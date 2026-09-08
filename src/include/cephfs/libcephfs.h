@@ -41,7 +41,7 @@ extern "C" {
 #endif
 
 #define LIBCEPHFS_VER_MAJOR 11
-#define LIBCEPHFS_VER_MINOR 0
+#define LIBCEPHFS_VER_MINOR 1
 #define LIBCEPHFS_VER_EXTRA 0
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -645,6 +645,19 @@ int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
 int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de,
 		       struct ceph_statx *stx, unsigned want, unsigned flags, struct Inode **out);
 
+/* attr mask bits (up to an int in size) */
+#ifndef CEPH_SNAPDIFF_MODE
+#define CEPH_SNAPDIFF_MODE		(1 << 0)
+#define CEPH_SNAPDIFF_UID		(1 << 1)
+#define CEPH_SNAPDIFF_GID		(1 << 2)
+#define CEPH_SNAPDIFF_SIZE		(1 << 3)
+#define CEPH_SNAPDIFF_NLINK		(1 << 4)
+#define CEPH_SNAPDIFF_MTIME		(1 << 5)
+#define CEPH_SNAPDIFF_ATIME		(1 << 6)
+#define CEPH_SNAPDIFF_CTIME		(1 << 7)
+#define CEPH_SNAPDIFF_BTIME		(1 << 8)
+#endif
+
 struct ceph_snapdiff_info
 {
   struct ceph_mount_info* cmount;
@@ -653,6 +666,9 @@ struct ceph_snapdiff_info
                                    // Can point to the parent dir entry if entry-in-question
                                    // doesn't exist in the second snapshot
 };
+
+// Opaque handle for the snapdiff2 stream.
+struct ceph_snapdiff_info2;
 
 struct ceph_file_blockdiff_result;
 
@@ -737,6 +753,28 @@ int ceph_open_snapdiff(struct ceph_mount_info* cmount,
                        const char* snap1,
                        const char* snap2,
                        struct ceph_snapdiff_info* out);
+
+/**
+ * Opens snapdiff stream to get snapshots delta w/ diff mask (aka snapdiff2).
+ *
+ * @param cmount the ceph mount handle to use for snapdiff retrieval.
+ * @param root_path  root path for snapshots-in-question
+ * @param rel_path subpath under the root to build delta for
+ * @param snap1 the first snapshot name
+ * @param snap2 the second snapshot name
+ * @param diff_mask file metadata change mask to apply for delta building (CEPH_SNAPDIFF_*)
+ * @param out resulting snapdiff stream handle to be used for snapdiff results
+              retrieval via ceph_readdir_snapdiff2
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_open_snapdiff2(struct ceph_mount_info* cmount,
+                        const char* root_path,
+                        const char* rel_path,
+                        const char* snap1,
+                        const char* snap2,
+                        unsigned diff_mask,
+                        struct ceph_snapdiff_info2** out);
+
 /**
  * Get the next snapshot delta entry.
  *
@@ -749,6 +787,20 @@ int ceph_open_snapdiff(struct ceph_mount_info* cmount,
  */
 int ceph_readdir_snapdiff(struct ceph_snapdiff_info* snapdiff,
                           struct ceph_snapdiff_entry_t* out);
+
+/**
+ * Get the next snapshot delta entry (v2)
+ *
+ * @param info snapdiff stream handle opened via ceph_open_snapdiff2()
+ * @param out  the next snapdiff entry which includes directory entry and the
+ *             entry's snapshot id - later one for emerged/existing entry or
+ *             former snapshot id for the removed entry.
+ * @returns >0 on success, 0 if no more entries in the stream and negative
+ *          error code otherwise
+ */
+int ceph_readdir_snapdiff2(struct ceph_snapdiff_info2* snapdiff,
+                           struct ceph_snapdiff_entry_t* out);
+
 /**
  * Close snapdiff stream.
  *
@@ -756,6 +808,14 @@ int ceph_readdir_snapdiff(struct ceph_snapdiff_info* snapdiff,
  * @returns 0 on success and negative error code otherwise
  */
 int ceph_close_snapdiff(struct ceph_snapdiff_info* snapdiff);
+
+/**
+ * Close snapdiff stream (v2)
+ *
+ * @param info snapdiff stream handle opened via ceph_open_snapdiff2()
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_close_snapdiff2(struct ceph_snapdiff_info2* snapdiff);
 
 /**
  * Gets multiple directory entries.
@@ -860,6 +920,22 @@ int ceph_mksnap(struct ceph_mount_info *cmount, const char *path, const char *na
  * @returns 0 on success or a negative return code on error.
  */
 int ceph_rmsnap(struct ceph_mount_info *cmount, const char *path, const char *name);
+
+/**
+ * Add, update or remove snapshot metadata.
+ *
+ * @param cmount the ceph mount handle to use for making the directory.
+ * @param path the path of the snapshot. This must be either an absolute
+ *        path or a path relative to CWD.
+ * @param mds_key key for the key-value pair in snapshot metadata.
+ * @param mds_val value for the key-value pair in snapshot metadata.
+ * @param op_flag unsigned integer to indicate whether metadata op is create,
+ *        update or remove.
+ * @returns 0 on success or a negative return value on error.
+ */
+int ceph_do_snap_md_op(struct ceph_mount_info* cmount, const char* path,
+                       const char* md_key, const char* md_val,
+                       const unsigned int op_flag);
 
 /**
  * Create multiple directories at once.
@@ -2221,6 +2297,8 @@ int ceph_ll_getlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner);
 int ceph_ll_setlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+int ceph_ll_flock(struct ceph_mount_info *cmount,
+		  Fh *fh, int operation, uint64_t owner);
 
 int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
 
@@ -2415,6 +2493,11 @@ void ceph_free_snap_info_buffer(struct snap_info *snap_info);
 int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
 
 int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode);
+
+#if __GNUC__ >= 4
+  #pragma GCC diagnostic pop
+#endif
+
 #ifdef __cplusplus
 }
 #endif

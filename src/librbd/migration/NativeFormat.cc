@@ -10,6 +10,7 @@
 #include "librbd/ImageCtx.h"
 #include "json_spirit/json_spirit.h"
 #include "boost/lexical_cast.hpp"
+#include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -22,6 +23,8 @@ namespace migration {
 namespace {
 
 const std::string TYPE_KEY{"type"};
+const std::string MON_HOST_KEY{"mon_host"};
+const std::string SECRET_KEY{"key"};
 const std::string CLUSTER_NAME_KEY{"cluster_name"};
 const std::string CLIENT_NAME_KEY{"client_name"};
 const std::string POOL_ID_KEY{"pool_id"};
@@ -66,6 +69,8 @@ int NativeFormat<I>::create_image_ctx(
     librados::Rados** src_rados) {
   auto cct = reinterpret_cast<CephContext*>(dst_io_ctx.cct());
   std::string cluster_name;
+  std::string mon_host;
+  std::string secret_key;
   std::string client_name;
   std::string pool_name;
   int64_t pool_id = -1;
@@ -76,6 +81,34 @@ int NativeFormat<I>::create_image_ctx(
   uint64_t snap_id = CEPH_NOSNAP;
   int r;
 
+  if (auto it = source_spec_object.find(MON_HOST_KEY);
+      it != source_spec_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      mon_host = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid mon host" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if (auto it = source_spec_object.find(SECRET_KEY);
+      it != source_spec_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      secret_key = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid key" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if (!mon_host.empty() && secret_key.empty()) {
+    lderr(cct) << "cannot specify mon host without key" << dendl;
+    return -EINVAL;
+  } else if (mon_host.empty() && !secret_key.empty()) {
+    lderr(cct) << "cannot specify key without mon host" << dendl;
+    return -EINVAL;
+  }
+
   if (auto it = source_spec_object.find(CLUSTER_NAME_KEY);
       it != source_spec_object.end()) {
     if (it->second.type() == json_spirit::str_type) {
@@ -84,12 +117,17 @@ int NativeFormat<I>::create_image_ctx(
       lderr(cct) << "invalid cluster name" << dendl;
       return -EINVAL;
     }
+    if (!mon_host.empty()) {
+      lderr(cct) << "cannot specify both cluster name and mon host" << dendl;
+      return -EINVAL;
+    }
   }
 
   if (auto it = source_spec_object.find(CLIENT_NAME_KEY);
       it != source_spec_object.end()) {
-    if (cluster_name.empty()) {
-      lderr(cct) << "cannot specify client name without cluster name" << dendl;
+    if (cluster_name.empty() && mon_host.empty()) {
+      lderr(cct) << "cannot specify client name without cluster name or mon host"
+                 << dendl;
       return -EINVAL;
     }
     if (it->second.type() == json_spirit::str_type) {
@@ -212,12 +250,11 @@ int NativeFormat<I>::create_image_ctx(
   }
 
   std::unique_ptr<librados::Rados> rados_ptr;
-  if (!cluster_name.empty()) {
+  if (!cluster_name.empty() || !mon_host.empty()) {
     // manually bootstrap a CephContext, skipping reading environment
     // variables for now -- since we don't have access to command line
     // arguments here, the least confusing option is to limit initial
     // remote cluster config to a file in the default location
-    // TODO: support specifying mon_host and key via source spec
     // TODO: support merging in effective local cluster config to get
     // overrides for log levels, etc
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
@@ -229,17 +266,44 @@ int NativeFormat<I>::create_image_ctx(
     auto remote_cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     auto put_remote_cct = make_scope_guard([remote_cct] { remote_cct->put(); });
 
-    remote_cct->_conf->cluster = cluster_name;
+    if (!cluster_name.empty()) {
+      remote_cct->_conf->cluster = cluster_name;
 
-    // pass CEPH_CONF_FILE_DEFAULT instead of nullptr to prevent
-    // CEPH_CONF environment variable from being picked up
-    r = remote_cct->_conf.parse_config_files(CEPH_CONF_FILE_DEFAULT, nullptr,
-                                             0);
-    if (r < 0) {
-      remote_cct->_conf.complain_about_parse_error(cct);
-      lderr(cct) << "failed to read ceph conf for remote cluster: "
-                 << cpp_strerror(r) << dendl;
-      return r;
+      // pass CEPH_CONF_FILE_DEFAULT instead of nullptr to prevent
+      // CEPH_CONF environment variable from being picked up
+      r = remote_cct->_conf.parse_config_files(CEPH_CONF_FILE_DEFAULT, nullptr,
+                                               0);
+      if (r < 0) {
+        remote_cct->_conf.complain_about_parse_error(cct);
+        lderr(cct) << "failed to read ceph conf for remote cluster: "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
+    } else if (!mon_host.empty()) {
+      ldout(cct, 5) << "found mon host in source spec: " << mon_host << dendl;
+      if (util::is_config_key_uri(secret_key)) {
+        ldout(cct, 5) << "found key ref in source spec: " << secret_key << dendl;
+        librados::Rados dest_rados(dst_io_ctx);
+        r = util::get_config_key(dest_rados, secret_key, &secret_key);
+        if (r < 0) {
+          lderr(cct) << "failed to retrieve secret key: " << cpp_strerror(r)
+                     << dendl;
+          return r;
+        }
+      }
+
+      r = remote_cct->_conf.set_val(MON_HOST_KEY, mon_host);
+      if (r < 0) {
+        lderr(cct) << "failed to set_val " << MON_HOST_KEY << ": "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
+      r = remote_cct->_conf.set_val(SECRET_KEY, secret_key);
+      if (r < 0) {
+        lderr(cct) << "failed to set_val " << SECRET_KEY << ": "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
 
     remote_cct->_conf.apply_changes(nullptr);
@@ -248,6 +312,7 @@ int NativeFormat<I>::create_image_ctx(
     r = rados_ptr->init_with_context(remote_cct);
     ceph_assert(r == 0);
 
+    ldout(cct, 5) << "going to connect to remote cluster" <<dendl;
     r = rados_ptr->connect();
     if (r < 0) {
       lderr(cct) << "failed to connect to remote cluster: " << cpp_strerror(r)
@@ -280,7 +345,7 @@ int NativeFormat<I>::create_image_ctx(
                                true);
   }
 
-  if (!cluster_name.empty()) {
+  if (!cluster_name.empty() || !mon_host.empty()) {
     *src_rados = rados_ptr.release();
   } else {
     *src_rados = nullptr;

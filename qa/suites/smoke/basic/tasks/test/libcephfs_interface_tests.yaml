@@ -11,6 +11,7 @@ tasks:
 - ceph:
     log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
+      - \(FS_DEGRADED\)
 - ceph-fuse:
 - workunit:
     clients:

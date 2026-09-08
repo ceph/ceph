@@ -755,13 +755,7 @@ inline void dump_header_prefixed(req_state* s,
 				 const std::string_view& name_prefix,
 				 const std::string_view& name,
 				 Args&&... args) {
-  char full_name_buf[name_prefix.size() + name.size() + 1];
-  const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s",
-                            static_cast<int>(name_prefix.length()),
-                            name_prefix.data(),
-                            static_cast<int>(name.length()),
-                            name.data());
-  std::string_view full_name(full_name_buf, len);
+  const auto full_name = fmt::format("{}{}", name_prefix, name);
   return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
 }
 
@@ -771,15 +765,7 @@ inline void dump_header_infixed(req_state* s,
 				const std::string_view& infix,
 				const std::string_view& sufix,
 				Args&&... args) {
-  char full_name_buf[prefix.size() + infix.size() + sufix.size() + 1];
-  const auto len = snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s%.*s",
-                            static_cast<int>(prefix.length()),
-                            prefix.data(),
-                            static_cast<int>(infix.length()),
-                            infix.data(),
-                            static_cast<int>(sufix.length()),
-                            sufix.data());
-  std::string_view full_name(full_name_buf, len);
+  auto full_name = fmt::format("{}{}{}", prefix, infix, sufix);
   return dump_header(s, std::move(full_name), std::forward<Args>(args)...);
 }
 
@@ -788,10 +774,8 @@ inline void dump_header_quoted(req_state* s,
 			       const std::string_view& name,
 			       const std::string_view& val) {
   /* We need two extra bytes for quotes. */
-  char qvalbuf[val.size() + 2 + 1];
-  const auto len = snprintf(qvalbuf, sizeof(qvalbuf), "\"%.*s\"",
-                            static_cast<int>(val.length()), val.data());
-  return dump_header(s, name, std::string_view(qvalbuf, len));
+  auto qval = fmt::format("\"{}\"", val);
+  return dump_header(s, name, std::move(qval));
 }
 
 template <class ValueT>
@@ -834,6 +818,12 @@ inline std::string compute_domain_uri(const req_state *s) {
   }();
   return uri;
 }
+
+// Transform S3 virtual-host style requests to a path-style request.
+// When the Host header includes the bucket name as a subdomain, prepend
+// that bucket name to s->info.request_uri then re-url-decode that
+// into s->decoded_uri.
+int rgw_rest_transform_s3_vhost_style(req_state* s);
 
 extern void dump_content_length(req_state *s, uint64_t len);
 extern void dump_etag(req_state *s,

@@ -18,8 +18,7 @@ The requirements of one Ceph cluster are not the same as the requirements of
 another, but below are some general guidelines.
 
 .. important:: Note that as of December 2025, ARM architecture containers
-               provide a limited set of daemons. SMB service, for example, is
-               not yet supported.
+               provide a limited set of daemons.
 
 .. tip:: Check out the `Ceph blog`_ too.
 
@@ -35,7 +34,7 @@ CRUSH, to replicate data, and to maintain their own copies of the cluster map.
 
 With earlier releases of Ceph, we would make hardware recommendations based on
 the number of cores per OSD, but this cores-per-OSD metric is no longer as
-useful a metric as the number of cycles per IOP and the number of IOPS per OSD.
+useful a metric as the number of cycles per I/O and the number of IOPS per OSD.
 For example, with NVMe OSD drives, Ceph can easily utilize five or six cores on real
 clusters and up to about fourteen cores on single OSDs in isolation. So cores
 per OSD are no longer as pressing a concern as they were. When selecting
@@ -120,7 +119,7 @@ the :confval:`osd_memory_target` configuration option.
 
 - Setting the memory target between 2 GB and 4 GB typically works but may
   result in degraded performance: metadata may need to be read from disk
-  during IO unless the active data set is relatively small.
+  during I/O unless the active data set is relatively small.
 
 - 4 GB is the current default value for :confval:`osd_memory_target`. This
   default was chosen for typical use cases, and is intended to balance RAM

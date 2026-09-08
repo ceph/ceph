@@ -1,58 +1,102 @@
-<ul class="me-2">
-  <ng-template #upToDateTpl>
-    <li i18n>
-      <cds-tag class="tag-success">Up to Date</cds-tag>
-    </li>
-  </ng-template>
-  <cds-toggletip  [dropShadow]="true"
-                  [align]="align">
-    <div  cdsToggletipButton
-          class="toggleTipBtn">
-    <ng-template #showStatus>
-      <a  *ngIf="zone.syncstatus !== 'Not Syncing From Zone'"
-          class="lead text-primary"
-          i18n>{{ zone.syncstatus | titlecase }}</a>
-      <a  *ngIf="zone.syncstatus === 'Not Syncing From Zone'"
-          class="lead text-primary"
-          i18n>Not Syncing</a>
-    </ng-template>
-    <li><b>Status:</b></li>
-    <li *ngIf="zone.syncstatus?.includes('failed') || zone.syncstatus?.includes('error'); else showStatus">
-      <svg  [cdsIcon]="icons.danger"
+<div class="sync-info">
+  <cds-toggletip
+    [dropShadow]="true"
+    [align]="align"
+  >
+    <div
+      cdsToggletipButton
+      class="toggleTipBtn"
+    >
+      <span
+        class="cds--type-label-01"
+        i18n
+        >Status:</span
+      >
+      @if (zone.syncstatus?.includes('failed') || zone.syncstatus?.includes('error')) {
+        <span class="sync-info__status">
+          <svg
+            [cdsIcon]="icons.danger"
             [size]="icons.size16"
-            class="cds-danger-color"></svg>
-      <a  class="lead text-danger"
-          i18n>Error</a>
-    </li>
-  </div>
-  <div cdsToggletipContent>
-    <div class="cds--popover-scroll-container">
-      <ul class="text-center">
-        <li><h5><b i18n>Sync Status:</b></h5></li>
-        <li *ngFor="let status of zone.fullSyncStatus">
-          <span *ngIf="!status?.includes(zone.name) && !status?.includes(zone.syncstatus) && !status?.includes('failed') && !status?.includes('error')">
-            <span *ngIf="status?.includes(':')">
-              <b>{{ status.split(': ')[0] | titlecase }}</b>:{{ status.split(': ')[1] | titlecase}}
-            </span>
-            <span *ngIf="!status?.includes(':')">
-              <b>{{ status | titlecase }}</b>
-            </span>
-          </span>
-          <span *ngIf="status?.includes('failed') || status?.includes('error')">
-            {{ status | titlecase }}
-          </span>
-        </li>
-      </ul>
+            class="cds-danger-color"
+          ></svg>
+          <a
+            class="cds--link cds--type-label-01 cds-danger-color sync-status-link"
+            i18n
+            >Error</a
+          >
+        </span>
+      } @else {
+        @if (zone.syncstatus === 'Not Syncing From Zone') {
+          <a
+            class="cds--link cds--type-label-01 sync-status-link"
+            i18n
+            >Not Syncing</a
+          >
+        } @else {
+          <a
+            class="cds--link cds--type-label-01 sync-status-link"
+            i18n
+            >{{ zone.syncstatus | titlecase }}</a
+          >
+        }
+      }
     </div>
-  </div>
+    <div cdsToggletipContent>
+      <div class="cds--popover-scroll-container">
+        <div class="toggletip-content">
+          @for (status of zone.fullSyncStatus; track status) {
+            @if (status?.includes('failed') || status?.includes('error')) {
+              <div class="toggletip-content__item">
+                <span class="cds--type-body-compact-01 cds-danger-color">{{
+                  status | titlecase
+                }}</span>
+              </div>
+            } @else if (
+              !status?.includes(zone.name) && !status?.includes(zone.syncstatus) && status?.trim()
+            ) {
+              @if (status?.includes(':')) {
+                <div class="toggletip-content__item">
+                  <span class="cds--type-label-01">{{ status.split(': ')[0] | titlecase }}</span>
+                  <span class="cds--type-body-compact-01">{{
+                    status.split(': ')[1] | titlecase
+                  }}</span>
+                </div>
+              } @else {
+                <div class="toggletip-content__item">
+                  <span
+                    class="cds--type-label-01"
+                    i18n
+                    >Summary</span
+                  >
+                  <span class="cds--type-body-compact-01">{{ status | titlecase }}</span>
+                </div>
+              }
+            }
+          }
+        </div>
+      </div>
+    </div>
   </cds-toggletip>
-  <li class="mt-4 fw-bold"
-      i18n>
-      Last Synced:
-  </li>
-  <li *ngIf="zone.timestamp; else upToDateTpl">
-    <cds-tag class="tag-info">
-      {{ zone.timestamp | relativeDate }}
-    </cds-tag>
-  </li>
-</ul>
+  <div class="sync-info__last-synced cds-mt-3">
+    <span
+      class="cds--type-label-01"
+      i18n
+      >Last Synced:</span
+    >
+    @if (zone.timestamp) {
+      <cds-tag
+        class="tag-info"
+        size="sm"
+      >
+        {{ zone.timestamp | relativeDate }}
+      </cds-tag>
+    } @else {
+      <cds-tag
+        class="tag-success"
+        size="sm"
+        i18n
+        >Up to Date</cds-tag
+      >
+    }
+  </div>
+</div>

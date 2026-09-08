@@ -1,5 +1,5 @@
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { FormControl, FormsModule } from '@angular/forms';
+import { FormControl } from '@angular/forms';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { DateTimePickerComponent } from './date-time-picker.component';
@@ -15,7 +15,7 @@ describe('DateTimePickerComponent', () => {
 
   configureTestBed({
     declarations: [DateTimePickerComponent],
-    imports: [DatePickerModule, FormsModule, TimePickerModule, TimePickerSelectModule]
+    imports: [DatePickerModule, TimePickerModule, TimePickerSelectModule]
   });
 
   beforeEach(() => {
@@ -37,6 +37,23 @@ describe('DateTimePickerComponent', () => {
     fixture.detectChanges();
     tick();
     expect(component.control.value).toBe('2022-02-22 00:00:00');
+  }));
+
+  it('should update control value if datetime is in the past', fakeAsync(() => {
+    component.control = new FormControl('2022-02-20 15:30:00');
+    fixture.detectChanges();
+    tick();
+    expect(component.control.value).toBe('2022-02-22 00:00:00');
+  }));
+
+  it('should keep past datetime when disabled', fakeAsync(() => {
+    component.control = new FormControl('2022-02-20 15:30:00');
+    component.disabled = true;
+    fixture.detectChanges();
+    tick();
+    expect(component.control.value).toBe('2022-02-20 15:30:00');
+    expect(component.time).toBe('03:30');
+    expect(component.ampm).toBe('PM');
   }));
 
   it('should init with only date enabled', () => {

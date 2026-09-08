@@ -503,29 +503,26 @@ void Op::cmp_omap(const std::vector<cmp_assertion>& assertions) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_cmp(std::move(bl), nullptr);
 }
 
-void Op::exec(std::string_view cls, std::string_view method,
-	      const bufferlist& inbl,
-	      cb::list* out,
-	      bs::error_code* ec) {
+void Op::exec_impl(std::string_view cls, std::string_view method,
+              const bufferlist& inbl,
+              cb::list* out,
+              bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec, out);
 }
-
-void Op::exec(std::string_view cls, std::string_view method,
-	      const bufferlist& inbl,
-	      fu2::unique_function<void(bs::error_code,
-					const cb::list&) &&> f) {
+void Op::exec_impl(std::string_view cls, std::string_view method,
+              const bufferlist& inbl,
+              fu2::unique_function<void(bs::error_code,
+                                        const cb::list&) &&> f) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
 }
-
-void Op::exec(std::string_view cls, std::string_view method,
-	      const bufferlist& inbl,
-	      fu2::unique_function<void(bs::error_code, int,
-					const cb::list&) &&> f) {
+void Op::exec_impl(std::string_view cls, std::string_view method,
+              const bufferlist& inbl,
+              fu2::unique_function<void(bs::error_code, int,
+                                        const cb::list&) &&> f) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
 }
-
-void Op::exec(std::string_view cls, std::string_view method,
-	      const bufferlist& inbl, bs::error_code* ec) {
+void Op::exec_impl(std::string_view cls, std::string_view method,
+              const bufferlist& inbl, bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec);
 }
 
@@ -878,6 +875,7 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   }
 
   cct->_conf.parse_env(cct->get_module_type());
+  cct->_conf.apply_changes(nullptr);
 
   for (const auto& [n, v] : configs) {
     std::stringstream ss;
@@ -906,15 +904,20 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   }
   common_init_finish(cct.get());
 
-  RADOS::make_with_cct(std::move(cct), ioctx, std::move(c));
+  RADOS::make_with_cct_(
+      std::move(cct), ioctx, std::move(c), objecter_admin_socket_name);
 }
 
-void RADOS::make_with_cct_(boost::intrusive_ptr<CephContext> cct,
-			   asio::io_context& ioctx,
-			   BuildComp c) {
+void
+RADOS::make_with_cct_(
+    boost::intrusive_ptr<CephContext> cct,
+    asio::io_context& ioctx,
+    BuildComp c,
+    const std::optional<std::string>& objecter_admin_socket_name)
+{
   try {
-    auto r = std::make_shared<detail::NeoClient>(
-      std::make_unique<detail::RADOS>(ioctx, std::move(cct)));
+    auto r = std::make_shared<detail::NeoClient>(std::make_unique<detail::RADOS>(
+        ioctx, std::move(cct), objecter_admin_socket_name));
     r->objecter->wait_for_osd_map([c = std::move(c),
                                    r = std::move(r)]() mutable {
       asio::dispatch(
@@ -1409,12 +1412,23 @@ class Notifier : public async::service_list_base_hook {
   std::shared_ptr<detail::Client> neoref;
 
   void service_shutdown() {
-    if (neoref) {
-      neoref = nullptr;
-    }
-    linger_op.reset();
+    // Ensure neorados object and operation live to the end of the
+    // function.
+    auto localop = std::move(linger_op);
+    [[maybe_unused]] auto localneo = std::move(neoref);
     std::unique_lock l(m);
     handlers.clear();
+    l.unlock();
+    if (localop) {
+      // We are being taken down and will execute no more
+      // handlers. Call `linger_cancel` to clean up properly in
+      // Objecter. (It doesn't call out to the OSD or anything.)
+      //
+      // Removal and decrement are guarded by `linger_op->canceled`
+      // so there's no risk of an underflow.
+      localop->objecter->linger_cancel(localop.get());
+    }
+    // The Notifier object is freed by the `linger_cancel` above.
   }
 
 public:
@@ -1486,7 +1500,9 @@ public:
     } else if (capacity && notifications.size() >= capacity) {
       // We are allowed one over, so the client knows where in the
       // sequence of notifications we started losing data.
-      notifications.push({errc::notification_overflow, {}});
+      if (notifications.size() == capacity) {
+        notifications.push({errc::notification_overflow, {}});
+      }
     } else {
       notifications.push({{},
 			  Notification{
@@ -1680,6 +1696,7 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
   bool finished = false;
   bs::error_code res;
   bufferlist rbl;
+  bool cleaned = false;
 
   NotifyHandler(asio::io_context& ioc,
 		Objecter* objecter,
@@ -1714,18 +1731,27 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
 
   // Should be called from strand.
   void maybe_cleanup(bs::error_code ec) {
+    if (cleaned) {
+      return;
+    }
     if (!res && ec)
       res = ec;
     if ((acked && finished) || res) {
+      cleaned = true;
       objecter->linger_cancel(op.get());
       ceph_assert(c);
       bc::flat_map<std::pair<uint64_t, uint64_t>, buffer::list> reply_map;
       bc::flat_set<std::pair<uint64_t, uint64_t>> missed_set;
-      auto p = rbl.cbegin();
-      decode(reply_map, p);
-      decode(missed_set, p);
-      asio::dispatch(asio::append(std::move(c), res, std::move(reply_map),
-				  std::move(missed_set)));
+      if (rbl.length() > 0) try {
+          auto p = rbl.cbegin();
+          decode(reply_map, p);
+          decode(missed_set, p);
+      } catch (const std::exception&) {
+        // Swallowing the decode error.
+      }
+      asio::dispatch(
+          asio::append(
+              std::move(c), res, std::move(reply_map), std::move(missed_set)));
     }
   }
 };

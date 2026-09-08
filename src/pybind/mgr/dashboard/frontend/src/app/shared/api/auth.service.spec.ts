@@ -41,7 +41,7 @@ describe('AuthService', () => {
     expect(req.request.body).toEqual(fakeCredentials);
     req.flush(fakeResponse);
     tick();
-    expect(localStorage.getItem(LocalStorage.DASHBOARD_USRENAME)).toBe('foo');
+    expect(localStorage.getItem(LocalStorage.DASHBOARD_USERNAME)).toBe('foo');
   }));
 
   it('should logout and remove the user', () => {
@@ -52,7 +52,7 @@ describe('AuthService', () => {
     const req = httpTesting.expectOne('api/auth/logout');
     expect(req.request.method).toBe('POST');
     req.flush({ redirect_url: '#/login' });
-    expect(localStorage.getItem(LocalStorage.DASHBOARD_USRENAME)).toBe(null);
+    expect(localStorage.getItem(LocalStorage.DASHBOARD_USERNAME)).toBe(null);
     expect(router.navigate).toBeCalledTimes(1);
   });
 });

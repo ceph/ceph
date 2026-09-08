@@ -102,7 +102,7 @@ public:
       f->close_section();
     } else if (command == "bluestore allocator score " + name) {
       f->open_object_section("fragmentation_score");
-      f->dump_float("fragmentation_rating", alloc->get_fragmentation_score());
+      f->dump_float("fragmentation_score", alloc->get_fragmentation_score());
       f->close_section();
     } else if (command == "bluestore allocator fragmentation " + name) {
       f->open_object_section("fragmentation");
@@ -205,5 +205,38 @@ void AllocatorBase::FreeStateHistogram::foreach(
     cb(myTraits._get_bucket_max(i),
       b.total, b.aligned, b.alloc_units);
     ++i;
+  }
+}
+void AllocatorPerf::_init_logger(std::string_view name) {
+  PerfCountersBuilder b(cct,
+                        "bluestore-alloc-" + std::string(name),
+                        l_bluestore_allocator_first,
+                        l_bluestore_allocator_last);
+
+  b.add_time_avg(l_bluestore_allocator_alloc_process_lat,
+    "alloc_process_lat",
+    "Allocator processing latency while holding lock",
+    "apl",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_allocator_lock_wait_lat,
+    "lock_wait_lat",
+    "Allocator lock wait latency",
+    "lwl",
+    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_allocator_nolock_process_lat,
+    "nolock_process_lat",
+    "Allocator lockless fast-path allocation latency",
+    "fpl",
+    PerfCountersBuilder::PRIO_USEFUL);
+
+  logger = b.create_perf_counters();
+
+  cct->get_perfcounters_collection()->add(logger);
+}
+void AllocatorPerf::_shutdown_logger() {
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = nullptr;
   }
 }

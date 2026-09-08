@@ -46,7 +46,7 @@
  */
 class MockMessenger {
 public:
-  using MessageHandler = std::function<bool(int from_osd, int to_osd, Message*)>;
+  using MessageHandler = std::function<bool(int from_osd, int to_osd, MessageRef)>;
   using EpochGetter = std::function<epoch_t(int osd)>;
   
 private:
@@ -95,23 +95,31 @@ public:
   /**
    * Register a type-safe handler for a specific message type.
    * Uses C++20 concepts to ensure type safety at compile time.
-   * The handler receives the correctly-typed message pointer.
+   * The handler receives a typed intrusive_ptr; lifetime is managed by
+   * the smart pointer.  If the handler wants to extend the message's
+   * lifetime (e.g. by storing it in an OpRequest that consumes a
+   * refcount), it can call `.detach()` to transfer ownership without
+   * touching the refcount manually.
    *
    * @tparam MsgType The specific message type (e.g., MOSDECSubOpWrite)
    * @param msg_type The message type code (e.g., MSG_OSD_EC_WRITE)
-   * @param handler Lambda that accepts (from_osd, to_osd, MsgType*) and returns true if handled
+   * @param handler Lambda that accepts (from_osd, to_osd,
+   *                boost::intrusive_ptr<MsgType>) and returns true if handled
    */
   template<typename MsgType>
   requires std::derived_from<MsgType, Message>
-  void register_typed_handler(int msg_type, std::function<bool(int, int, MsgType*)> handler) {
+  void register_typed_handler(
+      int msg_type,
+      std::function<bool(int, int, boost::intrusive_ptr<MsgType>)> handler) {
     // Wrap the typed handler in a generic handler that performs the cast
-    register_handler(msg_type, [handler](int from_osd, int to_osd, Message* m) -> bool {
-      MsgType* typed_msg = dynamic_cast<MsgType*>(m);
-      if (!typed_msg) {
-        return false;  // Wrong type, let other handlers try
-      }
-      return handler(from_osd, to_osd, typed_msg);
-    });
+    register_handler(msg_type,
+      [handler](int from_osd, int to_osd, MessageRef m) -> bool {
+        auto typed = boost::dynamic_pointer_cast<MsgType>(m);
+        if (!typed) {
+          return false;  // Wrong type, let other handlers try
+        }
+        return handler(from_osd, to_osd, std::move(typed));
+      });
   }
   
   /**
@@ -202,12 +210,22 @@ public:
         
         // Decode the message components into a new message object
         // This uses the proper decode_message() function that real messengers use,
-        // which supports the new footer format with message authentication
+        // which supports the new footer format with message authentication.
+        // ConnectionRef takes the new MockConnection with add_ref=false so the
+        // +1 from `new` is consumed exactly once (decode_message moves the
+        // ConnectionRef into the Message; the Message destructor releases it).
+        Message::ConnectionRef con{new MockConnection(from_osd), /*add_ref=*/false};
         Message *decoded_msg = decode_message(g_ceph_context, 0, header, footer,
-                                              mf.front(), mf.middle(), mf.data(), new MockConnection(from_osd));
+                                              mf.front(), mf.middle(), mf.data(), con);
 
         ceph_assert(decoded_msg);
-        
+        // Wrap decode_message's +1 in a MessageRef so the Message's lifetime
+        // is managed automatically: the ref drops when this lambda returns,
+        // which releases the +1.  Handlers that want to extend lifetime
+        // receive the MessageRef by value (or a typed intrusive_ptr) and can
+        // .detach() to transfer ownership cleanly.
+        MessageRef decoded{decoded_msg, /*add_ref=*/false};
+
         // Try specific handler first, then catch-all handler (-1)
         if (!handlers.contains(header.type)) {
           std::cerr << "ERROR: No handler registered for message type " << header.type
@@ -219,7 +237,7 @@ public:
           std::cerr << std::endl;
         }
         ceph_assert(handlers.contains(header.type));
-        ceph_assert(handlers.at(header.type)(from_osd, to_osd, decoded_msg));
+        ceph_assert(handlers.at(header.type)(from_osd, to_osd, decoded));
       });
   }
   

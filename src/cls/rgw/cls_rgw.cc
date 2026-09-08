@@ -3,20 +3,23 @@
 
 #include "include/types.h"
 
-#include <errno.h>
+#include <cerrno>
+#include <map>
+#include <string>
+#include <vector>
+#include <utility>
+
+#include <fmt/format.h>
 
 #include <boost/algorithm/string.hpp>
 
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_const.h"
-#include "common/Clock.h"
 #include "common/strtol.h"
 #include "common/escape.h"
-#include "common/config_proxy.h"
 #include "osd/osd_types.h"
 
-#include "include/compat.h"
 #include <boost/lexical_cast.hpp>
 
 using std::pair;
@@ -1168,7 +1171,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	       __func__,
 	       modify_op_str(op.op).c_str(), op.key.to_string().c_str(),
 	       (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
-	       op.tag.c_str());
+	       op.op_tag.c_str());
 
   rgw_bucket_dir_header header;
   int rc = read_bucket_header(hctx, &header);
@@ -1206,21 +1209,21 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
    * marker */
   entry.flags &= rgw_bucket_dir_entry::FLAG_VER;
 
-  if (op.tag.size()) {
-    auto pinter = entry.pending_map.find(op.tag);
+  if (op.op_tag.size()) {
+    auto pinter = entry.pending_map.find(op.op_tag);
     if (pinter == entry.pending_map.end()) {
       CLS_LOG_BITX(bitx_inst, 1,
 		   "ERROR: %s: couldn't find tag for pending operation with tag %s",
-		   __func__, op.tag.c_str());
+		   __func__, op.op_tag.c_str());
       return -EINVAL;
     }
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: removing tag %s from pending map",
-		   __func__, op.tag.c_str());
+		   __func__, op.op_tag.c_str());
     entry.pending_map.erase(pinter);
   }
 
-  if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
+  if (op.op_tag.size() && op.op == CLS_RGW_OP_CANCEL) {
     CLS_LOG_BITX(bitx_inst, 20, "INFO: %s: op is cancel", __func__);
   } else if (op.ver.pool == entry.ver.pool &&
              op.ver.epoch && op.ver.epoch <= entry.ver.epoch) {
@@ -1237,7 +1240,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   entry.ver = op.ver;
   if (op.op == CLS_RGW_OP_CANCEL) {
     log_op = false; // don't log cancelation
-    if (op.tag.size()) {
+    if (op.op_tag.size()) {
       if (!entry.exists && entry.pending_map.empty()) {
         // a racing delete succeeded, and we canceled the last pending op
         CLS_LOG_BITX(bitx_inst, 20,
@@ -1318,7 +1321,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     entry.meta = meta;
     entry.key = op.key;
     entry.exists = true;
-    entry.tag = op.tag;
+    entry.tag = op.op_tag;
     // account for new entry
     stats.num_entries++;
     stats.total_size += meta.accounted_size;
@@ -1337,7 +1340,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   } // CLS_RGW_OP_ADD
 
   if (log_op) {
-    rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
+    rc = log_index_operation(hctx, op.key, op.op, op.op_tag, entry.meta.mtime,
 			     entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
 			     header.max_marker, op.bilog_flags, NULL, NULL,
 			     &op.zones_trace);
@@ -1922,6 +1925,10 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+
+  encode(candidate_epoch, *out);
+  CLS_LOG(20, "%s: key=%s olh_epoch=%lu candidate_epoch=%lu",
+          __func__, op.key.to_string().c_str(), op.olh_epoch, candidate_epoch);
   if (olh.start_modify(candidate_epoch)) {
     // promote this version to current if it's a newer epoch, or if it matches the
     // current epoch and sorts after the current instance
@@ -2045,6 +2052,73 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   return write_bucket_header(hctx, &header); /* updates header version */
 }
 
+static int rgw_bucket_refresh_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "entered %s", __func__);
+
+  rgw_cls_refresh_instance_op op;
+  auto iter = in->cbegin();
+  try {
+    decode(op, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: %s: failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+    return rc;
+  }
+
+  rc = guard_bucket_resharding(hctx, header);
+  if (rc < 0) {
+    return rc;
+  }
+
+  rgw_bucket_dir_entry entry;
+  string idx;
+  rc = read_key_entry(hctx, op.key, &idx, &entry);
+  if (rc == -ENOENT) {
+    CLS_LOG(10, "%s: no instance entry for key=%s, nothing to refresh",
+            __func__, op.key.to_string().c_str());
+    return 0;
+  }
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s: read_key_entry key=%s rc=%d",
+            __func__, op.key.to_string().c_str(), rc);
+    return rc;
+  }
+
+  /*
+   * Only versioned instances have a separate list entry. complete_op
+   * refreshes this instance's data entry (size/etag/mtime), but the
+   * bucket version listing reads the list entry, so copy the refreshed
+   * data entry into it and leave the data entry untouched. No OLH
+   * change and no stats change; complete_op already accounted the size
+   * delta.
+   */
+  if (!(entry.flags & rgw_bucket_dir_entry::FLAG_VER)) {
+    CLS_LOG(10, "%s: key=%s is not a versioned instance, skipping",
+            __func__, op.key.to_string().c_str());
+    return 0;
+  }
+
+  string list_idx;
+  get_list_index_key(entry, &list_idx);
+  if (idx != list_idx) {
+    rc = write_entry(hctx, entry, list_idx, header);
+    if (rc < 0) {
+      CLS_LOG(0, "ERROR: %s: write_entry key=%s rc=%d",
+              __func__, op.key.to_string().c_str(), rc);
+      return rc;
+    }
+  }
+
+  return write_bucket_header(hctx, &header); /* updates header version */
+}
+
 static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -2098,6 +2172,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
   uint64_t now_epoch = duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch : now_epoch;
+
+  encode(candidate_epoch, *out);
+  CLS_LOG(20, "%s: key=%s olh_epoch=%lu candidate_epoch=%lu",
+          __func__, op.key.to_string().c_str(), op.olh_epoch, candidate_epoch);
 
   if (!olh_found) {
     bool instance_only = false;
@@ -4067,9 +4145,7 @@ static void usage_record_prefix_by_time(uint64_t epoch, string& key)
 
 static void usage_record_prefix_by_user_old(const string& user, uint64_t epoch, string& key)
 {
-  char buf[user.size() + 32];
-  snprintf(buf, sizeof(buf), "%s_%011llu_", user.c_str(), (long long unsigned)epoch);
-  key = buf;
+  key = fmt::format("{}_{:011}_", user, epoch);
 }
 
 static void usage_record_prefix_by_user(const string& user, uint64_t epoch, string& key)
@@ -4084,16 +4160,12 @@ static void usage_record_prefix_by_user(const string& user, uint64_t epoch, stri
 
 static void usage_record_name_by_time(uint64_t epoch, const string& user, const string& bucket, string& key)
 {
-  char buf[32 + user.size() + bucket.size()];
-  snprintf(buf, sizeof(buf), "%011llu_%s_%s", (long long unsigned)epoch, user.c_str(), bucket.c_str());
-  key = buf;
+  key = fmt::format("{:011}_{}_{}", epoch, user, bucket);
 }
 
 static void usage_record_name_by_user_old(const string& user, uint64_t epoch, const string& bucket, string& key)
 {
-  char buf[32 + user.size() + bucket.size()];
-  snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
-  key = buf;
+  key = fmt::format("{}_{:011}_{}", user, epoch, bucket);
 }
 
 static void usage_record_name_by_user(const string& user, uint64_t epoch, const string& bucket, string& key)
@@ -5314,6 +5386,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bucket_read_olh_log;
   cls_method_handle_t h_rgw_bucket_trim_olh_log;
   cls_method_handle_t h_rgw_bucket_clear_olh;
+  cls_method_handle_t h_rgw_bucket_refresh_instance;
   cls_method_handle_t h_rgw_obj_remove;
   cls_method_handle_t h_rgw_obj_store_pg_ver;
   cls_method_handle_t h_rgw_obj_check_attrs_prefix;
@@ -5353,81 +5426,87 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_guard_bucket_resharding;
   cls_method_handle_t h_rgw_get_bucket_resharding;
 
-  cls_register(RGW_CLASS, &h_class);
 
-  /* bucket index */
-  cls_register_cxx_method(h_class, RGW_BUCKET_INIT_INDEX, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_init_index, &h_rgw_bucket_init_index);
-  cls_register_cxx_method(h_class, RGW_BUCKET_INIT_INDEX2, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_init_index, &h_rgw_bucket_init_index);
-  cls_register_cxx_method(h_class, RGW_BUCKET_SET_TAG_TIMEOUT, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_set_tag_timeout, &h_rgw_bucket_set_tag_timeout);
-  cls_register_cxx_method(h_class, RGW_BUCKET_LIST, CLS_METHOD_RD, rgw_bucket_list, &h_rgw_bucket_list);
-  cls_register_cxx_method(h_class, RGW_BUCKET_CHECK_INDEX, CLS_METHOD_RD, rgw_bucket_check_index, &h_rgw_bucket_check_index);
-  cls_register_cxx_method(h_class, RGW_BUCKET_REBUILD_INDEX, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
-  cls_register_cxx_method(h_class, RGW_BUCKET_UPDATE_STATS, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_update_stats, &h_rgw_bucket_update_stats);
-  cls_register_cxx_method(h_class, RGW_BUCKET_PREPARE_OP, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
-  cls_register_cxx_method(h_class, RGW_BUCKET_COMPLETE_OP, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
-  cls_register_cxx_method(h_class, RGW_BUCKET_LINK_OLH, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
-  cls_register_cxx_method(h_class, RGW_BUCKET_UNLINK_INSTANCE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_unlink_instance, &h_rgw_bucket_unlink_instance_op);
-  cls_register_cxx_method(h_class, RGW_BUCKET_READ_OLH_LOG, CLS_METHOD_RD, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
-  cls_register_cxx_method(h_class, RGW_BUCKET_TRIM_OLH_LOG, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
-  cls_register_cxx_method(h_class, RGW_BUCKET_CLEAR_OLH, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
+  using namespace cls::rgw;
 
-  cls_register_cxx_method(h_class, RGW_OBJ_REMOVE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
-  cls_register_cxx_method(h_class, RGW_OBJ_STORE_PG_VER, CLS_METHOD_WR, rgw_obj_store_pg_ver, &h_rgw_obj_store_pg_ver);
-  cls_register_cxx_method(h_class, RGW_OBJ_CHECK_ATTRS_PREFIX, CLS_METHOD_RD, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
-  cls_register_cxx_method(h_class, RGW_OBJ_CHECK_MTIME, CLS_METHOD_RD, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
+  cls_register(ClassId::name, &h_class);
 
-  cls_register_cxx_method(h_class, RGW_BI_GET, CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
-  cls_register_cxx_method(h_class, RGW_BI_PUT, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);
-  cls_register_cxx_method(h_class, RGW_BI_PUT_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_entries, &h_rgw_bi_put_entries_op);
-  cls_register_cxx_method(h_class, RGW_BI_LIST, CLS_METHOD_RD, rgw_bi_list_op, &h_rgw_bi_list_op);
-  cls_register_cxx_method(h_class, RGW_RESHARD_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_log_trim_op, &h_rgw_reshard_log_trim_op);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, RGW_BI_LOG_LIST, CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
-  cls_register_cxx_method(h_class, RGW_BI_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_trim_op);
-  cls_register_cxx_method(h_class, RGW_DIR_SUGGEST_CHANGES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
+  using namespace method;
 
-  cls_register_cxx_method(h_class, RGW_BI_LOG_RESYNC, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_resync, &h_rgw_bi_log_resync_op);
-  cls_register_cxx_method(h_class, RGW_BI_LOG_STOP, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_stop, &h_rgw_bi_log_stop_op);
+  // Bucket Index
+  cls.register_cxx_method(bucket_init_index, rgw_bucket_init_index, &h_rgw_bucket_init_index);
+  cls.register_cxx_method(bucket_init_index2, rgw_bucket_init_index, &h_rgw_bucket_init_index);
+  cls.register_cxx_method(bucket_set_tag_timeout, rgw_bucket_set_tag_timeout, &h_rgw_bucket_set_tag_timeout);
+  cls.register_cxx_method(bucket_list, rgw_bucket_list, &h_rgw_bucket_list);
+  cls.register_cxx_method(bucket_check_index, rgw_bucket_check_index, &h_rgw_bucket_check_index);
+  cls.register_cxx_method(bucket_rebuild_index, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
+  cls.register_cxx_method(bucket_update_stats, rgw_bucket_update_stats, &h_rgw_bucket_update_stats);
+  cls.register_cxx_method(bucket_prepare_op, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
+  cls.register_cxx_method(bucket_complete_op, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
+  cls.register_cxx_method(bucket_link_olh, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
+  cls.register_cxx_method(bucket_unlink_instance, rgw_bucket_unlink_instance, &h_rgw_bucket_unlink_instance_op);
+  cls.register_cxx_method(bucket_read_olh_log, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
+  cls.register_cxx_method(bucket_trim_olh_log, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
+  cls.register_cxx_method(bucket_clear_olh, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
+  cls.register_cxx_method(bucket_refresh_instance, rgw_bucket_refresh_instance, &h_rgw_bucket_refresh_instance);
 
-  /* usage logging */
-  cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_user_usage_log_add, &h_rgw_user_usage_log_add);
-  cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_READ, CLS_METHOD_RD, rgw_user_usage_log_read, &h_rgw_user_usage_log_read);
-  cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_user_usage_log_trim, &h_rgw_user_usage_log_trim);
-  cls_register_cxx_method(h_class, RGW_USAGE_LOG_CLEAR, CLS_METHOD_WR, rgw_usage_log_clear, &h_rgw_usage_log_clear);
+  // Object
+  cls.register_cxx_method(obj_remove, rgw_obj_remove, &h_rgw_obj_remove);
+  cls.register_cxx_method(obj_store_pg_ver, rgw_obj_store_pg_ver, &h_rgw_obj_store_pg_ver);
+  cls.register_cxx_method(obj_check_attrs_prefix, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
+  cls.register_cxx_method(obj_check_mtime, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
 
-  /* garbage collection */
-  cls_register_cxx_method(h_class, RGW_GC_SET_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_gc_set_entry, &h_rgw_gc_set_entry);
-  cls_register_cxx_method(h_class, RGW_GC_DEFER_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_gc_defer_entry, &h_rgw_gc_defer_entry);
-  cls_register_cxx_method(h_class, RGW_GC_LIST, CLS_METHOD_RD, rgw_cls_gc_list, &h_rgw_gc_list);
-  cls_register_cxx_method(h_class, RGW_GC_REMOVE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_gc_remove, &h_rgw_gc_remove);
+  // Bucket Index (BI) / Resharding
+  cls.register_cxx_method(bi_get, rgw_bi_get_op, &h_rgw_bi_get_op);
+  cls.register_cxx_method(bi_put, rgw_bi_put_op, &h_rgw_bi_put_op);
+  cls.register_cxx_method(bi_put_entries, rgw_bi_put_entries, &h_rgw_bi_put_entries_op);
+  cls.register_cxx_method(bi_list, rgw_bi_list_op, &h_rgw_bi_list_op);
+  cls.register_cxx_method(reshard_log_trim, rgw_reshard_log_trim_op, &h_rgw_reshard_log_trim_op);
 
-  /* lifecycle bucket list */
-  cls_register_cxx_method(h_class, RGW_LC_GET_ENTRY, CLS_METHOD_RD, rgw_cls_lc_get_entry, &h_rgw_lc_get_entry);
-  cls_register_cxx_method(h_class, RGW_LC_SET_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_lc_set_entry, &h_rgw_lc_set_entry);
-  cls_register_cxx_method(h_class, RGW_LC_RM_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_lc_rm_entry, &h_rgw_lc_rm_entry);
-  cls_register_cxx_method(h_class, RGW_LC_GET_NEXT_ENTRY, CLS_METHOD_RD, rgw_cls_lc_get_next_entry, &h_rgw_lc_get_next_entry);
-  cls_register_cxx_method(h_class, RGW_LC_PUT_HEAD, CLS_METHOD_RD| CLS_METHOD_WR, rgw_cls_lc_put_head, &h_rgw_lc_put_head);
-  cls_register_cxx_method(h_class, RGW_LC_GET_HEAD, CLS_METHOD_RD, rgw_cls_lc_get_head, &h_rgw_lc_get_head);
-  cls_register_cxx_method(h_class, RGW_LC_LIST_ENTRIES, CLS_METHOD_RD, rgw_cls_lc_list_entries, &h_rgw_lc_list_entries);
+  cls.register_cxx_method(bi_log_list, rgw_bi_log_list, &h_rgw_bi_log_list_op);
+  cls.register_cxx_method(bi_log_trim, rgw_bi_log_trim, &h_rgw_bi_log_trim_op);
+  cls.register_cxx_method(dir_suggest_changes, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
 
-  /* multipart */
-  cls_register_cxx_method(h_class, RGW_MP_UPLOAD_PART_INFO_UPDATE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_mp_upload_part_info_update, &h_rgw_mp_upload_part_info_update);
+  cls.register_cxx_method(bi_log_resync, rgw_bi_log_resync, &h_rgw_bi_log_resync_op);
+  cls.register_cxx_method(bi_log_stop, rgw_bi_log_stop, &h_rgw_bi_log_stop_op);
 
-  /* resharding */
-  cls_register_cxx_method(h_class, RGW_RESHARD_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_add, &h_rgw_reshard_add);
-  cls_register_cxx_method(h_class, RGW_RESHARD_LIST, CLS_METHOD_RD, rgw_reshard_list, &h_rgw_reshard_list);
-  cls_register_cxx_method(h_class, RGW_RESHARD_GET, CLS_METHOD_RD,rgw_reshard_get, &h_rgw_reshard_get);
-  cls_register_cxx_method(h_class, RGW_RESHARD_REMOVE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_remove, &h_rgw_reshard_remove);
+  // Usage Logging
+  cls.register_cxx_method(user_usage_log_add, rgw_user_usage_log_add, &h_rgw_user_usage_log_add);
+  cls.register_cxx_method(user_usage_log_read, rgw_user_usage_log_read, &h_rgw_user_usage_log_read);
+  cls.register_cxx_method(user_usage_log_trim, rgw_user_usage_log_trim, &h_rgw_user_usage_log_trim);
+  cls.register_cxx_method(usage_log_clear, rgw_usage_log_clear, &h_rgw_usage_log_clear);
 
-  /* resharding attribute  */
-  cls_register_cxx_method(h_class, RGW_SET_BUCKET_RESHARDING, CLS_METHOD_RD | CLS_METHOD_WR,
-			  rgw_set_bucket_resharding, &h_rgw_set_bucket_resharding);
-  cls_register_cxx_method(h_class, RGW_CLEAR_BUCKET_RESHARDING, CLS_METHOD_RD | CLS_METHOD_WR,
-			  rgw_clear_bucket_resharding, &h_rgw_clear_bucket_resharding);
-  cls_register_cxx_method(h_class, RGW_GUARD_BUCKET_RESHARDING, CLS_METHOD_RD ,
-			  rgw_guard_bucket_resharding, &h_rgw_guard_bucket_resharding);
-  cls_register_cxx_method(h_class, RGW_GET_BUCKET_RESHARDING, CLS_METHOD_RD ,
-			  rgw_get_bucket_resharding, &h_rgw_get_bucket_resharding);
+  // Garbage Collection
+  cls.register_cxx_method(gc_set_entry, rgw_cls_gc_set_entry, &h_rgw_gc_set_entry);
+  cls.register_cxx_method(method::gc_defer_entry, rgw_cls_gc_defer_entry, &h_rgw_gc_defer_entry);
+  cls.register_cxx_method(gc_list, rgw_cls_gc_list, &h_rgw_gc_list);
+  cls.register_cxx_method(method::gc_remove, rgw_cls_gc_remove, &h_rgw_gc_remove);
+
+  // Lifecycle Bucket List
+  cls.register_cxx_method(lc_get_entry, rgw_cls_lc_get_entry, &h_rgw_lc_get_entry);
+  cls.register_cxx_method(lc_set_entry, rgw_cls_lc_set_entry, &h_rgw_lc_set_entry);
+  cls.register_cxx_method(lc_rm_entry, rgw_cls_lc_rm_entry, &h_rgw_lc_rm_entry);
+  cls.register_cxx_method(lc_get_next_entry, rgw_cls_lc_get_next_entry, &h_rgw_lc_get_next_entry);
+  cls.register_cxx_method(lc_put_head, rgw_cls_lc_put_head, &h_rgw_lc_put_head);
+  cls.register_cxx_method(lc_get_head, rgw_cls_lc_get_head, &h_rgw_lc_get_head);
+  cls.register_cxx_method(lc_list_entries, rgw_cls_lc_list_entries, &h_rgw_lc_list_entries);
+
+  // Multipart
+  cls.register_cxx_method(mp_upload_part_info_update, rgw_mp_upload_part_info_update, &h_rgw_mp_upload_part_info_update);
+
+  // Resharding
+  cls.register_cxx_method(reshard_add, rgw_reshard_add, &h_rgw_reshard_add);
+  cls.register_cxx_method(reshard_list, rgw_reshard_list, &h_rgw_reshard_list);
+  cls.register_cxx_method(reshard_get, rgw_reshard_get, &h_rgw_reshard_get);
+  cls.register_cxx_method(reshard_remove, rgw_reshard_remove, &h_rgw_reshard_remove);
+
+  // Resharding Attribute
+  cls.register_cxx_method(set_bucket_resharding, rgw_set_bucket_resharding, &h_rgw_set_bucket_resharding);
+  cls.register_cxx_method(clear_bucket_resharding, rgw_clear_bucket_resharding, &h_rgw_clear_bucket_resharding);
+  cls.register_cxx_method(method::guard_bucket_resharding, rgw_guard_bucket_resharding, &h_rgw_guard_bucket_resharding);
+  cls.register_cxx_method(get_bucket_resharding, rgw_get_bucket_resharding, &h_rgw_get_bucket_resharding);
 
   return;
 }

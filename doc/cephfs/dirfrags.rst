@@ -28,8 +28,8 @@ Splitting and merging
 =====================
 
 When an MDS identifies a directory fragment to be split, it does not
-do the split immediately.  Because splitting interrupts metadata IO,
-a short delay is used to allow short bursts of client IO to complete
+do the split immediately.  Because splitting interrupts metadata I/O,
+a short delay is used to allow short bursts of client I/O to complete
 before the split begins.  This delay is configured with
 ``mds_bal_fragment_interval``, which defaults to 5 seconds.
 
@@ -50,7 +50,7 @@ A directory fragment is eligible for splitting when its size exceeds
 split is delayed by ``mds_bal_fragment_interval``, but if the fragment size
 exceeds a factor of ``mds_bal_fragment_fast_factor`` the split size,
 the split will happen immediately (holding up any client metadata
-IO on the directory).
+I/O on the directory).
 
 ``mds_bal_fragment_size_max`` is the hard limit on the size of
 directory fragments.  If it is reached, clients will receive
@@ -81,7 +81,7 @@ exponential decay based on the ``mds_decay_halflife`` setting.
 
 On writes, the write counter is
 incremented, and compared with ``mds_bal_split_wr``, triggering a
-split if the threshold is exceeded.  Write operations include metadata IO
+split if the threshold is exceeded.  Write operations include metadata I/O
 such as renames, unlinks and creations.
 
 The ``mds_bal_split_rd`` threshold is applied based on the read operation

@@ -150,11 +150,13 @@ class TestLvm:
         assert self.lvm.args.data_size == 102400
 
     @patch('ceph_volume.objectstore.lvm.nvme_utils.preformat', Mock(return_value=True))
+    @patch('ceph_volume.objectstore.lvm.api.get_device_vgs', Mock(return_value=[]))
     @patch('ceph_volume.util.disk.is_device', Mock(return_value=True))
     @patch('ceph_volume.api.lvm.create_lv')
     def test_prepare_data_device_preformats_nvme_and_skips_mkfs_discard(self,
                                                                        m_create_lv: MagicMock,
                                                                        factory: Callable[..., Namespace]) -> None:
+        """No existing VG on a fresh device: preformat runs, discard flag is set."""
         args = factory(data='/dev/nvme0n1',
                        data_slots=1,
                        data_size=0)
@@ -167,6 +169,30 @@ class TestLvm:
                                           lv_uuid='abcd')
         self.lvm.prepare_data_device('block', 'abcd')
         assert self.lvm.skip_mkfs_discard is True
+
+    @patch('ceph_volume.util.disk.is_device', Mock(return_value=True))
+    @patch('ceph_volume.api.lvm.create_lv')
+    def test_prepare_data_device_skips_preformat_when_vg_exists(self,
+                                                                 m_create_lv: MagicMock,
+                                                                 factory: Callable[..., Namespace]) -> None:
+        """Existing ceph VG on device (--osds-per-device > 1): preformat must not run."""
+        m_preformat = Mock(return_value=True)
+        fake_vg = Mock()
+        with patch('ceph_volume.objectstore.lvm.nvme_utils.preformat', m_preformat), \
+             patch('ceph_volume.objectstore.lvm.api.get_device_vgs', return_value=[fake_vg]):
+            args = factory(data='/dev/nvme0n1',
+                           data_slots=1,
+                           data_size=0)
+            self.lvm.args = args
+            self.lvm.objectstore = 'bluestore'
+            m_create_lv.return_value = Volume(lv_name='lv_foo',
+                                              lv_path='/fake-path',
+                                              vg_name='vg_foo',
+                                              lv_tags='',
+                                              lv_uuid='abcd')
+            self.lvm.prepare_data_device('block', 'abcd')
+            m_preformat.assert_not_called()
+            assert self.lvm.skip_mkfs_discard is False
 
     @patch('ceph_volume.util.disk.is_device', Mock(return_value=False))
     @patch('ceph_volume.util.disk.is_partition', Mock(return_value=False))

@@ -113,7 +113,9 @@ ProgressTracker::set_total(uint64_t total)
 void
 ProgressTracker::display_progress() const
 {
-  if (!started) {
+  auto processed = processed_items.load();
+  auto total = total_items.load();
+  if (!started || !total || (processed > total)) {
     return;
   }
   const time_point now = clock::now();
@@ -298,6 +300,7 @@ ProgressTracker::display_final_summary() const
   if (!started) {
     return;
   }
+
   std::lock_guard<std::mutex> lock(display_mutex);
   std::string completed_status = get_completed_status();
   write_console_line(fmt::format("Completed {}! Processed {}", operation_name, completed_status), false);

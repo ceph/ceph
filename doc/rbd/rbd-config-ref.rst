@@ -4,8 +4,8 @@
 
 See `Block Device`_ for additional details.
 
-Generic IO Settings
-===================
+Generic I/O Settings
+====================
 
 .. confval:: rbd_compression_hint
 .. confval:: rbd_read_from_replica_policy
@@ -220,7 +220,7 @@ Clone Settings
 QoS Settings
 ============
 
-librbd supports limiting per-image IO in several ways. These all apply
+librbd supports limiting per-image I/O in several ways. These all apply
 to a given image within a given process - the same image used in
 multiple places, e.g. two separate VMs, would have independent limits.
 

@@ -462,12 +462,12 @@ class Builder:
         if os.path.isdir(self._workdir / "tmp_bin"):
             # For every binary file that was copied to the tmp_bin directory by the jobs above, search for the existing file in the container and replace it.
             dlines.append("ADD tmp_bin /tmpbin")
-            dlines.append("RUN for i in tmpbin/*; do find /usr/bin /usr/sbin -name $(basename $i) -exec mv -f $i '{}' \;; echo $(basename $i); done && rm -rf tmpbin")
+            dlines.append(r"RUN for i in tmpbin/*; do find /usr/bin /usr/sbin -name $(basename $i) -exec mv -f $i '{}' \;; echo $(basename $i); done && rm -rf tmpbin")
 
         if os.path.isdir(self._workdir / "tmp_lib"):
             # For every library file that was copied to the tmp_lib directory by the jobs above, search for the existing file in the container and replace it.
             dlines.append("ADD tmp_lib /tmplib")
-            dlines.append("RUN for i in tmplib/*; do find /usr/lib64 -name $(basename $i) -exec mv -f $i '{}' \;; echo $(basename $i); done && rm -rf tmplib")
+            dlines.append(r"RUN for i in tmplib/*; do find /usr/lib64 -name $(basename $i) -exec mv -f $i '{}' \;; echo $(basename $i); done && rm -rf tmplib")
 
         if os.path.isdir(self._workdir / "tmp_bin"):
             # by default locally built binaries assume /usr/local

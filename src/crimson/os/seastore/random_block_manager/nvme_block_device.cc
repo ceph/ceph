@@ -22,9 +22,9 @@ namespace crimson::os::seastore::random_block_device::nvme {
 seastar::future<> NVMeBlockDevice::start(uint32_t shard_nums)
 {
   device_shard_nums = shard_nums;
-  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+  auto num_shard_services = (device_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
   LOG_PREFIX(NVMeBlockDevice::start);
-  DEBUG("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
+  DEBUG("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
   return shard_devices.start(num_shard_services, device_path);
 
 }
@@ -43,7 +43,7 @@ Device& NVMeBlockDevice::get_sharded_device(store_index_t store_index)
 NVMeBlockDevice::mkfs_ret NVMeBlockDevice::mkfs(device_config_t config) {
   using crimson::common::get_conf;
   co_await shard_devices.local().mshard_devices[0]->do_primary_mkfs(config,
-    seastar::smp::count,
+    seastar::this_smp_shard_count(),
     get_conf<Option::size_t>("seastore_cbjournal_size") 
   );
 }
@@ -100,9 +100,9 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
     return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
       return mshard_device->do_shard_mount(
       ).handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in NVMeBlockDevice::do_shard_mount"
-      });
+      ));
     });
   });
 
@@ -346,7 +346,7 @@ nvme_command_ertr::future<int> NVMeBlockDevice::get_nsid(seastar::file f) {
 
 nvme_command_ertr::future<int> NVMeBlockDevice::pass_admin(
   nvme_admin_command_t& admin_cmd, seastar::file f) {
-  auto ret = co_await f.ioctl(NVME_IOCTL_ADMIN_CMD, nullptr
+  auto ret = co_await f.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd
   ).handle_exception(
     [](auto e)->nvme_command_ertr::future<int> {
     LOG_PREFIX(NVMeBlockDevice::pass_admin);

@@ -69,6 +69,9 @@ cdef nogil:
     cdef struct ceph_snapdiff_info:
         int dummy
 
+    cdef struct ceph_snapdiff_info2:
+        int dummy
+
     cdef struct ceph_snapdiff_entry_t:
         dirent dir_entry
         uint64_t snapid
@@ -116,6 +119,9 @@ cdef nogil:
         pass
     int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags):
         pass
+    int ceph_statxat(ceph_mount_info *cmount, int dirfd, const char *path,
+                     statx *stx, unsigned want, unsigned flags):
+        pass
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf):
         pass
 
@@ -140,7 +146,13 @@ cdef nogil:
         pass
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname):
         pass
+    int ceph_symlinkat(ceph_mount_info *cmount, const char *existing, int fd,
+                       const char *newname):
+        pass
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size):
+        pass
+    int ceph_readlinkat(ceph_mount_info *cmount, const int dirfd, char *path,
+                        char *buf, int64_t size):
         pass
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       const void *value, size_t size, int flags):
@@ -196,6 +208,9 @@ cdef nogil:
 
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
+    int ceph_mkdirat(ceph_mount_info *cmount, int dirfd, const char *relpath, mode_t mode):
+        pass
+
     int ceph_mksnap(ceph_mount_info *cmount, const char *path, const char *name, mode_t mode, snap_metadata *snap_metadata, size_t nr_snap_metadata):
         pass
     int ceph_rmsnap(ceph_mount_info *cmount, const char *path, const char *name):
@@ -204,6 +219,11 @@ cdef nogil:
         pass
     void ceph_free_snap_info_buffer(snap_info *snap_info):
         pass
+    int ceph_do_snap_md_op(ceph_mount_info* cmount, const char* path,
+                           const char* md_key, const char* md_val,
+                           const unsigned int op_flag):
+        pass
+
     int ceph_mkdirs(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
     int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp):
@@ -224,9 +244,15 @@ cdef nogil:
         pass
     int ceph_open_snapdiff(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1path, const char *snap2root, ceph_snapdiff_info *out):
         pass
+    int ceph_open_snapdiff2(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1path, const char *snap2root, unsigned mask, ceph_snapdiff_info2 **out):
+        pass
     int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out):
         pass
+    int ceph_readdir_snapdiff2(ceph_snapdiff_info2 *snapdiff, ceph_snapdiff_entry_t *out):
+        pass
     int ceph_close_snapdiff(ceph_snapdiff_info *snapdiff):
+        pass
+    int ceph_close_snapdiff2(ceph_snapdiff_info2 *snapdiff):
         pass
     int ceph_rmdir(ceph_mount_info *cmount, const char *path):
         pass
@@ -244,24 +270,34 @@ cdef nogil:
         pass
     int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length):
         pass
+
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
     int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode):
         pass
+    int ceph_chmodat(ceph_mount_info *cmount, int dirfd, const char *relpath,
+                     mode_t mode, int flags):
+        pass
+
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid):
         pass
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid):
         pass
     int ceph_fchown(ceph_mount_info *cmount, int fd, int uid, int gid):
         pass
+    int ceph_chownat(ceph_mount_info *cmount, int fd, const char *relpath,
+                     int uid, int gid, int flags):
+        pass
+
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence):
         pass
     void ceph_buffer_free(char *buf):
         pass
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode):
         pass
+
     int ceph_utime(ceph_mount_info *cmount, const char *path, utimbuf *buf):
         pass
     int ceph_futime(ceph_mount_info *cmount, int fd, utimbuf *buf):
@@ -274,6 +310,10 @@ cdef nogil:
         pass
     int ceph_futimens(ceph_mount_info *cmount, int fd, timespec times[2]):
         pass
+    int ceph_utimensat(ceph_mount_info* cmount, int fd, const char* relpath,
+                       timespec* times, int flags):
+        pass
+
     int ceph_get_file_replication(ceph_mount_info *cmount, int fh):
         pass
     int ceph_get_path_replication(ceph_mount_info *cmount, const char *path):

@@ -925,38 +925,18 @@ CLS_INIT(fifo)
   cls_method_handle_t h_list_part;
   cls_method_handle_t h_get_part_info;
 
-  cls_register(op::CLASS, &h_class);
-  cls_register_cxx_method(h_class, op::CREATE_META,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          create_meta, &h_create_meta);
+  using namespace rados::cls::fifo;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, op::GET_META,
-                          CLS_METHOD_RD,
-                          get_meta, &h_get_meta);
-
-  cls_register_cxx_method(h_class, op::UPDATE_META,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          update_meta, &h_update_meta);
-
-  cls_register_cxx_method(h_class, op::INIT_PART,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          init_part, &h_init_part);
-
-  cls_register_cxx_method(h_class, op::PUSH_PART,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          push_part, &h_push_part);
-
-  cls_register_cxx_method(h_class, op::TRIM_PART,
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          trim_part, &h_trim_part);
-
-  cls_register_cxx_method(h_class, op::LIST_PART,
-                          CLS_METHOD_RD,
-                          list_part, &h_list_part);
-
-  cls_register_cxx_method(h_class, op::GET_PART_INFO,
-                          CLS_METHOD_RD,
-                          get_part_info, &h_get_part_info);
+  cls.register_cxx_method(method::create_meta,   create_meta,   &h_create_meta);
+  cls.register_cxx_method(method::get_meta,      get_meta,      &h_get_meta);
+  cls.register_cxx_method(method::update_meta,   update_meta,   &h_update_meta);
+  cls.register_cxx_method(method::init_part,     init_part,     &h_init_part);
+  cls.register_cxx_method(method::push_part,     push_part,     &h_push_part);
+  cls.register_cxx_method(method::trim_part,     trim_part,     &h_trim_part);
+  cls.register_cxx_method(method::list_part,     list_part,     &h_list_part);
+  cls.register_cxx_method(method::get_part_info, get_part_info, &h_get_part_info);
 
   /* calculate entry overhead */
   struct entry_header entry_header;

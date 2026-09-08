@@ -13,6 +13,8 @@
 #include "crimson/os/seastore/seastore.h"
 #include "crimson/os/seastore/onode.h"
 
+#include "common/strtol.h" // for ritoa()
+
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
@@ -607,7 +609,7 @@ struct seastore_test_t :
       SeaStoreShard &sharded_seastore) {
       return sharded_seastore.get_attrs(coll, oid)
 	.handle_error(
-	  SeaStoreShard::get_attrs_ertr::assert_all{"unexpected error"})
+	  SeaStoreShard::get_attrs_ertr::assert_all("unexpected error"))
 	.get();
     }
 
@@ -616,7 +618,7 @@ struct seastore_test_t :
       std::string_view name) {
       return sharded_seastore.get_attr(coll, oid, name)
 	.handle_error(
-	  SeaStoreShard::get_attr_errorator::assert_all{"unexpected error"})
+	  SeaStoreShard::get_attr_errorator::assert_all("unexpected error"))
 	.get();
     }
 
@@ -899,6 +901,43 @@ TEST_P(seastore_test_t, collection_split)
   });
 }
 
+TEST_P(seastore_test_t, collection_merge)
+{
+  run_async([this] {
+    coll_t src_coll{spg_t{pg_t{17, 0}}};
+    coll_t dest_coll{spg_t{pg_t{1, 0}}};
+
+    sharded_seastore->create_new_collection(dest_coll).get();
+    {
+      CTransaction t;
+      t.create_collection(dest_coll, 5);
+      do_transaction(std::move(t));
+    }
+    sharded_seastore->create_new_collection(src_coll).get();
+    {
+      CTransaction t;
+      t.create_collection(src_coll, 5);
+      do_transaction(std::move(t));
+    }
+
+    {
+      CTransaction t;
+      t.merge_collection(src_coll, dest_coll, 4);
+      do_transaction(std::move(t));
+    }
+
+    auto raw = seastore->list_collections().get();
+    std::vector<coll_t> colls;
+    colls.reserve(raw.size());
+    std::ranges::transform(raw, std::back_inserter(colls),
+                           [](const auto& p) { return p.first; });
+    EXPECT_EQ(colls.size(), 2u);
+    EXPECT_TRUE(contains(colls, coll_name));
+    EXPECT_TRUE(contains(colls, dest_coll));
+    EXPECT_FALSE(contains(colls, src_coll));
+  });
+}
+
 TEST_P(seastore_test_t, meta) {
   run_async([this] {
     set_meta("key1", "value1");
@@ -923,6 +962,16 @@ TEST_P(seastore_test_t, touch_stat_list_remove)
 
     remove_object(test_obj);
     validate_objects();
+  });
+}
+
+TEST_P(seastore_test_t, stat_nonexistent)
+{
+  run_async([this] {
+    auto st = sharded_seastore->stat(
+      coll,
+      make_oid(99)).get();
+    EXPECT_EQ(st.st_size, 0);
   });
 }
 

@@ -18,6 +18,7 @@
 
 #include "common/Finisher.h"
 #include "common/snap_types.h" // for class SnapContext
+#include "common/Timer.h" // for SafeTimer
 #include "include/cephfs/types.h" // for mds_rank_t
 #include "osdc/Journaler.h"
 #include "include/frag.h"

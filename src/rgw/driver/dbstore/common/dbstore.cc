@@ -104,6 +104,8 @@ std::shared_ptr<class DBOp> DB::getDBOp(const DoutPrefixProvider *dpp, std::stri
     return dbops.RemoveUser;
   if (!Op.compare("GetUser"))
     return dbops.GetUser;
+  if (!Op.compare("ListUsers"))
+    return dbops.ListUsers;
   if (!Op.compare("InsertBucket"))
     return dbops.InsertBucket;
   if (!Op.compare("UpdateBucket"))
@@ -234,6 +236,7 @@ int DB::InitializeParams(const DoutPrefixProvider *dpp, DBOpParams *params)
   params->cct = cct;
 
   //reset params here
+  params->account_table = account_table;
   params->user_table = user_table;
   params->bucket_table = bucket_table;
   params->quota_table = quota_table;
@@ -427,6 +430,184 @@ int DB::remove_user(const DoutPrefixProvider *dpp,
   }
 
 out:
+  return ret;
+}
+
+int DB::list_users(const DoutPrefixProvider *dpp,
+        const std::string& marker,
+        uint64_t max,
+        std::list<std::string>& keys,
+        bool *is_truncated)
+{
+  int ret = 0;
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.user.uinfo.user_id = marker;
+  params.op.list_max_count = max;
+
+  ret = ProcessOp(dpp, "ListUsers", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0) << "list_users failed with err:(" << ret <<") " << dendl;
+    goto out;
+  }
+  for (auto& entry : params.op.user.list_entries) {
+    keys.push_back(entry.user_id.to_str());
+  }
+
+out:
+  return ret;
+}
+
+int DB::get_account(const DoutPrefixProvider *dpp,
+    const std::string& query_str, const std::string& query_str_val,
+    RGWAccountInfo& ainfo, map<string, bufferlist> *pattrs,
+    RGWObjVersionTracker *pobjv_tracker) {
+  int ret = 0;
+
+  if (query_str.empty() || query_str_val.empty()) {
+    ldpp_dout(dpp, 0)<<"In GetAccount - Invalid query(" << query_str <<"), query_str_val(" << query_str_val <<")" << dendl;
+    return -1;
+  }
+
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+
+  params.op.query_str = query_str;
+
+  // validate query_str with AccountTable entries names
+  if (query_str == "name") {
+    params.op.account.info.name = query_str_val;
+  } else if (query_str == "email") {
+    params.op.account.info.email = query_str_val;
+  } else if (query_str == "account_id") {
+    params.op.account.info.id = query_str_val;
+  } else {
+    ldpp_dout(dpp, 0)<<"In GetAccount Invalid query string :" <<query_str.c_str()<<") " << dendl;
+    return -1;
+  }
+
+  ret = ProcessOp(dpp, "GetAccount", &params);
+
+  if (ret) {
+    return ret;
+  }
+
+  /* Verify if its a valid account */
+  if (params.op.account.info.id.empty()) {
+    ldpp_dout(dpp, 0)<<"In GetAccount - No account with query(" <<query_str.c_str()<<"), account_id(" << ainfo.id <<") found" << dendl;
+    return -ENOENT;
+  }
+
+  ainfo = params.op.account.info;
+
+  if (pattrs) {
+    *pattrs = params.op.account.account_attrs;
+  }
+
+  if (pobjv_tracker) {
+    pobjv_tracker->read_version = params.op.account.account_version;
+  }
+
+  return ret;
+}
+
+int DB::store_account(const DoutPrefixProvider *dpp,
+    const RGWAccountInfo& ainfo, bool exclusive, const map<string, bufferlist> *pattrs,
+    RGWObjVersionTracker *pobjv)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  /* Check if the account already exists and return the old info, caller will have a use for it */
+  RGWAccountInfo orig_info;
+  RGWObjVersionTracker objv_tracker = {};
+  obj_version& obj_ver = objv_tracker.read_version;
+
+  orig_info.id = ainfo.id;
+  ret = get_account(dpp, string("account_id"), ainfo.id, orig_info, nullptr, &objv_tracker);
+
+  if (!ret && obj_ver.ver) {
+    /* already exists. */
+    if (pobjv && (pobjv->read_version.ver != obj_ver.ver)) {
+      /* Object version mismatch.. return ECANCELED */
+      ret = -ECANCELED;
+      ldpp_dout(dpp, 0)<<"Account Read version mismatch err:(" <<ret<<") " << dendl;
+      return ret;
+    }
+
+    if (exclusive) {
+      // return
+      return ret;
+    }
+    obj_ver.ver++;
+  } else {
+    obj_ver.ver = 1;
+    obj_ver.tag = "AccountTAG";
+  }
+
+  params.op.account.account_version = obj_ver;
+  params.op.account.info = ainfo;
+
+  if (pattrs) {
+    params.op.account.account_attrs = *pattrs;
+  }
+
+  ret = ProcessOp(dpp, "InsertAccount", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"store_account failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 20)<<"Account creation successful - account_id:(" <<ainfo.id<<") " << dendl;
+
+  if (pobjv) {
+    pobjv->read_version = obj_ver;
+    pobjv->write_version = obj_ver;
+  }
+
+  return ret;
+}
+
+int DB::remove_account(const DoutPrefixProvider *dpp,
+    const RGWAccountInfo &ainfo, RGWObjVersionTracker *pobjv)
+{
+  DBOpParams params = {};
+  InitializeParams(dpp, &params);
+  int ret = 0;
+
+  RGWAccountInfo orig_info;
+  RGWObjVersionTracker objv_tracker = {};
+
+  orig_info.id = ainfo.id;
+  ret = get_account(dpp, string("account_id"), ainfo.id, orig_info, nullptr, &objv_tracker);
+
+  if (ret) {
+    return ret;
+  }
+
+  if (!ret && objv_tracker.read_version.ver) {
+    /* already exists. */
+
+    if (pobjv && (pobjv->read_version.ver != objv_tracker.read_version.ver)) {
+      /* Object version mismatch.. return ECANCELED */
+      ret = -ECANCELED;
+      ldpp_dout(dpp, 0)<<"Account Read version mismatch err:(" <<ret<<") " << dendl;
+      return ret;
+    }
+  }
+
+  params.op.account.info.id = ainfo.id;
+
+  ret = ProcessOp(dpp, "RemoveAccount", &params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"remove_account failed with err:(" <<ret<<") " << dendl;
+    return ret;
+  }
+
   return ret;
 }
 

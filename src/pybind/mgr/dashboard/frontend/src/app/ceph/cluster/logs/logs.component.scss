@@ -1,58 +1,113 @@
-@use './src/styles/vendor/variables' as vv;
+// Log viewer container
+.log-viewer {
+  position: relative;
+  background: var(--cds-layer-01);
+  border-radius: var(--cds-spacing-02);
+  padding: var(--cds-spacing-05);
 
-p {
-  font-family: monospace;
-}
+  &--scrollable {
+    max-height: 50vh;
+    overflow-y: auto;
 
-.card {
-  .btn-group {
-    margin-top: -57px;
-    position: absolute;
-    right: 0;
-  }
+    // Custom scrollbar styling for better Carbon integration
+    &::-webkit-scrollbar {
+      width: var(--cds-spacing-03);
+    }
 
-  div p {
-    display: flex;
+    &::-webkit-scrollbar-track {
+      background: var(--cds-layer-01);
+    }
 
-    &:last-child {
-      margin-bottom: 0;
+    &::-webkit-scrollbar-thumb {
+      background: var(--cds-border-subtle-01);
+      border-radius: var(--cds-spacing-02);
+
+      &:hover {
+        background: var(--cds-border-strong-01);
+      }
     }
   }
 
-  .timestamp {
+  &__empty {
+    font-size: var(--cds-body-compact-01-font-size);
+    font-weight: var(--cds-body-compact-01-font-weight);
+    line-height: var(--cds-body-compact-01-line-height);
+    letter-spacing: var(--cds-body-compact-01-letter-spacing);
+    color: var(--cds-text-secondary);
+    padding: var(--cds-spacing-07) 0;
+    text-align: center;
+  }
+}
+
+// Action buttons (download/copy)
+.log-actions {
+  position: absolute;
+  top: var(--cds-spacing-03);
+  right: var(--cds-spacing-03);
+  display: flex;
+  gap: var(--cds-spacing-02);
+  z-index: 1;
+}
+
+// Log entries container
+.log-entries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cds-spacing-02);
+}
+
+// Individual log entry
+.log-entry {
+  display: flex;
+  gap: var(--cds-spacing-04);
+  padding: var(--cds-spacing-02) 0;
+
+  &:hover {
+    background: var(--cds-layer-hover-01);
+    margin: 0 calc(-1 * var(--cds-spacing-03));
+    padding: var(--cds-spacing-02) var(--cds-spacing-03);
+    border-radius: var(--cds-spacing-01);
+  }
+
+  &__timestamp {
     flex-shrink: 0;
-    font-weight: bold;
+    font-weight: 600;
+    color: var(--cds-text-primary);
+    min-width: 140px;
   }
 
-  .priority {
-    margin-left: 0.5rem;
+  &__priority {
+    flex-shrink: 0;
+    font-weight: 500;
+    min-width: 48px;
+
+    &--err {
+      color: var(--cds-support-error);
+    }
+
+    &--warn {
+      color: var(--cds-support-warning);
+    }
+
+    &--info {
+      color: var(--cds-support-info);
+    }
+
+    &--debug {
+      color: var(--cds-text-secondary);
+    }
   }
 
-  .message {
-    margin-left: 1rem;
-  }
-
-  .err {
-    color: vv.$danger;
-  }
-
-  .warn {
-    color: vv.$warning;
-  }
-
-  .info {
-    color: vv.$info;
-  }
-
-  .debug {
-    color: vv.$gray-700;
+  &__message {
+    flex: 1;
+    overflow-wrap: break-word;
+    color: var(--cds-text-primary);
   }
 }
 
-::ng-deep cd-logs ngb-timepicker input.ngb-tp-input {
-  width: 3.5rem !important;
-}
-
-.card-body.overflow-auto {
-  height: 50vh;
+.log-entry__message mark {
+  background-color: var(--cds-background-selected);
+  color: var(--cds-text-on-color);
+  padding: 0 var(--cds-spacing-01);
+  border-radius: var(--cds-spacing-01);
 }

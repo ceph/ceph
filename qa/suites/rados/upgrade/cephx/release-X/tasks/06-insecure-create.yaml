@@ -1,0 +1,25 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health unmute AUTH_INSECURE_KEYS_CREATABLE
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+- ceph.healthy:
+    expected_checks: [AUTH_INSECURE_KEYS_CREATABLE]
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 config rm mon 'mon auth allow insecure key'
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 tell mon.a config diff
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 tell mon.b config diff
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 tell mon.c config diff
+# The default when auth_allow_ciphers inclues aes, retain default mon_auth_allow_insecure_key=true
+- ceph.healthy:
+    expected_checks: [AUTH_INSECURE_KEYS_CREATABLE]
+# Now setting it overrides:
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 config set mon 'mon auth allow insecure key' false
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 tell mon.a config diff
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 tell mon.b config diff
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 tell mon.c config diff
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+- ceph.healthy:

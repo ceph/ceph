@@ -35,6 +35,13 @@ void PGScrubber::on_replica_activate()
   handle_event(events::replica_activate_t{});
 }
 
+void PGScrubber::stop()
+{
+  LOG_PREFIX(PGScrubber::stop);
+  DEBUGDPP("", pg);
+  on_interval_change();
+}
+
 void PGScrubber::on_interval_change()
 {
   LOG_PREFIX(PGScrubber::on_interval_change);
@@ -134,6 +141,7 @@ void PGScrubber::notify_scrub_end(bool deep)
     pg.peering_state.state_clear(PG_STATE_DEEP_SCRUB);
   }
   pg.publish_stats_to_osd();
+  pg.kick_snap_trim();
 }
 
 const std::set<pg_shard_t> &PGScrubber::get_ids_to_scrub() const
@@ -183,8 +191,12 @@ void PGScrubber::reserve_range(const hobject_t &start, const hobject_t &end)
 void PGScrubber::release_range()
 {
   LOG_PREFIX(PGScrubber::release_range);
-  ceph_assert(blocked);
-  DEBUGDPP("blocked: {}", pg, *blocked);
+  if (!blocked) {
+    DEBUGDPP("range not reserved, skipping", pg);
+    return;
+  }
+  DEBUGDPP("blocked: {}, releasing pg background_process_lock (range {} .. {})",
+	   pg, *blocked, blocked->begin, blocked->end);
   pg.background_process_lock.unlock();
   blocked->p.set_value();
   blocked = std::nullopt;

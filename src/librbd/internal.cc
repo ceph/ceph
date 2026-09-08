@@ -9,6 +9,7 @@
 #include "include/types.h"
 #include "include/uuid.h"
 #include "common/ceph_context.h"
+#include "common/Cond.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Throttle.h"

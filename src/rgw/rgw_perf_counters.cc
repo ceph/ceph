@@ -63,6 +63,11 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_u64_counter(l_rgw_d4n_cache_hits, "d4n_cache_hits", "D4N cache hits");
   pcb->add_u64_counter(l_rgw_d4n_cache_misses, "d4n_cache_misses", "D4N cache misses");
   pcb->add_u64_counter(l_rgw_d4n_cache_evictions, "d4n_cache_evictions", "D4N cache evictions");
+
+  pcb->add_time_avg(l_rgw_kms_fetch_lat, "kms_fetch_lat", "Uncached KMS secret fetch latency");
+  pcb->add_u64_counter(l_rgw_kms_error_permanent, "kms_error_permanent", "Permanent (e.g key not found) errors returned from KMS");
+  pcb->add_u64_counter(l_rgw_kms_error_transient, "kms_error_transient", "Transient (e.g timeout, overloaded) errors returned from KMS");
+  pcb->add_u64_counter(l_rgw_kms_error_secret_store, "kms_error_secret_store", "Secret store errors (e.g kernel keyring quota)");
 }
 
 void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
@@ -93,6 +98,9 @@ void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
 
   lpcb->add_u64_counter(l_rgw_op_list_buckets, "list_buckets_ops", "List buckets");
   lpcb->add_time_avg(l_rgw_op_list_buckets_lat, "list_buckets_lat", "List buckets latency");
+
+  lpcb->add_u64_counter(l_rgw_op_head_obj, "head_obj_ops","Head object operations");
+  lpcb->add_time_avg(l_rgw_op_head_obj_lat, "head_obj_lat","Head object latency");
 }
 
 void add_rgw_topic_counters(PerfCountersBuilder *lpcb) {
@@ -232,6 +240,66 @@ CountersManager::~CountersManager() {
 
 } // namespace rgw::persistent_topic_counters
 
+namespace rgw::lc_counters {
+
+ceph::perf_counters::PerfCountersCache *lc_counters_cache = nullptr;
+const std::string rgw_lc_counters_key = "rgw_lc_per_bucket";
+
+void add_lc_counters(PerfCountersBuilder *pcb) {
+  /*
+   * mgr can't expose labeled counters via its prometheus module, so
+   * register at PRIO_DEBUGONLY to keep them out of MgrReport under the
+   * default mgr_stats_threshold.
+   */
+  pcb->set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
+
+  pcb->add_u64(l_rgw_lc_per_bucket_start_time, "start_time",
+               "LC processing start timestamp (Unix epoch seconds)");
+  pcb->add_u64(l_rgw_lc_per_bucket_end_time, "end_time",
+               "LC processing end timestamp (Unix epoch seconds)");
+  pcb->add_u64_counter(l_rgw_lc_per_bucket_obj_scanned, "objects_scanned",
+                       "Objects scanned by LC (cumulative across runs)");
+  pcb->add_u64(l_rgw_lc_per_bucket_obj_pending, "objects_pending",
+               "Objects currently pending LC processing");
+  pcb->add_u64_counter(l_rgw_lc_per_bucket_obj_expired, "objects_expired",
+                       "Current-version objects expired by LC");
+  pcb->add_u64_counter(l_rgw_lc_per_bucket_obj_noncur_expired,
+                       "objects_noncurrent_expired",
+                       "Noncurrent-version objects expired by LC");
+  pcb->add_u64_counter(l_rgw_lc_per_bucket_obj_dm_expired,
+                       "objects_dm_expired",
+                       "Delete markers expired by LC");
+  pcb->add_u64_counter(l_rgw_lc_per_bucket_obj_transitioned,
+                       "objects_transitioned",
+                       "Objects transitioned by LC");
+  pcb->add_u64_counter(l_rgw_lc_per_bucket_obj_mpu_aborted,
+                       "objects_mpu_aborted",
+                       "Multipart uploads aborted by LC");
+}
+
+std::shared_ptr<PerfCounters> create_lc_counters(const std::string& name, CephContext *cct) {
+  PerfCountersBuilder pcb(cct, name, l_rgw_lc_per_bucket_first, l_rgw_lc_per_bucket_last);
+  add_lc_counters(&pcb);
+  std::shared_ptr<PerfCounters> new_counters(pcb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(new_counters.get());
+  return new_counters;
+}
+
+std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
+                                  const std::string& tenant) {
+  if (!lc_counters_cache) {
+    return nullptr;
+  }
+  std::string key = ceph::perf_counters::key_create(rgw_lc_counters_key,
+                                                    {{"bucket", bucket_name}});
+  if (!tenant.empty()) {
+    key = ceph::perf_counters::key_insert(key, {{"tenant", tenant}});
+  }
+  return lc_counters_cache->get(key);
+}
+
+} // namespace rgw::lc_counters
+
 int rgw_perf_start(CephContext *cct)
 {
   frontend_counters_init(cct);
@@ -248,6 +316,12 @@ int rgw_perf_start(CephContext *cct)
     bucket_counters_cache = new PerfCountersCache(cct, target_size, create_rgw_op_counters);
   }
 
+  bool lc_counters_cache_enabled = cct->_conf.get_val<bool>("rgw_lc_counters_cache");
+  if (lc_counters_cache_enabled) {
+    uint64_t target_size = cct->_conf.get_val<uint64_t>("rgw_lc_counters_cache_size");
+    rgw::lc_counters::lc_counters_cache = new PerfCountersCache(cct, target_size, rgw::lc_counters::create_lc_counters);
+  }
+
   global_op_counters_init(cct);
   return 0;
 }
@@ -262,4 +336,5 @@ void rgw_perf_stop(CephContext *cct)
   delete global_op_counters;
   delete user_counters_cache;
   delete bucket_counters_cache;
+  delete rgw::lc_counters::lc_counters_cache;
 }

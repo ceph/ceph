@@ -23,7 +23,7 @@ function run() {
 
     export CEPH_MON="127.0.0.1:7104" # git grep '\<7104\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     local funcs=${@:-$(set | ${SED} -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
@@ -40,7 +40,7 @@ function TEST_crush_rule_create_simple() {
     run_mon $dir a || return 1
 
     ceph --format xml osd crush rule dump replicated_rule | \
-        egrep '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
+        grep -E '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
         grep '<op>choose_firstn</op><num>0</num><type>osd</type>' || return 1
     local rule=rule0
     local root=host1
@@ -50,7 +50,7 @@ function TEST_crush_rule_create_simple() {
     ceph osd crush rule create-simple $rule $root $failure_domain 2>&1 | \
         grep "$rule already exists" || return 1
     ceph --format xml osd crush rule dump $rule | \
-        egrep '<op>take</op><item>[^<]+</item><item_name>'$root'</item_name>' | \
+        grep -E '<op>take</op><item>[^<]+</item><item_name>'$root'</item_name>' | \
         grep '<op>choose_firstn</op><num>0</num><type>'$failure_domain'</type>' || return 1
     ceph osd crush rule rm $rule || return 1
 }
@@ -96,7 +96,7 @@ function TEST_crush_rule_create_erasure() {
     ceph osd crush rule create-erasure $rule 2>&1 | \
         grep "$rule already exists" || return 1
     ceph --format xml osd crush rule dump $rule | \
-        egrep '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
+        grep -E '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
         grep '<op>chooseleaf_indep</op><num>0</num><type>host</type>' || return 1
     ceph osd crush rule rm $rule || return 1
     ! ceph osd crush rule ls | grep $rule || return 1

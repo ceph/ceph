@@ -5,7 +5,6 @@ from typing import Optional, Union
 
 import ipaddress
 
-
 IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
 
 

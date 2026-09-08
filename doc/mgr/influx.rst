@@ -128,47 +128,47 @@ OSDs
 +------------+------------------------------------+
 
 
-+------------------------+--------------------------------------------------------------------------+
-|Counter                 | Description                                                              |
-+========================+==========================================================================+
-|op_wip                  | Replication operations currently being processed (primary)               |
-+------------------------+--------------------------------------------------------------------------+
-|op_latency              | Latency of client operations (including queue time)                      |
-+------------------------+--------------------------------------------------------------------------+
-|op_process_latency      | Latency of client operations (excluding queue time)                      |           
-+------------------------+--------------------------------------------------------------------------+
-|op_prepare_latency      | Latency of client operations (excluding queue time and wait for finished)|
-+------------------------+--------------------------------------------------------------------------+
-|op_r_latency            | Latency of read operation (including queue time)                         |
-+------------------------+--------------------------------------------------------------------------+
-|op_r_process_latency    | Latency of read operation (excluding queue time)                         |
-+------------------------+--------------------------------------------------------------------------+
-|op_w_in_bytes           | Client data written                                                      |
-+------------------------+--------------------------------------------------------------------------+
-|op_w_latency            | Latency of write operation (including queue time)                        |
-+------------------------+--------------------------------------------------------------------------+
-|op_w_process_latency    | Latency of write operation (excluding queue time)                        |
-+------------------------+--------------------------------------------------------------------------+
-|op_w_prepare_latency    | Latency of write operations (excluding queue time and wait for finished) |
-+------------------------+--------------------------------------------------------------------------+
-|op_rw                   | Client read-modify-write operations                                      |
-+------------------------+--------------------------------------------------------------------------+
-|op_rw_in_bytes          | Client read-modify-write operations write in                             |
-+------------------------+--------------------------------------------------------------------------+
-|op_rw_out_bytes         | Client read-modify-write operations read out                             |
-+------------------------+--------------------------------------------------------------------------+
-|op_rw_latency           | Latency of read-modify-write operation (including queue time)            |
-+------------------------+--------------------------------------------------------------------------+
-|op_rw_process_latency   | Latency of read-modify-write operation (excluding queue time)            |
-+------------------------+--------------------------------------------------------------------------+
-|op_rw_prepare_latency   | Latency of read-modify-write operations (excluding queue time            |
-|                        | and wait for finished)                                                   |
-+------------------------+--------------------------------------------------------------------------+
-|op_before_queue_op_lat  | Latency of IO before calling queue (before really queue into ShardedOpWq)|
-|                        | op_before_dequeue_op_lat                                                 |
-+------------------------+--------------------------------------------------------------------------+
-|op_before_dequeue_op_lat| Latency of IO before calling dequeue_op(already dequeued and get PG lock)|
-+------------------------+--------------------------------------------------------------------------+
++------------------------+---------------------------------------------------------------------------+
+|Counter                 | Description                                                               |
++========================+===========================================================================+
+|op_wip                  | Replication operations currently being processed (primary)                |
++------------------------+---------------------------------------------------------------------------+
+|op_latency              | Latency of client operations (including queue time)                       |
++------------------------+---------------------------------------------------------------------------+
+|op_process_latency      | Latency of client operations (excluding queue time)                       |
++------------------------+---------------------------------------------------------------------------+
+|op_prepare_latency      | Latency of client operations (excluding queue time and wait for finished) |
++------------------------+---------------------------------------------------------------------------+
+|op_r_latency            | Latency of read operation (including queue time)                          |
++------------------------+---------------------------------------------------------------------------+
+|op_r_process_latency    | Latency of read operation (excluding queue time)                          |
++------------------------+---------------------------------------------------------------------------+
+|op_w_in_bytes           | Client data written                                                       |
++------------------------+---------------------------------------------------------------------------+
+|op_w_latency            | Latency of write operation (including queue time)                         |
++------------------------+---------------------------------------------------------------------------+
+|op_w_process_latency    | Latency of write operation (excluding queue time)                         |
++------------------------+---------------------------------------------------------------------------+
+|op_w_prepare_latency    | Latency of write operations (excluding queue time and wait for finished)  |
++------------------------+---------------------------------------------------------------------------+
+|op_rw                   | Client read-modify-write operations                                       |
++------------------------+---------------------------------------------------------------------------+
+|op_rw_in_bytes          | Client read-modify-write operations write in                              |
++------------------------+---------------------------------------------------------------------------+
+|op_rw_out_bytes         | Client read-modify-write operations read out                              |
++------------------------+---------------------------------------------------------------------------+
+|op_rw_latency           | Latency of read-modify-write operation (including queue time)             |
++------------------------+---------------------------------------------------------------------------+
+|op_rw_process_latency   | Latency of read-modify-write operation (excluding queue time)             |
++------------------------+---------------------------------------------------------------------------+
+|op_rw_prepare_latency   | Latency of read-modify-write operations (excluding queue time             |
+|                        | and wait for finished)                                                    |
++------------------------+---------------------------------------------------------------------------+
+|op_before_queue_op_lat  | Latency of I/O before calling queue (before really queue into ShardedOpWq)|
+|                        | op_before_dequeue_op_lat                                                  |
++------------------------+---------------------------------------------------------------------------+
+|op_before_dequeue_op_lat| Latency of I/O before calling dequeue_op(already dequeued and get PG lock)|
++------------------------+---------------------------------------------------------------------------+
 
 Latency counters are measured in microseconds unless otherwise specified in
 the description.

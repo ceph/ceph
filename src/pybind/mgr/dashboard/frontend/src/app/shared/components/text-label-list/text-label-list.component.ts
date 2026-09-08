@@ -44,8 +44,14 @@ export class TextLabelListComponent implements ControlValueAccessor {
     return originalValue.slice(0, -1) === value;
   }
 
-  writeValue(value: string[]): void {
-    this.values = value?.length ? [...value, ''] : [''];
+  writeValue(value: string[] | string | null): void {
+    let items: string[] = [];
+    if (typeof value === 'string') {
+      items = value ? [value] : [];
+    } else if (Array.isArray(value)) {
+      items = [...value];
+    }
+    this.values = items.length ? [...items, ''] : [''];
   }
 
   registerOnChange(onChange: (value: string[]) => void): void {

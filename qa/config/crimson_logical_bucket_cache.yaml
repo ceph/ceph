@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        seastore logical bucket cache test stress: true

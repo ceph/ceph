@@ -49,6 +49,8 @@ for arg in "$@"; do
       ;;
     -i=*|--ceph-image=*)
       CEPHADM_IMAGE="${arg#*=}"
+      echo "Using custom Ceph image: $CEPHADM_IMAGE"
+      extra_args+=" -P custom_image=${CEPHADM_IMAGE}"
       ;;
     -h|--help)
       show_help
@@ -62,19 +64,18 @@ for arg in "$@"; do
   esac
 done
 
-image_name=$(echo "$CEPHADM_IMAGE")
-
+image_name="${CEPHADM_IMAGE:-quay.ceph.io/ceph-ci/ceph:main}"
 extra_args+=" -P nodes=${NODES}"
 
 if [[ ${use_cached_image} == false ]]; then
     printf "Pulling the image: %s\n" "$image_name"
-    podman pull "${image_name}"
+    podman pull "$image_name"
 fi
 
 rm -f ceph_image.tar
 
 printf "Saving the image: %s\n" "$image_name"
-podman save -o ceph_image.tar "${image_name}"
+podman save -o ceph_image.tar "$image_name"
 
 # build cephadm binary if it does not exist
 printf "\nChecking for cephadm binary...\n"

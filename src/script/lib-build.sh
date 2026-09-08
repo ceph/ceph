@@ -64,7 +64,8 @@ function get_processors() {
 # and uses the same BUILD_DIR environment variable. It checks for the
 # directory relative to the current working directory.
 function has_build_dir() {
-    ( cd "${BUILD_DIR:=build}" && [[ -f build.ninja || -f Makefile ]] )
+    [[ -d "${BUILD_DIR:=build}" ]] &&
+        ( cd "${BUILD_DIR}" && [[ -f build.ninja || -f Makefile ]] )
 }
 
 # discover_compiler takes one argument, purpose, which may be used
@@ -82,7 +83,7 @@ function discover_compiler() {
     local cxx_compiler=g++
     local c_compiler=gcc
     # ubuntu/debian ci builds prefer clang
-    for i in {19..12}; do
+    for i in {21..12}; do
         if type -t "clang-$i" > /dev/null; then
             cxx_compiler="clang++-$i"
             c_compiler="clang-$i"

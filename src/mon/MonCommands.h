@@ -162,24 +162,42 @@ COMMAND_WITH_FLAG("auth list", "list authentication state", "auth", "rx",
 COMMAND("auth ls", "list authentication state", "auth", "rx")
 COMMAND("auth import", "auth import: read keyring file from -i <file>",
 	"auth", "rwx")
-COMMAND("auth add "
-	"name=entity,type=CephString "
-	"name=caps,type=CephString,n=N,req=false",
+COMMAND("auth add"
+	" name=entity,type=CephString"
+	" name=caps,type=CephString,n=N,req=false"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"add auth info for <entity> from input file, or random key if no "
         "input is given, and/or any caps specified in the command",
 	"auth", "rwx")
-COMMAND("auth rotate "
-	"name=entity,type=CephString",
+COMMAND("auth rotate"
+	" name=entity,type=CephString"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"rotate entity key",
 	"auth", "rwx")
-COMMAND("auth get-or-create-key "
-	"name=entity,type=CephString "
-	"name=caps,type=CephString,n=N,req=false",
+COMMAND("auth dump-keys",
+	"dump keys",
+	"auth", "rwx")
+COMMAND("auth wipe-rotating-service-keys",
+	"wipe rotating keys",
+	"auth", "rwx")
+COMMAND("auth get-or-create-key"
+	" name=entity,type=CephString"
+	" name=caps,type=CephString,n=N,req=false"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"get, or add, key for <name> from system/caps pairs specified in the command.  If key already exists, any given caps must match the existing caps for that key.",
 	"auth", "rwx")
-COMMAND("auth get-or-create "
-	"name=entity,type=CephString "
-	"name=caps,type=CephString,n=N,req=false",
+COMMAND("auth get-or-create"
+	" name=entity,type=CephString"
+	" name=caps,type=CephString,n=N,req=false"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command",
 	"auth", "rwx")
 COMMAND("auth get-or-create-pending "
@@ -194,10 +212,13 @@ COMMAND("auth commit-pending "
 	"name=entity,type=CephString",
 	"rotate pending key into active position",
 	"auth", "rwx")
-COMMAND("fs authorize "
-   "name=filesystem,type=CephString "
-   "name=entity,type=CephString "
-	"name=caps,type=CephString,n=N",
+COMMAND("fs authorize"
+        " name=filesystem,type=CephString"
+        " name=entity,type=CephString"
+	" name=caps,type=CephString,n=N"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"add auth for <entity> to access file system <filesystem> based on following directory and permissions pairs",
 	"auth", "rwx")
 COMMAND("auth caps "
@@ -408,6 +429,7 @@ COMMAND("fs set "
           "|session_autoclose"
           "|session_timeout"
           "|standby_count_wanted"
+          "|standby_enable_host_anti_affinity"
           " "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
@@ -550,8 +572,13 @@ COMMAND("mon set_location " \
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]",
 	"specify location <args> for the monitor <name>, using CRUSH bucket names", \
 	"mon", "rw")
+COMMAND("mon set " \
+	"name=name,type=CephChoices,strings=auth_service_cipher|auth_allowed_ciphers|auth_preferred_cipher "
+	"name=value,type=CephString",
+	"set mon configuration", \
+	"mon", "rw")
 COMMAND("mon enable_stretch_mode " \
-	"name=tiebreaker_mon,type=CephString, "
+	"name=tiebreaker_mon,type=CephString,req=false, "
 	"name=new_crush_rule,type=CephString, "
 	"name=dividing_bucket,type=CephString, ",
 	"enable stretch mode, changing the peering rules and "
@@ -1029,14 +1056,15 @@ COMMAND("osd rm-pg-upmap-items "
 COMMAND("osd pg-upmap-primary "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName ",
-	"set pg primary osd <pgid>:<id> (id (osd) must be part of pgid)",
+	"set pg_upmap_primary osd <pgid>:<id> (id (osd) must be part of pgid)",
         "osd", "rw")
 COMMAND("osd rm-pg-upmap-primary "
 	"name=pgid,type=CephPgid ",
-	"clear pg primary setting for <pgid>",
+	"clear pg_upmap_primary setting for <pgid>",
         "osd", "rw")
-COMMAND("osd rm-pg-upmap-primary-all ",
-        "clear all pg primary entries (developers only)",
+COMMAND("osd rm-pg-upmap-primary-all "
+        "name=pool,type=CephPoolname,req=false",
+        "clear all pg_upmap_primary entries, or all entries for pool <pool> (developers only)",
         "osd", "rw")
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "
@@ -1128,8 +1156,11 @@ COMMAND("osd pool force-remove-snap "
 	"order to cause OSDs to re-trim them.",
 	"osd", "rw")
 COMMAND("osd pool ls "
-	"name=detail,type=CephChoices,strings=detail,req=false",
-	"list pools", "osd", "r")
+	"name=detail,type=CephChoices,strings=detail,req=false "
+	"name=show_rule_names,type=CephBool,req=false",
+	"list pools (with `detail` and --show-rule-names, render the "
+	"CRUSH rule by name in the text output, and add a "
+	"`crush_rule_name` field to the JSON output)", "osd", "r")
 COMMAND("osd pool create "
 	"name=pool,type=CephPoolname "
 	"name=pg_num,type=CephInt,range=0,req=false "
@@ -1144,8 +1175,9 @@ COMMAND("osd pool create "
 	"name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
-	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "\
-	"name=yes_i_really_mean_it,type=CephBool,req=false"
+	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "
+	"name=force_pg_limit,type=CephBool,req=false "
+	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=crimson,type=CephBool,req=false",
 	"create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "
@@ -1170,11 +1202,137 @@ COMMAND("osd pool rename "
 	"rename <srcpool> to <destpool>", "osd", "rw")
 COMMAND("osd pool get "
 	"name=pool,type=CephPoolname "
-	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|all|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk|read_ratio|pct_update_delay|allow_ec_optimizations",
+	"name=var,type=CephChoices,strings=all"
+          "|allow_ec_optimizations"
+          "|allow_ec_overwrites"
+          "|bulk"
+          "|cache_min_evict_age"
+          "|cache_min_flush_age"
+          "|cache_target_dirty_high_ratio"
+          "|cache_target_dirty_ratio"
+          "|cache_target_full_ratio"
+          "|compression_algorithm"
+          "|compression_max_blob_size"
+          "|compression_min_blob_size"
+          "|compression_mode"
+          "|compression_required_ratio"
+          "|crimson_allow_pg_merge"
+          "|crush_rule"
+          "|csum_max_block"
+          "|csum_min_block"
+          "|csum_type"
+          "|deep_scrub_interval"
+          "|dedup_cdc_chunk_size"
+          "|dedup_chunk_algorithm"
+          "|dedup_tier"
+          "|ec_coding_shard_count"
+          "|ec_data_shard_count"
+          "|eio"
+          "|erasure_code_profile"
+          "|fast_read"
+          "|fingerprint_algorithm"
+          "|hashpspool"
+          "|hit_set_count"
+          "|hit_set_fpp"
+          "|hit_set_grade_decay_rate"
+          "|hit_set_period"
+          "|hit_set_search_last_n"
+          "|hit_set_type"
+          "|min_read_recency_for_promote"
+          "|min_size"
+          "|min_write_recency_for_promote"
+          "|nodeep-scrub"
+          "|nodelete"
+          "|nopgchange"
+          "|noscrub"
+          "|nosizechange"
+          "|pct_update_delay"
+          "|pg_autoscale_bias"
+          "|pg_autoscale_mode"
+          "|pg_num"
+          "|pg_num_max"
+          "|pg_num_min"
+          "|pgp_num"
+          "|read_ratio"
+          "|recovery_op_priority"
+          "|recovery_priority"
+          "|scrub_max_interval"
+          "|scrub_min_interval"
+          "|scrub_priority"
+          "|size"
+          "|supports_omap"
+          "|target_max_bytes"
+          "|target_max_objects"
+          "|target_size_bytes"
+          "|target_size_ratio"
+          "|use_gmt_hitset"
+          "|write_fadvise_dontneed",
 	"get pool parameter <var>", "osd", "r")
 COMMAND("osd pool set "
 	"name=pool,type=CephPoolname "
-	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|pgp_num_actual|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk|read_ratio|pct_update_delay|allow_ec_optimizations "
+ 	"name=var,type=CephChoices,strings=allow_ec_optimizations"
+          "|allow_ec_overwrites"
+          "|bulk"
+          "|cache_min_evict_age"
+          "|cache_min_flush_age"
+          "|cache_target_dirty_high_ratio"
+          "|cache_target_dirty_ratio"
+          "|cache_target_full_ratio"
+          "|compression_algorithm"
+          "|compression_max_blob_size"
+          "|compression_min_blob_size"
+          "|compression_mode"
+          "|compression_required_ratio"
+          "|crimson_allow_pg_merge"
+          "|crush_rule"
+          "|csum_max_block"
+          "|csum_min_block"
+          "|csum_type"
+          "|deep_scrub_interval"
+          "|dedup_cdc_chunk_size"
+          "|dedup_chunk_algorithm"
+          "|dedup_tier"
+          "|eio"
+          "|fast_read"
+          "|fingerprint_algorithm"
+          "|hashpspool"
+          "|hit_set_count"
+          "|hit_set_fpp"
+          "|hit_set_grade_decay_rate"
+          "|hit_set_period"
+          "|hit_set_search_last_n"
+          "|hit_set_type"
+          "|min_read_recency_for_promote"
+          "|min_size"
+          "|min_write_recency_for_promote"
+          "|nodeep-scrub"
+          "|nodelete"
+          "|nopgchange"
+          "|noscrub"
+          "|nosizechange"
+          "|pct_update_delay"
+          "|pg_autoscale_bias"
+          "|pg_autoscale_mode"
+          "|pg_num"
+          "|pg_num_max"
+          "|pg_num_min"
+          "|pgp_num"
+          "|pgp_num_actual"
+          "|read_ratio"
+          "|recovery_op_priority"
+          "|recovery_priority"
+          "|scrub_max_interval"
+          "|scrub_min_interval"
+          "|scrub_priority"
+          "|set_pool_flags"
+          "|size"
+          "|target_max_bytes"
+          "|target_max_objects"
+          "|target_size_bytes"
+          "|target_size_ratio"
+          "|unset_pool_flags"
+          "|use_gmt_hitset"
+          "|write_fadvise_dontneed "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set pool parameter <var> to <val>", "osd", "rw")
@@ -1216,7 +1374,7 @@ COMMAND("osd pool application rm "
         "removes application <app> metadata key <key> on pool <poolname>",
         "osd", "rw")
 COMMAND("osd pool application get "
-        "name=pool,type=CephPoolname,req=fasle "
+        "name=pool,type=CephPoolname,req=false "
         "name=app,type=CephString,req=false "
         "name=key,type=CephString,req=false",
         "get value of key <key> of application <app> on pool <poolname>",
@@ -1451,6 +1609,10 @@ COMMAND("nvme-gw show"
    " name=group,type=CephString",
    " show nvmeof gateways within (pool, group)",
    "mon", "r")
+
+COMMAND("nvme-gw show-all",
+  " Dump nvmeof gateways for all pools and groups",
+  "mon", "r")
 
 COMMAND("nvme-gw listeners"
 	" name=pool,type=CephString"

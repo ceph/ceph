@@ -37,6 +37,7 @@
 #include "osd/OSDMap.h"
 #include "crush/CrushCompiler.h"
 #include "mon/CreatingPGs.h"
+#include "mon/mon_types.h" // for CEPH_MON_ONDISK_MAGIC
 
 namespace po = boost::program_options;
 
@@ -507,7 +508,7 @@ static int update_auth(MonitorDBStore& st, const string& keyring_path)
     KeyServer ks(g_ceph_context, nullptr);
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
-    bool r = ks.prepare_rotating_update(auth_inc.rotating_bl);
+    bool r = ks.prepare_rotating_update(auth_inc.rotating_bl, false);
     ceph_assert(r);
     AuthMonitor::Incremental inc;
     inc.inc_type = AuthMonitor::AUTH_DATA;

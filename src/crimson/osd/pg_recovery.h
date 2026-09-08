@@ -51,6 +51,7 @@ public:
     const hobject_t& obj,
     const eversion_t& v,
     const std::vector<pg_shard_t> &peers) final;
+  void cancel_backfill();  // called from PG::on_change()
 private:
   PGRecoveryListener* pg;
   size_t start_primary_recovery_ops(
@@ -105,9 +106,18 @@ private:
   friend class ReplicatedRecoveryBackend;
   friend class crimson::osd::UrgentRecovery;
 
+  interruptible_future<OperationThrottler::ThrottleReleaser>
+  get_backfill_throttle();
+
   interruptible_future<> recover_object_with_throttle(
     hobject_t soid,
     eversion_t need);
+
+  interruptible_future<> do_request_primary_scan(hobject_t begin);
+  interruptible_future<> do_request_replica_scan(
+    pg_shard_t target,
+    hobject_t begin,
+    hobject_t end);
 
   interruptible_future<> recover_object(
     const hobject_t &soid,
@@ -117,11 +127,15 @@ private:
     return backend->recover_object(soid, need);
   }
 
+  interruptible_future<> do_request_budget_retry();
+
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
   std::map<pg_shard_t,
            MURef<MOSDPGBackfillRemove>> backfill_drop_requests;
-
+  std::map<pg_shard_t,
+           OperationThrottler::ThrottleReleaser> replica_scan_throttle_releasers;
+  std::optional<OperationThrottler::ThrottleReleaser> budget_retry_releaser;
   template <class EventT>
   void start_backfill_recovery(
     const EventT& evt);
@@ -143,15 +157,18 @@ private:
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
+  void request_budget_retry() final;
 
   template <typename T>
   void start_peering_event_operation_listener(T &&evt, float delay = 0);
   void backfilled() final;
   void request_backfill();
   void all_replicas_recovered();
+  void reset_backfill_state();  // common reset logic
 
   friend crimson::osd::BackfillState::PGFacade;
   friend crimson::osd::PG;
+  bool budget_retry_in_flight = false;
   // backfill end
 };
 

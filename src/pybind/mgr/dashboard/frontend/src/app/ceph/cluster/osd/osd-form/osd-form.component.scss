@@ -1,0 +1,24 @@
+.osd-tearsheet-content {
+  padding: var(--cds-spacing-05) var(--cds-spacing-06);
+  max-height: calc(100vh - 300px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.osd-alert-block {
+  display: block;
+}
+
+.osd-radio-label-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.osd-radio-helper-text {
+  max-width: 25rem;
+  white-space: normal;
+}
+
+.osd-review-section {
+  border-left: 1px solid var(--cds-border-subtle-01);
+}

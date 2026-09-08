@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def log_output(descriptor, message, terminal_logging, logfile_logging):
+def log_output(descriptor, message, terminal_logging, logfile_logging, log_level=logging.DEBUG):
     """
     log output to both the logger and the terminal if terminal_logging is
     enabled
@@ -23,7 +23,7 @@ def log_output(descriptor, message, terminal_logging, logfile_logging):
     if terminal_logging:
         getattr(terminal, descriptor)(message)
     if logfile_logging:
-        logger.info(line)
+        logger.log(log_level, line)
 
 
 def log_descriptors(reads, process, terminal_logging):
@@ -111,7 +111,7 @@ def run(command, run_on_host=False, **kw):
     stop_on_error = kw.pop('stop_on_error', True)
     command_msg = obfuscate(command, kw.pop('obfuscate', None))
     fail_msg = kw.pop('fail_msg', None)
-    logger.info(command_msg)
+    logger.debug(command_msg)
     terminal.write(command_msg)
     terminal_logging = kw.pop('terminal_logging', True)
 
@@ -139,6 +139,7 @@ def run(command, run_on_host=False, **kw):
     returncode = process.wait()
     if returncode != 0:
         msg = "command returned non-zero exit status: %s" % returncode
+        logger.warning(command_msg)
         if fail_msg:
             logger.warning(fail_msg)
             if terminal_logging:
@@ -156,7 +157,8 @@ def call(command, run_on_host=False, **kw):
     Similar to ``subprocess.Popen`` with the following changes:
 
     * returns stdout, stderr, and exit code (vs. just the exit code)
-    * logs the full contents of stderr and stdout (separately) to the file log
+    * logs the command and the full contents of stderr/stdout to the file log
+      at DEBUG on success, and at WARNING on failure
 
     By default, no terminal output is given, not even the command that is going
     to run.
@@ -184,7 +186,7 @@ def call(command, run_on_host=False, **kw):
     show_command = kw.pop('show_command', False)
     command_msg = "Running command: %s" % ' '.join(command)
     stdin = kw.pop('stdin', None)
-    logger.info(command_msg)
+    logger.debug(command_msg)
     if show_command:
         terminal.write(command_msg)
 
@@ -210,6 +212,7 @@ def call(command, run_on_host=False, **kw):
     stdout = stdout_stream.splitlines()
     stderr = stderr_stream.splitlines()
 
+    log_level = logging.DEBUG
     if returncode != 0:
         # set to true so that we can log the stderr/stdout that callers would
         # do anyway as long as verbose_on_failure is set (defaults to True)
@@ -218,12 +221,14 @@ def call(command, run_on_host=False, **kw):
         # logfiles aren't disruptive visually, unlike the terminal, so this
         # should always be on when there is a failure
         logfile_verbose = True
+        log_level = logging.WARNING
+        logger.warning(command_msg)
 
     # the following can get a messed up order in the log if the system call
     # returns output with both stderr and stdout intermingled. This separates
     # that.
     for line in stdout:
-        log_output('stdout', line, terminal_verbose, logfile_verbose)
+        log_output('stdout', line, terminal_verbose, logfile_verbose, log_level)
     for line in stderr:
-        log_output('stderr', line, terminal_verbose, logfile_verbose)
+        log_output('stderr', line, terminal_verbose, logfile_verbose, log_level)
     return stdout, stderr, returncode

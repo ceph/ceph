@@ -24,6 +24,10 @@
   min_mon_release 21 (umbrella)
   election_strategy: 1
   0: v1:2.3.4.5:6789/0 mon.foo
+  auth_epoch 0
+  auth_service_cipher aes256k
+  auth_allowed_ciphers aes256k
+  auth_preferred_cipher aes256k
 
   $ NEW_FSID="$(monmaptool --print mymonmap|grep ^fsid)"
   $ [ "$ORIG_FSID" = "$NEW_FSID" ]

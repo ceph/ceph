@@ -2,6 +2,7 @@ import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import {
@@ -38,11 +39,11 @@ const BASE_URL = 'rgw/storage-class';
 })
 export class RgwStorageClassListComponent extends ListWithDetails implements OnInit {
   @ViewChild('table', { static: true })
-  table: TableComponent;
-  columns: CdTableColumn[];
+  table!: TableComponent;
+  columns: CdTableColumn[] = [];
   selection = new CdTableSelection();
   permission: Permission;
-  tableActions: CdTableAction[];
+  tableActions: CdTableAction[] = [];
   storageClassList: StorageClass[] = [];
 
   constructor(
@@ -71,6 +72,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       {
         name: $localize`Name`,
         prop: 'storage_class',
+        cellTransformation: CellTemplate.routerLink,
         flexGrow: 2
       },
       {
@@ -137,10 +139,10 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
           const tierConfig = tierObj.map((tier) => ({
             ...tier,
-            tier_type: this.mapTierTypeDisplay(tier.tier_type),
+            tier_type: BucketTieringUtils.mapTierTypeDisplay(tier.tier_type),
             storageClass: tier.storage_class,
             placementTarget: tier.placement_target,
-            tierType: this.mapTierTypeDisplay(tier.tier_type)
+            tierType: BucketTieringUtils.mapTierTypeDisplay(tier.tier_type)
           }));
 
           this.transformTierData(tierConfig);
@@ -154,25 +156,15 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     });
   }
 
-  private mapTierTypeDisplay(tierType: string): string {
-    switch (tierType?.toLowerCase()) {
-      case TIER_TYPE.CLOUD_TIER:
-        return TIER_TYPE_DISPLAY.CLOUD_TIER;
-      case TIER_TYPE.LOCAL:
-        return TIER_TYPE_DISPLAY.LOCAL;
-      case TIER_TYPE.GLACIER:
-        return TIER_TYPE_DISPLAY.GLACIER;
-      default:
-        return tierType;
-    }
-  }
-
   transformTierData(tierConfig: any[]) {
     tierConfig.forEach((item, index) => {
       const zone_group = item?.zone_group;
       const storageClass = item?.storage_class;
       const uniqueId = `${zone_group}-${storageClass}-${index}`;
       item.uniqueId = uniqueId;
+      item.cdLink = `/${BASE_URL}/${encodeURIComponent(item.zonegroup_name)}/${encodeURIComponent(
+        item.placement_target
+      )}/${encodeURIComponent(item.storage_class)}/overview`;
     });
     return tierConfig;
   }

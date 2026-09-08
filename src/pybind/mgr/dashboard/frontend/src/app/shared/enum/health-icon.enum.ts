@@ -1,7 +1,7 @@
 export enum HealthIcon {
-  HEALTH_ERR = 'fa fa-exclamation-circle',
-  HEALTH_WARN = 'fa fa-exclamation-triangle',
-  HEALTH_OK = 'fa fa-check-circle'
+  HEALTH_ERR = 'error',
+  HEALTH_WARN = 'warningAltFilled',
+  HEALTH_OK = 'success'
 }
 
 export enum AlertClass {

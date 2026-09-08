@@ -160,6 +160,55 @@ It is also possible to provide explicit sizes to `ceph-volume` via the arguments
 this is not possible, no OSDs will be deployed.
 
 
+Collocated DB on the same device
+---------------------------------
+
+.. versionadded:: Squid 19.2.3
+
+It is possible to deploy a non-collocated BlueStore layout where the ``block.db``
+LV is carved out of the **same physical device** as the data LV, without needing
+a separate device. This helps mitigate BlueStore fragmentation by isolating metadata
+writes.
+
+To enable this, pass ``--block-db-size`` **without** ``--db-devices``.
+``ceph-volume`` will create two LVs on each data device: one for data and one for
+``block.db``::
+
+    $ ceph-volume lvm batch --report /dev/sdb /dev/sdc --block-db-size 4G
+
+Example output::
+
+    Total OSDs: 2
+
+      Type            Path                                                    LV Size         % of device
+    ----------------------------------------------------------------------------------------------------
+      data            /dev/sdb                                                196.00 GB       98.00%
+      block_db        /dev/sdb                                                4.00 GB         2.00%
+    ----------------------------------------------------------------------------------------------------
+      data            /dev/sdc                                                196.00 GB       98.00%
+      block_db        /dev/sdc                                                4.00 GB         2.00%
+
+This also works with ``--osds-per-device``::
+
+    $ ceph-volume lvm batch --report /dev/sdb --osds-per-device 2 --block-db-size 4G
+
+Example output::
+
+    Total OSDs: 2
+
+      Type            Path                                                    LV Size         % of device
+    ----------------------------------------------------------------------------------------------------
+      data            /dev/sdb                                                96.00 GB        48.00%
+      block_db        /dev/sdb                                                4.00 GB         2.00%
+    ----------------------------------------------------------------------------------------------------
+      data            /dev/sdb                                                96.00 GB        48.00%
+      block_db        /dev/sdb                                                4.00 GB         2.00%
+
+.. note:: ``ceph-volume`` cannot derive a sensible default DB size automatically
+          in this scenario, so ``--block-db-size`` is mandatory. If the requested
+          size cannot be accommodated, no OSDs will be deployed.
+
+
 Idempotency and disk replacements
 =================================
 `ceph-volume lvm batch` intends to be idempotent, i.e. calling the same command

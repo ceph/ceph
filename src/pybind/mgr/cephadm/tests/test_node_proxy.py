@@ -1,15 +1,25 @@
 import cherrypy
 import json
+import socket
 from _pytest.monkeypatch import MonkeyPatch
 from urllib.error import URLError
 from cherrypy.test import helper
 from cephadm.agent import NodeProxyEndpoint
 from unittest.mock import MagicMock, call, patch
 from cephadm.inventory import AgentCache, NodeProxyCache, Inventory
-from cephadm.ssl_cert_utils import SSLCerts
+from cephadm.ssl_certs import SSLCerts
 from . import node_proxy_data
 
-PORT = 58585
+
+def _free_port() -> int:
+    # Pick an ephemeral port so the test server does not clash with other
+    # pytest-xdist workers running this module in parallel.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('127.0.0.1', 0))
+        return s.getsockname()[1]
+
+
+PORT = _free_port()
 fake_cert = """-----BEGIN CERTIFICATE-----\nMIICxjCCAa4CEQDIZSujNBlKaLJzmvntjukjMA0GCSqGSIb3DQEBDQUAMCExDTAL\nBgNVBAoMBENlcGgxEDAOBgNVBAMMB2NlcGhhZG0wHhcNMjIwNzEzMTE0NzA3WhcN\nMzIwNzEwMTE0NzA3WjAhMQ0wCwYDVQQKDARDZXBoMRAwDgYDVQQDDAdjZXBoYWRt\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyyMe4DMA+MeYK7BHZMHB\nq7zjliEOcNgxomjU8qbf5USF7Mqrf6+/87XWqj4pCyAW8x0WXEr6A56a+cmBVmt+\nqtWDzl020aoId6lL5EgLLn6/kMDCCJLq++Lg9cEofMSvcZh+lY2f+1p+C+00xent\nrLXvXGOilAZWaQfojT2BpRnNWWIFbpFwlcKrlg2G0cFjV5c1m6a0wpsQ9JHOieq0\nSvwCixajwq3CwAYuuiU1wjI4oJO4Io1+g8yB3nH2Mo/25SApCxMXuXh4kHLQr/T4\n4hqisvG4uJYgKMcSIrWj5o25mclByGi1UI/kZkCUES94i7Z/3ihx4Bad0AMs/9tw\nFwIDAQABMA0GCSqGSIb3DQEBDQUAA4IBAQAf+pwz7Gd7mDwU2LY0TQXsK6/8KGzh\nHuX+ErOb8h5cOAbvCnHjyJFWf6gCITG98k9nxU9NToG0WYuNm/max1y/54f0dtxZ\npUo6KSNl3w6iYCfGOeUIj8isi06xMmeTgMNzv8DYhDt+P2igN6LenqWTVztogkiV\nxQ5ZJFFLEw4sN0CXnrZX3t5ruakxLXLTLKeE0I91YJvjClSBGkVJq26wOKQNHMhx\npWxeydQ5EgPZY+Aviz5Dnxe8aB7oSSovpXByzxURSabOuCK21awW5WJCGNpmqhWK\nZzACBDEstccj57c4OGV0eayHJRsluVr2e9NHRINZA3qdB37e6gsI1xHo\n-----END CERTIFICATE-----\n"""
 
 
@@ -309,14 +319,83 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
         self.getPage("/host03/fans", method="GET")
         self.assertStatus('404 Not Found')
 
-    def test_firmwares_with_valid_hostname(self):
+    def test_temperatures_with_valid_hostname(self):
+        self.getPage("/host02/temperatures", method="GET")
+        self.assertStatus('200 OK')
+
+    def test_temperatures_no_hostname(self):
+        self.getPage("/temperatures", method="GET")
+        self.assertStatus('200 OK')
+
+    def test_temperatures_with_invalid_hostname(self):
+        self.getPage("/host03/temperatures", method="GET")
+        self.assertStatus('404 Not Found')
+
+    def test_fcm_with_valid_hostname(self):
+        self.getPage("/host02/fcm", method="GET")
+        self.assertStatus('200 OK')
+
+    def test_fcm_no_hostname(self):
+        self.getPage("/fcm", method="GET")
+        self.assertStatus('200 OK')
+
+    def test_fcm_with_invalid_hostname(self):
+        self.getPage("/host03/fcm", method="GET")
+        self.assertStatus('404 Not Found')
+
+    def test_firmware_with_valid_hostname(self):
+        self.getPage("/host02/firmware", method="GET")
+        self.assertStatus('200 OK')
+
+    def test_firmware_no_hostname(self):
+        self.getPage("/firmware", method="GET")
+        self.assertStatus('200 OK')
+
+    def test_firmware_with_invalid_hostname(self):
+        self.getPage("/host03/firmware", method="GET")
+        self.assertStatus('404 Not Found')
+
+    def test_firmwares_legacy_endpoint(self):
         self.getPage("/host02/firmwares", method="GET")
         self.assertStatus('200 OK')
 
-    def test_firmwares_no_hostname(self):
-        self.getPage("/firmwares", method="GET")
-        self.assertStatus('200 OK')
 
-    def test_firmwares_with_invalid_hostname(self):
-        self.getPage("/host03/firmwares", method="GET")
-        self.assertStatus('404 Not Found')
+class TestNodeProxyCacheSave:
+    def _make_cache(self) -> NodeProxyCache:
+        mgr = MagicMock()
+        mgr.get_store = MagicMock(return_value='{}')
+        mgr.set_store = MagicMock()
+        mgr.inventory = {}
+        cache = NodeProxyCache(mgr)
+        return cache
+
+    def test_save_updates_in_memory_data(self):
+        cache = self._make_cache()
+        data = {'status': {'storage': {}, 'fans': {}}, 'sn': 'ABC123'}
+        cache.save(host='host01', data=data)
+        assert cache.data['host01'] == data
+
+    def test_save_in_memory_data_includes_new_keys_after_upgrade(self):
+        cache = self._make_cache()
+        # Simulate what load() would have populated from the old KV store
+        cache.data['host01'] = {'status': {'storage': {}, 'fans': {}}, 'sn': 'ABC123'}
+        # Node-proxy POSTs new data with fcm after upgrade
+        new_data = {'status': {'storage': {}, 'fans': {}, 'fcm': {'local': {'nvme0n1': {}}}}, 'sn': 'ABC123'}
+        cache.save(host='host01', data=new_data)
+        assert 'fcm' in cache.data['host01']['status']
+
+    def test_save_normalizes_hostname(self):
+        cache = self._make_cache()
+        data = {'status': {}, 'sn': 'XYZ'}
+        cache.save(host='HOST01', data=data)
+        assert 'host01' in cache.data
+        assert 'HOST01' not in cache.data
+
+    def test_save_writes_to_kv_store(self):
+        cache = self._make_cache()
+        data = {'status': {}, 'sn': 'XYZ'}
+        cache.save(host='host01', data=data)
+        cache.mgr.set_store.assert_called_once()
+        key, value = cache.mgr.set_store.call_args[0]
+        assert 'host01' in key
+        assert json.loads(value) == data

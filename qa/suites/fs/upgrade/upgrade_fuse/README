@@ -1,0 +1,3 @@
+This suite should be testing what has been released (or close to being
+released) and verify that a newer client (say on `main`) can talk to a
+N-1|N-2 MDS.

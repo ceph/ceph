@@ -126,7 +126,7 @@ See `libvirt Installation`_ for details.
 
 
 
-.. _libvirt Installation: http://www.libvirt.org/compiling.html
-.. _AutoGen: http://www.gnu.org/software/autogen/
+.. _libvirt Installation: https://www.libvirt.org/compiling.html
+.. _AutoGen: https://www.gnu.org/software/autogen/
 .. _QEMU and Block Devices: ../../rbd/qemu-rbd
 .. _Using libvirt with Ceph Block Device: ../../rbd/libvirt

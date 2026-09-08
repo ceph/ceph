@@ -1,5 +1,6 @@
 tasks:
 - workunit:
+    watchdog: true
     clients:
       client.0:
         - cls/test_cls_rbd.sh

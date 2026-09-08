@@ -19,8 +19,9 @@ then
        --email librgw@example.com || echo "librgw user exists"
 
     # keyring override for teuthology env
-    if [ -z ${KEYRING} ]
-    then
+    if [ -n "$CEPH_KEYRING" ]; then
+      KEYRING="$CEPH_KEYRING"
+    elif [ -z ${KEYRING} ]; then
       KEYRING="/etc/ceph/ceph.keyring"
     fi
     K="-k ${KEYRING}"
@@ -39,6 +40,11 @@ ceph_test_librgw_file_nfsns ${K} --dirs1 --verbose
 # and delete the hierarchy
 echo "phase 1.3"
 ceph_test_librgw_file_nfsns ${K} --hier1 --dirs1 --delete --verbose
+
+# common-prefix anti-regression test
+echo "phase 1.4"
+ceph_test_librgw_file_cpref ${K} --create
+ceph_test_librgw_file_cpref ${K} # crashed w/unfixed cp_ref assignment
 
 # bulk create/delete buckets
 echo "phase 2.1"
@@ -68,5 +74,9 @@ ceph_test_librgw_file_gp ${K} --delete
 # rename tests
 echo "phase 6.1"
 ceph_test_librgw_file_rename ${K} --create
+
+# librgw_create() single-call semantics test
+echo "phase 7.1"
+ceph_test_librgw_file_create ${K}
 
 exit 0

@@ -48,11 +48,17 @@ public:
 
   remove_mapping_ret remove_mapping(
     Transaction &t,
-    paddr_t offset) final;
+    paddr_t offset,
+    extent_types_t type) final;
 
   scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) final;
+
+  scan_device_ret scan_device(
+    Transaction &t,
+    paddr_t paddr,
+    scan_device_func_t &f) final;
 
   init_cached_extent_ret init_cached_extent(
     Transaction &t,

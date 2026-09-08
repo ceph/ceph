@@ -24,6 +24,7 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
   form: CdFormGroup;
   action: string;
   resource: string;
+  submitText: string;
   editing: boolean;
   icons = Icons;
 
@@ -45,11 +46,13 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
 
   ngOnInit() {
     this.action = this.actionLabels.CREATE;
+    this.submitText = $localize`Create AD resource`;
     this.smbClusters$ = this.smbService.listClusters();
     this.createForm();
 
     if (this.editing) {
       this.action = this.actionLabels.UPDATE;
+      this.submitText = $localize`Update AD resource`;
       this.form.get('authId').disable();
       let editingAuthId: string;
       this.route.params.subscribe((params: { authId: string }) => {

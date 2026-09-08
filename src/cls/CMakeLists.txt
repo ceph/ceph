@@ -81,12 +81,20 @@ if (WITH_RADOSGW)
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_otp DESTINATION ${cls_dir})
+  if(COMPILER_SUPPORTS_VLA_ERROR)
+    target_compile_options(cls_otp PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  endif()
 
   set(cls_otp_client_srcs
     otp/cls_otp_client.cc
     otp/cls_otp_types.cc
     )
   add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+  if(COMPILER_SUPPORTS_VLA_ERROR)
+    target_compile_options(cls_otp_client PUBLIC
+      $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  endif()
 endif (WITH_RADOSGW)
 
 # cls_refcount
@@ -139,7 +147,7 @@ add_library(cls_log_client STATIC ${cls_log_client_srcs})
 
 
 # cls_timeindex
-set(cls_timeindex_srcs timeindex/cls_timeindex.cc)
+set(cls_timeindex_srcs timeindex/cls_timeindex.cc timeindex/cls_timeindex_types.cc)
 add_library(cls_timeindex SHARED ${cls_timeindex_srcs})
 set_target_properties(cls_timeindex PROPERTIES
   VERSION "1.0.0"
@@ -206,6 +214,10 @@ if (WITH_RADOSGW)
     SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
+  if(COMPILER_SUPPORTS_VLA_ERROR)
+    target_compile_options(cls_rgw PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  endif()
   install(TARGETS cls_rgw DESTINATION ${cls_dir})
 
   set(cls_rgw_client_srcs
@@ -216,6 +228,10 @@ if (WITH_RADOSGW)
   target_include_directories(cls_rgw_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+  if(COMPILER_SUPPORTS_VLA_ERROR)
+    target_compile_options(cls_rgw_client PUBLIC
+      $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  endif()
 
 endif (WITH_RADOSGW)
 
@@ -313,6 +329,10 @@ if (WITH_RADOSGW)
     SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
+  if(COMPILER_SUPPORTS_VLA_ERROR)
+    target_compile_options(cls_rgw_gc PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  endif()
   install(TARGETS cls_rgw_gc DESTINATION ${cls_dir})
 
   set(cls_rgw_gc_client_srcs
@@ -322,6 +342,10 @@ if (WITH_RADOSGW)
   target_include_directories(cls_rgw_gc_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+  if(COMPILER_SUPPORTS_VLA_ERROR)
+    target_compile_options(cls_rgw_gc_client PUBLIC
+      $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  endif()
 endif (WITH_RADOSGW)
 
 

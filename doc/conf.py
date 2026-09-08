@@ -1,3 +1,4 @@
+import datetime
 import fileinput
 import glob
 import logging
@@ -55,7 +56,7 @@ def is_release_eol(codename):
 
 # project information
 project = 'Ceph'
-copyright = ('2016, Ceph authors and contributors. '
+copyright = (f'2016-{datetime.date.today().year}, Ceph authors and contributors. '
              'Licensed under Creative Commons Attribution Share Alike 3.0 '
              '(CC-BY-SA-3.0)')
 version, codename, release = parse_ceph_release()
@@ -91,7 +92,7 @@ html_css_files = ['css/custom.css']
 
 # general configuration
 templates_path = ['_templates']
-source_suffix = '.rst'
+source_suffix = {'.rst': 'restructuredtext'}
 exclude_patterns = ['**/.#*',
                     '**/*~',
                     'start/quick-common.rst',
@@ -132,9 +133,9 @@ extensions = [
     'sphinx.ext.graphviz',
     'sphinx.ext.mathjax',
     'sphinx.ext.todo',
-    'sphinx-prompt',
     'sphinx_autodoc_typehints',
     'sphinx_substitution_extensions',
+    'substitution_prompt',
     'breathe',
     'ceph_commands',
     'ceph_releases',
@@ -164,9 +165,6 @@ else:
     plantweb_defaults = {
         'engine': 'ditaa'
     }
-
-if build_with_rtd:
-    extensions += ['sphinx_search.extension']
 
 # sphinx.ext.todo options
 todo_include_todos = True

@@ -41,6 +41,34 @@ describe('TextLabelListComponent', () => {
     expect(inputs[0].nativeElement.value).toBe('');
   });
 
+  it('should treat a string value as a single item', () => {
+    component.writeValue('openid profile email');
+    fixture.detectChanges();
+
+    const inputs = fixture.debugElement.queryAll(By.css('cds-text-label input'));
+    expect(inputs.length).toBe(2);
+    expect(inputs[0].nativeElement.value).toBe('openid profile email');
+    expect(inputs[1].nativeElement.value).toBe('');
+  });
+
+  it('should not spread a string into individual characters', () => {
+    component.writeValue('openid');
+    fixture.detectChanges();
+
+    const inputs = fixture.debugElement.queryAll(By.css('cds-text-label input'));
+    expect(inputs.length).toBe(2);
+    expect(inputs[0].nativeElement.value).toBe('openid');
+  });
+
+  it('should treat null like an empty list', () => {
+    component.writeValue(null);
+    fixture.detectChanges();
+
+    const inputs = fixture.debugElement.queryAll(By.css('cds-text-label input'));
+    expect(inputs.length).toBe(1);
+    expect(inputs[0].nativeElement.value).toBe('');
+  });
+
   it('should call onTouch on input changes', () => {
     spyOn(component as any, 'onTouched');
 

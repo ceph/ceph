@@ -11,6 +11,7 @@
 #include <seastar/core/future.hh>
 
 #include "os/Transaction.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/osd/exceptions.h"
@@ -24,7 +25,6 @@ class Transaction;
 }
 
 namespace crimson::os {
-class FuturizedCollection;
 class FuturizedStore;
 struct BackendStore {
   FuturizedStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
@@ -45,12 +45,17 @@ public:
     const Shard& operator=(const Shard& o) = delete;
 
     bool is_shard_store_active(store_index_t store_index, uint32_t store_shard_nums) {
-      if(seastar::this_shard_id() + seastar::smp::count * store_index >= store_shard_nums) {
+      if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= store_shard_nums) {
         // store_index is out of range {} - inactivating this store shard
         return false;
       }
       return true;
     }
+
+    // Returns true when the local store is full (failsafe limit); checked at
+    // OSDOp boundary, where data-allocating ops are dropped with -EAGAIN so
+    // the client resends. Default false.
+    virtual bool is_storage_full() const { return false; }
 
     using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
     using base_errorator = crimson::errorator<crimson::ct_error::input_output_error>;
@@ -244,6 +249,11 @@ public:
 
   virtual uuid_d get_fsid() const  = 0;
 
+  /// Override to report a tighter per-object cap than osd_max_object_size.
+  virtual uint64_t get_max_object_size() const {
+    return crimson::common::local_conf()->osd_max_object_size;
+  }
+
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;
 
@@ -258,6 +268,10 @@ public:
   virtual seastar::future<std::vector<coll_core_t>> list_collections() = 0;
 
   virtual seastar::future<std::string> get_default_device_class() = 0;
+
+  /// Run garbage collection on all shards until space ratios are acceptable.
+  /// Default implementation is a no-op (for stores that don't need GC).
+  virtual seastar::future<> do_gc() { return seastar::now(); }
 protected:
   const core_id_t primary_core;
 };

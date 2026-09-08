@@ -30,6 +30,8 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/security/credentials.h>
 
+#include <atomic>
+
 class NVMeofGwMonitorClient: public Dispatcher,
 		   public md_config_obs_t {
 private:
@@ -43,9 +45,11 @@ private:
   std::string client_cert;
   grpc::SslCredentialsOptions
               gw_ssl_opts;  // gateway grpc ssl options
-  epoch_t     osdmap_epoch; // last awaited osdmap_epoch
-  epoch_t     gwmap_epoch;  // last received gw map epoch
-  std::chrono::time_point<std::chrono::steady_clock>
+  // shared with the timer thread (send_beacon/disconnect_panic); atomic so the
+  // two threads need no common lock and `map` stays private to the dispatch thread
+  std::atomic<epoch_t> osdmap_epoch; // last awaited osdmap_epoch
+  std::atomic<epoch_t> gwmap_epoch;  // last received gw map epoch
+  std::atomic<std::chrono::time_point<std::chrono::steady_clock>>
               last_map_time; // used to panic on disconnect
   std::chrono::time_point<std::chrono::steady_clock>
                 reset_timestamp; // used to bypass some validations
@@ -53,10 +57,16 @@ private:
                 start_time; // used to panic on connect
 
   bool first_beacon = true;
-  bool set_group_id = false;
+  // written by the dispatch thread, read by the timer thread (connect_panic)
+  std::atomic<bool> set_group_id = false;
+  // published by the dispatch thread once this gateway appears in the gw map,
+  // read by the timer thread (send_beacon) instead of reading `map` directly
+  std::atomic<bool> gw_in_map = false;
   uint64_t beacon_sequence = 0;
   BeaconSubsystems prev_beacon_subsystems;
-  bool cluster_beacon_diff_included = 0;  // track cluster features for beacon encoding
+  // written by the dispatch thread, read by the timer thread (send_beacon);
+  // tracks cluster features for beacon encoding
+  std::atomic<bool> cluster_beacon_diff_included = false;
   // init gw ssl opts
   void init_gw_ssl_opts();
 

@@ -83,6 +83,10 @@ as follows:
   list its objects. Adding --allow-unordered
   removes the ordering requirement, possibly generating results more
   quickly for buckets with large number of objects.
+  Use --marker to paginate through object listings (requires ordered listing;
+  do not use with --allow-unordered). For versioned buckets, also specify
+  --object-version with the instance/version ID to resume from a specific version
+  (e.g., ``--marker=obj1 --object-version=abc123``).
 
 :command:`bucket limit check`
   Show bucket sharding stats.
@@ -99,6 +103,13 @@ as follows:
 
 :command:`bucket stats`
   List bucket statistics plus other internal information about a bucket.
+
+:command:`bucket suspend`
+  Suspend an individual bucket. S3 requests against the bucket fail with
+  ``403 BucketSuspended``.
+
+:command:`bucket unsuspend`
+  Unsuspend a previously suspended bucket.
 
 :command:`bucket rm`
   Remove a bucket.
@@ -168,7 +179,7 @@ as follows:
 :command:`objects expire`
   Run expired objects cleanup.
 
-:command:`period rm`
+:command:`period delete`
   Remove a period.
 
 :command:`period get`
@@ -291,7 +302,7 @@ as follows:
 :command:`zone create`
   Create a new zone.
 
-:command:`zone rm`
+:command:`zone delete`
   Remove a zone.
 
 :command:`zone get`
@@ -449,7 +460,7 @@ as follows:
 :command:`role create`
   Create a new role for use with STS (Security Token Service).
 
-:command:`role rm`
+:command:`role delete`
   Remove a role.
 
 :command:`role get`
@@ -470,8 +481,26 @@ as follows:
 :command:`role-policy get`
   Get the specified inline policy document embedded with the given role.
 
-:command:`role-policy rm`
+:command:`role-policy delete`
   Remove the policy attached to a role
+
+:command:`oidc-provider create`
+  Create an OIDC provider. If ``account-id`` is not specified,
+  the provider is created in the global scope.
+
+:command:`oidc-provider modify`
+  Update thumbprints and/or client-ids of an OIDC provider. The provided list
+  fully replaces the existing list for that field; unspecified fields are left
+  unchanged.
+
+:command:`oidc-provider get`
+  Get information about an OIDC provider.
+
+:command:`oidc-provider delete`
+  Delete an OIDC provider.
+
+:command:`oidc-provider list`
+  List OIDC providers.
 
 :command:`reshard add`
   Schedule a resharding of a bucket
@@ -635,7 +664,7 @@ Options
 
 .. option:: --shard-id=<shard-id>
 
-   Optional for mdlog list, bi list, data sync status. Required for ``mdlog trim``.
+   Optional for mdlog list, bi list, data sync status, gc list, gc process. Required for ``mdlog trim``.
 
 .. option:: --max-entries=<entries>
 
@@ -820,6 +849,12 @@ Options
 
     Specify output format for certain operations. Supported formats: xml, json.
 
+.. option:: --pretty-format
+
+    Enable pretty formatting for JSON/XML output with indentation and newlines.
+    If no format is specified, default is true. Use ``--format <json/xml>`` to disable
+    for more compact output.
+
 .. option:: --sync-stats
 
     Option for the 'user stats' command. When specified, it will update user stats with
@@ -974,6 +1009,22 @@ Role Options
 .. option:: --path-prefix
 
    The path prefix for filtering the roles.
+
+
+OIDC Provider Options
+=====================
+
+.. option:: --provider-url
+
+   URL of the OIDC provider.
+
+.. option:: --client-ids
+
+   Comma-separated list of client IDs.
+
+.. option:: --thumbprints
+
+   Comma-separated list of thumbprints.
 
 
 Bucket Notifications/PubSub Options

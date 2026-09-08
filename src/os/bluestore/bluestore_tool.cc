@@ -234,9 +234,11 @@ void super_dump(
   delete fs;
 }
 
-void inferring_bluefs_devices(vector<string>& devs, std::string& path)
+void inferring_bluefs_devices(vector<string>& devs, std::string& path, bool verbose = true)
 {
-  cout << "inferring bluefs devices from bluestore path" << std::endl;
+  if (verbose) {
+    cout << "inferring bluefs devices from bluestore path" << std::endl;
+  }
   for (auto fn : {"block", "block.wal", "block.db"}) {
     string p = path + "/" + fn;
     struct stat st;
@@ -344,6 +346,7 @@ int main(int argc, char **argv)
     ("command", po::value<string>(&action),
         "fsck, "
         "qfsck, "
+        "recovery-compare, "
         "allocmap, "
         "restore_cfb, "
         "repair, "
@@ -491,6 +494,7 @@ int main(int argc, char **argv)
   if (action == "fsck" || action == "repair" ||
       action == "quick-fix" || action == "allocmap" ||
       action == "qfsck" || action == "restore_cfb" ||
+      action == "recovery-compare" ||
       action == "revert-wal-to-plain") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
@@ -713,6 +717,18 @@ int main(int argc, char **argv)
       cout << action << " success" << std::endl;
     }
 #endif
+  }
+  else if( action == "recovery-compare" ) {
+    cout << action << " bluestore compare new and legacy onode recovery" << std::endl;
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.compare_allocation_recovery_for_bluestore_tool(cout);
+    if (r < 0) {
+      cerr << action << " failed: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    } else {
+      cout << action << " success" << std::endl;
+    }
   }
   else if (action == "fsck" ||
       action == "repair" ||
@@ -1259,8 +1275,24 @@ int main(int argc, char **argv)
       cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+    
+    // Device inference is sufficient here, as
+    // cold_open() has already initialized the allocators.
+    vector<string> present_devs;
+    inferring_bluefs_devices(present_devs, path, false);
+    auto device_present = [&](const string& alloc_name) {
+      string suffix = (alloc_name == "bluefs-wal") ? "block.wal" :
+                      (alloc_name == "bluefs-db")  ? "block.db"  : "block";
+      return std::any_of(present_devs.begin(), present_devs.end(),
+                         [&](const string& dev) {
+                           return dev.ends_with(suffix);
+                         });
+    };
 
     for (auto alloc_name : allocs_name) {
+      if (!device_present(alloc_name)) {
+        continue;
+      }	    
       ceph::bufferlist in, out;
       ostringstream err;
       int r = admin_socket->execute_command(

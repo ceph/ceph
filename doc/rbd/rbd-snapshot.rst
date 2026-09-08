@@ -39,10 +39,10 @@ the ``rbd`` command and several higher-level interfaces, including `QEMU`_,
            +------------+         +-------------+
 
 
-Cephx Notes
+CephX Notes
 ===========
 
-When :ref:`cephx <rados-cephx-config-ref>` authentication is enabled (it is by default), you must specify a
+When :ref:`CephX <rados-cephx-config-ref>` authentication is enabled (it is by default), you must specify a
 user name or ID and a path to the keyring containing the corresponding key. See
 :ref:`User Management <user-management>` for details.
 

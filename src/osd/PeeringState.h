@@ -197,6 +197,14 @@ struct HeartbeatStamps : public RefCountedObject {
     peer_clock_delta_ub = delta_ub;
   }
 
+  void get_peer_clock_delta(
+      std::optional<ceph::signedspan> *out_lb,
+      std::optional<ceph::signedspan> *out_ub) const {
+    std::lock_guard l(lock);
+    *out_lb = peer_clock_delta_lb;
+    *out_ub = peer_clock_delta_ub;
+  }
+
 private:
   FRIEND_MAKE_REF(HeartbeatStamps);
   HeartbeatStamps(int o)
@@ -1061,6 +1069,7 @@ public:
       boost::statechart::custom_reaction< RemoteBackfillPreempted >,
       boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
       boost::statechart::custom_reaction< RecoveryDone >,
+      boost::statechart::custom_reaction< BackfillTooFull >,
       boost::statechart::transition<DeleteStart, ToDelete>,
       boost::statechart::custom_reaction< MLease >
       > reactions;
@@ -1095,6 +1104,9 @@ public:
     boost::statechart::result react(const RemoteRecoveryPreempted& evt) {
       return discard_event();
     }
+    boost::statechart::result react(const BackfillTooFull& evt) {
+      return discard_event();
+    }
   };
 
   struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
@@ -1116,6 +1128,7 @@ public:
 
   struct RepWaitBackfillReserved : boost::statechart::state< RepWaitBackfillReserved, ReplicaActive >, NamedState {
     typedef boost::mpl::list<
+      boost::statechart::custom_reaction< BackfillTooFull >,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
       boost::statechart::custom_reaction< RejectTooFullRemoteReservation >,
       boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
@@ -1123,6 +1136,7 @@ public:
       > reactions;
     explicit RepWaitBackfillReserved(my_context ctx);
     void exit();
+    boost::statechart::result react(const BackfillTooFull &evt);
     boost::statechart::result react(const RemoteBackfillReserved &evt);
     boost::statechart::result react(const RejectTooFullRemoteReservation &evt);
     boost::statechart::result react(const RemoteReservationRejectedTooFull &evt);
@@ -1579,6 +1593,21 @@ public:
   bool backfill_reserved = false;
   bool backfill_reserving = false;
 
+  /**
+   * Per-PG latch state for rebuild time tracking. Cleared after each
+   * completed rebuild event is recorded in the perf counters.
+   * The state is also cleared in start_peering_interval() when the
+   * primary role actually changes across the transition, so that a
+   * role change (primary -> replica, or vice versa) does not carry a
+   * stale start time or baseline recovered count into a future primary
+   * stint. Peering-interval restarts that leave this OSD as primary
+   * throughout preserve the latch so an in-progress rebuild keeps
+   * accruing across them.
+   */
+  utime_t rebuild_start_time;
+  int64_t rebuild_base_recovered = 0;
+  bool rebuild_had_redundancy_loss = false;
+
   PeeringMachine machine;
 
   void update_osdmap_ref(OSDMapRef newmap) {
@@ -1678,6 +1707,17 @@ public:
       pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
       return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
     }
+  }
+
+  // Accessors for the per-PG rebuild latch state.
+  utime_t get_rebuild_start_time() const {
+    return rebuild_start_time;
+  }
+  int64_t get_rebuild_base_recovered() const {
+    return rebuild_base_recovered;
+  }
+  bool get_rebuild_had_redundancy_loss() const {
+    return rebuild_had_redundancy_loss;
   }
 
 private:
@@ -1812,7 +1852,7 @@ private:
 
   void update_blocked_by();
   void update_calc_stats();
-  void increment_stats_invalidations_counter(bool invalidation_state);
+  void increment_stats_invalidations_counter(int stats_invalidation_counter, bool invalidation_state);
 
   void add_log_entry(const pg_log_entry_t& e, ObjectStore::Transaction &t, bool applied);
 

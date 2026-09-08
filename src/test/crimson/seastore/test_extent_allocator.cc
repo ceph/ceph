@@ -58,7 +58,7 @@ struct allocator_test_t :
     return allocator->alloc_extent(size);
   }
   auto allocates(size_t size) {
-    return allocator->alloc_extents(size);
+    return allocator->alloc_extents(size, 0);
   }
   void free(uint64_t start, uint64_t length) {
     allocator->free_extent(start, length);

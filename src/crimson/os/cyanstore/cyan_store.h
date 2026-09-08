@@ -182,6 +182,7 @@ public:
 		 std::string_view name);
     int _rm_attrs(const coll_t& cid, const ghobject_t& oid);
     int _create_collection(const coll_t& cid, int bits);
+    int _merge_collection(const coll_t& cid, const coll_t& dest_cid, int bits);
     int _remove_collection(const coll_t& cid);
     boost::intrusive_ptr<Collection> _get_collection(const coll_t& cid);
 

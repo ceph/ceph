@@ -368,6 +368,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
                            uint64_t max_mem,
                            std::string_view name) :
   AllocatorBase(name, device_size, block_size),
+  AllocatorPerf(cct, name),
   cct(cct),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
@@ -421,8 +422,22 @@ int64_t AvlAllocator::allocate(
       max_alloc_size >= cap) {
     max_alloc_size = p2align(uint64_t(cap), (uint64_t)block_size);
   }
+  auto lock_wait_start = mono_clock::now();
+
   std::lock_guard l(lock);
-  return _allocate(want, unit, max_alloc_size, hint, extents);
+
+  auto lock_acquired = mono_clock::now();
+
+  auto ret = _allocate(want, unit, max_alloc_size, hint, extents);
+
+  logger->tinc_with_max(
+      l_bluestore_allocator_alloc_process_lat,
+      mono_clock::now() - lock_acquired);
+  logger->tinc_with_max(
+      l_bluestore_allocator_lock_wait_lat,
+      lock_acquired - lock_wait_start);
+
+  return ret;
 }
 
 void AvlAllocator::release(const release_set_t& release_set) {
@@ -479,6 +494,47 @@ void AvlAllocator::_foreach(
   for (auto& rs : range_tree) {
     notify(rs.start, rs.end - rs.start);
   }
+}
+
+uint64_t AvlAllocator::get_free_extents(
+  uint64_t range_begin,
+  uint64_t range_end,
+  size_t max_count,
+  free_extent_vector_t* out)
+{
+  ceph_assert(range_begin <= range_end);
+  // Empty window: nothing to enumerate, already fully covered.
+  if (range_begin == range_end) {
+    return range_end;
+  }
+
+  std::lock_guard l(lock);
+  auto it = range_tree.lower_bound(range_t{range_begin, range_begin},
+				   range_tree.key_comp());
+  // An extent starting before range_begin may still straddle it; step back
+  // one to include it so its left edge can be clipped by the lo= max() below.
+  if (it != range_tree.begin()) {
+    auto prev = std::prev(it);
+    if (prev->end > range_begin) {
+      it = prev;
+    }
+  }
+  size_t n = 0;
+  max_count--;  // if 0, wraps to SIZE_MAX so n <= max_count is always true (unbounded)
+  while (it != range_tree.end() && it->start < range_end &&
+         (n <= max_count)) {
+    uint64_t lo = std::max(it->start, range_begin);
+    uint64_t hi = std::min(it->end, range_end);
+    out->emplace_back(lo, hi - lo);
+    ++it;
+    ++n;
+  }
+  if (it == range_tree.end() || it->start >= range_end) {
+    // Window fully enumerated.
+    return range_end;
+  }
+  // Stopped on the count cap: resume from the next, not-yet-emitted extent.
+  return it->start;
 }
 
 void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)

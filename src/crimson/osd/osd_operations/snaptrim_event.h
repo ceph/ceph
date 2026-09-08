@@ -6,6 +6,7 @@
 #include <iostream>
 #include <seastar/core/future.hh>
 
+#include "common/fmt_common.h"
 #include "crimson/osd/object_context_loader.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
@@ -169,6 +170,36 @@ public:
     StartEvent,
     CommonOBCPipeline::Process::BlockingEvent,
     CommonOBCPipeline::WaitRepop::BlockingEvent,
+    CompletionEvent
+  > tracking_events;
+};
+
+class SnapTrimInitiate final : public PhasedOperationT<SnapTrimInitiate> {
+public:
+  static constexpr OperationTypeCode type =
+    OperationTypeCode::snap_trim_initiate;
+
+  SnapTrimInitiate(Ref<PG> pg) : pg(std::move(pg)) {}
+
+  void print(std::ostream &) const final;
+  void dump_detail(ceph::Formatter* f) const final;
+  seastar::future<> start();
+
+  template <typename FormatContext>
+  auto fmt_print_ctx(FormatContext& ctx) const {
+    return fmt::format_to(ctx.out(), "SnapTrimInitiate(pgid={})",
+                          pg->get_pgid());
+  }
+
+private:
+  Ref<PG> pg;
+  PipelineHandle handle;
+
+public:
+  PipelineHandle& get_handle() { return handle; }
+
+  std::tuple<
+    StartEvent,
     CompletionEvent
   > tracking_events;
 };

@@ -4,6 +4,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include "mds/mdstypes.h"
 #include "cls_cephfs.h"
+#include "cls_cephfs_types.h"
 
 struct inode_backtrace_t;
 class AccumulateArgs;

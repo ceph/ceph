@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { MockComponent } from 'ng-mocks';
-import { ToastrModule } from 'ngx-toastr';
+
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
@@ -69,7 +69,6 @@ describe('RbdSnapshotListComponent', () => {
       PipesModule,
       RouterTestingModule,
       NgbNavModule,
-      ToastrModule.forRoot(),
       ModalModule,
       PlaceholderModule,
       CoreModule

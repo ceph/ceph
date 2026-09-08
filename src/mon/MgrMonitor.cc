@@ -20,6 +20,7 @@
 #include "messages/MMonCommand.h"
 
 #include "include/stringify.h"
+#include "include/util.h" // for dump_services()
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
@@ -28,6 +29,8 @@
 #include "Monitor.h"
 #include "Paxos.h"
 
+#include "common/debug.h"
+#include "common/errno.h"
 #include "common/TextTable.h"
 #include "include/stringify.h"
 
@@ -188,7 +191,6 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 
     ever_had_active_mgr = get_value("ever_had_active_mgr");
 
-    load_health();
 
     if (map.available) {
       first_seen_inactive = utime_t();
@@ -351,7 +353,7 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata.clear();
   pending_metadata_rm.clear();
 
-  health_check_map_t next;
+  auto& next = get_health_checks_pending_writeable();
   if (pending_map.active_gid == 0) {
     auto level = should_warn_about_mgr_down();
     if (level != HEALTH_OK) {
@@ -363,7 +365,6 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   } else {
     put_value(t, "ever_had_active_mgr", 1);
   }
-  encode_health(next, t);
 
   if (pending_command_descs.size()) {
     dout(4) << __func__ << " encoding " << pending_command_descs.size()
@@ -995,6 +996,14 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->dump_bool("available", map.get_available());
     f->dump_string("active_name", map.get_active_name());
     f->dump_unsigned("num_standby", map.get_num_standby());
+    f->open_array_section("standbys");
+    for (const auto& [gid, s] : map.standbys) {
+      f->open_object_section("standby_mgr");
+      f->dump_unsigned("gid", s.gid);
+      f->dump_string("name", s.name);
+      f->close_section();
+    }
+    f->close_section();
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "mgr dump") {
@@ -1193,18 +1202,21 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     std::string var;
     if (!cmd_getval(cmdmap, "var", var) || var.empty()) {
       ss << "Invalid variable";
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
     string val;
     if (!cmd_getval(cmdmap, "val", val)) {
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
 
     if (var == "down") {
       bool enable_down = false;
-      int r = parse_bool(val, &enable_down, ss);
-      if (r != 0) {
-        return r;
+      int ret = parse_bool(val, &enable_down, ss);
+      if (ret != 0) {
+        r = ret;
+        goto out;
       }
       if (enable_down) {
         bool has_active = !!pending_map.active_gid;
@@ -1223,7 +1235,9 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
         }
       }
     } else {
-      return -EINVAL;
+      ss << "Unknown variable '" << var << "'";
+      r = -EINVAL;
+      goto out;
     }
   } else if (prefix == "mgr fail") {
     string who;

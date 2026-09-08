@@ -28,10 +28,12 @@
 #include "PaxosService.h"
 #include "mds/MDSMap.h"
 #include "messages/MMDSBeacon.h"
+#include "mon/mon_types.h" // for Metadata
 #include "CommandHandler.h"
 
 class Monitor;
 class FileSystemCommandHandler;
+struct Subscription;
 
 class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHandler {
  public:
@@ -163,6 +165,8 @@ protected:
 private:
   time last_fsmap_struct_flush = clock::zero();
   bool check_fsmap_struct_version = true;
+  boost::optional<const entity_addrvec_t&> get_rank_addrs(const Filesystem& fs,
+                                                          mds_rank_t rank) const;
 };
 
 #endif

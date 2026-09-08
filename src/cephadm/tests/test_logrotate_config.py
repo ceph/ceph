@@ -23,7 +23,7 @@ def test_cluster_logrotate_config(cephadm_fs):
     compress
     sharedscripts
     postrotate
-        killall -q -1 ceph-mon ceph-mgr ceph-mds ceph-osd ceph-fuse radosgw rbd-mirror cephfs-mirror tcmu-runner || pkill -1 -x 'ceph-mon|ceph-mgr|ceph-mds|ceph-osd|ceph-fuse|radosgw|rbd-mirror|cephfs-mirror|tcmu-runner' || true
+        killall -q -1 ceph-exporter ceph-mon ceph-mgr ceph-mds ceph-osd ceph-fuse radosgw rbd-mirror cephfs-mirror tcmu-runner || pkill -1 -x 'ceph-exporter|ceph-mon|ceph-mgr|ceph-mds|ceph-osd|ceph-fuse|radosgw|rbd-mirror|cephfs-mirror|tcmu-runner' || true
     endscript
     missingok
     notifempty

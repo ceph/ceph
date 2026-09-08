@@ -2,14 +2,16 @@
  Cache Tiering
 ===============
 
-.. warning:: Cache tiering has been deprecated in the Reef release. Cache
-   tiering has lacked a maintainer for a long time. This does not mean that
-   it will certainly be removed, but it might be removed without much
-   notice.
+.. warning:: Cache tiering was deprecated in the Reef release and has lacked
+   a maintainer for a long time. It will be removed in a future release without
+   notice. **Do not deploy new cache tiers.** Migrate existing cache
+   tier deployments as soon as possible.
 
-   The upstream Ceph community strongly advises against deploying new cache
-   tiers. The upstream Ceph community also recommends migrating from legacy
-   deployments.
+.. note:: This documentation is retained for existing deployments only.
+   If you need to remove a cache tier, see :ref:`cache-tiering-removal`.
+   Some community members have adopted ``dm-cache`` (the Linux kernel's
+   device-mapper cache target) as a block-level caching alternative, though
+   this is not an officially supported or endorsed configuration.
 
 A cache tier provides Ceph clients with better I/O performance for a subset of
 the data stored in a backing storage tier. Cache tiering involves creating a
@@ -450,10 +452,12 @@ For example, to evict objects after 30 minutes, execute the following:
    ceph osd pool set hot-storage cache_min_evict_age 1800
 
 
+.. _cache-tiering-removal:
+
 Removing a Cache Tier
 =====================
 
-Removing a cache tier differs depending on whether it is a writeback 
+Removing a cache tier differs depending on whether it is a writeback
 cache or a read-only cache.
 
 
@@ -587,24 +591,16 @@ Here is an example of unfound objects appearing during an upgrade from Ceph
        ],
        "more": false
 
-Some tests in the field indicate that the unfound objects can be deleted with
-no adverse effects (see `Tracker Issue #44286, Note 3
-<https://tracker.ceph.com/issues/44286#note-3>`_). Pawel Stefanski suggests
-that deleting missing or unfound objects is safe as long as the objects are a
-part of ``.ceph-internal::hit_set_PGID_archive``.
+Field reports indicate that the unfound objects can be deleted with no
+adverse effects, provided that the objects belong to the
+``.ceph-internal`` namespace and have names of the form
+``hit_set_<PGID>_archive``. These are hit set archives maintained
+internally by cache tiering, not user data. Pawel Stefanski reported
+that deleting missing or unfound objects is safe as long as the objects
+are a part of ``.ceph-internal::hit_set_PGID_archive``.
 
-Various members of the upstream Ceph community have reported in `Tracker Issue
-#44286 <https://tracker.ceph.com/issues/44286>`_ that the following versions of
-Ceph have been affected by this issue:
-
-* 14.2.8
-* 14.2.16
-* 15.2.15
-* 16.2.5
-* 17.2.7
-
-See `Tracker Issue #44286 <https://tracker.ceph.com/issues/44286>`_ for the
-history of this issue.
+Members of the upstream Ceph community have reported this issue on
+releases ranging from 14.2.8 through 17.2.7.
 
 
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter

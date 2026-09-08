@@ -21,7 +21,6 @@
 #include <string_view>
 
 #include "Capability.h"
-#include "mdstypes.h"
 #include "snap.h"
 #include "include/xlist.h"
 #include "include/elist.h"
@@ -41,6 +40,10 @@ public:
     }
     return false;
   }
+
+  bool will_md_op_succeed(const snapid_t snap_id, const std::string& md_key,
+                          const std::string& md_val,
+                          const unsigned int op_flag) const;
 
   void prune_past_parent_snaps();
   bool has_past_parent_snaps() const {

@@ -1,6 +1,12 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
 set(crimson_cflag_definitions "WITH_CRIMSON=1")
 
+option(WITH_CRIMSON_DETAILED_SAMPLING
+  "Enable detailed onode-tree sampling metrics in crimson-seastore" OFF)
+if(WITH_CRIMSON_DETAILED_SAMPLING)
+  list(APPEND crimson_cflag_definitions "CRIMSON_DETAILED_SAMPLING=1")
+endif()
+
 set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
@@ -203,3 +209,15 @@ add_subdirectory(admin)
 add_subdirectory(os)
 add_subdirectory(osd)
 add_subdirectory(tools)
+
+if(WITH_EC_ISA_PLUGIN)
+  add_library(ec_isa_crimson STATIC
+    ${PROJECT_SOURCE_DIR}/src/erasure-code/isa/ErasureCodeIsa.cc
+    ${PROJECT_SOURCE_DIR}/src/erasure-code/isa/ErasureCodeIsaTableCache.cc
+    ${PROJECT_SOURCE_DIR}/src/erasure-code/isa/ErasureCodePluginIsa.cc
+    $<TARGET_OBJECTS:erasure_code_objs>)
+  target_link_libraries(ec_isa_crimson PUBLIC ISAL::ISAL crimson::cflags)
+  target_compile_definitions(ec_isa_crimson INTERFACE WITH_EC_ISA_PLUGIN)
+  target_link_libraries(crimson-osd
+    -Wl,--whole-archive ec_isa_crimson -Wl,--no-whole-archive)
+endif()

@@ -30,6 +30,10 @@
   1: [v2:172.21.15.68:6791/0,v1:172.21.15.68:6792/0] mon.fiz
   2: v2:3.4.5.6:7890/0 mon.bar
   3: v2:4.5.6.7:8901/0 mon.baz
+  auth_epoch 0
+  auth_service_cipher aes256k
+  auth_allowed_ciphers aes256k
+  auth_preferred_cipher aes256k
 
   $ NEW_FSID="$(monmaptool --print mymonmap|grep ^fsid)"
   $ [ "$ORIG_FSID" = "$NEW_FSID" ]

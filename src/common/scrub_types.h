@@ -117,6 +117,7 @@ namespace librados {
 }
 
 struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
+  inconsistent_obj_wrapper() = default;
   explicit inconsistent_obj_wrapper(const hobject_t& hoid);
 
   void merge(obj_err_t other) {

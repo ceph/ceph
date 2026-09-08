@@ -1,5 +1,8 @@
 Feature: Ceph Cluster Dashboard
 
+  Background:
+    Given the dashboard is `ceph-cluster-advanced`
+
   Scenario: "Test cluster health"
   Given the following series:
     | metrics                  | values |

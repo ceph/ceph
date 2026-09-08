@@ -15,6 +15,8 @@
 #include <vector>
 #include <algorithm>
 #include <mutex>
+#include <string_view>
+#include <utility>
 
 typedef uint64_t slot_t;
 
@@ -36,6 +38,7 @@ typedef std::vector<slot_t> slot_vector_t;
 #include "include/ceph_assert.h"
 #include "common/likely.h"
 #include "os/bluestore/bluestore_types.h"
+#include "AllocatorBase.h"
 #include "include/mempool.h"
 #include "common/ceph_mutex.h"
 
@@ -70,6 +73,76 @@ inline size_t find_next_set_bit(slot_t slot_val, size_t start_pos)
   return start_pos;
 }
 
+// -----------------------------------------------------------------------
+// L0 bit-range primitives, shared by the free-extent walk (see
+// AllocatorLevel01Loose::get_free_extents_internal) and by any level of
+// the allocator doing the same "index -> range of children" arithmetic
+// (e.g. AllocatorLevel02's L2 -> L1 indexing).
+// -----------------------------------------------------------------------
+
+// Intersection of [lo, hi) with [bound_lo, bound_hi).
+inline std::pair<uint64_t, uint64_t> intersect(
+  uint64_t lo, uint64_t hi, uint64_t bound_lo, uint64_t bound_hi)
+{
+  return { std::max(lo, bound_lo), std::min(hi, bound_hi) };
+}
+
+// L0 bit position where L0 word (slot) 'word_idx' begins.
+inline uint64_t l0_word_start(uint64_t word_idx)
+{
+  return word_idx * bits_per_slot;
+}
+
+// [start, end) of L0 bits covered by slotset 'l1_idx'.
+inline std::pair<uint64_t, uint64_t> slotset_l0_range(uint64_t l1_idx)
+{
+  uint64_t start = l1_idx * bits_per_slotset;
+  return { start, start + bits_per_slotset };
+}
+
+// L1 slotset index containing L0 bit position 'pos'. Inverse of
+// slotset_l0_range()'s start.
+inline uint64_t l0_bit_to_l1_idx(uint64_t pos)
+{
+  return pos / bits_per_slotset;
+}
+
+// Index of the first L0 word (slot) belonging to slotset 'l1_idx'.
+inline uint64_t slotset_first_slot(uint64_t l1_idx)
+{
+  return l1_idx * slots_per_slotset;
+}
+
+// [start, end) of L0 bits covered by word 'slot_num' within slotset 'l1_idx'.
+inline std::pair<uint64_t, uint64_t> slot_l0_range(
+  uint64_t l1_idx, uint64_t slot_num)
+{
+  uint64_t start = l0_word_start(slotset_first_slot(l1_idx) + slot_num);
+  return { start, start + bits_per_slot };
+}
+
+// Tracks a free run being accumulated while walking a bitmap. extend()
+// covers both "open" (run was empty) and "extend" (run was already open) --
+// callers never need to open without possibly extending.
+struct FreeRun {
+  uint64_t off = 0;
+  uint64_t len = 0;
+
+  bool is_open() const { return len > 0; }
+
+  void extend(uint64_t pos, uint64_t add_len) {
+    if (!is_open()) {
+      off = pos;
+    }
+    len += add_len;
+  }
+
+  std::pair<uint64_t, uint64_t> close() {
+    std::pair<uint64_t, uint64_t> run{off, len};
+    len = 0;
+    return run;
+  }
+};
 
 class AllocatorLevel
 {
@@ -295,6 +368,48 @@ protected:
     }
   }
 
+  void expand(uint64_t new_capacity, uint64_t old_capacity)
+  {
+    auto new_aligned_capacity =
+      p2roundup((int64_t)new_capacity,
+        int64_t(l1_granularity * slots_per_slotset * _children_per_slot()));
+
+    auto old_aligned_capacity =
+      p2roundup((int64_t)old_capacity,
+        int64_t(l1_granularity * slots_per_slotset * _children_per_slot()));
+
+    if (new_aligned_capacity == old_aligned_capacity) {
+      // aligned capacity didn't change, but we should check the old and new boundaries
+      auto old_l0_pos_no_use = p2roundup((int64_t)old_capacity, (int64_t)l0_granularity) / l0_granularity;
+      auto new_l0_pos_no_use = p2roundup((int64_t)new_capacity, (int64_t)l0_granularity) / l0_granularity;
+      if (old_l0_pos_no_use < new_l0_pos_no_use) {
+        // L1 aligned capacity is the same but actual capacity increased
+        // mark the newly expanded region [old_capacity, new_capacity) as free
+        _mark_free_l1_l0(old_l0_pos_no_use, new_l0_pos_no_use);
+      }
+      return;
+    }
+
+    size_t new_slot_count = new_aligned_capacity / l1_granularity / _children_per_slot();
+    size_t old_slot_count = l1.size();
+    l1.resize(new_slot_count, all_slot_set);
+
+    size_t new_slot_count_l0 = new_aligned_capacity / l0_granularity / bits_per_slot;
+    l0.resize(new_slot_count_l0, all_slot_set);
+
+    unalloc_l1_count += (new_slot_count - old_slot_count) * _children_per_slot();
+
+    // Free the old padding at the old aligned boundary
+    auto old_l0_pos_no_use = p2roundup((int64_t)old_capacity, (int64_t)l0_granularity) / l0_granularity;
+    auto old_l0_pos_end = old_aligned_capacity / l0_granularity;
+    if (old_l0_pos_no_use < old_l0_pos_end) {
+      _mark_free_l1_l0(old_l0_pos_no_use, old_l0_pos_end);
+    }
+
+    auto l0_pos_no_use = p2roundup((int64_t)new_capacity, (int64_t)l0_granularity) / l0_granularity;
+    _mark_alloc_l1_l0(l0_pos_no_use, new_aligned_capacity / l0_granularity);
+  }
+
   struct search_ctx_t
   {
     size_t partial_count = 0;
@@ -505,7 +620,35 @@ public:
 
   static inline ssize_t count_0s(slot_t slot_val, size_t start_pos);
   static inline ssize_t count_1s(slot_t slot_val, size_t start_pos);
+
+  // Which l1[] word holds the packed 2-bit entry for slotset 'l1_idx', and
+  // its bit shift within that word.
+  static inline std::pair<size_t, size_t> l1_split(uint64_t l1_idx)
+  {
+    return { l1_idx / L1_ENTRIES_PER_SLOT,
+             (l1_idx % L1_ENTRIES_PER_SLOT) * L1_ENTRY_WIDTH };
+  }
+
+  // Decoded L1 summary for slotset 'l1_idx': one of L1_ENTRY_FULL /
+  // L1_ENTRY_PARTIAL / L1_ENTRY_NOT_USED / L1_ENTRY_FREE.
+  inline slot_t l1_entry_at(uint64_t l1_idx) const
+  {
+    auto [word, shift] = l1_split(l1_idx);
+    return (l1[word] >> shift) & L1_ENTRY_MASK;
+  }
   void foreach_internal(std::function<void(uint64_t offset, uint64_t length)> notify);
+
+  // Range- and count-bounded counterpart to foreach_internal(). Enumerates free
+  // extents whose offsets (in L0 units, one bit per min_alloc_size) intersect
+  // [l0_pos_start, l0_pos_end), emitting at most max_count of them (0 ==
+  // unbounded). Each run is clipped to the window. Returns an L0 resume cursor:
+  // >= l0_pos_end once the window is exhausted, otherwise the first unit past
+  // the last emitted run (which may land in allocated space).
+  uint64_t get_free_extents_internal(
+    uint64_t l0_pos_start,
+    uint64_t l0_pos_end,
+    size_t max_count,
+    std::function<void(uint64_t offset, uint64_t length)> notify);
 };
 
 
@@ -524,9 +667,13 @@ public:
 };
 
 template <class L1>
-class AllocatorLevel02 : public AllocatorLevel
+class AllocatorLevel02 : public AllocatorLevel, public AllocatorPerf
 {
 public:
+  AllocatorLevel02(CephContext* cct, std::string_view name)
+    : AllocatorPerf(cct, name)
+  {}
+
   uint64_t debug_get_free(uint64_t pos0 = 0, uint64_t pos1 = 0)
   {
     std::lock_guard l(lock);
@@ -591,9 +738,82 @@ public:
     std::lock_guard l(lock);
     l1.foreach_internal(multiply_by_alloc_size);
   }
+
+  uint64_t get_free_extents_internal(
+    uint64_t range_begin,
+    uint64_t range_end,
+    size_t max_count,
+    std::function<void(uint64_t offset, uint64_t length)> notify)
+  {
+    ceph_assert(range_begin <= range_end);
+    if (range_begin == range_end) {
+      return range_end;
+    }
+    const uint64_t alloc_size = get_min_alloc_size();
+    // Window expressed in L0 units (one bit per min_alloc_size).
+    const uint64_t l0_pos_start = range_begin / alloc_size;
+    const uint64_t l0_pos_end   = p2roundup(range_end, alloc_size) / alloc_size;
+
+    // Scale unit runs back to bytes, clipped to the exact byte window
+    // (free extents are alloc-unit aligned, so only the boundary units clip).
+    auto emit = [&](uint64_t off, uint64_t len) {
+      uint64_t lo = std::max(off * alloc_size, range_begin);
+      uint64_t hi = std::min((off + len) * alloc_size, range_end);
+      notify(lo, hi - lo);
+    };
+
+    std::lock_guard l(lock);
+    uint64_t cursor =
+      l1.get_free_extents_internal(l0_pos_start, l0_pos_end, max_count, emit);
+    return cursor >= l0_pos_end ? range_end : cursor * alloc_size;
+  }
+
   double get_fragmentation_internal() {
     std::lock_guard l(lock);
     return l1.get_fragmentation();
+  }
+
+  void expand(uint64_t new_capacity, uint64_t old_capacity)
+  {
+    ceph_assert(new_capacity >= old_capacity);
+    std::lock_guard l(lock);
+
+    l1.expand(new_capacity, old_capacity);
+
+    auto new_aligned_capacity =
+      p2roundup((int64_t)new_capacity, (int64_t)l2_granularity * L1_ENTRIES_PER_SLOT);
+    auto old_aligned_capacity =
+      p2roundup((int64_t)old_capacity, (int64_t)l2_granularity * L1_ENTRIES_PER_SLOT);
+
+    if (new_aligned_capacity == old_aligned_capacity) {
+      // L2 vector didn't grow, but we need to update L2 bits to reflect the expanded L1 entries
+      // calculate which L2 position range covers the expanded region [old_capacity, new_capacity)
+      auto l2_pos_start = old_capacity / l2_granularity;
+      auto l2_pos_end = p2roundup((int64_t)new_capacity, (int64_t)l2_granularity) / l2_granularity;
+
+      if (l2_pos_start < l2_pos_end) {
+        // update L2 metadata for the expanded region by examining L1 state
+        _mark_l2_on_l1(l2_pos_start, l2_pos_end);
+      }
+
+      return;
+    }
+
+    size_t new_elem_count = new_aligned_capacity / l2_granularity / L1_ENTRIES_PER_SLOT;
+    l2.resize(new_elem_count, all_slot_set);
+
+    // free the old padding so we can reuse that space
+    auto old_l2_pos_no_use = 
+      p2roundup((int64_t)old_capacity, (int64_t)l2_granularity) / l2_granularity;
+    auto old_l2_pos_end = old_aligned_capacity / l2_granularity;
+    if (old_l2_pos_no_use < old_l2_pos_end) {
+      _mark_l2_free(old_l2_pos_no_use, old_l2_pos_end);
+    }
+
+    auto l2_pos_no_use = 
+      p2roundup((int64_t)new_capacity, (int64_t)l2_granularity) / l2_granularity;
+    _mark_l2_allocated(l2_pos_no_use, new_aligned_capacity / l2_granularity);
+
   }
 
 protected:
@@ -720,9 +940,19 @@ protected:
 
     uint64_t l1_w = slots_per_slotset * l1._children_per_slot();
 
+    auto lock_wait_start = mono_clock::now();
+
     std::lock_guard l(lock);
 
+    auto lock_acquired = mono_clock::now();
+
     if (available < min_length) {
+      logger->tinc_with_max(
+        l_bluestore_allocator_alloc_process_lat,
+        mono_clock::now() - lock_acquired);
+      logger->tinc_with_max(
+        l_bluestore_allocator_lock_wait_lat,
+        lock_acquired - lock_wait_start);
       return;
     }
     if (hint != -1) {
@@ -783,6 +1013,13 @@ protected:
     auto allocated_here = *allocated - prev_allocated;
     ceph_assert(available >= allocated_here);
     available -= allocated_here;
+
+    logger->tinc_with_max(
+      l_bluestore_allocator_alloc_process_lat,
+      mono_clock::now() - lock_acquired);
+    logger->tinc_with_max(
+      l_bluestore_allocator_lock_wait_lat,
+      lock_acquired - lock_wait_start);
   }
 
 #ifndef NON_CEPH_BUILD

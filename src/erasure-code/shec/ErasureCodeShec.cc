@@ -28,8 +28,8 @@
 #include "common/strtol.h"
 #include "ErasureCodeShec.h"
 extern "C" {
-#include "jerasure/include/jerasure.h"
-#include "jerasure/include/galois.h"
+#include "jerasure.h"
+#include "galois.h"
 
 extern int calc_determinant(int *matrix, int dim);
 extern int* reed_sol_vandermonde_coding_matrix(int k, int m, int w);

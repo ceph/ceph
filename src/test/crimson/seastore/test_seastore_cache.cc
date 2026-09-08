@@ -81,7 +81,7 @@ struct cache_test_t : public seastar_test_suite_t {
 	cache->complete_commit(*t, prev, seq /* TODO */);
         return prev;
       },
-      crimson::ct_error::assert_all{"failed to submit"}
+      crimson::ct_error::assert_all("failed to submit")
      );
   }
 
@@ -131,7 +131,7 @@ struct cache_test_t : public seastar_test_suite_t {
         });
       });
     }).handle_error(
-      crimson::ct_error::assert_all{"failed to submit"}
+      crimson::ct_error::assert_all("failed to submit")
     );
   }
 
@@ -142,7 +142,7 @@ struct cache_test_t : public seastar_test_suite_t {
       epm.reset();
       cache.reset();
     }).handle_error(
-      Cache::close_ertr::assert_all{}
+      Cache::close_ertr::assert_all("unexpected error")
     );
   }
 };
@@ -157,8 +157,7 @@ TEST_F(cache_test_t, test_addr_fixup)
       auto extent = cache->alloc_new_non_data_extent<TestBlockPhysical>(
 	*t,
 	TestBlockPhysical::SIZE,
-	placement_hint_t::HOT,
-	0);
+	{placement_hint_t::HOT, 0});
       extent->set_contents('c');
       csum = extent->calc_crc32c();
       submit_transaction(std::move(t)).get();
@@ -188,8 +187,7 @@ TEST_F(cache_test_t, test_dirty_extent)
       auto extent = cache->alloc_new_non_data_extent<TestBlockPhysical>(
 	*t,
 	TestBlockPhysical::SIZE,
-	placement_hint_t::HOT,
-	0);
+	{placement_hint_t::HOT, 0});
       extent->set_contents('c');
       csum = extent->calc_crc32c();
       auto reladdr = extent->get_paddr();

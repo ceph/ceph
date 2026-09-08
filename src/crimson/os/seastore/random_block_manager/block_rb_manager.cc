@@ -31,7 +31,7 @@ device_config_t get_rbm_ephemeral_device_config(
          ++secondary_index) {
       device_id_t secondary_id = static_cast<device_id_t>(secondary_index);
       secondary_devices.insert({
-        secondary_index, device_spec_t{magic, type, secondary_id}
+        secondary_index, device_spec_t{magic, type, backend_type_t::RANDOM_BLOCK, secondary_id}
       });
     }
   } else { // index > 0
@@ -41,7 +41,7 @@ device_config_t get_rbm_ephemeral_device_config(
   device_id_t id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN + index);
   seastore_meta_t meta = {};
   return {is_major_device,
-          device_spec_t{magic, type, id},
+          device_spec_t{magic, type, backend_type_t::RANDOM_BLOCK, id},
           meta,
           secondary_devices};
 }
@@ -66,11 +66,13 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
 }
 
 BlockRBManager::allocate_ret_bare
-BlockRBManager::alloc_extents(size_t size)
+BlockRBManager::alloc_extents(size_t size, paddr_t hint)
 {
   LOG_PREFIX(BlockRBManager::alloc_extents);
   assert(allocator);
-  auto alloc = allocator->alloc_extents(size);
+  rbm_abs_addr rbm_hint =
+    (hint == P_ADDR_NULL ? 0 : convert_paddr_to_abs_addr(hint));
+  auto alloc = allocator->alloc_extents(size, rbm_hint);
   if (!alloc) {
     return {};
   }
@@ -204,29 +206,5 @@ void BlockRBManager::prefill_fragmented_device()
   }
 }
 #endif
-
-std::ostream &operator<<(std::ostream &out, const rbm_superblock_t &header)
-{
-  out << " rbm_superblock_t(size=" << header.size
-       << ", block_size=" << header.block_size
-       << ", feature=" << header.feature
-       << ", journal_size=" << header.journal_size
-       << ", crc=" << header.crc
-       << ", config=" << header.config
-       << ", shard_num=" << header.shard_num
-       << ", end_to_end_data_protection=" << header.is_end_to_end_data_protection()
-       << ", device_block_size=" << header.nvme_block_size;
-  for (auto p : header.shard_infos) {
-    out << p;
-  }
-  return out << ")";
-}
-
-std::ostream &operator<<(std::ostream &out, const rbm_shard_info_t &shard)
-{
-  out << " rbm_shard_info_t(size=" << shard.size
-      << ", start_offset=" << shard.start_offset;
-  return out << ")";
-}
 
 }

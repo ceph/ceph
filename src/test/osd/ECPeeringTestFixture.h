@@ -87,6 +87,14 @@ public:
   void event_advance_map();
   void event_activate_map();
   
+  /**
+   * set_config - Set a configuration option for testing
+   *
+   * @param option The configuration option name
+   * @param value The value to set
+   */
+  void set_config(const std::string& option, const std::string& value);
+  
 private:
   /**
    * dispatch_buffered_messages - Check for and dispatch any buffered messages
@@ -184,5 +192,69 @@ public:
    * @param to_osd The OSD number to unblock messages to (from the primary)
    */
   void unsuspend_primary_to_osd(int to_osd);
+
+  /**
+   * Inject a read error for a specific object on a specific shard's store.
+   * The error will be returned on the next read() call for this object,
+   * then automatically cleared.
+   *
+   * @param obj_name The name of the object to inject an error for
+   * @param shard The shard number whose store should return the error
+   * @param error_code The error code to return (should be negative, e.g., -EIO)
+   */
+  void inject_read_error_for_shard(const std::string& obj_name, int shard, int error_code);
+
+  /**
+   * run_recovery_and_verify_callbacks - Run recovery for an object and verify callbacks
+   *
+   * This helper function encapsulates the complete EC recovery flow:
+   * 1. Verifies the object is in the peer's missing set
+   * 2. Runs the recovery operation
+   * 3. Verifies all recovery callbacks were invoked correctly
+   * 4. Verifies PeeringState was updated correctly
+   *
+   * @param obj_name The name of the object to recover
+   * @param removed_osd The OSD that was down and needs recovery
+   * @param expected_data The expected data content after recovery
+   */
+  void run_recovery_and_verify_callbacks(
+    const std::string& obj_name,
+    int removed_osd,
+    const std::string& expected_data);
+
+  /**
+   * run_parallel_recovery_and_verify_callbacks - Run parallel recovery for multiple objects
+   *
+   * This helper function recovers multiple objects in parallel within a single recovery
+   * operation. This is the key difference from run_recovery_and_verify_callbacks which
+   * recovers objects sequentially (one at a time).
+   *
+   * The parallel recovery flow:
+   * 1. Calls recover_object() for ALL objects first (queues them)
+   * 2. Calls run_recovery_op() ONCE to process all queued recoveries together
+   * 3. Verifies callbacks and data for all objects
+   *
+   * This reproduces Bug 75432 where multiple objects in a single operation can cause
+   * assertion failures when some complete while others need resend.
+   *
+   * @param obj_names Vector of object names to recover in parallel
+   * @param target_osd The OSD that was down and needs recovery
+   * @param expected_data Vector of expected data content (must match obj_names size)
+   */
+  void run_parallel_recovery_and_verify_callbacks(
+    const std::vector<std::string>& obj_names,
+    int target_osd,
+    const std::vector<std::string>& expected_data);
+
+private:
+  /**
+   * Implementation function for parallel recovery that runs within event loop context.
+   * This is called by the public wrapper function after scheduling on the primary OSD.
+   */
+  void do_run_parallel_recovery_and_verify_callbacks_impl(
+    const std::vector<std::string>& obj_names,
+    int target_osd,
+    const std::vector<std::string>& expected_data,
+    int instance);
 };
 

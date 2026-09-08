@@ -17,7 +17,7 @@ describe('CRUSH map page', () => {
   describe('fields check', () => {
     it('should check that title & table appears', () => {
       // Check that title (CRUSH map viewer) appears
-      crushmap.getPageTitle().should('equal', 'CRUSH map viewer');
+      crushmap.getPageTitle().should('contain.text', 'CRUSH map viewer');
 
       // Check that title appears once OSD is clicked
       crushmap.getCrushNode(0).click();

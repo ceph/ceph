@@ -371,7 +371,6 @@ def ceph_log(ctx, config):
 
     update_archive_setting(ctx, 'log', '/var/log/ceph')
 
-
     try:
         yield
 
@@ -382,20 +381,37 @@ def ceph_log(ctx, config):
 
     finally:
         log.info('Checking cluster log for badness...')
+
+        log_path = '/var/log/ceph/{fsid}/ceph.log'.format(fsid=fsid)
+
+        def _ceph_log_exists():
+            try:
+                ctx.ceph[cluster_name].bootstrap_remote.run(
+                    args=['sudo', 'test', '-f', log_path],
+                )
+                return True
+            except CommandFailedError:
+                return False
+
         def first_in_ceph_log(pattern, excludes, only_match):
             """
-            Find the first occurrence of the pattern specified in the Ceph log,
-            Returns None if none found.
+            Find the first occurrence of the pattern specified in the Ceph log.
 
-            :param pattern: Pattern scanned for.
-            :param excludes: Patterns to ignore.
-            :return: First line of text (or None if not found)
+            Returns:
+                - matching line as a string if found
+                - None if the file does not exist or no match is found
+
+            Raises:
+                - CommandFailedError if the scan command itself fails unexpectedly
             """
+            if not _ceph_log_exists():
+                log.warning('Skipping cluster log scan: %s does not exist', log_path)
+                return None
+
             args = [
                 'sudo',
                 'grep', '-E', pattern,
-                '/var/log/ceph/{fsid}/ceph.log'.format(
-                    fsid=fsid),
+                log_path,
             ]
             if only_match:
                 args.extend([run.Raw('|'), 'grep', '-E', '|'.join(only_match)])
@@ -405,18 +421,33 @@ def ceph_log(ctx, config):
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
+
             r = ctx.ceph[cluster_name].bootstrap_remote.run(
                 stdout=BytesIO(),
                 args=args,
                 stderr=StringIO(),
+                check_status=False,
             )
-            stdout = r.stdout.getvalue().decode()
+
+            stdout = r.stdout.getvalue().decode(errors='replace')
+            stderr = r.stderr.getvalue().strip()
+            exitstatus = getattr(r, 'exitstatus', None)
+
             if stdout:
                 return stdout
-            stderr = r.stderr.getvalue()
-            if stderr:
-                return stderr
-            return None
+
+            # No stdout and no stderr means no match.
+            if not stderr:
+                return None
+
+            # stderr is a grep/pipeline execution problem, not a log match.
+            raise CommandFailedError(
+                'error scanning cluster log {}: {}{}'.format(
+                    log_path,
+                    stderr,
+                    '' if exitstatus is None else ' (exitstatus={})'.format(exitstatus),
+                )
+            )
 
         # NOTE: technically the first and third arg to first_in_ceph_log
         # are serving a similar purpose here of being something we
@@ -425,21 +456,32 @@ def ceph_log(ctx, config):
         # we match even if the test yaml specifies nothing else, and then the
         # log-only-match options are for when a test only wants to fail on
         # a specific subset of log lines that '\[ERR\]|\[WRN\]|\[SEC\]' matches
-        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config.get('log-ignorelist'),
-                             config.get('log-only-match')) is not None:
-            log.warning('Found errors (ERR|WRN|SEC) in cluster log')
-            ctx.summary['success'] = False
-            # use the most severe problem as the failure reason
+        try:
+            if first_in_ceph_log(
+                r'\[ERR\]|\[WRN\]|\[SEC\]',
+                config.get('log-ignorelist'),
+                config.get('log-only-match'),
+            ) is not None:
+                log.warning('Found errors (ERR|WRN|SEC) in cluster log')
+                ctx.summary['success'] = False
+                # use the most severe problem as the failure reason
+                if 'failure_reason' not in ctx.summary:
+                    for pattern in [r'\[SEC\]', r'\[ERR\]', r'\[WRN\]']:
+                        match = first_in_ceph_log(
+                            pattern,
+                            config.get('log-ignorelist'),
+                            config.get('log-only-match'),
+                        )
+                        if match is not None:
+                            ctx.summary['failure_reason'] = \
+                                '"{match}" in cluster log'.format(
+                                    match=match.rstrip('\n'),
+                                )
+                            break
+        except CommandFailedError as e:
+            log.warning('Unable to scan cluster log safely: %s', e)
             if 'failure_reason' not in ctx.summary:
-                for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log-ignorelist'], config.get('log-only-match'))
-                    if match is not None:
-                        ctx.summary['failure_reason'] = \
-                            '"{match}" in cluster log'.format(
-                                match=match.rstrip('\n'),
-                            )
-                        break
+                ctx.summary['failure_reason'] = 'cluster log scan failed'
 
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
@@ -487,8 +529,11 @@ def ceph_log(ctx, config):
                 except OSError:
                     pass
                 try:
-                    teuthology.pull_directory(remote, '/var/log/ceph',  # everything
-                                              os.path.join(sub, 'log'))
+                    teuthology.pull_directory(
+                        remote,
+                        '/var/log/ceph',
+                        os.path.join(sub, 'log'),
+                    )
                 except ReadError:
                     pass
 
@@ -583,12 +628,14 @@ def setup_ca_signed_keys(ctx, config):
             'sudo', 'tee', '-a', '/etc/ssh/ca-key.pub',
         ])
         # make sshd accept the CA signed key
+        # NOTE: the SSH server systemd unit is named 'ssh' on Debian/Ubuntu
+        # and 'sshd' on RHEL/CentOS/Rocky -- try both, but only after the
+        # config write itself has succeeded (grouped with parens so the
+        # restart fallback doesn't mask a failed config write).
         remote.run(args=[
-            'sudo', 'echo', 'TrustedUserCAKeys /etc/ssh/ca-key.pub',
-            run.Raw('|'),
-            'sudo', 'tee', '-a', '/etc/ssh/sshd_config',
-            run.Raw('&&'),
-            'sudo', 'systemctl', 'restart', 'sshd',
+            'sudo', 'sh', '-c',
+            "echo 'TrustedUserCAKeys /etc/ssh/ca-key.pub' | sudo tee -a /etc/ssh/sshd_config && "
+            "(sudo systemctl restart ssh || sudo systemctl restart sshd)"
         ])
 
     # generate a new key pair and sign the pub key to make a cert
@@ -890,6 +937,7 @@ def ceph_bootstrap(ctx, config):
             args=[
                 'sudo', 'rm', '-f',
                 '/etc/ceph/{}.conf'.format(cluster_name),
+                '/etc/ceph/{}.keyring'.format(cluster_name),
                 '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             ],
             check_status=False,  # rm-cluster above should have cleaned these up
@@ -1139,23 +1187,28 @@ def ceph_osds(ctx, config):
             cur += 1
 
         if cur == 0:
-            if raw:
-                for remote, devs in devs_by_remote.items():
-                    for dev in devs:
-                        log.info(f'Zapping device {dev} on {remote.shortname} before raw OSD deployment')
-                        remote.run(
-                            args=[
-                                'sudo', 'ceph-bluestore-tool', 'zap-device',
-                                '--dev', dev,
-                                '--yes-i-really-really-mean-it',
-                            ],
-                            check_status=False,
-                        )
-                        remote.run(args=['sudo', 'wipefs', '--all', dev], check_status=False)
-                        remote.run(
-                            args=['sudo', 'dd', 'if=/dev/zero', f'of={dev}', 'bs=1M', 'count=10', 'conv=fsync'],
-                            check_status=False,
-                        )
+            for remote, devs in devs_by_remote.items():
+                for dev in devs:
+                    log.info(f'Zapping device {dev} on {remote.shortname} before OSD deployment')
+                    remote.run(
+                        args=[
+                            'sudo',
+                            ctx.cephadm,
+                            '--image', ctx.ceph[cluster_name].image,
+                            'ceph-volume',
+                            '-c', '/etc/ceph/{}.conf'.format(cluster_name),
+                            '-k', '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+                            '--fsid', ctx.ceph[cluster_name].fsid,
+                            '--', 'lvm', 'zap', dev
+                        ],
+                        check_status=False,
+                     )
+                    remote.run(args=['sudo', 'wipefs', '--all', dev], check_status=False)
+                    remote.run(
+                        args=['sudo', 'dd', 'if=/dev/zero', f'of={dev}', 'bs=1M', 'count=10', 'conv=fsync'],
+                        check_status=False,
+                    )
+            _shell(ctx, cluster_name, remote, ['ceph', 'orch', 'device', 'ls', '--refresh'])
             osd_cmd = ['ceph', 'orch', 'apply', 'osd', '--all-available-devices']
             if raw:
                 osd_cmd.extend(['--method', 'raw'])
@@ -1432,6 +1485,8 @@ def ceph_iscsi(ctx, config):
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
 
+    client_key_type = config.get('client_key_type', None)
+
     log.info('Setting up client nodes...')
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
     for remote, roles_for_host in clients.remotes.items():
@@ -1440,18 +1495,22 @@ def ceph_clients(ctx, config):
             name = teuthology.ceph_role(role)
             client_keyring = '/etc/ceph/{0}.{1}.keyring'.format(cluster_name,
                                                                 name)
+
+            args = ['ceph', 'auth', 'get-or-create']
+            if client_key_type is not None:
+                args.append(f'--key-type={client_key_type}')
+            args.extend([
+                name,
+                'mon', 'allow *',
+                'osd', 'allow *',
+                'mds', 'allow *',
+                'mgr', 'allow *',
+            ])
             r = _shell(
                 ctx=ctx,
                 cluster_name=cluster_name,
                 remote=remote,
-                args=[
-                    'ceph', 'auth',
-                    'get-or-create', name,
-                    'mon', 'allow *',
-                    'osd', 'allow *',
-                    'mds', 'allow *',
-                    'mgr', 'allow *',
-                ],
+                args=args,
                 stdout=StringIO(),
             )
             keyring = r.stdout.getvalue()
@@ -1772,14 +1831,17 @@ def distribute_config_and_admin_keyring(ctx, config):
             path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             data=ctx.ceph[cluster_name].admin_keyring,
             sudo=True)
+        keyring = f"/etc/ceph/{cluster_name}.keyring"
+        remote.write_file(
+            path=keyring,
+            data=ctx.ceph[cluster_name].admin_keyring,
+            sudo=True)
+        ctx.ceph[cluster_name].keyring = keyring
     try:
         yield
     finally:
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
+        # ceph_bootstrap cleans up keys/confs
+        pass
 
 
 @contextlib.contextmanager
@@ -1820,6 +1882,26 @@ def module_setup(ctx, config):
 def conf_setup(ctx, config):
     cluster_name = config['cluster']
     remote = ctx.ceph[cluster_name].bootstrap_remote
+
+    client_key_type = config.get('client_key_type', None)
+
+    if client_key_type is not None:
+        if client_key_type in ('aes',):
+            args = ['ceph', 'config', 'set', 'mon', 'mon_auth_allow_insecure_key', 'true']
+            _shell(ctx, cluster_name, remote, args=args)
+
+            args = ['ceph', 'mon', 'set', 'auth_allowed_ciphers', f'{client_key_type},aes256k']
+            _shell(ctx, cluster_name, remote, args=args)
+
+            auth_warnings = [
+                'AUTH_INSECURE_CLIENT_KEY_TYPE',
+                'AUTH_INSECURE_KEYS_ALLOWED',
+                'AUTH_INSECURE_KEYS_CREATABLE',
+            ]
+            for w in auth_warnings:
+                args = ['ceph', 'health', 'mute', w, '--sticky']
+                _shell(ctx, cluster_name, remote, args=args)
+
 
     configs = config.get('cluster-conf', {})
     procs = []
@@ -1916,7 +1998,18 @@ def initialize_config(ctx, config):
         # mons will be named after hosts
         first_mon = None
         max_mons = config.get('max_mons', 5)
-        for remote, _ in remotes_and_roles:
+        for remote, roles in remotes_and_roles:
+            mon_roles = [r for r in roles
+                         if teuthology.is_type('mon', cluster_name)(r)]
+            if mon_roles:
+                # Fabricated host-named mons would be deployed on top of the
+                # mon roles, and the default mon service placement created by
+                # cephadm bootstrap races with the explicit placement applied
+                # later, deploying host-named mons on ports assigned to the
+                # role-named mons.
+                raise RuntimeError(
+                    'roleless cephadm requires host-only roles; found %s on %s'
+                    % (mon_roles, remote.shortname))
             ctx.cluster.remotes[remote].append('mon.' + remote.shortname)
             if not first_mon:
                 first_mon = remote.shortname

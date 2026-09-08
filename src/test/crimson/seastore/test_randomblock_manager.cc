@@ -57,20 +57,20 @@ struct rbm_test_t :
     size = device->get_available_size();
     rbm_manager.reset(new BlockRBManager(device.get(), std::string(), false));
     config = get_rbm_ephemeral_device_config(0, 1);
-    return device->mkfs(config).handle_error(crimson::ct_error::assert_all{}
+    return device->mkfs(config).handle_error(crimson::ct_error::assert_all("unexpected error")
     ).then([this] {
-      return device->mount().handle_error(crimson::ct_error::assert_all{}
+      return device->mount().handle_error(crimson::ct_error::assert_all("unexpected error")
       ).then([this] {
-	return rbm_manager->open().handle_error(crimson::ct_error::assert_all{});
+	return rbm_manager->open().handle_error(crimson::ct_error::assert_all("unexpected error"));
       });
     });
   }
 
   seastar::future<> tear_down_fut() final {
     co_await rbm_manager->close().handle_error(
-      crimson::ct_error::assert_all{});
+      crimson::ct_error::assert_all("unexpected error"));
     co_await device->close().handle_error(
-      crimson::ct_error::assert_all{});
+      crimson::ct_error::assert_all("unexpected error"));
     rbm_manager.reset();
     device.reset();
     co_return;
@@ -127,14 +127,14 @@ TEST_F(rbm_test_t, mkfs_test)
    auto super = read_rbm_superblock();
    ASSERT_TRUE(
        super.block_size == block_size &&
-       super.size == size
+       super.total_size == size
    );
    config.spec.id = DEVICE_ID_NULL;
    mkfs();
    super = read_rbm_superblock();
    ASSERT_TRUE(
        super.config.spec.id == DEVICE_ID_NULL &&
-       super.size == size 
+       super.total_size == size
    );
  });
 }

@@ -5,6 +5,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <map>
 #include <iterator>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -105,7 +106,7 @@ get_canon_resource(const DoutPrefixProvider *dpp, const char* const request_uri,
     if (iter == std::end(sub_resources)) {
       continue;
     }
-    
+
     if (initial) {
       dest.append("?");
       initial = false;
@@ -146,7 +147,7 @@ void rgw_create_s3_canonical_header(
     dest = method;
   }
   dest.append("\n");
-  
+
   if (content_md5) {
     dest.append(content_md5);
   }
@@ -605,7 +606,7 @@ string gen_v4_scope(const ceph::real_time& timestamp,
   auto mon = bt.tm_mon + 1;
   auto day = bt.tm_mday;
 
-  return fmt::format(FMT_STRING("{:d}{:02d}{:02d}/{:s}/{:s}/aws4_request"),
+  return fmt::format("{:d}{:02d}{:02d}/{:s}/{:s}/aws4_request",
                      year, mon, day, region, service);
 }
 
@@ -711,7 +712,8 @@ std::string gen_v4_canonical_qs(const req_info& info, bool is_non_s3_op)
 }
 
 boost::optional<std::string>
-get_v4_canonical_headers(const req_info& info,
+get_v4_canonical_headers(CephContext* cct,
+                         const req_info& info,
                          const std::string_view& signedheaders,
                          const bool using_qs,
                          const bool force_boto2_compat)
@@ -724,11 +726,7 @@ get_v4_canonical_headers(const req_info& info,
     token_env.reserve(token.length() + sarrlen("HTTP_") + 1);
 
     /* XXX can we please stop doing this? */
-    std::transform(std::begin(token), std::end(token),
-                   std::back_inserter(token_env), [](const int c) {
-                     return c == '-' ? '_' : c == '_' ? '-' : std::toupper(c);
-                   });
-
+    uppercase_dash_transform(token, std::back_inserter(token_env), true);
     if (token_env == "HTTP_CONTENT_LENGTH") {
       token_env = "CONTENT_LENGTH";
     } else if (token_env == "HTTP_CONTENT_TYPE") {
@@ -765,6 +763,62 @@ get_v4_canonical_headers(const req_info& info,
     }
 
     canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
+  }
+
+  if (!cct->_conf->rgw_sigv4_insecure) {
+    // https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
+    // gives us a list of headers that must be signed if they are present.
+
+    // `host` is always required.
+    if (!canonical_hdrs_map.contains("host")) {
+        dout(5) << "Signature rejected: CanonicalHeaders must contain `host`." << dendl;
+        return boost::none;
+    }
+    // Content-type is deliberately NOT required here. That page has a bullet
+    // saying that a content-type present in the request "must" be added to
+    // CanonicalHeaders, but the same page contradicts it twice:
+    //
+    //   "You must include the host header (HTTP/1.1) or the :authority
+    //    header (HTTP/2), and any `x-amz-*` headers in the signature. You
+    //    can optionally include other standard headers in the signature,
+    //    such as content-type."
+    //
+    //   "For the purpose of calculating an authorization signature, only
+    //    the host and any `x-amz-*` headers are required[.]"
+    //
+    // Real S3 accepts requests where content-type wasnt signed, and SDKs rely
+    // on that. minio-go's streaming signer straight up drops content-type from
+    // SignedHeaders every time (see pkg/signer/request-signature-streaming.go,
+    // `ignoredStreamingHeaders`), and thats the path every minio-go PutObject
+    // over plain HTTP takes. Rejecting these requests broke Mimir, Loki,
+    // Thanos and basically everything else built on thanos-io/objstore.
+    //
+    // The privilege escalation that CVE-2026-54330 describes comes from
+    // unsigned `x-amz-*` headers, and those are still rejected below.
+
+    // Any header starting with `x-amz-` must be in CanonicalHeaders
+    const auto& emap = info.env->get_map();
+    static const std::string xamz{"HTTP_X_AMZ_"};
+    for (auto i = emap.lower_bound(xamz);
+        i != emap.end() && boost::istarts_with(i->first, xamz);
+        ++i) {
+        const std::string_view env_key =
+        std::string_view(i->first).substr(sarrlen("HTTP_"));
+        boost::container::small_vector<char, 64> buf(env_key.size());
+        lowercase_dash_transform(env_key, buf.begin(), true);
+        std::string_view lower_key{buf.data(), buf.size()};
+        // S3 has an exception for x-amz-content-sha256 because it's already
+        // signed as part of the HashedPayload
+        // TODO: make this specific to CredentialScope:service == s3
+        if (lower_key == "x-amz-content-sha256") {
+          continue;
+        }
+        if (!canonical_hdrs_map.contains(lower_key)) {
+        dout(5) << "Signature rejected: '" << lower_key
+        << "' supplied, but not in CanonicalHeaders." << dendl;
+        return boost::none;
+        }
+    }
   }
 
   std::string canonical_hdrs;
@@ -1006,7 +1060,7 @@ get_v4_signature(const std::string_view& credential_scope,
   using srv_signature_t = AWSEngine::VersionAbstractor::server_signature_t;
   srv_signature_t signature(srv_signature_t::initialized_later(),
                             digest.SIZE * 2);
-  buf_to_hex(digest.v, digest.SIZE, signature.begin());
+  buf_to_hex(std::span{digest.v, digest.SIZE}, signature.begin());
 
   ldpp_dout(dpp, 10) << "generated signature = " << signature << dendl;
 
@@ -1289,7 +1343,7 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
   size_t to_extract = \
     std::min(chunk_meta.get_data_size(stream_pos_was), buf_max);
   dout(30) << "AWSv4ComplMulti: stream_pos_was=" << stream_pos_was << ", to_extract=" << to_extract << dendl;
-  
+
   /* It's quite probable we have a couple of real data bytes stored together
    * with meta-data in the parsing_buf. We need to extract them and move to
    * the final buffer. This is a trade-off between frontend's read overhead
@@ -1760,7 +1814,10 @@ void get_aws_version_and_auth_type(const req_state* s, string& aws_version, stri
       aws_version = "SigV2";
     }
   } else {
-    if (!s->info.args.get("x-amz-credential").empty()) {
+    // Expires is characteristic of the older Signature Version 2,
+    //  while X-Amz-Expires is used in Signature Version 4 (SigV4)
+    if (!s->info.args.get("x-amz-expires").empty() ||
+        !s->info.args.get("Expires").empty()) {
       auth_type = "QueryString";
       if (s->info.args.get("x-amz-algorithm") == AWS4_HMAC_SHA256_STR) {
       /* AWS v4 */

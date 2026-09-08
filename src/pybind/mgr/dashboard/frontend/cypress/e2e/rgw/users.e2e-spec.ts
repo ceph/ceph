@@ -50,7 +50,6 @@ describe('RGW users page', () => {
   });
 
   describe('link user with account test', () => {
-    let account_id: string;
     const user_id = 'account_user';
     const account = {
       name: 'test_account',
@@ -58,22 +57,24 @@ describe('RGW users page', () => {
       tenant: 'tenanted_acc'
     };
 
-    it('should create an account and store account_id', () => {
-      accounts.navigateTo('create');
-      accounts.create(account);
-      accounts.navigateTo();
-      accounts
-        .getTableRow(account.name)
-        .find('td')
-        .eq(3)
-        .invoke('text')
-        .then((acc_id: string) => {
-          cy.log(acc_id);
-          account_id = acc_id;
-        });
+    before(() => {
+      cy.login();
+      cy.request({
+        method: 'POST',
+        url: 'api/rgw/accounts',
+        headers: { Accept: 'application/vnd.ceph.api.v1.0+json' },
+        body: {
+          account_name: account.name,
+          email: account.email,
+          tenant: account.tenant
+        }
+      }).then((resp) => {
+        Cypress.env('account_id', resp.body.id);
+      });
     });
 
     it('should link user with account', () => {
+      const account_id = Cypress.env('account_id');
       users.navigateTo();
       users.navigateTo('create');
       users.linkAccount(account_id, account.name, user_id, account.tenant);

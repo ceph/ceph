@@ -44,8 +44,14 @@ namespace rgw::putobj {
     case Type::crc32c:
       return cksum_hdr_t(hdr.data(), "CRC32C");
       break;
-    case Type::xxh3:
-      return cksum_hdr_t(hdr.data(), "XX3");
+    case Type::xxhash3:
+      return cksum_hdr_t(hdr.data(), "XXHASH3");
+      break;
+    case Type::xxhash64:
+      return cksum_hdr_t(hdr.data(), "XXHASH64");
+      break;
+    case Type::xxhash128:
+      return cksum_hdr_t(hdr.data(), "XXHASH128");
       break;
     case Type::sha1:
       return cksum_hdr_t(hdr.data(), "SHA1");
@@ -119,7 +125,7 @@ namespace rgw::putobj {
   using GetHeaderCksumResult = std::pair<cksum::Cksum, std::string_view>;
 
   static inline GetHeaderCksumResult get_hdr_cksum(const RGWEnv& env) {
-    cksum::Type cksum_type;
+    cksum::Type cksum_type{cksum::Type::none};
     auto algo_hdr = cksum_algorithm_hdr(env);
     if (algo_hdr.first) {
       if (algo_hdr.second) {
@@ -142,8 +148,8 @@ namespace rgw::putobj {
    * need to search for one */
   static inline GetHeaderCksumResult find_hdr_cksum(const RGWEnv& env) {
     cksum::Type cksum_type;
-    for (int16_t ix = int16_t(cksum::Type::crc32);
-	 ix <= uint16_t(cksum::Type::blake3); ++ix) {
+    for (int16_t ix = int16_t(cksum::Type::none) + 1;
+	 ix < uint16_t(cksum::Type::COUNT); ++ix) {
       cksum_type = cksum::Type(ix);
       auto hk = fmt::format("HTTP_X_AMZ_CHECKSUM_{}", to_uc_string(cksum_type));
       auto hv = env.get(hk.c_str());

@@ -54,37 +54,3 @@ command. Older versions of Ceph require you to stop these daemons manually.
     ceph fs set <fs_name> max_mds <old_max_mds>
     ceph fs set <fs_name> allow_standby_replay <old_allow_standby_replay>
 
-
-Upgrading pre-Firefly file systems past Jewel
-=============================================
-
-.. tip::
-
-    This advice only applies to users with file systems
-    created using versions of Ceph older than *Firefly* (0.80).
-    Users creating new file systems may disregard this advice.
-
-Pre-firefly versions of Ceph used a now-deprecated format
-for storing CephFS directory objects, called TMAPs.  Support
-for reading these in RADOS will be removed after the Jewel
-release of Ceph, so for upgrading CephFS users it is important
-to ensure that any old directory objects have been converted.
-
-After installing Jewel on all your MDS and OSD servers, and restarting
-the services, run the following command:
-
-::
-    
-    cephfs-data-scan tmap_upgrade <metadata pool name>
-
-This only needs to be run once, and it is not necessary to
-stop any other services while it runs.  The command may take some
-time to execute, as it iterates over all objects in your metadata
-pool.  It is safe to continue using your file system as normal while
-it executes.  If the command aborts for any reason, it is safe
-to simply run it again.
-
-If you are upgrading a pre-Firefly CephFS file system to a newer Ceph version
-than Jewel, you must first upgrade to Jewel and run the ``tmap_upgrade``
-command before completing your upgrade to the latest version.
-

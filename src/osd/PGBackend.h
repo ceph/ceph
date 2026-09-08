@@ -33,6 +33,10 @@
 #include <string>
 #include "PGTransaction.h"
 #include "common/ostream_temp.h"
+#include "Coroutines.h"
+
+
+class ECOmapJournalEntry;
 
 namespace Scrub {
   class Store;
@@ -447,7 +451,45 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual shard_id_map<bufferlist> ec_decode_acting_set(
        const shard_id_map<bufferlist> &shard_map, int chunk_size) const = 0;
    virtual ECUtil::stripe_info_t ec_get_sinfo() const = 0;
-
+   virtual bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
+     return false; // Only EC uses ec_omap_journal
+   };
+   virtual std::pair<gen_t, bool> omap_get_generation(const hobject_t &hoid) {
+     return {0, false}; // Only EC uses ec_omap_journal
+   };
+   virtual void omap_trim_delete_from_journal(const hobject_t &hoid, const version_t version) {};
+   using OmapIterFunction = std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)>;
+   virtual int omap_iterate(
+     ObjectStore::CollectionHandle &c_, ///< [in] collection
+     const ghobject_t &oid, ///< [in] object
+     const ObjectStore::omap_iter_seek_t &start_from,
+     ///^ [in] where the iterator should point to at the beginning
+     const OmapIterFunction &f ///< [in] function to call for each key/value pair
+   ) = 0;
+   virtual int omap_get_values(
+     ObjectStore::CollectionHandle &c_, ///< [in] collection
+     const ghobject_t &oid, ///< [in] object
+     const std::set<std::string> &keys, ///< [in] keys to get
+     std::map<std::string, ceph::buffer::list> *out ///< [out] returned key/values
+   ) = 0;
+   virtual int omap_get_header(
+     ObjectStore::CollectionHandle &c_, ///< [in] Collection containing oid
+     const ghobject_t &oid, ///< [in] Object containing omap
+     ceph::buffer::list *header, ///< [out] omap header
+     bool allow_eio ///< [in] don't assert on eio
+   ) = 0;
+   virtual int omap_get(
+     ObjectStore::CollectionHandle &c_, ///< [in] Collection containing oid
+     const ghobject_t &oid, ///< [in] Object containing omap
+     ceph::buffer::list *header, ///< [out] omap header
+     std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
+   ) = 0;
+   virtual int omap_check_keys(
+     ObjectStore::CollectionHandle &c_, ///< [in] Collection containing oid
+     const ghobject_t &oid, ///< [in] Object containing omap
+     const std::set<std::string> &keys, ///< [in] Keys to check
+     std::set<std::string> *out ///< [out] Subset of keys defined on oid
+   ) = 0;
  private:
    std::set<hobject_t> temp_contents;
  public:
@@ -507,6 +549,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::Transaction *t);
 
    void trim(
+     const pg_log_entry_t &entry,
+     ObjectStore::Transaction *t);
+
+   void trim_after_remove(
      const pg_log_entry_t &entry,
      ObjectStore::Transaction *t);
 
@@ -600,7 +646,17 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      uint64_t off,
      uint64_t len,
      uint32_t op_flags,
-     ceph::buffer::list *bl) = 0;
+     ceph::buffer::list *bl,
+     uint64_t object_size,
+     std::optional<CoroHandles> coro
+   ) = 0;
+
+   virtual int objects_read_local(
+      const hobject_t &hoid,
+      uint64_t off,
+      uint64_t len,
+      uint32_t op_flags,
+      ceph::buffer::list *bl) = 0;
 
    virtual int objects_readv_sync(
      const hobject_t &hoid,

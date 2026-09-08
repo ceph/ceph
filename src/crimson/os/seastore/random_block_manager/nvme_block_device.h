@@ -374,25 +374,7 @@ private:
   int namespace_id; // TODO: multi namespaces
   std::string device_path;
 
-  class MultiShardDevices {
-    public:
-      std::vector<std::unique_ptr<NVMeBlockDevice>> mshard_devices;
-
-    public:
-    MultiShardDevices(size_t count,
-                      const std::string path)
-    : mshard_devices() {
-      mshard_devices.reserve(count);
-      for (size_t store_index = 0; store_index < count; ++store_index) {
-        mshard_devices.emplace_back(std::make_unique<NVMeBlockDevice>(
-          path, store_index));
-      }
-    }
-    ~MultiShardDevices() {
-     mshard_devices.clear();
-    }
-  };
-  seastar::sharded<MultiShardDevices> shard_devices;
+  seastar::sharded<MultiShardDevices<NVMeBlockDevice>> shard_devices;
 };
 
 }

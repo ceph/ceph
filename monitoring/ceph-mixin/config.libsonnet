@@ -22,5 +22,11 @@
     // Read/Write latency is defined in ms
     NVMeoFHighClientReadLatency: 10,
     NVMeoFHighClientWriteLatency: 20,
+    //
+    // Hardware temperature thresholds in Celsius
+    HWTempMotherboardWarning: 60,
+    HWTempDIMMWarning: 80,
+    HWTempProcessorWarning: 80,
+    HWTempNVMeWarning: 70,
   },
 }

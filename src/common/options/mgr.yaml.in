@@ -6,7 +6,7 @@ options:
   type: str
   level: advanced
   desc: Filesystem path to the Manager's data directory, which contains
-    keyrings and other data 
+    keyrings and other data
   fmt_desc: Path to load daemon data (such as keyring)
   default: /var/lib/ceph/mgr/$cluster-$id
   services:
@@ -25,14 +25,59 @@ options:
 - name: mgr_stats_period
   type: int
   level: basic
-  desc: Period in seconds of OSD/MDS stats reports to manager
+  desc: Period in seconds of OSD/MDS stats reports to the Manager
   long_desc: Use this setting to control the granularity of time series data collection
-    from daemons.  Adjust upwards if the manager CPU load is too high, or if you simply
-    do not require the most up to date performance counter data.
+    from daemons.  Adjust upwards if the Manager CPU load is too high, or if you simply
+    do not require the most up-to-date performance counter data.
   default: 5
   services:
   - mgr
   - common
+- name: mgr_stats_period_autotune
+  type: bool
+  level: basic
+  desc: Automatically adjust mgr_stats_period based on Manager message queue depth
+  long_desc: When enabled, the Manager monitors its incoming message queue and automatically
+    increases mgr_stats_period when the queue backs up beyond the configured threshold,
+    reducing daemon reporting frequency to prevent Manager overload. The period is
+    gradually decreased back to the original value when the queue depth recovers.
+    This prevents performance degradation during high cluster activity without requiring
+    manual intervention. When disabled, mgr_stats_period remains at the manually
+    configured value.
+  default: true
+  services:
+  - mgr
+  see_also:
+  - mgr_stats_period
+- name: mgr_stats_period_autotune_queue_threshold
+  type: int
+  level: advanced
+  desc: Message queue depth that triggers automatic increase of mgr_stats_period
+  long_desc: When mgr_stats_period_autotune is enabled, the Manager will increase
+    the stats reporting period if the incoming message queue exceeds this threshold.
+    Higher values make the system less sensitive to temporary queue spikes but may
+    allow longer periods of Manager overload. Should be well below the smallest
+    of mgr_mon_messages, mgr_mds_messages, and mgr_osd_messages so the autotune
+    fires before any per-connection throttle saturates.
+  default: 100
+  services:
+  - mgr
+  see_also:
+  - mgr_stats_period
+- name: mgr_dispatch_throttle_bytes
+  type: size
+  level: advanced
+  desc: Limit total size of messages waiting in the mgr dispatch queue
+  long_desc: Sets the maximum total bytes of messages queued in the mgr dispatch
+    throttle. Overrides ms_dispatch_throttle_bytes for the mgr process. Should be
+    set to at least the sum of all per-type byte throttles (mgr_osd_bytes +
+    mgr_mds_bytes + mgr_client_bytes) to avoid the dispatch queue becoming a
+    bottleneck before per-connection throttles engage.
+  default: 1_G
+  services:
+  - mgr
+  see_also:
+  - ms_dispatch_throttle_bytes
 - name: mgr_client_bytes
   type: size
   level: dev
@@ -85,7 +130,7 @@ options:
   type: float
   level: advanced
   desc: Period in seconds from last beacon to manager dropping state about a monitored
-    service (RGW, rbd-mirror etc)
+    service (RGW, rbd-mirror etc.)
   default: 1_min
   services:
   - mgr
@@ -107,7 +152,7 @@ options:
 - name: mgr_max_pg_creating
   type: uint
   level: advanced
-  desc: bound on max creating pgs when acting to create more pgs
+  desc: bound on max creating PGs when acting to create more PGs
   default: 1024
   services:
   - mgr
@@ -133,7 +178,7 @@ options:
 - name: mgr_disabled_modules
   type: str
   level: advanced
-  desc: List of manager modules never get loaded
+  desc: List of Manager modules that never get loaded
   long_desc: A comma delimited list of module names. This list is read by manager
     when it starts. By default, manager loads all modules found in specified 'mgr_module_path',
     and it starts the enabled ones as instructed. The modules in this list will not
@@ -270,7 +315,7 @@ options:
 - name: mon_pg_check_down_all_threshold
   type: float
   level: advanced
-  desc: threshold of down osds after which we check all pgs
+  desc: threshold of down OSDs after which we check all PGs
   fmt_desc: Percentage threshold of ``down`` OSDs above which we check all PGs
     for stale ones.
   default: 0.5
@@ -280,18 +325,17 @@ options:
 - name: mon_pg_stuck_threshold
   type: int
   level: advanced
-  desc: number of seconds after which pgs can be considered stuck inactive, unclean,
-    etc
-  long_desc: see doc/control.rst under dump_stuck for more info
-  fmt_desc: Number of seconds after which PGs can be considered as
-    being stuck.
+  desc: Seconds after which a PG is considered stuck (inactive, unclean, etc.).
+  long_desc: The number of seconds after which a PG can be considered stuck (for example
+    inactive, unclean, undersized, or stale). See doc/rados/operations/control.rst
+    under dump_stuck for more information.
   default: 1_min
   services:
   - mgr
 - name: mon_pg_warn_min_per_osd
   type: uint
   level: advanced
-  desc: minimal number PGs per (in) osd before we warn the admin
+  desc: minimal number of PGs per (in) OSD before we warn the admin
   fmt_desc: Raise ``HEALTH_WARN`` if the average number
     of PGs per ``in`` OSD is under this number. A non-positive number
     disables this.
@@ -301,7 +345,7 @@ options:
 - name: mon_pg_warn_max_object_skew
   type: float
   level: advanced
-  desc: max skew few average in objects per pg
+  desc: max skew from average object count per PG
   fmt_desc: Raise ``HEALTH_WARN`` if the average RADOS object count per PG
     of any pool is greater than ``mon_pg_warn_max_object_skew`` times
     the average RADOS object count per PG of all pools. Zero or a non-positive
@@ -312,7 +356,7 @@ options:
 - name: mon_pg_warn_min_objects
   type: int
   level: advanced
-  desc: 'do not warn below this object #'
+  desc: do not warn below this object count
   fmt_desc: Do not warn if the total number of RADOS objects in cluster is below
     this number
   default: 10000
@@ -321,7 +365,7 @@ options:
 - name: mon_pg_warn_min_pool_objects
   type: int
   level: advanced
-  desc: 'do not warn on pools below this object #'
+  desc: do not warn on pools below this object count
   fmt_desc: Do not warn on pools whose RADOS object count is below this number
   default: 1000
   services:
@@ -365,9 +409,9 @@ options:
     replicas on each OSD as shown by the PGS column of a ``ceph osd df``
     report. In some circumstances it may exceed this target, up to the
     ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
-    set if the cluster is not yet fully utilized or when the sum of power-of-two
-    per-pool ``pg_num`` values does not permit a perfect fit.
-  default: 100
+    created if the cluster is not yet fully populated and the ``bulk`` flag is not
+    enabled for a given pool.
+  default: 200
   min: 1
 # min pgs per osd for reweight-by-pg command
 - name: mon_reweight_min_pgs_per_osd
@@ -409,6 +453,14 @@ options:
   default: 5
   min: 0
   max: 11
+- name: mgr_module_monitor_interval
+  type: int
+  level: advanced
+  desc: Period in seconds for collecting Manager modules cpu and memory performance counters.
+  long_desc: Period in seconds for Manager Monitor to collect the cpu and memory for
+    each enabled module. If set to 0, collection of these stats will be disabled.
+  default: 5
+  min: 0
 - name: mgr_tick_period
   type: secs
   level: advanced
@@ -422,7 +474,7 @@ options:
 - name: mon_osd_err_op_age_ratio
   type: float
   level: advanced
-  desc: issue REQUEST_STUCK health error if OSD ops are slower than is age (seconds)
+  desc: issue REQUEST_STUCK health error if OSD ops are slower than this age (seconds)
   default: 128
   services:
   - mgr

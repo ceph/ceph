@@ -27,7 +27,7 @@ the Ceph Storage Cluster:
             +---------------+ +---------------+
 
 This guide provides a high-level introduction to using ``librados``. 
-Refer to :doc:`../../architecture` for additional details of the Ceph
+Refer to :doc:`../../architecture/index` for additional details of the Ceph
 Storage Cluster. To use the API, you need a running Ceph Storage Cluster. 
 See `Installation (Quick)`_ for details.
 
@@ -70,8 +70,7 @@ Getting librados for Python
 ---------------------------
 
 The ``rados`` module provides ``librados`` support to Python
-applications. You may install ``python3-rados`` for Debian, Ubuntu, SLE or
-openSUSE or the ``python-rados`` package for CentOS/RHEL.
+applications. You may install the ``python3-rados`` package.
 
 To install ``librados`` development support files for Python on Debian/Ubuntu
 distributions, execute the following:
@@ -85,7 +84,7 @@ distributions, execute the following:
 
 .. prompt:: bash $
 
-   sudo yum install python-rados
+   sudo yum install python3-rados
 
 To install ``librados`` development support files for Python on SLE/openSUSE
 distributions, execute the following:
@@ -223,23 +222,23 @@ The Ceph Storage Cluster handle encapsulates the client configuration, including
 - The `user ID`_ for ``rados_create()`` or user name for ``rados_create2()`` 
   (preferred).
 - The :term:`cephx` authentication key
-- The monitor ID and IP address
+- The Monitor ID and IP address
 - Logging levels
 - Debugging levels
 
 Thus, the first steps in using the cluster from your app are to 1) create
 a cluster handle that your app will use to connect to the storage cluster,
 and then 2) use that handle to connect. To connect to the cluster, the
-app must supply a monitor address, a username and an authentication key
-(cephx is enabled by default).
+app must supply a Monitor address, a username and an authentication key
+(CephX is enabled by default).
 
 .. tip:: Talking to different Ceph Storage Clusters – or to the same cluster 
    with different users – requires different cluster handles.
 
 RADOS provides a number of ways for you to set the required values. For
-the monitor and encryption key settings, an easy way to handle them is to ensure
+the Monitor and encryption key settings, an easy way to handle them is to ensure
 that your Ceph configuration file contains a ``keyring`` path to a keyring file
-and at least one monitor address (e.g., ``mon_host``). For example::
+and at least one Monitor address (e.g., ``mon_host``). For example::
 
 	[global]
 	mon_host = 192.168.1.1
@@ -291,7 +290,7 @@ uses SSDs for frequently used objects or a "cold" pool that uses erasure coding.
 
 The main difference in the various ``librados`` bindings is between C and
 the object-oriented bindings for C++, Java and Python. The object-oriented
-bindings use objects to represent cluster handles, IO Contexts, iterators,
+bindings use objects to represent cluster handles, I/O Contexts, iterators,
 exceptions, etc.
 
 
@@ -1047,7 +1046,7 @@ PHP Example
 .. _user ID: ../../operations/user-management#command-line-usage
 .. _CAPS: ../../operations/user-management#authorization-capabilities
 .. _Installation (Quick): ../../../start
-.. _Smart Daemons Enable Hyperscale: ../../../architecture#smart-daemons-enable-hyperscale
-.. _Calculating PG IDs: ../../../architecture#calculating-pg-ids
-.. _computes: ../../../architecture#calculating-pg-ids
-.. _OSD: ../../../architecture#mapping-pgs-to-osds
+.. _Smart Daemons Enable Hyperscale: ../../../architecture/scalability-high-availability#smart-daemons-enable-hyperscale
+.. _Calculating PG IDs: ../../../architecture/dynamic-cluster-management#calculating-pg-ids
+.. _computes: ../../../architecture/dynamic-cluster-management#calculating-pg-ids
+.. _OSD: ../../../architecture/dynamic-cluster-management#mapping-pgs-to-osds

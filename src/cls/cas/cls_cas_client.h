@@ -7,6 +7,7 @@
 #include "include/types.h"
 #include "include/rados/librados_fwd.hpp"
 #include "common/hobject.h"
+#include "cls_cas_types.h"
 
 //
 // basic methods

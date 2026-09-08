@@ -15,6 +15,13 @@ import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 })
 export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep {
   @Input() group!: string;
+  @Input() set initialAuthType(value: AUTHENTICATION) {
+    this._initialAuthType = value;
+    if (this.formGroup) {
+      this.formGroup.get('authType')?.setValue(value, { emitEvent: false });
+      this.refreshHostKeyValidation();
+    }
+  }
   @Input() set stepTwoValue(value: HostStepType | null) {
     this._addedHosts = value?.addedHosts ?? [];
     if (this.formGroup) {
@@ -31,6 +38,7 @@ export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep
   };
   AUTHENTICATION = AUTHENTICATION;
 
+  _initialAuthType: AUTHENTICATION = AUTHENTICATION.Unidirectional;
   _addedHosts: Array<string> = [];
 
   constructor(public actionLabels: ActionLabelsI18n) {}
@@ -50,14 +58,12 @@ export class NvmeofSubsystemsStepThreeComponent implements OnInit, TearsheetStep
       hosts.forEach((nqn) => {
         currentList.push(this.createHostDhchapKeyFormGroup(nqn, existing.get(nqn) ?? null));
       });
-    } else {
-      currentList.push(this.createHostDhchapKeyFormGroup('', null));
     }
   }
 
   private createForm() {
     this.formGroup = new CdFormGroup({
-      authType: new UntypedFormControl(AUTHENTICATION.Unidirectional),
+      authType: new UntypedFormControl(this._initialAuthType),
       subsystemDchapKey: new UntypedFormControl(null, [
         CdValidators.base64(),
         CdValidators.requiredIf({

@@ -328,7 +328,7 @@ public:
     encode(static_cast<uint32_t>(mirror_mode), out_bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),
+                exec_internal(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),
                      _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([out_bl, r](bufferlist* out) {
                              *out = out_bl;

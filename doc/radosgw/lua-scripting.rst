@@ -8,11 +8,12 @@ Lua Scripting
 
 This feature allows users to assign execution context to Lua scripts. The supported contexts are:
 
-- ``prerequest`` which will execute a script before each operation is performed
-- ``postrequest`` which will execute after each operation is performed
-- ``background`` which will execute within a specified time interval
-- ``getdata`` which will execute on objects' data when objects are downloaded
-- ``putdata`` which will execute on objects' data when objects are uploaded
+ - ``prerequest`` which will execute a script before each operation is performed
+ - ``postauth`` which will execute a script after each operation is authorized but before it is performed
+ - ``postrequest`` which will execute after each operation is performed
+ - ``background`` which will execute within a specified time interval
+ - ``getdata`` which will execute on objects' data when objects are downloaded
+ - ``putdata`` which will execute on objects' data when objects are uploaded
 
 A request (pre or post) or data (get or put) context script may be constrained to operations belonging to a specific tenant's users.
 The request context script can also access fields in the request and modify certain fields, as well as the `Global RGW Table`_.
@@ -49,7 +50,7 @@ To upload a script:
 
 ::
 
-   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postauth|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 * When uploading a script with the ``background`` context, a tenant name should not be specified.
 
@@ -62,14 +63,14 @@ To print the content of the script to standard output:
 
 ::
 
-   # radosgw-admin script get --context={preRequest|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script get --context={preRequest|postAuth|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
 To remove the script:
 
 ::
 
-   # radosgw-admin script rm --context={preRequest|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script rm --context={preRequest|postAuth|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
 Package Management via CLI
@@ -198,6 +199,8 @@ Request Fields
 | ``Request.Bucket.Quota.Enabled``                   | boolean  | bucket quota is enabled                                      | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Quota.Rounded``                   | boolean  | bucket quota is rounded to 4K                                | no       | no        | no       |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.Bucket.Tags``                            | table    | bucket tags                                                  | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.PlacementRule``                   | table    | bucket placement rule                                        | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -351,7 +354,7 @@ The script's return value determines how RGW proceeds with the request:
 
 Return Value Context
 ~~~~~~~~~~~~~~~~~~~~
-The Lua script’s return value is evaluated only during the prerequest context and is ignored in any other RGW request-processing context.
+The Lua script’s return value is evaluated only during the prerequest and postauth context and is ignored in any other RGW request-processing context.
 The HTTP response status code is 403 (Forbidden) by default when a request is blocked by Lua. The response code can be changed using ``Request.Response.HTTPStatusCode`` and ``Request.Response.HTTPStatus``.
 If a request is aborted this way, the ``data`` and ``postrequest`` context will also be aborted.
 

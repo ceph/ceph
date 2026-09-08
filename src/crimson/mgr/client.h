@@ -35,11 +35,13 @@ class Client : public crimson::net::Dispatcher {
   using get_perf_report_cb_t = std::function<seastar::future<MetricPayload> ()>;
   using set_perf_queries_cb_t =
     std::function<seastar::future<> (const ConfigPayload &)>;
+  using stats_warning_cb_t = std::function<void(uint32_t skips)>;
 public:
   Client(crimson::net::Messenger& msgr,
 	 WithStats& with_stats,
 	 set_perf_queries_cb_t cb_set,
-	 get_perf_report_cb_t cb_get);
+	 get_perf_report_cb_t cb_get,
+	 stats_warning_cb_t stats_warning_cb);
   seastar::future<> start();
   seastar::future<> stop();
   seastar::future<> send(MessageURef msg);
@@ -74,6 +76,14 @@ private:
   get_perf_report_cb_t get_perf_report_cb;
 
   std::vector<DaemonHealthMetric> daemon_health_metrics;
+
+  bool stats_in_flight = false;
+  uint32_t stats_skip_count = 0;
+  // emit a cluster-log warning every this many skipped reports (~60s)
+  static constexpr uint32_t STATS_WARN_INTERVAL = 12;
+  // abandon a stuck in-flight stats send after this many skips (~5min)
+  static constexpr uint32_t STATS_ABANDON_THRESHOLD = 5 * STATS_WARN_INTERVAL;
+  stats_warning_cb_t stats_warning_cb;
 
   void _send_report();
 };

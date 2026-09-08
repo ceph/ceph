@@ -29,10 +29,10 @@
 
 #include "rgw/rgw_zone.h"
 
-#include "common/connection_pool.h"
-#include "sqlite/connection.h"
-#include "sqlite/error.h"
-#include "sqlite/statement.h"
+#include "driver/dbstore/common/connection_pool.h"
+#include "driver/dbstore/sqlite/connection.h"
+#include "driver/dbstore/sqlite/error.h"
+#include "driver/dbstore/sqlite/statement.h"
 #include "sqlite_schema.h"
 #include "sqlite.h"
 

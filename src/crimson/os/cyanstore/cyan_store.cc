@@ -66,8 +66,8 @@ seastar::future<> CyanStore::get_shard_nums()
     }
   }
   if (store_shard_nums == 0) {
-    // If no collections files found, assume seastar::smp::count shards
-    store_shard_nums = seastar::smp::count;
+    // If no collections files found, assume seastar::this_smp_shard_count() shards
+    store_shard_nums = seastar::this_smp_shard_count();
   }
   return seastar::make_ready_future<>();
 }
@@ -76,8 +76,8 @@ seastar::future<uint32_t> CyanStore::start()
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
   return get_shard_nums().then([this] {
-    auto num_shard_services = (store_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-    logger().info("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::smp::count, num_shard_services);
+    auto num_shard_services = (store_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
+    logger().info("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
     return shard_stores.start(num_shard_services, path, store_shard_nums);
   }).then([this] {
     logger().debug("CyanStore started with {} shard stores", store_shard_nums);
@@ -97,9 +97,9 @@ CyanStore::mount_ertr::future<> CyanStore::mount()
   return shard_stores.invoke_on_all([](auto &local_store) {
     return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
       return mshard_store->mount().handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in CyanStore::mount"
-        });
+        ));
     });
   });
 }
@@ -179,7 +179,7 @@ CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
       }
     }
   }).safe_then([this]{
-    return write_meta("type", "memstore");
+    return write_meta("type", "cyanstore");
   }).safe_then([this] {
     return shard_stores.invoke_on_all([](auto &local_store) {
       return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
@@ -261,7 +261,7 @@ CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
   static const char read_file_errmsg[]{"read_file"};
   ceph::bufferlist bl;
   std::string fn =
-    path + "/collections" + std::to_string(seastar::this_shard_id() + seastar::smp::count * store_index);
+    path + "/collections" + std::to_string(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index);
   std::string err;
   if (int r = bl.read_file(fn.c_str(), &err); r < 0) {
     return crimson::stateful_ec{ singleton_ec<read_file_errmsg>() };
@@ -273,7 +273,7 @@ CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 
   for (auto& coll : collections) {
     std::string fn = fmt::format("{}/{}{}", path, coll,
-      std::to_string(seastar::this_shard_id() + seastar::smp::count * store_index));
+      std::to_string(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index));
     ceph::bufferlist cbl;
     if (int r = cbl.read_file(fn.c_str(), &err); r < 0) {
       return crimson::stateful_ec{ singleton_ec<read_file_errmsg>() };
@@ -300,13 +300,13 @@ seastar::future<> CyanStore::Shard::umount()
       ceph_assert(ch);
       ch->encode(bl);
       std::string fn = fmt::format("{}/{}{}", path, col,
-        std::to_string(seastar::this_shard_id()+ seastar::smp::count * store_index));
+        std::to_string(seastar::this_shard_id()+ seastar::this_smp_shard_count() * store_index));
       return crimson::write_file(std::move(bl), fn);
     }).then([&collections, this] {
       ceph::bufferlist bl;
       ceph::encode(collections, bl);
       std::string fn = fmt::format("{}/collections{}",
-        path, std::to_string(seastar::this_shard_id()+ seastar::smp::count * store_index));
+        path, std::to_string(seastar::this_shard_id()+ seastar::this_smp_shard_count() * store_index));
       return crimson::write_file(std::move(bl), fn);
     });
   });
@@ -583,6 +583,7 @@ seastar::future<> CyanStore::Shard::do_transaction_no_callbacks(
       }
       break;
       case Transaction::OP_TOUCH:
+      case Transaction::OP_TOUCH_TEMP:
       case Transaction::OP_CREATE:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -673,6 +674,13 @@ seastar::future<> CyanStore::Shard::do_transaction_no_callbacks(
       {
         coll_t cid = i.get_cid(op->cid);
         r = _remove_collection(cid);
+      }
+      break;
+      case Transaction::OP_MERGE_COLLECTION:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        coll_t dest_cid = i.get_cid(op->dest_cid);
+        r = _merge_collection(cid, dest_cid, op->split_bits);
       }
       break;
       case Transaction::OP_SETALLOCHINT:
@@ -1041,6 +1049,29 @@ int CyanStore::Shard::_create_collection(const coll_t& cid, int bits)
   result.first->second = p->second;
   result.first->second->bits = bits;
   new_coll_map.erase(p);
+  return 0;
+}
+
+int CyanStore::Shard::_merge_collection(
+  const coll_t& cid,
+  const coll_t& dest_cid,
+  int bits)
+{
+  logger().debug("{} cid={} dest_cid={} bits={}", __func__, cid, dest_cid, bits);
+  auto src = _get_collection(cid);
+  if (!src) {
+    return -ENOENT;
+  }
+  auto dest = _get_collection(dest_cid);
+  if (!dest) {
+    return -ENOENT;
+  }
+  for (auto& [oid, obj] : src->object_map) {
+    dest->object_map.emplace(oid, obj);
+    dest->object_hash.emplace(oid, obj);
+  }
+  dest->bits = bits;
+  coll_map.erase(cid);
   return 0;
 }
 

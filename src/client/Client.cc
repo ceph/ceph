@@ -888,6 +888,7 @@ void Client::trim_cache(bool trim_kernel_dcache)
 {
   uint64_t max = cct->_conf->client_cache_size;
   ldout(cct, 20) << "trim_cache size " << lru.lru_get_size() << " max " << max << dendl;
+  assert_lru_num_pinned_sane("trim_cache start");
   unsigned last = 0;
   while (lru.lru_get_size() != last) {
     last = lru.lru_get_size();
@@ -899,8 +900,12 @@ void Client::trim_cache(bool trim_kernel_dcache)
     if (!dn)
       break;  // done
 
+    assert_lru_num_pinned_sane("trim_cache before evict", dn);
+
     trim_dentry(dn);
   }
+
+  assert_lru_num_pinned_sane("trim_cache end");
 
   if (trim_kernel_dcache && lru.lru_get_size() > max)
     _invalidate_kernel_dcache();
@@ -935,6 +940,8 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
   for(list<Dentry*>::iterator p = skipped.begin(); p != skipped.end(); ++p)
     lru.lru_insert_mid(*p);
 
+  assert_lru_num_pinned_sane("trim_cache_for_reconnect end");
+
   ldout(cct, 20) << __func__ << " mds." << mds
 		 << " trimmed " << trimmed << " dentries" << dendl;
 
@@ -944,6 +951,12 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
 
 void Client::trim_dentry(Dentry *dn)
 {
+  // dn come straight out of lru.lru_get_next_expire() in trim_cache(), it
+  // should still be attached to its dir. we touch dn->dir right below
+  // (before unlink() get a chance to check it itself), so better we assert
+  // it here too, otherwise we would just segfault on the dereference with
+  // no clue at all. See https://tracker.ceph.com/issues/77947.
+  ceph_assert(dn->dir);
   ldout(cct, 15) << "trim_dentry unlinking dn " << dn->name 
 		 << " in dir "
 		 << std::hex << dn->dir->parent_inode->ino << std::dec
@@ -1417,7 +1430,7 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
     int r = fscrypt_denc->get_encrypted_fname(dname, &_enc_name, &_alt_name, false);
     if (r < 0) {
       ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-      return r;
+      return false;
     }
     dname = std::move(_enc_name);
     if (alternate_name.empty()) {
@@ -1428,7 +1441,7 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
       int r = fscrypt_denc->get_encrypted_fname(alternate_name, &_enc_name, &_alt_name, true);
       if (r < 0) {
         ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-        return r;
+        return false;
       }
       alternate_name = std::move(_alt_name);
     }
@@ -1611,6 +1624,9 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 
     bool end = ((unsigned)flags & CEPH_READDIR_FRAG_END);
     bool hash_order = ((unsigned)flags & CEPH_READDIR_HASH_ORDER);
+    if (hash_order) {
+      dirp->set_hash_order();
+    }
 
     unsigned readdir_offset = dirp->next_offset;
     string readdir_start = dirp->last_name;
@@ -1872,10 +1888,22 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	  }
 	}
       }
-      if (dlease.duration_ms > 0) {
+      // no lease is issued when the client already holds Fs/Fx on the parent.
+      // the dentry is still cacheable by the parent's shared_gen rather than
+      // by a lease ttl.
+      if (dlease.duration_ms > 0 ||
+	  diri->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
+	if (dlease.duration_ms == 0) {
+	  trim_cache();
+	}
 	if (!dn) {
 	  Dir *dir = diri->open_dir();
 	  dn = link(dir, dname, NULL, NULL);
+	  if (dlease.duration_ms == 0) {
+	    // push the newly created negative to the bottom so that when
+	    // trim_cache() is called, it is this negative that gets trimmed.
+	    lru.lru_bottouch(dn);
+	  }
 	}
 	update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       }
@@ -3734,8 +3762,24 @@ void Client::close_dir(Dir *dir)
   ceph_assert(dir->is_empty());
   ceph_assert(in->dir == dir);
   ceph_assert(in->dentries.size() < 2);     // dirs can't be hard-linked
-  if (!in->dentries.empty())
-    in->get_first_parent()->put();   // unpin dentry
+  if (!in->dentries.empty()) {
+    Dentry *pdn = in->get_first_parent();
+    // this will remove the "dir -> dn" pin from parent dentry. if that
+    // make its ref go down to 1, it become lru-unpinned and can be
+    // evicted on next trim_cache() run (may even happen inside same
+    // call, from _try_to_trim_inode() or from tick thread). we add log
+    // here so if "num_pinned" go wrong in some future crash dump, we
+    // have at least a clue what caused it.
+    // See: https://tracker.ceph.com/issues/74625,
+    // https://tracker.ceph.com/issues/77947
+    ldout(cct, 15) << __func__ << " dropping dir pin on parent dn " << pdn->name
+		   << " (dn " << pdn << ") ref " << pdn->ref << " -> " << (pdn->ref - 1)
+		   << dendl;
+    pdn->put();   // unpin dentry, note: pdn could be freed by put() already,
+                  // do not touch it below this line.
+
+    assert_lru_num_pinned_sane("close_dir after parent unpin");
+  }
   
   delete in->dir;
   in->dir = 0;
@@ -3791,6 +3835,22 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 {
   InodeRef in(dn->inode);
+  // Keep the dentry alive for the duration of this function.
+  // Without the O_DIRECTORY dentry pin (PR #60909), a directory dentry can
+  // remain at ref=1 while its inode->dir is still active. When trim_cache()
+  // evicts it, Dentry::unlink() calls put() for the dir pin, dropping ref
+  // to 0 and freeing the dentry while we still need it for detach/lru_remove.
+  // The DentryRef guard prevents use-after-free regardless of pin state.
+  // See: https://tracker.ceph.com/issues/74625
+  DentryRef dnref(dn);
+
+  // dn must be still linked into its dir at this point. this was a concern
+  // that came up during review of the DentryRef fix - in theory somebody
+  // could call us with a dn that close_dir()/detach() already unlinked.
+  // better to assert here than dereference a null dn->dir few lines below.
+  // See https://tracker.ceph.com/issues/77947.
+  ceph_assert(dn->dir);
+
   ldout(cct, 15) << "unlink dir " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
 		 << " inode " << dn->inode << dendl;
 
@@ -3800,6 +3860,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
     dec_dentry_nr();
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dentries << dendl;
   }
+  ceph_assert(dn->ref > 1);
 
   if (keepdentry) {
     dn->lease_mds = -1;
@@ -3809,8 +3870,9 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
     // unlink from dir
     Dir *dir = dn->dir;
     dn->detach();
+    ceph_assert(dn->dir == nullptr);   // detach() must clear it
 
-    // delete den
+    assert_lru_num_pinned_sane("unlink before lru_remove", dn);
     lru.lru_remove(dn);
     dn->put();
 
@@ -4677,6 +4739,11 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
   if (!in->oset.dirty_or_tx) {
     ldout(cct, 10) << " nothing to flush" << dendl;
+    return;
+  }
+
+  if (size == 0) {
+    ldout(cct, 10) << "zero size flush is not supported by OSD" << dendl;
     return;
   }
 
@@ -7029,14 +7096,14 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
 #if defined(__linux__)
   // dummy encryption?
   if (cct->_conf.get_val<bool>("client_fscrypt_dummy_encryption")) {
-    client_lock.unlock();
+    cl.unlock();
 
     r = fscrypt_dummy_encryption();
     if (r < 0) {
       return r;
     }
 
-    client_lock.lock();
+    cl.lock();
   }
 #endif
   /*
@@ -7351,13 +7418,15 @@ void Client::abort_conn()
 #if defined(__linux__)
 int Client::fscrypt_dummy_encryption() {
     // get add key
-    char key[FSCRYPT_KEY_IDENTIFIER_SIZE];
+    char key[FSCRYPT_MAX_KEY_SIZE];
     memset(key, 0, sizeof(key));
 
     char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
     int r = add_fscrypt_key(key, sizeof(key), keyid);
     if (r < 0) {
-      goto err;
+      // The key was not added, so keyid is not populated and there is
+      // nothing to remove.
+      return r;
     }
 
     // set dummy encryption policy
@@ -7371,6 +7440,7 @@ int Client::fscrypt_dummy_encryption() {
     memcpy(policy.master_key_identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
     r = ll_set_fscrypt_policy_v2(root.get(), policy);
     if (r < 0) {
+      ldout(cct, 0) << __func__ << "(): failed to set dummy encryption policy: r=" << r << dendl;
       goto err;
     }
 
@@ -7383,7 +7453,11 @@ int Client::fscrypt_dummy_encryption() {
     memcpy(key_spec.u.identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
     arg.removal_status_flags = 0;
     arg.key_spec = key_spec;
-    r = remove_fscrypt_key(&arg);
+    // Preserve the original failure; don't mask it with the removal result.
+    int r2 = remove_fscrypt_key(&arg);
+    if (r2 < 0) {
+      ldout(cct, 0) << __func__ << "(): failed to remove fscrypt key: r=" << r2 << dendl;
+    }
     return r;
 }
 #endif
@@ -7691,6 +7765,9 @@ int Client::_do_lookup(const InodeRef& dir, const string& name, int mask,
   if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
       mask |= DEBUG_GETATTR_CAPS;
   req->head.args.getattr.mask = mask;
+  // ask for the dentry back even on ENOENT, so that a negative result can be
+  // cached locally instead of re-issuing a LOOKUP on every stat
+  req->set_dentry_wanted();
 
   ldout(cct, 10) << __func__ << " on " << path << dendl;
 
@@ -8775,13 +8852,15 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->ctime = ceph_clock_now();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
       mask &= ~CEPH_SETATTR_ATIME;
-    } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
-	       in->atime != utime_t(stx->stx_atime)) {
-      args.setattr.atime = utime_t(stx->stx_atime);
-      inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
-                    CEPH_CAP_FILE_WR;
     } else {
-      mask &= ~CEPH_SETATTR_ATIME;
+      /* If we do not hold EXCL or WR caps, we MUST pass this request to the MDS
+       * regardless of whether the new atime matches the old cached atime.
+       * This ensures the network mask preserves CEPH_SETATTR_ATIME so the MDS
+       * can handle POSIX compliance and bump ctime. A client with SHARED caps
+       * cannot mutate metadata or bump ctime locally too.
+       */
+      args.setattr.atime = utime_t(stx->stx_atime);
+      inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR;
     }
   }
 
@@ -10462,6 +10541,7 @@ int Client::file_blockdiff(struct scan_state_t *state, const UserPerm &perms,
 }
 
 int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
+                             unsigned diff_mask,
                              struct dirent* out_de,
                              snapid_t* out_snap)
 {
@@ -10499,6 +10579,7 @@ int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
       } else if (dirp->hash_order()) {
 	req->head.args.snapdiff.offset_hash = dirp->offset_high();
       }
+      req->head.args.snapdiff.mask = diff_mask;
       req->dirp = dirp;
   };
 
@@ -11554,6 +11635,20 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
+  ldout(cct, 10) << __func__ << " " << f->inode.get() << " " << offset << "~"
+                 << size << dendl;
+
+  if ((f->mode & CEPH_FILE_MODE_RD) == 0 && !read_for_write)
+    return -EBADF;
+
+  // zero bytes read is not supported by osd
+  if (size == 0) {
+    if (onfinish) {
+      onfinish->complete(0);
+    }
+    return 0;
+  }
+
   int want, have = 0;
   bool movepos = false;
   std::unique_ptr<Context> iofinish = nullptr;
@@ -11565,10 +11660,6 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
   utime_t start = mono_clock_now();
   CRF_iofinish *crf_iofinish = nullptr;
 
-  ldout(cct, 10) << __func__ << " " << *in << " " << offset << "~" << size << dendl;
-
-  if ((f->mode & CEPH_FILE_MODE_RD) == 0 && !read_for_write)
-    return -EBADF;
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   if (offset < 0) {
@@ -11686,18 +11777,6 @@ retry:
     // branch below but in a non-blocking fashion. The code in _read_sync
     // is duplicated and modified and exists in
     // C_Read_Sync_NonBlocking::finish().
-
-    // trim read based on file size?
-    if (size == 0) {
-      // zero byte read requested -- therefore just release managed
-      // pointers and complete the C_Read_Finisher immediately with 0 bytes
-      Context *iof = iofinish.release();
-      crf.release();
-      iof->complete(0);
-
-      // Signal async completion
-      return 0;
-    }
 
     C_Read_Sync_NonBlocking *crsa =
       new C_Read_Sync_NonBlocking(this, iofinish.release(), f, in, f->pos,
@@ -11966,6 +12045,10 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 		       bool *checkeof)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+  if (len == 0) {
+    // zero byte read is not supported by OSD
+    return 0;
+  }
 
   Inode *in = f->inode.get();
 
@@ -14236,6 +14319,56 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms,
   }
   auto snapdir = open_snapdir(in.get());
   return _rmdir(snapdir.get(), name, perms, check_perms);
+}
+
+int Client::do_snap_md_op(const char* path, const string& md_key,
+                          const string& md_val, const unsigned int op_flag,
+                          const UserPerm &perms)
+{
+  if (op_flag != CEPH_SNAP_MD_OP_CREATE &&
+      op_flag != (CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL) &&
+      op_flag != CEPH_SNAP_MD_OP_REMOVE) {
+    return -EINVAL;
+  }
+
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::scoped_lock l(client_lock);
+
+  walk_dentry_result wdr;
+  if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+    return rc;
+  }
+
+  if (wdr.target->snapid == CEPH_NOSNAP) {
+    return -EINVAL;
+  }
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SNAP_METADATA);
+  req->set_filepath(wdr.getpath());
+  req->set_inode(wdr.diri);
+  req->set_dentry(wdr.dn);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+  bufferlist bl;
+  encode(md_key, bl);
+  encode(md_val, bl);
+  encode(op_flag, bl);
+  req->set_data(bl);
+
+  ldout(cct, 10) << __func__ << ": making request" << dendl;
+  int res = make_request(req, perms, &wdr.target);
+  ldout(cct, 10) << __func__ << ": result is " << res << dendl;
+
+  trim_cache();
+
+  ldout(cct, 8) << __func__ << "(" << wdr.getpath() << ", " << perms
+                << ") = " << res << dendl;
+
+  return res;
 }
 
 // =============================

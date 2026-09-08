@@ -4,7 +4,6 @@
 
 @mixin row-details-icon {
   color: vv.$gray-900;
-  font-family: 'ForkAwesome', sans-serif;
   font-size: 1rem;
   line-height: 1;
 }
@@ -65,8 +64,8 @@
 }
 
 .filter-tags {
-  background-color: var(--cds-layer-accent);
-  border-bottom: 1px solid var(--cds-layer-active);
+  background-color: var(--cds-layer-01);
+  border-top: var(--cds-spacing-01) solid var(--cds-layer-02);
   color: var(--cds-text-primary);
 }
 
@@ -110,4 +109,24 @@ tr:hover .edit-btn {
 
 .table-tag {
   white-space: nowrap;
+}
+
+.filter--header {
+  align-items: center;
+  border-bottom: 1px solid var(--cds-ui-03);
+  display: flex;
+  justify-content: space-between;
+  padding: var(--cds-spacing-04);
+}
+
+.filter--footer {
+  display: flex;
+  margin-top: var(--cds-spacing-08);
+  width: 100%;
+
+  button {
+    flex: 1;
+    justify-content: center;
+    max-width: 50%;
+  }
 }

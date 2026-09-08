@@ -499,8 +499,8 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       this.selectedDir.quotas[key] === 0
         ? this.actionLabels.SET
         : values[key] === 0
-        ? this.actionLabels.UNSET
-        : $localize`Updated`;
+          ? this.actionLabels.UNSET
+          : $localize`Updated`;
     this.cephfsService.quota(this.id, path, values).subscribe(() => {
       if (onSuccess) {
         onSuccess();

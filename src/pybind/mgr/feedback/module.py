@@ -9,7 +9,7 @@ from requests.exceptions import RequestException
 
 from .cli import FeedbackCLICommand
 
-from mgr_module import HandleCommandResult, MgrModule
+from mgr_module import HandleCommandResult, MgrModule, Option
 import errno
 
 from .service import CephTrackerClient
@@ -18,6 +18,15 @@ from .model import Feedback
 
 class FeedbackModule(MgrModule):
     CLICommand = FeedbackCLICommand
+
+    MODULE_OPTIONS = [
+        Option(
+            name='tracker_url',
+            type='str',
+            default='tracker.ceph.com',
+            desc='Hostname of the Ceph issue tracker (Redmine) instance',
+            runtime=True),
+    ]
 
     # there are CLI commands we implement
     @FeedbackCLICommand.Read('feedback set api-key')
@@ -60,7 +69,7 @@ class FeedbackModule(MgrModule):
         """
         Fetch issue list
         """
-        tracker_client = CephTrackerClient()
+        tracker_client = CephTrackerClient(self.get_module_option('tracker_url'))
         try:
             response = tracker_client.list_issues()
         except Exception:
@@ -83,7 +92,7 @@ class FeedbackModule(MgrModule):
                 return HandleCommandResult(stderr='Issue tracker key is not set. Set key with `ceph set issue_key <your_key>`')
         except Exception as error:
             return HandleCommandResult(stderr=f'Error in retreiving issue tracker API key: {error}')
-        tracker_client = CephTrackerClient()
+        tracker_client = CephTrackerClient(self.get_module_option('tracker_url'))
         try:
             response = tracker_client.create_issue(feedback, current_api_key)
         except RequestException as error:
@@ -121,13 +130,13 @@ class FeedbackModule(MgrModule):
         return 'Successfully deleted API key'
 
     def get_issues(self):
-        tracker_client = CephTrackerClient()
+        tracker_client = CephTrackerClient(self.get_module_option('tracker_url'))
         return tracker_client.list_issues()
 
     def validate_and_create_issue(self, project: str, tracker: str, subject: str, description: str, api_key=None):
         feedback = Feedback(Feedback.Project[project].value,
                                 Feedback.TrackerType[tracker].value, subject, description)
-        tracker_client = CephTrackerClient()
+        tracker_client = CephTrackerClient(self.get_module_option('tracker_url'))
         stored_api_key = self.get_store('api_key')
         try:
             if api_key:

@@ -5,40 +5,52 @@ export class ConfigurationPageHelper extends PageHelper {
     index: { url: '#/configuration', id: 'cd-configuration' }
   };
 
+  getOverviewField(label: string) {
+    return cy
+      .get('.cd-overview-label')
+      .filter((_index, el) => el.textContent?.includes(label))
+      .closest('.cd-overview-item');
+  }
+
+  private waitForEditForm(name: string) {
+    cy.contains('h3', `Edit ${name}`).should('be.visible');
+  }
+
+  private getSectionInput(section: string) {
+    return cy.get(`input#${section}`);
+  }
+
   /**
    * Clears out all the values in a config to reset before and after testing
    * Does not work for configs with checkbox only, possible future PR
    */
   configClear(name: string) {
     this.navigateTo();
-    const valList = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']; // Editable values
-    this.getFirstTableCell(name).click();
+    const valList = ['global', 'mon', 'mgr', 'osd', 'mds']; // Editable values (client moved to separate section)
+    this.searchTable(name, 100);
+    this.getTableRow(name).find('[cdstabledata]').eq(1).click();
     cy.contains('button', 'Edit').click();
-    // Waits for the data to load
-    cy.contains('.card-header', `Edit ${name}`);
+    this.waitForEditForm(name);
 
     for (const i of valList) {
-      cy.get(`#${i}`).clear();
+      this.getSectionInput(i).clear({ force: true }).blur({ force: true });
     }
     // Clicks save button and checks that values are not present for the selected config
     cy.get('[data-testid=submitBtn]').click();
 
-    cy.wait(3 * 1000);
+    cy.url().should('include', '#/configuration');
+    cy.get(this.pages.index.id);
 
     this.clearFilter();
 
     // Enter config setting name into filter box
     this.searchTable(name, 100);
 
-    // Expand row
-    this.getExpandCollapseElement(name).click();
-
-    // Checks for visibility of details tab
-    this.getStatusTables().should('be.visible');
+    // Open the resource page for the config and verify the overview card values are cleared.
+    this.getResourcePage(name).should('be.visible').click();
 
     for (const i of valList) {
-      // Waits until values are not present in the details table
-      this.getStatusTables().should('not.contain.text', i + ':');
+      this.getOverviewField('Current values').should('not.contain.text', `${i}:`);
     }
   }
 
@@ -51,33 +63,31 @@ export class ConfigurationPageHelper extends PageHelper {
    */
   edit(name: string, ...values: [string, string][]) {
     this.clearFilter();
-    this.getFirstTableCell(name).click();
+    this.searchTable(name, 100);
+    this.getTableRow(name).find('[cdstabledata]').eq(1).click();
     cy.contains('button', 'Edit').click();
 
-    // Waits for data to load
-    cy.contains('.card-header', `Edit ${name}`);
+    this.waitForEditForm(name);
 
     values.forEach((valtuple) => {
       // Finds desired value based off given list
-      cy.get(`#${valtuple[0]}`).type(valtuple[1]); // of values and inserts the given number for the value
+      this.getSectionInput(valtuple[0]).type(valtuple[1]);
     });
 
     // Clicks save button then waits until the desired config is visible, clicks it,
     // then checks that each desired value appears with the desired number
     cy.get('[data-testid=submitBtn]').click();
-    cy.wait(3 * 1000);
+    cy.url().should('include', '#/configuration');
+    cy.get(this.pages.index.id);
 
     // Enter config setting name into filter box
     this.searchTable(name, 100);
 
-    // Checks for visibility of config in table
-    this.getExpandCollapseElement(name).should('be.visible').click();
+    // Open the resource page for the config and verify the overview card values.
+    this.getResourcePage(name).should('be.visible').click();
 
-    // Clicks config
     values.forEach((value) => {
-      // iterates through list of values and
-      // checks if the value appears in details with the correct number attatched
-      cy.contains('[data-testid=config-details-table]', `${value[0]}\: ${value[1]}`);
+      this.getOverviewField('Current values').should('contain.text', `${value[0]}: ${value[1]}`);
     });
   }
 

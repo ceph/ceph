@@ -23,7 +23,7 @@ import { LocalStorage } from '../../src/app/shared/enum/local-storage-enum';
 let auth: any;
 
 const fillAuth = () => {
-  window.localStorage.setItem(LocalStorage.DASHBOARD_USRENAME, auth.username);
+  window.localStorage.setItem(LocalStorage.DASHBOARD_USERNAME, auth.username);
   window.localStorage.setItem('dashboard_permissions', auth.permissions);
   window.localStorage.setItem('user_pwd_expiration_date', auth.pwdExpirationDate);
   window.localStorage.setItem('user_pwd_update_required', auth.pwdUpdateRequired);

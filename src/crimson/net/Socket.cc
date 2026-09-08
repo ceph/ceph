@@ -5,8 +5,12 @@
 
 #include <seastar/core/sleep.hh>
 #include <seastar/core/when_all.hh>
+#include <seastar/core/do_with.hh>
 #include <seastar/net/packet.hh>
 
+#include <span>
+
+#include "crimson/common/config_proxy.h" // for local_conf()
 #include "crimson/common/log.h"
 #include "include/random.h" // for ceph::util::generate_random_number()
 #include "Errors.h"
@@ -190,7 +194,9 @@ Socket::write(bufferlist buf)
     return inject_delay(
     ).then([buf = std::move(buf), this]() mutable {
       packet p(std::move(buf));
-      return out.write(std::move(p));
+      return seastar::do_with(p.release(), [this](auto& frags) {
+        return out.write(std::span<seastar::temporary_buffer<char>>(frags));
+      });
     });
 #ifdef UNIT_TESTS_BUILT
   }).then([this] {
@@ -221,8 +227,9 @@ Socket::write_flush(bufferlist buf)
     return inject_delay(
     ).then([buf = std::move(buf), this]() mutable {
       packet p(std::move(buf));
-      return out.write(std::move(p)
-      ).then([this] {
+      return seastar::do_with(p.release(), [this](auto& frags) {
+        return out.write(std::span<seastar::temporary_buffer<char>>(frags));
+      }).then([this] {
         return out.flush();
       });
     });

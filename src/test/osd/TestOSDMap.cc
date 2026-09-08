@@ -10,6 +10,7 @@
 #include "common/common_init.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
+#include "crush/CrushWrapper.h"
 #include "include/stringify.h"
 
 #include <iostream>
@@ -1843,6 +1844,166 @@ TEST_F(OSDMapTest, BUG_40104) {
   }
 }
 
+TEST_F(OSDMapTest, TryDropRemapOverfullBothOverfull) {
+  // https://tracker.ceph.com/issues/63137
+  //
+  // try_drop_remap_overfull must not drop a [um_from -> osd] pair when
+  // um_from is itself overfull: the drop returns the PG to an OSD that
+  // already carries too many PGs, providing no net improvement.
+  //
+  // Setup (size=1, 12 PGs, 3 OSDs, target=4 each):
+  //   pg_upmap:       pg0..pg6 -> osd.0 (7 PGs), pg7..pg11 -> osd.1 (5 PGs)
+  //   pg_upmap_items: pg6: [osd.0 -> osd.1]
+  //   pgs_by_osd:     osd.0=6 (+2), osd.1=6 (+2), osd.2=0 (-4)
+  //
+  // Dropping pg6's entry would return it to osd.0, raising osd.0's deviation
+  // from +2 to +3 while lowering osd.1's from +2 to +1 -- a net wash that
+  // leaves one OSD worse off.
+  set_up_map(3, true);
+
+  OSDMap::Incremental pool_inc(osdmap.get_epoch() + 1);
+  pool_inc.new_pool_max = osdmap.get_pool_max();
+  pg_pool_t empty;
+  int64_t pool_id = ++pool_inc.new_pool_max;
+  pg_pool_t *p = pool_inc.get_new_pool(pool_id, &empty);
+  p->size = 1;
+  p->min_size = 1;
+  p->set_pg_num(12);
+  p->set_pgp_num(12);
+  p->type = pg_pool_t::TYPE_REPLICATED;
+  p->crush_rule = 0;
+  p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+  pool_inc.new_pool_names[pool_id] = "testpool";
+  osdmap.apply_incremental(pool_inc);
+
+  // Force placement via pg_upmap: pg0..pg6 -> osd.0, pg7..pg11 -> osd.1
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    for (int i = 0; i <= 6; ++i) {
+      pg_t pg = osdmap.raw_pg_to_pg(pg_t(i, pool_id));
+      inc.new_pg_upmap[pg] = mempool::osdmap::vector<int32_t>{0};
+    }
+    for (int i = 7; i <= 11; ++i) {
+      pg_t pg = osdmap.raw_pg_to_pg(pg_t(i, pool_id));
+      inc.new_pg_upmap[pg] = mempool::osdmap::vector<int32_t>{1};
+    }
+    osdmap.apply_incremental(inc);
+  }
+
+  // Add pg_upmap_items pg6: [osd.0 -> osd.1]
+  // pgs_by_osd after all upmaps: osd.0=6 (+2), osd.1=6 (+2), osd.2=0 (-4)
+  pg_t pg6 = osdmap.raw_pg_to_pg(pg_t(6, pool_id));
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.new_pg_upmap_items[pg6] =
+      mempool::osdmap::vector<pair<int32_t,int32_t>>{{0, 1}};
+    osdmap.apply_incremental(inc);
+  }
+
+  // Verify pg6 acts from osd.1 before the balancer runs
+  {
+    vector<int> up;
+    int up_primary;
+    osdmap.pg_to_up_acting_osds(pg6, &up, &up_primary, nullptr, nullptr);
+    ASSERT_EQ(up[0], 1);
+  }
+
+  set<int64_t> only_pools = {pool_id};
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+  osdmap.calc_pg_upmaps(g_ceph_context, 1, 100, only_pools, &pending_inc);
+
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  newmap.apply_incremental(pending_inc);
+
+  // pg6 must still act from osd.1: returning it to osd.0 would not improve
+  // the distribution (osd.0 deviation would rise from +2 to +3).
+  {
+    vector<int> up;
+    int up_primary;
+    newmap.pg_to_up_acting_osds(pg6, &up, &up_primary, nullptr, nullptr);
+    ASSERT_EQ(up[0], 1);
+  }
+}
+
+TEST_F(OSDMapTest, BUG_63137_calc_pg_upmaps_perf) {
+  // https://tracker.ceph.com/issues/63137
+  //
+  // try_drop_remap_overfull used to call test_change (full stddev recompute
+  // over all OSDs) for every incoming pg_upmap_items pair that cannot improve
+  // distribution.  With R incoming pairs per cohort OSD, that is O(n_cohort*R)
+  // wasted test_change calls.
+  //
+  // Setup (size=1, n_osds=600, pg_num=6000, target=10 per OSD):
+  //   cohort OSDs 0..499: 12 PGs each (deviation +2)
+  //   sink   OSDs 500..599: 0 PGs each (deviation -10)
+  //
+  //   pg_upmap:       pg(i*12+j) -> osd.i   for i in 0..499, j in 0..11
+  //   pg_upmap_items: pg(i*12+k) [osd.i -> osd.(i+k)%500]   k in 1..R
+  //
+  // After all upmaps each cohort OSD has (12-R) natural + R incoming = 12 PGs.
+  // When processing overfull osd.i, there are R incoming ring pairs with
+  // um_from also at deviation +2. Old code tried dropping each and paid
+  // test_change; new code skips them with the um_from overload check.
+  const int n_cohort = 500;
+  const int n_sink = 100;
+  const int n_osds = n_cohort + n_sink;
+  const int pgs_per_cohort = 12;
+  const int total_pgs = n_cohort * pgs_per_cohort;
+  const int R = 5;
+
+  set_up_map(n_osds, true);
+
+  int pool_id;
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pool_max = osdmap.get_pool_max();
+    pool_id = ++pending_inc.new_pool_max;
+    pg_pool_t empty;
+    auto p = pending_inc.get_new_pool(pool_id, &empty);
+    p->size = 1;
+    p->min_size = 1;
+    p->set_pg_num(total_pgs);
+    p->set_pgp_num(total_pgs);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = 0;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    pending_inc.new_pool_names[pool_id] = "perf_pool";
+    osdmap.apply_incremental(pending_inc);
+    ASSERT_TRUE(osdmap.have_pg_pool(pool_id));
+  }
+
+  // pg_upmap: assign all PGs for cohort OSD i to osd.i
+  // pg_upmap_items ring: pg(i*12+k) [osd.i -> osd.(i+k)%n_cohort]
+  {
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    for (int i = 0; i < n_cohort; ++i) {
+      for (int j = 0; j < pgs_per_cohort; ++j) {
+        pg_t pg = osdmap.raw_pg_to_pg(pg_t(i * pgs_per_cohort + j, pool_id));
+        inc.new_pg_upmap[pg] = mempool::osdmap::vector<int32_t>{i};
+      }
+      for (int k = 1; k <= R; ++k) {
+        pg_t pg = osdmap.raw_pg_to_pg(pg_t(i * pgs_per_cohort + k, pool_id));
+        int um_to = (i + k) % n_cohort;
+        inc.new_pg_upmap_items[pg] =
+          mempool::osdmap::vector<pair<int32_t,int32_t>>{{i, um_to}};
+      }
+    }
+    osdmap.apply_incremental(inc);
+  }
+
+  {
+    set<int64_t> only_pools = {pool_id};
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    auto start = mono_clock::now();
+    osdmap.calc_pg_upmaps(g_ceph_context, 1, 10000, only_pools, &pending_inc);
+    auto latency = mono_clock::now() - start;
+    std::cout << "calc_pg_upmaps (63137 scenario, n_cohort=" << n_cohort
+              << " R=" << R << ") latency: " << timespan_str(latency)
+              << std::endl;
+  }
+}
+
 TEST_F(OSDMapTest, BUG_42052) {
   // https://tracker.ceph.com/issues/42052
   set_up_map(6, true);
@@ -2861,6 +3022,58 @@ TEST_F(OSDMapTest, ReadBalanceScore2) {
         //TODO add ReadBalanceScore3 - with weighted osds.
 
   }
+
+//
+// A pool which is mapped to only a few OSDs of a large cluster (like the .mgr
+// pool, which usually has a single PG) used to get an optimal score which was
+// rounded down to 0, and therefore a read balance score of infinity.
+// See https://tracker.ceph.com/issues/66215
+//
+TEST_F(OSDMapTest, ReadBalanceScoreSmallPoolLargeCluster) {
+  constexpr int n_osds = 700;
+  set_up_map(n_osds);
+
+  // create an additional replicated pool with a single PG
+  OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+  new_pool_inc.new_pool_max = osdmap.get_pool_max();
+  new_pool_inc.fsid = osdmap.get_fsid();
+  uint64_t pool_id = set_rep_pool("one_pg_pool", new_pool_inc, false);
+  ASSERT_TRUE(new_pool_inc.new_pools.contains(pool_id));
+  new_pool_inc.new_pools[pool_id].set_pg_num(1);
+  new_pool_inc.new_pools[pool_id].set_pgp_num(1);
+  osdmap.apply_incremental(new_pool_inc);
+
+  const pg_pool_t *pi = osdmap.get_pg_pool(pool_id);
+  ASSERT_NE(pi, nullptr);
+  ASSERT_TRUE(pi->is_replicated());
+  ASSERT_EQ(pi->get_pg_num(), 1u);
+
+  // the pool is mapped to pool size OSDs only, way less than the cluster size
+  map<uint64_t,set<pg_t>> prim_pgs_by_osd, acting_prims_by_osd;
+  auto pgs_by_osd = osdmap.get_pgs_by_osd(g_ceph_context, pool_id,
+                                          &prim_pgs_by_osd, &acting_prims_by_osd);
+  ASSERT_EQ(pgs_by_osd.size(), pi->get_size());
+
+  OSDMap::read_balance_info_t rbi;
+  auto rc = osdmap.calc_read_balance_score(g_ceph_context, pool_id, &rbi);
+  ASSERT_EQ(rc, 0);
+  ASSERT_TRUE(rbi.err_msg.empty());
+
+  // scores must be finite and, as documented, not lower than 1
+  ASSERT_TRUE(std::isfinite(rbi.optimal_score));
+  ASSERT_TRUE(std::isfinite(rbi.raw_score));
+  ASSERT_TRUE(std::isfinite(rbi.acting_raw_score));
+  ASSERT_TRUE(std::isfinite(rbi.adjusted_score));
+  ASSERT_TRUE(std::isfinite(rbi.acting_adj_score));
+  ASSERT_GE(rbi.optimal_score, 1.0);
+  ASSERT_TRUE(score_in_range(rbi.adjusted_score));
+  ASSERT_TRUE(score_in_range(rbi.acting_adj_score));
+
+  // a single PG pool is as balanced as it can be - the only PG has exactly one
+  // primary - so it must score exactly 1
+  ASSERT_FLOAT_EQ(rbi.adjusted_score, 1.0);
+  ASSERT_FLOAT_EQ(rbi.acting_adj_score, 1.0);
+}
 
 TEST_F(OSDMapTest, read_balance_small_map) {
   // Set up a map with 4 OSDs and default pools

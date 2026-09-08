@@ -26,7 +26,10 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   HOST_TYPE = HOST_TYPE;
   AUTHENTICATION = AUTHENTICATION;
 
-  constructor(public actionLabels: ActionLabelsI18n, public activeModal: NgbActiveModal) {}
+  constructor(
+    public actionLabels: ActionLabelsI18n,
+    public activeModal: NgbActiveModal
+  ) {}
 
   ngOnInit() {
     this.formGroup = new CdFormGroup({});
@@ -37,7 +40,9 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   }
 
   get hostAccessLabel(): string {
-    return this.hostType === HOST_TYPE.ALL ? $localize`All hosts` : $localize`Restricted`;
+    if (this.hostType === HOST_TYPE.ALL) return $localize`All hosts`;
+    if (!this.addedHosts?.length) return $localize`N/A`;
+    return $localize`Restricted`;
   }
 
   get hostCount(): number {
@@ -45,7 +50,7 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   }
 
   get authTypeLabel(): string {
-    if (this.authType === AUTHENTICATION.None) return NO_AUTH;
+    if (this.authType === AUTHENTICATION.None || this.hostDchapKeyCount === 0) return NO_AUTH;
     return this.authType === AUTHENTICATION.Bidirectional
       ? $localize`Bidirectional`
       : $localize`Unidirectional`;

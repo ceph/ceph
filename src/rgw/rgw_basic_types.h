@@ -157,8 +157,8 @@ class Principal {
   Principal(types t, std::string&& n, std::string i)
     : t(t), u(std::move(n), std::move(i)) {}
 
-  Principal(std::string&& idp_url)
-    : t(OidcProvider), idp_url(std::move(idp_url)) {}
+  Principal(std::string&& account, std::string&& idp_url)
+    : t(OidcProvider), u(std::move(account), {}), idp_url(std::move(idp_url)) {}
 
 public:
 
@@ -178,8 +178,8 @@ public:
     return Principal(Account, std::move(t), {});
   }
 
-  static Principal oidc_provider(std::string&& idp_url) {
-    return Principal(std::move(idp_url));
+  static Principal oidc_provider(std::string&& account, std::string&& idp_url) {
+    return Principal(std::move(account), std::move(idp_url));
   }
 
   static Principal assumed_role(std::string&& t, std::string&& u) {
@@ -220,36 +220,38 @@ public:
     return t == Service;
   }
 
-  const std::string& get_account() const {
+  std::string_view get_account() const {
     return u.tenant;
   }
 
-  const std::string& get_id() const {
+  std::string_view get_id() const {
     return u.id;
   }
 
-  const std::string& get_idp_url() const {
+  std::string_view get_idp_url() const {
     return idp_url;
   }
 
-  const std::string& get_role_session() const {
+  std::string_view get_role_session() const {
     return u.id;
   }
 
-  const std::string& get_role() const {
+  std::string_view get_role() const {
     return u.id;
   }
 
-  const std::string& get_service() const {
+  std::string_view get_service() const {
     return service_id;
   }
 
   bool operator ==(const Principal& o) const {
-    return (t == o.t) && (u == o.u);
+    return (t == o.t) && (u == o.u) && (idp_url == o.idp_url);
   }
 
   bool operator <(const Principal& o) const {
-    return (t < o.t) || ((t == o.t) && (u < o.u));
+    if (t != o.t) return t < o.t;
+    if (u != o.u) return u < o.u;
+    return idp_url < o.idp_url;
   }
 };
 
@@ -278,6 +280,7 @@ struct RGWUploadPartInfo {
   RGWObjManifest manifest;
   RGWCompressionInfo cs_info;
   std::optional<rgw::cksum::Cksum> cksum;
+  std::string crypt_salt;  // per-UploadPart GCM salt (non-secret HMAC input)
 
   // Previous part obj prefixes. Recorded here for later cleanup.
   std::set<std::string> past_prefixes; 
@@ -285,7 +288,7 @@ struct RGWUploadPartInfo {
   RGWUploadPartInfo() : num(0), size(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 2, bl);
+    ENCODE_START(7, 2, bl);
     encode(num, bl);
     encode(size, bl);
     encode(etag, bl);
@@ -295,10 +298,11 @@ struct RGWUploadPartInfo {
     encode(accounted_size, bl);
     encode(past_prefixes, bl);
     encode(cksum, bl);
+    encode(crypt_salt, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(7, 2, 2, bl);
     decode(num, bl);
     decode(size, bl);
     decode(etag, bl);
@@ -316,6 +320,9 @@ struct RGWUploadPartInfo {
     }
     if (struct_v >= 6) {
       decode(cksum, bl);
+    }
+    if (struct_v >= 7) {
+      decode(crypt_salt, bl);
     }
     DECODE_FINISH(bl);
   }

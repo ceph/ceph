@@ -47,10 +47,6 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
   fill: theme.$layer-selected-disabled !important;
 }
 
-.notificationNew-icon circle {
-  fill: theme.$support-error !important;
-}
-
 .emptySearch-icon {
   fill: theme.$layer-selected-disabled !important;
 }
@@ -69,4 +65,8 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
 
 .arrowDown-icon {
   fill: theme.$support-error !important;
+}
+
+.edit-icon {
+  fill: var(--cds-link-primary) !important;
 }

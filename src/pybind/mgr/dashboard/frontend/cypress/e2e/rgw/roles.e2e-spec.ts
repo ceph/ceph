@@ -1,20 +1,37 @@
 import { RolesPageHelper } from './roles.po';
+import { AccountsPageHelper } from './accounts.po';
 
 describe('RGW roles page', () => {
   const roles = new RolesPageHelper();
+  const accounts = new AccountsPageHelper();
+  const accountName = 'roles-test-account';
+  const roleName = 'testRole';
+
+  before(() => {
+    cy.login();
+    accounts.navigateTo('create');
+    accounts.create({ name: accountName, email: 'test@example.com' });
+  });
+
+  after(() => {
+    cy.login();
+    accounts.navigateTo();
+    accounts.delete(accountName, null, null, true, false, false, false);
+  });
 
   beforeEach(() => {
     cy.login();
-    roles.navigateTo();
+    accounts.navigateTo();
+    accounts.getResourcePage(accountName).click();
+    cy.contains('cds-sidenav-item a', /^Roles$/).click();
+    cy.location('hash').should('include', '/roles');
+    // Wait for the roles list to render
+    cy.get('cd-rgw-account-roles-list').should('exist');
   });
 
   describe('Create, Edit & Delete rgw roles', () => {
-    const roleName = 'testRole';
-
-    it('should create rgw roles', () => {
-      roles.navigateTo('create');
+    it('should create rgw role', () => {
       roles.create(roleName, '/', '{}');
-      roles.navigateTo();
       roles.checkExist(roleName, true);
     });
 
@@ -23,7 +40,8 @@ describe('RGW roles page', () => {
     });
 
     it('should delete rgw role', () => {
-      roles.delete(roleName, null, null, true);
+      roles.deleteRole(roleName);
+      roles.checkExist(roleName, false);
     });
   });
 });

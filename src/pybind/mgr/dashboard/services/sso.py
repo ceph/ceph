@@ -97,6 +97,22 @@ def load_sso_db():
 
 @DBCLICommand.Write("dashboard sso enable oauth2")
 def enable_sso(_, roles_path: Optional[str] = None):
+    if mgr.get_module_option_ex('orchestrator', 'orchestrator') == 'cephadm':
+        from orchestrator import DaemonDescriptionStatus
+
+        from .orchestrator import OrchClient
+        orch = OrchClient.instance()
+        if orch.available():
+            daemons = orch.services.list_daemons(daemon_type='oauth2-proxy')
+            oauth2_proxy_running = any(
+                d.status == DaemonDescriptionStatus.running for d in daemons
+            )
+            if not oauth2_proxy_running:
+                return HandleCommandResult(
+                    retval=-errno.EPERM,
+                    stderr='OAuth2 SSO prerequisite not met: '
+                           'oauth2-proxy service must be deployed and running.'
+                )
     mgr.SSO_DB.protocol = AuthType.OAUTH2
     if jmespath and roles_path:
         try:
@@ -160,14 +176,20 @@ def handle_sso_command(cmd):
                              'dashboard sso setup saml2']:
         return -errno.ENOSYS, '', ''
 
-    if not python_saml_imported:
-        return -errno.EPERM, '', 'Required library not found: `python3-saml`'
+    if cmd['prefix'] == 'dashboard sso status':
+        if not mgr.SSO_DB.protocol == AuthType.LOCAL:
+            return 0, f'SSO is "enabled" with "{mgr.SSO_DB.protocol.name}" protocol.', ''
+
+        return 0, 'SSO is "disabled".', ''
 
     if cmd['prefix'] == 'dashboard sso disable':
         mgr.SSO_DB.protocol = AuthType.LOCAL
         mgr.SSO_DB.save()
         mgr.set_module_option('sso_oauth2', False)
         return 0, 'SSO is "disabled".', ''
+
+    if not python_saml_imported:
+        return -errno.EPERM, '', 'Required library not found: `python3-saml`'
 
     if cmd['prefix'] == 'dashboard sso enable saml2':
         configured = _is_sso_configured()
@@ -177,12 +199,6 @@ def handle_sso_command(cmd):
             return 0, 'SSO is "enabled" with "saml2" protocol.', ''
         return -errno.EPERM, '', 'Single Sign-On is not configured: ' \
             'use `ceph dashboard sso setup saml2`'
-
-    if cmd['prefix'] == 'dashboard sso status':
-        if not mgr.SSO_DB.protocol == AuthType.LOCAL:
-            return 0, f'SSO is "enabled" with "{mgr.SSO_DB.protocol}" protocol.', ''
-
-        return 0, 'SSO is "disabled".', ''
 
     if cmd['prefix'] == 'dashboard sso show saml2':
         return 0, json.dumps(mgr.SSO_DB.config.to_dict()), ''

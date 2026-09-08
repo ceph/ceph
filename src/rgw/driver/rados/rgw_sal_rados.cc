@@ -40,6 +40,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_bucket.h"
 #include "rgw_bucket_logging.h"
+#include "rgw_crypt.h"
 #include "rgw_bl_rados.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
@@ -54,6 +55,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_rest_log.h"
 #include "rgw_rest_metadata.h"
+#include "rgw_rest_dedup.h"
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_user.h"
@@ -83,6 +85,7 @@
 #include "buckets.h"
 #include "group.h"
 #include "groups.h"
+#include "oidc.h"
 #include "rgw_pubsub.h"
 #include "role.h"
 #include "roles.h"
@@ -714,6 +717,27 @@ int RadosBucket::unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, o
                                              y, dpp, update_entrypoint);
 }
 
+static void chown_acl(const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      RGWAccessControlPolicy& policy)
+{
+  //Get the ACL from the policy
+  RGWAccessControlList& acl = policy.get_acl();
+  ACLOwner& owner = policy.get_owner();
+
+  //Remove grant that is set to old owner
+  acl.remove_canon_user_grant(owner.id);
+
+  //Create a grant and add grant
+  ACLGrant grant;
+  grant.set_canon(new_owner, new_owner_name, RGW_PERM_FULL_CONTROL);
+  acl.add_grant(grant);
+
+  //Update the ACL owner to the new user
+  owner.id = new_owner;
+  owner.display_name = new_owner_name;
+}
+
 int RadosBucket::chown(const DoutPrefixProvider* dpp,
                        const rgw_owner& new_owner,
                        const std::string& new_owner_name,
@@ -739,21 +763,8 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp,
 
       RGWAccessControlPolicy policy;
       decode(policy, p);
-      //Get the ACL from the policy
-      RGWAccessControlList& acl = policy.get_acl();
-      ACLOwner& owner = policy.get_owner();
 
-      //Remove grant that is set to old owner
-      acl.remove_canon_user_grant(owner.id);
-
-      //Create a grant and add grant
-      ACLGrant grant;
-      grant.set_canon(new_owner, new_owner_name, RGW_PERM_FULL_CONTROL);
-      acl.add_grant(grant);
-
-      //Update the ACL owner to the new user
-      owner.id = new_owner;
-      owner.display_name = new_owner_name;
+      chown_acl(new_owner, new_owner_name, policy);
 
       bufferlist bl;
       encode(policy, bl);
@@ -2576,6 +2587,7 @@ void RadosStore::register_admin_apis(RGWRESTMgr* mgr)
   mgr->register_resource("config", new RGWRESTMgr_Config);
   mgr->register_resource("realm", new RGWRESTMgr_Realm);
   mgr->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
+  mgr->register_resource("dedup", new RGWRESTMgr_Dedup);
 }
 
 std::unique_ptr<LuaManager> RadosStore::get_lua_manager(const std::string& luarocks_path)
@@ -2619,58 +2631,29 @@ int RadosStore::list_roles(const DoutPrefixProvider *dpp,
                                      listing.roles, listing.next_marker);
 }
 
-static constexpr std::string_view oidc_url_oid_prefix = "oidc_url.";
-
-static std::string oidc_provider_oid(std::string_view account,
-                                     std::string_view prefix,
-                                     std::string_view url)
-{
-  return string_cat_reserve(account, prefix, url);
-}
-
 int RadosStore::store_oidc_provider(const DoutPrefixProvider *dpp,
                                     optional_yield y,
                                     const RGWOIDCProviderInfo& info,
-                                    bool exclusive)
+                                    bool exclusive,
+                                    RGWObjVersionTracker* objv_tracker)
 {
-  auto sysobj = svc()->sysobj;
-  std::string oid = oidc_provider_oid(info.tenant, oidc_url_oid_prefix,
-                                      url_remove_prefix(info.provider_url));
-
-  // TODO: add support for oidc metadata sync
-  bufferlist bl;
-  using ceph::encode;
-  encode(info, bl);
-  return rgw_put_system_obj(dpp, sysobj, svc()->zone->get_zone_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::oidc::write(
+      dpp, y, *svc()->sysobj, svc()->mdlog, *getRados()->get_rados_handle(),
+      zone, info, ceph::real_clock::now(), exclusive, objv_tracker);
 }
 
 int RadosStore::load_oidc_provider(const DoutPrefixProvider *dpp,
                                    optional_yield y,
                                    std::string_view account,
                                    std::string_view url,
-                                   RGWOIDCProviderInfo& info)
+                                   RGWOIDCProviderInfo& info,
+                                   RGWObjVersionTracker* objv_tracker)
 {
-  auto sysobj = svc()->sysobj;
-  auto& pool = svc()->zone->get_zone_params().oidc_pool;
-  std::string oid = oidc_provider_oid(account, oidc_url_oid_prefix, url);
-  bufferlist bl;
-
-  int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr, y, dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
-  try {
-    using ceph::decode;
-    auto iter = bl.cbegin();
-    decode(info, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
-                  ": " << url << dendl;
-    return -EIO;
-  }
-
-  return 0;
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::oidc::read(
+      dpp, y, *svc()->sysobj, zone, account, url, info,
+      nullptr, objv_tracker);
 }
 
 int RadosStore::delete_oidc_provider(const DoutPrefixProvider *dpp,
@@ -2678,63 +2661,21 @@ int RadosStore::delete_oidc_provider(const DoutPrefixProvider *dpp,
                                      std::string_view account,
                                      std::string_view url)
 {
-  auto& pool = svc()->zone->get_zone_params().oidc_pool;
-  std::string oid = oidc_provider_oid(account, oidc_url_oid_prefix, url);
-  int ret = rgw_delete_system_obj(dpp, svc()->sysobj, pool, oid, nullptr, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: deleting oidc url from pool: " << pool.name << ": "
-                  << url << ": " << cpp_strerror(-ret) << dendl;
-  }
-
-  return ret;
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::oidc::remove(dpp, y, *svc()->sysobj, svc()->mdlog,
+                                *getRados()->get_rados_handle(), zone,
+                                account, url);
 }
 
 int RadosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
-				   optional_yield y,
-				   std::string_view tenant,
-				   vector<RGWOIDCProviderInfo>& providers)
+                                   optional_yield y,
+                                   std::string_view tenant,
+                                   vector<RGWOIDCProviderInfo>& providers)
 {
-  std::string prefix = string_cat_reserve(tenant, oidc_url_oid_prefix);
-  auto pool = svc()->zone->get_zone_params().oidc_pool;
-
-  //Get the filtered objects
-  list<std::string> result;
-  bool is_truncated;
-  RGWListRawObjsCtx ctx;
-  do {
-    list<std::string> oids;
-    int r = rados->list_raw_objects(dpp, pool, prefix, 1000, ctx, oids, &is_truncated);
-    if (r == -ENOENT) {
-      return 0;
-    }
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: listing filtered objects failed: OIDC pool: "
-                  << pool.name << ": " << prefix << ": " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-    for (const auto& iter : oids) {
-      bufferlist bl;
-      r = rgw_get_system_obj(svc()->sysobj, pool, iter, bl, nullptr, nullptr, y, dpp);
-      if (r < 0) {
-        return r;
-      }
-
-      RGWOIDCProviderInfo info;
-      try {
-        using ceph::decode;
-        auto iter = bl.cbegin();
-        decode(info, iter);
-      } catch (buffer::error& err) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: "
-	  << pool.name << ": " << iter << dendl;
-        return -EIO;
-      }
-
-      providers.push_back(std::move(info));
-    }
-  } while (is_truncated);
-
-  return 0;
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::oidc::list(dpp, y, *svc()->sysobj,
+                              *getRados()->get_rados_handle(),
+                              zone, tenant, providers);
 }
 
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
@@ -2807,7 +2748,7 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
   }
 
   const auto& log_layout = bucket_info.layout.logs.front();
-  const uint32_t shard_count = num_shards(log_to_index_layout(log_layout));
+  const uint32_t shard_count = num_shards(log_layout);
 
   std::string marker;
   bool truncated;
@@ -3135,7 +3076,10 @@ int RadosObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
   return sysobj.omap().set_must_exist(must_exist).set(dpp, key, val, y);
 }
 
-int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+int RadosObject::chown(const DoutPrefixProvider* dpp,
+                       const rgw_owner& new_owner,
+                       const std::string& new_owner_name,
+                       optional_yield y)
 {
   int r = get_obj_attrs(y, dpp);
   if (r < 0) {
@@ -3162,21 +3106,7 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
     return -EIO;
   }
 
-  //Get the ACL from the policy
-  RGWAccessControlList& acl = policy.get_acl();
-
-  //Remove grant that is set to old owner
-  acl.remove_canon_user_grant(owner.id);
-
-  //Create a grant and add grant
-  ACLGrant grant;
-  grant.set_canon(new_user.get_id(), new_user.get_display_name(), RGW_PERM_FULL_CONTROL);
-  acl.add_grant(grant);
-
-  //Update the ACL owner to the new user
-  owner.id = new_user.get_id();
-  owner.display_name = new_user.get_display_name();
-  policy.set_owner(owner);
+  chown_acl(new_owner, new_owner_name, policy);
 
   bl.clear();
   encode(policy, bl);
@@ -3226,8 +3156,18 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   RGWAccessKey key = rtier->get_rt().t.s3.key;
   string region = rtier->get_rt().t.s3.region;
   HostStyle host_style = rtier->get_rt().t.s3.host_style;
-  string bucket_name = rtier->get_rt().t.s3.target_path;
   const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
+  // extract owner (user_id or account_id depending on ownership type)
+  std::string owner;
+  if (const auto* acct = std::get_if<rgw_account_id>(&bucket->get_owner()); acct) {
+    owner = *acct;
+  } else if (const auto* user = std::get_if<rgw_user>(&bucket->get_owner()); user) {
+    owner = user->id;
+  }
+  string bucket_name = rtier->get_rt().t.s3.make_target_bucket_name(
+      zonegroup.get_name(),
+      tier->get_storage_class(), bucket->get_name(),
+      bucket->get_tenant(), owner);
   int ret = 0;
 
   auto& attrs = get_attrs();
@@ -3249,12 +3189,6 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   // update tier_config in case tier params are updated
   tier_config.tier_placement = rtier->get_rt();
 
-  if (bucket_name.empty()) {
-    bucket_name = "rgwx-" + zonegroup.get_name() + "-" + tier->get_storage_class() +
-                    "-cloud-bucket";
-    boost::algorithm::to_lower(bucket_name);
-  }
-
   rgw_bucket_dir_entry ent;
   ent.key.name = get_key().name;
   ent.key.instance = get_key().instance;
@@ -3271,7 +3205,8 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   // save source cloudtier storage class
   RGWLCCloudTierCtx tier_ctx(cct, dpp, ent, store, bucket->get_info(),
            this, conn, bucket_name,
-           rtier->get_rt().t.s3.target_storage_class);
+           rtier->get_rt().t.s3.target_storage_class,
+           rtier->get_rt().t.s3.target_by_bucket, y);
   tier_ctx.acl_mappings = rtier->get_rt().t.s3.acl_mappings;
   tier_ctx.multipart_min_part_size = rtier->get_rt().t.s3.multipart_min_part_size;
   tier_ctx.multipart_sync_threshold = rtier->get_rt().t.s3.multipart_sync_threshold;
@@ -3279,6 +3214,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   tier_ctx.restore_storage_class = rtier->get_rt().restore_storage_class;
   tier_ctx.tier_type = rtier->get_rt().tier_type;
   tier_ctx.location_constraint = rtier->get_rt().t.s3.location_constraint;
+  tier_ctx.retain_current_version = rtier->get_rt().retain_current_version;
 
   ldpp_dout(dpp, 20) << "Restoring object(" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
 
@@ -3333,26 +3269,32 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
   RGWAccessKey key = rtier->get_rt().t.s3.key;
   string region = rtier->get_rt().t.s3.region;
   HostStyle host_style = rtier->get_rt().t.s3.host_style;
-  string bucket_name = rtier->get_rt().t.s3.target_path;
   const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
-
-  if (bucket_name.empty()) {
-    bucket_name = "rgwx-" + zonegroup.get_name() + "-" + tier->get_storage_class() +
-                    "-cloud-bucket";
-    boost::algorithm::to_lower(bucket_name);
+  // extract owner (user_id or account_id depending on ownership type)
+  std::string owner;
+  if (const auto* acct = std::get_if<rgw_account_id>(&bucket->get_owner()); acct) {
+    owner = *acct;
+  } else if (const auto* user = std::get_if<rgw_user>(&bucket->get_owner()); user) {
+    owner = user->id;
   }
+  string bucket_name = rtier->get_rt().t.s3.make_target_bucket_name(
+      zonegroup.get_name(),
+      tier->get_storage_class(), bucket->get_name(),
+      bucket->get_tenant(), owner);
 
   /* Create RGW REST connection */
   S3RESTConn conn(cct, id, { endpoint }, key, zonegroup.get_id(), region, host_style);
 
   RGWLCCloudTierCtx tier_ctx(cct, dpp, o, store, bucket->get_info(),
 			     this, conn, bucket_name,
-			     rtier->get_rt().t.s3.target_storage_class);
+			     rtier->get_rt().t.s3.target_storage_class,
+			     rtier->get_rt().t.s3.target_by_bucket, y);
   tier_ctx.acl_mappings = rtier->get_rt().t.s3.acl_mappings;
   tier_ctx.multipart_min_part_size = rtier->get_rt().t.s3.multipart_min_part_size;
   tier_ctx.multipart_sync_threshold = rtier->get_rt().t.s3.multipart_sync_threshold;
   tier_ctx.storage_class = tier->get_storage_class();
   tier_ctx.location_constraint = rtier->get_rt().t.s3.location_constraint;
+  tier_ctx.retain_current_version = rtier->get_rt().retain_current_version;
 
   ldpp_dout(dpp, 0) << "Transitioning object(" << o.key << ") to the cloud endpoint(" << endpoint << ")" << dendl;
 
@@ -4325,9 +4267,6 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
            const char *if_nomatch)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
-  std::string etag;
-  bufferlist etag_bl;
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
@@ -4341,6 +4280,17 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
+
+  // Check if this is AEAD encryption to track plaintext size
+  bool is_aead = false;
+  uint64_t plaintext_ofs = 0;
+  auto mode_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
+  if (mode_iter != attrs.end()) {
+    std::string crypt_mode = mode_iter->second.to_str();
+    is_aead = is_aead_mode(crypt_mode);
+  }
+  // AEAD: (S3 part number, GCM salt) per selected part, in manifest-segment order.
+  std::vector<std::pair<uint32_t, std::string>> part_keys;
 
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
@@ -4457,20 +4407,31 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
       ofs += obj_part.size;
       accounted_size += obj_part.accounted_size;
+
+      // Track plaintext size for AEAD encryption
+      if (is_aead) {
+        part_keys.push_back({obj_part.num, obj_part.crypt_salt});
+        if (part_compressed) {
+          // For compressed parts, use the uncompressed size directly
+          plaintext_ofs += obj_part.accounted_size;
+        } else {
+          plaintext_ofs += aead_encrypted_to_plaintext_size(obj_part.size);
+        }
+      }
     }
   } while (truncated);
   hash.Final((unsigned char *)final_etag);
 
-  buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
-  snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],
-	   sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)part_etags.size());
-  etag = final_etag_str;
-  ldpp_dout(dpp, 10) << "calculated etag: " << etag << dendl;
-
-  etag_bl.append(etag);
-
-  attrs[RGW_ATTR_ETAG] = etag_bl;
+  bufferlist etag_bl;
+  append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16, [&](auto iter) {
+    auto start = iter;
+    iter = buf_to_hex(final_etag, iter);
+    iter = fmt::format_to(iter, "-{}", part_etags.size());
+    ldpp_dout(dpp, 10) << "calculated etag: " << std::string_view{start, iter}
+                       << dendl;
+    return iter;
+  });
+  attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
 
   rgw_placement_rule* ru;
   ru = &placement;
@@ -4493,6 +4454,22 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
     bufferlist tmp;
     encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
+  }
+
+  // For AEAD encryption: store total plaintext size (calculated during loop)
+  if (is_aead) {
+    bufferlist bl;
+    bl.append(std::to_string(plaintext_ofs));
+    attrs[RGW_ATTR_CRYPT_ORIGINAL_SIZE] = std::move(bl);
+
+    // Store (S3 part number, GCM salt) pairs (collected in selection order
+    // above) for correct key derivation during decrypt.
+    bufferlist part_keys_bl;
+    using ceph::encode;
+    encode(part_keys, part_keys_bl);
+    attrs[RGW_ATTR_CRYPT_PART_NUMS] = std::move(part_keys_bl);
+    ldpp_dout(dpp, 20) << "Stored CRYPT_PART_NUMS with " << part_keys.size()
+                       << " parts" << dendl;
   }
 
   target_obj->set_atomic(true);
@@ -5421,7 +5398,7 @@ bool RadosZone::is_writeable()
 bool RadosZone::get_redirect_endpoint(std::string* endpoint)
 {
   if (local_zone)
-    return store->svc()->zone->get_redirect_zone_endpoint(endpoint);
+    return store->svc()->zone->get_redirect_zone_endpoint_url(endpoint);
 
   endpoint = &rgw_zone.redirect_zone;
   return true;
@@ -5764,7 +5741,9 @@ int RadosLuaManager::list_packages(const DoutPrefixProvider *dpp, optional_yield
     if (ret < 0) {
       return ret;
     }
-
+    if (more) {
+      start_after = *packages_chunk.rbegin();
+    }
     packages.merge(packages_chunk);
   }
 
@@ -6044,13 +6023,30 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 } // namespace rgw::sal
 
+std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context,
+              std::optional<std::string> objecter_admin_socket_name) {
+  try {
+    auto neorados = neorados::RADOS::make_with_cct(boost::intrusive_ptr{cct},
+                                                   io_context,
+                                                   ceph::async::use_blocked,
+                                                   std::move(
+                                                       objecter_admin_socket_name));
+    return neorados;
+  } catch (const std::exception& e) {
+    ldout(cct, 0) << "Failed constructing neroados handle: " << e.what()
+		  << dendl;
+  }
+  return std::nullopt;
+}
+
 extern "C" {
 
 void* newRadosStore(void* io_context_, CephContext* cct)
 {
   auto& io_context = *static_cast<boost::asio::io_context*>(io_context_);
   ceph_assert(!io_context.stopped());
-  auto neorados = make_neorados(cct, io_context);
+  auto neorados = make_neorados(cct, io_context, "RadosStore");
   if (!neorados || !*neorados) {
     return nullptr;
   }

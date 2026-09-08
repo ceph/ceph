@@ -21,7 +21,7 @@ RocksDB's data (like OSD's omap) offline.
 Commands
 ========
 
-:program:`ceph-kvstore-tool` utility uses many commands for debugging purpose
+:program:`ceph-kvstore-tool` utility uses many commands for debugging purposes
 which are as follows:
 
 :command:`list [prefix]`
@@ -82,7 +82,7 @@ which are as follows:
 
 :command:`stats`
     Prints statistics from underlying key-value database. This is only for informative purposes.
-    Format and information content may vary between releases. For RocksDB information includes
+    Format and information content may vary between releases. For RocksDB, information includes
     compactions stats, performance counters, memory usage and internal RocksDB stats. 
 
 :command:`histogram`

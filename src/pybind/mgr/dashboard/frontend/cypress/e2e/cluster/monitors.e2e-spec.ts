@@ -16,13 +16,10 @@ describe('Monitors page', () => {
 
   describe('fields check', () => {
     it('should check status table is present', () => {
-      // check for table header 'Status'
-      monitors.getLegends().its(0).should('have.text', 'Status');
-
-      // check for fields in table
       monitors
-        .getStatusTables()
-        .should('contain.text', 'Cluster ID')
+        .getStatusTable()
+        .should('be.visible')
+        .and('contain.text', 'Cluster ID')
         .and('contain.text', 'monmap modified')
         .and('contain.text', 'monmap epoch')
         .and('contain.text', 'quorum con')
@@ -31,30 +28,21 @@ describe('Monitors page', () => {
         .and('contain.text', 'required mon');
     });
 
-    it('should check In Quorum and Not In Quorum tables are present', () => {
-      // check for there to be two tables
-      monitors.getDataTables().should('have.length', 2);
+    it('should check monitors table is present', () => {
+      monitors.getMonitorTable().should('be.visible');
+      monitors.getDataTables().should('have.length', 1);
 
-      // check for table header 'In Quorum'
-      monitors.getLegends().its(1).should('have.text', 'In Quorum');
+      monitors.getMonitorTable().find('h4').should('contain.text', 'Monitors');
+      monitors
+        .getMonitorTable()
+        .find('p')
+        .should('contain.text', 'Maintains the master copy of the cluster state');
 
-      // check for table header 'Not In Quorum'
-      monitors.getLegends().its(2).should('have.text', 'Not In Quorum');
-
-      // verify correct columns on In Quorum table
-      monitors.getDataTableHeaders().contains('Name');
-
-      monitors.getDataTableHeaders().contains('Rank');
-
-      monitors.getDataTableHeaders().contains('Public Address');
-
-      monitors.getDataTableHeaders().contains('Open Sessions');
-      // verify correct columns on Not In Quorum table
-      monitors.getDataTableHeaders().contains('Name');
-
-      monitors.getDataTableHeaders().contains('Rank');
-
-      monitors.getDataTableHeaders().contains('Public Address');
+      monitors.getMonitorTableHeaders().should('contain.text', 'Name');
+      monitors.getMonitorTableHeaders().should('contain.text', 'Rank');
+      monitors.getMonitorTableHeaders().should('contain.text', 'Public address');
+      monitors.getMonitorTableHeaders().should('contain.text', 'In Quorum');
+      monitors.getMonitorTableHeaders().should('contain.text', 'Open sessions');
     });
   });
 });

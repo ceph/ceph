@@ -124,6 +124,8 @@ double Allocator::get_fragmentation_score()
     size_t sc_shifted = size_t(1) << sc;
     double x = double(v - sc_shifted) / sc_shifted; //x is <0,1) in its scale grade
     // linear extrapolation in its scale grade
+    ceph_assert(sc < scales.size());
+    ceph_assert(sc + 1 < scales.size());
     double score = (sc_shifted    ) * scales[sc]   * (1-x) +
                    (sc_shifted * 2) * scales[sc+1] * x;
     return score;
@@ -135,8 +137,30 @@ double Allocator::get_fragmentation_score()
     sum += len;
   };
   foreach(iterated_allocation);
+  if (sum == 0) {
+    return 0.0;
+  }
 
   double ideal = get_score(sum);
   double terrible = (sum / block_size) * get_score(block_size);
   return (ideal - score_sum) / (ideal - terrible);
+}
+
+void Allocator::foreach_interruptible(
+  std::function<void(uint64_t offset, uint64_t length)> notify)
+{
+  // Number of free extents fetched per get_free_extents() call. The allocator
+  // lock is held only for the duration of one batch, so this bounds the
+  // per-batch lock hold
+  static constexpr size_t batch_size = 1024;
+  const uint64_t end = get_capacity();
+  uint64_t cursor = 0;
+  free_extent_vector_t batch;
+  while (cursor < end) {
+    batch.clear();
+    cursor = get_free_extents(cursor, end, batch_size, &batch);
+    for (const auto& [offset, length] : batch) {
+      notify(offset, length);
+    }
+  }
 }

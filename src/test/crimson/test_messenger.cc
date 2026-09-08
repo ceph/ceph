@@ -3839,7 +3839,7 @@ seastar::future<int> do_test(seastar::app_template& app)
                   verbose, rounds, keepalive_ratio,
                   test_addr, cmd_peer_addr, test_peer_addr,
                   testpeer_islocal, peer_wins,
-                  seastar::smp::count);
+                  seastar::this_smp_shard_count());
     return test_echo(rounds, keepalive_ratio
     ).then([] {
       return test_preemptive_shutdown();

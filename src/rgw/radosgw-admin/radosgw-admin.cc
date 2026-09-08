@@ -14,6 +14,8 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include "rgw_cors_s3.h"
+
 extern "C" {
 #include <liboath/oath.h>
 }
@@ -39,16 +41,20 @@ extern "C" {
 
 #include "include/util.h"
 
+#ifdef WITH_RADOSGW_RADOS
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/2pc_queue/cls_2pc_queue_types.h"
 #include "cls/2pc_queue/cls_2pc_queue_client.h"
+#endif
 
 #include "include/utime.h"
 #include "include/str_list.h"
 
+#ifdef WITH_RADOSGW_RADOS
 #include "radosgw-admin/orphan.h"
 #include "radosgw-admin/sync_checkpoint.h"
+#endif
 
 #include "rgw/async_utils.h"
 
@@ -62,11 +68,15 @@ extern "C" {
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sync.h"
+#endif
 #include "rgw_trim_bilog.h"
 #include "rgw_trim_datalog.h"
 #include "rgw_trim_mdlog.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_data_sync.h"
+#endif
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
 #include "rgw_role.h"
@@ -80,8 +90,10 @@ extern "C" {
 #include "rgw_sal_config.h"
 #include "rgw_data_access.h"
 #include "rgw_account.h"
+#include "rgw_oidc_provider.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_dedup_filter.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -90,7 +102,9 @@ extern "C" {
 #include "services/svc_zone.h"
 
 #include "driver/rados/rgw_bucket.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "driver/rados/rgw_sal_rados.h"
+#endif
 #include "driver/rados/rgw_bl_rados.h"
 
 #include <iomanip>
@@ -135,7 +149,7 @@ inline int posix_errortrans(int r)
  return ERR_NO_SUCH_BUCKET == r ? ENOENT : r;
 }
 
-static const std::string LUA_CONTEXT_LIST("prerequest, postrequest, background, getdata, putdata");
+static const std::string LUA_CONTEXT_LIST("prerequest, postauth, postrequest, background, getdata, putdata");
 
 void usage()
 {
@@ -179,6 +193,8 @@ void usage()
   cout << "  bucket link                      link bucket to specified user\n";
   cout << "  bucket unlink                    unlink bucket from specified user\n";
   cout << "  bucket stats                     returns bucket statistics\n";
+  cout << "  bucket suspend                   suspend a bucket\n";
+  cout << "  bucket unsuspend                 unsuspend a bucket\n";
   cout << "  bucket rm                        remove bucket\n";
   cout << "  bucket check                     check bucket index by verifying size and object count stats\n";
   cout << "  bucket check olh                 check for olh index entries and objects that are pending removal\n";
@@ -201,13 +217,14 @@ void usage()
   cout << "  object rm                        remove object; include --yes-i-really-mean-it to force removal from bucket index\n";
   cout << "  object put                       put object\n";
   cout << "  object stat                      stat an object for its metadata\n";
+  cout << "  object manifest                  display the manifest of an object, producing a list of RADOS objects containing the data\n";
   cout << "  object unlink                    unlink object from bucket index\n";
   cout << "  object rewrite                   rewrite the specified object\n";
   cout << "  object reindex                   reindex the object(s) indicated by --bucket and either --object or --objects-file\n";
   cout << "  objects expire                   run expired objects cleanup\n";
   cout << "  objects expire-stale list        list stale expired objects (caused by reshard)\n";
   cout << "  objects expire-stale rm          remove stale expired objects\n";
-  cout << "  period rm                        remove a period\n";
+  cout << "  period delete                    remove a period\n";
   cout << "  period get                       get period info\n";
   cout << "  period get-current               get current period info\n";
   cout << "  period pull                      pull a period\n";
@@ -258,7 +275,7 @@ void usage()
   cout << "  zonegroup placement rm           remove a placement target from a zonegroup\n";
   cout << "  zonegroup placement default      set a zonegroup's default placement target\n";
   cout << "  zone create                      create a new zone\n";
-  cout << "  zone rm                          remove a zone\n";
+  cout << "  zone delete                      remove a zone\n";
   cout << "  zone get                         show zone cluster params\n";
   cout << "  zone modify                      modify an existing zone\n";
   cout << "  zone set                         set zone cluster params (requires infile)\n";
@@ -309,7 +326,7 @@ void usage()
   cout << "  datalog list                     list data log\n";
   cout << "  datalog trim                     trim data log\n";
   cout << "  datalog status                   read data log status\n";
-  cout << "  datalog type                     change datalog type to --log_type={fifo,omap}\n";
+  cout << "  datalog type                     change datalog type to --log_type=fifo\n";
   cout << "  datalog semaphore list           List recovery semaphores\n";
   cout << "  datalog semaphore reset          Reset recovery semaphore (use marker)\n";
   cout << "  orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
@@ -329,6 +346,11 @@ void usage()
   cout << "  role policy detach               detach a managed policy\n";
   cout << "  role policy list attached        list attached managed policies\n";
   cout << "  role update                      update max_session_duration of a role\n";
+  cout << "  oidc-provider create             create an OIDC provider (global if no --account-id)\n";
+  cout << "  oidc-provider modify             update thumbprints and/or client-ids of an OIDC provider\n";
+  cout << "  oidc-provider get                get an OIDC provider\n";
+  cout << "  oidc-provider delete             delete an OIDC provider\n";
+  cout << "  oidc-provider list               list OIDC providers\n";
   cout << "  reshard add                      schedule a resharding of a bucket\n";
   cout << "  reshard list                     list all bucket resharding or scheduled to be resharded\n";
   cout << "  reshard status                   read bucket resharding status\n";
@@ -340,12 +362,14 @@ void usage()
   cout << "  reshardlog purge                 trim bucket resharding log\n";
   cout << "  sync error list                  list sync error\n";
   cout << "  sync error trim                  trim sync error\n";
+#ifdef WITH_RADOSGW_RADOS
   cout << "  mfa create                       create a new MFA TOTP token\n";
   cout << "  mfa list                         list MFA TOTP tokens\n";
   cout << "  mfa get                          show MFA TOTP token\n";
   cout << "  mfa remove                       delete MFA TOTP token\n";
   cout << "  mfa check                        check MFA TOTP token\n";
   cout << "  mfa resync                       re-sync MFA TOTP token\n";
+#endif
   cout << "  topic list                       list bucket notifications topics\n";
   cout << "  topic get                        get a bucket notifications topic\n";
   cout << "  topic rm                         remove a bucket notifications topic\n";
@@ -408,6 +432,8 @@ void usage()
   cout << "                                       mdlog list\n";
   cout << "                                       data sync status\n";
   cout << "                                       sync error trim\n";
+  cout << "                                       gc list\n";
+  cout << "                                       gc process\n";
   cout << "                                     required for:\n";
   cout << "                                       mdlog trim\n";
   cout << "   --gen=<gen-id>                    optional for:\n";
@@ -459,7 +485,8 @@ void usage()
   cout << "   --bucket-index-max-shards         override a zone/zonegroup's default bucket index shard count\n";
   cout << "   --fix                             besides checking bucket index, will also fix it\n";
   cout << "   --check-objects                   bucket check: rebuilds bucket index according to actual objects state\n";
-  cout << "   --format=<format>                 specify output format for certain operations: xml, json\n";
+  cout << "   --format=<format>                 specify output format for certain operations: xml, json (default: json)\n";
+  cout << "   --pretty-format                   enable pretty formatting for json/xml output\n";
   cout << "   --purge-data                      when specified, user removal will also purge all the\n";
   cout << "                                     user data\n";
   cout << "   --purge-keys                      when specified, subuser removal will also purge all the\n";
@@ -500,6 +527,11 @@ void usage()
   cout << "   --max-bucket-index-ops        specify max bucket-index requests per second allowed for an RGW during dedup, 0 means unlimited\n";
   cout << "   --max-metadata-ops            specify max metadata requests per second allowed for an RGW during dedup, 0 means unlimited\n";
   cout << "   --stat                        display dedup throttle setting\n";
+  cout << "\nDedup filter options:\n";
+  cout << "   --allow-bucket-list=<file>    file with bucket names to allow in dedup (mutually exclusive with --deny-bucket-list)\n";
+  cout << "   --deny-bucket-list=<file>     file with bucket names to deny in dedup (mutually exclusive with --allow-bucket-list)\n";
+  cout << "   --allow-storage-class-list=<file> file with storage class names to allow in dedup (mutually exclusive with --deny-storage-class-list)\n";
+  cout << "   --deny-storage-class-list=<file>  file with storage class names to deny in dedup (mutually exclusive with --allow-storage-class-list)\n";
   cout << "\nQuota options:\n";
   cout << "   --max-objects                 specify max objects (negative value to disable)\n";
   cout << "   --max-size                    specify max size (in B/K/M/G/T, negative value to disable)\n";
@@ -529,7 +561,13 @@ void usage()
   cout << "   --path-prefix                 path prefix for filtering roles\n";
   cout << "   --description                 Role description\n";
   cout << "   --policy-arn                  ARN of a managed policy\n";
+  cout << "\nOIDC Provider options:\n";
+  cout << "   --provider-url                URL of the OIDC provider\n";
+  cout << "   --client-ids                  comma-separated list of client IDs\n";
+  cout << "   --thumbprints                 comma-separated list of thumbprints\n";
+#ifdef WITH_RADOSGW_RADOS
   cout << "\nMFA options:\n";
+#endif
   cout << "   --totp-serial                 a string that represents the ID of a TOTP token\n";
   cout << "   --totp-seed                   the secret seed that is used to calculate the TOTP\n";
   cout << "   --totp-seconds                the time resolution that is being used for TOTP generation\n";
@@ -551,7 +589,11 @@ void usage()
   cout << "                                 additionally rados objects for incomplete multipart uploads will not be output\n";
   cout << "\nBucket list objects options:\n";
   cout << "   --max-entries                 max number of entries listed (default 1000)\n";
-  cout << "   --marker                      the marker used to specify on which entry the listing begins, default none (i.e., very first entry)\n";
+  cout << "   --marker                      object name marker to specify where listing begins (default: start from beginning)\n";
+  cout << "                                 requires ordered listing (do not use with --allow-unordered)\n";
+  cout << "   --object-version              for versioned buckets: specify the version/instance ID to start from\n";
+  cout << "                                 use together with --marker to paginate through versioned buckets\n";
+  cout << "                                 example: --marker=obj1 --object-version=abc123def456\n";
   cout << "   --show-restore-stats          if the flag is in present it will show restores stats in the bucket stats command\n";
   cout << "\n";
   generic_client_usage();
@@ -714,10 +756,15 @@ enum class OPT {
   KEY_RM,
   BUCKETS_LIST,
   BUCKET_LIMIT_CHECK,
+#ifdef WITH_RADOSGW_RADOS
   BUCKET_LINK,
   BUCKET_UNLINK,
+#endif
   BUCKET_LAYOUT,
   BUCKET_STATS,
+  BUCKET_SUSPEND,
+  BUCKET_UNSUSPEND,
+#ifdef WITH_RADOSGW_RADOS
   BUCKET_CHECK,
   BUCKET_CHECK_OLH,
   BUCKET_CHECK_UNLINKED,
@@ -729,22 +776,31 @@ enum class OPT {
   BUCKET_SYNC_RUN,
   BUCKET_SYNC_DISABLE,
   BUCKET_SYNC_ENABLE,
+#endif
   BUCKET_RM,
+#ifdef WITH_RADOSGW_RADOS
   BUCKET_REWRITE,
   BUCKET_RESHARD,
+#endif
   BUCKET_SET_MIN_SHARDS,
   BUCKET_CHOWN,
+#ifdef WITH_RADOSGW_RADOS
   BUCKET_RADOS_LIST,
+#endif
   BUCKET_SHARD_OBJECTS,
   BUCKET_OBJECT_SHARD,
+#ifdef WITH_RADOSGW_RADOS
   BUCKET_RESYNC_ENCRYPTED_MULTIPART,
+#endif
   BUCKET_LOGGING_FLUSH,
   BUCKET_LOGGING_INFO,
   BUCKET_LOGGING_LIST,
   POLICY,
+#ifdef WITH_RADOSGW_RADOS
   LOG_LIST,
   LOG_SHOW,
   LOG_RM,
+#endif
   USAGE_SHOW,
   USAGE_TRIM,
   USAGE_CLEAR,
@@ -752,21 +808,26 @@ enum class OPT {
   OBJECT_RM,
   OBJECT_UNLINK,
   OBJECT_STAT,
+#ifdef WITH_RADOSGW_RADOS
   OBJECT_MANIFEST,
   OBJECT_REWRITE,
   OBJECT_REINDEX,
+#endif
   OBJECTS_EXPIRE,
   OBJECTS_EXPIRE_STALE_LIST,
   OBJECTS_EXPIRE_STALE_RM,
+#ifdef WITH_RADOSGW_RADOS
   BI_GET,
   BI_PUT,
   BI_LIST,
   BI_PURGE,
   OLH_GET,
   OLH_READLOG,
+#endif
   QUOTA_SET,
   QUOTA_ENABLE,
   QUOTA_DISABLE,
+#ifdef WITH_RADOSGW_RADOS
   DEDUP_STATS,
   DEDUP_ESTIMATE,
   DEDUP_ABORT,
@@ -776,13 +837,18 @@ enum class OPT {
   DEDUP_THROTTLE,
   GC_LIST,
   GC_PROCESS,
+#endif
   LC_LIST,
   LC_GET,
+#ifdef WITH_RADOSGW_RADOS
   LC_PROCESS,
+#endif
   LC_RESHARD_FIX,
+#ifdef WITH_RADOSGW_RADOS
   ORPHANS_FIND,
   ORPHANS_FINISH,
   ORPHANS_LIST_JOBS,
+#endif
   RATELIMIT_GET,
   RATELIMIT_SET,
   RATELIMIT_ENABLE,
@@ -811,13 +877,16 @@ enum class OPT {
   ZONE_LIST,
   ZONE_RENAME,
   ZONE_DEFAULT,
+#ifdef WITH_RADOSGW_RADOS
   ZONE_PLACEMENT_ADD,
+#endif
   ZONE_PLACEMENT_MODIFY,
   ZONE_PLACEMENT_RM,
   ZONE_PLACEMENT_LIST,
   ZONE_PLACEMENT_GET,
   CAPS_ADD,
   CAPS_RM,
+#ifdef WITH_RADOSGW_RADOS
   METADATA_GET,
   METADATA_PUT,
   METADATA_RM,
@@ -832,6 +901,7 @@ enum class OPT {
   MDLOG_STATUS,
   SYNC_ERROR_LIST,
   SYNC_ERROR_TRIM,
+#endif
   SYNC_GROUP_CREATE,
   SYNC_GROUP_MODIFY,
   SYNC_GROUP_GET,
@@ -843,12 +913,14 @@ enum class OPT {
   SYNC_GROUP_PIPE_REMOVE,
   SYNC_POLICY_GET,
   BILOG_LIST,
+#ifdef WITH_RADOSGW_RADOS
   BILOG_TRIM,
   BILOG_STATUS,
   BILOG_AUTOTRIM,
   DATA_SYNC_STATUS,
   DATA_SYNC_INIT,
   DATA_SYNC_RUN,
+#endif
   DATALOG_LIST,
   DATALOG_STATUS,
   DATALOG_AUTOTRIM,
@@ -885,7 +957,9 @@ enum class OPT {
   GLOBAL_RATELIMIT_ENABLE,
   GLOBAL_RATELIMIT_DISABLE,
   SYNC_INFO,
+#ifdef WITH_RADOSGW_RADOS
   SYNC_STATUS,
+#endif
   ROLE_CREATE,
   ROLE_DELETE,
   ROLE_GET,
@@ -899,6 +973,12 @@ enum class OPT {
   ROLE_POLICY_DETACH,
   ROLE_POLICY_LIST_ATTACHED,
   ROLE_UPDATE,
+  OIDC_PROVIDER_CREATE,
+  OIDC_PROVIDER_MODIFY,
+  OIDC_PROVIDER_GET,
+  OIDC_PROVIDER_DELETE,
+  OIDC_PROVIDER_LIST,
+#ifdef WITH_RADOSGW_RADOS
   RESHARD_ADD,
   RESHARD_LIST,
   RESHARD_STATUS,
@@ -914,14 +994,17 @@ enum class OPT {
   RESHARD_STALE_INSTANCES_DELETE,
   RESHARDLOG_LIST,
   RESHARDLOG_PURGE,
+#endif
   PUBSUB_TOPIC_LIST,
   PUBSUB_TOPIC_GET,
   PUBSUB_TOPIC_RM,
   PUBSUB_NOTIFICATION_LIST,
   PUBSUB_NOTIFICATION_GET,
   PUBSUB_NOTIFICATION_RM,
+#ifdef WITH_RADOSGW_RADOS
   PUBSUB_TOPIC_STATS,
   PUBSUB_TOPIC_DUMP,
+#endif
   SCRIPT_PUT,
   SCRIPT_GET,
   SCRIPT_RM,
@@ -937,6 +1020,7 @@ enum class OPT {
   ACCOUNT_LIST,
   RESTORE_STATUS,
   RESTORE_LIST,
+  GLOBAL_CORS_GET,
 };
 
 }
@@ -965,10 +1049,15 @@ static SimpleCmd::Commands all_cmds = {
   { "buckets list", OPT::BUCKETS_LIST },
   { "bucket list", OPT::BUCKETS_LIST },
   { "bucket limit check", OPT::BUCKET_LIMIT_CHECK },
+#ifdef WITH_RADOSGW_RADOS
   { "bucket link", OPT::BUCKET_LINK },
   { "bucket unlink", OPT::BUCKET_UNLINK },
+#endif
   { "bucket layout", OPT::BUCKET_LAYOUT },
   { "bucket stats", OPT::BUCKET_STATS },
+  { "bucket suspend", OPT::BUCKET_SUSPEND },
+  { "bucket unsuspend", OPT::BUCKET_UNSUSPEND },
+#ifdef WITH_RADOSGW_RADOS
   { "bucket check", OPT::BUCKET_CHECK },
   { "bucket check olh", OPT::BUCKET_CHECK_OLH },
   { "bucket check unlinked", OPT::BUCKET_CHECK_UNLINKED },
@@ -980,24 +1069,33 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket sync run", OPT::BUCKET_SYNC_RUN },
   { "bucket sync disable", OPT::BUCKET_SYNC_DISABLE },
   { "bucket sync enable", OPT::BUCKET_SYNC_ENABLE },
+#endif
   { "bucket rm", OPT::BUCKET_RM },
+#ifdef WITH_RADOSGW_RADOS
   { "bucket rewrite", OPT::BUCKET_REWRITE },
   { "bucket reshard", OPT::BUCKET_RESHARD },
+#endif
   { "bucket set-min-shards", OPT::BUCKET_SET_MIN_SHARDS },
   { "bucket chown", OPT::BUCKET_CHOWN },
+#ifdef WITH_RADOSGW_RADOS
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
+#endif
   { "bucket shard objects", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
+#ifdef WITH_RADOSGW_RADOS
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
+#endif
   { "bucket logging flush", OPT::BUCKET_LOGGING_FLUSH },
   { "bucket logging info", OPT::BUCKET_LOGGING_INFO },
   { "bucket logging list", OPT::BUCKET_LOGGING_LIST },
   { "policy", OPT::POLICY },
+#ifdef WITH_RADOSGW_RADOS
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
   { "log rm", OPT::LOG_RM },
+#endif
   { "usage show", OPT::USAGE_SHOW },
   { "usage trim", OPT::USAGE_TRIM },
   { "usage clear", OPT::USAGE_CLEAR },
@@ -1005,18 +1103,22 @@ static SimpleCmd::Commands all_cmds = {
   { "object rm", OPT::OBJECT_RM },
   { "object unlink", OPT::OBJECT_UNLINK },
   { "object stat", OPT::OBJECT_STAT },
+#ifdef WITH_RADOSGW_RADOS
   { "object manifest", OPT::OBJECT_MANIFEST },
   { "object rewrite", OPT::OBJECT_REWRITE },
   { "object reindex", OPT::OBJECT_REINDEX },
+#endif  
   { "objects expire", OPT::OBJECTS_EXPIRE },
   { "objects expire-stale list", OPT::OBJECTS_EXPIRE_STALE_LIST },
   { "objects expire-stale rm", OPT::OBJECTS_EXPIRE_STALE_RM },
+#ifdef WITH_RADOSGW_RADOS
   { "bi get", OPT::BI_GET },
   { "bi put", OPT::BI_PUT },
   { "bi list", OPT::BI_LIST },
   { "bi purge", OPT::BI_PURGE },
   { "olh get", OPT::OLH_GET },
   { "olh readlog", OPT::OLH_READLOG },
+#endif
   { "quota set", OPT::QUOTA_SET },
   { "quota enable", OPT::QUOTA_ENABLE },
   { "quota disable", OPT::QUOTA_DISABLE },
@@ -1024,6 +1126,7 @@ static SimpleCmd::Commands all_cmds = {
   { "ratelimit set", OPT::RATELIMIT_SET },
   { "ratelimit enable", OPT::RATELIMIT_ENABLE },
   { "ratelimit disable", OPT::RATELIMIT_DISABLE },
+#ifdef WITH_RADOSGW_RADOS
   { "dedup stats", OPT::DEDUP_STATS },
   { "dedup estimate", OPT::DEDUP_ESTIMATE },
   { "dedup abort", OPT::DEDUP_ABORT },
@@ -1034,14 +1137,19 @@ static SimpleCmd::Commands all_cmds = {
   { "dedup throttle", OPT::DEDUP_THROTTLE },
   { "gc list", OPT::GC_LIST },
   { "gc process", OPT::GC_PROCESS },
+#endif
   { "lc list", OPT::LC_LIST },
   { "lc get", OPT::LC_GET },
+#ifdef WITH_RADOSGW_RADOS
   { "lc process", OPT::LC_PROCESS },
+#endif
   { "lc reshard fix", OPT::LC_RESHARD_FIX },
+#ifdef WITH_RADOSGW_RADOS
   { "orphans find", OPT::ORPHANS_FIND },
   { "orphans finish", OPT::ORPHANS_FINISH },
   { "orphans list jobs", OPT::ORPHANS_LIST_JOBS },
   { "orphans list-jobs", OPT::ORPHANS_LIST_JOBS },
+#endif
   { "zonegroup add", OPT::ZONEGROUP_ADD },
   { "zonegroup create", OPT::ZONEGROUP_CREATE },
   { "zonegroup default", OPT::ZONEGROUP_DEFAULT },
@@ -1069,13 +1177,16 @@ static SimpleCmd::Commands all_cmds = {
   { "zones list", OPT::ZONE_LIST },
   { "zone rename", OPT::ZONE_RENAME },
   { "zone default", OPT::ZONE_DEFAULT },
+#ifdef WITH_RADOSGW_RADOS
   { "zone placement add", OPT::ZONE_PLACEMENT_ADD },
+#endif
   { "zone placement modify", OPT::ZONE_PLACEMENT_MODIFY },
   { "zone placement rm", OPT::ZONE_PLACEMENT_RM },
   { "zone placement list", OPT::ZONE_PLACEMENT_LIST },
   { "zone placement get", OPT::ZONE_PLACEMENT_GET },
   { "caps add", OPT::CAPS_ADD },
   { "caps rm", OPT::CAPS_RM },
+#ifdef WITH_RADOSGW_RADOS
   { "metadata get [*]", OPT::METADATA_GET },
   { "metadata put [*]", OPT::METADATA_PUT },
   { "metadata rm [*]", OPT::METADATA_RM },
@@ -1090,6 +1201,7 @@ static SimpleCmd::Commands all_cmds = {
   { "mdlog status", OPT::MDLOG_STATUS },
   { "sync error list", OPT::SYNC_ERROR_LIST },
   { "sync error trim", OPT::SYNC_ERROR_TRIM },
+#endif
   { "sync policy get", OPT::SYNC_POLICY_GET },
   { "sync group create", OPT::SYNC_GROUP_CREATE },
   { "sync group modify", OPT::SYNC_GROUP_MODIFY },
@@ -1101,12 +1213,14 @@ static SimpleCmd::Commands all_cmds = {
   { "sync group pipe modify", OPT::SYNC_GROUP_PIPE_MODIFY },
   { "sync group pipe remove", OPT::SYNC_GROUP_PIPE_REMOVE },
   { "bilog list", OPT::BILOG_LIST },
+#ifdef WITH_RADOSGW_RADOS
   { "bilog trim", OPT::BILOG_TRIM },
   { "bilog status", OPT::BILOG_STATUS },
   { "bilog autotrim", OPT::BILOG_AUTOTRIM },
   { "data sync status", OPT::DATA_SYNC_STATUS },
   { "data sync init", OPT::DATA_SYNC_INIT },
   { "data sync run", OPT::DATA_SYNC_RUN },
+#endif
   { "datalog list", OPT::DATALOG_LIST },
   { "datalog status", OPT::DATALOG_STATUS },
   { "datalog autotrim", OPT::DATALOG_AUTOTRIM },
@@ -1146,7 +1260,9 @@ static SimpleCmd::Commands all_cmds = {
   { "global ratelimit enable", OPT::GLOBAL_RATELIMIT_ENABLE },
   { "global ratelimit disable", OPT::GLOBAL_RATELIMIT_DISABLE },
   { "sync info", OPT::SYNC_INFO },
+#ifdef WITH_RADOSGW_RADOS
   { "sync status", OPT::SYNC_STATUS },
+#endif
   { "role create", OPT::ROLE_CREATE },
   { "role delete", OPT::ROLE_DELETE },
   { "role get", OPT::ROLE_GET },
@@ -1164,6 +1280,12 @@ static SimpleCmd::Commands all_cmds = {
   { "role policy detach", OPT::ROLE_POLICY_DETACH },
   { "role policy list attached", OPT::ROLE_POLICY_LIST_ATTACHED },
   { "role update", OPT::ROLE_UPDATE },
+  { "oidc-provider create", OPT::OIDC_PROVIDER_CREATE },
+  { "oidc-provider modify", OPT::OIDC_PROVIDER_MODIFY },
+  { "oidc-provider get", OPT::OIDC_PROVIDER_GET },
+  { "oidc-provider delete", OPT::OIDC_PROVIDER_DELETE },
+  { "oidc-provider list", OPT::OIDC_PROVIDER_LIST },
+#ifdef WITH_RADOSGW_RADOS
   { "reshard bucket", OPT::BUCKET_RESHARD },
   { "reshard add", OPT::RESHARD_ADD },
   { "reshard list", OPT::RESHARD_LIST },
@@ -1182,14 +1304,17 @@ static SimpleCmd::Commands all_cmds = {
   { "reshard stale delete", OPT::RESHARD_STALE_INSTANCES_DELETE },
   { "reshardlog list", OPT::RESHARDLOG_LIST},
   { "reshardlog purge", OPT::RESHARDLOG_PURGE},
+#endif
   { "topic list", OPT::PUBSUB_TOPIC_LIST },
   { "topic get", OPT::PUBSUB_TOPIC_GET },
   { "topic rm", OPT::PUBSUB_TOPIC_RM },
   { "notification list", OPT::PUBSUB_NOTIFICATION_LIST },
   { "notification get", OPT::PUBSUB_NOTIFICATION_GET },
   { "notification rm", OPT::PUBSUB_NOTIFICATION_RM },
+#ifdef WITH_RADOSGW_RADOS
   { "topic stats", OPT::PUBSUB_TOPIC_STATS },
   { "topic dump", OPT::PUBSUB_TOPIC_DUMP },
+#endif
   { "script put", OPT::SCRIPT_PUT },
   { "script get", OPT::SCRIPT_GET },
   { "script rm", OPT::SCRIPT_RM },
@@ -1205,6 +1330,7 @@ static SimpleCmd::Commands all_cmds = {
   { "account list", OPT::ACCOUNT_LIST },
   { "restore status", OPT::RESTORE_STATUS },
   { "restore list", OPT::RESTORE_LIST },
+  { "global-cors get", OPT::GLOBAL_CORS_GET},
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -1272,6 +1398,7 @@ static void show_policy_arns(const boost::container::flat_set<std::string>& arns
   formatter->close_section();
 }
 
+#ifdef WITH_RADOSGW_RADOS
 static void show_reshard_status(
   const list<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
 {
@@ -1284,6 +1411,7 @@ static void show_reshard_status(
   formatter->close_section();
   formatter->flush(cout);
 }
+#endif
 
 static void show_topics_info_v2(const rgw_pubsub_topic& topic,
                                 const std::set<std::string>& subscribed_buckets,
@@ -1773,6 +1901,7 @@ int check_min_obj_stripe_size(rgw::sal::Driver* driver, rgw::sal::Object* obj, u
 }
 
 
+#ifdef WITH_RADOSGW_RADOS
 int check_obj_locator_underscore(rgw::sal::Object* obj, bool fix, bool remove_bad, Formatter *f) {
   f->open_object_section("object");
   f->open_object_section("key");
@@ -1814,7 +1943,9 @@ done:
 
   return 0;
 }
+#endif
 
+#ifdef WITH_RADOSGW_RADOS
 int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj_key& key, bool fix, Formatter *f) {
   f->open_object_section("object");
   f->open_object_section("key");
@@ -1841,7 +1972,9 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj_key& k
 
   return 0;
 }
+#endif
 
+#ifdef WITH_RADOSGW_RADOS
 int do_check_object_locator(const string& tenant_name, const string& bucket_name,
                             bool fix, bool remove_bad, Formatter *f)
 {
@@ -1914,7 +2047,9 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   return 0;
 }
+#endif
 
+#ifdef WITH_RADOSGW_RADOS
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver,
                                                     const RGWZoneGroup& zonegroup,
@@ -1949,6 +2084,7 @@ static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver
   }
   return conn;
 }
+#endif // WITH_RADOSGW_RADOS
 
 // we expect a very small response
 static constexpr size_t MAX_REST_RESPONSE = 128 * 1024;
@@ -2067,6 +2203,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
   boost::optional<RGWRESTConn> conn;
   RGWRESTConn *remote_conn = nullptr;
   if (!remote.empty()) {
+#ifdef WITH_RADOSGW_RADOS
     conn = get_remote_conn(static_cast<rgw::sal::RadosStore*>(driver), period.get_map(), remote);
     if (!conn) {
       cerr << "failed to find a zone or zonegroup for remote "
@@ -2074,6 +2211,11 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
       return -ENOENT;
     }
     remote_conn = &*conn;
+#else
+    cerr << "ERROR: sending the period to a remote zone by id (--remote) "
+        "requires the RADOS backend; use --url instead" << std::endl;
+    return -ENOTSUP;
+#endif
   }
 
   // push period to the master with an empty period id
@@ -2123,11 +2265,25 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
         << cpp_strerror(ret) << std::endl;
     return ret;
   }
+
+  ret = cfgstore->update_latest_epoch(dpp(), null_yield, period.get_id(), period.get_epoch());
+  if (ret == -EEXIST) {
+    // already have this epoch (or a more recent one)
+    cerr << "already have epoch >= " << period.get_epoch()
+        << " for period " << period.get_id() << std::endl;
+    return 0;
+  }
+  if (ret < 0) {
+    cerr << "Error updating latest epoch for period " << period.get_id() << ": " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+
   ret = rgw::reflect_period(dpp(), null_yield, cfgstore, period);
   if (ret < 0) {
     cerr << "Error updating local objects: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
+
   (void) cfgstore->realm_notify_new_period(dpp(), null_yield, period);
   return ret;
 }
@@ -2187,6 +2343,7 @@ static int update_period(rgw::sal::ConfigStore* cfgstore,
   return 0;
 }
 
+#ifdef WITH_RADOSGW_RADOS
 static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
                                 const string& bucket_id,
 				std::unique_ptr<rgw::sal::Bucket>* bucket)
@@ -2199,6 +2356,7 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
 
   return 0;
 }
+#endif
 
 static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
                           RGWRESTConn *remote_conn, const string& url,
@@ -2242,6 +2400,19 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
   if (ret < 0) {
     cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
   }
+
+  ret = cfgstore->update_latest_epoch(dpp(), null_yield, period->get_id(), period->get_epoch());
+  if (ret == -EEXIST) {
+    // already have this epoch (or a more recent one)
+    cerr << "already have epoch >= " << period->get_epoch()
+        << " for period " << period->get_id() << std::endl;
+    return 0;
+  }
+  if (ret < 0) {
+    cerr << "Error updating latest epoch for period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+
   return 0;
 }
 
@@ -2262,6 +2433,7 @@ stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
   return ss;
 }
 
+#ifdef WITH_RADOSGW_RADOS
 static void get_md_sync_status(list<string>& status)
 {
   RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
@@ -2433,6 +2605,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   ret = sync.read_sync_status(dpp(), &sync_status);
   if (ret < 0 && ret != -ENOENT) {
     push_ss(ss, status, tab) << string("failed read sync status: ") + cpp_strerror(-ret);
+    flush_ss(ss, status);
     return;
   }
 
@@ -2440,6 +2613,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   ret = sync.read_recovering_shards(dpp(), sync_status.sync_info.num_shards, recovering_shards);
   if (ret < 0 && ret != ENOENT) {
     push_ss(ss, status, tab) << string("failed read recovering shards: ") + cpp_strerror(-ret);
+    flush_ss(ss, status);
     return;
   }
 
@@ -2497,6 +2671,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   ret = sync.read_source_log_shards_info(dpp(), &source_shards_info);
   if (ret < 0) {
     push_ss(ss, status, tab) << string("failed to fetch source sync status: ") + cpp_strerror(-ret);
+    flush_ss(ss, status);
     return;
   }
 
@@ -2637,6 +2812,7 @@ static void sync_status(Formatter *formatter)
 
   tab_dump("data sync", width, data_status);
 }
+#endif
 
 struct indented {
   int w; // indent width
@@ -2717,6 +2893,7 @@ struct bucket_source_sync_info {
   }
 };
 
+#ifdef WITH_RADOSGW_RADOS
 static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* driver,
                                      const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
@@ -2781,12 +2958,17 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
       source_sync_info.status = "init: bucket sync has not started";
       return 0;
     }
-    if (log.layout.type != rgw::BucketLogType::InIndex) {
+    if (log.layout.type != rgw::BucketLogType::InIndex &&
+        log.layout.type != rgw::BucketLogType::FIFO) {
       source_sync_info.error = fmt::format("unrecognized log layout type {}", to_string(log.layout.type));
       return -EINVAL;
     }
     // use shard count from our log gen=0
-    shard_status.resize(rgw::num_shards(log.layout.in_index));
+    if (log.layout.type == rgw::BucketLogType::FIFO) {
+      shard_status.resize(rgw::num_shards(log.layout.fifo));
+    } else {
+      shard_status.resize(rgw::num_shards(log.layout.in_index));
+    }
   } else {
     source_sync_info.error = fmt::format("failed to read bucket full sync status: {}", cpp_strerror(r));
     return r;
@@ -2831,6 +3013,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   source_sync_info.shards_behind = std::move(shards_behind);
   return 0;
 }
+#endif
 
 void encode_json(const char *name, const RGWBucketSyncFlowManager::pipe_set& pset, Formatter *f)
 {
@@ -3001,6 +3184,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
   return 0;
 }
 
+#ifdef WITH_RADOSGW_RADOS
 static int bucket_sync_info(rgw::sal::Driver* driver, const RGWBucketInfo& info,
                               std::ostream& out)
 {
@@ -3038,6 +3222,7 @@ static int bucket_sync_info(rgw::sal::Driver* driver, const RGWBucketInfo& info,
 
   return 0;
 }
+#endif
 
 struct bucket_sync_status_info {
   std::vector<bucket_source_sync_info> source_status_info;
@@ -3102,6 +3287,7 @@ struct bucket_sync_status_info {
 
 };
 
+#ifdef WITH_RADOSGW_RADOS
 static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& info,
                               const rgw_zone_id& source_zone_id,
 			      std::optional<rgw_bucket>& opt_source_bucket,
@@ -3184,6 +3370,7 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
 
   return 0;
 }
+#endif
 
 static void parse_tier_config_param(const string& s, map<string, string, ltstr_nocase>& out)
 {
@@ -3219,6 +3406,7 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
   }
 }
 
+#ifdef WITH_RADOSGW_RADOS
 static int check_pool_support_omap(const rgw_pool& pool)
 {
   librados::IoCtx io_ctx;
@@ -3236,6 +3424,7 @@ static int check_pool_support_omap(const rgw_pool& pool)
   io_ctx.close();
   return 0;
 }
+#endif
 
 int check_reshard_bucket_params(rgw::sal::Driver* driver,
 				const string& bucket_name,
@@ -3256,10 +3445,12 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
     return -EINVAL;
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (num_shards > (int)static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards()) {
     cerr << "ERROR: num_shards too high, max value: " << static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards() << std::endl;
     return -EINVAL;
   }
+#endif
 
   if (num_shards < 0) {
     cerr << "ERROR: num_shards must be non-negative integer" << std::endl;
@@ -3290,6 +3481,7 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
   return 0;
 }
 
+#ifdef WITH_RADOSGW_RADOS
 static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::otp_info_t& totp, vector<string>& pins,
                      time_t *pofs)
 {
@@ -3359,6 +3551,7 @@ static int trim_sync_error_log(int shard_id, const string& marker, int delay_ms)
   }
   // unreachable
 }
+#endif
 
 static bool symmetrical_flow_opt(const string& opt)
 {
@@ -3625,6 +3818,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix, max_session_duration;
+  std::string provider_url, client_ids_str, thumbprints_str;
   std::string description;
   std::string policy_arn;
   std::string redirect_zone;
@@ -3717,9 +3911,11 @@ int main(int argc, const char **argv)
   list<string> tags;
   list<string> tags_add;
   list<string> tags_rm;
+#ifdef WITH_RADOSGW_RADOS
   int placement_inline_data = true;
   bool placement_inline_data_specified = false;
   bool format_arg_passed = false;
+#endif
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
@@ -3729,8 +3925,10 @@ int main(int argc, const char **argv)
   int64_t max_delete_ops = 0;
   int64_t max_read_bytes = 0;
   int64_t max_write_bytes = 0;
+#ifdef WITH_RADOSGW_RADOS
   uint32_t max_bucket_index_ops = 0;
   uint32_t max_metadata_ops = 0;
+#endif
   bool have_max_objects = false;
   bool have_max_size = false;
   bool have_max_write_ops = false;
@@ -3739,8 +3937,14 @@ int main(int argc, const char **argv)
   bool have_max_delete_ops = false;
   bool have_max_write_bytes = false;
   bool have_max_read_bytes = false;
+#ifdef WITH_RADOSGW_RADOS
   bool have_max_bucket_index_ops = false;
   bool have_max_metadata_ops = false;
+  std::string allow_bucket_list_file;
+  std::string deny_bucket_list_file;
+  std::string allow_storage_class_list_file;
+  std::string deny_storage_class_list_file;
+#endif
   int include_all = false;
   int allow_unordered = false;
 
@@ -3754,9 +3958,11 @@ int main(int argc, const char **argv)
 
   int extra_info = false;
 
+#ifdef WITH_RADOSGW_RADOS
   uint64_t min_rewrite_size = 4 * 1024 * 1024;
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
+#endif
 
   BIIndexType bi_index_type = BIIndexType::Plain;
   std::optional<log_type> opt_log_type;
@@ -3770,7 +3976,9 @@ int main(int argc, const char **argv)
   ceph::timespan min_age = std::chrono::hours(1);
   bool hide_progress = false;
   bool dump_keys = false;
+#ifdef WITH_RADOSGW_RADOS
   uint64_t orphan_stale_secs = (24 * 3600);
+#endif
   int detail = false;
 
   std::string val;
@@ -3789,8 +3997,10 @@ int main(int argc, const char **argv)
   boost::optional<string> index_pool;
   boost::optional<string> data_pool;
   boost::optional<string> data_extra_pool;
+#ifdef WITH_RADOSGW_RADOS
   rgw::BucketIndexType placement_index_type = rgw::BucketIndexType::Normal;
   bool index_type_specified = false;
+#endif
 
   boost::optional<std::string> compression_type;
 
@@ -3798,9 +4008,11 @@ int main(int argc, const char **argv)
   string totp_seed;
   string totp_seed_type = "hex";
   vector<string> totp_pin;
+#ifdef WITH_RADOSGW_RADOS
   int totp_seconds = 0;
   int totp_window = 0;
   int trim_delay_ms = 0;
+#endif
 
   string topic_name;
   string notification_id;
@@ -3866,6 +4078,12 @@ int main(int argc, const char **argv)
   std::optional<std::string> rgw_obj_fs; // radoslist field separator
   std::optional<std::string> restore_status_filter;
   int show_restore_stats = false;
+
+  // global CORS settings
+  std::optional<std::string> gcors_allow_origins;
+  std::optional<std::string> gcors_allow_methods;
+  std::optional<std::string> gcors_allow_headers;
+  std::optional<std::string> gcors_expose_headers;
 
   init_realm_param(cct.get(), realm_id, opt_realm_id, "rgw_realm_id");
   init_realm_param(cct.get(), zonegroup_id, opt_zonegroup_id, "rgw_zonegroup_id");
@@ -3990,12 +4208,14 @@ int main(int argc, const char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &commit, NULL, "--commit", (char*)NULL)) {
       // do nothing
+#ifdef WITH_RADOSGW_RADOS
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*)NULL)) {
       min_rewrite_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*)NULL)) {
       max_rewrite_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*)NULL)) {
       min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
+#endif
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
       max_buckets = ceph::parse<int>(val);
       if (!max_buckets) {
@@ -4066,19 +4286,35 @@ int main(int argc, const char **argv)
       }
       have_max_write_bytes = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-bucket-index-ops", (char*)NULL)) {
+#ifdef WITH_RADOSGW_RADOS
       max_bucket_index_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+#endif
       if (!err.empty()) {
 	cerr << "ERROR: failed to parse max bucket index ops: " << err << std::endl;
 	return EINVAL;
       }
+#ifdef WITH_RADOSGW_RADOS
       have_max_bucket_index_ops = true;
+#endif
     } else if (ceph_argparse_witharg(args, i, &val, "--max-metadata-ops", (char*)NULL)) {
+#ifdef WITH_RADOSGW_RADOS
       max_metadata_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+#endif
       if (!err.empty()) {
 	cerr << "ERROR: failed to parse max metadata ops: " << err << std::endl;
 	return EINVAL;
       }
+#ifdef WITH_RADOSGW_RADOS
       have_max_metadata_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-bucket-list", (char*)NULL)) {
+      allow_bucket_list_file = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--deny-bucket-list", (char*)NULL)) {
+      deny_bucket_list_file = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-storage-class-list", (char*)NULL)) {
+      allow_storage_class_list_file = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--deny-storage-class-list", (char*)NULL)) {
+      deny_storage_class_list_file = val;
+#endif
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -4108,12 +4344,14 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--min-age-hours", (char*)NULL)) {
       min_age = std::chrono::hours(atoi(val.c_str()));
+#ifdef WITH_RADOSGW_RADOS
     } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*)NULL)) {
       orphan_stale_secs = (uint64_t)strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse orphan stale secs: " << err << std::endl;
         return EINVAL;
       }
+#endif
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
       shard_id = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -4154,7 +4392,9 @@ int main(int argc, const char **argv)
       new_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
+#ifdef WITH_RADOSGW_RADOS
       format_arg_passed = true;
+#endif
     } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*)NULL)) {
       string cat_str = val;
       list<string> cat_list;
@@ -4203,8 +4443,10 @@ int main(int argc, const char **argv)
       hide_progress = true;
     } else if (ceph_argparse_flag(args, i, "--dump-keys", (char*)NULL)) {
       dump_keys = true;
+#ifdef WITH_RADOSGW_RADOS
     } else if (ceph_argparse_binary_flag(args, i, &placement_inline_data, NULL, "--placement-inline-data", (char*)NULL)) {
       placement_inline_data_specified = true;
+#endif
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -4321,6 +4563,7 @@ int main(int argc, const char **argv)
       data_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*)NULL)) {
       data_extra_pool = val;
+#ifdef WITH_RADOSGW_RADOS
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*)NULL)) {
       if (val == "normal") {
         placement_index_type = rgw::BucketIndexType::Normal;
@@ -4334,6 +4577,7 @@ int main(int argc, const char **argv)
         }
       }
       index_type_specified = true;
+#endif
     } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*)NULL)) {
       compression_type = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--role-name", (char*)NULL)) {
@@ -4352,6 +4596,12 @@ int main(int argc, const char **argv)
       policy_arn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-session-duration", (char*)NULL)) {
       max_session_duration = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--provider-url", (char*)NULL)) {
+      provider_url = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--client-ids", (char*)NULL)) {
+      client_ids_str = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--thumbprints", (char*)NULL)) {
+      thumbprints_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--description", (char*)NULL)) {
       description = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
@@ -4362,12 +4612,14 @@ int main(int argc, const char **argv)
       totp_seed = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-seed-type", (char*)NULL)) {
       totp_seed_type = val;
+#ifdef WITH_RADOSGW_RADOS
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-seconds", (char*)NULL)) {
       totp_seconds = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-window", (char*)NULL)) {
       totp_window = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--trim-delay-ms", (char*)NULL)) {
       trim_delay_ms = atoi(val.c_str());
+#endif
     } else if (ceph_argparse_witharg(args, i, &val, "--topic", (char*)NULL)) {
       topic_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--notification-id", (char*)NULL)) {
@@ -4467,6 +4719,14 @@ int main(int argc, const char **argv)
       restore_status_filter = val;
     } else if (ceph_argparse_binary_flag(args, i, &show_restore_stats, NULL, "--show-restore-stats", (char*)NULL)){
       // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-origin", (char*)NULL)) {
+      gcors_allow_origins = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-methods", (char*)NULL)) {
+      gcors_allow_methods = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-headers", (char*)NULL)) {
+      gcors_allow_headers = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--expose-headers", (char*)NULL)) {
+      gcors_expose_headers = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4516,12 +4776,14 @@ int main(int argc, const char **argv)
     /* some commands may have an optional extra param */
     if (!extra_args.empty()) {
       switch (opt_cmd) {
+#ifdef WITH_RADOSGW_RADOS
         case OPT::METADATA_GET:
         case OPT::METADATA_PUT:
         case OPT::METADATA_RM:
         case OPT::METADATA_LIST:
           metadata_key = extra_args[0];
           break;
+#endif
         default:
           break;
       }
@@ -4550,7 +4812,10 @@ int main(int argc, const char **argv)
 			 OPT::ZONE_CREATE, OPT::ZONE_DELETE,
 			 OPT::ZONE_GET, OPT::ZONE_SET, OPT::ZONE_RENAME,
 			 OPT::ZONE_LIST, OPT::ZONE_MODIFY, OPT::ZONE_DEFAULT,
-			 OPT::ZONE_PLACEMENT_ADD, OPT::ZONE_PLACEMENT_RM,
+#ifdef WITH_RADOSGW_RADOS
+			 OPT::ZONE_PLACEMENT_ADD, 
+#endif
+			 OPT::ZONE_PLACEMENT_RM,
 			 OPT::ZONE_PLACEMENT_MODIFY, OPT::ZONE_PLACEMENT_LIST,
 			 OPT::ZONE_PLACEMENT_GET,
 			 OPT::REALM_CREATE,
@@ -4578,6 +4843,7 @@ int main(int argc, const char **argv)
 			 OPT::BUCKET_LIMIT_CHECK,
 			 OPT::BUCKET_LAYOUT,
 			 OPT::BUCKET_STATS,
+#ifdef WITH_RADOSGW_RADOS
 			 OPT::BUCKET_SYNC_CHECKPOINT,
 			 OPT::BUCKET_SYNC_INFO,
 			 OPT::BUCKET_SYNC_STATUS,
@@ -4586,8 +4852,10 @@ int main(int argc, const char **argv)
 			 OPT::BUCKET_OBJECT_SHARD,
 			 OPT::LOG_LIST,
 			 OPT::LOG_SHOW,
+#endif
 			 OPT::USAGE_SHOW,
 			 OPT::OBJECT_STAT,
+#ifdef WITH_RADOSGW_RADOS
 			 OPT::OBJECT_MANIFEST,
 			 OPT::BI_GET,
 			 OPT::BI_LIST,
@@ -4601,8 +4869,11 @@ int main(int argc, const char **argv)
 			 OPT::DEDUP_RESUME,
 			 OPT::DEDUP_THROTTLE,
 			 OPT::GC_LIST,
+#endif
 			 OPT::LC_LIST,
+#ifdef WITH_RADOSGW_RADOS
 			 OPT::ORPHANS_LIST_JOBS,
+#endif
 			 OPT::ZONEGROUP_GET,
 			 OPT::ZONEGROUP_LIST,
 			 OPT::ZONEGROUP_PLACEMENT_LIST,
@@ -4611,17 +4882,21 @@ int main(int argc, const char **argv)
 			 OPT::ZONE_LIST,
 			 OPT::ZONE_PLACEMENT_LIST,
 			 OPT::ZONE_PLACEMENT_GET,
+#ifdef WITH_RADOSGW_RADOS
 			 OPT::METADATA_GET,
 			 OPT::METADATA_LIST,
 			 OPT::METADATA_SYNC_STATUS,
 			 OPT::MDLOG_LIST,
 			 OPT::MDLOG_STATUS,
 			 OPT::SYNC_ERROR_LIST,
+#endif
 			 OPT::SYNC_GROUP_GET,
 			 OPT::SYNC_POLICY_GET,
 			 OPT::BILOG_LIST,
+#ifdef WITH_RADOSGW_RADOS
 			 OPT::BILOG_STATUS,
 			 OPT::DATA_SYNC_STATUS,
+#endif
 			 OPT::DATALOG_LIST,
 			 OPT::DATALOG_SEMAPHORE_LIST,
 			 OPT::DATALOG_STATUS,
@@ -4633,40 +4908,52 @@ int main(int argc, const char **argv)
 			 OPT::PERIOD_GET_CURRENT,
 			 OPT::PERIOD_LIST,
 			 OPT::GLOBAL_QUOTA_GET,
-       OPT::GLOBAL_RATELIMIT_GET,
+		     OPT::GLOBAL_RATELIMIT_GET,
 			 OPT::SYNC_INFO,
+#ifdef WITH_RADOSGW_RADOS
 			 OPT::SYNC_STATUS,
+#endif
 			 OPT::ROLE_GET,
 			 OPT::ROLE_LIST,
+			 OPT::OIDC_PROVIDER_GET,
+			 OPT::OIDC_PROVIDER_LIST,
 			 OPT::ROLE_POLICY_LIST,
 			 OPT::ROLE_POLICY_GET,
 			 OPT::ROLE_POLICY_LIST_ATTACHED,
+#ifdef WITH_RADOSGW_RADOS
 			 OPT::RESHARD_LIST,
 			 OPT::RESHARD_STATUS,
+#endif			 
 			 OPT::PUBSUB_TOPIC_LIST,
        OPT::PUBSUB_NOTIFICATION_LIST,
 			 OPT::PUBSUB_TOPIC_GET,
        OPT::PUBSUB_NOTIFICATION_GET,
+#ifdef WITH_RADOSGW_RADOS
        OPT::PUBSUB_TOPIC_STATS  ,
        OPT::PUBSUB_TOPIC_DUMP  ,
+#endif
 			 OPT::SCRIPT_GET,
        OPT::RESTORE_STATUS,
        OPT::RESTORE_LIST,
     };
 
     std::set<OPT> gc_ops_list = {
+#ifdef WITH_RADOSGW_RADOS
 			 OPT::GC_LIST,
 			 OPT::GC_PROCESS,
+#endif
 			 OPT::OBJECT_RM,
 			 OPT::BUCKET_RM,  // --purge-objects
 			 OPT::USER_RM,    // --purge-data
 			 OPT::OBJECTS_EXPIRE,
 			 OPT::OBJECTS_EXPIRE_STALE_RM,
+#ifdef WITH_RADOSGW_RADOS
 			 OPT::LC_PROCESS,
        OPT::BUCKET_SYNC_RUN,
        OPT::DATA_SYNC_RUN,
        OPT::BUCKET_REWRITE,
        OPT::OBJECT_REWRITE
+#endif
     };
 
     raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
@@ -4745,17 +5032,26 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::ROLE_POLICY_DETACH
                           && opt_cmd != OPT::ROLE_POLICY_LIST_ATTACHED
                           && opt_cmd != OPT::ROLE_UPDATE
+                          && opt_cmd != OPT::OIDC_PROVIDER_CREATE
+                          && opt_cmd != OPT::OIDC_PROVIDER_MODIFY
+                          && opt_cmd != OPT::OIDC_PROVIDER_GET
+                          && opt_cmd != OPT::OIDC_PROVIDER_DELETE
+                          && opt_cmd != OPT::OIDC_PROVIDER_LIST
+#ifdef WITH_RADOSGW_RADOS
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
                           && opt_cmd != OPT::RESHARD_STATUS
+#endif			  
                           && opt_cmd != OPT::PUBSUB_TOPIC_LIST
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_LIST
                           && opt_cmd != OPT::PUBSUB_TOPIC_GET
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_GET
                           && opt_cmd != OPT::PUBSUB_TOPIC_RM
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_RM
+#ifdef WITH_RADOSGW_RADOS
                           && opt_cmd != OPT::PUBSUB_TOPIC_STATS
                           && opt_cmd != OPT::PUBSUB_TOPIC_DUMP
+#endif
 			  && opt_cmd != OPT::SCRIPT_PUT
 			  && opt_cmd != OPT::SCRIPT_GET
 			  && opt_cmd != OPT::SCRIPT_RM
@@ -5345,9 +5641,11 @@ int main(int argc, const char **argv)
 	  cerr << "rename failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-        cout << "Realm name updated. Note that this change only applies to "
-            "the current cluster, so this command must be run separately "
-            "on each of the realm's other clusters." << std::endl;
+        cout << "Realm name updated. Note that the realm name is not carried "
+            "by the period, so this change does not propagate on its own. On "
+            "each of the realm's other clusters, either run this command "
+            "again or run 'radosgw-admin realm pull' to pick up the new name."
+            << std::endl;
       }
       break;
     case OPT::REALM_SET:
@@ -5563,6 +5861,7 @@ int main(int argc, const char **argv)
         // validate --tier-type if specified
         const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
         if (ptier_type) {
+#ifdef WITH_RADOSGW_RADOS
           auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
           if (!sync_mgr->get_module(*ptier_type, nullptr)) {
             ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
@@ -5570,6 +5869,10 @@ int main(int argc, const char **argv)
                 << sync_mgr->get_registered_module_names() << dendl;
             return EINVAL;
           }
+#else
+          ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
+          return EINVAL;
+#endif
         }
 
         if (enable_features.empty()) { // enable all features by default
@@ -6236,6 +6539,7 @@ int main(int argc, const char **argv)
           // validate --tier-type if specified
           const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
           if (ptier_type) {
+#ifdef WITH_RADOSGW_RADOS
             auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
             if (!sync_mgr->get_module(*ptier_type, nullptr)) {
               ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
@@ -6243,6 +6547,10 @@ int main(int argc, const char **argv)
                   << sync_mgr->get_registered_module_names() << dendl;
               return EINVAL;
             }
+#else
+            ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
+            return EINVAL;
+#endif
           }
 
           if (enable_features.empty()) { // enable all features by default
@@ -6516,6 +6824,7 @@ int main(int argc, const char **argv)
         // validate --tier-type if specified
         const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
         if (ptier_type) {
+#ifdef WITH_RADOSGW_RADOS
           auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
           if (!sync_mgr->get_module(*ptier_type, nullptr)) {
             ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
@@ -6523,6 +6832,10 @@ int main(int argc, const char **argv)
                 << sync_mgr->get_registered_module_names() << dendl;
             return EINVAL;
           }
+#else
+          ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
+          return EINVAL;
+#endif
         }
 
         if (enable_features.empty()) { // enable all features by default
@@ -6610,7 +6923,9 @@ int main(int argc, const char **argv)
 	}
       }
       break;
+#ifdef WITH_RADOSGW_RADOS
     case OPT::ZONE_PLACEMENT_ADD:
+#endif
     case OPT::ZONE_PLACEMENT_MODIFY:
     case OPT::ZONE_PLACEMENT_RM:
       {
@@ -6634,6 +6949,7 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
+#ifdef WITH_RADOSGW_RADOS
         if (opt_cmd == OPT::ZONE_PLACEMENT_ADD ||
 	    opt_cmd == OPT::ZONE_PLACEMENT_MODIFY) {
 	  RGWZoneGroup zonegroup;
@@ -6706,7 +7022,9 @@ int main(int argc, const char **argv)
                  << "' does not support omap" << std::endl;
              return ret;
           }
-        } else if (opt_cmd == OPT::ZONE_PLACEMENT_RM) {
+        } else 
+#endif
+	    if (opt_cmd == OPT::ZONE_PLACEMENT_RM) {
           if (!opt_storage_class ||
               opt_storage_class->empty()) {
             zone.placement_pools.erase(placement_id);
@@ -6784,16 +7102,27 @@ int main(int argc, const char **argv)
                                         OPT::USER_MODIFY, OPT::USER_ENABLE,
                                         OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
                                         OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
+#ifdef WITH_RADOSGW_RADOS
                                         OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
-                                        OPT::BUCKET_CHOWN, OPT::METADATA_PUT,
-                                        OPT::METADATA_RM, OPT::MFA_CREATE,
+#endif
+                                        OPT::BUCKET_CHOWN,
+                                        OPT::BUCKET_SUSPEND,
+                                        OPT::BUCKET_UNSUSPEND,
+#ifdef WITH_RADOSGW_RADOS
+                                        OPT::METADATA_PUT,
+                                        OPT::METADATA_RM,
+				       	                OPT::MFA_CREATE,
                                         OPT::MFA_REMOVE, OPT::MFA_RESYNC,
+#endif
                                         OPT::CAPS_ADD, OPT::CAPS_RM,
                                         OPT::ROLE_CREATE, OPT::ROLE_DELETE,
+                                        OPT::OIDC_PROVIDER_CREATE, OPT::OIDC_PROVIDER_MODIFY,
+                                        OPT::OIDC_PROVIDER_DELETE,
                                         OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE,
                                         OPT::ROLE_POLICY_ATTACH, OPT::ROLE_POLICY_DETACH,
                                         OPT::USER_POLICY_ATTACH, OPT::USER_POLICY_DETACH,
-                                        OPT::RATELIMIT_SET, OPT::RATELIMIT_ENABLE, OPT::RATELIMIT_DISABLE};
+                                        OPT::RATELIMIT_SET, OPT::RATELIMIT_ENABLE, OPT::RATELIMIT_DISABLE,
+                                        OPT::QUOTA_SET, OPT::QUOTA_ENABLE, OPT::QUOTA_DISABLE};
 
   bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
                                 non_master_cmd);
@@ -6933,6 +7262,27 @@ int main(int argc, const char **argv)
   std::string err_msg;
 
   bool output_user_info = true;
+
+  // Helper: resolve OIDC scope from --account-id or global fallback.
+  // Returns negative error code if --tenant is used (not supported for OIDC).
+  auto resolve_oidc_tenant = [&]() -> std::pair<int, std::string> {
+    if (!tenant.empty()) {
+      cerr << "ERROR: --tenant is not supported for OIDC providers. "
+           << "Use --account-id for account-scoped providers, "
+           << "or omit for global providers." << std::endl;
+      return {-EINVAL, {}};
+    }
+    if (!account_id.empty()) {
+      std::string err_msg;
+      if (!rgw::account::validate_id(account_id, &err_msg)) {
+        cerr << "ERROR: invalid --account-id '" << account_id << "': "
+             << err_msg << std::endl;
+        return {-EINVAL, {}};
+      }
+      return {0, account_id};
+    }
+    return {0, std::string(global_oidc_id)};
+  };
 
   switch (opt_cmd) {
   case OPT::USER_INFO:
@@ -7244,15 +7594,21 @@ int main(int argc, const char **argv)
         constexpr int32_t max_chunk = 100;
         int32_t count = std::min(max_chunk, remaining);
 
+        // Copy the marker to a separate local variable to break the reference alias
+        std::string current_marker = listing.next_marker;
+        // Clear the roles list to prevent appending duplicates across loop iterations
+        listing.roles.clear();
+        listing.next_marker.clear();
+
         if (!account_id.empty()) {
           // list roles in the account
           ret = driver->list_account_roles(dpp(), null_yield, account_id,
-                                           path_prefix, listing.next_marker,
+                                           path_prefix, current_marker,
                                            count, listing);
         } else {
           // list roles in the tenant
           ret = driver->list_roles(dpp(), null_yield, tenant, path_prefix,
-                                   listing.next_marker, count, listing);
+                                   current_marker, count, listing);
         }
         if (ret < 0) {
           return -ret;
@@ -7272,6 +7628,157 @@ int main(int argc, const char **argv)
         }
         formatter->close_section(); // result
       }
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_CREATE:
+    {
+      if (provider_url.empty()) {
+        cerr << "ERROR: --provider-url is required" << std::endl;
+        return EINVAL;
+      }
+
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      RGWOIDCProviderInfo info;
+      info.provider_url = provider_url;
+      info.tenant = oidc_tenant;
+      info.creation_date = format_creation_date(ceph::real_clock::now());
+
+      // parse comma-separated client IDs
+      if (!client_ids_str.empty()) {
+        get_str_vec(client_ids_str, ",", info.client_ids);
+      }
+      // parse comma-separated thumbprints
+      if (!thumbprints_str.empty()) {
+        get_str_vec(thumbprints_str, ",", info.thumbprints);
+      }
+
+      // Account-scoped providers persist an arn (matching the IAM create path);
+      // global providers derive their arn from the url at dump time.
+      if (!is_global_oidc_provider(info)) {
+        info.arn = rgw::ARN(url_remove_prefix(info.provider_url),
+                            "oidc-provider/", info.tenant, true).to_string();
+      }
+
+      ret = driver->store_oidc_provider(dpp(), null_yield, info,
+                                        /*exclusive=*/true, nullptr);
+      if (ret < 0) {
+        cerr << "ERROR: failed to create OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      encode_json("oidc_provider", info, formatter.get());
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_MODIFY:
+    {
+      if (provider_url.empty()) {
+        cerr << "ERROR: --provider-url is required" << std::endl;
+        return EINVAL;
+      }
+
+      if (client_ids_str.empty() && thumbprints_str.empty()) {
+        cerr << "ERROR: at least one of --client-ids or --thumbprints is required" << std::endl;
+        return EINVAL;
+      }
+
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      RGWOIDCProviderInfo info;
+      RGWObjVersionTracker objv_tracker;
+      ret = driver->load_oidc_provider(dpp(), null_yield, oidc_tenant,
+                                       url_remove_prefix(provider_url),
+                                       info, &objv_tracker);
+      if (ret < 0) {
+        cerr << "ERROR: failed to load OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      if (!client_ids_str.empty()) {
+        info.client_ids.clear();
+        get_str_vec(client_ids_str, ",", info.client_ids);
+      }
+      if (!thumbprints_str.empty()) {
+        info.thumbprints.clear();
+        get_str_vec(thumbprints_str, ",", info.thumbprints);
+      }
+
+      constexpr bool exclusive = false;
+      ret = driver->store_oidc_provider(dpp(), null_yield, info,
+                                        exclusive, &objv_tracker);
+      if (ret < 0) {
+        cerr << "ERROR: failed to modify OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      encode_json("oidc_provider", info, formatter.get());
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_GET:
+    {
+      if (provider_url.empty()) {
+        cerr << "ERROR: --provider-url is required" << std::endl;
+        return EINVAL;
+      }
+
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      RGWOIDCProviderInfo info;
+      ret = driver->load_oidc_provider(dpp(), null_yield, oidc_tenant,
+                                       url_remove_prefix(provider_url),
+                                       info, nullptr);
+      if (ret < 0) {
+        cerr << "ERROR: failed to get OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      encode_json("oidc_provider", info, formatter.get());
+      formatter->flush(cout);
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_DELETE:
+    {
+      if (provider_url.empty()) {
+        cerr << "ERROR: --provider-url is required" << std::endl;
+        return EINVAL;
+      }
+
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      ret = driver->delete_oidc_provider(dpp(), null_yield, oidc_tenant,
+                                         url_remove_prefix(provider_url));
+      if (ret < 0) {
+        cerr << "ERROR: failed to delete OIDC provider: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      cout << "OIDC provider successfully deleted" << std::endl;
+      return 0;
+    }
+  case OPT::OIDC_PROVIDER_LIST:
+    {
+      const auto [oidc_ret, oidc_tenant] = resolve_oidc_tenant();
+      if (oidc_ret < 0) return -oidc_ret;
+
+      std::vector<RGWOIDCProviderInfo> providers;
+      ret = driver->get_oidc_providers(dpp(), null_yield, oidc_tenant, providers);
+      if (ret < 0) {
+        cerr << "ERROR: failed to list OIDC providers: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      formatter->open_array_section("oidc_providers");
+      for (const auto& p : providers) {
+        encode_json("oidc_provider", p, formatter.get());
+      }
+      formatter->close_section();
       formatter->flush(cout);
       return 0;
     }
@@ -7597,7 +8104,7 @@ int main(int argc, const char **argv)
         bucket_op.max_entries = max_entries;
       else
         bucket_op.max_entries = 0; /* for backward compatibility */
-      RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
+      RGWBucketAdminOp::info(driver, *site, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
@@ -7625,7 +8132,14 @@ int main(int argc, const char **argv)
 
       params.prefix = prefix;
       params.delim = delim;
-      params.marker = rgw_obj_key(marker);
+      // Support pagination for versioned buckets using --marker and --object-version
+      // For versioned buckets: use both --marker (name) and --object-version (instance)
+      // For non-versioned buckets: use only --marker (name)
+      if (!object_version.empty()) {
+        params.marker = rgw_obj_key(marker, object_version);
+      } else {
+        params.marker = rgw_obj_key(marker);
+      }
       params.ns = ns;
       params.enforce_ns = false;
       params.list_versions = true;
@@ -7658,6 +8172,7 @@ int main(int argc, const char **argv)
     } /* have bucket_name */
   } /* OPT::BUCKETS_LIST */
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::BUCKET_RADOS_LIST) {
     RGWRadosList lister(static_cast<rgw::sal::RadosStore*>(driver),
 			max_concurrent_ios, orphan_stale_secs, tenant);
@@ -7686,6 +8201,7 @@ int main(int argc, const char **argv)
       return -ret;
     }
   }
+#endif
 
   if (opt_cmd == OPT::BUCKET_LAYOUT) {
     if (bucket_name.empty()) {
@@ -7720,13 +8236,14 @@ int main(int argc, const char **argv)
       bucket_op.max_entries = 0; /* for backward compatibility */
     bucket_op.set_restore_stats(bool(show_restore_stats));
 
-    int r = RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
+    int r = RGWBucketAdminOp::info(driver, *site, bucket_op, stream_flusher, null_yield, dpp());
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return posix_errortrans(-r);
     }
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::BUCKET_LINK) {
     bucket_op.set_bucket_id(bucket_id);
     bucket_op.set_new_bucket_name(new_bucket_name);
@@ -7745,6 +8262,7 @@ int main(int argc, const char **argv)
       return -r;
     }
   }
+#endif
 
   if (opt_cmd == OPT::BUCKET_SHARD_OBJECTS) {
     const auto prefix = opt_prefix ? *opt_prefix : "obj"s;
@@ -7809,6 +8327,7 @@ int main(int argc, const char **argv)
     formatter->flush(cout);
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART) {
     // repair logic for replication of encrypted multipart uploads:
     // https://tracker.ceph.com/issues/46062
@@ -7849,6 +8368,7 @@ int main(int argc, const char **argv)
     formatter->flush(cout);
     return 0;
   }
+#endif
 
   if (opt_cmd == OPT::BUCKET_CHOWN) {
     if (bucket_name.empty()) {
@@ -7856,6 +8376,7 @@ int main(int argc, const char **argv)
       return EINVAL;
     }
 
+    bucket_op.account_id = account_id;
     bucket_op.set_bucket_name(bucket_name);
     bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
@@ -7905,7 +8426,7 @@ int main(int argc, const char **argv)
     }
     std::string old_obj;
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
-    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket, null_yield, true, &objv_tracker, false, &old_obj);
+    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket.get(), null_yield, true, &objv_tracker, false, &old_obj);
     if (ret < 0) {
       cerr << "ERROR: failed to flush pending logging object '" << obj_name << "' to target bucket '" << configuration.target_bucket
         << "'. error: " << cpp_strerror(-ret) << std::endl;
@@ -7957,6 +8478,7 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::BUCKET_LOGGING_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
@@ -8139,6 +8661,7 @@ next:
       }
     }
   }
+#endif
 
   if (opt_cmd == OPT::USAGE_SHOW) {
     uint64_t start_epoch = 0;
@@ -8234,6 +8757,7 @@ next:
   }
 
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::OLH_GET || opt_cmd == OPT::OLH_READLOG) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
@@ -8365,8 +8889,16 @@ next:
     std::list<rgw_cls_bi_entry> entries;
     bool is_truncated;
     const auto& index = bucket->get_info().layout.current_index;
+    if (index.layout.type == rgw::BucketIndexType::Indexless) {
+      cerr << "Error: indexless bucket has no index to list" << std::endl;
+      return EINVAL;
+    }
+
     const int max_shards = rgw::num_shards(index);
-    if (max_entries < 0) {
+
+    if (max_entries_specified) {
+      max_entries = std::max(1, max_entries); // sanity
+    } else {
       max_entries = 1000;
     }
 
@@ -8377,8 +8909,11 @@ next:
     formatter->open_array_section("entries");
 
     auto rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
+    int64_t entry_count = 0; // track number of entries displayed
+    bool done = false;       // true once reached max_entries
+
     int i = (specified_shard_id ? shard_id : 0);
-    for (; i < max_shards; i++) {
+    for (; i < max_shards && !done; i++) {
       ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": starting shard=" <<
 	i << dendl;
       marker.clear();
@@ -8406,6 +8941,14 @@ next:
 	for (const auto& entry : entries) {
           encode_json("entry", entry, formatter.get());
           marker = entry.idx;
+
+          if (++entry_count >= max_entries) {
+            done = true;
+            ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
+              ": bi_list() stopped outputting entries after " << entry_count <<
+              " entries given that max_entries=" << max_entries << dendl;
+            break;
+          }
         }
         formatter->flush(cout);
 
@@ -8413,14 +8956,14 @@ next:
 	  ": bi_list() returned without error; entries.size()=" <<
 	  entries.size() << ", is_truncated=" << is_truncated <<
 	  ", next_marker=" << marker << dendl;
-      } while (is_truncated);
+      } while (is_truncated && !done);
 
       formatter->flush(cout);
 
       if (specified_shard_id) {
         break;
       }
-    }
+    } // shard loop
     ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": done" << dendl;
 
     formatter->close_section();
@@ -8474,6 +9017,7 @@ next:
       }
     }
   }
+#endif
 
   if (opt_cmd == OPT::OBJECT_PUT) {
     if (bucket_name.empty()) {
@@ -8532,6 +9076,7 @@ next:
     }
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::OBJECT_REWRITE) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
@@ -8648,6 +9193,7 @@ next:
       } // while
     }
   } // OPT::OBJECT_REINDEX
+#endif
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE) {
     if (!driver->process_expired_objects(dpp(), null_yield)) {
@@ -8672,6 +9218,7 @@ next:
     }
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::BUCKET_REWRITE) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
@@ -9020,6 +9567,7 @@ next:
       return -ret;
     }
   } // OPT_RESHARD_CANCEL
+#endif
 
   if (opt_cmd == OPT::BUCKET_SET_MIN_SHARDS) {
     if (bucket_name.empty()) {
@@ -9174,6 +9722,7 @@ next:
     formatter->flush(cout);
   } // OPT::OBJECT_STAT
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::OBJECT_MANIFEST) {
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
@@ -9263,7 +9812,9 @@ next:
     formatter->close_section(); // outer
     formatter->flush(cout);
   } // OPT::OBJECT_MANIFEST
+#endif
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::BUCKET_CHECK) {
     if (check_head_obj_locator) {
       if (bucket_name.empty()) {
@@ -9297,6 +9848,7 @@ next:
     }
     RGWBucketAdminOp::check_index_unlinked(store, bucket_op, stream_flusher, dpp());
   }
+#endif
 
   if (opt_cmd == OPT::BUCKET_RM) {
     if (!inconsistent_index) {
@@ -9311,6 +9863,7 @@ next:
     }
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::DEDUP_STATS    ||
       opt_cmd == OPT::DEDUP_ESTIMATE ||
       opt_cmd == OPT::DEDUP_ABORT    ||
@@ -9335,7 +9888,7 @@ next:
       else {
 	cerr << "ERROR: Failed reading stat counters" << std::endl;
       }
-      return ret;
+      return -ret;
     }
 
     if (opt_cmd == OPT::DEDUP_THROTTLE) {
@@ -9344,30 +9897,35 @@ next:
       ceph::encode(urgent_msg, urgent_msg_bl);
       throttle_msg_t throttle_msg;
 
-      if (throttle_stat) {
-	encode(throttle_msg, urgent_msg_bl);
-	return cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
-      }
+      if (!throttle_stat) {
+        if (unlikely(!have_max_bucket_index_ops && !have_max_metadata_ops)) {
+          std::cerr << "dedup throttle must set either --max-bucket-index-ops or --max-metadata-ops" << std::endl;
+          return EINVAL;
+        }
 
-      if (unlikely(!have_max_bucket_index_ops && !have_max_metadata_ops)) {
-	std::cerr << "dedup throttle must set either --max-bucket-index-ops or --max-metadata-ops" << std::endl;
-	return EINVAL;
-      }
+        if (have_max_bucket_index_ops) {
+          throttle_action_t action = { .op_type = BUCKET_INDEX_OP,
+                                       .limit = max_bucket_index_ops};
+          throttle_msg.vec.push_back(action);
+        }
 
-      if (have_max_bucket_index_ops) {
-	throttle_action_t action = { .op_type = BUCKET_INDEX_OP,
-				     .limit = max_bucket_index_ops};
-	throttle_msg.vec.push_back(action);
-      }
-
-      if (have_max_metadata_ops) {
-	throttle_action_t action = { .op_type = METADATA_ACCESS_OP,
-				     .limit = max_metadata_ops};
-	throttle_msg.vec.push_back(action);
+        if (have_max_metadata_ops) {
+          throttle_action_t action = { .op_type = METADATA_ACCESS_OP,
+                                       .limit = max_metadata_ops};
+          throttle_msg.vec.push_back(action);
+        }
       }
 
       encode(throttle_msg, urgent_msg_bl);
-      return cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
+      int ret = cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl,
+                                          formatter.get());
+      if (ret == 0) {
+        formatter->flush(cout);
+      }
+      else {
+        cerr << "ERROR: Failed throttle command" << std::endl;
+      }
+      return -ret;
     }
 
     if (opt_cmd == OPT::DEDUP_ABORT  ||
@@ -9383,7 +9941,7 @@ next:
       else {
 	urgent_msg = URGENT_MSG_RESUME;
       }
-      return cluster::dedup_control(store, dpp(), urgent_msg);
+      return -cluster::dedup_control(store, dpp(), urgent_msg);
     }
 
     if (opt_cmd == OPT::DEDUP_EXEC || opt_cmd == OPT::DEDUP_ESTIMATE) {
@@ -9405,7 +9963,21 @@ next:
 #endif
       }
 
-      int ret = cluster::dedup_restart_scan(store, dedup_type, dpp());
+      // Build the dedup filter from the supplied file paths
+      dedup_filter_t dedup_filter(allow_bucket_list_file, deny_bucket_list_file,
+				  allow_storage_class_list_file,
+				  deny_storage_class_list_file, dpp());
+      int filter_err = dedup_filter.errcode();
+      if (filter_err != 0) {
+	cerr << "ERROR: failed to build dedup filter: "
+             << cpp_strerror(-filter_err) << std::endl;
+	return -filter_err;
+      }
+
+      int ret = cluster::dedup_restart_scan(store, dedup_type, dpp(),
+					    dedup_filter.is_active() ? &dedup_filter : nullptr);
+      // reverse negative errno codes
+      ret = -ret;
       if (ret == 0) {
 	std::cout << "Dedup was restarted successfully" << std::endl;
       }
@@ -9418,14 +9990,28 @@ next:
   }
 
   if (opt_cmd == OPT::GC_LIST) {
+    if (bypass_gc) {
+      cerr << "ERROR: 'gc list' command does not support --bypass-gc option" << std::endl;
+      return EINVAL;
+    }
+    if (specified_shard_id) {
+      int max_gc_shards = min(static_cast<int>(g_ceph_context->_conf->rgw_gc_max_objs), rgw_shards_max());
+      if (shard_id < 0 || shard_id >= max_gc_shards) {
+        cerr << "ERROR: shard-id must be in the range [0, " << max_gc_shards - 1 << "]" << std::endl;
+        return EINVAL;
+      }
+    }
+
     int index = 0;
     bool truncated;
     bool processing_queue = false;
     formatter->open_array_section("entries");
 
+    std::optional<int> gc_shard_id = specified_shard_id ? std::optional<int>(shard_id) : std::nullopt;
+
     do {
       list<cls_rgw_gc_obj_info> result;
-      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(&index, marker, 1000, !include_all, result, &truncated, processing_queue);
+      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(index, marker, 1000, !include_all, result, truncated, processing_queue, gc_shard_id);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;
@@ -9452,6 +10038,18 @@ next:
   }
 
   if (opt_cmd == OPT::GC_PROCESS) {
+    if (bypass_gc) {
+      cerr << "ERROR: 'gc process' command does not support --bypass-gc option" << std::endl;
+      return EINVAL;
+    }
+    if (specified_shard_id) {
+      int max_gc_shards = min(static_cast<int>(g_ceph_context->_conf->rgw_gc_max_objs), rgw_shards_max());
+      if (shard_id < 0 || shard_id >= max_gc_shards) {
+        cerr << "ERROR: shard-id must be in the range [0, " << max_gc_shards - 1 << "]" << std::endl;
+        return EINVAL;
+      }
+    }
+
     rgw::sal::RadosStore* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!rados_store) {
       cerr <<
@@ -9461,12 +10059,14 @@ next:
     }
     RGWRados* store = rados_store->getRados();
 
-    int ret = store->process_gc(!include_all, null_yield);
+    std::optional<int> gc_shard_id = specified_shard_id ? std::optional<int>(shard_id) : std::nullopt;
+    int ret = store->process_gc(!include_all, null_yield, gc_shard_id);
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
   }
+#endif
 
   if (opt_cmd == OPT::LC_LIST) {
     formatter->open_array_section("lifecycle_list");
@@ -9536,6 +10136,7 @@ next:
     formatter->flush(cout);
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::LC_PROCESS) {
     if ((! bucket_name.empty()) ||
 	(! bucket_id.empty())) {
@@ -9554,6 +10155,7 @@ next:
       return 1;
     }
   }
+#endif
 
   if (opt_cmd == OPT::LC_RESHARD_FIX) {
     ret = RGWBucketAdminOp::fix_lc_shards(driver, bucket_op, stream_flusher, dpp(), null_yield);
@@ -9563,6 +10165,7 @@ next:
 
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::ORPHANS_FIND) {
     if (!yes_i_really_mean_it) {
       cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
@@ -9669,6 +10272,7 @@ next:
     formatter->close_section();
     formatter->flush(cout);
   }
+#endif
 
   if (opt_cmd == OPT::USER_CHECK) {
     check_bad_owner_bucket_mapping(driver, user->get_id(),
@@ -9873,6 +10477,7 @@ next:
     return 0;
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::METADATA_GET) {
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->get(metadata_key, formatter.get(), null_yield, dpp());
     if (ret < 0) {
@@ -9904,8 +10509,12 @@ next:
       return -ret;
     }
   }
+#endif
 
-  if (opt_cmd == OPT::METADATA_LIST ||
+  if (
+#ifdef WITH_RADOSGW_RADOS
+      opt_cmd == OPT::METADATA_LIST ||
+#endif
       opt_cmd == OPT::USER_LIST ||
       opt_cmd == OPT::ACCOUNT_LIST) {
     if (opt_cmd == OPT::USER_LIST) {
@@ -9980,6 +10589,7 @@ next:
     driver->meta_list_keys_complete(handle);
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::MDLOG_LIST) {
     if (!start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
@@ -10159,16 +10769,27 @@ next:
       return -ret;
     }
   }
+#endif
 
   if (opt_cmd == OPT::SYNC_INFO) {
     sync_info(opt_effective_zone_id, opt_bucket, zone_formatter.get());
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::SYNC_STATUS) {
+    if (opt_bucket || opt_bucket_name) {
+       cerr << "ERROR: 'sync status' command does not support --bucket option." << std::endl;
+       cerr << "Use 'radosgw-admin bucket sync status --bucket=<bucketname>' instead." << std::endl;
+       return EINVAL;
+    }
     sync_status(formatter.get());
   }
 
   if (opt_cmd == OPT::METADATA_SYNC_STATUS) {
+    if (opt_bucket || opt_bucket_name) {
+      cerr << "ERROR: 'metadata sync status' command does not support --bucket option." << std::endl;
+      return EINVAL;
+    }
     RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp());
@@ -10458,6 +11079,26 @@ next:
     }
   }
 
+  if ((opt_cmd == OPT::BUCKET_SUSPEND) || (opt_cmd == OPT::BUCKET_UNSUSPEND)) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    std::vector<rgw_bucket> buckets;
+    buckets.push_back(bucket->get_key());
+    const bool enabled = (opt_cmd == OPT::BUCKET_UNSUSPEND);
+    ret = driver->set_buckets_enabled(dpp(), buckets, enabled, null_yield);
+    if (ret < 0) {
+      cerr << "failed to " << (enabled ? "unsuspend" : "suspend")
+           << " bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
   if (opt_cmd == OPT::BUCKET_SYNC_INFO) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
@@ -10592,11 +11233,8 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-        rgw_bi_log_entry& entry = *iter;
+      for (auto& entry : entries) {
         encode_json("entry", entry, formatter.get());
-
-        marker = entry.id;
       }
       formatter->flush(cout);
     } while (truncated && count < max_entries);
@@ -10729,6 +11367,7 @@ next:
       }
     }
   }
+#endif
 
   if (opt_cmd == OPT::SYNC_GROUP_CREATE ||
       opt_cmd == OPT::SYNC_GROUP_MODIFY) {
@@ -11064,6 +11703,7 @@ next:
     show_result(sync_policy, zone_formatter.get(), cout);
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::BILOG_TRIM) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
@@ -11125,6 +11765,19 @@ next:
   }
 
   if (opt_cmd == OPT::BILOG_AUTOTRIM) {
+    // The background sync-log-trim thread only runs bucket trim on zones whose
+    // sync module exports data. Non-exporting zones (e.g. archive) deliberately
+    // forbid bucket-instance removal. Likewise, here, we add the same guard for
+    // user triggered auto-trim.
+    if (!static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->sync_module_exports_data() &&
+        !yes_i_really_mean_it) {
+      cerr << "This zone's sync module does not export data (e.g. an archive zone). "
+              "bilog autotrim can remove bucket instance metadata that this zone type "
+              "is meant to retain.\n"
+              "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return EPERM;
+    }
+
     RGWCoroutinesManager crs(driver->ctx(), driver->get_cr_registry());
     RGWHTTPManager http(driver->ctx(), crs.get_completion_mgr());
     int ret = http.start();
@@ -11352,10 +12005,14 @@ next:
       std::cerr << "log-type not specified." << std::endl;
       return -EINVAL;
     }
+    if (opt_log_type == log_type::omap) {
+      std::cerr << "omap datalogs are deprecated. You cannot convert to them." << std::endl;
+      return -EINVAL;
+    }
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
     std::string errstr;
     ret = run_coro(dpp(), context_pool,
-		   datalog->change_format(dpp(), *opt_log_type),
+		   datalog->change_format(dpp(), log_type::fifo),
 		   &errstr);
     if (ret < 0) {
       cerr << "ERROR: change_format(): " << errstr << std::endl;
@@ -11382,6 +12039,7 @@ next:
       std::cout << "No empty generations." << std::endl;
     }
   }
+#endif
 
   bool quota_op = (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE || opt_cmd == OPT::QUOTA_DISABLE);
 
@@ -11425,7 +12083,11 @@ next:
         op_state.quota_max_objects = std::max<int64_t>(-1, max_objects);
       }
       if (have_max_size) {
-        op_state.quota_max_size = std::max<int64_t>(-1, rgw_rounded_kb(max_size) * 1024);
+        if (max_size < 0) {
+          op_state.quota_max_size = -1;
+        } else {
+          op_state.quota_max_size = rgw_rounded_kb(max_size) * 1024;
+        }
       }
 
       std::string err_msg;
@@ -11499,6 +12161,7 @@ next:
     }
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::MFA_CREATE) {
     rados::cls::otp::otp_info_t config;
 
@@ -11851,6 +12514,7 @@ next:
       return -ret;
     }
   }
+#endif
 
   if (opt_cmd == OPT::PUBSUB_NOTIFICATION_LIST) {
     if (bucket_name.empty()) {
@@ -12075,8 +12739,13 @@ next:
         ret = b.remove_notification_by_id(dpp(), notification_id, null_yield);
       }
     }
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not remove notification: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::PUBSUB_TOPIC_STATS) {
     if (topic_name.empty()) {
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
@@ -12174,6 +12843,7 @@ next:
     formatter->close_section();
     formatter->flush(cout);
   }
+#endif
 
   if (opt_cmd == OPT::SCRIPT_PUT) {
     if (!str_script_ctx) {
@@ -12409,6 +13079,36 @@ next:
       ret =  driver->get_rgwrestore()->list(dpp(), entry, restore_status_filter,
                                             err_msg, stream_flusher, null_yield);
     }
+  }
+  if (opt_cmd == OPT::GLOBAL_CORS_GET) {
+    string allow_origins, allow_headers, allow_methods, expose_headers;
+    ret = g_conf().get_val("rgw_gcors_allow_origins", &allow_origins);
+    if (ret < 0 || allow_origins.empty()) {
+      cerr << "ERROR in OPT::GLOBAL_CORS_GET, no rgw_gcors_allow_origins config found or empty, ret=" << ret << std::endl;
+      return -EINVAL;
+    }
+    ret = g_conf().get_val("rgw_gcors_allow_headers", &allow_headers);
+    if (ret < 0 || allow_headers.empty()) {
+      cerr << "ERROR in OPT::GLOBAL_CORS_GET, no rgw_gcors_allow_headers config found or empty, ret=" << ret << std::endl;
+      return -EINVAL;
+    }
+    ret = g_conf().get_val("rgw_gcors_allow_methods", &allow_methods);
+    if (ret < 0 || allow_methods.empty()) {
+      cerr << "ERROR in OPT::GLOBAL_CORS_GET, no rgw_gcors_allow_methods config found or empty, ret=" << ret << std::endl;
+      return -EINVAL;
+    }
+    ret = g_conf().get_val("rgw_gcors_expose_headers", &expose_headers);
+    std::optional<RGWCORSRule> optional_global_cors;
+    if (RGWCORSRule::create_rule(allow_origins.c_str(), allow_headers.c_str(),
+          expose_headers.c_str(), allow_methods.c_str(), optional_global_cors) < 0) {
+      cerr << "ERROR: couldn't create RGWCORSRule from rgw_gcors_allow_origins=" << allow_origins <<
+		  ", rgw_gcors_allow_headers=" << allow_headers << ", rgw_gcors_allow_methods=" << allow_methods <<
+		  ", rgw_gcors_expose_headers=" << expose_headers << std::endl;
+      return -EINVAL;
+    }
+
+    optional_global_cors->dump(formatter.get());
+    formatter->flush(cout);
   }
   return 0;
 }

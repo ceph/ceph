@@ -25,6 +25,24 @@ class DaemonTest(ControllerTestCase):
             self._put(f'{self.URL_DAEMON}/crash.b78cd1164a1b', payload, version=APIVersion(0, 1))
             self.assertJsonBody(msg)
             self.assertStatus(200)
+            fake_client.daemons.action.assert_called_with(
+                action='restart', daemon_name='crash.b78cd1164a1b', image=None, force=False)
+
+    def test_daemon_action_force(self):
+        msg = "Scheduled to stop rgw.foo.host on host 'hostname'"
+
+        with patch_orch(True) as fake_client:
+            fake_client.daemons.action.return_value = msg
+            payload = {
+                'action': 'stop',
+                'container_image': None,
+                'force': True
+            }
+            self._put(f'{self.URL_DAEMON}/rgw.foo.host', payload, version=APIVersion(0, 1))
+            self.assertJsonBody(msg)
+            self.assertStatus(200)
+            fake_client.daemons.action.assert_called_with(
+                action='stop', daemon_name='rgw.foo.host', image=None, force=True)
 
     def test_daemon_invalid_action(self):
         payload = {

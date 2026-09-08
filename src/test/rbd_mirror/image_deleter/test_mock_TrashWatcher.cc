@@ -168,7 +168,7 @@ public:
     encode(images, out_bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
-                exec(RBD_TRASH, _, StrEq("rbd"), StrEq("trash_list"),
+                exec_internal(RBD_TRASH, _, StrEq("rbd"), StrEq("trash_list"),
                      ContentsEqual(bl), _, _, _))
       .WillOnce(DoAll(WithArg<5>(Invoke([out_bl](bufferlist *bl) {
                           *bl = out_bl;

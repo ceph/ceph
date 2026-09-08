@@ -106,13 +106,13 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
     ];
     const columns = [
       {
-        name: $localize`Hostname`,
-        prop: 'hostname',
+        name: $localize`Device path`,
+        prop: 'path',
         flexGrow: 1
       },
       {
-        name: $localize`Device path`,
-        prop: 'path',
+        name: $localize`Hostname`,
+        prop: 'hostname',
         flexGrow: 1
       },
       {

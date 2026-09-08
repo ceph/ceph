@@ -56,6 +56,27 @@ public:
     }
   }
   void init_rm_free(uint64_t offset, uint64_t length) override;
+
+  void expand(int64_t new_size) override {
+    std::lock_guard l(PrimaryAllocator::get_lock());
+    int64_t old_size = PrimaryAllocator::get_capacity();
+    ceph_assert(new_size >= old_size);
+
+    if (new_size == old_size) {
+      return;
+    }
+
+    PrimaryAllocator::expand(new_size);
+    if (bmap_alloc) {
+      bmap_alloc->expand(new_size);
+    }
+  }
+
+  uint64_t get_free_extents(
+    uint64_t range_begin,
+    uint64_t range_end,
+    size_t max_count,
+    free_extent_vector_t* out) override;
   void shutdown() override {
     std::lock_guard l(PrimaryAllocator::get_lock());
     PrimaryAllocator::_shutdown();

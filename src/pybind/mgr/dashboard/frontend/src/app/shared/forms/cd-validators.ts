@@ -10,7 +10,10 @@ import _ from 'lodash';
 import { Observable, of as observableOf, timer as observableTimer } from 'rxjs';
 import { map, switchMapTo, take } from 'rxjs/operators';
 
+import { hasMirroringMdsCaps } from '~/app/ceph/cephfs/cephfs-utils';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
+import { CLIENT_PREFIX } from '~/app/shared/models/cephfs.model';
+import { CephAuthUser } from '~/app/shared/models/cluster.model';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import validator from 'validator';
@@ -273,6 +276,49 @@ export class CdValidators {
   }
 
   /**
+   * Fails when an existing CephX user lacks MDS caps for CephFS mirroring.
+   * Missing users are valid (they will be created). Empty values are skipped.
+   * Revalidates when the filesystem control changes, same as {@link requiredIf}.
+   *
+   * @param getUsers Function returning the current CephX user list.
+   * @param fsControlName Name of the sibling form control with the filesystem name.
+   * @return {ValidatorFn} Error map with `invalidMdsCaps` when caps are insufficient.
+   */
+  static mirroringMdsCaps(
+    getUsers: () => CephAuthUser[],
+    fsControlName = 'filesystem'
+  ): ValidatorFn {
+    let isWatched = false;
+
+    return (control: AbstractControl): ValidationErrors | null => {
+      if (!isWatched && control.parent) {
+        const fsControl = control.parent.get(fsControlName);
+        if (fsControl) {
+          fsControl.valueChanges.subscribe(() => {
+            control.updateValueAndValidity({ emitEvent: false });
+          });
+        }
+        isWatched = true;
+      }
+
+      const username = (control.value ?? '').toString().trim();
+      const fsName = control.parent?.get(fsControlName)?.value;
+      if (isEmptyInputValue(username) || !fsName) {
+        return null;
+      }
+
+      const entity = `${CLIENT_PREFIX}${username}`;
+      const user = (getUsers() || []).find(
+        (u) => String(u.entity || u['user_entity'] || '') === entity
+      );
+      if (!user) {
+        return null;
+      }
+      return hasMirroringMdsCaps(user.caps?.mds, fsName) ? null : { invalidMdsCaps: true };
+    };
+  }
+
+  /**
    * Validator for DH-HMAC-CHAP keys that must be Base64 encoded.
    * Accepts plain Base64 or DHHC-1:XX:base64: format.
    * Skips validation when value is empty (use with required validator if needed).
@@ -289,6 +335,29 @@ export class CdValidators {
       return plainBase64Regex.test(value) || dhchapFormatRegex.test(value)
         ? null
         : { invalidBase64: true };
+    };
+  }
+
+  /**
+   * Validator that checks whether the control value is a Base64 encoded JSON string.
+   * Whitespace characters are ignored. Skips validation when value is empty.
+   * @returns {ValidatorFn} Returns error map with `invalidBase64Json` if validation fails.
+   */
+  static base64Json(): ValidatorFn {
+    return (control: AbstractControl): ValidationErrors | null => {
+      const value = (control.value || '').replace(/\s/g, '');
+      if (isEmptyInputValue(value)) {
+        return null;
+      }
+      if (!/^[A-Za-z0-9+/]+=*$/.test(value)) {
+        return { invalidBase64Json: true };
+      }
+      try {
+        JSON.parse(atob(value));
+        return null;
+      } catch {
+        return { invalidBase64Json: true };
+      }
     };
   }
 
@@ -312,18 +381,22 @@ export class CdValidators {
   ) {
     conditionalValidators = conditionalValidators.concat(permanentValidators);
 
-    formControl.setValidators((control: AbstractControl): {
-      [key: string]: any;
-    } => {
-      const value = condition.call(this);
-      if (value) {
-        return Validators.compose(conditionalValidators)(control);
+    formControl.setValidators(
+      (
+        control: AbstractControl
+      ): {
+        [key: string]: any;
+      } => {
+        const value = condition.call(this);
+        if (value) {
+          return Validators.compose(conditionalValidators)(control);
+        }
+        if (permanentValidators.length > 0) {
+          return Validators.compose(permanentValidators)(control);
+        }
+        return null;
       }
-      if (permanentValidators.length > 0) {
-        return Validators.compose(permanentValidators)(control);
-      }
-      return null;
-    });
+    );
 
     watchControls.forEach((control: AbstractControl) => {
       control.valueChanges.subscribe(() => {
@@ -348,8 +421,9 @@ export class CdValidators {
       if (!ctrl1 || !ctrl2) {
         return null;
       }
-      if (ctrl1.value !== ctrl2.value) {
-        ctrl2.setErrors({ match: true });
+      if (ctrl2.value && ctrl1.value !== ctrl2.value) {
+        const errors = _.merge({}, ctrl2.errors, { match: true });
+        ctrl2.setErrors(errors);
       } else {
         const hasError = ctrl2.hasError('match');
         if (hasError) {
@@ -565,7 +639,8 @@ export class CdValidators {
       let errorName: string;
       // - Bucket names cannot be formatted as IP address.
       constraints.push(() => {
-        const ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
+        const ipv4Rgx =
+          /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
         const ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
         const name = control.value;
         let notIP = true;
@@ -706,7 +781,8 @@ export class CdValidators {
 
   static oauthAddressTest(): ValidatorFn {
     // Pattern matches: IPv4 addresses or hostnames (with or without dots, like 'localhost')
-    const OAUTH2_HTTPS_ADDRESS_PATTERN = /^((\d{1,3}\.){3}\d{1,3}|([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9-_]+)$/;
+    const OAUTH2_HTTPS_ADDRESS_PATTERN =
+      /^((\d{1,3}\.){3}\d{1,3}|([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9-_]+)$/;
     return (control: AbstractControl): Record<string, boolean> | null => {
       if (!control.value) {
         return null;

@@ -73,6 +73,23 @@ ceph config rm client.foo debug_asok
 ceph config set client.foo debug_asok 66
 ceph config rm client.foo 'debug asok'
 
+# whitespace in who/section (e.g. "osd.0  " with stray trailing spaces)
+ceph config set 'osd.0  ' debug_asok 44
+ceph config get osd.0 debug_asok | grep 44
+while ! ceph tell osd.0 config get debug_asok | grep 44
+do
+    sleep 1
+done
+ceph config rm osd.0 debug_asok
+while ceph tell osd.0 config get debug_asok | grep 44
+do
+    sleep 1
+done
+
+ceph config set '  osd.0' debug_asok 55
+ceph config get osd.0 debug_asok | grep 55
+ceph config rm osd.0 debug_asok
+
 # help
 ceph config help debug_asok | grep debug_asok
 
@@ -117,6 +134,28 @@ while ! ceph config show client.rgw | grep debug_rgw | grep 22 | grep mon
 do
     sleep 1
 done
+
+# show mgr module options (tracker #24458)
+# Pick the active mgr name and verify that a known module option appears in
+# "config show" and "config show-with-defaults" once it has been set.
+# Use telemetry/contact (str, default empty) so any set value is non-default
+# and is guaranteed to appear in "config show" (not just "show-with-defaults").
+mgr_name=$(ceph mgr dump --format json | jq -r '.active_name')
+
+ceph config set mgr."$mgr_name" mgr/telemetry/contact test@example.com
+
+# config show must include the option with source "mgr_module"
+while ! ceph config show mgr."$mgr_name" | grep 'telemetry/contact'
+do
+    sleep 1
+done
+ceph config show mgr."$mgr_name" | grep 'telemetry/contact' | grep 'mgr_module'
+
+# config show-with-defaults must also include it
+ceph config show-with-defaults mgr."$mgr_name" | grep 'telemetry/contact'
+
+# single-key lookup
+ceph config show mgr."$mgr_name" mgr/telemetry/contact | grep 'test@example.com'
 
 # show-with-defaults
 ceph config show-with-defaults osd.0 | grep debug_asok

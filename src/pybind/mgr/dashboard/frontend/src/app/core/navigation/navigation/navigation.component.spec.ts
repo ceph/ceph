@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { SimplebarAngularModule } from 'simplebar-angular';
 import { of } from 'rxjs';
 
@@ -69,7 +68,6 @@ describe('NavigationComponent', () => {
     imports: [
       HttpClientTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       RouterTestingModule,
       SimplebarAngularModule,
       NgbModule,
@@ -264,6 +262,33 @@ describe('NavigationComponent', () => {
         expect(element).toBeTruthy();
         expect(element.nativeElement.textContent.trim()).toBe(expectedText);
       }
+    });
+  });
+
+  describe('Administration settings icon wrapper', () => {
+    it('should hide the wrapper for a read-only user (no write user perms, no configOpt.read)', () => {
+      component.permissions = everythingPermittedExcept(['user', 'configOpt']);
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('.tc_administration'))).toBeFalsy();
+    });
+
+    it('should show the wrapper when user has write permission', () => {
+      const permissions: Permissions = new Permissions({});
+      Object.keys(permissions).forEach((key) => (permissions[key] = new Permission(['read'])));
+      permissions.user = new Permission(['read', 'create']);
+      component.permissions = permissions;
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('.tc_administration'))).toBeTruthy();
+    });
+
+    it('should show the wrapper when configOpt is readable', () => {
+      const permissions: Permissions = new Permissions({});
+      Object.keys(permissions).forEach((key) => (permissions[key] = new Permission(['read'])));
+      permissions.user = new Permission(['read']);
+      permissions.configOpt = new Permission(['read']);
+      component.permissions = permissions;
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('.tc_administration'))).toBeTruthy();
     });
   });
 });

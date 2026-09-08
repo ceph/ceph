@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import moment from 'moment';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
@@ -35,8 +35,7 @@ describe('RbdTrashListComponent', () => {
       RouterTestingModule,
       SharedModule,
       NgbNavModule,
-      PipesModule,
-      ToastrModule.forRoot()
+      PipesModule
     ],
     providers: [TaskListService]
   });

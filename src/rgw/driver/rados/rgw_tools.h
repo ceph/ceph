@@ -105,7 +105,7 @@ int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                         real_time *pmtime, uint64_t *psize, optional_yield y,
                         std::map<std::string, bufferlist> *pattrs = nullptr);
 
-const char *rgw_find_mime_by_ext(std::string& ext);
+std::string_view rgw_find_mime_by_ext(std::string_view ext);
 
 void rgw_filter_attrset(std::map<std::string, bufferlist>& unfiltered_attrset, const std::string& check_prefix,
                         std::map<std::string, bufferlist> *attrset);

@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
-#include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast/try_lexical_convert.hpp>
 
 #include "librbd/Features.h"
 #include "include/rbd/features.h"
@@ -62,10 +62,8 @@ uint64_t rbd_features_from_string(const std::string& orig_value,
     return RBD_FEATURES_DEFAULT;
   }
 
-  try {
-    // numeric?
-    features = boost::lexical_cast<uint64_t>(value);
-
+  // Try to parse as numeric value first
+  if (boost::conversion::try_lexical_convert(value, features)) {
     // drop unrecognized bits
     uint64_t unsupported_features = (features & ~RBD_FEATURES_ALL);
     if (unsupported_features != 0ull) {
@@ -85,7 +83,7 @@ uint64_t rbd_features_from_string(const std::string& orig_value,
 	*err << "ignoring feature mask 0x" << std::hex << ignored_features;
       }
     }
-  } catch (boost::bad_lexical_cast&) {
+  } else {
     // feature name list?
     bool errors = false;
     std::vector<std::string> feature_names;

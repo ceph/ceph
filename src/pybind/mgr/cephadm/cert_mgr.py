@@ -3,10 +3,17 @@ import logging
 from fnmatch import fnmatch
 from enum import Enum
 
-from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
+from cephadm.ssl_certs import SSLCerts
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
-from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSCredentials
+from ceph.deployment.tls_utils import (
+    get_certificate_info,
+    get_private_key_info,
+    parse_tls_pem_bundle,
+    contains_private_key,
+    contains_multiple_pem_blocks,
+    SSLConfigException
+)
+from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSObjectProtocol, TLSCredentials
 from cephadm.tlsobject_store import TLSObjectStore
 
 if TYPE_CHECKING:
@@ -364,12 +371,124 @@ class CertMgr:
                  user_made: bool = False, editable: bool = False) -> None:
         self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
 
+    def save_cert_key_from_pem(
+        self,
+        cert_name: str,
+        key_name: str,
+        pem_data: str,
+        service_name: Optional[str] = None,
+        host: Optional[str] = None,
+        user_made: bool = True,
+        editable: bool = True,
+    ) -> Tuple[str, str]:
+        """Ingest user-provided PEM data and store certificate/key objects.
+
+        This helper accepts either cert-only PEM data or a combined PEM bundle.
+
+        * **Single cert-only PEM**:
+          stored unchanged under *cert_name*. No key is saved and the returned
+          private key is an empty string.
+
+        * **Multi-block certificate chain without a key**:
+          parsed and normalised via ``parse_tls_pem_bundle()``. The resulting
+          certificate chain is stored under *cert_name*. No key is saved.
+
+        * **Combined PEM bundle** containing a private key and one or more
+          CERTIFICATE blocks:
+          parsed and split on ingest. The certificate chain is stored under
+          *cert_name* and the private key is stored under *key_name*. The private
+          key is validated against the leaf certificate before either object is
+          persisted.
+
+        Note:
+            Single-block cert-only input is not parsed or validated by this
+            method; callers that require certificate validation must perform it
+            separately.
+
+        Args:
+            cert_name: Logical certificate name in the TLS object store.
+            key_name: Logical private-key name in the TLS object store.
+            pem_data: Raw PEM string.
+            service_name: Service target for SERVICE-scoped objects.
+            host: Host target for HOST-scoped objects.
+            user_made: Mark the stored objects as user-provided.
+            editable: Allow subsequent CLI edits.
+
+        Returns:
+            ``(cert_chain, private_key)`` — the values stored or selected for
+            storage. ``private_key`` is an empty string when no private key block
+            was present.
+
+        Raises:
+            SSLConfigException: If bundle parsing or key/certificate validation
+                fails, for example because the bundle has multiple private keys,
+                no CERTIFICATE block, an encrypted/unsupported private key, or a
+                private key that does not match the leaf certificate.
+        """
+        if contains_private_key(pem_data) or contains_multiple_pem_blocks(pem_data):
+            # Combined PEM bundle or multi-block cert chain: parse and normalize before storing.
+            cert_chain, private_key = parse_tls_pem_bundle(pem_data)
+            logger.debug(
+                'certmgr: split fullchain PEM for %s (service=%s host=%s)',
+                cert_name, service_name, host,
+            )
+        else:
+            # Single cert block (most common case for existing callers).
+            cert_chain = pem_data
+            private_key = ''
+
+        self.cert_store.save_tlsobject(cert_name, cert_chain, service_name, host, user_made, editable)
+        if private_key:
+            self.key_store.save_tlsobject(key_name, private_key, service_name, host, user_made, editable)
+
+        return cert_chain, private_key
+
     def save_self_signed_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials, host: str,
                                        label: Optional[str] = None) -> None:
         ss_cert_name = self.self_signed_cert(service_name, label)
         ss_key_name = self.self_signed_key(service_name, label)
         self.cert_store.save_tlsobject(ss_cert_name, tls_creds.cert, host=host, user_made=False)
         self.key_store.save_tlsobject(ss_key_name, tls_creds.key, host=host, user_made=False)
+
+    def _is_inline_saved_tlsobject(self, obj: Optional[TLSObjectProtocol]) -> bool:
+        # Inline-saved credentials are persisted as user_made=True but editable=False.
+        return bool(obj and getattr(obj, 'user_made', False) and not getattr(obj, 'editable', True))
+
+    def rm_inline_saved_cert_key_pair(
+        self,
+        cert_name: str,
+        key_name: str,
+        service_name: Optional[str] = None,
+        host: Optional[str] = None,
+        ca_cert_name: Optional[str] = None,
+    ) -> None:
+        """Remove inline-saved (non-editable) TLS objects for a given service/host.
+        This intentionally does *not* remove user-provisioned certmgr entries
+        (editable=True), which are considered reusable references.
+        """
+        context = f"service={service_name!r}, host={host!r}" if host else f"service={service_name!r}"
+
+        cert_obj = cast(Cert, self.cert_store.get_tlsobject_if_exists(cert_name, service_name, host))
+        if self._is_inline_saved_tlsobject(cert_obj):
+            logger.info("Removing inline-saved cert %r (%s)", cert_name, context)
+            self.rm_cert_if_present(cert_name, service_name, host)
+        elif cert_obj:
+            logger.info("Skipping cert removal for %r — exists but is not inline-saved (editable=True) (%s)", cert_name, context)
+
+        key_obj = cast(PrivKey, self.key_store.get_tlsobject_if_exists(key_name, service_name, host))
+        if self._is_inline_saved_tlsobject(key_obj):
+            logger.info("Removing inline-saved private key %r (%s)", key_name, context)
+            self.rm_key_if_present(key_name, service_name, host)
+        elif key_obj:
+            logger.info("Skipping key removal for %r — exists but is not inline-saved (editable=True) (%s)", key_name, context)
+
+        if ca_cert_name:
+            ca_obj = cast(Cert, self.cert_store.get_tlsobject_if_exists(ca_cert_name, service_name, host))
+            if self._is_inline_saved_tlsobject(ca_obj):
+                logger.info("Removing inline-saved CA cert %r (%s)", ca_cert_name, context)
+                self.rm_cert_if_present(ca_cert_name, service_name, host)
+            elif ca_obj:
+                logger.info("Skipping CA cert removal for %r — exists but is not inline-saved (editable=True) (%s)", ca_cert_name, context)
 
     def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         return self.cert_store.rm_tlsobject(cert_name, service_name, host)
@@ -385,25 +504,22 @@ class CertMgr:
         try:
             return self.rm_cert(cert_name, service_name, host)
         except TLSObjectException:
-            logger.debug(
-                "TLS cert %s for service=%s host=%s not found; nothing to remove",
-                cert_name, service_name, host,
-            )
             return False
 
     def rm_key_if_present(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         try:
             return self.rm_key(key_name, service_name, host)
         except TLSObjectException:
-            logger.debug(
-                "TLS key %s for service=%s host=%s not found; nothing to remove",
-                key_name, service_name, host,
-            )
             return False
 
-    def rm_self_signed_cert_key_pair_if_present(self, service_name: str, host: str, label: Optional[str] = None) -> None:
-        self.rm_cert_if_present(self.self_signed_cert(service_name, label), service_name, host)
-        self.rm_key_if_present(self.self_signed_key(service_name, label), service_name, host)
+    def try_rm_self_signed_cert_key_pair(self, service_name: str, host: str, label: Optional[str] = None) -> None:
+        cert_removed = self.rm_cert_if_present(self.self_signed_cert(service_name, label), service_name, host)
+        key_removed = self.rm_key_if_present(self.self_signed_key(service_name, label), service_name, host)
+        if cert_removed or key_removed:
+            logger.info(
+                f"Removing cephadm-signed cert/key for service: {service_name}, host: {host}: "
+                f"key/cert removed: {key_removed}/{cert_removed}"
+            )
 
     def cert_ls(self, filter_by: str = '',
                 include_details: bool = False,

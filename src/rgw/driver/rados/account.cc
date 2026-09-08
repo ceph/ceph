@@ -37,6 +37,7 @@ static constexpr std::string_view users_oid_prefix = "users.";
 static constexpr std::string_view groups_oid_prefix = "groups.";
 static constexpr std::string_view roles_oid_prefix = "roles.";
 static constexpr std::string_view topics_oid_prefix = "topics.";
+static constexpr std::string_view oidcs_oid_prefix = "oidcs.";
 static const std::string account_oid_prefix = "account.";
 static constexpr std::string_view name_oid_prefix = "name.";
 
@@ -79,6 +80,14 @@ static std::string get_topics_key(std::string_view account_id) {
 rgw_raw_obj get_topics_obj(const RGWZoneParams& zone,
                           std::string_view account_id) {
   return {zone.account_pool, get_topics_key(account_id)};
+}
+
+static std::string get_oidcs_key(std::string_view account_id) {
+  return string_cat_reserve(oidcs_oid_prefix, account_id);
+}
+rgw_raw_obj get_oidcs_obj(const RGWZoneParams& zone,
+                          std::string_view account_id) {
+  return {zone.account_pool, get_oidcs_key(account_id)};
 }
 
 static std::string get_account_key(std::string_view account_id) {

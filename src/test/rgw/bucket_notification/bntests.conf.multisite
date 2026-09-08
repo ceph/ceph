@@ -11,3 +11,8 @@ secret_key = crayon
 display_name = RegularUser
 user_id = regular.user
 email =
+
+[kerberos]
+service_name = kafka
+principal = rgw/<broker-fqdn/ip>@REALM.COM
+keytab = /etc/krb5-keytabs/rgw.service.keytab

@@ -100,5 +100,5 @@ opened will also be returned on fsync.
 
 See `PostgreSQL's summary of fsync() error reporting across operating systems
 <https://wiki.postgresql.org/wiki/Fsync_Errors>`_ and `Matthew Wilcox's
-presentation on Linux IO error handling
+presentation on Linux I/O error handling
 <https://www.youtube.com/watch?v=74c19hwY2oE>`_ for more information.

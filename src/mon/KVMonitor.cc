@@ -4,6 +4,7 @@
 #include "mon/Monitor.h"
 #include "mon/KVMonitor.h"
 #include "mon/Paxos.h"
+#include "common/debug.h"
 #include "include/stringify.h"
 #include "messages/MKVData.h"
 #include "messages/MMonCommand.h"

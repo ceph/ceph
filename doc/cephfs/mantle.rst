@@ -27,7 +27,7 @@ following features from that paper:
 #. "Instantaneous CPU utilization" as a metric.
 
 [1] Supercomputing '15 Paper:
-http://sc15.supercomputing.org/schedule/event_detail-evid=pap168.html
+https://sc15.supercomputing.org/schedule/event_detail-evid=pap168.html
 
 Quickstart with vstart
 ----------------------

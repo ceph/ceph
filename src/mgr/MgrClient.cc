@@ -15,6 +15,8 @@
 
 #include "MgrClient.h"
 
+#include <algorithm>
+
 #include "common/perf_counters_collection.h"
 #include "common/perf_counters_key.h"
 #include "mgr/MgrContext.h"
@@ -38,6 +40,16 @@ using std::vector;
 
 using ceph::bufferlist;
 using ceph::make_message;
+
+namespace {
+
+std::string format_counter_path(std::string path)
+{
+  std::replace(path.begin(), path.end(), '\0', ' ');
+  return path;
+}
+
+} // anonymous namespace
 using ceph::ref_cast;
 using ceph::ref_t;
 
@@ -65,12 +77,15 @@ void MgrClient::init()
 
   timer.init();
   initialized = true;
+  dead = false;
 }
 
 void MgrClient::shutdown()
 {
   std::unique_lock l(lock);
   ldout(cct, 10) << dendl;
+
+  dead = true;
 
   if (connect_retry_callback) {
     timer.cancel_event(connect_retry_callback);
@@ -104,6 +119,10 @@ void MgrClient::shutdown()
 Dispatcher::dispatch_result_t MgrClient::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
+
+  if (dead) {
+    return false;
+  }
 
   switch(m->get_type()) {
   case MSG_MGR_MAP:
@@ -342,7 +361,7 @@ void MgrClient::_send_report()
     auto undeclare = [report, this](const std::string &path)
     {
       report->undeclare_types.push_back(path);
-      ldout(cct,20) << " undeclare " << path << dendl;
+      ldout(cct,20) << " undeclare " << format_counter_path(path) << dendl;
       session->declared.erase(path);
     };
 
@@ -371,7 +390,7 @@ void MgrClient::_send_report()
       }
 
       if (session->declared.count(path) == 0) {
-        ldout(cct, 20) << " declare " << path << dendl;
+        ldout(cct, 20) << " declare " << format_counter_path(path) << dendl;
         PerfCounterType type;
         type.path = path;
         if (data.description) {

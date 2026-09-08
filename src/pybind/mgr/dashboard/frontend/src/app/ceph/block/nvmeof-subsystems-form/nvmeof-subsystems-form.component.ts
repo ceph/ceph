@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, SecurityContext, ViewChild } from '@angular/core';
+import { Component, DestroyRef, OnInit, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
@@ -19,7 +19,6 @@ import { from, Observable, of } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { catchError, concatMap, map, tap } from 'rxjs/operators';
-import { DomSanitizer } from '@angular/platform-browser';
 
 export type SubsystemPayload = {
   nqn: string;
@@ -30,9 +29,25 @@ export type SubsystemPayload = {
   listeners: ListenerItem[];
   authType: AUTHENTICATION.Bidirectional | AUTHENTICATION.Unidirectional;
   hostDchapKeyList: Array<{ dhchap_key: string; host_nqn: string }>;
+  listenerMode?: string;
+  subnetMask?: string;
 };
 
 type StepResult = { step: string; success: boolean; error?: string };
+
+type CreateSubsystemRequest = {
+  nqn: string;
+  gw_group: string;
+  dhchap_key: string;
+  network_mask?: string[];
+};
+
+type SequentialStep = { step: string; call: () => Observable<unknown> };
+
+const LISTENER_MODE = {
+  AUTO_FETCH: 'auto-fetch',
+  MANUAL: 'manual'
+};
 
 const STEP_LABELS = {
   DETAILS: 'Subsystem details',
@@ -76,8 +91,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     private destroyRef: DestroyRef,
     private nvmeofService: NvmeofService,
     private notificationService: NotificationService,
-    private router: Router,
-    private sanitizer: DomSanitizer
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -87,10 +101,18 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     this.rebuildSteps();
   }
 
+  onHostTypeChanged(hostType: string) {
+    this.setAuthStepVisibility(this.shouldShowAuthStep(hostType));
+  }
+
   private setAuthStepVisibility(nextShowAuth: boolean) {
     if (this.showAuthStep === nextShowAuth) return;
     this.showAuthStep = nextShowAuth;
     this.rebuildSteps();
+  }
+
+  private shouldShowAuthStep(hostType: string | null | undefined): boolean {
+    return (hostType ?? HOST_TYPE.SPECIFIC) === HOST_TYPE.SPECIFIC;
   }
 
   populateReviewData() {
@@ -110,7 +132,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       this.stepTwoValue = step2;
     }
 
-    const nextShowAuth = (step2?.hostType ?? HOST_TYPE.SPECIFIC) === HOST_TYPE.SPECIFIC;
+    const nextShowAuth = this.shouldShowAuthStep(step2?.hostType);
 
     if (nextShowAuth !== this.showAuthStep) {
       this.setAuthStepVisibility(nextShowAuth);
@@ -159,62 +181,69 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
       hosts: payload.hostType === HOST_TYPE.SPECIFIC ? payload.hostDchapKeyList : [],
       gw_group: this.group
     };
-    this.nvmeofService
-      .createSubsystem({
-        nqn: payload.nqn,
-        gw_group: this.group,
-        dhchap_key: payload.subsystemDchapKey
-      })
-      .subscribe({
-        next: () => {
-          stepResults.push({ step: this.steps[0].label, success: true });
-          const sequentialSteps: { step: string; call: () => Observable<any> }[] = [];
 
-          if (payload.listeners && payload.listeners.length > 0) {
-            sequentialSteps.push({
-              step: $localize`Listeners`,
-              call: () =>
-                this.nvmeofService.createListeners(
-                  `${payload.nqn}.${this.group}`,
-                  this.group,
-                  payload.listeners
-                )
-            });
-          }
+    // Prepare subsystem creation request
+    const createSubsystemRequest: CreateSubsystemRequest = {
+      nqn: payload.nqn,
+      gw_group: this.group,
+      dhchap_key: payload.subsystemDchapKey
+    };
 
+    if (payload.listenerMode === LISTENER_MODE.AUTO_FETCH && payload.subnetMask) {
+      createSubsystemRequest.network_mask = [payload.subnetMask];
+    }
+
+    this.nvmeofService.createSubsystem(createSubsystemRequest).subscribe({
+      next: () => {
+        stepResults.push({ step: this.steps[0].label, success: true });
+        const sequentialSteps: SequentialStep[] = [];
+
+        if (
+          payload.listenerMode !== LISTENER_MODE.AUTO_FETCH &&
+          payload.listeners &&
+          payload.listeners.length > 0
+        ) {
           sequentialSteps.push({
-            step: this.steps[1].label,
+            step: $localize`Listeners`,
             call: () =>
-              this.nvmeofService.addSubsystemInitiators(
+              this.nvmeofService.createListeners(
                 `${payload.nqn}.${this.group}`,
-                initiatorRequest
+                this.group,
+                payload.listeners
               )
           });
-
-          this.runSequentialSteps(sequentialSteps, stepResults).subscribe({
-            complete: () => this.showFinalNotification(stepResults)
-          });
-        },
-        error: (err) => {
-          err.preventDefault();
-          const errorMsg = err?.error?.detail || $localize`Subsystem creation failed`;
-          this.notificationService.show(
-            NotificationType.error,
-            $localize`Subsystem creation failed`,
-            errorMsg
-          );
-          this.isSubmitLoading = false;
-          this.router.navigate(['block/nvmeof/subsystems'], {
-            queryParams: { group: this.group }
-          });
         }
-      });
+
+        sequentialSteps.push({
+          step: this.steps[1].label,
+          call: () =>
+            this.nvmeofService.addSubsystemInitiators(
+              `${payload.nqn}.${this.group}`,
+              initiatorRequest
+            )
+        });
+
+        this.runSequentialSteps(sequentialSteps, stepResults).subscribe({
+          complete: () => this.showFinalNotification(stepResults)
+        });
+      },
+      error: (err) => {
+        err.preventDefault();
+        const errorMsg = err?.error?.detail || $localize`Subsystem creation failed`;
+        this.notificationService.show(
+          NotificationType.error,
+          $localize`Subsystem creation failed`,
+          errorMsg
+        );
+        this.isSubmitLoading = false;
+        this.router.navigate(['block/nvmeof/subsystems'], {
+          queryParams: { group: this.group }
+        });
+      }
+    });
   }
 
-  private runSequentialSteps(
-    steps: { step: string; call: () => Observable<any> }[],
-    stepResults: StepResult[]
-  ): Observable<void> {
+  private runSequentialSteps(steps: SequentialStep[], stepResults: StepResult[]): Observable<void> {
     return from(steps).pipe(
       concatMap((step) =>
         step.call().pipe(
@@ -234,22 +263,19 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   private showFinalNotification(stepResults: StepResult[]) {
     this.isSubmitLoading = false;
 
-    const messageLines = stepResults.map((stepResult) =>
-      stepResult.success
-        ? $localize`<div>${stepResult.step} step created successfully</div><br/>`
-        : $localize`<div>${stepResult.step} step failed: <code>${stepResult.error}</code></div><br/>`
-    );
-
-    const rawHtml = messageLines.join('<br/>');
-    const sanitizedHtml = this.sanitizer.sanitize(SecurityContext.HTML, rawHtml) ?? '';
-
     const hasFailure = stepResults.some((r) => !r.success);
     const type = hasFailure ? NotificationType.error : NotificationType.success;
     const title = hasFailure
       ? $localize`Subsystem created (with errors)`
       : $localize`Subsystem created`;
 
-    this.notificationService.show(type, title, sanitizedHtml);
+    const messageLines = stepResults.map((stepResult) =>
+      stepResult.success
+        ? $localize`${stepResult.step}:step: created successfully`
+        : $localize`${stepResult.step}:step: failed (${stepResult.error}:error:)`
+    );
+
+    this.notificationService.show(type, title, messageLines.join('<br>'));
     this.router.navigate(['block/nvmeof/subsystems'], {
       queryParams: {
         group: this.group,

@@ -15,6 +15,16 @@ counters for all reporting entities are returned in the Prometheus exposition
 format.  (See the Prometheus `documentation
 <https://prometheus.io/docs/instrumenting/exposition_formats/#text-format-details>`_.)
 
+.. note:: Ceph daemon performance counters are no longer exported by
+   this module by default. That job has moved to the ``ceph-exporter``
+   daemon, which cephadm deploys on every host and which reads the
+   counters directly from the local daemon admin sockets. The
+   ``prometheus`` module continues to provide cluster-level metrics,
+   the service discovery endpoint, and RBD image metrics. See
+   :ref:`monitoring` for an overview of the monitoring stack and
+   `Ceph daemon performance counters metrics`_ below for how to
+   re-enable the old behavior.
+
 Enabling Prometheus output
 ==========================
 
@@ -23,6 +33,19 @@ Enable the ``prometheus`` module by running the below command :
 .. prompt:: bash #
 
    ceph mgr module enable prometheus
+
+ceph-exporter
+=============
+
+``ceph-exporter`` works alongside the Prometheus manager module. The two
+components have distinct responsibilities:
+
+- The **Prometheus manager module** exposes all cluster-level metrics by
+  default other than Ceph daemon performance counters. However, these metrics
+  may be exported by the Prometheus manager module by setting the module option
+  :confval:`mgr/prometheus/exclude_perf_counter` to `false`.
+- The **ceph-exporter daemon** exposes only Ceph daemon performance counters
+  as Prometheus metrics, running on each host in the cluster.
 
 Configuration
 -------------
@@ -183,10 +206,10 @@ encountered since the last ``clear`` command was issued:
     3 health check(s) listed
 
 
-RBD IO statistics
------------------
+RBD I/O statistics
+------------------
 
-The ``prometheus`` module can optionally collect RBD per-image IO statistics by enabling
+The ``prometheus`` module can optionally collect RBD per-image I/O statistics by enabling
 dynamic OSD performance counters. Statistics are gathered for all images
 in the pools that are specified by the ``mgr/prometheus/rbd_stats_pools``
 configuration parameter. The parameter is a comma or space separated list

@@ -14,7 +14,7 @@ Ceph Container Images
    Instead of the ``:latest`` tag, use explicit tags or image IDs. For
    example:
 
-   ``podman pull ceph/ceph:v15.2.0``
+   ``podman pull quay.io/ceph/ceph:v20.2.3``
 
 Official Releases
 -----------------

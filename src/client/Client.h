@@ -42,6 +42,7 @@
 #include "osdc/ObjectCacher.h"
 
 #include "RWRef.h"
+#include "Dentry.h"
 #include "DentryRef.h"
 #include "InodeRef.h"
 #include "MetaSession.h"
@@ -56,6 +57,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -144,7 +146,6 @@ struct DirEntry {
 
 struct Cap;
 class Dir;
-class Dentry;
 struct SnapRealm;
 struct Fh;
 struct CapSnap;
@@ -443,6 +444,7 @@ public:
    *
    */
   int readdir_snapdiff(dir_result_t* dir1, snapid_t snap2,
+    unsigned diff_mask,
     struct dirent* out_de, snapid_t* out_snap);
 
   int getdir(const char *relpath, std::list<std::string>& names,
@@ -633,6 +635,9 @@ public:
   int mksnap(const char *path, const char *name, const UserPerm& perm,
              mode_t mode=0, const std::map<std::string, std::string> &metadata={});
   int rmsnap(const char *path, const char *name, const UserPerm& perm, bool check_perms=false);
+  int do_snap_md_op(const char* path, const std::string& md_key,
+                    const std::string& md_val, const unsigned int op_flag,
+                    const UserPerm &perms);
 
   // cephx mds auth caps checking
   int mds_check_access(std::string& path, const UserPerm& perms, int mask);
@@ -1241,6 +1246,21 @@ protected:
   void trim_cache(bool trim_kernel_dcache=false);
   void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
+  void assert_lru_num_pinned_sane(const char *where, const Dentry *dn = nullptr) {
+    if (lru.lru_get_num_pinned() <= lru.lru_get_size())
+      return;
+    std::ostringstream oss;
+    oss << where << " LRU num_pinned drift: pinned="
+	<< lru.lru_get_num_pinned() << " size=" << lru.lru_get_size()
+	<< " (top=" << lru.lru_get_top() << " bot=" << lru.lru_get_bot()
+	<< " pintail=" << lru.lru_get_pintail() << ")";
+    if (dn)
+      oss << " dentry '" << dn->name << "' dn " << dn
+	  << " ref=" << dn->ref
+	  << " expireable=" << dn->lru_is_expireable();
+    lderr(cct) << oss.str() << dendl;
+    ceph_assert(lru.lru_get_num_pinned() <= lru.lru_get_size());
+  }
   void trim_caps(MetaSession *s, uint64_t max);
   void _invalidate_kernel_dcache();
   void _trim_negative_child_dentries(const InodeRef& in);

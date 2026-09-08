@@ -167,14 +167,66 @@ void OperationThrottler::start()
   return;
 }
 
+void OperationThrottler::register_metrics(const std::string &sched_type) {
+  namespace sm = seastar::metrics;
+
+  LOG_PREFIX(OperationThrottler::register_metrics);
+  INFO("registering metrics for scheduler {}", sched_type);
+  const std::string group_name =
+    (sched_type == "mclock_scheduler") ? "osd_mclock" : "osd_wpq";
+
+  for (auto& [op_class, name] : {
+    std::pair{SchedulerClass::background_recovery,    "background_recovery"},
+    std::pair{SchedulerClass::background_best_effort, "background_best_effort"},
+    std::pair{SchedulerClass::client,                 "client"},
+    std::pair{SchedulerClass::repop,                  "repop"},
+    std::pair{SchedulerClass::immediate,              "immediate"},
+  }) {
+    auto label = sm::label("op_class")(name);
+    metrics.add_group(group_name, {
+      sm::make_counter("throttled_ops",
+        [this, op_class] { return throttled_ops[op_class]; },
+        sm::description("ops delayed by mClock scheduler"), {label}),
+      sm::make_counter("total_wait_ms",
+        [this, op_class] { return total_wait_ms[op_class]; },
+        sm::description("total ms spent waiting in mClock"), {label}),
+      sm::make_gauge("max_wait_ms",
+        [this, op_class] { return max_wait_ms[op_class]; },
+        sm::description("max wait ms in mClock by op class"), {label}),
+      sm::make_histogram("throttle_wait_latency",
+        [this, op_class]() -> seastar::metrics::histogram& {
+          return wait_hist[op_class]; },
+        sm::description("mClock throttle wait distribution"), {label}),
+    });
+  }
+}
+
+
 OperationThrottler::OperationThrottler(ConfigProxy &conf)
 {
   conf.add_observer(this);
+  for (auto op_class : {SchedulerClass::background_recovery,
+                        SchedulerClass::background_best_effort,
+                        SchedulerClass::client,
+                        SchedulerClass::repop,
+                        SchedulerClass::immediate}) {
+    wait_hist[op_class].buckets = {
+      {0, 1},
+      {0, 5},
+      {0, 10},
+      {0, 50},
+      {0, 100},
+      {0, 500},
+      {0, 1000},
+    };
+  }
+  register_metrics(conf.get_val<std::string>("osd_op_queue"));
+
 }
 
 void OperationThrottler::initialize_scheduler(CephContext *cct, ConfigProxy &conf, bool is_rotational, int whoami)
 {
-  scheduler = crimson::osd::scheduler::make_scheduler(cct, conf, whoami, seastar::smp::count,
+  scheduler = crimson::osd::scheduler::make_scheduler(cct, conf, whoami, seastar::this_smp_shard_count(),
             seastar::this_shard_id(), is_rotational, true);
   update_from_config(conf);
 }
@@ -194,9 +246,12 @@ seastar::future<> OperationThrottler::background_task() {
       if (auto when_ready = std::get_if<double>(&work_item)) {
         ceph::real_clock::time_point future_time = ceph::real_clock::from_double(*when_ready);
         auto now = ceph::real_clock::now();
-        ceph_assert(future_time > now);
+        if (future_time <= now) {
+          DEBUG("future_time={} already passed now={}, retrying immediately", future_time, now);
+          continue;
+        }  
         auto wait_duration = std::chrono::duration_cast<std::chrono::milliseconds>(future_time - now);
-        INFO("No items ready. Retrying in {} ms", wait_duration.count());
+        DEBUG("No items ready. Retrying in {} ms", wait_duration.count());
         co_await seastar::sleep(wait_duration);
         continue;
       }
@@ -260,6 +315,26 @@ seastar::future<> OperationThrottler::stop()
   started = false;
 
   co_return;
+}
+
+void OperationThrottler::record_throttle_wait(
+  SchedulerClass op_class, uint64_t wait_ms)
+{
+  if (wait_ms == 0) {
+    return;
+  }
+  throttled_ops[op_class]++;
+  total_wait_ms[op_class] += wait_ms;
+  max_wait_ms[op_class] = std::max(max_wait_ms[op_class], wait_ms);
+
+  auto& h = wait_hist[op_class];
+  h.sample_count++;
+  h.sample_sum += wait_ms;
+  for (auto& bucket : h.buckets) {
+    if (wait_ms <= bucket.upper_bound) {
+      bucket.count++;
+    }
+  }
 }
 
 void OperationThrottler::dump_detail(Formatter *f) const

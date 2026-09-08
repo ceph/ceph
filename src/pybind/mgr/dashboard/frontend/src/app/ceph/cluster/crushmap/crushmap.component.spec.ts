@@ -34,7 +34,7 @@ describe('CrushmapComponent', () => {
 
   it('should display right title', () => {
     const span = debugElement.nativeElement.querySelector('.card-header');
-    expect(span.textContent).toBe('CRUSH map viewer');
+    expect(span.textContent.trim()).toBe('CRUSH map viewer');
   });
 
   it('should display "No nodes!" if ceph tree nodes is empty array', fakeAsync(() => {

@@ -48,10 +48,8 @@ seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
                     store, coll,
                     osdmap_oid(e), 0, 0,
                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED).handle_error(
-    read_errorator::assert_all_func([e](const auto&) {
-      ceph_abort_msg(fmt::format("{} read gave enoent on {}",
-                                 __func__, osdmap_oid(e)));
-    }));
+    read_errorator::assert_all("{} read gave enoent on {}",
+                                   __func__, osdmap_oid(e)));
 }
 
 read_errorator::future<ceph::bufferlist> OSDMeta::load_inc_map(epoch_t e)

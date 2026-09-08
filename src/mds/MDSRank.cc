@@ -21,6 +21,7 @@
 #include <iterator>
 #include <vector>
 #include <cstdlib>
+#include "common/Cond.h"
 #include "common/DecayCounter.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -32,6 +33,7 @@
 #include "common/cmdparse.h"
 #include "log/Log.h"
 
+#include "msg/Messenger.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
@@ -531,6 +533,8 @@ MDSRank::MDSRank(
 
   _heartbeat_reset_grace = g_conf().get_val<uint64_t>("mds_heartbeat_reset_grace");
   heartbeat_grace = g_conf().get_val<double>("mds_heartbeat_grace");
+  mds_dmclock_scheduler = new MDSDmclockScheduler(this);
+
   op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
                                          cct->_conf->mds_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->mds_op_history_size,
@@ -558,6 +562,7 @@ MDSRank::~MDSRank()
 
   if (server) { delete server; server = 0; }
   if (locker) { delete locker; locker = 0; }
+  if (mds_dmclock_scheduler) { delete mds_dmclock_scheduler; mds_dmclock_scheduler = 0; }
 
   if (logger) {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
@@ -2127,6 +2132,8 @@ void MDSRank::active_start()
   dout(1) << "active_start" << dendl;
 
   m_is_active = true;
+  mds_dmclock_scheduler->set_mds_is_active(true);
+  mds_dmclock_scheduler->try_enable_qos_feature();
 
   if (last_state == MDSMap::STATE_CREATING ||
       last_state == MDSMap::STATE_STARTING) {
@@ -2246,6 +2253,9 @@ void MDSRank::boot_create()
 void MDSRank::stopping_start()
 {
   dout(2) << "Stopping..." << dendl;
+
+  mds_dmclock_scheduler->try_disable_qos_feature();
+  mds_dmclock_scheduler->set_mds_is_active(false);
 
   if (mdsmap->get_num_in_mds() == 1 && !sessionmap.empty()) {
     std::vector<Session*> victims;
@@ -3108,20 +3118,22 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "dump stray") {
     dout(10) << "dump_stray start" <<  dendl;
     // the context is a wrapper for formatter to be used while scanning stray dir
-    auto context = std::make_unique<MDCache::C_MDS_DumpStrayDirCtx>(mdcache, f,
-     [this,on_finish](int r) {
-      // completion callback, will be called when scan is done
-      dout(10) << "dump_stray done" <<  dendl;
-      bufferlist bl;
-      on_finish(r, "", bl);
-    });
+    auto ctx = new MDCache::C_MDS_DumpStrayDirCtx(mdcache, f, on_finish);
     std::lock_guard l(mds_lock);
-    r = mdcache->stray_status(std::move(context));
-    // since the scanning op can be async, we want to know it, for better semantics
-    if (r == -EAGAIN) {
-     dout(10) << "dump_stray wait" << dendl;
-    }
+    mdcache->stray_status(ctx);
     return;
+  } else if (command == "dump qos") {
+    std::lock_guard l(mds_lock);
+    mds_dmclock_scheduler->dump(f);
+  } else if (command == "qos set") {
+    std::lock_guard l(mds_lock);
+    mds_dmclock_scheduler->process_asok_qos_set(cmdmap, *css, f);
+  } else if (command == "qos rm") {
+    std::lock_guard l(mds_lock);
+    mds_dmclock_scheduler->process_asok_qos_rm(cmdmap, *css, f);
+  } else if (command == "qos get") {
+    std::lock_guard l(mds_lock);
+    mds_dmclock_scheduler->process_asok_qos_get(cmdmap, *css, f);
   } else {
     r = -ENOSYS;
   }
@@ -3753,6 +3765,8 @@ void MDSRank::create_logger()
 			    "dir_fetch_complete", "Fetch complete dirfrag");
     mds_plb.add_u64_counter(l_mds_dir_fetch_keys,
 			    "dir_fetch_keys", "Fetch keys from dirfrag");
+    mds_plb.add_u64_counter(l_mds_dir_fetch_background,
+			    "dir_fetch_background", "Background full dirfrag prefetch");
     mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
     mds_plb.add_u64_counter(l_mds_dir_split, "dir_split", "Directory split");
     mds_plb.add_u64_counter(l_mds_dir_merge, "dir_merge", "Directory merge");
@@ -4142,6 +4156,14 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_cap_revoke_eviction_timeout",
     "mds_debug_subtrees",
     "mds_dir_max_entries",
+    "mds_dir_prefetch",
+    "mds_dir_prefetch_backend",
+    "mds_dir_prefetch_backend_hit_threshold",
+    "mds_dir_prefetch_backend_max",
+    "mds_dmclock_enable",
+    "mds_dmclock_limit",
+    "mds_dmclock_reservation",
+    "mds_dmclock_weight",
     "mds_dump_cache_threshold_file",
     "mds_dump_cache_threshold_formatter",
     "mds_enable_op_tracker",
@@ -4274,6 +4296,7 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
     mdlog->handle_conf_change(changed, *mdsmap);
     purge_queue.handle_conf_change(changed, *mdsmap);
     scrubstack->handle_conf_change(changed);
+    mds_dmclock_scheduler->handle_conf_change(changed);
   }));
 }
 

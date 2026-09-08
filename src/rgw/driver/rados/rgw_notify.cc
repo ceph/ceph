@@ -38,14 +38,15 @@ static inline std::ostream& operator<<(std::ostream& out,
   std::string user;
   std::string password;
   parse_url_authority(e.push_endpoint, host, user, password);
-  return out << "notification id: '" << e.event.configurationId
-             << "', topic: '" << e.arn_topic
-             << "', endpoint: '" << host
-             << "', endpoint_user: '" << user
-             << "', bucket_owner: '" << e.event.bucket_ownerIdentity
-             << "', bucket: '" << e.event.bucket_name
-             << "', object: '" << e.event.object_key
-             << "', event type: '" << e.event.eventName << "'";
+  return out << "notification id=" << e.event.configurationId
+             << " topic=" << e.arn_topic << " endpoint=" << host
+             << " endpoint_user=" << user
+             << " bucket_owner=" << e.event.bucket_ownerIdentity
+             << " bucket=" << e.event.bucket_name
+             << " object=" << e.event.object_key
+             << " object_versionId=" << e.event.object_versionId
+             << " x_amz_request_id=" << e.event.x_amz_request_id
+             << " event type=" << e.event.eventName;
 }
 
 struct persistency_tracker {
@@ -84,10 +85,8 @@ void publish_commit_completion(rados_completion_t completion, void* arg) {
 class Manager : public DoutPrefixProvider {
   using Executor = boost::asio::io_context::executor_type;
   bool shutdown = false;
-  static constexpr auto queues_update_period = std::chrono::milliseconds(30000); // 30s
   static constexpr auto queues_update_retry = std::chrono::milliseconds(1000); // 1s
   static constexpr auto queue_idle_sleep = std::chrono::milliseconds(100); // 100ms
-  const utime_t failover_time = utime_t(queues_update_period*3); // 90s
   CephContext* const cct;
   static constexpr auto COOKIE_LEN = 16;
   const std::string lock_cookie;
@@ -258,13 +257,14 @@ private:
     ret = push_endpoint->send(this, event_entry.event, yield);
     if (ret < 0) {
       ldpp_dout(this, 5) << "WARNING: push entry marker: " << entry.marker
-                         << " failed. error: " << ret
+                         << " failed."
                          << " (will retry) for event with " << event_entry
-                         << dendl;
+                         << " ret=" << ret << dendl;
       return EntryProcessingResult::Failure;
     }
     ldpp_dout(this, 5) << "INFO: push entry marker: " << entry.marker
-                       << " ok for event with " << event_entry << dendl;
+                       << " ok for event with " << event_entry << " ret=" << ret
+                       << dendl;
     if (perfcounter)
       perfcounter->inc(l_rgw_pubsub_push_ok);
     return EntryProcessingResult::Successful;
@@ -681,6 +681,12 @@ private:
     auto& rados_ioctx = rados_store->getRados()->get_notif_pool_ctx();
     auto next_check_time = ceph::coarse_real_clock::zero();
     while (!shutdown) {
+      // both the refresh period and the ownership timeout are derived from the
+      // same read, so the renewal cadence always stays shorter than the lock
+      // duration, even if the option is changed at runtime
+      const auto queues_update_period = std::chrono::seconds(
+          cct->_conf.get_val<uint64_t>("rgw_topic_ownership_update_period"));
+      const utime_t failover_time = utime_t(queues_update_period*3);
       // check if queue list needs to be refreshed
       if (ceph::coarse_real_clock::now() > next_check_time) {
         next_check_time = ceph::coarse_real_clock::now() + queues_update_period;
@@ -1394,7 +1400,7 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   metadata_fetched_from_attributes(false),
   user_id(to_string(_s->owner.id)),
   user_tenant(_s->user->get_id().tenant),
-  req_id(_s->req_id),
+  req_id(_s->trans_id),
   yield(y)
 {
   filter_amz_meta(x_meta_map, _s->info.x_meta_map);

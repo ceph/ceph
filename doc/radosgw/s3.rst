@@ -17,6 +17,7 @@ API
    Service Ops <s3/serviceops>
    Bucket Ops <s3/bucketops>
    Object Ops <s3/objectops>
+   S3 Control <s3/s3control>
    C++ <s3/cpp>
    C# <s3/csharp>
    Java <s3/java>
@@ -70,6 +71,8 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+--------------------------------------------------+
 | **Get Object Info (HEAD)**      | Supported       |                                                  |
 +---------------------------------+-----------------+--------------------------------------------------+
+| **Get Object Attributes**       | Supported       | Added in Tentacle                                |
++---------------------------------+-----------------+--------------------------------------------------+
 | **POST Object**                 | Supported       |                                                  |
 +---------------------------------+-----------------+--------------------------------------------------+
 | **Copy Object**                 | Supported       |                                                  |
@@ -86,6 +89,10 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+--------------------------------------------------+
 | **Object Ownership**            | Supported       |                                                  |
 +---------------------------------+-----------------+--------------------------------------------------+
+| **Bucket PublicAccessBlock**    | Supported       |                                                  |
++---------------------------------+-----------------+--------------------------------------------------+
+| **Account PublicAccessBlock**   | Supported       | See :ref:`radosgw-s3control`                     |
++---------------------------------+-----------------+--------------------------------------------------+
 
 Unsupported Header Fields
 -------------------------
@@ -98,4 +105,4 @@ The following common request header fields are not supported:
 | **x-amz-id-2**             | Response   |
 +----------------------------+------------+
 
-.. _Amazon S3 API: http://docs.aws.amazon.com/AmazonS3/latest/API/APIRest.html
+.. _Amazon S3 API: https://docs.aws.amazon.com/AmazonS3/latest/API/APIRest.html

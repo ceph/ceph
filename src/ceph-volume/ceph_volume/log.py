@@ -16,7 +16,7 @@ def setup(name='ceph-volume.log', log_path=None, log_level=None):
     root_logger = logging.getLogger()
     # The default path is where all ceph log files are, and will get rotated by
     # Ceph's logrotate rules.
-    log_level = log_level or "DEBUG"
+    log_level = log_level or "INFO"
     log_level = getattr(logging, log_level.upper())
     root_logger.setLevel(log_level)
 

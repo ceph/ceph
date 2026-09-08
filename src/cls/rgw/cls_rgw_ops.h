@@ -4,6 +4,7 @@
 #pragma once
 
 #include "cls/rgw/cls_rgw_types.h"
+#include "include/rados/librados_fwd.hpp"
 
 struct rgw_cls_tag_timeout_op
 {
@@ -79,21 +80,27 @@ struct rgw_cls_obj_prepare_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
 
-struct rgw_cls_obj_complete_op
-{
-  RGWModifyOp op;
+// common bilog-related fields shared across bucket index write operations.
+// wire structs (rgw_cls_obj_complete_op, rgw_cls_link_olh_op,
+// rgw_cls_unlink_instance_op) inherit from this to provide a uniform
+// interface for both InIndex (cls_rgw CLS) and FIFO bilog writing.
+struct cls_rgw_bi_log_related_op {
+  bool log_op{false};
   cls_rgw_obj_key key;
+  std::string op_tag;
+  rgw_zone_set zones_trace;
+  uint16_t bilog_flags{0};
+  RGWModifyOp op{CLS_RGW_OP_UNKNOWN};
+};
+
+struct rgw_cls_obj_complete_op : cls_rgw_bi_log_related_op
+{
   std::string locator;
   rgw_bucket_entry_ver ver;
   rgw_bucket_dir_entry_meta meta;
-  std::string tag;
-  bool log_op;
-  uint16_t bilog_flags;
-
   std::list<cls_rgw_obj_key> remove_objs;
-  rgw_zone_set zones_trace;
 
-  rgw_cls_obj_complete_op() : op(CLS_RGW_OP_ADD), log_op(false), bilog_flags(0) {}
+  rgw_cls_obj_complete_op() { op = CLS_RGW_OP_ADD; }
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(9, 7, bl);
@@ -101,7 +108,7 @@ struct rgw_cls_obj_complete_op
     encode(c, bl);
     encode(ver.epoch, bl);
     encode(meta, bl);
-    encode(tag, bl);
+    encode(op_tag, bl);
     encode(locator, bl);
     encode(remove_objs, bl);
     encode(ver, bl);
@@ -110,7 +117,7 @@ struct rgw_cls_obj_complete_op
     encode(bilog_flags, bl);
     encode(zones_trace, bl);
     ENCODE_FINISH(bl);
- }
+  }
   void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
     uint8_t c;
@@ -121,7 +128,7 @@ struct rgw_cls_obj_complete_op
     }
     decode(ver.epoch, bl);
     decode(meta, bl);
-    decode(tag, bl);
+    decode(op_tag, bl);
     if (struct_v >= 2) {
       decode(locator, bl);
     }
@@ -162,20 +169,15 @@ struct rgw_cls_obj_complete_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
 
-struct rgw_cls_link_olh_op {
-  cls_rgw_obj_key key;
+struct rgw_cls_link_olh_op : cls_rgw_bi_log_related_op {
   std::string olh_tag;
-  bool delete_marker;
-  std::string op_tag;
+  bool delete_marker{false};
   rgw_bucket_dir_entry_meta meta;
-  uint64_t olh_epoch;
-  bool log_op;
-  uint16_t bilog_flags;
-  ceph::real_time unmod_since; /* only create delete marker if newer then this */
-  bool high_precision_time;
-  rgw_zone_set zones_trace;
+  uint64_t olh_epoch{0};
+  ceph::real_time unmod_since; /* only create delete marker if newer than this */
+  bool high_precision_time{false};
 
-  rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false), bilog_flags(0), high_precision_time(false) {}
+  rgw_cls_link_olh_op() {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(5, 1, bl);
@@ -229,13 +231,31 @@ struct rgw_cls_link_olh_op {
 };
 WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
 
-struct rgw_cls_unlink_instance_op {
+struct rgw_cls_refresh_instance_op {
   cls_rgw_obj_key key;
-  std::string op_tag;
+
+  rgw_cls_refresh_instance_op() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(key, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static std::list<rgw_cls_refresh_instance_op> generate_test_instances();
+  void dump(ceph::Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_cls_refresh_instance_op)
+
+struct rgw_cls_unlink_instance_op : cls_rgw_bi_log_related_op {
   // this represents a remote epoch during multisite sync
-  uint64_t olh_epoch;
-  bool log_op;
-  uint16_t bilog_flags;
+  uint64_t olh_epoch{0};
   // cls ops include olh_tag so the OLH class code can guard sensitive updates—only proceed if op.olh_tag equals
   // the OLH’s stored tag. If it doesn’t, the op fails and the caller refreshes state/retries.
   // for context: in real clusters, out‑of‑order replication or topology changes can recreate/move an OLH
@@ -243,9 +263,8 @@ struct rgw_cls_unlink_instance_op {
   // writers carrying the old tag get refused instead of overwriting the new state. A concrete example of failures
   // tied to OLH attributes shows how wrong attributes/tags cause bad GET behavior, which is why the guard exists.
   std::string olh_tag;
-  rgw_zone_set zones_trace;
 
-  rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
+  rgw_cls_unlink_instance_op() { op = CLS_RGW_OP_UNLINK_INSTANCE; }
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(3, 1, bl);
@@ -1794,3 +1813,172 @@ struct cls_rgw_get_bucket_resharding_ret  {
   void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
+
+// OpIssuer types: carry bilog metadata and issue the CLS bucket index op.
+// used by with_bilog<CLSRGWOpType>() in rgw_rados.cc to dispatch both the
+// in-index CLS operation and (for FIFO buckets) the bilog FIFO write.
+
+// base for CLSRGWCompleteModifyOp — holds all bilog fields and issues the
+// cls_rgw_bucket_complete_op() call.
+struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {
+  CLSRGWCompleteModifyOpBase(bool log_data, cls_rgw_obj_key key_,
+                             std::string tag_, const rgw_zone_set* zones_trace_,
+                             uint16_t bilog_flags_,
+                             RGWModifyOp op_ = CLS_RGW_OP_UNKNOWN) {
+    log_op = log_data;
+    key = std::move(key_);
+    op_tag = std::move(tag_);
+    if (zones_trace_) zones_trace = *zones_trace_;
+    bilog_flags = bilog_flags_;
+    op = op_;
+  }
+  void complete_op(librados::ObjectWriteOperation& o,
+                   const rgw_bucket_entry_ver& ver,
+                   const rgw_bucket_dir_entry_meta& dir_meta,
+                   const std::list<cls_rgw_obj_key>* remove_objs,
+                   const std::string& locator) const;
+};
+
+// typed complete-op issuer.
+template <RGWModifyOp OpType>
+struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
+  template <class... Args>
+  explicit CLSRGWCompleteModifyOp(Args&&... args)
+    : CLSRGWCompleteModifyOpBase(std::forward<Args>(args)...) { op = OpType; }
+};
+
+// base for CLSRGWLinkOLH
+struct CLSRGWLinkOLHBase : private cls_rgw_bi_log_related_op {
+  CLSRGWLinkOLHBase(bool log_data, cls_rgw_obj_key key_,
+                    std::string tag_, const rgw_zone_set* zones_trace_,
+                    uint16_t bilog_flags_) {
+    log_op = log_data;
+    key = std::move(key_);
+    op_tag = std::move(tag_);
+    if (zones_trace_) zones_trace = *zones_trace_;
+    bilog_flags = bilog_flags_;
+  }
+  static RGWModifyOp get_bilog_op_type(bool delete_marker) {
+    return delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH;
+  }
+  std::string& get_op_tag_ref() { return op_tag; }
+  const cls_rgw_bi_log_related_op& get_bilog_op() const { return *this; }
+
+  void link_olh(librados::ObjectWriteOperation& o,
+                const ceph::bufferlist& olh_tag,
+                bool delete_marker,
+                const rgw_bucket_dir_entry_meta* meta,
+                uint64_t olh_epoch,
+                ceph::real_time unmod_since,
+                bool high_precision_time,
+                ceph::bufferlist* epoch_out_bl = nullptr) const;
+};
+
+// typed OLH-link issuer. DeleteMarkerV selects LINK_OLH vs LINK_OLH_DM.
+template <bool DeleteMarkerV>
+struct CLSRGWLinkOLH : CLSRGWLinkOLHBase {
+  using CLSRGWLinkOLHBase::CLSRGWLinkOLHBase;
+  static constexpr RGWModifyOp get_bilog_op_type() {
+    return DeleteMarkerV ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH;
+  }
+};
+
+// issuer for unlink-instance ops. always carries CLS_RGW_OP_UNLINK_INSTANCE.
+struct CLSRGWUnlinkInstance : cls_rgw_bi_log_related_op {
+  CLSRGWUnlinkInstance(bool log_data, cls_rgw_obj_key key_,
+                       std::string tag_, const rgw_zone_set* zones_trace_,
+                       uint16_t bilog_flags_) {
+    log_op = log_data;
+    key = std::move(key_);
+    op_tag = std::move(tag_);
+    if (zones_trace_) zones_trace = *zones_trace_;
+    bilog_flags = bilog_flags_;
+    op = CLS_RGW_OP_UNLINK_INSTANCE;
+  }
+  static constexpr RGWModifyOp get_bilog_op_type() {
+    return CLS_RGW_OP_UNLINK_INSTANCE;
+  }
+  void unlink_instance(librados::ObjectWriteOperation& o,
+                       const std::string& olh_tag,
+                       uint64_t olh_epoch,
+                       ceph::bufferlist* epoch_out_bl = nullptr) const;
+};
+
+namespace cls::rgw {
+struct ClassId {
+  static constexpr auto name = "rgw";
+};
+namespace method {
+// Bucket Index
+constexpr auto bucket_init_index = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_INIT_INDEX);
+constexpr auto bucket_init_index2 = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_INIT_INDEX2);
+constexpr auto bucket_set_tag_timeout = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_SET_TAG_TIMEOUT);
+constexpr auto bucket_list = ClsMethod<RdTag, ClassId>(RGW_BUCKET_LIST);
+constexpr auto bucket_check_index = ClsMethod<RdTag, ClassId>(RGW_BUCKET_CHECK_INDEX);
+constexpr auto bucket_rebuild_index = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_REBUILD_INDEX);
+constexpr auto bucket_update_stats = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_UPDATE_STATS);
+constexpr auto bucket_prepare_op = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_PREPARE_OP);
+constexpr auto bucket_complete_op = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_COMPLETE_OP);
+constexpr auto bucket_link_olh = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_LINK_OLH);
+constexpr auto bucket_unlink_instance = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_UNLINK_INSTANCE);
+constexpr auto bucket_read_olh_log = ClsMethod<RdTag, ClassId>(RGW_BUCKET_READ_OLH_LOG);
+constexpr auto bucket_trim_olh_log = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_TRIM_OLH_LOG);
+constexpr auto bucket_clear_olh = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_CLEAR_OLH);
+constexpr auto bucket_refresh_instance = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_REFRESH_INSTANCE);
+
+// Object
+constexpr auto obj_remove = ClsMethod<RdWrTag, ClassId>(RGW_OBJ_REMOVE);
+constexpr auto obj_store_pg_ver = ClsMethod<WrTag, ClassId>(RGW_OBJ_STORE_PG_VER);
+constexpr auto obj_check_attrs_prefix = ClsMethod<RdTag, ClassId>(RGW_OBJ_CHECK_ATTRS_PREFIX);
+constexpr auto obj_check_mtime = ClsMethod<RdTag, ClassId>(RGW_OBJ_CHECK_MTIME);
+
+// Bucket Index (BI) / Resharding
+constexpr auto bi_get = ClsMethod<RdTag, ClassId>(RGW_BI_GET);
+constexpr auto bi_put = ClsMethod<RdWrTag, ClassId>(RGW_BI_PUT);
+constexpr auto bi_put_entries = ClsMethod<RdWrTag, ClassId>(RGW_BI_PUT_ENTRIES);
+constexpr auto bi_list = ClsMethod<RdTag, ClassId>(RGW_BI_LIST);
+constexpr auto reshard_log_trim = ClsMethod<RdWrTag, ClassId>(RGW_RESHARD_LOG_TRIM);
+constexpr auto bi_log_list = ClsMethod<RdTag, ClassId>(RGW_BI_LOG_LIST);
+constexpr auto bi_log_trim = ClsMethod<RdWrTag, ClassId>(RGW_BI_LOG_TRIM);
+constexpr auto dir_suggest_changes = ClsMethod<RdWrTag, ClassId>(RGW_DIR_SUGGEST_CHANGES);
+constexpr auto bi_log_resync = ClsMethod<RdWrTag, ClassId>(RGW_BI_LOG_RESYNC);
+constexpr auto bi_log_stop = ClsMethod<RdWrTag, ClassId>(RGW_BI_LOG_STOP);
+
+// Usage Logging
+constexpr auto user_usage_log_add = ClsMethod<RdWrTag, ClassId>(RGW_USER_USAGE_LOG_ADD);
+constexpr auto user_usage_log_read = ClsMethod<RdTag, ClassId>(RGW_USER_USAGE_LOG_READ);
+constexpr auto user_usage_log_trim = ClsMethod<RdWrTag, ClassId>(RGW_USER_USAGE_LOG_TRIM);
+constexpr auto usage_log_clear = ClsMethod<WrTag, ClassId>(RGW_USAGE_LOG_CLEAR);
+
+// Garbage Collection
+constexpr auto gc_set_entry = ClsMethod<RdWrTag, ClassId>(RGW_GC_SET_ENTRY);
+constexpr auto gc_defer_entry = ClsMethod<RdWrTag, ClassId>(RGW_GC_DEFER_ENTRY);
+constexpr auto gc_list = ClsMethod<RdTag, ClassId>(RGW_GC_LIST);
+constexpr auto gc_remove = ClsMethod<RdWrTag, ClassId>(RGW_GC_REMOVE);
+
+// Lifecycle Bucket List
+constexpr auto lc_get_entry = ClsMethod<RdTag, ClassId>(RGW_LC_GET_ENTRY);
+constexpr auto lc_set_entry = ClsMethod<RdWrTag, ClassId>(RGW_LC_SET_ENTRY);
+constexpr auto lc_rm_entry = ClsMethod<RdWrTag, ClassId>(RGW_LC_RM_ENTRY);
+constexpr auto lc_get_next_entry = ClsMethod<RdTag, ClassId>(RGW_LC_GET_NEXT_ENTRY);
+constexpr auto lc_put_head = ClsMethod<RdWrTag, ClassId>(RGW_LC_PUT_HEAD);
+constexpr auto lc_get_head = ClsMethod<RdTag, ClassId>(RGW_LC_GET_HEAD);
+constexpr auto lc_list_entries = ClsMethod<RdTag, ClassId>(RGW_LC_LIST_ENTRIES);
+
+// Multipart
+constexpr auto mp_upload_part_info_update = ClsMethod<RdWrTag, ClassId>(RGW_MP_UPLOAD_PART_INFO_UPDATE);
+
+// Resharding
+constexpr auto reshard_add = ClsMethod<RdWrTag, ClassId>(RGW_RESHARD_ADD);
+constexpr auto reshard_list = ClsMethod<RdTag, ClassId>(RGW_RESHARD_LIST);
+constexpr auto reshard_get = ClsMethod<RdTag, ClassId>(RGW_RESHARD_GET);
+constexpr auto reshard_remove = ClsMethod<RdWrTag, ClassId>(RGW_RESHARD_REMOVE);
+
+// Resharding Attribute
+constexpr auto set_bucket_resharding = ClsMethod<RdWrTag, ClassId>(RGW_SET_BUCKET_RESHARDING);
+constexpr auto clear_bucket_resharding = ClsMethod<RdWrTag, ClassId>(RGW_CLEAR_BUCKET_RESHARDING);
+constexpr auto guard_bucket_resharding = ClsMethod<RdTag, ClassId>(RGW_GUARD_BUCKET_RESHARDING);
+constexpr auto get_bucket_resharding = ClsMethod<RdTag, ClassId>(RGW_GET_BUCKET_RESHARDING);
+}
+}
+

@@ -212,6 +212,94 @@ void ObjectModel::applyIoOp(IoOp& op) {
       verify_write_and_record_and_generate_seed(appendOp);
     } break;
 
+    case OpType::TruncateWrite: {
+      ceph_assert(primary_created);
+      ceph_assert(reads.empty());
+      ceph_assert(writes.empty());
+      SingleTruncateWriteOp& truncWriteOp = static_cast<SingleTruncateWriteOp&>(op);
+      auto new_size = truncWriteOp.size;
+      auto old_size = primary_contents.size();
+      bool expand = new_size > old_size;
+      primary_contents.resize(new_size);
+      if (expand) {
+        std::generate(std::execution::seq, primary_contents.begin() + old_size,
+                      primary_contents.end(), generate_random);
+      }
+      // Now apply the write operations
+      for (int i = 0; i < 1; i++) {
+        ceph_assert(!reads.intersects(truncWriteOp.offset[i], truncWriteOp.length[i]));
+        ceph_assert(!writes.intersects(truncWriteOp.offset[i], truncWriteOp.length[i]));
+        writes.union_insert(truncWriteOp.offset[i], truncWriteOp.length[i]);
+        if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
+          primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
+        }
+        std::generate(std::execution::seq,
+                      std::next(primary_contents.begin(), truncWriteOp.offset[i]),
+                      std::next(primary_contents.begin(),
+                                truncWriteOp.offset[i] + truncWriteOp.length[i]),
+                      generate_random);
+      }
+      num_io++;
+    } break;
+    case OpType::TruncateWrite2: {
+      ceph_assert(primary_created);
+      ceph_assert(reads.empty());
+      ceph_assert(writes.empty());
+      DoubleTruncateWriteOp& truncWriteOp = static_cast<DoubleTruncateWriteOp&>(op);
+      auto new_size = truncWriteOp.size;
+      auto old_size = primary_contents.size();
+      bool expand = new_size > old_size;
+      primary_contents.resize(new_size);
+      if (expand) {
+        std::generate(std::execution::seq, primary_contents.begin() + old_size,
+                      primary_contents.end(), generate_random);
+      }
+      // Now apply the write operations
+      for (int i = 0; i < 2; i++) {
+        ceph_assert(!reads.intersects(truncWriteOp.offset[i], truncWriteOp.length[i]));
+        ceph_assert(!writes.intersects(truncWriteOp.offset[i], truncWriteOp.length[i]));
+        writes.union_insert(truncWriteOp.offset[i], truncWriteOp.length[i]);
+        if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
+          primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
+        }
+        std::generate(std::execution::seq,
+                      std::next(primary_contents.begin(), truncWriteOp.offset[i]),
+                      std::next(primary_contents.begin(),
+                                truncWriteOp.offset[i] + truncWriteOp.length[i]),
+                      generate_random);
+      }
+      num_io++;
+    } break;
+    case OpType::TruncateWrite3: {
+      ceph_assert(primary_created);
+      ceph_assert(reads.empty());
+      ceph_assert(writes.empty());
+      TripleTruncateWriteOp& truncWriteOp = static_cast<TripleTruncateWriteOp&>(op);
+      auto new_size = truncWriteOp.size;
+      auto old_size = primary_contents.size();
+      bool expand = new_size > old_size;
+      primary_contents.resize(new_size);
+      if (expand) {
+        std::generate(std::execution::seq, primary_contents.begin() + old_size,
+                      primary_contents.end(), generate_random);
+      }
+      // Now apply the write operations
+      for (int i = 0; i < 3; i++) {
+        ceph_assert(!reads.intersects(truncWriteOp.offset[i], truncWriteOp.length[i]));
+        ceph_assert(!writes.intersects(truncWriteOp.offset[i], truncWriteOp.length[i]));
+        writes.union_insert(truncWriteOp.offset[i], truncWriteOp.length[i]);
+        if (truncWriteOp.offset[i] + truncWriteOp.length[i] > primary_contents.size()) {
+          primary_contents.resize(truncWriteOp.offset[i] + truncWriteOp.length[i]);
+        }
+        std::generate(std::execution::seq,
+                      std::next(primary_contents.begin(), truncWriteOp.offset[i]),
+                      std::next(primary_contents.begin(),
+                                truncWriteOp.offset[i] + truncWriteOp.length[i]),
+                      generate_random);
+      }
+      num_io++;
+    } break;
+
     case OpType::FailedWrite: {
       ceph_assert(primary_created);
       SingleWriteOp& writeOp = static_cast<SingleWriteOp&>(op);

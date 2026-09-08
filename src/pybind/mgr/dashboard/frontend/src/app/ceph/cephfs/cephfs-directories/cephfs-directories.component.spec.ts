@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { TreeViewComponent, TreeviewModule } from 'carbon-components-angular';
 import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { Observable, of } from 'rxjs';
 import _ from 'lodash';
 
@@ -393,7 +393,6 @@ describe('CephfsDirectoriesComponent', () => {
       SharedModule,
       RouterTestingModule,
       TreeviewModule,
-      ToastrModule.forRoot(),
       NgbModalModule
     ],
     declarations: [CephfsDirectoriesComponent],

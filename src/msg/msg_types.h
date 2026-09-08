@@ -45,8 +45,6 @@ namespace ceph {
 std::ostream& operator<<(std::ostream& out, const sockaddr_storage &ss);
 std::ostream& operator<<(std::ostream& out, const sockaddr *sa);
 
-typedef uint8_t entity_type_t;
-
 class entity_name_t {
 public:
   entity_type_t _type;

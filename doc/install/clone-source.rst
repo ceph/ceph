@@ -1,3 +1,5 @@
+.. _install-clone-source:
+
 =========================================
  Cloning the Ceph Source Code Repository
 =========================================

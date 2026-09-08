@@ -30,6 +30,7 @@ class CephadmConfig:
     listener_key: str
     name: str
     node_proxy_config_path: str
+    system: Dict[str, Any]
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> CephadmConfig:
@@ -41,6 +42,7 @@ class CephadmConfig:
             "NODE_PROXY_CONFIG", "/etc/ceph/node-proxy.yml"
         )
         assert node_proxy_config_path is not None
+        system = data.get("system")
         return cls(
             target_ip=data["target_ip"],
             target_port=data["target_port"],
@@ -50,6 +52,7 @@ class CephadmConfig:
             listener_key=data["listener.key"],
             name=data["name"],
             node_proxy_config_path=node_proxy_config_path,
+            system=system if isinstance(system, dict) else {},
         )
 
 

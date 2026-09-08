@@ -131,16 +131,14 @@ namespace rgw::dedup {
     dedup_table_t(const DoutPrefixProvider* _dpp,
                   uint32_t _head_object_size,
                   uint32_t _min_obj_size_for_dedup,
-                  uint32_t _max_obj_size_for_split,
+                  bool     _split_head,
                   uint8_t *p_slab,
                   uint64_t slab_size);
     int add_entry(key_t *p_key,
                   disk_block_id_t block_id,
                   record_id_t rec_id,
                   bool shared_manifest,
-                  dedup_stats_t *p_small_objs_stat,
-                  dedup_stats_t *p_big_objs_stat,
-                  uint64_t *p_duplicate_head_bytes);
+                  dedup_stats_t *p_dedup_stats);
 
     void update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
                       bool shared_manifest);
@@ -159,9 +157,7 @@ namespace rgw::dedup {
                      bool set_shared_manifest_src,
                      bool set_has_valid_hash_src);
 
-    void count_duplicates(dedup_stats_t *p_small_objs_stat,
-                          dedup_stats_t *p_big_objs_stat);
-
+    void count_duplicates(dedup_stats_t *p_dedup_stats);
     void remove_singletons_and_redistribute_keys();
   private:
     // 32 Bytes unified entries
@@ -173,15 +169,13 @@ namespace rgw::dedup {
 
     uint32_t find_entry(const key_t *p_key) const;
     void     inc_counters(const key_t *p_key,
-                          dedup_stats_t *p_small_objs,
-                          dedup_stats_t *p_big_objs,
-                          uint64_t *p_duplicate_head_bytes);
+                          dedup_stats_t *p_dedup_stats);
 
     uint32_t       entries_count = 0;
     uint32_t       occupied_count = 0;
     uint32_t       head_object_size;
     uint32_t       min_obj_size_for_dedup;
-    uint32_t       max_obj_size_for_split;
+    bool           split_head;
     table_entry_t *hash_tab = nullptr;
 
     // stat counters

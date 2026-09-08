@@ -181,13 +181,13 @@ int RGWObjManifest::append_explicit(const DoutPrefixProvider *dpp, RGWObjManifes
   return 0;
 }
 
-bool RGWObjManifest::get_rule(uint64_t ofs, RGWObjManifestRule *rule)
+bool RGWObjManifest::get_rule(uint64_t ofs, RGWObjManifestRule *rule) const
 {
   if (rules.empty()) {
     return false;
   }
 
-  map<uint64_t, RGWObjManifestRule>::iterator iter = rules.upper_bound(ofs);
+  map<uint64_t, RGWObjManifestRule>::const_iterator iter = rules.upper_bound(ofs);
   if (iter != rules.begin()) {
     --iter;
   }
@@ -457,9 +457,10 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(const RGWZoneGroup& zonegroup, const RGW
   return raw_obj;
 }
 
+#ifdef WITH_RADOSGW_RADOS 
 // returns true on success, false on failure
 bool RGWRados::get_obj_data_pool(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_pool *pool)
 {
   return rgw_get_obj_data_pool(svc.zone->get_zonegroup(), svc.zone->get_zone_params(), placement_rule, obj, pool);
 }
-
+#endif

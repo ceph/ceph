@@ -4,8 +4,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import _ from 'lodash';
 
 import { NgbNav, NgbTooltip, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
-import { forkJoin, Observable, Subject } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { forkJoin, Observable, of, Subject, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { HostService } from '~/app/shared/api/host.service';
@@ -154,28 +154,39 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     } else {
       forkJoin({
         usedPools: this.cephfsService.getUsedPools(),
-        pools: this.poolService.getList()
-      }).subscribe(({ usedPools, pools }) => {
-        // filtering pools if
-        // * pool is labelled with cephfs
-        // * its not already used by cephfs
-        // * its not erasure coded
-        // * and only if its empty
-        const filteredPools = Object.values(pools).filter(
-          (pool: Pool) =>
-            this.cephfsService.isCephFsPool(pool) &&
-            !usedPools.includes(pool.pool) &&
-            pool.type !== 'erasure' &&
-            pool.stats.bytes_used.latest === 0
-        );
-        if (filteredPools.length < 2) this.form.get('customPools').disable();
-        this.pools = filteredPools;
-        this.metadatPools = this.dataPools = this.pools;
+        pools: this.poolService
+          .getList()
+          .pipe(catchError((err) => (err.status === 403 ? of([]) : throwError(() => err))))
+      }).subscribe({
+        next: ({ usedPools, pools }) => {
+          // filtering pools if
+          // * pool is labelled with cephfs
+          // * its not already used by cephfs
+          // * its not erasure coded
+          // * and only if its empty
+          const filteredPools = Object.values(pools).filter(
+            (pool: Pool) =>
+              this.cephfsService.isCephFsPool(pool) &&
+              !usedPools.includes(pool.pool) &&
+              pool.type !== 'erasure' &&
+              pool.stats.bytes_used.latest === 0
+          );
+          if (filteredPools.length < 2) this.form.get('customPools').disable();
+          this.pools = filteredPools;
+          this.metadatPools = this.dataPools = this.pools;
+        },
+        error: () => {
+          this.form.setErrors({ cdSubmitButton: true });
+        }
       });
 
       this.hostsAndLabels$ = forkJoin({
-        hosts: this.hostService.getAllHosts(),
-        labels: this.hostService.getLabels()
+        hosts: this.hostService
+          .getAllHosts()
+          .pipe(catchError((err) => (err.status === 403 ? of([]) : throwError(() => err)))),
+        labels: this.hostService
+          .getLabels()
+          .pipe(catchError((err) => (err.status === 403 ? of([]) : throwError(() => err))))
       }).pipe(
         map(({ hosts, labels }) => ({
           hosts: hosts.map((host: Host) => ({ content: host['hostname'] })),

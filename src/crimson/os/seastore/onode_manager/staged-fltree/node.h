@@ -9,8 +9,6 @@
 #include <ostream>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
-#include "crimson/common/type_helpers.h"
-
 #include "node_extent_mutable.h"
 #include "stages/key_layout.h"
 #include "stages/stage_types.h"
@@ -47,6 +45,28 @@ namespace crimson::os::seastore::onode {
 
 class LeafNode;
 class InternalNode;
+class Node;
+class tree_cursor_t;
+
+// Provide intrusive_ptr ADL functions for Node hierarchy.
+// boost::intrusive_ref_counter defines them in boost::sp_adl_block,
+// which is not reachable by ADL when these types are in crimson::os::seastore::onode.
+// These must be declared before boost/intrusive_ptr.hpp is included.
+inline void intrusive_ptr_add_ref(const tree_cursor_t* p) noexcept;
+inline void intrusive_ptr_release(const tree_cursor_t* p) noexcept;
+inline void intrusive_ptr_add_ref(const Node* p) noexcept;
+inline void intrusive_ptr_release(const Node* p) noexcept;
+inline void intrusive_ptr_add_ref(const InternalNode* p) noexcept;
+inline void intrusive_ptr_release(const InternalNode* p) noexcept;
+inline void intrusive_ptr_add_ref(const LeafNode* p) noexcept;
+inline void intrusive_ptr_release(const LeafNode* p) noexcept;
+
+} // namespace crimson::os::seastore::onode
+
+#include <boost/intrusive_ptr.hpp>
+#include "crimson/common/type_helpers.h"
+
+namespace crimson::os::seastore::onode {
 
 using layout_version_t = uint32_t;
 struct node_version_t {
@@ -417,7 +437,7 @@ class Node
     make_root(c, std::move(_super));
   }
   void as_root(Super::URef&& _super);
-  eagain_ifuture<> upgrade_root(context_t, laddr_t);
+  eagain_ifuture<> upgrade_root(context_t, laddr_hint_t);
 
   Super::URef deref_super();
 
@@ -551,7 +571,7 @@ class InternalNode final : public Node {
   void track_make_tail(const search_position_t&);
 
   static eagain_ifuture<Ref<InternalNode>> allocate_root(
-      context_t, laddr_t, level_t, laddr_t, Super::URef&&);
+      context_t, laddr_hint_t, level_t, laddr_t, Super::URef&&);
 
  protected:
   eagain_ifuture<Ref<tree_cursor_t>> lookup_smallest(context_t) override;
@@ -592,7 +612,7 @@ class InternalNode final : public Node {
       return std::make_pair(Ref<Node>(node), mut);
     }
   };
-  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_t, field_type_t, bool, level_t);
+  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_hint_t, field_type_t, bool, level_t);
 
  private:
   /**
@@ -724,7 +744,7 @@ class LeafNode final : public Node {
       return std::make_pair(Ref<Node>(node), mut);
     }
   };
-  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_t, field_type_t, bool);
+  static eagain_ifuture<fresh_node_t> allocate(context_t, laddr_hint_t, field_type_t, bool);
 
  private:
   /**
@@ -739,5 +759,44 @@ class LeafNode final : public Node {
   LeafNodeImpl* impl;
   layout_version_t layout_version = 0;
 };
+
+// Provide intrusive_ptr ADL functions for Node hierarchy.
+// boost::intrusive_ref_counter defines them in boost::sp_adl_block,
+// which is not reachable by ADL when these types are in crimson::os::seastore::onode.
+inline void intrusive_ptr_add_ref(const tree_cursor_t* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_add_ref(
+    static_cast<const boost::intrusive_ref_counter<
+      tree_cursor_t, boost::thread_unsafe_counter>*>(p));
+}
+inline void intrusive_ptr_release(const tree_cursor_t* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_release(
+    static_cast<const boost::intrusive_ref_counter<
+      tree_cursor_t, boost::thread_unsafe_counter>*>(p));
+}
+
+inline void intrusive_ptr_add_ref(const Node* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_add_ref(
+    static_cast<const boost::intrusive_ref_counter<
+      Node, boost::thread_unsafe_counter>*>(p));
+}
+inline void intrusive_ptr_release(const Node* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_release(
+    static_cast<const boost::intrusive_ref_counter<
+      Node, boost::thread_unsafe_counter>*>(p));
+}
+
+inline void intrusive_ptr_add_ref(const InternalNode* p) noexcept {
+  intrusive_ptr_add_ref(static_cast<const Node*>(p));
+}
+inline void intrusive_ptr_release(const InternalNode* p) noexcept {
+  intrusive_ptr_release(static_cast<const Node*>(p));
+}
+
+inline void intrusive_ptr_add_ref(const LeafNode* p) noexcept {
+  intrusive_ptr_add_ref(static_cast<const Node*>(p));
+}
+inline void intrusive_ptr_release(const LeafNode* p) noexcept {
+  intrusive_ptr_release(static_cast<const Node*>(p));
+}
 
 }

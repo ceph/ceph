@@ -84,8 +84,8 @@ public:
     return _readv(rbm_addr, std::move(ptrs));
   }
 protected:
-  rbm_superblock_t super;
-  rbm_shard_info_t shard_info;
+  device_superblock_t super;
+  device_shard_info_t shard_info;
   uint32_t device_shard_nums = 0;
   store_index_t store_index = 0;
   bool shard_status = true;
@@ -111,7 +111,7 @@ public:
     return super.config.spec.magic;
   }
 
-  device_type_t get_device_type() const final {
+  virtual device_type_t get_device_type() const {
     return device_type_t::RANDOM_BLOCK_SSD;
   }
 
@@ -126,7 +126,7 @@ public:
   secondary_device_set_t& get_secondary_devices() final {
     return super.config.secondary_devices;
   }
-  std::size_t get_available_size() const { return super.size; }
+  std::size_t get_available_size() const { return super.total_size; }
   extent_len_t get_block_size() const { return super.block_size; }
 
   read_ertr::future<uint32_t> get_shard_nums() final;
@@ -179,7 +179,7 @@ public:
 
   write_ertr::future<> write_rbm_superblock();
 
-  read_ertr::future<rbm_superblock_t> read_rbm_superblock(rbm_abs_addr addr);
+  read_ertr::future<device_superblock_t> read_rbm_superblock(rbm_abs_addr addr);
 
   using stat_device_ret =
     read_ertr::future<seastar::stat_data>;
@@ -277,5 +277,25 @@ using EphemeralRBMDeviceRef = std::unique_ptr<EphemeralRBMDevice>;
 EphemeralRBMDeviceRef create_test_ephemeral(
   uint64_t journal_size = DEFAULT_TEST_CBJOURNAL_SIZE,
   uint64_t data_size = DEFAULT_TEST_CBJOURNAL_SIZE);
+
+template <typename T>
+class MultiShardDevices {
+  public:
+    std::vector<std::unique_ptr<T>> mshard_devices;
+
+  public:
+  MultiShardDevices(size_t count,
+                    const std::string path)
+  : mshard_devices() {
+    mshard_devices.reserve(count);
+    for (size_t store_index = 0; store_index < count; ++store_index) {
+      mshard_devices.emplace_back(std::make_unique<T>(
+        path, store_index));
+    }
+  }
+  ~MultiShardDevices() {
+    mshard_devices.clear();
+  }
+};
 
 }

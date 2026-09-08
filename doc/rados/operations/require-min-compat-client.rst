@@ -1,0 +1,189 @@
+.. _require_min_compat_client:
+
+===========================
+ Minimum Compatible Client
+===========================
+
+The ``require_min_compat_client`` field of the OSDMap declares the minimum
+Ceph client release the cluster expects of its clients. It is an
+operator-set hint that authorizes use of on-map features whose encoding
+or semantics older clients cannot parse.
+
+Setting the flag does not refuse older clients at connect time. Instead it
+gates operator commands that would place feature bits into the OSDMap which
+only newer clients understand. Once those features are in active use,
+older clients can no longer parse the OSDMap; they lose the ability to
+locate objects and will error or disconnect.
+
+Setting the flag
+================
+
+.. prompt:: bash $
+
+   ceph osd set-require-min-compat-client <release>
+
+For example, to declare that the cluster requires at least *reef*:
+
+.. prompt:: bash $
+
+   ceph osd set-require-min-compat-client reef
+
+Before committing the change, the Monitors inspect connected clients, MDSs,
+and Managers. If any advertise release-feature bits that fall short of the
+target, the command is rejected with a message like::
+
+   cannot set require_min_compat_client to reef:
+     3 connected client(s) look like luminous (missing 0x...)
+
+Pass ``--yes-i-really-mean-it`` to proceed anyway. Those clients will be
+disconnected once any feature the flag unlocks is actually enabled on the
+map.
+
+Checking the current value
+==========================
+
+.. prompt:: bash $
+
+   ceph osd get-require-min-compat-client
+
+or, for the full OSDMap context:
+
+.. prompt:: bash $
+
+   ceph osd dump | grep require_min_compat_client
+
+To see which release each connected entity advertises:
+
+.. prompt:: bash $
+
+   ceph features
+
+Lowering the flag
+=================
+
+Unlike :ref:`require_osd_release`, ``require_min_compat_client`` is not
+monotonic. Monitors accept a lower value as long as no feature
+currently on the OSDMap requires a higher one. The floor is computed from
+features in active use on the map:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 55 25
+
+   * - Feature in use
+     - Minimum release
+   * - CRUSH MSR rules
+     - ``squid``
+   * - ``pg-upmap-primary`` entries
+     - ``reef``
+   * - ``pg-upmap`` entries or CRUSH choose-args
+     - ``luminous``
+   * - CRUSH tunables level 5
+     - ``jewel``
+   * - CRUSH straw2 buckets
+     - ``hammer``
+   * - Per-OSD primary affinity, tunables level 3, or cache tiers
+     - ``firefly``
+   * - CRUSH tunables level 2 or ``OSDHASHPSPOOL`` pool flag
+     - ``dumpling``
+   * - CRUSH tunables (any non-legacy)
+     - ``argonaut``
+
+The last two rows are effectively always satisfied on modern clusters,
+since ``OSDHASHPSPOOL`` has been set by default on every pool since
+``dumpling`` and non-legacy CRUSH tunables have been the default since
+``argonaut``. They are listed for completeness; in practice the floor
+only ever sits at ``firefly`` or newer.
+
+If the command fails and prints ``osdmap current utilizes features that
+require <release>; cannot set require_min_compat_client below that``,
+remove the feature that pins the floor (for example, clear all
+``pg-upmap-primary`` entries) and retry.
+
+Features gated by the flag
+==========================
+
+Raising the flag does not enable any feature on its own. It authorizes the
+operator to run commands that would otherwise be rejected with an error
+like ``min_compat_client luminous < reef, which is required for
+pg-upmap-primary``.
+
+The Linux kernel Ceph client (``krbd`` for RBD block devices, ``kcephfs``
+for CephFS) ships with the kernel, not with Ceph packages, so its version
+is independent of the cluster release. New OSD map features reach the
+kernel client only after they are implemented and merged upstream, which
+can lag the Ceph daemon release by months or years. The userspace clients
+(``ceph-fuse`` and ``libcephfs`` for CephFS, ``librbd`` for RBD) link the
+Ceph release they were built from and advertise its full feature set, so
+they are not subject to this lag.
+
+The *Min kernel* column shows the minimum Linux kernel version required on
+kernel client hosts before the corresponding commands are used. If no
+kernel clients are present in the cluster, that column can be ignored.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 25
+
+   * - Command
+     - Minimum release
+     - Min kernel
+   * - | ``ceph osd primary-affinity``
+       | ``ceph osd primary-temp``
+       | ``ceph osd rm-primary-temp``
+     - ``firefly``
+     - any
+   * - | ``ceph osd pg-upmap``
+       | ``ceph osd rm-pg-upmap``
+       | ``ceph osd pg-upmap-items``
+       | ``ceph osd rm-pg-upmap-items``
+       | ``ceph osd crush weight-set``
+       | balancer ``upmap`` mode
+     - ``luminous``
+     - 4.13
+   * - | ``ceph osd pg-upmap-primary``
+       | ``ceph osd rm-pg-upmap-primary``
+       | ``ceph osd rm-pg-upmap-primary-all``
+       | balancer ``read`` mode
+       | balancer ``upmap-read`` mode
+     - ``reef``
+     - not yet implemented
+
+.. warning::
+
+   ``pg-upmap-primary`` (``reef``) and CRUSH MSR rules (``squid``) are
+   not yet implemented in the kernel client.  Kernel clients that
+   encounter ``pg-upmap-primary`` entries will silently route I/O to
+   the wrong OSD, causing **I/O hangs** on the affected PGs.  Kernel
+   clients that encounter CRUSH MSR rules will fail to compute a PG
+   mapping, causing **I/O errors**.  Do not enable either feature while
+   kernel clients are present (use ``ceph features`` to check).  Note
+   that CRUSH MSR rules are added via ``osd setcrushmap`` and are
+   **not** gated by ``require_min_compat_client``, but they immediately
+   raise the features-in-use floor to ``squid``
+   (see `Lowering the flag`_).  To check whether either is active::
+
+      ceph osd dump | grep -E "pg_upmap_primary|msr"
+
+   See :ref:`read_balancer` for removal commands.
+
+When a kernel mount blocks the flag
+===================================
+
+A single kernel mount can hold the whole cluster below the release you
+want, even when every daemon and userspace client is already newer.
+``ceph features`` reports such a mount as ``luminous`` because the kernel
+client does not advertise the ``pg-upmap-primary`` (reef) feature. To
+confirm which entry it adds, run ``ceph features`` with the mount
+unmounted, then again with it mounted, and compare the client counts.
+
+Since the userspace clients advertise the full feature set, switching the
+holdout to its userspace equivalent (``ceph-fuse`` or ``libcephfs`` for
+CephFS, ``librbd`` for RBD) clears the blocker, after which the flag can
+be raised and the read balancer enabled.
+
+See :ref:`upmap` and :ref:`read_balancer` for the operational procedures
+that depend on raising the flag. CephFS clients must satisfy both this
+flag and any per-filesystem :ref:`cephfs_required_client_features` on
+the file systems they mount. For CephFS-specific kernel version guidance,
+see :ref:`cephfs_which_kernel_version` and :doc:`/cephfs/kernel-features`.

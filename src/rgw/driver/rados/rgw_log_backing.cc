@@ -170,7 +170,7 @@ asio::awaitable<void> log_remove(
   neorados::RADOS rados,
   const neorados::IOContext& loc,
   int shards,
-  const fu2::unique_function<std::string(int) const>& get_oid,
+  fu2::unique_function<std::string(int) const> get_oid,
   bool leave_zero)
 {
   sys::error_code ec;
@@ -180,7 +180,10 @@ asio::awaitable<void> log_remove(
       = co_await fifo::FIFO::get_meta(rados, oid, loc, std::nullopt,
 				      asio::redirect_error(asio::use_awaitable,
 							   ec));
-    if (ec == sys::errc::no_such_file_or_directory) continue;
+    if (ec == sys::errc::no_such_file_or_directory) {
+      ec.clear();
+      continue;
+    }
     if (!ec && info.head_part_num > -1) {
       for (auto j = info.tail_part_num; j <= info.head_part_num; ++j) {
 	sys::error_code subec;
@@ -219,8 +222,8 @@ asio::awaitable<void> log_remove(
 			 << ": " << ec.message() << dendl;
     }
   }
-  if (ec)
-    throw sys::error_code(ec);
+  if (ec && ec != sys::errc::no_such_file_or_directory)
+    throw sys::system_error(ec);
   co_return;
 }
 

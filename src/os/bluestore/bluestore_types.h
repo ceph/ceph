@@ -30,9 +30,60 @@
 #include "include/ceph_hash.h"
 #include "include/intarith.h" // for round_up_to()
 
+#include "include/ceph_assert.h"
+
+// Decode-failure tolerance for BlueStore fsck/repair (tracker #77325).
+// Regular I/O still crashes on corrupt decode; a caller can opt in via
+// throwing_guard to get ceph::buffer::malformed_input instead, so it can
+// catch and report the failure rather than aborting.
+namespace bluestore_decode {
+extern thread_local bool throw_on_failure;
+struct throwing_guard {
+  explicit throwing_guard(bool enable = true) : active(enable) {
+    if (active) {
+      ceph_assert(!throw_on_failure);
+      throw_on_failure = true;
+    }
+  }
+  ~throwing_guard() {
+    if (active) {
+      throw_on_failure = false;
+    }
+  }
+private:
+  bool active;
+};
+  void assert_fail(const char* assertion, const char* file,
+                   int line, const char* func);
+} // namespace bluestore_decode
+
+#define ceph_assert_decode(expr)                                           \
+  do {                                                                     \
+    ((expr))                                                               \
+    ? _CEPH_ASSERT_VOID_CAST (0)                                           \
+      : ::bluestore_decode::assert_fail(__STRING(expr), __FILE__,          \
+                                        __LINE__, __CEPH_ASSERT_FUNCTION); \
+  } while (false)
+
 namespace ceph {
   class Formatter;
 }
+
+struct bluestore_stats_t
+{
+  uint64_t num_objects = 0;
+  uint64_t num_sharded_objects = 0;
+  uint64_t num_extents = 0;
+  uint64_t num_blobs = 0;
+  uint64_t num_spanning_blobs = 0;
+  uint64_t num_shared_blobs = 0;
+  uint64_t warnings_found = 0;
+  uint64_t errors_found = 0;
+
+  void dump(ceph::Formatter* f) const;
+  friend std::ostream& operator<<(std::ostream& out, const bluestore_stats_t& s);
+};
+
 
 /// label for block device
 struct bluestore_bdev_label_t {
@@ -142,6 +193,7 @@ struct denc_traits<PExtentVector> {
     unsigned num;
     denc_varint(num, p);
     v.clear();
+    ceph_assert_decode(num <= unsigned(p.get_end() - p.get_pos())); 
     v.resize(num);
     for (unsigned i=0; i<num; ++i) {
       denc(v[i], p);
@@ -470,6 +522,7 @@ struct bluestore_blob_use_tracker_t {
         num_au = 0;
         denc_varint(total_bytes, p);
       } else {
+        ceph_assert_decode(_num_au <= size_t(p.get_end() - p.get_pos()));
         allocate(_num_au);
         for (size_t i = 0; i < _num_au; ++i) {
 	  denc_varint(bytes_per_au[i], p);
@@ -561,8 +614,10 @@ public:
       denc(unused, p);
     }
   }
-
-  void decode(ceph::buffer::ptr::const_iterator& p, uint64_t struct_v) {
+  struct empty_context_t {};
+  template <bool decode_csum = true, typename context_t = empty_context_t>
+  void decode(ceph::buffer::ptr::const_iterator& p, uint64_t struct_v,
+    context_t context = empty_context_t()) {
     ceph_assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
@@ -570,15 +625,19 @@ public:
       denc_varint_lowz(logical_length, p);
       denc_varint_lowz(compressed_length, p);
     } else {
-      logical_length = get_ondisk_length();
+      logical_length = get_ondisk_capacity();
     }
     if (has_csum()) {
       denc(csum_type, p);
       denc(csum_chunk_order, p);
       int len;
       denc_varint(len, p);
-      csum_data = p.get_ptr(len);
-      csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      if (decode_csum) {
+        csum_data = p.get_ptr(len);
+        csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      } else {
+        p += len;
+      }
     }
     if (has_unused()) {
       denc(unused, p);
@@ -899,10 +958,26 @@ public:
     }
   }
 
-  uint32_t get_ondisk_length() const {
+  /// Count blob's capacity for data
+  /// It returns how much data blob can hold without resizing.
+  /// Compressed blobs cannot be modified, so actual disk usage is returned.
+  uint32_t get_ondisk_capacity() const {
     uint32_t len = 0;
     for (auto &p : extents) {
       len += p.length;
+    }
+    return len;
+  }
+
+  /// Count blob's usage of disk
+  /// For compressed blobs get_ondisk_capacity == get_ondisk_size.
+  /// It is similar to get_ondisk_capacity() except unmapped extents do not count.
+  uint32_t get_ondisk_size() const {
+    uint32_t len = 0;
+    for (auto &p : extents) {
+      if (p.is_valid()) {
+        len += p.length;
+      }
     }
     return len;
   }

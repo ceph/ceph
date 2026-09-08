@@ -238,7 +238,7 @@ SegmentStateTracker::read_in(
 }
 using std::vector;
 static
-block_sm_superblock_t make_superblock(
+device_superblock_t make_superblock(
   device_id_t device_id,
   device_config_t sm_config,
   const seastar::stat_data &data)
@@ -255,15 +255,15 @@ block_sm_superblock_t make_superblock(
     "seastore_segment_size");
   size_t raw_segments = size / config_segment_size;
   size_t shard_tracker_size = SegmentStateTracker::get_raw_size(
-    raw_segments / seastar::smp::count,
+    raw_segments / seastar::this_smp_shard_count(),
     data.block_size);
-  size_t total_tracker_size = shard_tracker_size * seastar::smp::count;
+  size_t total_tracker_size = shard_tracker_size * seastar::this_smp_shard_count();
   size_t tracker_off = data.block_size;   //superblock
   size_t segments = (size - tracker_off - total_tracker_size) / config_segment_size;
-  size_t segments_per_shard = segments / seastar::smp::count;
+  size_t segments_per_shard = segments / seastar::this_smp_shard_count();
 
-  vector<block_shard_info_t> shard_infos(seastar::smp::count);
-  for (unsigned int i = 0; i < seastar::smp::count; i++) {
+  vector<device_shard_info_t> shard_infos(seastar::this_smp_shard_count());
+  for (unsigned int i = 0; i < seastar::this_smp_shard_count(); i++) {
     shard_infos[i].size = segments_per_shard * config_segment_size;
     shard_infos[i].segments = segments_per_shard;
     shard_infos[i].tracker_offset = tracker_off + i * shard_tracker_size;
@@ -276,17 +276,16 @@ block_sm_superblock_t make_superblock(
        size,
        uint64_t(config_segment_size),
        data.block_size);
-  for (unsigned int i = 0; i < seastar::smp::count; i++) {
+  for (unsigned int i = 0; i < seastar::this_smp_shard_count(); i++) {
     INFO("shard {} infos: {}", i, shard_infos[i]);
   }
 
-  return block_sm_superblock_t{
-    seastar::smp::count,
+  return device_superblock_t::make_segmented(
+    seastar::this_smp_shard_count(),
     config_segment_size,
     data.block_size,
-    shard_infos,
-    std::move(sm_config)
-  };
+    std::move(sm_config),
+    std::move(shard_infos));
 }
 
 using open_device_ret = 
@@ -306,9 +305,11 @@ open_device_ret open_device(
     ).then([stat, &path, FNAME](auto file) mutable {
       return file.size().then([stat, file, &path, FNAME](auto size) mutable {
         stat.size = size;
-        // Use Seastar's DMA alignment requirement instead of stat's block_size
-        // to ensure writes are properly aligned for optimal performance
-        stat.block_size = file.disk_write_dma_alignment();
+        // Use Seastar's DMA alignment for optimal I/O alignment; clamp to
+        // laddr_t::UNIT_SIZE since SeaStore operates at 4 KiB granularity
+        // and rejects smaller device-reported block sizes.
+        stat.block_size = std::max<uint64_t>(file.disk_write_dma_alignment(),
+                                             laddr_t::UNIT_SIZE);
         INFO("path={} successful, size=0x{:x}, block_size=0x{:x}",
              path, stat.size, stat.block_size);
         return std::make_pair(file, stat);
@@ -326,31 +327,33 @@ BlockSegmentManager::access_ertr::future<>
 write_superblock(
     device_id_t device_id,
     seastar::file &device,
-    block_sm_superblock_t sb)
+    device_superblock_t sb)
 {
   LOG_PREFIX(block_write_superblock);
   DEBUG("{} write {}", device_id_printer_t{device_id}, sb);
   sb.validate();
-  assert(ceph::encoded_sizeof<block_sm_superblock_t>(sb) <
-	 sb.block_size);
+  assert(SUPERBLOCK_HEADER_PREFIX +
+	 ceph::encoded_sizeof<device_superblock_t>(sb) < sb.block_size);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
     [=, &device](auto &bp)
   {
-    //  Encode SEASTORE_SUPERBLOCK_SIGN at offset 0 before
-    //  encoding anything else
+    bp.zero();
+    // magic at offset 0, followed by 37 bytes of null padding (already zero)
+    std::memcpy(bp.c_str(),
+		CRIMSON_DEVICE_SUPERBLOCK_MAGIC.data(), SUPERBLOCK_MAGIC_SIZE);
+    // DENC-encoded superblock at offset 60
     bufferlist bl;
-    bl.append(SEASTORE_SUPERBLOCK_SIGN);
     encode(sb, bl);
     auto iter = bl.begin();
-    assert(bl.length() < sb.block_size);
-    iter.copy(bl.length(), bp.c_str());
+    assert(SUPERBLOCK_HEADER_PREFIX + bl.length() < sb.block_size);
+    iter.copy(bl.length(), bp.c_str() + SUPERBLOCK_HEADER_PREFIX);
     return do_write(device_id, device, 0, bp);
   });
 }
 
 static
-BlockSegmentManager::access_ertr::future<block_sm_superblock_t>
+BlockSegmentManager::access_ertr::future<device_superblock_t>
 read_superblock(seastar::file &device, seastar::stat_data sd)
 {
   LOG_PREFIX(block_read_superblock);
@@ -366,28 +369,32 @@ read_superblock(seastar::file &device, seastar::stat_data sd)
       bp.length(),
       bp
     ).safe_then([=, &bp] {
-      bufferlist bl;
-      bl.push_back(bp);
-      block_sm_superblock_t ret;
-      auto bliter = bl.cbegin();
-      // Validate the magic prefix
-      std::string sb_magic;
-      bliter.copy(SEASTORE_SUPERBLOCK_SIGN_LEN, sb_magic);
-      if (sb_magic != SEASTORE_SUPERBLOCK_SIGN) {
-        ERROR("invalid superblock signature: got '{}' expected '{}'",
-	      sb_magic, SEASTORE_SUPERBLOCK_SIGN);
-        ceph_abort_msg("invalid superblock signature");
+      // verify magic at offset 0
+      superblock_magic_t disk_magic;
+      std::memcpy(disk_magic.data(), bp.c_str(), SUPERBLOCK_MAGIC_SIZE);
+      if (disk_magic != CRIMSON_DEVICE_SUPERBLOCK_MAGIC) {
+        ERROR("invalid superblock magic, got: {:02x}",
+          fmt::join(
+            std::views::transform(disk_magic,
+              [](std::byte b) { return std::to_integer<uint8_t>(b); }),
+            " "));
+        ceph_abort_msg("invalid superblock magic");
       }
-
+      // decode DENC superblock from offset 60
+      bufferlist bl;
+      bl.append(bp.c_str() + SUPERBLOCK_HEADER_PREFIX,
+		bp.length() - SUPERBLOCK_HEADER_PREFIX);
+      device_superblock_t ret;
+      auto bliter = bl.cbegin();
       try {
         decode(ret, bliter);
       } catch (...) {
         ERROR("got decode error!");
         ceph_assert(0 == "invalid superblock");
       }
-      assert(ceph::encoded_sizeof<block_sm_superblock_t>(ret) +
-	     SEASTORE_SUPERBLOCK_SIGN_LEN <= sd.block_size);
-      return BlockSegmentManager::access_ertr::future<block_sm_superblock_t>(
+      assert(SUPERBLOCK_HEADER_PREFIX +
+	     ceph::encoded_sizeof<device_superblock_t>(ret) <= sd.block_size);
+      return BlockSegmentManager::access_ertr::future<device_superblock_t>(
         BlockSegmentManager::access_ertr::ready_future_marker{},
         ret);
     });
@@ -485,8 +492,8 @@ seastar::future<> BlockSegmentManager::start(uint32_t shard_nums)
 {
   LOG_PREFIX(BlockSegmentManager::start);
   device_shard_nums = shard_nums;
-  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
+  auto num_shard_services = (device_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
+  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
   return shard_devices.start(num_shard_services, device_path, superblock.config.spec.dtype);
 
 }
@@ -513,9 +520,9 @@ SegmentManager::read_ertr::future<uint32_t> BlockSegmentManager::get_shard_nums(
   }).safe_then([](auto sb) {
     return read_ertr::make_ready_future<uint32_t>(sb.shard_num);
   }).handle_error(
-    crimson::ct_error::assert_all{
+    crimson::ct_error::assert_all(
       "Invalid error in BlockSegmentManager::get_shard_nums"
-    }
+    )
   );
 }
 
@@ -525,9 +532,9 @@ BlockSegmentManager::mount_ret BlockSegmentManager::mount()
     return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
       return mshard_device->shard_mount(
       ).handle_error(
-        crimson::ct_error::assert_all{
+        crimson::ct_error::assert_all(
           "Invalid error in BlockSegmentManager::mount"
-      });
+      ));
     });
   });
 }
@@ -543,20 +550,20 @@ BlockSegmentManager::mount_ret BlockSegmentManager::shard_mount()
     return read_superblock(device, sd);
   }).safe_then([=, this](auto sb) ->mount_ertr::future<> {
     set_device_id(sb.config.spec.id);
-    if(seastar::this_shard_id() + seastar::smp::count * store_index >= sb.shard_num) {
+    if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= sb.shard_num) {
       INFO("{} shard_id {} out of range {}",
       device_id_printer_t{get_device_id()},
-        seastar::this_shard_id() + seastar::smp::count * store_index,
+        seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index,
         sb.shard_num);
-      store_active = false;
+      shard_status = false;
       return mount_ertr::now();
     }
-    shard_info = sb.shard_infos[seastar::this_shard_id() + seastar::smp::count * store_index];
+    shard_info = sb.shard_infos[seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index];
     INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
     sb.validate();
     superblock = sb;
     stats.data_read.increment(
-        ceph::encoded_sizeof<block_sm_superblock_t>(superblock));
+        ceph::encoded_sizeof<device_superblock_t>(superblock));
     tracker = std::make_unique<SegmentStateTracker>(
       shard_info.segments,
       superblock.block_size);
@@ -591,9 +598,9 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::mkfs(
       return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
         return mshard_device->shard_mkfs(
         ).handle_error(
-          crimson::ct_error::assert_all{
+          crimson::ct_error::assert_all(
             "Invalid error in BlockSegmentManager::mkfs"
-        });
+        ));
       });
     });
   });
@@ -610,7 +617,7 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::primary_mkfs(
 
   seastar::file device;
   seastar::stat_data stat;
-  block_sm_superblock_t sb;
+  device_superblock_t sb;
   std::unique_ptr<SegmentStateTracker> tracker;
 
   using crimson::common::get_conf;
@@ -625,7 +632,7 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::primary_mkfs(
     std::ignore = device.close();
   });
   sb = make_superblock(get_device_id(), sm_config, stat);
-  stats.metadata_write.increment(ceph::encoded_sizeof<block_sm_superblock_t>(sb));
+  stats.metadata_write.increment(ceph::encoded_sizeof<device_superblock_t>(sb));
   co_await write_superblock(get_device_id(), device, sb);
   INFO("{} complete", device_id_printer_t{get_device_id()});
 }
@@ -831,7 +838,7 @@ SegmentManager::read_ertr::future<> BlockSegmentManager::read(
 void BlockSegmentManager::register_metrics(store_index_t store_index)
 {
   LOG_PREFIX(BlockSegmentManager::register_metrics);
-  if (!store_active) {
+  if (!shard_status) {
     INFO("{} shard {} is not active, skip registering metrics",
          device_id_printer_t{get_device_id()}, store_index);
     return;

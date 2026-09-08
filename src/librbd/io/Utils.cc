@@ -119,16 +119,6 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* read_extents,
 
   ldout(cct, 20) << dendl;
 
-  ceph::bufferlist* parent_read_bl;
-  if (read_extents->size() > 1) {
-    auto parent_comp = new ReadResult::C_ObjectReadMergedExtents(
-        cct, read_extents, on_finish);
-    parent_read_bl = &parent_comp->bl;
-    on_finish = parent_comp;
-  } else {
-    parent_read_bl = &read_extents->front().bl;
-  }
-
   auto comp = AioCompletion::create_and_start(on_finish, image_ctx->parent,
                                               AIO_TYPE_READ);
   ldout(cct, 20) << "completion=" << comp
@@ -136,7 +126,7 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* read_extents,
                  << " area=" << area << dendl;
   auto req = io::ImageDispatchSpec::create_read(
     *image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
-    std::move(parent_extents), area, ReadResult{parent_read_bl},
+    std::move(parent_extents), area, ReadResult{read_extents},
     image_ctx->parent->get_data_io_context(), 0, 0, trace);
   req->send();
 }

@@ -192,7 +192,7 @@ class FSStatus(RunCephCmd):
 
     def get_mds_addr(self, name):
         """
-        Return the instance addr as a string, like "10.214.133.138:6807\/10825"
+        Return the instance addr as a string, like "10.214.133.138:6807/10825"
         """
         info = self.get_mds(name)
         if info:
@@ -801,6 +801,16 @@ class FilesystemBase(MDSClusterBase):
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 # standby_count_wanted not available prior to luminous (upgrade tests would fail otherwise)
+                pass
+            else:
+                raise
+
+        # Disable host anti-affinity for densely populated Teuthology environments by default.
+        try:
+            self.run_ceph_cmd('fs', 'set', self.name, 'standby_enable_host_anti_affinity', 'false')
+        except CommandFailedError as e:
+            if e.exitstatus == 22:
+                # Setting not available in older Ceph versions (upgrade tests)
                 pass
             else:
                 raise

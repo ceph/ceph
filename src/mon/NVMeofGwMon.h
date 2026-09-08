@@ -18,6 +18,8 @@
 #include "PaxosService.h"
 #include "NVMeofGwMap.h"
 
+struct Subscription;
+
 struct LastBeacon {
   NvmeGwId gw_id;
   NvmeGroupKey group_key;
@@ -72,6 +74,9 @@ public:
   bool prepare_update(MonOpRequestRef op) override;
 
   bool preprocess_command(MonOpRequestRef op);
+  bool nvme_gw_show_command(ceph::Formatter* f,
+       bufferlist &rdata, const std::string  &pool,
+       const std::string &group);
   bool prepare_command(MonOpRequestRef op);
 
   void encode_full(MonitorDBStore::TransactionRef t) override {}
@@ -93,8 +98,7 @@ public:
 private:
   void synchronize_last_beacon();
   void process_gw_down(const NvmeGwId &gw_id,
-     const NvmeGroupKey& group_key, bool &propose_pending,
-     gw_availability_t avail);
+     const NvmeGroupKey& group_key, bool &propose_pending);
   bool get_gw_by_addr(const  entity_addr_t &sub_addr,
        NvmeGwId &gw_id, NvmeGroupKey& group_key);
   epoch_t get_ack_map_epoch(bool gw_created, const NvmeGroupKey& group_key);

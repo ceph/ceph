@@ -116,12 +116,14 @@ Replayer<I>::Replayer(
     Threads<I>* threads,
     InstanceWatcher<I>* instance_watcher,
     const std::string& local_mirror_uuid,
+    const std::string& local_mirror_peer_uuid,
     PoolMetaCache* pool_meta_cache,
     StateBuilder<I>* state_builder,
     ReplayerListener* replayer_listener)
   : m_threads(threads),
     m_instance_watcher(instance_watcher),
     m_local_mirror_uuid(local_mirror_uuid),
+    m_local_mirror_peer_uuid(local_mirror_peer_uuid),
     m_pool_meta_cache(pool_meta_cache),
     m_state_builder(state_builder),
     m_replayer_listener(replayer_listener),
@@ -171,7 +173,9 @@ void Replayer<I>::init(Context* on_finish) {
   }
 
   m_remote_mirror_peer_uuid = remote_pool_meta.mirror_peer_uuid;
-  dout(10) << "remote_mirror_peer_uuid=" << m_remote_mirror_peer_uuid << dendl;
+  dout(10) << "local_mirror_peer_uuid=" << m_local_mirror_peer_uuid
+           << ", remote_mirror_peer_uuid=" << m_remote_mirror_peer_uuid
+           << dendl;
 
   {
     auto local_image_ctx = m_state_builder->local_image_ctx;
@@ -513,8 +517,11 @@ void Replayer<I>::scan_local_mirror_snapshots(
         // if remote has new snapshots, we would sync from here
         m_local_snap_id_start = local_snap_id;
         ceph_assert(m_local_snap_id_end == CEPH_NOSNAP);
-
-        if (mirror_ns->mirror_peer_uuids.empty()) {
+        const auto& peer_uuids = mirror_ns->mirror_peer_uuids;
+        if (peer_uuids.empty() ||
+            (mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED &&
+             peer_uuids.size() == 1 &&
+             peer_uuids.count(m_local_mirror_peer_uuid) == 1)) {
           // no other peer will attempt to sync to this snapshot so store as
           // a candidate for removal
           prune_snap_ids.insert(local_snap_id);
@@ -539,6 +546,18 @@ void Replayer<I>::scan_local_mirror_snapshots(
       }
     } else if (mirror_ns->is_primary()) {
       if (mirror_ns->complete) {
+        const auto& peer_uuids = mirror_ns->mirror_peer_uuids;
+        if (peer_uuids.empty() ||
+            (mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED &&
+             peer_uuids.size() == 1 &&
+             peer_uuids.count(m_local_mirror_peer_uuid) == 1)) {
+          // After relocation, the primary snapshots on the new secondary become
+          // obsolete snapshots. They can be pruned if they are already unlinked.
+          // Additionally, in this case, a demoted primary snapshot that is linked
+          // to only a single remote (current primary) peer is safe to prune,
+          // because no other peer depends on it waiting for sync.
+          prune_snap_ids.insert(local_snap_id);
+        }
         m_local_snap_id_start = local_snap_id;
         ceph_assert(m_local_snap_id_end == CEPH_NOSNAP);
       } else {
@@ -564,8 +583,8 @@ void Replayer<I>::scan_local_mirror_snapshots(
     locker->unlock();
 
     auto prune_snap_id = *prune_snap_ids.begin();
-    dout(5) << "pruning unused non-primary snapshot " << prune_snap_id << dendl;
-    prune_non_primary_snapshot(prune_snap_id);
+    dout(5) << "pruning unused mirror snapshot " << prune_snap_id << dendl;
+    prune_mirror_snapshot(prune_snap_id);
     return;
   }
 
@@ -798,7 +817,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
 }
 
 template <typename I>
-void Replayer<I>::prune_non_primary_snapshot(uint64_t snap_id) {
+void Replayer<I>::prune_mirror_snapshot(uint64_t snap_id) {
   dout(10) << "snap_id=" << snap_id << dendl;
 
   auto local_image_ctx = m_state_builder->local_image_ctx;
@@ -825,18 +844,18 @@ void Replayer<I>::prune_non_primary_snapshot(uint64_t snap_id) {
   }
 
   auto ctx = create_context_callback<
-    Replayer<I>, &Replayer<I>::handle_prune_non_primary_snapshot>(this);
+    Replayer<I>, &Replayer<I>::handle_prune_mirror_snapshot>(this);
   local_image_ctx->operations->snap_remove(snap_namespace, snap_name, ctx);
 }
 
 template <typename I>
-void Replayer<I>::handle_prune_non_primary_snapshot(int r) {
+void Replayer<I>::handle_prune_mirror_snapshot(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r < 0 && r != -ENOENT) {
-    derr << "failed to prune non-primary snapshot: " << cpp_strerror(r)
+    derr << "failed to prune mirror snapshot: " << cpp_strerror(r)
          << dendl;
-    handle_replay_complete(r, "failed to prune non-primary snapshot");
+    handle_replay_complete(r, "failed to prune mirror snapshot");
     return;
   }
 

@@ -10,6 +10,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/object_context_loader.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/shard_services.h"
 
@@ -121,6 +122,9 @@ public:
 
   seastar::future<> stop() {
     for (auto& [soid, recovery_waiter] : recovering) {
+      // release now: obc_loader is destroyed before this backend, so
+      // the Manager dtors must not run after it
+      recovery_waiter->drop_clone_locks();
       recovery_waiter->stop();
     }
     for (auto& [soid, promise] : unfound) {
@@ -151,6 +155,8 @@ protected:
     crimson::osd::ObjectContextRef head_ctx;
     crimson::osd::ObjectContextRef obc;
     object_stat_sum_t stat;
+    // locks on neighbor clones used as clone-overlap sources
+    std::vector<ObjectContextLoader::Manager> clone_locks;
     bool is_complete() const {
       return recovery_progress.is_complete(recovery_info);
     }
@@ -161,6 +167,8 @@ protected:
     ObjectRecoveryInfo recovery_info;
     crimson::osd::ObjectContextRef obc;
     object_stat_sum_t stat;
+    // locks on neighbor clones used as clone-overlap sources
+    std::vector<ObjectContextLoader::Manager> clone_locks;
   };
 
 public:
@@ -179,6 +187,18 @@ public:
     crimson::osd::ObjectContextRef obc;
     std::optional<pull_info_t> pull_info;
     std::map<pg_shard_t, push_info_t> pushing;
+
+    // Release the clone-overlap locks now. The Manager dtors would
+    // also release them, but only once every intrusive_ptr ref to this
+    // waiter (e.g. a blocked op) drops, which callers here can't rely on.
+    void drop_clone_locks() {
+      for (auto& [shard, push_info] : pushing) {
+        push_info.clone_locks.clear();
+      }
+      if (pull_info) {
+        pull_info->clone_locks.clear();
+      }
+    }
 
     seastar::future<> wait_for_readable() {
       if (!readable) {

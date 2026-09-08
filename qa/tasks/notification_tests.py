@@ -233,6 +233,15 @@ def run_tests(ctx, config):
         if kafka_dir:
             args.append('KAFKA_DIR={kafka_dir}'.format(kafka_dir=kafka_dir))
 
+        # when a KDC has been set up, point the GSSAPI client (the kafka-python
+        # consumer used by the tests) at the rgw keytab so it can auto-acquire
+        # and auto-renew its kerberos credentials without a separate kinit.
+        kerberos = getattr(ctx, 'kerberos', None)
+        if kerberos and client in kerberos:
+            keytab = kerberos[client]['keytab']
+            args.append('KRB5_CLIENT_KTNAME={keytab}'.format(keytab=keytab))
+            args.append('KRB5CCNAME=FILE:/tmp/krb5cc_bntests')
+
         args.extend([
             '{tdir}/ceph/src/test/rgw/bucket_notification/virtualenv/bin/python'.format(tdir=testdir),
             '-m', 'pytest',
@@ -251,10 +260,13 @@ def run_tests(ctx, config):
 @contextlib.contextmanager
 def task(ctx,config):
     """
-    To run bucket notification tests under Kafka endpoint the prerequisite is to run the kafka server. Also you need to pass the
-    'extra_attr' to the notification tests. Following is the way how to run kafka and finally bucket notification tests::
+    To run bucket notification tests under Kafka endpoint the prerequisite is to run the kafka server and have kerberos setup.
+    Also you need to pass the 'extra_attr' to the notification tests. Following is the way how to run kerberos, kafka, and 
+    finally bucket notification tests::
 
     tasks:
+    - kerberos:
+        client.0:
     - kafka:
         client.0:
           kafka_version: 2.6.0
@@ -294,13 +306,25 @@ def task(ctx,config):
 
     bntests_conf = {}
 
+    kerberos = getattr(ctx, 'kerberos', None)
+
     for client in clients:
         endpoint = ctx.rgw.role_endpoints.get(client)
         assert endpoint, 'bntests: no rgw endpoint for {}'.format(client)
 
+        if kerberos and client in kerberos:
+            kerberos_conf = {
+                'service_name': kerberos[client]['service_name'],
+                'principal': kerberos[client]['principal'],
+                'keytab': kerberos[client]['keytab'],
+            }
+        else:
+            kerberos_conf = {'service_name': '', 'principal': '', 'keytab': ''}
+
         cluster_name, _, _ = teuthology.split_role(client)
         bntests_conf[client] = ConfigObj(
             indent_type='',
+            write_empty_values=True,
             infile={
                 'DEFAULT':
                     {
@@ -310,7 +334,8 @@ def task(ctx,config):
                     'cluster':cluster_name,
                     'version':'v2'
                     },
-                's3 main':{}
+                's3 main':{},
+                'kerberos':kerberos_conf
             }
         )
 

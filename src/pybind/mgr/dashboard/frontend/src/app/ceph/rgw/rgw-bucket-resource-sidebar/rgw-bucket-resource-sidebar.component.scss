@@ -1,0 +1,19 @@
+@use '@carbon/layout';
+
+.rgw-bucket-header-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: layout.$spacing-02;
+  min-width: 0;
+}
+
+.rgw-bucket-resource-layout .sidebar-header-content {
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.rgw-bucket-resource-layout .sidebar-header-content h2 {
+  white-space: nowrap;
+  flex-shrink: 0;
+}

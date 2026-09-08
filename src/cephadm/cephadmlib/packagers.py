@@ -136,9 +136,9 @@ class Packager(object):
         if self.ctx.gpg_url:
             return self.ctx.gpg_url, 'manual'
         if self.stable or self.version:
-            return 'https://download.ceph.com/keys/release.gpg', 'release'
+            return 'https://download.ceph.com/keys/release.asc', 'release'
         else:
-            return 'https://download.ceph.com/keys/autobuild.gpg', 'autobuild'
+            return 'https://download.ceph.com/keys/autobuild.asc', 'autobuild'
 
 
 class Apt(Packager):

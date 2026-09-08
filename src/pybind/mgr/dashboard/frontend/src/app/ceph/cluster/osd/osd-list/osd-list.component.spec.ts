@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { EMPTY, of } from 'rxjs';
 
 import { CephModule } from '~/app/ceph/ceph.module';
@@ -22,7 +22,9 @@ import { TableActionsComponent } from '~/app/shared/datatable/table-actions/tabl
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { Permissions } from '~/app/shared/models/permissions';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import {
   configureTestBed,
@@ -99,7 +101,6 @@ describe('OsdListComponent', () => {
       BrowserAnimationsModule,
       HttpClientTestingModule,
       PerformanceCounterModule,
-      ToastrModule.forRoot(),
       CephModule,
       ReactiveFormsModule,
       NgbDropdownModule,
@@ -131,6 +132,21 @@ describe('OsdListComponent', () => {
   it('should create', () => {
     fixture.detectChanges();
     expect(component).toBeTruthy();
+  });
+
+  it('should set OSD edit modal submit label to Save changes', () => {
+    const modalService = TestBed.inject(ModalCdsService);
+    const actionLabels = TestBed.inject(ActionLabelsI18n);
+    const showSpy = spyOn(modalService, 'show').and.stub();
+
+    setFakeSelection();
+    component.editAction();
+
+    expect(showSpy).toHaveBeenCalled();
+    const modalConfig = showSpy.calls.mostRecent().args[1];
+    expect(modalConfig.submitButtonText).toBe('Save changes');
+    expect(modalConfig.submitButtonText).toBe(actionLabels.SAVE_CHANGES);
+    expect(modalConfig.titleText).toContain('Edit OSD');
   });
 
   it('should have columns that are sortable', () => {
@@ -518,13 +534,7 @@ describe('OsdListComponent', () => {
     const expectOsdServiceMethodCalled = (
       actionName: string,
       osdServiceMethodName:
-        | 'markOut'
-        | 'markIn'
-        | 'markDown'
-        | 'markLost'
-        | 'purge'
-        | 'destroy'
-        | 'delete'
+        'markOut' | 'markIn' | 'markDown' | 'markLost' | 'purge' | 'destroy' | 'delete'
     ): void => {
       const osdServiceSpy = spyOn(osdService, osdServiceMethodName).and.callFake(() => EMPTY);
       openActionModal(actionName);

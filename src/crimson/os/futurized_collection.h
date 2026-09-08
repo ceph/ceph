@@ -33,5 +33,19 @@ private:
   const coll_t cid;
 };
 
-using CollectionRef =  boost::intrusive_ptr<FuturizedCollection>;
+// Provide intrusive_ptr ADL functions in the global namespace.
+// boost::intrusive_ref_counter defines them in boost::sp_adl_block,
+// which is not reachable by ADL when FuturizedCollection is in crimson::os.
+inline void intrusive_ptr_add_ref(const FuturizedCollection* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_add_ref(
+    static_cast<const boost::intrusive_ref_counter<
+      FuturizedCollection, boost::thread_safe_counter>*>(p));
 }
+inline void intrusive_ptr_release(const FuturizedCollection* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_release(
+    static_cast<const boost::intrusive_ref_counter<
+      FuturizedCollection, boost::thread_safe_counter>*>(p));
+}
+
+using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
+} // namespace crimson::os

@@ -1,5 +1,7 @@
 import errno
+import json
 import logging
+import os
 import threading
 
 import rados
@@ -12,8 +14,42 @@ MIRROR_OBJECT_NAME = MIRROR_OBJECT_PREFIX
 
 INSTANCE_ID_PREFIX = "instance_"
 DIRECTORY_MAP_PREFIX = "dir_map_"
+SYNC_STAT_KEY_PREFIX = "sync_stat"
 
 log = logging.getLogger(__name__)
+
+
+def get_metadata_pool(filesystem, fs_map):
+    for fs in fs_map['filesystems']:
+        if fs['mdsmap']['fs_name'] == filesystem:
+            return fs['mdsmap']['metadata_pool']
+    return None
+
+
+def norm_path(dir_path):
+    if not os.path.isabs(dir_path):
+        raise MirrorException(-errno.EINVAL, f'{dir_path} should be an absolute path')
+    return os.path.normpath(dir_path)
+
+
+def sync_stat_omap_key(filesystem, peer_uuid, dir_path):
+    return (f'{SYNC_STAT_KEY_PREFIX}/{filesystem}/{peer_uuid}/'
+            f'{dir_path.lstrip("/")}')
+
+
+def parse_sync_stat_omap_key(key, filesystem):
+    prefix = f'{SYNC_STAT_KEY_PREFIX}/{filesystem}/'
+    if not key.startswith(prefix):
+        return None
+    suffix = key[len(prefix):]
+    peer_uuid, sep, dir_rel = suffix.partition('/')
+    if not peer_uuid or not sep:
+        return None
+    return peer_uuid, os.path.normpath('/' + dir_rel)
+
+
+def decode_sync_stat_val(val):
+    return json.loads(val.decode('utf-8'))
 
 def connect_to_cluster(client_name, cluster_name, conf_dct, desc=''):
     try:

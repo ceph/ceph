@@ -15,7 +15,7 @@ export class MgrSummaryPipe implements PipeTransform {
     let activeCount: number;
     const activeTitleText = _.isUndefined(value.active_name)
       ? ''
-      : `${$localize`active daemon`}: ${value.active_name}`;
+      : `${$localize`active service instance`}: ${value.active_name}`;
     // There is always one standbyreplay to replace active daemon, if active one is down
     if (activeTitleText.length > 0) {
       activeCount = 1;

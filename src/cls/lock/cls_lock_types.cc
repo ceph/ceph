@@ -14,8 +14,7 @@
  */
 
 #include "common/Formatter.h"
-
-#include "cls/lock/cls_lock_types.h"
+#include "cls_lock_types.h"
 
 using namespace rados::cls::lock;
 

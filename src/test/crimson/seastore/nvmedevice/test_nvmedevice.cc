@@ -58,13 +58,14 @@ TEST_F(nvdev_test_t, write_and_verify_test)
   run_async([this] {
     device.reset(new random_block_device::nvme::NVMeBlockDevice(dev_path));
     local_conf().set_val("seastore_cbjournal_size", "1048576").get();
-    device->start(seastar::smp::count).get();
+    device->start(seastar::this_smp_shard_count()).get();
     device->mkfs(
       device_config_t{
 	true,
 	device_spec_t{
 	(magic_t)std::rand(),
 	device_type_t::RANDOM_BLOCK_SSD,
+	backend_type_t::RANDOM_BLOCK,
 	static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN)},
 	seastore_meta_t{uuid_d()},
 	secondary_device_set_t()}

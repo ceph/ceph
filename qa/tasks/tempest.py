@@ -133,6 +133,7 @@ def configure_instance(ctx, config):
         cpar = configparser.ConfigParser()
         cpar.read(local_conf)
         setup_logging(ctx, cpar)
+        cpar.set('service_available', 'neutron', 'false')
         to_config(cconfig, params, 'auth', cpar)
         to_config(cconfig, params, 'identity', cpar)
         to_config(cconfig, params, 'object-storage', cpar)
@@ -159,7 +160,7 @@ def run_tempest(ctx, config):
                 '--workspace',
                 'rgw',
                 '--regex', '^tempest.api.object_storage',
-                '--black-regex', '|'.join(blocklist)
+                '--exclude-regex', '|'.join(blocklist)
             ])
     try:
         yield

@@ -6,11 +6,13 @@ tasks:
         - cephfs-shell
         - cephfs-top
         - cephfs-mirror
+        - ceph-mgr-modules-standard
         deb:
         - python3-cephfs
         - cephfs-shell
         - cephfs-top
         - cephfs-mirror
+        - ceph-mgr-modules-standard
       # For kernel_untar_build workunit
       extra_system_packages:
         deb:

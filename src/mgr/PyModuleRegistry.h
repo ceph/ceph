@@ -50,6 +50,7 @@ private:
 
   std::unique_ptr<ActivePyModules> active_modules;
   std::unique_ptr<StandbyPyModules> standby_modules;
+  std::unique_ptr<ThreadMonitor> thread_monitor;
 
   PyThreadState *pMainThreadState;
 
@@ -64,6 +65,7 @@ private:
   std::vector<std::string> probe_modules(const std::string &path) const;
 
   PyModuleConfig module_config;
+  PyObject* process_obj = nullptr;
 
 public:
   void handle_config(const std::string &k, const std::string &v);
@@ -75,6 +77,28 @@ public:
     const std::map<std::string, std::optional<bufferlist>, std::less<>>& data) {
     ceph_assert(active_modules);
     active_modules->update_kv_data(prefix, incremental, data);
+  }
+
+  /**
+   * Look up a single mgr module config option by its full key ("mgr/<mod>/<opt>").
+   * Returns true and sets *val if found.
+   */
+  bool get_module_option(const std::string& key, std::string *val) const {
+    std::lock_guard l(module_config.lock);
+    auto it = module_config.config.find(key);
+    if (it == module_config.config.end()) {
+      return false;
+    }
+    *val = it->second;
+    return true;
+  }
+
+  /**
+   * Return a snapshot of the entire module config map.
+   */
+  std::map<std::string, std::string> get_module_config_snapshot() const {
+    std::lock_guard l(module_config.lock);
+    return module_config.config;
   }
 
   /**
@@ -93,9 +117,13 @@ public:
   }
 
   explicit PyModuleRegistry(LogChannelRef clog_)
-    : clog(clog_)
-  {}
+    : clog(clog_),
+      thread_monitor(std::make_unique<ThreadMonitor>(g_ceph_context))
+  { }
 
+  ~PyModuleRegistry() {
+    thread_monitor->stop_monitoring();
+  }
   /**
    * @return true if the mgrmap has changed such that the service needs restart
    */

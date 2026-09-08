@@ -4,19 +4,22 @@ import logging
 import os
 import subprocess
 import tempfile
-from typing import Dict, Tuple, Any, List, cast, Optional, TYPE_CHECKING
+from threading import Lock
+from typing import Dict, Tuple, Any, List, Set, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
-
+from cephadm import utils
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
+from ceph.utils import with_units_to_int
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
-from cephadm import utils
-from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
+from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService, \
+    RGW_PROFILE_RELEASE
+from cephadm.schedule import get_placement_hosts
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
 
@@ -28,6 +31,28 @@ class NFSService(CephService):
     TYPE = 'nfs'
     DEFAULT_EXPORTER_PORT = 9587
 
+    def __init__(self, mgr: "CephadmOrchestrator"):
+        super().__init__(mgr)
+        self._fencing_store_lock = Lock()
+
+    def allow_colo(self) -> bool:
+        return True
+
+    def get_certificate_ips(
+        self,
+        spec: NFSServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+    ) -> List[str]:
+        ips: List[str] = []
+        host_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+        if host_ip:
+            ips.append(host_ip)
+
+        if spec.virtual_ip and spec.virtual_ip not in ips:
+            ips.append(spec.virtual_ip)
+
+        return ips
+
     @property
     def needs_monitoring(self) -> bool:
         return True
@@ -35,11 +60,50 @@ class NFSService(CephService):
     def ranked(self, spec: ServiceSpec) -> bool:
         return True
 
-    def fence(self, daemon_id: str) -> None:
+    def _update_failed_fencing_services(
+        self,
+        service_name: str,
+        add_if_failed: bool,
+        remove_if_success: bool
+    ) -> None:
+        with self._fencing_store_lock:
+            failed_services = self.mgr.get_store('nfs_fencing_failed_services')
+            services = failed_services.split(',') if failed_services else []
+            if add_if_failed:
+                if service_name not in services:
+                    services.append(service_name)
+            elif remove_if_success:
+                if service_name in services:
+                    services.remove(service_name)
+            val = ','.join(services) if services else None
+            if failed_services or services:
+                self.mgr.set_store('nfs_fencing_failed_services', val)
+
+    def update_failed_fencing_services_remove_missing(self, services_to_remove: List[str]) -> None:
+        if not services_to_remove:
+            return
+        with self._fencing_store_lock:
+            failed_services = self.mgr.get_store('nfs_fencing_failed_services')
+            services = failed_services.split(',') if failed_services else []
+            updated = [s for s in services if s not in services_to_remove]
+            val = ','.join(updated) if updated else None
+            self.mgr.set_store('nfs_fencing_failed_services', val)
+
+    def fence(self, service_name: str, daemon_id: str) -> None:
         logger.info(f'Fencing old nfs.{daemon_id}')
+
+        rados_user = self.get_daemon_user(service_name, daemon_id)
+        entity = self.get_auth_entity(daemon_id, rados_user=rados_user)
+
+        # as new auth entity is common across cluster, we will need to delete it for last daemon
+        if rados_user == service_name and self.mgr.cache.get_daemons_by_service(service_name):
+            logger.debug(f'Not removing key for {entity} as daemons still exists')
+            return
+
+        logger.info(f'Removing key for {entity}')
         ret, out, err = self.mgr.mon_command({
             'prefix': 'auth rm',
-            'entity': f'client.nfs.{daemon_id}',
+            'entity': entity,
         })
 
         # TODO: block/fence this entity (in case it is still running somewhere)
@@ -48,24 +112,34 @@ class NFSService(CephService):
                         spec: ServiceSpec,
                         rank_map: Dict[int, Dict[int, Optional[str]]],
                         num_ranks: int) -> None:
+        service_name = spec.service_name()
+        fence_failed = False
         for rank, m in list(rank_map.items()):
             if rank >= num_ranks:
                 for daemon_id in m.values():
                     if daemon_id is not None:
-                        self.fence(daemon_id)
-                del rank_map[rank]
-                nodeid = f'{rank}'
-                self.mgr.log.info(f'Removing {nodeid} from the ganesha grace table')
-                self.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', nodeid)
-                self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+                        self.fence(spec.service_name(), daemon_id)
+                nodeid = self.get_daemon_nodeid(spec.service_name(), rank)
+                self.mgr.log.info(
+                    "Removing %s from the ganesha grace table for service %s", nodeid, service_name
+                )
+                try:
+                    self.run_grace_tool(cast(NFSServiceSpec, spec), 'remove', nodeid)
+                    # Only delete from rank_map if grace tool succeeds
+                    del rank_map[rank]
+                    self.mgr.spec_store.save_rank_map(service_name, rank_map)
+                except RuntimeError:
+                    self.mgr.log.exception('Got exception while removing node id from grace table')
+                    fence_failed = True
             else:
                 max_gen = max(m.keys())
                 for gen, daemon_id in list(m.items()):
                     if gen < max_gen:
                         if daemon_id is not None:
-                            self.fence(daemon_id)
+                            self.fence(spec.service_name(), daemon_id)
                         del rank_map[rank][gen]
-                        self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+                        self.mgr.spec_store.save_rank_map(service_name, rank_map)
+        self._update_failed_fencing_services(service_name, fence_failed, not fence_failed)
 
     def config(self, spec: NFSServiceSpec) -> None:  # type: ignore
         from nfs.cluster import create_ganesha_pool
@@ -83,60 +157,95 @@ class NFSService(CephService):
         assert spec
         deps: List[str] = []
         nfs_spec = cast(NFSServiceSpec, spec)
-        # add dependency of tls fields
-        if (spec.ssl and spec.ssl_cert and spec.ssl_key and spec.ssl_ca_cert):
-            deps.append(f'ssl_cert: {str(utils.md5_hash(spec.ssl_cert))}')
-            deps.append(f'ssl_key: {str(utils.md5_hash(spec.ssl_key))}')
-            deps.append(f'ssl_ca_cert: {str(utils.md5_hash(spec.ssl_ca_cert))}')
-        deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
-        deps.append(f'tls_debug: {nfs_spec.tls_debug}')
-        deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
-        deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
-        return sorted(deps)
+        # choose_next_action() ignores False/None in the symmetric diff, so
+        # False <-> None transitions do not trigger reconfig or redeploy.
+
+        # RDMA related
+        if nfs_spec.enable_rdma:
+            deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
+            if nfs_spec.rdma_port is not None:
+                deps.append(f'rdma_port: {nfs_spec.rdma_port}')
+        # TLS related
+        if nfs_spec.tls_ktls:
+            deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
+        if nfs_spec.tls_debug:
+            deps.append(f'tls_debug: {nfs_spec.tls_debug}')
+        if nfs_spec.tls_min_version is not None:
+            deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
+        if nfs_spec.tls_ciphers is not None:
+            deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
+        # Ceph client object cache related
+        if nfs_spec.enable_client_object_cache:
+            deps.append(f'enable_client_object_cache: {nfs_spec.enable_client_object_cache}')
+            if nfs_spec.client_object_cache_size is not None:
+                deps.append(
+                    f'client_object_cache_size: {nfs_spec.client_object_cache_size}'
+                )
+            if nfs_spec.client_object_cache_max_dirty is not None:
+                deps.append(
+                    f'client_object_cache_max_dirty: '
+                    f'{nfs_spec.client_object_cache_max_dirty}'
+                )
+
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
+    def get_daemon_nodeid(self, service_name: str, rank: Optional[int]) -> str:
+        out = self.mgr.get_store('nfs_services_with_old_nodeid')
+        if out and service_name in out.split(','):
+            return f'{service_name}.{rank}'
+        return str(rank)
+
+    def get_daemon_user(self, service_name: str, daemon_id: str) -> str:
+        out = self.mgr.get_store('nfs_services_with_old_userid')
+        if out and service_name in out.split(','):
+            return f'nfs.{daemon_id}'
+        return f'{service_name}'
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-
-        super().register_for_certificates(daemon_spec)
+        super().prepare_certificates(daemon_spec)
         daemon_type = daemon_spec.daemon_type
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
         spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
-        nodeid = f'{daemon_spec.rank}'
+        nodeid = self.get_daemon_nodeid(spec.service_name(), daemon_spec.rank)
 
         nfs_idmap_conf = '/etc/ganesha/idmap.conf'
 
         # create the RADOS recovery pool keyring
-        rados_user = f'{daemon_type}.{daemon_id}'
-        rados_keyring = self.create_keyring(daemon_spec)
+        rados_user = self.get_daemon_user(daemon_spec.service_name, daemon_id)
+        rados_keyring = self.create_keyring(daemon_spec, rados_user)
 
         # ensure rank is known to ganesha
-        self.mgr.log.info(f'Ensuring {nodeid} is in the ganesha grace table')
+        self.mgr.log.info(
+            'Ensuring %s is in the ganesha grace table for service %s', nodeid, daemon_spec.service_name
+        )
         self.run_grace_tool(spec, 'add', nodeid)
 
-        # create the rados config object
-        self.create_rados_config_obj(spec)
-
         port = daemon_spec.ports[0] if daemon_spec.ports else 2049
-        monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host)
+        monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host, daemon_spec)
 
         # create the RGW keyring
-        rgw_user = f'{rados_user}-rgw'
+        rgw_user = f'{daemon_type}.{daemon_id}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
         bind_addr = ''
+
         if spec.virtual_ip and not spec.enable_haproxy_protocol:
+            # keepalive_only mode: prioritize virtual_ip
             bind_addr = spec.virtual_ip
             daemon_spec.port_ips = {str(port): spec.virtual_ip}
             # update daemon spec ip for prometheus, as monitoring will happen on this
             # ip, if no monitor ip specified
             daemon_spec.ip = bind_addr
         elif daemon_spec.ip:
+            # daemon_spec.ip is already set by scheduler from ip_addrs if specified
             bind_addr = daemon_spec.ip
             daemon_spec.port_ips = {str(port): daemon_spec.ip}
         if not bind_addr:
@@ -144,10 +253,56 @@ class NFSService(CephService):
         else:
             logger.debug("using haproxy bind address: %r", bind_addr)
 
+        if spec.enable_rdma:
+            from cephadm.serve import CephadmServe
+            # During a cluster upgrade, prepare_create run on the asyncio
+            # event-loop thread; a nested wait_async(cephadm list-rdma) there would
+            # block the loop. Skip the check while upgrade_state is set.
+            if self.mgr.upgrade.upgrade_state is not None:
+                self.mgr.log.info('NFS: RDMA list-rdma skipped (cluster upgrade in progress)')
+            else:
+                rdma_devices = self.mgr.wait_async(
+                    CephadmServe(self.mgr).get_rdma_devices(host)
+                )
+                if not rdma_devices:
+                    raise OrchestratorError(
+                        f'NFS RDMA is enabled but host {host} has no RDMA devices. '
+                        "Run 'cephadm list-rdma' on the host to verify RDMA is available."
+                    )
+                if bind_addr:
+                    bind_ip = bind_addr.split('/')[0]
+                    iface = self.mgr.cache.get_interface_for_ip(host, bind_ip)
+                    rdma_netdevs = {d.get('netdev', '') for d in rdma_devices}
+                    if iface and iface not in rdma_netdevs:
+                        raise OrchestratorError(
+                            f'NFS RDMA is enabled with bind address {bind_addr} on host {host}, '
+                            f'but interface {iface} (for this IP) is not RDMA-capable. '
+                            f'RDMA netdevs on host: {sorted(rdma_netdevs)}. '
+                            "Use an IP on an RDMA-capable interface or run 'rdma link show' on the host."
+                        )
+
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
+        ceph_nodes = []
+        hosts = get_placement_hosts(spec, self.mgr.cache.get_schedulable_hosts(), self.mgr.cache.get_draining_hosts())
+        for host in hosts:
+            host_ip = self.mgr.inventory.get_addr(host.hostname)
+            ceph_nodes.append(host_ip)
+
+        cluster_qos_port = None
+        if daemon_spec.ports and len(daemon_spec.ports) > 2:
+            cluster_qos_port = daemon_spec.ports[2]
+        elif spec.cluster_qos_port:
+            cluster_qos_port = spec.cluster_qos_port
+
         # generate the ganesha config
+        rdma_port = None
+        if spec.enable_rdma and daemon_spec.ports and len(daemon_spec.ports) > 3:
+            rdma_port = daemon_spec.ports[3]
+        elif spec.enable_rdma:
+            rdma_port = spec.rdma_port
+
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
                 "user": rados_user,
@@ -160,20 +315,35 @@ class NFSService(CephService):
                 "port": port,
                 "monitoring_addr": monitoring_ip,
                 "monitoring_port": monitoring_port,
+                "cqos_port": cluster_qos_port,
                 "bind_addr": bind_addr,
                 "haproxy_hosts": [],
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
+                "enable_rdma": spec.enable_rdma,
+                "rdma_port": rdma_port,
                 "cluster_id": self.mgr._cluster_fsid,
                 "tls_add": spec.ssl,
                 "tls_ciphers": spec.tls_ciphers,
                 "tls_min_version": spec.tls_min_version,
                 "tls_ktls": spec.tls_ktls,
                 "tls_debug": spec.tls_debug,
+                "ceph_nodes": ceph_nodes,
+                "protocols": "3, 4" if spec.enable_nfsv3 else "4",
+                "use_old_nodeid": False if nodeid.isdigit() else True,
+                "enable_client_object_cache": spec.enable_client_object_cache,
+                "client_object_cache_size": (
+                    with_units_to_int(str(spec.client_object_cache_size))
+                    if spec.client_object_cache_size is not None else None
+                ),
+                "client_object_cache_max_dirty": (
+                    with_units_to_int(str(spec.client_object_cache_max_dirty))
+                    if spec.client_object_cache_max_dirty is not None else None
+                ),
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
-                if spec.virtual_ip:
+                if spec.virtual_ip and spec.virtual_ip not in context["haproxy_hosts"]:
                     context["haproxy_hosts"].append(spec.virtual_ip)
                 logger.debug("selected haproxy_hosts: %r", context["haproxy_hosts"])
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
@@ -204,7 +374,11 @@ class NFSService(CephService):
                 'idmap.conf': get_idmap_conf()
             }
             if spec.ssl:
-                tls_creds = self.get_certificates(daemon_spec, ca_cert_required=True)
+                tls_creds = self.get_certificates(
+                    daemon_spec,
+                    ips=self.get_certificate_ips(spec, daemon_spec),
+                    ca_cert_required=True,
+                )
                 config['files'].update({
                     'tls_cert.pem': tls_creds.cert,
                     'tls_key.pem': tls_creds.key,
@@ -222,14 +396,21 @@ class NFSService(CephService):
                 'user': rgw_user,
                 'keyring': rgw_keyring,
             }
+            config['enable_rdma'] = spec.enable_rdma
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 
         return get_cephadm_config(), self.get_dependencies(self.mgr, spec)
 
+    def pre_daemon_service_config(self, spec: ServiceSpec) -> None:
+        nfs_spec = cast(NFSServiceSpec, spec)
+        self.config(nfs_spec)
+        self.create_rados_config_obj(nfs_spec)
+
     def create_rados_config_obj(self,
                                 spec: NFSServiceSpec,
                                 clobber: bool = False) -> None:
+        config_file_data = None
         objname = spec.rados_config_name()
         cmd = [
             'rados',
@@ -244,6 +425,7 @@ class NFSService(CephService):
             timeout=10)
         if not result.returncode and not clobber:
             logger.info('Rados config object exists: %s' % objname)
+            config_file_data = result.stdout
         else:
             logger.info('Creating rados config object: %s' % objname)
             result = subprocess.run(
@@ -255,11 +437,30 @@ class NFSService(CephService):
                     f'Unable to create rados config object {objname}: {result.stderr.decode("utf-8")}'
                 )
                 raise RuntimeError(result.stderr.decode("utf-8"))
+        if spec.cluster_qos_config:
+            # set cluster level qos config
+            from nfs.cluster import config_cluster_qos_from_dict
+            assert spec.service_id
+            update_obj = False
+            if config_file_data and 'qosconf-nfs' in config_file_data.decode('utf-8'):
+                update_obj = True
 
-    def create_keyring(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
+            config_cluster_qos_from_dict(
+                mgr=self.mgr,
+                cluster_id=spec.service_id,
+                qos_dict=spec.cluster_qos_config,
+                update_existing_obj=update_obj
+            )
+
+    def get_auth_entity(self, daemon_id: str, host: str = "", rados_user: str = '') -> AuthEntity:
+        if rados_user:
+            return AuthEntity(f'client.{rados_user}')
+        return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
+
+    def create_keyring(self, daemon_spec: CephadmDaemonDeploySpec, rados_user: str) -> str:
         daemon_id = daemon_spec.daemon_id
         spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        entity: AuthEntity = self.get_auth_entity(daemon_id)
+        entity: AuthEntity = self.get_auth_entity(daemon_id, rados_user=rados_user)
 
         osd_caps = 'allow rw pool=%s namespace=%s' % (POOL_NAME, spec.service_id)
 
@@ -275,16 +476,23 @@ class NFSService(CephService):
         entity: AuthEntity = self.get_auth_entity(f'{daemon_id}-rgw')
 
         logger.info('Creating key for %s' % entity)
+        # the profile grants nothing on a mon or osd that predates it
+        osdmap = self.mgr.get('osd_map')
+        release = osdmap.get('require_osd_release', 'argonaut')
+        if utils.ceph_release_to_major(release) >= RGW_PROFILE_RELEASE:
+            osd_caps = 'profile rgw'
+        else:
+            osd_caps = 'allow rwx tag rgw *=*'
         keyring = self.get_keyring_with_caps(entity,
                                              ['mon', 'allow r',
-                                              'osd', 'allow rwx tag rgw *=*'])
+                                              'osd', osd_caps])
 
         return keyring
 
     def run_grace_tool(self,
                        spec: NFSServiceSpec,
                        action: str,
-                       nodeid: str) -> None:
+                       nodeid: str = '') -> str:
         # write a temp keyring and referencing config file.  this is a kludge
         # because the ganesha-grace-tool can only authenticate as a client (and
         # not a mgr).  Also, it doesn't allow you to pass a keyring location via
@@ -316,10 +524,20 @@ class NFSService(CephService):
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     timeout=10)
             if result.returncode:
+                stderr = result.stderr.decode("utf-8")
                 self.mgr.log.warning(
-                    f'ganesha-rados-grace tool failed: {result.stderr.decode("utf-8")}'
+                    'ganesha-rados-grace tool failed for service %s, err: %s rc: %s',
+                    spec.service_name(), stderr, result.returncode
                 )
-                raise RuntimeError(f'grace tool failed: {result.stderr.decode("utf-8")}')
+                if action == 'remove' and 'Failure: -126' in stderr:
+                    self.mgr.log.info(
+                        'Ignore ganesha-rados-grace tool remove failure as %s does not exists for %s service',
+                        nodeid, spec.service_name()
+                    )
+                    return ''
+
+                raise RuntimeError(f'grace tool failed for service {spec.service_name()}: {stderr}')
+            return result.stdout.decode("utf-8")
 
         finally:
             self.mgr.check_mon_command({
@@ -338,9 +556,32 @@ class NFSService(CephService):
             'entity': entity,
         })
 
+    def remove_nfs_keyring(self, service_name: str, daemon_id: str) -> None:
+        rados_user = self.get_daemon_user(service_name, daemon_id)
+        entity = self.get_auth_entity(daemon_id, rados_user=rados_user)
+
+        # as new auth entity is common across cluster, we will need to delete it for last daemon
+        if rados_user == service_name and self.mgr.cache.get_daemons_by_service(service_name):
+            logger.debug(f'Not removing key for {entity} as daemons still exists')
+            return
+
+        logger.info(f'Removing key for {entity}')
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'auth rm',
+            'entity': entity,
+        })
+
+    def remove_keyring(self, daemon: DaemonDescription) -> None:
+        assert daemon.daemon_id is not None
+        daemon_id: str = daemon.daemon_id
+        service_name = daemon.service_name()
+
+        self.remove_nfs_keyring(service_name, daemon_id)
+
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
         self.remove_rgw_keyring(daemon)
+        self.remove_keyring(daemon)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
@@ -360,7 +601,23 @@ class NFSService(CephService):
         warn_message = "WARNING: Removing NFS daemons can cause clients to lose connectivity. "
         return HandleCommandResult(-errno.EBUSY, '', warn_message)
 
+    def _clear_legacy_nfs_store_markers(self, service_name: str) -> None:
+        # Keep these markers until daemon post_remove has finished so
+        # get_daemon_user()/get_daemon_nodeid() still resolve legacy entities.
+        mon_keys = ['nfs_services_with_old_nodeid', 'nfs_services_with_old_userid']
+        for key in mon_keys:
+            nfs_services = self.mgr.get_store(key)
+            if nfs_services:
+                nfs_services = nfs_services.split(',')
+                if service_name in nfs_services:
+                    nfs_services.remove(service_name)
+                    val = ','.join(nfs_services) if nfs_services else None
+                    self.mgr.set_store(key, val)
+
     def purge(self, service_name: str) -> None:
+        # Clear after all daemons are gone (post_remove already cleaned keys).
+        self._clear_legacy_nfs_store_markers(service_name)
+
         if service_name not in self.mgr.spec_store:
             return
         spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
@@ -402,10 +659,10 @@ class NFSService(CephService):
         # good enough to prevent acceping haproxy protocol messages
         # from "rouge" systems that are not under our control. At
         # least until we learn otherwise.
-        cluster_ips: List[str] = []
+        cluster_ips: Set[str] = set()
         for host in self.mgr.inventory.keys():
             default_addr = self.mgr.inventory.get_addr(host)
-            cluster_ips.append(default_addr)
+            cluster_ips.add(default_addr)
             nets = self.mgr.cache.networks.get(host)
             if not nets:
                 continue
@@ -418,18 +675,46 @@ class NFSService(CephService):
                 addrs: List[str] = sum((addr_list for addr_list in iface.values()), [])
                 if addrs:
                     # one address per interface/subnet is enough
-                    cluster_ips.append(addrs[0])
-        return cluster_ips
+                    cluster_ips.add(addrs[0])
+        return list(cluster_ips)
 
-    def get_monitoring_details(self, service_name: str, host: str) -> Tuple[Optional[str], Optional[int]]:
+    def get_monitoring_details(
+        self,
+        service_name: str,
+        host: str,
+        daemon_spec: Optional['CephadmDaemonDeploySpec'] = None
+    ) -> Tuple[Optional[str], Optional[int]]:
         spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
-        monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
+
+        # For colocation, use the incremented monitoring port from daemon_spec.ports[1] if available
+        # Otherwise fall back to the spec's monitoring_port
+        if daemon_spec and daemon_spec.ports and len(daemon_spec.ports) > 1:
+            monitoring_port = daemon_spec.ports[1]
+        else:
+            monitoring_port = spec.monitoring_port if spec.monitoring_port else 9587
 
         # check if monitor needs to be bind on specific ip
         monitoring_addr = spec.monitoring_ip_addrs.get(host) if spec.monitoring_ip_addrs else None
-        if monitoring_addr and monitoring_addr not in self.mgr.cache.get_host_network_ips(host):
-            logger.debug(f"Monitoring IP {monitoring_addr} is not configured on host {host}.")
-            monitoring_addr = None
+
+        if monitoring_addr:
+            try:
+                ip = ipaddress.ip_address(monitoring_addr)
+
+                # Fetch host IPs once and normalize to strings
+                host_ips = set(self.mgr.cache.get_host_network_ips(host))
+
+                # Allow loopback addresses without requiring them on an interface
+                if not ip.is_loopback and str(ip) not in host_ips:
+                    logger.debug(
+                        f"Monitoring IP {monitoring_addr} is not configured on host {host}."
+                    )
+                    monitoring_addr = None
+
+            except ValueError:
+                logger.warning(
+                    f"Invalid monitoring IP address {monitoring_addr} for host {host}."
+                )
+                monitoring_addr = None
         if not monitoring_addr and spec.monitoring_networks:
             monitoring_addr = self.mgr.get_first_matching_network_ip(host, spec, spec.monitoring_networks)
             if not monitoring_addr:
@@ -443,14 +728,26 @@ class NFSService(CephService):
         spec: Optional[ServiceSpec],
         curr_deps: List[str],
         last_deps: List[str],
-    ) -> utils.Action:
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
         """Given the scheduled_action, service spec, daemon_type, and
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
         """
+        def is_default_value_dep(dep: str) -> bool:
+            # Ignoring False and None as both represent an unset/default option
+            if ':' not in dep:
+                return False
+            return dep.split(':', 1)[1].strip() in ('False', 'None')
+
         if curr_deps == last_deps:
-            return scheduled_action
-        sym_diff = set(curr_deps).symmetric_difference(last_deps)
+            return utils.NextDaemonStep(scheduled_action)
+        sym_diff = {
+            d for d in set(curr_deps).symmetric_difference(last_deps)
+            if not is_default_value_dep(d)
+        }
+        if not sym_diff:
+            return utils.NextDaemonStep(scheduled_action)
         logger.info(
             'Reconfigure wanted %s: deps %r -> %r (diff %r)',
             spec.service_name() if spec else daemon_type,
@@ -463,4 +760,4 @@ class NFSService(CephService):
         only_kmip_updated = all(s.startswith('kmip') for s in sym_diff)
         if not only_kmip_updated:
             action = utils.Action.REDEPLOY
-        return action
+        return utils.NextDaemonStep(action)

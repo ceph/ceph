@@ -35,7 +35,11 @@ int64_t HybridAllocatorBase<T>::allocate(
     max_alloc_size = p2align(uint64_t(cap), (uint64_t)T::get_block_size());
   }
 
+  auto lock_wait_start = mono_clock::now();
+
   std::lock_guard l(T::get_lock());
+
+  auto lock_acquired = mono_clock::now();
 
   // try bitmap first to avoid unneeded contiguous extents split if
   // desired amount is less than shortes range in AVL or Btree2
@@ -63,6 +67,12 @@ int64_t HybridAllocatorBase<T>::allocate(
       ceph_assert(orig_size == extents->size());
     }
   }
+  this->logger->tinc_with_max(
+      l_bluestore_allocator_alloc_process_lat,
+      mono_clock::now() - lock_acquired);
+  this->logger->tinc_with_max(
+      l_bluestore_allocator_lock_wait_lat,
+      lock_acquired - lock_wait_start);
   return res ? res : -ENOSPC;
 }
 
@@ -142,6 +152,57 @@ uint64_t HybridAllocatorBase<T>::_spillover_allocate(uint64_t want,
     hint,
     extents);
 }
+
+template <typename T>
+uint64_t HybridAllocatorBase<T>::get_free_extents(
+  uint64_t range_begin,
+  uint64_t range_end,
+  size_t max_count,
+  free_extent_vector_t* out)
+{
+  if (!bmap_alloc) {
+    return T::get_free_extents(range_begin, range_end, max_count, out);
+  }
+
+  free_extent_vector_t primary_out;
+  T::get_free_extents(range_begin, range_end, max_count, &primary_out);
+
+  if (primary_out.empty()) {
+    return bmap_alloc->get_free_extents(range_begin, range_end, max_count, out);
+  }
+
+  const bool unbounded = (max_count == 0);
+  size_t n = 0;
+  uint64_t prev_end = range_begin;
+  free_extent_vector_t bmap_out;
+
+  for (size_t i = 0; i <= primary_out.size(); ++i) {
+    uint64_t gap_end = (i < primary_out.size()) ? primary_out[i].offset : range_end;
+
+    bmap_out.clear();
+    uint64_t bmap_cursor = bmap_alloc->get_free_extents(
+      prev_end, gap_end, unbounded ? 0 : (max_count - n), &bmap_out);
+    out->insert(out->end(), bmap_out.begin(), bmap_out.end());
+    n += bmap_out.size();
+
+    if (!unbounded && n >= max_count) {
+      return bmap_cursor;
+    }
+    if (i == primary_out.size()) {
+      return bmap_cursor;  // tail edge done, nothing left to interleave
+    }
+
+    out->push_back(primary_out[i]);
+    n++;
+    prev_end = primary_out[i].offset + primary_out[i].length;
+
+    if (!unbounded && n >= max_count) {
+      return prev_end;
+    }
+  }
+  return range_end;
+}
+
 
 template <typename PrimaryAllocator>
 uint64_t HybridAllocatorBase<PrimaryAllocator>::_allocate_or_rollback(

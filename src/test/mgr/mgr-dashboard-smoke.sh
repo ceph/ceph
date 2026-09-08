@@ -25,7 +25,7 @@ function run() {
 
     export CEPH_MON=127.0.0.1:$mon_port
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-initial-members=a --mon-host=$MON "
     CEPH_ARGS+="--mgr-initial-modules=dashboard "
     CEPH_ARGS+="--mon-host=$CEPH_MON"

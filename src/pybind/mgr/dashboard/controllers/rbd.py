@@ -82,14 +82,15 @@ class Rbd(RESTController):
 
     DEFAULT_LIMIT = 5
 
-    def _rbd_list(self, pool_name=None, offset=0, limit=DEFAULT_LIMIT, search='', sort=''):
+    def _rbd_list(self, pool_name=None, namespace=None, offset=0, limit=DEFAULT_LIMIT,
+                  search='', sort=''):
         if pool_name:
             pools = [pool_name]
         else:
             pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
 
         images, num_total_images = RbdService.rbd_pool_list(
-            pools, offset=offset, limit=limit, search=search, sort=sort)
+            pools, namespace=namespace, offset=offset, limit=limit, search=search, sort=sort)
         cherrypy.response.headers['X-Total-Count'] = num_total_images
         pool_result = {}
         for i, image in enumerate(images):
@@ -111,14 +112,16 @@ class Rbd(RESTController):
     @EndpointDoc("Display Rbd Images",
                  parameters={
                      'pool_name': (str, 'Pool Name'),
+                     'namespace': (str, 'Optional RBD namespace. If provided, list images only '
+                                        'from this namespace within the selected pool(s).'),
                      'limit': (int, 'limit'),
                      'offset': (int, 'offset'),
                  },
                  responses={200: RBD_SCHEMA})
     @RESTController.MethodMap(version=APIVersion(2, 0))  # type: ignore
-    def list(self, pool_name=None, offset: int = 0, limit: int = DEFAULT_LIMIT,
+    def list(self, pool_name=None, namespace=None, offset: int = 0, limit: int = DEFAULT_LIMIT,
              search: str = '', sort: str = ''):
-        return self._rbd_list(pool_name, offset=int(offset), limit=int(limit),
+        return self._rbd_list(pool_name, namespace=namespace, offset=int(offset), limit=int(limit),
                               search=search, sort=sort)
 
     @handle_rbd_error()
@@ -317,7 +320,7 @@ class RbdSnapshot(RESTController):
     def clone(self, image_spec, snapshot_name, child_pool_name,
               child_image_name, child_namespace=None, obj_size=None, features=None,
               stripe_unit=None, stripe_count=None, data_pool=None,
-              configuration=None, metadata=None):
+              configuration=None, metadata=None, clone_by_snap_id=False):
         """
         Clones a snapshot to an image
         """
@@ -334,10 +337,25 @@ class RbdSnapshot(RESTController):
                 # Set features
                 feature_bitmask = format_features(features)
 
+                # When clone_by_snap_id is set, treat snapshot_name as a
+                # numeric snap ID and clone by ID. This is required for
+                # non-user namespace snapshots (e.g. group snapshots) which
+                # cannot be cloned by name. Passing an int to rbd.RBD().clone()
+                # triggers rbd_clone4 (by snap ID) instead of rbd_clone3.
+                # Clone format 2 is enforced here because this flag is intended
+                # for non-user namespace snapshots which cannot be protected
+                # (a prerequisite for clone format 1).
+                snap_ref = snapshot_name
+                clone_format = None
+                if clone_by_snap_id:
+                    snap_ref = int(snapshot_name)
+                    clone_format = 2
+
                 rbd_inst = rbd.RBD()
-                rbd_inst.clone(p_ioctx, image_name, snapshot_name, ioctx,
+                rbd_inst.clone(p_ioctx, image_name, snap_ref, ioctx,
                                child_image_name, feature_bitmask, l_order,
-                               stripe_unit, stripe_count, data_pool)
+                               stripe_unit, stripe_count, data_pool,
+                               clone_format=clone_format)
 
                 RbdConfiguration(pool_ioctx=ioctx, image_name=child_image_name).set_configuration(
                     configuration)

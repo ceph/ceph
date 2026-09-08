@@ -2,6 +2,7 @@
 upgrade-sequence:
    sequential:
    - print: "**** done start upgrade, wait"
+   - sequential: [ignore-auth-warn-cephadm]
    - cephadm.shell:
        env: [sha1]
        mon.a:

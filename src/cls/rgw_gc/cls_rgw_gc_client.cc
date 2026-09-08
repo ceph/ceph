@@ -17,6 +17,7 @@ using ceph::decode;
 using ceph::encode;
 
 using namespace librados;
+using namespace cls::rgw_gc;
 
 void cls_rgw_gc_queue_init(ObjectWriteOperation& op, uint64_t size, uint64_t num_deferred_entries)
 {
@@ -25,13 +26,13 @@ void cls_rgw_gc_queue_init(ObjectWriteOperation& op, uint64_t size, uint64_t num
   call.size = size;
   call.num_deferred_entries = num_deferred_entries;
   encode(call, in);
-  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_INIT, in);
+  op.exec(method::init, in);
 }
 
 int cls_rgw_gc_queue_get_capacity(IoCtx& io_ctx, const string& oid, uint64_t& size)
 {
   bufferlist in, out;
-  int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_GET_CAPACITY, in, out);
+  int r = io_ctx.exec(oid, cls::queue::method::get_capacity, in, out);
   if (r < 0)
     return r;
 
@@ -55,11 +56,11 @@ void cls_rgw_gc_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs
   call.expiration_secs = expiration_secs;
   call.info = info;
   encode(call, in);
-  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_ENQUEUE, in);
+  op.exec(method::enqueue, in);
 }
 
 int cls_rgw_gc_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max, bool expired_only,
-                                  list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
+                                  list<cls_rgw_gc_obj_info>& entries, bool& truncated, string& next_marker)
 {
   bufferlist in, out;
   cls_rgw_gc_list_op op;
@@ -68,7 +69,7 @@ int cls_rgw_gc_queue_list_entries(IoCtx& io_ctx, const string& oid, const string
   op.expired_only = expired_only;
   encode(op, in);
 
-  int r = io_ctx.exec(oid, RGW_GC_CLASS, RGW_GC_QUEUE_LIST_ENTRIES, in, out);
+  int r = io_ctx.exec(oid, method::list_entries, in, out);
   if (r < 0)
     return r;
 
@@ -82,7 +83,7 @@ int cls_rgw_gc_queue_list_entries(IoCtx& io_ctx, const string& oid, const string
 
   entries.swap(ret.entries);
 
-  *truncated = ret.truncated;
+  truncated = ret.truncated;
 
   next_marker = std::move(ret.next_marker);
 
@@ -95,7 +96,7 @@ void cls_rgw_gc_queue_remove_entries(ObjectWriteOperation& op, uint32_t num_entr
   cls_rgw_gc_queue_remove_entries_op rem_op;
   rem_op.num_entries = num_entries;
   encode(rem_op, in);
-  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_REMOVE_ENTRIES, in);
+  op.exec(method::remove_entries, in);
 }
 
 void cls_rgw_gc_queue_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, const cls_rgw_gc_obj_info& info)
@@ -105,5 +106,5 @@ void cls_rgw_gc_queue_defer_entry(ObjectWriteOperation& op, uint32_t expiration_
   defer_op.expiration_secs = expiration_secs;
   defer_op.info = info;
   encode(defer_op, in);
-  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_UPDATE_ENTRY, in);
+  op.exec(method::update_entry, in);
 }

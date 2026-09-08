@@ -24,8 +24,8 @@ failures within it are unlikely to make non-inlined data inaccessible.
 Inline data has always been off by default and requires setting
 the ``inline_data`` flag.
 
-Inline data has been declared deprecated for the Octopus release, and will
-likely be removed altogether in a future release.
+Inline data has been deprecated since the Octopus release. Enabling it triggers
+a health warning, and the feature will be removed altogether in a future release.
 
 Mantle: Programmable Metadata Load Balancer
 -------------------------------------------

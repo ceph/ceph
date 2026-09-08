@@ -20,6 +20,8 @@
 #include <time.h>
 #include <iterator>
 
+#include "crush/CrushWrapper.h"
+
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #include "include/stringify.h"
@@ -34,8 +36,10 @@
 #include "messages/MMonCommand.h"
 #include "messages/MMonHealthChecks.h"
 
+#include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/prime.h"
+#include "crush/CrushWrapper.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -77,7 +81,10 @@ static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
 }
 
 HealthMonitor::HealthMonitor(Monitor &m, Paxos &p, const string& service_name)
-  : PaxosService(m, p, service_name) {
+  : PaxosService(m, p, service_name)
+  , quorum_checks(m, *this)
+  , leader_checks(m, *this)
+{
 }
 
 void HealthMonitor::init()
@@ -94,13 +101,12 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version = get_last_committed();
   dout(10) << __func__ << dendl;
-  load_health();
 
   bufferlist qbl;
   mon.store->get(service_name, "quorum", qbl);
   if (qbl.length()) {
     auto p = qbl.cbegin();
-    decode(quorum_checks, p);
+    quorum_checks.decode(p);
   } else {
     quorum_checks.clear();
   }
@@ -109,7 +115,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   mon.store->get(service_name, "leader", lbl);
   if (lbl.length()) {
     auto p = lbl.cbegin();
-    decode(leader_checks, p);
+    leader_checks.decode(p);
   } else {
     leader_checks.clear();
   }
@@ -129,12 +135,12 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   JSONFormatter jf(true);
   jf.open_object_section("health");
   jf.open_object_section("quorum_health");
-  for (auto& p : quorum_checks) {
-    string s = string("mon.") + stringify(p.first);
-    jf.dump_object(s.c_str(), p.second);
+  for (auto& [rank, checks] : quorum_checks.get_map()) {
+    string s = string("mon.") + stringify(rank);
+    jf.dump_object(s.c_str(), checks);
   }
   jf.close_section();
-  jf.dump_object("leader_health", leader_checks);
+  jf.dump_object("leader_health", leader_checks.get_map());
   jf.close_section();
   jf.flush(*_dout);
   *_dout << dendl;
@@ -153,10 +159,10 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   put_last_committed(t, version);
 
   bufferlist qbl;
-  encode(quorum_checks, qbl);
+  encode(quorum_checks.get_pending_map(), qbl);
   t->put(service_name, "quorum", qbl);
   bufferlist lbl;
-  encode(leader_checks, lbl);
+  encode(leader_checks.get_pending_map(), lbl);
   t->put(service_name, "leader", lbl);
   {
     bufferlist bl;
@@ -164,15 +170,15 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     t->put(service_name, "mutes", bl);
   }
 
-  health_check_map_t pending_health;
+  auto& pending_health = get_health_checks_pending_writeable();
 
   // combine per-mon details carefully...
   map<string,set<string>> names; // code -> <mon names>
-  for (auto p : quorum_checks) {
-    for (auto q : p.second.checks) {
-      names[q.first].insert(mon.monmap->get_name(p.first));
+  for (auto& [rank, check_map] : quorum_checks.get_pending_map()) {
+    for (auto q : check_map.checks) {
+      names[q.first].insert(mon.monmap->get_name(rank));
     }
-    pending_health.merge(p.second);
+    pending_health.merge(check_map);
   }
   for (auto &p : pending_health.checks) {
     p.second.summary = std::regex_replace(
@@ -192,8 +198,10 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       names[p.first].size() > 1 ? "are" : "is");
   }
 
-  pending_health.merge(leader_checks);
-  encode_health(pending_health, t);
+  /* populate leader_health health checks */
+  check_leader_health();
+
+  pending_health.merge(leader_checks.get_pending_map());
 }
 
 version_t HealthMonitor::get_trim_to() const
@@ -377,7 +385,9 @@ bool HealthMonitor::prepare_health_checks(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonHealthChecks>();
   // no need to check if it's changed, the peon has done so
-  quorum_checks[m->get_source().num()] = std::move(m->health_checks);
+  auto rank = m->get_source().num();
+  auto& pending = quorum_checks.get_pending_map_writeable();
+  pending[rank] = std::move(m->health_checks);
   return true;
 }
 
@@ -601,6 +611,13 @@ bool HealthMonitor::check_member_health()
 	   << ", used " << byte_u_t(stats.fs_stats.byte_used)
 	   << ", avail " << byte_u_t(stats.fs_stats.byte_avail) << dendl;
 
+  if (mon.logger) {
+    mon.logger->set(l_mon_data_disk_total_bytes, stats.fs_stats.byte_total);
+    mon.logger->set(l_mon_data_disk_avail_bytes, stats.fs_stats.byte_avail);
+    mon.logger->set(l_mon_data_disk_avail_percent, stats.fs_stats.avail_percent);
+    mon.logger->set(l_mon_db_total_bytes, stats.store_stats.bytes_total);
+  }
+
   // MON_DISK_{LOW,CRIT,BIG}
   health_check_map_t next;
   if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_crit) {
@@ -691,20 +708,24 @@ bool HealthMonitor::check_member_health()
     d.detail.push_back(ds.str());
   }
 
-  auto p = quorum_checks.find(mon.rank);
-  if (p == quorum_checks.end()) {
-    if (next.empty()) {
-      return false;
-    }
-  } else {
-    if (p->second == next) {
-      return false;
+  {
+    auto& current_quorum_checks = quorum_checks.get_map();
+    auto p = current_quorum_checks.find(mon.rank);
+    if (p == current_quorum_checks.end()) {
+      if (next.empty()) {
+        return false;
+      }
+    } else {
+      if (p->second == next) {
+        return false;
+      }
     }
   }
 
   if (mon.is_leader()) {
     // prepare to propose
-    quorum_checks[mon.rank] = next;
+    auto& pending_quorum_checks = quorum_checks.get_pending_map_writeable();
+    pending_quorum_checks[mon.rank] = next;
     changed = true;
   } else {
     // tell the leader
@@ -722,10 +743,11 @@ bool HealthMonitor::check_leader_health()
   // prune quorum_health
   {
     auto& qset = mon.get_quorum();
-    auto p = quorum_checks.begin();
-    while (p != quorum_checks.end()) {
+    auto& pending_quorum_checks = quorum_checks.get_pending_map_writeable();
+    auto p = pending_quorum_checks.begin();
+    while (p != pending_quorum_checks.end()) {
       if (qset.count(p->first) == 0) {
-	p = quorum_checks.erase(p);
+	p = pending_quorum_checks.erase(p);
 	changed = true;
       } else {
 	++p;
@@ -733,37 +755,37 @@ bool HealthMonitor::check_leader_health()
     }
   }
 
-  health_check_map_t next;
+  auto& pending = leader_checks.get_pending_map_writeable();
+  pending.clear(); /* start over */
 
  // DAEMON_OLD_VERSION
   if (g_conf().get_val<bool>("mon_warn_on_older_version")) {
-    check_for_older_version(&next);
+    check_for_older_version(&pending);
   }
   std::set<std::string> mons_down;
   // MON_DOWN
-  check_for_mon_down(&next, mons_down);
+  check_for_mon_down(&pending, mons_down);
   // MON_NETSPLIT
-  check_netsplit(&next, mons_down);
+  check_netsplit(&pending, mons_down);
   // MON_CLOCK_SKEW
-  check_for_clock_skew(&next);
+  check_for_clock_skew(&pending);
   // MON_MSGR2_NOT_ENABLED
   if (g_conf().get_val<bool>("mon_warn_on_msgr2_not_enabled")) {
-    check_if_msgr2_enabled(&next);
+    check_if_msgr2_enabled(&pending);
   }
   // STRETCH MODE
-  check_mon_crush_loc_stretch_mode(&next);
+  check_mon_crush_loc_stretch_mode(&pending);
 
   //CHECK_ERASURE_CODE_PROFILE
-  check_erasure_code_profiles(&next);
+  check_erasure_code_profiles(&pending);
 
   // MON_COLOCATED
   if (g_conf().get_val<bool>("mon_warn_on_colocated_monitors")) {
-    check_for_colocated_monitors(&next);
+    check_for_colocated_monitors(&pending);
   }
 
-  if (next != leader_checks) {
+  if (pending != leader_checks.get_map()) {
     changed = true;
-    leader_checks = next;
   }
   return changed;
 }
@@ -1365,7 +1387,8 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
 
 void HealthMonitor::check_erasure_code_profiles(health_check_map_t *checks)
 {
-  list<string> details;
+  list<string> blaum_roth_details;
+  list<string> deprecated_details;
   
   //This is a loop that will go through all the erasure code profiles 
   for (auto& erasure_code_profile : mon.osdmon()->osdmap.get_erasure_code_profiles()) {
@@ -1382,22 +1405,68 @@ void HealthMonitor::check_erasure_code_profiles(health_check_map_t *checks)
         if ((w <= 2) || (w >= 256)) {
           ostringstream ds;
           ds << "The value of w must be greater than 2 and less than 256";
-          details.push_back(ds.str());
+          blaum_roth_details.push_back(ds.str());
         }
         if (!is_prime(w + 1)) {
           ostringstream ds;
           ds << "w+1="<< w+1 << " for the EC profile " << erasure_code_profile.first 
             << " is not prime and could lead to data corruption";
-          details.push_back(ds.str());
+          blaum_roth_details.push_back(ds.str());
+        }
+      }
+    }
+
+    // Check for plugins and techniques that are deprecated in Umbrella
+    auto plugin = erasure_code_profile.second.find("plugin");
+    if (plugin != erasure_code_profile.second.end()) {
+      const string& plugin_name = erasure_code_profile.second.at("plugin");
+
+      // Check if plugin is clay, shec (including legacy variants) or legacy jerasure
+      if (plugin_name == "clay" ||
+          plugin_name == "shec" ||
+          plugin_name == "shec_generic" ||
+          plugin_name == "shec_sse3" ||
+          plugin_name == "shec_sse4" ||
+          plugin_name == "shec_neon" ||
+          plugin_name == "jerasure_generic" ||
+          plugin_name == "jerasure_sse3" ||
+          plugin_name == "jerasure_sse4" ||
+          plugin_name == "jerasure_neon") {
+        ostringstream ds;
+        ds << "EC profile '" << erasure_code_profile.first
+           << "' uses deprecated plugin '" << plugin_name << "'";
+        deprecated_details.push_back(ds.str());
+      }
+      // Check if plugin is jerasure with non-reed_sol_van technique
+      else if (plugin_name == "jerasure") {
+        auto technique_it = erasure_code_profile.second.find("technique");
+        if (technique_it != erasure_code_profile.second.end()) {
+          const string& technique_name = erasure_code_profile.second.at("technique");
+          if (technique_name != "reed_sol_van") {
+            ostringstream ds;
+            ds << "EC profile '" << erasure_code_profile.first
+               << "' uses deprecated jerasure technique '" << technique_name << "'";
+            deprecated_details.push_back(ds.str());
+          }
         }
       }
     }
   }
-  if (!details.empty()) {
+
+  if (!blaum_roth_details.empty()) {
     ostringstream ss;
     ss << "1 or more EC profiles have a w value such that w+1 is not prime."
       << " This can result in data corruption";
-    auto &d = checks->add("BLAUM_ROTH_W_IS_NOT_PRIME", HEALTH_WARN, ss.str(), details.size());
-    d.detail.swap(details);
+    auto &d = checks->add("BLAUM_ROTH_W_IS_NOT_PRIME", HEALTH_WARN, ss.str(), blaum_roth_details.size());
+    d.detail.swap(blaum_roth_details);
+  }
+
+  if (!deprecated_details.empty()) {
+    ostringstream ss;
+    ss << "1 or more EC profiles are using a plugin and/or technique that are "
+       << "deprecated in the Umbrella release. This will be unsupported in the V release. "
+       << "Migrate objects to a new pool that uses a supported plugin and technique. ";
+    auto &d = checks->add("DEPRECATED_EC_PLUGIN", HEALTH_WARN, ss.str(), deprecated_details.size());
+    d.detail.swap(deprecated_details);
   }
 }

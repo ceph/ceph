@@ -3221,8 +3221,9 @@ class CephManager:
         Revive osds by either power cycling (if indicated by the config)
         or by restarting.
         """
-        if self.config.get('powercycle'):
+        if self.config.get('powercycle') or self.cephadm:
             remote = self.find_remote('osd', osd)
+        if self.config.get('powercycle'):
             self.log('kill_osd on osd.{o} doing powercycle of {s}'.
                      format(o=osd, s=remote.name))
             self._assert_ipmi(remote)
@@ -3234,6 +3235,14 @@ class CephManager:
             mount_osd_data(self.ctx, remote, self.cluster, str(osd))
             self.make_admin_daemon_dir(remote)
             self.ctx.daemons.get_daemon('osd', osd, self.cluster).reset()
+        if self.cephadm:
+            # If the OSD was killed hard by the OSD thrasher or a powercycle,
+            # the unit may be left in 'failed' state, which prevents restart.
+            # reset-failed clears that state
+            fsid = self.ctx.ceph[self.cluster].fsid
+            service = 'ceph-{fsid}@osd.{osd}'.format(fsid=fsid, osd=osd)
+            self.log('resetting systemd failed state for %s' % service)
+            remote.run(args=['sudo', 'systemctl', 'reset-failed', service])
         self.ctx.daemons.get_daemon('osd', osd, self.cluster).restart()
 
         if not skip_admin_check:
@@ -3393,14 +3402,39 @@ class CephManager:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)
 
-    def wait_until_healthy(self, timeout=None):
+    def wait_until_healthy(self, timeout=None, expected_checks=[]):
         self.log("wait_until_healthy")
         start = time.time()
-        while self.get_mon_health()['status'] != 'HEALTH_OK':
+        found = set()
+        while True:
+            health = self.get_mon_health()
+            if health['status'] == 'HEALTH_OK':
+                break
+            found = set()
+            okay = True
+            unhealthy = []
+            for name, check in health['checks'].items():
+                if check['muted']:
+                    log.debug("{} is muted", name)
+                elif name in expected_checks:
+                    log.info("{} in expected_checks", name)
+                    found.add(name)
+                else:
+                    unhealthy.append(name)
+                    okay = False
+            if okay:
+                break
             if timeout is not None:
-                assert time.time() - start < timeout, \
-                    'timeout expired in wait_until_healthy'
+                if timeout < (time.time() - start):
+                    what = ", ".join(unhealthy)
+                    err = f"timeout {timeout}s expired waiting for healthy cluster with these unhealthy checks: {what}"
+                    raise RuntimeError(err)
             time.sleep(3)
+        if found != set(expected_checks):
+            exp = ", ".join(expected_checks)
+            fnd = ", ".join(found)
+            err = f"healthy cluster but expected_checks ({exp}) not equal to {fnd}"
+            raise RuntimeError(err)
         self.log("wait_until_healthy done")
 
     def get_filepath(self):

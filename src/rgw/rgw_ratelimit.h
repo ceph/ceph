@@ -9,13 +9,29 @@ enum class OpType { Read, Write, List, Delete };
 
 
 class RateLimiterEntry {
-  /* 
+public:
+  /*
     fixed_point_rgw_ratelimit is important to preserve the precision of the token calculation
     for example: a user have a limit of single op per minute, the user will consume its single token and then will send another request, 1s after it.
     in that case, without this method, the user will get 0 tokens although it should get 0.016 tokens.
     using this method it will add 16 tokens to the user, and the user will have 16 tokens, each time rgw will do comparison rgw will divide by fixed_point_rgw_ratelimit, so the user will be blocked anyway until it has enough tokens.
   */
   static constexpr int64_t fixed_point_rgw_ratelimit = 1000;
+
+  // Compute the seconds needed to replenish `needed` tokens when tokens
+  // replenish at `limit` units per `interval` seconds. All three parameters
+  // are in fixed-point-scaled units (multiply user-visible token counts by
+  // fixed_point_rgw_ratelimit before passing). The result is in seconds,
+  // rounded up. Returns 0 when `limit` or `needed` is non-positive, which
+  // callers treat as "no delay required for this dimension".
+  static int64_t compute_delay(int64_t limit, int64_t needed, int64_t interval) {
+    if (limit <= 0 || needed <= 0) {
+      return 0;
+    }
+    return (needed * interval + limit - 1) / limit;
+  }
+
+private:
   // counters are tracked in multiples of fixed_point_rgw_ratelimit
   struct counters {
     int64_t ops = 0;
@@ -53,66 +69,74 @@ class RateLimiterEntry {
   {
     return write.bytes / fixed_point_rgw_ratelimit;
   }
-  bool should_rate_limit_read(int64_t ops_limit, int64_t bw_limit) {
-    //check if tenants did not reach their bw or ops limits and that the limits are not 0 (which is unlimited)
-    if(((read_ops() - 1 < 0) && (ops_limit > 0)) ||
-      (read_bytes() < 0 && bw_limit > 0))
-  {
-    return true;
-  }
+  // Returns 0 if the request is allowed, or the estimated retry delay
+  // in seconds if rate-limited. compute_delay() is the sole decision
+  // maker: delay > 0 means rate-limited, 0 means allowed.
+  int64_t should_rate_limit_read(int64_t ops_limit, int64_t bw_limit) {
+    const int64_t interval = g_ceph_context->_conf->rgw_ratelimit_interval;
+    const int64_t ops_delay = compute_delay(ops_limit * fixed_point_rgw_ratelimit,
+                                            fixed_point_rgw_ratelimit - read.ops,
+                                            interval);
+    const int64_t bw_delay = compute_delay(bw_limit * fixed_point_rgw_ratelimit,
+                                           -read.bytes,
+                                           interval);
+    const int64_t delay = std::max(ops_delay, bw_delay);
+    if (delay > 0) {
+      return delay;
+    }
     // we don't want to reduce ops' tokens if we've rejected it.
-    if (read_ops() > 0)
-    {
-      // make sure read.ops always greater or equal than 0
-      // to avoid large budget caused by the case that rate limiter was enabled and read.ops set to 0
+    if (read_ops() > 0) {
       read.ops -= fixed_point_rgw_ratelimit;
     }
-    return false;
+    return 0;
   }
-  bool should_rate_limit_list(int64_t ops_limit)
+  int64_t should_rate_limit_list(int64_t ops_limit)
   {
-    if ((list_ops() - 1 < 0) && (ops_limit > 0)) {
-      return true;
+    const int64_t interval = g_ceph_context->_conf->rgw_ratelimit_interval;
+    const int64_t delay = compute_delay(ops_limit * fixed_point_rgw_ratelimit,
+                                        fixed_point_rgw_ratelimit - list.ops,
+                                        interval);
+    if (delay > 0) {
+      return delay;
     }
-    if (list_ops() > 0)
-    {
-      // make sure list.ops always greater or equal than 0
-      // to avoid large budget caused by the case that rate limiter was enabled and list.ops set to 0
+    if (list_ops() > 0) {
       list.ops -= fixed_point_rgw_ratelimit;
     }
-    return false;
+    return 0;
   }
-  bool should_rate_limit_delete(int64_t ops_limit)
+  int64_t should_rate_limit_delete(int64_t ops_limit)
   {
-    if ((delete_ops() - 1 < 0) && (ops_limit > 0)) {
-      return true;
+    const int64_t interval = g_ceph_context->_conf->rgw_ratelimit_interval;
+    const int64_t delay = compute_delay(ops_limit * fixed_point_rgw_ratelimit,
+                                        fixed_point_rgw_ratelimit - del.ops,
+                                        interval);
+    if (delay > 0) {
+      return delay;
     }
-    if (delete_ops() > 0)
-    {
-      // make sure del.ops always greater or equal than 0
-      // to avoid large budget caused by the case that rate limiter was enabled and del.ops set to 0
+    if (delete_ops() > 0) {
       del.ops -= fixed_point_rgw_ratelimit;
     }
-    return false;
+    return 0;
   }
-  bool should_rate_limit_write(int64_t ops_limit, int64_t bw_limit) 
+  int64_t should_rate_limit_write(int64_t ops_limit, int64_t bw_limit)
   {
-    //check if tenants did not reach their bw or ops limits and that the limits are not 0 (which is unlimited)
-    if(((write_ops() - 1 < 0) && (ops_limit > 0)) ||
-      (write_bytes() < 0 && bw_limit > 0))
-    {
-      return true;
+    const int64_t interval = g_ceph_context->_conf->rgw_ratelimit_interval;
+    const int64_t ops_delay = compute_delay(ops_limit * fixed_point_rgw_ratelimit,
+                                            fixed_point_rgw_ratelimit - write.ops,
+                                            interval);
+    const int64_t bw_delay = compute_delay(bw_limit * fixed_point_rgw_ratelimit,
+                                           -write.bytes,
+                                           interval);
+    const int64_t delay = std::max(ops_delay, bw_delay);
+    if (delay > 0) {
+      return delay;
     }
-
-    // we don't want to reduce ops' tokens if we've rejected it.
-    if (write_ops() > 0)
-    {
-      // make sure write.ops always greater or equal than 0
-      // to avoid large budget caused by the case that rate limiter was enabled and write.ops set to 0
+    if (write_ops() > 0) {
       write.ops -= fixed_point_rgw_ratelimit;
     }
-    return false;
+    return 0;
   }
+
   /* The purpose of this function is to minimum time before overriding the stored timestamp
      This function is necessary to force the increase tokens add at least 1 token when it updates the last stored timestamp.
      That way the user/bucket will not lose tokens because of rounding
@@ -167,7 +191,8 @@ class RateLimiterEntry {
   }
 
   public:
-    bool should_rate_limit(OpType op_type, const RGWRateLimitInfo* ratelimit_info, ceph::timespan curr_timestamp)
+    // Returns 0 if allowed, or the retry delay in seconds if rate-limited.
+    int64_t should_rate_limit(OpType op_type, const RGWRateLimitInfo* ratelimit_info, ceph::timespan curr_timestamp)
     {
       std::unique_lock lock(ts_lock);
       increase_tokens(curr_timestamp, ratelimit_info);
@@ -181,7 +206,7 @@ class RateLimiterEntry {
         case OpType::Delete:
           return should_rate_limit_delete(ratelimit_info->max_delete_ops);
       }
-      return false;
+      return 0;
     }
     void decrease_bytes(bool is_read, int64_t amount, const RGWRateLimitInfo* info) {
       std::unique_lock lock(ts_lock);
@@ -283,11 +308,12 @@ class RateLimiter : public DoutPrefix {
       ratelimit_entries.max_load_factor(1000);
     };
 
-    bool should_rate_limit(const char *method, const std::string& key, ceph::coarse_real_time curr_timestamp, const RGWRateLimitInfo* ratelimit_info, const std::string& resource) {
+    // Returns 0 if allowed, or the retry delay in seconds if rate-limited.
+    int64_t should_rate_limit(const char *method, const std::string& key, ceph::coarse_real_time curr_timestamp, const RGWRateLimitInfo* ratelimit_info, const std::string& resource) {
       ldpp_dout(this, 21) << "checking should_rate_limit: key=" << std::quoted(key) << " enabled=" << ratelimit_info->enabled << dendl;
       if (key.empty() || key.length() == 1 || !ratelimit_info->enabled)
       {
-        return false;
+        return 0;
       }
       OpType type = op_type(method, resource, ratelimit_info);
       auto& it = find_or_create(key);

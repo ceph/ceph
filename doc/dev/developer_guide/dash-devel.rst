@@ -1003,12 +1003,10 @@ component in the footer for closing the modal.
 Icons
 .....
 
-We use `Fork Awesome <https://forkaweso.me/Fork-Awesome/>`_ classes for icons.
+We use  `src/app/shared/components/icon/icon.component.ts` component for icons.
 We have a list of used icons in `src/app/shared/enum/icons.enum.ts`, these
-should be referenced in the HTML, so its easier to change them later. When
-icons are next to text, they should be center-aligned horizontally. If icons
-are stacked, they should also be center-aligned vertically. Use small icons
-with buttons. For notifications use large icons.
+should be referenced in the HTML, so its easier to change them later. We follow 
+carbon guidelines and `Carbon Icons <https://angular.carbondesignsystem.com/?path=/story/components-icon--all-icon>`_ for aligning icons.
 
 Navigation
 ..........

@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:
       - \(MON_DOWN\)
       - pgs peering
+      - Reduced data availability
 tasks:
 - install:
     branch: squid

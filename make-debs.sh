@@ -53,9 +53,9 @@ tar -C $releasedir --no-same-owner -jxf $releasedir/ceph_$vers.orig.tar.bz2
 #
 cp -a debian $releasedir/ceph-$vers/debian
 cd $releasedir
-if [[ -n "$SKIP_DEBUG_PACKAGES" ]] ; then
-	perl -ni -e 'print if(!(/^Package: .*-dbg$/../^$/))' ceph-$vers/debian/control
-	perl -pi -e 's/--dbg-package.*//' ceph-$vers/debian/rules
+if [[ -n "$SKIP_DEBUG_PACKAGES" ]]; then
+    perl -ni -e 'print if(!(/^Package: .*-dbg$/../^$/))' ceph-$vers/debian/control
+    perl -pi -e 's/--dbg-package.*//' ceph-$vers/debian/rules
 fi
 
 # For cache hit consistency, allow CI builds to use a build directory whose name
@@ -72,7 +72,7 @@ fi
 #
 chvers=$(head -1 debian/changelog | perl -ne 's/.*\(//; s/\).*//; print')
 if [ "$chvers" != "$dvers" ]; then
-   DEBEMAIL="contact@ceph.com" dch -D $VERSION_CODENAME --force-distribution -b -v "$dvers" "new version"
+    DEBEMAIL="contact@ceph.com" dch -D $VERSION_CODENAME --force-distribution -b -v "$dvers" "new version"
 fi
 #
 # create the packages
@@ -92,13 +92,52 @@ if test "$NPROC" -gt "$MAX_JOBS"; then
 else
     JOBS_FLAG="-j${NPROC}"
 fi
-if [ "$SCCACHE" != "true" ] ; then
+if [ "$SCCACHE" != "true" ]; then
     PATH=/usr/lib/ccache:$PATH
+fi
+# Crimson/seastar needs GCC >= 13 (C++20 coroutines).
+# WITH_CRIMSON: off forces disable; on/unset enable when the distro is new enough
+# (Ubuntu 24.04 (noble)+ or Debian 13 (trixie)+). Distro is a hard floor: setting
+# WITH_CRIMSON=on on an older distro is ignored (with a warning).
+distro_supports_crimson=no
+case "$ID" in
+ubuntu)
+    ubuntu_major=${VERSION_ID%%.*}
+    ubuntu_minor=${VERSION_ID#*.}
+    if [ "$ubuntu_major" -gt 24 ] ||
+        { [ "$ubuntu_major" -eq 24 ] && [ "$ubuntu_minor" -ge 4 ]; }; then
+        distro_supports_crimson=yes
+    fi
+    ;;
+debian)
+    if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" -ge 13 ] 2>/dev/null; then
+        distro_supports_crimson=yes
+    fi
+    ;;
+esac
+
+enable_crimson=no
+case "${WITH_CRIMSON:-auto}" in
+OFF | off | 0 | false) ;;
+ON | on | 1 | true)
+    if [ "$distro_supports_crimson" = yes ]; then
+        enable_crimson=yes
+    else
+        echo "WITH_CRIMSON=$WITH_CRIMSON ignored: $ID $VERSION_ID lacks GCC >= 13" >&2
+    fi
+    ;;
+auto | "")
+    [ "$distro_supports_crimson" = yes ] && enable_crimson=yes
+    ;;
+esac
+
+if [ "$enable_crimson" = yes ]; then
+    export DEB_BUILD_PROFILES="${DEB_BUILD_PROFILES:+$DEB_BUILD_PROFILES }pkg.ceph.crimson"
 fi
 PATH=$PATH dpkg-buildpackage $JOBS_FLAG -uc -us
 cd ../..
 mkdir -p $VERSION_CODENAME/conf
-cat > $VERSION_CODENAME/conf/distributions <<EOF
+cat >$VERSION_CODENAME/conf/distributions <<EOF
 Codename: $VERSION_CODENAME
 Suite: stable
 Components: main
@@ -111,4 +150,4 @@ reprepro --basedir $(pwd) include $VERSION_CODENAME WORKDIR/*.changes
 #
 # teuthology needs the version in the version file
 #
-echo $dvers > $VERSION_CODENAME/version
+echo $dvers >$VERSION_CODENAME/version

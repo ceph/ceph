@@ -39,7 +39,7 @@ Crashed ``radosgw`` process
 ===========================
 
 If the ``radosgw`` process dies, you will normally see a 500 error
-from the web server (apache, nginx, etc.).  In that situation, simply
+from the web server (Apache, NGINX, etc.).  In that situation, simply
 restarting radosgw will restore service.
 
 To diagnose the cause of the crash, check the log in ``/var/log/ceph``

@@ -23,7 +23,7 @@ the capability grants.
         #define CEPH_CAP_GWR        16  /* (file) client can write (w) */
         #define CEPH_CAP_GBUFFER    32  /* (file) client can buffer writes (b) */
         #define CEPH_CAP_GWREXTEND  64  /* (file) client can extend EOF (a) */
-        #define CEPH_CAP_GLAZYIO   128  /* (file) client can perform lazy io (l) */
+        #define CEPH_CAP_GLAZYIO   128  /* (file) client can perform lazy I/O (l) */
 
 These are then shifted by a particular number of bits. These denote a part of
 the inode's data or metadata on which the capability is being granted:
@@ -176,7 +176,7 @@ permissions. The metadata includes **mtime**, **atime**, **size**, etc.
   forcing clients to drop dirty buffers, for example on a simple file size extension
   or truncating use case.
 
-* **Fl**: This capability means the clients could perform lazy IO. LazyIO relaxes
+* **Fl**: This capability means the clients could perform lazy I/O. LazyIO relaxes
   POSIX semantics. Buffered reads/writes are allowed even when a file is opened by
   multiple applications on multiple clients. Applications are responsible for managing
   cache coherency themselves.

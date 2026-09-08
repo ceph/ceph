@@ -2,8 +2,6 @@
 Archive Sync Module
 ===================
 
-.. versionadded:: Nautilus
-
 The Archive Sync module uses the RGW versioning feature of S3 objects to
 maintain an archive zone that captures successive versions of objects
 as they are updated in other zones.  Archive zone objects can

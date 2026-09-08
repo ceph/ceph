@@ -26,7 +26,10 @@ LogManager::LogManager(
   : tm(tm) {}
 
 LogManager::initialize_omap_ret
-LogManager::initialize_omap(Transaction &t, laddr_t hint, omap_type_t omap_type) 
+LogManager::initialize_omap(
+  Transaction &t,
+  laddr_hint_t hint,
+  omap_type_t omap_type)
 {
   LOG_PREFIX(LogManager::initialize_omap);
   DEBUGT("hint: {}", t, hint);
@@ -55,26 +58,25 @@ LogManager::initialize_omap(Transaction &t, laddr_t hint, omap_type_t omap_type)
 LogManager::omap_set_keys_ret
 LogManager::omap_set_keys(
   omap_root_t &log_root,
-  Transaction &t, std::map<std::string, ceph::bufferlist>&& _kvs) 
+  Transaction &t, std::map<std::string, ceph::bufferlist> kvs)
 {
   LOG_PREFIX(LogManager::omap_set_keys);
-  DEBUGT("enter kv size {}", t, _kvs.size());
+  DEBUGT("enter kv size {}", t, kvs.size());
   assert(log_root.get_type() == omap_type_t::LOG);
 
-  auto kvs = std::move(_kvs);
   auto ext = co_await log_load_extent<LogNode>(
     t, log_root.addr, BEGIN_KEY, END_KEY);
   ceph_assert(ext);
-  std::pair<std::string, ceph::bufferlist> ow_kv;
-  // To prevent missing remove_kv even when overwritten is not done
-  bool ow_done = false;
-  auto resync_node = [&](LogNodeRef e)
+  auto resync_log_node = [&](LogNodeRef e)
     -> log_load_extent_iertr::future<CachedExtentRef> {
     CachedExtentRef node;
-    Transaction::get_extent_ret ret;
-    // To find mutable extent in the same transaction
-    ret = t.get_extent(e->get_paddr(), &node);
-    assert(ret == Transaction::get_extent_ret::PRESENT);
+    // Look for a mutable version already tracked by this transaction.
+    auto ret = t.get_extent(e->get_paddr(), &node);
+    // ABSENT is expected when the target LogNode was newly created and is
+    // not yet tracked in the transaction's extent cache; fall through to a
+    // full reload below. RETIRED would mean the caller is resyncing an
+    // extent already removed in this transaction, which is a real logic bug.
+    ceph_assert(ret != Transaction::get_extent_ret::RETIRED);
     if (!node) {
       // Do full reload if not cached
       node = co_await log_load_extent<LogNode>(
@@ -83,23 +85,33 @@ LogManager::omap_set_keys(
     ceph_assert(node);
     co_return std::move(node);
   };
-  auto f = [&](const std::string &k, const bufferlist &v, bool has_ow_key) 
+  auto set_log_node_entry = [&](const std::string &k, const bufferlist &v) 
     -> omap_set_key_ret {
-    CachedExtentRef node = co_await resync_node(ext);
+    CachedExtentRef node = co_await resync_log_node(ext);
     LogNodeRef log_node = node->template cast<LogNode>();
-    bool can_ow = has_ow_key && log_node->can_ow();
-    if (can_ow) {
-      ow_done = true;
-    }
     // If multiple blocks are needed to store the kv pair
     if (log_node->get_max_val_length(k.size()) < v.length()) {
       co_await _log_set_multi_block_key(log_root, t, log_node, k, v);
       co_return;
     }
-    co_await _log_set_key(log_root, t, log_node, k, v, can_ow);
+    co_await _log_set_key(log_root, t, log_node, k, v);
     co_return;
   };
+  auto alloc_log_node = [&](laddr_t prev_laddr)
+    -> omap_set_key_iertr::future<LogNodeRef> {
+    return tm.alloc_non_data_extent<LogNode>(
+      t, log_root.hint, LOG_NODE_BLOCK_SIZE
+    ).handle_error_interruptible(
+      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      omap_set_key_iertr::pass_further{}
+    ).si_then([prev_laddr](auto ext) {
+      assert(ext);
+      ext->set_prev_addr(prev_laddr);
+      return omap_set_key_iertr::make_ready_future<LogNodeRef>(ext);
+    });
+  };
   /*
+   * Fast path:
    * During a normal write transaction, pgmeta_oid receives two key–value pairs:
    * _fastinfo and pg_log_entry. Unlike pg_log_entry, _fastinfo is likely to be
    * overwritten in the near future. Storing _fastinfo in an append-only manner
@@ -119,44 +131,81 @@ LogManager::omap_set_keys(
    */
   bool has_ow_key = false;
   if (kvs.size() == OW_SIZE) {
-    for (auto &p : kvs) {
-      if (is_ow_key(p.first)) {
-	ow_kv.first = p.first;
-	ow_kv.second = p.second;
+    std::vector<std::pair<std::string, ceph::bufferlist>> kvs_for_ow;
+    kvs_for_ow.reserve(2);
+    for (const auto& [k, v] : kvs) {
+      if (is_log_key(k)) {
+	kvs_for_ow.insert(kvs_for_ow.begin(), {k, v});
+      } else if (is_ow_key(k)) {
+	kvs_for_ow.push_back({k, v});
 	has_ow_key = true;
-	break;
       }
+    }
+    LogNodeRef cur = ext;
+    if (has_ow_key) {
+      if (!cur->can_ow()) {
+	co_await remove_kv(t, log_root.addr, get_ow_key(), nullptr);
+	CachedExtentRef node = co_await resync_log_node(cur);
+	cur = node->template cast<LogNode>();
+      }
+      for (auto &p : kvs_for_ow) {
+	if (cur->get_max_val_length(p.first.size()) < p.second.length()) {
+	  co_await _log_set_multi_block_key(log_root, t, cur, p.first, p.second);
+	  cur = co_await log_load_extent<LogNode>(
+	    t, log_root.addr, BEGIN_KEY, END_KEY);
+	  continue;
+	}
+	if (cur->expect_overflow(p.first, p.second.length(),
+	    (!is_ow_key(p.first) && !cur->is_initial_pending())
+	      ? cur->can_ow() : false)) {
+	  // This means the first entry of the new LogNode is not _fastinfo
+	  if (!is_ow_key(p.first)) {
+	    // remove _fastinfo in old LogNode
+	    auto e = co_await cur->get_value(p.first, LogNode::copy_t::SHALLOW);
+	    if (e != std::nullopt) {
+	      auto mut = tm.get_mutable_extent(t, cur)->template cast<LogNode>();
+	      mut->remove_entry(get_ow_key());
+	    }
+	  }
+	  laddr_t dup_addr = cur->get_dup_tail_addr();
+	  cur = co_await alloc_log_node(cur->get_laddr());
+	  cur->set_dup_tail_addr(dup_addr);
+	  log_root.update(cur->get_laddr(), log_root.depth,
+	    log_root.hint, log_root.type);
+	}
+	if (cur->is_initial_pending()) {
+	  cur->append_kv(t, p.first, p.second);
+	} else {
+	  auto mut = tm.get_mutable_extent(t, cur)->cast<LogNode>();
+	  if (cur->can_ow() && is_log_key(p.first)) {
+	    mut->overwrite_kv(t, p.first, p.second);
+	  } else {
+	    mut->append_kv(t, p.first, p.second);
+	  }
+	  cur = mut;
+	}
+      }
+      co_return;
     }
   }
 
   std::map<std::string, ceph::bufferlist> dup_kvs;
   if (kvs.size() > BATCH_CREATE_SIZE) {
-    auto alloc_log_node = [&](laddr_t prev_laddr)
-      -> omap_set_key_iertr::future<LogNodeRef> {
-      return tm.alloc_non_data_extent<LogNode>(
-	t, log_root.hint, LOG_NODE_BLOCK_SIZE
-      ).handle_error_interruptible(
-	crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
-	omap_set_key_iertr::pass_further{}
-      ).si_then([prev_laddr](auto ext) {
-        assert(ext);
-        ext->set_prev_addr(prev_laddr);
-        return omap_set_key_iertr::make_ready_future<LogNodeRef>(ext);
-      });
-    };
-
-    LogNodeRef e = co_await alloc_log_node(ext->get_laddr());
-    LogNodeRef dup_e = co_await alloc_log_node(
-      co_await get_dup_addr_from_root(t, ext->get_laddr()));
+    LogNodeRef e = ext;
+    LogNodeRef dup_e;
+    laddr_t dup_tail = co_await get_dup_addr_from_root(t, ext->get_laddr());
     for (auto &p : kvs) {
       if (!is_log_key(p.first)) {
 	co_await remove_kv(t, log_root.addr, p.first, nullptr);
 	// reload latest log list e because e was updated if the key is in e
-	CachedExtentRef node = co_await resync_node(e);
+	CachedExtentRef node = co_await resync_log_node(e);
 	e = node->template cast<LogNode>();
       }
       LogNodeRef cur = e;
       if (is_dup_log_key(p.first)) {
+	if (!dup_e) {
+	  dup_e = co_await alloc_log_node(dup_tail);
+	}
 	cur = dup_e;
       }
       if (e->get_max_val_length(p.first.size()) < p.second.length()) {
@@ -175,27 +224,33 @@ LogManager::omap_set_keys(
 	cur = co_await alloc_log_node(cur->get_laddr());
 	if (!is_dup_log_key(p.first)) {
 	  e = cur;
+	  log_root.update(e->get_laddr(), log_root.depth,
+	    log_root.hint, log_root.type);
 	} else {
 	  dup_e = cur;
 	}
       }
-      cur->append_kv(t, p.first, p.second);
+      if (cur->is_initial_pending()) {
+	cur->append_kv(t, p.first, p.second);
+      } else {
+	assert(!is_dup_log_key(p.first));
+	auto mut = tm.get_mutable_extent(t, cur)->cast<LogNode>();
+	mut->append_kv(t, p.first, p.second);
+	e = mut;
+      }
     }
-    if (e->is_initial_pending()) {
-      e->set_dup_tail_addr(dup_e->get_laddr());
-    } else {
-      auto mut = tm.get_mutable_extent(t, e)->cast<LogNode>();
-      mut->set_dup_tail_addr(dup_e->get_laddr());
+    laddr_t new_dup_tail = dup_e ? dup_e->get_laddr() : dup_tail;
+    if (e->get_dup_tail_addr() != new_dup_tail) {
+      if (e->is_initial_pending()) {
+	e->set_dup_tail_addr(new_dup_tail);
+      } else {
+	tm.get_mutable_extent(t, e)->cast<LogNode>()->set_dup_tail_addr(new_dup_tail);
+      }
     }
-    log_root.update(e->get_laddr(), log_root.depth,
-      log_root.hint, log_root.type);
     co_return;
   }
 
   for (auto &p : kvs) {
-    if (is_ow_key(p.first) && has_ow_key) {
-      continue;
-    }
     if (is_dup_log_key(p.first)) {
       dup_kvs[p.first] = p.second;
       continue;
@@ -205,7 +260,7 @@ LogManager::omap_set_keys(
       co_await remove_kv(t, log_root.addr, p.first, nullptr);
     }
     laddr_t last_addr = log_root.addr;
-    co_await f(p.first, p.second, has_ow_key);
+    co_await set_log_node_entry(p.first, p.second);
     if (last_addr != log_root.addr) {
       ext = co_await log_load_extent<LogNode>(
 	t, log_root.addr, BEGIN_KEY, END_KEY);
@@ -213,19 +268,11 @@ LogManager::omap_set_keys(
     }
   }
 
-  if (!ow_kv.first.empty()) {
-    if (!ow_done) {
-      co_await remove_kv(t, log_root.addr, ow_kv.first, nullptr);
-    }
-    co_await f(ow_kv.first, ow_kv.second, has_ow_key);
-  }
-
-
   if (!dup_kvs.empty()) {
-    laddr_t last_addr = co_await get_dup_addr_from_root(t, log_root.addr);
+    laddr_t last_addr = ext->get_dup_tail_addr();
     ext = co_await log_load_extent<LogNode>(t, last_addr, BEGIN_KEY, END_KEY);
     for (auto &p: dup_kvs) {
-      co_await f(p.first, p.second, false);
+      co_await set_log_node_entry(p.first, p.second);
       if (&p != &*dup_kvs.rbegin()) {
 	laddr_t current_addr = co_await get_dup_addr_from_root(t, log_root.addr);
 	if (last_addr != current_addr) {
@@ -242,7 +289,7 @@ LogManager::omap_set_key_ret
 LogManager::omap_set_key(
   omap_root_t &log_root,
   Transaction &t,
-  const std::string &key, const ceph::bufferlist &value) 
+  std::string key, ceph::bufferlist value)
 {
   LOG_PREFIX(LogManager::omap_set_key);
   DEBUGT("enter k={}", t, key);
@@ -302,29 +349,15 @@ LogManager::_log_set_multi_block_key(omap_root_t &log_root,
 LogManager::omap_set_key_ret
 LogManager::_log_set_key(omap_root_t &log_root,
   Transaction &t, LogNodeRef tail,
-  const std::string &key, const ceph::bufferlist &value, bool can_ow)
+  const std::string &key, const ceph::bufferlist &value)
 {
   LOG_PREFIX(LogManager::_log_set_key);
   DEBUGT("enter key={}", t, key);
   assert(tail);
-  if (!tail->expect_overflow(key, value.length(), can_ow)) {
+  if (!tail->expect_overflow(key.size(), value.length())) {
     auto mut = tm.get_mutable_extent(t, tail)->cast<LogNode>();
-    if (can_ow) {
-      mut->overwrite_kv(t, key, value);
-    } else {
-      mut->append_kv(t, key, value);
-    }
+    mut->append_kv(t, key, value);
     co_return;
-  }
-
-  // This means the first entry of the new LogNode is not _fastinfo
-  if (!is_ow_key(key) && can_ow) {
-    // remove _fastinfo in old LogNode
-    auto e = co_await tail->get_value(key, LogNode::copy_t::SHALLOW);
-    if (e != std::nullopt) {
-      auto mut = tm.get_mutable_extent(t, tail)->template cast<LogNode>();
-      mut->remove_entry(get_ow_key());
-    }
   }
 
   auto extent = co_await tm.alloc_non_data_extent<LogNode>(
@@ -363,7 +396,9 @@ std::ostream &LogNode::print_detail_l(std::ostream &out) const
       << ", num=" << this->get_size()
       << ", used_space=" << this->use_space()
       << ", capacity=" << this->get_capacity()
-      << ", last_pos=" << this->get_last_pos();
+      << ", last_pos=" << this->get_last_pos()
+      << ", first_key=" << this->iter_cbegin().get_key()
+      << ", last_key=" << this->get_last_key();
   if (has_laddr()) {
     out << ", begin=" << get_begin()
 	<< ", end=" << get_end();
@@ -391,7 +426,7 @@ LogManager::log_load_extent(
     }
   ).handle_error_interruptible(
     log_load_extent_iertr::pass_further{},
-    crimson::ct_error::assert_all{ "Invalid error in log_load_extent" }
+    crimson::ct_error::assert_all( "Invalid error in log_load_extent" )
   );
 
   assert(!maybe_indirect_extent.is_indirect());
@@ -401,7 +436,7 @@ LogManager::log_load_extent(
 
 LogManager::omap_get_value_ret
 LogManager::omap_get_value(
-  const omap_root_t &log_root, Transaction &t, const std::string &key)
+  const omap_root_t &log_root, Transaction &t, std::string key)
 {
   LOG_PREFIX(LogManager::omap_get_value);
   DEBUGT("key={}", t, key);
@@ -555,7 +590,7 @@ LogManager::remove_node(Transaction &t, LogNodeRef mut, LogNodeRef prev)
   co_await tm.remove(t, mut->get_laddr()
   ).handle_error_interruptible(
     omap_rm_key_iertr::pass_further{},
-    crimson::ct_error::assert_all{"Invalid error in remove_node"}
+    crimson::ct_error::assert_all("Invalid error in remove_node")
   );
   auto mut_prev = tm.get_mutable_extent(t, prev)->template cast<LogNode>();
   assert(mut_prev);
@@ -673,7 +708,7 @@ LogManager::omap_rm_key_ret
 LogManager::omap_rm_key(
   omap_root_t &log_root,
   Transaction &t,
-  const std::string &key)
+  std::string key)
 {
   LOG_PREFIX(LogManager::omap_rm_key);
   DEBUGT("key={}", t, key);
@@ -734,7 +769,7 @@ LogManager::omap_rm_keys_ret
 LogManager::omap_rm_keys(
   omap_root_t& log_root,
   Transaction& t,
-  std::set<std::string>& keys)
+  std::set<std::string> keys)
 {
   LOG_PREFIX(LogManager::omap_rm_keys);
   DEBUGT("key size={}", t, keys.size());
@@ -811,16 +846,18 @@ LogManager::omap_clear(omap_root_t &root, Transaction &t)
   co_await tm.remove(t, co_await get_dup_addr_from_root(t, root.addr)
   ).handle_error_interruptible(
     omap_clear_iertr::pass_further{},
-    crimson::ct_error::assert_all{"Invalid error in omap_clear"}
+    crimson::ct_error::assert_all("Invalid error in omap_clear")
   );
   co_await tm.remove(t, root.get_location()
   ).handle_error_interruptible(
     omap_clear_iertr::pass_further{},
-    crimson::ct_error::assert_all{"Invalid error in omap_clear"}
+    crimson::ct_error::assert_all("Invalid error in omap_clear")
   );
   root.update(
     L_ADDR_NULL,
-    0, L_ADDR_MIN, root.get_type());
+    0,
+    laddr_hint_t::create_as_fixed(L_ADDR_MIN),
+    root.get_type());
   co_return;
 }
 

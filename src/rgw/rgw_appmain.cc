@@ -13,17 +13,23 @@
  *
  */
 
+#include <set>
 #include <boost/intrusive/list.hpp>
 #include "global/global_init.h"
 #include "global/signal_handler.h"
+#include "common/admin_socket.h"
+#include "common/cmdparse.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
 #include "common/numa.h"
+#include "common/split.h"
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "perfglue/heap_profiler.h"
+#include "rgw_kms_cache.h"
 #include "rgw_main.h"
 #include "rgw_asio_thread.h"
 #include "rgw_common.h"
@@ -40,7 +46,9 @@
 #include "rgw_rest_account.h"
 #include "rgw_rest_bucket.h"
 #include "rgw_rest_metadata.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_rest_log.h"
+#endif
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_ratelimit.h"
@@ -82,18 +90,63 @@
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+using TOPNSPC::common::cmd_getval;
 
 namespace {
   TracepointProvider::Traits rgw_op_tracepoint_traits(
     "librgw_op_tp.so", "rgw_op_tracing");
   TracepointProvider::Traits rgw_rados_tracepoint_traits(
     "librgw_rados_tp.so", "rgw_rados_tracing");
-}
+
+class RGWHeapProfilerHook : public AdminSocketHook {
+public:
+  int call(std::string_view command,
+	   const cmdmap_t& cmdmap,
+	   const ceph::buffer::list&,
+	   ceph::Formatter*,
+	   std::ostream& errss,
+	   ceph::buffer::list& out) override {
+    if (!ceph_using_tcmalloc()) {
+      errss << "not using tcmalloc";
+      return -EOPNOTSUPP;
+    }
+    string heapcmd;
+    if (!cmd_getval(cmdmap, "heapcmd", heapcmd)) {
+      errss << "unable to get value for command \"heap\"";
+      return -EINVAL;
+    }
+    vector<string> cmd_vec;
+    get_str_vec(heapcmd, cmd_vec);
+    string value;
+    if (cmd_getval(cmdmap, "value", value)) {
+      cmd_vec.push_back(value);
+    }
+    ostringstream ss;
+    ceph_heap_profiler_handle_command(cmd_vec, ss);
+    out.append(ss.str());
+    return 0;
+  }
+};
+
+} // anonymous namespace
 
 OpsLogFile* rgw::AppMain::ops_log_file;
 
-rgw::AppMain::AppMain(const DoutPrefixProvider* dpp) : dpp(dpp), context_pool_holder(dpp) {}
-rgw::AppMain::~AppMain() = default;
+rgw::AppMain::AppMain(const DoutPrefixProvider* dpp) : dpp(dpp), context_pool(dpp) {}
+
+rgw::AppMain::~AppMain()
+{
+  unregister_heap_profiler_hook();
+}
+
+void rgw::AppMain::unregister_heap_profiler_hook()
+{
+  if (heap_profiler_hook) {
+    g_ceph_context->get_admin_socket()->unregister_commands(heap_profiler_hook);
+    delete heap_profiler_hook;
+    heap_profiler_hook = nullptr;
+  }
+}
 
 void rgw::AppMain::init_frontends1(bool nfs) 
 {
@@ -236,7 +289,7 @@ int rgw::AppMain::init_storage()
   DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
   env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
           cfg,
-          context_pool_holder.get(),
+          *context_pool,
           site,
           run_gc,
           run_lc,
@@ -257,6 +310,21 @@ int rgw::AppMain::init_storage()
 void rgw::AppMain::init_perfcounters()
 {
   (void) rgw_perf_start(dpp->get_cct());
+
+  ceph_heap_profiler_init();
+  unregister_heap_profiler_hook();
+  heap_profiler_hook = new RGWHeapProfilerHook();
+  int r = g_ceph_context->get_admin_socket()->register_command(
+    "heap "
+    "name=heapcmd,type=CephChoices,strings="
+    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats "
+    "name=value,type=CephString,req=false",
+    heap_profiler_hook,
+    "show heap usage info (available only if compiled with tcmalloc)");
+  if (r < 0) {
+    delete heap_profiler_hook;
+    heap_profiler_hook = nullptr;
+  }
 } /* init_perfcounters */
 
 void rgw::AppMain::init_http_clients()
@@ -272,13 +340,10 @@ void rgw::AppMain::cond_init_apis()
    rgw_rest_init(g_ceph_context, env.driver->get_zone()->get_zonegroup());
 
   if (have_http_frontend) {
-    std::vector<std::string> apis;
-    get_str_vec(g_conf()->rgw_enable_apis, apis);
+    const auto apis = ceph::split(g_conf()->rgw_enable_apis);
 
-    std::map<std::string, bool> apis_map;
-    for (auto &api : apis) {
-      apis_map[api] = true;
-    }
+    std::set<std::string> apis_set;
+    apis_set.insert(apis.begin(), apis.end());
 
     /* warn about insecure keystone secret config options */
     if (!g_ceph_context->_conf->rgw_keystone_admin_password.empty()) {
@@ -290,18 +355,19 @@ void rgw::AppMain::cond_init_apis()
     }
 
     // S3 website mode is a specialization of S3
-    const bool s3website_enabled = apis_map.count("s3website") > 0;
-    const bool sts_enabled = apis_map.count("sts") > 0;
-    const bool iam_enabled = apis_map.count("iam") > 0;
+    const bool s3website_enabled = apis_set.contains("s3website");
+    const bool s3control_enabled = apis_set.contains("s3control");
+    const bool sts_enabled = apis_set.contains("sts");
+    const bool iam_enabled = apis_set.contains("iam");
     const bool pubsub_enabled =
-        apis_map.count("pubsub") > 0 || apis_map.count("notifications") > 0;
+        apis_set.contains("pubsub") || apis_set.contains("notifications");
     // Swift API entrypoint could placed in the root instead of S3
     const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
-    if (apis_map.count("s3") > 0 || s3website_enabled) {
+    if (apis_set.contains("s3") || s3website_enabled) {
       if (!swift_at_root) {
         rest.register_default_mgr(set_logging(
             rest_filter(env.driver, RGW_REST_S3,
-                        new RGWRESTMgr_S3(s3website_enabled, sts_enabled,
+                        new RGWRESTMgr_S3(s3control_enabled, s3website_enabled, sts_enabled,
                                           iam_enabled, pubsub_enabled))));
       } else {
         derr << "Cannot have the S3 or S3 Website enabled together with "
@@ -309,7 +375,7 @@ void rgw::AppMain::cond_init_apis()
       }
     }
 
-    if (apis_map.count("swift") > 0) {
+    if (apis_set.contains("swift")) {
       RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
 
       if (! g_conf()->rgw_cross_domain_policy.empty()) {
@@ -338,12 +404,12 @@ void rgw::AppMain::cond_init_apis()
       }
     }
 
-    if (apis_map.count("swift_auth") > 0) {
+    if (apis_set.contains("swift_auth")) {
       rest.register_resource(g_conf()->rgw_swift_auth_entry,
                 set_logging(new RGWRESTMgr_SWIFT_Auth));
     }
 
-    if (apis_map.count("admin") > 0) {
+    if (apis_set.contains("admin")) {
       RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
       admin_resource->register_resource("info", new RGWRESTMgr_Info);
       admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
@@ -354,7 +420,7 @@ void rgw::AppMain::cond_init_apis()
       rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
     }
 
-    if (apis_map.count("zero")) {
+    if (apis_set.contains("zero")) {
       rest.register_resource("zero", new rgw::RESTMgr_Zero());
     }
   } /* have_http_frontend */
@@ -462,7 +528,13 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       fe = new RGWLoadGenFrontend(env, config);
     }
     else if (framework == "beast") {
-      fe = new RGWAsioFrontend(env, config, *sched_ctx, context_pool_holder.get());
+      fe = new RGWAsioFrontend(env, config, *sched_ctx, *context_pool);
+      if (g_conf()->rgw_crypt_s3_kms_cache_enabled) {
+        env.kms_cache->initialize_ttl_reaper(
+            g_conf()->rgw_beast_enable_async
+            ? std::optional(context_pool->get_executor())
+                : nullopt);
+      }
     }
     else if (framework == "rgw-nfs") {
       fe = new RGWLibFrontend(env, config);
@@ -532,7 +604,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       rgw_pauser->add_pauser(dedup_background.get());
     }
       reloader = std::make_unique<RGWRealmReloader>(
-          env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), context_pool_holder.get());
+          env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
       realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
     }
   }
@@ -553,12 +625,11 @@ void rgw::AppMain::init_lua()
   if (!g_conf().get_val<bool>("rgw_lua_enable"))
     return;
   rgw::sal::Driver* driver = env.driver;
-  int r{0};
   std::string install_dir;
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
-  r = rgw::lua::install_packages(dpp, driver, null_yield, g_conf().get_val<std::string>("rgw_luarocks_location"),
-                                 failed_packages, install_dir);
+  int r = rgw::lua::install_packages(dpp, driver, null_yield, g_conf().get_val<std::string>("rgw_luarocks_location"),
+                                     failed_packages, install_dir);
   if (r < 0) {
     ldpp_dout(dpp, 5) << "WARNING: failed to install Lua packages from allowlist. error: " << r
             << dendl;
@@ -585,6 +656,14 @@ void rgw::AppMain::init_lua()
 #ifdef WITH_RADOSGW_RADOS
 void rgw::AppMain::init_dedup()
 {
+  auto run_dedup =
+    (g_conf()->rgw_enable_dedup_threads &&
+      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_dedup_threads)));
+
+  if (!run_dedup) {
+    return;
+  }
+
   rgw::sal::Driver* driver = env.driver;
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     try {
@@ -598,6 +677,15 @@ void rgw::AppMain::init_dedup()
   }
 }
 #endif
+
+void rgw::AppMain::init_kms_cache()
+{
+  if (!g_conf().get_val<bool>("rgw_crypt_s3_kms_cache_enabled")) {
+    return;
+  }
+  env.kms_cache = std::make_unique<rgw::kms::KMSCache>(
+      dpp->get_cct(), Keyring::get_best());
+}
 
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
@@ -623,6 +711,9 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     fe->stop();
   }
 
+  if (env.kms_cache) {
+    env.kms_cache->stop_ttl_reaper();
+  }
   ldh.reset(nullptr); // deletes ldap helper if it was created
   rgw_log_usage_finalize();
 
@@ -639,7 +730,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
   // closed storage.
-  context_pool_holder.get().finish();
+  context_pool->finish();
 
   cfgstore.reset(); // deletes
   DriverManager::close_storage(env.driver);
@@ -663,6 +754,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   rgw::curl::cleanup_curl();
   g_conf().remove_observer(implicit_tenant_context.get());
   implicit_tenant_context.reset(); // deletes
+  unregister_heap_profiler_hook();
   rgw_perf_stop(g_ceph_context);
   ratelimiter.reset(); // deletes--ensure this happens before we destruct
 } /* AppMain::shutdown */

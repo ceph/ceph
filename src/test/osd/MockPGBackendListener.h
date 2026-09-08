@@ -65,6 +65,28 @@ public:
   OpTracker *op_tracker = nullptr;
   PerfCounters *perf_logger = nullptr;
 
+  // Recovery callback tracking
+  struct RecoveryCallbackTracker {
+    int on_local_recover_calls = 0;
+    std::vector<hobject_t> on_local_recover_objects;
+
+    std::map<pg_shard_t, int> on_peer_recover_calls;
+    std::vector<std::pair<pg_shard_t, hobject_t>> on_peer_recover_objects;
+
+    int on_global_recover_calls = 0;
+    std::vector<hobject_t> on_global_recover_objects;
+
+    void reset() {
+      on_local_recover_calls = 0;
+      on_local_recover_objects.clear();
+      on_peer_recover_calls.clear();
+      on_peer_recover_objects.clear();
+      on_global_recover_calls = 0;
+      on_global_recover_objects.clear();
+    }
+  };
+  RecoveryCallbackTracker recovery_tracker;
+
   MockPGBackendListener(OSDMapRef osdmap, int64_t pool_id, DoutPrefixProvider *dpp, pg_shard_t pg_whoami, PeeringState *ps = nullptr) :
     osdmap(osdmap), pool_id(pool_id), log(g_ceph_context), dpp(dpp), pg_whoami(pg_whoami), peering_state(ps) {
     // Create a full OSD PerfCounters using the standard build_osd_logger function.
@@ -108,22 +130,58 @@ public:
   // Recovery callbacks
   void on_local_recover(
     const hobject_t &oid,
-    const ObjectRecoveryInfo &recovery_info,
+    const ObjectRecoveryInfo &_recovery_info,
     ObjectContextRef obc,
     bool is_delete,
     ObjectStore::Transaction *t) override {
+    recovery_tracker.on_local_recover_calls++;
+    recovery_tracker.on_local_recover_objects.push_back(oid);
+
+    // Make a copy of recovery_info as we may need to modify it
+    ObjectRecoveryInfo recovery_info(_recovery_info);
+    if (!is_delete && peering_state &&
+        peering_state->get_pg_log().get_missing().is_missing(recovery_info.soid) &&
+        peering_state->get_pg_log().get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
+      ceph_assert(pgb_is_primary());
+    }
+
+    // Call into PeeringState to update recovery state
+    if (peering_state) {
+      peering_state->recover_got(recovery_info.soid, recovery_info.version, is_delete, *t);
+    }
+
+    // Register transaction callbacks (similar to PrimaryLogPG::on_local_recover)
+    // Note: In the mock, we don't track active_pushes or handle all the same callbacks,
+    // but we should register basic callbacks if needed by tests
+    if (peering_state && pgb_is_primary()) {
+      if (!is_delete && obc) {
+        obc->obs.exists = true;
+        obc->obs.oi = recovery_info.oi;
+      }
+    }
   }
 
   void on_global_recover(
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff,
     bool is_delete) override {
+    recovery_tracker.on_global_recover_calls++;
+    recovery_tracker.on_global_recover_objects.push_back(oid);
+
+    // Call into PeeringState to mark object as fully recovered
+    if (peering_state) {
+      peering_state->object_recovered(oid, stat_diff);
+    }
   }
 
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info) override {
+    recovery_tracker.on_peer_recover_calls[peer]++;
+    recovery_tracker.on_peer_recover_objects.push_back({peer, oid});
+
+    // Call into PeeringState to update peer missing state
     if (peering_state) {
       peering_state->on_peer_recover(peer, oid, recovery_info.version);
     }
@@ -140,6 +198,10 @@ public:
   void apply_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override {
+    // Mimic PrimaryLogPG::apply_stats() - apply stats to PeeringState
+    if (peering_state) {
+      peering_state->apply_op_stats(soid, delta_stats);
+    }
   }
 
   void on_failed_pull(
@@ -180,7 +242,10 @@ public:
 
   // Routes messages through MockMessenger for asynchronous message processing.
   void send_message(int to_osd, Message *m) override {
-    MessageRef mref(m);
+    // Callers that pass `new T(...)` hand off a +1 refcount; consume it here
+    // with add_ref=false so the original +1 is owned by `mref`/the storage
+    // vectors and is correctly released when those go out of scope.
+    MessageRef mref(m, /*add_ref=*/false);
     sent_messages.push_back(mref);
     sent_messages_with_dest.push_back({to_osd, mref});
     
@@ -254,10 +319,16 @@ public:
 
   // Shard information
   const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
+    if (peering_state) {
+      return peering_state->get_acting_recovery_backfill();
+    }
     return shardset;
   }
 
-  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const {
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const override {
+    if (peering_state) {
+      return peering_state->get_acting_recovery_backfill_shard_id_set();
+    }
     return acting_recovery_backfill_shard_id_set;
   }
 
@@ -376,7 +447,30 @@ public:
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) override {
-    return ObjectContextRef();
+    // This is called by the backend during recovery to create an OBC from attributes.
+    // Create a minimal OBC with the provided attributes.
+    ObjectContextRef obc = std::make_shared<ObjectContext>();
+    
+    // Decode object_info from attributes
+    auto it_oi = attrs.find(OI_ATTR);
+    if (it_oi != attrs.end()) {
+      try {
+        bufferlist::const_iterator bliter = it_oi->second.begin();
+        decode(obc->obs.oi, bliter);
+        obc->obs.exists = true;
+      } catch (...) {
+        obc->obs.oi = object_info_t(hoid);
+        obc->obs.exists = false;
+      }
+    } else {
+      obc->obs.oi = object_info_t(hoid);
+      obc->obs.exists = false;
+    }
+    
+    obc->ssc = nullptr;
+    obc->attr_cache = attrs;
+    
+    return obc;
   }
 
   bool try_lock_for_read(
@@ -392,6 +486,31 @@ public:
   }
 
   bool should_send_op(pg_shard_t peer, const hobject_t &hoid) override {
+    // If we're sending to ourselves (primary), always send
+    if (peer == pg_whoami)
+      return true;
+
+    // If we have a peering_state, use it to check async_recovery_targets
+    if (peering_state) {
+      // Check if peer is an async_recovery_target with this object missing
+      if (peering_state->is_async_recovery_target(peer)) {
+        const pg_missing_t &peer_missing = peering_state->get_peer_missing(peer);
+        if (peer_missing.is_missing(hoid)) {
+          // Object is missing on async_recovery_target, send empty transaction
+          return false;
+        }
+      }
+
+      // Check backfill logic
+      if (peering_state->is_backfill_target(peer)) {
+        const pg_info_t &peer_info = peering_state->get_peer_info(peer);
+        // If object is beyond peer's last_backfill, don't send full transaction
+        if (hoid > peer_info.last_backfill) {
+          return false;
+        }
+      }
+    }
+
     return true;
   }
 
@@ -672,7 +791,12 @@ public:
   }
 
   bool is_missing_object(const hobject_t& oid) const override {
-    return false;
+    // Check if object is in the missing set (same as PrimaryLogPG::is_missing_object)
+    if (peering_state) {
+      return peering_state->get_pg_log().get_missing().get_items().count(oid);
+    }
+    // Fallback for tests without peering_state
+    return log.get_missing().get_items().count(oid);
   }
   void send_message_osd_cluster(
     int osd, MOSDPGPush* msg, epoch_t from_epoch) override {

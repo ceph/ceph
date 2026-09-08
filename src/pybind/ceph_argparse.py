@@ -1241,7 +1241,7 @@ def validate(args: List[str],
                         or myarg == "--yes-i-really-mean-it" \
                         or myarg == "--yes-i-really-really-mean-it" \
                         or myarg == "--yes-i-really-really-mean-it-not-faking" \
-                        or myarg == "--force" \
+                        or (myarg == "--force" and 'force' in arg_descs_by_name) \
                         or injectargs
 
                 if not is_value:

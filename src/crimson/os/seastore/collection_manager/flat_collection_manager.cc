@@ -31,7 +31,7 @@ FlatCollectionManager::mkfs(Transaction &t)
 
   logger().debug("FlatCollectionManager: {}", __func__);
   return tm.alloc_non_data_extent<CollectionNode>(
-    t, L_ADDR_MIN, MIN_FLAT_BLOCK_SIZE
+    t, laddr_hint_t::create_global_md_hint(), MIN_FLAT_BLOCK_SIZE
   ).si_then([](auto&& root_extent) {
     coll_root_t coll_root = coll_root_t(
       root_extent->get_laddr(),
@@ -78,7 +78,7 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 	// collections would create a ton of other problems as well
 	assert(new_size < MAX_FLAT_BLOCK_SIZE);
         return tm.alloc_non_data_extent<CollectionNode>(
-	  t, L_ADDR_MIN, new_size
+	  t, laddr_hint_t::create_global_md_hint(), new_size
 	).si_then([=, this, &coll_root, &t] (auto &&root_extent) {
           coll_root.update(root_extent->get_laddr(), root_extent->get_length());
 

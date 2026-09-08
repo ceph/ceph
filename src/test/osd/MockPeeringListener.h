@@ -28,6 +28,12 @@
 #include "MockMessenger.h"
 #include "global/global_context.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 // Forward declarations
 class EventLoop;
 class ECPeeringTestFixture;
@@ -189,8 +195,13 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     int osd, MessageRef m, epoch_t epoch, bool share_map_update=false) override {
     dout(0) << "send_cluster_message to " << osd << " " << m << " epoch " << epoch << dendl;
     if (messenger) {
-      // Use MockMessenger for EventLoop-based routing with epoch tracking
-      messenger->send_message(pg_whoami.osd, osd, m.detach());
+      // Use MockMessenger for EventLoop-based routing with epoch tracking.
+      // Pass m.get() rather than m.detach(): MockMessenger::send_message takes
+      // a borrowed reference (it wraps in MessageRef internally for the
+      // duration of encoding), so the caller-side intrusive_ptr `m` should
+      // continue to own the refcount and release it when this function
+      // returns.  Using detach() leaked the refcount.
+      messenger->send_message(pg_whoami.osd, osd, m.get());
     } else {
       // Fall back to direct message queue for TestPeeringState compatibility
       messages[osd].push_back(m);

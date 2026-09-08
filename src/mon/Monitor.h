@@ -47,7 +47,10 @@
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
 #include "include/common_fwd.h"
+#include "include/CompatSet.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/mon_types.h" // for Metadata, PAXOS_*, ScrubResult
+#include "mon/MonitorBackup.h"
 #include "mgr/MgrClient.h"
 #include <boost/smart_ptr/atomic_shared_ptr.hpp>
 #include <boost/smart_ptr/shared_ptr.hpp>
@@ -98,6 +101,29 @@ enum {
   l_mon_election_call,
   l_mon_election_win,
   l_mon_election_lose,
+  l_mon_backup_running,
+  l_mon_backup_started,
+  l_mon_backup_success,
+  l_mon_backup_failed,
+  l_mon_backup_duration,
+  l_mon_backup_last_success,
+  l_mon_backup_last_success_id,
+  l_mon_backup_last_failed,
+  l_mon_backup_last_size,
+  l_mon_backup_last_files,
+  l_mon_backup_cleanup_started,
+  l_mon_backup_cleanup_running,
+  l_mon_backup_cleanup_success,
+  l_mon_backup_cleanup_failed,
+  l_mon_backup_cleanup_size,
+  l_mon_backup_cleanup_kept,
+  l_mon_backup_cleanup_duration,
+  l_mon_backup_cleanup_freed,
+  l_mon_backup_cleanup_deleted,
+  l_mon_data_disk_total_bytes,
+  l_mon_data_disk_avail_bytes,
+  l_mon_data_disk_avail_percent,
+  l_mon_db_total_bytes,
   l_mon_last,
 };
 
@@ -109,6 +135,7 @@ class AdminSocketHook;
 #define COMPAT_SET_LOC "feature_set"
 
 class Monitor : public Dispatcher,
+		public KeyServer,
 		public AuthClient,
 		public AuthServer,
                 public md_config_obs_t {
@@ -148,7 +175,6 @@ public:
   LogChannelRef clog;
   LogChannelRef audit_clog;
   KeyRing keyring;
-  KeyServer key_server;
 
   AuthMethodList auth_cluster_required;
   AuthMethodList auth_service_required;
@@ -166,6 +192,15 @@ public:
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
   std::string gss_ktfile_client{};
+
+private:
+  mutable ceph::mutex cipher_mutex = ceph::make_mutex("Monitor::cipher_mutex");
+  std::vector<int> my_allowed_ciphers;
+  int my_service_cipher = -1;
+public:
+  int get_service_cipher() const override;
+  bool is_cipher_allowed(int cipher) const override;
+  std::vector<int> get_ciphers_allowed() const override;
 
 private:
   void new_tick();
@@ -733,10 +768,9 @@ public:
   ceph::mutex session_map_lock = ceph::make_mutex("Monitor::session_map_lock");
   AdminSocketHook *admin_hook;
 
-  template<typename Func, typename...Args>
-  void with_session_map(Func&& func) {
+  void with_session_map(auto&& f) {
     std::lock_guard l(session_map_lock);
-    std::forward<Func>(func)(session_map);
+    std::forward<decltype(f)>(f)(session_map);
   }
   void send_latest_monmap(Connection *con);
 
@@ -999,6 +1033,8 @@ private:
 
   OpTracker op_tracker;
 
+  std::unique_ptr<MonitorBackupManager> backup_manager;
+
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
 	  Messenger *m, Messenger *mgr_m, MonMap *map);
@@ -1044,6 +1080,10 @@ private:
 		       std::ostream& err,
 		       std::ostream& out);
 
+  // Execute mon database backup
+  int perform_backup();
+  int cleanup_backup();
+
 private:
   // don't allow copying
   Monitor(const Monitor& rhs);
@@ -1085,7 +1125,16 @@ public:
   }
 
 private:
+  bool use_mon_keyring = false;
+public:
+  void use_keyring_as_authoritative() {
+    use_mon_keyring = true;
+  }
+
+private:
   ceph::coarse_mono_time const starttime = coarse_mono_clock::now();
+  epoch_t probe_epoch = 0;
+  epoch_t cycle_mon_secret = 0;
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
@@ -1108,6 +1157,7 @@ private:
 #define CEPH_MON_FEATURE_INCOMPAT_UMBRELLA CompatSet::Feature(18, "umbrella ondisk layout")
 
 // Release-independent features
+#define CEPH_MON_FEATURE_INCOMPAT_CEPHX_AUTH_AES256K CompatSet::Feature(31, "cephx auth aes256k")
 #define CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF CompatSet::Feature(32, "nvmeof beacon diff")
 // make sure you add your feature to Monitor::get_supported_features
 

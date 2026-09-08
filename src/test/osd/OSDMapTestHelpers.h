@@ -286,6 +286,12 @@ public:
     OSDMap::Incremental inc(osdmap.get_epoch() + 1);
     inc.fsid = osdmap.get_fsid();
     inc.new_state[osd_id] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
+
+    // Preserve xinfo features when marking OSD down
+    // This is critical for peering to work correctly with feature checks
+    const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
+    inc.new_xinfo[osd_id] = existing_xinfo;
+
     osdmap.apply_incremental(inc);
   }
   
@@ -306,6 +312,12 @@ public:
     OSDMap::Incremental inc(osdmap.get_epoch() + 1);
     inc.fsid = osdmap.get_fsid();
     inc.new_state[osd_id] = CEPH_OSD_EXISTS | CEPH_OSD_UP;
+    
+    // Preserve xinfo features when marking OSD up
+    // This is critical for peering to work correctly with feature checks
+    const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
+    inc.new_xinfo[osd_id] = existing_xinfo;
+    
     osdmap.apply_incremental(inc);
   }
   
@@ -327,6 +339,11 @@ public:
     inc.fsid = osdmap.get_fsid();
     for (int osd_id : osd_ids) {
       inc.new_state[osd_id] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
+
+      // Preserve xinfo features when marking OSD down
+      // This is critical for peering to work correctly with feature checks
+      const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
+      inc.new_xinfo[osd_id] = existing_xinfo;
     }
     osdmap.apply_incremental(inc);
   }

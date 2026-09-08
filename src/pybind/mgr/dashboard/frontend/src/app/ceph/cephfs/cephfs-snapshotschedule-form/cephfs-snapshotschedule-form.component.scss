@@ -1,0 +1,13 @@
+:host {
+  display: block;
+}
+
+:host .form-item-append {
+  align-items: flex-end;
+  gap: var(--cds-spacing-05);
+}
+
+:host .form-col {
+  flex: 1 1 0;
+  min-width: 0;
+}

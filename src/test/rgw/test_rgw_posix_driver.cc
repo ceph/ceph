@@ -273,7 +273,7 @@ TEST(FSEnt, DirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), ObjectType::DIRECTORY);
 
-  ret = testdir->remove(env->dpp, null_yield, false);
+  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -485,7 +485,7 @@ TEST(FSEnt, FileBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), ObjectType::FILE);
 
-  ret = testfile->remove(env->dpp, null_yield, false);
+  ret = testfile->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -549,7 +549,7 @@ TEST(FSEnt, SymlinkBase)
   EXPECT_EQ(ent->get_type(), ObjectType::SYMLINK);
 
 
-  ret = testlink->remove(env->dpp, null_yield, false);
+  ret = testlink->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -667,7 +667,7 @@ TEST(FSEnt, MPDirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), ObjectType::MULTIPART);
 
-  ret = testdir->remove(env->dpp, null_yield, false);
+  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -877,7 +877,7 @@ TEST(FSEnt, VerDirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), ObjectType::VERSIONED);
 
-  ret = testdir->remove(env->dpp, null_yield, false);
+  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(sf::exists(tp));
 }
@@ -1073,7 +1073,9 @@ public:
 
   TestDriver(std::string _base_path) : POSIXDriver(nullptr), driver_base(_base_path)
   { }
-  virtual ~TestDriver() = default;
+  virtual ~TestDriver() {
+    RGWQuotaHandler::free_handler(quota_handler);
+  }
 
   int init(const DoutPrefixProvider* dpp)
   {
@@ -1097,7 +1099,7 @@ public:
         }
       }
     }
-
+    quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
     /* ordered listing cache */
     bucket_cache.reset(new BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));
@@ -1221,7 +1223,6 @@ TEST_F(POSIXDriverTest, Bucket)
 TEST_F(POSIXDriverTest, BucketCreate)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  bool bucket_exists;
   rgw::sal::Bucket::CreateParams createparams;
 
   RGWBucketInfo info;
@@ -1231,6 +1232,9 @@ TEST_F(POSIXDriverTest, BucketCreate)
   bucket = driver->get_bucket(info);
   EXPECT_NE(bucket.get(), nullptr);
 
+  sf::path tp{bp / "root" / testname};
+  EXPECT_FALSE(sf::exists(tp));
+
   createparams.owner = owner;
 
   int ret = bucket->create(env->dpp, createparams, null_yield);
@@ -1239,9 +1243,7 @@ TEST_F(POSIXDriverTest, BucketCreate)
   EXPECT_EQ(bucket->get_key().name, testname);
   EXPECT_EQ(bucket->get_key().tenant, "");
   EXPECT_EQ(bucket->get_key().bucket_id, "");
-  EXPECT_FALSE(bucket_exists);
 
-  sf::path tp{bp / "root" / testname};
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
 }
@@ -2187,7 +2189,8 @@ TEST_F(POSIXVerObjectTest, DeleteCurVersion)
   EXPECT_TRUE(sf::is_regular_file(op2));
   EXPECT_TRUE(sf::exists(op3));
   EXPECT_TRUE(sf::is_regular_file(op3));
-  EXPECT_FALSE(sf::exists(ops));
+  // a temporary 0 byte file exists to represent a delete marker
+  EXPECT_TRUE(sf::exists(ops));
   EXPECT_TRUE(sf::is_symlink(ops));
   /* Need to find a way to get the correct version */
   //EXPECT_EQ(sf::read_symlink(ops), dfname);

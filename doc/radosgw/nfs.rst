@@ -2,8 +2,6 @@
 NFS
 ===
 
-.. versionadded:: Jewel
-
 .. note:: Only the NFSv4 protocol is supported when using a cephadm or Rook based deployment.
 
 Ceph Object Gateway namespaces can be exported via NFSv4,
@@ -371,4 +369,4 @@ in the RGW section(s) of the Ceph configuration file.
 References
 ==========
 
-.. [#] http://docs.aws.amazon.com/AmazonS3/latest/dev/ListingKeysHierarchy.html
+.. [#] https://docs.aws.amazon.com/AmazonS3/latest/dev/ListingKeysHierarchy.html

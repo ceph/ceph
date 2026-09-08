@@ -120,7 +120,7 @@ seastar::future<uint32_t> AlienStore::start()
     get_conf<uint64_t>("crimson_bluestore_num_threads");
   tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, alien_thread_cpu_cores);
   return tp->start().then([]() {
-    return seastar::make_ready_future<uint32_t>(seastar::smp::count);
+    return seastar::make_ready_future<uint32_t>(seastar::this_smp_shard_count());
   });
 }
 

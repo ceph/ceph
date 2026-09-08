@@ -14,7 +14,7 @@ from .constants import (
     MIN_PODMAN_VERSION,
     PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
 )
-from .data_utils import with_units_to_int
+from ceph.utils import with_units_to_int
 from .exceptions import Error
 
 
@@ -111,6 +111,11 @@ class Podman(ContainerEngine):
 
 class Docker(ContainerEngine):
     EXE = 'docker'
+
+    def service_args(
+        self, ctx: CephadmContext, service_name: str
+    ) -> List[str]:
+        return ['-d']
 
 
 CONTAINER_PREFERENCE = (Podman, Docker)  # prefer podman to docker

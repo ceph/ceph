@@ -51,7 +51,7 @@ class LSMDisk:
         else:
             self.lsm_available = False
             self.error_list.add("libstoragemgmt (lsm module) is unavailable")
-            logger.info("LSM information is unavailable: libstoragemgmt is not installed")
+            logger.debug("LSM information is unavailable: libstoragemgmt is not installed")
             self.disk = None
 
         self.led_bits = None

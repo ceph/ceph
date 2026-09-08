@@ -153,7 +153,7 @@ Parameters
    * object-map: object map support (requires exclusive-lock)
    * fast-diff: fast diff calculations (requires object-map)
    * deep-flatten: snapshot flatten support
-   * journaling: journaled IO support (requires exclusive-lock)
+   * journaling: journaled I/O support (requires exclusive-lock)
    * data-pool: erasure coded pool support
 
 .. option:: --image-shared
@@ -181,7 +181,7 @@ Commands
 .. TODO rst "option" directive seems to require --foo style options, parsing breaks on subcommands.. the args show up as bold too
 
 :command:`bench` --io-type <read | write | readwrite | rw> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] [--rw-mix-read *read proportion in readwrite*] *image-spec*
-  Generate a series of IOs to the image and measure the IO throughput and
+  Generate a series of I/Os to the image and measure the I/O throughput and
   latency.  If no suffix is given, unit B is assumed for both --io-size and
   --io-total.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
   --io-pattern seq, --rw-mix-read 50.
@@ -610,6 +610,21 @@ Commands
   Rebuild an invalid object map for the specified image. An image snapshot can be
   specified to rebuild an invalid object map for a snapshot.
 
+:command:`perf image iostat` [-p | --pool *pool-name*] [--namespace *namespace*] [--iterations *iterations*] [--sort-by *sort-by*] [--format *format*] [--pretty-format] [*pool-spec*]
+  Display image IO statistics. The output shows per-image write/read
+  operations, bytes, and latency.
+
+  The pool/pool-spec refers to the pool where image data is stored (the data
+  pool for images created with ``--data-pool``, otherwise the pool where the
+  image is defined).
+
+:command:`perf image iotop` [-p | --pool *pool-name*] [--namespace *namespace*] [*pool-spec*]
+  Display a top-like IO monitor.
+  
+  The pool/pool-spec refers to the pool where image data is stored (the data
+  pool for images created with ``--data-pool``, otherwise the pool where the
+  image is defined).
+
 :command:`pool init` [*pool-name*] [--force]
   Initialize pool for use by RBD. Newly created pools must be initialized
   prior to use.
@@ -783,11 +798,10 @@ Per client instance `rbd device map` options:
   For msgr2.1 protocol this option is ignored.
 
 * cephx_require_signatures - Require msgr1 message signing feature (since 3.19,
-  default).  This option is deprecated and will be removed in the future as the
-  feature has been supported since the Bobtail release.
+  default).  This option is deprecated and will be removed in a future release.
 
 * nocephx_require_signatures - Don't require msgr1 message signing feature
-  (since 3.19).  This option is deprecated and will be removed in the future.
+  (since 3.19).  This option is deprecated and will be removed in a future release.
 
 * tcp_nodelay - Disable Nagle's algorithm on client sockets (since 4.0,
   default).
@@ -869,6 +883,11 @@ Per mapping (block device) `rbd device map` options:
 
 * read_from_replica=balance - When issued a read on a replicated pool, pick
   a random OSD for serving it (since 5.8).
+
+  When issued a read on an erasure-coded pool, pick the shard that stores the
+  data, giving a performance uplift over routing the request via the primary
+  (requires Umbrella server and client; kernel client support is planned for a
+  future release).
 
   This mode is safe for general use only since Octopus (i.e. after "ceph osd
   require-osd-release octopus").  Otherwise it should be limited to read-only
@@ -974,7 +993,7 @@ To delete a snapshot::
 
        rbd snap rm mypool/myimage@mysnap
 
-To map an image via the kernel with cephx enabled::
+To map an image via the kernel with CephX enabled::
 
        rbd device map mypool/myimage --id admin --keyfile secretfile
 

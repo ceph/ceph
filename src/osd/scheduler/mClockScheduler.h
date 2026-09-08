@@ -149,6 +149,8 @@ public:
 private:
   // Enqueue the op to the high priority queue
   void enqueue_high(unsigned prio, OpSchedulerItem &&item, bool front = false);
+  // Return the scheduler op type - used to update perf counters
+  scheduler_op_type_t get_scheduler_op_type(const OpSchedulerItem &item);
 };
 
 }

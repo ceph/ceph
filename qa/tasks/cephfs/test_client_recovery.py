@@ -12,6 +12,7 @@ import distutils.version as version
 import re
 import string
 import os
+import unittest
 
 from teuthology import contextutil
 from teuthology.orchestra import run
@@ -349,9 +350,23 @@ class TestClientRecovery(CephFSTestCase):
                             count, num_caps
                         ))
 
+    def _fuse_package_version(self, client_remote):
+        for pkg in ("fuse", "fuse3"):
+            ver = get_package_version(client_remote, pkg)
+            if ver:
+                log.debug(f'using {pkg} package version {ver} for flock check')
+                return ver
+        return None
+
     def _is_flockable(self):
-        a_version_str = get_package_version(self.mount_a.client_remote, "fuse")
-        b_version_str = get_package_version(self.mount_b.client_remote, "fuse")
+        a_version_str = self._fuse_package_version(self.mount_a.client_remote)
+        b_version_str = self._fuse_package_version(self.mount_b.client_remote)
+
+        if (a_version_str is None or b_version_str is None):
+            log.info("not testing flock locks, could not determine fuse version(s) {av} and {bv}".format(
+                av=a_version_str, bv=b_version_str))
+            return False
+
         flock_version_str = "2.9"
 
         version_regex = re.compile(r"[0-9\.]+")
@@ -756,6 +771,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.umount_wait(force=True)
 
 
+@unittest.skip("Feature is not maintained and requires a full overhaul (see: "
+                "https://tracker.ceph.com/issues/64563). Testing it further "
+                "serves no purpose, so the entire class is disabled until "
+                "the code is either removed or reworked.")
 class TestClientOnLaggyOSD(CephFSTestCase):
     CLIENTS_REQUIRED = 2
 

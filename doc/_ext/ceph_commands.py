@@ -193,7 +193,7 @@ TEMPLATE = '''
 {{ command.prefix }}
 {{ command.prefix | length * punct_char }}
 
-{{ command.help | wordwrap(70) }}
+{{ command.help | trim | wordwrap(70) }}
 
 :Example command:
     .. code-block:: bash

@@ -15,7 +15,6 @@
 
 #pragma once
 
-#include <iostream>
 #include <functional>
 #include <deque>
 #include <map>
@@ -27,6 +26,7 @@
 #include "osd/OpRequest.h"
 #include "osd/PeeringState.h"
 #include "os/ObjectStore.h"
+#include "common/dout.h"
 
 /**
  * EventLoop - Unified single-threaded event loop for OSD tests.
@@ -48,7 +48,37 @@ public:
     PEERING_EVENT
   };
   
+  /**
+   * Get the log prefix for the currently executing context.
+   * Returns "osd.X" if an OSD is currently executing, "harness" if not.
+   * This is used by Log::_flush() to replace thread IDs with meaningful names.
+   */
+  static const char* get_log_prefix() {
+    static thread_local char prefix_buf[32];
+    
+    // Read the value once to ensure consistency within this call
+    int osd_id = current_executing_osd;
+    
+    if (osd_id >= 0) {
+      snprintf(prefix_buf, sizeof(prefix_buf), "osd.%d", osd_id);
+      return prefix_buf;
+    }
+    // osd_id is -1 (harness/test code, not in OSD event)
+    return "harness";
+  }
+  
+  /**
+   * Get the OSD number currently executing in the EventLoop.
+   * Returns -1 if no OSD is currently executing or if called outside an EventLoop context.
+   * This is a simple static variable that can be easily accessed from lldb at any time.
+   */
+  static int get_current_executing_osd() {
+    return current_executing_osd;
+  }
+  
 private:
+  // Static storage for the currently executing OSD
+  static int current_executing_osd;
   struct Event {
     EventType type;
     int from_osd;  // -1 for generic events or when not applicable
@@ -60,13 +90,13 @@ private:
   };
   
   std::deque<Event> events;
-  bool verbose = false;
   int events_executed = 0;
   std::map<EventType, int> events_by_type;
   std::set<int> suspended_from_osds;
   std::set<int> suspended_to_osds;
   std::set<std::pair<int, int>> suspended_from_to_osds;
   int current_osd = -1;
+  DoutPrefixProvider *dpp;
   
   // Map from OSD number to its queue of suspended events
   std::map<int, std::deque<Event>> suspended_events;
@@ -87,7 +117,7 @@ private:
   }
   
 public:
-  EventLoop(bool verbose = false) : verbose(verbose) {}
+  EventLoop(DoutPrefixProvider *dpp) : dpp(dpp) {}
   
   void schedule_generic(GenericEvent event) {
     events.emplace_back(EventType::GENERIC, -1, -1, std::move(event));
@@ -96,6 +126,8 @@ public:
   void schedule_osd_message(int from_osd, int to_osd, GenericEvent callback) {
     ceph_assert(from_osd >= 0);
     ceph_assert(to_osd >= 0);
+    ldpp_dout(dpp, 20) << "EventLoop: scheduling OSD_MESSAGE from OSD." << from_osd
+                       << " to OSD." << to_osd << dendl;
     events.emplace_back(EventType::OSD_MESSAGE, from_osd, to_osd, std::move(callback));
   }
   
@@ -107,12 +139,16 @@ public:
   void schedule_peering_message(int from_osd, int to_osd, GenericEvent callback) {
     ceph_assert(from_osd >= 0);
     ceph_assert(to_osd >= 0);
+    ldpp_dout(dpp, 20) << "EventLoop: scheduling PEERING_MESSAGE from OSD." << from_osd
+                       << " to OSD." << to_osd << dendl;
     events.emplace_back(EventType::PEERING_MESSAGE, from_osd, to_osd, std::move(callback));
   }
   
   void schedule_cluster_message(int from_osd, int to_osd, GenericEvent callback) {
     ceph_assert(from_osd >= 0);
     ceph_assert(to_osd >= 0);
+    ldpp_dout(dpp, 20) << "EventLoop: scheduling CLUSTER_MESSAGE from OSD." << from_osd
+                       << " to OSD." << to_osd << dendl;
     events.emplace_back(EventType::CLUSTER_MESSAGE, from_osd, to_osd, std::move(callback));
   }
   
@@ -172,68 +208,32 @@ public:
     
     if (should_suspend) {
       // Move to suspended queue
-      if (verbose) {
-        std::cout << "  [Event " << (events_executed + 1) << "] "
-                  << event_type_name(event.type);
-        if (event.from_osd >= 0 && event.to_osd >= 0) {
-          std::cout << " (OSD." << event.from_osd << " -> OSD." << event.to_osd << ")";
-        } else if (event.to_osd >= 0) {
-          std::cout << " (to OSD." << event.to_osd << ")";
-        } else if (event.from_osd >= 0) {
-          std::cout << " (from OSD." << event.from_osd << ")";
-        }
-        std::cout << " *** SUSPENDED - moving to suspended queue ***" << std::endl;
-      }
       suspended_events[suspend_osd].push_back(std::move(event));
       return true;  // We processed an event (by suspending it)
     }
     
-    // Print banner if switching to a different OSD
+    // Track which OSD we're currently processing
     int active_osd = (event.to_osd >= 0) ? event.to_osd : event.from_osd;
     if (active_osd >= 0 && active_osd != current_osd) {
       current_osd = active_osd;
-      if (verbose) {
-        std::cout << "\n==== Processing events for OSD." << current_osd
-                  << " ====" << std::endl;
-      }
     }
     
-    if (verbose) {
-      std::cout << "  [Event " << (events_executed + 1) << "] "
-                << event_type_name(event.type);
-      if (event.from_osd >= 0 && event.to_osd >= 0) {
-        std::cout << " (OSD." << event.from_osd << " -> OSD." << event.to_osd << ")";
-      } else if (event.to_osd >= 0) {
-        std::cout << " (to OSD." << event.to_osd << ")";
-      } else if (event.from_osd >= 0) {
-        std::cout << " (from OSD." << event.from_osd << ")";
-      }
-      std::cout << " Executing..." << std::endl;
-    }
+    current_executing_osd = active_osd;
     
     // Execute the event
     event.callback();
     events_executed++;
     events_by_type[event.type]++;
+    current_executing_osd = -1;
     
     return true;
   }
   
   int run_many(int count) {
-    if (verbose) {
-      std::cout << "\n=== Running " << count << " events ===" << std::endl;
-    }
-    
     int executed = 0;
     for (int i = 0; i < count && run_one(); i++) {
       executed++;
     }
-    
-    if (verbose) {
-      std::cout << "=== Executed " << executed << " events, "
-                << events.size() << " remaining ===" << std::endl;
-    }
-    
     return executed;
   }
 
@@ -253,14 +253,6 @@ public:
    * Returns -1 if max_events was reached before the queue emptied.
    */
   void run_until_idle(int max_events = 10000) {
-    if (verbose) {
-      std::cout << "\n=== Running until idle";
-      if (max_events > 0) {
-        std::cout << " (max " << max_events << " events)";
-      }
-      std::cout << " ===" << std::endl;
-    }
-
     do {
       ceph_assert(--max_events);
       while (has_events()) {
@@ -274,10 +266,6 @@ public:
     suspended_events.clear();
   }
   
-  void set_verbose(bool v) {
-    verbose = v;
-  }
-  
   // OSD management methods
   /**
    * Suspend events FROM an OSD - events originating from this OSD will be queued
@@ -285,9 +273,6 @@ public:
    */
   void suspend_from_osd(int osd) {
     suspended_from_osds.insert(osd);
-    if (verbose) {
-      std::cout << "*** Events FROM OSD." << osd << " marked as SUSPENDED ***" << std::endl;
-    }
   }
   
   /**
@@ -300,21 +285,11 @@ public:
     // Move all suspended events for this OSD back to the main queue
     auto it = suspended_events.find(osd);
     if (it != suspended_events.end()) {
-      if (verbose) {
-        std::cout << "*** Events FROM OSD." << osd << " marked as UNSUSPENDED - restoring "
-                  << it->second.size() << " suspended events ***" << std::endl;
-      }
-      
       // Append suspended events to the main queue
       for (auto& event : it->second) {
         events.push_back(std::move(event));
       }
-      
       suspended_events.erase(it);
-    } else {
-      if (verbose) {
-        std::cout << "*** Events FROM OSD." << osd << " marked as UNSUSPENDED ***" << std::endl;
-      }
     }
   }
   
@@ -324,9 +299,6 @@ public:
    */
   void suspend_to_osd(int osd) {
     suspended_to_osds.insert(osd);
-    if (verbose) {
-      std::cout << "*** Events TO OSD." << osd << " marked as SUSPENDED ***" << std::endl;
-    }
   }
   
   /**
@@ -339,21 +311,11 @@ public:
     // Move all suspended events for this OSD back to the main queue
     auto it = suspended_events.find(osd);
     if (it != suspended_events.end()) {
-      if (verbose) {
-        std::cout << "*** Events TO OSD." << osd << " marked as UNSUSPENDED - restoring "
-                  << it->second.size() << " suspended events ***" << std::endl;
-      }
-      
       // Append suspended events to the main queue
       for (auto& event : it->second) {
         events.push_back(std::move(event));
       }
-      
       suspended_events.erase(it);
-    } else {
-      if (verbose) {
-        std::cout << "*** Events TO OSD." << osd << " marked as UNSUSPENDED ***" << std::endl;
-      }
     }
   }
   
@@ -363,10 +325,6 @@ public:
    */
   void suspend_from_to_osd(int from_osd, int to_osd) {
     suspended_from_to_osds.insert({from_osd, to_osd});
-    if (verbose) {
-      std::cout << "*** Events FROM OSD." << from_osd << " TO OSD." << to_osd
-                << " marked as SUSPENDED ***" << std::endl;
-    }
   }
   
   /**
@@ -379,23 +337,11 @@ public:
     // Move all suspended events for this OSD pair back to the main queue
     auto it = suspended_events.find(to_osd);
     if (it != suspended_events.end()) {
-      if (verbose) {
-        std::cout << "*** Events FROM OSD." << from_osd << " TO OSD." << to_osd
-                  << " marked as UNSUSPENDED - restoring "
-                  << it->second.size() << " suspended events ***" << std::endl;
-      }
-      
       // Append suspended events to the main queue
       for (auto& event : it->second) {
         events.push_back(std::move(event));
       }
-      
       suspended_events.erase(it);
-    } else {
-      if (verbose) {
-        std::cout << "*** Events FROM OSD." << from_osd << " TO OSD." << to_osd
-                  << " marked as UNSUSPENDED ***" << std::endl;
-      }
     }
   }
   
@@ -436,4 +382,8 @@ public:
     std::cout << "  TOTAL: " << events_executed << std::endl;
   }
 };
+
+// Define the static variable
+// Initialized to -1 (no OSD currently executing)
+inline int EventLoop::current_executing_osd = -1;
 

@@ -130,6 +130,62 @@ TEST(LibCephFS, BasicLocking) {
   CLEANUP_CEPH();
 }
 
+TEST(LibCephFS, BasicLLLocking) {
+  struct ceph_mount_info *cmount = NULL;
+  STARTUP_CEPH();
+
+  char c_file[1024];
+  sprintf(c_file, "ll_flock_test_%d", getpid());
+  Fh *fh = NULL;
+  Inode *root = NULL, *inode = NULL;
+  struct ceph_statx stx;
+  UserPerm *perms = ceph_mount_perms(cmount);
+
+  ASSERT_EQ(0, ceph_ll_lookup_root(cmount, &root));
+  ASSERT_EQ(0, ceph_ll_create(cmount, root, c_file, fileMode,
+			      O_RDWR | O_CREAT, &inode, &fh, &stx,
+			      0, 0, perms));
+
+  // Lock exclusively twice
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_EX, 42));
+  ASSERT_EQ(-EAGAIN, ceph_ll_flock(cmount, fh, LOCK_EX | LOCK_NB, 43));
+  ASSERT_EQ(-EAGAIN, ceph_ll_flock(cmount, fh, LOCK_EX | LOCK_NB, 44));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_UN, 42));
+
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_EX | LOCK_NB, 43));
+  ASSERT_EQ(-EAGAIN, ceph_ll_flock(cmount, fh, LOCK_EX | LOCK_NB, 44));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_UN, 43));
+
+  // Lock shared three times
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_SH, 42));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_SH, 43));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_SH, 44));
+  // And then attempt to lock exclusively
+  ASSERT_EQ(-EAGAIN, ceph_ll_flock(cmount, fh, LOCK_EX | LOCK_NB, 45));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_UN, 42));
+  ASSERT_EQ(-EAGAIN, ceph_ll_flock(cmount, fh, LOCK_EX | LOCK_NB, 45));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_UN, 44));
+  ASSERT_EQ(-EAGAIN, ceph_ll_flock(cmount, fh, LOCK_EX | LOCK_NB, 45));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_UN, 43));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_EX | LOCK_NB, 45));
+  ASSERT_EQ(-EAGAIN, ceph_ll_flock(cmount, fh, LOCK_SH | LOCK_NB, 42));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_UN, 45));
+
+  // Lock shared with upgrade to exclusive (POSIX)
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_SH, 42));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_EX, 42));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_UN, 42));
+
+  // Lock exclusive with downgrade to shared (POSIX)
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_EX, 42));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_SH, 42));
+  ASSERT_EQ(0, ceph_ll_flock(cmount, fh, LOCK_UN, 42));
+
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
+  ASSERT_EQ(0, ceph_ll_unlink(cmount, root, c_file, perms));
+  CLEANUP_CEPH();
+}
+
 /* Locking in different threads */
 
 // Used by ConcurrentLocking test

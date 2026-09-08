@@ -10,9 +10,8 @@ import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
-import { RgwBucketDetailsComponent } from '../rgw-bucket-details/rgw-bucket-details.component';
+import { RgwBucketResourceSidebarComponent } from '../rgw-bucket-resource-sidebar/rgw-bucket-resource-sidebar.component';
 import { RgwBucketListComponent } from './rgw-bucket-list.component';
-import { ToastrModule } from 'ngx-toastr';
 
 describe('RgwBucketListComponent', () => {
   let component: RgwBucketListComponent;
@@ -21,14 +20,13 @@ describe('RgwBucketListComponent', () => {
   let rgwBucketServiceListSpy: jasmine.Spy;
 
   configureTestBed({
-    declarations: [RgwBucketListComponent, RgwBucketDetailsComponent],
+    declarations: [RgwBucketListComponent, RgwBucketResourceSidebarComponent],
     imports: [
       BrowserAnimationsModule,
       RouterTestingModule,
       SharedModule,
       NgbNavModule,
-      HttpClientTestingModule,
-      ToastrModule.forRoot()
+      HttpClientTestingModule
     ]
   });
 

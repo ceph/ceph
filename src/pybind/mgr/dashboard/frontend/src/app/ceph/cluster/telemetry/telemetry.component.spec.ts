@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of as observableOf } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
@@ -46,13 +46,7 @@ describe('TelemetryComponent', () => {
 
   configureTestBed({
     declarations: [TelemetryComponent],
-    imports: [
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      SharedModule,
-      ToastrModule.forRoot()
-    ]
+    imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule]
   });
 
   describe('configForm', () => {
@@ -294,7 +288,8 @@ describe('TelemetryComponent', () => {
       });
     });
 
-    it('should submit', () => {
+    it('should submit when telemetry is not yet enabled', () => {
+      component.moduleEnabled = false;
       component.onSubmit();
       const req1 = httpTesting.expectOne('api/telemetry');
       expect(req1.request.method).toBe('PUT');
@@ -311,6 +306,21 @@ describe('TelemetryComponent', () => {
         config: {}
       });
       req2.flush({});
+      expect(router.url).toBe('/');
+    });
+
+    it('should only update config when telemetry is already enabled', () => {
+      component.moduleEnabled = true;
+      component.onSubmit();
+      httpTesting.expectNone('api/telemetry');
+      const req = httpTesting.expectOne({
+        url: 'api/mgr/module/telemetry',
+        method: 'PUT'
+      });
+      expect(req.request.body).toEqual({
+        config: {}
+      });
+      req.flush({});
       expect(router.url).toBe('/');
     });
   });

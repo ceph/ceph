@@ -8,6 +8,7 @@ usr/bin/monmaptool
 usr/bin/osdmaptool
 usr/bin/ceph-kvstore-tool
 usr/libexec/ceph/ceph_common.sh
+usr/libexec/ceph/block-device-health
 usr/lib/ceph/erasure-code/*
 usr/lib/ceph/extblkdev/*
 usr/lib/rados-classes/*

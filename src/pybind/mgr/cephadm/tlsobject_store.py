@@ -119,6 +119,15 @@ class TLSObjectStore():
         else:
             return TLSObjectScope.UNKNOWN, None
 
+    def get_tlsobject_if_exists(self,
+                                obj_name: str,
+                                service_name: Optional[str] = None,
+                                host: Optional[str] = None) -> Optional[TLSObjectProtocol]:
+        try:
+            return self.get_tlsobject(obj_name, service_name, host)
+        except TLSObjectException:
+            return None
+
     def get_tlsobject(self, obj_name: str,
                       service_name: Optional[str] = None,
                       host: Optional[str] = None) -> Optional[TLSObjectProtocol]:

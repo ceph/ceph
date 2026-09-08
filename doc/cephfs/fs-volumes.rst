@@ -31,7 +31,7 @@ Requirements
 
 * Nautilus (14.2.x) or later Ceph release
 
-* Cephx client user (see :doc:`/rados/operations/user-management`) with
+* CephX client user (see :doc:`/rados/operations/user-management`) with
   at least the following capabilities::
 
     mon 'allow r'
@@ -44,19 +44,66 @@ Create a volume by running a command of the following form:
 
 .. prompt:: bash #
 
-   ceph fs volume create <vol_name> [placement] [--data-pool <data-pool-name>] [--meta-pool <metadata-pool-name>]
+   ceph fs volume create <vol_name>
 
 This creates a CephFS file system and its data and metadata pools. Alternately,
-if the data pool and/or metadata pool needed for creating a CephFS volume
-already exist, these pool names can be passed to this command so that the
-volume is created using these existing pools. This command can also deploy MDS
-daemons for the filesystem using a Ceph Manager orchestrator module (for
-example Rook). See :doc:`/mgr/orchestrator`.
+if the data pool and/or metadata pool for the new CephFS volume
+already exist, these pool names can be passed to the ``ceph fs`` command so that the
+volume is created using these existing pools.
 
+MDS services for the new CephFS filesystem (volume) may be deployed using the
+orchestrator. See :doc:`/mgr/orchestrator`.
+
+When using the cephadm orchestrator, an example service spec might look
+like the following, which assumes that the new volume is named ``zac`` and
+the orchestrator label ``zacmds`` has been asigned to at least two appropriate
+cluster nodes:
+
+.. prompt:: bash # auto
+
+   # cat <<EOF >/tmp/mds.zac.spec
+   service_type: mds
+   service_id: zac
+   service_name: mds.zac
+   placement:
+     count: 2
+     label: zacmds
+   EOF
+   # ceph orch apply -i /tmp/mds.zac.spec --dry-run
+   # echo validate the placement then run
+   # ceph orch apply -i /tmp/mds.zac.spec
+
+See also :ref:`orchestrator-cli-cephfs` for more information information
+regarding placement.
+
+When the cluster is running Ceph Tentacle (20.2.0) or later, one may condense these
+commands, placing and deploying MDS daemons for the filesystem using a Ceph Manager
+orchestrator module (cephadm or Rook). See :doc:`/mgr/orchestrator`.
 ``<vol_name>`` is the volume name (an arbitrary string). ``[placement]`` is an
 optional string that specifies the :ref:`orchestrator-cli-placement-spec` for
-the MDS. See also :ref:`orchestrator-cli-cephfs` for more examples on
+the MDS. See also :ref:`orchestrator-cli-cephfs` for more examples of
 placement.
+
+.. prompt:: bash #
+
+   ceph fs volume create <vol_name> [placement] [--data-pool <data-pool-name>] [--meta-pool <metadata-pool-name>]
+
+With either command form, the metadata pool must currently be replicated,
+and we recommend placing it, via an appropriate CRUSH rule, on SSD OSDs.
+The metadata pool may easily share SSD OSDs with other pools, as it
+stores relatively little data. That said, for this purpose, more but smaller
+OSDs are better than fewer but larger. Say you have four 7.6 TiB NVMe SSDs total: you
+will gain performance by splitting each into 3 or 4 OSDs.
+
+The first data pool may be erasure-coded, but we also recommend that it be
+replicated and placed on SSDs, which will often be the same OSDs as above. Then
+one or more additional data pools may be attached and client data directed
+to them via :doc:`/cephfs/file-layouts`.  The advantage of this strategy is
+that backtrace information is always stored in the first data pool, and
+provisioning that on faster media will greatly speed repair and other operations.
+As with the metadata pool, this will not consume much capacity and does not
+require dedicated OSDs. These additional data pools often are deployed with erasure
+coding and/or on cost-effective media such as HDDs or coarse-IU QLC SSDs.
 
 .. note:: Specifying placement via a YAML file is not supported through the
           volume interface.
@@ -72,8 +119,9 @@ tries to remove MDS daemons using the enabled Ceph Manager orchestrator module.
 
 .. note:: After volume deletion, we recommend restarting `ceph-mgr` if a new
    file system is created on the same cluster and the subvolume interface is
-   being used. See https://tracker.ceph.com/issues/49605#note-5 for more
-   details.
+   being used. The restart clears state that Manager modules may still hold
+   for the deleted volume, which can otherwise interfere with subvolume
+   operations on the new file system.
 
 .. note:: If the snap-schedule Ceph Manager module is being used for a volume
    and the volume is deleted, then the snap-schedule Ceph Manager module will
@@ -428,6 +476,15 @@ Use a command of the following form to resize a subvolume:
 This command resizes the subvolume quota, using the size specified by
 ``new_size``.  The ``--no_shrink`` flag prevents the subvolume from shrinking
 below the current "used size" of the subvolume.
+
+Resizing can also be done using human-friendly units::
+
+  ceph fs subvolume resize foo subvol1 100KiB
+  ceph fs subvolume resize foo subvol1 200.45KiB
+  ceph fs subvolume resize foo subvol1 300KB
+
+.. note:: Values will be strictly cast to IEC units even when SI units
+   are input, i.e. 1{K|KB|Ki|KiB} all translate to 1024 bytes.
 
 The subvolume can be resized to an unlimited (but sparse) logical size by
 passing ``inf`` or ``infinite`` as ``<new_size>``.
@@ -1116,9 +1173,8 @@ following command.
 Controlling Subvolume Snapshot Visibility
 -----------------------------------------
 
-.. note:: This functionality is currently supported only for FUSE/libcephfs clients.
-          Kernel client support is planned: progress can be tracked at
-          https://tracker.ceph.com/issues/72589.
+.. note:: This functionality is currently supported only for FUSE/libcephfs
+          clients. The kernel client does not yet support it.
 
 Snapshots of a subvolume can be hidden from compatible clients by
 performing two actions:
@@ -1369,7 +1425,7 @@ file system flushes to synchronize checkpoints across its distributed components
 no guarantee that all acknowledged writes will be part of a given snapshot.
 
 The subvolume quiesce feature has been developed to provide enterprise-level consistency guarantees
-for multi-client applications that work with one or more subvolumes. The feature makes it possible to pause IO
+for multi-client applications that work with one or more subvolumes. The feature makes it possible to pause I/O
 to a set of subvolumes of a given volume (file system). Enforcing such a pause across all clients makes
 it possible to guarantee that any persistent checkpoints reached by the application before the pause
 will be recoverable from the snapshots made during the pause.
@@ -1380,7 +1436,7 @@ This pause is called a `quiesce`, which is also used as the command name:
 .. prompt:: bash $ auto
 
   $ ceph fs quiesce <vol_name> --set-id myset1 <[group_name/]sub_name...> --await
-  # perform actions while the IO pause is active, like taking snapshots
+  # perform actions while the I/O pause is active, like taking snapshots
   $ ceph fs quiesce <vol_name> --set-id myset1 --release --await
   # if successful, all members of the set were confirmed as still paused and released
 
@@ -1402,7 +1458,7 @@ A quiesce set can be manipulated in the following ways:
 * **cancel** the set, asynchronously aborting the pause on all its current members
 * **release** the set, requesting the end of the pause from all members and expecting an ack from all clients
 * **query** the current state of a set by id or all active sets or all known sets
-* **cancel all** active sets in case an immediate resume of IO is required.
+* **cancel all** active sets in case an immediate resume of I/O is required.
 
 The operations listed above are non-blocking: they attempt the intended modification
 and return with an up-to-date version of the target set, whether the operation was successful or not.
@@ -1667,7 +1723,7 @@ Quiesce-Await and Expiration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Quiesce await has a side effect: it resets the internal expiration timer. This allows for a watchdog
-approach to a long running multistep process under the IO pause by repeatedly ``--await``\ ing an already
+approach to a long running multistep process under the I/O pause by repeatedly ``--await``\ ing an already
 `QUIESCED` set. Consider the following example script:
 
 .. prompt:: bash # auto
@@ -1688,14 +1744,14 @@ The goal of the script is to take consistent snapshots of 3 subvolumes.
 We begin by setting the bash ``-e`` option `(1)` to exit this script if any or the following commands
 returns with a non-zero status.
 
-We go on requesting an IO pause for the three subvolumes `(2)`. We set our timeouts allowing
+We go on requesting an I/O pause for the three subvolumes `(2)`. We set our timeouts allowing
 the system to spend up to 30 seconds reaching the quiesced state across all members
-and stay quiesced for up to 10 seconds before the quiesce expires and the IO
+and stay quiesced for up to 10 seconds before the quiesce expires and the I/O
 is resumed. We also specify ``--await`` to only proceed once the quiesce is reached.
 
 We then proceed with a set of command pairs that take the next snapshot and call ``--await`` on our set
 to extend the expiration timeout for 10 more seconds `(3,4)`. This approach gives us up to 10 seconds
-for every snapshot, but also allows taking as many snapshots as we need without losing the IO pause,
+for every snapshot, but also allows taking as many snapshots as we need without losing the I/O pause,
 and with it - consistency. If we wanted, we could update the `expiration` every time we called for await.
 
 If any of the snapshots gets stuck and takes longer than 10 seconds to complete, then the next call
@@ -1720,7 +1776,7 @@ a concurrent change of the set by another client. Consider this example:
   # ceph fs quiesce fs1 --set-id="snapshots" --release --await  # (5)
 
 The sequence looks good, and the release `(5)` completes successfully. However, it could be that
-before snap for sub3 `(4)` is taken, another session excludes sub3 from the set, resuming its IOs
+before snap for sub3 `(4)` is taken, another session excludes sub3 from the set, resuming its I/Os
 
 .. prompt:: bash # auto
 

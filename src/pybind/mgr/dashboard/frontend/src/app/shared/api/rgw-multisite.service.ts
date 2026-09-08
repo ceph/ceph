@@ -32,8 +32,7 @@ export class RgwMultisiteService {
         zone_name: zone.name,
         zonegroup_endpoints: zonegroup.endpoints,
         zone_endpoints: zone.endpoints,
-        username: username,
-        tier_type: zone.tier_type
+        username: username
       });
       return this.http.put(`${this.uiUrl}/migrate`, null, { params: params });
     });
@@ -50,40 +49,47 @@ export class RgwMultisiteService {
   }
 
   getSyncPolicy(bucketName?: string, zonegroup?: string, fetchAllPolicy = false) {
-    let params = new HttpParams();
-    if (bucketName) {
-      params = params.append('bucket_name', bucketName);
-    }
-    if (zonegroup) {
-      params = params.append('zonegroup_name', zonegroup);
-    }
-    // fetchAllPolicy - if true, will fetch all the policy either linked or not linked with the buckets
-    params = params.append('all_policy', fetchAllPolicy);
-    return this.http.get(`${this.url}/sync-policy`, { params });
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      if (bucketName) {
+        params = params.append('bucket_name', bucketName);
+      }
+      if (zonegroup) {
+        params = params.append('zonegroup_name', zonegroup);
+      }
+      // fetchAllPolicy - if true, will fetch all the policy either linked or not linked with the buckets
+      params = params.append('all_policy', fetchAllPolicy);
+      return this.http.get(`${this.url}/sync-policy`, { params });
+    });
   }
 
   getSyncPolicyGroup(group_id: string, bucket_name?: string) {
-    let params = new HttpParams();
-    if (bucket_name) {
-      params = params.append('bucket_name', bucket_name);
-    }
-    return this.http.get(`${this.url}/sync-policy-group/${group_id}`, { params });
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      if (bucket_name) {
+        params = params.append('bucket_name', bucket_name);
+      }
+      return this.http.get(`${this.url}/sync-policy-group/${group_id}`, { params });
+    });
   }
 
   createSyncPolicyGroup(payload: { group_id: string; status: string; bucket_name?: string }) {
-    return this.http.post(`${this.url}/sync-policy-group`, payload);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.post(`${this.url}/sync-policy-group`, payload, { params: params });
+    });
   }
 
   modifySyncPolicyGroup(payload: { group_id: string; status: string; bucket_name?: string }) {
-    return this.http.put(`${this.url}/sync-policy-group`, payload);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.put(`${this.url}/sync-policy-group`, payload, { params: params });
+    });
   }
 
   removeSyncPolicyGroup(group_id: string, bucket_name?: string) {
-    let params = new HttpParams();
-    if (bucket_name) {
-      params = params.append('bucket_name', bucket_name);
-    }
-    return this.http.delete(`${this.url}/sync-policy-group/${group_id}`, { params });
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      if (bucket_name) {
+        params = params.append('bucket_name', bucket_name);
+      }
+      return this.http.delete(`${this.url}/sync-policy-group/${group_id}`, { params });
+    });
   }
 
   setUpMultisiteReplication(
@@ -91,11 +97,11 @@ export class RgwMultisiteService {
     zonegroupName: string,
     zonegroupEndpoints: string,
     zoneName: string,
-    tierType: string,
     zoneEndpoints: string,
     username: string,
     cluster?: string,
     replicationZoneName?: string,
+    secondaryTierType?: string,
     clusterDetailsArray?: any,
     selectedRealmName?: string
   ) {
@@ -104,7 +110,6 @@ export class RgwMultisiteService {
       .set('zonegroup_name', zonegroupName)
       .set('zonegroup_endpoints', zonegroupEndpoints)
       .set('zone_name', zoneName)
-      .set('tier_type', tierType)
       .set('zone_endpoints', zoneEndpoints)
       .set('username', username);
 
@@ -124,46 +129,55 @@ export class RgwMultisiteService {
       params = params.set('selectedRealmName', selectedRealmName);
     }
 
+    if (secondaryTierType) {
+      params = params.set('secondary_tier_type', secondaryTierType);
+    }
+
     return this.http.post(`${this.uiUrl}/multisite-replications`, null, { params: params });
   }
 
   createEditSyncFlow(payload: any) {
-    return this.http.put(`${this.url}/sync-flow`, payload);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.put(`${this.url}/sync-flow`, payload, { params: params });
+    });
   }
 
   removeSyncFlow(flow_id: string, flow_type: string, group_id: string, bucket_name?: string) {
-    let params = new HttpParams();
-    if (bucket_name) {
-      params = params.append('bucket_name', encodeURIComponent(bucket_name));
-    }
-    return this.http.delete(
-      `${this.url}/sync-flow/${encodeURIComponent(flow_id)}/${flow_type}/${encodeURIComponent(
-        group_id
-      )}`,
-      { params }
-    );
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      if (bucket_name) {
+        params = params.append('bucket_name', encodeURIComponent(bucket_name));
+      }
+      return this.http.delete(
+        `${this.url}/sync-flow/${encodeURIComponent(flow_id)}/${flow_type}/${encodeURIComponent(
+          group_id
+        )}`,
+        { params }
+      );
+    });
   }
 
   createEditSyncPipe(payload: any, user?: string, mode?: string) {
-    let params = new HttpParams();
-    if (user) {
-      params = params.append('user', user);
-    }
-    if (mode) {
-      params = params.append('mode', mode);
-    }
-    return this.http.put(`${this.url}/sync-pipe`, payload, { params });
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      if (user) {
+        params = params.append('user', user);
+      }
+      if (mode) {
+        params = params.append('mode', mode);
+      }
+      return this.http.put(`${this.url}/sync-pipe`, payload, { params });
+    });
   }
 
   removeSyncPipe(pipe_id: string, group_id: string, bucket_name?: string) {
-    let params = new HttpParams();
-    if (bucket_name) {
-      params = params.append('bucket_name', encodeURIComponent(bucket_name));
-    }
-    return this.http.delete(
-      `${this.url}/sync-pipe/${encodeURIComponent(group_id)}/${encodeURIComponent(pipe_id)}`,
-      { params }
-    );
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      if (bucket_name) {
+        params = params.append('bucket_name', encodeURIComponent(bucket_name));
+      }
+      return this.http.delete(
+        `${this.url}/sync-pipe/${encodeURIComponent(group_id)}/${encodeURIComponent(pipe_id)}`,
+        { params }
+      );
+    });
   }
 
   setRestartGatewayMessage(value: boolean): void {

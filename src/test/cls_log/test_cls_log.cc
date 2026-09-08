@@ -10,6 +10,7 @@
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
 
 #include <errno.h>
 #include <string>
@@ -20,25 +21,14 @@ using namespace std::literals;
 
 using ceph::real_time;
 using ceph::real_clock;
+using ceph::test::PoolType;
+using ceph::test::pool_type_name;
+using ceph::test::create_pool_by_type;
+using ceph::test::destroy_pool_by_type;
 
 /// creates a temporary pool and initializes an IoCtx for each test
-class cls_log : public ::testing::Test {
-  librados::Rados rados;
-  std::string pool_name;
- protected:
-  librados::IoCtx ioctx;
-
-  void SetUp() {
-    pool_name = get_temp_pool_name();
-    /* create pool */
-    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
-  }
-  void TearDown() {
-    /* remove pool */
-    ioctx.close();
-    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
-  }
+class TestClsLog : public ceph::test::ClsTestFixture {
+  // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
 };
 
 static int read_bl(bufferlist& bl, int *i)
@@ -142,7 +132,7 @@ static int log_list(librados::IoCtx& ioctx, const std::string& oid,
   return log_list(ioctx, oid, from, to, 0, entries, &truncated);
 }
 
-TEST_F(cls_log, test_log_add_same_time)
+TEST_P(TestClsLog, test_log_add_same_time)
 {
   /* add chains */
   string oid = "obj";
@@ -203,7 +193,7 @@ TEST_F(cls_log, test_log_add_same_time)
   }
 }
 
-TEST_F(cls_log, test_log_add_different_time)
+TEST_P(TestClsLog, test_log_add_different_time)
 {
   /* add chains */
   string oid = "obj";
@@ -288,7 +278,7 @@ int do_log_trim(librados::IoCtx& ioctx, const std::string& oid,
   return ioctx.operate(oid, &op);
 }
 
-TEST_F(cls_log, trim_by_time)
+TEST_P(TestClsLog, trim_by_time)
 {
   /* add chains */
   string oid = "obj";
@@ -323,7 +313,7 @@ TEST_F(cls_log, trim_by_time)
   }
 }
 
-TEST_F(cls_log, trim_by_marker)
+TEST_P(TestClsLog, trim_by_marker)
 {
   string oid = "obj";
   ASSERT_EQ(0, ioctx.create(oid, true));
@@ -383,3 +373,10 @@ TEST_F(cls_log, trim_by_marker)
     ASSERT_EQ(-ENODATA, do_log_trim(ioctx, oid, from, to));
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(, TestClsLog,
+    ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+    [](const ::testing::TestParamInfo<PoolType>& info) {
+      return pool_type_name(info.param);
+    }
+);

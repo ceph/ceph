@@ -75,7 +75,7 @@ export class DeviceListComponent implements OnChanges, OnInit {
         isHidden: true
       },
       { prop: 'location', name: $localize`Device Name`, cellTemplate: this.locationTemplate },
-      { prop: 'daemons', name: $localize`Daemons`, cellTemplate: this.daemonNameTemplate }
+      { prop: 'daemons', name: $localize`Service instances`, cellTemplate: this.daemonNameTemplate }
     ];
   }
 

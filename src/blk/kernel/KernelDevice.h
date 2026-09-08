@@ -97,9 +97,7 @@ private:
   void _aio_thread();
   void _discard_thread(DiscardThread* thr);
   bool _queue_discard(interval_set<uint64_t> &to_release);
-  bool try_discard(interval_set<uint64_t> &to_release,
-                   bool async = true,
-                   bool force = false) override;
+  int _discard(uint64_t offset, uint64_t len);
 
   int _aio_start();
   void _aio_stop();
@@ -146,9 +144,10 @@ public:
     return 0;
   }
   int get_devices(std::set<std::string> *ls) const override;
+  int refresh_size() override;
 
   int get_ebd_state(ExtBlkDevState &state) const override;
-  int get_ebd_id(std::string& id) const override;
+  int detect_ebd(std::string& id) override;
 
   int read(uint64_t off, uint64_t len, ceph::buffer::list *pbl,
 	   IOContext *ioc,
@@ -163,7 +162,12 @@ public:
 		bool buffered,
 		int write_hint = WRITE_LIFE_NOT_SET) override;
   int flush() override;
-  int _discard(uint64_t offset, uint64_t len);
+
+  bool try_discard(interval_set<uint64_t> &to_release,
+                   bool async = true,
+                   bool force = false) override;
+
+  void collect_alerts(osd_alert_list_t& alerts, const std::string& device_name) override;
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;

@@ -165,15 +165,23 @@ class PerfHandler:
         for query_id in query[QUERY_IDS]:
             res = self.module.get_osd_perf_counters(query_id)
             for counter in res['counters']:
-                # replace pool id from object name if it exists
                 k = counter['k']
-                pool_id = int(k[2][0]) if k[2][0] else int(k[0][0])
+                data_pool_id = int(k[0][0])
                 namespace = k[1][0]
                 image_id = k[2][1]
+                # The metadata pool id is encoded in the object name
+                # for images with a separate data pool (e.g. EC).
+                pool_id = int(k[2][0]) if k[2][0] else data_pool_id
 
-                # ignore metrics from non-matching pools/namespaces
-                if pool_id not in pool_id_map:
+                # Filter by data pool (where I/O takes place)
+                if data_pool_id not in pool_id_map:
                     continue
+
+                # Ensure metadata pool is in pool_id_map for display
+                # and image name resolution
+                if pool_id not in pool_id_map:
+                    pool_id_map[pool_id] = self.module.rados.pool_reverse_lookup(
+                        pool_id)
                 if pool_key[1] is not None and pool_key[1] != namespace:
                     continue
 

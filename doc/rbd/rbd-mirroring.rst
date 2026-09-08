@@ -531,7 +531,7 @@ For example::
         $ rbd --cluster site-a mirror pool promote image-pool
 
 .. tip:: Since the primary / non-primary status is per-image, it is possible to
-   have two clusters split the IO load and stage failover / failback.
+   have two clusters split the I/O load and stage failover / failback.
 
 .. note:: Promotion can be forced using the ``--force`` option. Forced
    promotion is needed when the demotion cannot be propagated to the peer
@@ -557,6 +557,10 @@ For example::
 .. note:: The ``rbd`` command only flags the image as requiring a resync. The
    local cluster's ``rbd-mirror`` daemon process is responsible for performing
    the resync asynchronously.
+
+.. note:: For snapshot-based mirroring, resync replicates the image contents
+   only up to the most recent mirror-snapshot. Create a new mirror-snapshot on
+   the primary image to sync the latest updates.
 
 Mirror Status
 =============

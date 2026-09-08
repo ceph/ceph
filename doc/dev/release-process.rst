@@ -54,31 +54,72 @@ A hotfix release has a couple differences.
 5. Notify the "Build Lead" to start the build.
 6. The "Build Lead" should set ``RELEASE_TYPE=HOTFIX`` instead of ``STABLE``.
 
+
 Security Release Process Deviation
 ----------------------------------
 
 A security/CVE release is similar to a hotfix release with two differences:
 
-    1. The fix should be pushed to the `ceph-private <https://github.com/ceph/ceph-private>`_ repo instead of ceph.git (requires GitHub Admin Role).
-    2. The tags (e.g., v19.2.3) must be manually pushed to ceph.git by the "Build Lead."
+#. The fix is pushed to the `ceph-private
+   <https://github.com/ceph/ceph-private>`_ repo instead of ceph.git (requires
+   GitHub Admin Role or membership in the `ceph/security
+   <https://github.com/orgs/ceph/teams/security>`_ GitHub team).
+#. The tags (e.g., v19.2.3) must be manually pushed to ceph.git by the "Build
+   Lead."
 
-1. Check out the most recent tag. For example, if we're releasing a security fix on top of 19.2.2, ``git checkout -f -B squid-release origin/v19.2.2``
-2. ``git cherry-pick -x`` the necessary security fix commits
-3. ``git remote add security git@github.com:ceph/ceph-private.git``
-4. ``git push -f security squid-release``
-5. Notify the "Build Lead" to start the build.
-6. The "Build Lead" should set ``RELEASE_TYPE=SECURITY`` instead of ``STABLE``.
-7. Finally, the `ceph-tag <https://github.com/ceph/ceph-build/blob/main/ansible/roles/ceph-release/tasks/push.yml>`_ steps need to be manually run by the "Build Lead" as close to the Announcement time as possible::
+The release must be built from the exact commits that were built and tested in
+the advisory fork (see :ref:`build and test cve`). Do **not** cherry-pick the
+fix commits onto a new branch; that rewrites their sha1s and the release would
+no longer match what was tested.
 
-    # Example using squid pretending 19.2.3 is the security release version
-    # Add the ceph-releases repo (also requires GitHub Admin Role). The `ceph-setup <https://jenkins.ceph.com/job/ceph-setup>`_ job will have already created and pushed the tag to ceph-releases.git.
-    git remote add releases git@github.com:ceph/ceph-releases.git
-    git fetch --all
-    # Check out the version commit
-    git checkout -f -B squid-release releases/squid-release
-    git push -f origin squid-release
-    git push origin v19.2.3
-    # Now create a Pull Request of squid-release targeting squid to merge the version commit and security fixes back into the squid branch
+#. Add the ceph-private repo to your remotes and fetch the security fix
+   branch that should already be pushed there by the developer(s)
+   working on the fix:
+
+   .. prompt:: bash $
+
+      git remote add private git@github.com:ceph/ceph-private.git
+
+      git fetch private
+
+#. Point the release branch at the security fix branch. For example, if we're
+   releasing a security fix on top of 19.2.2:
+
+   .. prompt:: bash $
+
+      git checkout -f -B squid-release private/$BRANCH_NAME
+
+#. Push the release branch to ceph-private:
+
+   .. prompt:: bash $
+
+      git push -f private squid-release
+
+#. Notify the "Build Lead" to start the build.
+
+#. The "Build Lead" should set ``RELEASE_TYPE=SECURITY`` instead of
+   ``STABLE``.
+
+#. Finally, the `ceph-tag
+   <https://github.com/ceph/ceph-build/blob/main/ansible/roles/ceph-release/tasks/push.yml>`_
+   steps need to be manually run by the "Build Lead" as close to the
+   Announcement time as possible. The `ceph-setup
+   <https://jenkins.ceph.com/job/ceph-setup/>`_ job will have already created
+   and pushed the tag to ceph-releases.git. Example using squid, pretending
+   19.2.3 is the security release version:
+
+   .. prompt:: bash $
+
+      # Add the ceph-releases repo (also requires GitHub Admin Role)
+      git remote add releases git@github.com:ceph/ceph-releases.git
+      git fetch --all
+      # Check out the version commit
+      git checkout -f -B squid-release releases/squid-release
+      git push -f origin squid-release
+      git push origin v19.2.3
+
+   Now create a Pull Request of ``squid-release`` targeting ``squid`` to merge
+   the version commit and security fixes back into the ``squid`` branch.
 
 1. Preparing the release branch
 ===============================
@@ -87,8 +128,8 @@ Once QE has determined a stopping point in the working (e.g., ``squid``) branch,
 
 Notify the "Build Lead" that the release branch is ready.
 
-2. Starting the build
-=====================
+2a. Starting the build
+======================
 
 We'll use a stable/regular 19.2.2 release of Squid as an example throughout this document.
 
@@ -104,24 +145,51 @@ We'll use a stable/regular 19.2.2 release of Squid as an example throughout this
 
 NOTE: if for some reason the build has to be restarted (for example if one distro failed) then the ``TAG`` option has to be unchecked.
 
-4. Use https://docs.ceph.com/en/latest/start/os-recommendations/?highlight=debian#platforms to determine the ``DISTROS`` parameter.  For example,
+4. Use :ref:`start-platforms` to determine the ``DISTROS`` parameter.  For example,
 
-    +-------------------+--------------------------------------------------+
-    | Release           | Distro Codemap                                   |
-    +===================+==================================================+
-    | pacific (16.X.X)  | ``focal bionic buster bullseye``                 |
-    +-------------------+--------------------------------------------------+
-    | quincy (17.X.X)   | ``jammy focal centos9 bullseye``                 |
-    +-------------------+--------------------------------------------------+
-    | reef (18.X.X)     | ``jammy focal centos9 windows bookworm``         |
-    +-------------------+--------------------------------------------------+
-    | squid (19.X.X)    | ``jammy centos9 windows bookworm``               |
-    +-------------------+--------------------------------------------------+
-    | tentacle (20.X.X) | ``jammy centos9 noble windows bookworm rocky10`` |
-    +-------------------+--------------------------------------------------+
+    +-------------------+---------------------------------------------------------+
+    | Release           | Distro Codemap                                          |
+    +===================+=========================================================+
+    | squid (19.X.X)    | ``jammy centos9 windows bookworm``                      |
+    +-------------------+---------------------------------------------------------+
+    | tentacle (20.X.X) | ``jammy centos9 rocky10 windows bookworm``              |
+    +-------------------+---------------------------------------------------------+
+    | umbrella (21.X.X) | ``jammy noble centos9 rocky10 bookworm trixie windows`` |
+    +-------------------+---------------------------------------------------------+
 
 
 5. Click ``Build``.
+
+2b. What to do if your build fails
+==================================
+
+The ceph-release-pipeline parent job has three stages.
+
+If your build fails during the "create ceph release tag" stage, troubleshoot the child ceph-tag job and re-run the parent ceph-release-pipeline job with the same parameters.
+
+----
+
+If your build fails during the "package build" stage, troubleshoot the child ceph-dev-pipeline job.  If only one variant failed to build (e.g., centos9 arm64), start a new ceph-release-pipeline job specifying::
+
+    DISTROS=centos9
+    ARCHS=arm64
+    TAG=false <-- VERY IMPORTANT
+
+This will leave the version commit and previously-created tag intact in ceph-releases.git.  You will want the subsequent ceph-dev-pipeline job to reuse that SHA/tag.
+
+Once all of your variants are successfully built, you will have to manually run the ceph-tag job.  For example,::
+
+    BRANCH=tentacle
+    TAG=true
+    TAG_PHASE=push
+    VERSION=20.2.0
+    RELEASE_TYPE=STABLE
+
+Then proceed with the normal release process.
+
+----
+
+If your build fails during the "push ceph release tag" stage, troubleshoot the child ceph-tag job and re-run **just** the ceph-tag job again manually.  Do not re-run ceph-release-pipeline.
 
 3. Release Notes
 ================
@@ -178,18 +246,57 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    .. prompt:: bash
 
-      merfi gpg /opt/repos/ceph/squid-19.2.2/debian/
+      sign-debs ceph squid
 
    Example::
 
+      + project=ceph
+      + releases=(squid)
+      + distro_versions=(jessie)
+      + for release in "${releases[@]}"
+      + for distro_version in "${distro_versions[@]}"
+      + for path in /opt/repos/ceph/squid*
+      + '[' -d /opt/repos/ceph/squid-19.2.2/debian/jessie ']'
+      + needs_signing=0
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
+      + needs_signing=1
+      + break
+      + '[' 1 -eq 0 ']'
+      + echo 'Signing: /opt/repos/ceph/squid-19.2.2/debian/jessie'
+      Signing: /opt/repos/ceph/squid-19.2.2/debian/jessie
+      + merfi gpg /opt/repos/ceph/squid-19.2.2/debian/jessie
       --> Starting path collection, looking for files to sign
-      --> 1 repos found
+      --> 2 repos found
       --> signing: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
       --> Running command: gpg --batch --yes --armor --detach-sig --output Release.gpg Release
       --> Running command: gpg --batch --yes --clearsign --output InRelease Release
       --> signing: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release
       --> Running command: gpg --batch --yes --armor --detach-sig --output Release.gpg Release
       --> Running command: gpg --batch --yes --clearsign --output InRelease Release
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/Release.gpg
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/InRelease
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/InRelease'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/bookworm/InRelease
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release.gpg /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release.gpg'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/Release.gpg
+      + gpg --verify /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/InRelease
+      gpg: Signature made Thu May 14 12:00:00 2026 UTC
+      gpg:                using RSA key 460F3994
+      gpg: Good signature from "Ceph Release Key <security@ceph.com>"
+      + echo 'verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/InRelease'
+      verifying: /opt/repos/ceph/squid-19.2.2/debian/jessie/dists/jammy/InRelease
 
       etc...
 

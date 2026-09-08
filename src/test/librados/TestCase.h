@@ -70,18 +70,28 @@ struct RadosTestECNSCleanup : public RadosTestECNS {
  * Since pool creation and deletion is slow, this allows many tests to
  * run faster.
  */
-class RadosTest : public ::testing::Test {
+class RadosTestBase {
+public:
+  RadosTestBase() = default;
+  ~RadosTestBase() = default;
+protected:
+  static void cleanup_default_namespace(rados_ioctx_t ioctx);
+  static void cleanup_namespace(rados_ioctx_t ioctx, std::string ns);
+};
+
+class RadosTest : public RadosTestBase,
+                  public ::testing::TestWithParam<bool> {
 public:
   RadosTest(bool c=false) : cleanup(c) {}
   ~RadosTest() override {}
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
-  static void cleanup_default_namespace(rados_ioctx_t ioctx);
-  static void cleanup_namespace(rados_ioctx_t ioctx, std::string ns);
   static rados_t s_cluster;
-  static std::string pool_name;
+  static std::string pool_name_default;
+  static std::string pool_name_split;
 
+  std::string pool_name;
   void SetUp() override;
   void TearDown() override;
   rados_t cluster = nullptr;
@@ -90,7 +100,8 @@ protected:
   bool cleanup;
 };
 
-class RadosTestEC : public RadosTest {
+class RadosTestEC : public RadosTestBase,
+                    public ::testing::TestWithParam<std::tuple<bool, bool>> {
 public:
   RadosTestEC(bool c=false) : cleanup(c) {}
   ~RadosTestEC() override {}
@@ -98,8 +109,11 @@ protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
   static rados_t s_cluster;
-  static std::string pool_name;
+  static std::string pool_name_default;
+  static std::string pool_name_fast;
+  static std::string pool_name_fast_split;
 
+  std::string pool_name;
   void SetUp() override;
   void TearDown() override;
   rados_t cluster = nullptr;

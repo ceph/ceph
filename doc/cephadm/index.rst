@@ -40,6 +40,7 @@ support older versions of Ceph.
 
     compatibility
     install
+    docker-live-restore
     adoption
     host-management
     Service Management <services/index>
@@ -49,3 +50,4 @@ support older versions of Ceph.
     Client Setup <client-setup>
     troubleshooting
     Cephadm Feature Planning <../dev/cephadm/index>
+    version-tracker

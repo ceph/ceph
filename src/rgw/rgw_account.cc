@@ -21,6 +21,7 @@
 #include "common/random_string.h"
 #include "common/utf8.h"
 
+#include "rgw_arn.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_quota.h"
 #include "rgw_role.h"
@@ -99,6 +100,12 @@ bool validate_name(std::string_view name, std::string* err_msg)
     return false;
   }
   return true;
+}
+
+ARN root_arn(std::string id)
+{
+  const std::string region; // empty
+  return {Partition::aws, Service::iam, region, std::move(id), "root"};
 }
 
 
@@ -415,13 +422,13 @@ int remove(const DoutPrefixProvider* dpp,
     return -ENOTEMPTY;
   }
 
-  for (const auto& info : providers) {
-    ret = driver->delete_oidc_provider(dpp, y, info.tenant, info.provider_url);
+  for (const auto& oidc : providers) {
+    ret = driver->delete_oidc_provider(dpp, y, info.id, oidc.provider_url);
     if (ret < 0) {
-      err_msg = fmt::format("unable to delete oidc provider {}", info.provider_url);
+      err_msg = fmt::format("unable to delete oidc provider {}", oidc.provider_url);
       return ret;
     }
-    ldpp_dout_fmt(dpp, 1, "Deleted account oidc provider {}", info.provider_url);
+    ldpp_dout_fmt(dpp, 1, "Deleted account oidc provider {}", oidc.provider_url);
   }
 
   rgw::sal::TopicList topics;

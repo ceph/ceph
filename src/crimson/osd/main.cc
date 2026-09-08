@@ -60,7 +60,7 @@ seastar::future<> make_keyring()
       return seastar::now();
     } else {
       CephContext temp_cct{};
-      auth.key.create(&temp_cct, CEPH_CRYPTO_AES);
+      auth.key.create(&temp_cct, CEPH_CRYPTO_AES256KRB5);
       keyring.add(name, auth);
       bufferlist bl;
       keyring.encode_plaintext(bl);
@@ -74,20 +74,6 @@ seastar::future<> make_keyring()
   });
 }
 
-static std::ofstream maybe_set_logger()
-{
-  std::ofstream log_file_stream;
-  if (auto log_file = local_conf()->log_file; !log_file.empty()) {
-    log_file_stream.open(log_file, std::ios::app | std::ios::out);
-    try {
-      seastar::throw_system_error_on(log_file_stream.fail());
-    } catch (const std::system_error& e) {
-      ceph_abort_msg(fmt::format("unable to open log file: {}", e.what()));
-    }
-    logger().set_ostream(log_file_stream);
-  }
-  return log_file_stream;
-}
 
 int main(int argc, const char* argv[])
 {
@@ -104,7 +90,7 @@ int main(int argc, const char* argv[])
   INFO("early config parsed successfully");
 
   auto seastar_n_early_args = early_config.get_early_args();
-  auto config_proxy_args = early_config.get_ceph_args();
+  auto config_proxy_args = early_config.ceph_args;
 
   INFO("initializing seastar app_template");
   seastar::app_template::config app_cfg;
@@ -168,10 +154,24 @@ int main(int argc, const char* argv[])
           DEBUG("parsing config files");
           local_conf().parse_config_files(early_config.conf_file_list).get();
           local_conf().parse_env().get();
-          local_conf().parse_argv(config_proxy_args).get();
+          local_conf().parse_argv(std::move(config_proxy_args)).get();
 
           DEBUG("initializing logger output");
-          auto log_file_stream = maybe_set_logger();
+          std::ofstream log_file_stream;
+          if (auto log_file = local_conf()->log_file; !log_file.empty()) {
+            // seastar::logger::do_log() writes to _out from every shard's thread
+            // with no lock. std::cerr is safe because it is unbuffered; a buffered
+            // ofstream is not. Disable buffering so each write() is a single syscall,
+            // matching cerr's thread-safety guarantee.
+            log_file_stream.rdbuf()->pubsetbuf(nullptr, 0);
+            log_file_stream.open(log_file, std::ios::app | std::ios::out);
+            try {
+              seastar::throw_system_error_on(log_file_stream.fail());
+            } catch (const std::system_error& e) {
+              ceph_abort_msg(fmt::format("unable to open log file: {}", e.what()));
+            }
+            logger().set_ostream(log_file_stream);
+          }
           auto reset_logger = seastar::defer([] {
             logger().set_ostream(std::cerr);
           });
@@ -263,6 +263,15 @@ int main(int argc, const char* argv[])
               DEBUG("uuid not specified, generating random osd uuid");
               // use a random osd uuid if not specified
               osd_uuid.generate_random();
+            }
+            if (auto c = local_conf().get_val<uint64_t>("seastore_cold_devices_count");
+                c != 0) {
+              auto root = local_conf().get_val<std::string>("osd_data");
+              for (size_t i = 1; i <= c; i++) {
+                auto path = fmt::format("{}/block.{}", root, i);
+                seastar::touch_directory(path).get();
+              }
+              seastar::sync_directory(root).get();
             }
             osd.mkfs(
 	      *store,

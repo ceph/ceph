@@ -10,10 +10,6 @@ add_executable(ceph_test_neorados_start_stop start_stop.cc)
 target_link_libraries(ceph_test_neorados_start_stop global libneorados
   ${unittest_libs})
 
-add_executable(ceph_test_neorados_completions completions.cc)
-target_link_libraries(ceph_test_neorados_completions Boost::boost pthread
-  ${unittest_libs})
-
 add_executable(ceph_test_neorados_op_speed op_speed.cc)
 target_link_libraries(ceph_test_neorados_op_speed
   libneorados ${FMT_LIB} ${unittest_libs})
@@ -21,6 +17,13 @@ target_link_libraries(ceph_test_neorados_op_speed
 add_library(neoradostest-support STATIC common_tests.cc)
 target_link_libraries(neoradostest-support
   libneorados ${FMT_LIB} GTest::GTest)
+
+add_executable(ceph_test_neorados_completions completions.cc)
+target_link_libraries(ceph_test_neorados_completions
+  libneorados neoradostest-support GTest::Main)
+install(TARGETS
+  ceph_test_neorados_completions
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_executable(ceph_test_neorados_list_pool list_pool.cc)
 target_link_libraries(ceph_test_neorados_list_pool
@@ -232,4 +235,11 @@ target_link_libraries(ceph_test_neorados_watch_notify
   )
 install(TARGETS
   ceph_test_neorados_watch_notify
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_leak_watch_notify leak_watch_notify.cc)
+target_link_libraries(ceph_test_neorados_leak_watch_notify global libneorados
+  neoradostest-support ${unittest_libs})
+install(TARGETS
+  ceph_test_neorados_leak_watch_notify
   DESTINATION ${CMAKE_INSTALL_BINDIR})

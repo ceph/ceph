@@ -7,6 +7,8 @@
 .. confval:: mds_cache_mid
 .. confval:: mds_allow_batched_ops
 .. confval:: mds_dir_max_commit_size
+.. confval:: mds_dir_prefetch_backend
+.. confval:: mds_dir_prefetch_backend_max
 .. confval:: mds_dir_max_entries
 .. confval:: mds_decay_halflife
 .. confval:: mds_beacon_interval
@@ -68,3 +70,12 @@
 .. confval:: mds_symlink_recovery
 .. confval:: mds_extraordinary_events_dump_interval
 .. confval:: subv_metrics_window_interval
+
+The following options control the dmClock QoS scheduler for client
+metadata requests. See :ref:`mds-qos` for an explanation of the
+feature and a worked example.
+
+.. confval:: mds_dmclock_enable
+.. confval:: mds_dmclock_reservation
+.. confval:: mds_dmclock_weight
+.. confval:: mds_dmclock_limit

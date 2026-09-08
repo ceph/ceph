@@ -333,7 +333,7 @@ class Schedule:
     @staticmethod
     def _compute_phase_offset_minutes(entity_id: str, period_minutes: int) -> int:
         key = entity_id + "|" + str(period_minutes)
-        h = hashlib.md5(key.encode("utf-8")).hexdigest()
+        h = hashlib.md5(key.encode("utf-8"), usedforsecurity=False).hexdigest()
         val = int(h, 16)
         return (val % period_minutes)
 

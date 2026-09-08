@@ -107,6 +107,19 @@ def threaded(f: Callable[..., None]) -> Callable[..., threading.Thread]:
     return cast(Callable[..., threading.Thread], wrapper)
 
 
+def fetch_k8s_items(api_func: Callable, **kwargs: Any) -> List[Any]:
+    """One-shot fetch of a kubernetes list resource.
+
+    Unlike KubernetesResource, no watcher thread is spawned, so this is
+    safe for short-lived, per-call use.
+    """
+    response = api_func(**kwargs)
+    if isinstance(response, dict):
+        # the custom-object api returns a plain dict
+        return list(response['items'])
+    return list(response.items)
+
+
 class DefaultFetcher():
     def __init__(self, storage_class_name: str, coreV1_api: 'client.CoreV1Api', rook_env: 'RookEnv'):
         self.storage_class_name = storage_class_name
@@ -115,8 +128,11 @@ class DefaultFetcher():
         self.pvs_in_sc: List[client.V1PersistentVolumeList] = []
 
     def fetch(self) -> None:
-        self.inventory: KubernetesResource[client.V1PersistentVolumeList] = KubernetesResource(self.coreV1_api.list_persistent_volume)
-        self.pvs_in_sc = [i for i in self.inventory.items if i.spec.storage_class_name == self.storage_class_name]
+        # fetchers are created per get_discovered_devices() call, so use
+        # a one-shot fetch: a KubernetesResource watcher thread would
+        # leak on every call
+        self.pvs_in_sc = [i for i in fetch_k8s_items(self.coreV1_api.list_persistent_volume)
+                          if i.spec.storage_class_name == self.storage_class_name]
 
     def convert_size(self, size_str: str) -> int:
         units = ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "", "K", "M", "G", "T", "P", "E")
@@ -171,10 +187,19 @@ class LSOFetcher(DefaultFetcher):
 
     def fetch(self) -> None:
         super().fetch()
-        self.discovery: KubernetesCustomResource = KubernetesCustomResource(self.customObjects_api.list_cluster_custom_object,
-                                                 group="local.storage.openshift.io",
-                                                 version="v1alpha1",
-                                                 plural="localvolumediscoveryresults")
+        # the api call now happens here (fetch_k8s_items is eager), so the
+        # ApiException handling that used to live in devices() -- back when
+        # the fetch was triggered lazily by KubernetesCustomResource.items --
+        # has to move with it
+        try:
+            self.discovery: List[Any] = fetch_k8s_items(
+                self.customObjects_api.list_cluster_custom_object,
+                group="local.storage.openshift.io",
+                version="v1alpha1",
+                plural="localvolumediscoveryresults")
+        except ApiException:
+            log.error("Failed to fetch device metadata")
+            raise
 
     def predicate(self, item: 'client.V1ConfigMapList') -> bool:
             if self.nodenames is not None:
@@ -183,11 +208,7 @@ class LSOFetcher(DefaultFetcher):
                 return True
 
     def devices(self) -> Dict[str, List[Device]]:
-        try:
-            lso_discovery_results = [i for i in self.discovery.items if self.predicate(i)]
-        except ApiException as dummy_e:
-            log.error("Failed to fetch device metadata")
-            raise
+        lso_discovery_results = [i for i in self.discovery if self.predicate(i)]
         self.lso_devices = {}
         for i in lso_discovery_results:
             drives = i['status']['discoveredDevices']
@@ -237,14 +258,14 @@ class PDFetcher(DefaultFetcher):
 
     def fetch(self) -> None:
         """ Collect the devices information from k8s configmaps"""
-        self.dev_cms: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_config_map,
-                                                              namespace=self.rook_env.operator_namespace,
-                                                              label_selector='app=rook-discover')
+        self.dev_cms: List[Any] = fetch_k8s_items(self.coreV1_api.list_namespaced_config_map,
+                                                  namespace=self.rook_env.operator_namespace,
+                                                  label_selector='app=rook-discover')
 
     def devices(self) -> Dict[str, List[Device]]:
         """ Return the list of devices found"""
         node_devices: Dict[str, List[Device]] = {}
-        for i in self.dev_cms.items:
+        for i in self.dev_cms:
             devices_list: List[Device] = []
             for d in json.loads(i.data['devices']):
                 devices_list.append(self.device(d)[1])
@@ -276,6 +297,11 @@ class KubernetesResource(Generic[T]):
         The api fetch and watch methods should be common across resource types,
 
         Exceptions in the runner thread are propagated to the caller.
+
+        Instances own a watcher thread that runs until the watch stream
+        ends, so they must be long-lived: on a short-lived instance the
+        thread outlives it and leaks along with its HTTP connection. For
+        one-shot fetches use fetch_k8s_items() instead.
 
         :param api_func: kubernetes client api function that is passed to the watcher
         :param filter_func: signature: ``(Item) -> bool``.
@@ -497,10 +523,12 @@ class RookCluster(object):
         return discovered_devices
 
     def get_osds(self) -> List:
-        osd_pods: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_pod,
-                                                          namespace=self.rook_env.namespace,
-                                                          label_selector='app=rook-ceph-osd')
-        return list(osd_pods.items)
+        # filter the long-lived rook_pods watch instead of creating a
+        # KubernetesResource per call: each instance spawns a watcher
+        # thread that outlives it, so per-call instances leak a thread
+        # and its HTTP connection on every call
+        return [p for p in self.rook_pods.items
+                if (p.metadata.labels or {}).get('app') == 'rook-ceph-osd']
 
     def get_nfs_conf_url(self, nfs_cluster: str, instance: str) -> Optional[str]:
         #
@@ -859,12 +887,13 @@ class RookCluster(object):
         return f'Removed {objpath}'
 
     def get_resource(self, resource_type: str) -> Iterable:
-        custom_objects: KubernetesCustomResource = KubernetesCustomResource(self.customObjects_api.list_namespaced_custom_object,
-                                                                            group="ceph.rook.io",
-                                                                            version="v1",
-                                                                            namespace=self.rook_env.namespace,
-                                                                            plural=resource_type)
-        return custom_objects.items
+        # called per describe_service() call, so use a one-shot fetch: a
+        # KubernetesCustomResource watcher thread would leak on every call
+        return fetch_k8s_items(self.customObjects_api.list_namespaced_custom_object,
+                               group="ceph.rook.io",
+                               version="v1",
+                               namespace=self.rook_env.namespace,
+                               plural=resource_type)
 
     def can_create_osd(self) -> bool:
         current_cluster = self.rook_api_get(

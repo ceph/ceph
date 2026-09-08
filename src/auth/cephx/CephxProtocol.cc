@@ -40,8 +40,21 @@ void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uin
   b.client_challenge = client_challenge;
 
   bufferlist enc;
-  if (encode_encrypt(cct, b, secret, enc, error))
-    return;
+  switch (secret.get_type()) {
+    case CEPH_CRYPTO_AES:
+      if (encode_encrypt(cct, b, secret, enc, error))
+        return;
+      break;
+    default:
+      /*
+       * AES256KRB5 has a builtin confounder that randomizes the result,
+       * so just encode_encrypt() cannot be used. We should use
+       * a cryptographic hash anyway, keeping the old behavior
+       * for AES for backward compatibility.
+       */
+      if (encode_hash(cct, b, secret, enc, error))
+        return;
+  };
 
   uint64_t k = 0;
   const ceph_le64 *p = (const ceph_le64 *)enc.c_str();
@@ -50,12 +63,23 @@ void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uin
   *key = k;
 }
 
+void CephXSessionAuthInfo::print(std::ostream& os) const
+{
+  os << "session_auth_info("
+     << ceph_entity_type_name(service_id)
+     << " id=" << secret_id
+     << " session_key=" << session_key
+     << " service_secret=" << service_secret
+     << " ticket.name=" << ticket.name
+     << " ticket.global_id=" << ticket.global_id
+     << ")";
+}
 
 /*
  * Authentication
  */
 
-bool cephx_build_service_ticket_blob(CephContext *cct, CephXSessionAuthInfo& info,
+bool cephx_build_service_ticket_blob(CephContext *cct, const CephXSessionAuthInfo& info,
 				     CephXTicketBlob& blob)
 {
   CephXServiceTicketInfo ticket_info;
@@ -63,18 +87,13 @@ bool cephx_build_service_ticket_blob(CephContext *cct, CephXSessionAuthInfo& inf
   ticket_info.ticket = info.ticket;
   ticket_info.ticket.caps = info.ticket.caps;
 
-  ldout(cct, 10) << "build_service_ticket service "
-		 << ceph_entity_type_name(info.service_id)
-		 << " secret_id " << info.secret_id
-		 << " ticket_info.ticket.name="
-		 << ticket_info.ticket.name.to_str()
-		 << " ticket.global_id " << info.ticket.global_id << dendl;
+  ldout(cct, 10) << "build_service_ticket service " << info << dendl;
   blob.secret_id = info.secret_id;
   std::string error;
-  if (!info.service_secret.get_secret().length())
+  if (info.service_secret.empty())
     error = "invalid key";  // Bad key?
   else
-    encode_encrypt_enc_bl(cct, ticket_info, info.service_secret, blob.blob, error);
+    encode_encrypt_enc_bl(cct, ticket_info, info.service_secret, CEPHX_KEY_USAGE_TICKET_INFO, blob.blob, error);
   if (!error.empty()) {
     ldout(cct, -1) << "cephx_build_service_ticket_blob failed with error "
 	  << error << dendl;
@@ -120,7 +139,7 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
     msg_a.session_key = info.session_key;
     msg_a.validity = info.validity;
     std::string error;
-    if (encode_encrypt(cct, msg_a, principal_secret, reply, error)) {
+    if (encode_encrypt(cct, msg_a, principal_secret, CEPHX_KEY_USAGE_TICKET_SESSION_KEY, reply, error)) {
       ldout(cct, -1) << "error encoding encrypted: " << error << dendl;
       return false;
     }
@@ -138,7 +157,7 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
 
     encode((__u8)should_encrypt_ticket, reply);
     if (should_encrypt_ticket) {
-      if (encode_encrypt(cct, service_ticket_bl, ticket_enc_key, reply, error)) {
+      if (encode_encrypt(cct, service_ticket_bl, ticket_enc_key, CEPHX_KEY_USAGE_TICKET_BLOB, reply, error)) {
 	ldout(cct, -1) << "error encoding encrypted ticket: " << error << dendl;
         return false;
       }
@@ -164,7 +183,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(
 
     CephXServiceTicket msg_a;
     std::string error;
-    if (decode_decrypt(cct, msg_a, secret, indata, error)) {
+    if (decode_decrypt(cct, msg_a, secret, CEPHX_KEY_USAGE_TICKET_SESSION_KEY, indata, error)) {
       ldout(cct, 0) << __func__ << " failed decode_decrypt, error is: " << error
 		    << dendl;
       return false;
@@ -177,7 +196,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(
     if (ticket_enc) {
       ldout(cct, 10) << __func__ << " got encrypted ticket" << dendl;
       std::string error;
-      if (decode_decrypt(cct, service_ticket_bl, session_key, indata, error)) {
+      if (decode_decrypt(cct, service_ticket_bl, session_key, CEPHX_KEY_USAGE_TICKET_BLOB, indata, error)) {
 	ldout(cct, 10) << __func__ << " decode_decrypt failed "
 		       << "with " << error << dendl;
 	return false;
@@ -279,6 +298,15 @@ void CephXTicketManager::invalidate_ticket(uint32_t service_id)
     iter->second.invalidate_ticket();
 }
 
+void CephXTicketManager::invalidate_all_tickets()
+{
+  ldout(cct, 10) << __func__ << dendl;
+  for ([[maybe_unused]] auto &[service_id, ticket] : tickets_map) {
+    ticket.invalidate_ticket();
+  }
+}
+
+
 /*
  * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.
@@ -339,7 +367,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id) const
   msg.nonce = a->nonce;
 
   std::string error;
-  if (encode_encrypt(cct, msg, session_key, a->bl, error)) {
+  if (encode_encrypt(cct, msg, session_key, CEPHX_KEY_USAGE_AUTHORIZE, a->bl, error)) {
     ldout(cct, 0) << "failed to encrypt authorizer: " << error << dendl;
     delete a;
     return 0;
@@ -405,7 +433,7 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys,
   }
 
   std::string error;
-  decode_decrypt_enc_bl(cct, ticket_info, service_secret, ticket_blob.blob, error);
+  decode_decrypt_enc_bl(cct, ticket_info, service_secret, CEPHX_KEY_USAGE_TICKET_INFO, ticket_blob.blob, error);
   if (!error.empty()) {
     ldout(cct, 0) << "ceph_decode_ticket could not decrypt ticket info. error:" 
 	<< error << dendl;
@@ -444,19 +472,22 @@ bool cephx_verify_authorizer(CephContext *cct, const KeyStore& keys,
     // Unable to decode!
     return false;
   }
-  ldout(cct, 10) << "verify_authorizer decrypted service "
+
+  ldout(cct, 10) << __func__ << ": decoded service "
 	   << ceph_entity_type_name(service_id)
 	   << " secret_id=" << ticket.secret_id << dendl;
 
   if (ticket.secret_id == (uint64_t)-1) {
     EntityName name;
     name.set_type(service_id);
+    ldout(cct, 20) << __func__ << ": looking up secret for " << ceph_entity_type_name(service_id) << dendl;
     if (!keys.get_secret(name, service_secret)) {
       ldout(cct, 0) << "verify_authorizer could not get general service secret for service "
 	      << ceph_entity_type_name(service_id) << " secret_id=" << ticket.secret_id << dendl;
       return false;
     }
   } else {
+    ldout(cct, 20) << __func__ << ": looking up service secret for " << ceph_entity_type_name(service_id) << dendl;
     if (!keys.get_service_secret(service_id, ticket.secret_id, service_secret)) {
       ldout(cct, 0) << "verify_authorizer could not get service secret for service "
 	      << ceph_entity_type_name(service_id) << " secret_id=" << ticket.secret_id << dendl;
@@ -465,30 +496,36 @@ bool cephx_verify_authorizer(CephContext *cct, const KeyStore& keys,
       return false;
     }
   }
+  ldout(cct, 30) << __func__ << ": got secret " << service_secret << dendl;
+
   std::string error;
-  if (!service_secret.get_secret().length())
+  if (service_secret.empty())
     error = "invalid key";  // Bad key?
   else
-    decode_decrypt_enc_bl(cct, ticket_info, service_secret, ticket.blob, error);
+    decode_decrypt_enc_bl(cct, ticket_info, service_secret, CEPHX_KEY_USAGE_TICKET_INFO, ticket.blob, error);
   if (!error.empty()) {
-    ldout(cct, 0) << "verify_authorizer could not decrypt ticket info: error: "
-      << error << dendl;
+    ldout(cct, 0) << __func__ << ": could not decrypt ticket info: " << error << dendl;
     return false;
   }
 
   if (ticket_info.ticket.global_id != global_id) {
-    ldout(cct, 0) << "verify_authorizer global_id mismatch: declared id=" << global_id
+    ldout(cct, 0) << __func__ << ": global_id mismatch: declared id=" << global_id
 	    << " ticket_id=" << ticket_info.ticket.global_id << dendl;
     return false;
   }
 
-  ldout(cct, 10) << "verify_authorizer global_id=" << global_id << dendl;
+  ldout(cct, 10) << __func__ << ": global_id=" << global_id << dendl;
+  ldout(cct, 30) << __func__ << ": session key=" << ticket_info.session_key << dendl;
 
   // CephXAuthorize
   CephXAuthorize auth_msg;
-  if (decode_decrypt(cct, auth_msg, ticket_info.session_key, indata, error)) {
-    ldout(cct, 0) << "verify_authorizercould not decrypt authorize request with error: "
-      << error << dendl;
+  if (ticket_info.session_key.empty()) {
+    error = "session key is invalid";
+  } else if (!decode_decrypt(cct, auth_msg, ticket_info.session_key, CEPHX_KEY_USAGE_AUTHORIZE, indata, error)) {
+    error = "";
+  }
+  if (!error.empty()) {
+    ldout(cct, 0) << __func__ << ": could not decrypt authorize request: " << error << dendl;
     return false;
   }
 
@@ -498,17 +535,17 @@ bool cephx_verify_authorizer(CephContext *cct, const KeyStore& keys,
       c = new CephXAuthorizeChallenge;
       challenge->reset(c);
       cct->random()->get_bytes((char*)&c->server_challenge, sizeof(c->server_challenge));
-      ldout(cct,10) << __func__ << " adding server_challenge " << c->server_challenge
+      ldout(cct,10) << __func__ << ": adding server_challenge " << c->server_challenge
 		    << dendl;
 
-      encode_encrypt_enc_bl(cct, *c, ticket_info.session_key, *reply_bl, error);
+      encode_encrypt_enc_bl(cct, *c, ticket_info.session_key, CEPHX_KEY_USAGE_AUTHORIZE_CHALLENGE, *reply_bl, error);
       if (!error.empty()) {
-	ldout(cct, 10) << "verify_authorizer: encode_encrypt error: " << error << dendl;
+	ldout(cct, 0) << __func__ << ": encode_encrypt error: " << error << dendl;
 	return false;
       }
       return false;
     }
-    ldout(cct, 10) << __func__ << " got server_challenge+1 "
+    ldout(cct, 10) << __func__ << ": got server_challenge+1 "
 		   << auth_msg.server_challenge_plus_one
 		   << " expecting " << c->server_challenge + 1 << dendl;
     if (c->server_challenge + 1 != auth_msg.server_challenge_plus_one) {
@@ -539,7 +576,7 @@ bool cephx_verify_authorizer(CephContext *cct, const KeyStore& keys,
     }
     reply.connection_secret = *connection_secret;
   }
-  if (encode_encrypt(cct, reply, ticket_info.session_key, *reply_bl, error)) {
+  if (encode_encrypt(cct, reply, ticket_info.session_key, CEPHX_KEY_USAGE_AUTHORIZE_REPLY, *reply_bl, error)) {
     ldout(cct, 10) << "verify_authorizer: encode_encrypt error: " << error << dendl;
     return false;
   }
@@ -555,7 +592,7 @@ bool CephXAuthorizer::verify_reply(bufferlist::const_iterator& indata,
   CephXAuthorizeReply reply;
 
   std::string error;
-  if (decode_decrypt(cct, reply, session_key, indata, error)) {
+  if (decode_decrypt(cct, reply, session_key, CEPHX_KEY_USAGE_AUTHORIZE_REPLY, indata, error)) {
       ldout(cct, 0) << "verify_reply couldn't decrypt with error: " << error << dendl;
       return false;
   }
@@ -586,7 +623,7 @@ bool CephXAuthorizer::add_challenge(CephContext *cct,
   if (!p.end()) {
     std::string error;
     CephXAuthorizeChallenge ch{};
-    decode_decrypt_enc_bl(cct, ch, session_key, challenge, error);
+    decode_decrypt_enc_bl(cct, ch, session_key, CEPHX_KEY_USAGE_AUTHORIZE_CHALLENGE, challenge, error);
     if (!error.empty()) {
       ldout(cct, 0) << "failed to decrypt challenge (" << challenge.length() << " bytes): "
 		    << error << dendl;
@@ -597,7 +634,7 @@ bool CephXAuthorizer::add_challenge(CephContext *cct,
   }
 
   std::string error;
-  if (encode_encrypt(cct, msg, session_key, bl, error)) {
+  if (encode_encrypt(cct, msg, session_key, CEPHX_KEY_USAGE_AUTHORIZE, bl, error)) {
     ldout(cct, 0) << __func__ << " failed to encrypt authorizer: " << error << dendl;
     return false;
   }

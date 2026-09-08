@@ -22,6 +22,7 @@
 #include "common/LogEntry.h"
 #include "common/Thread.h"
 #include "common/Finisher.h"
+#include "global/global_context.h" // for g_ceph_context
 #include "mon/health_check.h"
 #include "mgr/Gil.h"
 
@@ -54,8 +55,9 @@ public:
 
 public:
   ActivePyModule(const PyModuleRef &py_module_,
-      LogChannelRef clog_)
-    : PyModuleRunner(py_module_, clog_),
+      LogChannelRef clog_,
+      ThreadMonitor* monitor_ = nullptr)
+    : PyModuleRunner(py_module_, clog_, monitor_),
       finisher(g_ceph_context, thread_name, fmt::format("m-fin-{}", py_module->get_name()).substr(0,15))
 
   {
@@ -71,7 +73,8 @@ public:
       const std::string &method,
       std::span<std::byte const> pickled_args,
       std::span<std::byte const> pickled_kwargs,
-      std::string *err);
+      std::string *err,
+      bool *crash_dump = nullptr);
 
   int handle_command(
     const ModuleCommand& module_command,

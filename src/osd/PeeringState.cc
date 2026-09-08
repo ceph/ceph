@@ -6,6 +6,7 @@
 #include "osd_perf_counters.h"
 #include "common/ceph_releases.h"
 #include "common/debug.h"
+#include "common/JSONFormatter.h"
 #include "common/ostream_temp.h"
 #include "crush/crush.h" // for CRUSH_ITEM_NONE
 #include "crush/CrushWrapper.h"
@@ -837,6 +838,18 @@ void PeeringState::start_peering_interval(
   } else if (was_old_nonprimary || is_nonprimary()) {
     pl->clear_want_pg_temp();
   }
+
+  // Only reset the rebuild-time latch when the primary role actually
+  // changes across this interval transition. Routine peering restarts
+  // (e.g. acting-set churn from backfill peers being added/removed)
+  // that leave this OSD as primary throughout must not wipe an
+  // in-progress rebuild's start time.
+  if (!(was_old_primary && is_primary())) {
+    rebuild_start_time = utime_t();
+    rebuild_base_recovered = 0;
+    rebuild_had_redundancy_loss = false;
+  }
+
   clear_primary_state();
 
   pl->on_change(t);
@@ -1323,11 +1336,14 @@ void PeeringState::proc_lease(const pg_lease_t& l)
     readable_until_ub_from_primary = l.readable_until_ub;
   }
 
+  std::optional<ceph::signedspan> peer_clock_delta_lb, peer_clock_delta_ub;
+  hb_stamps[0]->get_peer_clock_delta(&peer_clock_delta_lb, &peer_clock_delta_ub);
+
   ceph::signedspan ru = ceph::signedspan::zero();
   if (l.readable_until != ceph::signedspan::zero() &&
-      hb_stamps[0]->peer_clock_delta_ub) {
-    ru = l.readable_until - *hb_stamps[0]->peer_clock_delta_ub;
-    psdout(20) << " peer_clock_delta_ub " << *hb_stamps[0]->peer_clock_delta_ub
+      peer_clock_delta_ub) {
+    ru = l.readable_until - *peer_clock_delta_ub;
+    psdout(20) << " peer_clock_delta_ub " << *peer_clock_delta_ub
 	       << " -> ru " << ru << dendl;
   }
   if (ru > readable_until) {
@@ -1338,9 +1354,9 @@ void PeeringState::proc_lease(const pg_lease_t& l)
   }
 
   ceph::signedspan ruub;
-  if (hb_stamps[0]->peer_clock_delta_lb) {
-    ruub = l.readable_until_ub - *hb_stamps[0]->peer_clock_delta_lb;
-    psdout(20) << " peer_clock_delta_lb " << *hb_stamps[0]->peer_clock_delta_lb
+  if (peer_clock_delta_lb) {
+    ruub = l.readable_until_ub - *peer_clock_delta_lb;
+    psdout(20) << " peer_clock_delta_lb " << *peer_clock_delta_lb
 	       << " -> ruub " << ruub << dendl;
   } else {
     ruub = pl->get_mnow() + l.interval;
@@ -3394,6 +3410,7 @@ void PeeringState::proc_master_log(
 	       &olog);
   }
 
+  const pg_log_entry_t* head_log_entry = nullptr;
   bool invalidate_stats = false;
 
   // For partial writes we may be able to keep some of the divergent entries
@@ -3403,7 +3420,10 @@ void PeeringState::proc_master_log(
     while (p != pg_log.get_log().log.begin()) {
       --p;
       if (p->version <= olog.head) {
-	break;
+        if (p->version == olog.head) {
+          head_log_entry = &(*p);
+        }
+        break;
       }
     }
     if (p == pg_log.get_log().log.end()) {
@@ -3501,22 +3521,75 @@ void PeeringState::proc_master_log(
       }
       rollbacker.get()->partial_write(&info, previous_version, *p);
       olog.head = p->version;
+      head_log_entry = &(*p);
 
       // Process the next entry
       ++p;
     }
   }
+
+  // Find the version we want to roll forwards to
+  // Iterate over all shards and see if any have a last_update equal to where we want to roll to
+  // Copy the stats for this shard into oinfo
+  // Set invalidate_stats to false again if we do copy these stats
+  // We will only copy stats if they are copied from a primary, or if they are
+  // copied from a non-primary where the last write was a non-partial write
+  // as the stats of non-primaries are stale after partial writes on objects with clones
+  if (invalidate_stats && pool.info.allows_ecoptimizations()) {
+    for (const auto& [shard, my_info] : peer_info) {
+      if (invalidate_stats && my_info.stats.version == olog.head &&
+          (!pool.info.is_nonprimary_shard(shard.shard) ||
+           (head_log_entry &&
+            head_log_entry->is_written_shard(shard.shard)))) {
+        oinfo.stats = my_info.stats;
+        invalidate_stats = false;
+        psdout(10) << "keeping stats for " << shard
+                   << " (wanted last update: " << olog.head
+                   << ", stats version: " << my_info.stats.version
+                   << ", shard last update: " << my_info.last_update << ")."
+                   << " Stats: ";
+
+        JSONFormatter f;
+        oinfo.stats.dump(&f);
+        f.flush(*_dout);
+
+        *_dout << dendl;
+      } else {
+        psdout(20) << "not using stats for " << shard
+                   << " (wanted last update: " << olog.head
+                   << ", stats version: " << my_info.stats.version
+                   << ", shard last update: " << my_info.last_update << ")."
+                   << " Stats: ";
+
+        JSONFormatter f;
+        my_info.stats.dump(&f);
+        f.flush(*_dout);
+
+        *_dout << dendl;
+      }
+    }
+  }
+
   // merge log into our own log to build master log.  no need to
   // make any adjustments to their missing map; we are taking their
   // log to be authoritative (i.e., their entries are by definitely
   // non-divergent).
   merge_log(t, oinfo, std::move(olog), from);
   if (info.last_backfill.is_max() &&
-      pool.info.is_nonprimary_shard(from.shard)) {
+      (pool.info.allows_ecoptimizations() &&
+       pool.info.is_nonprimary_shard(from.shard) &&
+      (!head_log_entry ||
+       !head_log_entry->is_written_shard(from.shard)))){
     invalidate_stats = true;
   }
+
   info.stats.stats_invalid |= invalidate_stats;
-  increment_stats_invalidations_counter(invalidate_stats);
+  increment_stats_invalidations_counter(rs_process_log_stats_invalidated,
+                                        invalidate_stats);
+  if (invalidate_stats)
+  {
+    psdout(10) << "invalidating stats for " << pg_whoami << dendl;
+  }
   peer_info[from] = oinfo;
   psdout(10) << " peer osd." << from << " now " << oinfo
 	     << " " << omissing << dendl;
@@ -3771,8 +3844,10 @@ void PeeringState::split_into(
   child->info.last_epoch_started = info.last_epoch_started;
   child->info.last_interval_started = info.last_interval_started;
 
-  increment_stats_invalidations_counter(info.stats.stats_invalid);
-  increment_stats_invalidations_counter(child->info.stats.stats_invalid);
+  increment_stats_invalidations_counter(rs_pg_split_parent_stats_invalidated,
+                                        info.stats.stats_invalid);
+  increment_stats_invalidations_counter(rs_pg_split_child_stats_invalidated,
+                                        child->info.stats.stats_invalid);
 
   // There can't be recovery/backfill going on now
   int primary, up_primary;
@@ -4438,15 +4513,120 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
       info.stats.last_fullsized = now;
 
+    /**
+     * The following block is an interim solution to aggregate PG rebuild stats
+     * into a set of perf counters. The counterss are set based on the following
+     * existing pg_stat_t fields:
+     *  - last_clean, last_change
+     *  - num_objects_degraded, num_objects_misplaced, num_objects_recovered
+     *
+     * The PG rebuild stats are aggregated into the following recoverystate
+     * perf counter:
+     *  - rs_pg_rebuild_duration: rebuild duration LONGRUNAVG time counter
+     *
+     * Workflow:
+     *  1. Only the acting primary OSD of the PG executes the logic to
+     *     determine the rebuild stats.
+     *  2. The logic uses rebuild_start_time as a per-PG in-memory latch that
+     *     captures the failure entry point. When a PG is considered vulnerable,
+     *     rebuild_start_time latches info.stats.last_change as the start time,
+     *     provided last_change > last_clean, which ensures only genuine new
+     *     failures after the prior clean interval are tracked.
+     *  3. On recovery, the rebuild duration is computed as
+     *     (now - rebuild_start_time) and is only recorded if delta
+     *     num_objects_recovered > 0 or the PG had confirmed redundancy loss
+     *     at latch time, filtering out spurious state transitions. The latch
+     *     is cleared after each recorded event.
+     *  4. The "recovered" (record) branch additionally requires the live
+     *     PG_STATE_ACTIVE bit, not just an empty degraded/misplaced count.
+     *     Right after a peering-interval restart, clear_primary_state()
+     *     wipes acting_recovery_backfill/missing_loc before peering has
+     *     repopulated them for the new interval; a publish landing in that
+     *     narrow mid-peering window sees num_objects_degraded == 0 and no
+     *     DEGRADED/UNDERSIZED bit set, which looks identical to a genuine
+     *     recovery completion even though the PG is still mid-transition
+     *     and about to go degraded again. Requiring PG_STATE_ACTIVE (never
+     *     set while PEERING) filters out that transient situation so it can't
+     *     prematurely record a truncated duration and reset the latch out
+     *     from under an in-progress rebuild.
+     *
+     * last_degraded is intentionally not used in the interim solution to
+     * retain compatibility with older Ceph releases where this field doesn't
+     * exist and requires encoding changes. The interim solution is a
+     * close approximation of the PG rebuild time.
+     *
+     * A future simplification can replace the latch with a direct
+     * (last_clean - last_degraded) calculation once last_degraded is
+     * consistently available.
+     */
+    if (is_primary()) {
+      const int64_t num_degraded  = info.stats.stats.sum.num_objects_degraded;
+      const int64_t num_misplaced = info.stats.stats.sum.num_objects_misplaced;
+      const int64_t num_recovered = info.stats.stats.sum.num_objects_recovered;
+      const bool is_vulnerable =
+        (info.stats.state & (PG_STATE_DEGRADED | PG_STATE_UNDERSIZED)) ||
+        num_degraded > 0 || num_misplaced > 0;
+
+      if (is_vulnerable) {
+        // Latch the failure entry point on the first publish after a new
+        // failure; last_change captures when the state transition occurred.
+        if (rebuild_start_time == utime_t()) {
+          const bool new_failure =
+            info.stats.last_clean == utime_t() ||
+            info.stats.last_change > info.stats.last_clean;
+          if (new_failure) {
+            rebuild_start_time = info.stats.last_change;
+            rebuild_base_recovered = num_recovered;
+            rebuild_had_redundancy_loss =
+              (num_degraded > 0 || num_misplaced > 0);
+            psdout(15) << "rebuild-stats: latched failure start for "
+                       << info.pgid << " at " << rebuild_start_time << dendl;
+          }
+        }
+      } else if (rebuild_start_time != utime_t() && (state & PG_STATE_ACTIVE)) {
+        // PG recovered — record rebuild time if this was a genuine event.
+        // The PG_STATE_ACTIVE check excludes the transient mid-peering
+        // window (see point 4 above) where the degraded/misplaced counts
+        // can momentarily read as zero before peering has finished
+        // repopulating them for the new interval.
+        const int64_t delta_recovered = num_recovered - rebuild_base_recovered;
+        const utime_t rebuild_dur  = now - rebuild_start_time;
+
+        if (rebuild_dur.to_msec() > 0 &&
+            (delta_recovered > 0 || rebuild_had_redundancy_loss)) {
+          pl->get_peering_perf().tinc(rs_pg_rebuild_duration, rebuild_dur);
+          psdout(15) << "rebuild-stats: recorded rebuild for " << info.pgid
+                     << " duration=" << rebuild_dur
+                     << " delta_recovered=" << delta_recovered << dendl;
+        }
+        // reset for the next event
+        rebuild_start_time = utime_t();
+        rebuild_base_recovered = 0;
+        rebuild_had_redundancy_loss = false;
+      }
+    }
+
+    // check if the PG is vulnerable
+    if (info.stats.state & (PG_STATE_DEGRADED|PG_STATE_UNDERSIZED)) {
+      // set last_degraded only if we are entering a new
+      // failure state and if it's older than last_clean
+      if (info.stats.last_degraded <= info.stats.last_clean) {
+        info.stats.last_degraded = now;
+      }
+    }
+    // update pre_publish so the change is sent immediately
+    pre_publish.last_degraded = info.stats.last_degraded;
+
     psdout(15) << "publish_stats_to_osd " << pre_publish.reported_epoch
 	       << ":" << pre_publish.reported_seq << dendl;
     return std::make_optional(std::move(pre_publish));
   }
 }
 
-void PeeringState::increment_stats_invalidations_counter(bool invalidation_state) {
+void PeeringState::increment_stats_invalidations_counter(int stats_invalidation_counter,
+                                                         bool invalidation_state) {
   if (invalidation_state) {
-    pl->get_peering_perf().inc(rs_stats_invalidated);
+    pl->get_peering_perf().inc(stats_invalidation_counter);
   }
 }
 
@@ -4549,7 +4729,8 @@ void PeeringState::update_stats(
   }
 
   if (previous_stats_invalidation != info.stats.stats_invalid) {
-    increment_stats_invalidations_counter(info.stats.stats_invalid);
+    increment_stats_invalidations_counter(rs_update_stats_invalidated,
+                                          info.stats.stats_invalid);
   }
 
   if (t) {
@@ -4598,7 +4779,8 @@ bool PeeringState::append_log_entries_update_missing(
     info.last_complete = info.last_update;
   }
   info.stats.stats_invalid = info.stats.stats_invalid || invalidate_stats;
-  increment_stats_invalidations_counter(invalidate_stats);
+  increment_stats_invalidations_counter(rs_append_log_stats_invalidated,
+                                        invalidate_stats);
   psdout(20) << "trim_to bool = " << bool(trim_to)
 	     << " trim_to = " << (trim_to ? *trim_to : eversion_t()) << dendl;
   if (trim_to) {
@@ -4652,7 +4834,8 @@ void PeeringState::merge_new_log_entries(
       dpp);
     pinfo.last_update = info.last_update;
     pinfo.stats.stats_invalid = pinfo.stats.stats_invalid || invalidate_stats;
-    increment_stats_invalidations_counter(invalidate_stats);
+    increment_stats_invalidations_counter(rs_merge_log_stats_invalidated,
+                                          invalidate_stats);
     rebuild_missing = rebuild_missing || invalidate_stats;
   }
 
@@ -4730,6 +4913,8 @@ void PeeringState::append_log(
   }
   psdout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
+  bool invalidate_pwlc = false;
+
   PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
   if (!transaction_applied) {
      /* We must be a backfill or async recovery peer, so it's ok if we apply
@@ -4742,17 +4927,7 @@ void PeeringState::append_log(
       * object is deleted before we can _merge_object_divergent_entries().
       */
     pg_log.skip_rollforward(&info, handler.get());
-    /* Invalidate pwlc for this shard until the next interval when
-     * it will be updated with the pwlc from another shard
-     */
-    for (auto & [shard, versionrange] :
-	   info.partial_writes_last_complete) {
-      auto & [fromversion, toversion] = versionrange;
-      fromversion.epoch = 0;
-      fromversion.version = eversion_t::max().version;
-      toversion = fromversion;
-    }
-    info.partial_writes_last_complete_epoch = 0;
+    invalidate_pwlc = true;
   }
 
   for (auto p = logv.begin(); p != logv.end(); ++p) {
@@ -4761,9 +4936,12 @@ void PeeringState::append_log(
     /* We don't want to leave the rollforward artifacts around
      * here past last_backfill.  It's ok for the same reason as
      * above */
-    if (transaction_applied &&
-	p->soid > info.last_backfill) {
+    if (transaction_applied && !is_acting(pg_whoami)) {
+      psdout(20) << __func__
+             << ": rolling forward because of backfill/async_recovery, soid="
+             << p->soid << " entry=" << *p << dendl;
       pg_log.roll_forward(&info, handler.get());
+      invalidate_pwlc = true;
     }
   }
   if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
@@ -4772,6 +4950,20 @@ void PeeringState::append_log(
       &info,
       handler.get());
     last_rollback_info_trimmed_to_applied = roll_forward_to;
+  }
+
+  if (invalidate_pwlc) {
+    /* Invalidate pwlc for this shard until the next interval when
+     * it will be updated with the pwlc from another shard
+     */
+    for (auto & [shard, versionrange] :
+           info.partial_writes_last_complete) {
+      auto & [fromversion, toversion] = versionrange;
+      fromversion.epoch = 0;
+      fromversion.version = eversion_t::max().version;
+      toversion = fromversion;
+    }
+    info.partial_writes_last_complete_epoch = 0;
   }
 
   psdout(10) << "approx pg log length =  "
@@ -5077,6 +5269,15 @@ void PeeringState::apply_op_stats(
   const hobject_t &soid,
   const object_stat_sum_t &delta_stats)
 {
+  psdout(20) << fmt::format(
+	"apply_op_stats {} d.objs={} d.clns={} d.bytes={}"
+	" -> objs={} clns={} bytes={}",
+	soid, delta_stats.num_objects, delta_stats.num_object_clones,
+	delta_stats.num_bytes,
+	info.stats.stats.sum.num_objects + delta_stats.num_objects,
+	info.stats.stats.sum.num_object_clones + delta_stats.num_object_clones,
+	info.stats.stats.sum.num_bytes + delta_stats.num_bytes)
+	     << dendl;
   info.stats.stats.add(delta_stats);
   info.stats.stats.floor(0);
 
@@ -6070,6 +6271,15 @@ void PeeringState::RepWaitBackfillReserved::exit()
   DECLARE_LOCALS;
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_repwaitbackfillreserved_latency, dur);
+}
+
+boost::statechart::result
+PeeringState::RepWaitBackfillReserved::react(const BackfillTooFull &)
+{
+  DECLARE_LOCALS;
+  ps->reject_reservation();
+  post_event(RemoteReservationRejectedTooFull());
+  return discard_event();
 }
 
 boost::statechart::result
@@ -7471,7 +7681,10 @@ void PeeringState::GetInfo::get_infos()
       continue;
     }
     if (ps->peer_info.count(peer)) {
-      psdout(10) << " have osd." << peer << " info " << ps->peer_info[peer] << dendl;
+      uint64_t f = ps->get_osdmap()->get_xinfo(peer.osd).features;
+      psdout(10) << " have osd." << peer << " info " << ps->peer_info[peer]
+                 << " peer features: " << hex << f << dec << dendl;
+      ps->apply_peer_features(f);
       continue;
     }
     if (peer_info_requested.count(peer)) {

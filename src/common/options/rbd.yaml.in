@@ -359,13 +359,14 @@ options:
 - name: rbd_read_from_replica_policy
   type: str
   level: basic
-  desc: Read replica policy send to the OSDS during reads
+  desc: Read replica policy send to the OSDs during reads
   fmt_desc: |
     Policy for determining which OSD will receive read operations.
     If set to ``default``, each PG's primary OSD will always be used
     for read operations. If set to ``balance``, read operations will
-    be sent to a randomly selected OSD within the replica set. If set
-    to ``localize``, read operations will be sent to the closest OSD
+    be sent to a randomly selected OSD within the replica set for replica
+    pools or directly to the shard storing the data for erasure-coded pools.
+    If set to ``localize``, read operations will be sent to the closest OSD
     as determined by the CRUSH map. Unlike ``rbd_balance_snap_reads``
     and ``rbd_localize_snap_reads`` or ``rbd_balance_parent_reads`` and
     ``rbd_localize_parent_reads``, it affects all read operations, not
@@ -556,7 +557,7 @@ options:
   type: bool
   level: advanced
   desc: when enabled, the rbd_journal_object_flush* configuration options are ignored
-    until the first flush so that batched journal IO is known to be safe for consistency
+    until the first flush so that batched journal I/O is known to be safe for consistency
   default: true
   services:
   - rbd
@@ -612,14 +613,14 @@ options:
 - name: rbd_qos_iops_limit
   type: uint
   level: advanced
-  desc: the desired limit of IO operations per second
+  desc: the desired limit of I/O operations per second
   default: 0
   services:
   - rbd
 - name: rbd_qos_bps_limit
   type: uint
   level: advanced
-  desc: the desired limit of IO bytes per second
+  desc: the desired limit of I/O bytes per second
   default: 0
   services:
   - rbd
@@ -654,14 +655,14 @@ options:
 - name: rbd_qos_iops_burst
   type: uint
   level: advanced
-  desc: the desired burst limit of IO operations
+  desc: the desired burst limit of I/O operations
   default: 0
   services:
   - rbd
 - name: rbd_qos_bps_burst
   type: uint
   level: advanced
-  desc: the desired burst limit of IO bytes
+  desc: the desired burst limit of I/O bytes
   default: 0
   services:
   - rbd
@@ -696,7 +697,7 @@ options:
 - name: rbd_qos_iops_burst_seconds
   type: uint
   level: advanced
-  desc: the desired burst duration in seconds of IO operations
+  desc: the desired burst duration in seconds of I/O operations
   default: 1
   services:
   - rbd
@@ -704,7 +705,7 @@ options:
 - name: rbd_qos_bps_burst_seconds
   type: uint
   level: advanced
-  desc: the desired burst duration in seconds of IO bytes
+  desc: the desired burst duration in seconds of I/O bytes
   default: 1
   services:
   - rbd
@@ -806,7 +807,7 @@ options:
 - name: rbd_io_scheduler
   type: str
   level: advanced
-  desc: RBD IO scheduler
+  desc: RBD I/O scheduler
   default: simple
   services:
   - rbd
@@ -816,7 +817,7 @@ options:
 - name: rbd_io_scheduler_simple_max_delay
   type: uint
   level: advanced
-  desc: maximum io delay (in milliseconds) for simple io scheduler (if set to 0 dalay
+  desc: maximum I/O delay (in milliseconds) for simple I/O scheduler (if set to 0, delay
     is calculated based on latency stats)
   default: 0
   services:

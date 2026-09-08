@@ -1,17 +1,25 @@
-<cds-modal size="sm"
-           [open]="open"
-           [hasScrollingContent]="false"
-           (overlaySelected)="closeModal()">
+<cds-modal
+  size="sm"
+  [open]="open"
+  [hasScrollingContent]="false"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      {{ action | titlecase }} {{ resource | upperFirst }}
+    </h3>
   </cds-modal-header>
 
   <div cdsModalContent>
-    <form name="multisiteRealmForm"
-          #formDir="ngForm"
-          [formGroup]="multisiteRealmForm"
-          novalidate>
+    <form
+      name="multisiteRealmForm"
+      #formDir="ngForm"
+      [formGroup]="multisiteRealmForm"
+      novalidate
+    >
       <div class="form-item">
         <cds-text-label
           labelInputID="realmName"

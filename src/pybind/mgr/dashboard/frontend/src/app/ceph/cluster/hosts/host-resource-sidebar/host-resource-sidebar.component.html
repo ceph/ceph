@@ -1,0 +1,21 @@
+<cd-sidebar-layout
+  class="host-details-layout"
+  [title]="hostname"
+  [items]="sidebarItems"
+  [headerStatus]="headerStatus"
+  [headerTags]="headerTags"
+  [headerActions]="headerActions"
+></cd-sidebar-layout>
+
+<ng-template #maintenanceConfirmTpl>
+  @for (msg of errorMessage; track $index; let last = $last) {
+    <div>
+      @if (!last || errorMessage.length === 1) {
+        <ul>
+          <li i18n>{{ msg }}</li>
+        </ul>
+      }
+    </div>
+  }
+  <ng-container i18n>Are you sure you want to continue?</ng-container>
+</ng-template>

@@ -6,8 +6,13 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+int ceph_arch_riscv_rvv = 0;
 int ceph_arch_riscv_zbc = 0;
 int ceph_arch_riscv_zvbc = 0;
+
+#ifndef RISCV_HWPROBE_IMA_V
+#define RISCV_HWPROBE_IMA_V (1ULL << 2)
+#endif
 
 #ifndef RISCV_HWPROBE_EXT_ZBC
 #define RISCV_HWPROBE_EXT_ZBC (1ULL << 7)
@@ -30,6 +35,7 @@ void ceph_arch_riscv_probe(void)
 
     if (do_hwprobe(pairs, 1) == 0) {
         unsigned long long ext = pairs[0].value;
+        ceph_arch_riscv_rvv  = (ext & RISCV_HWPROBE_IMA_V);
         ceph_arch_riscv_zbc  = (ext & RISCV_HWPROBE_EXT_ZBC);
         ceph_arch_riscv_zvbc = (ext & RISCV_HWPROBE_EXT_ZVBC);
     }

@@ -117,7 +117,11 @@ void* allocator(void* ud, void* ptr, std::size_t osize, std::size_t nsize) {
 
 // create new lua state together with reference to the guard
 lua_State* newstate(lua_state_guard* guard) {
+#if LUA_VERSION_NUM >= 505
+  lua_State* L = lua_newstate(allocator, guard, 0);
+#else
   lua_State* L = lua_newstate(allocator, guard);
+#endif
   if (L) {
     lua_atpanic(L, [](lua_State* L) -> int {
       const char* msg = lua_tostring(L, -1);

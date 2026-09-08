@@ -4,7 +4,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
@@ -12,7 +12,6 @@ import { TableActionsComponent } from '~/app/shared/datatable/table-actions/tabl
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
-import { MgrModuleDetailsComponent } from '../mgr-module-details/mgr-module-details.component';
 import { MgrModuleListComponent } from './mgr-module-list.component';
 import { SummaryService } from '~/app/shared/services/summary.service';
 
@@ -22,14 +21,13 @@ describe('MgrModuleListComponent', () => {
   let mgrModuleService: MgrModuleService;
 
   configureTestBed({
-    declarations: [MgrModuleListComponent, MgrModuleDetailsComponent],
+    declarations: [MgrModuleListComponent],
     imports: [
       BrowserAnimationsModule,
       RouterTestingModule,
       SharedModule,
       HttpClientTestingModule,
-      NgbNavModule,
-      ToastrModule.forRoot()
+      NgbNavModule
     ],
     providers: [MgrModuleService]
   });
@@ -147,7 +145,7 @@ describe('MgrModuleListComponent', () => {
       tick(mgrModuleService.REFRESH_INTERVAL);
       tick(mgrModuleService.REFRESH_INTERVAL);
       tick(mgrModuleService.REFRESH_INTERVAL);
-      expect(mgrModuleService.enable).toHaveBeenCalledWith('foo');
+      expect(mgrModuleService.enable).toHaveBeenCalledWith('foo', false);
       expect(mgrModuleService.list).toHaveBeenCalledTimes(2);
       expect(component.table.refreshBtn).toHaveBeenCalled();
     }));

@@ -52,6 +52,55 @@ if [[ $* == *--debug* ]]; then
     set -x
 fi
 
+# ---------------------------------------------------------------------------
+# Portability guard (Linux and macOS)
+#
+# ceph-backport.sh requires GNU bash >= 4 (associative arrays, ${var,,}) and
+# GNU getopt (--long options). Both are the default on Linux. macOS ships bash
+# 3.2 and BSD getopt, so install the GNU versions:
+#
+#     brew install bash gnu-getopt
+#
+# If they are not first in PATH, point this script at them with:
+#
+#     export BASH_OVERRIDE=/opt/homebrew/bin/bash
+#     export GETOPT=/opt/homebrew/opt/gnu-getopt/bin/getopt
+# ---------------------------------------------------------------------------
+
+# Re-exec under a bash >= 4 when the current interpreter is too old (e.g. the
+# bash 3.2 that macOS ships in /bin).
+if ((BASH_VERSINFO[0] < 4)) && [ -z "${_CEPH_BACKPORT_REEXEC:-}" ]; then
+    for _cand in "${BASH_OVERRIDE:-}" /opt/homebrew/bin/bash /usr/local/bin/bash "$(command -v bash 2>/dev/null || true)"; do
+        [ -n "$_cand" ] && [ -x "$_cand" ] || continue
+        _cand_major=$("$_cand" -c 'echo "${BASH_VERSINFO[0]}"' 2>/dev/null || true)
+        if [ -n "$_cand_major" ] && [ "$_cand_major" -ge 4 ] 2>/dev/null; then
+            exec env _CEPH_BACKPORT_REEXEC=1 "$_cand" "$0" "$@"
+        fi
+    done
+fi
+if ((BASH_VERSINFO[0] < 4)); then
+    echo "${0##*/}: requires GNU bash >= 4 (found ${BASH_VERSINFO[0]}.x)." >&2
+    echo "    On macOS: brew install bash   (or set BASH_OVERRIDE=/path/to/bash)" >&2
+    exit 1
+fi
+
+# Require GNU (enhanced) getopt; the BSD getopt on macOS has no --long. The
+# $GETOPT override lets callers select Homebrew's gnu-getopt.
+GETOPT="${GETOPT:-getopt}"
+if ! command -v "$GETOPT" >/dev/null 2>&1; then
+    echo "${0##*/}: cannot find getopt (\"$GETOPT\")." >&2
+    echo "    On macOS: brew install gnu-getopt" >&2
+    exit 1
+fi
+_getopt_rc=0
+"$GETOPT" --test >/dev/null 2>&1 || _getopt_rc=$?
+if [ "$_getopt_rc" -ne 4 ]; then
+    echo "${0##*/}: GNU (enhanced) getopt required; \"$GETOPT\" is not it." >&2
+    echo "    On macOS: brew install gnu-getopt, then" >&2
+    echo "    export GETOPT=/opt/homebrew/opt/gnu-getopt/bin/getopt" >&2
+    exit 1
+fi
+
 # associative array keyed on "component" strings from PR titles, mapping them to
 # GitHub PR labels that make sense in backports
 declare -A comp_hash=(
@@ -294,7 +343,9 @@ function cherry_pick_phase {
         git checkout -b "$local_branch" FETCH_HEAD
     fi
 
-    git fetch "$CEPH_UPSTREAM" "$merge_commit_sha"
+    if ! git cat-file -e "${merge_commit_sha}^{commit}" 2>/dev/null; then
+        git fetch "$CEPH_UPSTREAM" "$merge_commit_sha"
+    fi
 
     set +x
     maybe_restore_set_x
@@ -1406,7 +1457,7 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhsv --long "cherry-pick-only,component:,debug,existing-pr:,force,fork:,help,milestones,prepare,setup,setup-report,troubleshooting,update-version,usage,verbose,version" -n "$this_script" -- "$@")
+munged_options=$("$GETOPT" -o c:dhsv --long "cherry-pick-only,component:,debug,existing-pr:,force,fork:,help,milestones,prepare,setup,setup-report,troubleshooting,update-version,usage,verbose,version" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 ADVICE=""
@@ -1688,7 +1739,18 @@ if [ "$PR_PHASE" ] ; then
     
     debug "Generating backport PR title"
     if [ "$original_pr" ] ; then
-        backport_pr_title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
+        remote_api_output=$(curl -u ${github_user}:${github_token} --silent "https://api.github.com/repos/ceph/ceph/pulls/${original_pr}")
+        original_pr_title=$(echo "$remote_api_output" | jq -r '.title')
+        if [ -z "$original_pr_title" ] || [ "$original_pr_title" = "null" ] ; then
+            if [ "$FORCE" ] ; then
+                warning "could not determine title of ${original_pr_url}: check the backport PR title"
+            else
+                error "could not determine title of ${original_pr_url}"
+                info "(hint) run with --force to open the backport PR anyway"
+                false
+            fi
+        fi
+        backport_pr_title="${milestone}: ${original_pr_title}"
     else
         if [[ $tracker_title =~ ^${milestone}: ]] ; then
             backport_pr_title="${tracker_title}"
@@ -1730,13 +1792,13 @@ fi
 
 if [ "$TRACKER_PHASE" ] ; then
     debug "Considering Backport tracker issue ${redmine_url}"
-    status_should_be=2 # In Progress
+    status_should_be=13 # Fix Under Review
     desc_should_be="${backport_pr_url}"
     assignee_should_be="${redmine_user_id}"
     if [ "$EXISTING_PR" ] ; then
-        data_binary="{\"issue\":{\"description\":\"${desc_should_be}\",\"status_id\":${status_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
+        data_binary="{\"issue\":{\"status_id\":${status_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
     else
-        data_binary="{\"issue\":{\"description\":\"${desc_should_be}\",\"status_id\":${status_should_be},\"assigned_to_id\":${assignee_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
+        data_binary="{\"issue\":{\"status_id\":${status_should_be},\"assigned_to_id\":${assignee_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
     fi
     remote_api_status_code="$(curl --write-out '%{http_code}' --output /dev/null --silent -X PUT --header "Content-type: application/json" --data-binary "${data_binary}" "${redmine_url}.json?key=$redmine_key")"
     if [ "$FORCE" ] || [ "$EXISTING_PR" ] ; then 

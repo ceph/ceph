@@ -43,7 +43,9 @@ export class RgwRateLimitComponent implements OnInit, AfterViewInit {
     private rgwUserService: RgwUserService,
     private rgwBucketService: RgwBucketService,
     private notificationService: NotificationService
-  ) {}
+  ) {
+    this.createForm();
+  }
 
   ngOnInit(): void {
     // get the global rate Limit
@@ -71,7 +73,9 @@ export class RgwRateLimitComponent implements OnInit, AfterViewInit {
         }
       );
     }
-    // rate limit form
+  }
+  // rate limit form
+  private createForm() {
     this.form = this.formBuilder.group({
       rate_limit_enabled: [false],
       rate_limit_max_readOps_unlimited: [true],

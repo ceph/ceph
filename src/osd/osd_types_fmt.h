@@ -8,6 +8,11 @@
 
 #include "common/hobject.h"
 #include "include/types_fmt.h"
+// formatter<osd_reqid_t> below formats req_id.name (entity_name_t), so its
+// formatter must be visible here, otherwise it gets instantiated before
+// msg_fmt.h is pulled in by a later include (explicit-specialization-after-
+// instantiation under compile-time {fmt} checking).
+#include "msg/msg_fmt.h"
 #include "osd/osd_types.h"
 #include <fmt/chrono.h>
 #include <fmt/ranges.h>

@@ -1,5 +1,5 @@
 # ceph_test_cls_numops
-add_executable(ceph_test_cls_numops 
+add_executable(ceph_test_cls_numops
   test_cls_numops.cc)
 target_link_libraries(ceph_test_cls_numops 
   librados

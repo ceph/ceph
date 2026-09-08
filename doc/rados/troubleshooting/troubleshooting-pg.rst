@@ -229,9 +229,9 @@ we will call "1" and "2":
 * Before the new objects are copied, 2 goes down.
 
 At this point, 1 knows that these objects exist, but there is no live OSD
-that has a copy of the objects. In this case, IO to those objects
+that has a copy of the objects. In this case, I/O to those objects
 will block, and the cluster will hope that the failed node comes back soon.
-This is assumed to be preferable to returning an IO error to the user.
+This is assumed to be preferable to returning an I/O error to the user.
 
 .. note:: The situation described immediately above is one reason that setting
    ``size=2`` on a replicated pool and ``m=1`` on an erasure coded pool risks
@@ -567,7 +567,7 @@ For example:
 If you receive ``active+clean+inconsistent`` states periodically due to
 clock skew, consider configuring the `NTP
 <https://en.wikipedia.org/wiki/Network_Time_Protocol>`_ daemons on your monitor
-hosts to act as peers. See `The Network Time Protocol <http://www.ntp.org>`_
+hosts to act as peers. See `The Network Time Protocol <https://www.ntp.org>`_
 and Ceph :ref:`Clock Settings <mon-config-ref-clock>` for more information.
 
 

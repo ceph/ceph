@@ -41,7 +41,7 @@ export class UsersPageHelper extends PageHelper {
   edit(name: string, newCaps: string, isMultiselect = false) {
     this.navigateEdit(name, false, true, null, isMultiselect);
     cy.get('#formly_5_string_cap_1').clear().type(newCaps);
-    cy.get("[aria-label='Edit User']").should('exist').click();
+    cy.get("[aria-label='Save changes']").should('exist').click();
     cy.get('cd-crud-table').should('exist');
   }
 

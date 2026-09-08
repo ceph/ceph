@@ -209,8 +209,9 @@ void usage(ostream& out)
 "        select target pool by name\n"
 "   --pgid PG id\n"
 "        select given PG id\n"
-"   -f [--format plain|json|json-pretty]\n"
-"   --format=[--format plain|json|json-pretty]\n"
+"   -f [plain|json|json-pretty]\n"
+"   --format=[plain|json|json-pretty]\n"
+"        specify the structured format for output data.\n"
 "   -b op_size\n"
 "        set the block size for put/get ops and for write benchmarking\n"
 "   -O object_size\n"
@@ -225,6 +226,8 @@ void usage(ostream& out)
 "        set the filter_prefix parameter for OMAP list benchmarking\n"
 "   --omap-read-max-return\n"
 "        set the max number of entries for OMAP list benchmarking\n"
+"   --output=filename\n"
+"        specify the file path to which structured output should be written\n"
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
@@ -649,7 +652,7 @@ static int do_put(IoCtx& io_ctx,
   }
   ret = 0;
  out:
-  if (fd != STDOUT_FILENO)
+  if (fd != STDIN_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
   return ret;
 }
@@ -684,7 +687,7 @@ static int do_append(IoCtx& io_ctx,
   }
   ret = 0;
 out:
-  if (fd != STDOUT_FILENO)
+  if (fd != STDIN_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
   return ret;
 }
@@ -2581,7 +2584,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
       formatter->flush(*outstream);
     }
-    if (!stdout) {
+    if (!use_stdout) {
       delete outstream;
     }
   }
@@ -3434,7 +3437,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       object_size = op_size;
     else if (object_size < op_size)
       op_size = object_size;
-    cout << "hints = " << (int)hints << std::endl;
     ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, object_size,
 			    max_objects, cleanup, hints, run_name, reuse_bench, no_verify);
@@ -4092,7 +4094,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     ret = PoolDump(file_fd).dump(&io_ctx);
 
-    if (file_fd != STDIN_FILENO) {
+    if (file_fd != STDOUT_FILENO) {
       VOID_TEMP_FAILURE_RETRY(::close(file_fd));
     }
 

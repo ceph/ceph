@@ -181,13 +181,13 @@ protected:
   }
 };
 
-TEST_F(CReadOpsTest, NewDelete) {
+TEST_P(CReadOpsTest, NewDelete) {
   rados_read_op_t op = rados_create_read_op();
   ASSERT_TRUE(op);
   rados_release_read_op(op);
 }
 
-TEST_F(CReadOpsTest, SetOpFlags) {
+TEST_P(CReadOpsTest, SetOpFlags) {
   write_object();
 
   rados_read_op_t op = rados_create_read_op();
@@ -206,7 +206,7 @@ TEST_F(CReadOpsTest, SetOpFlags) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, AssertExists) {
+TEST_P(CReadOpsTest, AssertExists) {
   rados_read_op_t op = rados_create_read_op();
   rados_read_op_assert_exists(op);
 
@@ -234,7 +234,7 @@ TEST_F(CReadOpsTest, AssertExists) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, AssertVersion) {
+TEST_P(CReadOpsTest, AssertVersion) {
   write_object();
   // Write to the object a second time to guarantee that its
   // version number is greater than 0
@@ -259,7 +259,7 @@ TEST_F(CReadOpsTest, AssertVersion) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, CmpXattr) {
+TEST_P(CReadOpsTest, CmpXattr) {
   write_object();
 
   char buf[len];
@@ -314,7 +314,7 @@ TEST_F(CReadOpsTest, CmpXattr) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, Read) {
+TEST_P(CReadOpsTest, Read) {
   write_object();
 
   char buf[len];
@@ -376,7 +376,7 @@ TEST_F(CReadOpsTest, Read) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, Checksum) {
+TEST_P(CReadOpsTest, Checksum) {
   write_object();
 
   {
@@ -443,7 +443,7 @@ TEST_F(CReadOpsTest, Checksum) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, RWOrderedRead) {
+TEST_P(CReadOpsTest, RWOrderedRead) {
   write_object();
 
   char buf[len];
@@ -462,7 +462,7 @@ TEST_F(CReadOpsTest, RWOrderedRead) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, ShortRead) {
+TEST_P(CReadOpsTest, ShortRead) {
   write_object();
 
   char buf[len * 2];
@@ -511,7 +511,7 @@ TEST_F(CReadOpsTest, ShortRead) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, Exec) {
+TEST_P(CReadOpsTest, Exec) {
   // create object so we don't get -ENOENT
   write_object();
 
@@ -539,7 +539,7 @@ TEST_F(CReadOpsTest, Exec) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, ExecUserBuf) {
+TEST_P(CReadOpsTest, ExecUserBuf) {
   // create object so we don't get -ENOENT
   write_object();
 
@@ -575,7 +575,7 @@ TEST_F(CReadOpsTest, ExecUserBuf) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, Stat) {
+TEST_P(CReadOpsTest, Stat) {
   rados_read_op_t op = rados_create_read_op();
   uint64_t size = 1;
   int rval = 0;
@@ -613,7 +613,7 @@ TEST_F(CReadOpsTest, Stat) {
   rados_release_read_op(op);
 }
 
-TEST_F(CReadOpsTest, Stat2) {
+TEST_P(CReadOpsTest, Stat2) {
   rados_read_op_t op = rados_create_read_op();
   uint64_t size = 1;
   int rval = 0;
@@ -654,7 +654,7 @@ TEST_F(CReadOpsTest, Stat2) {
   rados_release_read_op(op);
 }
 
-TEST_F(CReadOpsTest, Omap) {
+TEST_P(CReadOpsTest, Omap) {
   char *keys[] = {(char*)"bar",
 		  (char*)"foo",
 		  (char*)"test1",
@@ -746,7 +746,7 @@ TEST_F(CReadOpsTest, Omap) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, OmapNuls) {
+TEST_P(CReadOpsTest, OmapNuls) {
   char *keys[] = {(char*)"1\0bar",
                       (char*)"2baar\0",
                       (char*)"3baa\0rr"};
@@ -820,7 +820,7 @@ TEST_F(CReadOpsTest, OmapNuls) {
 
   remove_object();
 }
-TEST_F(CReadOpsTest, GetXattrs) {
+TEST_P(CReadOpsTest, GetXattrs) {
   write_object();
 
   char *keys[] = {(char*)"bar",
@@ -856,7 +856,7 @@ TEST_F(CReadOpsTest, GetXattrs) {
   remove_object();
 }
 
-TEST_F(CReadOpsTest, CmpExt) {
+TEST_P(CReadOpsTest, CmpExt) {
   char buf[len];
   size_t bytes_read = 0;
   int cmpext_val = 0;
@@ -893,3 +893,5 @@ TEST_F(CReadOpsTest, CmpExt) {
 
   remove_object();
 }
+
+INSTANTIATE_TEST_SUITE_P_REPLICA(CReadOpsTest);

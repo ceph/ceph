@@ -254,6 +254,14 @@ void set_event_id(std::string& id, const std::string& hash, const utime_t& ts);
 
 using ShardNamesView = std::ranges::transform_view<std::ranges::iota_view<uint64_t, uint64_t>, std::function<std::string(uint64_t)>>; 
 
+namespace rgw::notify {
+  // Denotes that the topic has not overridden the global configurations for (time_to_live / max_retries / retry_sleep_duration)
+  // defaults: (rgw_topic_persistency_time_to_live / rgw_topic_persistency_max_retries / rgw_topic_persistency_sleep_duration)
+  constexpr uint32_t DEFAULT_GLOBAL_VALUE = UINT32_MAX;
+  // Used in case the topic is using the default global value for dumping in a formatter
+  constexpr static const std::string_view DEFAULT_CONFIG{"None"};
+} // namespace rgw::notify
+
 struct rgw_pubsub_dest {
   std::string push_endpoint;
   std::string push_endpoint_args;
@@ -262,13 +270,13 @@ struct rgw_pubsub_dest {
   bool persistent = false;
   // rados object name of the persistent queue in the 'notif' pool
   std::string persistent_queue;
-  uint32_t time_to_live;
-  uint32_t max_retries;
-  uint32_t retry_sleep_duration;
+  uint32_t time_to_live = rgw::notify::DEFAULT_GLOBAL_VALUE;
+  uint32_t max_retries = rgw::notify::DEFAULT_GLOBAL_VALUE;
+  uint32_t retry_sleep_duration = rgw::notify::DEFAULT_GLOBAL_VALUE;
   // naming convention of sharded queues in the 'notif' pool -> persistent_queue, persistent_queue.1, persistent_queue.(num_shards -1)...
   uint64_t num_shards = 1; // Default to 1 shard for backward compatibility with pre-sharding persistent topics.
 
-
+  
   void encode(bufferlist& bl) const {
     ENCODE_START(8, 1, bl);
     encode("", bl);
@@ -608,11 +616,6 @@ public:
 };
 
 namespace rgw::notify {
-  // Denotes that the topic has not overridden the global configurations for (time_to_live / max_retries / retry_sleep_duration)
-  // defaults: (rgw_topic_persistency_time_to_live / rgw_topic_persistency_max_retries / rgw_topic_persistency_sleep_duration)
-  constexpr uint32_t DEFAULT_GLOBAL_VALUE = UINT32_MAX;
-  // Used in case the topic is using the default global value for dumping in a formatter
-  constexpr static const std::string_view DEFAULT_CONFIG{"None"};
   struct event_entry_t {
     rgw_pubsub_s3_event event;
     std::string push_endpoint;

@@ -75,6 +75,7 @@ public:
       Messenger *clientm_, Objecter *objecter_,
       LogChannelRef clog_, LogChannelRef audit_clog_);
   ~Mgr();
+  void shutdown();
 
   bool is_initialized() const {return initialized;}
   bool exceeded_initialization_expiration();
@@ -115,6 +116,7 @@ class MetadataUpdate : public Context
 
 private:
   DaemonStateIndex &daemon_state;
+  ClusterState &cluster_state;
   DaemonKey key;
 
   std::map<std::string, std::string> defaults;
@@ -123,8 +125,9 @@ public:
   bufferlist outbl;
   std::string outs;
 
-  MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
-    : daemon_state(daemon_state_), key(key_)
+  MetadataUpdate(DaemonStateIndex &daemon_state_, ClusterState &cluster_state_,
+                 const DaemonKey &key_)
+    : daemon_state(daemon_state_), cluster_state(cluster_state_), key(key_)
   {
       daemon_state.notify_updating(key);
   }

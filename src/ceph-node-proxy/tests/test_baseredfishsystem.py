@@ -46,8 +46,9 @@ class TestBaseRedfishSystemInit:
         assert "network" in system.component_list
         assert "processors" in system.component_list
         assert "storage" in system.component_list
-        assert "firmwares" in system.component_list
+        assert "firmware" in system.component_list
         assert "fans" in system.component_list
+        assert "temperatures" in system.component_list
 
     def test_init_update_funcs_populated(self, system):
         # Should have one callable per component that has _update_<name>
@@ -106,8 +107,11 @@ class TestBaseRedfishSystemGetters:
     def test_get_fans_empty(self, system):
         assert system.get_fans() == {}
 
-    def test_get_firmwares_empty(self, system):
-        assert system.get_firmwares() == {}
+    def test_get_temperatures_empty(self, system):
+        assert system.get_temperatures() == {}
+
+    def test_get_firmware_empty(self, system):
+        assert system.get_firmware() == {}
 
     def test_get_status_empty(self, system):
         assert system.get_status() == {}
@@ -122,7 +126,8 @@ class TestBaseRedfishSystemGetSystem:
         system._sys["storage"] = {}
         system._sys["power"] = {}
         system._sys["fans"] = {}
-        system._sys["firmwares"] = {}
+        system._sys["temperatures"] = {}
+        system._sys["firmware"] = {}
         result = system.get_system()
         assert "host" in result
         assert "sn" in result
@@ -134,7 +139,12 @@ class TestBaseRedfishSystemGetSystem:
         assert result["status"]["storage"] == {}
         assert result["status"]["power"] == {}
         assert result["status"]["fans"] == {}
-        assert "firmwares" in result
+        assert result["status"]["temperatures"] == {}
+        assert "fcm" not in result["status"]
+        assert "firmware" in result
+
+    def test_get_fcm_empty(self, system):
+        assert system.get_fcm() == {}
 
 
 class TestBaseRedfishSystemGetSpecs:
@@ -170,6 +180,15 @@ class TestBaseRedfishSystemGetSpecs:
         assert specs[0].collection == "chassis"
         assert specs[0].path == "Thermal"
         assert specs[0].attribute == "Fans"
+        assert "Reading" in specs[0].fields
+
+    def test_get_specs_temperatures(self, system):
+        specs = system.get_specs("temperatures")
+        assert len(specs) == 1
+        assert specs[0].collection == "chassis"
+        assert specs[0].path == "Thermal"
+        assert specs[0].attribute == "Temperatures"
+        assert "Reading" in specs[0].fields
 
     def test_get_component_spec_overrides_empty(self, system):
         assert system.get_component_spec_overrides() == {}
@@ -232,7 +251,8 @@ class TestBaseRedfishSystemComponentSpecs:
         assert "memory" in BaseRedfishSystem.COMPONENT_SPECS
         assert "power" in BaseRedfishSystem.COMPONENT_SPECS
         assert "fans" in BaseRedfishSystem.COMPONENT_SPECS
-        assert "firmwares" in BaseRedfishSystem.COMPONENT_SPECS
+        assert "temperatures" in BaseRedfishSystem.COMPONENT_SPECS
+        assert "firmware" in BaseRedfishSystem.COMPONENT_SPECS
 
     def test_field_lists_non_empty(self):
         assert len(BaseRedfishSystem.NETWORK_FIELDS) > 0

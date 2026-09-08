@@ -12,12 +12,16 @@ SMB Service
     has been determined to be unsuitable for your needs we recommend using that
     module over directly using the smb service spec.
 
+.. important::
+
+    If using Podman, the SMB service requires Podman release 4.1.0 or later.
+
 
 Deploying Samba Containers
 ==========================
 
-Cephadm deploys `Samba <http://www.samba.org>`_ servers using container images
-built by the `samba-container project <http://github.com/samba-in-kubernetes/samba-container>`_.
+Cephadm deploys `Samba <https://www.samba.org>`_ servers using container images
+built by the `samba-container project <https://github.com/samba-in-kubernetes/samba-container>`_.
 
 In order to host SMB shares with access to CephFS file systems, deploy
 Samba containers with the following command:
@@ -53,12 +57,99 @@ An SMB service can be applied using a specification. An example in YAML follows:
       include_ceph_users:
         - client.smb.fs.cluster.tango
 
+TLS/SSL Example
+---------------
+
+Here's an example SMB service specification with TLS/SSL configuration:
+
+.. code-block:: yaml
+
+   service_id: smbcluster
+   service_type: smb
+   cluster_id: tango
+   config_uri: rados://smb/foxtrot/config.json
+   placement:
+     hosts:
+       - host0
+   spec:
+     ssl_certificates:
+       remote_control:
+         enabled: true
+         certificate_source: inline
+         ssl_cert: |
+           -----BEGIN CERTIFICATE-----
+           ...
+           -----END CERTIFICATE-----
+
+         ssl_key: |
+           -----BEGIN PRIVATE KEY-----
+           ...
+           -----END PRIVATE KEY-----
+
+         ssl_ca_cert: |
+           -----BEGIN CERTIFICATE-----
+           ...
+           -----END CERTIFICATE-----
+       keybridge:
+         enabled: true
+         certificate_source: inline
+         ssl_cert: |
+           -----BEGIN CERTIFICATE-----
+           ...
+           -----END CERTIFICATE-----
+
+         ssl_key: |
+           -----BEGIN PRIVATE KEY-----
+           ...
+           -----END PRIVATE KEY-----
+
+         ssl_ca_cert: |
+           -----BEGIN CERTIFICATE-----
+           ...
+           -----END CERTIFICATE-----
+
+This example configures an SMB service with TLS encryption enabled using
+inline certificates.
+
+TLS/SSL Parameters
+~~~~~~~~~~~~~~~~~~
+
+The following parameters can be used to configure TLS/SSL encryption per sidecar
+for the SMB service:
+
+* ``enabled`` (boolean): Enable or disable SSL/TLS encryption. Default is ``false``.
+
+* ``certificate_source`` (string): Specifies the source of the TLS certificates.
+  Options include:
+
+  - ``cephadm-signed``: Use certificates signed by cephadm's internal CA
+  - ``inline``: Provide certificates directly in the specification using ``ssl_cert``,
+    ``ssl_key`` and ``ssl_ca_cert`` fields
+  - ``reference``: Users can register their own certificate and key with certmgr and
+    set the ``certificate_source`` to ``reference`` in the spec.
+
+* ``ssl_cert`` (string): The SSL certificate in PEM format. Required when using
+  ``inline`` certificate source.
+
+* ``ssl_key`` (string): The SSL private key in PEM format. Required when using
+  ``inline`` certificate source.
+
+* ``ssl_ca_cert`` (string): The SSL CA certificate in PEM format. Required when
+  using ``inline`` certificate source.
+
+.. note::
+   ``ssl_key``, ``ssl_cert`` and ``ssl_ca_cert`` can be set from the smb manager
+   module. If ``cert`` and ``key`` are specified in the resource_type
+   ``ceph.smb.tls.credential`` and applied from the smb manager will be automatically
+   configured as ssl_certificate is enabled and update ``ssl_key``, ``ssl_cert`` to
+   the certificate manager. ``ssl_ca_cert`` will be set if it is specified in the
+   resource_type ``ceph.smb.tls.credential``
+
 The specification can then be applied by running the following command:
 
 .. prompt:: bash #
 
    ceph orch apply -i smb.yaml
-
 
 Service Spec Options
 --------------------
@@ -128,8 +219,8 @@ bind_addrs
         For example, ``192.168.7.0/24``.
 
 include_ceph_users
-    A list of cephx user (aka entity) names that the Samba containers may use.
-    The cephx keys for each user in the list will automatically be added to
+    A list of CephX user (aka entity) names that the Samba containers may use.
+    The CephX keys for each user in the list will automatically be added to
     the keyring in the container.
 
 cluster_meta_uri
@@ -215,8 +306,8 @@ named ``.smb``. Within the pool there should be a namespace named after the
 constructed like ``rados://.smb/<cluster_id>/<object_name>``. Example:
 ``rados://.smb/tango/config.json``.
 
-The containers are automatically deployed with cephx keys allowing access to
-resources in these pools and namespaces. As long as this scheme is used
+The containers are automatically deployed with CephX keys allowing access to
+resources in these pools and namespaces. As long as this scheme is used,
 no additional configuration to read the object is needed.
 
 To copy a configuration file to a RADOS pool, use the ``rados`` command line
@@ -237,9 +328,9 @@ identify this configuration constructed like
 ``rados:mon-config-key:smb/config/<cluster_id>/<name>``.
 Example: ``rados:mon-config-key:smb/config/tango/config.json``.
 
-The containers are automatically deployed with cephx keys allowing access to
+The containers are automatically deployed with CephX keys allowing access to
 resources with the key-prefix ``smb/config/<cluster_id>/``. As long as this
-scheme is used no additional configuration to read the value is needed.
+scheme is used, no additional configuration to read the value is needed.
 
 To copy a configuration file into the Key/Value store use the ``ceph config-key
 put ...`` tool. For example:
@@ -260,6 +351,16 @@ exercise for the reader.
 .. note:: All URI schemes are supported by parameters that accept URIs. Each
    scheme has different performance and security characteristics.
 
+
+The CephFS Proxy Sidecar
+========================
+
+When at least one CephFS-backed share uses a proxied provider, the
+smb manager module includes the ``cephfs-proxy`` feature in the
+``features`` parameter of the smb service specification, and cephadm
+deploys a ``cephfs-proxy`` sidecar container alongside each Samba
+instance. See :ref:`smb-cephfs-proxy` for a description of the
+sidecar and troubleshooting pointers.
 
 Limitations
 ===========

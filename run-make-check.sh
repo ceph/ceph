@@ -24,9 +24,12 @@ set -e
 
 function gen_ctest_resource_file() {
     local file_name=$(mktemp /tmp/ctest-resource-XXXXXX)
-    local max_cpuid=$(($(nproc) - 1))
+    # Usable CPU ids for this process: excludes offline cores and honors cgroup/
+    # taskset limits. Not necessarily contiguous 0..nproc-1, so a crimson seastar
+    # unittest could otherwise get an offline id in --cpuset and abort.
+    local ids=$(python3 -c 'import os; print(*sorted(os.sched_getaffinity(0)))')
     jq -n '$ARGS.positional | map({id:., slots:1}) | {cpus:.} | {version: {major:1, minor:0}, local:[.]}' \
-        --args $(seq 0 $max_cpuid) > $file_name
+        --args $ids > $file_name
     echo "$file_name"
 }
 

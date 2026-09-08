@@ -1,5 +1,12 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  discardPeriodicTasks,
+  fakeAsync,
+  flush,
+  TestBed,
+  tick
+} from '@angular/core/testing';
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -7,7 +14,7 @@ import { MgrModuleService } from './mgr-module.service';
 import { CdTableSelection } from '../models/cd-table-selection';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { MgrModuleListComponent } from '~/app/ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '../shared.module';
 import { BlockUIService } from 'ng-block-ui';
 import { SummaryService } from '../services/summary.service';
@@ -19,7 +26,7 @@ describe('MgrModuleService', () => {
 
   configureTestBed({
     declarations: [MgrModuleListComponent],
-    imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
+    imports: [HttpClientTestingModule, SharedModule],
     providers: [MgrModuleService]
   });
 
@@ -61,6 +68,21 @@ describe('MgrModuleService', () => {
     service.enable('foo').subscribe();
     const req = httpTesting.expectOne('api/mgr/module/foo/enable');
     expect(req.request.method).toBe('POST');
+    expect(req.request.body).toBeNull();
+  });
+
+  it('should call enable with force for whitelisted modules', () => {
+    service.enable('feedback').subscribe();
+    const req = httpTesting.expectOne('api/mgr/module/feedback/enable');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ force: true });
+  });
+
+  it('should call enable with explicit force', () => {
+    service.enable('foo', true).subscribe();
+    const req = httpTesting.expectOne('api/mgr/module/foo/enable');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ force: true });
   });
 
   it('should call disable', () => {
@@ -106,7 +128,7 @@ describe('MgrModuleService', () => {
       tick(service.REFRESH_INTERVAL);
       tick(service.REFRESH_INTERVAL);
       tick(service.REFRESH_INTERVAL);
-      expect(service.enable).toHaveBeenCalledWith('foo');
+      expect(service.enable).toHaveBeenCalledWith('foo', false);
       expect(service.list).toHaveBeenCalledTimes(2);
       expect(notificationService.suspendToasties).toHaveBeenCalledTimes(2);
       expect(blockUIService.start).toHaveBeenCalled();
@@ -129,6 +151,38 @@ describe('MgrModuleService', () => {
       expect(notificationService.suspendToasties).toHaveBeenCalledTimes(2);
       expect(blockUIService.start).toHaveBeenCalled();
       expect(blockUIService.stop).toHaveBeenCalled();
+    }));
+
+    it('should enable multiple modules sequentially', fakeAsync(() => {
+      const summaryService = TestBed.inject(SummaryService);
+      spyOn(service, 'enable').and.returnValues(
+        observableThrowError('mirroring reconnect'),
+        observableOf(null)
+      );
+      spyOn(service, 'list').and.returnValue(observableOf([]));
+      spyOn(notificationService, 'show');
+      spyOn(service.updateCompleted$, 'next');
+
+      service.updateModuleState(
+        ['mirroring', 'snap_schedule'],
+        false,
+        null,
+        '',
+        'Enabled mirroring modules'
+      );
+      tick(service.REFRESH_INTERVAL);
+      flush();
+
+      expect(service.enable).toHaveBeenCalledWith('mirroring', false);
+      expect(service.enable).toHaveBeenCalledWith('snap_schedule', false);
+      expect(service.list).toHaveBeenCalledTimes(1);
+      expect(notificationService.show).toHaveBeenCalledWith(
+        jasmine.any(Number),
+        jasmine.any(String)
+      );
+      expect(service.updateCompleted$.next).toHaveBeenCalled();
+      expect(summaryService.startPolling).toHaveBeenCalled();
+      discardPeriodicTasks();
     }));
 
     it('should not disable module without selecting one', () => {

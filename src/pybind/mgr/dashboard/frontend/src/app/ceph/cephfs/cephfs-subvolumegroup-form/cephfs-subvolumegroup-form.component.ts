@@ -48,14 +48,15 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
     @Optional() @Inject('fsName') public fsName: string,
     @Optional() @Inject('subvolumegroupName') public subvolumegroupName: string,
     @Optional() @Inject('pools') public pools: Pool[],
-    @Optional() @Inject('isEdit') public isEdit = false
+    @Optional() @Inject('isEdit') public isEdit = false,
+    @Optional() @Inject('isRecreate') public isRecreate = false
   ) {
     super();
     this.resource = $localize`subvolume group`;
   }
 
   ngOnInit(): void {
-    this.action = this.actionLabels.CREATE;
+    this.action = this.isRecreate ? this.actionLabels.RECREATE : this.actionLabels.CREATE;
     this.columns = [
       {
         prop: 'scope',
@@ -85,7 +86,22 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
     this.dataPools = this.pools.filter((pool) => pool.type === 'data');
     this.createForm();
 
-    this.isEdit ? this.populateForm() : this.loadingReady();
+    if (this.isEdit) {
+      this.populateForm();
+    } else {
+      if (this.isRecreate) {
+        this.prepareRecreateForm();
+      }
+      this.loadingReady();
+    }
+  }
+
+  private prepareRecreateForm() {
+    const nameControl = this.subvolumegroupForm.get('subvolumegroupName');
+    nameControl.setValue(this.subvolumegroupName);
+    nameControl.disable();
+    nameControl.clearAsyncValidators();
+    nameControl.updateValueAndValidity();
   }
 
   createForm() {

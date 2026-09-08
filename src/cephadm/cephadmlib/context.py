@@ -31,6 +31,7 @@ class BaseConfig:
         self.memory_request: Optional[int] = None
         self.memory_limit: Optional[int] = None
         self.log_to_journald: Optional[bool] = None
+        self.logging_level: str = 'debug'
 
         self.container_init: bool = CONTAINER_INIT
         # FIXME(refactor) : should be Optional[ContainerEngine]

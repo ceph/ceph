@@ -347,9 +347,9 @@ Using Ceph Block Devices
 Create rbd image
 ----------------
 
-``ceph-csi`` requires the cephx credentials for communicating with the Ceph
+``ceph-csi`` requires the CephX credentials for communicating with the Ceph
 cluster. Generate a ``ceph-volume.hcl`` file similar to the example below,
-using the newly created nomad user id and cephx key::
+using the newly created nomad user ID and CephX key::
 
     id = "ceph-mysql"
     name = "ceph-mysql"

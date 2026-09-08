@@ -463,10 +463,15 @@ To disable monitoring and remove the software that supports it, run the followin
 .. prompt:: bash #
 
   ceph orch rm grafana
-  ceph orch rm prometheus --force   # this will delete metrics data collected so far
+  ceph orch rm prometheus
   ceph orch rm node-exporter
   ceph orch rm alertmanager
   ceph mgr module disable prometheus
+
+By default, cephadm moves Prometheus data aside under ``<fsid>/removed/`` on the
+host. To delete that data instead, use
+``ceph orch rm prometheus --force --force-delete-data`` in place of
+``ceph orch rm prometheus`` (``--force-delete-data`` requires ``--force``).
 
 See also :ref:`orch-rm`.
 
@@ -652,7 +657,7 @@ webhook URLs like so:
         - "https://foo"
         - "https://bar"
 
-Where ``default_webhook_urls`` is a list of additional URLs that are
+Where ``webhook_urls`` is a list of additional URLs that are
 added to the default receivers' ``<webhook_configs>`` configuration.
 
 Run ``reconfig`` on the service to update its configuration:

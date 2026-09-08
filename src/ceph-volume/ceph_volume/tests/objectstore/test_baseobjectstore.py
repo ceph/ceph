@@ -177,6 +177,33 @@ class TestBaseObjectStore:
                           '--setuser', 'ceph',
                           '--setgroup', 'ceph']
 
+    @patch('ceph_volume.conf.cluster', 'ceph')
+    def test_build_osd_mkfs_cmd_fcm_crush_device_class_sets_keepcaps(self, factory):
+        bo = BaseObjectStore(factory(crush_device_class='fcm'))
+        bo.osd_path = '/var/lib/ceph/osd/ceph-123/'
+        bo.osd_fsid = 'abcd-1234'
+        bo.objectstore = 'bluestore'
+        bo.osd_id = '123'
+        bo.monmap = '/etc/ceph/ceph.monmap'
+        bo.osd_type = 'classic'
+        result = bo.build_osd_mkfs_cmd()
+
+        assert result == ['ceph-osd',
+                          '--cluster',
+                          'ceph',
+                          '--osd-objectstore',
+                          'bluestore',
+                          '--mkfs', '-i', '123',
+                          '--monmap',
+                          '/etc/ceph/ceph.monmap',
+                          '--set-keepcaps', 'true',
+                          '--keyfile', '-',
+                          '--osd-data',
+                          '/var/lib/ceph/osd/ceph-123/',
+                          '--osd-uuid', 'abcd-1234',
+                          '--setuser', 'ceph',
+                          '--setgroup', 'ceph']
+
     def test_osd_mkfs_ok(self, monkeypatch, fake_call, objectstore):
         args = objectstore(dmcrypt=False)
         bo = BaseObjectStore(args)
@@ -248,6 +275,39 @@ class TestBaseObjectStore:
     def test_activate(self):
         with pytest.raises(NotImplementedError):
             BaseObjectStore([]).activate()
+
+    def test_enroll_tpm2_default_pcrs(self, monkeypatch, factory):
+        captured: dict = {}
+
+        def fake_call(cmd, **kwargs):
+            captured['cmd'] = cmd
+            return ([], '', 0)
+
+        monkeypatch.setattr(
+            'ceph_volume.objectstore.baseobjectstore.process.call', fake_call)
+        args = factory(with_tpm=True)
+        bo = BaseObjectStore(args)
+        bo.dmcrypt_key = 'sekrit'
+        bo.enroll_tpm2('/dev/sdz')
+        assert '--tpm2-pcrs' in captured['cmd']
+        i = captured['cmd'].index('--tpm2-pcrs')
+        assert captured['cmd'][i + 1] == '7'
+
+    def test_enroll_tpm2_custom_pcrs(self, monkeypatch, factory):
+        captured: dict = {}
+
+        def fake_call(cmd, **kwargs):
+            captured['cmd'] = cmd
+            return ([], '', 0)
+
+        monkeypatch.setattr(
+            'ceph_volume.objectstore.baseobjectstore.process.call', fake_call)
+        args = factory(with_tpm=True, tpm2_pcrs='9+12')
+        bo = BaseObjectStore(args)
+        bo.dmcrypt_key = 'sekrit'
+        bo.enroll_tpm2('/dev/sdz')
+        i = captured['cmd'].index('--tpm2-pcrs')
+        assert captured['cmd'][i + 1] == '9+12'
 
     @patch('ceph_volume.objectstore.baseobjectstore.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']))
     def setup_method(self, m_create_key):

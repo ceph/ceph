@@ -8,7 +8,7 @@ import {
 } from '@angular/core/testing';
 
 import { CephfsSnapshotscheduleFormComponent } from './cephfs-snapshotschedule-form.component';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
@@ -34,7 +34,6 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
     providers: [ModalService, { provide: 'fsName', useValue: 'test_fs' }],
     imports: [
       SharedModule,
-      ToastrModule.forRoot(),
       ReactiveFormsModule,
       HttpClientTestingModule,
       RouterTestingModule,
@@ -86,4 +85,27 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
     expect(createSpy).toHaveBeenCalled();
     discardPeriodicTasks();
   }));
+
+  it('should derive subvol/group from each targetPath when building create payloads', () => {
+    formHelper.setMultipleValues({
+      directory: '/volumes/g1/sv1',
+      startDate: '2023-11-14 00:06:22',
+      repeatInterval: 1,
+      repeatFrequency: 'd'
+    });
+    component.isSubvolume = true;
+    component.subvolume = 'sv1';
+    component.subvolumeGroup = 'g1';
+    component.isDefaultSubvolumeGroup = false;
+
+    const first = component.buildCreatePayload('/volumes/g1/sv1');
+    const second = component.buildCreatePayload('/volumes/g1/sv2');
+
+    expect(first).toEqual(
+      expect.objectContaining({ path: '/volumes/g1/sv1', subvol: 'sv1', group: 'g1' })
+    );
+    expect(second).toEqual(
+      expect.objectContaining({ path: '/volumes/g1/sv2', subvol: 'sv2', group: 'g1' })
+    );
+  });
 });

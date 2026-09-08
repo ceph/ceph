@@ -15,6 +15,7 @@
 
 #include "rgw_perf_counters.h"
 #include <boost/redis/config.hpp>
+#include <boost/version.hpp>
 #include <memory>
 #include "rgw_sal_d4n.h"
 
@@ -77,7 +78,11 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     return -EDESTADDRREQ;
   }
 
+#if BOOST_VERSION >= 108900
+  conn->async_run(cfg, net::consign(net::detached, conn));
+#else
   conn->async_run(cfg, {}, net::consign(net::detached, conn));
+#endif
 
   FilterDriver::initialize(cct, dpp);
 
@@ -903,6 +908,10 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
       bufferlist bl_val;
       bl_val.append(*version_id);
       baseAttrs[RGW_CACHE_ATTR_VERSION_ID] = std::move(bl_val); //populate destination version id
+    }
+    auto titer = attrs.find(RGW_ATTR_TAGS);
+    if (titer != attrs.end()) {
+      baseAttrs[RGW_ATTR_TAGS] = titer->second;
     }
   }
 

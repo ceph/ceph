@@ -1,60 +1,80 @@
-<cds-modal size="sm"
-           [open]="open"
-           (overlaySelected)="closeModal()">
+<cds-modal
+  size="sm"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>Delete zone</h3>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      Delete zone
+    </h3>
   </cds-modal-header>
 
   <ng-container>
     <section cdsModalContent>
-      <form [formGroup]="zoneForm"
-            novalidate>
-        <label class="cds--label-description"
-               i18n>
+      <form
+        [formGroup]="zoneForm"
+        novalidate
+      >
+        <legend
+          class="cds--label-description"
+          i18n
+        >
           This will delete your <strong>{{ zone?.name }}</strong> Zone.
-        </label>
+        </legend>
         @if (includedPools.size) {
-        <label class="cds--label-description"
-               i18n>
-          Do you want to delete the associated pools with the
-          <strong>{{ zone?.name }}</strong> Zone?
-        </label>
-        <label class="cds--label-description"
-               i18n>
-          This will delete the following pools and any data stored in these pools:
-        </label>
+          <legend
+            class="cds--label-description"
+            i18n
+          >
+            Do you want to delete the associated pools with the
+            <strong>{{ zone?.name }}</strong> Zone?
+          </legend>
+          <legend
+            class="cds--label-description"
+            i18n
+          >
+            This will delete the following pools and any data stored in these pools:
+          </legend>
 
-        <div class="scroll-list">
-          @for (pool of includedPools; track pool) {
-          <div>
-            <strong>{{ pool }}</strong>
+          <div class="scroll-list">
+            @for (pool of includedPools; track pool) {
+              <div>
+                <strong>{{ pool }}</strong>
+              </div>
+            }
           </div>
+
+          <div class="form-item">
+            <cds-checkbox
+              id="deletePools"
+              formControlName="deletePools"
+              (checkedChange)="showDangerText()"
+              i18n
+              >Yes, I want to delete the pools.
+            </cds-checkbox>
+          </div>
+
+          @if (displayText) {
+            <cd-alert-panel
+              type="danger"
+              i18n
+            >
+              This will delete all the data in the pools!
+            </cd-alert-panel>
           }
-        </div>
-
-        <div class="form-item">
-          <cds-checkbox id="deletePools"
-                        formControlName="deletePools"
-                        (checkedChange)="showDangerText()"
-                        i18n>Yes, I want to delete the pools.
-          </cds-checkbox>
-        </div>
-
-        @if (displayText) {
-        <cd-alert-panel type="danger"
-                        i18n>
-          This will delete all the data in the pools!
-        </cd-alert-panel>
-        }
         }
       </form>
     </section>
   </ng-container>
 
-  <cd-form-button-panel (submitActionEvent)="submit()"
-                        [form]="zoneForm"
-                        [submitText]="actionLabels.DELETE"
-                        [modalForm]="true">
+  <cd-form-button-panel
+    (submitActionEvent)="submit()"
+    [form]="zoneForm"
+    [submitText]="actionLabels.DELETE"
+    [modalForm]="true"
+  >
   </cd-form-button-panel>
 </cds-modal>

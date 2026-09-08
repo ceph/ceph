@@ -14,7 +14,7 @@ before working with the :term:`Ceph Block Device`.
            /------------------\         /----------------\
            |    Admin Node    |         |   ceph-client  |
            |                  +-------->+ cCCC           |
-           |    ceph-deploy   |         |      ceph      |
+           |                  |         |      ceph      |
            \------------------/         \----------------/
 
 

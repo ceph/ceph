@@ -4,8 +4,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -28,13 +26,7 @@ describe('CephfsListComponent', () => {
   let cephfsService: CephfsService;
 
   configureTestBed({
-    imports: [
-      BrowserAnimationsModule,
-      SharedModule,
-      HttpClientTestingModule,
-      ToastrModule.forRoot(),
-      RouterTestingModule
-    ],
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, RouterTestingModule],
     declarations: [CephfsListComponent, CephfsTabsStubComponent, CephfsVolumeFormComponent]
   });
 

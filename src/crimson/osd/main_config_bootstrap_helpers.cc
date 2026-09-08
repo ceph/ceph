@@ -96,7 +96,8 @@ const std::vector<SeastarOption> seastar_options = {
   {"--io-latency-goal-ms", "crimson_reactor_io_latency_goal_ms", Option::TYPE_FLOAT},
   {"--idle-poll-time-us", "crimson_reactor_idle_poll_time_us", Option::TYPE_UINT},
   {"--poll-mode", "crimson_poll_mode", Option::TYPE_BOOL},
-  {"--reactor-backend", "crimson_reactor_backend", Option::TYPE_STR}
+  {"--reactor-backend", "crimson_reactor_backend", Option::TYPE_STR},
+  {"--memory", "crimson_memory", Option::TYPE_SIZE}
 };
 
 std::optional<std::string> get_option_value(const SeastarOption& option) {
@@ -109,6 +110,12 @@ std::optional<std::string> get_option_value(const SeastarOption& option) {
     }
     case Option::TYPE_UINT: {
       if (auto value = crimson::common::get_conf<uint64_t>(option.config_key)) {
+        return std::to_string(value);
+      }
+      break;
+    }
+    case Option::TYPE_SIZE: {
+      if (auto value = crimson::common::get_conf<Option::size_t>(option.config_key)) {
         return std::to_string(value);
       }
       break;
@@ -171,7 +178,16 @@ _get_early_config(int argc, const char *argv[])
 	auto stop_perf_coll = seastar::deferred_stop(sharded_perf_coll());
 
 	local_conf().parse_env().get();
-	local_conf().parse_argv(early_args).get();
+	auto remaining_args = local_conf().parse_argv(
+	  std::vector<std::string>(early_args.begin(), early_args.end())).get();
+	auto next = remaining_args.begin();
+	std::erase_if(early_args, [&next, &remaining_args](const char* arg) {
+	  if (next != remaining_args.end() && *next == arg) {
+	    ++next;
+	    return false;
+	  }
+	  return true;
+	});
 	local_conf().parse_config_files(ret.conf_file_list).get();
 
 	if (local_conf()->no_mon_config) {

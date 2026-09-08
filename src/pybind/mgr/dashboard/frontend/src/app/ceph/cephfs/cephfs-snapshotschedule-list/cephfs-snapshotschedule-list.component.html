@@ -12,18 +12,19 @@
 
 <ng-template
   #pathTpl
-  let-row="data.row">
+  let-row="data.row"
+>
   <span
     class="fw-bold"
     [ngbTooltip]="fullpathTpl"
-    triggers="click:blur">
-    {{ row.pathForSelection?.split?.("@")?.[0] | path }}
+    triggers="click:blur"
+  >
+    {{ row.pathForSelection?.split?.('@')?.[0] | path }}
   </span>
 
-  <span
-  *ngIf="row.active; else inactiveStatusTpl">
+  <span *ngIf="row.active; else inactiveStatusTpl">
     <i
-      [ngClass]="[icons.success, icons.large]"
+      [ngClass]="[icons.success, icons.size24]"
       ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} is active"
       class="text-success"
     ></i>
@@ -31,7 +32,7 @@
 
   <ng-template #inactiveStatusTpl>
     <i
-      [ngClass]="[icons.warning, icons.large]"
+      [ngClass]="[icons.warning, icons.size24]"
       class="text-warning"
       ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} has been deactivated"
     ></i>
@@ -51,7 +52,8 @@
 
 <ng-template
   #retentionTpl
-  let-row="data.row">
+  let-row="data.row"
+>
   <ul *ngIf="row.retentionCopy.length; else noDataTpl">
     <li *ngFor="let ret of row.retentionCopy">{{ ret }}</li>
   </ul>
@@ -59,13 +61,12 @@
 
 <ng-template
   #subvolTpl
-  let-row="data.row">
+  let-row="data.row"
+>
   <span *ngIf="row.subvol; else noDataTpl">
-    {{row.subvol}}
+    {{ row.subvol }}
   </span>
 </ng-template>
-
-
 
 <ng-template #noDataTpl>-</ng-template>
 

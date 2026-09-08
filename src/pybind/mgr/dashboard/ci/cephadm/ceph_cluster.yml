@@ -47,6 +47,9 @@ parameters:
  {% if quick_install is defined %}
  - /root/load-podman-image.sh
  {% endif %}
+ {% if custom_image is defined %}
+ - export CEPHADM_IMAGE={{custom_image}}
+ {% endif %}
  - sed -i "s/SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config
  - setenforce 0
  {% if number == 0 %}

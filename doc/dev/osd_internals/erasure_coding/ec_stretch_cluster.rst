@@ -1,6 +1,6 @@
-=====================================================
+========================================================
 Design Document: Ceph Erasure Coded (EC) Stretch Cluster
-=====================================================
+========================================================
 
 .. note::
 
@@ -108,7 +108,7 @@ to the CLIs that control stretch mode.
 
 
 2.1 ceph osd pool create
-^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ceph osd pool create command will be extended to become a parameterized command.
 
@@ -247,8 +247,7 @@ These parameters are intended for advanced users and offer finer control over th
 
 **--min_size**
   - *Definition*: The minimum number of shards required to serve I/O within a zone.
-  - *Format*: Now always specified as a target range: ``1-<num replicas>`` for replica pools, 
-              or ``<num data shards>-<num data shards>+<num coding shards>`` for EC pools.
+  - *Note*: The value should be within allowed specified ranges. For replica pools this range is ``1-<num replicas>``, for EC pools this is ``<num data shards>-<num data shards>+<num coding shards>``.
 
 **--crush_rule**
   - *Definition*: Use this CRUSH rule, instead of an auto-generated rule. 
@@ -311,7 +310,7 @@ These are used for backward compatibility only.
 
 
 2.3 Examples
-^^^^^^^^^^^^
+~~~~~~~~~~~~
 
 The following are examples of how the new parameterized ``ceph osd pool create`` command simplifies pool creation across different topologies.
 
@@ -1078,7 +1077,7 @@ each object that results in the fewest bytes crossing zone boundaries.
   specifies which remote-zone shards to fetch.
 
 9.3 Delegated Remote-zone Recovery — *Later Release*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. note::
 
@@ -1104,7 +1103,7 @@ each object that results in the fewest bytes crossing zone boundaries.
    and are deferred to a later release.
 
 9.4.1 Remote-zone Fallback (Push Recovery)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If a remote zone cannot perform zone-local recovery, and the cost-based analysis
 determines that Primary-side reconstruction and push is the cheapest option:

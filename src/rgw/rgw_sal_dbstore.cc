@@ -26,9 +26,12 @@
 #include "rgw_sal_dbstore.h"
 #include "rgw_bucket.h"
 
-#include "driver/rados/rgw_rados.h" // XXX: for RGW_OBJ_NS_MULTIPART, PUT_OBJ_CREATE, etc
-
 #define dout_subsys ceph_subsys_rgw
+
+/* flags for put_obj_meta() */
+#define PUT_OBJ_CREATE      0x01
+#define PUT_OBJ_EXCL        0x02
+#define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
 
 using namespace std;
 
@@ -606,7 +609,10 @@ namespace rgw::sal {
     return op_target.obj_omap_set_val_by_key(dpp, key, val, must_exist);
   }
 
-  int DBObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+  int DBObject::chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y)
   {
     return 0;
   }
@@ -948,9 +954,6 @@ namespace rgw::sal {
            const char *if_nomatch)
   {
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
-    std::string etag;
-    bufferlist etag_bl;
     MD5 hash;
     bool truncated;
     int ret;
@@ -1018,16 +1021,17 @@ namespace rgw::sal {
     } while (truncated);
     hash.Final((unsigned char *)final_etag);
 
-    buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
-    snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],
-	     sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)part_etags.size());
-    etag = final_etag_str;
-    ldpp_dout(dpp, 10) << "calculated etag: " << etag << dendl;
+    bufferlist etag_bl;
+    append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16, [&](auto iter) {
+      const auto start = iter;
+      iter = buf_to_hex(final_etag, iter);
+      iter = fmt::format_to(iter, "-{}", part_etags.size());
+      ldpp_dout(dpp, 10) << "calculated etag: " << std::string_view{start, iter}
+                         << dendl;
+      return iter;
+    });
 
-    etag_bl.append(etag);
-
-    attrs[RGW_ATTR_ETAG] = etag_bl;
+    attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
 
     /* XXX: handle compression ? */
 
@@ -1484,7 +1488,8 @@ namespace rgw::sal {
   int DBStore::store_oidc_provider(const DoutPrefixProvider *dpp,
                                    optional_yield y,
                                    const RGWOIDCProviderInfo& info,
-                                   bool exclusive)
+                                   bool exclusive,
+                                   RGWObjVersionTracker* objv_tracker)
   {
     return -ENOTSUP;
   }
@@ -1493,7 +1498,8 @@ namespace rgw::sal {
                                   optional_yield y,
                                   std::string_view account,
                                   std::string_view url,
-                                  RGWOIDCProviderInfo& info)
+                                  RGWOIDCProviderInfo& info,
+                                  RGWObjVersionTracker* objv_tracker)
   {
     return -ENOTSUP;
   }

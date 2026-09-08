@@ -4,3 +4,8 @@ export enum NotificationType {
   success,
   warning
 }
+
+export enum NotificationApplication {
+  Ceph = 'Ceph',
+  Prometheus = 'Prometheus'
+}

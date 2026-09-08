@@ -32,8 +32,7 @@ case $(librados-config --release | grep -Po ' \(\K[^\)]+') in
         echo "unknown release '$(librados-config --release)'" >&2
         return 1;;
 esac
-DL_PREFIX="http://git.ceph.com/?p=ceph.git;a=blob_plain;hb=${BRANCH};f=examples/librados/"
-#DL_PREFIX="https://raw.githubusercontent.com/ceph/ceph/master/examples/librados/"
+DL_PREFIX="https://raw.githubusercontent.com/ceph/ceph/${BRANCH}/examples/librados/"
 DESTDIR=$(pwd)
 
 function cleanup () {

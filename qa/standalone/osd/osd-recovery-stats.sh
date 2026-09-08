@@ -24,7 +24,7 @@ function run() {
     # Fix port????
     export CEPH_MON="127.0.0.1:7115" # git grep '\<7115\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     # so we will not force auth_log_shard to be acting_primary
     CEPH_ARGS+="--osd_force_auth_primary_missing_objects=1000000 "
@@ -502,6 +502,394 @@ function TEST_recovery_multi() {
     check $dir $PG $primary replicated 399 0 300 0 99 0 || return 1
 
     delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
+function TEST_recovery_last_degraded_latching() {
+    local dir=$1
+    local osds=6
+
+    # Setup Cluster
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for i in $(seq 0 $(expr $osds - 1)); do
+      run_osd $dir $i || return 1
+    done
+
+    # Create Pool with specific replica counts
+    create_pool $poolname 8 8
+    ceph osd pool set $poolname size 3
+    ceph osd pool set $poolname min_size 1
+    wait_for_clean || return 1
+
+    # Inject data
+    local numobjs=100
+    for i in $(seq 1 $numobjs); do
+      rados -p $poolname put obj$i /dev/null
+    done
+
+    # Identify PG and OSDs
+    local pgid=$(get_pg $poolname obj1)
+    local replicaosds=$(get_osds $poolname obj1 | awk '{print $2, $3}')
+    read -r osd_a osd_b <<< "$replicaosds"
+
+    # Capture baseline timestamp
+    local last_clean_start=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_clean')
+
+    # --- Step 1: Kill the first non-primary OSD (osd_a) ---
+    echo "Setting norecover to freeze PG state..."
+    ceph osd set norecover
+
+    echo "Stopping OSD.$osd_a..."
+    kill $(cat $dir/osd.${osd_a}.pid)
+    ceph osd down osd.${osd_a}
+    ceph osd out osd.${osd_a}
+
+    # 1.1 Wait and confirm state moves to degraded or undersized
+    local state=""
+    for i in $(seq 1 30); do
+      state=$(ceph pg $pgid query | jq -r '.info.stats.state')
+      echo "Current PG $pgid state: $state"
+      if [[ "$state" == *"degraded"* ]] || \
+         [[ "$state" == *"undersized"* ]]; then
+        break
+      fi
+      sleep 1
+    done
+
+    if [[ "$state" != *"degraded"* ]] && [[ "$state" != *"undersized"* ]]; then
+      echo "Error: PG $pgid state ($state) did not become " \
+           "degraded/undersized after killing osd.$osd_a."
+      return 1
+    fi
+
+    # 1.2 Confirm last_degraded updated
+    local last_degraded_t1=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_degraded')
+    echo "Queried last_degraded (T1): $last_degraded_t1"
+    if [[ "$last_degraded_t1" > "$last_clean_start" ]]; then
+      echo "Confirmed: last_degraded ($last_degraded_t1) updated on failure."
+    else
+      echo "Error: last_degraded ($last_degraded_t1) is not newer than " \
+           "initial last_clean ($last_clean_start)."
+      return 1
+    fi
+
+    # --- Step 2: Kill the second non-primary OSD (osd_b) ---
+    echo "Stopping OSD.$osd_b..."
+    kill $(cat $dir/osd.${osd_b}.pid)
+    ceph osd down osd.${osd_b}
+    ceph osd out osd.${osd_b}
+
+    # 2.1 Confirm last_degraded remains latched (the same)
+    local last_degraded_t2=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_degraded')
+    echo "Queried last_degraded (T2): $last_degraded_t2"
+    if [[ "$last_degraded_t2" == "$last_degraded_t1" ]]; then
+      echo "Test Passed: last_degraded timestamp remained " \
+           "stable at $last_degraded_t2."
+    else
+      echo "Test Failed: last_degraded updated to " \
+           "$last_degraded_t2 on second failure."
+      return 1
+    fi
+
+    # --- Step 3: Recovery ---
+    echo "Unsetting norecover and restarting OSDs..."
+    ceph osd unset norecover
+
+    echo "Restarting OSDs $osd_a and $osd_b..."
+    activate_osd $dir $osd_a
+    activate_osd $dir $osd_b
+    wait_for_clean || return 1
+
+    # --- Step 4: Final Verification ---
+    local final_stats=$(ceph pg $pgid query | \
+      jq -r '.info.stats | "\(.last_degraded) \(.last_clean)"')
+    read -r last_degraded_final last_clean_final <<< "$final_stats"
+
+    echo "Final Timestamps -> Last Degraded: $last_degraded_final, " \
+         "Last Clean: $last_clean_final"
+    if [[ "$last_clean_final" > "$last_degraded_final" ]]; then
+      echo "Test Passed: Recovery successful. last_clean ($last_clean_final) " \
+           "is newer than last_degraded ($last_degraded_final)."
+    else
+      echo "Test Failed: last_clean ($last_clean_final) was not updated " \
+           "correctly after recovery."
+      return 1
+    fi
+
+    # Cleanup
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
+function TEST_recovery_last_degraded_undersized() {
+    local dir=$1
+    local osds=3
+
+    # 1. Setup Cluster
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for i in $(seq 0 $(expr $osds - 1)); do
+      run_osd $dir $i || return 1
+    done
+
+    # 2. Create Pool and force size 1
+    create_pool $poolname 8 8
+    ceph osd pool set $poolname size 1 --yes-i-really-mean-it
+    wait_for_clean || return 1
+
+    # Inject data
+    for i in $(seq 1 50); do
+      rados -p $poolname put obj$i /dev/null
+    done
+
+    local pgid=$(get_pg $poolname obj1)
+    local primary=$(get_primary $poolname obj1)
+
+    # 3. Select Non-Primary OSD
+    local replica_osd=""
+    for i in $(seq 0 $(expr $osds - 1)); do
+      if [[ "$i" != "$primary" ]]; then
+          replica_osd=$i
+          break
+      fi
+    done
+    echo "Primary is OSD.$primary, selected OSD.$replica_osd to mark OUT."
+
+    local last_clean_start=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_clean')
+
+    # 4. Mark non-primary OSD out and set norecover
+    ceph osd set norecover
+    ceph osd out $replica_osd
+
+    # 5. Increase pool size to 4
+    echo "Increasing pool size to 4..."
+    ceph osd pool set $poolname size 4
+
+    # 6. Unset norecover and kick the recovery queue
+    echo "Starting recovery..."
+    ceph osd unset norecover
+    ceph tell osd.$primary debug kick_recovery_wq 0
+
+    sleep 10
+    flush_pg_stats || return 1
+
+    # 7. Custom recovery-wait logic
+    echo "Waiting for $pgid to be marked undersized..."
+    for i in $(seq 1 300); do
+      # Fetch only the stats for the specific PG in JSON format
+      local current_state=$(ceph pg $pgid query | jq -r '.info.stats.state')
+      echo "Iteration $i: PG $pgid state is [$current_state]"
+
+      # Check if 'recovering' is absent from the state string
+      if [[ "$current_state" != *"recovering"* ]]; then
+        echo "PG $pgid is marked undersized (current state: $current_state)."
+        break
+      fi
+      if [ "$i" = "300" ]; then
+        echo "Timeout waiting for $pgid to become undersized"
+        ceph pg $pgid query | jq .
+        return 1
+      fi
+      sleep 1
+    done
+
+    # 8. Verification
+    local last_degraded_final=$(ceph pg $pgid query | \
+      jq -r '.info.stats.last_degraded')
+    echo "Initial Clean:  $last_clean_start"
+    echo "Final Degraded: $last_degraded_final"
+
+    if [[ "$last_degraded_final" > "$last_clean_start" ]]; then
+      echo "Test Passed: last_degraded updated correctly."
+    else
+      echo "Test Failed: last_degraded ($last_degraded_final) was not updated."
+      return 1
+    fi
+
+    # Cleanup
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
+# Verify that the rebuild perf counters on the primary OSD increment after a
+# real EC shard recovery, AND that a same-primary peering-interval restart
+# occurring mid-rebuild does not truncate or drop the recorded duration.
+#
+# Sequence:
+#  1. Kill one non-primary OSD so the PG goes degraded (1st interval restart)
+#  2. Grep primary's log for rebuild latch firing, hold a deliberate gap before
+#     the second restart to unambiguously distinguish the duration.
+#  3. Mark the non-primary OSD out which results in the 4th OSD added to the
+#     acting set and becomes a backfill target (2nd interval restart).
+#  4. Assert that "latched failure start" line appears only once in the logs.
+#     This confirms that the second restart does not reset the counters.
+#  5. Let recovery run to completion. Assert exactly one "recorded rebuild"
+#     line, and that the recorded duration covers at least the deliberate gap
+#     from step 2 -- proving the full window survived.
+function TEST_rebuild_perf_ec_increments() {
+    local dir=$1
+    local OSDS=4
+    local ecpoolname=ectest
+    # Deliberate gap between the latch firing and the second interval
+    # restart, long enough to be unambiguous against scheduling jitter.
+    local gap_secs=5
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      # debug-osd=15 so the "rebuild-stats: latched/recorded" lines emitted
+      # by prepare_stats_for_publish() are captured in the OSD log.
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 || return 1
+    done
+
+    ceph osd erasure-code-profile set ecprofile \
+        plugin=jerasure technique=reed_sol_van k=2 m=1 \
+        crush-failure-domain=osd || return 1
+    ceph osd pool create $ecpoolname 1 1 erasure ecprofile || return 1
+    ceph osd pool set $ecpoolname min_size 2 || return 1
+    wait_for_clean || return 1
+
+    # Write a few objects so the PG has data that must be recovered.
+    for i in $(seq 1 5)
+    do
+      rados -p $ecpoolname put obj$i /etc/hostname || return 1
+    done
+    wait_for_clean || return 1
+
+    local primary
+    primary=$(get_primary $ecpoolname obj1)
+    local PG
+    PG=$(get_pg $ecpoolname obj1)
+    # Derive the primary's actual shard for a given object (obj1)
+    local primary_shard
+    primary_shard=$(ceph --format json osd map $ecpoolname obj1 2>/dev/null | \
+      jq ".acting | index($primary)")
+    local PG_SPG="${PG}s${primary_shard}"
+    local replica
+    replica=$(get_not_primary $ecpoolname obj1)
+    local log=$dir/osd.${primary}.log
+
+    # Pause recovery so the PG stays degraded long enough for the latch to
+    # fire inside prepare_stats_for_publish before recovery completes.
+    ceph osd set norecover || return 1
+
+    # Kill one non-primary OSD so the PG becomes degraded.
+    # ---1st interval restart---
+    kill $(cat $dir/osd.${replica}.pid)
+    ceph osd down osd.${replica} || return 1
+
+    if [ "$(get_primary $ecpoolname obj1)" != "$primary" ]; then
+      echo "FAIL: primary changed after killing a non-primary OSD;" \
+           "test topology assumption broken"
+      return 1
+    fi
+
+    # Wait for the latch to fire.
+    local latched=0
+    for i in $(seq 1 30)
+    do
+      flush_pg_stats || return 1
+      if grep -q "rebuild-stats: latched failure start for ${PG_SPG} " $log
+      then
+        latched=1
+        break
+      fi
+      sleep 1
+    done
+    test "$latched" = 1 || {
+      echo "FAIL: rebuild latch never fired after opening the acting-set hole"
+      return 1
+    }
+
+    # Deliberate gap before the second restart. A duration truncated by a
+    # re-latch after that restart would come out well under this.
+    sleep $gap_secs
+
+    # --- 2nd interval restart: mark the OSD out to force a remap of a spare
+    # OSD into the acting set as a backfill target. Primary is unaffected.
+    ceph osd out osd.${replica} || return 1
+
+    if [ "$(get_primary $ecpoolname obj1)" != "$primary" ]; then
+      echo "FAIL: primary changed after marking the OSD out;" \
+           "test topology assumption broken"
+      return 1
+    fi
+
+    # Let the new interval settle and force another stats publish so a
+    # pre-fix reset-and-relatch would already be visible in the log here.
+    sleep 2
+    flush_pg_stats || return 1
+
+    local latch_count
+    latch_count=$(grep -c "rebuild-stats: latched failure start for ${PG_SPG} " $log)
+    test "$latch_count" = 1 || {
+      echo "FAIL: expected exactly 1 'latched failure start' for ${PG_SPG}," \
+           "got $latch_count -- the same-primary interval restart reset" \
+           "the in-progress latch"
+      return 1
+    }
+
+    # Release the hold and wait for full recovery.
+    ceph osd unset norecover || return 1
+    wait_for_clean || return 1
+
+    # flush_pg_stats triggers publish_stats_to_osd on every OSD, which calls
+    # prepare_stats_for_publish and commits the rebuild counters.
+    flush_pg_stats || return 1
+
+    # The primary may be the same OSD we started with (we only killed a
+    # replica), but re-query in case CRUSH remapped the primary shard.
+    primary=$(get_primary $ecpoolname obj1)
+    log=$dir/osd.${primary}.log
+
+    local dump
+    dump=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
+           perf dump) || return 1
+
+    local rebuild_avgcount
+    rebuild_avgcount=$(jq '.recoverystate_perf.pg_rebuild_duration.avgcount' \
+      <<< "$dump")
+    test "$rebuild_avgcount" -ge 1 || {
+      echo "FAIL: expected pg_rebuild_duration.avgcount>=1, got $rebuild_avgcount"
+      return 1
+    }
+
+    local rebuild_sum
+    rebuild_sum=$(jq '.recoverystate_perf.pg_rebuild_duration.sum' <<< "$dump")
+    echo "$dump" | \
+      jq -e '.recoverystate_perf.pg_rebuild_duration.sum > 0' > /dev/null || {
+      echo "FAIL: expected pg_rebuild_duration.sum>0, got $rebuild_sum"
+      return 1
+    }
+
+    # Exactly one full rebuild event must have been recorded.
+    local record_count
+    record_count=$(grep -c "rebuild-stats: recorded rebuild for ${PG_SPG} " $log)
+    test "$record_count" = 1 || {
+      echo "FAIL: expected exactly 1 'recorded rebuild' for ${PG_SPG}," \
+           "got $record_count"
+      return 1
+    }
+
+    # The recorded duration must cover at least the deliberate gap held
+    # before the second restart i.e., $gap_secs. pg_rebuild_duration.sum is
+    # reported in fractional seconds.
+    echo "$dump" | \
+      jq -e ".recoverystate_perf.pg_rebuild_duration.sum >= ${gap_secs}" \
+      > /dev/null || {
+      echo "FAIL: expected pg_rebuild_duration.sum >= ${gap_secs}s" \
+           "(the ${gap_secs}s gap held before the second interval restart)," \
+           "got ${rebuild_sum}s -- duration looks truncated"
+      return 1
+    }
+
+    delete_pool $ecpoolname
     kill_daemons $dir || return 1
 }
 

@@ -498,6 +498,9 @@ class SMBStatus(RESTController):
     def status(self):
         status = {'available': False, 'message': None}
         try:
+            if not mgr.remote('smb', 'db_ready'):
+                status['message'] = 'SMB DB not ready. SMB module is unavailable.'
+                return status
             mgr.remote('smb', 'show', ['ceph.smb.cluster'])
             status['available'] = True
         except (ImportError, RuntimeError):

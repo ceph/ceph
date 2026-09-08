@@ -457,8 +457,13 @@ std::unique_ptr<BatchOp> MDRequestImpl::release_batch_op()
 {
   int mask = client_request->head.args.getattr.mask;
   auto it = batch_op_map->find(mask);
+  ceph_assert(it != batch_op_map->end());
   std::unique_ptr<BatchOp> bop = std::move(it->second);
   batch_op_map->erase(it);
+  /* we do not own an entry in that map anymore; leaving the pointer set
+   * would make is_batch_head() lie and the next find() would return end()
+   */
+  batch_op_map = nullptr;
   return bop;
 }
 

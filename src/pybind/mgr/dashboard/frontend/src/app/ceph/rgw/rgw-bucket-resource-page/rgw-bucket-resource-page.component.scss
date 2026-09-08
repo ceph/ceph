@@ -1,0 +1,19 @@
+@use '@carbon/layout';
+
+.rgw-bucket-resource-section {
+  margin-bottom: layout.$spacing-07;
+}
+
+.rgw-bucket-resource-subtitle {
+  margin-top: layout.$spacing-06;
+  margin-bottom: layout.$spacing-03;
+}
+
+.rgw-bucket-resource-section-block {
+  margin-bottom: layout.$spacing-07;
+}
+
+cd-rgw-bucket-resource-page .cds--content-switcher {
+  inline-size: 20%;
+  outline: none;
+}

@@ -1,3 +1,5 @@
+.. _radosgw-cloud-transition:
+
 ================
 Cloud Transition
 ================
@@ -50,10 +52,13 @@ Cloud Storage Class Tier Configuration
                 "dest_id": <dest_id> } ... ],
     "location_constraint": <location-constraint>,
     "target_path": <target_path>,
+    "target_by_bucket": <true | false>,
+    "target_by_bucket_prefix": <template>,
     "target_storage_class": <target-storage-class>,
     "multipart_sync_threshold": {object_size},
     "multipart_min_part_size": {part_size},
-    "retain_head_object": <true | false>
+    "retain_head_object": <true | false>,
+    "retain_current_version": <true | false>
   }
 
 
@@ -109,13 +114,53 @@ Cloud Transition Specific Configurables
 
   A string that defines how the target path is constructed. The target path
   specifies a prefix to which the source bucket-name/object-name is appended.
-  If not specified the ``target_path`` created is ``rgwx-${zonegroup}-${storage-class}-cloud-bucket``.
+  If not specified and ``target_by_bucket`` is ``false``, the ``target_path``
+  created is ``rgwx-${zonegroup}-${storage_class}-cloud-bucket``.
 
-  For example: ``target_path = rgwx-archive-${zonegroup}/``
+  Supports the template variables ``${zonegroup}`` and ``${storage_class}``.
+
+  The ``target_path`` value is only used when ``target_by_bucket`` is ``false``.
+
+  For example: ``target_path = rgwx-${zonegroup}-archive/``
+
+* ``target_by_bucket`` (boolean)
+
+  When enabled, each source bucket transitions to a dedicated destination
+  bucket rather than sharing a common target. Defaults to ``false`` to
+  preserve the legacy behavior.
+
+* ``target_by_bucket_prefix`` (string)
+
+  Optional template used when ``target_by_bucket`` is true to derive the
+  destination bucket name. Supports the variables ``${zonegroup}``,
+  ``${storage_class}``, ``${bucket}``, ``${tenant}``, and ``${owner}``.
+  The ``${owner}`` variable expands to the bucket owner's identifier
+  (the user ID for user-owned buckets, or the account ID for account-owned
+  buckets). If unset, the template falls back to the built-in default
+  ``rgwx-${zonegroup}-${storage_class}-${bucket}``.
+
+.. note::
+   S3 bucket naming constraints still apply on the destination side
+   (lowercase letters and numbers, 3-63 characters, no slashes). RGW
+   lowercases the derived bucket name. If you include slashes or invalid
+   characters in a custom template, bucket creation may still fail on the
+   target cloud.
+
+For example, to enable per-bucket targeting with a custom prefix:
+
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement modify --rgw-zonegroup default \
+                                              --placement-id default-placement \
+                                              --storage-class CLOUDTIER \
+                                              --tier-config=target_by_bucket=true,\
+                                              target_by_bucket_prefix=archive-${owner}-${bucket}
 
 * ``location_constraint`` (string)
 
-  Specifies the region where the target bucket will be created on the remote S3 endpoint. For AWS, this location needs to be specified only if the region is other than US East (us-east-1).
+  Specifies the region where the target bucket will be created on the remote
+  S3 endpoint. For AWS, specify this only if the region is other than
+  US East (``us-east-1``).
 
 * ``target_storage_class`` (string)
 
@@ -124,10 +169,21 @@ Cloud Transition Specific Configurables
 
 * ``retain_head_object`` (true | false)
 
-  If ``true``, the metadata of the object transitioned to the cloud service is retained.
-  If ``false`` (default), the object is deleted after the transition.
-  This option is ignored for current-versioned objects. For more details,
-  refer to the :ref:`versioned_objects` section below.
+  If ``true``, the metadata of the object transitioned to the cloud service is retained
+  as a cloud-tiered stub. If ``false`` (default), the object is deleted after the transition.
+  This option applies to non-versioned objects and non-current versions in versioned buckets.
+  For current versions in versioned buckets, see ``retain_current_version``.
+  Setting this to ``false`` also clears ``retain_current_version``.
+
+* ``retain_current_version`` (true | false)
+
+  If ``true``, when transitioning current versions in versioned buckets, the HEAD
+  object is retained as a cloud-tiered stub instead of creating a delete marker.
+  The stub has size=0 and storage class set to the cloud tier name.
+  If ``false`` (default), a delete marker is created and the transitioned version
+  becomes non-current, matching the behavior of LifecycleExpiration.
+  This option only applies to current versions in versioned buckets.
+  Requires ``retain_head_object`` to be ``true``.
 
 
 S3 Specific Configurables
@@ -412,22 +468,51 @@ Below is the object name format::
 
   s3://<target_path>/<source_bucket_name>/<source_object_name>(-<source_object_version_id>)
 
+The version id is appended for non-current versions. The ``null`` version is
+stored under the bare object name, without a suffix.
+
+Null versions transitioned by earlier releases are stored as
+``<source_object_name>-null``. A restore looks for the bare name and will not
+find them, so any such objects have to be copied back from the cloud service
+manually.
+
 .. _versioned_objects:
 
 Versioned Objects
 ~~~~~~~~~~~~~~~~~
 
-For versioned and locked objects, similar semantics as that of LifecycleExpiration are applied as stated below.
+For versioned objects:
 
-* If the object is current, post transitioning to cloud, it is made noncurrent with delete marker created.
+* If both ``retain_head_object`` and ``retain_current_version`` are ``true``,
+  current versions are updated in place to be cloud-tiered stubs (size=0,
+  CloudTiered category). No delete marker is created. The version ID is
+  appended to the cloud object key.
 
-* If the object is noncurrent and is locked, its transition is skipped.
+* If ``retain_current_version`` is ``false`` (default), current versions are made
+  non-current with a delete marker created, matching the behavior of LifecycleExpiration.
+
+* For non-current versions, the ``retain_head_object`` setting applies.
+
+* If a non-current version is locked, its transition is skipped.
 
 
 Restoring Objects
 -----------------
 The objects transitioned to cloud can now be restored. For more information, refer to
 :ref:`Restoring Objects from Cloud <radosgw-cloud-restore>`.
+
+
+Retry Behavior
+--------------
+When the remote cloud endpoint reports a transient error, RGW retries the
+request with backoff rather than failing the lifecycle action immediately.
+
+If the retry budget is exhausted the operation is not completed and is
+retried on the next lifecycle pass.
+
+.. confval:: rgw_cloud_tier_retry_limit
+.. confval:: rgw_cloud_tier_retry_delay_ms
+.. confval:: rgw_cloud_tier_retry_max_ms
 
 
 Future Work

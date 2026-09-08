@@ -39,7 +39,7 @@ describe('Logs page', () => {
     });
 
     it('should show daemon logs as a third tab', () => {
-      logs.getTabText(2).should('eq', 'Daemon Logs');
+      logs.getTabText(2).should('eq', 'Service instance logs');
     });
   });
 

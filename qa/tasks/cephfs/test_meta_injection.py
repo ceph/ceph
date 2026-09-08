@@ -3,7 +3,7 @@ from tasks.cephfs.cephfs_test_case import CephFSTestCase
 class TestMetaInjection(CephFSTestCase):
     def test_meta_injection(self):
         conf_ori = self.fs.mds_asok(['config', 'show'])
-        self.fs.mds_asok(['config', 'set', 'mds_log_max_segments', '1'])
+        self.fs.mds_asok(['config', 'set', 'mds_log_max_segments', '8'])
         self.mount_a.run_shell(["mkdir", "metadir"])
         self.mount_a.run_shell(["touch", "metadir/metafile1"])
         self.mount_a.run_shell(["touch", "metadir/metafile2"])

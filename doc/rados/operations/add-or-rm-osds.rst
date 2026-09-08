@@ -1,8 +1,17 @@
+.. _adding-and-removing-osds:
+
 ======================
  Adding/Removing OSDs
 ======================
 
-When a cluster is up and running, it is possible to add or remove OSDs. 
+.. note:: The procedures on this page are for clusters that are not
+   managed by cephadm. In a cephadm-managed cluster, OSDs are added
+   and removed through the orchestrator: see
+   :ref:`cephadm-deploy-osds` and :ref:`cephadm-osd-removal`. Using
+   the procedures below on a cephadm-managed cluster will conflict
+   with the orchestrator's own management of the daemons.
+
+When a cluster is up and running, it is possible to add or remove OSDs.
 
 Adding OSDs
 ===========
@@ -52,6 +61,13 @@ and root permissions.
 
 Adding an OSD (Manual)
 ----------------------
+
+.. seealso:: The :ref:`manual-deployment-adding-osds` section of the
+   Manual Deployment guide documents the same task using
+   ``ceph-volume``, which automates most of the steps below, and a
+   long form based on the newer ``ceph osd new`` command. Prefer
+   those procedures where possible; the steps below remain valid for
+   environments where ``ceph-volume`` cannot be used.
 
 The following procedure sets up a ``ceph-osd`` daemon, configures this OSD to
 use one drive, and configures the cluster to distribute data to the OSD. If
@@ -124,7 +140,7 @@ cluster have and therefore might have greater weight as well.
 
    .. prompt:: bash $
 
-      ceph auth add osd.{osd-num} osd 'allow *' mon 'allow rwx' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
+      ceph auth add osd.{osd-num} osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
 
    This presentation of the command has ``ceph-{osd-num}`` in the listed path
    because many clusters have the name ``ceph``. However, if your cluster name

@@ -1,0 +1,23 @@
+@if (selection) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Cluster details"
+        [columns]="2"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+
+      <section class="cds-mt-6">
+        <cd-smb-share-list [clusterId]="selection.cluster_id"></cd-smb-share-list>
+      </section>
+    }
+  }
+} @else if (loadError) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No SMB cluster found.</cd-alert-panel
+  >
+}

@@ -1,6 +1,7 @@
 import logging
 import json
 import socket
+from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
 from typing import (
@@ -15,6 +16,7 @@ from typing import (
     Union,
 )
 from orchestrator import OrchestratorError
+from functools import lru_cache
 import hashlib
 
 if TYPE_CHECKING:
@@ -38,7 +40,7 @@ GATEWAY_TYPES = ['iscsi', 'nfs', 'nvmeof', 'smb']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus',
                           'alertmanager', 'grafana', 'loki', 'promtail', 'alloy']
 MGMT_GATEWAY_STACK_TYPES = ['mgmt-gateway', 'oauth2-proxy']
-RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs']
+RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs', 'keepalived']
 
 CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES + MGMT_GATEWAY_STACK_TYPES
 
@@ -52,6 +54,29 @@ NON_CEPH_IMAGE_TYPES = MONITORING_STACK_TYPES + ['nvmeof', 'smb'] + MGMT_GATEWAY
 
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token
+
+# allowed ciphers for cephx keyrings in this version.
+# We do not set preferred ciphers as we may potentially
+# brake clusters on upgrade
+ALLOWED_CIPHERS = ['aes', 'aes256k']
+# ROTATION_CIPHER is the cipher the new keys will be set
+# up with after we rotate them
+ROTATION_CIPHER = 'aes256k'
+# cipher mons should use by default for service requests
+# Do not set the service cipher until all core (mon/mgr/osd/mds)
+# daemons have been upgraded
+SERVICE_CIPHER = 'aes256k'
+
+
+DEFAULT_SSH_CONFIG = """
+Host *
+  User root
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  ConnectTimeout=30
+"""
+
+FIPS_SSH_CIPHERS = 'aes256-ctr,aes128-ctr'
 
 
 class ContainerInspectInfo(NamedTuple):
@@ -90,6 +115,16 @@ class Action(str, Enum):
 
     def __str__(self) -> str:
         return self.value
+
+
+@dataclass(frozen=True)
+class NextDaemonStep:
+    """Result of CephadmService.choose_next_action: high-level action plus
+    optional reconfig hints (e.g. HAProxy reload via signal instead of restart).
+    """
+    action: Action
+    skip_restart_for_reconfig: bool = False
+    send_signal_to_daemon: Optional[str] = None
 
 
 def name_to_config_section(name: str) -> ConfEntity:
@@ -187,10 +222,13 @@ def file_mode_to_str(mode: int) -> str:
     return r
 
 
-def md5_hash(input_value: str) -> str:
-    input_str = str(input_value).encode('utf-8')
-    hash_object = hashlib.md5(input_str)
-    return hash_object.hexdigest()
+def config_hash(input_value: str) -> str:
+    """
+    Short stable digest for config/dependency change detection.
+    Uses SHA-256 so this works on FIPS-enabled systems (MD5 may be blocked).
+    """
+    input_str = input_value.encode('utf-8')
+    return hashlib.sha256(input_str).hexdigest()[:8]
 
 
 def get_node_proxy_status_value(data: Any, key: str, lower: bool = False) -> str:
@@ -203,3 +241,61 @@ def get_node_proxy_status_value(data: Any, key: str, lower: bool = False) -> str
     if not isinstance(value, str):
         return ''
     return value.lower() if lower else value
+
+
+def get_config_option_meta(
+    mgr: 'CephadmOrchestrator',
+    key: str,
+    cache: Optional[dict[str, Optional[dict[str, Any]]]] = None,
+) -> Optional[dict[str, Any]]:
+    if cache is not None and key in cache:
+        return cache[key]
+
+    try:
+        ret, out, err = mgr.check_mon_command({
+            'prefix': 'config help',
+            'key': key,
+            'format': 'json',
+        })
+        meta = json.loads(out) if out else None
+    except Exception:
+        logger.exception("Failed to fetch config metadata for key %s", key)
+        meta = None
+
+    if cache is not None:
+        cache[key] = meta
+    return meta
+
+
+def can_apply_post_create(
+    mgr: 'CephadmOrchestrator',
+    key: str,
+    cache: Optional[dict[str, Optional[dict[str, Any]]]] = None,
+) -> bool:
+    meta = get_config_option_meta(mgr, key, cache)
+    if not meta:
+        return False
+    return bool(meta.get('can_update_at_runtime', False))
+
+
+@lru_cache(maxsize=1)
+def is_fips_enabled() -> bool:
+    try:
+        with open('/proc/sys/crypto/fips_enabled', 'r') as f:
+            return f.read().strip() == '1'
+    except OSError as error:
+        logger.debug(
+            'Unable to read /proc/sys/crypto/fips_enabled: %s',
+            error,
+        )
+        return False
+
+
+def get_default_ssh_config() -> str:
+    """Return the default cephadm SSH config for the local environment."""
+    ssh_config = DEFAULT_SSH_CONFIG
+
+    if is_fips_enabled():
+        ssh_config += f'  Ciphers {FIPS_SSH_CIPHERS}\n'
+
+    return ssh_config

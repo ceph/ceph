@@ -512,7 +512,7 @@ class NodeExtentAccessorT {
     std::memcpy(to.get_write(), extent->get_read(), get_length());
   }
 
-  eagain_ifuture<NodeExtentMutable> rebuild(context_t c, laddr_t hint) {
+  eagain_ifuture<NodeExtentMutable> rebuild(context_t c, laddr_hint_t hint) {
     LOG_PREFIX(OTree::Extent::rebuild);
     assert(!is_retired());
     if (state == nextent_state_t::FRESH) {
@@ -550,9 +550,9 @@ class NodeExtentAccessorT {
       return c.nm.retire_extent(c.t, to_discard
       ).handle_error_interruptible(
         eagain_iertr::pass_further{},
-        crimson::ct_error::assert_all(fmt::format(
+        crimson::ct_error::assert_all(
           "{} during retire -- to_disgard={}, fresh={}",
-          FNAME, to_discard->get_laddr(), fresh_extent->get_laddr()).c_str())
+          FNAME, to_discard->get_laddr(), fresh_extent->get_laddr())
       );
     }).si_then([this, c] {
       boost::ignore_unused(c);  // avoid clang warning;
@@ -568,8 +568,7 @@ class NodeExtentAccessorT {
     return c.nm.retire_extent(c.t, std::move(extent)
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::assert_all(fmt::format(
-        "{} addr={}", FNAME, addr).c_str())
+      crimson::ct_error::assert_all("{} addr={}", FNAME, addr)
 #ifndef NDEBUG
     ).si_then([c] {
       assert(!c.t.is_conflicted());

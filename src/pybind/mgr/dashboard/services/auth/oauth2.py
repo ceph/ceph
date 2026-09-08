@@ -2,6 +2,7 @@
 import importlib
 import json
 import logging
+import time
 from typing import Dict, List
 from urllib.parse import quote
 
@@ -129,13 +130,17 @@ class OAuth2(SSOAuth):
             raise cherrypy.HTTPError()
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(
-                jwt_payload['sub'], None, jwt_payload['name'], jwt_payload['email'])
+                jwt_payload['sub'], None,
+                jwt_payload.get('name', None), jwt_payload.get('email', None))
         except UserAlreadyExists:
             logger.debug("User already exists")
             user = mgr.ACCESS_CTRL_DB.get_user(jwt_payload['sub'])
+        except KeyError as e:
+            raise cherrypy.HTTPError(500, f'Invalid token payload: {e}')
+
         user.set_roles(cls.get_user_roles())
         # set user last update to token time issued
-        user.last_update = jwt_payload['iat']
+        user.last_update = jwt_payload.get('iat', 0)
         cherrypy.request.user = user
 
     @classmethod
@@ -145,6 +150,14 @@ class OAuth2(SSOAuth):
             cherrypy.request.user = None
         except AttributeError:
             raise cherrypy.HTTPError()
+
+    @classmethod
+    def is_token_expired(cls, token: str) -> bool:
+        try:
+            payload = decode_jwt_segment(token.split(".")[1])
+            return time.time() > payload.get('exp', 0)
+        except Exception:
+            raise cherrypy.HTTPError(500, 'Failed to verify session')
 
     @classmethod
     def get_token_iss(cls, token=''):

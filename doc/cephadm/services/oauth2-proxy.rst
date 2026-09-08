@@ -43,7 +43,7 @@ a secure and flexible authentication mechanism.
 High availability
 =================
 In general, `oauth2-proxy` is used in conjunction with the `mgmt-gateway`. The `oauth2-proxy` service can be deployed as multiple
-stateless instances, with the `mgmt-gateway` (nginx reverse-proxy) handling load balancing across these instances using a round-robin strategy.
+stateless instances, with the `mgmt-gateway` (NGINX reverse-proxy) handling load balancing across these instances using a round-robin strategy.
 Since oauth2-proxy integrates with an external identity provider (IDP), ensuring high availability for login is managed externally
 and not the responsibility of this service.
 
@@ -118,7 +118,8 @@ A non-exhaustive list of important limitations for the `oauth2-proxy` service fo
 
 * High-availability configurations for `oauth2-proxy` itself are not supported.
 * Proper configuration of the IDP and OAuth2 parameters is crucial to avoid authentication failures. Misconfigurations can lead to access issues.
-
+* IDP must include the jti claim in the issued JWT token because the Ceph Dashboard relies on this value to verify the token's validity.
+* If the `oauth2-proxy` service goes down, cephadm will automatically disable Dashboard OAuth2 SSO.
 
 Container images
 ~~~~~~~~~~~~~~~~

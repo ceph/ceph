@@ -822,7 +822,10 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
 
   std::vector<cls::rbd::GroupImageStatus> image_ids;
 
-  group_image_list(group_ioctx, group_name, &image_ids);
+  int r = group_image_list(group_ioctx, group_name, &image_ids);
+  if (r < 0) {
+    return r;
+  }
 
   for (auto image_id : image_ids) {
     IoCtx ioctx;

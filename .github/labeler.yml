@@ -74,6 +74,7 @@ common:
   - src/common/**
   - src/global/**
   - src/log/**
+  - src/python-common/**
 
 cephadm:
   - doc/cephadm/**
@@ -127,6 +128,15 @@ core:
   - qa/workunits/objectstore/**
   - qa/workunits/rados/**
   - src/ceph.in
+  - src/pybind/mgr/balancer/**
+  - src/pybind/mgr/crash/**
+  - src/pybind/mgr/devicehealth/**
+  - src/pybind/mgr/insights/**
+  - src/pybind/mgr/localpool/**
+  - src/pybind/mgr/osd_perf_query/**
+  - src/pybind/mgr/osd_support/**
+  - src/pybind/mgr/pg_autoscaler/**
+  - src/pybind/mgr/progress/**
   - src/ceph_osd.cc
   - src/ceph_mon.cc
   - src/blk/**
@@ -199,8 +209,11 @@ cephfs:
   - src/mon/FSCommands.*
   - src/pybind/cephfs/**
   - src/pybind/mgr/mds_autoscaler/**
+  - src/pybind/mgr/mirroring/**
+  - src/pybind/mgr/snap_schedule/**
   - src/pybind/mgr/status/**
   - src/pybind/mgr/volumes/**
+  - src/test/client/**
   - src/test/fs/**
   - src/test/libcephfs/**
   - src/tools/cephfs/**
@@ -211,6 +224,7 @@ CI:
 
 rbd:
   - doc/dev/rbd*
+  - doc/man/8/ceph-immutable-object-cache.rst
   - doc/man/8/ceph-rbdnamer.rst
   - doc/man/8/rbd*
   - doc/rbd/**
@@ -222,6 +236,7 @@ rbd:
   - qa/suites/krbd/**
   - qa/suites/rbd/**
   - qa/tasks/ceph_iscsi_client.py
+  - qa/tasks/immutable_object_cache*
   - qa/tasks/metadata.yaml
   - qa/tasks/qemu.py
   - qa/tasks/rbd*
@@ -235,6 +250,7 @@ rbd:
   - src/cls/journal/**
   - src/cls/lock/**
   - src/cls/rbd/**
+  - src/common/options/immutable-object-cache.yaml.in
   - src/common/options/rbd*
   - src/etc-rbdmap
   - src/include/krbd.h
@@ -253,6 +269,7 @@ rbd:
   - src/test/cls_journal/**
   - src/test/cls_lock/**
   - src/test/cls_rbd/**
+  - src/test/immutable_object_cache/**
   - src/test/journal/**
   - src/test/librbd/**
   - src/test/pybind/test_rbd.py
@@ -260,7 +277,9 @@ rbd:
   - src/test/rbd*/**
   - src/test/run-rbd*
   - src/test/test_rbd*
+  - src/tools/immutable_object_cache/**
   - src/tools/rbd*/**
+  - systemd/ceph-immutable-object-cache*
   - systemd/ceph-rbd-mirror*
   - systemd/rbdmap.service.in
   - udev/50-rbd.rules
@@ -276,12 +295,15 @@ nvmeof:
   - src/nvmeof/**
   - src/pybind/mgr/cephadm/services/nvmeof.py
   - src/pybind/mgr/cephadm/templates/services/nvmeof/**
+  - src/pybind/mgr/nvmeof/**
   - src/tools/ceph-dencoder/nvmeof*
 
 rgw:
   - qa/suites/rgw/**
+  - qa/tasks/kafka*
   - qa/tasks/rgw*
   - qa/tasks/s3*
+  - src/pybind/mgr/rgw/**
   - src/cls/cmpomap/**
   - src/cls/fifo/**
   - src/cls/otp/**
@@ -322,6 +344,18 @@ nfs:
   - doc/cephadm/nfs.rst
   - doc/radosgw/nfs.rst
   - doc/dev/vstart-ganesha.rst
+
+smb:
+  - src/pybind/mgr/smb/**
+  - src/pybind/mgr/cephadm/services/smb.py
+  - src/pybind/mgr/cephadm/tests/services/test_smb.py
+  - src/pybind/mgr/dashboard/controllers/smb.py
+  - src/pybind/mgr/dashboard/tests/test_smb.py
+  - qa/tasks/smb.py
+  - qa/workunits/smb/**
+  - qa/suites/orch/cephadm/smb/**
+  - doc/mgr/smb.rst
+  - doc/cephadm/services/smb.rst
 
 monitoring:
   - doc/cephadm/monitoring.rst

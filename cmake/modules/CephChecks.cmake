@@ -165,7 +165,10 @@ int main() { std::stable_sort((int *)0, (int*)0); }
 cmake_pop_check_state()
 
 set(version_script_source "v1 { }; v2 { } v1;")
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt "${version_script_source}")
+file(CONFIGURE
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/version_script.txt
+  CONTENT "${version_script_source}"
+  @ONLY)
 cmake_push_check_state(RESET)
 set(CMAKE_REQUIRED_FLAGS "-Werror -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/version_script.txt")
 check_c_source_compiles("
@@ -202,3 +205,12 @@ try_compile(HAVE_LINK_EXCLUDE_LIBS
   ${CMAKE_CURRENT_BINARY_DIR}
   SOURCES ${CMAKE_CURRENT_LIST_DIR}/CephCheck_link.c
   LINK_LIBRARIES "-Wl,--exclude-libs,ALL")
+
+# Mold linker applies --exclude-libs after version script processing,
+# which hides .symver-aliased symbols (e.g. rados_*) even when the
+# version script lists them as global.  Disable --exclude-libs for Mold;
+# version scripts already control symbol visibility.
+if(HAVE_LINK_EXCLUDE_LIBS AND USING_MOLD_LINKER)
+  message(STATUS "Mold linker -- disabling --exclude-libs (incompatible with .symver)")
+  set(HAVE_LINK_EXCLUDE_LIBS FALSE CACHE INTERNAL "" FORCE)
+endif()

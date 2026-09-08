@@ -254,7 +254,11 @@ public:
   }
 
   void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs,
-                             std::string *override_prefix, rgw_obj_select *location) const;
+                             const std::string *override_prefix, rgw_obj_select *location) const;
+
+  const std::map<uint64_t, RGWObjManifestRule>& get_rules() const {
+    return rules;
+  }
 
   void clear_rules() {
     rules.clear();
@@ -383,7 +387,7 @@ public:
   int append(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup,
              const RGWZoneParams& zone_params);
 
-  bool get_rule(uint64_t ofs, RGWObjManifestRule *rule);
+  bool get_rule(uint64_t ofs, RGWObjManifestRule *rule) const;
 
   bool empty() const {
     if (explicit_objs)

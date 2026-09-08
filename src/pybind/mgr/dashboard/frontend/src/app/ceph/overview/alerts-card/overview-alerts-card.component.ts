@@ -72,8 +72,8 @@ export class OverviewAlertsCardComponent implements OnInit {
       const icon = !hasAlerts
         ? AlertIcon.success
         : hasCritical
-        ? AlertIcon.error
-        : AlertIcon.warning;
+          ? AlertIcon.error
+          : AlertIcon.warning;
 
       const statusText = hasAlerts ? $localize`Need attention` : $localize`No active alerts`;
 

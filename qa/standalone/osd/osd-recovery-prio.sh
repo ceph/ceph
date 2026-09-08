@@ -24,7 +24,7 @@ function run() {
     # Fix port????
     export CEPH_MON="127.0.0.1:7114" # git grep '\<7114\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON --osd_max_backfills=1 --debug_reserver=20 "
     # Set osd op queue = wpq for the tests. Recovery priority is not
     # considered by mclock_scheduler leading to unexpected results.
@@ -426,13 +426,19 @@ function TEST_recovery_pool_priority() {
     ceph pg dump pgs
     ERRORS=0
 
+    # Pause recovery so reservations are held while we inspect them
+    ceph osd set norecover
+
     ceph osd pool set $pool1 size 2
     ceph osd pool set $pool2 size 2
 
     # Wait for both PGs to be in recovering state
     ceph pg dump pgs
 
-    # Wait for recovery to start
+    # Wait for recovery to start on both PGs so reservations are
+    # created. If we check too early we may miss the reservation
+    # creation and if we wait too long the recovery may complete
+    # and reservations be removed.
     set -o pipefail
     count=0
     while(true)
@@ -446,6 +452,7 @@ function TEST_recovery_pool_priority() {
       if test "$count" -eq "10"
       then
         echo "Recovery never started on both PGs"
+        ceph osd unset norecover
         return 1
       fi
       count=$(expr $count + 1)
@@ -519,6 +526,8 @@ function TEST_recovery_pool_priority() {
         ERRORS=$(expr $ERRORS + 1)
       fi
     fi
+
+    ceph osd unset norecover
 
     wait_for_clean || return 1
 

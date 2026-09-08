@@ -224,7 +224,8 @@ namespace ceph {
         preload_result = 0;
 	return 0;
       }
-      return limit_caps(cct);
+      preload_result = limit_caps(cct);
+      return preload_result;
 #else
       preload_result = 0;
       return 0;

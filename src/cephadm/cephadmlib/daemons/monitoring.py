@@ -215,7 +215,10 @@ class Monitoring(ContainerDaemonForm):
     def container(self, ctx: CephadmContext) -> CephContainer:
         self._prevalidate(ctx)
         ctr = daemon_to_container(ctx, self)
-        return to_deployment_container(ctx, ctr)
+        ctr = to_deployment_container(ctx, ctr)
+        if self.identity.daemon_type == 'node-exporter':
+            ctr.success_exit_status = [143]
+        return ctr
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return self.extract_uid_gid(ctx, self.identity.daemon_type)

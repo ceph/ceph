@@ -47,7 +47,7 @@ It is important to create redundancy between the host and the gateways. To creat
 
 The HA feature uses the Active/Standby approach for each namespace. Using Active/Standby means that at any point in time, only one of the NVMe-oF gateways in the group serve I/O from the host to a specific namespace. To properly use all NVMe-oF gateways, each namespace is assigned to a different load-balancing group. The number of load-balancing groups is equal to the number of NVMe-oF gateways in the gateway group.
 
-In case the one or more GWs in the group dies or cannot be seen by the Ceph NVMe-oF monitor, an automatic failover is triggered, and another GW in the group will assume reponsibilty to the load-balancing group of the failed GW(s). That means that there is no disruption to the IO, because another GW will continue serving these namespaces. If the failing GW(s) are showing up again, a failback is automatically triggered. 
+In case the one or more GWs in the group dies or cannot be seen by the Ceph NVMe-oF monitor, an automatic failover is triggered, and another GW in the group will assume reponsibilty to the load-balancing group of the failed GW(s). That means that there is no disruption to the I/O, because another GW will continue serving these namespaces. If the failing GW(s) are showing up again, a failback is automatically triggered.
 
 The NVMe-oF initoator on the host, will also continue trying to connect a failing GW, for the amount of time that was specified in the connect-all command. The recommended amount is 1800 seconds.
 

@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CephfsAuthModalComponent } from './cephfs-auth-modal.component';
 import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -20,7 +19,6 @@ describe('CephfsAuthModalComponent', () => {
         HttpClientTestingModule,
         SharedModule,
         ReactiveFormsModule,
-        ToastrModule.forRoot(),
         RouterTestingModule,
         NgbTypeaheadModule,
         ModalModule,

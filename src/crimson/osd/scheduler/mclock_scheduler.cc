@@ -18,6 +18,7 @@
 #include <functional>
 
 #include "crimson/osd/scheduler/mclock_scheduler.h"
+#include "common/debug.h"
 #include "common/dout.h"
 
 #define dout_context cct

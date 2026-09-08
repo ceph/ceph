@@ -269,7 +269,7 @@ class Worker {
     plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
     plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0, unit_t(UNIT_BYTES));
     plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0, unit_t(UNIT_BYTES));
-    plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
+    plb.add_u64(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
     plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
 
     plb.add_time(l_msgr_running_total_time, "msgr_running_total_time", "The total time of thread running");

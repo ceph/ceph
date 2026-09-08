@@ -15,6 +15,8 @@
 #ifndef JOURNAL_SCANNER_H
 #define JOURNAL_SCANNER_H
 
+#include <functional>
+
 #include "include/rados/librados_fwd.hpp"
 
 // For Journaler::Header, can't forward-declare nested classes
@@ -74,18 +76,6 @@ class JournalScanner
 
   ~JournalScanner();
 
-  int set_journal_ino();
-  int scan(bool const full=true);
-  int scan_pointer();
-  int scan_header();
-  int scan_events();
-  void report(std::ostream &out) const;
-
-  std::string obj_name(uint64_t offset) const;
-  std::string obj_name(inodeno_t ino, uint64_t offset) const;
-
-  // The results of the scan
-  inodeno_t ino;  // Corresponds to journal ino according their type
   struct EventRecord {
     EventRecord(std::unique_ptr<LogEvent> le, uint32_t rs) : log_event(std::move(le)), raw_size(rs) {}
     EventRecord(std::unique_ptr<PurgeItem> p, uint32_t rs) : pi(std::move(p)), raw_size(rs) {}
@@ -93,6 +83,21 @@ class JournalScanner
     std::unique_ptr<PurgeItem> pi;
     uint32_t raw_size = 0;  //< Size from start offset including all encoding overhead
   };
+
+  using EventCallback = std::function<void(uint64_t, EventRecord&)>;
+
+  int set_journal_ino();
+  int scan(bool const full=true, EventCallback cb = nullptr);
+  int scan_pointer();
+  int scan_header();
+  int scan_events(EventCallback cb = nullptr);
+  void report(std::ostream &out) const;
+
+  std::string obj_name(uint64_t offset) const;
+  std::string obj_name(inodeno_t ino, uint64_t offset) const;
+
+  // The results of the scan
+  inodeno_t ino;  // Corresponds to journal ino according their type
 
   class EventError {
     public:
@@ -114,10 +119,10 @@ class JournalScanner
 
   bool is_healthy() const;
   bool is_readable() const;
-  std::vector<std::string> objects_valid;
   std::vector<uint64_t> objects_missing;
   std::vector<Range> ranges_invalid;
-  std::vector<uint64_t> events_valid;
+  uint64_t num_objects_valid{0};
+  uint64_t num_events_valid{0};
   EventMap events;
 
   // For events present in ::events (i.e. scanned successfully),

@@ -21,6 +21,8 @@
 #include <map>
 #include <string>
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
 #include "common/ceph_mutex.h"
@@ -71,7 +73,7 @@ struct KeyServerData {
     rotating_secrets.clear();
   }
 
-  void add_auth(const EntityName& name, EntityAuth& auth) {
+  void add_auth(const EntityName& name, const EntityAuth& auth) {
     secrets[name] = auth;
   }
 
@@ -87,11 +89,12 @@ struct KeyServerData {
 			  double& ttl) const;
   bool get_service_secret(CephContext *cct, uint32_t service_id,
 			  uint64_t secret_id, CryptoKey& secret) const;
-  bool get_auth(const EntityName& name, EntityAuth& auth) const;
-  bool get_secret(const EntityName& name, CryptoKey& secret) const;
+  bool get_auth(CephContext *cct, const EntityName& name, EntityAuth& auth) const;
+  bool get_secret(CephContext *cct, const EntityName& name, CryptoKey& secret) const;
   bool get_caps(CephContext *cct, const EntityName& name,
 		const std::string& type, AuthCapsInfo& caps) const;
 
+  auto const& get_secrets() const { return secrets; }
   std::map<EntityName, EntityAuth>::iterator secrets_begin()
   { return secrets.begin(); }
   std::map<EntityName, EntityAuth>::const_iterator secrets_begin() const 
@@ -163,7 +166,7 @@ WRITE_CLASS_ENCODER(KeyServerData::Incremental)
 
 
 class KeyServer : public KeyStore {
-  CephContext *cct;
+  boost::intrusive_ptr<CephContext> kscct;
   KeyServerData data;
   std::map<EntityName, CryptoKey> used_pending_keys;
   mutable ceph::mutex lock;
@@ -172,6 +175,7 @@ class KeyServer : public KeyStore {
   void _dump_rotating_secrets();
   int _build_session_auth_info(uint32_t service_id, 
 			       const AuthTicket& parent_ticket,
+                               std::optional<int> key_type,
 			       CephXSessionAuthInfo& info,
 			       double ttl);
   bool _get_service_caps(const EntityName& name, uint32_t service_id,
@@ -180,7 +184,11 @@ public:
   KeyServer() : lock{ceph::make_mutex("KeyServer::lock")} {}
   KeyServer(CephContext *cct_, KeyRing *extra_secrets);
   KeyServer& operator=(const KeyServer&) = delete;
-  bool generate_secret(CryptoKey& secret);
+  bool generate_secret(CryptoKey& secret, std::optional<int> type = std::nullopt);
+
+  auto const& get_rotating_secrets() const {
+    return data.rotating_secrets;
+  }
 
   bool get_secret(const EntityName& name, CryptoKey& secret) const override;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
@@ -198,11 +206,13 @@ public:
   
   int build_session_auth_info(uint32_t service_id,
 			      const AuthTicket& parent_ticket,
+                              std::optional<int> key_type,
 			      CephXSessionAuthInfo& info);
   int build_session_auth_info(uint32_t service_id,
 			      const AuthTicket& parent_ticket,
 			      const CryptoKey& service_secret,
 			      uint64_t secret_id,
+                              std::optional<int> key_type,
 			      CephXSessionAuthInfo& info);
 
   /* get current secret for specific service type */
@@ -211,10 +221,9 @@ public:
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
 			  CryptoKey& secret) const override;
 
-  bool generate_secret(EntityName& name, CryptoKey& secret);
-
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
+
   void dump(ceph::Formatter *f) const;
   static std::list<KeyServer> generate_test_instances();
   bool contains(const EntityName& name) const;
@@ -243,7 +252,7 @@ public:
     data.version = ver;
   }
 
-  void add_auth(const EntityName& name, EntityAuth& auth) {
+  void add_auth(const EntityName& name, const EntityAuth& auth) {
     std::scoped_lock l{lock};
     data.add_auth(name, auth);
   }
@@ -273,7 +282,7 @@ public:
     }
   }
 
-  bool prepare_rotating_update(ceph::buffer::list& rotating_bl);
+  bool prepare_rotating_update(ceph::buffer::list& rotating_bl, bool wipe);
 
   bool get_rotating_encrypted(const EntityName& name, ceph::buffer::list& enc_bl) const;
 
@@ -281,10 +290,21 @@ public:
   bool get_service_caps(const EntityName& name, uint32_t service_id,
 			AuthCapsInfo& caps) const;
 
+  auto const& get_secrets() const { return data.get_secrets(); }
   std::map<EntityName, EntityAuth>::iterator secrets_begin()
   { return data.secrets_begin(); }
   std::map<EntityName, EntityAuth>::iterator secrets_end()
   { return data.secrets_end(); }
+
+  virtual int get_service_cipher() const {
+    return CEPH_CRYPTO_AES256KRB5;
+  }
+  virtual bool is_cipher_allowed(int cipher) const {
+    return cipher == CEPH_CRYPTO_AES256KRB5;
+  }
+  virtual std::vector<int> get_ciphers_allowed() const {
+    return {CEPH_CRYPTO_AES256KRB5};
+  }
 };
 WRITE_CLASS_ENCODER(KeyServer)
 

@@ -53,6 +53,7 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECTransaction.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECOmapJournal.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_op_util.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDCap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc
@@ -69,16 +70,36 @@ if(HAS_VTA)
   set_source_files_properties(main.cc
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
 endif()
-target_link_libraries(crimson-osd
-  legacy-option-headers
-  crimson-admin
-  crimson-common
-  crimson-os
-  crimson
-  erasure_code
-  ${FMT_LIB}
-  Boost::MPL
-  dmclock::dmclock)
+if(USING_MOLD_LINKER AND WITH_BLUESTORE)
+  # With Mold, duplicate symbols between crimson-alienstore and crimson-common
+  # must be resolved in favor of crimson-alienstore (compiled without
+  # WITH_CRIMSON) so the alien thread uses the classic code paths.
+  # Link crimson-alienstore BEFORE crimson-common so its definitions win
+  # with --allow-multiple-definition (Mold picks first definition).
+  target_link_libraries(crimson-osd
+    legacy-option-headers
+    crimson-admin
+    crimson-alienstore
+    crimson-common
+    crimson-os
+    crimson
+    erasure_code
+    ${FMT_LIB}
+    Boost::MPL
+    dmclock::dmclock)
+  target_link_options(crimson-osd PRIVATE -Wl,--allow-multiple-definition)
+else()
+  target_link_libraries(crimson-osd
+    legacy-option-headers
+    crimson-admin
+    crimson-common
+    crimson-os
+    crimson
+    erasure_code
+    ${FMT_LIB}
+    Boost::MPL
+    dmclock::dmclock)
+endif()
 set_target_properties(crimson-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
 install(TARGETS crimson-osd DESTINATION bin)

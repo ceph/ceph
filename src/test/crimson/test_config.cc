@@ -1,8 +1,10 @@
 #include <chrono>
 #include <string>
 #include <numeric>
+#include <vector>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/smp.hh>
 #include "common/ceph_argparse.h"
 #include "common/config_obs.h"
 #include "crimson/common/config_proxy.h"
@@ -83,11 +85,50 @@ static seastar::future<> test_config()
   });
 }
 
+// Regression for cross-shard parse_argv lifetime: args are taken by value and
+// moved into the do_change closure so the owning shard can safely use them
+// after the caller returns. Also verifies unrecognized leftovers are returned.
+static seastar::future<> test_parse_argv()
+{
+  return crimson::common::sharded_conf().start(EntityName{}, "ceph"sv).then([] {
+    return crimson::common::sharded_conf().invoke_on(0, &Config::start);
+  }).then([] {
+    if (seastar::this_smp_shard_count() < 2) {
+      throw std::runtime_error("test_parse_argv requires --smp >= 2");
+    }
+    // Owner shard is 0; invoke from a non-owner shard to exercise invoke_on.
+    return crimson::common::sharded_conf().invoke_on(1, [](Config& conf) {
+      std::vector<std::string> args{
+        "--osd_max_pgls", std::to_string(EXPECTED_VALUE),
+        "--not-a-real-ceph-flag", "xyz",
+      };
+      return conf.parse_argv(std::move(args)).then(
+        [](std::vector<std::string> leftovers) {
+          if (leftovers.size() != 2 ||
+              leftovers[0] != "--not-a-real-ceph-flag" ||
+              leftovers[1] != "xyz") {
+            throw std::runtime_error("unexpected leftover argv from parse_argv");
+          }
+        });
+    });
+  }).then([] {
+    return crimson::common::sharded_conf().invoke_on_all([](Config& config) {
+      if (config.get_val<uint64_t>(test_uint_option) != EXPECTED_VALUE) {
+        throw std::runtime_error("parse_argv setting not applied on all shards");
+      }
+    });
+  }).finally([] {
+    return crimson::common::sharded_conf().stop();
+  });
+}
+
 int main(int argc, char** argv)
 {
   seastar::app_template app{get_smp_opts_from_ctest()};
   return app.run(argc, argv, [&] {
     return test_config().then([] {
+      return test_parse_argv();
+    }).then([] {
       std::cout << "All tests succeeded" << std::endl;
     }).handle_exception([] (auto eptr) {
       std::cout << "Test failure" << std::endl;

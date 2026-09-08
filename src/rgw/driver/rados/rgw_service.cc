@@ -24,6 +24,7 @@
 
 #include "account.h"
 #include "group.h"
+#include "oidc.h"
 #include "rgw_bucket.h"
 #include "rgw_cr_rados.h"
 #include "rgw_datalog.h"
@@ -59,7 +60,7 @@ int RGWServices_Def::init(CephContext *cct,
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
   bucket_sync_sobj = std::make_unique<RGWSI_Bucket_Sync_SObj>(cct);
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
-  bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
+  bilog_rados = std::make_unique<RGWSI_BILog_RADOS_BackendDispatcher>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
   datalog_rados = std::make_unique<RGWDataChangesLog>(driver);
@@ -84,7 +85,7 @@ int RGWServices_Def::init(CephContext *cct,
   async_processor->start();
   bi_rados->init(zone.get(), driver->getRados()->get_rados_handle(),
 		 bilog_rados.get(), datalog_rados.get());
-  bilog_rados->init(bi_rados.get());
+  bilog_rados->init(bi_rados.get(), driver->get_neorados());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi_rados.get(), mdlog.get(),
                     sync_modules.get(), bucket_sync_sobj.get());
@@ -350,6 +351,8 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
       *svc.sysobj, *svc.cls, *svc.mdlog, svc.zone->get_zone_params());
   meta.role = rgwrados::role::create_metadata_handler(
       rados, *svc.sysobj, *svc.mdlog, svc.zone->get_zone_params());
+  meta.oidc = rgwrados::oidc::create_metadata_handler(
+      rados, *svc.sysobj, *svc.mdlog, svc.zone->get_zone_params());
   meta.account = rgwrados::account::create_metadata_handler(
       *svc.sysobj, svc.zone->get_zone_params());
   meta.group = rgwrados::group::create_metadata_handler(
@@ -421,6 +424,13 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver,
   r = meta.role->attach(meta.mgr);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start init meta.role ctl (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = _ctl.meta.oidc->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init meta.oidc ctl ("
+                  << cpp_strerror(-r) << ")" << dendl;
     return r;
   }
 

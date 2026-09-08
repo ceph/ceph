@@ -14,6 +14,7 @@
 
 #include "MDSUtility.h"
 #include "mon/MonClient.h"
+#include "common/Cond.h"
 #include "common/debug.h"
 
 #define dout_context g_ceph_context

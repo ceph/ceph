@@ -89,6 +89,12 @@ enum class operation_type_t {
   DUMP,
   SET_SIZE,
   CLEAR_DATA_DIGEST,
+
+  // Device-inspection operations (--op)
+  DUMP_SUPERBLOCK,
+
+  // Maintenance operations (--op)
+  GC,
 };
 
 std::string to_string(operation_type_t op) {
@@ -111,6 +117,8 @@ std::string to_string(operation_type_t op) {
     case operation_type_t::DUMP: return "dump";
     case operation_type_t::SET_SIZE: return "set-size";
     case operation_type_t::CLEAR_DATA_DIGEST: return "clear-data-digest";
+    case operation_type_t::DUMP_SUPERBLOCK: return "dump-superblock";
+    case operation_type_t::GC: return "gc";
     default: return "unknown";
   }
 }
@@ -119,6 +127,8 @@ tl::expected<operation_type_t, std::string> parse_pg_operation(const std::string
   if (op_str == "list-pgs") return operation_type_t::LIST_PGS;
   if (op_str == "list") return operation_type_t::LIST_OBJECTS;
   if (op_str == "info") return operation_type_t::INFO;
+  if (op_str == "dump-superblock") return operation_type_t::DUMP_SUPERBLOCK;
+  if (op_str == "gc") return operation_type_t::GC;
   return tl::unexpected("Unsupported PG operation: " + op_str);
 }
 
@@ -155,6 +165,7 @@ struct operation_params_t {
 struct objectstore_config_t {
   // Basic parameters
   std::string data_path;
+  std::string dev_path;
   std::string device_type;
   std::string type;
   std::string format;
@@ -187,12 +198,14 @@ struct objectstore_config_t {
        "store type, default: seastore")
       ("data-path", bpo::value<std::string>(&data_path),
        "path to object store, mandatory")
+      ("dev-path", bpo::value<std::string>(&dev_path),
+       "path to device file (alternative to --data-path for dump-superblock)")
       ("device-type", bpo::value<std::string>(&device_type)->default_value("SSD"),
        "path to object store, defualt: SSD")
       ("pgid", bpo::value<std::string>(&pgid_str),
        "PG id, mandatory for info operation")
       ("op", bpo::value<std::string>(&op),
-       "Arg is one of [info, list, list-pgs]")
+       "Arg is one of [info, list, list-pgs, dump-superblock]")
       ("file", bpo::value<std::string>(&file),
        "path of file to read from or write to")
       ("format", bpo::value<std::string>(&format)->default_value("json-pretty"),
@@ -439,67 +452,173 @@ void print_usage(const bpo::options_description& desc) {
   std::cout << "if not specified or if '-' specified." << std::endl;
 }
 
+static void dump_superblock(
+  Formatter& formatter,
+  const crimson::os::seastore::device_superblock_t& sb)
+{
+  formatter.open_object_section("superblock");
+
+  {
+    // Display the magic as a printable string (from the on-disk constant)
+    const auto& magic = crimson::os::seastore::CRIMSON_DEVICE_SUPERBLOCK_MAGIC;
+    std::string magic_str(reinterpret_cast<const char*>(magic.data()),
+			  crimson::os::seastore::SUPERBLOCK_MAGIC_SIZE);
+    auto pos = magic_str.find('\0');
+    if (pos != std::string::npos)
+      magic_str.resize(pos);
+    formatter.dump_string("magic", magic_str);
+  }
+  formatter.dump_unsigned("version", sb.version);
+  formatter.dump_unsigned("shard_num", sb.shard_num);
+  formatter.dump_unsigned("segment_size", sb.segment_size);
+  formatter.dump_unsigned("block_size", sb.block_size);
+
+  // config
+  {
+    Formatter::ObjectSection config_section(formatter, "config");
+    formatter.dump_bool("major_dev", sb.config.major_dev);
+    formatter.dump_format(
+        "spec_magic", "0x%lx", static_cast<uint64_t>(sb.config.spec.magic));
+    formatter.dump_stream("spec_dtype") << sb.config.spec.dtype;
+    formatter.dump_unsigned("spec_id", sb.config.spec.id);
+    formatter.dump_stream("meta") << sb.config.meta;
+
+    // secondary devices (in the config)
+    {
+      Formatter::ArraySection secondary_devices_section(
+          formatter, "secondary_devices");
+      for (const auto& [dev_id, spec] : sb.config.secondary_devices) {
+        Formatter::ObjectSection device_section(formatter, "device");
+        formatter.dump_unsigned("device_id", dev_id);
+        formatter.dump_format(
+            "magic", "0x%lx", static_cast<uint64_t>(spec.magic));
+        formatter.dump_stream("dtype") << spec.dtype;
+      }
+    }
+  }
+
+  // rbm
+  {
+    Formatter::ObjectSection rbm_section(formatter, "rbm");
+    formatter.dump_unsigned("total_size", sb.total_size);
+    formatter.dump_unsigned("journal_size", sb.journal_size);
+    formatter.dump_unsigned("crc", sb.crc);
+    formatter.dump_unsigned("feature", sb.feature);
+    formatter.dump_unsigned("nvme_block_size", sb.nvme_block_size);
+  }
+
+  // zbd
+  {
+    Formatter::ObjectSection zbd_section(formatter, "zbd");
+    formatter.dump_unsigned("segment_capacity", sb.segment_capacity);
+    formatter.dump_unsigned("zones_per_segment", sb.zones_per_segment);
+    formatter.dump_unsigned("zone_size", sb.zone_size);
+    formatter.dump_unsigned("zone_capacity", sb.zone_capacity);
+  }
+
+  // shards
+  {
+    Formatter::ArraySection shards_section(formatter, "shards");
+    for (auto i = 0u; i < sb.shard_infos.size(); ++i) {
+      const auto& si = sb.shard_infos[i];
+      Formatter::ObjectSection shard_section(formatter, "shard");
+      formatter.dump_unsigned("shard", i);
+      formatter.dump_unsigned("size", si.size);
+      formatter.dump_unsigned("segments", si.segments);
+      formatter.dump_unsigned("first_segment_offset", si.first_segment_offset);
+      formatter.dump_unsigned("tracker_offset", si.tracker_offset);
+      formatter.dump_unsigned("start_offset", si.start_offset);
+    }
+  }
+
+  formatter.close_section();
+  formatter.flush(std::cout);
+}
+
 class SeastoreMetaReader {
 private:
   std::string m_data_path;
+  std::string m_dev_path;
   std::string m_device_type;
 
-  size_t get_filesystem_block_size(const std::string& path) {
-    struct stat st;
-    if (stat(path.c_str(), &st) == 0) {
-      return st.st_blksize;
+  std::string get_block_path() const {
+    if (!m_dev_path.empty()) {
+      return m_dev_path;
     }
-    return 4096;
+    return m_data_path + "/block";
   }
 
 public:
-  explicit SeastoreMetaReader(const std::string& path, const std::string& device_type) :
-    m_data_path(path), m_device_type(device_type) {}
+  explicit SeastoreMetaReader(
+    const std::string& data_path,
+    const std::string& device_type,
+    const std::string& dev_path = {})
+    : m_data_path(data_path)
+    , m_dev_path(dev_path)
+    , m_device_type(device_type) {}
 
-  tl::expected<crimson::os::seastore::block_sm_superblock_t, std::string> load_seastore_superblock() {
+  tl::expected<crimson::os::seastore::device_superblock_t, std::string> load_seastore_superblock() {
     try {
-      std::string block_path = m_data_path + "/block";
+      std::string block_path = get_block_path();
 
-      size_t block_size = get_filesystem_block_size(block_path);
+      // Read enough to cover the superblock — 64KiB should be plenty
+      // for any device type.
+      constexpr size_t read_size = 64 * 1024;
 
       std::ifstream file(block_path, std::ios::binary);
       if (!file.is_open()) {
         return tl::unexpected("Could not open block file: " + block_path);
       }
 
-      std::vector<char> buf(block_size);
-      file.read(buf.data(), block_size);
-
-      if (!file.good() && !file.eof()) {
+      std::vector<char> buf(read_size);
+      file.read(buf.data(), read_size);
+      const auto nread = file.gcount();
+      if (nread == 0) {
         return tl::unexpected("Could not read superblock from " + block_path);
       }
 
-      bufferlist bl;
-      bl.append(buf.data(), block_size);
+      using crimson::os::seastore::superblock_magic_t;
+      using crimson::os::seastore::CRIMSON_DEVICE_SUPERBLOCK_MAGIC;
+      using crimson::os::seastore::SUPERBLOCK_MAGIC_SIZE;
+      using crimson::os::seastore::SUPERBLOCK_HEADER_PREFIX;
 
-      auto bliter = bl.cbegin();
-
-      // fmt::println(std::cout, "Device type: {}", m_device_type);
-
-      if (m_device_type != "RANDOM_BLOCK_SSD") {
-        // TODO this Signature is only applicable for segment devices(SSD/HDD) not
-        // for other two devices like ZBD/RANDOM_BLOCK_SSD
-        constexpr const char SEASTORE_SUPERBLOCK_SIGN[] = "seastore block device\n";
-        constexpr std::size_t SEASTORE_SUPERBLOCK_SIGN_LEN = sizeof(SEASTORE_SUPERBLOCK_SIGN) - 1;
-
-        // Validate the magic prefix
-        std::string sb_magic;
-        bliter.copy(SEASTORE_SUPERBLOCK_SIGN_LEN, sb_magic);
-        if (sb_magic != SEASTORE_SUPERBLOCK_SIGN) {
-          return tl::unexpected("invalid superblock signature " + block_path);
-        }
+      // Both Crimson and BlueStore devices share the same on-disk prefix
+      // layout: a 23-byte magic at offset 0, 37 bytes of type-specific
+      // data, and DENC-encoded content starting at offset 60.
+      if (static_cast<size_t>(nread) < SUPERBLOCK_HEADER_PREFIX) {
+        return tl::unexpected("file too small for superblock header: " + block_path);
       }
 
-      crimson::os::seastore::block_sm_superblock_t superblock;
-      decode(superblock, bliter);
+      // Extract the 23-byte magic at offset 0
+      superblock_magic_t disk_magic;
+      std::memcpy(disk_magic.data(), buf.data(), SUPERBLOCK_MAGIC_SIZE);
 
-      ceph_assert(ceph::encoded_sizeof<crimson::os::seastore::block_sm_superblock_t>(superblock) <
-                  block_size);
+      // BlueStore uses "bluestore block device\n" — same 23-byte size
+      static constexpr char bluestore_magic[] = "bluestore block device\n";
+      static_assert(sizeof(bluestore_magic) - 1 == SUPERBLOCK_MAGIC_SIZE);
+
+      if (disk_magic != CRIMSON_DEVICE_SUPERBLOCK_MAGIC) {
+        if (std::memcmp(disk_magic.data(), bluestore_magic,
+                        SUPERBLOCK_MAGIC_SIZE) == 0) {
+          return tl::unexpected(
+            block_path + " is a BlueStore device, not a Crimson device");
+        }
+        return tl::unexpected("unrecognized device magic in " + block_path);
+      }
+
+      // Decode DENC superblock from offset 60
+      bufferlist bl;
+      bl.append(buf.data() + SUPERBLOCK_HEADER_PREFIX,
+		nread - SUPERBLOCK_HEADER_PREFIX);
+      auto bliter = bl.cbegin();
+
+      crimson::os::seastore::device_superblock_t superblock;
+      try {
+        decode(superblock, bliter);
+      } catch (const std::exception& e) {
+        return tl::unexpected(
+          "failed to decode superblock from " + block_path + ": " + e.what());
+      }
 
       return superblock;
 
@@ -608,7 +727,9 @@ seastar::future<int> run_tool(StoreTool& st, objectstore_config_t& config) {
   }
 
   // Resolve object and pgid before executing operations
-  if (config.operation->op != operation_type_t::LIST_PGS) {
+  if (config.operation->op != operation_type_t::LIST_PGS &&
+      config.operation->op != operation_type_t::DUMP_SUPERBLOCK &&
+      config.operation->op != operation_type_t::GC) {
     bool resolved = co_await resolve_operation_parameters(st, config);
     if (!resolved) {
       co_return EXIT_FAILURE;
@@ -627,6 +748,18 @@ seastar::future<int> run_tool(StoreTool& st, objectstore_config_t& config) {
       for (const auto& pgid_str : pgid_strs) {
         fmt::println(std::cout, "{}", pgid_str);
       }
+      break;
+    }
+
+    case operation_type_t::DUMP_SUPERBLOCK: {
+      SeastoreMetaReader reader(
+          config.data_path, config.device_type, config.dev_path);
+      auto sb_result = reader.load_seastore_superblock();
+      if (!sb_result) {
+        fmt::println(std::cerr, "{}", sb_result.error());
+        co_return EXIT_FAILURE;
+      }
+      dump_superblock(*formatter.get(), *sb_result);
       break;
     }
 
@@ -869,6 +1002,11 @@ seastar::future<int> run_tool(StoreTool& st, objectstore_config_t& config) {
       break;
     }
 
+    case operation_type_t::GC: {
+      co_await st.do_gc();
+      break;
+    }
+
     default:
       fmt::println(std::cerr, "Operation {} not implemented yet", to_string(op.op));
       co_return EXIT_FAILURE;
@@ -1048,7 +1186,33 @@ int main(int argc, const char* argv[])
     return EXIT_FAILURE;
   }
 
-  // Validate required parameters
+  // Validate path parameters
+  if (vm.count("dev-path") && vm.count("data-path")) {
+    fmt::println(std::cerr, "Cannot specify both --data-path and --dev-path");
+    return EXIT_FAILURE;
+  }
+
+  if (vm.count("dev-path") &&
+      config.operation->op != operation_type_t::DUMP_SUPERBLOCK) {
+    fmt::println(
+        std::cerr, "--dev-path is only supported with --op dump-superblock");
+    return EXIT_FAILURE;
+  }
+
+  // dump-superblock with --dev-path: no store mount needed
+  if (config.operation->op == operation_type_t::DUMP_SUPERBLOCK &&
+      vm.count("dev-path")) {
+    std::unique_ptr<Formatter> formatter(Formatter::create(config.format));
+    SeastoreMetaReader reader({}, config.device_type, config.dev_path);
+    auto sb_result = reader.load_seastore_superblock();
+    if (!sb_result) {
+      fmt::println(std::cerr, "{}", sb_result.error());
+      return EXIT_FAILURE;
+    }
+    dump_superblock(*formatter.get(), *sb_result);
+    return EXIT_SUCCESS;
+  }
+
   if (!vm.count("data-path")) {
     fmt::println(std::cerr, "Must provide --data-path");
     print_usage(desc);

@@ -30,6 +30,10 @@ import httplib2
 from tasks.rgw import RGWEndpoint
 from tasks.util.rgw import rgwadmin as tasks_util_rgw_rgwadmin
 from tasks.util.rgw import get_user_summary, get_user_successful_ops
+from tasks.util.rgw import (s3_get_usage, parse_s3_usage_xml,
+                            s3_usage_capacity_entries, s3_usage_log_users,
+                            s3_usage_log_owners, s3_usage_total_ops,
+                            s3_usage_summary_successful_ops, s3_usage_total_bytes)
 
 log = logging.getLogger(__name__)
 
@@ -516,6 +520,51 @@ def task(ctx, config):
     assert len(out) >= 1
     assert bucket_name in out;
 
+    # TESTCASE 'bucket-list-versioned','bucket','list','versioned bucket with --object-version marker','succeeds'
+    versioned_bucket_name = bucket_name + '-' + 'versioned'
+    connection.create_bucket(Bucket=versioned_bucket_name)
+    connection.put_bucket_versioning(
+        Bucket=versioned_bucket_name,
+        VersioningConfiguration={'Status': 'Enabled'}
+    )
+
+    # Create exactly 3 versions of a unique object
+    unique_obj_key = 'test-versioned-obj-' + str(int(time.time()))
+    connection.put_object(Bucket=versioned_bucket_name, Key=unique_obj_key, Body=b'version1')
+    connection.put_object(Bucket=versioned_bucket_name, Key=unique_obj_key, Body=b'version2')
+    connection.put_object(Bucket=versioned_bucket_name, Key=unique_obj_key, Body=b'version3')
+
+    # List with marker (name only) and max-entries=3, should get exactly 3 versions
+    (err, out) = rgwadmin(ctx, client, [
+            'bucket', 'list', '--bucket', versioned_bucket_name,
+            '--marker', unique_obj_key,
+            '--max-entries', '3'], check_status=True)
+    assert len(out) == 3, f"Expected exactly 3 versions, got {len(out)}"
+    assert all(v['name'] == unique_obj_key for v in out), "All entries should have the same object name"
+
+    # Now use --marker with --object-version to paginate from the second entry
+    # This should return only the third entry
+    second_instance = out[1]['instance']
+    (err, out2) = rgwadmin(ctx, client, [
+            'bucket', 'list', '--bucket', versioned_bucket_name,
+            '--marker', unique_obj_key,
+            '--object-version', second_instance,
+            '--max-entries', '1'], check_status=True)
+
+    # Should get exactly 1 result, and it should be the third entry from the first list
+    assert len(out2) == 1, f"Expected exactly 1 result, got {len(out2)}"
+    assert out2[0]['name'] == out[2]['name'], "Result should match third entry name"
+    assert out2[0]['instance'] == out[2]['instance'], "Result should match third entry instance"
+
+    # Clean up: delete all versions and the versioned bucket
+    versions = connection.list_object_versions(Bucket=versioned_bucket_name)
+    to_delete = []
+    for v in versions.get('Versions', []):
+        to_delete.append({'Key': v['Key'], 'VersionId': v['VersionId']})
+    if to_delete:
+        connection.delete_objects(Bucket=versioned_bucket_name, Delete={'Objects': to_delete})
+    connection.delete_bucket(Bucket=versioned_bucket_name)
+
     # TESTCASE 'max-bucket-limit,'bucket','create','4 buckets','5th bucket fails due to max buckets == 4'
     connection.create_bucket(Bucket=bucket_name + '2')
     connection.create_bucket(Bucket=bucket_name + '3')
@@ -856,6 +905,21 @@ def task(ctx, config):
 
     total = user_summary['total']
     assert total['successful_ops'] > 0
+
+    # TESTCASE 'usage-s3-getusage' 'usage' 's3-get' 'GET /?usage' 'returns capacity and log entries'
+    status, usage_xml = s3_get_usage(endpoint.url(), access_key, secret_key)
+    assert status == 200, usage_xml
+    usage_root = parse_s3_usage_xml(usage_xml)
+    capacity_entries = s3_usage_capacity_entries(usage_root)
+    assert len(capacity_entries) > 0
+    log_users = s3_usage_log_users(usage_root)
+    assert len(log_users) > 0
+    assert user1 in s3_usage_log_owners(usage_root)
+    assert s3_usage_total_ops(usage_root) > 0
+    assert s3_usage_summary_successful_ops(usage_root) > 0
+    assert s3_usage_total_bytes(usage_root) > 0
+    # service-level GET /?usage must reflect the same user ops as usage show
+    assert s3_usage_summary_successful_ops(usage_root) >= total['successful_ops']
 
     # TESTCASE 'usage-show2' 'usage' 'show' 'user usage' 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user1],

@@ -1,3 +1,18 @@
+#
+# Helper for adding RGW tests built with Catch2:
+# Note: to define a test that does not use Catch2::main(), use:
+#   add_catch2_test_rgw(my_test_name NO_CATCH2_MAIN)
+# ...your test should be in a file called "test_<my_test_name>.cc (ex. "test_foo.cc")
+# and the output will be called "unittest_my_test_name".
+#
+function(add_catch2_test_rgw test_name)
+add_catch2_test(${test_name}
+ ${ARGV1}
+ EXTRA_LIBS rgw_common ${rgw_libs}
+ EXTRA_INCS ${rgw_incs}
+ EXTRA_INCS "SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/src/rgw")
+endfunction()
+
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # amqp mock library
   set(amqp_mock_src
@@ -6,10 +21,14 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
 endif()
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  # kafka stub library
-  set(kafka_stub_src
-    kafka_stub.cc)
-  add_library(kafka_stub STATIC ${kafka_stub_src})
+  # kafka stub library — built whenever RGW links against a dynamic
+  # system librdkafka (WITH_SYSTEM_RDKAFKA=ON, or the fallback path
+  # when the bundled submodule is not checked out).
+  if(WITH_SYSTEM_RDKAFKA OR NOT EXISTS "${CMAKE_SOURCE_DIR}/src/librdkafka/CMakeLists.txt")
+    set(kafka_stub_src
+      kafka_stub.cc)
+    add_library(kafka_stub STATIC ${kafka_stub_src})
+  endif()
 endif()
 
 if(WITH_RADOSGW_LUA_PACKAGES)
@@ -102,6 +121,14 @@ add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
 target_link_libraries(unittest_rgw_bencode ${rgw_libs})
 
+# unittest_rgw_cors
+add_executable(unittest_rgw_cors
+  test_rgw_cors.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_cors)
+target_link_libraries(unittest_rgw_cors ${rgw_libs})
+
+
 # unittest_rgw_bucket_sync_cache
 add_executable(unittest_rgw_bucket_sync_cache test_rgw_bucket_sync_cache.cc)
 add_ceph_unittest(unittest_rgw_bucket_sync_cache)
@@ -112,12 +139,24 @@ add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
 target_link_libraries(unittest_rgw_period_history ${rgw_libs})
 
+# unittest_rgw_zone
+add_executable(unittest_rgw_zone test_rgw_zone.cc)
+add_ceph_unittest(unittest_rgw_zone)
+target_link_libraries(unittest_rgw_zone ${rgw_libs})
+
 # unittest_rgw_compression
 add_executable(unittest_rgw_compression
   test_rgw_compression.cc
   $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_compression)
 target_link_libraries(unittest_rgw_compression ${rgw_libs})
+
+# unittest_rgw_cache
+add_executable(unittest_rgw_cache
+  test_rgw_cache.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_cache)
+target_link_libraries(unittest_rgw_cache ${rgw_libs})
 
 # unittest_http_manager
 add_executable(unittest_http_manager test_http_manager.cc)
@@ -140,6 +179,19 @@ target_link_libraries(bench_rgw_ratelimit ${rgw_libs})
 
 add_executable(bench_rgw_ratelimit_gc bench_rgw_ratelimit_gc.cc )
 target_link_libraries(bench_rgw_ratelimit_gc ${rgw_libs})
+
+# Crypto benchmark through the BlockCrypt interface (full RGW encrypt path).
+# Uses the plugin system to load the configured accelerator (ISA-L or OpenSSL).
+# Run with --accel crypto_isal or --accel crypto_openssl to compare backends.
+add_executable(bench_rgw_crypto_accel bench_rgw_crypto_accel.cc)
+target_link_libraries(bench_rgw_crypto_accel
+  ${rgw_libs}
+  global
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS})
+add_dependencies(bench_rgw_crypto_accel crypto_plugins)
 
 add_executable(unittest_rgw_ratelimit test_rgw_ratelimit.cc $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(unittest_rgw_ratelimit ${rgw_libs})
@@ -217,6 +269,13 @@ target_link_libraries(unittest_rgw_crypto
   ${CRYPTO_LIBS}
   )
 
+add_executable(unittest_rgw_range_projection test_rgw_range_projection.cc)
+add_ceph_unittest(unittest_rgw_range_projection)
+target_link_libraries(unittest_rgw_range_projection
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  )
+
 if(WITH_RADOSGW_RADOS)
 set(test_rgw_reshard_srcs test_rgw_reshard.cc)
 add_executable(unittest_rgw_reshard
@@ -261,6 +320,12 @@ add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)
 target_include_directories(unittest_rgw_string
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+
+add_executable(unittest_rgw_http_errors test_rgw_http_errors.cc)
+add_ceph_unittest(unittest_rgw_http_errors)
+target_include_directories(unittest_rgw_http_errors
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_http_errors rgw_common ${UNITTEST_LIBS})
 
 # unittest_rgw_dmclock_queue
 add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TARGET_OBJECTS:unit-main>)
@@ -315,6 +380,13 @@ target_include_directories(unittest_rgw_kms
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_kms ${rgw_libs})
 
+# unittest_rgw_kms_cache
+add_executable(unittest_rgw_kms_cache test_rgw_kms_cache.cc)
+add_ceph_unittest(unittest_rgw_kms_cache)
+target_include_directories(unittest_rgw_kms_cache
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_kms_cache ${rgw_libs})
+
 # unittest_rgw_url
 add_executable(unittest_rgw_url test_rgw_url.cc)
 add_ceph_unittest(unittest_rgw_url)
@@ -327,13 +399,13 @@ add_executable(unittest_rgw_sync_trace test_rgw_sync_trace.cc)
 add_ceph_unittest(unittest_rgw_sync_trace)
 target_include_directories(unittest_rgw_sync_trace
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
-target_link_libraries(unittest_rgw_sync_trace)
+target_link_libraries(unittest_rgw_sync_trace rgw_common ${rgw_libs})
 
 if(WITH_RADOSGW_RADOS)
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_include_directories(ceph_test_rgw_gc_log
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
-target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
+target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} rgw radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -408,8 +480,10 @@ target_compile_definitions(unittest_rgw_posix_driver PUBLIC LMDB_SAFE_NO_CPP_UTI
 target_include_directories(unittest_rgw_posix_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
-target_link_libraries(unittest_rgw_posix_driver  ${UNITTEST_LIBS}
-  ${rgw_libs} ${LMDB_LIBRARIES})
+target_link_libraries(unittest_rgw_posix_driver
+  ${UNITTEST_LIBS}
+  rgw_a_standalone
+  ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
 if(WITH_RADOSGW_RADOS)
@@ -426,26 +500,54 @@ target_link_libraries(ceph_test_datalog
 install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-#
-# Helper for adding RGW tests built with Catch2:
-# Note: to define a test that does not use Catch2::main(), use:
-#   add_catch2_test_rgw(my_test_name NO_CATCH2_MAIN)
-# ...your test should be in a file called "test_<my_test_name>.cc (ex. "test_foo.cc")
-# and the output will be called "unittest_my_test_name".
-#
-function(add_catch2_test_rgw test_name)
-add_catch2_test(${test_name}
- ${ARGV1}
- EXTRA_LIBS rgw_common ${rgw_libs}
- EXTRA_INCS "SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/src/rgw")
-endfunction()
-
-add_catch2_test_rgw(rgw_hex)
+if(WITH_RADOSGW_RADOS)
+# ceph_test_bilog
+add_executable(ceph_test_bilog test_bilog.cc)
+target_include_directories(ceph_test_bilog
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/services")
+target_link_libraries(ceph_test_bilog
+  libneorados
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  ${rgw_libs})
+install(TARGETS ceph_test_bilog DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 add_executable(unittest_rgw_async_utils test_rgw_async_utils.cc)
 add_ceph_unittest(unittest_rgw_async_utils)
 target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})
 
+add_executable(unittest_rgw_asio_frontend_connection test_rgw_asio_frontend_connection.cc)
+add_ceph_unittest(unittest_rgw_asio_frontend_connection)
+target_link_libraries(unittest_rgw_asio_frontend_connection ${rgw_libs} ${UNITTEST_LIBS})
+
 add_executable(unittest_rgw_tag test_rgw_tag.cc)
 add_ceph_unittest(unittest_rgw_tag)
 target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})
+
+# unittest_rgw_auth_sigv4
+add_executable(unittest_rgw_auth_sigv4 test_rgw_auth_sigv4.cc)
+add_ceph_unittest(unittest_rgw_auth_sigv4)
+target_link_libraries(unittest_rgw_auth_sigv4 ${rgw_libs} ${UNITTEST_LIBS})
+
+# unittest_rgw_http_client
+add_executable(unittest_rgw_http_client test_rgw_http_client.cc)
+add_ceph_unittest(unittest_rgw_http_client)
+target_link_libraries(unittest_rgw_http_client
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
+# unittest_rgw_rest_conn
+add_executable(unittest_rgw_rest_conn test_rgw_rest_conn.cc)
+add_ceph_unittest(unittest_rgw_rest_conn)
+target_link_libraries(unittest_rgw_rest_conn
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
+if(WITH_RADOSGW_FDB)
+ list(APPEND rgw_incs "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+ add_catch2_test_rgw(rgw_hex)
+ add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
+ add_catch2_test_rgw(fdb_query)
+ add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
+ add_catch2_test_rgw(fdb_content)
+endif()

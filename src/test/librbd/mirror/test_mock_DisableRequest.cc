@@ -227,7 +227,7 @@ public:
     encode(clients, bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(::journal::Journaler::header_oid(mock_image_ctx.id),
+                exec_internal(::journal::Journaler::header_oid(mock_image_ctx.id),
                      _, StrEq("journal"), StrEq("client_list"), _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(CopyInBufferlist(bl)),
                       Return(r)));
@@ -241,7 +241,7 @@ public:
     encode(client_id, bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(::journal::Journaler::header_oid(mock_image_ctx.id),
+                exec_internal(::journal::Journaler::header_oid(mock_image_ctx.id),
                      _, StrEq("journal"), StrEq("client_unregister"),
                      ContentsEqual(bl), _, _, _))
       .WillOnce(Return(r));

@@ -10,7 +10,7 @@ clients (initiators) to send SCSI commands to storage devices (targets) over a
 TCP/IP network, enabling clients without native Ceph client support to access
 Ceph block storage.  
 
-Each iSCSI gateway exploits the Linux IO target kernel subsystem (LIO) to
+Each iSCSI gateway exploits the Linux-IO target kernel subsystem (LIO) to
 provide iSCSI protocol support. LIO utilizes userspace passthrough (TCMU) to
 interact with Ceph's librbd library and expose RBD images to iSCSI clients.
 With Ceph’s iSCSI gateway you can provision a fully integrated block-storage
@@ -46,7 +46,11 @@ Area Network (SAN).
 
    The iSCSI gateway is in maintenance as of November 2022. This means that
    it is no longer in active development and will not be updated to add
-   new features. 
+   new features. It remains documented for existing deployments.
+
+   New deployments should prefer accessing RBD images directly from clients
+   (``librbd``, QEMU, Kubernetes CSI and similar) or the :doc:`NVMe-oF gateway
+   <nvmeof-overview>` for NVMe-based access.
 
 .. toctree::
   :maxdepth: 1

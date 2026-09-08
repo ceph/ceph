@@ -9,6 +9,7 @@ overrides:
       - python3-pytest
 tasks:
 - workunit:
+    watchdog: true
     clients:
       client.0:
         - rbd/test_librbd_python.sh

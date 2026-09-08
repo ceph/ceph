@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule, FormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -10,7 +10,11 @@ import { TrimDirective } from './trim.directive';
 @Component({
   template: `
     <form [formGroup]="trimForm">
-      <input type="text" formControlName="trimInput" cdTrim />
+      <input
+        type="text"
+        formControlName="trimInput"
+        cdTrim
+      />
     </form>
   `,
   standalone: false
@@ -38,8 +42,9 @@ describe('TrimDirective', () => {
   it('should trim', () => {
     const fixture: ComponentFixture<TrimComponent> = TestBed.createComponent(TrimComponent);
     const component: TrimComponent = fixture.componentInstance;
-    const inputElement: HTMLInputElement = fixture.debugElement.query(By.css('input'))
-      .nativeElement;
+    const inputElement: HTMLInputElement = fixture.debugElement.query(
+      By.css('input')
+    ).nativeElement;
     fixture.detectChanges();
 
     inputElement.value = ' a b ';

@@ -8,7 +8,8 @@ import {
   PlaceholderModule,
   IconModule,
   ThemeModule,
-  ButtonModule
+  ButtonModule,
+  TagModule
 } from 'carbon-components-angular';
 
 import { ContextComponent } from '~/app/core/context/context.component';
@@ -30,7 +31,8 @@ import { NavigationModule } from './navigation/navigation.module';
     PlaceholderModule,
     IconModule,
     ThemeModule,
-    ButtonModule
+    ButtonModule,
+    TagModule
   ],
   exports: [NavigationModule],
   declarations: [

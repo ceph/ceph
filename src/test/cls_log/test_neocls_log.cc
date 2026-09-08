@@ -246,7 +246,18 @@ auto list(RADOS& rados, Object oid, IOContext ioc,
     nullptr, asio::use_awaitable);
 }
 
-CORO_TEST_F(neocls_log, test_log_add_same_time, NeoRadosTest)
+class TestNeoClsLog : public NeoRadosPoolTypeTest {
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    TestNeoClsLog,
+    ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+    [](const ::testing::TestParamInfo<PoolType>& info) {
+      return info.param == PoolType::REPLICATED ? "Replicated" : "FastEC";
+    });
+
+CORO_TEST_P(TestNeoClsLog, test_log_add_same_time)
 {
   co_await create_obj(oid);
 
@@ -291,7 +302,7 @@ CORO_TEST_F(neocls_log, test_log_add_same_time, NeoRadosTest)
   EXPECT_FALSE(marker.empty());
 }
 
-CORO_TEST_F(neocls_log, test_log_add_different_time, NeoRadosTest)
+CORO_TEST_P(TestNeoClsLog, test_log_add_different_time)
 {
   co_await create_obj(oid);
 
@@ -356,7 +367,7 @@ CORO_TEST_F(neocls_log, test_log_add_different_time, NeoRadosTest)
   EXPECT_EQ(10, i);
 }
 
-CORO_TEST_F(neocls_log, trim_by_time, NeoRadosTest)
+CORO_TEST_P(TestNeoClsLog, trim_by_time)
 {
   co_await create_obj(oid);
 
@@ -387,7 +398,7 @@ CORO_TEST_F(neocls_log, trim_by_time, NeoRadosTest)
   }
 }
 
-CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
+CORO_TEST_P(TestNeoClsLog, trim_by_marker)
 {
   co_await create_obj(oid);
 
@@ -471,6 +482,71 @@ CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
 		  asio::redirect_error(asio::use_awaitable, ec));
     EXPECT_EQ(no_message_available, ec);
   }
+}
+
+// Test the neorados::trim() loop function (use_awaitable overloads) to verify
+// it terminates.
+CORO_TEST_F(neocls_log, trim_loop_all_entries_by_marker, NeoRadosTest)
+{
+  co_await create_obj(oid);
+  auto start_time = real_clock::now();
+
+  // write 10 cls_log entries into the object
+  co_await generate_log(rados(), oid, pool(), 10, start_time, true,
+			asio::use_awaitable);
+
+  // call trim() loop function.
+  co_await neorados::cls::log::trim(
+    rados(), oid, pool(),
+    std::string_view{neorados::cls::log::begin_marker},
+    std::string_view{neorados::cls::log::end_marker},
+    asio::use_awaitable);
+
+  // Verify all entries are gone
+  std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+  std::span<l::entry> result;
+  co_await list(rados(), oid, pool(), entries, &result, asio::use_awaitable);
+  EXPECT_EQ(0u, result.size());
+}
+
+CORO_TEST_F(neocls_log, trim_loop_empty_log_by_marker, NeoRadosTest)
+{
+  co_await create_obj(oid);
+
+  // Trim an empty log object. With the bug, cls_log_trim returns ENODATA,
+  // which is caught and swallowed inside the for(;;), looping forever.
+  co_await neorados::cls::log::trim(
+    rados(), oid, pool(),
+    std::string_view{neorados::cls::log::begin_marker},
+    std::string_view{neorados::cls::log::end_marker},
+    asio::use_awaitable);
+}
+
+
+CORO_TEST_F(neocls_log, trim_loop_all_entries_by_time, NeoRadosTest)
+{
+  co_await create_obj(oid);
+  auto start_time = real_clock::now();
+  co_await generate_log(rados(), oid, pool(), 10, start_time, true,
+			asio::use_awaitable);
+
+  auto end_time = start_time + 100s;
+  co_await neorados::cls::log::trim(
+    rados(), oid, pool(), real_time{}, end_time, asio::use_awaitable);
+
+  std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+  std::span<l::entry> result;
+  co_await list(rados(), oid, pool(), entries, &result, asio::use_awaitable);
+  EXPECT_EQ(0u, result.size());
+}
+
+CORO_TEST_F(neocls_log, trim_loop_empty_log_by_time, NeoRadosTest)
+{
+  co_await create_obj(oid);
+
+  auto end_time = real_clock::now() + 100s;
+  co_await neorados::cls::log::trim(
+    rados(), oid, pool(), real_time{}, end_time, asio::use_awaitable);
 }
 
 #if 0 // Disable until we get rid of GCC11

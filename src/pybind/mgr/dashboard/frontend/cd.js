@@ -20,8 +20,8 @@
 
 const fs = require('fs');
 
-const filename = './project.json';
-const backup = './project.backup.json';
+const filename = './angular.json';
+const backup = './angular.backup.json';
 
 if (process.argv.includes('--env')) {
   envBuild();
@@ -46,11 +46,11 @@ function prepareLocales() {
   }
 
   let langs = process.env.DASHBOARD_FRONTEND_LANGS || '';
-  langs = langs.replace(/\"\'/g, '')
-  if (langs == 'ALL') {
+  langs = langs.replace(/["']/g, '')
+  if (langs === 'ALL') {
     logger(`Preparing build of all languages.`);
     return;
-  } else if (langs.length == 0) {
+  } else if (langs.length === 0) {
     langs = [];
     logger(`Preparing build of EN.`);
   } else {

@@ -113,9 +113,18 @@ Creating/growing/shrinking/removing services:
    ceph orch apply mds <fs_name> [--placement=<placement>] [--dry-run]
    ceph orch apply rgw <name> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>] [--dry-run]
    ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>] [--dry-run]
-   ceph orch rm <service_name> [--force]
+   ceph orch rm <service_name> [--force] [--force-delete-data]
 
 where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
+
+For ``ceph orch rm``, ``--force`` may be required in some cases (for example when
+removing an OSD service that would leave OSDs behind).
+
+The ``--force-delete-data`` flag requires that ``--force`` is also passed.
+This directs cephadm to delete on-disk data for certain daemon types instead
+of moving it to ``<fsid>/removed/`` on the host. These daemon types include
+``mon``, ``osd``, and ``prometheus``. This helps avoid filling up the
+underlying filesystem over time.
 
 e.g., ``ceph orch apply mds myfs --placement="3 host1 host2 host3"``
 

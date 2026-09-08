@@ -1096,7 +1096,7 @@ class Module(MgrModule):
         pools_with_pg_merge = []
         crush_rule_by_pool_name = {}
         no_read_balance_info = []
-        replicated_pools_with_optimal_score = []
+        optimally_balanced_rep_pools = []
         rb_error_message = {}
         for p in osdmap_dump.get('pools', []):
             for pool_pg_status in plan.pg_status.get('pgs_by_pool_state', []):
@@ -1115,8 +1115,10 @@ class Module(MgrModule):
                 if 'error_message' in p['read_balance']:
                     rb_error_message[p['pool_name']] = p['read_balance']['error_message']
                 elif 'optimal_score' in p['read_balance']:
-                    if p['read_balance']['score_acting'] == p['read_balance']['optimal_score']:
-                        replicated_pools_with_optimal_score.append(p['pool_name'])
+                    # the score is normalized against the best achievable one,
+                    # so an optimally balanced pool scores 1
+                    if p['read_balance']['score_acting'] <= 1.0:
+                        optimally_balanced_rep_pools.append(p['pool_name'])
         for pool in pools:
             if pool not in crush_rule_by_pool_name:
                 self.log.debug('pool %s does not exist' % pool)
@@ -1127,7 +1129,7 @@ class Module(MgrModule):
             if pool in no_read_balance_info:
                 self.log.debug('pool %s has no read_balance information, skipping' % pool)
                 continue
-            if pool in replicated_pools_with_optimal_score:
+            if pool in optimally_balanced_rep_pools:
                 self.log.debug('pool %s is already balanced, skipping' % pool)
                 continue
             if pool in rb_error_message:

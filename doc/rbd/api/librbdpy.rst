@@ -12,7 +12,7 @@ The `rbd` python module provides file-like access to RBD images.
 Example: Creating and writing to an image
 =========================================
 
-To use `rbd`, you must first connect to RADOS and open an IO
+To use `rbd`, you must first connect to RADOS and open an I/O
 context::
 
     cluster = rados.Rados(conffile='my_ceph.conf')
@@ -36,7 +36,7 @@ This writes 'foo' to the first 600 bytes of the image. Note that data
 cannot be :type:unicode - `Librbd` does not know how to deal with
 characters wider than a :c:type:char.
 
-In the end, you will want to close the image, the IO context and the connection to RADOS::
+In the end, you will want to close the image, the I/O context and the connection to RADOS::
 
     image.close()
     ioctx.close()

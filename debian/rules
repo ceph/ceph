@@ -5,6 +5,14 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 include /usr/share/dpkg/default.mk
 
+# gcc 15's fat LTO objects leave std::_Sp_counted_base::_M_release_last_use_cold
+# unresolved when linking our static convenience libraries (first seen on
+# Ubuntu 26.04, whose dpkg enables -flto=auto -ffat-lto-objects by default),
+# so opt deb builds out of LTO on gcc >= 15.
+ifeq ($(shell expr $(shell gcc -dumpversion | cut -d. -f1) \>= 15),1)
+  export DEB_BUILD_MAINT_OPTIONS += optimize=-lto
+endif
+
 ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # dh_auto_build sets LDFLAGS with `dpkg-buildflags --get LDFLAGS` on ubuntu,
   # which makes the application aborts when the shared library throws
@@ -18,8 +26,12 @@ endif
 ifneq ($(filter pkg.ceph.crimson,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_CRIMSON=ON
 endif
+ifneq ($(filter pkg.ceph.system-rdkafka,$(DEB_BUILD_PROFILES)),)
+  extraopts += -DWITH_SYSTEM_RDKAFKA=ON
+endif
 
 extraopts += -DWITH_JAEGER=ON
+extraopts += -DWITH_SYSTEM_JERASURE=ON
 extraopts += -DWITH_SYSTEM_UTF8PROC=ON
 extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON
 extraopts += -DWITH_MGR_DASHBOARD_FRONTEND=OFF
@@ -53,6 +65,11 @@ endif
 
 ifeq ($(DWZ), false)
 override_dh_dwz:
+else
+override_dh_dwz:
+	# Exclude ceph-osd-crimson, librgw, and radosgw due to excessive debug info (too many DIEs)
+	dh_dwz -Xceph-osd-crimson -Xlibrgw -Xradosgw
+
 endif
 
 # for python3-${pkg} packages
@@ -115,6 +132,8 @@ override_dh_strip:
 	dh_strip -pceph-exporter --dbg-package=ceph-exporter-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
+	dh_strip -pceph-osd-classic --dbg-package=ceph-osd-classic-dbg
+	dh_strip -pceph-osd-crimson --dbg-package=ceph-osd-crimson-dbg
 	dh_strip -pceph-base --dbg-package=ceph-base-dbg
 	dh_strip -pcephfs-mirror --dbg-package=cephfs-mirror-dbg
 	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg

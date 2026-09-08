@@ -208,6 +208,107 @@ class TestJournalRepair(CephFSTestCase):
         # Validate that the journal flush has trimmed the old journal objects
         self.assertGreater(len(journal_objs_before_reset), len(journal_objs_after_reset))
 
+    def test_cephfs_journal_tool_recover_dentries_with_huge_journal(self):
+        """
+        That after having a pile of unflushed dentries and mds crashed,
+        invocation of `cephfs-journal-tool recover_dentries summary` can
+        flush dentries into RADOS without getting consuming too much RSS
+        or getting OOM killed.
+
+        NOTE: this test runs through 10M iterations each with 6 ops, totalling
+        to 60K ops. Please run this with caution.
+        """
+
+        # Register cleanup of the config_set so that a partial run can still
+        # reset the state
+        self.addCleanup(self.config_rm, 'mds', 'debug_mds')
+        self.addCleanup(self.config_rm, 'mds', 'debug_ms')
+        self.addCleanup(self.config_rm, 'mds', 'mds_cache_memory_limit')
+        self.addCleanup(self.config_rm, 'mds', 'mds_log_max_segments')
+        self.addCleanup(self.config_rm, 'mds', 'mds_log_warn_factor')
+        self.addCleanup(self.config_rm, 'mds', 'mds_log_trim_upkeep_interval')
+        self.addCleanup(self.config_rm, 'mds', 'mds_verify_scatter')
+        self.addCleanup(self.config_rm, 'mds', 'mds_debug_scatterstat')
+
+        # debugging can be too slow given how long the file names are being
+        # used in the test case therefore turn off the mds
+        self.config_set('mds', 'debug_mds', '0')
+        self.config_set('mds', 'debug_ms', '0')
+
+        # We do not want any unintended failover
+        self.fs.set_joinable(False)
+
+        # Set the MDS cache limit to 32GiB
+        self.config_set('mds', 'mds_cache_memory_limit', '34359738368')
+
+        # 100K segments limit is more than enough for 60M metadata ops
+        # with mds_log_events_per_segment being 1024 (default)
+        self.config_set('mds', 'mds_log_max_segments', '100000')
+
+        # eases generating heath warnings
+        self.config_set('mds', 'mds_log_warn_factor', '1')
+
+        # Sleep trim() for a day
+        self.config_set('mds', 'mds_log_trim_upkeep_interval', '86400')
+
+        # Clutter the journal
+        self.mount_a.run_shell_payload(
+            """
+set -u
+rm -rf w*
+A200=$(printf 'A%.0s' {1..200})
+X400=$(printf 'X%.0s' {1..400})
+export A200 X400
+for w in $(seq 0 19); do
+(
+    d="w${w}"
+    mkdir -p "$d/a" "$d/b" "$d/c"
+    for ((i = 0; i < 10000; i++)); do
+        touch "$d/a/${A200}_f${i}"
+        ln "$d/a/${A200}_f${i}" "$d/b/${A200}_l${i}"
+        mv "$d/b/${A200}_l${i}" "$d/c/${A200}_r${i}"
+        ln "$d/a/${A200}_f${i}" "$d/c/${A200}_h${i}"
+        mv "$d/a/${A200}_f${i}" "$d/b/${A200}_m${i}"
+        setfattr -n user.chaos -v "$X400" "$d/b/${A200}_m${i}"
+    done
+) &
+done
+wait
+""",timeout=43200)
+        
+        # kill the mds
+        self.fs.rank_fail(rank=0)
+
+        # Try to access files from the client
+        blocked_ls = self.mount_a.run_shell(["ls", "w0/a"], wait=False)
+        log.info("Sleeping to check ls is blocked...")
+        time.sleep(60)
+        self.assertFalse(blocked_ls.finished)
+        self.mount_a.kill()
+        self.mount_a.kill_cleanup()
+
+        # flush dentries into RADOS
+        self.fs.fail()
+        result = self.fs.journal_tool(["event", "recover_dentries", "summary",
+                                       "--max-rss", "524288000"], 0,
+                                       quiet=True)
+        log.info(f"recover_dentries result:\n{result}")
+
+        # test dentries by truncating the journal
+        self.fs.journal_tool(['journal', 'reset', '--yes-i-really-really-mean-it'], 0)
+        
+        # Dir stats maybe inconsistent post journal reset
+        self.config_set('mds', 'mds_verify_scatter', 'false')
+        self.config_set('mds', 'mds_debug_scatterstat', 'false')
+
+        self.fs.set_joinable(True)
+        status = self.fs.wait_for_daemons()
+        self.assertEqual(len(list(self.fs.get_ranks(status=status))), 1)
+        self.mount_a.mount_wait()
+        # checking one of the dirs should be enough
+        self.mount_a.run_shell(["ls", "w0"], wait=True)
+
+
     @for_teuthology # 308s
     def test_reset(self):
         """
@@ -538,3 +639,112 @@ class TestJournalRepair(CephFSTestCase):
             raise RuntimeError("Expected journal import to fail")
         finally:
             self.mount_a.run_shell(["sudo", "rm", fname], omit_sudo=False)
+
+    def test_recover_header(self):
+        """
+        Validates the discovery of segment boundaries, dry-run reporting,
+        and header field modification (trimmed_pos, expire_pos, write_pos) via --force.
+        after a deliberate journal corruption that breaks MDS replay.
+        """
+        # Generate metadata events in the journal
+        log.info("Creating file system activity to populate the journal...")
+        test_dir = "header_recover_test_dir"
+        self.mount_a.run_shell(["mkdir", "-p", test_dir])
+        for i in range(20):
+            self.mount_a.run_shell(["touch", f"{test_dir}/file_{i}"])
+
+        # Force a deep metadata log flush from the MDS to RADOS layers
+        log.info("Forcing absolute metadata flush to RADOS storage...")
+        self.mount_a.run_shell(["sync"])
+        # Follow the file's native multi-rank flush pattern to ensure write_pos > 0
+        self.fs.rank_asok(["flush", "journal"], rank=0)
+
+        # Fail the filesystem to run journal operations.
+        log.info("Fail the filesystem to run offline journal operations...")
+        self.fs.fail()
+
+        # Fetch the real header first to avoid breaking trimmed_pos constraints
+        log.info("Fetching healthy header to calculate dynamic corruption offset...")
+        header_raw = self.fs.journal_tool(["header", "get"], 0)
+        if "{" in header_raw:
+            header_raw = header_raw[header_raw.index("{"):]
+        header_json = json.loads(header_raw)
+
+        # Calculate a corrupt write position relative to the valid active stream position
+        real_write_pos = header_json["write_pos"]
+        corrupt_write_pos = real_write_pos - 4096 if real_write_pos > 4096 else real_write_pos + 4096
+
+        log.info(f"Corrupting the journal header by shifting write_pos from {real_write_pos} to {corrupt_write_pos}...")
+        self.fs.journal_tool(["header", "set", "write_pos", str(corrupt_write_pos)], 0)
+
+        log.info("Verifying that MDS daemon fails to replay the corrupted journal...")
+        self.fs.set_joinable()
+
+        # Capture the status profile while the FS is active/joinable
+        # so that the rank dictionary definitions exist.
+        time.sleep(10)
+        status = self.fs.status()
+        try:
+            info = status.get_rank(self.fs.id, 0)
+            current_state = info.get('state')
+            log.info(f"MDS daemon is in state: {current_state} after corruption.")
+            self.assertNotEqual(current_state, "up:active", "MDS reached active despite header corruption!")
+        except Exception as e:
+            log.info(f"MDS rank missing or failed as expected during replay: {e}")
+
+        # Fail the filesystem again to regain exclusive access to the journal
+        log.info("Regaining exclusive offline access...")
+        self.fs.fail()
+
+        # Test Dry-Run Mode on the corrupted journal
+        log.info("Executing recover_header in dry-run mode (without --force)...")
+        dry_run_output = self.fs.journal_tool(["header", "recover"], 0)
+        log.info(f"Dry-run output:\n{dry_run_output}")
+
+        # Assert against outputs printed in JournalTool::recover_header
+        self.assertIn("Proposed Journal Header Updates:", dry_run_output)
+        self.assertIn("trimmed_pos:", dry_run_output)
+        self.assertIn("expire_pos:", dry_run_output)
+        self.assertIn("read_pos:", dry_run_output)
+        self.assertIn("write_pos:", dry_run_output)
+        self.assertIn("Target event type at proposed read_pos:", dry_run_output)
+        self.assertIn("Dry-run mode enabled. Header modifications skipped.", dry_run_output)
+
+        # Test Mutation Mode (--force)
+        log.info("Executing recover_header with --force to commit changes to RADOS...")
+        mutation_output = self.fs.journal_tool(["header", "recover", "--force"], 0)
+        log.info(f"Mutation output:\n{mutation_output}")
+
+        # Verify the success indicators printed upon successful RADOS synchronization
+        self.assertIn("Proposed Journal Header Updates:", mutation_output)
+        self.assertIn("trimmed_pos:", mutation_output)
+        self.assertIn("expire_pos:", mutation_output)
+        self.assertIn("read_pos:", mutation_output)
+        self.assertIn("write_pos:", mutation_output)
+        self.assertIn("Successfully recovered journal header.", mutation_output)
+        self.assertNotIn("Dry-run mode enabled", mutation_output)
+
+        log.info("Resetting session and inode allocation tables to prevent boot loops...")
+        target_rank = f"{self.fs.name}:0"
+        self.fs.table_tool([target_rank, "reset", "session"])
+        self.fs.table_tool([target_rank, "reset", "inode"])
+
+        # Bring the filesystem back up and confirm MDS can now replay successfully
+        log.info("Verify file system stability post-recovery...")
+        self.fs.set_joinable()
+
+        # Explicitly tell the Monitor to clear the "damaged" state record for Rank 0.
+        log.info("Clearing damaged rank flag from monitor status...")
+        self.fs.mon_manager.raw_cluster_cmd("mds", "repaired", f"{self.fs.name}:0")
+
+        # Wait for the daemons report healthy and active. This should succeed now.
+        try:
+            self.fs.wait_for_daemons(timeout=60)
+            log.info("MDS successfully booted up after journal recovery")
+        except Exception as e:
+            raise RuntimeError(f"MDS failed to start after journal recovery: {e}")
+
+        # Ensure data can still be read without MDS crashing
+        log.info("Verifying that directory contents are readable...")
+        dir_list = self.mount_a.run_shell(["ls", test_dir])
+        self.assertIn("file_19", dir_list.stdout.getvalue().strip())

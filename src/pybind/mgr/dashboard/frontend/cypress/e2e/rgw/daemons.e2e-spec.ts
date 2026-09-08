@@ -26,9 +26,9 @@ describe('RGW daemons page', () => {
     });
   });
 
-  describe('details and performance counters table tests', () => {
-    it('should check that details/performance tables are visible when daemon is selected', () => {
-      daemons.checkTables();
+  describe('resource page and performance counters table tests', () => {
+    it('should check that overview card and performance tables are visible when daemon is selected', () => {
+      daemons.checkResourcePage();
     });
   });
 });

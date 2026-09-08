@@ -5,11 +5,14 @@ import { Component, EventEmitter } from '@angular/core';
 import { ComboBoxItem } from '../models/combo-box.model';
 
 @Component({
-  template: `<div cdDynamicInputCombobox [items]="[]"></div>`,
+  template: `<div
+    cdDynamicInputCombobox
+    [items]="[]"
+  ></div>`,
   standalone: false
 })
 class MockComponent {
-  items: ComboBoxItem[] = [{ content: 'Item1', name: 'Item1' }];
+  items: ComboBoxItem[] = [{ content: 'Item1', name: 'Item1', selected: false }];
   searchSubject = new Subject<string>();
   selectedItems: ComboBoxItem[] = [];
   updatedItems = new EventEmitter<ComboBoxItem[]>();

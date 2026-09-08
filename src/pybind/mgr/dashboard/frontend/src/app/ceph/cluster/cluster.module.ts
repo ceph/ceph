@@ -10,7 +10,9 @@ import {
   ButtonModule,
   GridModule,
   ProgressIndicatorModule,
+  InlineLoadingModule,
   InputModule,
+  LoadingModule,
   ModalModule,
   TreeviewModule,
   ListModule,
@@ -25,7 +27,10 @@ import {
   TabsModule,
   RadioModule,
   TilesModule,
-  LayerModule
+  LayerModule,
+  AccordionModule,
+  MenuButtonModule,
+  ContextMenuModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
 import CloseFilled from '@carbon/icons/es/close--filled/16';
@@ -47,13 +52,19 @@ import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
-import { ConfigurationDetailsComponent } from './configuration/configuration-details/configuration-details.component';
+import { ConfigurationResourcePageComponent } from './configuration/configuration-resource-page/configuration-resource-page.component';
+import { ConfigurationResourceSidebarComponent } from './configuration/configuration-resource-sidebar/configuration-resource-sidebar.component';
 import { ConfigurationFormComponent } from './configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { CreateClusterReviewComponent } from './create-cluster/create-cluster-review.component';
+import { CreateClusterStep1Component } from './create-cluster/create-cluster-step-1/create-cluster-step-1.component';
+import { CreateClusterStep2Component } from './create-cluster/create-cluster-step-2/create-cluster-step-2.component';
+import { CreateClusterStep3Component } from './create-cluster/create-cluster-step-3/create-cluster-step-3.component';
+import { CreateClusterStep4Component } from './create-cluster/create-cluster-step-4/create-cluster-step-4.component';
 import { CreateClusterComponent } from './create-cluster/create-cluster.component';
 import { CrushmapComponent } from './crushmap/crushmap.component';
-import { HostDetailsComponent } from './hosts/host-details/host-details.component';
+import { HostSidebarComponent } from './hosts/host-resource-sidebar/host-resource-sidebar.component';
+import { HostResourcePageComponent } from './hosts/host-resource-page/host-resource-page.component';
 import { HostFormComponent } from './hosts/host-form/host-form.component';
 import { HostsComponent } from './hosts/hosts.component';
 import { InventoryDevicesComponent } from './inventory/inventory-devices/inventory-devices.component';
@@ -82,7 +93,8 @@ import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal
 import { PlacementPipe } from './services/placement.pipe';
 import { ServiceDaemonListComponent } from './services/service-daemon-list/service-daemon-list.component';
 import { ServiceCertificateDetailsComponent } from './services/service-cert-details/service-certificate-details.component';
-import { ServiceDetailsComponent } from './services/service-details/service-details.component';
+import { ServiceResourcePageComponent } from './services/service-resource-page/service-resource-page.component';
+import { ServiceResourceSidebarComponent } from './services/service-resource-sidebar/service-resource-sidebar.component';
 import { ServiceFormComponent } from './services/service-form/service-form.component';
 import { ServicesComponent } from './services/services.component';
 import { TelemetryComponent } from './telemetry/telemetry.component';
@@ -94,6 +106,7 @@ import { MultiClusterFormComponent } from './multi-cluster/multi-cluster-form/mu
 import { MultiClusterListComponent } from './multi-cluster/multi-cluster-list/multi-cluster-list.component';
 import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-details/multi-cluster-details.component';
+import { CertificateAuthorityFormComponent } from '~/app/shared/components/certificate-authority-form/certificate-authority-form.component';
 import { TextLabelListComponent } from '~/app/shared/components/text-label-list/text-label-list.component';
 
 @NgModule({
@@ -123,7 +136,9 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     GridModule,
     ProgressIndicatorModule,
     ButtonModule,
+    InlineLoadingModule,
     InputModule,
+    LoadingModule,
     ModalModule,
     ListModule,
     ToggletipModule,
@@ -131,13 +146,17 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     TagModule,
     TabsModule,
     TextLabelListComponent,
+    CertificateAuthorityFormComponent,
     SelectModule,
     LayoutModule,
     NumberModule,
     FileUploaderModule,
     RadioModule,
     TilesModule,
-    LayerModule
+    LayerModule,
+    AccordionModule,
+    MenuButtonModule,
+    ContextMenuModule
   ],
   declarations: [
     MonitorComponent,
@@ -146,8 +165,10 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     OsdDetailsComponent,
     OsdScrubModalComponent,
     OsdFlagsModalComponent,
-    HostDetailsComponent,
-    ConfigurationDetailsComponent,
+    HostSidebarComponent,
+    HostResourcePageComponent,
+    ConfigurationResourcePageComponent,
+    ConfigurationResourceSidebarComponent,
     ConfigurationFormComponent,
     OsdReweightModalComponent,
     CrushmapComponent,
@@ -168,7 +189,8 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     OsdCreationPreviewModalComponent,
     RulesListComponent,
     ActiveAlertListComponent,
-    ServiceDetailsComponent,
+    ServiceResourcePageComponent,
+    ServiceResourceSidebarComponent,
     ServiceDaemonListComponent,
     ServiceCertificateDetailsComponent,
     TelemetryComponent,
@@ -178,6 +200,10 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     PlacementPipe,
     CreateClusterComponent,
     CreateClusterReviewComponent,
+    CreateClusterStep1Component,
+    CreateClusterStep2Component,
+    CreateClusterStep3Component,
+    CreateClusterStep4Component,
     UpgradeComponent,
     UpgradeStartModalComponent,
     UpgradeProgressComponent,

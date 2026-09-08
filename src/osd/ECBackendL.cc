@@ -573,7 +573,18 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
       ceph_assert(!op.recovery_progress.data_complete);
       set<int> want(op.missing_on_shards.begin(), op.missing_on_shards.end());
       uint64_t from = op.recovery_progress.data_recovered_to;
+      /* When beginning recovery, the OI may not be known. As such the object
+       * size is not known. For the first read, attempt to read the default
+       * size.  If this is larger than the object sizes, then the OSD will
+       * return truncated reads.  If the object size is known, then attempt
+       * correctly sized reads, capped at recovery chunk size.
+       * (Ref: ECCommon.cc -> ECCommon::RecoveryBackend::continue_recovery_op())
+       */
       uint64_t amount = get_recovery_chunk_size();
+      if (op.obc) {
+        uint64_t remaining = op.obc->obs.oi.size - from;
+        amount = std::min(remaining, amount);
+      }
 
       if (op.recovery_progress.first && op.obc) {
         if (auto [r, attrs, size] = ecbackend->get_attrs_n_size_from_disk(op.hoid);
@@ -1562,7 +1573,7 @@ void ECBackendL::submit_transaction(
   rmw_pipeline.start_rmw(std::move(op));
 }
 
-int ECBackendL::objects_read_sync(
+int ECBackendL::objects_read_local(
   const hobject_t &hoid,
   uint64_t off,
   uint64_t len,

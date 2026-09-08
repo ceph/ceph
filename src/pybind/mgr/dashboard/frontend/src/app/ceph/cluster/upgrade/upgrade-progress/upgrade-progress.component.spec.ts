@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { UpgradeProgressComponent } from './upgrade-progress.component';
-import { ToastrModule } from 'ngx-toastr';
+
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -14,7 +14,7 @@ describe('UpgradeProgressComponent', () => {
 
   configureTestBed({
     declarations: [UpgradeProgressComponent, LogsComponent],
-    imports: [ToastrModule.forRoot(), HttpClientTestingModule, SharedModule, RouterTestingModule]
+    imports: [HttpClientTestingModule, SharedModule, RouterTestingModule]
   });
 
   beforeEach(() => {

@@ -117,4 +117,16 @@ seastar::future<> PGShardManager::set_superblock(OSDSuperblock superblock) {
   });
 }
 
+seastar::future<uint64_t>
+PGShardManager::calc_snap_trim_queue_total() const
+{
+  uint64_t total = 0;
+  co_await for_each_pg([&total](const auto&, const auto &pg) {
+    if (pg->is_primary()) {
+      total += pg->get_snap_trimq_size();
+    }
+  });
+  co_return total;
+}
+
 }

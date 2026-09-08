@@ -9,7 +9,6 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { Permission } from '~/app/shared/models/permissions';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -28,13 +27,7 @@ describe('IscsiTargetDiscoveryModalComponent', () => {
 
   configureTestBed({
     declarations: [IscsiTargetDiscoveryModalComponent],
-    imports: [
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      SharedModule,
-      ToastrModule.forRoot(),
-      RouterTestingModule
-    ],
+    imports: [HttpClientTestingModule, ReactiveFormsModule, SharedModule, RouterTestingModule],
     providers: [NgbActiveModal]
   });
 

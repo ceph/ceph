@@ -1,4 +1,5 @@
 
+import json
 import time
 import requests
 import errno
@@ -36,14 +37,26 @@ class TestModuleSelftest(MgrTestCase):
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
                 "mgr", "self-test", "module", module_name)
 
+    def _require_mgr_module(self, module_name):
+        dump = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "dump", "--format=json-pretty"))
+        mgr_map_dump = dump.get("mgrmap", dump)
+        # getting the available modules and checking if the module is in the list
+        # and if it can run, if not, skip the test
+        for entry in mgr_map_dump["available_modules"]:
+            if entry.get("name") == module_name:
+                if not entry.get("can_run", True):
+                    self.skipTest(entry.get("error_string") or
+                                  "%s module cannot run" % module_name)
+                return
+        raise RuntimeError("module %r not found in mgr dump" % module_name)
+
     def test_prometheus(self):
         self._assign_ports("prometheus", "server_port", min_port=8100)
         self._selftest_plugin("prometheus")
 
     def test_influx(self):
-        #before we are enabling influx, set config options to avoid errors
-        self.mgr_cluster.mon_manager.raw_cluster_cmd(
-            "config", "set", "mgr", "mgr/influx/hostname", "testhost")
+        self._require_mgr_module("influx")
         self._selftest_plugin("influx")
 
     def test_diskprediction_local(self):
@@ -203,11 +216,8 @@ class TestModuleSelftest(MgrTestCase):
         """
         Use the selftest module to exercise inter-module communication
         """
+        self._require_mgr_module("influx")
         self._load_module("selftest")
-        #before we are enabling influx, set config options to avoid errors
-        self.mgr_cluster.mon_manager.raw_cluster_cmd(
-            "config", "set", "mgr", "mgr/influx/hostname", "testhost")
-
         # The "self-test remote" operation just happens to call into
         # influx.
         self._load_module("influx")

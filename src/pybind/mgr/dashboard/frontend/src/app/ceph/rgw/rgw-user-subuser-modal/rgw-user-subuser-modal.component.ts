@@ -30,7 +30,10 @@ export class RgwUserSubuserModalComponent extends BaseModal {
   resource: string;
   action: string;
 
-  constructor(private formBuilder: CdFormBuilder, private actionLabels: ActionLabelsI18n) {
+  constructor(
+    private formBuilder: CdFormBuilder,
+    private actionLabels: ActionLabelsI18n
+  ) {
     super();
     this.resource = $localize`Subuser`;
     this.createForm();

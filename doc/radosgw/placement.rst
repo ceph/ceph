@@ -7,8 +7,6 @@ Pool Placement and Storage Classes
 Placement Targets
 =================
 
-.. versionadded:: Jewel
-
 Placement targets control which :ref:`radosgw-pools` are associated with a particular
 bucket. A bucket's placement target is selected on creation, and cannot be
 modified. The ``radosgw-admin bucket stats`` command will display its
@@ -25,8 +23,6 @@ and a ``data_pool`` name for each storage class.
 
 Storage Classes
 ===============
-
-.. versionadded:: Nautilus
 
 Storage classes specify the placement of object data. S3 Bucket
 Lifecycle (LC) rules can automate the transition of objects between storage classes.

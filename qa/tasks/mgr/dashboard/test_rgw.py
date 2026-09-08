@@ -204,7 +204,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['bucket'], 'teuth-test-bucket')
         self.assertEqual(data['owner'], 'admin')
         self.assertEqual(data['placement_rule'], 'default-placement')
-        self.assertEqual(data['versioning'], 'Suspended')
+        self.assertEqual(data['versioning'], 'Off')
 
         # Update bucket: change owner, enable versioning.
         self._put(
@@ -312,7 +312,7 @@ class RgwBucketTest(RgwTestCase):
         # Get the bucket.
         data = _verify_tenant_bucket('teuth-test-bucket', 'testx', 'teuth-test-user')
         self.assertEqual(data['placement_rule'], 'default-placement')
-        self.assertEqual(data['versioning'], 'Suspended')
+        self.assertEqual(data['versioning'], 'Off')
 
         # Update bucket: different user with different tenant, enable versioning.
         self._put(
@@ -550,7 +550,7 @@ class RgwUserTest(RgwTestCase):
         self._delete('/api/rgw/user/teuth-test-user')
         self.assertStatus(204)
         self.get_rgw_user('teuth-test-user')
-        self.assertStatus(500)
+        self.assertStatus(404)
         resp = self.jsonBody()
         self.assertIn('detail', resp)
         self.assertIn('failed request with status code 404', resp['detail'])
@@ -593,7 +593,7 @@ class RgwUserTest(RgwTestCase):
         self._delete('/api/rgw/user/test01$teuth-test-user')
         self.assertStatus(204)
         self.get_rgw_user('test01$teuth-test-user')
-        self.assertStatus(500)
+        self.assertStatus(404)
         resp = self.jsonBody()
         self.assertIn('detail', resp)
         self.assertIn('failed request with status code 404', resp['detail'])

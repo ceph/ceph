@@ -66,7 +66,8 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
       {
         name: $localize`Group Name`,
         prop: 'groupName',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.routerLink
       },
       {
         name: $localize`Status`,
@@ -143,12 +144,19 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
   transformSyncPolicyData(allSyncPolicyData: any) {
     if (allSyncPolicyData && allSyncPolicyData.length > 0) {
       allSyncPolicyData.forEach((policy: any) => {
+        const groupName = policy['id'];
+        const bucketName = policy['bucketName'];
+        const encodedGroupName = encodeURIComponent(groupName);
+        const cdLink = `/rgw/multisite/sync-policy/${encodedGroupName}/overview`;
+
         this.syncPolicyData.push({
-          uniqueId: policy['id'] + (policy['bucketName'] ? policy['bucketName'] : ''),
-          groupName: policy['id'],
+          uniqueId: groupName + (bucketName ? bucketName : ''),
+          groupName: groupName,
           status: policy['status'],
-          bucket: policy['bucketName'],
-          zonegroup: policy['zonegroup']
+          bucket: bucketName,
+          zonegroup: policy['zonegroup'],
+          cdLink: cdLink,
+          cdParams: bucketName ? { bucketName: bucketName } : undefined
         });
       });
       this.syncPolicyData = [...this.syncPolicyData];

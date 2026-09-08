@@ -13,9 +13,11 @@
  */
 
 #pragma once
+#include "common/async/yield_context.h"
 #include "common/dout.h"
 #include "rgw_dedup_utils.h"
 #include "rgw_dedup_store.h"
+#include "rgw_dedup_filter.h"
 #include <string>
 
 namespace rgw::dedup {
@@ -95,13 +97,18 @@ namespace rgw::dedup {
     static int   dedup_control_bl(rgw::sal::RadosStore *store,
                                   const DoutPrefixProvider *dpp,
                                   urgent_msg_t urgent_msg,
-                                  bufferlist urgent_msg_bl);
+                                  bufferlist urgent_msg_bl,
+                                  Formatter *fmt = nullptr,
+                                  optional_yield y = null_yield);
     static int   dedup_control(rgw::sal::RadosStore *store,
                                const DoutPrefixProvider *dpp,
-                               urgent_msg_t urgent_msg);
+                               urgent_msg_t urgent_msg,
+                               optional_yield y = null_yield);
     static int   dedup_restart_scan(rgw::sal::RadosStore *store,
                                     dedup_req_type_t dedup_type,
-                                    const DoutPrefixProvider *dpp);
+                                    const DoutPrefixProvider *dpp,
+                                    const dedup_filter_t *p_filter = nullptr,
+                                    optional_yield y = null_yield);
 
     //---------------------------------------------------------------------------
     int mark_work_shard_token_completed(rgw::sal::RadosStore *store,

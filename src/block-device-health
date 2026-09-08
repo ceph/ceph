@@ -1,0 +1,65 @@
+#!/bin/sh
+#
+# Privileged helper for collecting device health metrics on behalf of the
+# ceph daemons (which run as user ceph).  Installed as
+# /usr/libexec/ceph/block-device-health and the only command sudoers.d/
+# ceph-smartctl lets the ceph user run.  The fixed command lines used to
+# live in sudoers as argument patterns; sudo-rs (Ubuntu >= 25.10) does not
+# support wildcards there, so the confinement moved here instead.
+#
+# Usage:
+#   block-device-health smartctl /dev/<dev>
+#   block-device-health nvme <vendor> /dev/<dev>
+
+set -eu
+
+# The old sudoers rules pinned /usr/sbin/smartctl and /usr/sbin/nvme; don't
+# let the invoking user's PATH pick the binaries here either.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+usage() {
+    echo "usage: $0 smartctl /dev/<dev> | nvme <vendor> /dev/<dev>" >&2
+    exit 64
+}
+
+check_dev() {
+    case "$1" in
+        /dev/*) ;;
+        *) echo "$0: refusing device path '$1'" >&2; exit 65 ;;
+    esac
+    case "$1" in
+        *..*|*/./*|*' '*|*'	'*) echo "$0: refusing device path '$1'" >&2; exit 65 ;;
+    esac
+    if [ ! -b "$1" ] && [ ! -c "$1" ]; then
+        echo "$0: '$1' is not a device node" >&2
+        exit 66
+    fi
+}
+
+check_word() {
+    case "$1" in
+        ''|*[!A-Za-z0-9_-]*) echo "$0: refusing argument '$1'" >&2; exit 65 ;;
+    esac
+}
+
+[ $# -ge 2 ] || usage
+mode=$1
+shift
+
+case "$mode" in
+    smartctl)
+        [ $# -eq 1 ] || usage
+        check_dev "$1"
+        exec smartctl -x --json=o "$1"
+        ;;
+    nvme)
+        [ $# -eq 2 ] || usage
+        check_word "$1"
+        check_dev "$2"
+        exec nvme "$1" smart-log-add --json "$2"
+        ;;
+    *)
+        usage
+        ;;
+esac

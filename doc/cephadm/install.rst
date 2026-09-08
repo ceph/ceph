@@ -25,7 +25,8 @@ are installed automatically by the bootstrap process below.
 
 See `Docker Live Restore <https://docs.docker.com/engine/daemon/live-restore/>`_
 for an optional feature that allows restarting Docker Engine without restarting
-all running containers.
+all running containers. See :ref:`cephadm-docker-live-restore` for details on
+how cephadm integrates with Docker Engine to facilitate the Live Restore feature.
 
 See the section :ref:`Compatibility With Podman
 Versions<cephadm-compatibility-with-podman>` for a table of Ceph versions that
@@ -149,6 +150,7 @@ packages that provide the ``cephadm`` command, run the following commands:
 #. Add the repository:
 
    .. prompt:: bash #
+      :substitutions:
 
       ./cephadm add-repo --release |stable-release|
 

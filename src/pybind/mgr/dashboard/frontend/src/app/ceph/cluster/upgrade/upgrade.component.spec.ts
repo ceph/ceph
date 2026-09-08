@@ -12,7 +12,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { LogsComponent } from '../logs/logs.component';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { ToastrModule } from 'ngx-toastr';
+
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { RouterTestingModule } from '@angular/router/testing';
 import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
@@ -54,13 +54,7 @@ describe('UpgradeComponent', () => {
   };
 
   configureTestBed({
-    imports: [
-      HttpClientTestingModule,
-      SharedModule,
-      NgbNavModule,
-      ToastrModule.forRoot(),
-      RouterTestingModule
-    ],
+    imports: [HttpClientTestingModule, SharedModule, NgbNavModule, RouterTestingModule],
     declarations: [UpgradeComponent, LogsComponent],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [UpgradeService, { provide: SummaryService, useClass: SummaryServiceMock }]
@@ -96,10 +90,8 @@ describe('UpgradeComponent', () => {
   it('should load the view once check for upgrade is done', () => {
     component.ngOnInit();
     fixture.detectChanges();
-    const firstCellSpan = fixture.debugElement.nativeElement.querySelector(
-      'cd-card[cardTitle="New Version"] .card-title'
-    );
-    expect(firstCellSpan.textContent).toContain('New Version');
+    const upgradeSection = fixture.debugElement.nativeElement.querySelector('#newVersionAvailable');
+    expect(upgradeSection).not.toBeNull();
   });
 
   it('should show button to Upgrade if a new version is available', () => {
@@ -124,9 +116,8 @@ describe('UpgradeComponent', () => {
     upgradeInfoSpy.and.returnValue(of(upgradeInfoPayload));
     component.ngOnInit();
     fixture.detectChanges();
-    const noUpgradesSpan = fixture.debugElement.nativeElement.querySelector(
-      '#no-upgrades-available'
-    );
+    const noUpgradesSpan =
+      fixture.debugElement.nativeElement.querySelector('#no-upgrades-available');
     expect(noUpgradesSpan.textContent).toBe(' Cluster is up-to-date ');
   });
 
@@ -183,7 +174,7 @@ describe('UpgradeComponent', () => {
     expect(loading.textContent).toContain('Failed to retrieve');
   });
 
-  it('should show popover when health warning is present', () => {
+  it('should show warning icon when health warning is present', () => {
     const healthPayload: Record<string, any> = {
       health: {
         status: 'HEALTH_WARN',
@@ -210,13 +201,13 @@ describe('UpgradeComponent', () => {
     component.ngOnInit();
     fixture.detectChanges();
 
-    const popover = fixture.debugElement.nativeElement.querySelector(
-      '.info-card-content-clickable'
+    const warningIcon = fixture.debugElement.nativeElement.querySelector(
+      '#clusterStatus cd-icon[type="warning"]'
     );
-    expect(popover).not.toBeNull();
+    expect(warningIcon).not.toBeNull();
   });
 
-  it('should not show popover when health warning is not present', () => {
+  it('should not show warning icon when health is OK', () => {
     const healthPayload: Record<string, any> = {
       health: {
         status: 'HEALTH_OK'
@@ -225,9 +216,9 @@ describe('UpgradeComponent', () => {
     getHealthSpy.and.returnValue(of(healthPayload));
     component.ngOnInit();
     fixture.detectChanges();
-    const popover = fixture.debugElement.nativeElement.querySelector(
-      '.info-card-content-clickable'
+    const warningIcon = fixture.debugElement.nativeElement.querySelector(
+      '#clusterStatus cd-icon[type="warning"]'
     );
-    expect(popover).toBeNull();
+    expect(warningIcon).toBeNull();
   });
 });

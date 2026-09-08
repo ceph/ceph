@@ -14,7 +14,7 @@ from mgr_module import HandleCommandResult
 
 from test_orchestrator import TestOrchestrator as _TestOrchestrator
 
-from orchestrator import InventoryHost, DaemonDescription, ServiceDescription, DaemonDescriptionStatus, OrchResult
+from orchestrator import InventoryHost, DaemonDescription, ServiceDescription, DaemonDescriptionStatus, OrchResult, OrchestratorError
 from orchestrator import OrchestratorValidationError
 from orchestrator.module import to_format, Format, OrchestratorCli, preview_table_osd
 from unittest import mock
@@ -93,6 +93,7 @@ status: 1
 status_desc: starting
 is_active: false
 pending_daemon_config: false
+user_stopped: false
 events:
 - 2020-06-10T10:08:22.933241Z daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on
   host 'ubuntu'"
@@ -351,3 +352,194 @@ class TestApplyNvmeof:
         mock_remote.assert_called_once_with('nvmeof', 'create_pool_if_not_exists')
         mock_apply_misc.assert_called_once()
         assert res.retval == 0
+
+
+@mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
+class TestApplyOAuth2Proxy:
+
+    def setup_method(self):
+        self.m = OrchestratorCli('orchestrator', 0, 0)
+
+    def test_missing_required_fields_raises_error(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy()
+
+        assert res.retval != 0
+        assert (
+            'Missing required fields for oauth2-proxy: provider_display_name, '
+            'oidc_issuer_url, client_id, client_secret.'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+    def test_inbuf_with_missing_fields_is_rejected(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy(inbuf=textwrap.dedent("""
+            service_type: oauth2-proxy
+            spec:
+              oidc_issuer_url: "https://idp.example.com"
+              client_id: "oauth-client"
+              client_secret: "oauth-secret"
+            """).strip())
+
+        assert res.retval != 0
+        assert (
+            'unrecognized command -i; -h or --help for usage'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+    def test_inbuf_with_valid_spec_is_rejected(self, mock_apply_misc):
+        res = self.m._apply_oauth2_proxy(inbuf=textwrap.dedent("""
+            service_type: oauth2-proxy
+            spec:
+              provider_display_name: "My OIDC Provider"
+              oidc_issuer_url: "https://idp.example.com"
+              client_id: "oauth-client"
+              client_secret: "oauth-secret"
+            """).strip())
+
+        assert res.retval != 0
+        assert (
+            'unrecognized command -i; -h or --help for usage'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+
+@mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
+class TestApplyOAuth2ProxyYaml:
+
+    def setup_method(self):
+        self.m = OrchestratorCli('orchestrator', 0, 0)
+
+    def test_apply_yaml_missing_required_fields(self, mock_apply_misc):
+        res = self.m.apply_misc(
+            inbuf=textwrap.dedent("""
+                service_type: oauth2-proxy
+                spec:
+                  oidc_issuer_url: "https://idp.example.com"
+                """).strip()
+        )
+
+        assert res.retval != 0
+        assert (
+            'Missing required fields for oauth2-proxy: '
+            'provider_display_name, client_id, client_secret.'
+        ) in res.stderr
+        mock_apply_misc.assert_not_called()
+
+
+@mock.patch("orchestrator.module.OrchestratorCli.cert_store_set_pair")
+class TestCertStoreCertKeySet:
+
+    def setup_method(self):
+        self.m = OrchestratorCli('orchestrator', 0, 0)
+
+    def test_inbuf_is_forwarded_as_cert_with_empty_key(self, mock_set_pair):
+        mock_set_pair.return_value = OrchResult("Certificate/key pair set correctly")
+
+        res = self.m._cert_store_cert_key_set(
+            consumer="rgw",
+            inbuf="FULLCHAIN_PEM_BLOB",
+            cert_name="rgw_ssl_cert",
+            service_name="rgw.realm.zone",
+            hostname="host1",
+            force=True,
+        )
+
+        assert res == HandleCommandResult(
+            retval=0,
+            stdout="Certificate/key pair set correctly",
+            stderr="",
+        )
+        mock_set_pair.assert_called_once_with(
+            "FULLCHAIN_PEM_BLOB",
+            "",
+            "rgw",
+            "rgw_ssl_cert",
+            "rgw.realm.zone",
+            "host1",
+            True,
+        )
+
+    def test_cert_and_key_are_forwarded_with_all_options(self, mock_set_pair):
+        mock_set_pair.return_value = OrchResult("Certificate/key pair set correctly")
+
+        res = self.m._cert_store_cert_key_set(
+            consumer="rgw",
+            cert="CERT_PEM",
+            key="KEY_PEM",
+            cert_name="rgw_ssl_cert",
+            service_name="rgw.realm.zone",
+            hostname="host1",
+            force=True,
+        )
+
+        assert res == HandleCommandResult(
+            retval=0,
+            stdout="Certificate/key pair set correctly",
+            stderr="",
+        )
+        mock_set_pair.assert_called_once_with(
+            "CERT_PEM",
+            "KEY_PEM",
+            "rgw",
+            "rgw_ssl_cert",
+            "rgw.realm.zone",
+            "host1",
+            True,
+        )
+
+    def test_missing_cert_or_key_without_inbuf_is_rejected(self, mock_set_pair):
+        res = self.m._cert_store_cert_key_set(
+            consumer="rgw",
+            cert="CERT_PEM",
+        )
+
+        assert res.retval != 0
+        assert (
+            "This command requires passing cert/key pair by either using "
+            "--cert/--key parameters or a combined PEM file using \"-i\" option."
+        ) in res.stderr
+        mock_set_pair.assert_not_called()
+
+    def test_backend_error_is_returned_as_cli_error(self, mock_set_pair):
+        mock_set_pair.return_value = OrchResult(
+            None,
+            OrchestratorError("backend rejected PEM"),
+        )
+
+        res = self.m._cert_store_cert_key_set(
+            consumer="rgw",
+            inbuf="BAD_PEM",
+        )
+
+        assert res.retval != 0
+        assert "backend rejected PEM" in res.stderr
+        mock_set_pair.assert_called_once_with(
+            "BAD_PEM",
+            "",
+            "rgw",
+            None,
+            None,
+            None,
+            False,
+        )
+
+    def test_inbuf_takes_precedence_over_cert_and_key(self, mock_set_pair):
+        mock_set_pair.return_value = OrchResult("Certificate/key pair set correctly")
+
+        res = self.m._cert_store_cert_key_set(
+            consumer="rgw",
+            cert="CERT_PEM_SHOULD_BE_IGNORED",
+            key="KEY_PEM_SHOULD_BE_IGNORED",
+            inbuf="FULLCHAIN_PEM_BLOB",
+        )
+
+        assert res.retval == 0
+        assert res.stdout == "Certificate/key pair set correctly"
+        mock_set_pair.assert_called_once_with(
+            "FULLCHAIN_PEM_BLOB",
+            "",
+            "rgw",
+            None,
+            None,
+            None,
+            False,
+        )

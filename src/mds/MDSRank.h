@@ -26,11 +26,14 @@
 
 #include "include/common_fwd.h"
 
+#include "msg/Connection.h" // for ConnectionRef
+
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
 #include "PurgeQueue.h"
 #include "MetricsHandler.h"
+#include "MDSDmclockScheduler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -55,6 +58,7 @@ enum {
   l_mds_forward,
   l_mds_dir_fetch_complete,
   l_mds_dir_fetch_keys,
+  l_mds_dir_fetch_background,
   l_mds_dir_commit,
   l_mds_dir_split,
   l_mds_dir_merge,
@@ -155,6 +159,7 @@ class ScrubStack;
 class C_ExecAndReply;
 class QuiesceDbManager;
 class QuiesceAgent;
+class MDSDmclockScheduler;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -430,6 +435,8 @@ class MDSRank {
     SnapClient *snapclient = nullptr;
 
     SessionMap sessionmap;
+
+    MDSDmclockScheduler *mds_dmclock_scheduler = nullptr;
 
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;

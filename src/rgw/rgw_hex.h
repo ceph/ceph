@@ -16,29 +16,38 @@
 #pragma once
 
 #include <array>
-#include <stdint.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <errno.h>
+#include <cstddef>
+#include <cstdint>
+#include <cctype>
+#include <cerrno>
+#include <ranges>
 
-static inline void buf_to_hex(const unsigned char* const buf,
-                              const size_t len,
-                              char* const str)
+inline auto
+buf_to_hex(
+    std::ranges::input_range auto&& in,
+    std::output_iterator<char> auto out)
 {
-  str[0] = '\0';
-  for (size_t i = 0; i < len; i++) {
-    ::sprintf(&str[i*2], "%02x", static_cast<int>(buf[i]));
+  static constexpr char hexits[] = "0123456789abcdef";
+  for (const auto c_ : std::forward<decltype(in)>(in)) {
+    const auto c = static_cast<std::uint8_t>(c_);
+    for (const auto digit : {c >> 4, c & 0xf}) {
+      *out++ = hexits[digit];
+    }
   }
+  return out;
 }
 
-template<size_t N> static inline std::array<char, N * 2 + 1>
+template <size_t N>
+inline std::array<char, N * 2 + 1>
 buf_to_hex(const std::array<unsigned char, N>& buf)
 {
-  static_assert(N > 0, "The input array must be at least one element long");
+  if constexpr (N == 0) {
+    return std::array<char, 1>{'\0'};
+  }
 
   std::array<char, N * 2 + 1> hex_dest;
-  buf_to_hex(buf.data(), N, hex_dest.data());
+  buf_to_hex(buf, hex_dest.begin());
+  hex_dest[hex_dest.size() - 1] = '\0';
   return hex_dest;
 }
 

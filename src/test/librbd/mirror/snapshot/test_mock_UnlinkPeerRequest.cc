@@ -83,7 +83,7 @@ public:
     encode(peer_uuid, bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                exec_internal(mock_image_ctx.header_oid, _, StrEq("rbd"),
                      StrEq("mirror_image_snapshot_unlink_peer"),
                      ContentsEqual(bl), _, _, _))
       .WillOnce(Invoke([&mock_image_ctx, snap_id, peer_uuid, r](auto&&... args) -> int {

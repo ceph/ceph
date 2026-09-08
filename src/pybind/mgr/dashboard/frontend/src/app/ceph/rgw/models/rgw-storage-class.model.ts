@@ -50,6 +50,8 @@ export interface StorageClassDetails {
   glacier_restore_tier_type?: string;
   read_through_restore_days?: number;
   restore_storage_class?: string;
+  target_storage_class?: string;
+  location_constraint?: string;
   retain_head_object?: boolean;
   acls?: ACL[];
   acl_mappings?: ACL[];
@@ -116,6 +118,7 @@ export interface S3Details {
   storage_class: string;
   target_path: string;
   target_storage_class: string;
+  location_constraint?: string;
   region: string;
   secret: string;
   multipart_min_part_size: number;
@@ -155,6 +158,7 @@ export interface PlacementTarget {
     restore_storage_class?: string;
     read_through_restore_days?: number;
     target_storage_class?: string;
+    location_constraint?: string;
     acls?: ACL[];
   };
   storage_class?: string;
@@ -190,6 +194,8 @@ export interface TextLabels {
   restoreDaysText: string;
   readthroughrestoreDaysText: string;
   restoreStorageClassText: string;
+  locationConstraintText: string;
+  targetStorageClassText: string;
 }
 
 export const CLOUD_TIER_REQUIRED_FIELDS = [
@@ -226,15 +232,13 @@ export const STORAGE_CLASS_CONSTANTS = {
 
 export const DEFAULT_PLACEMENT = 'default-placement';
 
-export type TIER_TYPE = typeof TIER_TYPE[keyof typeof TIER_TYPE];
+export type TIER_TYPE = (typeof TIER_TYPE)[keyof typeof TIER_TYPE];
 
 export const TIER_TYPE_DISPLAY = {
   LOCAL: 'Local',
   CLOUD_TIER: 'Cloud S3',
   GLACIER: 'Cloud S3 Glacier'
 };
-
-export const GLACIER_TARGET_STORAGE_CLASS = $localize`GLACIER`;
 
 export const ALLOW_READ_THROUGH_TEXT = $localize`Enables fetching objects from remote cloud S3 if not found locally.`;
 
@@ -277,6 +281,10 @@ export const RESTORE_DAYS_TEXT = $localize`Refers to number of days to the objec
 export const READTHROUGH_RESTORE_DAYS_TEXT = $localize`The days for which objects restored via read-through are retained.`;
 
 export const RESTORE_STORAGE_CLASS_TEXT = $localize`The storage class to which object data is to be restored.`;
+
+export const LOCATION_CONSTRAINT_TEXT = $localize`The region constraint for the target bucket on the remote S3 endpoint. For AWS, set this only if the region is other than US East (us-east-1).`;
+
+export const TARGET_STORAGE_CLASS_TEXT = $localize`The storage class objects are placed into on the remote S3 endpoint (for example, STANDARD or STANDARD_IA). If empty, the remote endpoint's default is used.`;
 
 export const ZONEGROUP_TEXT = $localize`A Zonegroup is a logical grouping of one or more zones that share the same data
                   and metadata, allowing for multi-site replication and geographic distribution of
@@ -350,3 +358,5 @@ export const AclHelperText: AclMaps = {
 export const POOL = {
   PATH: '/pool/create'
 };
+
+export const FROM_STORAGE_CLASS = 'from-storage-class';

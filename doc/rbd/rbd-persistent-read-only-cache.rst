@@ -151,7 +151,7 @@ The immutable object cache supports throttling, controlled by the following sett
 
 ``immutable_object_cache_qos_iops_limit``
 
-:Description: The desired immutable object cache IO operations limit per second.
+:Description: The desired immutable object cache I/O operations limit per second.
 :Type: Unsigned Integer
 :Required: No
 :Default: ``0``
@@ -159,7 +159,7 @@ The immutable object cache supports throttling, controlled by the following sett
 
 ``immutable_object_cache_qos_iops_burst``
 
-:Description: The desired burst limit of immutable object cache IO operations.
+:Description: The desired burst limit of immutable object cache I/O operations.
 :Type: Unsigned Integer
 :Required: No
 :Default: ``0``
@@ -167,7 +167,7 @@ The immutable object cache supports throttling, controlled by the following sett
 
 ``immutable_object_cache_qos_iops_burst_seconds``
 
-:Description: The desired burst duration in seconds of immutable object cache IO operations.
+:Description: The desired burst duration in seconds of immutable object cache I/O operations.
 :Type: Seconds
 :Required: No
 :Default: ``1``
@@ -175,7 +175,7 @@ The immutable object cache supports throttling, controlled by the following sett
 
 ``immutable_object_cache_qos_bps_limit``
 
-:Description: The desired immutable object cache IO bytes limit per second.
+:Description: The desired immutable object cache I/O bytes limit per second.
 :Type: Unsigned Integer
 :Required: No
 :Default: ``0``
@@ -183,7 +183,7 @@ The immutable object cache supports throttling, controlled by the following sett
 
 ``immutable_object_cache_qos_bps_burst``
 
-:Description: The desired burst limit of immutable object cache IO bytes.
+:Description: The desired burst limit of immutable object cache I/O bytes.
 :Type: Unsigned Integer
 :Required: No
 :Default: ``0``
@@ -191,7 +191,7 @@ The immutable object cache supports throttling, controlled by the following sett
 
 ``immutable_object_cache_qos_bps_burst_seconds``
 
-:Description: The desired burst duration in seconds of immutable object cache IO bytes.
+:Description: The desired burst duration in seconds of immutable object cache I/O bytes.
 :Type: Seconds
 :Required: No
 :Default: ``1``

@@ -4,8 +4,10 @@ import logging
 
 from typing import Tuple, List
 
+from .constants import DISABLED_SERVICES
 from .context import CephadmContext
 from .call_wrappers import call, CallVerbosity
+from .listing import DaemonEntry, daemons_matching
 
 logger = logging.getLogger()
 
@@ -93,3 +95,32 @@ def enable_service(ctx: CephadmContext, service_name: str) -> None:
         ['systemctl', 'enable', '--now', service_name],
         verbosity=CallVerbosity.DEBUG,
     )
+
+
+def start_disabled_services_after_maintenance_exit(
+    ctx: CephadmContext,
+) -> None:
+    """Start nfs/keepalived units after host-maintenance exit."""
+    if not ctx.fsid:
+        return
+    for daemon_type in DISABLED_SERVICES:
+        for entry in daemons_matching(
+            ctx, fsid=ctx.fsid, daemon_type=daemon_type
+        ):
+            if isinstance(entry, DaemonEntry):
+                unit = entry.identity.unit_name
+            else:
+                unit = entry.status['systemd_unit']
+            _out, _err, code = call(
+                ctx,
+                ['systemctl', 'start', unit],
+                verbosity=CallVerbosity.DEBUG,
+            )
+            if code:
+                logger.warning(
+                    'Failed to start %s after maintenance exit: %s',
+                    unit,
+                    _err,
+                )
+            else:
+                logger.info('Started %s after maintenance exit', unit)

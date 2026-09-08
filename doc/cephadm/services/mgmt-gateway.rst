@@ -8,10 +8,10 @@ Deploying mgmt-gateway
 ======================
 
 In Ceph releases beginning with Tentacle, the ``mgmt-gateway`` service introduces a new design for Ceph applications
-based on a modular, service-based architecture. This service, managed by cephadm and built on top of nginx
+based on a modular, service-based architecture. This service, managed by cephadm and built on top of NGINX
 (an open-source, high-performance web server), acts as the new front-end and single entry point to the
 Ceph cluster. The ``mgmt-gateway`` provides unified access to all Ceph applications, including the Ceph dashboard
-and monitoring stack. Employing nginx enhances security and simplifies access management due to its robust
+and monitoring stack. Employing NGINX enhances security and simplifies access management due to its robust
 community support and high-security standards. The ``mgmt-gateway`` service acts as a reverse proxy that routes
 requests to the appropriate Ceph application instances.
 
@@ -28,10 +28,10 @@ consolidated behind the new service endpoint: ``https://<node-ip>:<port>``.
 
 Benefits of the mgmt-gateway service
 ====================================
-* ``Unified Access``: Consolidated access through nginx improves security and provides a single entry point to services.
+* ``Unified Access``: Consolidated access through NGINX improves security and provides a single entry point to services.
 * ``Improved user experience``: Users no longer need to know where each application is running (IP/host).
-* ``High Availability for dashboard``: nginx HA mechanisms are used to provide high availability for the Ceph dashboard.
-* ``High Availability for monitoring``: nginx HA mechanisms are used to provide high availability for monitoring.
+* ``High Availability for dashboard``: NGINX HA mechanisms are used to provide high availability for the Ceph dashboard.
+* ``High Availability for monitoring``: NGINX HA mechanisms are used to provide high availability for monitoring.
 
 Security enhancements
 =====================
@@ -42,7 +42,7 @@ Ceph dashboard.
 
 High availability enhancements
 ==============================
-nginx HA mechanisms are used to provide high availability for all the Ceph management applications including the Ceph dashboard
+NGINX HA mechanisms are used to provide high availability for all the Ceph management applications including the Ceph dashboard
 and monitoring stack. In case of the Ceph dashboard, users no longer need to know where the active manager is running.
 ``mgmt-gateway`` handles manager failover transparently and redirects the user to the active manager. In case of the
 monitoring ``mgmt-gateway`` takes care of handling HA when several instances of Prometheus, Alertmanager or Grafana are
@@ -58,7 +58,7 @@ even if certain core components for the service fail, including the ``mgmt-gatew
 
 Multiple ``mgmt-gateway`` instances can be deployed in an active/standby configuration using keepalived
 for seamless failover. The ``oauth2-proxy`` service can be deployed as multiple stateless instances,
-with nginx acting as a load balancer across them using a round-robin strategy. This setup removes
+with NGINX acting as a load balancer across them using a round-robin strategy. This setup removes
 single points of failure and enhances the resilience of the entire system.
 
 In this setup, the underlying internal services follow the same high availability mechanism. Instead of
@@ -188,7 +188,7 @@ Limitations
 Default images
 ~~~~~~~~~~~~~~
 
-The ``mgmt-gateway`` service internally makes use of nginx reverse proxy. The following container image is used by default:
+The ``mgmt-gateway`` service internally makes use of NGINX reverse proxy. The following container image is used by default:
 
 ::
 

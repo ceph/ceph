@@ -19,7 +19,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 })
 export class RgwMultisiteZonegroupDeletionFormComponent
   extends CdForm
-  implements OnInit, AfterViewInit {
+  implements OnInit, AfterViewInit
+{
   zonegroupData$: any;
   poolList$: any;
   zonesPools: Array<any> = [];

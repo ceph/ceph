@@ -58,6 +58,8 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_account_default_quota_max_objects
 .. confval:: rgw_account_default_quota_max_size
 .. confval:: rgw_verify_ssl
+.. confval:: rgw_rest_conn_connect_to_resolved_ips
+.. confval:: rgw_rest_conn_ip_fail_timeout_secs
 .. confval:: rgw_max_chunk_size
 .. confval:: rgw_multi_obj_del_max_aio
 
@@ -150,10 +152,16 @@ thread running:
 
 .. confval:: rgw_enable_gc_threads
 
+Dedup Settings
+==============
+
+At least one RGW in each zone must have the dedup background thread running
+for dedup operations to function:
+
+.. confval:: rgw_enable_dedup_threads
+
 Multisite Settings
 ==================
-
-.. versionadded:: Jewel
 
 You may include the following settings in your Ceph configuration
 file under each ``[client.radosgw.{instance-name}]`` instance.
@@ -233,6 +241,7 @@ Server-side Encryption Settings
 ===============================
 
 .. confval:: rgw_crypt_s3_kms_backend
+.. confval:: rgw_crypt_sse_algorithm
 
 Barbican Settings
 =================
@@ -270,11 +279,19 @@ SSE-S3 Settings
 .. confval:: rgw_crypt_sse_s3_vault_ssl_clientcert
 .. confval:: rgw_crypt_sse_s3_vault_ssl_clientkey
 
+KMS Secrets Cache Settings
+==========================
+
+.. confval:: rgw_crypt_s3_kms_cache_enabled
+.. confval:: rgw_crypt_s3_kms_cache_max_size
+.. confval:: rgw_crypt_s3_kms_cache_positive_ttl
+.. confval:: rgw_crypt_s3_kms_cache_transient_error_ttl
+.. confval:: rgw_crypt_s3_kms_cache_negative_ttl
+
+.. _Encryption: ../encryption
 
 QoS Settings
 ============
-
-.. versionadded:: Nautilus
 
 The older and now non-default ``civetweb`` frontend has a threading model that uses a thread per
 connection and hence is automatically throttled by :confval:`rgw_thread_pool_size`
@@ -305,7 +322,7 @@ implementation of the *dmclock_client* op queue divides RGW ops into admin, auth
 .. confval:: rgw_dmclock_metadata_wgt
 .. confval:: rgw_dmclock_metadata_lim
 
-.. _Architecture: ../../architecture#data-striping
+.. _Architecture: ../../architecture/ceph-protocol#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Cluster Pools: ../../rados/operations/pools
 .. _Rados cluster handles: ../../rados/api/librados-intro/#step-2-configuring-a-cluster-handle
@@ -328,10 +345,42 @@ below.
 .. confval:: rgw_d4n_l1_datacache_disk_reserve
 .. confval:: rgw_d4n_l1_evict_cache_on_start
 .. confval:: rgw_d4n_l1_fadvise
-.. confval:: rgw_d4n_libaio_aio_threads
-.. confval:: rgw_d4n_libaio_aio_num
 .. confval:: rgw_lfuda_sync_frequency
 .. confval:: rgw_d4n_l1_datacache_address
+
+D4N Asynchronous I/O Backend Settings
+--------------------------------------
+
+D4N supports two asynchronous I/O backends for cache read/write
+operations: ``libaio`` (POSIX AIO, the default) and ``liburing`` (io_uring).
+The active backend is selected at startup via :confval:`rgw_d4n_io_backend_type`.
+
+.. confval:: rgw_d4n_io_backend_type
+
+If the ``liburing`` backend is selected but liburing is unavailable or
+initialization fails, the gateway automatically falls back to ``libaio``.
+The ``liburing`` backend requires Linux kernel 5.1 or later.
+
+.. note:: The ``liburing`` backend and all ``rgw_d4n_io_uring_*`` options are *experimental*.
+
+liburing Settings
+~~~~~~~~~~~~~~~~~
+
+The following options apply only when :confval:`rgw_d4n_io_backend_type` is set to ``liburing``.
+
+.. confval:: rgw_d4n_io_uring_queue_depth
+.. confval:: rgw_d4n_io_uring_direct_io
+.. confval:: rgw_d4n_io_uring_sqpoll
+.. confval:: rgw_d4n_io_uring_sq_thread_idle_ms
+.. confval:: rgw_d4n_io_uring_iopoll
+
+libaio Settings
+~~~~~~~~~~~~~~~~~
+
+The following options apply only when :confval:`rgw_d4n_io_backend_type` is set to ``libaio``.
+
+.. confval:: rgw_d4n_libaio_aio_threads
+.. confval:: rgw_d4n_libaio_aio_num
 
 Topic Persistency Settings
 ==========================
@@ -365,3 +414,16 @@ Cloud Restore feature currently enables the restoration of objects transitioned 
 .. confval:: rgw_restore_processor_period
 
 These values can be tuned based upon your specific workload to further increase the aggressiveness of restore processing. 
+
+Global CORS
+===========
+
+Configuration options that allows administrators to define a global CORS policy applied at the gateway level, affecting all buckets served by RGW.
+Previously, CORS (Cross-Origin Resource Sharing) support in RGW is limited to per-bucket configuration using the Get/PutBucketCors API, following the standard AWS S3 behavior.
+While this suffices for most use cases, it becomes a blocker when using browser-based tools that require interaction with gateway-wide resources, such as listing all buckets accessible to a user.
+These configuration options are necessary to enable CORS-based access for tools like S3 Browser, which need to list and create buckets across the gateway from a browser client.
+
+.. confval:: rgw_gcors_allow_origins
+.. confval:: rgw_gcors_allow_headers
+.. confval:: rgw_gcors_allow_methods
+.. confval:: rgw_gcors_expose_headers

@@ -8,4 +8,7 @@
           [--feature-set <value> [--optional|--persistent]]
           [--feature-unset <value> [--optional|--persistent]]
           [--set-min-mon-release <release-major-number>]
+          [--auth-service-cipher <cipher>]
+          [--auth-allowed-ciphers <cipher1,cipher2,...>]
+          [--auth-preferred-cipher <cipher>]
           <mapfilename>

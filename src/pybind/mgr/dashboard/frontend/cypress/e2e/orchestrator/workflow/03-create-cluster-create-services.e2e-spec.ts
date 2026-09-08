@@ -1,12 +1,9 @@
 /* tslint:disable*/
-import {
-  CreateClusterServicePageHelper,
-  CreateClusterWizardHelper
-} from '../../cluster/create-cluster.po';
+import { CreateClusterServicePageHelper, OnboardingHelper } from '../../cluster/create-cluster.po';
 /* tslint:enable*/
 
 describe('Create cluster create services page', () => {
-  const createCluster = new CreateClusterWizardHelper();
+  const onboardingPage = new OnboardingHelper();
   const createClusterServicePage = new CreateClusterServicePageHelper();
 
   const createService = (serviceType: string, serviceName: string, count = 1) => {
@@ -17,16 +14,14 @@ describe('Create cluster create services page', () => {
 
   beforeEach(() => {
     cy.login();
-    createCluster.navigateTo();
-    createCluster.createCluster();
+    onboardingPage.navigateTo();
+    onboardingPage.onboarding();
 
-    cy.get('cd-wizard').within(() => {
-      cy.get('button').contains('Create Services').click();
-    });
+    onboardingPage.selectStep('Create Services');
   });
 
   it('should check if title contains Create Services', () => {
-    cy.get('.title').should('contain.text', 'Create Services');
+    cy.get('.tearsheet-body .tearsheet-content h4').should('contain.text', 'Create Services');
   });
 
   describe('when Orchestrator is available', () => {

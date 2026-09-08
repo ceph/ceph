@@ -356,7 +356,7 @@ options:
   long_desc: This determines how long a session needs to be quiescent before the MDS
     begins preemptively recalling capabilities. The default of 5 minutes will cause
     10 halvings of the decay counter after 1 hour, or 1/1024. The default magnitude
-    of 10 (1^10 or 1024) is chosen so that the MDS considers a previously chatty session
+    of 10 (2^10 or 1024) is chosen so that the MDS considers a previously chatty session
     (approximately) to be quiescent after 1 hour.
   default: 5_min
   services:
@@ -460,6 +460,41 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_dir_prefetch_backend
+  type: bool
+  level: advanced
+  desc: When mds_dir_prefetch is false, additionally launch a full background
+    dirfrag fetch to warm the cache while the operation completes via keyed fetch
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_dir_prefetch_backend_max
+  type: uint
+  level: advanced
+  desc: Maximum number of concurrent background dirfrag prefetches when
+    mds_dir_prefetch_backend is enabled
+  default: 1
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_dir_prefetch_backend_hit_threshold
+  type: uint
+  level: advanced
+  desc: Number of keyed-fetch hits on a dirfrag before a background full
+    prefetch is triggered. Low values (2-4) warm caches aggressively for
+    mixed workloads; high values (16+) eliminate bg fetches for scattered
+    access patterns, behaving like prefetch_false.
+    Effective maximum is 255 due to the uint8_t per-dirfrag hit counter.
+  max: 255
+  min: 1
+  default: 16
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_tick_interval
   type: float
   level: advanced
@@ -521,7 +556,7 @@ options:
 - name: mds_replay_unsafe_with_closed_session
   type: bool
   level: advanced
-  desc: complete all the replay request when mds is restarted, no matter the session
+  desc: complete all replay requests when MDS is restarted, no matter the session
     is closed or not
   default: false
   services:
@@ -603,7 +638,7 @@ options:
   level: advanced
   desc: maximum number of segments which may be untrimmed
   fmt_desc: The maximum number of segments (objects) in the journal before
-    we initiate trimming. Set to ``-1`` to disable limits.
+    we initiate trimming.
   default: 128
   min: 8
   services:
@@ -777,7 +812,7 @@ options:
 - name: mds_bal_fragment_interval
   type: int
   level: advanced
-  desc: delay in seconds before interrupting client IO to perform splits
+  desc: delay in seconds before interrupting client I/O to perform splits
   fmt_desc: The delay (in seconds) between a fragment being eligible for split
     or merge and executing the fragmentation change.
   default: 5
@@ -1564,8 +1599,8 @@ options:
 - name: mds_task_status_update_interval
   type: float
   level: dev
-  desc: task status update interval to manager
-  long_desc: interval (in seconds) for sending mds task status to ceph manager
+  desc: task status update interval to the Manager
+  long_desc: interval (in seconds) for sending MDS task status to the Manager
   default: 2
   services:
   - mds
@@ -1587,7 +1622,7 @@ options:
   default: true
   services:
   - mds
-  fmt_desc: MDS will use the global snaprealm's seq to cow old inodes
+  fmt_desc: MDS will use the global snaprealm's seq to CoW old inodes
     for the directory. If the option is disabled, MDS will use the
     respective snaprealm seq number for the subvolume snapshot directory
     i.e., the directory marked with the 'ceph.dir.subvolume'. This is
@@ -1596,9 +1631,9 @@ options:
     above subvolume, it will use the global snaprealm's seq only if there
     is at least one snapshot of the directory above the subvolume.
     If the option is enabled, which is the default, it uses the global
-    snaprealm's seq to cow old inodes across the filesystem. Hence,
-    disabling this option is only suitalbe for the cephfs volumes used
-    purely for subvolume usecase where there are no snapshots in the
+    snaprealm's seq to CoW old inodes across the filesystem. Hence,
+    disabling this option is only suitable for the CephFS volumes used
+    purely for subvolume use case where there are no snapshots in the
     filesystem apart from the subvolume snapshots. So it's a great
     optimization for subvolumes.
   flags:
@@ -1812,3 +1847,39 @@ options:
   min: 30
   services:
   - mds
+- name: mds_dmclock_enable
+  type: bool
+  level: advanced
+  desc: enable MDS dmClock QoS scheduler
+  log_dest: This option can be configured when reservation, weight, and limit values are
+    greater than zero.
+  default: false
+  services:
+  - mds
+- name: mds_dmclock_reservation
+  type: float
+  level: advanced
+  desc: dmclock reservation for each MDS client
+  default: 1000.0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_dmclock_weight
+  type: float
+  level: advanced
+  desc: dmclock weight for each MDS client
+  default: 1000.0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_dmclock_limit
+  type: float
+  level: advanced
+  desc: dmclock limit for each MDS client
+  default: 1000.0
+  services:
+  - mds
+  flags:
+  - runtime

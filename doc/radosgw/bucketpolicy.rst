@@ -2,8 +2,6 @@
 Bucket Policies
 ===============
 
-.. versionadded:: Luminous
-
 The Ceph Object Gateway supports a subset of the Amazon S3 policy
 language applied to buckets.
 
@@ -122,6 +120,11 @@ For all requests, condition keys we support are:
 - aws:SourceIp
 - aws:UserAgent
 - aws:username
+
+Request that authenticate with Keystone also include:
+
+- keystone:role
+- keystone:userid
 
 We support certain S3 condition keys for bucket and object requests.
 

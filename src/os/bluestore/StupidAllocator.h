@@ -14,7 +14,7 @@
 #include "include/mempool.h"
 #include "common/ceph_mutex.h"
 
-class StupidAllocator : public AllocatorBase {
+class StupidAllocator : public AllocatorBase, public AllocatorPerf {
   CephContext* cct;
   ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 
@@ -59,6 +59,11 @@ public:
 
   void dump() override;
   void foreach(std::function<void(uint64_t offset, uint64_t length)> notify) override;
+  uint64_t get_free_extents(
+    uint64_t range_begin,
+    uint64_t range_end,
+    size_t max_count,
+    free_extent_vector_t* out) override;
 
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;

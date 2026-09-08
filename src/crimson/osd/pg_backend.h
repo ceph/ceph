@@ -26,6 +26,7 @@
 
 struct hobject_t;
 struct ECListener;
+class PGLog;
 
 namespace ceph::os {
   class Transaction;
@@ -50,7 +51,8 @@ protected:
 
 public:
   using load_metadata_ertr = crimson::errorator<
-    crimson::ct_error::object_corrupted>;
+    crimson::ct_error::object_corrupted,
+    crimson::ct_error::enoent>;
   using load_metadata_iertr =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -402,7 +404,9 @@ public:
   interruptible_future<> omap_remove_key(
     ObjectState& os,
     const OSDOp& osd_op,
-    ceph::os::Transaction& trans);
+    ceph::os::Transaction& trans,
+    osd_op_params_t &osd_op_params,
+    object_stat_sum_t &delta_stats);
   using omap_clear_ertr = crimson::errorator<crimson::ct_error::enoent>;
   using omap_clear_iertr =
     ::crimson::interruptible::interruptible_errorator<
@@ -430,12 +434,13 @@ public:
 
   virtual rep_op_fut_t
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
-		     crimson::osd::ObjectContextRef&& obc,
-		     crimson::osd::ObjectContextRef&& new_clone,
-		     ceph::os::Transaction&& txn,
-		     osd_op_params_t&& osd_op_p,
-		     epoch_t min_epoch, epoch_t max_epoch,
-		     std::vector<pg_log_entry_t>&& log_entries) = 0;
+       crimson::osd::ObjectContextRef&& obc,
+       crimson::osd::ObjectContextRef&& new_clone,
+       ceph::os::Transaction&& txn,
+       osd_op_params_t&& osd_op_p,
+       epoch_t min_epoch, epoch_t max_epoch,
+       std::vector<pg_log_entry_t>&& log_entries,
+       const PGLog &pg_log) = 0;
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
@@ -470,6 +475,9 @@ public:
     const hobject_t &oid);
 
 private:
+  bool is_offset_and_length_valid(
+    std::uint64_t offset, std::uint64_t length) const;
+
   virtual ll_read_ierrorator::future<ceph::bufferlist> _read(
     const hobject_t& hoid,
     size_t object_size,

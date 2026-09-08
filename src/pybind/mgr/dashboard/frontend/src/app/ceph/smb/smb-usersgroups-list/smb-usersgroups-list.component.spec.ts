@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SmbUsersgroupsListComponent } from './smb-usersgroups-list.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
-import { ToastrModule } from 'ngx-toastr';
+
 import { SharedModule } from '~/app/shared/shared.module';
 
 describe('SmbUsersgroupsListComponent', () => {
@@ -13,7 +13,7 @@ describe('SmbUsersgroupsListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [SmbUsersgroupsListComponent],
-      imports: [SharedModule, HttpClientTestingModule, ToastrModule.forRoot(), RouterTestingModule]
+      imports: [SharedModule, HttpClientTestingModule, RouterTestingModule]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbUsersgroupsListComponent);

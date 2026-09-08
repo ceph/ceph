@@ -54,7 +54,7 @@ function run() {
 
     export CEPH_MON="127.0.0.1:7107" # git grep '\<7107\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd-skip-data-digest=false "
 
@@ -1028,7 +1028,7 @@ function list_missing_erasure_coded() {
 
     for i in $(seq 0 120) ; do
         [ $i -lt 60 ] || return 1
-        matches=$(ceph pg $pg list_unfound | egrep "MOBJ0|MOBJ1" | wc -l)
+        matches=$(ceph pg $pg list_unfound | grep -E "MOBJ0|MOBJ1" | wc -l)
         [ $matches -eq 2 ] && break
     done
 }

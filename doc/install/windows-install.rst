@@ -1,5 +1,7 @@
 :orphan:
 
+.. _install-windows:
+
 ==========================
 Installing Ceph on Windows
 ==========================
@@ -15,7 +17,7 @@ Supported platforms
 -------------------
 .. note::
 
-  Please see the `OS recommendations`_ regarding client package support.
+  Please see the :ref:`os-recommendations` regarding client package support.
 
 Windows Server 2019 and Windows Server 2016 are supported. Previous Windows
 Server versions, including Windows client versions such as Windows 10, might
@@ -66,7 +68,7 @@ https://github.com/ceph/ceph/blob/master/README.windows.rst
 Configuration
 =============
 
-Please check the `Windows configuration sample`_ to get started.
+Please check the :ref:`Windows configuration sample <install-windows-basic-config>` to get started.
 
 You'll also need a keyring file. The `General CephFS Prerequisites`_ page provides a
 simple example, showing how a new CephX user can be created and how its secret
@@ -80,12 +82,8 @@ Further reading
 
 * `RBD Windows documentation`_
 * :ref:`CephFS Windows documentation <ceph-dokan>`
-* `Windows troubleshooting`_
+* :ref:`install-windows-troubleshooting`
 
-.. _Windows configuration sample: ../windows-basic-config
 .. _RBD Windows documentation: ../../rbd/rbd-windows/
-.. _Windows troubleshooting: ../windows-troubleshooting
 .. _General CephFS Prerequisites: ../../cephfs/mount-prerequisites
 .. _Client Authentication: ../../cephfs/client-auth
-.. _Windows testing: ../dev/tests-windows
-.. _OS recommendations: ../../start/os-recommendations
