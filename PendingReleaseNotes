@@ -1,5 +1,11 @@
 >=22.0.0
 
+* RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
+  containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
+  hold the lock, instead of an empty list. Callers should check the
+  ``lockers`` field rather than the truth value of the returned object
+  to determine whether any clients hold the lock.
+
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed

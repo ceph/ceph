@@ -4465,7 +4465,11 @@ written." % (self.name, ret, length))
                 elif ret != -errno.ERANGE:
                     raise make_ex(ret, 'error listing images')
             if ret == 0:
-                return []
+                return {
+                    'tag': decode_cstr(c_tag),
+                    'exclusive': exclusive == 1,
+                    'lockers': [],
+                }
             clients = map(decode_cstr, c_clients[:clients_size - 1].split(b'\0'))
             cookies = map(decode_cstr, c_cookies[:cookies_size - 1].split(b'\0'))
             addrs = map(decode_cstr, c_addrs[:addrs_size - 1].split(b'\0'))
