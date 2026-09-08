@@ -4581,6 +4581,68 @@ def command_check_host(ctx: CephadmContext) -> None:
 ##################################
 
 
+def command_check_mtu(ctx: CephadmContext) -> int:
+    """Don't-fragment ping to a target IP using this host's NIC MTU."""
+    target_ip = unwrap_ipv6(ctx.target_ip)
+    try:
+        ipv6 = ipaddress.ip_address(target_ip).version == 6
+    except ValueError:
+        raise Error(f'Invalid target IP: {ctx.target_ip}')
+
+    iface = _get_route_interface(ctx, target_ip, ipv6)
+    if iface == 'lo':
+        logger.info('Target %s is local; skipping path MTU ping', target_ip)
+        return 0
+
+    mtu = _get_interface_mtu(iface)
+    payload_size = mtu - (48 if ipv6 else 28)
+    if payload_size <= 0:
+        raise Error(f'Invalid MTU {mtu} on interface {iface}')
+
+    _check_mtu_ping(ctx, target_ip, payload_size, ipv6)
+    logger.info('MTU check OK for %s via %s (mtu=%s)', target_ip, iface, mtu)
+    return 0
+
+
+def _get_route_interface(ctx: CephadmContext, addr: str, ipv6: bool) -> str:
+    cmd = ['ip', '-6', 'route', 'get', addr] if ipv6 else ['ip', 'route', 'get', addr]
+    out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+    if code:
+        raise Error(f'Unable to determine source interface to reach {addr}: {err or out}')
+    m = re.search(r'\bdev\s+(\S+)', out)
+    if not m:
+        raise Error(f'Unable to determine source interface to reach {addr}')
+    if 'local' in out.split() or m.group(1) == 'lo':
+        return 'lo'
+    return m.group(1)
+
+
+def _get_interface_mtu(iface: str) -> int:
+    try:
+        mtu = int(read_file([os.path.join('/sys/class/net', iface, 'mtu')]))
+    except (TypeError, ValueError):
+        mtu = 0
+    if mtu <= 0:
+        raise Error(f'Unable to determine MTU for interface {iface}')
+    return mtu
+
+
+def _check_mtu_ping(ctx: CephadmContext, addr: str, payload_size: int, ipv6: bool) -> None:
+    try:
+        ping_bin = find_program('ping')
+    except ValueError:
+        raise Error('ping binary does not appear to be installed')
+    cmd = [ping_bin, '-6' if ipv6 else '-4', '-M', 'do', '-s', str(payload_size),
+           '-c', '1', '-W', '2', addr]
+    out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+    if code:
+        overhead = 48 if ipv6 else 28
+        raise Error(
+            f'MTU validation failed for host {addr}. '
+            f'Could not send {payload_size + overhead} byte packet without fragmentation. '
+            f'{err or out}'
+        )
+
 def command_check_online(ctx: CephadmContext) -> int:
     return 0
 
@@ -5868,6 +5930,15 @@ def _get_parser():
         '--expect-hostname',
         help='Check that hostname matches an expected value')
 
+    parser_check_mtu = subparsers.add_parser(
+        'check-mtu',
+        help='verify path MTU to a target IP with a don\'t-fragment ping')
+    parser_check_mtu.set_defaults(func=command_check_mtu)
+    parser_check_mtu.add_argument(
+        '--target-ip',
+        required=True,
+        help='IP address to ping using the local interface MTU')
+
     parser_prepare_host = subparsers.add_parser(
         'prepare-host', help='prepare a host for cephadm use')
     parser_prepare_host.set_defaults(func=command_prepare_host)
@@ -6145,6 +6216,7 @@ def main() -> None:
         if ctx.func not in \
                 [
                     command_check_host,
+                    command_check_mtu,
                     command_check_online,
                     command_prepare_host,
                     command_setup_ssh_user,

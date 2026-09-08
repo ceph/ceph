@@ -2211,6 +2211,41 @@ Then run the following:
             raise OrchestratorError(str(e))
         return ip_addr
 
+    def _validate_host_mtu(self, hostname: str, addr: str, skip_mtu_check: bool = False) -> None:
+        """Don't-fragment ping from the active mgr host to the new host, using the mgr host MTU."""
+        if skip_mtu_check:
+            return
+        dest_ip = addr
+        try:
+            dest_ip = utils.resolve_ip(addr)
+            if ipaddress.ip_address(dest_ip).is_loopback:
+                return
+        except (OrchestratorError, ValueError):
+            pass
+
+        ref_host = self.get_active_mgr().hostname
+        if not ref_host or ref_host == hostname or ref_host not in self.inventory:
+            return
+
+        try:
+            with self.async_timeout_handler(ref_host, f'cephadm check-mtu --target-ip {dest_ip}'):
+                out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
+                    ref_host, cephadmNoImage, 'check-mtu',
+                    ['--target-ip', dest_ip],
+                    error_ok=True, no_fsid=True))
+        except ssh.HostConnectionError as e:
+            raise OrchestratorError(
+                f'MTU check failed for {hostname} ({dest_ip}): {e}\n'
+                'Use --skip-mtu-check to add anyway.')
+        if code:
+            details = '\n'.join(err) if err else '\n'.join(out)
+            errors = [_i.replace('ERROR: ', '') for _i in err if _i.startswith('ERROR')]
+            if errors:
+                details = '; '.join(errors)
+            raise OrchestratorError(
+                f'MTU check failed for {hostname} ({dest_ip}): {details}\n'
+                'Use --skip-mtu-check to add anyway.')
+
     def _get_cephadm_version_for_host_prep(self) -> Optional[str]:
         """Extract cephadm version from cluster version string."""
         try:
@@ -2276,6 +2311,9 @@ Then run the following:
             raise
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
+
+        skip_mtu_check = bool(getattr(spec, 'skip_mtu_check', False))
+        self._validate_host_mtu(spec.hostname, spec.addr, skip_mtu_check=skip_mtu_check)
 
         if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
             self.cache.refresh_all_host_info(spec.hostname)
