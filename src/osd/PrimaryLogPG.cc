@@ -17948,8 +17948,10 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
     return discard_event();
   }
   if (!pg->is_clean() ||
-      pg->snap_trimq.empty()) {
-    ldout(pg->cct, 10) << "NotTrimming not clean or nothing to trim" << dendl;
+      pg->snap_trimq.empty() ||
+      pg->state_test(PG_STATE_MIGRATION_WAIT) ||
+      pg->state_test(PG_STATE_MIGRATION_TOOFULL)) {
+    ldout(pg->cct, 10) << "NotTrimming not permitted to trim" << dendl;
     return discard_event();
   }
   if (pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM)) {
