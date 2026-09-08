@@ -34,6 +34,9 @@ For example, one may use ``s3cmd`` to set or delete a policy thus::
 Limitations
 ===========
 
+See :ref:`Principals <radosgw-account-principals>` regarding
+the interactions between policy Principals and User Accounts.
+
 Bucket policies do not yet support string interpolation.
 
 For all requests, condition keys we support are:
