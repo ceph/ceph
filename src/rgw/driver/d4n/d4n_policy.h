@@ -251,7 +251,6 @@ class LFUDAPolicy : public CachePolicy {
         return nullptr;
       return it->second;
     }
-    int delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y);
     int perform_background_eviction(const DoutPrefixProvider* dpp, uint64_t bytes_to_free, optional_yield y);
     virtual void background_eviction_worker(const DoutPrefixProvider* dpp, optional_yield y);
     int do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int interval, optional_yield y);
@@ -313,7 +312,9 @@ class LFUDAPolicy : public CachePolicy {
     int get_age() { return age; }
 
   private:
-    int mark_local_blocks_clean(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y, bool local_only = false);
+    int mark_data_blocks_dir_clean(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y,
+                                   std::optional<std::reference_wrapper<Transaction>> txn);
+    int mark_local_blocks_clean(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y);
 };
 
 class LRUPolicy : public CachePolicy {
