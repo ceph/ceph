@@ -325,6 +325,24 @@ class RgwClientTest(TestCase, CLICommandTestMixin):
         result = _determine_rgw_addr(daemon_info)
         self.assertEqual(result.host, "192.168.178.3")
 
+    def test_set_rgw_default_daemon_command(self):
+        self.exec_cmd('set-rgw-default-daemon', value='daemon2')
+        self.assertEqual(Settings.RGW_DEFAULT_DAEMON, 'daemon2')
+
+    def test_default_daemon_setting_selects_daemon(self):
+        self.CONFIG_KEY_DICT.update({'RGW_DEFAULT_DAEMON': 'daemon2'})
+        instance = RgwClient.admin_instance()
+        self.assertEqual(instance.daemon.name, 'daemon2')
+
+    @patch.object(RgwMultisite, 'get_all_zonegroups_info',
+                  Mock(return_value={'default_zonegroup': 'zonegroup2-id'}))
+    def test_default_daemon_setting_unknown_falls_back(self):
+        self.CONFIG_KEY_DICT.update({'RGW_DEFAULT_DAEMON': 'missing'})
+        with self.assertLogs(level='WARNING') as cm:
+            instance = RgwClient.admin_instance()
+        self.assertEqual(instance.daemon.name, 'daemon2')
+        self.assertIn('missing', cm.output[0])
+
 
 class RgwClientHelperTest(TestCase):
     def test_parse_frontend_config_1(self):

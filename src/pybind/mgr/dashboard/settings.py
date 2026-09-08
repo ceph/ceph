@@ -68,6 +68,7 @@ class Options(object):
     RGW_API_ADMIN_RESOURCE = Setting('admin', [str])
     RGW_API_SSL_VERIFY = Setting(True, [bool])
     RGW_HOSTNAME_PER_DAEMON = Setting('', [dict, str])
+    RGW_DEFAULT_DAEMON = Setting('', [str])
 
     # Ceph Issue Tracker API Access Key
     ISSUE_TRACKER_API_KEY = Setting('', [str])
