@@ -153,6 +153,7 @@ CephFS Concepts
     CephFS I/O Path <cephfs-io-path>
     Case Sensitivity and Normalization <charmap>
     LazyIO <lazyio>
+    Attribute caching <attribute-caching>
     Directory fragmentation <dirfrags>
     Multiple active MDS daemons <multimds>
     Snapshots <snapshots>
