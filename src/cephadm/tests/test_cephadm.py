@@ -3451,6 +3451,127 @@ cluster_network=3.3.3.0/24, 4.4.4.0/24
         assert not ipv6
         assert _str_to_networks(cluster_network) == ['3.3.3.0/24', '4.4.4.0/24']
 
+class TestGetRouteInterface:
+
+    CALL_MOCK = 'cephadmlib.net_utils.call'
+
+    def test_ipv4_returns_dev(self):
+        from cephadmlib.net_utils import get_route_interface
+        route = json.dumps([{'dst': '192.168.1.5', 'dev': 'eth0', 'prefsrc': '192.168.1.1'}])
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=(route, '', 0)) as _call:
+            assert get_route_interface(ctx, '192.168.1.5', False) == ('eth0', None)
+        cmd = _call.call_args.args[1]
+        assert cmd == ['ip', '-j', 'route', 'get', '192.168.1.5']
+
+    def test_ipv6_uses_dash_6_and_returns_dev(self):
+        from cephadmlib.net_utils import get_route_interface
+        route = json.dumps([{'dst': '2001:db8::5', 'dev': 'eth1', 'prefsrc': '2001:db8::1'}])
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=(route, '', 0)) as _call:
+            assert get_route_interface(ctx, '2001:db8::5', True) == ('eth1', None)
+        cmd = _call.call_args.args[1]
+        assert cmd == ['ip', '-6', '-j', 'route', 'get', '2001:db8::5']
+
+    def test_route_mtu_is_returned(self):
+        from cephadmlib.net_utils import get_route_interface
+        route = json.dumps([{'dst': '192.168.1.5', 'dev': 'eth0', 'mtu': 1450}])
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=(route, '', 0)):
+            assert get_route_interface(ctx, '192.168.1.5', False) == ('eth0', 1450)
+
+    def test_local_route_type_returns_lo(self):
+        from cephadmlib.net_utils import get_route_interface
+        route = json.dumps([{'dst': '192.168.1.1', 'dev': 'eth0', 'type': 'local'}])
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=(route, '', 0)):
+            assert get_route_interface(ctx, '192.168.1.1', False) == ('lo', None)
+
+    def test_dev_lo_returns_lo(self):
+        from cephadmlib.net_utils import get_route_interface
+        route = json.dumps([{'dst': '127.0.0.1', 'dev': 'lo'}])
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=(route, '', 0)):
+            assert get_route_interface(ctx, '127.0.0.1', False) == ('lo', None)
+
+    def test_ip_command_failure_raises(self):
+        from cephadmlib.net_utils import get_route_interface
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=('', 'network is unreachable', 1)):
+            with pytest.raises(_cephadm.Error, match='ip route command failed'):
+                get_route_interface(ctx, '192.168.1.5', False)
+
+    def test_invalid_json_raises(self):
+        from cephadmlib.net_utils import get_route_interface
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=('not json', '', 0)):
+            with pytest.raises(_cephadm.Error, match='invalid JSON'):
+                get_route_interface(ctx, '192.168.1.5', False)
+
+    def test_empty_route_list_raises(self):
+        from cephadmlib.net_utils import get_route_interface
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=('[]', '', 0)):
+            with pytest.raises(_cephadm.Error, match='no route was returned'):
+                get_route_interface(ctx, '192.168.1.5', False)
+
+    def test_non_dict_route_entry_raises(self):
+        from cephadmlib.net_utils import get_route_interface
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=(json.dumps(['oops']), '', 0)):
+            with pytest.raises(_cephadm.Error, match='unexpected route data'):
+                get_route_interface(ctx, '192.168.1.5', False)
+
+    def test_route_without_dev_raises(self):
+        from cephadmlib.net_utils import get_route_interface
+        route = json.dumps([{'dst': '192.168.1.5', 'prefsrc': '192.168.1.1'}])
+        ctx = _cephadm.CephadmContext()
+        with mock.patch(self.CALL_MOCK, return_value=(route, '', 0)):
+            with pytest.raises(_cephadm.Error, match='does not contain a network interface'):
+                get_route_interface(ctx, '192.168.1.5', False)
+
+
+class TestGetInterfaceMtu:
+
+    def test_valid_mtu(self):
+        from cephadmlib.host_facts import get_interface_mtu
+        with mock.patch('cephadmlib.host_facts.read_file', return_value='9000'):
+            assert get_interface_mtu('eth0') == 9000
+
+    def test_unknown_mtu_raises(self):
+        from cephadmlib.host_facts import get_interface_mtu
+        with mock.patch('cephadmlib.host_facts.read_file', return_value='Unknown'):
+            with pytest.raises(ValueError, match='Unable to determine MTU'):
+                get_interface_mtu('eth0')
+
+
+class TestCheckMtuPing:
+
+    def test_ipv4_payload_size_for_mtu_9000(self):
+        """MTU 9000 IPv4 → payload = 9000 - 28 = 8972, so -s 8972."""
+        ctx = _cephadm.CephadmContext()
+        with mock.patch('cephadm.find_program', return_value='/usr/bin/ping'), \
+             mock.patch('cephadm.call', return_value=('', '', 0)) as _call:
+            _cephadm.check_mtu_ping(ctx, '10.0.0.1', 8972, False)
+        # The path-MTU probe is the second call (first is baseline)
+        mtu_call = _call.call_args_list[1]
+        cmd = mtu_call.args[1]
+        assert '-s' in cmd
+        assert cmd[cmd.index('-s') + 1] == '8972'
+
+    def test_ipv6_payload_size_for_mtu_9000(self):
+        """MTU 9000 IPv6 → payload = 9000 - 48 = 8952, so -s 8952."""
+        ctx = _cephadm.CephadmContext()
+        with mock.patch('cephadm.find_program', return_value='/usr/bin/ping'), \
+             mock.patch('cephadm.call', return_value=('', '', 0)) as _call:
+            _cephadm.check_mtu_ping(ctx, '2001:db8::1', 8952, True)
+        mtu_call = _call.call_args_list[1]
+        cmd = mtu_call.args[1]
+        assert '-s' in cmd
+        assert cmd[cmd.index('-s') + 1] == '8952'
+        assert '-6' in cmd
+
+
 class TestSysctl:
     @mock.patch('cephadmlib.sysctl.sysctl_get')
     def test_filter_sysctl_settings(self, _sysctl_get):
