@@ -9617,6 +9617,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
     case pg_log_entry_t::MODIFY:
     case pg_log_entry_t::PROMOTE:
     case pg_log_entry_t::CLEAN:
+    case pg_log_entry_t::REPLACE:
       dout(20) << __func__ << " encoding snaps from " << ctx->new_snapset
 	       << dendl;
       encode(ctx->new_snapset.clone_snaps[soid.snap], ctx->log.back().snaps);
