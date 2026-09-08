@@ -91,7 +91,7 @@ struct GroupReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD0(destroy, void());
   MOCK_METHOD3(start, void(Context *, bool, bool));
   MOCK_METHOD2(stop, void(Context *, bool));
-  MOCK_METHOD2(restart, void(Context*, bool));
+  MOCK_METHOD1(restart, void(Context*));
   MOCK_METHOD0(flush, void());
   MOCK_METHOD0(sync_group_names, void());
   MOCK_METHOD1(print_status, void(Formatter *));
@@ -295,6 +295,83 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   instance_replayer.release_image("global_image_id", &on_release);
   ASSERT_EQ(0, on_release.wait());
 
+  expect_work_queue(mock_threads);
+  expect_cancel_event(mock_threads, true);
+  expect_work_queue(mock_threads);
+  instance_replayer.shut_down();
+  ASSERT_TRUE(timer_ctx != nullptr);
+  delete timer_ctx;
+  ASSERT_TRUE(group_timer_ctx != nullptr);
+  delete group_timer_ctx;
+}
+
+// Test plan:
+// 1. Set up an instance replayer and one remote peer.
+// 2. Acquire a stopped group replayer and start it.
+// 3. Release the group and check that it is stopped before it is destroyed.
+// 4. Shut down the instance replayer and clean up its timers.
+TEST_F(TestMockInstanceReplayer, AcquireReleaseGroup) {
+  MockThreads mock_threads(m_threads);
+  MockServiceDaemon mock_service_daemon;
+  MockMirrorStatusUpdater mock_status_updater;
+  MockInstanceWatcher mock_instance_watcher;
+  MockGroupReplayer mock_group_replayer;
+  MockInstanceReplayer instance_replayer(
+      m_local_io_ctx, "local_mirror_uuid",
+      &mock_threads, &mock_service_daemon, &mock_status_updater, nullptr,
+      nullptr);
+  std::string global_group_id("global_group_id");
+
+  EXPECT_CALL(mock_group_replayer, get_global_group_id())
+    .WillRepeatedly(ReturnRef(global_group_id));
+
+  // Set up the work queue and the timers used by the instance replayer.
+  InSequence seq;
+  expect_work_queue(mock_threads);
+  Context *timer_ctx = nullptr;
+  expect_add_event_after(mock_threads, &timer_ctx);
+  Context *group_timer_ctx = nullptr;
+  expect_add_event_after(mock_threads, &group_timer_ctx);
+  instance_replayer.init();
+  // Add the remote peer that owns the group.
+  instance_replayer.add_peer({"peer_uuid", m_remote_io_ctx, {}, nullptr});
+
+  // Acquire the group. It is stopped, not blocklisted, and not finished, so
+  // the instance replayer should start it successfully.
+  C_SaferCond on_acquire;
+  EXPECT_CALL(mock_group_replayer, add_peer(_));
+  EXPECT_CALL(mock_group_replayer, is_stopped()).WillOnce(Return(true));
+  EXPECT_CALL(mock_group_replayer, is_blocklisted()).WillOnce(Return(false));
+  EXPECT_CALL(mock_group_replayer, is_finished()).WillOnce(Return(false));
+  EXPECT_CALL(mock_group_replayer, start(_, false, false))
+    .WillOnce(CompleteContext(0));
+  expect_work_queue(mock_threads);
+
+  instance_replayer.acquire_group(&mock_instance_watcher, global_group_id,
+                                  &on_acquire);
+  ASSERT_EQ(0, on_acquire.wait());
+
+  // Release the group. Since it is active, stop it first, then erase and
+  // destroy it.
+  C_SaferCond on_release;
+  EXPECT_CALL(mock_group_replayer, is_stopped()).WillOnce(Return(false));
+  EXPECT_CALL(mock_group_replayer, is_running()).WillOnce(Return(false));
+  expect_work_queue(mock_threads);
+  expect_add_event_after(mock_threads);
+  expect_work_queue(mock_threads);
+  EXPECT_CALL(mock_group_replayer, is_stopped()).WillOnce(Return(false));
+  EXPECT_CALL(mock_group_replayer, is_running()).WillOnce(Return(true));
+  EXPECT_CALL(mock_group_replayer, stop(_, false))
+    .WillOnce(CompleteContext(0));
+  expect_work_queue(mock_threads);
+  EXPECT_CALL(mock_group_replayer, is_stopped()).WillOnce(Return(true));
+  expect_work_queue(mock_threads);
+  EXPECT_CALL(mock_group_replayer, destroy());
+
+  instance_replayer.release_group(global_group_id, &on_release);
+  ASSERT_EQ(0, on_release.wait());
+
+  // Finish pending work, cancel the timers, and shut down cleanly.
   expect_work_queue(mock_threads);
   expect_cancel_event(mock_threads, true);
   expect_work_queue(mock_threads);
