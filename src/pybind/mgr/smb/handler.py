@@ -409,7 +409,9 @@ class ClusterConfigHandler:
                 len(list(results)),
             )
             with _store_transaction(staging.destination_store):
-                results = staging.save()
+                db_results = staging.save()
+                db_results.merge(results)
+                results = db_results
                 staging.prune_linked_entries()
             _reconcile_store(staging.destination_store)
             with _store_transaction(staging.destination_store):
