@@ -2268,11 +2268,6 @@ public:
   }
 };
 
-class RGWDeleteMultiObj_DeleteObj : public RGWDeleteObj {
-public:
-  void send_response() override;
-};
-
 class RGWDeleteMultiObj : public RGWOp {
   /**
    * Handles the deletion of an individual object and uses
@@ -2285,7 +2280,7 @@ class RGWDeleteMultiObj : public RGWOp {
   void handle_objects(const std::vector<RGWMultiDelObject>& objects,
                       uint32_t max_aio, boost::asio::yield_context yield);
 
-  int run_lua_script(RGWDeleteMultiObj_DeleteObj *op, rgw::lua::context ctx,
+  int run_lua_script(rgw::lua::context ctx,
                      const rgw::sal::Object* multi_delete_obj);
 
 protected:
