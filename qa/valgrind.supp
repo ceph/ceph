@@ -903,6 +903,25 @@
    ...
 }
 {
+   OpenSSL EVP_CIPHER_fetch reachable leak via CryptoAES256KRB5 (ceph-mon)
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:EVP_CIPHER_fetch
+   ...
+   fun:*CryptoAES256KRB5*get_key_handler_ext*
+   ...
+}
+{
+   OpenSSL reachable leak via HMAC/calc_hmac_sha384 (ceph-mon)
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:HMAC
+   fun:*calc_hmac_sha384*
+   ...
+}
+{
    OpenSSL leak still reachable
    Memcheck:Leak
    match-leak-kinds: reachable
@@ -913,7 +932,7 @@
    ...
    fun:*ceph*crypto*onwire*create_handler_pair*
    ...
-   fun:*ProtocolV2*
+   fun:*Protocol*
    ...
 }
 {
@@ -954,7 +973,7 @@
    ...
    fun:*ceph*crypto*onwire*create_handler_pair*
    ...
-   fun:*ProtocolV2*
+   fun:*Protocol*
    ...
 }
 {
@@ -966,7 +985,7 @@
    ...
    fun:*CryptoKeyHandler*
    ...
-   fun:*ProtocolV2*
+   fun:*Protocol*
    ...
 }
 {
@@ -977,7 +996,7 @@
    ...
    fun:*CryptoKeyHandler*
    ...
-   fun:*ProtocolV2*
+   fun:*Protocol*
    ...
 }
 {
@@ -989,7 +1008,7 @@
    ...
    fun:*ceph*crypto*onwire*create_handler_pair*
    ...
-   fun:*ProtocolV2*
+   fun:*Protocol*
    ...
 }
 {
@@ -1003,3 +1022,15 @@
    fun:__libc_start_main@@GLIBC_2.34
    fun:(below main)
 }
+{
+   rocky10 still reachable rocksdb leak (LTO variant without inlined frames)
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:_Znam
+   fun:__static_initialization_and_destruction_0
+   fun:_GLOBAL__sub_I_error_handler.cc.lto_priv.0
+   fun:_sub_I_65535_0.0
+   fun:__libc_start_main@@GLIBC_2.34
+   fun:(below main)
+}
+
