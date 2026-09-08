@@ -17,6 +17,8 @@
 #include <functional>
 #include <atomic>
 #include <memory>
+#include <optional>
+#include <string>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/intrusive_ptr.hpp>
@@ -61,8 +63,10 @@ class RADOS : public Dispatcher {
   std::atomic<bool> finished = false;
 
 public:
-
-  RADOS(boost::asio::io_context& ioctx, boost::intrusive_ptr<CephContext> cct);
+  RADOS(
+      boost::asio::io_context& ioctx,
+      boost::intrusive_ptr<CephContext> cct,
+      const std::optional<std::string>& objecter_admin_socket_name);
   ~RADOS();
   bool ms_dispatch(Message *m) override;
   void ms_handle_connect(Connection *con) override;
