@@ -93,13 +93,14 @@ class RedFishClient(BaseClient):
         result: Dict[str, Any] = {}
         try:
             if self.is_logged_in():
-                _, _data, _status_code = self.query(
+                _, _data, _ = self.query(
                     method="DELETE",
                     headers={"X-Auth-Token": self.token},
                     endpoint=self.location,
                 )
-                result = json.loads(_data)
-        except URLError:
+                if _data:
+                    result = json.loads(_data)
+        except (URLError, json.JSONDecodeError):
             self.log.error(f"Can't log out from {self.url}")
 
         self.location = ""
