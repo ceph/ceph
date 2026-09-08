@@ -439,6 +439,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 
   attr_cache_timeout = cct->_conf.get_val<std::chrono::seconds>(
     "client_attr_cache_timeout");
+  dentry_cache_timeout = cct->_conf.get_val<std::chrono::seconds>(
+    "client_dentry_cache_timeout");
 
   injected_write_delay_secs = std::chrono::duration<int>(
     cct->_conf.get_val<std::chrono::seconds>("client_inject_write_delay_secs")).count();
@@ -1280,6 +1282,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 	in->dirstat.nsubdirs == 0) {
       ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on empty dir " << *in << dendl;
       in->flags |= I_COMPLETE | I_DIR_ORDERED;
+      in->dir_cached_at = from;
       if (in->dir) {
 	ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
 		       << in->dir->dentries.size() << " entries, marking all dentries null" << dendl;
@@ -1540,6 +1543,7 @@ void Client::update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, Me
     }
   }
   dn->cap_shared_gen = dn->dir->parent_inode->shared_gen;
+  dn->cached_at = from;
   if (dlease->mask & CEPH_LEASE_PRIMARY_LINK)
     dn->mark_primary();
   dn->alternate_name = std::move(dlease->alternate_name);
@@ -1694,6 +1698,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
       dirp->release_count = diri->dir_release_count;
       dirp->ordered_count = diri->dir_ordered_count;
       dirp->start_shared_gen = diri->shared_gen;
+      dirp->start_stamp = request->sent_stamp;
       dirp->cache_index = 0;
     }
 
@@ -4846,7 +4851,15 @@ void Client::check_cap_issue(Inode *in, unsigned issued)
       (had & CEPH_CAP_FILE_SHARED)) {
     if (issued & CEPH_CAP_FILE_SHARED)
       in->shared_gen++;
-    if (in->is_dir())
+    /*
+     * Dropping Fs normally throws the listing away, because from here on the
+     * MDS no longer tells us about changes to the directory.  Dentry caching
+     * keeps it instead, until _dir_cache_valid() stops vouching for it.
+     * Getting Fs back still throws it away: what happened while we were not
+     * being told about changes is anybody's guess.
+     */
+    if (in->is_dir() &&
+	((issued & CEPH_CAP_FILE_SHARED) || !_dir_cache_valid(in)))
       clear_dir_complete_and_ordered(in, true);
   }
 }
@@ -7923,6 +7936,44 @@ void Client::_forget_cached_attrs(Inode *in)
   in->xattr_cached_at = utime_t();
 }
 
+/*
+ * Whether a name may be resolved out of the cache even though the MDS is no
+ * longer telling us about changes to the directory it lives in: whether the
+ * MDS told us about it recently enough.  Callers that also need to know that
+ * we saw the directory as it really was (a null dentry, which only proves
+ * anything as part of a complete listing) check shared_gen themselves.
+ */
+bool Client::_dentry_cache_valid(const Dentry *dn) const
+{
+  if (dentry_cache_timeout <= std::chrono::seconds::zero() || blocklisted)
+    return false;
+
+  if (dn->cached_at.is_zero())
+    return false;
+
+  utime_t expires = dn->cached_at;
+  expires += utime_t(dentry_cache_timeout.count(), 0);
+  return ceph_clock_now() < expires;
+}
+
+/*
+ * The same for the listing of a whole directory that a readdir() filled in
+ * and marked I_COMPLETE.  check_cap_issue() lets that listing survive the
+ * loss of Fs so that there is something left to answer from here.
+ */
+bool Client::_dir_cache_valid(const Inode *diri) const
+{
+  if (dentry_cache_timeout <= std::chrono::seconds::zero() || blocklisted)
+    return false;
+
+  if (diri->dir_cached_at.is_zero())
+    return false;
+
+  utime_t expires = diri->dir_cached_at;
+  expires += utime_t(dentry_cache_timeout.count(), 0);
+  return ceph_clock_now() < expires;
+}
+
 bool Client::_dentry_valid(const Dentry *dn)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
@@ -7946,11 +7997,35 @@ bool Client::_dentry_valid(const Dentry *dn)
   return false;
 }
 
-int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& alternate_name, int mask, InodeRef *target, const UserPerm& perms, bool is_rename)
+/*
+ * Forget every name of an inode that turned out to be unlinked: they came
+ * out of an unprotected cache, and the next lookup must ask the MDS.
+ */
+void Client::_forget_stale_names(Inode *in)
+{
+  for (auto dn : in->dentries) {
+    dn->lease_mds = -1;
+    dn->cached_at = utime_t();
+    dn->cap_shared_gen = -1;
+    if (dn->dir && dn->dir->parent_inode)
+      clear_dir_complete_and_ordered(dn->dir->parent_inode, false);
+  }
+}
+
+int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& alternate_name, int mask, InodeRef *target, const UserPerm& perms, bool is_rename, bool authoritative)
 {
   int r = 0;
   Dentry *dn = NULL;
   bool did_lookup_request = false;
+  /*
+   * Opening, creating or replacing a name must not act on one that is only
+   * still in an unprotected cache: another client may have removed it, or
+   * replaced the file behind it.  An open would then go to the orphaned inode
+   * by number, a create would fail with EEXIST.  NFS resolves opens and
+   * creates by name at the server for the same reason.  A name the MDS is
+   * keeping coherent for us costs nothing here; any other costs a lookup.
+   */
+  const bool unprotected_ok = !authoritative;
   // can only request shared caps
   mask &= CEPH_CAP_ANY_SHARED | CEPH_STAT_RSTAT;
   std::string dname = name;
@@ -8015,7 +8090,7 @@ relookup:
         << " ttl " << dn->lease_ttl << " seq " << dn->lease_seq << dendl;
 
     if (!dn->inode || dn->inode->caps_issued_mask(mask, true) ||
-	_attr_cache_valid(dn->inode.get(), mask)) {
+	(unprotected_ok && _attr_cache_valid(dn->inode.get(), mask))) {
       ldout(cct, 25) << __func__ << " no inode or have caps" << dendl;
 
       if (_dentry_valid(dn)) {
@@ -8025,7 +8100,16 @@ relookup:
         dir->try_touch_cap(dn->lease_mds);
           goto hit_dn;
       }
-      // dir shared caps?
+      /*
+       * While we hold Fs on the directory the MDS tells us about changes to
+       * it, so both a name and its absence from a complete listing can be
+       * trusted.  Without Fs, only the "name is still warm" case below: a
+       * listing kept past the loss of Fs may lack a name another client has
+       * created since, and answering ENOENT for it breaks the most ordinary
+       * pattern there is - one node makes a directory or file, another uses
+       * it straight away.  NFS never answers ENOENT for a name it did not
+       * look up itself.
+       */
       if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
         ldout(cct, 25) << __func__ << " dir has Fs" << dendl;
 	if (dn->cap_shared_gen == dir->shared_gen) {
@@ -8037,6 +8121,21 @@ relookup:
 			 << *dir << " dn '" << dname << "'" << dendl;
 	  return -ENOENT;
 	}
+      }
+      /*
+       * A name the MDS resolved for us is as good as the attributes we kept
+       * for its inode, listing or not: what the MDS said was true when it
+       * said it, whether or not we held Fs on the directory then or since.
+       * That is what an NFS client caches by name, and without it a client
+       * that stats paths it never listed - a build, a dataloader working
+       * from a file list - goes to the MDS for every one of them as soon as
+       * anybody else touches the directory.  Only positive names: a null
+       * dentry says nothing unless it is part of a listing the MDS is still
+       * keeping current, which is the case above.
+       */
+      if (unprotected_ok && dn->inode && _dentry_cache_valid(dn)) {
+	ldout(cct, 25) << __func__ << " name is still warm" << dendl;
+	goto hit_dn;
       }
     } else {
       ldout(cct, 20) << " no cap on " << dn->inode->vino() << dendl;
@@ -8056,6 +8155,7 @@ relookup:
     }
   } else {
     // can we conclude ENOENT locally?
+    // as above: never out of a listing the MDS is not keeping current
     if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED, true) &&
 	(dir->flags & I_COMPLETE)) {
       ldout(cct, 10) << __func__ << " concluded ENOENT locally for " << *dir << " dn '" << dname << "'" << dendl;
@@ -8201,7 +8301,9 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
       caps |= extra_options.mask;
     }
 
-    int r = _lookup(diri, dname, alternate_name, caps, &next, perms, extra_options.is_rename);
+    int r = _lookup(diri, dname, alternate_name, caps, &next, perms, extra_options.is_rename,
+		    (extra_options.authoritative || !extra_options.require_target) &&
+		    i == (path.depth() - 1));
     if (r == -ENOENT && i == (path.depth()-1) && !extra_options.require_target) {
       target = InodeRef();
       rc = 0;
@@ -10164,6 +10266,18 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       mask |= CEPH_STAT_RSTAT;
     }
     int r = _getattr(dn->inode, mask, dirp->perms);
+    if ((r == -ENOENT || r == -ESTALE) &&
+	!dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
+      /*
+       * A listing kept past the loss of Fs can name something another
+       * client has removed since.  Read the directory from the MDS instead
+       * of failing the readdir.
+       */
+      ldout(cct, 10) << __func__ << " '" << dn->name << "' is gone, "
+		     << "dropping the cached listing" << dendl;
+      clear_dir_complete_and_ordered(dirp->inode.get(), false);
+      return -EAGAIN;
+    }
     if (r == -EACCES && dn->inode->is_under_quarantine()) {
       ldout(cct, 10) << __func__ << " quarantined entry '"
 		     << dn->name << "', using cached stat" << dendl;
@@ -10381,7 +10495,8 @@ int Client::_readdir_r_cb(int op,
   if (!bypass_cache &&
       dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&
-      dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
+      (dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED, true) ||
+       _dir_cache_valid(dirp->inode.get()))) {
     int retval = _readdir_cache_cb(dirp, cb, p, caps, getref);
     if (retval != -EAGAIN)
       return retval;
@@ -10483,6 +10598,9 @@ int Client::_readdir_r_cb(int op,
 	ldout(cct, 10) << " marking I_COMPLETE on " << *diri << dendl;
 	diri->flags |= I_COMPLETE;
       }
+      // the entries are as old as the readdir that read them, not as this
+      // moment: dentry caching hands them out from here on
+      diri->dir_cached_at = dirp->start_stamp;
     }
 
     dirp->set_end();
@@ -10922,7 +11040,7 @@ int Client::create_and_open(int dirfd, const char *relpath, int flags,
 
   walk_dentry_result wdr;
   bool require_target = !(flags & O_CREAT);
-  r = path_walk(dirinode, path, &wdr, perms, {.followsym = followsym, .mask = (unsigned)mask, .require_target = require_target});
+  r = path_walk(dirinode, path, &wdr, perms, {.followsym = followsym, .mask = (unsigned)mask, .require_target = require_target, .authoritative = true});
   if (r < 0)
     return r;
 
@@ -11262,6 +11380,38 @@ int Client::_open(const InodeRef& in, int flags, mode_t mode, Fh **fhp,
 
   bool cto = in->snapid == CEPH_NOSNAP && in->is_file() &&
 	     _is_close_to_open(flags);
+
+  /*
+   * The name that led here may have come out of an unprotected cache - ours,
+   * or the kernel's through ceph-fuse, which opens by inode - and another
+   * client may have removed it, or replaced the file behind it, since.  The
+   * open would then go to the orphaned inode by number, and writes to it
+   * would be lost.  Unless caps vouch for the link count (and for the size,
+   * which close-to-open must not take from a cache either), ask the MDS.  An
+   * unlinked inode means the name was stale: forget it and return ESTALE, on
+   * which the kernel looks the name up again.  An inode this client already
+   * has open is a legitimate reopen of an unlinked file.
+   */
+  if (in->snapid == CEPH_NOSNAP && in->is_file() &&
+      (cto || attr_cache_timeout > std::chrono::seconds::zero() ||
+       dentry_cache_timeout > std::chrono::seconds::zero())) {
+    bool already_open = false;
+    for (const auto& [m, n] : in->open_by_mode)
+      already_open |= n > 0;
+    int mask = CEPH_STAT_CAP_NLINK | (cto ? CEPH_STAT_CAP_SIZE : 0);
+    int r = _getattr(in, mask, perms, false, /* allow_cached */ false);
+    if (r == -ENOENT)
+      r = -ESTALE;
+    if (r == 0 && in->nlink == 0 && !already_open)
+      r = -ESTALE;
+    if (r < 0) {
+      if (r == -ESTALE)
+	_forget_stale_names(in.get());
+      if (fhp)
+	*fhp = nullptr;
+      return r;
+    }
+  }
 
   // use normalized flags to generate cmode
   int cflags = ceph_flags_sys2wire(flags);
@@ -17166,7 +17316,7 @@ int Client::_link(Inode *diri_from, const char* path_from, Inode* diri_to, const
   }
 
   walk_dentry_result wdr_to;
-  if (int rc = path_walk(diri_to, filepath(path_to), &wdr_to, perm, {}); rc == 0) {
+  if (int rc = path_walk(diri_to, filepath(path_to), &wdr_to, perm, {.authoritative = true}); rc == 0) {
     return -EEXIST;
   } else if (rc != -ENOENT) {
     return rc;
@@ -17451,7 +17601,7 @@ int Client::_ll_create(Inode *parent, const char *name, mode_t mode,
 
   bool created = false;
   walk_dentry_result wdr;
-  int r = path_walk(parent, filepath(name), &wdr, perms, {.followsym = false, .mask = (unsigned)caps, .require_target = false});
+  int r = path_walk(parent, filepath(name), &wdr, perms, {.followsym = false, .mask = (unsigned)caps, .require_target = false, .authoritative = true});
   if (r < 0) {
     goto out;
   } else if (wdr.target && (flags & O_CREAT) && (flags & O_EXCL)) {
@@ -19382,6 +19532,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_close_to_open_timeout",
     "client_deleg_break_on_open",
     "client_deleg_timeout",
+    "client_dentry_cache_timeout",
     "client_fscrypt_as",
     "client_inject_write_delay_secs",
     "client_mount_timeout",
@@ -19418,6 +19569,10 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_attr_cache_timeout")) {
     attr_cache_timeout = cct->_conf.get_val<std::chrono::seconds>(
       "client_attr_cache_timeout");
+  }
+  if (changed.count("client_dentry_cache_timeout")) {
+    dentry_cache_timeout = cct->_conf.get_val<std::chrono::seconds>(
+      "client_dentry_cache_timeout");
   }
   if (changed.count("fuse_default_permissions")) {
     fuse_default_permissions = cct->_conf.get_val<bool>("fuse_default_permissions");

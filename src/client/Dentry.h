@@ -106,6 +106,8 @@ public:
   uint64_t lease_gen = 0;
   ceph_seq_t lease_seq = 0;
   int cap_shared_gen = -1;
+  // when the MDS told us about this name, for dentry caching
+  utime_t cached_at;
   std::string alternate_name;
   bool is_renaming = false;
 

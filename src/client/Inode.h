@@ -271,6 +271,8 @@ struct Inode : RefCountedObject {
   // Same, for xattrs.  The MDS only sends them to a client that holds or asks
   // for Xs, so a stat that refreshes the attributes says nothing about them.
   utime_t xattr_cached_at;
+  // Same, for the listing of a directory that is marked I_COMPLETE.
+  utime_t dir_cached_at;
 
   // Set while the object cache is (or has been) used without holding Fc/Fb,
   // which LazyIO allows.  The MDS does not keep such a cache coherent, so it

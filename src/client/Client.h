@@ -258,6 +258,7 @@ struct dir_result_t {
   uint64_t ordered_count;
   unsigned cache_index;
   int start_shared_gen;  // dir shared_gen at start of readdir
+  utime_t start_stamp;   // when the readdir that fills this one started
   UserPerm perms;
 
   frag_t buffer_frag;
@@ -1151,6 +1152,11 @@ protected:
     unsigned int mask = 0;
     bool is_rename = false;
     bool require_target = true;
+    // resolve the last component only through what the MDS keeps coherent
+    // for us (caps, leases, Fs), never an unprotected cache: for opens, and
+    // implied for any walk that is about to create or replace the name
+    // (require_target = false)
+    bool authoritative = false;
   };
   int path_walk(InodeRef dirinode, const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options, std::string trimmed_path=std::string());
   int path_walk(InodeRef dirinode, const filepath& fp, InodeRef *end, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options);
@@ -2108,7 +2114,8 @@ private:
 		 const UserPerm& perms);
 
   int _lookup(const InodeRef& dir, const std::string& name, std::string& alternate_name,
-              int mask, InodeRef *target, const UserPerm& perm, bool is_rename=false);
+              int mask, InodeRef *target, const UserPerm& perm, bool is_rename=false,
+              bool authoritative=false);
 
   int _link(Inode *diri_from, const char* path_from, Inode* diri_to, const char* path_to, const UserPerm& perm, std::string alternate_name);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
@@ -2142,6 +2149,8 @@ private:
                bool force=false, bool allow_cached=true);
   bool _attr_cache_valid(const Inode *in, int mask) const;
   void _forget_cached_attrs(Inode *in);
+  bool _dentry_cache_valid(const Dentry *dn) const;
+  bool _dir_cache_valid(const Inode *diri) const;
   int _readlink(const InodeRef& diri, const char* relpath, char *buf, size_t size, const UserPerm& perms);
   int _getxattr(Inode *in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
@@ -2382,7 +2391,7 @@ private:
   ceph::coarse_mono_time last_auto_reconnect;
   std::chrono::seconds caps_release_delay, mount_timeout;
   std::chrono::seconds close_to_open_timeout;
-  std::chrono::seconds attr_cache_timeout;
+  std::chrono::seconds attr_cache_timeout, dentry_cache_timeout;
   int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;
