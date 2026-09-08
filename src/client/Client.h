@@ -2138,7 +2138,10 @@ private:
 	       const UserPerm& perms);
   int _ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
 		   const UserPerm& perms, InodeRef *inp = 0);
-  int _getattr(const InodeRef& in, int mask, const UserPerm& perms, bool force=false);
+  int _getattr(const InodeRef& in, int mask, const UserPerm& perms,
+               bool force=false, bool allow_cached=true);
+  bool _attr_cache_valid(const Inode *in, int mask) const;
+  void _forget_cached_attrs(Inode *in);
   int _readlink(const InodeRef& diri, const char* relpath, char *buf, size_t size, const UserPerm& perms);
   int _getxattr(Inode *in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
@@ -2379,6 +2382,7 @@ private:
   ceph::coarse_mono_time last_auto_reconnect;
   std::chrono::seconds caps_release_delay, mount_timeout;
   std::chrono::seconds close_to_open_timeout;
+  std::chrono::seconds attr_cache_timeout;
   int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;

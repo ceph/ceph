@@ -437,6 +437,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   close_to_open_timeout = cct->_conf.get_val<std::chrono::seconds>(
     "client_close_to_open_timeout");
 
+  attr_cache_timeout = cct->_conf.get_val<std::chrono::seconds>(
+    "client_attr_cache_timeout");
+
   injected_write_delay_secs = std::chrono::duration<int>(
     cct->_conf.get_val<std::chrono::seconds>("client_inject_write_delay_secs")).count();
 
@@ -1241,6 +1244,18 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
   if (st->version > in->version)
     in->version = st->version;
+
+  /*
+   * Attribute caching hands these fields out once the capabilities that
+   * protect them are gone, so remember when the MDS sampled them.  Only the
+   * authoritative MDS can say that; a stat from anywhere else tells us
+   * nothing about the fields we skipped updating above.
+   */
+  if (st->cap.flags & CEPH_CAP_FLAG_AUTH) {
+    in->attr_cached_at = from;
+    if (st->xattrbl.length())
+      in->xattr_cached_at = from;
+  }
 
   if (was_new)
     ldout(cct, 12) << __func__ << " adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
@@ -7853,6 +7868,61 @@ int Client::_do_lookup(const InodeRef& dir, const string& name, int mask,
   return r;
 }
 
+/*
+ * NFS-like attribute caching.
+ *
+ * The MDS keeps the attributes a client has cached up to date for as long as
+ * the client holds the shared capabilities that protect them, and takes those
+ * away as soon as somebody else wants to change the inode.  A client with
+ * client_attr_cache_timeout set keeps answering stat() out of what it last
+ * heard from the MDS anyway, the way an NFS client does between acregmin and
+ * acregmax, rather than asking the MDS every single time.
+ */
+bool Client::_attr_cache_valid(const Inode *in, int mask) const
+{
+  if (attr_cache_timeout <= std::chrono::seconds::zero() || blocklisted)
+    return false;
+
+  // we have never seen an authoritative stat of this inode
+  if (in->attr_cached_at.is_zero())
+    return false;
+
+  /*
+   * Only the shared capabilities (and the recursive statistics, which no
+   * capability protects anyway) stand for attributes we keep a copy of.
+   * Anything else in the mask has to come from the MDS.
+   */
+  if (mask & ~(CEPH_CAP_PIN | CEPH_CAP_ANY_SHARED | CEPH_STAT_RSTAT))
+    return false;
+
+  utime_t now = ceph_clock_now();
+  utime_t timeout(attr_cache_timeout.count(), 0);
+  if (mask & CEPH_CAP_XATTR_SHARED) {
+    if (in->xattr_cached_at.is_zero())
+      return false;
+    utime_t xattrs_expire = in->xattr_cached_at;
+    xattrs_expire += timeout;
+    if (now >= xattrs_expire)
+      return false;
+  }
+  utime_t expires = in->attr_cached_at;
+  expires += timeout;
+  return now < expires;
+}
+
+/*
+ * We are about to change attributes of an inode - its link count, its ctime
+ * - in a request that gives up the capabilities protecting them, and the MDS
+ * may not send the inode back: unlink() does not.  Stop serving our copy out
+ * of the attribute cache, or this client would not even see its own change;
+ * a reply that does carry the inode makes it cacheable again.
+ */
+void Client::_forget_cached_attrs(Inode *in)
+{
+  in->attr_cached_at = utime_t();
+  in->xattr_cached_at = utime_t();
+}
+
 bool Client::_dentry_valid(const Dentry *dn)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
@@ -7944,7 +8014,8 @@ relookup:
     ldout(cct, 20) << __func__ << " have " << *dn << " from mds." << dn->lease_mds
         << " ttl " << dn->lease_ttl << " seq " << dn->lease_seq << dendl;
 
-    if (!dn->inode || dn->inode->caps_issued_mask(mask, true)) {
+    if (!dn->inode || dn->inode->caps_issued_mask(mask, true) ||
+	_attr_cache_valid(dn->inode.get(), mask)) {
       ldout(cct, 25) << __func__ << " no inode or have caps" << dendl;
 
       if (_dentry_valid(dn)) {
@@ -8459,7 +8530,8 @@ int Client::_readlink(const InodeRef& diri, const char* relpath, char *buf, size
 
 // inode stuff
 
-int Client::_getattr(const InodeRef& in, int mask, const UserPerm& perms, bool force)
+int Client::_getattr(const InodeRef& in, int mask, const UserPerm& perms,
+		     bool force, bool allow_cached)
 {
   if (in->snapid == CEPH_SNAPDIR) {
     if (in->snapdir_parent) {
@@ -8476,6 +8548,17 @@ int Client::_getattr(const InodeRef& in, int mask, const UserPerm& perms, bool f
   ldout(cct, 10) << __func__ << " mask " << ccap_string(mask) << " issued=" << yes << dendl;
   if (yes && !force)
     return 0;
+
+  /*
+   * Answer out of the copy we already have, even though the MDS took away the
+   * capabilities that kept it up to date.  Callers that cannot live with an
+   * answer that may be a little behind pass allow_cached = false.
+   */
+  if (!force && allow_cached && _attr_cache_valid(in.get(), mask)) {
+    ldout(cct, 10) << __func__ << " serving cached attributes of " << *in
+		   << dendl;
+    return 0;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath path;
@@ -11433,7 +11516,8 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
   }
 
   if (whence_check) {
-    int r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+    int r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms, false,
+		     /* allow_cached */ false);
     if (r < 0)
       return r;
   }
@@ -11728,7 +11812,8 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
 
     // reverify size
     {
-      r = clnt->_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+      r = clnt->_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms, false,
+			 /* allow_cached */ false);
       if (r < 0)
         goto error;
     }
@@ -11970,7 +12055,8 @@ retry:
       have = 0;
       // reverify size
       {
-        auto r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+        auto r = _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms, false,
+			  /* allow_cached */ false);
         if (r < 0) {
           rc = r;
           goto done;
@@ -14503,7 +14589,8 @@ int Client::_lazyio_synchronize(Inode *in, const UserPerm& perms)
   if (in->lazyio_cache_stale)
     in->lazyio_validated_at = ceph::coarse_mono_clock::now();
 
-  return _getattr(in, CEPH_STAT_CAP_SIZE, perms);
+  return _getattr(in, CEPH_STAT_CAP_SIZE, perms, false,
+		  /* allow_cached */ false);
 }
 
 int Client::lazyio_propagate(int fd, loff_t offset, size_t count)
@@ -15537,6 +15624,9 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
 
   int res = make_request(req, perms);
 
+  // the reply need not carry the xattrs, so what we hold is now out of date
+  in->xattr_cached_at = utime_t();
+
   trim_cache();
   ldout(cct, 3) << __func__ << "(" << in->ino << ", \"" << name << "\") = " <<
     res << dendl;
@@ -15754,6 +15844,9 @@ int Client::_removexattr(Inode *in, const char *name, const UserPerm& perms)
   req->set_inode(in);
  
   int res = make_request(req, perms);
+
+  // as in _do_setxattr()
+  in->xattr_cached_at = utime_t();
 
   if ((!strcmp(name, ACL_EA_ACCESS) ||
       !strcmp(name, ACL_EA_DEFAULT)) &&
@@ -16788,6 +16881,7 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   req->set_other_inode(in);
   in->break_all_delegs();
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+  _forget_cached_attrs(in.get());
 
   req->set_inode(wdr.diri);
 
@@ -17006,11 +17100,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     wdr_from.target->break_all_delegs();
     req->set_old_inode(wdr_from.target);
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
+    _forget_cached_attrs(wdr_from.target.get());
 
     if (wdr_to.target) {
       wdr_to.target->break_all_delegs();
       req->set_other_inode(wdr_to.target);
       req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+      _forget_cached_attrs(wdr_to.target.get());
     }
   } else {
     // renamesnap reply contains no tracedn, so we need to invalidate
@@ -17097,6 +17193,7 @@ int Client::_link(Inode *diri_from, const char* path_from, Inode* diri_to, const
   }
 
   in->break_all_delegs();
+  _forget_cached_attrs(in);
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
   req->set_filepath(wdr_to.getpath());
@@ -18781,7 +18878,8 @@ int Client::_posix_acl_chmod(const InodeRef& in, mode_t mode, const UserPerm& pe
   if (acl_type == NO_ACL)
     return 0;
 
-  int r = _getattr(in, CEPH_STAT_CAP_XATTR, perms, in->xattr_version == 0);
+  // this writes the ACL back, so it must not start from a cached one
+  int r = _getattr(in, CEPH_STAT_CAP_XATTR, perms, in->xattr_version == 0, false);
   if (r < 0)
     goto out;
 
@@ -19276,6 +19374,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
 {
   static constexpr auto as_sv = std::to_array<std::string_view>({
     "client_acl_type",
+    "client_attr_cache_timeout",
     "client_cache_mid",
     "client_cache_size",
     "client_caps_release_delay",
@@ -19315,6 +19414,10 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_close_to_open_timeout")) {
     close_to_open_timeout = cct->_conf.get_val<std::chrono::seconds>(
       "client_close_to_open_timeout");
+  }
+  if (changed.count("client_attr_cache_timeout")) {
+    attr_cache_timeout = cct->_conf.get_val<std::chrono::seconds>(
+      "client_attr_cache_timeout");
   }
   if (changed.count("fuse_default_permissions")) {
     fuse_default_permissions = cct->_conf.get_val<bool>("fuse_default_permissions");

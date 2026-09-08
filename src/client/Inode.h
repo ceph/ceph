@@ -263,6 +263,15 @@ struct Inode : RefCountedObject {
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
+  // When the inode stat these attributes were filled from was sampled on the
+  // MDS.  Attribute caching serves them without the capabilities that protect
+  // them until client_attr_cache_timeout has passed since then.  Zero while we
+  // have never seen an authoritative stat of this inode.
+  utime_t attr_cached_at;
+  // Same, for xattrs.  The MDS only sends them to a client that holds or asks
+  // for Xs, so a stat that refreshes the attributes says nothing about them.
+  utime_t xattr_cached_at;
+
   // Set while the object cache is (or has been) used without holding Fc/Fb,
   // which LazyIO allows.  The MDS does not keep such a cache coherent, so it
   // has to be revalidated explicitly before it can be trusted again.
