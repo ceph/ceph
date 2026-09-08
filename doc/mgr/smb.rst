@@ -327,7 +327,7 @@ Create Share
 
 .. prompt:: bash #
 
-   ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly]
+   ceph smb share create <cluster_id> <share_id> <cephfs_volume> <path> [--share-name=<share_name>] [--subvolume=<subvolume>] [--readonly] [--case-insensitive=<case_insensitive>]
 
 Create a new SMB share, hosted by the named cluster, that maps to the given
 CephFS volume and path.
@@ -351,6 +351,12 @@ subvolume
     specified.
 readonly
     Creates a read-only share
+case_insensitive
+    Optional.  Configures behavior with regards to checking or enforcing that
+    the CephFS subvolume is configured for case insensitive operation. The
+    value may be one of ``warn`` (the default), ``ignore``, or ``require``.
+    See the description for the `case_insensitive`_ field of the share spec
+    for details.
 
 
 Examples
@@ -1181,6 +1187,29 @@ cephfs
         not set and this value contains exactly one ``/`` character, the
         subvolume field will automatically be split into
         ``<subvolumegroup>/<subvolume>`` parts for convenience.
+    _`case_insensitive`
+        Optional string. Configures behavior with regards to checking or
+        enforcing that the CephFS subvolume is configured for case insensitive
+        operation. The value may be one of ``warn``, ``ignore``, or ``require``.
+        If unspecified the behavior is the same as ``warn``.
+
+        When a Share is created using a subvolume that is case sensitive (case
+        insensitive behavior was not enabled):
+
+        ``warn``
+            The system will emit a warning message that is part of the
+            result object but allow the operation to continue.
+        ``ignore``
+            The system will ignore the case sensitivity setting and allow the
+            operation to continue. No warning is emitted.
+        ``require``
+            The system will enforce the need for case insensitivity and
+            fail the operation.
+
+        Older versions of the system, before the option existed, behaved as
+        if ``ignore`` was specified. The default of ``warn`` was chosen as
+        this allows shares created before this setting to continue working
+        while now informing of possible performance issues.
     provider
         Optional. Selects how CephFS storage should be provided to the share.
         The value may be one of ``samba-vfs``, ``samba-vfs/classic``,
@@ -1402,6 +1431,23 @@ Another example, this time of a share with QoS disabled:
         read_bw_limit: 0
         write_bw_limit: 0
         # Note: burst multipliers are ignored when limits are disabled
+
+The following example creates a share on a CephFS subvolume with
+case sensitivity enabled (the default for CephFS) and ignores
+that setting, suppressing warning messages:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: otc1
+    name: On the Case
+    cephfs:
+      volume: cephfs
+      subvolumegroup: smb
+      subvolume: case1
+      path: /
+      case_insensitive: ignore
 
 And finally, a share with an intent to be removed:
 
