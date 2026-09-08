@@ -407,7 +407,7 @@ class ClusterConfigHandler:
                 len(list(results)),
             )
             with _store_transaction(staging.destination_store):
-                results = staging.save()
+                results.merge(staging.save())
                 staging.prune_linked_entries()
             with _store_transaction(staging.destination_store):
                 self._sync_modified(results)
