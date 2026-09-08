@@ -6,12 +6,6 @@
 # location-aware ANA balancer, and the site disaster-recovery flow
 # (disaster-set / disaster-clear + ANA failover/failback).
 #
-# The console output intentionally mirrors the style of the reference test
-# (ceph-nvmeof-atom tests/nvmeof_tests.py::test_stretch_cluster): banner-delimited
-# steps, "==>" sub-steps and indented status lines. xtrace (bash -x) is left OFF
-# on purpose so the log reads like that test's logger output rather than a raw
-# command trace.
-#
 # Flow:
 #   (0) Wait for all gateways to be AVAILABLE.
 #   (1) Reset to default state: clear every gateway and namespace location and
@@ -562,6 +556,37 @@ wait_for_ana_recovery () {
     return 1
 }
 
+# Poll until every listed gw-id is reported UNAVAILABLE (not AVAILABLE) in
+# 'ceph nvme-gw show'. The mon only accepts 'disaster-set' once all gateways in
+# the location have left the AVAILABLE state, which lags stopping the daemon by
+# the beacon-grace period. Waiting here avoids the disaster-set race that fails
+# with EINVAL ("command cannot be executed") when a site gateway is still
+# AVAILABLE. Returns non-zero on timeout.
+wait_gws_unavailable () {
+    local ids=("$@")
+    local attempt out still gw_id st
+    substep "Waiting for ${#ids[@]} gateway(s) to be reported UNAVAILABLE by the mon"
+    for ((attempt=1; attempt<=AVAIL_RETRIES; attempt++)); do
+        out=$(gw_show 2>/dev/null || true)
+        still=0
+        for gw_id in "${ids[@]}"; do
+            st=$(echo "$out" | jq -r --arg g "$gw_id" '.["Created Gateways:"][] | select(.["gw-id"]==$g) | .Availability' 2>/dev/null | head -1)
+            [ "$st" = "AVAILABLE" ] && still=$(( still + 1 ))
+        done
+        if [ "$still" -eq 0 ]; then
+            echo "    [OK] All ${#ids[@]} gateway(s) are UNAVAILABLE after $attempt attempt(s)"
+            return 0
+        fi
+        if (( attempt % 5 == 0 )); then
+            echo "    Attempt $attempt/$AVAIL_RETRIES: $still gateway(s) still AVAILABLE, waiting..."
+        fi
+        sleep "$RETRY_DELAY"
+    done
+    echo "    [FAIL] TEST FAILED: not all gateways became UNAVAILABLE before disaster-set" >&2
+    show_gw_full "at unavailable-wait timeout"
+    return 1
+}
+
 # Full disaster-recovery scenario for a location. Takes the location followed by
 # the gw-ids currently holding that location. Stops each site gateway (verifying
 # ANA failover), disaster-set, restarts them (STANDBY), disaster-clear, and waits
@@ -605,6 +630,9 @@ run_site_dr () {
 
     bump_step
     step_banner "($STEP) Setting disaster-set for $loc"
+    # The mon rejects disaster-set while any gateway in the location is still
+    # AVAILABLE, so wait for them all to age out to UNAVAILABLE first.
+    wait_gws_unavailable "${site_ids[@]}" || exit 1
     echo "    ceph nvme-gw disaster-set $POOL $GROUP $loc"
     ceph nvme-gw disaster-set "$POOL" "$GROUP" "$loc"
     show_gw_full "after disaster-set $loc"
