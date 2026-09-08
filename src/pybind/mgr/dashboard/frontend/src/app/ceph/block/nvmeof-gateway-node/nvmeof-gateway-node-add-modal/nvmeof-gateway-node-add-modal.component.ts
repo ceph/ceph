@@ -165,9 +165,15 @@ export class NvmeofGatewayNodeAddModalComponent extends CdForm implements OnInit
   }
 
   private createServiceSpecPayload(): CephServiceSpecUpdate {
-    const selectedHosts = this.selection.selected.map((h: Host) => h.hostname);
-    const currentHosts = this.serviceSpec.placement?.hosts || [];
-    const newHosts = [...currentHosts, ...selectedHosts];
+    const selectedHosts = this.selection.selected
+      .map((h: Host) => h.hostname)
+      .filter((hostname): hostname is string => !!hostname);
+    const currentHosts = (this.serviceSpec.placement?.hosts || [])
+      .map((host: string | { hostname?: string }) =>
+        typeof host === 'string' ? host : host?.hostname
+      )
+      .filter((hostname): hostname is string => !!hostname);
+    const newHosts = [...new Set([...currentHosts, ...selectedHosts])];
 
     const { status, ...modifiedSpec } = this.serviceSpec;
 
@@ -186,6 +192,9 @@ export class NvmeofGatewayNodeAddModalComponent extends CdForm implements OnInit
     }
 
     modifiedSpec.placement.hosts = newHosts;
+    // Explicit host membership must not stay capped by a leftover count
+    // (e.g. count: 2 would ignore a 3rd host).
+    delete modifiedSpec.placement.count;
 
     return modifiedSpec;
   }
