@@ -56,8 +56,8 @@ RGW_ADMIN=/other/ceph/build/bin/radosgw-admin bash ../src/test/rgw/radosgw-admin
 The bucket suite has 42 rows that fail on purpose.
 
 They cover errors where radosgw-admin returns the error code still negative.
-The shell keeps only the low byte, so `-EINVAL` (-22) shows as 234 and
-`-ENOENT` (-2) shows as 254. Other commands return those same two errors
-positive, and exit 22 or 2.
+An exit status is only one byte, so a negative value comes out as 256 minus it:
+`-EINVAL` (-22) shows as 234, and `-ENOENT` (-2) shows as 254. Other commands
+return those same two errors positive, and exit 22 or 2.
 
-Those rows expect 22 and 2. They will pass once the tool is fixed.
+The 42 rows expect 22 and 2, so they fail until the tool is fixed.
