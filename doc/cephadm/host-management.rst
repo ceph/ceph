@@ -88,6 +88,15 @@ To add each new host to the cluster, perform two steps:
 
       ceph orch host add host4 10.10.0.104 --labels _admin
 
+   When a host is added, cephadm checks that a packet the size of the
+   active manager host's NIC MTU can reach the new host without
+   fragmentation. If that check fails, host addition is rejected. To
+   add the host anyway, pass ``--skip-mtu-check``:
+
+   .. prompt:: bash #
+
+      ceph orch host add host5 10.10.0.105 --skip-mtu-check
+
 
 .. _cephadm-removing-hosts:
 

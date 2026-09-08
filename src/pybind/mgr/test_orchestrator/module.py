@@ -268,8 +268,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return [orchestrator.HostSpec('localhost')]
 
     @handle_orch_error
-    def add_host(self, spec):
-        # type: (orchestrator.HostSpec) -> str
+    def add_host(self, spec, skip_mtu_check: bool = False):
+        # type: (orchestrator.HostSpec, bool) -> str
         host = spec.hostname
         if host == 'raise_validation_error':
             raise orchestrator.OrchestratorValidationError("MON count must be either 1, 3 or 5")
