@@ -64,6 +64,32 @@ def read_config(fn):
     return cp
 
 
+def parse_ini_section(
+    text: str, entity: str, option: Optional[str] = None
+) -> Optional[Any]:
+    """Parse text as INI and return data from entity.
+
+    If option is given, return the value of that option (str or
+    None when not found).  If option is omitted, return a plain
+    dict of all options in the section (empty dict when the section
+    exists but has no options), or None when the section is absent
+    or the text cannot be parsed.
+    """
+    parser = ConfigParser(interpolation=None)
+    try:
+        parser.read_string(text)
+    except Exception:
+        return None
+
+    if not parser.has_section(entity):
+        return None
+
+    if option is not None:
+        return parser.get(entity, option, fallback=None)
+
+    return dict(parser.items(entity))
+
+
 def try_convert_datetime(s):
     # type: (str) -> Optional[str]
     # This is super irritating because

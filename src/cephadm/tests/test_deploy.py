@@ -446,6 +446,92 @@ def test_deploy_ceph_osd_container(cephadm_fs, funkypatch):
     assert _make_run_dir.call_args[0][2] == 8765
 
 
+def test_deploy_ceph_osd_keyring_caps_only_diff_no_bluestore_update(cephadm_fs, funkypatch):
+    """When the existing OSD keyring and the incoming keyring have the same key
+    value but differ only in capability lines, the bluestore-label keyring
+    update must NOT be triggered."""
+    from cephadmlib.daemons.ceph import OSD
+
+    mocks = _common_patches(funkypatch)
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+
+    KEYRING_WITHOUT_CAPS = '[osd.4]\nkey = AQAb9J9qhylHBBAAb6cTQ0KqWZMCI/6ray1Umg==\n'
+    KEYRING_WITH_CAPS = (
+        '[osd.4]\n'
+        '\tkey = AQAb9J9qhylHBBAAb6cTQ0KqWZMCI/6ray1Umg==\n'
+        '\tcaps mgr = "allow profile osd"\n'
+        '\tcaps mon = "allow profile osd"\n'
+        '\tcaps osd = "allow *"\n'
+    )
+
+    # Pre-populate the keyring on disk (without caps)
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/osd.4')
+    basedir.mkdir(parents=True, exist_ok=True)
+    (basedir / 'keyring').write_text(KEYRING_WITHOUT_CAPS)
+
+    with mock.patch.object(OSD, 'rotate_osd_lv_keyring') as _rotate:
+        with with_cephadm_ctx([]) as ctx:
+            ctx.container_engine = mock_podman()
+            ctx.fsid = fsid
+            ctx.name = 'osd.4'
+            ctx.image = 'quay.io/ceph/ceph:latest'
+            ctx.reconfig = False
+            ctx.allow_ptrace = False
+            ctx.osd_fsid = '00000000-0000-0000-0000-000000000000'
+            ctx.config_blobs = {
+                'config': 'XXXXXXX',
+                # incoming keyring has the same key but now includes caps
+                'keyring': KEYRING_WITH_CAPS,
+            }
+            ctx.limit_core_infinity = False
+            _cephadm._common_deploy(ctx)
+
+    # The new keyring (with caps) must be written to disk
+    with open(basedir / 'keyring') as f:
+        assert f.read() == KEYRING_WITH_CAPS
+    # rotate_osd_lv_keyring must NOT have been called because only caps changed
+    _rotate.assert_not_called()
+
+
+def test_deploy_ceph_osd_keyring_key_changed_triggers_bluestore_update(cephadm_fs, funkypatch):
+    """When the existing OSD keyring has a different key value than the incoming
+    keyring, the bluestore-label keyring update MUST be triggered."""
+    from cephadmlib.daemons.ceph import OSD
+
+    mocks = _common_patches(funkypatch)
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+
+    OLD_KEYRING = '[osd.4]\nkey = AQAb9J9qhylHBBAAb6cTQ0KqWZMCI/6ray1Umg==\n'
+    NEW_KEYRING = '[osd.4]\nkey = AQAf9J9q/JuvFhAAts2n0E559zSx9hu2K8v9Fg==\n'
+
+    # Pre-populate the keyring on disk (old key)
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/osd.4')
+    basedir.mkdir(parents=True, exist_ok=True)
+    (basedir / 'keyring').write_text(OLD_KEYRING)
+
+    with mock.patch.object(OSD, 'rotate_osd_lv_keyring') as _rotate:
+        with with_cephadm_ctx([]) as ctx:
+            ctx.container_engine = mock_podman()
+            ctx.fsid = fsid
+            ctx.name = 'osd.4'
+            ctx.image = 'quay.io/ceph/ceph:latest'
+            ctx.reconfig = False
+            ctx.allow_ptrace = False
+            ctx.osd_fsid = '00000000-0000-0000-0000-000000000000'
+            ctx.config_blobs = {
+                'config': 'XXXXXXX',
+                'keyring': NEW_KEYRING,
+            }
+            ctx.limit_core_infinity = False
+            _cephadm._common_deploy(ctx)
+
+    # The new keyring must be written to disk
+    with open(basedir / 'keyring') as f:
+        assert f.read() == NEW_KEYRING
+    # rotate_osd_lv_keyring MUST have been called because the key itself changed
+    _rotate.assert_called_once()
+
+
 def test_deploy_ceph_osd_container_crimson(cephadm_fs, funkypatch):
     mocks = _common_patches(funkypatch)
     _make_run_dir = funkypatch.patch('cephadmlib.file_utils.make_run_dir')
