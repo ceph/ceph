@@ -59,6 +59,12 @@ int rgw_admin_meta_list_keys(const DoutPrefixProvider* dpp,
         ? static_cast<uint64_t>(*opts.max_entries) - count
         : static_cast<uint64_t>(DEFAULT_MAX_KEYS);
 
+    // NOTE: intentional behavior change vs. the original inline code in
+    // radosgw-admin.cc, which looped on `while (truncated && left > 0)`
+    // using the pre-fetch `left`. That could issue one extra
+    // meta_list_keys_next() call with left == 0 once count reached
+    // max_entries exactly. We break here instead, and the loop condition
+    // below re-checks `count` (post-fetch) rather than the stale `left`.
     if (left == 0) {
       break;
     }
