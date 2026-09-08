@@ -1212,38 +1212,27 @@ int RocksDBStore::do_open(ostream &out,
           return c.name == resharding_column_lock;
         });
 
-    if (recreate_mode && resharding) {
-      derr << __func__ << " cannot repair column families while resharding is"
-	   << " in progress, complete or continue resharding first" << dendl;
-      return -EINTR;
-    }
-    ceph_assert(!recreate_mode || !open_readonly);
-
-    // We do not accept when there are missing column families, except case that we are during resharding.
-    // We can get into this case if resharding was interrupted. It gives a chance to continue.
-    // Opening DB is only allowed in read-only mode.
-    if (missing_cfs.size() != 0 && open_readonly == false && resharding){
-      derr << __func__ << " missing column families: " << missing_cfs_shard << dendl;
+    if (resharding) {
+      // An interrupted resharding leaves keys split between the old and the
+      // new column families. The db must not be opened, not even read-only:
+      // BlueStore initializes its allocator from the freelist or the onodes
+      // stored in the db and would only get a partial view of them, so any
+      // subsequent write to BlueFS, including resuming the resharding, could
+      // overwrite live data. Reverting or resuming is not supported until
+      // the allocator can be recovered from such a db.
+      derr << __func__ << " resharding was interrupted, the db cannot be"
+	   << " safely resumed or reverted, the OSD has to be redeployed"
+	   << dendl;
       return -EIO;
     }
+    ceph_assert(!recreate_mode || !open_readonly);
 
     // verify_sharding adds at least default cf to existing_cfs
     ceph_assert(!existing_cfs.empty());
     if (!extra_cfs.empty()) {
       std::vector<std::string> columns_from_stored;
       sharding_def_to_columns(stored_sharding_def, columns_from_stored);
-      if (resharding) {
-	// An interrupted resharding left column families that are not part of
-	// the stored sharding definition: the (partially populated) target
-	// columns of the resharding. Do not treat them as an error. Opening
-	// the database read-write is still refused by the resharding lock
-	// check in do_open(), while a read-only open is valid on a subset of
-	// column families and gives access to the not-yet-moved keys.
-	dout(5) << __func__ << " resharding in progress, ignoring extra columns"
-		<< " in rocksdb. rocksdb columns = " << rocksdb_cfs
-		<< " stored sharding = " << columns_from_stored << dendl;
-	extra_cfs.clear();
-      } else if (recreate_mode) {
+      if (recreate_mode) {
 	// typically column families resurrected by rocksdb::RepairDB(), which
 	// rebuilds the manifest from the data files it finds; report them to
 	// do_open() so they get opened (a read-write open must list all
@@ -1309,7 +1298,7 @@ int RocksDBStore::do_open(ostream &out,
       db->DestroyColumnFamilyHandle(handles[i]);
     }
 
-    if (missing_cfs.size() > 0 && !resharding) {
+    if (missing_cfs.size() > 0) {
       dout(10) << __func__ << " missing_cfs=" << missing_cfs.size() << dendl;
       ceph_assert(recreate_mode);
       ceph_assert(missing_cfs.size() == missing_cfs_shard.size());
@@ -3995,11 +3984,6 @@ int RocksDBStore::read_sharding_def(std::string& sharding)
 
 bool RocksDBStore::get_sharding(std::string& sharding) {
   return read_sharding_def(sharding) == 1;
-}
-
-bool RocksDBStore::is_reshard_interrupted(const std::string& sharding)
-{
-  return sharding.find(resharding_column_lock) != std::string::npos;
 }
 
 // Find a key that is lexicographically between low and high.

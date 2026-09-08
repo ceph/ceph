@@ -598,10 +598,6 @@ public:
   /// definition is stored (non-sharded db), -EIO if a definition exists
   /// but cannot be read.
   int read_sharding_def(std::string& sharding);
-  /// Check whether a sharding definition, as returned by get_sharding(),
-  /// indicates an interrupted resharding that must be completed (by calling
-  /// reshard() again) before the database can be opened read-write.
-  static bool is_reshard_interrupted(const std::string& sharding);
   void util_divide_key_range(
     const std::string& prefix,        // Table to operate on.
     const std::string& starting_key,  // Included if exists.

@@ -1257,9 +1257,8 @@ TEST_F(RocksDBResharding, resume_interrupted_at_batch) {
   ctrl.unittest_fail_after_first_batch = true;
   ASSERT_EQ(db->reshard("Evade(4)", &ctrl), -1000);
   ASSERT_NE(db->open(cout), 0);
-  // but a read-only open of the interrupted db is possible
-  ASSERT_EQ(db->open_read_only(cout), 0);
-  db->close();
+  // not even read-only, see do_open()
+  ASSERT_NE(db->open_read_only(cout), 0);
   ASSERT_EQ(db->reshard("Evade(4)"), 0);
   ASSERT_EQ(db->open(cout), 0);
   check_db();
@@ -1276,9 +1275,8 @@ TEST_F(RocksDBResharding, resume_interrupted_at_column) {
   ctrl.unittest_fail_after_processing_column = true;
   ASSERT_EQ(db->reshard("Evade(4)", &ctrl), -1001);
   ASSERT_NE(db->open(cout), 0);
-  // but a read-only open of the interrupted db is possible
-  ASSERT_EQ(db->open_read_only(cout), 0);
-  db->close();
+  // not even read-only, see do_open()
+  ASSERT_NE(db->open_read_only(cout), 0);
   ASSERT_EQ(db->reshard("Evade(4)"), 0);
   ASSERT_EQ(db->open(cout), 0);
   check_db();
@@ -1295,9 +1293,8 @@ TEST_F(RocksDBResharding, resume_interrupted_before_commit) {
   ctrl.unittest_fail_after_successful_processing = true;
   ASSERT_EQ(db->reshard("Evade(4)", &ctrl), -1002);
   ASSERT_NE(db->open(cout), 0);
-  // but a read-only open of the interrupted db is possible
-  ASSERT_EQ(db->open_read_only(cout), 0);
-  db->close();
+  // not even read-only, see do_open()
+  ASSERT_NE(db->open_read_only(cout), 0);
   ASSERT_EQ(db->reshard("Evade(4)"), 0);
   ASSERT_EQ(db->open(cout), 0);
   check_db();
