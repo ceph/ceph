@@ -427,6 +427,31 @@ def test_rgw_credential_stub_written_to_priv_store(split_handler):
     assert opts['ceph_rgw:secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
 
 
+def test_rgw_credential_stub_survives_last_share_removal(split_handler):
+    """Deleting the last RGW share in a cluster must not prune the
+    credential stub from the private store.
+    """
+    h, pub, priv = split_handler
+    cluster, share = _rgw_cluster_and_share(
+        'c1',
+        's1',
+        'mybucket',
+        bucket='mybucket',
+        user_id='testuser',
+    )
+    rg = h.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+    assert priv['c1', 'config.smb.rgw'].exists()
+
+    rmshare = smb.resources.RemovedShare(cluster_id='c1', share_id='s1')
+    rg = h.apply([rmshare])
+    assert rg.success, rg.to_simplified()
+
+    stub_entry = priv['c1', 'config.smb.rgw']
+    assert stub_entry.exists()
+    assert stub_entry.get()['config:merge']['shares'] == {}
+
+
 def test_no_priv_store_entry_for_non_rgw_cluster(split_handler):
     """A cluster with no RGW shares must not write a credential stub."""
     h, pub, priv = split_handler
