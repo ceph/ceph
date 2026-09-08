@@ -544,6 +544,10 @@ public:
 	      BlueStore::ready_regions_t& res,
 	      interval_set<uint32_t>& res_intervals,
 	      int flags = 0);
+    uint32_t cached_size(
+      BufferCacheShard* cache,
+      uint32_t offset,
+      uint32_t length);
 
     void truncate(BufferCacheShard* cache,
                   uint32_t offset) {
@@ -3436,6 +3440,12 @@ private:
     blobs2read_t& blobs2read,
     span_stat_t* span_stat = nullptr);
 
+  void _reformat_scan(
+    OnodeRef& o,
+    uint64_t offset,
+    size_t length,
+    const blobs2read_t& blobs2read,
+    span_stat_t& span_stat);
 
   int _prepare_read_ioc(
     blobs2read_t& blobs2read,

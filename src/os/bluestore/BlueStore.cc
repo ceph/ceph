@@ -1932,6 +1932,28 @@ void BlueStore::BufferSpace::read(
   cache->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
 }
 
+uint32_t BlueStore::BufferSpace::cached_size(
+  BufferCacheShard* cache,
+  uint32_t offset,
+  uint32_t length)
+{
+  uint32_t cached_bytes = 0;
+  uint32_t end = offset + length;
+
+  std::lock_guard l(cache->lock);
+  for (auto i = _data_lower_bound(offset);
+       i != buffer_map.end() && offset < end && i->offset < end; ++i) {
+    Buffer* b = &*i;
+    ceph_assert(b->end() > offset);
+    uint32_t start = std::max(b->offset, offset);
+    uint32_t blen = std::min(b->end(), end) - start;
+    if (b->is_writing() || b->is_clean()) {
+      cached_bytes += blen;
+    }
+  }
+  return cached_bytes;
+}
+
 void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache,
                                            TransContext* txc,
                                            uint32_t offset, uint32_t len)
@@ -13200,6 +13222,71 @@ void BlueStore::_read_cache(
     ++lp;
   }
   span_stat.stored -= left; // finally adjust if we haven't seen the full length
+}
+
+void BlueStore::_reformat_scan(
+  OnodeRef& o,
+  uint64_t offset,
+  size_t length,
+  const blobs2read_t& blobs2read,
+  span_stat_t& span_stat)
+{
+  uint32_t end = offset + length;
+  span_stat.cached = o->bc.cached_size(o->c->cache, offset, length);
+  span_stat.stored = 0;
+  auto lp = o->extent_map.seek_lextent(offset);
+  while (lp != o->extent_map.extent_map.end() && lp->logical_offset < end) {
+    uint32_t start = std::max<uint32_t>(lp->logical_offset, offset);
+    uint32_t blen = std::min(lp->logical_end(), end) - start;
+    span_stat.stored += blen;
+    span_stat.extents++;
+    ++lp;
+  }
+  interval_set<uint64_t> pintervals; // need to accumulate pextents in this set
+                                     // to get them sorted by offset and merged
+                                     // into larger intervals if possible.
+  for (auto& p : blobs2read) {
+    const BlobRef& bptr = p.first;
+    SharedBlobRef sb;
+    bool has_shared = false;
+    if (bptr->get_blob().is_shared()) {
+      sb = bptr->get_shared_blob();
+      bptr->collection->load_shared_blob(sb);
+      has_shared = true;
+    }
+    auto shared_cb = [&](uint64_t o, uint32_t len, uint32_t refs) {
+      if (refs > 1) {
+        span_stat.allocated_shared += len;
+      }
+      return 0;
+    };
+    if (bptr->get_blob().is_compressed()) {
+      auto on_disk_size = bptr->get_blob().get_ondisk_size();
+      span_stat.stored_compressed += bptr->get_blob().get_logical_length();
+      span_stat.allocated_compressed += on_disk_size;
+      bptr->get_blob().map(0, on_disk_size,
+        [&](uint64_t offset, uint64_t length) {
+          pintervals.insert(offset, length);
+          if (has_shared) {
+            sb->map_fn(offset, length, shared_cb);
+          }
+          return 0;
+        });
+    } else {
+      for (auto& req : p.second) {
+        span_stat.allocated += req.r_len;
+        bptr->get_blob().map(req.r_off, req.r_len,
+          [&](uint64_t offset, uint64_t length) {
+            pintervals.insert(offset, length);
+            if (has_shared) {
+              sb->map_fn(offset, length, shared_cb);
+            }
+            return 0;
+          });
+      }
+    }
+  }
+  span_stat.frags += pintervals.num_intervals();
 }
 
 int BlueStore::_prepare_read_ioc(
