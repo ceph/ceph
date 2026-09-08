@@ -2,3 +2,21 @@
 
 ceph ALL=NOPASSWD: /usr/sbin/smartctl -x --json=o /dev/*
 ceph ALL=NOPASSWD: /usr/sbin/nvme * smart-log-add --json /dev/*
+
+## Do not open a PAM session for these commands.
+##
+## sudo's PAM session stage runs pam_systemd, which makes a dbus call to
+## systemd-logind.  The daemon invoking sudo runs in the SELinux ceph_t
+## domain, and although ceph_t is itself permissive, the reply from logind is
+## refused by a rule whose source domain -- and therefore whose permissive
+## flag -- is systemd_logind_t:
+##
+##   avc:  denied  { send_msg } for msgtype=method_return
+##     scontext=system_u:system_r:systemd_logind_t:s0
+##     tcontext=system_u:system_r:ceph_t:s0 tclass=dbus permissive=0
+##
+## sudo then waits for a reply that never arrives, until
+## osd_smart_report_timeout expires and its process group is killed.  Every
+## sample collected that way is a smartctl error stub rather than SMART data.
+## Neither command needs a session, so do not open one.
+Defaults:ceph !pam_session
