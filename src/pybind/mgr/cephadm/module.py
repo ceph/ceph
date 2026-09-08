@@ -2287,6 +2287,38 @@ Then run the following:
             raise OrchestratorError(str(e))
         return ip_addr
 
+    def _check_host_mtu(self, hostname: str, addr: str) -> Optional[str]:
+        """Advisory MTU check: DF ping from the active mgr host to the new host.
+
+        Returns a warning string on mismatch or None on success/skip. Never
+        raises, so an upgrade does not break clusters where ICMP is filtered
+        or the path MTU differs.
+        """
+        ref_host = self.get_active_mgr().hostname
+        if not ref_host or ref_host == hostname or ref_host not in self.inventory:
+            return None
+        try:
+            with self.async_timeout_handler(ref_host, f'cephadm check-mtu --target-ip {addr}'):
+                out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
+                    ref_host, cephadmNoImage, 'check-mtu',
+                    ['--target-ip', addr],
+                    error_ok=True, no_fsid=True))
+        except Exception as e:
+            self.log.debug(f'MTU check from {ref_host} to {addr} not run: {e}')
+            return None
+        if code:
+            err_str = '; '.join(err) if err else ''
+            if 'MTU validation failed' in err_str:
+                msg = (f'MTU check from {ref_host} to {hostname} ({addr}) failed, '
+                       f'possible MTU mismatch: {err_str}')
+                self.log.warning(msg)
+                return msg
+            # Any other failure (route lookup, SSH, missing ping, etc.) means
+            # the probe didn't run — log at debug and skip.
+            self.log.debug('MTU check from %s to %s not run: %s',
+                           ref_host, addr, err_str or 'unknown error')
+        return None
+
     def _get_cephadm_version_for_host_prep(self) -> Optional[str]:
         """Extract cephadm version from cluster version string."""
         try:
@@ -2328,12 +2360,11 @@ Then run the following:
             )
         self.log.info('Successfully prepared host %s for sudo hardening', hostname)
 
-    def _add_host(self, spec):
-        # type: (HostSpec) -> str
+    def _add_host(self, spec: HostSpec) -> str:
         """
         Add a host to be managed by the orchestrator.
 
-        :param host: host name
+        :param spec: host specification
         """
         HostSpec.validate(spec)
         # Drop the cached SSH connection when re-adding a host with a new
@@ -2357,6 +2388,12 @@ Then run the following:
             raise
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
+
+        # Only probe MTU for new hosts or when the address changed; skip on
+        # routine re-applies to avoid two 3-packet pings per existing host.
+        is_new_host = spec.hostname not in self.inventory
+        mtu_warning = self._check_host_mtu(spec.hostname, ip_addr or spec.addr) \
+            if is_new_host or addr_changed else None
 
         if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
             self.cache.refresh_all_host_info(spec.hostname)
@@ -2400,7 +2437,10 @@ Then run the following:
                     f'Failed to prepare host {spec.hostname} for sudo hardening. '
                     f'Host was not added to the cluster. Error: {e}'
                 )
-        return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
+        res = "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
+        if mtu_warning:
+            res += f'\nWARNING: {mtu_warning}'
+        return res
 
     @handle_orch_error
     def add_host(self, spec: HostSpec) -> str:

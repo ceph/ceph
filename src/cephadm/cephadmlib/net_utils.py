@@ -3,14 +3,16 @@
 import errno
 import fcntl
 import ipaddress
+import json
 import logging
 import os
 import re
 import socket
 import struct
 
-from typing import Dict, Tuple, List
+from typing import Dict, List, Optional, Tuple
 
+from .call_wrappers import call, CallVerbosity
 from .context import CephadmContext
 from .exceptions import Error, PortOccupiedError
 from .file_utils import read_file
@@ -312,3 +314,43 @@ def build_addrv_params(addrv: List[EndPoint]) -> str:
 
     addr_arg = '[{0}]'.format(','.join(addr_arg_list))
     return addr_arg
+
+
+def get_route_interface(ctx: CephadmContext, addr: str, ipv6: bool) -> Tuple[str, Optional[int]]:
+    """Determine the outgoing network interface and optional route MTU for a target address."""
+    cmd = ['ip', '-6', '-j', 'route', 'get', addr] if ipv6 else ['ip', '-j', 'route', 'get', addr]
+    out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+    if code:
+        raise Error(
+            f'Unable to determine source interface to reach {addr}: '
+            f'ip route command failed: {err or out}')
+    try:
+        routes = json.loads(out)
+    except (json.JSONDecodeError, TypeError) as e:
+        raise Error(
+            f'Unable to determine source interface to reach {addr}: '
+            f'invalid JSON from ip route: {e}')
+    if not isinstance(routes, list) or not routes:
+        raise Error(
+            f'Unable to determine source interface to reach {addr}: '
+            'no route was returned')
+    if not isinstance(routes[0], dict):
+        raise Error(
+            f'Unable to determine source interface to reach {addr}: '
+            'unexpected route data')
+    route = routes[0]
+    dev = route.get('dev')
+    if not dev:
+        raise Error(
+            f'Unable to determine source interface to reach {addr}: '
+            'route does not contain a network interface')
+    if route.get('type') == 'local' or dev == 'lo':
+        return 'lo', None
+    # ip -j route get reports a route-level mtu when one is set explicitly or a
+    # PMTU has been cached; surface it so callers can prefer it over the NIC MTU.
+    route_mtu = route.get('mtu')
+    try:
+        route_mtu = int(route_mtu) if route_mtu is not None else None
+    except (TypeError, ValueError):
+        route_mtu = None
+    return dev, route_mtu
