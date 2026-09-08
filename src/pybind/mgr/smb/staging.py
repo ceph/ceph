@@ -7,6 +7,7 @@ from typing import (
     Optional,
     Set,
     Type,
+    cast,
 )
 
 import dataclasses
@@ -19,6 +20,7 @@ from ceph.fs.earmarking import EarmarkTopScope
 from . import config_store, resources, rgw, utils
 from .enums import (
     AuthMode,
+    CaseInsensitiveCheckPolicy,
     ConfigNS,
     Intent,
     JoinSourceType,
@@ -42,6 +44,7 @@ from .proto import (
     ConfigStore,
     EarmarkResolver,
     EntryKey,
+    PathCaseSensitivityResolver,
     PathResolver,
 )
 from .resources import SMBResource
@@ -626,6 +629,7 @@ def _check_share_cephfs(
         raise ErrorResult(
             share, msg="path is not a valid directory in volume"
         )
+    _check_case_sensitivity_settings(share, toolbox)
     if earmark_resolver:
         earmark = earmark_resolver.get_earmark(
             volpath,
@@ -737,6 +741,56 @@ def _check_fscrypt_scopes(share: resources.Share, staging: Staging) -> None:
                 'cluster_id': share.cluster_id,
             },
         )
+
+
+def _check_case_sensitivity_settings(
+    share: resources.Share, toolbox: CrossCheckToolbox
+) -> None:
+    assert share.cephfs
+    policy = share.cephfs.case_insensitive or CaseInsensitiveCheckPolicy.WARN
+    if policy is CaseInsensitiveCheckPolicy.IGNORE:
+        log.debug('check case sensitivity: %r policy is ignore', share)
+        return
+    checked = found = False
+    sensitive = True  # cephfs is case sensitive by default
+    if not hasattr(toolbox.path_resolver, 'resolve_case_sensitivity'):
+        log.warning('Path resolver lacks resolve_case_sensitivity method')
+    else:
+        checked = True
+        cspr = cast(PathCaseSensitivityResolver, toolbox.path_resolver)
+        found, sensitive = cspr.resolve_case_sensitivity(
+            share.cephfs.volume,
+            share.cephfs.subvolumegroup,
+            share.cephfs.subvolume,
+            share.cephfs.path,
+        )
+    log.debug(
+        'subvolume%s %s:%s:%s:%s %s case sensitive',
+        '' if checked else '[UNCHECKED]',
+        share.cephfs.volume,
+        share.cephfs.subvolumegroup,
+        share.cephfs.subvolume,
+        share.cephfs.path,
+        'is' if sensitive else 'is not',
+    )
+    if not sensitive:
+        return
+
+    desc = {
+        (False, False): 'cannot be checked for case sensitivity',
+        # (False, True) impossible state - will raise a KeyError
+        (True, False): 'is case sensitive',
+        (True, True): 'is configured to be case sensitive',
+    }[checked, found]
+    if policy is CaseInsensitiveCheckPolicy.WARN:
+        log.debug('warning share %r: wrong subvol case setting', share)
+        # TODO: emit a warning visible on the CLI
+        return
+    log.debug('rejecting share %r: invalid subvol case setting', share)
+    raise ErrorResult(
+        share,
+        msg=f'CephFS subvolume {desc}; case insensitive mode is required',
+    )
 
 
 @cross_check_resource.register
