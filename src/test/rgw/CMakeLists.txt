@@ -427,7 +427,7 @@ target_link_libraries(unittest_rgw_object_ctx ${rgw_libs})
 add_ceph_test(test-ceph-diff-sorted.sh
   ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-diff-sorted.sh)
 
-if(WITH_RADOSGW)
+if(WITH_RADOSGW_RADOS)
 add_ceph_test(test-user-exit-codes.sh
   ${CMAKE_CURRENT_SOURCE_DIR}/radosgw-admin/test-user-exit-codes.sh)
 endif()
