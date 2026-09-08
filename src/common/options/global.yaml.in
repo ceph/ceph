@@ -5888,6 +5888,25 @@ options:
   desc: Raise a health warning on lack of per-pg omap
   default: false
   with_legacy: true
+- name: bluestore_warn_on_legacy_min_alloc_size
+  type: bool
+  level: advanced
+  desc: Raise a health warning if a BlueStore OSD uses an allocation unit that
+    differs from the one a newly deployed OSD would use
+  long_desc: HDD-backed BlueStore OSDs deployed prior to the Pacific release were
+    created with a 64 KiB allocation unit (min_alloc_size), while the current
+    default is 4 KiB. A large allocation unit causes increased space usage for
+    small objects, erasure-coded chunks and compressed data. The allocation unit
+    is set at OSD creation time; changing it requires redeploying the OSD. The
+    on-disk value is compared against the allocation unit that mkfs would select
+    today on the same device, so deliberate settings such as an explicitly
+    configured bluestore_min_alloc_size or a value derived from the device
+    optimal IO size (bluestore_use_optimal_io_size_for_min_alloc_size, e.g. for
+    coarse-IU QLC devices) do not raise the warning. The warning can also be
+    disabled for specific OSDs or device classes only, using a configuration
+    mask such as 'osd/class:hdd'.
+  default: true
+  with_legacy: true
 - name: bluestore_log_op_age
   type: float
   level: advanced

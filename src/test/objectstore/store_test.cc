@@ -12631,6 +12631,63 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixedPartialTest) {
     << std::endl;
 }
 
+TEST_P(StoreTestSpecificAUSize, BluestoreLegacyMinAllocSizeAlertTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // make the expected default allocation unit deterministic
+  // (bluestore_min_alloc_size_ssd = 4 KiB)
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  g_conf().apply_changes(nullptr);
+
+  // deploy an OSD with a 64 KiB allocation unit, as mkfs would have
+  // done on an HDD prior to Pacific
+  StartDeferred(65536);
+
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  // no alert yet: the on-disk value matches the explicitly configured
+  // bluestore_min_alloc_size, hence it is considered deliberate
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 0);
+
+  // drop the explicit setting: the on-disk 64 KiB allocation unit is
+  // now larger than the 4 KiB unit a redeployed OSD would get
+  SetVal(g_conf(), "bluestore_min_alloc_size", "0");
+  g_conf().apply_changes(nullptr);
+
+  alerts.clear();
+  r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 1);
+  std::cout << "legacy_min_alloc_size_alert:"
+	    << alerts.find("BLUESTORE_LEGACY_MIN_ALLOC_SIZE")->second
+	    << std::endl;
+
+  // the alert can be disabled at runtime
+  SetVal(g_conf(), "bluestore_warn_on_legacy_min_alloc_size", "false");
+  g_conf().apply_changes(nullptr);
+
+  alerts.clear();
+  r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 0);
+}
+
+TEST_P(StoreTest, BluestoreDefaultMinAllocSizeNoAlertTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // an OSD deployed with the default configuration matches the
+  // allocation unit a newly deployed OSD would use
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 0);
+}
+
 TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
   if (string(GetParam()) != "bluestore")
     return;

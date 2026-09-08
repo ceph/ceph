@@ -1200,6 +1200,55 @@ To disable this alert, run the following command:
 
    ceph config set global bluestore_warn_on_no_per_pg_omap false
 
+BLUESTORE_LEGACY_MIN_ALLOC_SIZE
+_______________________________
+
+One or more OSDs use a BlueStore allocation unit (``min_alloc_size``) that
+differs from the one a newly deployed OSD would use on the same device.
+This is typically the case for HDD-backed OSDs created prior to the Pacific
+release, which used a 64 KiB allocation unit, whereas the current default is
+4 KiB. OSDs that use a larger allocation unit than necessary suffer from
+increased space usage ("space amplification") when storing small objects,
+erasure-coded chunks, or compressed data. Conversely, OSDs with an
+allocation unit smaller than the one currently configured — for example,
+OSDs deployed before ``bluestore_use_optimal_io_size_for_min_alloc_size``
+was enabled for coarse-IU devices — do not benefit from the intended
+alignment.
+
+The on-disk allocation unit of each OSD is compared against the value that
+a newly created OSD would get on the same device with the current
+configuration. Deliberate choices therefore do not raise this warning: an
+explicitly configured ``bluestore_min_alloc_size`` or a value derived from
+the device's optimal IO size when
+``bluestore_use_optimal_io_size_for_min_alloc_size`` is enabled — for
+example, to align with the coarse indirection unit (IU) of some QLC NVMe
+devices — is considered intentional.
+
+The allocation unit is set when the OSD is created and cannot be changed
+afterwards. To align an OSD with the current configuration, redeploy (destroy
+and re-create) it. Make sure that the cluster is healthy and has enough free
+capacity before doing so, and redeploy only one OSD or failure domain at a
+time. To display the allocation unit of each OSD, run the following command:
+
+.. prompt:: bash #
+
+   ceph osd metadata | jq '.[] | {id, bluestore_min_alloc_size}'
+
+If a large allocation unit is used deliberately without the configuration
+options described above, the alert can be disabled for specific OSDs or
+device classes only, using a configuration mask:
+
+.. prompt:: bash #
+
+   ceph config set osd.123 bluestore_warn_on_legacy_min_alloc_size false
+   ceph config set osd/class:hdd bluestore_warn_on_legacy_min_alloc_size false
+
+To disable this alert entirely, run the following command:
+
+.. prompt:: bash #
+
+   ceph config set global bluestore_warn_on_legacy_min_alloc_size false
+
 
 BLUESTORE_DISK_SIZE_MISMATCH
 ____________________________
