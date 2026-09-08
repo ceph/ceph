@@ -8,8 +8,13 @@
 
 #include "common/ceph_json.h"
 #include "common/errno.h"
+#include "include/ceph_assert.h"
 #include "include/scope_guard.h"
+#ifdef WITH_RADOSGW_RADOS
+#include "cls/rgw/cls_rgw_types.h"
+#endif
 #include "rgw_account.h"
+#include "rgw_formats.h"
 #include "rgw_sal.h"
 #include "radosgw-admin/util.h"
 
@@ -37,7 +42,7 @@ rgw::account::AdminOpState make_op_state(const rgw_admin_account_options& o)
 
 int handle_account_op(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
-                      RGWStreamFlusher& stream_flusher,
+                      RGWFormatterFlusher& stream_flusher,
                       const rgw_admin_account_options& o)
 {
   auto op_state = make_op_state(o);
@@ -93,9 +98,19 @@ int handle_account_op(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+// NOTE: this pagination loop is intentionally near-identical to
+// rgw_admin_meta_list_keys() being added in the sibling "user module"
+// slice (#71578, admin_meta.cc): same guard/loop/section structure,
+// differing only in the hardcoded "account" metadata key and the error
+// message text. This PR is based directly on main and lands
+// independently, so it can't call into admin_meta.cc yet. Once both
+// slices have landed, this function should be replaced with a call to
+// rgw_admin_meta_list_keys(dpp, driver, stream_flusher,
+// {.metadata_key = "account", .marker = o.marker, .max_entries =
+// o.max_entries}) to avoid maintaining two copies of the same loop.
 int handle_account_list(const DoutPrefixProvider* dpp,
                         rgw::sal::Driver* driver,
-                        RGWStreamFlusher& stream_flusher,
+                        RGWFormatterFlusher& stream_flusher,
                         const rgw_admin_account_options& o)
 {
   if (o.max_entries && *o.max_entries < 0) {
@@ -166,7 +181,7 @@ int handle_account_list(const DoutPrefixProvider* dpp,
 
 int rgw_admin_account(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
-                      RGWStreamFlusher& stream_flusher,
+                      RGWFormatterFlusher& stream_flusher,
                       const rgw_admin_account_options& o)
 {
   switch (o.command) {
@@ -181,6 +196,8 @@ int rgw_admin_account(const DoutPrefixProvider* dpp,
     return handle_account_list(dpp, driver, stream_flusher, o);
 
   default:
-    return EINVAL;
+    // every account_command enumerator is handled above; reaching here
+    // means a new enumerator was added without updating this switch.
+    ceph_abort();
   }
 }
