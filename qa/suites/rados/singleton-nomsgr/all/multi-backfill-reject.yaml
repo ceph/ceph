@@ -24,6 +24,7 @@ tasks:
       - \(OBJECT_
       - \(POOL_APP_NOT_ENABLED\)
       - MDS_ALL_DOWN
+      - MDS_UP_LESS_THAN_MAX
     conf:
       osd:
         osd debug reject backfill probability: .3

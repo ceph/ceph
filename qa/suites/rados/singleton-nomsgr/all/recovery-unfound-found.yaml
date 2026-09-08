@@ -27,6 +27,7 @@ tasks:
       - \(PG_
       - overall HEALTH
       - MDS_ALL_DOWN
+      - MDS_UP_LESS_THAN_MAX
 - exec:
     osd.0:
       - ceph osd pool create foo 32
