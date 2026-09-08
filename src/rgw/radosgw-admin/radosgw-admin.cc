@@ -6933,6 +6933,8 @@ int main(int argc, const char **argv)
   case OPT::KEY_RM: {
     rgw_admin_user_mutate_options mutate_opts;
     switch (opt_cmd) {
+    default:
+      ceph_abort();
     case OPT::USER_INFO:
       mutate_opts.command = user_mutate_command::info;
       break;
@@ -6975,8 +6977,6 @@ int main(int argc, const char **argv)
     case OPT::KEY_RM:
       mutate_opts.command = user_mutate_command::key_rm;
       break;
-    default:
-      ceph_abort();
     }
     mutate_opts.access_key = access_key;
     mutate_opts.subuser = subuser;

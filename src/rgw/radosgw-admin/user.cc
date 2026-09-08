@@ -10,6 +10,7 @@
 #include "common/ceph_json.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
+#include "include/ceph_assert.h"
 #include "driver/rados/rgw_bucket.h"
 #include "driver/rados/rgw_user.h"
 #include "include/utime.h"
@@ -69,6 +70,10 @@ int rgw_admin_user_mutate(const DoutPrefixProvider* dpp,
   RGWUserInfo info;
 
   switch (opts.command) {
+  default:
+    // a user_mutate_command enumerator without a case below was added
+    // without updating this switch.
+    ceph_abort();
   case user_mutate_command::info:
     if (rgw::sal::User::empty(user) && opts.access_key.empty()) {
       std::cerr << "ERROR: --uid or --access-key required" << std::endl;
@@ -174,8 +179,6 @@ int rgw_admin_user_mutate(const DoutPrefixProvider* dpp,
       return -ret;
     }
     break;
-  default:
-    return EINVAL;
   }
 
   if (output_user_info) {
@@ -203,6 +206,10 @@ int rgw_admin_user_query(const DoutPrefixProvider* dpp,
   int ret = 0;
 
   switch (opts.command) {
+  default:
+    // a user_query_command enumerator without a case below was added
+    // without updating this switch.
+    ceph_abort();
   case user_query_command::check:
     check_bad_owner_bucket_mapping(driver, user->get_id(),
                                    user->get_display_name(), user->get_tenant(),
@@ -329,8 +336,6 @@ int rgw_admin_user_query(const DoutPrefixProvider* dpp,
     }
     return rgw_admin_meta_list_keys(dpp, driver, stream_flusher, list_opts);
   }
-  default:
-    return EINVAL;
   }
 
   return 0;
@@ -346,6 +351,10 @@ int rgw_admin_user_policy(const DoutPrefixProvider* dpp,
   int ret = 0;
 
   switch (opts.command) {
+  default:
+    // a user_policy_command enumerator without a case below was added
+    // without updating this switch.
+    ceph_abort();
   case user_policy_command::attach:
     if (rgw::sal::User::empty(user)) {
       std::cerr << "ERROR: uid not specified" << std::endl;
@@ -442,6 +451,13 @@ int rgw_admin_user_policy(const DoutPrefixProvider* dpp,
   case user_policy_command::list_attached:
     if (rgw::sal::User::empty(user)) {
       std::cerr << "ERROR: uid not specified" << std::endl;
+      // NOTE: behavior fix vs. the pre-extraction code, which returned
+      // -EINVAL here (the only one of the three policy subcommands that
+      // did). main()'s return value becomes the process exit code, so
+      // that was exit 234 (-22 & 0xff) instead of 22 like attach/detach.
+      // Returning EINVAL here makes exit codes consistent across
+      // attach/detach/list_attached; test-user-exit-codes.sh now asserts
+      // exit 22 for "policy list: no uid".
       return EINVAL;
     }
     ret = user->load_user(dpp, null_yield);
@@ -460,8 +476,5 @@ int rgw_admin_user_policy(const DoutPrefixProvider* dpp,
       formatter->flush(std::cout);
     }
     return 0;
-
-  default:
-    return EINVAL;
   }
 }
