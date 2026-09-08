@@ -90,6 +90,11 @@ To add each new host to the cluster, perform two steps:
       ceph orch host add host4 10.10.0.104 --labels _admin
       ceph orch host add host4 10.10.0.104 --labels _admin,prometheus,mon,ethelmerman
 
+   When a host is added, cephadm sends a don't-fragment ping from the
+   active manager host to the new host, sized to the manager's NIC MTU,
+   to detect possible MTU mismatches. If the ping fails, the host is
+   still added and a warning is printed.
+
 
 .. _cephadm-removing-hosts:
 

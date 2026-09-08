@@ -295,6 +295,106 @@ class TestCephadm(object):
             assert mock_reset.call_count == 2
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.resolve_ip")
+    def test_mtu_check_fail_still_adds_host(self, resolve_ip, cephadm_module):
+        """MTU probe fails → _add_host() still succeeds → host is in inventory → result contains WARNING."""
+        resolve_ip.return_value = '192.168.122.1'
+
+        # Add the mgr host first so ref_host is in inventory
+        mgr_host = 'mgr-host'
+        cephadm_module._add_host(HostSpec(mgr_host, '192.168.122.99'))
+
+        # Mock get_active_mgr to return mgr-host
+        mgr_dd = mock.MagicMock()
+        mgr_dd.hostname = mgr_host
+
+        # _run_cephadm that returns failure for check-mtu but success for everything else
+        async def _run_cephadm_mtu_fail(s, host, entity, cmd, e, **kwargs):
+            if cmd == 'check-mtu':
+                return [''], ['ERROR: MTU validation failed'], 1
+            if cmd == 'gather-facts':
+                return '{}', '', 0
+            return ['[]'], '', 0
+
+        with mock.patch.object(cephadm_module, 'get_active_mgr', return_value=mgr_dd), \
+             mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm_mtu_fail):
+            result = cephadm_module._add_host(HostSpec('newhost', '192.168.122.2'))
+
+        # Host was added despite the MTU failure
+        assert 'newhost' in cephadm_module.inventory
+        assert 'WARNING' in result
+        assert 'MTU' in result
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.resolve_ip")
+    def test_mtu_check_ok_no_warning(self, resolve_ip, cephadm_module):
+        """MTU check passes → no warning in result."""
+        resolve_ip.return_value = '192.168.122.1'
+
+        mgr_host = 'mgr-host'
+        cephadm_module._add_host(HostSpec(mgr_host, '192.168.122.99'))
+
+        mgr_dd = mock.MagicMock()
+        mgr_dd.hostname = mgr_host
+
+        # _run_cephadm that returns success for check-mtu
+        async def _run_cephadm_mtu_ok(s, host, entity, cmd, e, **kwargs):
+            if cmd == 'check-mtu':
+                return ['MTU check OK'], [''], 0
+            if cmd == 'gather-facts':
+                return '{}', '', 0
+            return ['[]'], '', 0
+
+        with mock.patch.object(cephadm_module, 'get_active_mgr', return_value=mgr_dd), \
+             mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm_mtu_ok):
+            result = cephadm_module._add_host(HostSpec('newhost', '192.168.122.2'))
+
+        assert 'newhost' in cephadm_module.inventory
+        assert 'WARNING' not in result
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.resolve_ip")
+    def test_mtu_check_ssh_error_still_adds(self, resolve_ip, cephadm_module):
+        """SSH error during MTU check → host added, no warning (logged at debug)."""
+        resolve_ip.return_value = '192.168.122.1'
+
+        mgr_host = 'mgr-host'
+        cephadm_module._add_host(HostSpec(mgr_host, '192.168.122.99'))
+
+        mgr_dd = mock.MagicMock()
+        mgr_dd.hostname = mgr_host
+
+        # _run_cephadm that raises for check-mtu
+        async def _run_cephadm_mtu_ssh_err(s, host, entity, cmd, e, **kwargs):
+            if cmd == 'check-mtu':
+                raise Exception('SSH connection failed')
+            if cmd == 'gather-facts':
+                return '{}', '', 0
+            return ['[]'], '', 0
+
+        with mock.patch.object(cephadm_module, 'get_active_mgr', return_value=mgr_dd), \
+             mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm_mtu_ssh_err):
+            result = cephadm_module._add_host(HostSpec('newhost', '192.168.122.2'))
+
+        assert 'newhost' in cephadm_module.inventory
+        assert 'WARNING' not in result
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.resolve_ip")
+    def test_mtu_check_skipped_when_host_is_mgr(self, resolve_ip, cephadm_module):
+        """New host is the active mgr host → check skipped."""
+        resolve_ip.return_value = '192.168.122.1'
+
+        mgr_dd = mock.MagicMock()
+        mgr_dd.hostname = 'newhost'  # same as the host being added
+
+        with mock.patch.object(cephadm_module, 'get_active_mgr', return_value=mgr_dd):
+            result = cephadm_module._add_host(HostSpec('newhost', '192.168.122.1'))
+
+        assert 'newhost' in cephadm_module.inventory
+        assert 'WARNING' not in result
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
