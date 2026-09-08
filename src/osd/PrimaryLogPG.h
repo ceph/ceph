@@ -1210,6 +1210,10 @@ protected:
   std::set<hobject_t> pool_migration_blocked_writes;
   /// count of snaps being migrated per head object
   std::map<hobject_t,int> pool_migration_clones_in_flight;
+  /// Heads with a live C_Migrate callback. Distinct from a head whose own copy
+  /// has already completed and is waiting for its clones (no outstanding op).
+  /// Used by the NEW_INTERVAL quiesce to avoid discarding a head that still has a live op.
+  std::set<hobject_t> pool_migration_head_copy_in_flight;
   /// last pool migration operation started
   hobject_t last_pool_migration_started;
   /// set for 1st object migration after activate
@@ -1222,7 +1226,8 @@ protected:
     NONE,           // Not quiescing
     FATAL_ERROR,    // Fatal error (ENOENT, EIO, etc.) - stop migration
     RETRY_NEEDED,   // Retryable error (EBUSY) - retry after drain
-    SUSPEND_NEEDED  // Suspension requested - drain any in-flight migrations first
+    SUSPEND_NEEDED, // Suspension requested - drain any in-flight migrations first
+    NEW_INTERVAL    // Source PG re-peered - drain any in-flight migrations before restarting
   };
   /// Current quiesce state for pool migration
   PoolMigrationQuiesceReason pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
@@ -1701,7 +1706,7 @@ public:
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
 
-  bool handle_pool_migration_copy_failure(hobject_t oid, int r);
+  void handle_pool_migration_copy_failure(hobject_t oid, int r);
   void handle_pool_migration_quiesce_complete();
 
   void pool_migration_source_start_delete_head(hobject_t oid);
