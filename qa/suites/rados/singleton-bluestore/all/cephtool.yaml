@@ -44,6 +44,7 @@ tasks:
     - slow request
     - evicting unresponsive client
     - MDS_ALL_DOWN
+    - MDS_UP_LESS_THAN_MAX
 - workunit:
     clients:
       all:

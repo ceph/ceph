@@ -17,6 +17,7 @@ overrides:
       - \(POOL_FULL\)
       - \(POOL_APP_NOT_ENABLED\)
       - MDS_ALL_DOWN
+      - MDS_UP_LESS_THAN_MAX
 tasks:
 - install:
 - ceph:
