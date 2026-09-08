@@ -1831,3 +1831,127 @@ TEST_P(TestClsRgw, StorageClassStats_UpdateStatsNullopt) {
   op.exec(cls::rgw::method::bucket_update_stats, in);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
+
+TEST_P(TestClsRgw, StorageClassStats_SuggestChanges) {
+  string oid = str_int("bucket-sc", 105);
+  const string loc = str_int("loc", 0);
+  ObjectWriteOperation init_op;
+  cls_rgw_bucket_init_index(init_op);
+  ASSERT_EQ(0, ioctx.operate(oid, &init_op));
+
+  string storage_classes[] = {"STANDARD", "HDD"};
+  for (int i = 0; i < 3; i++) {
+    rgw_bucket_dir_entry_meta meta;
+    meta.size = 1024 << i;
+    meta.storage_class = storage_classes[i >> 1];
+    meta.category = RGWObjCategory::Main;
+    index_prepare(ioctx, oid, CLS_RGW_OP_ADD,
+                  str_int("tag", i),
+                  cls_rgw_obj_key("obj" + std::to_string(i)), loc);
+    index_complete(ioctx, oid, CLS_RGW_OP_ADD,
+                   str_int("tag", i), i + 1,
+                   cls_rgw_obj_key("obj" + std::to_string(i)), meta);
+  }
+
+  // initial stats: STANDARD 2 entries/3072 bytes, HDD 1 entry/4096 bytes
+  rgw_bucket_dir_header header;
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  ASSERT_EQ((*header.storage_class_stats)["STANDARD"].num_entries, 2u);
+  ASSERT_EQ((*header.storage_class_stats)["STANDARD"].total_size, 3072u);
+  ASSERT_EQ((*header.storage_class_stats)["HDD"].num_entries, 1u);
+  ASSERT_EQ((*header.storage_class_stats)["HDD"].total_size, 4096u);
+
+  // list the entries so the suggestions carry the on-disk index_ver
+  rgw_cls_list_ret listing;
+  list_entries(ioctx, oid, 3, listing);
+  ASSERT_EQ(3u, listing.dir.m.size());
+  auto dir_entries = listing.dir.m;
+  // suggestions: remove obj0, update obj1 into HDD with a new size
+  bufferlist updates;
+  cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, dir_entries["obj0"], updates);
+
+  rgw_bucket_dir_entry updated = dir_entries["obj1"];
+  updated.meta.size = 8192;
+  updated.meta.accounted_size = 8192;
+  updated.meta.storage_class = "HDD";
+  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, updated, updates);
+
+  {
+    ObjectWriteOperation op;
+    cls_rgw_suggest_changes(op, updates);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  // obj0 removed from STANDARD, obj1 moved into HDD with the new size
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].num_entries, 0u);
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_size, 0u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].num_entries, 2u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_size, 12288u);
+  // per-category stats must stay in sync with the per-storage-class stats
+  EXPECT_EQ(header.stats[RGWObjCategory::Main].num_entries, 2u);
+  EXPECT_EQ(header.stats[RGWObjCategory::Main].total_size, 12288u);
+
+  // obj0 must be gone from the index map
+  rgw_cls_list_ret after;
+  list_entries(ioctx, oid, 3, after);
+  EXPECT_EQ(2u, after.dir.m.size());
+}
+
+TEST_P(TestClsRgw, StorageClassStats_SuggestChangesLegacy) {
+  string oid = str_int("bucket-sc", 106);
+  const string loc = str_int("loc", 0);
+  ObjectWriteOperation init_op;
+  cls_rgw_bucket_init_index(init_op);
+  ASSERT_EQ(0, ioctx.operate(oid, &init_op));
+
+  // two objects in STANDARD
+  for (int i = 0; i < 2; i++) {
+    rgw_bucket_dir_entry_meta meta;
+    meta.size = 1024;
+    meta.storage_class = "STANDARD";
+    meta.category = RGWObjCategory::Main;
+    index_prepare(ioctx, oid, CLS_RGW_OP_ADD,
+                  str_int("tag", i),
+                  cls_rgw_obj_key("obj" + std::to_string(i)), loc);
+    index_complete(ioctx, oid, CLS_RGW_OP_ADD,
+                   str_int("tag", i), i + 1,
+                   cls_rgw_obj_key("obj" + std::to_string(i)), meta);
+  }
+
+  // simulate a legacy bucket
+  rgw_bucket_dir_header header;
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  header.storage_class_stats = std::nullopt;
+  ASSERT_EQ(0, write_header(ioctx, oid, header));
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_FALSE(header.storage_class_stats.has_value());
+
+  rgw_cls_list_ret listing;
+  list_entries(ioctx, oid, 2, listing);
+  auto dir_entries = listing.dir.m;
+
+  bufferlist updates;
+  cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, dir_entries["obj0"], updates);
+
+  rgw_bucket_dir_entry updated = dir_entries["obj1"];
+  updated.meta.size = 4096;
+  updated.meta.accounted_size = 4096;
+  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, updated, updates);
+
+  {
+    ObjectWriteOperation op;
+    cls_rgw_suggest_changes(op, updates);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ(header.storage_class_stats->size(), 1u);
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].num_entries, 1u);
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_size, 4096u);
+  EXPECT_EQ(header.stats[RGWObjCategory::Main].num_entries, 1u);
+  EXPECT_EQ(header.stats[RGWObjCategory::Main].total_size, 4096u);
+}
