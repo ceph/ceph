@@ -753,4 +753,62 @@ namespace bluestore {
   }
 }
 
+template <int LogLevelV>
+inline void _dump_extent_map(CephContext *cct, const bluestore::ExtentMap &em)
+{
+  uint64_t pos = 0;
+  for (auto& s : em.shards) {
+    lgeneric_subdout(cct, bluestore, LogLevelV) << __func__ << "  shard " << *s.shard_info
+		    << (s.loaded ? " (loaded)" : "")
+		    << (s.dirty ? " (dirty)" : "")
+		    << dendl;
+  }
+  for (auto& e : em.extent_map) {
+    lgeneric_subdout(cct, bluestore, LogLevelV) << __func__ << "  " << e << dendl;
+    ceph_assert(e.logical_offset >= pos);
+    pos = e.logical_offset + e.length;
+    const bluestore_blob_t& blob = e.blob->get_blob();
+    if (blob.has_csum()) {
+      std::vector<uint64_t> v;
+      unsigned n = blob.get_csum_count();
+      for (unsigned i = 0; i < n; ++i)
+	v.push_back(blob.get_csum_item(i));
+      lgeneric_subdout(cct, bluestore, LogLevelV) << __func__ << "      csum: "
+		      << std::hex << v << std::dec << dendl;
+    }
+  }
+}
+
+template <int LogLevelV>
+inline void _dump_onode(CephContext *cct, const bluestore::Onode& o)
+{
+  if (!cct->_conf->subsys.should_gather<ceph_subsys_bluestore, LogLevelV>())
+    return;
+  lgeneric_subdout(cct, bluestore, LogLevelV) << __func__ << " " << &o << " " << o.oid
+		  << " nid " << o.onode.nid
+		  << " size 0x" << std::hex << o.onode.size
+		  << " (" << std::dec << o.onode.size << ")"
+		  << " expected_object_size " << o.onode.expected_object_size
+		  << " expected_write_size " << o.onode.expected_write_size
+		  << " in " << o.onode.extent_map_shards.size() << " shards"
+		  << ", " << o.extent_map.spanning_blob_map.size()
+		  << " spanning blobs"
+		  << dendl;
+  for (auto& [zone, offset] : o.onode.zone_offset_refs) {
+    lgeneric_subdout(cct, bluestore, LogLevelV) << __func__ << " zone ref 0x"
+		    << std::hex << zone << " offset 0x" << offset << std::dec << dendl;
+  }
+  for (auto p = o.onode.attrs.begin(); p != o.onode.attrs.end(); ++p) {
+    lgeneric_subdout(cct, bluestore, LogLevelV) << __func__ << "  attr " << p->first
+		    << " len " << p->second.length() << dendl;
+  }
+  _dump_extent_map<LogLevelV>(cct, o.extent_map);
+
+  for (auto& b : o.bc.buffer_map) {
+    lgeneric_subdout(cct, bluestore, LogLevelV) << __func__ << "       0x"
+                    << std::hex << b.offset << "~" << b.length << std::dec
+                    << " " << b << dendl;
+  }
+}
+
 #endif
