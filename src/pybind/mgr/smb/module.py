@@ -29,6 +29,7 @@ from . import (
 from .cli import SMBCLICommand
 from .enums import (
     AuthMode,
+    CaseInsensitiveCheckPolicy,
     ClientSupportMode,
     InputPasswordFilter,
     JoinSourceType,
@@ -643,6 +644,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share_name: str = '',
         subvolume: str = '',
         readonly: bool = False,
+        case_insensitive: Optional[CaseInsensitiveCheckPolicy] = None,
     ) -> results.Result:
         """Create an smb share"""
         share = resources.Share(
@@ -654,6 +656,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 volume=cephfs_volume,
                 path=path,
                 subvolume=subvolume,
+                case_insensitive=case_insensitive,
             ),
         )
         return self._apply_res([share], create_only=True).one()
