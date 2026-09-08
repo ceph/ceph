@@ -33,12 +33,14 @@ Client Config Reference
 ------------------------
 
 .. confval:: client_acl_type
+.. confval:: client_attr_cache_timeout
 .. confval:: client_cache_mid
 .. confval:: client_cache_size
 .. confval:: client_caps_release_delay
 .. confval:: client_close_to_open
 .. confval:: client_close_to_open_timeout
 .. confval:: client_debug_force_sync_read
+.. confval:: client_dentry_cache_timeout
 .. confval:: client_dirsize_rbytes
 .. confval:: client_fscrypt_as
 .. confval:: client_fscrypt_dummy_encryption

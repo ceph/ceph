@@ -180,6 +180,15 @@
   Metadata consistency is unchanged.  Applications that write overlapping regions
   of a shared file at the same time must not use it.  See the LazyIO section of
   the documentation.
+* CephFS: libcephfs and ceph-fuse can now serve inode attributes and directory
+  contents from a cache that is revalidated on a timer rather than by the MDS,
+  the way NFS does with its ``acregmax``/``acdirmax`` mount options.  The new
+  ``client_attr_cache_timeout`` and ``client_dentry_cache_timeout`` options
+  (both zero, i.e. off, by default) say for how long.  This turns a walk over a
+  tree the client holds no capabilities on from one MDS round trip per file
+  into one round trip per file per interval, at the cost of seeing another
+  client's changes that late.  See the attribute caching section of the
+  documentation.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
