@@ -7,7 +7,7 @@
 #include <string>
 
 class DoutPrefixProvider;
-class RGWStreamFlusher;
+class RGWFormatterFlusher;
 namespace rgw::sal { class Driver; }
 
 enum class account_command {
@@ -39,5 +39,5 @@ struct rgw_admin_account_options {
 
 int rgw_admin_account(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
-                      RGWStreamFlusher& stream_flusher,
+                      RGWFormatterFlusher& stream_flusher,
                       const rgw_admin_account_options& opts);
