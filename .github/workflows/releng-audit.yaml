@@ -64,8 +64,8 @@ jobs:
                 const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({
                   owner: context.repo.owner, repo: context.repo.repo, username: username
                 });
-                core.info(`[Router] Collaborator permission level for @${username}: ${permData.permission}`);
-                authorized = (permData.permission === 'admin' || permData.permission === 'maintain');
+                core.info(`[Router] Collaborator permission level for @${username}: ${permData.permission} (role: ${permData.role_name})`);
+                authorized = ['admin', 'maintain'].includes(permData.role_name);
               } catch (e) { 
                 core.info(`[Router] Failed to fetch repo permissions: ${e.message}`); 
               }
