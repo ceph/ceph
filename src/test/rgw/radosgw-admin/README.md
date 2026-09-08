@@ -48,8 +48,7 @@ Set `RGW_ADMIN` to test a different build of the tool, or `CEPH_CONF` to use a
 different cluster. Put either one on the line that runs the suite. For example:
 
 ```
-RGW_ADMIN=/other/ceph/build/bin/radosgw-admin \
-  bash ../src/test/rgw/radosgw-admin/test-globals.sh
+RGW_ADMIN=/other/ceph/build/bin/radosgw-admin bash ../src/test/rgw/radosgw-admin/test-globals.sh
 ```
 
 ## Known failures
