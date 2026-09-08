@@ -377,7 +377,7 @@ def test_multi_delete_obj():
     socket_path = '/tmp/'+bucket_name
 
     script = '''
-if Request.RGWOp == "delete_obj" then
+if Request.RGWOp == "multi_object_delete" then
     local json = require("cjson")
     local socket = require("socket")
     local unix = require("socket.unix")
