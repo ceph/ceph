@@ -811,4 +811,11 @@ inline void _dump_onode(CephContext *cct, const bluestore::Onode& o)
   }
 }
 
+template<typename S>
+void generate_extent_shard_key_and_apply(
+  const S& onode_key,
+  uint32_t offset,
+  std::string *key,
+  std::function<void(const std::string& final_key)> apply);
+
 #endif

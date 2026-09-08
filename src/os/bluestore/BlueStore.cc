@@ -523,7 +523,7 @@ static void rewrite_extent_shard_key(uint32_t offset, string *key)
 }
 
 template<typename S>
-static void generate_extent_shard_key_and_apply(
+void generate_extent_shard_key_and_apply(
   const S& onode_key,
   uint32_t offset,
   string *key,
