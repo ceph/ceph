@@ -2130,6 +2130,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   auto& next = get_health_checks_pending_writeable();
   tmp.check_health(cct, &next);
+  check_pool_mixed_min_alloc_size(tmp, &next);
 }
 
 int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
@@ -2175,6 +2176,69 @@ void OSDMonitor::count_metadata(const string& field, Formatter *f)
     f->dump_int(p.first.c_str(), p.second);
   }
   f->close_section();
+}
+
+void OSDMonitor::check_pool_mixed_min_alloc_size(const OSDMap& next_map,
+						 health_check_map_t *checks)
+{
+  if (!cct->_conf.get_val<bool>("mon_warn_on_pool_mixed_min_alloc_size")) {
+    return;
+  }
+  // BlueStore allocation unit of each up OSD, from the OSD metadata
+  map<int, string> osd_min_alloc_size;
+  for (int osd = 0; osd < next_map.get_max_osd(); ++osd) {
+    if (!next_map.is_up(osd)) {
+      continue;
+    }
+    map<string, string> meta;
+    if (load_metadata(osd, meta, nullptr) < 0) {
+      continue;
+    }
+    auto p = meta.find("bluestore_min_alloc_size");
+    if (p == meta.end()) {
+      // not a BlueStore OSD, or metadata not reported (yet)
+      continue;
+    }
+    osd_min_alloc_size[osd] = p->second;
+  }
+  list<string> details;
+  int64_t affected_pools = 0;
+  for (auto& [pool_id, pool] : next_map.get_pools()) {
+    // the OSDs that can host this pool's PGs, as determined by the
+    // pool's CRUSH rule
+    map<int, float> wm;
+    if (next_map.crush->get_rule_weight_osd_map(pool.get_crush_rule(),
+						&wm) < 0) {
+      continue;
+    }
+    // min_alloc_size -> number of the pool's OSDs using it
+    map<string, int> by_val;
+    for (auto& [osd, weight] : wm) {
+      auto p = osd_min_alloc_size.find(osd);
+      if (p != osd_min_alloc_size.end()) {
+	++by_val[p->second];
+      }
+    }
+    if (by_val.size() <= 1) {
+      continue;
+    }
+    ++affected_pools;
+    ostringstream ss;
+    ss << "pool '" << next_map.get_pool_name(pool_id)
+       << "' spans OSDs with different min_alloc_size values:";
+    for (auto& [val, count] : by_val) {
+      ss << " " << val << " (" << count << " OSD(s))";
+    }
+    details.push_back(ss.str());
+  }
+  if (affected_pools > 0) {
+    ostringstream ss;
+    ss << affected_pools << " pool(s) span OSDs with different BlueStore"
+       << " min_alloc_size values";
+    auto& d = checks->add("POOL_MIXED_MIN_ALLOC_SIZE", HEALTH_WARN,
+			  ss.str(), affected_pools);
+    d.detail.swap(details);
+  }
 }
 
 void OSDMonitor::get_versions(std::map<string, list<string>> &versions)

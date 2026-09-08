@@ -1724,6 +1724,20 @@ options:
   - mon
   see_also:
   - ms_bind_msgr2
+- name: mon_warn_on_pool_mixed_min_alloc_size
+  type: bool
+  level: advanced
+  desc: Raise the POOL_MIXED_MIN_ALLOC_SIZE health warning if a pool spans BlueStore
+    OSDs that use different allocation units (min_alloc_size)
+  long_desc: PGs of a pool that spans OSDs with different allocation units are
+    subject to non-uniform space usage and performance. Such a mix usually
+    results from OSDs created under different defaults (64 KiB for HDDs prior
+    to Pacific, 16 KiB for SSDs prior to Nautilus 14.2.8, 4 KiB since), e.g.
+    when new OSDs or nodes are added to an upgraded cluster or when only some
+    of the older OSDs have been redeployed.
+  default: true
+  services:
+  - mon
 - name: mon_warn_on_slow_ping_time
   type: float
   level: advanced
