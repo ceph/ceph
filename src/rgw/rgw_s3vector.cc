@@ -695,14 +695,12 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  static constexpr const char* data_field = "data";
-  static const std::string data_field_str{data_field};;
-  static constexpr const char* key_field = "key";
-  static const std::string key_field_str{key_field};;
-  static constexpr const char* metadata_field = "metadata";
-  static const std::string metadata_field_str{metadata_field};;
-  static constexpr const char* distance_field = "_distance";
-  static const std::string distance_field_str{distance_field};;
+  // the field names themselves are defined in the header, since they are also
+  // needed when building filter expressions
+  static const std::string data_field_str{data_field};
+  static const std::string key_field_str{key_field};
+  static const std::string metadata_field_str{metadata_field};
+  static const std::string distance_field_str{distance_field};
   static constexpr const char* key_columns[] = {key_field};
   static constexpr const char* table_columns[] = {key_field, data_field};
   static constexpr const char* table_columns_with_metadata[] = {key_field, data_field, metadata_field};
@@ -768,7 +766,7 @@ namespace rgw::s3vector {
     std::vector<filterable_metadata_key_t> keys;
     for (const auto& field : schema->fields()) {
       const auto& name = field->name();
-      if (name == key_field || name == data_field || name == metadata_field || name.starts_with('_')) {
+      if (is_internal_column(name)) {
         continue;
       }
       if (const auto type = arrow_to_filterable_type(field->type()); type.has_value()) {
@@ -884,14 +882,9 @@ namespace rgw::s3vector {
     std::set<std::string> filterable_names;
     for (unsigned int i = 0; i < configuration.filterable_metadata_keys.size(); ++i) {
       const auto& name = configuration.filterable_metadata_keys[i].name;
-      if (name.starts_with('_')) {
+      if (const auto result = validate_declared_metadata_key_name(name); !result) {
         errors.push_back({fmt::format("metadataConfiguration.filterableMetadataKeys[{}].name", i),
-            fmt::format("'{}' must not start with an underscore", name)});
-        break;
-      }
-      if (name.find('.') != std::string::npos) {
-        errors.push_back({fmt::format("metadataConfiguration.filterableMetadataKeys[{}].name", i),
-            fmt::format("'{}' must not contain '.'", name)});
+            fmt::format("'{}' {}", name, result.error())});
         break;
       }
       // each key is a column of the table, and a column may be declared only once
@@ -909,9 +902,9 @@ namespace rgw::s3vector {
     std::set<std::string> nonfilterable_names;
     for (unsigned int i = 0; i < configuration.non_filterable_metadata_keys.size(); ++i) {
       const auto& name = configuration.non_filterable_metadata_keys[i];
-      if (name.find('.') != std::string::npos) {
+      if (const auto result = validate_declared_metadata_key_name(name); !result) {
         errors.push_back({fmt::format("metadataConfiguration.nonFilterableMetadataKeys[{}]", i),
-            fmt::format("'{}' must not contain '.'", name)});
+            fmt::format("'{}' {}", name, result.error())});
         break;
       }
       if (!nonfilterable_names.insert(name).second) {
@@ -1774,9 +1767,9 @@ namespace rgw::s3vector {
             invalid_field = true;
             break;
           }
-          if (name.find('.') != std::string::npos) {
-            ldpp_dout(dpp, 1) << "ERROR: s3vector metadata field name '" << name << "' must not contain '.' in key: " << vector.key << dendl;
-            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, name), "field name must not contain '.'"});
+          if (const auto result = validate_metadata_key_name(name); !result) {
+            ldpp_dout(dpp, 1) << "ERROR: s3vector metadata field name '" << name << "' " << result.error() << " in key: " << vector.key << dendl;
+            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, name), fmt::format("field name {}", result.error())});
             invalid_field = true;
             break;
           }
