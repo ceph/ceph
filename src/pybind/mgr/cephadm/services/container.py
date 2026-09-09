@@ -22,9 +22,9 @@ class CustomContainerService(CephadmService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec, spec: Optional[ServiceSpec] = None) \
             -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        deps: List[str] = []
         spec = cast(CustomContainerSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         config: Dict[str, Any] = spec.config_json()
+        deps = self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
         logger.debug(
             'Generated configuration for \'%s\' service: config-json=%s, dependencies=%s' %
             (self.TYPE, config, deps))

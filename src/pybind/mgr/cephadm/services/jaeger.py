@@ -22,6 +22,8 @@ class ElasticSearchService(CephadmService):
             spec: Optional[ServiceSpec] = None,
     ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.deps = self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 
 
@@ -57,7 +59,8 @@ class JaegerAgentService(CephadmService):
             url = build_url(host=dd.hostname, port=port).lstrip('/')
             collectors.append(url)
         daemon_spec.final_config = {'collector_nodes': ",".join(collectors)}
-        daemon_spec.deps = self.get_dependencies(self.mgr)
+        daemon_spec.deps = self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 
     def choose_next_action(
@@ -97,6 +100,8 @@ class JaegerCollectorService(CephadmService):
         assert self.TYPE == daemon_spec.daemon_type
         elasticsearch_nodes = get_elasticsearch_nodes(self, daemon_spec)
         daemon_spec.final_config = {'elasticsearch_nodes': ",".join(elasticsearch_nodes)}
+        daemon_spec.deps = self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 
 
@@ -113,6 +118,8 @@ class JaegerQueryService(CephadmService):
         assert self.TYPE == daemon_spec.daemon_type
         elasticsearch_nodes = get_elasticsearch_nodes(self, daemon_spec)
         daemon_spec.final_config = {'elasticsearch_nodes': ",".join(elasticsearch_nodes)}
+        daemon_spec.deps = self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 
 

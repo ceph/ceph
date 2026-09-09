@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from cephadm.services.service_registry import service_registry
 from cephadm.services.monitoring import GrafanaService
-from cephadm.services.cephadmservice import CephadmService
+from cephadm.services.cephadmservice import CephadmService, CephService
 from orchestrator import OrchestratorError
 
 
@@ -56,6 +56,17 @@ class ServiceWithDependencies(CephadmService):
         return ['service-specific']
 
 
+class CephServiceWithDependencies(CephService):
+    TYPE = 'test'
+
+    @classmethod
+    def _get_dependencies(cls, mgr, spec=None, daemon_type=None):
+        return ['service-specific']
+
+    def get_config_and_keyring(self, *args, **kwargs):
+        return {}
+
+
 class ServiceWithConfig(CephadmService):
     TYPE = 'test'
 
@@ -94,6 +105,27 @@ class TestCephadmService:
         service.prepare_create(daemon_spec, spec)
 
         assert service.seen_spec is spec
+
+    def test_generate_config_uses_canonical_dependencies(self):
+        mgr = FakeMgr()
+        service = CephServiceWithDependencies(mgr)
+        daemon_spec = MagicMock()
+        daemon_spec.daemon_type = 'test'
+        daemon_spec.daemon_id = 'a'
+        daemon_spec.host = 'host1'
+        daemon_spec.keyring = None
+        daemon_spec.ceph_conf = None
+        daemon_spec.config_get_files.return_value = {}
+        spec = MagicMock()
+        spec.ssl = True
+        spec.certificate_source = 'cephadm-signed'
+        spec.ssl_cert = None
+        spec.ssl_key = None
+        spec.ssl_ca_cert = None
+
+        _, deps = service.generate_config(daemon_spec, spec)
+
+        assert deps == ['certificate_source: cephadm-signed', 'service-specific']
 
     def test_set_value_on_dashboard(self):
         # pylint: disable=protected-access

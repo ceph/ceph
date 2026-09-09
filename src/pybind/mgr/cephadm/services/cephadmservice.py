@@ -1087,7 +1087,8 @@ class CephService(CephadmService):
         if daemon_spec.config_get_files():
             cephadm_config.update({'files': daemon_spec.config_get_files()})
 
-        return cephadm_config, []
+        return cephadm_config, self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
@@ -1351,8 +1352,7 @@ class MgrService(CephService):
             daemon_spec: CephadmDaemonDeploySpec,
             spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
-        config, _ = super().generate_config(daemon_spec, spec)
-        return config, self.get_dependencies(self.mgr)
+        return super().generate_config(daemon_spec, spec)
 
     def prepare_create(
             self,
@@ -1970,7 +1970,7 @@ class RgwService(CephService):
             spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         svc_spec = cast(RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        config, parent_deps = super().generate_config(daemon_spec, spec)
+        config, deps = super().generate_config(daemon_spec, svc_spec)
 
         if hasattr(svc_spec, 'rgw_exit_timeout_secs') and svc_spec.rgw_exit_timeout_secs:
             config['rgw_exit_timeout_secs'] = svc_spec.rgw_exit_timeout_secs
@@ -1982,8 +1982,7 @@ class RgwService(CephService):
         if d3n_cache:
             config['d3n_cache'] = d3n_cache.to_json()
 
-        rgw_deps = parent_deps + self.get_dependencies(self.mgr, svc_spec)
-        return config, rgw_deps
+        return config, deps
 
     def get_active_ports(self, service_name: str) -> List[int]:
         """
@@ -2134,7 +2133,6 @@ class CephExporterService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
         daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
-        daemon_spec.deps = self.get_dependencies(self.mgr)
 
         return daemon_spec
 
@@ -2261,9 +2259,8 @@ class CephadmAgent(CephService):
             'listener.key': tls_creds.key,
         }
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), str(agent.server_port),
-                               self.mgr.cert_mgr.get_root_ca(),
-                               str(self.mgr.get_module_option('device_enhanced_scan'))])
+        return config, self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
 
 
 def next_action_for_mgmt_stack_service(
