@@ -71,6 +71,7 @@ void usage()
   cout << "   --tree                  displays a tree of the map" << std::endl;
   cout << "   --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds" << std::endl;
   cout << "   --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight> (but do not persist)" << std::endl;
+  cout << "   --create-osds <count>   add <count> osds to the map, marked up and in, reusing the lowest unused ids before growing max_osd (but do not persist)" << std::endl;
   cout << "   --save                  write modified osdmap with upmap or crush-adjust changes" << std::endl;
   cout << "   --read <file>           calculate pg upmap entries to balance pg primaries" << std::endl;
   cout << "   --read-pool <poolname>  specify which pool the read balancer should adjust" << std::endl;
@@ -167,6 +168,7 @@ int main(int argc, const char **argv)
   int range_last = -1;
   int pool = -1;
   bool mark_up_in = false;
+  int create_osds = 0;
   int marked_out = -1;
   int marked_up = -1;
   int marked_in = -1;
@@ -300,6 +302,15 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, err, "--adjust-crush-weight", (char*)NULL)) {
       adjust_crush_weight = val;
+    } else if (ceph_argparse_witharg(args, i, &create_osds, err, "--create-osds", (char*)NULL)) {
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      if (create_osds < 1) {
+        cerr << me << ": --create-osds requires a count greater than 0" << std::endl;
+        exit(EXIT_FAILURE);
+      }
     } else if (ceph_argparse_flag(args, i, "--save", (char*)NULL)) {
       save = true;
     } else if (ceph_argparse_flag(args, i, "--vstart", (char*)NULL)) {
@@ -429,6 +440,51 @@ int main(int argc, const char **argv)
     cout << "marking OSD@" << marked_up << " as up" << std::endl;
     int id = marked_up;
     osdmap.set_weight(id, CEPH_OSD_IN);
+  }
+
+  if (create_osds > 0) {
+    // follow the mon's allocation policy in OSDMonitor::_allocate_osd_id():
+    // reuse the lowest ids that no longer exist, and only grow max_osd once
+    // there are no holes left to fill.
+    int first = osdmap.get_max_osd();
+    vector<int> reused;
+    for (int id = 0; id < first && (int)reused.size() < create_osds; id++) {
+      if (!osdmap.exists(id))
+	reused.push_back(id);
+    }
+    int appended = create_osds - (int)reused.size();
+    int64_t want = (int64_t)first + appended;
+    if (want > cct->_conf->mon_max_osd) {
+      cerr << me << ": cannot create " << create_osds << " osd(s): max_osd would become "
+	   << want << ", which is > mon_max_osd (" << cct->_conf->mon_max_osd << ")"
+	   << std::endl;
+      exit(1);
+    }
+    if (appended > 0)
+      osdmap.set_max_osd((int)want);
+    for (int id : reused) {
+      osdmap.set_weight(id, CEPH_OSD_IN);
+      osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
+    }
+    for (int id = first; id < (int)want; id++) {
+      osdmap.set_weight(id, CEPH_OSD_IN);
+      osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
+    }
+    if (!reused.empty()) {
+      cout << "reused";
+      for (auto i = reused.begin(); i != reused.end(); ++i)
+	cout << (i == reused.begin() ? " osd." : ", osd.") << *i;
+      cout << (appended > 0 ? "; " : ", ");
+    }
+    if (appended > 0) {
+      cout << "created osd." << first;
+      if (appended > 1)
+	cout << " through osd." << (want - 1);
+      cout << ", ";
+    }
+    cout << "max_osd is now " << osdmap.get_max_osd() << std::endl;
+    if (save)
+      modified = true;
   }
 
   for_each_substr(adjust_crush_weight, ",", [&](auto osd_to_adjust) {
@@ -927,7 +983,8 @@ skip_upmap:
       export_crush.empty() && import_crush.empty() && 
       test_map_pg.empty() && test_map_object.empty() &&
       !test_map_pgs && !test_map_pgs_dump && !test_map_pgs_dump_all &&
-      adjust_crush_weight.empty() && !upmap && !upmap_cleanup && !read) {
+      adjust_crush_weight.empty() && create_osds <= 0 &&
+      !upmap && !upmap_cleanup && !read) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
   }

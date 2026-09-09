@@ -131,6 +131,30 @@ Options
 
    mark an osd as in (but do not persist)
 
+.. option:: --create-osds <count>
+
+   add *count* osds to the map, each marked as existing, up and in (but do not
+   persist without --save).
+
+   Ids are allocated the way the monitor allocates them in
+   ``OSDMonitor::_allocate_osd_id()``: the lowest ids that do not currently
+   exist are reused first, and ``max_osd`` grows only once there are no such
+   holes left to fill. A map that has no holes therefore gains *count* ids
+   starting at the old ``max_osd``, while a map with purged OSDs refills those
+   slots first, as a live cluster would.
+
+   Note that ``--createsimple`` produces a map whose OSDs do not yet exist, so
+   every slot in it is a hole; --create-osds will fill those before widening
+   such a map. Use --mark-up-in --save first to populate them if you want
+   ``max_osd`` to grow instead.
+
+   This widens a captured OSD map so that placement can be simulated for OSDs
+   the cluster does not have yet. The new OSDs are not added to the CRUSH map
+   and are assigned no uuid, so they take no data until a CRUSH map that places
+   them is supplied with --import-crush. Because --import-crush refuses a CRUSH
+   map whose ``max_devices`` exceeds ``max_osd``, --create-osds is applied first
+   when both are given.
+
 .. option:: --tree
 
    Displays a hierarchical tree of the map.
