@@ -105,6 +105,7 @@ class DistroKind(StrEnum):
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
     FEDORA43 = "fedora43"
+    FEDORA44 = "fedora44"
     ROCKY9 = "rocky9"
     ROCKY10 = "rocky10"
     UBUNTU2004 = "ubuntu20.04"
@@ -122,6 +123,7 @@ class DistroKind(StrEnum):
             cls.CENTOS8,
             cls.CENTOS9,
             cls.FEDORA43,
+            cls.FEDORA44,
             cls.ROCKY9,
             cls.ROCKY10,
             cls.OPENRUYI,
@@ -149,6 +151,8 @@ class DistroKind(StrEnum):
             # fedora
             str(cls.FEDORA43): cls.FEDORA43,
             "fc43": cls.FEDORA43,
+            str(cls.FEDORA44): cls.FEDORA44,
+            "fc44": cls.FEDORA44,
             # ubuntu
             str(cls.UBUNTU2004): cls.UBUNTU2004,
             "ubuntu-focal": cls.UBUNTU2004,
@@ -193,6 +197,7 @@ class DefaultImage(StrEnum):
     ROCKY10 = "docker.io/rockylinux/rockylinux:10"
     # fedora
     FEDORA43 = "registry.fedoraproject.org/fedora:43"
+    FEDORA44 = "registry.fedoraproject.org/fedora:44"
     # ubuntu
     UBUNTU2004 = "docker.io/ubuntu:20.04"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
