@@ -56,4 +56,37 @@ describe('RgwRoleService', () => {
     const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/test-role');
     expect(req.request.method).toBe('DELETE');
   });
+
+  it('should call listPolicies', () => {
+    service.listPolicies('test-role', 'test-account').subscribe();
+    const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/test-role/policy');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getPolicy', () => {
+    service.getPolicy('test-role', 'test-policy', 'test-account').subscribe();
+    const req = httpTesting.expectOne(
+      'api/rgw/accounts/test-account/roles/test-role/policy/test-policy'
+    );
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call putPolicy', () => {
+    service.putPolicy('test-role', 'test-policy', '{"Statement":[]}', 'test-account').subscribe();
+    const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/test-role/policy');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      role_name: 'test-role',
+      policy_name: 'test-policy',
+      policy_doc: '{"Statement":[]}'
+    });
+  });
+
+  it('should call deletePolicy', () => {
+    service.deletePolicy('test-role', 'test-policy', 'test-account').subscribe();
+    const req = httpTesting.expectOne(
+      'api/rgw/accounts/test-account/roles/test-role/policy/test-policy'
+    );
+    expect(req.request.method).toBe('DELETE');
+  });
 });

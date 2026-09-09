@@ -1,0 +1,15 @@
+@use '@carbon/layout';
+
+:host {
+  display: block;
+}
+
+.role-details-container {
+  padding-inline: layout.$spacing-09;
+  grid-template-columns: 41.2% 1fr;
+
+  @media (max-width: layout.rem(672px)) {
+    grid-template-columns: 1fr;
+    padding-inline: layout.$spacing-05;
+  }
+}

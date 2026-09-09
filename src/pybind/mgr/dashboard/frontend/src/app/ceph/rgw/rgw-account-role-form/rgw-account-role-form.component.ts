@@ -51,6 +51,8 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
       role_name: [{ value: '', disabled: this.isEdit }, [Validators.required]],
       role_path: [{ value: '', disabled: this.isEdit }, [Validators.required]],
       role_assume_policy_doc: [''],
+      perm_policy_name: [''],
+      perm_policy_doc: [''],
       max_session_duration: [1]
     });
 
@@ -58,6 +60,12 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
       Validators.required,
       CdValidators.json()
     ]);
+
+    CdValidators.validateIf(
+      this.form.get('perm_policy_doc'),
+      () => !this.isEdit && !!this.form.getValue('perm_policy_name'),
+      [CdValidators.json()]
+    );
 
     CdValidators.validateIf(this.form.get('max_session_duration'), () => this.isEdit, [
       Validators.required,
@@ -76,6 +84,11 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     if (!this.isEdit) {
       delete payload.max_session_duration;
     }
+
+    const permPolicyName = payload.perm_policy_name;
+    const permPolicyDoc = payload.perm_policy_doc;
+    delete payload.perm_policy_name;
+    delete payload.perm_policy_doc;
 
     if (this.isEdit) {
       this.rgwRoleService
@@ -100,11 +113,34 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     } else {
       this.rgwRoleService.create(payload).subscribe({
         next: () => {
-          this.notificationService.show(
-            NotificationType.success,
-            $localize`Role created successfully`
-          );
-          this.closeModal();
+          if (permPolicyName && permPolicyDoc) {
+            this.rgwRoleService
+              .putPolicy(payload.role_name, permPolicyName, permPolicyDoc, this.accountId)
+              .subscribe({
+                next: () => {
+                  this.notificationService.show(
+                    NotificationType.success,
+                    $localize`Role created with permission policy`,
+                    $localize`Role "${payload.role_name}" created and policy "${permPolicyName}" attached successfully.`
+                  );
+                  this.closeModal();
+                },
+                error: () => {
+                  this.notificationService.show(
+                    NotificationType.warning,
+                    $localize`Role created`,
+                    $localize`Role "${payload.role_name}" created, but failed to attach permission policy.`
+                  );
+                  this.closeModal();
+                }
+              });
+          } else {
+            this.notificationService.show(
+              NotificationType.success,
+              $localize`Role created successfully`
+            );
+            this.closeModal();
+          }
         },
         error: () => {
           this.form.setErrors({ cdSubmitButton: true });
