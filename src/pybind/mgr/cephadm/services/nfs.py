@@ -372,15 +372,14 @@ class NFSService(CephService):
         if nfs_spec.clients_per_pool is not None:
             deps.append(f'clients_per_pool: {nfs_spec.clients_per_pool}')
         # gRPC related
-        deps.append(f'grpc_certificate_source: {nfs_spec.grpc_certificate_source}')
+        if nfs_spec.grpc_certificate_source != CertificateSource.CEPHADM_SIGNED.value:
+            deps.append(f'grpc_certificate_source: {nfs_spec.grpc_certificate_source}')
         if nfs_spec.grpc_certificate_source == CertificateSource.INLINE.value:
             for field in ['grpc_server_cert', 'grpc_server_key',
                           'grpc_client_cert', 'grpc_client_key', 'grpc_ca_cert']:
                 val = getattr(nfs_spec, field, None)
                 if val:
                     deps.append(f'{field}: {hashlib.sha256(val.encode()).hexdigest()[:8]}')
-        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
-        return sorted(deps + parent_deps)
 
         return sorted(deps)
 
@@ -669,7 +668,7 @@ class NFSService(CephService):
                     'tls_ca_cert.pem': tls_creds.ca_cert,
                 })
 
-            server_cert, server_key, client_cert, client_key, ca_cert = self._get_grpc_certs(spec, daemon_spec)
+            server_cert, server_key, client_cert, client_key, ca_cert = self._get_grpc_certs(nfs_spec, daemon_spec)
             config['files'].update({
                 'grpc_server.crt': server_cert,
                 'grpc_server.key': server_key,

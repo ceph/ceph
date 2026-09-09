@@ -267,15 +267,11 @@ set -e
             for fname, content in self.files.items()
             if fname.startswith('tls')
         }
-<<<<<<< HEAD
-
-=======
         grpc_files = {
-            fname[len('grpc_'):]: content
+            fname[len('grpc_') :]: content
             for fname, content in self.files.items()
             if fname.startswith('grpc_')
         }
->>>>>>> 77e67937368 (mgr/cephadm:gRPC support for  NFS-Ganesha)
         # populate files from the config-json
         populate_files(config_dir, config_files, uid, gid)
         populate_files(kmip_dir, kmip_files, uid, gid)

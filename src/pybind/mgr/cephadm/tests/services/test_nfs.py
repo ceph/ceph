@@ -707,8 +707,9 @@ class TestNFS:
             nfs_spec = NFSServiceSpec(service_id='foo', placement=PlacementSpec(hosts=['test']))
             with with_service(cephadm_module, nfs_spec) as _:
                 conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
-                                            service_name=nfs_spec.service_name()))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='test', daemon_id='foo.test.0.0',
+                        service_name=nfs_spec.service_name())))
 
                 ganesha_conf = conf['files']['ganesha.conf']
 
@@ -752,8 +753,9 @@ class TestNFS:
             )
             with with_service(cephadm_module, nfs_spec) as _:
                 conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
-                                            service_name=nfs_spec.service_name()))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='test', daemon_id='foo.test.0.0',
+                        service_name=nfs_spec.service_name())))
 
                 ganesha_conf = conf['files']['ganesha.conf']
 
@@ -789,7 +791,8 @@ class TestNFS:
                 # trigger cert generation by calling generate_config
                 nfs_daemons = wait(cephadm_module, cephadm_module.list_daemons(daemon_type='nfs'))
                 daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(nfs_daemons[0])
-                service_registry.get_service('nfs').generate_config(daemon_spec)
+                service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(daemon_spec))
 
                 client_files = service_registry.get_service('nfs').get_client_files()
                 assert isinstance(client_files, dict)
