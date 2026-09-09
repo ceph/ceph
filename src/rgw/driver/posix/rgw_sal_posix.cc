@@ -3329,7 +3329,9 @@ int POSIXObject::copy_object(const ACLOwner& owner,
                       << dendl;
     return -EINVAL;
   }
+  // XXX: destination conditionals are not checked by the POSIX driver yet
   if (dest_if_match || dest_if_nomatch) {
+    ldpp_dout(dpp, 10) << "destination If-Match/If-None-Match not supported on the POSIX driver" << dendl;
     return -ERR_NOT_IMPLEMENTED;
   }
   bool has_instance = !get_key().instance.empty();

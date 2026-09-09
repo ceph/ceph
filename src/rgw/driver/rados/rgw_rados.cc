@@ -5139,7 +5139,9 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     return -EINVAL;
   }
 
+  // XXX: destination conditionals are not forwarded to a remote zonegroup yet
   if (remote_dest && (dest_if_match || dest_if_nomatch)) {
+    ldpp_dout(dpp, 10) << "destination If-Match/If-None-Match not supported when the dest bucket is remote" << dendl;
     return -ERR_NOT_IMPLEMENTED;
   }
 
