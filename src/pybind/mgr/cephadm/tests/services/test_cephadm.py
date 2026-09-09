@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 from cephadm.services.service_registry import service_registry
 from cephadm.services.monitoring import GrafanaService
+from cephadm.services.cephadmservice import CephadmService
 from orchestrator import OrchestratorError
 
 
@@ -49,7 +50,26 @@ class FakeMgr:
         return '1.2.3.4'
 
 
+class ServiceWithDependencies(CephadmService):
+    @classmethod
+    def _get_dependencies(cls, mgr, spec=None, daemon_type=None):
+        return ['service-specific']
+
+
 class TestCephadmService:
+    def test_get_dependencies_combines_service_and_common_dependencies(self):
+        mgr = FakeMgr()
+        spec = MagicMock()
+        spec.ssl = True
+        spec.certificate_source = 'cephadm-signed'
+        spec.ssl_cert = None
+        spec.ssl_key = None
+        spec.ssl_ca_cert = None
+
+        deps = ServiceWithDependencies.get_dependencies(mgr, spec)
+
+        assert deps == ['certificate_source: cephadm-signed', 'service-specific']
+
     def test_set_value_on_dashboard(self):
         # pylint: disable=protected-access
         mgr = FakeMgr()
