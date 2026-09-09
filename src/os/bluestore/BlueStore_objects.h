@@ -15,14 +15,6 @@
 #ifndef CEPH_OSD_BLUESTORE_BLUESTORE_OBJECTS_H
 #define CEPH_OSD_BLUESTORE_BLUESTORE_OBJECTS_H
 
-#include <atomic>
-#include <bit>
-#include <mutex>
-#include <condition_variable>
-#include <memory_resource>
-#include <new>
-
-#include "bluestore_types.h"
 #include "BlueStore.h"
 
 /*
