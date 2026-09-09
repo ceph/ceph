@@ -985,7 +985,8 @@ def _generate_rgw_share(
         # smb.conf options
         'options': {
             'path': '/',
-            'vfs objects': 'ceph_rgw',
+            'vfs objects': 'acl_xattr ceph_rgw',
+            'acl_xattr:security_acl_name': 'user.NTACL',
             'ceph_rgw:bucket': rgw.bucket,
             'ceph_rgw:user_id': user_id,
             # Credential values are left empty here; they are injected at
