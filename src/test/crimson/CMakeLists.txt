@@ -136,4 +136,13 @@ target_link_libraries(
   crimson-common
   crimson::gtest)
 
+add_executable(unittest-crimson-dispatch-context-transaction
+  test_dispatch_context_transaction.cc)
+target_link_libraries(
+  unittest-crimson-dispatch-context-transaction
+  crimson-os
+  crimson::gtest)
+add_ceph_unittest(unittest-crimson-dispatch-context-transaction
+  --memory 256M --smp 1)
+
 add_subdirectory(cbt)
