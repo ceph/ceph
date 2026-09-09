@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "include/denc.h"
@@ -452,10 +453,16 @@ public:
     }
 
   public:
-    std::string get_key() const {
-      return std::string(
+    // Valid as long as the node's buffer is alive. Prefer this over get_key()
+    // on scan paths: get_key() heap-allocates for every entry it touches.
+    std::string_view get_key_view() const {
+      return std::string_view(
 	get_node_val_ptr(),
 	get_node_key().key_len);
+    }
+
+    std::string get_key() const {
+      return std::string(get_key_view());
     }
 
     ceph::bufferlist get_val() const {
@@ -846,7 +853,7 @@ struct LogNode
   void append_remove(ceph::bufferlist bl);
 
   // Remove all matching keys in LogNode
-  bool remove_entry(const std::string key);
+  bool remove_entry(std::string_view key);
 
   void set_cur_bitmap(uint32_t begin, uint32_t end);
   d_bitmap_t get_cur_bitmap();
