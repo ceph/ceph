@@ -40,7 +40,7 @@ class IscsiService(CephService):
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
@@ -50,8 +50,7 @@ class IscsiService(CephService):
         else:
             deps = [mgr.get_mgr_ip()]
 
-        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
-        return sorted(deps + parent_deps)
+        return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type

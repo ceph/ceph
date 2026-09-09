@@ -108,7 +108,7 @@ class GrafanaService(CephadmService):
         })
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
 
@@ -126,8 +126,7 @@ class GrafanaService(CephadmService):
         for service in ['prometheus', 'loki', 'mgmt-gateway', 'oauth2-proxy']:
             deps += [d.name() for d in mgr.cache.get_daemons_by_service(service)]
 
-        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
-        return sorted(deps + parent_deps)
+        return sorted(deps)
 
     def generate_prom_services(self, security_enabled: bool, mgmt_gw_enabled: bool) -> List[str]:
 
@@ -304,7 +303,7 @@ class AlertmanagerService(CephadmService):
         return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
@@ -690,7 +689,7 @@ class PrometheusService(CephadmService):
         return r, self.get_dependencies(self.mgr, spec=spec)
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []  # type: List[str]
@@ -846,7 +845,7 @@ class NodeExporterService(CephadmService):
         return True
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
@@ -927,7 +926,7 @@ class AlloyService(CephadmService):
     DEFAULT_SERVICE_PORT = 9080
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         return sorted(mgr.cache.get_daemons_by_types(['loki']))
@@ -964,7 +963,7 @@ class PromtailService(CephadmService):
     DEFAULT_SERVICE_PORT = 9080
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         return sorted(mgr.cache.get_daemons_by_types(['loki']))

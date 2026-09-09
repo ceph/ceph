@@ -25,7 +25,7 @@ class OAuth2ProxyService(CephadmService):
         return daemon_spec
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         # adding dependency as redirect_url calculation depends on the mgmt-gateway
@@ -34,8 +34,7 @@ class OAuth2ProxyService(CephadmService):
             for service in ['mgmt-gateway']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
-        return sorted(deps + parent_deps)
+        return sorted(deps)
 
     def get_service_ips_and_hosts(self, service_name: str) -> List[str]:
         entries = set()

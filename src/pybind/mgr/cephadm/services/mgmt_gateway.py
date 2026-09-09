@@ -71,7 +71,7 @@ class MgmtGatewayService(CephadmService):
         return sd_endpoints
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         # url_prefix for the following services depends on the presence of mgmt-gateway
@@ -86,8 +86,7 @@ class MgmtGatewayService(CephadmService):
             for service in ['mgr']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
-        return sorted(deps + parent_deps)
+        return sorted(deps)
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type

@@ -27,7 +27,7 @@ class JaegerAgentService(CephadmService):
     DEFAULT_SERVICE_PORT = 6799
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []  # type: List[str]
