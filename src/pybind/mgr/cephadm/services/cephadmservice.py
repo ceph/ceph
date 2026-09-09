@@ -340,12 +340,13 @@ class CephadmService(metaclass=ABCMeta):
         spec: Optional[ServiceSpec] = None,
         daemon_type: Optional[str] = None,
     ) -> List[str]:
+        """Return the complete dependency set for this service."""
+        deps = cls._get_dependencies(mgr, spec, daemon_type)
 
         ssl_enabled = getattr(spec, 'ssl', False)
         if not spec or not ssl_enabled:
-            return []
+            return sorted(deps)
 
-        deps = []
         cert_source = getattr(spec, 'certificate_source', None)
         if cert_source:
             deps.append(f'certificate_source: {cert_source}')
@@ -356,6 +357,20 @@ class CephadmService(metaclass=ABCMeta):
             deps.append(f'ssl_ca_cert: {str(utils.config_hash(spec.ssl_ca_cert))}')
 
         return sorted(deps)
+
+    @classmethod
+    def _get_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
+        """Return service-specific dependencies.
+
+        Services should override this hook rather than ``get_dependencies`` so
+        common dependencies are always included.
+        """
+        return []
 
     @classmethod
     def sorted_dependencies(
