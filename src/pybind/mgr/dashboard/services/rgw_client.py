@@ -1114,8 +1114,7 @@ class RgwClient(RestClient):
 
     def get_role(self, role_name: str, account_id: Optional[str] = None):
         rgw_get_role_command = ['role', 'get', '--role-name', role_name]
-        if account_id:
-            rgw_get_role_command += ['--account-id', account_id]
+        self._append_account_flag(rgw_get_role_command, account_id)
         code, role, _err = mgr.send_rgwadmin_command(rgw_get_role_command)
         if code != 0:
             raise DashboardException(msg=f'Error getting role with code {code}: {_err}',
@@ -1128,8 +1127,7 @@ class RgwClient(RestClient):
                     account_id: Optional[str] = None):
         rgw_update_role_command = ['role', 'update', '--role-name',
                                    role_name, '--max_session_duration', max_session_duration]
-        if account_id:
-            rgw_update_role_command += ['--account-id', account_id]
+        self._append_account_flag(rgw_update_role_command, account_id)
         code, _, _err = mgr.send_rgwadmin_command(rgw_update_role_command,
                                                   stdout_as_json=False)
         if code != 0:
@@ -1138,12 +1136,71 @@ class RgwClient(RestClient):
 
     def delete_role(self, role_name: str, account_id: Optional[str] = None) -> None:
         rgw_delete_role_command = ['role', 'delete', '--role-name', role_name]
-        if account_id:
-            rgw_delete_role_command += ['--account-id', account_id]
+        self._append_account_flag(rgw_delete_role_command, account_id)
         code, _, _err = mgr.send_rgwadmin_command(rgw_delete_role_command,
                                                   stdout_as_json=False)
         if code != 0:
             raise DashboardException(msg=f'Error deleting role with code {code}: {_err}',
+                                     component='rgw')
+
+    def _append_account_flag(self, cmd: list, account_id: Optional[str]):
+        if account_id:
+            if account_id.startswith('RGW'):
+                cmd.extend(['--account-id', account_id])
+            else:
+                cmd.extend(['--account-name', account_id])
+
+    def list_role_policies(self, role_name: str,
+                           account_id: Optional[str] = None) -> List[str]:
+        rgw_list_role_policies_command = ['role', 'policy', 'list', '--role-name', role_name]
+        self._append_account_flag(rgw_list_role_policies_command, account_id)
+        code, res, err = mgr.send_rgwadmin_command(rgw_list_role_policies_command)
+        if code != 0:
+            logger.warning('Error listing role policies with code %d: %s', code, err)
+            return []
+        if isinstance(res, list):
+            return res
+        if isinstance(res, dict) and 'PolicyNames' in res:
+            return res['PolicyNames']
+        return []
+
+    def get_role_policy(self, role_name: str, policy_name: str,
+                         account_id: Optional[str] = None) -> Dict[str, Any]:
+        rgw_get_role_policy_command = ['role', 'policy', 'get', '--role-name', role_name,
+                                       '--policy-name', policy_name]
+        self._append_account_flag(rgw_get_role_policy_command, account_id)
+        code, res, err = mgr.send_rgwadmin_command(rgw_get_role_policy_command)
+        if code != 0:
+            raise DashboardException(msg=f'Error getting role policy with code {code}: {err}',
+                                     component='rgw')
+        return res
+
+    def put_role_policy(self, role_name: str, policy_name: str, policy_doc: str,
+                         account_id: Optional[str] = None) -> None:
+        try:
+            json.loads(policy_doc)
+        except:  # noqa: E722
+            raise DashboardException('Policy document is not a valid json')
+
+        rgw_put_role_policy_command = ['role', 'policy', 'put', '--role-name', role_name,
+                                       '--policy-name', policy_name,
+                                       '--policy-doc', f"{policy_doc}"]
+        self._append_account_flag(rgw_put_role_policy_command, account_id)
+        code, _, err = mgr.send_rgwadmin_command(rgw_put_role_policy_command,
+                                                 stdout_as_json=False)
+        if code != 0:
+            raise DashboardException(msg=f'Error putting role policy with code {code}: {err}',
+                                     component='rgw')
+
+    def delete_role_policy(self, role_name: str, policy_name: str,
+                            account_id: Optional[str] = None) -> None:
+        rgw_delete_role_policy_command = ['role', 'policy', 'delete', '--role-name', role_name,
+                                          '--policy-name', policy_name]
+        self._append_account_flag(rgw_delete_role_policy_command, account_id)
+        code, _, err = mgr.send_rgwadmin_command(rgw_delete_role_policy_command,
+                                                 stdout_as_json=False)
+        if code != 0:
+            raise DashboardException(msg=f'Error deleting role policy with code {code}: {err}',
                                      component='rgw')
 
     @RestClient.api_get('/{bucket_name}?policy')

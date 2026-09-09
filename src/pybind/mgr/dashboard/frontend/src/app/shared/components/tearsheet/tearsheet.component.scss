@@ -1,7 +1,8 @@
 // WIDE TEARSHEET
 // No css variable to apply css to modal div.
 // This is needed to set the width of tearsheet as per carbon standards.
-.cds--modal-container.cds--modal-container--lg {
+.cds--modal-container.cds--modal-container--lg,
+cd-tearsheet .cds--modal-container.cds--modal-container--md {
   position: fixed;
 
   // 88px from top
@@ -13,12 +14,6 @@
   // Fill remaining viewport between top and bottom insets
   block-size: calc(100vh - 88px - 64px);
   max-block-size: calc(100vh - 88px - 64px);
-
-  // 64px margins left & right
-  inset-inline-start: 64px;
-  inset-inline-end: 64px;
-  inline-size: auto;
-  max-inline-size: none;
   display: flex;
   flex-direction: column;
 
@@ -29,9 +24,18 @@
   }
 }
 
+.cds--modal-container.cds--modal-container--lg {
+  // 64px margins left & right
+  inset-inline-start: 64px;
+  inset-inline-end: 64px;
+  inline-size: auto;
+  max-inline-size: none;
+}
+
 // Global Carbon override sets .cds--modal-scroll-content to max-height: 70vh.
 // For tearsheets this causes content area to shrink and footer to float up.
-.cds--modal-container.cds--modal-container--lg .cds--modal-scroll-content {
+.cds--modal-container.cds--modal-container--lg .cds--modal-scroll-content,
+cd-tearsheet .cds--modal-container.cds--modal-container--md .cds--modal-scroll-content {
   max-height: none;
   height: 100%;
   flex: 1 1 auto;
@@ -129,9 +133,10 @@
   height: 100%;
 }
 
-// Wide tearsheet: body is a flex child of .cds--modal-container--lg; must shrink so
+// Wide tearsheet: body is a flex child of .cds--modal-container--lg / --md; must shrink so
 // .tearsheet-content scrolls and the footer stays in view on tall steps (e.g. Review).
-.cds--modal-container.cds--modal-container--lg > .tearsheet-body {
+.cds--modal-container.cds--modal-container--lg > .tearsheet-body,
+cd-tearsheet .cds--modal-container.cds--modal-container--md > .tearsheet-body {
   flex: 1 1 auto;
   min-height: 0;
   min-block-size: 0;

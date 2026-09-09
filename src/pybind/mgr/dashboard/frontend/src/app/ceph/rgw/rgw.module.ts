@@ -140,6 +140,8 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RgwAccountRolesListComponent } from './rgw-account-roles-list/rgw-account-roles-list.component';
 import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account-role-form.component';
+import { RgwAccountRoleDetailsComponent } from './rgw-account-role-details/rgw-account-role-details.component';
+import { RgwAccountRolePolicyFormComponent } from './rgw-account-role-policy-form/rgw-account-role-policy-form.component';
 import { RgwBucketResourceSidebarComponent } from './rgw-bucket-resource-sidebar/rgw-bucket-resource-sidebar.component';
 import { RgwBucketResourcePageComponent } from './rgw-bucket-resource-page/rgw-bucket-resource-page.component';
 import { RgwBucketResourceBreadcrumbResolver } from './rgw-bucket-resource-page/rgw-bucket-resource-breadcrumb.resolver';
@@ -262,6 +264,8 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     RgwNotificationFormComponent,
     RgwAccountRolesListComponent,
     RgwAccountRoleFormComponent,
+    RgwAccountRoleDetailsComponent,
+    RgwAccountRolePolicyFormComponent,
     RgwBucketResourceSidebarComponent,
     RgwBucketResourcePageComponent,
     RgwBucketTagsTableComponent
