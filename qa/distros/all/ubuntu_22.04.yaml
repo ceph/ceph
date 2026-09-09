@@ -1,3 +1,17 @@
 os_type: ubuntu
 os_version: "22.04"
 ktype: distro
+tasks:
+- pexec:
+    all:
+    # Work around mismatched /etc/nvme/hostnqn and hostid that make
+    # `nvme connect -t loop` fail with:
+    #   Failed to write to /dev/nvme-fabrics: Invalid argument
+    #   nvme_fabrics: found same hostid ... but different hostnqn ...
+    # Purge so Debian conffiles are removed and regenerated on install.
+    # Same approach as centos 9 / rocky. nvmetcli is not packaged on Ubuntu.
+    # See https://tracker.ceph.com/issues/71816
+    # See https://tracker.ceph.com/issues/67684
+    - sudo rm -f /etc/nvme/hostnqn /etc/nvme/hostid
+    - sudo env DEBIAN_FRONTEND=noninteractive apt-get purge -y nvme-cli
+    - sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y nvme-cli
