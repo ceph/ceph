@@ -782,7 +782,7 @@ class RBDSchedulerInterval:
     def __init__(self, interval: str):
         self.amount = int(interval[:-1])
         self.unit = interval[-1]
-        if self.unit not in 'mhd':
+        if self.unit not in 'wmhd':
             raise ValueError(f'Invalid interval unit {self.unit}')
 
     def __str__(self):
