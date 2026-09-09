@@ -164,7 +164,10 @@ target_link_libraries(ec_crush_test_fixture osd os global GTest::GTest)
 # unittest_ec_with_crush
 add_executable(unittest_ec_with_crush
   TestECWithCRUSH.cc
+  $<TARGET_OBJECTS:unit-main>
   $<TARGET_OBJECTS:ec_crush_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
   )
 add_ceph_unittest(unittest_ec_with_crush)
 target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
