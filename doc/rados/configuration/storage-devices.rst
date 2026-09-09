@@ -30,9 +30,12 @@ There are several Ceph daemons in a storage cluster:
 OSD Back Ends
 =============
 
-There are two ways that OSDs manage the data they store.  As of the Luminous
-12.2.z release, the default (and recommended) back end is *BlueStore*.  Prior
-to the Luminous release, the default (and only) back end was *Filestore*.
+BlueStore is the only supported OSD back end. It has been the default back end
+since the Luminous 12.2.z release. The earlier back end, Filestore, was
+deprecated in the Reef release and has since been removed: a Filestore OSD
+cannot start on this release. Clusters that still contain Filestore OSDs must
+migrate them to BlueStore before upgrading. See
+:ref:`rados_operations_bluestore_migration`.
 
 .. _rados_config_storage_devices_bluestore:
 
@@ -68,22 +71,4 @@ Key BlueStore features include:
   and for erasure-coded pools (which rely on cloning to implement
   efficient two-phase commits).
 
-For more information, see :doc:`bluestore-config-ref` and :doc:`/rados/operations/bluestore-migration`.
-
-FileStore
----------
-
-FileStore was the original approach to storing objects in Ceph. It
-relied on a standard file system (normally XFS) in combination with a
-key/value database (traditionally LevelDB, later RocksDB) for
-metadata. FileStore was deprecated in the Reef release and is no
-longer supported: FileStore OSDs cannot run on Reef or later
-releases.
-
-Clusters that still have FileStore OSDs must migrate them to
-BlueStore before upgrading to Reef or later. See
-:doc:`/rados/operations/bluestore-migration`. The FileStore
-configuration reference is available in the documentation of the
-releases that supported it, for example
-`the Quincy documentation
-<https://docs.ceph.com/en/quincy/rados/configuration/filestore-config-ref/>`_.
+For more information, see :doc:`bluestore-config-ref`.
