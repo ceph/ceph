@@ -212,7 +212,8 @@ class GrafanaService(CephadmService):
                     dashboard = f.read()
                     config_file['files'][f'/etc/grafana/provisioning/dashboards/{file_name}'] = dashboard
 
-        return config_file, self.get_dependencies(self.mgr, grafana_spec)
+        return config_file, self.get_dependencies(
+            self.mgr, grafana_spec, daemon_spec.daemon_type)
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # Use the least-created one as the active daemon
@@ -386,7 +387,7 @@ class AlertmanagerService(CephadmService):
             if ip_to_bind_to:
                 daemon_spec.port_ips = {str(port): ip_to_bind_to}
 
-        deps = self.get_dependencies(self.mgr)
+        deps = self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
         if security_enabled:
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
             tls_pair = self.get_alertmanager_certificates(daemon_spec)
@@ -698,7 +699,8 @@ class PrometheusService(CephadmService):
 
         self.configure_alerts(r)
 
-        return r, self.get_dependencies(self.mgr, spec=spec)
+        return r, self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
@@ -871,9 +873,6 @@ class NodeExporterService(CephadmService):
             spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        deps = []
-        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('mgmt-gateway')]
-        deps += [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
         security_enabled, mgmt_gw_enabled, _ = self.mgr._get_security_config()
         if security_enabled:
             tls_pair = self.get_certificates(daemon_spec)
@@ -890,7 +889,8 @@ class NodeExporterService(CephadmService):
         else:
             r = {}
 
-        return r, deps
+        return r, self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
@@ -930,14 +930,12 @@ class LokiService(CephadmService):
             spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        deps: List[str] = []
-
         yml = self.mgr.template.render('services/loki.yml.j2')
         return {
             "files": {
                 "loki.yml": yml
             }
-        }, sorted(deps)
+        }, self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
 
 
 @register_cephadm_service
@@ -982,7 +980,7 @@ class AlloyService(CephadmService):
             "files": {
                 "config.alloy": alloy_config
             }
-        }, self.get_dependencies(self.mgr)
+        }, self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
 
 
 @register_cephadm_service
@@ -1002,7 +1000,8 @@ class PromtailService(CephadmService):
             spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        deps: List[str] = self.get_dependencies(self.mgr)
+        deps: List[str] = self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
         daemons = self.mgr.cache.get_daemons_by_service('loki')
         loki_host = ''
         for i, dd in enumerate(daemons):
@@ -1032,8 +1031,6 @@ class SNMPGatewayService(CephadmService):
             spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        deps: List[str] = []
-
         spec = cast(SNMPGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         config = {
             "destination": spec.snmp_destination,
@@ -1072,7 +1069,8 @@ class SNMPGatewayService(CephadmService):
                     "snmp_v3_priv_password": priv_password,
                 })
 
+        deps = self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
         logger.debug(
             f"Generated configuration for '{self.TYPE}' service. Dependencies={deps}")
 
-        return config, sorted(deps)
+        return config, deps

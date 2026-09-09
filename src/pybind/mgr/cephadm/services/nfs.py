@@ -410,7 +410,8 @@ class NFSService(CephService):
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 
-        return get_cephadm_config(), self.get_dependencies(self.mgr, nfs_spec)
+        return get_cephadm_config(), self.get_dependencies(
+            self.mgr, nfs_spec, daemon_spec.daemon_type)
 
     def pre_daemon_service_config(self, spec: ServiceSpec) -> None:
         nfs_spec = cast(NFSServiceSpec, spec)
