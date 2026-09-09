@@ -249,9 +249,9 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--mark-out", (char*)NULL)) {
       marked_out = std::stoi(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--mark-up", (char*)NULL)) {
-      marked_up  = std::stod(val);
+      marked_up  = std::stoi(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--mark-in", (char*)NULL)) {
-      marked_in  = std::stod(val);
+      marked_in  = std::stoi(val);
     } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
       clear_temp = true;
     } else if (ceph_argparse_flag(args, i, "--clean-temps", (char*)NULL)) {
@@ -437,8 +437,8 @@ int main(int argc, const char **argv)
   }
 
   if (marked_in >=0 && marked_in < osdmap.get_max_osd()) {
-    cout << "marking OSD@" << marked_up << " as up" << std::endl;
-    int id = marked_up;
+    cout << "marking OSD@" << marked_in << " as in" << std::endl;
+    int id = marked_in;
     osdmap.set_weight(id, CEPH_OSD_IN);
   }
 
