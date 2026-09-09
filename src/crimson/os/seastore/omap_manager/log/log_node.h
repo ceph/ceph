@@ -988,6 +988,11 @@ struct LogNode
     return (capacity() - get_entry_size(ksize, 0));
   }
 
+  // Only valid on a non-empty node, as with has_multi_block_kv().
+  std::string_view get_first_key() const {
+    return iter_begin()->get_key_view();
+  }
+
   bool is_first_multi_block(const std::string &key) const {
     auto iter = iter_begin();
     return (iter->get_chunk_idx() == 1 && iter->get_key() == key);
