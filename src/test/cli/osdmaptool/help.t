@@ -35,6 +35,7 @@
      --tree                  displays a tree of the map
      --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds
      --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight> (but do not persist)
+     --create-osds <count>   add <count> osds to the map, marked up and in, with ids starting at max_osd (but do not persist)
      --save                  write modified osdmap with upmap or crush-adjust changes
      --read <file>           calculate pg upmap entries to balance pg primaries
      --read-pool <poolname>  specify which pool the read balancer should adjust
