@@ -99,7 +99,7 @@ public:
       f->open_object_section("item");
       f->dump_string("pool", item.pool_name);
       f->dump_string("namespace", item.namespace_name);
-      f->dump_string("schedule_time", item.schedule_time);
+      f->dump_string("next_scheduled_time", item.schedule_time);
       f->close_section(); // item
     }
     f->close_section(); // scheduled
@@ -135,7 +135,7 @@ std::ostream& operator<<(std::ostream& os, ScheduleStatus &s) {
   TextTable tbl;
   tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
   tbl.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
-  tbl.define_column("SCHEDULE TIME", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("NEXT SCHEDULED TIME", TextTable::LEFT, TextTable::LEFT);
 
   for (auto &item : s.scheduled) {
     tbl << item.pool_name << item.namespace_name << item.schedule_time
