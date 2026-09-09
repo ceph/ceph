@@ -1339,8 +1339,8 @@ class MgrService(CephService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         return sorted(
             [f'port:{p}' for p in cls._get_mgr_service_ports(mgr)]
             + [f'sd_port:{mgr.service_discovery_port}']
@@ -1525,8 +1525,8 @@ class RgwService(CephService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
         # we keep the following deps calculation for backward compatibility
         # as old RGW specs use rgw_frontend_ssl_certificate instead of modern
@@ -2092,8 +2092,8 @@ class CephExporterService(CephService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
 
         deps = [f'secure_monitoring_stack:{mgr.secure_monitoring_stack}']
         deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
@@ -2199,8 +2199,8 @@ class CephadmAgent(CephService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         agent = mgr.http_server.agent
         return sorted(
             [

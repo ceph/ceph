@@ -57,6 +57,8 @@ class ServiceWithDependencies(CephadmService):
 
 
 class ServiceWithConfig(CephadmService):
+    TYPE = 'test'
+
     def generate_config(self, daemon_spec, spec=None):
         self.seen_spec = spec
         return {}, []

@@ -39,8 +39,8 @@ class IngressService(CephService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         if daemon_type == 'haproxy':
             return IngressService.get_haproxy_dependencies(mgr, spec)
         elif daemon_type == 'keepalived':

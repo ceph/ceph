@@ -32,8 +32,8 @@ class JaegerAgentService(CephadmService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []  # type: List[str]
         for dd in mgr.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
             # scrape jaeger-collector nodes

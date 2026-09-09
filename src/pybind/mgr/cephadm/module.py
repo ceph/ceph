@@ -3936,8 +3936,8 @@ Then run the following:
             daemons.append(sd)
 
         @forall_hosts
-        def create_func_map(*args: Any) -> str:
-            daemon_spec = service_registry.get_service(daemon_type).prepare_create(*args, spec=spec)
+        def create_func_map(daemon_spec: CephadmDaemonDeploySpec) -> str:
+            daemon_spec = service_registry.get_service(daemon_type).prepare_create(daemon_spec, spec)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
                 return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec))
 

@@ -41,8 +41,8 @@ class IscsiService(CephService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
         if spec:
             iscsi_spec = cast(IscsiServiceSpec, spec)

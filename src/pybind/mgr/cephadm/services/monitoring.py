@@ -109,8 +109,8 @@ class GrafanaService(CephadmService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
 
         deps = []  # type: List[str]
         security_enabled, mgmt_gw_enabled, _ = mgr._get_security_config()
@@ -197,9 +197,12 @@ class GrafanaService(CephadmService):
             }
         }
 
-        spec: GrafanaSpec = cast(GrafanaSpec, self.mgr.spec_store.active_specs[daemon_spec.service_name])
-        if 'dashboard' in self.mgr.get('mgr_map')['modules'] and spec.initial_admin_password:
-            self.mgr.check_mon_command({'prefix': 'dashboard set-grafana-api-password'}, inbuf=spec.initial_admin_password)
+        grafana_spec = cast(
+            GrafanaSpec,
+            spec if spec is not None else self.mgr.spec_store.active_specs[daemon_spec.service_name],
+        )
+        if 'dashboard' in self.mgr.get('mgr_map')['modules'] and grafana_spec.initial_admin_password:
+            self.mgr.check_mon_command({'prefix': 'dashboard set-grafana-api-password'}, inbuf=grafana_spec.initial_admin_password)
 
         # include dashboards, if present in the container
         if os.path.exists(grafana_dashboards_path):
@@ -209,7 +212,7 @@ class GrafanaService(CephadmService):
                     dashboard = f.read()
                     config_file['files'][f'/etc/grafana/provisioning/dashboards/{file_name}'] = dashboard
 
-        return config_file, self.get_dependencies(self.mgr, spec)
+        return config_file, self.get_dependencies(self.mgr, grafana_spec, daemon_spec.daemon_type)
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         # Use the least-created one as the active daemon
@@ -308,8 +311,8 @@ class AlertmanagerService(CephadmService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
         deps += mgr.cache.get_daemons_by_types(['alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy'])
@@ -699,8 +702,8 @@ class PrometheusService(CephadmService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []  # type: List[str]
         deps.append(str(mgr.service_discovery_port))
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
@@ -855,8 +858,8 @@ class NodeExporterService(CephadmService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
         deps.append(f'secure_monitoring_stack:{mgr.secure_monitoring_stack}')
         deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
@@ -944,8 +947,8 @@ class AlloyService(CephadmService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         return sorted(mgr.cache.get_daemons_by_types(['loki']))
 
     def prepare_create(
@@ -989,8 +992,8 @@ class PromtailService(CephadmService):
 
     @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         return sorted(mgr.cache.get_daemons_by_types(['loki']))
 
     def generate_config(
