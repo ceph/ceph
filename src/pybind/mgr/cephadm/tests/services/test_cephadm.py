@@ -70,6 +70,13 @@ class TestCephadmService:
 
         assert deps == ['certificate_source: cephadm-signed', 'service-specific']
 
+    def test_registered_services_use_common_dependency_handler(self):
+        mgr = FakeMgr()
+        service_registry.init_services(mgr)
+
+        for service in service_registry.get_all_services():
+            assert 'get_dependencies' not in service.__class__.__dict__
+
     def test_set_value_on_dashboard(self):
         # pylint: disable=protected-access
         mgr = FakeMgr()
