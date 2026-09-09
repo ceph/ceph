@@ -15,20 +15,8 @@
 #ifndef CEPH_OSD_BLUESTORE_BLUESTORE_OBJECTS_IMPL_H
 #define CEPH_OSD_BLUESTORE_BLUESTORE_OBJECTS_IMPL_H
 
-#include <atomic>
-#include <bit>
-#include <mutex>
-#include <condition_variable>
-#include <memory_resource>
-#include <new>
-
-#include <boost/intrusive/list.hpp>
-#include <boost/intrusive/unordered_set.hpp>
+#include <boost/intrusive_ptr.hpp>
 #include <boost/intrusive/set.hpp>
-#include <boost/functional/hash.hpp>
-#include <boost/dynamic_bitset.hpp>
-#include <boost/circular_buffer.hpp>
-#include <boost/optional.hpp>
 
 #include "bluestore_types.h"
 
