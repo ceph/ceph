@@ -1987,11 +1987,11 @@ if cluster_running; then
       check_cluster "lifecycle: bucket rm --purge-objects (empty bucket)" 0 -- bucket rm --purge-objects --bucket "$_test_bucket"
     else
       echo "SKIP [integration: lifecycle tests]: could not get credentials for test user"
-      SKIP=$((SKIP+94))
+      SKIP=$((SKIP+92))
     fi
   else
     echo "SKIP [integration: lifecycle tests]: aws CLI not available (needed to create test bucket)"
-    SKIP=$((SKIP+94))
+    SKIP=$((SKIP+92))
   fi
 
   # Cleanup: remove the test user
