@@ -236,13 +236,13 @@ LogNode::get_value_ret LogNode::get_value(const std::string &key, copy_t c)
     std::nullopt);
 }
 
-bool LogNode::remove_entry(const std::string key)
+bool LogNode::remove_entry(std::string_view key)
 {
   auto iter = iter_begin();
   uint32_t index = 0;
   bool removed = false;
   while(iter != iter_end()) {
-    if (iter->get_key() == key) {
+    if (iter->get_key_view() == key) {
       set_cur_bitmap(index, index);
       // Duplicate keys may exist if the old entry was removed.
       removed = true;
