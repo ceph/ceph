@@ -1210,3 +1210,212 @@ void RGWListPolicyTags::send_response()
   }
 }
 
+int RGWListEntitiesForPolicy::list_entities_for_policy(
+    const DoutPrefixProvider *dpp,
+    optional_yield y,
+    std::string_view account_id,
+    std::string_view policy_name,
+    std::optional<rgw::IAM::EntityType> entity_filter,
+    std::string_view path_prefix,
+    rgw::IAM::PolicyUsageFilter policy_usage_filter,
+    std::string_view marker,
+    uint32_t max_items,
+    rgw::IAM::EntityList& listing)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account_id, policy_name);
+  op_ret = driver->get_customer_managed_policy(this, y, arn.account, policy_name, info);
+
+  if(op_ret < 0) {
+    return op_ret;
+  }
+
+  uint32_t count = 0;
+  bool marker_found = marker.empty();
+
+  for(const auto& [entity_id, attachment] : info.attachments) {
+    if(entity_filter) {
+      std::string entity_type;
+      switch(entity_filter.value()) {
+        case rgw::IAM::EntityType::User:
+          entity_type = "User";
+          break;
+        case rgw::IAM::EntityType::Role:
+          entity_type = "Role";
+          break;
+        case rgw::IAM::EntityType::Group:
+          entity_type = "Group";
+          break;
+      }
+      if(attachment.entity_type != entity_type) {
+        continue;
+      }
+    }
+
+    if(!path_prefix.empty() && attachment.entity_path.find(path_prefix) != 0) {
+      continue;
+    }
+
+    if(!marker_found) {
+      if(entity_id == marker) {
+        marker_found = true;
+      }
+      continue;
+    }
+
+    listing.entities.push_back(attachment);
+    count++;
+
+    if(count >= max_items) {
+      listing.next_marker = entity_id;
+      break;
+    }
+  }
+
+  return op_ret;
+}
+
+int RGWListEntitiesForPolicy::init_processing(optional_yield y)
+{
+  marker = s->info.args.get("Marker");
+
+  int r = s->info.args.get_int("MaxItems", &max_items, max_items);
+  if (r < 0 || max_items < 1 || max_items > MAX_ENTRIES_SIZE) {
+    s->err.message = "Invalid value for MaxItems";
+    return -EINVAL;
+  }
+
+  const std::string filter = s->info.args.get("EntityFilter");
+  if(filter == "User") {
+    entity_filter = rgw::IAM::EntityType::User;
+  } else if(filter == "Role") {
+    entity_filter = rgw::IAM::EntityType::Role;
+  } else if(filter == "Group") {
+    entity_filter = rgw::IAM::EntityType::Group;
+  } else if(!filter.empty()) {
+    s->err.message = "Invalid value for EntityFilter";
+    return -EINVAL;
+  }
+
+  path_prefix = s->info.args.get("PathPrefix");
+  if(path_prefix.empty()) {
+    path_prefix = "/";
+  }
+
+  const std::string usage_filter = s->info.args.get("PolicyUsageFilter");
+  if(usage_filter.empty() || usage_filter == "PermissionsBoundary") {
+    policy_usage_filter = rgw::IAM::PolicyUsageFilter::PermissionsBoundary;
+  } else if(usage_filter == "PermissionsPolicy") {
+    policy_usage_filter = rgw::IAM::PolicyUsageFilter::PermissionsPolicy;
+  } else {
+    s->err.message = "Invalid value for PolicyUsageFilter";
+    return -EINVAL;
+  }
+
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    std::string provider_arn = s->info.args.get("PolicyArn");
+    return validate_policy_arn(provider_arn, acc->id, arn, s->err.message);
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWListEntitiesForPolicy::execute(optional_yield y)
+{
+  rgw::IAM::EntityList listing;
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  op_ret = list_entities_for_policy(this, y, arn.account, policy_name, entity_filter, path_prefix, policy_usage_filter, marker, max_items, listing);
+  if (op_ret == -ENOENT) {
+    op_ret = 0;
+  } else if (op_ret < 0) {
+    return;
+  }
+
+  send_response_data(listing.entities);
+  end_response(listing.next_marker);
+}
+
+void RGWListEntitiesForPolicy::start_response()
+{
+  const int64_t proposed_content_length =
+      op_ret ? NO_CONTENT_LENGTH : CHUNKED_TRANSFER_ENCODING;
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, to_mime_type(s->format), proposed_content_length);
+
+  if (op_ret) {
+    return;
+  }
+
+  dump_start(s);
+  s->formatter->open_object_section_in_ns("ListEntitiesForPolicyResponse", RGW_REST_IAM_XMLNS);
+  s->formatter->open_object_section("ListEntitiesForPolicyResult");
+}
+
+void RGWListEntitiesForPolicy::send_response_data(std::span<rgw::IAM::ManagedPolicyAttachment> attachments)
+{
+  if (!started_response) {
+    started_response = true;
+    start_response();
+  }
+
+  if(op_ret < 0) {
+    return;
+  }
+
+  s->formatter->open_array_section("PolicyUsers");
+  for(const auto& attachment : attachments) {
+    if(attachment.entity_type == "User") {
+      s->formatter->open_object_section("member");
+      encode_json("UserName", attachment.entity_name, s->formatter);
+      encode_json("UserId", attachment.entity_id, s->formatter);
+      s->formatter->close_section();
+    }
+  }
+  s->formatter->close_section();
+
+  s->formatter->open_array_section("PolicyGroups");
+  for(const auto& attachment : attachments) {
+    if(attachment.entity_type == "Group") {
+      s->formatter->open_object_section("member");
+      encode_json("GroupName", attachment.entity_name, s->formatter);
+      encode_json("GroupId", attachment.entity_id, s->formatter);
+      s->formatter->close_section();
+    }
+  }
+  s->formatter->close_section();
+
+  s->formatter->open_array_section("PolicyRoles");
+  for(const auto& attachment : attachments) {
+    if(attachment.entity_type == "Role") {
+      s->formatter->open_object_section("member");
+      encode_json("RoleName", attachment.entity_name, s->formatter);
+      encode_json("RoleId", attachment.entity_id, s->formatter);
+      s->formatter->close_section();
+    }
+  }
+  s->formatter->close_section();
+
+  rgw_flush_formatter(s, s->formatter);
+}
+
+void RGWListEntitiesForPolicy::end_response(std::string_view next_marker)
+{
+  const bool truncated = !next_marker.empty();
+  s->formatter->dump_bool("IsTruncated", truncated);
+  if (truncated) {
+    s->formatter->dump_string("Marker", next_marker);
+  }
+
+  s->formatter->close_section();
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWListEntitiesForPolicy::send_response()
+{
+  if (!started_response) {
+    started_response = true;
+    start_response();
+  }
+}

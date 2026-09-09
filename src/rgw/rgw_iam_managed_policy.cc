@@ -189,30 +189,45 @@ void decode(ManagedPolicies& m, bufferlist::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void ManagedPolicyAttachment::generate_test_instances(std::list<ManagedPolicyAttachment*>& o)
+std::list<ManagedPolicyAttachment> ManagedPolicyAttachment::generate_test_instances()
 {
+  std::list<ManagedPolicyAttachment> o;
 
-  ManagedPolicyAttachment* u = new ManagedPolicyAttachment;
-  u->arn = "arn:aws:iam::123456789012:policy/TestPolicy1";
-  u->status = "PENDING";
-  o.push_back(u);
+  ManagedPolicyAttachment u;
+  u.arn = "arn:aws:iam::123456789012:policy/TestPolicy1";
+  u.entity_type = "User";
+  u.entity_name = "testuser";
+  u.entity_id = "testuser-id";
+  u.entity_path = "/testuserpath/";
+  o.push_back(std::move(u));
 
-  ManagedPolicyAttachment* v = new ManagedPolicyAttachment;
-  v->arn = "arn:aws:iam::123456789012:policy/TestPolicy2";
-  v->status = "ATTACHED";
-  o.push_back(v);
+  ManagedPolicyAttachment v;
+  v.arn = "arn:aws:iam::123456789012:policy/TestPolicy2";
+  v.entity_type = "User";
+  v.entity_name = "testuser";
+  v.entity_id = "testuser-id";
+  v.entity_path = "/testuserpath/";
+  o.push_back(std::move(v));
+
+  return o;
 }
 
 void ManagedPolicyAttachment::dump(Formatter *f) const
 {
   encode_json("arn", arn, f);
-  encode_json("status", status, f);
+  encode_json("entity_type", entity_type, f);
+  encode_json("entity_name", entity_name, f);
+  encode_json("entity_id", entity_id, f);
+  encode_json("entity_path", entity_path, f);
 }
 
 void ManagedPolicyAttachment::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("arn", arn, obj);
-  JSONDecoder::decode_json("status", status, obj);
+  JSONDecoder::decode_json("entity_type", entity_type, obj);
+  JSONDecoder::decode_json("entity_name", entity_name, obj);
+  JSONDecoder::decode_json("entity_id", entity_id, obj);
+  JSONDecoder::decode_json("entity_path", entity_path, obj);
 }
 
 void ManagedPolicyInfo::dump(Formatter * const f) const
@@ -262,15 +277,20 @@ void ManagedPolicyInfo::decode_json(JSONObj * obj)
   JSONDecoder::decode_json("is_attachable", is_attachable, obj);
 }
 
-void ManagedPolicyInfo::generate_test_instances(std::list<ManagedPolicyInfo*>& o)
+std::list<ManagedPolicyInfo> ManagedPolicyInfo::generate_test_instances()
 {
-  o.push_back(new ManagedPolicyInfo);
-  auto p = new ManagedPolicyInfo;
-  p->id = "id";
-  p->name = "policy_name";
-  p->path = "/path/";
-  p->account_id = "account";
-  o.push_back(p);
+  std::list<ManagedPolicyInfo> o;
+
+  o.emplace_back();
+
+  ManagedPolicyInfo p;
+  p.id = "id";
+  p.name = "policy_name";
+  p.path = "/path/";
+  p.account_id = "account";
+  o.push_back(std::move(p));
+
+  return o;
 }
 
 std::vector<ManagedPolicyInfo> list_aws_managed_policy()
@@ -300,7 +320,7 @@ std::vector<ManagedPolicyInfo> list_aws_managed_policy()
   add("AmazonS3FullAccess", "AmazonS3FullAccess", AmazonS3FullAccess, "arn:aws:iam::aws:policy/AmazonS3FullAccess", "Full access to S3", "v2");
   add("AmazonS3ReadOnlyAccess", "AmazonS3ReadOnlyAccess", AmazonS3ReadOnlyAccess, "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess", "Read-only access to S3", "v3");
 
-  return std::move(policies);
+  return policies;
 }
 
 } // namespace rgw::IAM
