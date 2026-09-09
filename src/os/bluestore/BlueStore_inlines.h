@@ -15,10 +15,8 @@
 #ifndef CEPH_OSD_BLUESTORE_BLUESTORE_INLINES_H
 #define CEPH_OSD_BLUESTORE_BLUESTORE_INLINES_H
 
-#include "bluestore_types.h"
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
-#include "BlueStore_objects_impl.h"
 
 inline BlueStore::SharedBlobRef BlueStore::SharedBlobSet::lookup(uint64_t sbid) {
   std::lock_guard l(lock);
