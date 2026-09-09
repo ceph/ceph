@@ -201,7 +201,7 @@ If the cluster has started but an OSD isn't starting, check the following:
 
 - **Check Paths:** Ensure that the paths specified in the configuration
   correspond to the paths for data and metadata that actually exist (for
-  example, the paths to the journals, the WAL, and the DB). Separate the OSD
+  example, the paths to the WAL and DB devices). Separate the OSD
   data from the metadata in order to see whether there are errors in the
   configuration file and in the actual mounts. If so, these errors might
   explain why OSDs are not starting. To store the metadata on a separate block
@@ -411,16 +411,6 @@ To address full cluster issues, it is recommended to add capacity by adding
 OSDs. Adding new OSDs allows the cluster to redistribute data to newly
 available storage. Search for ``rados bench`` orphans that are wasting space.
 
-If a legacy Filestore OSD cannot be started because it is full, it is possible
-to reclaim space by deleting a small number of placement group directories in
-the full OSD.
-
-.. important:: If you choose to delete a placement group directory on a full
-   OSD, **DO NOT** delete the same placement group directory on another full
-   OSD. **OTHERWISE YOU WILL LOSE DATA**. You **MUST** maintain at least one
-   copy of your data on at least one OSD. Deleting placement group directories
-   is a rare and extreme intervention. It is not to be undertaken lightly.
-
 See :ref:`monitor-config-reference` for more information.
 
 
@@ -468,23 +458,17 @@ Drive Configuration
 An SAS or SATA storage drive should house only one OSD, but an NVMe drive can
 easily house two or more. However, it is possible for read and write throughput
 to bottleneck if other processes share the drive. Such processes include:
-journals / metadata, operating systems, Ceph Monitors, ``syslog`` logs, other
-OSDs, and non-Ceph processes.
+BlueStore WAL and DB volumes, operating systems, Ceph Monitors, ``syslog``
+logs, other OSDs, and non-Ceph processes.
 
-Because Ceph acknowledges writes *after* journaling, fast SSDs are an
-attractive option for accelerating response time -- particularly when using the
-``XFS`` or ``ext4`` filesystems for legacy FileStore OSDs.  By contrast, the
-``Btrfs`` file system can write and journal simultaneously. (However, use of
-``Btrfs`` is not recommended for production deployments.)
+When OSD data lives on HDDs, placing the BlueStore WAL and DB on a fast SSD or
+NVMe device is an attractive option for accelerating response time. See
+:ref:`bluestore-mixed-device-config`.
 
 .. note:: Partitioning a drive does not change its total throughput or
-   sequential read/write limits. Throughput might be improved somewhat by
-   running a journal in a separate partition, but it is better still to run
-   such a journal in a separate physical drive.
-   
-.. warning:: Reef does not support FileStore. Releases after Reef do not
-   support FileStore. Any information that mentions FileStore is pertinent only
-   to the Quincy release of Ceph and to releases prior to Quincy.
+   sequential read/write limits. Placing the WAL and DB in a separate partition
+   of the same drive does not improve throughput; place them on a separate,
+   faster physical device instead.
 
 
 Bad Sectors / Fragmented Disk
@@ -506,11 +490,7 @@ Although Monitors are relatively lightweight processes, performance issues can
 result when Monitors are run on the same host machine as an OSD. Monitors issue
 many ``fsync()`` calls and this can interfere with other workloads. The danger
 of performance issues is especially acute when the Monitors are co-resident on
-the same storage drive as an OSD. In addition, if the Monitors are running an
-older kernel (pre-3.0) or a kernel with no ``syncfs(2)`` syscall, then multiple
-OSDs running on the same host might make so many commits as to undermine each
-other's performance.  This problem sometimes results in what is called "the
-bursty writes".
+the same storage drive as an OSD.
 
 
 Co-resident Processes
@@ -555,28 +535,6 @@ Kernel Version
 Check the kernel version that you are running. Older kernels may lack updates
 that improve Ceph performance. 
 
-
-Kernel Issues with SyncFS
--------------------------
-
-If you have kernel issues with SyncFS, try running one OSD per host to see if
-performance improves. Old kernels might not have a recent enough version of
-``glibc`` to support ``syncfs(2)``.
-
-
-Filesystem Issues
------------------
-
-In post-Luminous releases, we recommend deploying clusters with the BlueStore
-back end.  When running a pre-Luminous release, or if you have a specific
-reason to deploy OSDs with the previous Filestore backend, we recommend
-``XFS``.
-
-We recommend against using ``Btrfs`` or ``ext4``.  The ``Btrfs`` filesystem has
-many attractive features, but bugs may lead to performance issues and spurious
-ENOSPC errors.  We do not recommend ``ext4`` for Filestore OSDs because
-``xattr`` limitations break support for long object names, which are needed for
-RGW.
 
 Insufficient RAM
 ----------------
