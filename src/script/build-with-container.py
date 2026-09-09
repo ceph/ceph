@@ -121,6 +121,7 @@ class DistroKind(StrEnum):
             cls.CENTOS10,
             cls.CENTOS8,
             cls.CENTOS9,
+            cls.FEDORA43,
             cls.ROCKY9,
             cls.ROCKY10,
             cls.OPENRUYI,
