@@ -24,6 +24,7 @@ std::string create_ec_pool_pp(
   const std::string &pool_name,
   librados::Rados &cluster,
   bool fast_ec = false,
+  bool enable_omap = true,
   int k_per_zone = 0,
   int m_per_zone = 0);
 std::string create_pool_pp(const std::string &pool_name,
