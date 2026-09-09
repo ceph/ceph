@@ -335,7 +335,10 @@ struct shard_extent_set_t {
   bool empty() const { return map.empty(); }
   void swap(shard_extent_set_t &other) noexcept { map.swap(other.map); }
   void clear() { map.clear(); }
-  auto erase(shard_id_t shard) { return map.erase(shard); }
+  auto erase(shard_id_t shard) {
+    ceph_assert(shard < shard_id_t(map.max_size()));
+    return map.erase(shard);
+  }
 
   auto erase(shard_id_map<extent_set>::iterator &iter) {
     return map.erase(iter);
@@ -1052,6 +1055,7 @@ public:
   }
 
   extent_set get_extent_set(const shard_id_t &shard) const {
+    ceph_assert(shard < shard_id_t(extent_maps.max_size()));
     extent_set ret;
     if (extent_maps.contains(shard)) {
       extent_maps.at(shard).to_interval_set(ret);
@@ -1066,6 +1070,7 @@ public:
   }
 
   bool contains_shard(shard_id_t shard) const {
+    ceph_assert(shard < shard_id_t(extent_maps.max_size()));
     return extent_maps.contains(shard);
   }
 
