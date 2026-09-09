@@ -977,3 +977,159 @@ def test_qos_batch_result_unhandled():
     dump = qbr.to_simplified()
     assert dump['success'] is False
     assert dump['msg'] == 'Something strange in the neighborhood'
+
+
+def test_resource_result_warnings():
+    share = smb.resources.Share(
+        cluster_id='foo',
+        share_id='bar',
+        name='Foo Bar',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/',
+        ),
+    )
+    rr = smb.results.ResourceResult(
+        share, success=True, warnings=["Blim", "Blam"]
+    )
+    assert rr.mgr_return_value() == 0
+    assert rr.mgr_status_value() == ''
+    dump = rr.to_simplified()
+    assert set(dump) == {'success', 'resource', 'warnings'}
+    assert dump['success'] is True
+    assert dump['resource'].get('resource_type') == 'ceph.smb.share'
+    assert dump['resource'].get('cluster_id') == 'foo'
+    assert dump['resource'].get('share_id') == 'bar'
+    assert dump['warnings'] == ['Blim', 'Blam']
+
+
+def test_result_group_warnings(cs2):
+    cluster, share, share2 = cs2
+    rg = smb.results.ResultGroup(
+        initial_results=[
+            smb.results.ResourceResult(
+                cluster,
+                success=True,
+                warnings=['Flim', 'Flam'],
+            ),
+            smb.results.ResourceResult(
+                share,
+                success=True,
+                warnings=['Blim', 'Blam'],
+            ),
+            smb.results.ResourceResult(
+                share2,
+                success=True,
+                warnings=['Glim', 'Glam', 'Glom'],
+            ),
+        ]
+    )
+
+    assert rg.mgr_return_value() == 0
+    assert rg.mgr_status_value() == ''
+    dump = rg.to_simplified()
+    assert set(dump) == {'success', 'results', 'warnings_summary'}
+    assert dump['success'] is True
+    assert len(dump['results']) == 3
+    assert dump['warnings_summary']['count'] == 7
+    assert len(dump['warnings_summary']['recap']) == 6
+    assert dump['warnings_summary']['recap'][0] == 'Flim'
+    assert dump['warnings_summary']['recap'][-1].startswith('2 other')
+
+
+def test_resource_result_combine_ok():
+    share = smb.resources.Share(
+        cluster_id='foo',
+        share_id='bar',
+        name='Foo Bar',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/',
+        ),
+    )
+    rr1 = smb.results.ResourceResult(
+        share, success=True, warnings=["Blim", "Blam"]
+    )
+    rr2 = smb.results.ResourceResult(
+        share, success=True, status={'state': 'created'}
+    )
+    rr3 = rr2.combine(rr1)
+    assert rr3.mgr_return_value() == 0
+    assert rr3.mgr_status_value() == ''
+    dump = rr3.to_simplified()
+    assert set(dump) == {'success', 'resource', 'warnings', 'state'}
+    assert dump['success'] is True
+    assert dump['resource'].get('resource_type') == 'ceph.smb.share'
+    assert dump['resource'].get('cluster_id') == 'foo'
+    assert dump['resource'].get('share_id') == 'bar'
+    assert dump['warnings'] == ['Blim', 'Blam']
+    assert dump['state'] == 'created'
+
+
+def test_resource_result_combine_fail():
+    share = smb.resources.Share(
+        cluster_id='foo',
+        share_id='bar',
+        name='Foo Bar',
+        cephfs=smb.resources.CephFSStorage(
+            volume='myvol',
+            path='/',
+        ),
+    )
+    rr1 = smb.results.ErrorResult(share, msg='Whoops share fell down')
+    rr2 = smb.results.ErrorResult(share, msg='Whoops share blew up')
+    with pytest.raises(ValueError):
+        rr2.combine(rr1)
+
+
+def test_result_group_merge(cs2):
+    cluster, share, share2 = cs2
+    rg1 = smb.results.ResultGroup(
+        initial_results=[
+            smb.results.ResourceResult(
+                cluster,
+                success=True,
+                warnings=['Flim', 'Flam'],
+            ),
+            smb.results.ResourceResult(
+                share,
+                success=True,
+                warnings=['Blim', 'Blam'],
+            ),
+            smb.results.ResourceResult(
+                share2,
+                success=True,
+                warnings=['Glim', 'Glam', 'Glom'],
+            ),
+        ]
+    )
+    rg2 = smb.results.ResultGroup(
+        initial_results=[
+            smb.results.ResourceResult.processed(
+                cluster, smb.enums.State.UPDATED
+            ),
+            smb.results.ResourceResult.processed(
+                share, smb.enums.State.UPDATED
+            ),
+            smb.results.ResourceResult.processed(
+                share2, smb.enums.State.UPDATED
+            ),
+        ]
+    )
+
+    rg2.merge(rg1)
+    rr1, rr2, rr3 = list(rg2)
+    assert rr1.src == cluster
+    assert rr1.success
+    assert rr1.warnings == ['Flim', 'Flam']
+    assert rr1.status == {'state': smb.enums.State.UPDATED}
+
+    assert rr2.src == share
+    assert rr2.success
+    assert rr2.warnings == ['Blim', 'Blam']
+    assert rr2.status == {'state': smb.enums.State.UPDATED}
+
+    assert rr3.src == share2
+    assert rr3.success
+    assert rr3.warnings == ['Glim', 'Glam', 'Glom']
+    assert rr3.status == {'state': smb.enums.State.UPDATED}
