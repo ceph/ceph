@@ -2269,6 +2269,12 @@ public:
   void proc_lease_ack(int from, const pg_lease_ack_t& la);
   void proc_renew_lease();
 
+  /// [primary] arrange for recheck_readable() to run again while we are laggy
+  void schedule_laggy_recheck();
+
+  /// [primary] restart lease renewal if the renewal chain has stalled
+  void recheck_lease_renewal();
+
   pg_lease_ack_t get_lease_ack() {
     return pg_lease_ack_t(readable_until_ub_from_primary);
   }

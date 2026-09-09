@@ -1407,6 +1407,39 @@ void PeeringState::proc_renew_lease()
   schedule_renew_lease();
 }
 
+void PeeringState::schedule_laggy_recheck()
+{
+  if (!is_primary()) {
+    return;
+  }
+  psdout(20) << "scheduling readable recheck in " << (readable_interval / 2)
+	     << dendl;
+  pl->queue_check_readable(last_peering_reset, readable_interval / 2);
+}
+
+void PeeringState::recheck_lease_renewal()
+{
+  if (!is_primary() ||
+      !HAVE_FEATURE(upacting_features, SERVER_OCTOPUS)) {
+    return;
+  }
+  // Renewal runs every readable_interval/2, so the bound we last sent should
+  // always be comfortably in the future.  If it has expired outright the
+  // renewal chain is not keeping up: proc_renew_lease() re-arms itself and
+  // nothing else re-arms it, so a single discarded RenewLease event (stale
+  // last_peering_reset, or delivery outside Active) leaves this pg unable to
+  // ever renew again -- and therefore stuck in PG_STATE_LAGGY until the next
+  // interval change.  Restart the chain rather than wait for that.
+  auto mnow = pl->get_mnow();
+  if (mnow < readable_until_ub_sent) {
+    return;
+  }
+  psdout(1) << "lease renewal stalled (mnow " << mnow
+	    << " >= readable_until_ub_sent " << readable_until_ub_sent
+	    << "), restarting renewal" << dendl;
+  proc_renew_lease();
+}
+
 void PeeringState::recalc_readable_until()
 {
   ceph_assert(is_primary());
@@ -7127,6 +7160,7 @@ boost::statechart::result PeeringState::Active::react(const MLeaseAck& la)
 boost::statechart::result PeeringState::Active::react(const CheckReadable &evt)
 {
   DECLARE_LOCALS;
+  ps->recheck_lease_renewal();
   pl->recheck_readable();
   return discard_event();
 }
