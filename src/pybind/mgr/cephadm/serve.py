@@ -1105,7 +1105,7 @@ class CephadmServe:
                     slot.daemon_type, daemon_id, slot.hostname))
 
                 try:
-                    daemon_spec = svc.prepare_create(daemon_spec)
+                    daemon_spec = svc.prepare_create(daemon_spec, spec)
                     with self.mgr.async_timeout_handler(slot.hostname, f'cephadm deploy ({daemon_spec.daemon_type} type dameon)'):
                         self.mgr.wait_async(self._create_daemon(daemon_spec))
                     r = True

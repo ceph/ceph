@@ -71,8 +71,9 @@ class IngressService(CephService):
     def prepare_create(
             self,
             daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
     ) -> CephadmDaemonDeploySpec:
-        super().prepare_create(daemon_spec)
+        super().prepare_create(daemon_spec, spec)
         if daemon_spec.daemon_type == 'haproxy':
             return self.haproxy_prepare_create(daemon_spec)
         if daemon_spec.daemon_type == 'keepalived':
@@ -81,7 +82,8 @@ class IngressService(CephService):
 
     def generate_config(
             self,
-            daemon_spec: CephadmDaemonDeploySpec
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         if daemon_spec.daemon_type == 'haproxy':
             return self.haproxy_generate_config(daemon_spec)

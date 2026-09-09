@@ -16,7 +16,11 @@ class ElasticSearchService(CephadmService):
     TYPE = 'elasticsearch'
     DEFAULT_SERVICE_PORT = 9200
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         return daemon_spec
 
@@ -39,7 +43,11 @@ class JaegerAgentService(CephadmService):
             deps.append(url)
         return sorted(deps)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         collectors = []
         for dd in self.mgr.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
@@ -81,7 +89,11 @@ class JaegerCollectorService(CephadmService):
     TYPE = 'jaeger-collector'
     DEFAULT_SERVICE_PORT = 14250
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         elasticsearch_nodes = get_elasticsearch_nodes(self, daemon_spec)
         daemon_spec.final_config = {'elasticsearch_nodes': ",".join(elasticsearch_nodes)}
@@ -93,7 +105,11 @@ class JaegerQueryService(CephadmService):
     TYPE = 'jaeger-query'
     DEFAULT_SERVICE_PORT = 16686
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         elasticsearch_nodes = get_elasticsearch_nodes(self, daemon_spec)
         daemon_spec.final_config = {'elasticsearch_nodes': ",".join(elasticsearch_nodes)}
