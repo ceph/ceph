@@ -298,7 +298,8 @@ class NFSService(CephService):
         if nfs_spec.tls_ciphers is not None:
             deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
         # gRPC related
-        deps.append(f'grpc_certificate_source: {nfs_spec.grpc_certificate_source}')
+        if nfs_spec.grpc_certificate_source != CertificateSource.CEPHADM_SIGNED.value:
+            deps.append(f'grpc_certificate_source: {nfs_spec.grpc_certificate_source}')
         if nfs_spec.grpc_certificate_source == CertificateSource.INLINE.value:
             for field in ['grpc_server_cert', 'grpc_server_key',
                           'grpc_client_cert', 'grpc_client_key', 'grpc_ca_cert']:
