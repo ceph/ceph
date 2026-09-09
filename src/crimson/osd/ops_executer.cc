@@ -1293,7 +1293,7 @@ static PG::interruptible_future<ceph::bufferlist> do_pgnls_common(
     throw std::invalid_argument("outside of PG bounds");
   }
 
-  return backend.list_objects(lower_bound, limit).then_interruptible(
+  return backend.list_objects(lower_bound, pg_end, limit).then_interruptible(
     [&backend, filter, nspace](auto&& ret)
     -> PG::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>> {
       auto& [objects, next] = ret;
@@ -1450,7 +1450,7 @@ static PG::interruptible_future<ceph::bufferlist> do_pgls_common(
   }
 
   using entries_t = decltype(pg_ls_response_t::entries);
-  return backend.list_objects(lower_bound, limit).then_interruptible(
+  return backend.list_objects(lower_bound, pg_end, limit).then_interruptible(
     [&backend, filter, nspace](auto&& ret) {
       auto& [objects, next] = ret;
       return PG::interruptor::when_all(
