@@ -863,7 +863,9 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
                               optional_yield y)
 {
   bool write_to_cache = g_conf()->d4n_writecache_enabled;
+  // XXX: destination conditionals are not checked against the write cache yet
   if (write_to_cache && (dest_if_match || dest_if_nomatch)) {
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): destination If-Match/If-None-Match not supported with write cache enabled" << dendl;
     return -ERR_NOT_IMPLEMENTED;
   }
   bool dirty{false};
