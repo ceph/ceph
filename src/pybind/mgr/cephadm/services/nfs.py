@@ -148,7 +148,7 @@ class NFSService(CephService):
         create_ganesha_pool(self.mgr)
 
     @classmethod
-    def get_dependencies(
+    def _get_dependencies(
         cls,
         mgr: "CephadmOrchestrator",
         spec: Optional[ServiceSpec] = None,
@@ -187,8 +187,7 @@ class NFSService(CephService):
                     f'{nfs_spec.client_object_cache_max_dirty}'
                 )
 
-        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
-        return sorted(deps + parent_deps)
+        return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
