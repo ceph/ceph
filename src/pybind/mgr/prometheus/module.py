@@ -71,6 +71,51 @@ def _wait_for_port_available(
     return False
 
 
+def _build_ssl_info(mod: Any) -> Dict[str, Any]:
+    """Resolve the Prometheus TLS cert/key and build an SSLContext.
+
+    The certificate/key stored via the `prometheus set-ssl-certificate`
+    commands (config-key store) take precedence over the crt_file/key_file
+    options; a warning is logged when both are set. Raises if the cert/key
+    are missing or invalid.
+    """
+    cert = mod.get_localized_store("crt")
+    pkey = mod.get_localized_store("key")
+    crt_file = cast(str, mod.get_localized_module_option('crt_file'))
+    key_file = cast(str, mod.get_localized_module_option('key_file'))
+
+    if (cert is not None or pkey is not None) and (crt_file or key_file):
+        mod.log.warning(
+            'Prometheus TLS certificate/key stored with the '
+            '`prometheus set-ssl-certificate` commands take precedence '
+            'over crt_file/key_file. Run `ceph prometheus '
+            'clear-ssl-certificate` before using file-based TLS configuration.'
+        )
+
+    if cert is not None:
+        mod.cert_tmp = NamedTemporaryFile()
+        mod.cert_tmp.write(cert.encode('utf-8'))
+        mod.cert_tmp.flush()
+        cert_fname = mod.cert_tmp.name
+    else:
+        cert_fname = crt_file
+
+    if pkey is not None:
+        mod.pkey_tmp = NamedTemporaryFile()
+        mod.pkey_tmp.write(pkey.encode('utf-8'))
+        mod.pkey_tmp.flush()
+        pkey_fname = mod.pkey_tmp.name
+    else:
+        pkey_fname = key_file
+
+    verify_tls_files(cert_fname, pkey_fname)
+
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.load_cert_chain(cert_fname, pkey_fname)
+    context.minimum_version = ssl.TLSVersion.TLSv1_3
+    return {'cert': cert_fname, 'key': pkey_fname, 'context': context}
+
+
 def health_status_to_number(status: str) -> int:
     if status == 'HEALTH_OK':
         return 0
@@ -2386,46 +2431,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         return self.get_cherrypy_config(), None, 'http'
 
     def setup_direct_tls_config(self) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any], str]:
-        cert = self.get_localized_store("crt")
-        pkey = self.get_localized_store("key")
-        crt_file = cast(str, self.get_localized_module_option('crt_file'))
-        key_file = cast(str, self.get_localized_module_option('key_file'))
-
-        if (cert is not None or pkey is not None) and (crt_file or key_file):
-            self.log.warning(
-                'Prometheus TLS certificate/key stored with the '
-                '`prometheus set-ssl-certificate` commands take precedence '
-                'over crt_file/key_file. Run `ceph prometheus '
-                'clear-ssl-certificate` before using file-based TLS configuration.'
-            )
-
-        if cert is not None:
-            self.cert_tmp = NamedTemporaryFile()
-            self.cert_tmp.write(cert.encode('utf-8'))
-            self.cert_tmp.flush()
-            cert_fname = self.cert_tmp.name
-        else:
-            cert_fname = crt_file
-
-        if pkey is not None:
-            self.pkey_tmp = NamedTemporaryFile()
-            self.pkey_tmp.write(pkey.encode('utf-8'))
-            self.pkey_tmp.flush()
-            pkey_fname = self.pkey_tmp.name
-        else:
-            pkey_fname = key_file
-
-        verify_tls_files(cert_fname, pkey_fname)
-
-        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        context.load_cert_chain(cert_fname, pkey_fname)
-        context.minimum_version = ssl.TLSVersion.TLSv1_3
-
-        ssl_info = {
-            'cert': cert_fname,
-            'key': pkey_fname,
-            'context': context
-        }
+        ssl_info = _build_ssl_info(self)
         return self.get_cherrypy_config(), ssl_info, 'https'
 
     def setup_tls_config(self) -> Tuple[Dict[str, Dict[str, Any]], Optional[Dict[str, Any]], str]:
@@ -2694,41 +2700,11 @@ class StandbyModule(MgrStandbyModule):
 
         ssl_info = None
         if use_ssl:
-            cert = self.get_localized_store("crt")
-            pkey = self.get_localized_store("key")
-            crt_file = cast(str, self.get_localized_module_option('crt_file'))
-            key_file = cast(str, self.get_localized_module_option('key_file'))
-
-            if (cert is not None or pkey is not None) and (crt_file or key_file):
-                self.log.warning(
-                    'Prometheus TLS certificate/key stored with the '
-                    '`prometheus set-ssl-certificate` commands take precedence '
-                    'over crt_file/key_file. Run `ceph prometheus '
-                    'clear-ssl-certificate` before using file-based TLS configuration.'
-                )
-
-            if cert is not None:
-                self.cert_tmp = NamedTemporaryFile()
-                self.cert_tmp.write(cert.encode('utf-8'))
-                self.cert_tmp.flush()
-                cert_fname = self.cert_tmp.name
-            else:
-                cert_fname = crt_file
-
-            if pkey is not None:
-                self.pkey_tmp = NamedTemporaryFile()
-                self.pkey_tmp.write(pkey.encode('utf-8'))
-                self.pkey_tmp.flush()
-                pkey_fname = self.pkey_tmp.name
-            else:
-                pkey_fname = key_file
-
-            verify_tls_files(cert_fname, pkey_fname)
-
-            context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            context.load_cert_chain(cert_fname, pkey_fname)
-            context.minimum_version = ssl.TLSVersion.TLSv1_3
-            ssl_info = {'cert': cert_fname, 'key': pkey_fname, 'context': context}
+            try:
+                ssl_info = _build_ssl_info(self)
+            except Exception as e:
+                self.log.error(f'Failed to start Prometheus standby with TLS: {e}')
+                return
 
         module = self
 

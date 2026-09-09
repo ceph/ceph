@@ -579,3 +579,46 @@ class TestFileSDConfig(TestCase):
         ret, out, err = Module.get_file_sd_config(self.module)
         self.assertEqual(ret, 0)
         self.assertIn('host1:9284', out)
+
+
+class TestBuildSSLInfo(TestCase):
+    def setUp(self):
+        self.module = mock.MagicMock()
+        # By default no cert/key in the config-key store.
+        self.module.get_localized_store.return_value = None
+
+    def _set_options(self, **opts):
+        self.module.get_localized_module_option.side_effect = \
+            lambda opt: opts.get(opt)
+
+    def test_propagates_cert_error(self):
+        # A missing/invalid cert must raise so the caller can stay down
+        # instead of the module crashing with an unhandled exception.
+        from prometheus.module import _build_ssl_info
+        self._set_options(crt_file='/does/not/exist.pem',
+                          key_file='/does/not/exist.key')
+        with mock.patch('prometheus.module.verify_tls_files',
+                        side_effect=RuntimeError('Certificate does not exist')):
+            with self.assertRaises(RuntimeError):
+                _build_ssl_info(self.module)
+
+    def test_store_takes_precedence_and_warns(self):
+        # When both the config-key store and crt_file/key_file are set, the
+        # store wins and the user is warned about the precedence.
+        from prometheus.module import _build_ssl_info
+        self.module.get_localized_store.side_effect = \
+            lambda k: {'crt': 'CERT', 'key': 'KEY'}.get(k)
+        self._set_options(crt_file='/some/file.pem', key_file='/some/file.key')
+        with mock.patch('prometheus.module.verify_tls_files'), \
+                mock.patch('prometheus.module.ssl'):
+            _build_ssl_info(self.module)
+        self.module.log.warning.assert_called_once()
+
+    def test_no_warning_when_only_file_source(self):
+        # Only file-based config, no store values: no precedence conflict.
+        from prometheus.module import _build_ssl_info
+        self._set_options(crt_file='/some/file.pem', key_file='/some/file.key')
+        with mock.patch('prometheus.module.verify_tls_files'), \
+                mock.patch('prometheus.module.ssl'):
+            _build_ssl_info(self.module)
+        self.module.log.warning.assert_not_called()
