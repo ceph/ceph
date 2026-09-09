@@ -473,6 +473,7 @@ public:
    */
   version_t cached_first_committed = 0;
   version_t cached_last_committed = 0;
+  version_t last_committed_post_refresh = 0;
   /**
    * @}
    */
@@ -481,8 +482,6 @@ public:
    * Callback list to be used for waiting for the next proposal to commit.
    */
   std::vector<Context*> waiting_for_commit;
-  /// Set in refresh() when last_committed advanced; consumed in post_refresh().
-  bool committed_this_cycle = false;
 
   /**
    * Callback list to be used whenever we are running a proposal through

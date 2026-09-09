@@ -37,7 +37,6 @@ prun() {
     PATH=$CEPH_BIN:$PATH "$@"
 }
 
-
 if [ -n "$VSTART_DEST" ]; then
     SRC_PATH=`dirname $0`
     SRC_PATH=`(cd $SRC_PATH; pwd)`
@@ -1322,8 +1321,15 @@ EOF
             echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
             rm $CEPH_DEV_DIR/osd$osd/new.json
+            # osd new waits until KeyServer can auth as osd.N. Abort if mkfs
+            # wrote no type file. These branches never had the 49e8a07 retry;
+            # keep tee for console output, fail if type is missing.
             prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
-                2>&1 | tee $CEPH_OUT_DIR/osd-mkfs.$osd.log
+                2>&1 | tee $CEPH_OUT_DIR/osd-mkfs.$osd.log || exit $?
+            if [ ! -f "$CEPH_DEV_DIR/osd$osd/type" ]; then
+                echo "ERROR: osd.$osd mkfs did not write $CEPH_DEV_DIR/osd$osd/type" >&2
+                exit 1
+            fi
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
             cat > $key_fn<<EOF
