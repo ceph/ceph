@@ -343,7 +343,7 @@ def _sanitize_for_oci_tag(branch_name):
 
 
 @ftcache
-def _hash_sources(bsize=4096):
+def _hash_sources(ctx, bsize=4096):
     hh = hashlib.sha256()
     buf = bytearray(bsize)
     for path in sorted(_CONTAINER_SOURCES):
@@ -353,6 +353,8 @@ def _hash_sources(bsize=4096):
                 hh.update(buf[:rlen])
                 if rlen < len(buf):
                     break
+    for cmd in ctx.cli.custom_image_commands or []:
+        hh.update(cmd.encode("utf8"))
     return f"sha256:{hh.hexdigest()}"
 
 
@@ -727,7 +729,7 @@ def build_container(ctx):
         "--pull",
         "-t",
         ctx.image_name,
-        f"--label=io.ceph.build-with-container.src={_hash_sources()}",
+        f"--label=io.ceph.build-with-container.src={_hash_sources(ctx)}",
         f"--label=io.ceph.build-with-container.image-variant={ctx.variant()}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
@@ -752,6 +754,9 @@ def build_container(ctx):
         cmd.append(f"--build-arg=WITH_CRIMSON={with_crimson}")
     if ctx.cli.build_args:
         cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
+    if ctx.cli.custom_image_commands:
+        joined = chr(10).join(ctx.cli.custom_image_commands)
+        cmd.append(f"--build-arg=CUSTOM_IMAGE_COMMANDS={joined}")
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
@@ -779,7 +784,7 @@ def _check_cached_image(ctx):
     elif "Labels" in ctr_info.get("Config", {}):
         labels = ctr_info["Config"]["Labels"]
     saved_hash = labels.get("io.ceph.build-with-container.src", "")
-    curr_hash = _hash_sources()
+    curr_hash = _hash_sources(ctx)
     if saved_hash == curr_hash:
         log.info("Container passes source check")
         return True, True
@@ -1247,6 +1252,17 @@ def parse_cli(build_step_names):
         help=(
             "Extra argument to pass to container image build."
             " Can be used to override default build image behavior."
+        ),
+    )
+    g_image.add_argument(
+        "--custom-image-command",
+        dest="custom_image_commands",
+        action="append",
+        help=(
+            "Run this shell command while building the container image."
+            " May be given multiple times; commands run in the order given,"
+            " after distro package setup. Each value is passed to `bash -c`"
+            " verbatim (no file resolution, no directory convention)"
         ),
     )
     g_image.add_argument(

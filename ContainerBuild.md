@@ -156,6 +156,27 @@ be used: `./src/script/build-with-container.py -d centos9 --base-image
 myreg.example.com/ceph/centos-base:9`
 
 
+### Customizing the build image
+
+Sometimes a downstream consumer of `build-with-container.py` needs to install
+or compile extra dependencies into the build image without carrying a local
+patch on top of `buildcontainer-setup.sh` or `Dockerfile.build`. The
+`--custom-image-command` option runs an arbitrary shell command while the
+build image is being constructed, after the normal distro package setup:
+
+```
+./src/script/build-with-container.py -d centos9 \
+  --custom-image-command 'curl -sSL https://example.com/setup.sh | bash' \
+  -e build
+```
+
+The option may be given multiple times; commands run in the order given. Each
+value is passed to `bash -c` as-is - there is no special directory or file
+convention involved, so how (or whether) any referenced content gets into the
+image is entirely up to the command itself (fetch it over the network, invoke
+something already installed by a package manager, etc).
+
+
 ### Controlling where files are written
 
 By default the directory holding the Ceph source tree is mounted at `/ceph`
