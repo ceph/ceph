@@ -893,7 +893,7 @@ LogManager::omap_rm_keys(
 	nullptr);
     } else {
       for (auto& p : key_set) {
-	co_await remove_kv(t, log_root.addr, p, nullptr);
+	co_await remove_kv(t, addr, p, nullptr);
       }
     }
   };
