@@ -156,13 +156,71 @@ OSD (passthrough execution):
 * ``osd_cuobj_dc_key`` — must match the cuObject client library's DC
   key cluster-wide (default ``0xffeeddcc``, the library default).
 
+Host prerequisites
+==================
+
+Three host settings are easy to miss, and each one fails with an error
+that does not name the real cause.
+
+``rdma_ucm`` must be loaded
+  ``cuObjServer`` connects through ``rdma_cm``, so
+  ``/dev/infiniband/rdma_cm`` has to exist::
+
+    modprobe rdma_ucm
+
+  Without it the OSD logs ``cuObjServer RDMA session failed to start``
+  and disables ``READ_RDMA``; the server object still constructs, and
+  only ``isConnected()`` reports the failure. A passing ``ib_send_bw``
+  run does *not* establish that this is in place — perftest defaults to
+  ``rdma_cm QPs : OFF`` and exercises raw verbs only, so the fabric can
+  benchmark at line rate while cuObject cannot start a session at all.
+
+Locked memory must be raised
+  Every OSD registers ``osd_cuobj_buffer_count`` times
+  ``osd_cuobj_buffer_size`` of RDMA memory — 256 MiB at the defaults —
+  which is far above the customary 8 MiB ``memlock`` ceiling. Give the
+  OSDs (and the gateway, in staged mode) ``LimitMEMLOCK=infinity``, or
+  ``ulimit -l unlimited`` for a vstart cluster.
+
+The RDMA address must belong to the RDMA device
+  ``osd_cuobj_rdma_ip`` has to name an address the RDMA device actually
+  carries. Where the ConnectX ports are bonded and tenant traffic is
+  VLAN-tagged, that is the address on the VLAN above the bond, which is
+  typically not the public address. ``ibv_devinfo`` and the GID table
+  under ``/sys/class/infiniband/<device>/ports/1/gids`` show which
+  addresses the device carries; a RoCE v2 entry whose GID ends in the
+  IPv4-mapped form of the address confirms the pairing.
+
+Clients that read into host memory
+----------------------------------
+
+Such a client needs no GPU and no NVIDIA kernel driver, but
+``libcufile`` only reaches that configuration with DMABuf enabled.
+Otherwise it logs ``nvidia_peermem.ko is not loaded. Disabling
+UserSpace RDMA access.``, registers no RDMA devices, and
+``cuMemObjGetDescriptor`` fails::
+
+    export CUFILE_DMABUF_ENABLE=true
+
+The client's own RoCE address must also be listed in
+``rdma_dev_addr_list`` in ``cufile.json``, which is otherwise empty
+(``CUFILE_ENV_PATH_JSON`` selects an alternate copy)::
+
+    "rdma_dev_addr_list": [ "10.0.9.7" ],
+
+Leave ``rdma_transport_type`` at ``DC_V1``, and keep ``rdma_dc_key``
+equal to ``osd_cuobj_dc_key`` on the OSDs; the defaults on both sides
+already agree.
+
 Deployment notes
 ================
 
 * OSD nodes need a ConnectX-5 or newer (or RoCE-capable) NIC,
   ``rdma-core``, and the proprietary ``cuobjserver`` library from
-  NVIDIA. No GPU or CUDA toolkit is needed on OSD or gateway hosts;
-  only the *client* needs CUDA for GPU-memory targets.
+  NVIDIA. No GPU is needed on OSD, gateway or client hosts; only
+  GPU-memory targets on the client require CUDA. See `Host
+  prerequisites`_ for the kernel module, locked-memory and client
+  library settings this depends on.
 * The in-flight window per GET is bounded by
   ``rgw_get_obj_window_size`` (default 16 MiB), which throttles how
   much RDMA traffic the OSDs aim at one client NIC at a time.
