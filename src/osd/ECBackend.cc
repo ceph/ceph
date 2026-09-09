@@ -478,7 +478,7 @@ void ECBackend::handle_sub_write(
     async);
 
   if (!get_parent()->pg_is_undersized() &&
-    get_parent()->whoami_shard().shard >= sinfo.get_k())
+    whoami_rel_shard() >= sinfo.get_k())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   localt.register_on_commit(
@@ -1301,8 +1301,8 @@ std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, ui
   // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
   uint64_t end_chunk = (off + len - 1) / chunk_size;
   uint64_t shard_offset, shard_len;
-  shard_id_t shard = get_parent()->whoami_shard().shard;
-  raw_shard_id_t raw_shard = sinfo.get_raw_shard(shard);
+  shard_id_t rel_shard = whoami_rel_shard();
+  raw_shard_id_t raw_shard = sinfo.get_raw_shard(get_parent()->whoami_shard().shard);
 
   if (end_chunk == start_chunk) {
     shard_offset = sinfo.ro_offset_to_shard_offset(off, raw_shard);
@@ -1310,8 +1310,8 @@ std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, ui
   } else {
     ECUtil::shard_extent_set_t full_read(sinfo.get_k_plus_m());
     sinfo.ro_range_to_shard_extent_set(off, len, full_read);
-    shard_offset = full_read[shard].range_start();
-    shard_len = full_read[shard].range_end() - shard_offset;
+    shard_offset = full_read[rel_shard].range_start();
+    shard_len = full_read[rel_shard].range_end() - shard_offset;
   }
 
   return std::pair(shard_offset, shard_len);
