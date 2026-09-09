@@ -3422,6 +3422,16 @@ public:
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
 	     uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) override;
 
+  int read_range_checksum(CollectionHandle &c, const ghobject_t& oid,
+			  uint64_t offset, size_t len,
+			  int csum_type, uint64_t* out_csum,
+			  const ceph::buffer::list* data = nullptr) override;
+private:
+  int _derive_range_checksum(CollectionHandle &c, const ghobject_t& oid,
+			     uint64_t offset, size_t len,
+			     int csum_type, uint64_t* out_csum);
+public:
+
   int readv(
     CollectionHandle &c_,
     const ghobject_t& oid,
