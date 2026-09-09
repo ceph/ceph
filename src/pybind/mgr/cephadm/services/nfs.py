@@ -189,9 +189,13 @@ class NFSService(CephService):
 
         return sorted(deps)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
         return daemon_spec
 
     def get_daemon_nodeid(self, service_name: str, rank: Optional[int]) -> str:
@@ -206,15 +210,22 @@ class NFSService(CephService):
             return f'nfs.{daemon_id}'
         return f'{service_name}'
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         super().prepare_certificates(daemon_spec)
         daemon_type = daemon_spec.daemon_type
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
-        spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        nfs_spec = cast(
+            NFSServiceSpec,
+            spec if spec is not None else self.mgr.spec_store[daemon_spec.service_name].spec,
+        )
 
-        nodeid = self.get_daemon_nodeid(spec.service_name(), daemon_spec.rank)
+        nodeid = self.get_daemon_nodeid(nfs_spec.service_name(), daemon_spec.rank)
 
         nfs_idmap_conf = '/etc/ganesha/idmap.conf'
 
@@ -226,7 +237,7 @@ class NFSService(CephService):
         self.mgr.log.info(
             'Ensuring %s is in the ganesha grace table for service %s', nodeid, daemon_spec.service_name
         )
-        self.run_grace_tool(spec, 'add', nodeid)
+        self.run_grace_tool(nfs_spec, 'add', nodeid)
 
         port = daemon_spec.ports[0] if daemon_spec.ports else 2049
         monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host, daemon_spec)
@@ -236,11 +247,11 @@ class NFSService(CephService):
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
         bind_addr = ''
 
-        if spec.virtual_ip and not spec.enable_haproxy_protocol:
+        if nfs_spec.virtual_ip and not nfs_spec.enable_haproxy_protocol:
             # keepalive_only mode: prioritize virtual_ip
-            bind_addr = spec.virtual_ip
-            daemon_spec.port_ips = {str(port): spec.virtual_ip}
-            # update daemon spec ip for prometheus, as monitoring will happen on this
+            bind_addr = nfs_spec.virtual_ip
+            daemon_spec.port_ips = {str(port): nfs_spec.virtual_ip}
+            # update daemon nfs_spec ip for prometheus, as monitoring will happen on this
             # ip, if no monitor ip specified
             daemon_spec.ip = bind_addr
         elif daemon_spec.ip:
@@ -252,7 +263,7 @@ class NFSService(CephService):
         else:
             logger.debug("using haproxy bind address: %r", bind_addr)
 
-        if spec.enable_rdma:
+        if nfs_spec.enable_rdma:
             from cephadm.serve import CephadmServe
             # During a cluster upgrade, prepare_create run on the asyncio
             # event-loop thread; a nested wait_async(cephadm list-rdma) there would
@@ -284,7 +295,7 @@ class NFSService(CephService):
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
         ceph_nodes = []
-        hosts = get_placement_hosts(spec, self.mgr.cache.get_schedulable_hosts(), self.mgr.cache.get_draining_hosts())
+        hosts = get_placement_hosts(nfs_spec, self.mgr.cache.get_schedulable_hosts(), self.mgr.cache.get_draining_hosts())
         for host in hosts:
             host_ip = self.mgr.inventory.get_addr(host.hostname)
             ceph_nodes.append(host_ip)
@@ -292,24 +303,24 @@ class NFSService(CephService):
         cluster_qos_port = None
         if daemon_spec.ports and len(daemon_spec.ports) > 2:
             cluster_qos_port = daemon_spec.ports[2]
-        elif spec.cluster_qos_port:
-            cluster_qos_port = spec.cluster_qos_port
+        elif nfs_spec.cluster_qos_port:
+            cluster_qos_port = nfs_spec.cluster_qos_port
 
         # generate the ganesha config
         rdma_port = None
-        if spec.enable_rdma and daemon_spec.ports and len(daemon_spec.ports) > 3:
+        if nfs_spec.enable_rdma and daemon_spec.ports and len(daemon_spec.ports) > 3:
             rdma_port = daemon_spec.ports[3]
-        elif spec.enable_rdma:
-            rdma_port = spec.rdma_port
+        elif nfs_spec.enable_rdma:
+            rdma_port = nfs_spec.rdma_port
 
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
                 "user": rados_user,
                 "nodeid": nodeid,
                 "pool": POOL_NAME,
-                "namespace": spec.service_id,
+                "namespace": nfs_spec.service_id,
                 "rgw_user": rgw_user,
-                "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
+                "url": f'rados://{POOL_NAME}/{nfs_spec.service_id}/{nfs_spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
                 "port": port,
                 "monitoring_addr": monitoring_ip,
@@ -318,38 +329,38 @@ class NFSService(CephService):
                 "bind_addr": bind_addr,
                 "haproxy_hosts": [],
                 "nfs_idmap_conf": nfs_idmap_conf,
-                "enable_nlm": str(spec.enable_nlm).lower(),
-                "enable_rdma": spec.enable_rdma,
+                "enable_nlm": str(nfs_spec.enable_nlm).lower(),
+                "enable_rdma": nfs_spec.enable_rdma,
                 "rdma_port": rdma_port,
                 "cluster_id": self.mgr._cluster_fsid,
-                "tls_add": spec.ssl,
-                "tls_ciphers": spec.tls_ciphers,
-                "tls_min_version": spec.tls_min_version,
-                "tls_ktls": spec.tls_ktls,
-                "tls_debug": spec.tls_debug,
+                "tls_add": nfs_spec.ssl,
+                "tls_ciphers": nfs_spec.tls_ciphers,
+                "tls_min_version": nfs_spec.tls_min_version,
+                "tls_ktls": nfs_spec.tls_ktls,
+                "tls_debug": nfs_spec.tls_debug,
                 "ceph_nodes": ceph_nodes,
-                "protocols": "3, 4" if spec.enable_nfsv3 else "4",
+                "protocols": "3, 4" if nfs_spec.enable_nfsv3 else "4",
                 "use_old_nodeid": False if nodeid.isdigit() else True,
-                "enable_client_object_cache": spec.enable_client_object_cache,
+                "enable_client_object_cache": nfs_spec.enable_client_object_cache,
                 "client_object_cache_size": (
-                    with_units_to_int(str(spec.client_object_cache_size))
-                    if spec.client_object_cache_size is not None else None
+                    with_units_to_int(str(nfs_spec.client_object_cache_size))
+                    if nfs_spec.client_object_cache_size is not None else None
                 ),
                 "client_object_cache_max_dirty": (
-                    with_units_to_int(str(spec.client_object_cache_max_dirty))
-                    if spec.client_object_cache_max_dirty is not None else None
+                    with_units_to_int(str(nfs_spec.client_object_cache_max_dirty))
+                    if nfs_spec.client_object_cache_max_dirty is not None else None
                 ),
             }
-            if spec.enable_haproxy_protocol:
+            if nfs_spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
-                if spec.virtual_ip and spec.virtual_ip not in context["haproxy_hosts"]:
-                    context["haproxy_hosts"].append(spec.virtual_ip)
+                if nfs_spec.virtual_ip and nfs_spec.virtual_ip not in context["haproxy_hosts"]:
+                    context["haproxy_hosts"].append(nfs_spec.virtual_ip)
                 logger.debug("selected haproxy_hosts: %r", context["haproxy_hosts"])
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
         # generate the idmap config
         def get_idmap_conf() -> str:
-            idmap_conf = spec.idmap_conf
+            idmap_conf = nfs_spec.idmap_conf
             output = ''
             if idmap_conf is not None:
                 cp = ConfigParser()
@@ -365,17 +376,17 @@ class NFSService(CephService):
         def get_cephadm_config() -> Dict[str, Any]:
             config: Dict[str, Any] = {}
             config['pool'] = POOL_NAME
-            config['namespace'] = spec.service_id
+            config['namespace'] = nfs_spec.service_id
             config['userid'] = rados_user
             config['extra_args'] = ['-N', 'NIV_EVENT']
             config['files'] = {
                 'ganesha.conf': get_ganesha_conf(),
                 'idmap.conf': get_idmap_conf()
             }
-            if spec.ssl:
+            if nfs_spec.ssl:
                 tls_creds = self.get_certificates(
                     daemon_spec,
-                    ips=self.get_certificate_ips(spec, daemon_spec),
+                    ips=self.get_certificate_ips(nfs_spec, daemon_spec),
                     ca_cert_required=True,
                 )
                 config['files'].update({
@@ -395,11 +406,11 @@ class NFSService(CephService):
                 'user': rgw_user,
                 'keyring': rgw_keyring,
             }
-            config['enable_rdma'] = spec.enable_rdma
+            config['enable_rdma'] = nfs_spec.enable_rdma
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 
-        return get_cephadm_config(), self.get_dependencies(self.mgr, spec)
+        return get_cephadm_config(), self.get_dependencies(self.mgr, nfs_spec)
 
     def pre_daemon_service_config(self, spec: ServiceSpec) -> None:
         nfs_spec = cast(NFSServiceSpec, spec)

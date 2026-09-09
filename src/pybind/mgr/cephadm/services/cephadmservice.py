@@ -706,12 +706,20 @@ class CephadmService(metaclass=ABCMeta):
         if cert_source != CertificateSource.CEPHADM_SIGNED.value:
             self.mgr.cert_mgr.try_rm_self_signed_cert_key_pair(svc_name, host)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         self.prepare_certificates(daemon_spec)
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
         return daemon_spec
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         raise NotImplementedError()
 
     def config(self, spec: ServiceSpec) -> None:
@@ -1063,7 +1071,11 @@ class CephadmService(metaclass=ABCMeta):
 
 class CephService(CephadmService):
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         # Ceph.daemons (mon, mgr, mds, osd, etc)
         cephadm_config = self.get_config_and_keyring(
             daemon_spec.daemon_type,
@@ -1130,7 +1142,11 @@ class CephService(CephadmService):
 class MonService(CephService):
     TYPE = 'mon'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         """
         Create a new monitor on the given host.
         """
@@ -1176,7 +1192,7 @@ class MonService(CephService):
         daemon_spec.ceph_conf = extra_config
         daemon_spec.keyring = keyring
 
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
 
         return daemon_spec
 
@@ -1229,8 +1245,12 @@ class MonService(CephService):
         # super().post_remove(daemon)
         pass
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
-        daemon_spec.final_config, daemon_spec.deps = super().generate_config(daemon_spec)
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec.final_config, daemon_spec.deps = super().generate_config(daemon_spec, spec)
 
         # realistically, we expect there to always be a mon spec
         # in a real deployment, but the way teuthology deploys some daemons
@@ -1326,11 +1346,19 @@ class MgrService(CephService):
             + [f'sd_port:{mgr.service_discovery_port}']
         )
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
-        config, _ = super().generate_config(daemon_spec)
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        config, _ = super().generate_config(daemon_spec, spec)
         return config, self.get_dependencies(self.mgr)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         """
         Create a new manager instance on a host.
         """
@@ -1357,7 +1385,7 @@ class MgrService(CephService):
         daemon_spec.ports = ports + [self.mgr.service_discovery_port]
         daemon_spec.keyring = keyring
 
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
 
         return daemon_spec
 
@@ -1446,7 +1474,11 @@ class MdsService(CephService):
             'value': spec.service_id,
         })
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         mds_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
@@ -1457,7 +1489,7 @@ class MdsService(CephService):
                                               'mds', 'allow'])
         daemon_spec.keyring = keyring
 
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
 
         return daemon_spec
 
@@ -1618,7 +1650,11 @@ class RgwService(CephService):
             cache_path=cache_path,
         )
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         super().prepare_certificates(daemon_spec)
         rgw_id, _ = daemon_spec.daemon_id, daemon_spec.host
@@ -1785,7 +1821,7 @@ class RgwService(CephService):
             })
 
         daemon_spec.keyring = keyring
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
 
         d3n_cache = daemon_spec.final_config.get('d3n_cache')
 
@@ -1928,9 +1964,13 @@ class RgwService(CephService):
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         self.mgr.trigger_connect_dashboard_rgw()
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         svc_spec = cast(RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        config, parent_deps = super().generate_config(daemon_spec)
+        config, parent_deps = super().generate_config(daemon_spec, spec)
 
         if hasattr(svc_spec, 'rgw_exit_timeout_secs') and svc_spec.rgw_exit_timeout_secs:
             config['rgw_exit_timeout_secs'] = svc_spec.rgw_exit_timeout_secs
@@ -1986,7 +2026,11 @@ class RbdMirrorService(CephService):
     def allow_colo(self) -> bool:
         return True
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
@@ -1996,7 +2040,7 @@ class RbdMirrorService(CephService):
 
         daemon_spec.keyring = keyring
 
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
 
         return daemon_spec
 
@@ -2018,7 +2062,11 @@ class RbdMirrorService(CephService):
 class CrashService(CephService):
     TYPE = 'crash'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
@@ -2028,7 +2076,7 @@ class CrashService(CephService):
 
         daemon_spec.keyring = keyring
 
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
 
         return daemon_spec
 
@@ -2051,7 +2099,11 @@ class CephExporterService(CephService):
         deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
         return sorted(deps)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         super().prepare_certificates(daemon_spec)
         spec = cast(CephExporterSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
@@ -2080,7 +2132,7 @@ class CephExporterService(CephService):
             }
 
         daemon_spec.keyring = keyring
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
         daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
         daemon_spec.deps = self.get_dependencies(self.mgr)
 
@@ -2120,7 +2172,11 @@ class CephfsMirrorService(CephService):
             # we shouldn't get here (mon will tell the mgr to respawn), but no
             # harm done if we do.
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
         ret, keyring, err = self.mgr.check_mon_command({
@@ -2133,7 +2189,7 @@ class CephfsMirrorService(CephService):
         })
 
         daemon_spec.keyring = keyring
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
         return daemon_spec
 
 
@@ -2155,9 +2211,13 @@ class CephadmAgent(CephService):
             ]
         )
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        super().prepare_create(daemon_spec)
+        super().prepare_create(daemon_spec, spec)
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
         daemon_spec.ports = [self.mgr.agent_starting_port]
 
@@ -2168,11 +2228,15 @@ class CephadmAgent(CephService):
         daemon_spec.keyring = keyring
         self.mgr.agent_cache.agent_keys[host] = keyring
 
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
 
         return daemon_spec
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         agent = self.mgr.http_server.agent
         try:
             assert agent

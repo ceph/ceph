@@ -18,10 +18,14 @@ class OAuth2ProxyService(CephadmService):
     TYPE = 'oauth2-proxy'
     SVC_TEMPLATE_PATH = 'services/oauth2-proxy/oauth2-proxy.conf.j2'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        super().prepare_create(daemon_spec)
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        super().prepare_create(daemon_spec, spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
         return daemon_spec
 
     @classmethod
@@ -59,7 +63,11 @@ class OAuth2ProxyService(CephadmService):
         # if empty list provided, return empty Daemon Desc
         return DaemonDescription()
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         svc_spec = cast(OAuth2ProxySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         allowlist_domains = copy(svc_spec.allowlist_domains) or []
