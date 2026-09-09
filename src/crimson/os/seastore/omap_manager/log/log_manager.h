@@ -2,7 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <algorithm>
+#include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "include/denc.h"
@@ -18,6 +21,60 @@ class LogNode;
 using LogNodeRef = TCachedExtentRef<LogNode>;
 constexpr uint8_t OW_SIZE = 2;
 constexpr uint8_t BATCH_CREATE_SIZE = 50;
+
+/**
+ * pending_keys_t
+ *
+ * The set of keys remove_kv_set() is still looking for. It is probed once per
+ * live entry of every LogNode it walks - a chain of a hundred nodes holding
+ * ~62 entries each is thousands of probes per traversal - so the layout
+ * matters more than the interface:
+ *
+ *  - the keys are views into storage the caller already owns, so building the
+ *    set copies no strings and allocates once,
+ *  - they sit in a single sorted vector, so a probe is a binary search over
+ *    contiguous memory rather than a walk down a red-black tree whose nodes
+ *    (and, for keys past the SSO limit, whose key buffers) are scattered,
+ *  - striking a key off flips a bit instead of shifting the tail, so clearing
+ *    all K keys is O(K) rather than the O(K^2) a flat_set erase() would cost.
+ *
+ * The referenced keys must outlive the pending_keys_t.
+ */
+class pending_keys_t {
+public:
+  explicit pending_keys_t(std::vector<std::string_view> &&keys)
+    : keys(std::move(keys)) {
+    // Sources are ordered containers, so this is a scan in the common case.
+    std::sort(this->keys.begin(), this->keys.end());
+    assert(std::adjacent_find(this->keys.begin(), this->keys.end()) ==
+      this->keys.end());
+    live.assign(this->keys.size(), true);
+    remaining = this->keys.size();
+  }
+
+  bool empty() const { return remaining == 0; }
+  size_t size() const { return remaining; }
+
+  // Strike @key off the set, reporting whether it was still in it.
+  bool take(std::string_view key) {
+    auto iter = std::lower_bound(keys.begin(), keys.end(), key);
+    if (iter == keys.end() || *iter != key) {
+      return false;
+    }
+    auto index = iter - keys.begin();
+    if (!live[index]) {
+      return false;
+    }
+    live[index] = false;
+    --remaining;
+    return true;
+  }
+
+private:
+  std::vector<std::string_view> keys;
+  std::vector<bool> live;
+  size_t remaining = 0;
+};
 
 /*
  * 
@@ -257,7 +314,37 @@ public:
 
   omap_rm_key_ret remove_kv(Transaction &t, laddr_t dst, const std::string &key,
     LogNodeRef prev);
-  
+
+  /**
+   * remove_kv_set
+   *
+   * Batched form of remove_kv() for an arbitrary (non-contiguous) key set:
+   * traverses the prev chain from @dst exactly once instead of once per key,
+   * and stops as soon as every key has been accounted for. Removing K keys
+   * with remove_kv() costs O(K * chain length) - and a miss always walks the
+   * whole chain - which dominates large pgmeta transactions.
+   *
+   * Unlike remove_kvs(), this does not delete a key range: only keys present
+   * in @keys are removed, so keys that merely sort between them are left
+   * alone.
+   *
+   * @param t                Transaction context.
+   * @param dst              Logical address of the LogNode to start from.
+   * @param keys             In/out. Keys to remove; each key found and
+   *                         removed is struck off, so on return the set holds
+   *                         the keys that were not present.
+   * @param multi_block_keys Out. Keys whose value spans several LogNodes.
+   *                         These are not touched here; the caller must pass
+   *                         each of them to remove_kv(), which knows how to
+   *                         unlink an entire chunk chain.
+   * @param prev             The successor of @dst in the forward direction
+   *                         (nullptr if @dst is the tail).
+   */
+  omap_rm_key_ret remove_kv_set(Transaction &t, laddr_t dst,
+    pending_keys_t &keys,
+    std::vector<std::string> &multi_block_keys,
+    LogNodeRef prev);
+
   /**
    * remove_kvs
    *
