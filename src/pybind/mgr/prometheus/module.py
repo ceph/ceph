@@ -1900,10 +1900,13 @@ class Module(MgrModule, OrchestratorClientMixin):
         """
         new_metrics = {}
         for metric_path, metrics in self.metrics.items():
-            # Address RGW sync perf. counters.
-            match = re.search(r'^data-sync-from-(.*)\.', metric_path)
+            # Address RGW sync perf. counters. Zone names may contain
+            # characters such as hyphens and underscores.
+            match = re.match(r'^data-sync-from-(.+)\.(\w+)$', metric_path)
             if match:
-                new_path = re.sub('from-([^.]*)', 'from-zone', metric_path)
+                zone_name = match.group(1)
+                counter_name = match.group(2)
+                new_path = 'data-sync-from-zone.' + counter_name
                 if new_path not in new_metrics:
                     new_metrics[new_path] = Metric(
                         metrics.mtype,
@@ -1912,7 +1915,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                         cast(LabelValues, metrics.labelnames) + ('source_zone',)
                     )
                 for label_values, value in metrics.value.items():
-                    new_metrics[new_path].set(value, label_values + (match.group(1),))
+                    new_metrics[new_path].set(value, label_values + (zone_name,))
 
         self.metrics.update(new_metrics)
 
