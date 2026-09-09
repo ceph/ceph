@@ -892,7 +892,13 @@ LogManager::omap_rm_keys(
 	*key_set.rbegin(),
 	nullptr);
     } else {
-      for (auto& p : key_set) {
+      // Not a range, but still only one traversal: remove_kv_set() matches
+      // the whole set as it walks the chain.
+      pending_keys_t pending(
+	std::vector<std::string_view>(key_set.begin(), key_set.end()));
+      std::vector<std::string> multi_block_keys;
+      co_await remove_kv_set(t, addr, pending, multi_block_keys, nullptr);
+      for (auto& p : multi_block_keys) {
 	co_await remove_kv(t, addr, p, nullptr);
       }
     }
