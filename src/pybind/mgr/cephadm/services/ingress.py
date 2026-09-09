@@ -300,7 +300,7 @@ class IngressService(CephService):
             monitor_ssl_cert = [tls_creds.cert, tls_creds.key]
             config_files['files']['stats_haproxy.pem'] = '\n'.join(monitor_ssl_cert)
 
-        return config_files, self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
+        return config_files, self.get_dependencies(self.mgr, spec, 'haproxy')
 
     def get_stats_certs(
         self,
@@ -568,7 +568,7 @@ class IngressService(CephService):
             }
         }
 
-        return config_file, self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
+        return config_file, self.get_dependencies(self.mgr, spec, 'keepalived')
 
     def get_monitoring_details(self, service_name: str, host: str) -> Tuple[Optional[str], Optional[int]]:
         spec = cast(IngressSpec, self.mgr.spec_store[service_name].spec)

@@ -80,7 +80,8 @@ class NodeProxy(CephService):
         }
         config = {'node-proxy.json': json.dumps(cfg)}
 
-        return config, self.get_dependencies(self.mgr)
+        return config, self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
 
     def handle_hw_monitoring_setting(self) -> bool:
         # function to apply or remove node-proxy service spec depending

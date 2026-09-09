@@ -308,7 +308,7 @@ class SMBService(CephService):
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
-        deps = sorted(self.get_dependencies(self.mgr, smb_spec))
+        deps = self.get_dependencies(self.mgr, smb_spec, daemon_spec.daemon_type)
         return config_blobs, deps
 
     def _cert_or_uri(self, data: Optional[str]) -> Optional[str]:

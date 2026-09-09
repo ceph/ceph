@@ -96,7 +96,6 @@ class IscsiService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'iscsi-gateway.cfg': igw_conf}
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
-        daemon_spec.deps = self.get_dependencies(self.mgr, spec)
         return daemon_spec
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
