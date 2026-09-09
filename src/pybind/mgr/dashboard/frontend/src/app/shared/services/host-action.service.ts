@@ -7,13 +7,15 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import { HostService, HostModalRef } from '~/app/shared/api/host.service';
+import { HostService } from '~/app/shared/api/host.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { Host } from '~/app/shared/models/host.interface';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { FinishedTask } from '../models/finished-task';
+
+type HostModalRef = ReturnType<ModalCdsService['show']>;
 
 interface HostLabelOption {
   content: string;

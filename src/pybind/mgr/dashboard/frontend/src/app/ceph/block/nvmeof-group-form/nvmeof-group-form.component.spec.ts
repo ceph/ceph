@@ -12,7 +12,7 @@ import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { PaginateObservable } from '~/app/shared/api/paginate.model';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
-import { CertificateType } from '~/app/shared/models/service.interface';
+import { CephServiceSpec, CertificateType } from '~/app/shared/models/service.interface';
 
 import { NvmeofGroupFormComponent } from './nvmeof-group-form.component';
 import { CheckboxModule, GridModule, InputModule, SelectModule } from 'carbon-components-angular';
@@ -282,7 +282,7 @@ describe('NvmeofGroupFormComponent', () => {
       component.existingServiceData = {
         service_id: 'existing-group',
         spec: { group: 'existing-group' }
-      };
+      } as CephServiceSpec;
       component.createForm();
       component.gatewayNodeComponent = {
         getSelectedHosts: (): any[] => [{ hostname: 'host1' }, { hostname: 'host2' }],
