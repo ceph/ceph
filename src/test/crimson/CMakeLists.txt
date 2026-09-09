@@ -136,4 +136,22 @@ target_link_libraries(
   crimson-common
   crimson::gtest)
 
+add_executable(unittest-crimson-watch-notify
+  test_watch_notify.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/watch.cc)
+target_link_libraries(
+  unittest-crimson-watch-notify
+  crimson
+  crimson::gtest
+  # watch.h pulls in osd/PeeringState.h (via crimson/osd/pg.h); Boost::MPL sets
+  # the enlarged BOOST_MPL_LIMIT_LIST_SIZE it needs.
+  Boost::MPL)
+# Compile the code-under-test with assertions enabled regardless of the build
+# type. The pre-fix cancel_notify() bug is an `assert()` followed by a
+# dereference of a not-found iterator; under -DNDEBUG the assert vanishes and the
+# regression degrades into undefined behaviour
+target_compile_options(unittest-crimson-watch-notify PRIVATE -UNDEBUG)
+add_ceph_unittest(unittest-crimson-watch-notify
+  --memory 256M --smp 1)
+
 add_subdirectory(cbt)
