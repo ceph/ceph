@@ -577,7 +577,7 @@ Commands
 
 :command:`mirror snapshot schedule add` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
   Add mirror snapshot schedule. The ``interval`` can be specified in
-  days, hours, or minutes using the d, h, m suffix respectively.
+  weeks, days, hours, or minutes using the w, d, h, m suffix respectively.
   The ``start-time`` is a time string in ISO 8601 format. Not providing the
   ``--pool``, ``--namespace`` and ``--image`` options creates a global
   schedule which applies to all mirror-enabled images in the cluster.
@@ -709,7 +709,11 @@ Commands
   or has snapshots cannot be removed.
 
 :command:`trash purge schedule add` [-p | --pool *pool*] [--namespace *namespace*] *interval* [*start-time*]
-  Add trash purge schedule.
+  Add trash purge schedule. The ``interval`` can be specified in weeks,
+  days, hours, or minutes using the w, d, h, m suffix respectively. The
+  ``start-time`` is a time string in ISO 8601 format. Not providing the
+  ``--pool`` and ``--namespace`` options creates a global schedule which
+  applies to all pools and namespaces in the cluster.
 
 :command:`trash purge schedule list` [-R | --recursive] [--format *format*] [--pretty-format] [-p | --pool *pool*] [--namespace *namespace*]
   List trash purge schedule.
