@@ -69,6 +69,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
       struct sigevent sev = {};
       sev.sigev_notify = SIGEV_KEVENT;
       sev.sigev_notify_kqueue = ctx;
+      sev.sigev_notify_kevent_flags = EV_ONESHOT;
       sev.sigev_value.sival_ptr = &(*cur);
       // lio_listio() takes an array of POINTERS to aiocb (one pointer per
       // entry), not a pointer to a contiguous array of aiocb structs.
