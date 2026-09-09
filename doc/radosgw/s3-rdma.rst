@@ -36,9 +36,10 @@ Staged (gateway) mode
 OSD passthrough mode
   With ``rgw_cuobj_osd_passthrough`` enabled, the gateway forwards the
   client's descriptor to the OSDs instead: each stripe read carries an
-  *advisory delivery descriptor* (an optional field on the RADOS
-  request message holding the opaque token, the stripe's offset within
-  the requested range, and a lease). An OSD that can push builds an
+  *advisory delivery descriptor* (a per-operation field on the RADOS
+  request message, alongside the read it applies to, holding the
+  opaque token, the stripe's offset within the requested range, and a
+  lease). An OSD that can push builds an
   op-aware placement plan and RDMA-writes the reply data directly into
   the client's memory window, returning only byte counts; an OSD that
   cannot — not built with cuObject, disabled, lease expired, or a
@@ -55,8 +56,10 @@ OSD passthrough mode
   RDMA NIC; the OSDs do (build them with ``-DWITH_OSD_CUOBJ=ON`` and
   set ``osd_cuobj_enabled``).
 
-  Because the descriptor rides on the request message rather than in a
-  special operation, any read shape can use it: plain reads take a
+  Because the descriptor rides alongside each read on the request
+  message rather than being a special operation, any read shape can
+  use it (and each read in a compound request can carry its own):
+  plain reads take a
   linear placement, sparse reads scatter per extent (the extent map
   stays inline), erasure-coded *primary* reads work unchanged (the
   reply is reconstructed logical data), and erasure-coded *direct*

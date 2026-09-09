@@ -71,19 +71,21 @@ private:
   bool bdata_encode;
   osd_reqid_t reqid; // reqid explicitly set by sender
 
-  /// advisory out-of-band delivery descriptor (see common/rdma_token.h);
+  /// per-op advisory out-of-band delivery descriptors (see
+  /// common/rdma_token.h): empty when no op requests delivery,
+  /// otherwise aligned with ops (mirroring the reply's oob_results);
   /// decoded in the finish_decode() tail for header.version >= 10
-  std::optional<ceph::rdma::delivery_t> rdma_delivery;
+  std::vector<ceph::rdma::delivery_t> rdma_deliveries;
 
 public:
   bool has_rdma_delivery() const {
-    return rdma_delivery.has_value();
+    return !rdma_deliveries.empty();
   }
-  const ceph::rdma::delivery_t& get_rdma_delivery() const {
-    return *rdma_delivery;
+  const std::vector<ceph::rdma::delivery_t>& get_rdma_deliveries() const {
+    return rdma_deliveries;
   }
-  void set_rdma_delivery(const ceph::rdma::delivery_t& d) {
-    rdma_delivery = d;
+  void set_rdma_deliveries(std::vector<ceph::rdma::delivery_t>&& v) {
+    rdma_deliveries = std::move(v);
   }
 
   friend MOSDOpReply;
@@ -415,10 +417,10 @@ struct ceph_osd_request_head {
       encode(retry_attempt, payload);
       encode(features, payload);
     } else if (!HAVE_FEATURE(features, SERVER_UMBRELLA)) {
-      // v9 opentelemetry trace, no rdma delivery descriptor. Peers
-      // without SERVER_UMBRELLA silently lose the descriptor, which is
-      // safe because it is advisory (data comes back inline); the
-      // Objecter additionally refuses to attach one unless
+      // v9 opentelemetry trace, no rdma delivery descriptors. Peers
+      // without SERVER_UMBRELLA silently lose the descriptors, which
+      // is safe because they are advisory (data comes back inline);
+      // the Objecter additionally refuses to attach them unless
       // require_osd_release >= umbrella.
       header.version = 9;
 
@@ -449,7 +451,8 @@ struct ceph_osd_request_head {
       encode(retry_attempt, payload);
       encode(features, payload);
     } else {
-      // latest v10: v9 plus the trailing rdma delivery descriptor
+      // latest v10: v9 plus the trailing per-op rdma delivery
+      // descriptor vector
       header.version = HEAD_VERSION;
 
       encode(pgid, payload);
@@ -479,7 +482,7 @@ struct ceph_osd_request_head {
       encode(retry_attempt, payload);
       encode(features, payload);  // NB: the connection-features parameter
 
-      encode(rdma_delivery, payload);
+      encode(rdma_deliveries, payload);
     }
   }
 
@@ -491,8 +494,8 @@ struct ceph_osd_request_head {
     // Always keep here the newest version of decoding order/rule
     if (header.version == HEAD_VERSION || header.version == 9) {
       // v10 differs from v9 only in the finish_decode() tail (the
-      // trailing rdma delivery descriptor); the up-front section is
-      // identical
+      // trailing per-op rdma delivery descriptors); the up-front
+      // section is identical
       decode(pgid, p);
       uint32_t hash;
       decode(hash, p);
@@ -663,7 +666,7 @@ struct ceph_osd_request_head {
     decode(features, p);
 
     if (header.version >= 10) {
-      decode(rdma_delivery, p);
+      decode(rdma_deliveries, p);
     }
 
     hobj.pool = pgid.pgid.pool();

@@ -228,13 +228,15 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     if (!sub_reads.contains(shard_index)) {
       sub_reads.emplace(shard_index, orig_op->ops.size() + 1);
     }
-    auto &d = sub_reads.at(shard_index).details[ops_index];
+    auto &sr = sub_reads.at(shard_index);
+    auto &d = sr.details[ops_index];
     if (sparse) {
       d.e.emplace();
-      sub_reads.at(shard_index).rd.sparse_read(offset, length, &(*d.e), &d.bl, &d.rval);
+      sr.rd.sparse_read(offset, length, &(*d.e), &d.bl, &d.rval);
     } else {
-      sub_reads.at(shard_index).rd.read(offset, length, &d.ec, &d.bl);
+      sr.rd.read(offset, length, &d.ec, &d.bl);
     }
+    sr.parent_ops.push_back(ops_index);
   }
 
   // If primary is required and we haven't created a sub_read for it yet, create one
@@ -379,6 +381,7 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     } else {
       sr.rd.read(offset, len, &sr.details[ops_index].ec, bl);
     }
+    sr.parent_ops.push_back(ops_index);
     offset += len;
     length -= len;
   }
@@ -533,34 +536,44 @@ void SplitOp::complete() {
 
   int rc = assemble_rc();
 
-  // Aggregate out-of-band delivery. Mixed replies (some sub-reads
-  // pushed, some returned inline) cannot be assembled into a coherent
-  // response: retry to the primary, where the resend (attempts > 0)
-  // is guaranteed to deliver inline.
-  uint64_t oob_total = 0;
-  if (rc >= 0 && oob_fanned_out) {
-    bool any_inline = false;
-    for (auto& [index, sub_read] : sub_reads) {
-      oob_total += sub_read.oob.bytes;
-      if (sub_read.details.contains(oob_ops_index) &&
-          sub_read.details.at(oob_ops_index).bl.length()) {
-        any_inline = true;
+  // Aggregate out-of-band delivery per parent op. Mixed replies for
+  // one op (some sub-reads pushed, some returned inline) cannot be
+  // assembled into a coherent response: retry to the primary, where
+  // the resend (attempts > 0) is guaranteed to deliver inline.
+  std::vector<uint64_t> oob_total(orig_op->ops.size(), 0);
+  if (rc >= 0) {
+    for (unsigned i : oob_ops) {
+      bool any_inline = false;
+      for (auto& [index, sub_read] : sub_reads) {
+        for (unsigned j = 0; j < sub_read.parent_ops.size(); ++j) {
+          if (sub_read.parent_ops[j] == (int)i && j < sub_read.oob.size()) {
+            oob_total[i] += sub_read.oob[j].bytes;
+          }
+        }
+        if (sub_read.details.contains(i) &&
+            sub_read.details.at(i).bl.length()) {
+          any_inline = true;
+        }
       }
-    }
-    if (oob_total > 0 && any_inline) {
-      ldout(cct, DBG_LVL) << __func__
-        << " mixed inline/oob sub-replies, retrying inline" << dendl;
-      rc = -EAGAIN;
-      oob_total = 0;
+      if (oob_total[i] > 0 && any_inline) {
+        ldout(cct, DBG_LVL) << __func__ << " op " << i
+          << " mixed inline/oob sub-replies, retrying inline" << dendl;
+        rc = -EAGAIN;
+        break;
+      }
     }
   }
 
   if (rc >= 0) {
 
-    if (orig_op->rdma_oob_result) {
-      // sub-read CRCs are not requested (interleaved shard data does
-      // not concatenate-combine), so the aggregate carries bytes only
-      *orig_op->rdma_oob_result = ceph::rdma::oob_result_t{oob_total, 0, 0};
+    // sub-read CRCs are not requested (interleaved shard data does
+    // not concatenate-combine), so each op's aggregate carries bytes only
+    for (unsigned i = 0; i < orig_op->rdma_oob_result.size(); ++i) {
+      if (orig_op->rdma_oob_result[i]) {
+        *orig_op->rdma_oob_result[i] =
+          ceph::rdma::oob_result_t{i < oob_total.size() ? oob_total[i] : 0,
+                                   0, 0};
+      }
     }
 
     // In a "normal" completion, out_ops is generated in the MOSDOpReply reply
@@ -661,6 +674,7 @@ void SplitOp::protect_torn_reads() {
     auto &internal_version = sr.internal_version;
     internal_version = std::make_optional<InternalVersion>();
     sr.rd.get_internal_versions(&internal_version->ec, &internal_version->bl);
+    sr.parent_ops.push_back(-1);
   }
 }
 
@@ -680,8 +694,10 @@ void SplitOp::init(OSDOp &op, int ops_index) {
     if (!sub_reads.contains(reference_sub_read)) {
       sub_reads.emplace(reference_sub_read, orig_op->ops.size() + 1);
     }
-    Details &d = sub_reads.at(reference_sub_read).details[ops_index];
-    orig_op->pass_thru_op(sub_reads.at(reference_sub_read).rd, ops_index, &d.bl, &d.rval);
+    auto &sr = sub_reads.at(reference_sub_read);
+    Details &d = sr.details[ops_index];
+    orig_op->pass_thru_op(sr.rd, ops_index, &d.bl, &d.rval);
+    sr.parent_ops.push_back(ops_index);
     break;
   }
   }
@@ -1083,27 +1099,20 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   split_read->protect_torn_reads();
 
-  // Fan out an advisory rdma delivery descriptor. Only the
-  // single-plain-READ shape has well-defined per-sub placement:
-  // replica sub-reads cover disjoint logical ranges (window shifted
-  // to each sub-read's origin) while EC-direct sub-reads carry the
-  // original extent (shared origin; the shard OSD interleaves).
-  // Anything else simply doesn't fan out and every reply arrives
-  // inline, which is always correct.
-  if (op->rdma_delivery) {
-    int data_reads = 0;
+  // Fan out the per-op advisory rdma delivery descriptors. Only plain
+  // READ ops have well-defined per-sub placement: replica sub-reads
+  // cover disjoint logical ranges (window shifted to each sub-read's
+  // origin) while EC-direct sub-reads carry the original extent
+  // (shared origin; the shard OSD interleaves). A sparse read's
+  // descriptor is not fanned out (a follow-up) so its sub-replies
+  // arrive inline, which is always correct.
+  if (op->has_rdma_delivery()) {
+    ceph_assert(op->rdma_delivery.size() == op->ops.size());
     for (unsigned i = 0; i < op->ops.size(); ++i) {
-      const auto opcode = op->ops[i].op.op;
-      if (opcode == CEPH_OSD_OP_READ) {
-        data_reads++;
-        split_read->oob_ops_index = i;
-      } else if (opcode == CEPH_OSD_OP_SPARSE_READ) {
-        data_reads = 2;  // sparse fan-out is a follow-up
-        break;
+      if (op->ops[i].op.op == CEPH_OSD_OP_READ &&
+          !op->rdma_delivery[i].empty()) {
+        split_read->oob_ops.push_back(i);
       }
-    }
-    if (data_reads == 1) {
-      split_read->oob_fanned_out = true;
     }
   }
 
@@ -1127,23 +1136,26 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
       target.base_oid, target.base_oloc, split_read->sub_reads.at(index).rd, op->snapid,
       nullptr, split_read->flags, -1, fin, objver);
 
-    if (split_read->oob_fanned_out) {
-      auto d = *op->rdma_delivery;
-      const uint64_t orig_ofs =
-        op->ops[split_read->oob_ops_index].op.extent.offset;
-      uint64_t sub_ofs = orig_ofs;
-      for (const auto& so : sub_op->ops) {
-        if (so.op.op == CEPH_OSD_OP_READ) {
-          sub_ofs = so.op.extent.offset;
-          break;
+    if (!split_read->oob_ops.empty()) {
+      ceph_assert(sub_read.parent_ops.size() == sub_op->ops.size());
+      ceph_assert(sub_op->rdma_delivery.size() == sub_op->ops.size());
+      sub_read.oob.assign(sub_op->ops.size(), ceph::rdma::oob_result_t{});
+      for (unsigned j = 0; j < sub_op->ops.size(); ++j) {
+        const int parent = sub_read.parent_ops[j];
+        if (parent < 0 || sub_op->ops[j].op.op != CEPH_OSD_OP_READ ||
+            op->rdma_delivery[parent].empty()) {
+          continue;
         }
+        auto d = op->rdma_delivery[parent];
+        // zero shift for EC-direct subs (they carry the parent extent)
+        d.base_offset += sub_op->ops[j].op.extent.offset -
+                         op->ops[parent].op.extent.offset;
+        // per-sub CRCs of interleaved shard chunks cannot be combined
+        // into the parent's checksum; don't request them
+        d.flags &= ~ceph::rdma::delivery_t::FLAG_CRC64NVME;
+        sub_op->rdma_delivery[j] = std::move(d);
+        sub_op->rdma_oob_result[j] = &sub_read.oob[j];
       }
-      d.base_offset += sub_ofs - orig_ofs;  // zero shift for EC-direct subs
-      // per-sub CRCs of interleaved shard chunks cannot be combined
-      // into the parent's checksum; don't request them
-      d.flags &= ~ceph::rdma::delivery_t::FLAG_CRC64NVME;
-      sub_op->rdma_delivery = std::move(d);
-      sub_op->rdma_oob_result = &sub_read.oob;
     }
 
     auto &st = sub_op->target;

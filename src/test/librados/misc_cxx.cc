@@ -900,23 +900,33 @@ TEST_P(LibRadosMiscPP, RdmaDeliveryInlineFallbackPP) {
   const std::string token =
     "0102030405060708:01020304:0102aabb:0102:010203:1:"
     "0102030405060708090a0b0c0d0e0f10";
-  ObjectReadOperation::rdma_delivery_result res;
-  res.bytes = 42;
-  res.flags = 7;
-  int op_rval = 0;
-  bufferlist read_bl;
+  // two reads in one compound op, each carrying its own descriptor
+  // (the delivery request is per op, like the reply's result): both
+  // must degrade independently
+  ObjectReadOperation::rdma_delivery_result res1, res2;
+  res1.bytes = res2.bytes = 42;
+  res1.flags = res2.flags = 7;
+  int rval1 = 0, rval2 = 0;
+  bufferlist read_bl1, read_bl2;
   ObjectReadOperation op;
-  op.read(0, payload.size(), &read_bl, &op_rval);
+  op.read(0, 4, &read_bl1, &rval1);
   op.set_rdma_delivery(token, 0, 5000,
-                       ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64, &res);
+                       ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64, &res1);
+  op.read(4, payload.size() - 4, &read_bl2, &rval2);
+  op.set_rdma_delivery(token, 4, 5000, 0, &res2);
   int r = ioctx.operate("rdma_delivery_obj", &op, nullptr);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(0, op_rval);
-  ASSERT_EQ(0u, res.bytes);  // nothing was delivered out of band
-  ASSERT_EQ(0u, res.flags);  // and no crc came back
-  bufferlist expected;
-  expected.append(payload);
-  ASSERT_TRUE(read_bl.contents_equal(expected));  // data arrived inline
+  ASSERT_EQ(0, rval1);
+  ASSERT_EQ(0, rval2);
+  ASSERT_EQ(0u, res1.bytes);  // nothing was delivered out of band
+  ASSERT_EQ(0u, res1.flags);  // and no crc came back
+  ASSERT_EQ(0u, res2.bytes);
+  ASSERT_EQ(0u, res2.flags);
+  bufferlist expected1, expected2;
+  expected1.append(payload.substr(0, 4));
+  expected2.append(payload.substr(4));
+  ASSERT_TRUE(read_bl1.contents_equal(expected1));  // data arrived inline
+  ASSERT_TRUE(read_bl2.contents_equal(expected2));
 }
 
 TEST_P(LibRadosMiscPP, Applications) {
