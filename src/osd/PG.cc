@@ -1618,6 +1618,11 @@ HeartbeatStampsRef PG::get_hb_stamps(int peer)
 
 void PG::schedule_renew_lease(epoch_t lpr, ceph::timespan delay)
 {
+  if (cct->_conf->osd_debug_drop_pg_lease_renewals) {
+    dout(10) << __func__ << " dropping renewal for " << info.pgid
+	     << " (osd_debug_drop_pg_lease_renewals)" << dendl;
+    return;
+  }
   auto spgid = info.pgid;
   auto o = osd;
   osd->mono_timer.add_event(
