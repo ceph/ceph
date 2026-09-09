@@ -908,8 +908,31 @@ struct LogNode
   range_t has_between(const std::optional<std::string>& start,
     const std::optional<std::string>& end);
 
+  // The deletion bitmap in effect for this transaction, i.e. including any
+  // pending delta.
+  d_bitmap_t get_live_bitmap();
+
+  /*
+   * Invoke fn(entry, index) for every entry of this node that is not marked
+   * deleted, stopping early if fn returns true. Defined here rather than in
+   * the .cc so that callers outside log_node.cc can scan a node without
+   * materialising its keys.
+   */
   template <typename F>
-  void for_each_live_entry(F&& fn);
+  void for_each_live_entry(F&& fn) {
+    d_bitmap_t bitmap = get_live_bitmap();
+    uint32_t index = 0;
+    auto iter = iter_begin();
+    while (iter != iter_end()) {
+      if (!bitmap.is_set(index)) {
+	if (fn(*iter, index)) {
+	  return;
+	}
+      }
+      ++iter;
+      ++index;
+    }
+  }
 
   void list(const std::optional<std::string> &first,
     const std::optional<std::string> &last,
