@@ -194,25 +194,37 @@ void ManagedPolicyAttachment::generate_test_instances(std::list<ManagedPolicyAtt
 
   ManagedPolicyAttachment* u = new ManagedPolicyAttachment;
   u->arn = "arn:aws:iam::123456789012:policy/TestPolicy1";
-  u->status = "PENDING";
+  u->entity_type = "User";
+  u->entity_name = "testuser";
+  u->entity_id = "testuser-id";
+  u->entity_path = "/testuserpath/";
   o.push_back(u);
 
   ManagedPolicyAttachment* v = new ManagedPolicyAttachment;
   v->arn = "arn:aws:iam::123456789012:policy/TestPolicy2";
-  v->status = "ATTACHED";
+  v->entity_type = "User";
+  v->entity_name = "testuser";
+  v->entity_id = "testuser-id";
+  v->entity_path = "/testuserpath/";
   o.push_back(v);
 }
 
 void ManagedPolicyAttachment::dump(Formatter *f) const
 {
   encode_json("arn", arn, f);
-  encode_json("status", status, f);
+  encode_json("entity_type", entity_type, f);
+  encode_json("entity_name", entity_name, f);
+  encode_json("entity_id", entity_id, f);
+  encode_json("entity_path", entity_path, f);
 }
 
 void ManagedPolicyAttachment::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("arn", arn, obj);
-  JSONDecoder::decode_json("status", status, obj);
+  JSONDecoder::decode_json("entity_type", entity_type, obj);
+  JSONDecoder::decode_json("entity_name", entity_name, obj);
+  JSONDecoder::decode_json("entity_id", entity_id, obj);
+  JSONDecoder::decode_json("entity_path", entity_path, obj);
 }
 
 void ManagedPolicyInfo::dump(Formatter * const f) const

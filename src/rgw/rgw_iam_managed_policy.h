@@ -44,23 +44,32 @@ void encode(const ManagedPolicies&, bufferlist&, uint64_t f=0);
 void decode(ManagedPolicies&, bufferlist::const_iterator&);
 
 struct ManagedPolicyAttachment {
+  std::string entity_type;
+  std::string entity_name;
+  std::string entity_id;
+  std::string entity_path;
   std::string arn;
-  std::string  status;
 
   void encode(bufferlist& bl) const
   {
     ENCODE_START(2, 1, bl);
     encode(arn, bl);
-    encode(status, bl);
+    encode(entity_type, bl);
+    encode(entity_name, bl);
+    encode(entity_id, bl);
+    encode(entity_path, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl)
   {
     DECODE_START(2, bl);
-     decode(arn, bl);
-     decode(status, bl);
-     DECODE_FINISH(bl);
+    decode(arn, bl);
+    decode(entity_type, bl);
+    decode(entity_name, bl);
+    decode(entity_id, bl);
+    decode(entity_path, bl);
+    DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -180,6 +189,11 @@ struct PolicyTagList {
   std::string next_marker;
 };
 
+struct EntityList {
+  std::vector<ManagedPolicyAttachment> entities;
+  std::string next_marker;
+};
+enum class EntityType { User, Group, Role };
 enum class Scope { All, AWS, Local };
 enum class PolicyUsageFilter { PermissionsPolicy, PermissionsBoundary };
 std::vector<ManagedPolicyInfo> list_aws_managed_policy();

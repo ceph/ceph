@@ -203,6 +203,7 @@ enum action_t {
   iamTagPolicy,
   iamUntagPolicy,
   iamListPolicyTags,
+  iamListEntitiesForPolicy,
   iamAll,
 
 

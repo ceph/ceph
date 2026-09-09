@@ -550,6 +550,7 @@ bool is_non_s3_op(RGWOpType op_type)
   case RGW_OP_TAG_POLICY:
   case RGW_OP_UNTAG_POLICY:
   case RGW_OP_LIST_POLICY_TAGS:
+  case RGW_OP_LIST_ENTITIES_FOR_POLICY:
     return true;
   default:
     return false;

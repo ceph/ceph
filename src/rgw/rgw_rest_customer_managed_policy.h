@@ -228,3 +228,37 @@ public:
   const char* name() const override { return "list_policy_tags"; }
   RGWOpType get_type() override { return RGW_OP_LIST_POLICY_TAGS; }
 };
+
+class RGWListEntitiesForPolicy : public RGWRestPolicy {
+  std::string account_id;
+  std::string policy_arn;
+  std::string path_prefix;
+  rgw::IAM::PolicyUsageFilter policy_usage_filter;
+  std::optional<rgw::IAM::EntityType> entity_filter;
+  std::string marker;
+  int max_items = 100;
+  int list_entities_for_policy(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    std::string_view account_id,
+    std::string_view policy_name,
+    std::optional<rgw::IAM::EntityType> entity_filter,
+    std::string_view path_prefix,
+    rgw::IAM::PolicyUsageFilter policy_usage_filter,
+    std::string_view marker,
+    uint32_t max_items,
+    rgw::IAM::EntityList& listing);
+
+  bool started_response = false;
+  void start_response();
+  void end_response(std::string_view next_marker);
+  void send_response_data(std::span<rgw::IAM::ManagedPolicyAttachment> attachments);
+public:
+  RGWListEntitiesForPolicy() : RGWRestPolicy(rgw::IAM::iamListEntitiesForPolicy, RGW_CAP_READ){ }
+
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "list_entities_for_policy"; }
+  RGWOpType get_type() override { return RGW_OP_LIST_ENTITIES_FOR_POLICY; }
+};
