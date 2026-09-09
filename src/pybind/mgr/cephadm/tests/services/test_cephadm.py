@@ -56,6 +56,12 @@ class ServiceWithDependencies(CephadmService):
         return ['service-specific']
 
 
+class ServiceWithConfig(CephadmService):
+    def generate_config(self, daemon_spec, spec=None):
+        self.seen_spec = spec
+        return {}, []
+
+
 class TestCephadmService:
     def test_get_dependencies_combines_service_and_common_dependencies(self):
         mgr = FakeMgr()
@@ -76,6 +82,16 @@ class TestCephadmService:
 
         for service in service_registry.get_all_services():
             assert 'get_dependencies' not in service.__class__.__dict__
+
+    def test_prepare_create_passes_spec_to_generate_config(self):
+        mgr = FakeMgr()
+        service = ServiceWithConfig(mgr)
+        daemon_spec = MagicMock()
+        spec = MagicMock()
+
+        service.prepare_create(daemon_spec, spec)
+
+        assert service.seen_spec is spec
 
     def test_set_value_on_dashboard(self):
         # pylint: disable=protected-access

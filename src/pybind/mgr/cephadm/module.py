@@ -3157,7 +3157,8 @@ Then run the following:
         # deploy a new keyring file
         if daemon_spec.daemon_type != 'osd':
             daemon_spec = service_registry.get_service(daemon_type_to_service(
-                daemon_spec.daemon_type)).prepare_create(daemon_spec)
+                daemon_spec.daemon_type)).prepare_create(
+                daemon_spec, self.spec_store.active_specs.get(daemon_spec.service_name))
         with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
             self.wait_async(CephadmServe(self)._create_daemon(daemon_spec, reconfig=True))
 
@@ -3243,12 +3244,13 @@ Then run the following:
                 action = 'redeploy'  # to ensure proper behavior since we want redeploy
             if daemon_spec.daemon_type != 'osd':
                 daemon_spec = service_registry.get_service(daemon_type_to_service(
-                    daemon_spec.daemon_type)).prepare_create(daemon_spec)
+                    daemon_spec.daemon_type)).prepare_create(
+                    daemon_spec, self.spec_store.active_specs.get(daemon_spec.service_name))
             else:
                 # for OSDs, we still need to update config, just not carry out the full
                 # prepare_create function
                 daemon_spec.final_config, daemon_spec.deps = self.osd_service.generate_config(
-                    daemon_spec)
+                    daemon_spec, self.spec_store.active_specs.get(daemon_spec.service_name))
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
                 return self.wait_async(
                     CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig'),
@@ -3935,7 +3937,7 @@ Then run the following:
 
         @forall_hosts
         def create_func_map(*args: Any) -> str:
-            daemon_spec = service_registry.get_service(daemon_type).prepare_create(*args)
+            daemon_spec = service_registry.get_service(daemon_type).prepare_create(*args, spec=spec)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
                 return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec))
 

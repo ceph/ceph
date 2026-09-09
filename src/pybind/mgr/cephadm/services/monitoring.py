@@ -160,7 +160,11 @@ class GrafanaService(CephadmService):
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'grafana_servers']
         return self.get_certificates(daemon_spec, ips=host_ips, fqdns=host_fqdns)
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
 
         tls_pair = self.get_grafana_certificates(daemon_spec)
@@ -321,7 +325,11 @@ class AlertmanagerService(CephadmService):
 
         return sorted(deps)
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         webhook_urls: List[str] = []
 
@@ -581,6 +589,7 @@ class PrometheusService(CephadmService):
     def generate_config(
             self,
             daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
 
         assert self.TYPE == daemon_spec.daemon_type
@@ -853,7 +862,11 @@ class NodeExporterService(CephadmService):
         deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
         return sorted(deps)
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps = []
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('mgmt-gateway')]
@@ -908,7 +921,11 @@ class LokiService(CephadmService):
     TYPE = 'loki'
     DEFAULT_SERVICE_PORT = 3100
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = []
 
@@ -931,12 +948,20 @@ class AlloyService(CephadmService):
                          daemon_type: Optional[str] = None) -> List[str]:
         return sorted(mgr.cache.get_daemons_by_types(['loki']))
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
         return daemon_spec
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         daemons = self.mgr.cache.get_daemons_by_service('loki')
         loki_host = ''
@@ -968,7 +993,11 @@ class PromtailService(CephadmService):
                          daemon_type: Optional[str] = None) -> List[str]:
         return sorted(mgr.cache.get_daemons_by_types(['loki']))
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = self.get_dependencies(self.mgr)
         daemons = self.mgr.cache.get_daemons_by_service('loki')
@@ -994,7 +1023,11 @@ class PromtailService(CephadmService):
 class SNMPGatewayService(CephadmService):
     TYPE = 'snmp-gateway'
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = []
 

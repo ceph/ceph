@@ -19,7 +19,11 @@ if TYPE_CHECKING:
 class NodeProxy(CephService):
     TYPE = 'node-proxy'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
@@ -31,7 +35,7 @@ class NodeProxy(CephService):
         daemon_spec.keyring = keyring
         self.mgr.node_proxy_cache.update_keyring(host, keyring)
 
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
 
         return daemon_spec
 
@@ -48,7 +52,11 @@ class NodeProxy(CephService):
             pass
         return sorted([mgr.get_mgr_ip(), server_port, root_cert])
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         # node-proxy is re-using the agent endpoint and therefore
         # needs similar checks to see if the endpoint is ready.
         self.agent_endpoint = self.mgr.http_server.agent
