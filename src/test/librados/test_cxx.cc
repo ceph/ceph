@@ -114,7 +114,7 @@ std::string create_one_ec_pool_pp(const std::string &pool_name,
   if (err.length())
     return err;
 
-  err = create_ec_pool_pp(pool_name, cluster, fast_ec, k_per_zone, m_per_zone);
+  err = create_ec_pool_pp(pool_name, cluster, fast_ec, /*enable_omap=*/true, k_per_zone, m_per_zone);
   if (err.length()) {
     cluster.shutdown();
     return err;
@@ -146,8 +146,8 @@ std::string create_pool_pp(const std::string &pool_name, Rados &cluster) {
 }
 
 std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster,
-                               bool fast_ec, int k_per_zone, 
-                               int m_per_zone) {
+                               bool fast_ec, bool enable_omap,
+                               int k_per_zone, int m_per_zone) {
   const bool stretch = (k_per_zone > 0);
   std::ostringstream oss;
 
@@ -230,6 +230,7 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster,
         return oss.str();
       }
     }
+  }
 
   cluster.wait_for_latest_osdmap();
   return "";

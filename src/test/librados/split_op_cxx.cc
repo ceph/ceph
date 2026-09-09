@@ -512,15 +512,16 @@ public:
     SKIP_IF_CRIMSON();
     RadosTestECPP::SetUp();
 
-    ASSERT_TRUE(has_two_zone_topology())
-        << "Zone-aware split-read tests require a 2-zone CRUSH topology "
-           "(two datacenter buckets) but the cluster is not configured for it.\n"
-           "Set up the CRUSH topology before running these tests:\n"
-           "  ceph osd crush add-bucket zone-0 datacenter\n"
-           "  ceph osd crush add-bucket zone-1 datacenter\n"
-           "  ceph osd crush move zone-{0,1} root=default\n"
-           "  for i in 0 1 2; do ceph osd crush move osd.$i datacenter=zone-0; done\n"
-           "  for i in 3 4 5; do ceph osd crush move osd.$i datacenter=zone-1; done";
+    if (!has_two_zone_topology()) {
+      GTEST_SKIP() << "Zone-aware split-read tests require a 2-zone CRUSH topology "
+                      "(two datacenter buckets) but the cluster is not configured for it.\n"
+                      "Set up the CRUSH topology before running these tests:\n"
+                      "  ceph osd crush add-bucket zone-0 datacenter\n"
+                      "  ceph osd crush add-bucket zone-1 datacenter\n"
+                      "  ceph osd crush move zone-{0,1} root=default\n"
+                      "  for i in 0 1 2; do ceph osd crush move osd.$i datacenter=zone-0; done\n"
+                      "  for i in 3 4 5; do ceph osd crush move osd.$i datacenter=zone-1; done";
+    }
 
     // Switch ioctx to the stretch pool for zone tests
     ioctx.close();
@@ -714,8 +715,9 @@ public:
     SKIP_IF_CRIMSON();
     RadosTestECPP::SetUp();
 
-    ASSERT_TRUE(has_two_zone_topology())
-        << "Zone-stats tests require a 2-zone CRUSH topology.";
+    if (!has_two_zone_topology()) {
+      GTEST_SKIP() << "Zone-stats tests require a 2-zone CRUSH topology.";
+    }
 
     ioctx.close();
     ASSERT_EQ(0, s_cluster.ioctx_create(pool_name_stretch.c_str(), ioctx));
