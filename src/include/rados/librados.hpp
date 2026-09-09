@@ -603,7 +603,9 @@ inline namespace v14_2_0 {
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
     /**
-     * Request out-of-band delivery for this operation's read data: an
+     * Request out-of-band delivery of the most recently added read's
+     * data (call it right after read() or sparse_read(); each read in
+     * a compound operation may carry its own request and result): an
      * OSD that can honor it RDMA-writes the data into the client
      * memory window identified by the opaque RDMA descriptor token,
      * at the token's base address plus base_offset, and reports only

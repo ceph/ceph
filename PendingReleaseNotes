@@ -34,7 +34,7 @@
   (``WITH_RADOSGW_CUOBJ`` + ``rgw_cuobj_enabled``), a new OSD passthrough mode
   (``rgw_cuobj_osd_passthrough`` with OSDs built with ``WITH_OSD_CUOBJ`` and
   ``osd_cuobj_enabled``) forwards the client's RDMA descriptor to the OSDs as
-  an advisory delivery field on the RADOS request, so GET data is DMA-written
+  a per-operation advisory delivery field on the RADOS request, so GET data is DMA-written
   directly from each OSD into client (or client GPU) memory without traversing
   the gateway; replicated and erasure-coded pools are supported, including a
   shard-direct interleave for EC split reads. Any OSD that cannot push (older

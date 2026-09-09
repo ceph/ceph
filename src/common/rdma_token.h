@@ -32,14 +32,17 @@ inline constexpr size_t RDMA_TOKEN_MAX_LEN = 512;
 std::optional<token_window> parse_rdma_token(std::string_view token);
 
 /**
- * Out-of-band delivery descriptor carried on a MOSDOp.
+ * Per-op out-of-band delivery descriptor carried on a MOSDOp.
  *
- * The descriptor is advisory: an OSD that can and will deliver a
- * read's data out of band RDMA-writes it into the client memory
- * window named by the opaque token, at the token's base address plus
- * base_offset plus the data's offset relative to the read's extent,
- * and reports the pushed byte count in the reply's oob_bytes; any OSD
- * that cannot (or will not: expired lease, retransmitted op, unknown
+ * The MOSDOp carries one descriptor per op (a vector aligned with the
+ * ops, mirroring the reply's per-op oob results); an entry with an
+ * empty token means that op's data stays inline. The descriptor is
+ * advisory: an OSD that can and will deliver the op's read data out
+ * of band RDMA-writes it into the client memory window named by the
+ * opaque token, at the token's base address plus base_offset plus the
+ * data's offset relative to the read's extent, and reports the pushed
+ * byte count in the reply's oob result for that op; any OSD that
+ * cannot (or will not: expired lease, retransmitted op, unknown
  * flags) replies with the data inline exactly as if no descriptor
  * were present. Degradation is therefore always plain, correct,
  * in-band data.
@@ -57,6 +60,11 @@ struct delivery_t {
   uint32_t lease_ms = 0;  ///< do not START an RDMA write later than this after
                           ///< op receipt; 0 = no lease
   uint32_t flags = 0;     ///< FLAG_* above; OSDs deliver inline on unknown bits
+
+  /// true when no delivery is requested for this op
+  bool empty() const {
+    return token.empty();
+  }
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);

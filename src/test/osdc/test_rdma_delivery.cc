@@ -6,8 +6,9 @@
 #include "gtest/gtest.h"
 
 // Pin the rdma delivery descriptor wire format (carried as a trailing
-// MOSDOp field for header.version >= 10). Any change here is a wire
-// format change and needs a struct version bump.
+// per-op vector on the MOSDOp for header.version >= 10, aligned with
+// the ops). Any change here is a wire format change and needs a struct
+// version bump.
 TEST(RdmaDelivery, WireFormat)
 {
   ceph::rdma::delivery_t d;
@@ -79,24 +80,36 @@ TEST(RdmaDelivery, OobResultWireFormat)
   EXPECT_TRUE(p.end());
 }
 
-TEST(RdmaDelivery, OptionalRoundTrip)
+TEST(RdmaDelivery, PerOpVectorRoundTrip)
 {
-  // the field rides as a std::optional on the MOSDOp tail
-  std::optional<ceph::rdma::delivery_t> none;
-  std::optional<ceph::rdma::delivery_t> some =
-    ceph::rdma::delivery_t{"aa:bb:opaque", 42, 0, 0};
+  // the descriptors ride as a per-op vector on the MOSDOp tail: empty
+  // when nothing is requested, otherwise one entry per op where an
+  // empty token means "inline for this op"
+  std::vector<ceph::rdma::delivery_t> none;
+  std::vector<ceph::rdma::delivery_t> some = {
+    ceph::rdma::delivery_t{},                          // op 0: inline
+    ceph::rdma::delivery_t{"aa:bb:opaque", 42, 0, 0},  // op 1
+    ceph::rdma::delivery_t{"aa:bb:opaque", 4096, 0,
+			   ceph::rdma::delivery_t::FLAG_CRC64NVME},  // op 2
+  };
+  EXPECT_TRUE(some[0].empty());
+  EXPECT_FALSE(some[1].empty());
 
   bufferlist bl;
   encode(none, bl);
   encode(some, bl);
 
-  std::optional<ceph::rdma::delivery_t> out1, out2;
+  std::vector<ceph::rdma::delivery_t> out1, out2;
   auto p = bl.cbegin();
   decode(out1, p);
   decode(out2, p);
-  EXPECT_FALSE(out1.has_value());
-  ASSERT_TRUE(out2.has_value());
-  EXPECT_EQ("aa:bb:opaque", out2->token);
-  EXPECT_EQ(42u, out2->base_offset);
+  EXPECT_TRUE(out1.empty());
+  ASSERT_EQ(3u, out2.size());
+  EXPECT_TRUE(out2[0].empty());
+  EXPECT_EQ("aa:bb:opaque", out2[1].token);
+  EXPECT_EQ(42u, out2[1].base_offset);
+  EXPECT_EQ(0u, out2[1].flags);
+  EXPECT_EQ(4096u, out2[2].base_offset);
+  EXPECT_EQ(ceph::rdma::delivery_t::FLAG_CRC64NVME, out2[2].flags);
   EXPECT_TRUE(p.end());
 }
