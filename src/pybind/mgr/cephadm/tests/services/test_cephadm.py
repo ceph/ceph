@@ -4,7 +4,9 @@ from typing import Dict, List
 from unittest.mock import MagicMock
 
 from cephadm.services.service_registry import service_registry
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.services.monitoring import GrafanaService
+from cephadm.services.osd import OSDService
 from orchestrator import OrchestratorError
 
 
@@ -50,6 +52,27 @@ class FakeMgr:
 
 
 class TestCephadmService:
+    def test_osd_generate_config_simplifies_keyring(self):
+        mgr = FakeMgr()
+        service = OSDService(mgr)
+        secret = 'AQBexample=='
+        daemon_spec = CephadmDaemonDeploySpec(
+            host='host1',
+            daemon_id='0',
+            service_name='osd.test',
+            keyring=(
+                f'[osd.0]\n\tkey = {secret}\n'
+                '\tcaps mgr = "allow profile osd"\n'
+                '\tcaps mon = "allow profile osd"\n'
+                '\tcaps osd = "allow *"\n'
+            ),
+        )
+
+        config, deps = service.generate_config(daemon_spec)
+
+        assert config['keyring'] == f'[osd.0]\nkey = {secret}\n'
+        assert deps == []
+
     def test_set_value_on_dashboard(self):
         # pylint: disable=protected-access
         mgr = FakeMgr()

@@ -18,7 +18,7 @@ from ceph.utils import datetime_now
 from orchestrator import OrchestratorError, DaemonDescription
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, simplified_keyring
 from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
@@ -508,6 +508,10 @@ class OSDService(CephService):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         config, parent_deps = super().generate_config(daemon_spec)
+        keyring = config.get('keyring')
+        if keyring:
+            config['keyring'] = simplified_keyring(
+                str(self.get_auth_entity(daemon_spec.daemon_id)), keyring)
         if daemon_spec.service_name in self.mgr.spec_store:
             svc_spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
