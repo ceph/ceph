@@ -159,6 +159,26 @@ int librados::RadosClient::pool_required_alignment2(int64_t pool_id,
     });
 }
 
+int librados::RadosClient::pool_rdma_delivery_lease(int64_t pool_id,
+						    double *seconds)
+{
+  if (!seconds)
+    return -EINVAL;
+
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
+  return objecter->with_osdmap([seconds, pool_id](const OSDMap &o) {
+      if (!o.have_pg_pool(pool_id)) {
+	return -ENOENT;
+      }
+      *seconds = o.get_pg_pool(pool_id)->get_rdma_delivery_lease();
+      return 0;
+    });
+}
+
 int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s, bool wait_latest_map)
 {
   int r = wait_for_osdmap();

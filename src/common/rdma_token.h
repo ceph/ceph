@@ -46,6 +46,12 @@ std::optional<token_window> parse_rdma_token(std::string_view token);
  * flags) replies with the data inline exactly as if no descriptor
  * were present. Degradation is therefore always plain, correct,
  * in-band data.
+ *
+ * The lease bounding how long after receipt an OSD may still start
+ * the write is not carried here: it is the pool's rdma_delivery_lease
+ * option (pg_pool_t::get_rdma_delivery_lease()), so the value the OSD
+ * enforces and the value the client waits out before reusing the
+ * window come from the same place.
  */
 struct delivery_t {
   /// request the canonical CRC-64/NVME of the delivered bytes in the
@@ -57,8 +63,6 @@ struct delivery_t {
 
   std::string token;      ///< opaque cuObject RDMA descriptor
   uint64_t base_offset = 0; ///< client-window offset for the read's first byte
-  uint32_t lease_ms = 0;  ///< do not START an RDMA write later than this after
-                          ///< op receipt; 0 = no lease
   uint32_t flags = 0;     ///< FLAG_* above; OSDs deliver inline on unknown bits
 
   /// true when no delivery is requested for this op
@@ -70,7 +74,6 @@ struct delivery_t {
     ENCODE_START(1, 1, bl);
     ceph::encode(token, bl);
     ceph::encode(base_offset, bl);
-    ceph::encode(lease_ms, bl);
     ceph::encode(flags, bl);
     ENCODE_FINISH(bl);
   }
@@ -78,7 +81,6 @@ struct delivery_t {
     DECODE_START(1, p);
     ceph::decode(token, p);
     ceph::decode(base_offset, p);
-    ceph::decode(lease_ms, p);
     ceph::decode(flags, p);
     DECODE_FINISH(p);
   }

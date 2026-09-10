@@ -38,8 +38,8 @@ OSD passthrough mode
   client's descriptor to the OSDs instead: each stripe read carries an
   *advisory delivery descriptor* (a per-operation field on the RADOS
   request message, alongside the read it applies to, holding the
-  opaque token, the stripe's offset within the requested range, and a
-  lease). An OSD that can push builds an
+  opaque token and the stripe's offset within the requested
+  range). An OSD that can push builds an
   op-aware placement plan and RDMA-writes the reply data directly into
   the client's memory window, returning only byte counts; an OSD that
   cannot — not built with cuObject, disabled, lease expired, or a
@@ -82,9 +82,11 @@ Modes degrade transparently, per request:
    invisible to the client: no HTTP bytes have been sent, and
    rewriting any client memory ranges that were already delivered is
    harmless. When stripe operations already reached the OSDs, the
-   gateway first waits ``rgw_cuobj_fence_wait_ms`` so that a write
-   still queued in a failed OSD's NIC cannot land after the fallback
-   rewrites the same ranges (see Correctness below).
+   gateway first waits out the pool's ``rdma_delivery_lease`` plus
+   ``rgw_cuobj_fence_drain_ms`` so that a write an OSD we lost track
+   of may still start, or one still queued in its NIC, cannot land
+   after the fallback rewrites the same ranges (see Deployment notes
+   below).
 #. **Staged** mode is used when the gateway has a working
    ``cuObjServer``.
 #. Otherwise the response carries the data in the **HTTP body** with
@@ -129,13 +131,21 @@ Gateway (staged mode and protocol handling):
   that path fails the GET instead of reaching the application. On by
   default; per-stripe checksums are computed with carry-less-multiply
   accelerated tables.
-* ``rgw_cuobj_lease_ms`` — lease carried on each stripe operation; an
-  OSD refuses to *start* an RDMA write later than this after receiving
-  the op and returns the data inline instead.
-* ``rgw_cuobj_fence_wait_ms`` — how long a passthrough attempt that
-  already reached the OSDs waits before restarting in a fallback mode;
-  size it to cover the RDMA transport's retry budget (roughly two
-  seconds at the cuObject defaults).
+* ``rgw_cuobj_fence_drain_ms`` — transport drain bound added to the
+  pool's ``rdma_delivery_lease`` when a passthrough attempt that
+  already reached the OSDs restarts in a fallback mode; size it to
+  cover the RDMA transport's retry budget (roughly two seconds at the
+  cuObject defaults).
+
+Pool (enforced by the OSDs, read by the gateway from the OSDMap):
+
+* ``rdma_delivery_lease`` — how long, in seconds, after receiving a
+  stripe operation an OSD may still *start* the RDMA write; a push
+  that would start later is delivered inline instead. Set it with
+  ``ceph osd pool set <pool> rdma_delivery_lease <seconds>``; the
+  default is 5. The gateway sizes its fence from the same OSDMap
+  value the OSDs enforce, so there is no per-daemon setting to keep
+  in step.
 
 OSD (passthrough execution):
 
@@ -232,9 +242,11 @@ Deployment notes
   sent, a drained reply *is* the interlock for every OSD still in
   contact; OSDs deliver retransmitted requests inline (RADOS re-sends
   reads after peering changes) so a stripe is never double-pushed;
-  and for OSDs that vanish mid-request, the lease bounds how long
-  after receipt a write may still start, so the gateway's fence wait
-  (``rgw_cuobj_fence_wait_ms``, applied before any fallback rewrite)
+  and for OSDs that vanish mid-request, or whose original copy of an
+  operation the gateway's RADOS client has since resent, the pool's
+  ``rdma_delivery_lease`` bounds how long after receipt a write may
+  still start, so the gateway's fence (lease plus
+  ``rgw_cuobj_fence_drain_ms``, applied before any fallback rewrite)
   outlasts lease-plus-transport-drain and the window is quiescent
   before it is written again. The lease is measured against the
   wall clock, so it is best-effort fencing across clock steps —

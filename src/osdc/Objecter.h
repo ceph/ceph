@@ -141,13 +141,11 @@ struct ObjectOperation {
 
   /// request out-of-band delivery for the most recently added op
   void set_rdma_delivery(std::string_view token, uint64_t base_offset,
-			 uint32_t lease_ms, uint32_t flags,
-			 ceph::rdma::oob_result_t* result) {
+			 uint32_t flags, ceph::rdma::oob_result_t* result) {
     ceph_assert(!ops.empty());
     ceph_assert(rdma_delivery.size() == ops.size());
     rdma_delivery.back() = ceph::rdma::delivery_t{std::string(token),
-						  base_offset, lease_ms,
-						  flags};
+						  base_offset, flags};
     rdma_oob_result.back() = result;
   }
   bool has_rdma_delivery() const {

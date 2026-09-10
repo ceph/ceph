@@ -910,10 +910,10 @@ TEST_P(LibRadosMiscPP, RdmaDeliveryInlineFallbackPP) {
   bufferlist read_bl1, read_bl2;
   ObjectReadOperation op;
   op.read(0, 4, &read_bl1, &rval1);
-  op.set_rdma_delivery(token, 0, 5000,
+  op.set_rdma_delivery(token, 0,
                        ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64, &res1);
   op.read(4, payload.size() - 4, &read_bl2, &rval2);
-  op.set_rdma_delivery(token, 4, 5000, 0, &res2);
+  op.set_rdma_delivery(token, 4, 0, &res2);
   int r = ioctx.operate("rdma_delivery_obj", &op, nullptr);
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, rval1);
@@ -927,6 +927,32 @@ TEST_P(LibRadosMiscPP, RdmaDeliveryInlineFallbackPP) {
   expected2.append(payload.substr(4));
   ASSERT_TRUE(read_bl1.contents_equal(expected1));  // data arrived inline
   ASSERT_TRUE(read_bl2.contents_equal(expected2));
+}
+
+TEST_P(LibRadosMiscPP, RdmaDeliveryLeasePP) {
+  // the lease an OSD enforces on out-of-band delivery is a pool option
+  // the client reads from its OSDMap: the built-in default when unset,
+  // the pool's value once set, and the default again after clearing it
+  double lease = 0;
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(5.0, lease);
+  ASSERT_EQ(-EINVAL, ioctx.pool_rdma_delivery_lease(nullptr));
+
+  auto set_lease = [&](const std::string& val) {
+    bufferlist inbl, outbl;
+    std::string outs;
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+      "\", \"var\": \"rdma_delivery_lease\", \"val\": \"" + val +
+      "\"}", std::move(inbl), &outbl, &outs)) << outs;
+    ASSERT_EQ(0, cluster.wait_for_latest_osdmap());
+  };
+  set_lease("2.5");
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(2.5, lease);
+  set_lease("0");  // 0 clears the option, restoring the default
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(5.0, lease);
 }
 
 TEST_P(LibRadosMiscPP, Applications) {
