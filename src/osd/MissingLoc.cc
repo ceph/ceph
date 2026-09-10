@@ -75,44 +75,65 @@ bool MissingLoc::add_source_info(
   unsigned loop = 0;
   bool sources_updated = false;
   // found items?
+
+  auto start = ceph::coarse_mono_clock::now();
+  bool suppress_logging = false;
   for (auto p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
        ++p) {
     const hobject_t &soid(p->first);
     eversion_t need = p->second.need;
-    if (handle && ++loop >= cct->_conf->osd_loop_before_reset_tphandle) {
-      handle->reset_tp_timeout();
+    if (++loop >= cct->_conf->osd_loop_before_reset_tphandle) {
+      if (handle) {
+	handle->reset_tp_timeout();
+      }
+      auto now = ceph::coarse_mono_clock::now();
+      if (std::chrono::duration<double>(now - start).count() > 0.5) {
+	// Suppress logging if this function has be running more than
+	// 0.5 seconds
+	suppress_logging = true;
+      }
       loop = 0;
     }
     if (p->second.is_delete()) {
-      ldout(cct, 10) << __func__ << " " << soid
-		     << " delete, ignoring source" << dendl;
+      if (!suppress_logging) {
+        ldout(cct, 10) << __func__ << " " << soid
+                       << " delete, ignoring source" << dendl;
+      }
       continue;
     }
     if (oinfo.last_update < need) {
-      ldout(cct, 10) << "search_for_missing " << soid << " " << need
-		     << " also missing on osd." << fromosd
-		     << " (last_update " << oinfo.last_update
-		     << " < needed " << need << ")" << dendl;
+      if (!suppress_logging) {
+        ldout(cct, 10) << "search_for_missing " << soid << " " << need
+                       << " also missing on osd." << fromosd
+                       << " (last_update " << oinfo.last_update
+                       << " < needed " << need << ")" << dendl;
+      }
       continue;
     }
     if (p->first >= oinfo.last_backfill) {
       // FIXME: this is _probably_ true, although it could conceivably
       // be in the undefined region!  Hmm!
-      ldout(cct, 10) << "search_for_missing " << soid << " " << need
-		     << " also missing on osd." << fromosd
-		     << " (past last_backfill " << oinfo.last_backfill
-		     << ")" << dendl;
+      if (!suppress_logging) {
+        ldout(cct, 10) << "search_for_missing " << soid << " " << need
+                       << " also missing on osd." << fromosd
+                       << " (past last_backfill " << oinfo.last_backfill
+                       << ")" << dendl;
+      }
       continue;
     }
     if (omissing.is_missing(soid)) {
-      ldout(cct, 10) << "search_for_missing " << soid << " " << need
-		     << " also missing on osd." << fromosd << dendl;
+      if (!suppress_logging) {
+        ldout(cct, 10) << "search_for_missing " << soid << " " << need
+                       << " also missing on osd." << fromosd << dendl;
+      }
       continue;
     }
 
-    ldout(cct, 10) << "search_for_missing " << soid << " " << need
-		   << " is on osd." << fromosd << dendl;
+    if (!suppress_logging) {
+      ldout(cct, 10) << "search_for_missing " << soid << " " << need
+                     << " is on osd." << fromosd << dendl;
+    }
 
     {
       auto p = missing_loc.find(soid);
@@ -133,7 +154,7 @@ bool MissingLoc::add_source_info(
   }
 
   ldout(cct, 20) << "needs_recovery_map missing " << needs_recovery_map
-		 << dendl;
+                 << dendl;
   return found_missing;
 }
 
