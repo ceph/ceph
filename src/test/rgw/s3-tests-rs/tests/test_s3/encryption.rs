@@ -1005,15 +1005,17 @@ async fn multipart_upload_enc(
             .send()
             .await?;
 
-        parts.push(
-            aws_sdk_s3::types::CompletedPart::builder()
-                .e_tag(resp.e_tag().unwrap_or_default())
-                .part_number(part_num)
-                .build(),
-        );
+        let mut part_etag = resp.e_tag().unwrap_or_default().to_string();
 
         if resend_parts.contains(&((part_num - 1) as usize)) {
-            let _ = client
+            /* A re-uploaded part is a new part:  CompleteMultipartUpload
+             * must carry the ETag the *last* UploadPart returned for this
+             * number.  Reusing the first one only works while the ETag is
+             * a digest of the body, since re-sending identical bytes then
+             * reproduces it -- which also means the resend was invisible
+             * to the assertions.  Under rgw_non_md5_etag each upload mints
+             * a distinct ETag and the stale value is rejected outright. */
+            let again = client
                 .upload_part()
                 .bucket(bucket)
                 .key(key)
@@ -1025,7 +1027,15 @@ async fn multipart_upload_enc(
                 .sse_customer_key_md5(part_key_md5)
                 .send()
                 .await?;
+            part_etag = again.e_tag().unwrap_or_default().to_string();
         }
+
+        parts.push(
+            aws_sdk_s3::types::CompletedPart::builder()
+                .e_tag(part_etag)
+                .part_number(part_num)
+                .build(),
+        );
     }
 
     Ok(SseCMultipartResult { upload_id, data, parts })
