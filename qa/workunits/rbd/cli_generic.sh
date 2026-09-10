@@ -529,6 +529,45 @@ test_trash() {
     remove_images
 }
 
+test_trash_partially_removed() {
+    echo "testing listing of partially removed images..."
+    remove_images
+
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+
+    rbd create $RBD_CREATE_ARGS -s 1 test1
+    rbd create $RBD_CREATE_ARGS -s 64M --data-pool rbd2 test2
+    rbd bench --io-type write --io-size 4M --io-total 32M test2
+
+    # moving the image to the trash only updates objects in rbd, while the
+    # trim deletes its data objects in rbd2. so without write access to rbd2,
+    # "rbd rm" moves the image to the trash and then fails to trim it
+    local keyring
+    keyring=$(mktemp)
+    ceph auth get-or-create client.rbd_rm_ro mon 'profile rbd' \
+        osd 'profile rbd pool=rbd, profile rbd-read-only pool=rbd2' > $keyring
+    expect_fail rbd --id rbd_rm_ro --keyring $keyring rm test2
+    rbd ls | grep test2
+    expect_fail rbd info test2
+
+    rbd ls -l
+    rbd ls -l | grep 'test1.*1 MiB.*2'
+    rbd ls -l --format json
+    rbd du
+    rbd du | grep test1
+    expect_fail rbd du test2
+
+    rbd rm test2
+    rbd ls | expect_fail grep test2
+    rbd ls -l
+
+    ceph auth rm client.rbd_rm_ro
+    rm -f $keyring
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
+    remove_images
+}
+
 test_purge() {
     echo "testing trash purge..."
     remove_images
@@ -2088,6 +2127,7 @@ test_others
 test_locking
 test_clone
 test_trash
+test_trash_partially_removed
 test_purge
 test_deep_copy_clone
 test_clone_v2

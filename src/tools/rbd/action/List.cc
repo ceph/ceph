@@ -264,6 +264,9 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
 	  if (r < 0) {
 	    std::cerr << "rbd: error opening " << comp->name << ": "
                       << cpp_strerror(r) << std::endl;
+	    if (r == -ENOENT) {
+	      r = 0;
+	    }
 
 	    // in any event, continue to next image
 	    comp->state = STATE_IDLE;
