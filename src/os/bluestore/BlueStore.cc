@@ -8321,7 +8321,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
       options += options_annex;
     }
 
-    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
+    if (create && cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
       sharding_def = cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");
     }
   }
@@ -8335,8 +8335,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     // we pass in cf list here, but it is only used if the db already has
     // column families created.
     r = read_only ?
-      db->open_read_only(err, sharding_def) :
-      db->open(err, sharding_def);
+      db->open_read_only(err) :
+      db->open(err);
   }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
