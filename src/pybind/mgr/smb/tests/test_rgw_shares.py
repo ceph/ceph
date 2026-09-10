@@ -863,3 +863,49 @@ def test_external_cluster_no_user_validation(thandler):
             fsid='12345678-1234-1234-1234-123456789abc',
             mon_host='10.0.1.10:6789',
         )
+
+
+def test_rgw_share_acl_configuration(thandler):
+    """Test that RGW shares include proper ACL configuration."""
+    cluster = _cluster(
+        cluster_id='rgwacl',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    share = smb.resources.Share(
+        cluster_id='rgwacl',
+        share_id='aclshare',
+        name='ACL Test Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='acl-bucket',
+            user_id='acluser',
+        ),
+    )
+    rg = thandler.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify the share was created
+    assert ('shares', 'rgwacl.aclshare') in thandler.internal_store.data
+
+    # Sync to generate the configuration
+    thandler._sync_clusters(['rgwacl'])
+
+    # Verify ACL configuration in public store
+    cfg = thandler.public_store['rgwacl', 'config.smb'].get()
+    assert cfg
+    assert 'shares' in cfg
+    assert 'ACL Test Share' in cfg['shares']
+
+    share_opts = cfg['shares']['ACL Test Share']['options']
+
+    # Verify ACL-related VFS objects are present
+    assert 'vfs objects' in share_opts
+    assert share_opts['vfs objects'] == 'acl_xattr ceph_rgw'
+
+    # Verify ACL xattr security name is configured
+    assert 'acl_xattr:security_acl_name' in share_opts
+    assert share_opts['acl_xattr:security_acl_name'] == 'user.NTACL'
