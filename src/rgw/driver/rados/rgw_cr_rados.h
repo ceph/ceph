@@ -55,6 +55,20 @@ public:
     put();
   }
 
+  // Complete immediately with a specific rc without sending any request.
+  void complete_immediate(int rc) {
+    get();
+    retcode = rc;
+    {
+      std::lock_guard l{lock};
+      if (notifier) {
+        notifier->cb(); // drops its own ref
+        notifier = nullptr;
+      }
+    }
+    put();
+  }
+
   int get_ret_status() { return retcode; }
 
   void finish() {
