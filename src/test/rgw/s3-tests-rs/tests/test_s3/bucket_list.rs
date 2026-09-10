@@ -1894,3 +1894,174 @@ async fn test_bucket_listv2_unordered() {
         .await;
     assert_s3_err!(result, 400, "InvalidArgument");
 }
+
+/*
+ * Listing-cache coherence.
+ *
+ * The filesystem-backed drivers keep a listing cache and update it two
+ * ways:  a full rebuild that enumerates the bucket from disk, and an
+ * incremental add when an object is written.  The rebuild composes each
+ * key from the path prefix as it descends;  the incremental path has to
+ * get the key right on its own.
+ *
+ * The first listing of a cold bucket triggers a rebuild, and a rebuild
+ * repairs whatever the incremental path got wrong -- so a test that
+ * creates a bucket, writes, and lists cannot see an incremental-path
+ * bug at all.  Every test below therefore lists once to WARM the cache
+ * before the write it actually cares about.  Without that step these
+ * tests pass whether or not the code is correct.
+ *
+ * Do not restart the gateway between the write and the assertion:  that
+ * discards the cache and forces a rebuild, with the same masking
+ * effect.
+ */
+
+async fn warm_listing_cache(client: &aws_sdk_s3::Client, bucket_name: &str) {
+    client
+        .list_objects_v2()
+        .bucket(bucket_name)
+        .send()
+        .await
+        .expect("warming list failed");
+}
+
+#[tokio::test]
+async fn test_bucket_list_nested_key_warm_cache() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+
+    s3_tests_rs::fixtures::create_objects(&client, &bucket_name, &["seed"]).await;
+    warm_listing_cache(&client, &bucket_name).await;
+
+    s3_tests_rs::fixtures::create_objects(&client, &bucket_name, &["d1/child.txt"]).await;
+
+    let response = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    let keys = get_keys_v2(&response);
+
+    assert!(
+        keys.contains(&"d1/child.txt".to_string()),
+        "nested key absent from listing: {keys:?}"
+    );
+    assert!(
+        !keys.contains(&"child.txt".to_string()),
+        "nested object listed under its bare leaf name: {keys:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_bucket_list_folder_object_warm_cache() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+
+    s3_tests_rs::fixtures::create_objects(&client, &bucket_name, &["seed"]).await;
+    warm_listing_cache(&client, &bucket_name).await;
+
+    /* an explicit zero-length "directory" object */
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key("d1/")
+        .body(aws_sdk_s3::primitives::ByteStream::from(Vec::new()))
+        .send()
+        .await
+        .unwrap();
+
+    let response = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    let keys = get_keys_v2(&response);
+
+    assert!(
+        keys.contains(&"d1/".to_string()),
+        "directory object absent from listing: {keys:?}"
+    );
+    assert!(
+        !keys.iter().any(|k| k.ends_with(".folder")),
+        "driver sentinel leaked into the listing as a key: {keys:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_bucket_list_same_leaf_two_dirs_warm_cache() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+
+    s3_tests_rs::fixtures::create_objects(&client, &bucket_name, &["seed"]).await;
+    warm_listing_cache(&client, &bucket_name).await;
+
+    /* same leaf name under two different prefixes:  if the incremental
+     * path keys on the leaf alone these collide on one entry rather than
+     * merely being misnamed */
+    s3_tests_rs::fixtures::create_objects(&client, &bucket_name, &["a/x.txt", "b/x.txt"]).await;
+
+    let response = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    let keys = get_keys_v2(&response);
+
+    assert!(
+        keys.contains(&"a/x.txt".to_string()) && keys.contains(&"b/x.txt".to_string()),
+        "one or both nested keys collided or were lost: {keys:?}"
+    );
+    assert!(
+        !keys.contains(&"x.txt".to_string()),
+        "nested objects collapsed onto a bare leaf key: {keys:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_bucket_list_etag_agrees_with_head_warm_cache() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+
+    s3_tests_rs::fixtures::create_objects(&client, &bucket_name, &["seed"]).await;
+    warm_listing_cache(&client, &bucket_name).await;
+
+    s3_tests_rs::fixtures::create_objects(&client, &bucket_name, &["etagcheck"]).await;
+
+    let response = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    let listed = response
+        .contents()
+        .iter()
+        .find(|o| o.key() == Some("etagcheck"))
+        .expect("object absent from listing")
+        .e_tag()
+        .unwrap_or_default()
+        .to_string();
+
+    let head = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key("etagcheck")
+        .send()
+        .await
+        .unwrap();
+    let headed = head.e_tag().unwrap_or_default().to_string();
+
+    /* whether an etag is a real digest or a synthesized change token is
+     * a driver decision;  that LIST and HEAD report the same one is not */
+    assert_eq!(
+        listed, headed,
+        "listing etag disagrees with HEAD etag for the same object"
+    );
+}

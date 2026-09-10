@@ -1997,3 +1997,78 @@ async fn test_versioning_special_key_diagnostics() {
             .unwrap();
     }
 }
+
+/*
+ * A demoted version must reach the listing cache incrementally.
+ *
+ * On a versioned PUT the driver demotes the previous current version
+ * before linking the new one.  The full-rebuild path enumerates the
+ * version store and finds both;  the incremental path has to add both
+ * itself.  As with the other listing-cache tests, warm the cache first
+ * -- the first listing of a cold bucket rebuilds it and repairs
+ * whatever the incremental path missed, which masks the bug entirely.
+ */
+#[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+async fn test_versioning_demoted_version_listed_warm_cache() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let key = "demoted";
+
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from("first".as_bytes().to_vec()))
+        .send()
+        .await
+        .unwrap();
+
+    /* warm:  everything after this point exercises incremental updates */
+    client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from("second".as_bytes().to_vec()))
+        .send()
+        .await
+        .unwrap();
+
+    let list_resp = client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+
+    let versions: Vec<_> = list_resp
+        .versions()
+        .iter()
+        .filter(|v| v.key() == Some(key))
+        .collect();
+
+    assert_eq!(
+        versions.len(),
+        2,
+        "expected the demoted version to remain listed; got {:?}",
+        versions
+            .iter()
+            .map(|v| (v.version_id(), v.is_latest()))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        versions.iter().filter(|v| v.is_latest().unwrap_or(false)).count(),
+        1,
+        "exactly one version must be current"
+    );
+}
