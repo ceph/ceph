@@ -385,11 +385,9 @@ if [ x$(uname)x = xFreeBSDx ]; then
 	devel/google-perftools \
 	devel/protobuf \
 	devel/grpc \
-	lang/python312 \
 	lang/lua54 \
 	lang/gawk \
 	databases/sqlite3 \
-	databases/py-sqlite3 \
 	archivers/snappy \
 	archivers/liblz4 \
 	ftp/curl \
@@ -403,28 +401,34 @@ if [ x$(uname)x = xFreeBSDx ]; then
 	textproc/gsed \
 	security/nss \
 	security/oath-toolkit \
-	security/py-bcrypt \
-	security/py-pyopenssl \
 	sysutils/flock \
 	sysutils/fusefs-libs \
 	sysutils/smartmontools \
 	misc/getopt \
-	devel/py-prettytable \
-	devel/py-pyyaml \
-	devel/py-protobuf \
-	devel/py-grpcio \
-	devel/py-virtualenv \
-	www/py-routes \
-	www/py-werkzeug \
-	www/py-cherrypy \
-	www/py-pecan \
-	www/py-requests \
-	www/py-pyjwt \
-	textproc/py-sphinx \
+	misc/e2fsprogs-libuuid\
 
     PYTHON_VERSION=$(python -c "import sys; print('%d%d' % sys.version_info[:2])")
     $SUDO pkg install -y \
-	py${PYTHON_VERSION}-cython 
+	py${PYTHON_VERSION}-python \
+	py${PYTHON_VERSION}-cython \
+	py${PYTHON_VERSION}-setuptools \
+	py${PYTHON_VERSION}-pyopenssl \
+	py${PYTHON_VERSION}-routes \
+	py${PYTHON_VERSION}-werkzeug \
+	py${PYTHON_VERSION}-cherrypy \
+	py${PYTHON_VERSION}-pecan \
+	py${PYTHON_VERSION}-requests \
+	py${PYTHON_VERSION}-pyjwt \
+	py${PYTHON_VERSION}-sqlite3 \
+        py${PYTHON_VERSION}-prettytable \
+        py${PYTHON_VERSION}-virtualenv \
+        py${PYTHON_VERSION}-pyyaml \
+        py${PYTHON_VERSION}-bcrypt \
+	py${PYTHON_VERSION}-protobuf \
+	py${PYTHON_VERSION}-grpcio \
+	py${PYTHON_VERSION}-sphinx \
+	py${PYTHON_VERSION}-textproc \
+	
 
 # --- dropped for v21 on FreeBSD -------------------------------------------
 # Disabled by CMAKE_OFF, so the dependency is dead weight:
@@ -441,7 +445,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
 #	www/fcgi			civetweb-era RGW frontend, gone since Beast
 #	devel/py-argparse		stdlib since python 2.7
 #	devel/py-nose			dead upstream, replaced by pytest
-#	misc/e2fsprogs-libuuid		base uuid(3) suffices unless a submodule wants it
 #	lang/python36			-> lang/python312
 #	net/openldap24-client		-> net/openldap26-client
 #	lang/cython			-> devel/py-cython
