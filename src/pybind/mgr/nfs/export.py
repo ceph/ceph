@@ -314,14 +314,17 @@ class ExportMgr:
             return None
         return CephUsers.from_raw(raw)
 
-    def _write_ceph_users(self, cluster_id: str, ceph_users: CephUsers) -> None:
-        # Never notifies: this object is only ever written as part of an export
-        # change, and the export object write that follows it does the notify.
+    def _write_ceph_users(
+            self,
+            cluster_id: str,
+            ceph_users: CephUsers,
+            should_notify: bool = False
+    ) -> None:
         self._rados(cluster_id).write_obj(
             format_block(ceph_users.to_block()),
             ceph_users_obj_name(cluster_id),
             conf_obj_name(cluster_id),
-            should_notify=False,
+            should_notify=should_notify,
         )
 
     def _pool_user_ids(self, cluster_id: str, fs_name: str) -> List[str]:
@@ -632,11 +635,70 @@ class ExportMgr:
 
     def get_cephfs_export_user_ids(self, cluster_id: str) -> Set[str]:
         """Return CephFS export user_ids for the cluster."""
-        return {
+        user_ids = {
             export.fsal.user_id
             for export in self.exports.get(cluster_id, [])
-            if isinstance(export.fsal, CephFSFSAL) and export.fsal.user_id
+            if isinstance(export.fsal, CephFSFSAL)
+            and export.fsal.user_id
         }
+        ceph_users = self._read_ceph_users(cluster_id)
+        if ceph_users:
+            user_ids.update(u.user_id for u in ceph_users.users if u.user_id)
+        return user_ids
+
+    def _refresh_pool_user_keys(
+            self,
+            cluster_id: str,
+            entity_set: Set[str],
+            should_notify: bool
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Re-fetch rotated CephX keys into CEPH_USERS.
+        """
+        ceph_users = self._read_ceph_users(cluster_id)
+        if not ceph_users or not ceph_users.users:
+            return [], []
+
+        updated: List[str] = []
+        stale: List[str] = []
+
+        for user in ceph_users.users:
+            entity = f'client.{user.user_id}'
+            if entity not in entity_set:
+                continue
+            old_key = user.secret_access_key
+            try:
+                key = self._create_user_key(
+                    cluster_id, user.user_id, "/", user.filesystem)
+                if key == old_key:
+                    log.warning(
+                        "Pool user %s key did not change after rotate",
+                        user.user_id
+                    )
+                user.secret_access_key = key
+                updated.append(user.user_id)
+            except Exception:
+                stale.append(user.user_id)
+                log.exception(
+                    "Failed to update pool user %s after key rotation",
+                    user.user_id
+                )
+
+        if updated:
+            try:
+                self._write_ceph_users(cluster_id, ceph_users, should_notify)
+            except Exception:
+                log.exception(
+                    "Failed to write CEPH_USERS for cluster %s after key rotation",
+                    cluster_id
+                )
+                # Nothing was persisted, so none of them made it.
+                return [], stale + updated
+            log.info(
+                "Updated CEPH_USERS for cluster %s after rotating pool users %s",
+                cluster_id, updated
+            )
+        return updated, stale
 
     def refresh_export_keys(
             self,
@@ -646,29 +708,28 @@ class ExportMgr:
         """
         Re-fetch CephX keys for the given export entities and update matching
         CephFS exports so Ganesha receives the new keyrings.
-
-        Returns the pseudo paths that were updated and the ones that could not
-        be. One failure must not stop the others: their keys are already
-        rotated, so an export left behind is one Ganesha cannot authenticate.
         """
         entity_set = {normalize_auth_entity(e) for e in entities}
+        matching = [
+            export for export in self.exports.get(cluster_id, [])
+            if isinstance(export.fsal, CephFSFSAL) and export.fsal.user_id
+            and f'client.{export.fsal.user_id}' in entity_set
+        ]
+        updated, stale = self._refresh_pool_user_keys(
+            cluster_id, entity_set, should_notify=not matching)
+
         updated_pseudos: List[str] = []
         stale_pseudos: List[str] = []
 
-        for export in list(self.exports.get(cluster_id, [])):
-            if not isinstance(export.fsal, CephFSFSAL) or not export.fsal.user_id:
-                continue
-            entity = f'client.{export.fsal.user_id}'
-            if entity not in entity_set:
-                continue
-
-            old_key = export.fsal.cephx_key
+        for export in matching:
+            fsal = cast(CephFSFSAL, export.fsal)
+            old_key = fsal.cephx_key
             try:
                 self._ensure_cephfs_export_user(export)
-                if export.fsal.cephx_key == old_key:
+                if fsal.cephx_key == old_key:
                     log.warning(
                         "Export %s key for user %s did not change after rotate",
-                        export.pseudo, export.fsal.user_id
+                        export.pseudo, fsal.user_id
                     )
                 self.exports[cluster_id].remove(export)
                 self._update_export(cluster_id, export, need_nfs_service_restart=False)
@@ -680,9 +741,9 @@ class ExportMgr:
             updated_pseudos.append(export.pseudo)
             log.info(
                 "Updated export %s with rotated key for user %s",
-                export.pseudo, export.fsal.user_id
+                export.pseudo, fsal.user_id
             )
-        return updated_pseudos, stale_pseudos
+        return updated + updated_pseudos, stale + stale_pseudos
 
     # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
     # Do not change interface without updating the Dashboard code
