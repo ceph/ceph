@@ -600,9 +600,16 @@ pg_t ECPeeringTestFixture::split_pg()
   child_pgid = pg_t(1, pool_id);  // seed 1 = child of seed 0 for pg_num 1 -> 2
   child_split_bits = split_bits;
 
-  std::vector<int> acting;
-  for (int i = 0; i < k + m; i++) {
-    acting.push_back(i);
+  // Read the parent's current acting set from the osdmap so the new epoch
+  // preserves whatever acting set the test built before the split (e.g. after
+  // an OSD failure).  The child inherits the same set; a caller that needs a
+  // different child up-map can advance the epoch after the split.
+  std::vector<int> up_osds;
+  {
+    std::vector<int> acting_osds;
+    int up_primary = -1, acting_primary = -1;
+    osdmap->pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
+                                 &acting_osds, &acting_primary);
   }
 
   // 1. Bump pg_num to 2 and add upmaps for both parent and child.
@@ -618,9 +625,9 @@ pg_t ECPeeringTestFixture::split_pg()
     updated.set_pgp_num(new_pg_num);
     inc.new_pools[pool_id] = updated;
     inc.new_pg_upmap[pgid] =
-      mempool::osdmap::vector<int32_t>(acting.begin(), acting.end());
+      mempool::osdmap::vector<int32_t>(up_osds.begin(), up_osds.end());
     inc.new_pg_upmap[child_pgid] =
-      mempool::osdmap::vector<int32_t>(acting.begin(), acting.end());
+      mempool::osdmap::vector<int32_t>(up_osds.begin(), up_osds.end());
     new_osdmap->apply_incremental(inc);
   }
   // Advance each parent shard to the new osdmap so split_into() can resolve
