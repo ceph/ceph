@@ -54,11 +54,15 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
     out << " past_parent_snaps=" << realm.srnode.past_parent_snaps;
   }
 
-  if (realm.srnode.is_parent_global())
-    out << " global ";
+  if (realm.srnode.is_parent_global()) {
+    out << " global";
+  }
+  if (realm.srnode.is_subvolume()) {
+    out << " subvol";
+  }
   out << " last_modified " << realm.srnode.last_modified
-      << " change_attr " << realm.srnode.change_attr;
-  out << " " << &realm << ")";
+      << " change_attr " << realm.srnode.change_attr
+      << " " << &realm << ")";
   return out;
 }
 
