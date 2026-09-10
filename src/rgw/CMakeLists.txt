@@ -543,6 +543,10 @@ if(WITH_RADOSGW_STANDALONE)
     add_dependencies(rgw_common_standalone jaeger_base)
     target_link_libraries(rgw_common_standalone PUBLIC jaeger_base)
   endif()
+
+  if(WITH_RADOSGW_CUOBJ)
+    target_link_libraries(rgw_common_standalone PRIVATE ${CUOBJSERVER_LIBRARY})
+  endif()
 endif()
 
 if(WITH_RADOSGW_D4N AND WITH_LIBURING)
