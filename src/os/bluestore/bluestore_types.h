@@ -568,7 +568,7 @@ public:
       denc_varint_lowz(logical_length, p);
       denc_varint_lowz(compressed_length, p);
     } else {
-      logical_length = get_ondisk_length();
+      logical_length = get_ondisk_capacity();
     }
     if (has_csum()) {
       denc(csum_type, p);
@@ -897,10 +897,26 @@ public:
     }
   }
 
-  uint32_t get_ondisk_length() const {
+  /// Count blob's capacity for data
+  /// It returns how much data blob can hold without resizing.
+  /// Compressed blobs cannot be modified, so actual disk usage is returned.
+  uint32_t get_ondisk_capacity() const {
     uint32_t len = 0;
     for (auto &p : extents) {
       len += p.length;
+    }
+    return len;
+  }
+
+  /// Count blob's usage of disk
+  /// For compressed blobs get_ondisk_capacity == get_ondisk_size.
+  /// It is similar to get_ondisk_capacity() except unmapped extents do not count.
+  uint32_t get_ondisk_size() const {
+    uint32_t len = 0;
+    for (auto &p : extents) {
+      if (p.is_valid()) {
+        len += p.length;
+      }
     }
     return len;
   }
