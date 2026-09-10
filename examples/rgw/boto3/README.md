@@ -6,6 +6,12 @@ This is an extension to the [AWS SDK](https://github.com/boto/botocore/blob/deve
 For the standard client to support S3 extensions, the ``service-2.sdk-extras.json`` file should be used.
 You can place it under the default folder ``~/.aws/models/s3/2006-03-01/`` or create a custom one ``/path/to/custom/folder/models/s3/2006-03-01/`` and add it to ``AWS_DATA_PATH`` environment variable.
 For S3Vectors extensions, the ``s3vectors-service-2.sdk-extras.json`` file should be used, and it should be copied to ``~/.aws/models/s3vectors/2025-07-15/service-2.sdk-extras.json`` or a custom path added to ``AWS_DATA_PATH`` as ``service-2.sdk-extras.json``.
+```bash
+mkdir -p ~/.aws/models/s3/2006-03-01/
+cp service-2.sdk-extras.json ~/.aws/models/s3/2006-03-01/
+mkdir -p ~/.aws/models/s3vectors/2025-07-15/
+cp s3vectors-service-2.sdk-extras.json ~/.aws/models/s3vectors/2025-07-15/service-2.sdk-extras.json
+```
 For more information see [here](https://github.com/boto/botocore/blob/develop/botocore/loaders.py#L33).
 ## Python
 The [boto3 client](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) could be used with the extensions, code samples exists in this directory.
