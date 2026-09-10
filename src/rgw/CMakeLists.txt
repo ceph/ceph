@@ -591,13 +591,29 @@ if(WITH_RADOSGW_LANCEDB)
           --manifest-path ${RGW_LANCEDB_SOURCE_DIR}/Cargo.toml
     BUILD_ALWAYS OFF
     BUILD_BYPRODUCTS ${RGW_LANCEDB_STATIC_LIB}
-    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     ${LANCEDB_C_SOURCE_DIR}/include/lancedb.h
                     ${CMAKE_BINARY_DIR}/src/include/lancedb.h
-                COMMAND ${CMAKE_COMMAND} -E copy
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     ${LANCEDB_RGW_STORE_SOURCE_DIR}/include/lancedb_rgw_store.h
                     ${CMAKE_BINARY_DIR}/src/include/lancedb_rgw_store.h
   )
+
+  # Re-run cargo when the Rust sources, the manifests or the lock file change.
+  # The sources are collected once, at configure time, so a new file needs a
+  # cmake re-run like any other source. Cargo does the incremental work itself.
+  file(GLOB_RECURSE RGW_LANCEDB_RUST_SOURCES
+    ${LANCEDB_C_SOURCE_DIR}/src/*.rs
+    ${LANCEDB_RGW_STORE_SOURCE_DIR}/src/*.rs
+    ${RGW_LANCEDB_SOURCE_DIR}/src/*.rs)
+  ExternalProject_Add_StepDependencies(rgw-lancedb build
+    ${RGW_LANCEDB_RUST_SOURCES}
+    ${LANCEDB_RGW_STORE_SOURCE_DIR}/build.rs
+    ${LANCEDB_C_SOURCE_DIR}/Cargo.toml
+    ${LANCEDB_RGW_STORE_SOURCE_DIR}/Cargo.toml
+    ${RGW_LANCEDB_SOURCE_DIR}/Cargo.toml
+    ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
+    ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.lock)
 
   # Native system libraries required when linking a Rust staticlib,
   # probed with lancedb-c's own cmake module -- the same source of truth

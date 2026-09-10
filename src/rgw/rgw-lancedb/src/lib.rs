@@ -14,3 +14,12 @@
 // into the staticlib.
 pub use lancedb;
 pub use lancedb_rgw_store;
+
+// Both crates must be built against the same lance-io: the provider created
+// by lancedb-rgw-store is handed to lancedb-c as an opaque pointer, and is
+// read there as lancedb-c's own struct. With two lance-io versions in the
+// build the trait objects differ, and the first use of the provider
+// crashes. This does not compile unless the two `inner` fields have the
+// same type.
+const _: fn(lancedb_rgw_store::LanceDBObjectStoreProvider) -> lancedb::LanceDBObjectStoreProvider =
+    |provider| lancedb::LanceDBObjectStoreProvider { inner: provider.inner };

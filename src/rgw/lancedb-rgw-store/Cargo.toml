@@ -15,8 +15,8 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 # Both crates are in a Cargo workspace (src/rgw/Cargo.toml) sharing one
 # Cargo.lock — versions are unified automatically.  No pins needed.
-lance-io = { version = "7.0", default-features = false }
-lance-core = { version = "7.0", default-features = false }
+lance-io = { version = "=9.0.0", default-features = false }
+lance-core = { version = "=9.0.0", default-features = false }
 object_store = { version = "0.13", features = ["integration"] }
 bytes = "1"
 async-trait = "0.1"

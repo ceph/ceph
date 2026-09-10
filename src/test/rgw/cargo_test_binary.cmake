@@ -137,7 +137,7 @@ function(add_rgw_cargo_test_binary)
 
   # Rebuild when any crate or test source changes; cargo is incremental so a
   # no-op run is cheap, but this keeps the dependency graph honest for cmake.
-  file(GLOB _srcs CONFIGURE_DEPENDS
+  file(GLOB _srcs
     "${CMAKE_SOURCE_DIR}/src/rgw/${CT_PACKAGE}/src/*.rs"
     "${CMAKE_SOURCE_DIR}/src/rgw/${CT_PACKAGE}/tests/*.rs")
 
