@@ -309,6 +309,7 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
     obc->obs.oi.size,
+    obc->obs.oi.ec_chunk_size,
     in_native,
     new OnReadComplete(pg, this), pg->get_pool().fast_read);
 }
@@ -6012,7 +6013,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     } else if (ctx->op->ec_sync_read()) {
       result = pgbackend->objects_read_sync(
         soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata,
-        oi.size, ctx->op->coro_handles);
+        oi.size, oi.ec_chunk_size, ctx->op->coro_handles);
       dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
     } else {
       ctx->pending_async_reads.push_back(
@@ -6032,7 +6033,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata,
-      oi.size, ctx->op->coro_handles);
+      oi.size, oi.ec_chunk_size, ctx->op->coro_handles);
     // whole object?  can we verify the checksum?
     if (r >= 0 && op.extent.offset == 0 &&
         (uint64_t)r == oi.size && oi.is_data_digest()) {
@@ -9562,7 +9563,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
       } else {
  result = pgbackend->objects_read_sync(
    oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl,
-   oi.size, ctx->op->coro_handles);
+   oi.size, oi.ec_chunk_size, ctx->op->coro_handles);
 	if (result < 0)
 	  return result;
       }
@@ -10909,7 +10910,7 @@ int PrimaryLogPG::do_cdc(const object_info_t& oi,
    * As s result, we leave this as a future work.
    */
   int r = pgbackend->objects_read_sync(
-      oi.soid, 0, oi.size, 0, &bl, oi.size, std::nullopt);
+      oi.soid, 0, oi.size, 0, &bl, oi.size, oi.ec_chunk_size, std::nullopt);
   if (r < 0) {
     dout(0) << __func__ << " read fail " << oi.soid
             << " len: " << oi.size << " r: " << r << dendl;

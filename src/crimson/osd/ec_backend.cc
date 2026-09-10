@@ -74,6 +74,9 @@ ECBackend::_read(const hobject_t& hoid,
     reads,
     fast_read,
     object_size,
+    // TODO(dynamic-object-size): source the per-object chunk size from the OI
+    // in crimson; 0 => pool default (correct for non-dynamic pools).
+    0,
     make_gen_lambda_context<ec_extents_t &&>(
       [hoid, off, len, promise=std::move(promise), FNAME,
        &dpp=this->dpp](auto&& results) mutable {
@@ -558,10 +561,11 @@ void ECBackend::objects_read_and_reconstruct(
   const std::map<hobject_t, std::list<ec_align_t>> &reads,
   bool fast_read,
   uint64_t object_size,
+  uint64_t chunk_size,
   GenContextURef<ec_extents_t &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct(
-    reads, fast_read, object_size, std::move(func));
+    reads, fast_read, object_size, chunk_size, std::move(func));
 }
 
 void ECBackend::objects_read_and_reconstruct_for_rmw(

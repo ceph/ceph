@@ -278,8 +278,9 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
   ECUtil::shard_extent_set_t zero_mask(sinfo.get_k_plus_m());
 
-  sinfo.for_default().ro_size_to_read_mask(read_request.object_size, read_mask);
-  sinfo.for_default().ro_size_to_zero_mask(read_request.object_size, zero_mask);
+  const auto obj_sinfo = sinfo.for_object_chunk_size(read_request.chunk_size);
+  obj_sinfo.ro_size_to_read_mask(read_request.object_size, read_mask);
+  obj_sinfo.ro_size_to_zero_mask(read_request.object_size, zero_mask);
 
   /* First deal with missing shards */
   for (auto &&[shard, extent_set]: read_request.shard_want_to_read) {
@@ -347,8 +348,10 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
 
 void ECCommon::ReadPipeline::get_min_want_to_read_shards(
     const ec_align_t &to_read,
-    ECUtil::shard_extent_set_t &want_shard_reads) {
-  sinfo.for_default().ro_range_to_shard_extent_set(to_read.offset, to_read.size,
+    ECUtil::shard_extent_set_t &want_shard_reads,
+    uint64_t chunk_size) {
+  sinfo.for_object_chunk_size(chunk_size).ro_range_to_shard_extent_set(
+                                     to_read.offset, to_read.size,
                                      want_shard_reads);
   dout(20) << __func__ << ": to_read " << to_read
 	   << " read_request " << want_shard_reads << dendl;
@@ -641,19 +644,21 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
 
 void ECCommon::ReadPipeline::get_want_to_read_shards(
     const list<ec_align_t> &to_read,
-    ECUtil::shard_extent_set_t &want_shard_reads) {
+    ECUtil::shard_extent_set_t &want_shard_reads,
+    uint64_t chunk_size) {
   if (sinfo.supports_partial_reads()) {
     // Optimised.
     for (const auto &single_region: to_read) {
-      get_min_want_to_read_shards(single_region, want_shard_reads);
+      get_min_want_to_read_shards(single_region, want_shard_reads, chunk_size);
     }
     return;
   }
 
   // Non-optimised version.
+  const auto obj_sinfo = sinfo.for_object_chunk_size(chunk_size);
   for (const shard_id_t shard: sinfo.get_data_shards()) {
     for (auto &&read: to_read) {
-      auto &&[offset, len] = sinfo.for_default().chunk_aligned_ro_range_to_shard_ro_range(
+      auto &&[offset, len] = obj_sinfo.chunk_aligned_ro_range_to_shard_ro_range(
         read.offset, read.size);
       want_shard_reads[shard].union_insert(offset, len);
     }
@@ -662,10 +667,12 @@ void ECCommon::ReadPipeline::get_want_to_read_shards(
 
 void ECCommon::ReadPipeline::get_want_to_read_all_shards(
     const list<ec_align_t> &to_read,
-    ECUtil::shard_extent_set_t &want_shard_reads)
+    ECUtil::shard_extent_set_t &want_shard_reads,
+    uint64_t chunk_size)
 {
+  const auto obj_sinfo = sinfo.for_object_chunk_size(chunk_size);
   for (const auto &single_region: to_read) {
-    sinfo.for_default().ro_range_to_shard_extent_set_with_parity(single_region.offset,
+    obj_sinfo.ro_range_to_shard_extent_set_with_parity(single_region.offset,
                                                    single_region.size,
                                                    want_shard_reads);
   }
@@ -772,6 +779,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     const map<hobject_t, std::list<ec_align_t>> &reads,
     const bool fast_read,
     const uint64_t object_size,
+    const uint64_t chunk_size,
     GenContextURef<ec_extents_t&&> &&func) {
   in_progress_client_reads.emplace_back(reads.size(), std::move(func));
   if (!reads.size()) {
@@ -785,16 +793,16 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
 #ifndef WITH_CRIMSON
     if (cct->_conf->bluestore_debug_inject_read_err &&
         ECInject::test_parity_read(hoid)) {
-      get_want_to_read_all_shards(to_read, want_shard_reads);
+      get_want_to_read_all_shards(to_read, want_shard_reads, chunk_size);
     } else
 #endif
     {
-      get_want_to_read_shards(to_read, want_shard_reads);
+      get_want_to_read_shards(to_read, want_shard_reads, chunk_size);
     }
 
     read_request_t read_request(
       to_read, want_shard_reads, WantAttrs::No, WantOmapHeader::No,
-      WantOmapKeys::No, "", 0, object_size
+      WantOmapKeys::No, "", 0, object_size, chunk_size
     );
     const int r = get_min_avail_to_read_shards(
       hoid,
@@ -942,7 +950,8 @@ void ECCommon::RMWPipeline::start_rmw(OpRef op) {
       [op](ECExtentCache::OpRef const &cop)
       {
         op->cache_ready(cop->get_hoid(), cop->get_result());
-      });
+      },
+      plan.chunk_size);
     op->cache_ops.emplace_back(std::move(cache_op));
   }
   extent_cache.execute(op->cache_ops);
@@ -1650,7 +1659,10 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
       if (want_omap_keys == WantOmapKeys::Yes) {
         ceph_assert(get_parent()->get_pool().supports_omap());
       }
-      const auto chunk_size = op.obc ? op.obc->obs.oi.size : get_recovery_chunk_size();
+      const auto object_size = op.obc ? op.obc->obs.oi.size : get_recovery_chunk_size();
+      // Per-object EC chunk size (dynamic-object-size feature). 0 => default.
+      const uint64_t ec_chunk_size = op.obc ? op.obc->obs.oi.ec_chunk_size
+                                            : op.recovery_info.oi.ec_chunk_size;
       read_request_t read_request(
         std::move(want),
         want_attrs,
@@ -1658,7 +1670,8 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         want_omap_keys,
         op.recovery_progress.omap_recovered_to,
         available,
-        chunk_size
+        object_size,
+        ec_chunk_size
       );
 
       int r = read_pipeline.get_min_avail_to_read_shards(
@@ -1693,7 +1706,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
          */
         dout(10) << __func__ << " No reads required " << op << dendl;
         // Create an empty read result and fall through.
-        op.returned_data.emplace(sinfo.for_default());
+        op.returned_data.emplace(sinfo.for_object_chunk_size(ec_chunk_size));
       } else {
         m->recovery_read(
           op.hoid,

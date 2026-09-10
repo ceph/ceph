@@ -134,6 +134,7 @@ class ECBackend : public ECCommon {
   int objects_read_sync(
     const hobject_t &hoid,
     uint64_t object_size,
+    uint64_t chunk_size,
     const std::list<std::pair<ec_align_t,
     std::pair<ceph::buffer::list*, Context*>>> &to_read,
     CoroHandles coro
@@ -176,6 +177,7 @@ class ECBackend : public ECCommon {
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
       uint64_t object_size,
+      uint64_t chunk_size,
       GenContextURef<ECCommon::ec_extents_t&&> &&func
     ) override;
 
@@ -194,6 +196,7 @@ class ECBackend : public ECCommon {
   void objects_read_async(
       const hobject_t &hoid,
       uint64_t object_size,
+      uint64_t chunk_size,
       const std::list<std::pair<ec_align_t,
                                 std::pair<ceph::buffer::list*, Context*>>> &
       to_read,

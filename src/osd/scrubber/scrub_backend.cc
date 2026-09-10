@@ -822,6 +822,14 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
                                .objects.at(ho)
                                .size;
 
+    // Per-object EC chunk size (dynamic-object-size feature); the CRC-based
+    // encode/decode used for scrub must use the same chunk size the object was
+    // written with. 0 in the OI means the pool default.
+    const uint64_t ec_chunk_size =
+        auth_selection.auth_oi.ec_chunk_size
+            ? auth_selection.auth_oi.ec_chunk_size
+            : m_pg.get_ec_sinfo().get_default_chunk_size();
+
     shard_id_set available_shards;
 
     for (const auto& [srd, smap] : this_chunk->received_maps) {
@@ -850,8 +858,7 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
 
         // Buffers are created as chunk size rather than digest_length to ensure
         // any ec algorithms can decode them
-        ceph::bufferptr b = ceph::buffer::create_page_aligned(
-            m_pg.get_ec_sinfo().get_default_chunk_size());
+        ceph::bufferptr b = ceph::buffer::create_page_aligned(ec_chunk_size);
         b.copy_in(0, digest_length, crc_bytes);
 
         this_chunk->m_ec_digest_map[srd.shard] = bufferlist{};
@@ -882,7 +889,7 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
                    << dendl;
           this_chunk->m_ec_digest_map =
               m_pg.ec_decode_acting_set(this_chunk->m_ec_digest_map,
-                                        m_pg.get_ec_sinfo().get_default_chunk_size());
+                                        ec_chunk_size);
         } else if (missing_shards != 0) {
           dout(10) << fmt::format(
                           "{}: Cannot decode {} shards from pg {} "
@@ -1241,6 +1248,17 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
   uint64_t auth_length =
       this_chunk->received_maps[auth_sel.auth_shard].objects.at(ho).size;
 
+  // Per-object EC chunk size (dynamic-object-size feature). 0 => pool default.
+  // Only meaningful (and only safe to query the EC sinfo) on the deep EC
+  // CRC-encode/decode path.
+  uint64_t ec_chunk_size = 0;
+  if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
+      m_depth == scrub_level_t::deep) {
+    ec_chunk_size = auth_sel.auth_oi.ec_chunk_size
+                        ? auth_sel.auth_oi.ec_chunk_size
+                        : m_pg.get_ec_sinfo().get_default_chunk_size();
+  }
+
   for (const auto& [srd, smap] : this_chunk->received_maps) {
 
     if (srd == auth_sel.auth_shard) {
@@ -1286,8 +1304,7 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
         for (std::size_t i = 0; i < length; i++) {
           crc_bytes[i] = retrieve_byte(digest, i);
         }
-        ceph::bufferptr b = ceph::buffer::create_page_aligned(
-            m_pg.get_ec_sinfo().get_default_chunk_size());
+        ceph::bufferptr b = ceph::buffer::create_page_aligned(ec_chunk_size);
         b.copy_in(0, length, crc_bytes);
 
         digests[srd.shard] = bufferlist{};
@@ -1415,7 +1432,7 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
           digests.erase(srd);
 
           shard_id_map<bufferlist> decoded_map = m_pg.ec_decode_acting_set(
-              digests, m_pg.get_ec_sinfo().get_default_chunk_size());
+              digests, ec_chunk_size);
 
           if (!std::equal(removed_shard.begin(),
                           std::next(removed_shard.begin(), sizeof(int32_t)),

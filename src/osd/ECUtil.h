@@ -718,6 +718,11 @@ public:
     return oi.ec_chunk_size != 0 ? oi.ec_chunk_size : default_chunk_size;
   }
 
+  /* Object-scoped view for a possibly-unset per-object chunk size: a zero
+   * chunk_size means "use the pool default", so callers that have not (yet)
+   * plumbed a per-object size get identical behaviour to before. */
+  stripe_info_t for_object_chunk_size(uint64_t chunk_size) const;
+
   unsigned int get_m() const {
     return m;
   }
@@ -1017,6 +1022,11 @@ inline stripe_info_t stripe_info_base_t::for_chunk_size(
 
 inline stripe_info_t stripe_info_base_t::for_default() const {
   return for_chunk_size(default_chunk_size);
+}
+
+inline stripe_info_t stripe_info_base_t::for_object_chunk_size(
+    uint64_t chunk_size) const {
+  return for_chunk_size(chunk_size ? chunk_size : default_chunk_size);
 }
 
 class shard_extent_map_t {

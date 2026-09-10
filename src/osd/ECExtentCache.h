@@ -93,7 +93,8 @@ class ECExtentCache {
   struct BackendReadListener {
     virtual void backend_read(hobject_t oid,
                               ECUtil::shard_extent_set_t const &request,
-                              uint64_t object_size) = 0;
+                              uint64_t object_size,
+                              uint64_t chunk_size) = 0;
     virtual ~BackendReadListener() = default;
   };
 
@@ -225,6 +226,8 @@ private:
     uint64_t current_size = 0;
     uint64_t projected_size = 0;
     uint64_t line_size = 0;
+    // Per-object EC chunk size (dynamic-object-size feature). 0 => pool default.
+    uint64_t chunk_size = 0;
     bool reading = false;
     bool cache_invalidate_expected = false;
 
@@ -238,14 +241,18 @@ private:
    public:
     hobject_t oid;
 
-    Object(ECExtentCache &pg, hobject_t const &oid, uint64_t size) :
+    Object(ECExtentCache &pg, hobject_t const &oid, uint64_t size,
+           uint64_t chunk_size) :
       pg(pg),
       requesting(pg.sinfo.get_k_plus_m()),
       do_not_read(pg.sinfo.get_k_plus_m()),
       current_size(size),
       projected_size(size),
+      chunk_size(chunk_size),
       oid(oid) {
-      line_size = std::max(MIN_LINE_SIZE, pg.sinfo.get_default_chunk_size());
+      const uint64_t cs = chunk_size ? chunk_size
+                                     : pg.sinfo.get_default_chunk_size();
+      line_size = std::max(MIN_LINE_SIZE, cs);
     }
 
     void insert(ECUtil::shard_extent_map_t const &buffers) const;
@@ -274,7 +281,7 @@ private:
 
       if (c == nullptr) {
         cache = std::make_shared<ECUtil::shard_extent_map_t>(
-          object.pg.sinfo.for_default());
+          object.pg.sinfo.for_object_chunk_size(object.chunk_size));
         size = 0;
         /* We are creating an empty cache line */
         update_mempool(1, 0);
@@ -314,7 +321,8 @@ private:
                 ECUtil::shard_extent_set_t const &write,
                 uint64_t orig_size,
                 uint64_t projected_size,
-                bool invalidates_cache);
+                bool invalidates_cache,
+                uint64_t chunk_size);
 
  public:
   ~ECExtentCache() {
@@ -349,13 +357,14 @@ private:
                 uint64_t orig_size,
                 uint64_t projected_size,
                 bool invalidates_cache,
-                CacheReadyCb &&ready_cb) {
+                CacheReadyCb &&ready_cb,
+                uint64_t chunk_size = 0) {
     GenContextURef<OpRef&> ctx =
         make_gen_lambda_context<OpRef&, CacheReadyCb>(
           std::forward<CacheReadyCb>(ready_cb));
 
     return prepare(std::move(ctx), oid, to_read, write, orig_size,
-                   projected_size, invalidates_cache);
+                   projected_size, invalidates_cache, chunk_size);
   }
 
   void execute(std::list<OpRef> &op_list);

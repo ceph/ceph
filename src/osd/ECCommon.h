@@ -95,6 +95,7 @@ struct ECCommon {
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
       uint64_t object_size,
+      uint64_t chunk_size,
       GenContextURef<ec_extents_t&&> &&func) = 0;
 
   struct shard_read_t {
@@ -129,12 +130,15 @@ struct ECCommon {
     std::string omap_read_from;
     uint64_t omap_max_bytes = 0;
     uint64_t object_size;
+    // Per-object EC chunk size (dynamic-object-size feature). 0 => pool default.
+    uint64_t chunk_size = 0;
 
     read_request_t(
         const std::list<ec_align_t> &to_read,
         const ECUtil::shard_extent_set_t &shard_want_to_read,
         WantAttrs want_attrs, WantOmapHeader want_omap_header, WantOmapKeys want_omap_keys,
-        std::string omap_read_from, uint64_t omap_max_bytes, uint64_t object_size) :
+        std::string omap_read_from, uint64_t omap_max_bytes, uint64_t object_size,
+        uint64_t chunk_size = 0) :
       to_read(to_read),
       flags(to_read.front().flags),
       shard_want_to_read(shard_want_to_read),
@@ -145,11 +149,13 @@ struct ECCommon {
       want_omap_keys(static_cast<bool>(want_omap_keys)),
       omap_read_from(std::move(omap_read_from)),
       omap_max_bytes(omap_max_bytes),
-      object_size(object_size) {}
+      object_size(object_size),
+      chunk_size(chunk_size) {}
 
     read_request_t(const ECUtil::shard_extent_set_t &shard_want_to_read,
                    WantAttrs want_attrs, WantOmapHeader want_omap_header, WantOmapKeys want_omap_keys,
-                   std::string omap_read_from, uint64_t omap_max_bytes, uint64_t object_size) :
+                   std::string omap_read_from, uint64_t omap_max_bytes, uint64_t object_size,
+                   uint64_t chunk_size = 0) :
       shard_want_to_read(shard_want_to_read),
       zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
@@ -158,7 +164,8 @@ struct ECCommon {
       want_omap_keys(static_cast<bool>(want_omap_keys)),
       omap_read_from(std::move(omap_read_from)),
       omap_max_bytes(omap_max_bytes),
-      object_size(object_size) {}
+      object_size(object_size),
+      chunk_size(chunk_size) {}
 
     bool operator==(const read_request_t &other) const;
 
@@ -173,6 +180,8 @@ struct ECCommon {
           << ", want_omap_keys=" << want_omap_keys
           << ", omap_read_from=" << omap_read_from
           << ", omap_max_bytes=" << omap_max_bytes
+          << ", object_size=" << object_size
+          << ", chunk_size=" << chunk_size
           << ")";
     }
   };
@@ -354,6 +363,7 @@ struct ECCommon {
         const std::map<hobject_t, std::list<ec_align_t>> &reads,
         bool fast_read,
         uint64_t object_size,
+        uint64_t chunk_size,
         GenContextURef<ec_extents_t&&> &&func);
 
     void objects_read_and_reconstruct_for_rmw(
@@ -447,7 +457,8 @@ struct ECCommon {
      */
     void get_min_want_to_read_shards(
         const ec_align_t &to_read, ///< [in]
-        ECUtil::shard_extent_set_t &want_shard_reads); ///< [out]
+        ECUtil::shard_extent_set_t &want_shard_reads, ///< [out]
+        uint64_t chunk_size = 0); ///< [in] per-object chunk size (0=default)
 
     int get_remaining_shards(
         const hobject_t &hoid,
@@ -483,11 +494,13 @@ struct ECCommon {
 
     void get_want_to_read_shards(
         const std::list<ec_align_t> &to_read,
-        ECUtil::shard_extent_set_t &want_shard_reads);
+        ECUtil::shard_extent_set_t &want_shard_reads,
+        uint64_t chunk_size = 0);
 
     void get_want_to_read_all_shards(
         const std::list<ec_align_t> &to_read,
-        ECUtil::shard_extent_set_t &want_shard_reads);
+        ECUtil::shard_extent_set_t &want_shard_reads,
+        uint64_t chunk_size = 0);
     void create_parity_read_buffer(
         ECUtil::shard_extent_map_t buffers_read,
         ec_align_t read,
@@ -643,13 +656,13 @@ struct ECCommon {
     };
 
     void backend_read(hobject_t oid, ECUtil::shard_extent_set_t const &request,
-                      uint64_t object_size) override {
+                      uint64_t object_size, uint64_t chunk_size) override {
       std::map<hobject_t, read_request_t> to_read;
       to_read.emplace(
         oid,
         read_request_t(
           request, WantAttrs::No, WantOmapHeader::No, WantOmapKeys::No,
-          "", 0, object_size
+          "", 0, object_size, chunk_size
         )
       );
 
