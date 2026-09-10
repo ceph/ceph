@@ -7,10 +7,15 @@ tasks:
       do
           echo "rotating key for $f"
           K=$(ceph auth get-key $f)
-          NK="$K"
-          ceph orch daemon rotate-key $f
-          while [ "$K" == "$NK" ]; do
-              sleep 5
-              NK=$(ceph auth get-key $f)
-          done
+          ceph auth rotate $f >/dev/null
+          NK=$(ceph auth get-key $f)
+          test "$K" != "$NK"
+          ceph orch daemon redeploy $f
+          sleep 60
       done
+
+      osd_started=$(ceph orch ps --daemon-type osd --refresh -f json | jq -cS 'sort_by(.daemon_name) | map({daemon_name, started})')
+      ceph orch daemon reconfig osd.0
+      sleep 120
+      new_osd_started=$(ceph orch ps --daemon-type osd --refresh -f json | jq -cS 'sort_by(.daemon_name) | map({daemon_name, started})')
+      test "$osd_started" = "$new_osd_started"
