@@ -303,7 +303,8 @@ int ReplicatedBackend::objects_readv_sync(
   const hobject_t &hoid,
   map<uint64_t, uint64_t>& m,
   uint32_t op_flags,
-  bufferlist *bl)
+  bufferlist *bl,
+  uint64_t chunk_size)
 {
   interval_set<uint64_t> im(std::move(m));
   auto r = store->readv(ch, ghobject_t(hoid), im, *bl, op_flags);

@@ -286,18 +286,19 @@ public:
   int objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
-     ceph::buffer::list *bl) override
+     ceph::buffer::list *bl,
+     uint64_t chunk_size = 0) override
   {
     if (is_optimized()) {
-      return optimized.objects_readv_sync(hoid, m, op_flags, bl);
+      return optimized.objects_readv_sync(hoid, m, op_flags, bl, chunk_size);
     }
     ceph_abort_msg("Sync reads legacy EC");
   }
 
   std::pair<uint64_t, uint64_t> extent_to_shard_extent(
-    uint64_t off, uint64_t len) override {
+    uint64_t off, uint64_t len, uint64_t chunk_size = 0) override {
     if (is_optimized()) {
-      return optimized.extent_to_shard_extent(off, len);
+      return optimized.extent_to_shard_extent(off, len, chunk_size);
     }
     ceph_abort_msg("Extent conversion not supported in legacy EC");
   }

@@ -663,12 +663,13 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
-     ceph::buffer::list *bl) {
+     ceph::buffer::list *bl,
+     uint64_t chunk_size = 0) {
      return -EOPNOTSUPP;
    }
 
    virtual std::pair<uint64_t, uint64_t> extent_to_shard_extent(
-       uint64_t off, uint64_t len) {
+       uint64_t off, uint64_t len, uint64_t chunk_size = 0) {
      return std::pair(off, len);
    }
 

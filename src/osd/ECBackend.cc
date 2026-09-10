@@ -1301,12 +1301,12 @@ int ECBackend::objects_read_local(
           shard_len, *bl, op_flags);
 }
 
-std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, uint64_t len) {
+std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, uint64_t len, uint64_t chunk_size) {
   // sync reads are supported for sub-chunk reads where no reconstruct is
   // required.
-  // TODO(dynamic-object-size): use the object's stashed chunk size here.
-  const ECUtil::stripe_info_t sinfo = this->sinfo.for_default();
-  uint64_t chunk_size = sinfo.get_chunk_size();
+  const ECUtil::stripe_info_t sinfo = this->sinfo.for_object_chunk_size(chunk_size);
+  // Resolve the effective chunk size (param may be 0 => pool default).
+  chunk_size = sinfo.get_chunk_size();
   uint64_t start_chunk = off / chunk_size;
   // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
   uint64_t end_chunk = (off + len - 1) / chunk_size;
@@ -1330,7 +1330,8 @@ std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, ui
 int ECBackend::objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
-     ceph::buffer::list *bl) {
+     ceph::buffer::list *bl,
+     uint64_t chunk_size) {
 
   // Cannot return EAGAIN here: the op would get dropped.  This check must have
   // been done earlier.
@@ -1342,8 +1343,9 @@ int ECBackend::objects_readv_sync(const hobject_t &hoid,
   m.clear(); // Make m safe to write to again.
   auto r = switcher->store->readv(switcher->ch, ghobject_t(hoid, ghobject_t::NO_GEN, shard), im, *bl, op_flags);
   if (r >= 0) {
-    // TODO(dynamic-object-size): use the object's stashed chunk size here.
-    const ECUtil::stripe_info_t sinfo = this->sinfo.for_default();
+    const ECUtil::stripe_info_t sinfo =
+        this->sinfo.for_object_chunk_size(chunk_size);
+    // Effective chunk size (shadows the param, which may be 0 => default).
     uint64_t chunk_size = sinfo.get_chunk_size();
     for (auto [off, len] : im) {
       uint64_t ro_offset = sinfo.shard_offset_to_ro_offset(shard, off);

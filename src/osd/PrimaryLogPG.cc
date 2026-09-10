@@ -6119,7 +6119,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   } else {
     // read into a buffer
     map<uint64_t, uint64_t> m;
-    auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
+    auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length, oi.ec_chunk_size);
     int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
   			      info.pgid.shard),
   	       shard_offset, shard_length, m);
@@ -6128,7 +6128,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     }
 
     bufferlist data_bl;
-    r = pgbackend->objects_readv_sync(soid, m, op.flags, &data_bl);
+    r = pgbackend->objects_readv_sync(soid, m, op.flags, &data_bl, oi.ec_chunk_size);
     if (r == -EIO) {
       r = rep_repair_primary_object(soid, ctx);
     }

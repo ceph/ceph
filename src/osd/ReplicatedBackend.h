@@ -198,7 +198,8 @@ public:
     const hobject_t &hoid,
     std::map<uint64_t, uint64_t>& m,
     uint32_t op_flags,
-    ceph::buffer::list *bl) override;
+    ceph::buffer::list *bl,
+    uint64_t chunk_size = 0) override;
 
   void objects_read_async(
     const hobject_t &hoid,
