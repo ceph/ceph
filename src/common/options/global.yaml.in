@@ -6770,6 +6770,14 @@ options:
   default: true
   tags:
   - client
+- name: cephsqlite_inject_stat_error_probability
+  type: float
+  level: dev
+  desc: Probability that the libcephsqlite VFS fails a stat() with a fake I/O
+    error, for testing
+  default: 0
+  tags:
+  - client
 - name: bdev_type
   type: str
   level: advanced
