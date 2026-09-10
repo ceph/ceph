@@ -1219,7 +1219,7 @@ void ECBackend::submit_transaction(
 
   ceph_assert(op->plan.plans.empty());
   op->plan = get_write_plan(
-    sinfo.for_default(),
+    sinfo,
     *op->t,
     read_pipeline,
     rmw_pipeline,

@@ -343,7 +343,7 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
   //  op->trace = client_op->pg_trace;
   //}
   op->plan = ECCommon::get_write_plan(
-    sinfo.for_default(),
+    sinfo,
     *(op->t),
     read_pipeline,
     rmw_pipeline,

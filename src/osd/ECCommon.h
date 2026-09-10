@@ -920,7 +920,7 @@ struct ECCommon {
     );
 
   static ECTransaction::WritePlan get_write_plan(
-    const ECUtil::stripe_info_t &sinfo,
+    const ECUtil::stripe_info_base_t &sinfo,
     PGTransaction &t,
     ECCommon::ReadPipeline &read_pipeline,
     ECCommon::RMWPipeline &rmw_pipeline,

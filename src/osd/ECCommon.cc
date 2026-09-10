@@ -1912,7 +1912,7 @@ std::optional<object_info_t> ECCommon::get_object_info_from_obc(
 }
 
 ECTransaction::WritePlan ECCommon::get_write_plan(
-  const ECUtil::stripe_info_t &sinfo,
+  const ECUtil::stripe_info_base_t &sinfo,
   PGTransaction &t,
   ECCommon::ReadPipeline &read_pipeline,
   ECCommon::RMWPipeline &rmw_pipeline,
@@ -1949,9 +1949,39 @@ ECTransaction::WritePlan ECCommon::get_write_plan(
         }
       }
 
+      // Determine the per-object EC chunk size (dynamic-object-size feature).
+      // Honour a value already stashed in the OI; otherwise, for a dynamic
+      // pool, choose one from the object's size hint and stash it (below, in
+      // ECTransaction::Generate); otherwise use the pool default.
+      uint64_t chunk_size;
+      if (oi.ec_chunk_size != 0) {
+        chunk_size = oi.ec_chunk_size;
+      } else if (sinfo.allows_dynamic_object_size()) {
+        uint64_t hint = 0;
+        if (inner_op.alloc_hint) {
+          hint = inner_op.alloc_hint->expected_object_size;
+        }
+        if (hint == 0) {
+          hint = oi.expected_object_size;
+        }
+        if (hint == 0) {
+          // Fall back to the furthest offset this write touches.
+          extent_set es;
+          inner_op.buffer_updates.to_interval_set(es);
+          if (!es.empty()) {
+            hint = es.range_end();
+          }
+        }
+        chunk_size = sinfo.chunk_size_for_hint(
+          hint, sinfo.get_max_dynamic_chunk_size());
+      } else {
+        chunk_size = sinfo.get_default_chunk_size();
+      }
+      ECUtil::stripe_info_t obj_sinfo = sinfo.for_chunk_size(chunk_size);
+
       auto [readable_shards, writable_shards] =
         read_pipeline.get_readable_writable_shard_id_sets();
-      ECTransaction::WritePlanObj plan(oid, inner_op, sinfo, readable_shards,
+      ECTransaction::WritePlanObj plan(oid, inner_op, obj_sinfo, readable_shards,
                                        writable_shards,
                                        object_in_cache, old_object_size,
                                        oi, soi,

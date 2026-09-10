@@ -696,6 +696,28 @@ public:
     return cs;
   }
 
+  /* True if the pool has the dynamic-object-size feature enabled. */
+  bool allows_dynamic_object_size() const {
+    return pool && pool->allows_dynamic_object_size();
+  }
+
+  /* The configured maximum per-shard chunk size for the dynamic-object-size
+   * feature (pool property, defaulting to 1 MiB). */
+  uint64_t get_max_dynamic_chunk_size() const {
+    if (!pool) {
+      return DEFAULT_MAX_DYNAMIC_CHUNK_SIZE;
+    }
+    return pool->opts.value_or(
+      pool_opts_t::EC_DYNAMIC_MAX_CHUNK_SIZE,
+      static_cast<int64_t>(DEFAULT_MAX_DYNAMIC_CHUNK_SIZE));
+  }
+
+  /* The chunk size to use for an object given its object_info: the value
+   * stashed in the OI if set, otherwise the pool default. */
+  uint64_t effective_chunk_size(const object_info_t &oi) const {
+    return oi.ec_chunk_size != 0 ? oi.ec_chunk_size : default_chunk_size;
+  }
+
   unsigned int get_m() const {
     return m;
   }
@@ -826,6 +848,10 @@ public:
 
   uint64_t get_default_chunk_size() const {
     return base->get_default_chunk_size();
+  }
+
+  bool allows_dynamic_object_size() const {
+    return base->allows_dynamic_object_size();
   }
 
   uint64_t get_stripe_width() const {
