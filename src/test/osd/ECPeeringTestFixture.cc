@@ -490,7 +490,8 @@ PeeringState* ECPeeringTestFixture::get_child_peering_state(int shard) {
 
 // The child's log/missing/info are populated by the subsequent
 // PeeringState::split_into() call.
-PeeringState* ECPeeringTestFixture::create_child_peering_state(int shard)
+PeeringState* ECPeeringTestFixture::create_child_peering_state(int shard,
+                                                               unsigned split_bits)
 {
   pg_shard_t pg_whoami(shard, shard_id_t(shard));
   spg_t child_spgid(child_pgid, shard_id_t(shard));
@@ -500,7 +501,7 @@ PeeringState* ECPeeringTestFixture::create_child_peering_state(int shard)
   {
     ObjectStore::Transaction t;
     // Create at the post-split bit depth; split_collection() asserts dest bits == split_bits.
-    t.create_collection(child_coll, child_split_bits);
+    t.create_collection(child_coll, split_bits);
     store->queue_transaction(child_ch, std::move(t));
   }
   child_colls[shard] = child_coll;
@@ -598,7 +599,6 @@ pg_t ECPeeringTestFixture::split_pg()
   const unsigned new_pg_num = 2;
   const unsigned split_bits = pgid.get_split_bits(new_pg_num);
   child_pgid = pg_t(1, pool_id);  // seed 1 = child of seed 0 for pg_num 1 -> 2
-  child_split_bits = split_bits;
 
   // Read the parent's current acting set from the osdmap so the new epoch
   // preserves whatever acting set the test built before the split (e.g. after
@@ -655,7 +655,7 @@ pg_t ECPeeringTestFixture::split_pg()
   // 2. Split each shard: create the child state, run production split_into(),
   //    then split the ObjectStore collection.
   for (int shard = 0; shard < k + m; shard++) {
-    create_child_peering_state(shard);
+    create_child_peering_state(shard, split_bits);
     auto* parent = get_peering_state(shard);
     parent->split_into(child_pgid, get_child_peering_state(shard), split_bits);
 

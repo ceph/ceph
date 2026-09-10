@@ -47,7 +47,6 @@ protected:
 
   // Child-PG state populated by split_pg().  Empty until a split is performed.
   pg_t child_pgid;
-  unsigned child_split_bits = 0;
   bool stall_recovery_reservations = false;
   std::map<int, std::unique_ptr<PeeringState>> child_peering_states;
   std::map<int, std::unique_ptr<PeeringCtx>> child_peering_ctxs;
@@ -68,7 +67,7 @@ public:
   void TearDown() override;
   
   PeeringState* create_peering_state(int shard);
-  PeeringState* create_child_peering_state(int shard);
+  PeeringState* create_child_peering_state(int shard, unsigned split_bits);
 
   PeeringState* get_peering_state(int shard);
   PeeringCtx* get_peering_ctx(int shard);
