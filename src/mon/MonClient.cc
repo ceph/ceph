@@ -293,7 +293,11 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   ldout(cct, 10) << __func__ << " ping mon." << new_mon_id
                  << " " << con->get_peer_addr() << dendl;
 
-  pinger->mc.reset(new MonConnection(cct, con, 0, &auth_registry, monc_lock));
+  // the pinger runs without monc_lock on purpose (see above), so its
+  // MonConnection is guarded by the pinger's own lock, which the AuthClient
+  // callbacks take before reaching into it
+  pinger->mc.reset(new MonConnection(cct, con, 0, &auth_registry,
+				     pinger->lock));
   pinger->mc->start(monmap.get_epoch(), entity_name);
   con->send_message(new MPing);
 
