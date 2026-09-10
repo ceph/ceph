@@ -106,12 +106,54 @@ the data:
 * D3N datacache is not enabled; and
 * the requested range fits within the client's registered window.
 
-Replicated and erasure-coded pools are both supported (EC data is
-served by the primary as reconstructed logical data; the shard-direct
-interleave additionally serves librados split reads).
+Replicated and erasure-coded pools are both supported; see
+`Erasure-coded pools`_ for the two read paths an EC pool can serve a
+passthrough GET by, and what each one requires.
 
 Multipart objects and range requests are fully supported; every stripe
 lands at its logical offset within the requested range.
+
+Erasure-coded pools
+===================
+
+An EC pool serves a passthrough GET by one of two read paths. Which
+one runs is a property of the pool and of the gateway's read policy,
+not of this feature.
+
+Primary reads
+  The default. The primary reconstructs the logical data and replies
+  with it, so the OSD builds a linear placement and writes one
+  contiguous range per stripe. Nothing needs enabling: a plain EC pool
+  works with no client changes.
+
+Shard-direct reads
+  Each shard OSD instead scatters the chunks it holds to their logical
+  positions in the client's window, so the shards' concurrent writes
+  interleave and client-side reassembly disappears. Two settings are
+  needed, neither of them on by default:
+
+  * ``allow_ec_optimizations`` on the pool, which is what sets the
+    pool's ``split_reads`` flag. Replicated pools carry ``split_reads``
+    unconditionally, so it appears there without any opt-in.
+  * ``rados_replica_read_policy = balance`` on the gateway. A read that
+    does not carry the balanced-read flag is never split, so the pool
+    flag alone is not enough — it grants permission, while the client
+    still decides per request.
+
+  With only the first of the two, reads continue to go to the primary
+  and the linear placement runs.
+
+Shard-direct reads skip the CRC64-NVME verification described under
+`Integrity`_, because interleaved layouts do not concatenation-combine.
+Turning them on therefore trades end-to-end checksum verification for
+the removal of the reconstruct-and-reassemble step; consider whether
+that is the right trade for a given pool.
+
+The interleave itself is only exercised when a gateway stripe spans
+several EC stripes. Where ``rgw_obj_stripe_size`` equals the pool's
+``stripe_width``, each shard holds one contiguous range of the request
+and the plan collapses to a single write, which is indistinguishable
+from a primary read.
 
 Configuration
 =============
