@@ -8767,6 +8767,25 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
 
   ldpp_dout(dpp, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
   if (d->rdma) {
+    // the lease the OSD enforces on this stripe is a pool option; learn
+    // it before the op is sent so the fallback fence can cover it even
+    // if this op never comes back with a reply we can attribute
+    const int64_t pool_id = obj.ioctx.get_id();
+    auto lease = d->rdma_lease_by_pool.find(pool_id);
+    if (lease == d->rdma_lease_by_pool.end()) {
+      double seconds = 0;
+      r = obj.ioctx.pool_rdma_delivery_lease(&seconds);
+      if (r < 0) {
+        // without the bound the fence cannot be sized; nothing has been
+        // sent to this pool yet, so make the caller fall back
+        ldpp_dout(dpp, 4) << "rdma passthrough: cannot read the delivery "
+                          << "lease of pool " << pool_id << ": "
+                          << cpp_strerror(-r) << ", falling back" << dendl;
+        return -EOPNOTSUPP;
+      }
+      lease = d->rdma_lease_by_pool.emplace(pool_id, seconds).first;
+    }
+    d->rdma_lease = std::max(d->rdma_lease, lease->second);
     // a plain read carrying an advisory delivery descriptor: an OSD
     // that can push RDMA-writes the stripe into the client window at
     // the stripe's logical offset within the requested range and
@@ -8776,8 +8795,7 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
     d->rdma_slots.emplace_back();
     op.set_rdma_delivery(d->rdma_token,
                          uint64_t(obj_ofs) - d->rdma_range_start,
-                         d->rdma_lease_ms, d->rdma_flags,
-                         &d->rdma_slots.back());
+                         d->rdma_flags, &d->rdma_slots.back());
     d->rdma_ops_sent = true;
   } else {
     op.read(read_ofs, len, nullptr, nullptr);
@@ -8813,8 +8831,6 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
     data.rdma = true;
     data.rdma_token = params.rdma_token;
     data.rdma_range_start = ofs;
-    data.rdma_lease_ms = static_cast<uint32_t>(
-      cct->_conf.get_val<uint64_t>("rgw_cuobj_lease_ms"));
     if (cct->_conf.get_val<bool>("rgw_cuobj_crc64nvme")) {
       data.rdma_flags |=
         librados::ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64;
@@ -8831,11 +8847,13 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
     ldpp_dout(dpp, 0) << "iterate_obj() failed with " << r << dendl;
     data.cancel(); // drain completions without writing back to client
     params.rdma_submitted = data.rdma_ops_sent;
+    params.rdma_lease = data.rdma_lease;
     return r;
   }
 
   r = data.drain();
   params.rdma_submitted = data.rdma_ops_sent;
+  params.rdma_lease = data.rdma_lease;
   if (r < 0) {
     return r;
   }

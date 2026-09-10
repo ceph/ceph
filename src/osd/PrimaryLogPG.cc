@@ -9370,13 +9370,22 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
   if (m->get_retry_attempt() > 0) {
     return false;
   }
-  const utime_t age = ceph_clock_now() - m->get_recv_stamp();
+  // the pool's delivery lease bounds how long after receipt a push may
+  // still start; the client waits it out before reusing the window,
+  // so a late push must degrade to inline rather than race that reuse
+  const double lease = pool.info.get_rdma_delivery_lease();
+  const double age = ceph_clock_now() - m->get_recv_stamp();
+  if (age > lease) {
+    dout(10) << __func__ << " lease expired (" << age << "s > " << lease
+	     << "s), delivering inline" << dendl;
+    return false;
+  }
   bool any = false;
   for (size_t i = 0; i < rops.size(); i++) {
     if (deliveries[i].empty()) {
       continue;
     }
-    if (deliver_op_oob(ctx, i, rops[i], deliveries[i], age, oob[i])) {
+    if (deliver_op_oob(ctx, i, rops[i], deliveries[i], oob[i])) {
       any = true;
     }
   }
@@ -9385,18 +9394,12 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
 
 bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
 				  const ceph::rdma::delivery_t& d,
-				  const utime_t& age,
 				  ceph::rdma::oob_result_t& res)
 {
   auto m = ctx->op->get_req<MOSDOp>();
   if (d.flags & ~ceph::rdma::delivery_t::KNOWN_FLAGS) {
     // flag bits we do not implement: deliver inline so future
     // semantics degrade safely
-    return false;
-  }
-  if (d.lease_ms && age.to_msec() > d.lease_ms) {
-    dout(10) << __func__ << " op " << idx << " lease expired (" << age
-	     << " > " << d.lease_ms << "ms), delivering inline" << dendl;
     return false;
   }
   // only data-bearing reads go out of band; a descriptor on anything

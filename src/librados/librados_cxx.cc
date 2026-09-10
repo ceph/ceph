@@ -225,8 +225,8 @@ void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
 }
 
 void librados::ObjectReadOperation::set_rdma_delivery(
-    const std::string& token, uint64_t base_offset, uint32_t lease_ms,
-    uint32_t flags, rdma_delivery_result *result)
+    const std::string& token, uint64_t base_offset, uint32_t flags,
+    rdma_delivery_result *result)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
@@ -244,7 +244,7 @@ void librados::ObjectReadOperation::set_rdma_delivery(
 		ceph::rdma::delivery_t::FLAG_CRC64NVME);
   static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_VALID ==
 		ceph::rdma::oob_result_t::FLAG_CRC64NVME);
-  o->set_rdma_delivery(token, base_offset, lease_ms, flags,
+  o->set_rdma_delivery(token, base_offset, flags,
 		       reinterpret_cast<ceph::rdma::oob_result_t*>(result));
 }
 
@@ -1249,6 +1249,11 @@ uint64_t librados::IoCtx::pool_required_alignment()
 int librados::IoCtx::pool_required_alignment2(uint64_t *alignment)
 {
   return io_ctx_impl->client->pool_required_alignment2(get_id(), alignment);
+}
+
+int librados::IoCtx::pool_rdma_delivery_lease(double *seconds)
+{
+  return io_ctx_impl->client->pool_rdma_delivery_lease(get_id(), seconds);
 }
 
 std::string librados::IoCtx::get_pool_name()

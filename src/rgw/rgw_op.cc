@@ -3,6 +3,7 @@
 
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <optional>
 #include <cstdlib>
 #include <system_error>
@@ -3003,15 +3004,21 @@ void RGWGetObj::execute(optional_yield y)
                        << "in fallback mode" << dendl;
     if (read_op->params.rdma_submitted) {
       // descriptor-bearing ops reached OSDs: an RDMA write we lost
-      // track of (an OSD marked down mid-request) may still be in a
-      // NIC retry queue. Wait out the lease horizon plus the
-      // transport drain bound before the fallback rewrites the same
-      // client ranges, so no stale write can land afterward.
-      const auto wait_ms =
-        s->cct->_conf.get_val<uint64_t>("rgw_cuobj_fence_wait_ms");
+      // track of (an OSD marked down mid-request, or the original
+      // attempt of an op the Objecter resent) may still start until
+      // the pool's delivery lease runs out from the OSD's receipt of
+      // the op, and then sit in a NIC retry queue for the transport
+      // drain bound. Every op has completed by now, so waiting lease
+      // plus drain from here covers both before the fallback rewrites
+      // the same client ranges.
+      const auto lease_ms = static_cast<uint64_t>(
+        std::ceil(read_op->params.rdma_lease * 1000.0));
+      const auto wait_ms = lease_ms +
+        s->cct->_conf.get_val<uint64_t>("rgw_cuobj_fence_drain_ms");
       if (wait_ms) {
         ldpp_dout(this, 4) << "rdma fence: waiting " << wait_ms
-                           << "ms before fallback" << dendl;
+                           << "ms (lease " << lease_ms
+                           << "ms + drain) before fallback" << dendl;
         if (s->yield) {
           auto& yctx = s->yield.get_yield_context();
           boost::asio::steady_timer timer(yctx.get_executor());

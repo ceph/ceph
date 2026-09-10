@@ -4711,23 +4711,15 @@ options:
   default: true
   services:
   - rgw
-- name: rgw_cuobj_lease_ms
+- name: rgw_cuobj_fence_drain_ms
   type: uint
   level: advanced
-  desc: Lease carried on each passthrough stripe operation; an OSD refuses to
-    start an RDMA write more than this many milliseconds after receiving the
-    op and returns the data inline instead, bounding how long after a failure
-    a stray write can still start (0 disables the lease)
-  default: 5000
-  services:
-  - rgw
-- name: rgw_cuobj_fence_wait_ms
-  type: uint
-  level: advanced
-  desc: How long a passthrough GET that already reached the OSDs waits before
-    restarting in a fallback mode, so an RDMA write still queued in a failed
-    OSD's NIC cannot land after the fallback rewrites the same client ranges;
-    should cover the RDMA transport's retry budget (0 disables the wait)
+  desc: Transport drain bound added to the pool's rdma_delivery_lease when a
+    passthrough GET that already reached the OSDs restarts in a fallback mode.
+    The gateway waits lease plus this before the fallback rewrites the same
+    client ranges, so an RDMA write an OSD started within its lease but that
+    is still queued or retrying in its NIC cannot land afterward; size it to
+    cover the RDMA transport's retry budget
   default: 3000
   services:
   - rgw

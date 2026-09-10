@@ -801,6 +801,8 @@ public:
         uint64_t *rdma_bytes = nullptr;
         std::optional<uint64_t> *rdma_crc64 = nullptr;
         bool rdma_submitted = false; // out: descriptor-bearing ops reached OSDs
+        double rdma_lease = 0; // out: longest rdma_delivery_lease (seconds)
+                               // among the pools those ops were sent to
 
         Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
 		   target_obj(nullptr), epoch(nullptr)
@@ -1792,9 +1794,13 @@ struct get_obj_data {
   bool rdma = false;
   std::string rdma_token;
   uint64_t rdma_range_start = 0; // logical offset of the range start
-  uint32_t rdma_lease_ms = 0;
   uint32_t rdma_flags = 0;       // delivery request flags (e.g. want-crc64)
   bool rdma_ops_sent = false;    // at least one descriptor-bearing op issued
+  // the lease each OSD enforces is a pool option; the fence the caller
+  // waits before reusing the client window must cover the longest one
+  // among the pools descriptor-bearing ops were sent to
+  std::map<int64_t, double> rdma_lease_by_pool;
+  double rdma_lease = 0;
   // per-stripe oob results, pushed in logical stripe order (stable addrs)
   std::deque<librados::ObjectReadOperation::rdma_delivery_result> rdma_slots;
 

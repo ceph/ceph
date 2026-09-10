@@ -1329,9 +1329,9 @@ protected:
    */
   bool deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
 		   std::vector<ceph::rdma::oob_result_t>& oob);
-  /// deliver_oob for one op; age is the request's time since receipt
+  /// deliver_oob for one op
   bool deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
-		      const ceph::rdma::delivery_t& d, const utime_t& age,
+		      const ceph::rdma::delivery_t& d,
 		      ceph::rdma::oob_result_t& res);
 #endif
 
