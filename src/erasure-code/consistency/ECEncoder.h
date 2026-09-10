@@ -9,7 +9,7 @@
 #include "osd/ECUtilL.h"
 
 using stripe_info_l_t = ECLegacy::ECUtilL::stripe_info_t;
-using stripe_info_o_t = ECUtil::stripe_info_t;
+using stripe_info_o_t = ECUtil::stripe_info_base_t;
 
 namespace ceph {
 namespace consistency {

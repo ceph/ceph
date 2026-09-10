@@ -245,7 +245,7 @@ private:
       current_size(size),
       projected_size(size),
       oid(oid) {
-      line_size = std::max(MIN_LINE_SIZE, pg.sinfo.get_chunk_size());
+      line_size = std::max(MIN_LINE_SIZE, pg.sinfo.get_default_chunk_size());
     }
 
     void insert(ECUtil::shard_extent_map_t const &buffers) const;
@@ -273,7 +273,8 @@ private:
         object.oid, offset);
 
       if (c == nullptr) {
-        cache = std::make_shared<ECUtil::shard_extent_map_t>(&object.pg.sinfo);
+        cache = std::make_shared<ECUtil::shard_extent_map_t>(
+          object.pg.sinfo.for_default());
         size = 0;
         /* We are creating an empty cache line */
         update_mempool(1, 0);
@@ -301,7 +302,7 @@ private:
   std::map<hobject_t, Object> objects;
   BackendReadListener &backend_read;
   LRU &lru;
-  const ECUtil::stripe_info_t &sinfo;
+  const ECUtil::stripe_info_base_t &sinfo;
   std::list<OpRef> waiting_ops;
   void cache_maybe_ready();
   uint32_t active_ios = 0;
@@ -325,7 +326,7 @@ private:
   }
 
   explicit ECExtentCache(BackendReadListener &backend_read,
-                         LRU &lru, const ECUtil::stripe_info_t &sinfo,
+                         LRU &lru, const ECUtil::stripe_info_base_t &sinfo,
                          CephContext *cct
     ) :
     backend_read(backend_read),

@@ -704,8 +704,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     oid(oid),
     op(op),
     plan(plan),
-    read_sem(&sinfo),
-    to_write(&sinfo),
+    read_sem(sinfo),
+    to_write(sinfo),
     ec_omap_journal(ec_omap_journal),
     pg_log(pg_log) {
   ldpp_dout(dpp, 20) << __func__ << ": " << oid

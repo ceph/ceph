@@ -207,7 +207,7 @@ public:
                Context *on_complete,
                bool fast_read = false) override;
   bool get_ec_supports_crc_encode_decode() const override;
-  ECUtil::stripe_info_t ec_get_sinfo() const override;
+  const ECUtil::stripe_info_base_t &ec_get_sinfo() const override;
   bool ec_can_decode(const shard_id_set &available_shards) const override;
   shard_id_map<bufferlist> ec_encode_acting_set(
       const bufferlist &in_bl) const override;

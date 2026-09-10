@@ -83,8 +83,8 @@ void ECExtentCache::Object::request(OpRef &op) {
     shard_extent_set_t obj_hole(pg.sinfo.get_k_plus_m());
     shard_extent_set_t read_mask(pg.sinfo.get_k_plus_m());
 
-    pg.sinfo.ro_size_to_read_mask(op->projected_size, obj_hole);
-    pg.sinfo.ro_size_to_read_mask(projected_size, read_mask);
+    pg.sinfo.for_default().ro_size_to_read_mask(op->projected_size, obj_hole);
+    pg.sinfo.for_default().ro_size_to_read_mask(projected_size, read_mask);
     obj_hole.subtract(read_mask);
     do_not_read.insert(obj_hole);
   }
@@ -431,7 +431,7 @@ ECExtentCache::Op::Op(GenContextURef<OpRef&> &&cache_ready_cb,
   object(object),
   reads(to_read),
   writes(write),
-  result(&object.pg.sinfo),
+  result(object.pg.sinfo.for_default()),
   invalidates_cache(invalidates_cache),
   projected_size(projected_size),
   cache_ready_cb(std::move(cache_ready_cb)) {
@@ -442,7 +442,7 @@ ECExtentCache::Op::Op(GenContextURef<OpRef&> &&cache_ready_cb,
 shard_extent_map_t ECExtentCache::Object::get_cache(
     std::optional<shard_extent_set_t> const &set) const {
   if (!set) {
-    return shard_extent_map_t(&pg.sinfo);
+    return shard_extent_map_t(pg.sinfo.for_default());
   }
 
   shard_id_map<extent_map> res(pg.sinfo.get_k_plus_m());
@@ -466,5 +466,5 @@ shard_extent_map_t ECExtentCache::Object::get_cache(
       }
     }
   }
-  return shard_extent_map_t(&pg.sinfo, std::move(res));
+  return shard_extent_map_t(pg.sinfo.for_default(), std::move(res));
 }

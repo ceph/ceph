@@ -851,7 +851,7 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
         // Buffers are created as chunk size rather than digest_length to ensure
         // any ec algorithms can decode them
         ceph::bufferptr b = ceph::buffer::create_page_aligned(
-            m_pg.get_ec_sinfo().get_chunk_size());
+            m_pg.get_ec_sinfo().get_default_chunk_size());
         b.copy_in(0, digest_length, crc_bytes);
 
         this_chunk->m_ec_digest_map[srd.shard] = bufferlist{};
@@ -882,7 +882,7 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
                    << dendl;
           this_chunk->m_ec_digest_map =
               m_pg.ec_decode_acting_set(this_chunk->m_ec_digest_map,
-                                        m_pg.get_ec_sinfo().get_chunk_size());
+                                        m_pg.get_ec_sinfo().get_default_chunk_size());
         } else if (missing_shards != 0) {
           dout(10) << fmt::format(
                           "{}: Cannot decode {} shards from pg {} "
@@ -1287,7 +1287,7 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
           crc_bytes[i] = retrieve_byte(digest, i);
         }
         ceph::bufferptr b = ceph::buffer::create_page_aligned(
-            m_pg.get_ec_sinfo().get_chunk_size());
+            m_pg.get_ec_sinfo().get_default_chunk_size());
         b.copy_in(0, length, crc_bytes);
 
         digests[srd.shard] = bufferlist{};
@@ -1415,7 +1415,7 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
           digests.erase(srd);
 
           shard_id_map<bufferlist> decoded_map = m_pg.ec_decode_acting_set(
-              digests, m_pg.get_ec_sinfo().get_chunk_size());
+              digests, m_pg.get_ec_sinfo().get_default_chunk_size());
 
           if (!std::equal(removed_shard.begin(),
                           std::next(removed_shard.begin(), sizeof(int32_t)),

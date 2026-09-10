@@ -450,7 +450,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        const bufferlist &in_bl) const = 0;
    virtual shard_id_map<bufferlist> ec_decode_acting_set(
        const shard_id_map<bufferlist> &shard_map, int chunk_size) const = 0;
-   virtual ECUtil::stripe_info_t ec_get_sinfo() const = 0;
+   virtual const ECUtil::stripe_info_base_t &ec_get_sinfo() const = 0;
    virtual bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
      return false; // Only EC uses ec_omap_journal
    };

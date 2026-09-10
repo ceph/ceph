@@ -1446,7 +1446,7 @@ public:
    return get_pgbackend()->get_ec_supports_crc_encode_decode();
  }
 
- ECUtil::stripe_info_t get_ec_sinfo() const final {
+ ECUtil::stripe_info_base_t get_ec_sinfo() const final {
    return get_pgbackend()->ec_get_sinfo();
  }
 };

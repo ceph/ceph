@@ -278,8 +278,8 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
   ECUtil::shard_extent_set_t zero_mask(sinfo.get_k_plus_m());
 
-  sinfo.ro_size_to_read_mask(read_request.object_size, read_mask);
-  sinfo.ro_size_to_zero_mask(read_request.object_size, zero_mask);
+  sinfo.for_default().ro_size_to_read_mask(read_request.object_size, read_mask);
+  sinfo.for_default().ro_size_to_zero_mask(read_request.object_size, zero_mask);
 
   /* First deal with missing shards */
   for (auto &&[shard, extent_set]: read_request.shard_want_to_read) {
@@ -348,7 +348,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
 void ECCommon::ReadPipeline::get_min_want_to_read_shards(
     const ec_align_t &to_read,
     ECUtil::shard_extent_set_t &want_shard_reads) {
-  sinfo.ro_range_to_shard_extent_set(to_read.offset, to_read.size,
+  sinfo.for_default().ro_range_to_shard_extent_set(to_read.offset, to_read.size,
                                      want_shard_reads);
   dout(20) << __func__ << ": to_read " << to_read
 	   << " read_request " << want_shard_reads << dendl;
@@ -593,7 +593,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   m.reserve(messages.size());
   std::pair<int, int> subchunk_info =
     std::make_pair(ec_impl->get_sub_chunk_count(),
-      sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count());
+      sinfo.get_default_chunk_size() / ec_impl->get_sub_chunk_count());
   for (auto &&[pg_shard, read]: messages) {
     rop.in_progress.insert(pg_shard);
     shard_to_read_map[pg_shard].insert(rop.tid);
@@ -653,7 +653,7 @@ void ECCommon::ReadPipeline::get_want_to_read_shards(
   // Non-optimised version.
   for (const shard_id_t shard: sinfo.get_data_shards()) {
     for (auto &&read: to_read) {
-      auto &&[offset, len] = sinfo.chunk_aligned_ro_range_to_shard_ro_range(
+      auto &&[offset, len] = sinfo.for_default().chunk_aligned_ro_range_to_shard_ro_range(
         read.offset, read.size);
       want_shard_reads[shard].union_insert(offset, len);
     }
@@ -665,7 +665,7 @@ void ECCommon::ReadPipeline::get_want_to_read_all_shards(
     ECUtil::shard_extent_set_t &want_shard_reads)
 {
   for (const auto &single_region: to_read) {
-    sinfo.ro_range_to_shard_extent_set_with_parity(single_region.offset,
+    sinfo.for_default().ro_range_to_shard_extent_set_with_parity(single_region.offset,
                                                    single_region.size,
                                                    want_shard_reads);
   }
@@ -804,11 +804,11 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     ceph_assert(r == 0);
 
     const int subchunk_size =
-        sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
+        sinfo.get_default_chunk_size() / ec_impl->get_sub_chunk_count();
     dout(20) << __func__
              << " to_read=" << to_read
              << " subchunk_size=" << subchunk_size
-             << " chunk_size=" << sinfo.get_chunk_size() << dendl;
+             << " chunk_size=" << sinfo.get_default_chunk_size() << dendl;
 
     for_read_op.insert(make_pair(hoid, read_request));
   }
@@ -837,12 +837,12 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct_for_rmw(
         get_min_avail_to_read_shards(hoid, false, false, read_request);
     ceph_assert(r == 0);
 
-    const int subchunk_size = sinfo.get_chunk_size() / ec_impl->
+    const int subchunk_size = sinfo.get_default_chunk_size() / ec_impl->
         get_sub_chunk_count();
     dout(20) << __func__
              << " read_request=" << read_request
              << " subchunk_size=" << subchunk_size
-             << " chunk_size=" << sinfo.get_chunk_size() << dendl;
+             << " chunk_size=" << sinfo.get_default_chunk_size() << dendl;
 
     for_read_op.insert(make_pair(hoid, read_request));
   }
@@ -965,7 +965,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
   op.generate_transactions(
     ec_impl,
     get_parent()->get_info().pgid.pgid,
-    sinfo,
+    sinfo.for_default(),
     &written,
     &trans,
     get_parent()->get_dpp(),
@@ -1091,7 +1091,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     if (written.contains(oid)) {
       extent_cache.write_done(cop, std::move(written.at(oid)));
     } else {
-      extent_cache.write_done(cop, ECUtil::shard_extent_map_t(&sinfo));
+      extent_cache.write_done(cop, ECUtil::shard_extent_map_t(sinfo.for_default()));
     }
   }
 }
@@ -1175,7 +1175,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
       /* The cache is idle (we checked above) and this IO never blocks for reads
        * so we can skip the extent cache and immediately call the completion.
        */
-      nop->cache_ready(nop->hoid, ECUtil::shard_extent_map_t(&sinfo));
+      nop->cache_ready(nop->hoid, ECUtil::shard_extent_map_t(sinfo.for_default()));
     }
   }
 
@@ -1208,7 +1208,7 @@ ECCommon::RecoveryBackend::RecoveryBackend(
   CephContext *cct,
   const coll_t &coll,
   ceph::ErasureCodeInterfaceRef ec_impl,
-  const ECUtil::stripe_info_t &sinfo,
+  const ECUtil::stripe_info_base_t &sinfo,
   ReadPipeline &read_pipeline,
   ECListener *parent)
   : cct(cct),
@@ -1316,7 +1316,7 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
   }
 
   if (op.after_progress.data_complete && op.after_progress.omap_complete) {
-    uint64_t shard_size = sinfo.object_size_to_shard_size(op.recovery_info.size,
+    uint64_t shard_size = sinfo.for_default().object_size_to_shard_size(op.recovery_info.size,
       get_parent()->whoami_shard().shard);
     ceph_assert(shard_size >= tobj_size);
     if (shard_size != tobj_size) {
@@ -1384,9 +1384,9 @@ void ECCommon::RecoveryBackend::update_object_size_after_read(
   // We didn't know the size before, meaning the zero for decode calculations
   // will be off. Recalculate them!
   ECUtil::shard_extent_set_t zero_mask(sinfo.get_k_plus_m());
-  sinfo.ro_size_to_zero_mask(size, zero_mask);
+  sinfo.for_default().ro_size_to_zero_mask(size, zero_mask);
   ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
-  sinfo.ro_size_to_read_mask(size, read_mask);
+  sinfo.for_default().ro_size_to_read_mask(size, read_mask);
   extent_set superset = res.buffers_read.get_extent_superset();
 
   for (auto &&[shard, eset] : zero_mask) {
@@ -1616,7 +1616,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           read_size = read_to_end;
         }
       }
-      sinfo.ro_range_to_shard_extent_set_with_parity(
+      sinfo.for_default().ro_range_to_shard_extent_set_with_parity(
         op.recovery_progress.data_recovered_to, read_size, want);
 
       op.recovery_progress.data_recovered_to += read_size;
@@ -1693,7 +1693,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
          */
         dout(10) << __func__ << " No reads required " << op << dendl;
         // Create an empty read result and fall through.
-        op.returned_data.emplace(&sinfo);
+        op.returned_data.emplace(sinfo.for_default());
       } else {
         m->recovery_read(
           op.hoid,

@@ -449,12 +449,21 @@ inline uint64_t align_prev(uint64_t val) {
   return p2align(val, EC_ALIGN_SIZE);
 }
 
-class stripe_info_t {
-  friend class shard_extent_map_t;
+class stripe_info_t;
 
-  const uint64_t stripe_width;
+/* stripe_info_base_t holds the pool-invariant erasure-coding geometry: the
+ * plugin flags, the k/m counts, the shard/chunk mappings and the pool-level
+ * "default" chunk size (stripe_width / k).  It deliberately does NOT expose
+ * any offset<->shard geometry helpers - those depend on the (potentially
+ * per-object) chunk size and live on the object-scoped stripe_info_t view,
+ * obtained via for_chunk_size().  Keeping the size-dependent maths off the
+ * base is what forces every geometry call site to declare which chunk size
+ * it means. */
+class stripe_info_base_t {
+  friend class stripe_info_t;
+
   const uint64_t plugin_flags;
-  const uint64_t chunk_size;
+  const uint64_t default_chunk_size;
   const pg_pool_t *pool;
   const unsigned int k;
   // Can be calculated with a division from above. Better to cache.
@@ -466,14 +475,6 @@ class stripe_info_t {
   const shard_id_set all_shards;
 
 private:
-  void ro_range_to_shards(
-      uint64_t ro_offset,
-      uint64_t ro_size,
-      ECUtil::shard_extent_set_t *shard_extent_set,
-      extent_set *extent_superset,
-      buffer::list *bl,
-      shard_extent_map_t *shard_extent_map) const;
-
   static std::vector<shard_id_t> complete_chunk_mapping(
       const std::vector<shard_id_t> &_chunk_mapping, unsigned int n) {
     unsigned int size = (int)_chunk_mapping.size();
@@ -523,12 +524,10 @@ private:
   }
 
 public:
-  stripe_info_t(const ErasureCodeInterfaceRef &ec_impl, const pg_pool_t *pool,
-                uint64_t stripe_width
-    )
-    : stripe_width(stripe_width),
-      plugin_flags(ec_impl->get_supported_optimizations()),
-      chunk_size(stripe_width / ec_impl->get_data_chunk_count()),
+  stripe_info_base_t(const ErasureCodeInterfaceRef &ec_impl,
+                     const pg_pool_t *pool, uint64_t stripe_width)
+    : plugin_flags(ec_impl->get_supported_optimizations()),
+      default_chunk_size(stripe_width / ec_impl->get_data_chunk_count()),
       pool(pool),
       k(ec_impl->get_data_chunk_count()),
       m(ec_impl->get_coding_chunk_count()),
@@ -543,11 +542,10 @@ public:
   }
 
   // Simpler constructors for unit tests
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
+  stripe_info_base_t(unsigned int k, unsigned int m, uint64_t stripe_width)
+    : plugin_flags(0xFFFFFFFFFFFFFFFFul),
       // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
+      default_chunk_size(stripe_width / k),
       pool(nullptr),
       k(k),
       m(m),
@@ -560,12 +558,11 @@ public:
     ceph_assert(stripe_width % k == 0);
   }
 
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
+  stripe_info_base_t(unsigned int k, unsigned int m, uint64_t stripe_width,
                 const std::vector<shard_id_t> &_chunk_mapping)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
+    : plugin_flags(0xFFFFFFFFFFFFFFFFul),
       // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
+      default_chunk_size(stripe_width / k),
       pool(nullptr),
       k(k),
       m(m),
@@ -577,12 +574,11 @@ public:
     ceph_assert(stripe_width % k == 0);
   }
 
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
+  stripe_info_base_t(unsigned int k, unsigned int m, uint64_t stripe_width,
                 const pg_pool_t *pool, const std::vector<shard_id_t> &_chunk_mapping)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
+    : plugin_flags(0xFFFFFFFFFFFFFFFFul),
       // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
+      default_chunk_size(stripe_width / k),
       pool(pool),
       k(k),
       m(m),
@@ -594,12 +590,11 @@ public:
     ceph_assert(stripe_width % k == 0);
   }
 
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
+  stripe_info_base_t(unsigned int k, unsigned int m, uint64_t stripe_width,
                 const pg_pool_t *pool)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
+    : plugin_flags(0xFFFFFFFFFFFFFFFFul),
       // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
+      default_chunk_size(stripe_width / k),
       pool(pool),
       k(k),
       m(m),
@@ -611,41 +606,12 @@ public:
     ceph_assert(stripe_width % k == 0);
   }
 
-  uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const {
-    uint64_t remainder = size % get_stripe_width();
-    uint64_t shard_size = (size - remainder) / k;
-    raw_shard_id_t raw_shard = get_raw_shard(shard);
-    if (raw_shard >= get_k()) {
-      // coding parity shards have same size as data shard 0
-      raw_shard = 0;
-    }
-    if (remainder > uint64_t(raw_shard) * get_chunk_size()) {
-      remainder -= uint64_t(raw_shard) * get_chunk_size();
-      if (remainder > get_chunk_size()) {
-        remainder = get_chunk_size();
-      }
-      shard_size += remainder;
-    }
-    return align_next(shard_size);
-  }
+  /* Obtain the object-scoped geometry view for a given chunk size.  This is
+   * cheap - the view just references this base and carries the chunk size. */
+  stripe_info_t for_chunk_size(uint64_t chunk_size) const;
+  /* Convenience: the view using the pool-level default chunk size. */
+  stripe_info_t for_default() const;
 
-  uint64_t ro_offset_to_shard_offset(uint64_t ro_offset,
-                                     const raw_shard_id_t raw_shard) const {
-    uint64_t full_stripes = (ro_offset / stripe_width) * chunk_size;
-    int offset_shard = (ro_offset / chunk_size) % k;
-
-    if (int(raw_shard) == offset_shard) {
-      return full_stripes + ro_offset % chunk_size;
-    }
-    if (raw_shard < offset_shard) {
-      return full_stripes + chunk_size;
-    }
-    return full_stripes;
-  }
-
-  /**
-   * Return true if shard does not require metadata updates
-   */
   bool is_nonprimary_shard(const shard_id_t shard) const {
     return pool->is_nonprimary_shard(shard);
   }
@@ -688,12 +654,12 @@ public:
             ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) != 0;
   }
 
-  uint64_t get_stripe_width() const {
-    return stripe_width;
+  uint64_t get_default_chunk_size() const {
+    return default_chunk_size;
   }
 
-  uint64_t get_chunk_size() const {
-    return chunk_size;
+  uint64_t get_default_stripe_width() const {
+    return default_chunk_size * k;
   }
 
   unsigned int get_m() const {
@@ -728,6 +694,130 @@ public:
   auto get_all_shards() const {
     return all_shards;
   }
+};
+
+/* stripe_info_t is the object-scoped geometry VIEW.  It references a
+ * stripe_info_base_t and carries a specific chunk_size (and derived
+ * stripe_width = k * chunk_size), providing all the offset<->shard geometry
+ * helpers.  Obtain one with stripe_info_base_t::for_chunk_size().  It forwards
+ * the pool-invariant queries to the base for convenience. */
+class stripe_info_t {
+  friend class shard_extent_map_t;
+
+  // Non-const so the view stays copy-assignable: it is held by value in
+  // shard_extent_map_t (and thus in anything that owns one).  The pointed-to
+  // base is long-lived (owned by the EC backend), so copying a view is cheap
+  // and safe.
+  const stripe_info_base_t *base;
+  uint64_t chunk_size;
+  uint64_t stripe_width;
+
+private:
+  void ro_range_to_shards(
+      uint64_t ro_offset,
+      uint64_t ro_size,
+      ECUtil::shard_extent_set_t *shard_extent_set,
+      extent_set *extent_superset,
+      buffer::list *bl,
+      shard_extent_map_t *shard_extent_map) const;
+
+public:
+  stripe_info_t(const stripe_info_base_t &base, uint64_t chunk_size)
+    : base(&base),
+      chunk_size(chunk_size),
+      stripe_width(chunk_size * base.get_k()) {
+    ceph_assert(chunk_size != 0);
+  }
+
+  const stripe_info_base_t &get_base() const {
+    return *base;
+  }
+
+  bool operator==(const stripe_info_t &rhs) const {
+    return base == rhs.base && chunk_size == rhs.chunk_size;
+  }
+
+  uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const {
+    uint64_t remainder = size % get_stripe_width();
+    uint64_t shard_size = (size - remainder) / get_k();
+    raw_shard_id_t raw_shard = get_raw_shard(shard);
+    if (raw_shard >= get_k()) {
+      // coding parity shards have same size as data shard 0
+      raw_shard = 0;
+    }
+    if (remainder > uint64_t(raw_shard) * get_chunk_size()) {
+      remainder -= uint64_t(raw_shard) * get_chunk_size();
+      if (remainder > get_chunk_size()) {
+        remainder = get_chunk_size();
+      }
+      shard_size += remainder;
+    }
+    return align_next(shard_size);
+  }
+
+  uint64_t ro_offset_to_shard_offset(uint64_t ro_offset,
+                                     const raw_shard_id_t raw_shard) const {
+    uint64_t full_stripes = (ro_offset / stripe_width) * chunk_size;
+    int offset_shard = (ro_offset / chunk_size) % get_k();
+
+    if (int(raw_shard) == offset_shard) {
+      return full_stripes + ro_offset % chunk_size;
+    }
+    if (raw_shard < offset_shard) {
+      return full_stripes + chunk_size;
+    }
+    return full_stripes;
+  }
+
+  /* Pool-invariant queries: forwarded to the base geometry. */
+  bool is_nonprimary_shard(const shard_id_t shard) const {
+    return base->is_nonprimary_shard(shard);
+  }
+  bool supports_ec_overwrites() const { return base->supports_ec_overwrites(); }
+  bool supports_ec_optimisations() const {
+    return base->supports_ec_optimisations();
+  }
+  bool supports_sub_chunks() const { return base->supports_sub_chunks(); }
+  bool supports_partial_reads() const { return base->supports_partial_reads(); }
+  bool supports_partial_writes() const {
+    return base->supports_partial_writes();
+  }
+  bool supports_parity_delta_writes() const {
+    return base->supports_parity_delta_writes();
+  }
+  bool supports_encode_decode_crcs() const {
+    return base->supports_encode_decode_crcs();
+  }
+  bool supports_direct_reads() const { return base->supports_direct_reads(); }
+
+  uint64_t get_default_chunk_size() const {
+    return base->get_default_chunk_size();
+  }
+
+  uint64_t get_stripe_width() const {
+    return stripe_width;
+  }
+
+  uint64_t get_chunk_size() const {
+    return chunk_size;
+  }
+
+  unsigned int get_m() const { return base->get_m(); }
+  unsigned int get_k() const { return base->get_k(); }
+  unsigned int get_k_plus_m() const { return base->get_k_plus_m(); }
+
+  const shard_id_t get_shard(const raw_shard_id_t raw_shard) const {
+    return base->get_shard(raw_shard);
+  }
+
+  raw_shard_id_t get_raw_shard(shard_id_t shard) const {
+    return base->get_raw_shard(shard);
+  }
+
+  /* Return a "span" - which can be iterated over */
+  auto get_data_shards() const { return base->get_data_shards(); }
+  auto get_parity_shards() const { return base->get_parity_shards(); }
+  auto get_all_shards() const { return base->get_all_shards(); }
 
 
   uint64_t ro_offset_to_prev_chunk_offset(uint64_t offset) const {
@@ -860,11 +950,22 @@ public:
       ECUtil::shard_extent_set_t &shard_extent_set) const;
 };
 
+inline stripe_info_t stripe_info_base_t::for_chunk_size(
+    uint64_t chunk_size) const {
+  return stripe_info_t(*this, chunk_size);
+}
+
+inline stripe_info_t stripe_info_base_t::for_default() const {
+  return for_chunk_size(default_chunk_size);
+}
+
 class shard_extent_map_t {
   static const uint64_t invalid_offset = std::numeric_limits<uint64_t>::max();
 
 public:
-  const stripe_info_t *sinfo;
+  // The object-scoped geometry view (held by value - it is cheap and the
+  // base it references outlives us).
+  stripe_info_t sinfo;
   // The maximal range of all extents maps within rados object space.
   uint64_t ro_start;
   uint64_t ro_end;
@@ -879,10 +980,10 @@ public:
 
   /* This caculates the ro offset for an offset into a particular shard */
   uint64_t calc_ro_offset(raw_shard_id_t raw_shard, int shard_offset) const {
-    int stripes = shard_offset / sinfo->chunk_size;
-    return stripes * sinfo->stripe_width + uint64_t(raw_shard) * sinfo->
+    int stripes = shard_offset / sinfo.chunk_size;
+    return stripes * sinfo.stripe_width + uint64_t(raw_shard) * sinfo.
         chunk_size +
-        shard_offset % sinfo->chunk_size;
+        shard_offset % sinfo.chunk_size;
   }
 
   uint64_t calc_ro_end(raw_shard_id_t raw_shard, int shard_offset) const {
@@ -899,13 +1000,13 @@ public:
     uint64_t o_end = 0;
 
     for (auto &&[shard, emap] : extent_maps) {
-      raw_shard_id_t raw_shard = sinfo->get_raw_shard(shard);
+      raw_shard_id_t raw_shard = sinfo.get_raw_shard(shard);
       uint64_t start_off = emap.get_start_off();
       uint64_t end_off = emap.get_end_off();
       o_start = std::min(o_start, start_off);
       o_end = std::max(o_end, end_off);
 
-      if (raw_shard < sinfo->get_k()) {
+      if (raw_shard < sinfo.get_k()) {
         start = std::min(start, calc_ro_offset(raw_shard, start_off));
         end = std::max(end, calc_ro_end(raw_shard, end_off));
       }
@@ -924,15 +1025,15 @@ public:
   }
 
 public:
-  shard_extent_map_t(const stripe_info_t *sinfo) :
+  shard_extent_map_t(const stripe_info_t &sinfo) :
     sinfo(sinfo),
     ro_start(invalid_offset),
     ro_end(invalid_offset),
     start_offset(invalid_offset),
     end_offset(invalid_offset),
-    extent_maps(sinfo->get_k_plus_m()) {}
+    extent_maps(sinfo.get_k_plus_m()) {}
 
-  shard_extent_map_t(const stripe_info_t *sinfo,
+  shard_extent_map_t(const stripe_info_t &sinfo,
                      shard_id_map<extent_map> &&_extent_maps) :
     sinfo(sinfo),
     extent_maps(std::move(_extent_maps)) {

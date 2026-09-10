@@ -214,9 +214,9 @@ struct ECCommon {
     ECUtil::shard_extent_set_t processed_read_requests;
     shard_id_set zero_length_reads;
 
-    read_result_t(const ECUtil::stripe_info_t *sinfo) :
+    read_result_t(const ECUtil::stripe_info_t &sinfo) :
       r(0), buffers_read(sinfo),
-      processed_read_requests(sinfo->get_k_plus_m()) {}
+      processed_read_requests(sinfo.get_k_plus_m()) {}
 
     void print(std::ostream &os) const {
       os << "read_result_t(r=" << r << ", errors=" << errors;
@@ -398,7 +398,7 @@ struct ECCommon {
 
     CephContext *cct;
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t &sinfo;
+    const ECUtil::stripe_info_base_t &sinfo;
     // TODO: lay an interface down here
     ECListener *parent;
 #ifdef WITH_CRIMSON
@@ -419,7 +419,7 @@ struct ECCommon {
 
     ReadPipeline(CephContext *cct,
                  ceph::ErasureCodeInterfaceRef ec_impl,
-                 const ECUtil::stripe_info_t &sinfo,
+                 const ECUtil::stripe_info_base_t &sinfo,
 #ifdef WITH_CRIMSON
                  ECListener *parent,
                  ECCommon &ec_backend)
@@ -719,7 +719,7 @@ struct ECCommon {
     std::set<shard_id_t> pending_roll_forward;
 
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t &sinfo;
+    const ECUtil::stripe_info_base_t &sinfo;
     ECListener *parent;
     ECCommon &ec_backend;
     ECExtentCache extent_cache;
@@ -733,7 +733,7 @@ struct ECCommon {
 
     RMWPipeline(CephContext *cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
-                const ECUtil::stripe_info_t &sinfo,
+                const ECUtil::stripe_info_base_t &sinfo,
                 ECListener *parent,
                 ECCommon &ec_backend,
                 ECExtentCache::LRU &ec_extent_cache_lru)
@@ -782,7 +782,7 @@ struct ECCommon {
     CephContext *cct;
     const coll_t &coll;
     ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t &sinfo;
+    const ECUtil::stripe_info_base_t &sinfo;
     ReadPipeline &read_pipeline;
     // TODO: lay an interface down here
     ECListener *parent;
@@ -807,7 +807,7 @@ struct ECCommon {
     RecoveryBackend(CephContext *cct,
                     const coll_t &coll,
                     ceph::ErasureCodeInterfaceRef ec_impl,
-                    const ECUtil::stripe_info_t &sinfo,
+                    const ECUtil::stripe_info_base_t &sinfo,
                     ReadPipeline &read_pipeline,
                     ECListener *parent);
 
@@ -874,7 +874,7 @@ struct ECCommon {
 
     uint64_t get_recovery_chunk_size() const {
       return round_up_to(cct->_conf->osd_recovery_max_chunk,
-                         sinfo.get_stripe_width());
+                         sinfo.get_default_stripe_width());
     }
 
     virtual ~RecoveryBackend() = default;

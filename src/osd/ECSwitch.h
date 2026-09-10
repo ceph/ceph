@@ -400,13 +400,12 @@ public:
     return {0};
   }
 
-  ECUtil::stripe_info_t ec_get_sinfo() const {
+  const ECUtil::stripe_info_base_t &ec_get_sinfo() const {
     if (is_optimized()) {
       return optimized.ec_get_sinfo();
     }
 
     ceph_abort_msg("This interface is not supported by legacy EC");
-    return {0, 0, 0};
   }
 
   int objects_get_attrs(

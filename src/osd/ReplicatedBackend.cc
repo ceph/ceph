@@ -346,9 +346,8 @@ shard_id_map<bufferlist> ReplicatedBackend::ec_decode_acting_set(
   return {0};
 }
 
-ECUtil::stripe_info_t ReplicatedBackend::ec_get_sinfo() const {
+const ECUtil::stripe_info_base_t &ReplicatedBackend::ec_get_sinfo() const {
   ceph_abort_msg("get_ec_sinfo is not used by replica pool");
-  return {0, 0, 0};
 }
 
 class C_OSD_OnOpCommit : public Context {

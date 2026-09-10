@@ -309,7 +309,7 @@ struct PgScrubBeListener {
   virtual bool get_ec_supports_crc_encode_decode() const = 0;
 
   // Returns the stripe_info_t used by the PG in EC
-  virtual ECUtil::stripe_info_t get_ec_sinfo() const = 0;
+  virtual ECUtil::stripe_info_base_t get_ec_sinfo() const = 0;
 };
 
 // defining a specific subset of performance counters. Each of the members

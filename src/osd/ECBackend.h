@@ -205,7 +205,7 @@ class ECBackend : public ECCommon {
   shard_id_map<bufferlist> ec_encode_acting_set(const bufferlist &in_bl) const;
   shard_id_map<bufferlist> ec_decode_acting_set(
       const shard_id_map<bufferlist> &shard_map, int chunk_size) const;
-  ECUtil::stripe_info_t ec_get_sinfo() const;
+  const ECUtil::stripe_info_base_t &ec_get_sinfo() const;
 
  private:
   friend struct ECRecoveryHandle;
@@ -225,7 +225,7 @@ public:
     ECRecoveryBackend(CephContext *cct,
                       const coll_t &coll,
                       ceph::ErasureCodeInterfaceRef ec_impl,
-                      const ECUtil::stripe_info_t &sinfo,
+                      const ECUtil::stripe_info_base_t &sinfo,
                       ReadPipeline &read_pipeline,
                       PGBackend::Listener *parent,
                       ECBackend *)
@@ -286,11 +286,11 @@ public:
    */
   class ECRecPred : public IsPGRecoverablePredicate {
     shard_id_set want;
-    const ECUtil::stripe_info_t *sinfo;
+    const ECUtil::stripe_info_base_t *sinfo;
     ceph::ErasureCodeInterfaceRef ec_impl;
 
    public:
-    explicit ECRecPred(const ECUtil::stripe_info_t *sinfo,
+    explicit ECRecPred(const ECUtil::stripe_info_base_t *sinfo,
                        ceph::ErasureCodeInterfaceRef ec_impl) :
       sinfo(sinfo), ec_impl(ec_impl) {
       want.insert_range(shard_id_t(0), sinfo->get_k_plus_m());
@@ -323,7 +323,7 @@ public:
   }
 
   int get_ec_stripe_chunk_size() const {
-    return sinfo.get_chunk_size();
+    return sinfo.get_default_chunk_size();
   }
 
   bool get_ec_supports_crc_encode_decode() const {
@@ -332,7 +332,7 @@ public:
 
   uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard
     ) const {
-    return sinfo.object_size_to_shard_size(size, shard);
+    return sinfo.for_default().object_size_to_shard_size(size, shard);
   }
 
   uint64_t get_is_nonprimary_shard(shard_id_t shard) const {
@@ -351,7 +351,7 @@ public:
    public:
     ECReadPred(
         pg_shard_t whoami,
-        const ECUtil::stripe_info_t *sinfo,
+        const ECUtil::stripe_info_base_t *sinfo,
         ceph::ErasureCodeInterfaceRef ec_impl) : whoami(whoami), rec_pred(sinfo, ec_impl) {}
 
     bool operator()(const std::set<pg_shard_t> &_have) const override {
@@ -364,7 +364,7 @@ public:
     return std::make_unique<ECReadPred>(whoami, &sinfo, ec_impl);
   }
 
-  const ECUtil::stripe_info_t sinfo;
+  const ECUtil::stripe_info_base_t sinfo;
 
   std::tuple<
     int,
@@ -402,7 +402,7 @@ public:
       bool object_is_legacy_ec) const {
     if (object_is_legacy_ec) {
       // In legacy EC, all shards were padded to the next chunk boundry.
-      return sinfo.ro_offset_to_next_chunk_offset(logical_size);
+      return sinfo.for_default().ro_offset_to_next_chunk_offset(logical_size);
     }
     return object_size_to_shard_size(logical_size, shard_id);
   }

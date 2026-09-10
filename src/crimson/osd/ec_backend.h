@@ -116,7 +116,7 @@ private:
     GenContextURef<ec_extents_t&&> &&func) override;
 
   ceph::ErasureCodeInterfaceRef ec_impl;
-  const ECUtil::stripe_info_t sinfo;
+  const ECUtil::stripe_info_base_t sinfo;
 
   const bool fast_read;
   const bool allows_ecoverwrites;
