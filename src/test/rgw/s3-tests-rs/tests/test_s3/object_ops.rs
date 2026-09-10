@@ -2114,6 +2114,9 @@ async fn test_bucket_list_long_name() {
     let num = 61 - prefix.len();
     let name = format!("{}{}", prefix, "a".repeat(num));
     let client = get_client();
+    /* built from the prefix rather than get_new_bucket_name(), so nothing
+     * tracked it;  register or it leaks */
+    s3_tests_rs::fixtures::register_bucket_for_cleanup(&client, &name);
     client.create_bucket().bucket(&name).send().await.unwrap();
 
     let response = client.list_objects().bucket(&name).send().await.unwrap();

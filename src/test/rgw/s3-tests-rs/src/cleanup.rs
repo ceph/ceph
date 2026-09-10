@@ -3,7 +3,8 @@ use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
 
 use crate::client::{
-    get_alt_client, get_client, get_policy_only_client, get_quota_client, get_tenant_client,
+    get_alt_client, get_client, get_iam_alt_root_s3client, get_iam_root_s3client,
+    get_iam_s3client, get_policy_only_client, get_quota_client, get_tenant_client,
 };
 use crate::config::get_config;
 
@@ -321,6 +322,13 @@ async fn nuke_all_prefixed(prefix: &str) {
     if has_policy_only {
         nuke_prefixed_buckets(&get_policy_only_client(), prefix).await;
     }
+
+    /* The account and IAM identities create buckets too, and a bucket can
+     * only be deleted by its owner -- so buckets made by these were
+     * unreachable by every sweep and simply accumulated. */
+    nuke_prefixed_buckets(&get_iam_s3client(), prefix).await;
+    nuke_prefixed_buckets(&get_iam_root_s3client(), prefix).await;
+    nuke_prefixed_buckets(&get_iam_alt_root_s3client(), prefix).await;
 }
 
 pub async fn setup() {

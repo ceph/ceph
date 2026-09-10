@@ -876,6 +876,9 @@ async fn test_bucket_create_naming_good_starts_alpha() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
     let name = format!("a{}foo", s3_tests_rs::config::get_config().bucket_prefix);
+    /* built from the prefix rather than get_new_bucket_name(), so
+     * nothing tracked it;  register or it leaks */
+    s3_tests_rs::fixtures::register_bucket_for_cleanup(&client, &name);
     client.create_bucket().bucket(&name).send().await.unwrap();
 }
 
@@ -884,6 +887,9 @@ async fn test_bucket_create_naming_good_starts_digit() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
     let client = get_client();
     let name = format!("0{}foo", s3_tests_rs::config::get_config().bucket_prefix);
+    /* built from the prefix rather than get_new_bucket_name(), so
+     * nothing tracked it;  register or it leaks */
+    s3_tests_rs::fixtures::register_bucket_for_cleanup(&client, &name);
     client.create_bucket().bucket(&name).send().await.unwrap();
 }
 
@@ -893,6 +899,9 @@ async fn test_bucket_create_naming_good_contains_period() {
     let client = get_client();
     let cfg = s3_tests_rs::config::get_config();
     let name = format!("{}aaa.111", cfg.bucket_prefix);
+    /* built from the prefix rather than get_new_bucket_name(), so
+     * nothing tracked it;  register or it leaks */
+    s3_tests_rs::fixtures::register_bucket_for_cleanup(&client, &name);
     client.create_bucket().bucket(&name).send().await.unwrap();
 }
 
@@ -902,6 +911,9 @@ async fn test_bucket_create_naming_good_contains_hyphen() {
     let client = get_client();
     let cfg = s3_tests_rs::config::get_config();
     let name = format!("{}aaa-111", cfg.bucket_prefix);
+    /* built from the prefix rather than get_new_bucket_name(), so
+     * nothing tracked it;  register or it leaks */
+    s3_tests_rs::fixtures::register_bucket_for_cleanup(&client, &name);
     client.create_bucket().bucket(&name).send().await.unwrap();
 }
 

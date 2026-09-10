@@ -2583,3 +2583,66 @@ async fn test_multipart_resend_first_finishes_last() {
     let body = get_body(resp).await;
     assert_eq!(body, body_b);
 }
+
+#[tokio::test]
+async fn test_multipart_etag_agrees_with_head_warm_cache() {
+    /* A completed multipart object must report the same etag from LIST as
+     * from HEAD.  complete() computes the real <md5-of-md5s>-<parts> value;
+     * the incremental listing entry used to carry the driver's synthetic
+     * change token instead.
+     *
+     * That is worse than untidy:  the token contains dashes, which S3 SDKs
+     * treat as "this is a multipart etag, do not MD5-validate the body", so
+     * the disagreement silently disables the client's integrity check.
+     *
+     * Warm the listing cache first.  A cold bucket rebuilds its cache from
+     * the store on the first listing, and the rebuild path already reported
+     * the digest -- so without the warming list this passes either way. */
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+
+    s3_tests_rs::fixtures::create_objects(&client, &bucket_name, &["seed"]).await;
+    client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+
+    let key = "mpetag";
+    do_multipart(&client, &bucket_name, key, 2 * 1024 * 1024).await;
+
+    let head = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    let head_etag = head.e_tag().unwrap_or_default().to_string();
+
+    let listing = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    let listed_etag = listing
+        .contents()
+        .iter()
+        .find(|o| o.key() == Some(key))
+        .expect("completed multipart object absent from listing")
+        .e_tag()
+        .unwrap_or_default()
+        .to_string();
+
+    assert_eq!(
+        listed_etag, head_etag,
+        "listing etag disagrees with HEAD for a completed multipart object"
+    );
+    assert!(
+        !listed_etag.contains("mtime-"),
+        "listing reported the synthetic change token: {listed_etag}"
+    );
+}
