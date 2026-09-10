@@ -45,7 +45,8 @@ TEST(ectransaction, two_writes_separated_append)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 2, 8192, &pool);
+  ECUtil::stripe_info_base_t sinfo_base(2, 2, 8192, &pool);
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   shard_id_set shards;
   shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
@@ -78,7 +79,8 @@ TEST(ectransaction, two_writes_separated_misaligned_overwrite)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 2, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 2, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   object_info_t oi;
   oi.size = 3112960;
   shard_id_set shards;
@@ -116,7 +118,8 @@ TEST(ectransaction, partial_write)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   object_info_t oi;
   oi.size = 8;
   shard_id_set shards;
@@ -157,7 +160,8 @@ TEST(ectransaction, overlapping_write_non_aligned)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   object_info_t oi;
   oi.size = 8;
   shard_id_set shards;
@@ -198,7 +202,8 @@ TEST(ectransaction, test_appending_write_non_aligned)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   object_info_t oi;
   oi.size = 4*4096;
   shard_id_set shards;
@@ -239,7 +244,8 @@ TEST(ectransaction, append_with_large_hole)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   object_info_t oi;
   oi.size = 25*4096;
   shard_id_set shards;
@@ -280,7 +286,8 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   object_info_t oi;
   oi.size = 25*EC_ALIGN_SIZE;
   shard_id_set shards;
@@ -321,7 +328,8 @@ TEST(ectransaction, test_overwrite_with_missing)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   object_info_t oi;
   oi.size = 42*(EC_ALIGN_SIZE / 4);
   shard_id_set shards;
@@ -364,7 +372,8 @@ TEST(ectransaction, truncate_to_bigger_without_write)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 2, 8192, &pool);
+  ECUtil::stripe_info_base_t sinfo_base(2, 2, 8192, &pool);
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   shard_id_set shards;
   shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
@@ -393,7 +402,8 @@ TEST(ectransaction, truncate_to_smalelr_without_write) {
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 2, EC_ALIGN_SIZE*2, &pool);
+  ECUtil::stripe_info_base_t sinfo_base(2, 2, EC_ALIGN_SIZE*2, &pool);
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   shard_id_set shards;
   shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
@@ -435,7 +445,8 @@ TEST(ectransaction, delete_and_write_misaligned) {
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   object_info_t oi;
   oi.size = new_size;
   shard_id_set shards;
@@ -477,7 +488,8 @@ TEST(ectransaction, truncate_to_stripe) {
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   object_info_t oi;
   oi.size = new_size;
   shard_id_set shards;
@@ -531,7 +543,8 @@ TEST(ectransaction, truncate_then_write_one_shard) {
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
   
   // EC configuration: k=2, m=1, chunk_size=4096 (matching FastEC profile)
-  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
   
   // Set current object size to 16384 (16KB) - the object exists with this size
   object_info_t oi;

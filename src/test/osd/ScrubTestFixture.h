@@ -115,7 +115,7 @@ class MockPgScrubBeListener : public Scrub::PgScrubBeListener {
     return backend->get_ec_supports_crc_encode_decode();
   }
 
-  ECUtil::stripe_info_t get_ec_sinfo() const override {
+  ECUtil::stripe_info_base_t get_ec_sinfo() const override {
     return backend->ec_get_sinfo();
   }
 

@@ -22,7 +22,7 @@ using namespace ECUtil;
 
 shard_extent_map_t imap_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&in, stripe_info_t const *sinfo)
 {
-  shard_extent_map_t out(sinfo);
+  shard_extent_map_t out(*sinfo);
   for (int shard = 0; shard < (int)in.size(); shard++) {
     for (auto &&tup: in[shard]) {
       bufferlist bl;
@@ -35,7 +35,7 @@ shard_extent_map_t imap_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&i
 
 shard_extent_map_t imap_from_iset(const shard_extent_set_t &sset, stripe_info_t *sinfo)
 {
-  shard_extent_map_t out(sinfo);
+  shard_extent_map_t out(*sinfo);
 
   for (auto &&[shard, set]: sset) {
     for (auto &&iter: set) {
@@ -61,6 +61,7 @@ shard_extent_set_t iset_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&i
 struct Client : public ECExtentCache::BackendReadListener
 {
   hobject_t oid = hobject_t().make_temp_hobject("My first object");
+  stripe_info_base_t sinfo_base;
   stripe_info_t sinfo;
   ECExtentCache::LRU lru;
   ECExtentCache cache;
@@ -68,8 +69,9 @@ struct Client : public ECExtentCache::BackendReadListener
   list<shard_extent_map_t> results;
 
   Client(uint64_t chunk_size, int k, int m, uint64_t cache_size) :
-    sinfo(k, m, k*chunk_size, vector<shard_id_t>(0)),
-    lru(cache_size), cache(*this, lru, sinfo, g_ceph_context) {};
+    sinfo_base(k, m, k*chunk_size, vector<shard_id_t>(0)),
+    sinfo(sinfo_base.for_default()),
+    lru(cache_size), cache(*this, lru, sinfo_base, g_ceph_context) {};
 
   void backend_read(hobject_t _oid, const shard_extent_set_t& request,
     uint64_t object_size) override  {
@@ -699,6 +701,7 @@ struct MultiClient : public ECExtentCache::BackendReadListener
 {
   hobject_t oid_x = hobject_t().make_temp_hobject("Object X");
   hobject_t oid_y = hobject_t().make_temp_hobject("Object Y");
+  stripe_info_base_t sinfo_base;
   stripe_info_t sinfo;
   ECExtentCache::LRU lru;
   ECExtentCache cache;
@@ -708,8 +711,9 @@ struct MultiClient : public ECExtentCache::BackendReadListener
   list<shard_extent_map_t> results;
 
   MultiClient(uint64_t chunk_size, int k, int m, uint64_t cache_size) :
-    sinfo(k, m, k*chunk_size, vector<shard_id_t>(0)),
-    lru(cache_size), cache(*this, lru, sinfo, g_ceph_context) {};
+    sinfo_base(k, m, k*chunk_size, vector<shard_id_t>(0)),
+    sinfo(sinfo_base.for_default()),
+    lru(cache_size), cache(*this, lru, sinfo_base, g_ceph_context) {};
 
   void backend_read(hobject_t _oid, const shard_extent_set_t& request,
     uint64_t object_size) override  {

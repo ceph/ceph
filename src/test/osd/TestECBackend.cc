@@ -271,14 +271,16 @@ TEST(ECCommon, get_min_want_to_read_shards)
   const unsigned int m = 2;
   const uint64_t csize = 1024;
 
-  ECUtil::stripe_info_t s(k, m, swidth);
+  ECUtil::stripe_info_base_t s_base(k, m, swidth);
+
+  ECUtil::stripe_info_t s = s_base.for_default();
   ECListenerStub listenerStub;
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), csize);
 
   const std::vector<int> chunk_mapping = {}; // no remapping
   ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
-  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s_base, &listenerStub);
 
   ECUtil::shard_extent_set_t empty_extent_set_map(s.get_k_plus_m());
 
@@ -521,7 +523,9 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
 
   std::vector<ECCommon::shard_read_t> empty_shard_vector(k);
 
-  ECUtil::stripe_info_t s(k, m, swidth, vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t s_base(k, m, swidth, vector<shard_id_t>(0));
+
+  ECUtil::stripe_info_t s = s_base.for_default();
   ECListenerStub listenerStub;
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), swidth / k);
@@ -529,7 +533,7 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
   const std::vector<int> chunk_mapping = {}; // no remapping
   MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
-  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s_base, &listenerStub);
 
   for (int i = 0; i < nshards; i++) {
     listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
@@ -821,7 +825,9 @@ TEST(ECCommon, shard_read_combo_tests)
   const uint64_t object_size = swidth * 1024;
   hobject_t hoid;
 
-  ECUtil::stripe_info_t s(k, m, swidth, vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t s_base(k, m, swidth, vector<shard_id_t>(0));
+
+  ECUtil::stripe_info_t s = s_base.for_default();
   ECListenerStub listenerStub;
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
@@ -829,7 +835,7 @@ TEST(ECCommon, shard_read_combo_tests)
   const std::vector<int> chunk_mapping = {}; // no remapping
   MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
-  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s_base, &listenerStub);
 
   for (int i = 0; i < nshards; i++) {
     listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
@@ -910,7 +916,9 @@ TEST(ECCommon, get_min_want_to_read_shards_bug67087)
   const unsigned int m = 2;
   const uint64_t csize = 1024;
 
-  ECUtil::stripe_info_t s(k, m, swidth);
+  ECUtil::stripe_info_base_t s_base(k, m, swidth);
+
+  ECUtil::stripe_info_t s = s_base.for_default();
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), 1024);
 
@@ -920,7 +928,7 @@ TEST(ECCommon, get_min_want_to_read_shards_bug67087)
 
   const std::vector<int> chunk_mapping = {}; // no remapping
   ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
-  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s_base, &listenerStub);
 
   ECUtil::shard_extent_set_t want_to_read(s.get_k_plus_m());
   ec_align_t to_read1(512,512, 1);
@@ -954,7 +962,9 @@ TEST(ECCommon, get_remaining_shards)
   const uint64_t chunk_size = swidth / k;
   const uint64_t object_size = swidth * 1024;
 
-  ECUtil::stripe_info_t s(k, m, swidth, vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t s_base(k, m, swidth, vector<shard_id_t>(0));
+
+  ECUtil::stripe_info_t s = s_base.for_default();
   ECListenerStub listenerStub;
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
@@ -962,7 +972,7 @@ TEST(ECCommon, get_remaining_shards)
   const std::vector<int> chunk_mapping = {}; // no remapping
   MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
-  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s_base, &listenerStub);
 
   std::vector<ECCommon::shard_read_t> empty_shard_vector(k);
   ECCommon::shard_read_t empty_shard_read;
@@ -987,7 +997,7 @@ TEST(ECCommon, get_remaining_shards)
     int missing_shard = 0;
 
     // Mock up a read result.
-    ECCommon::read_result_t read_result(&s);
+    ECCommon::read_result_t read_result(s);
     read_result.errors.emplace(pg_shards[missing_shard], -EIO);
 
     pipeline.get_remaining_shards(hoid, read_result, read_request, false, false, false, false);
@@ -1022,7 +1032,7 @@ TEST(ECCommon, get_remaining_shards)
     unsigned int missing_shard = 1;
 
     // Mock up a read result.
-    ECCommon::read_result_t read_result(&s);
+    ECCommon::read_result_t read_result(s);
     read_result.errors.emplace(pg_shards[missing_shard], -EIO);
     buffer::list bl;
     bl.append_zero(chunk_size/2);
@@ -1063,7 +1073,9 @@ TEST(ECCommon, encode)
   const unsigned int k = 2;
   const unsigned int m = 2;
 
-  ECUtil::stripe_info_t s(k, m, swidth, vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t s_base(k, m, swidth, vector<shard_id_t>(0));
+
+  ECUtil::stripe_info_t s = s_base.for_default();
   ECListenerStub listenerStub;
   ASSERT_EQ(s.get_stripe_width(), swidth);
   ASSERT_EQ(s.get_chunk_size(), swidth/k);
@@ -1071,9 +1083,9 @@ TEST(ECCommon, encode)
   const std::vector<int> chunk_mapping = {}; // no remapping
   MockErasureCode *ecode = new MockErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
-  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s_base, &listenerStub);
 
-  ECUtil::shard_extent_map_t semap(&s);
+  ECUtil::shard_extent_map_t semap(s);
 
   for (shard_id_t i; i<k+m; ++i) {
     bufferlist bl;
@@ -1104,7 +1116,9 @@ void test_decode(unsigned int k, unsigned int m, uint64_t chunk_size, uint64_t o
 {
   const uint64_t swidth = k*chunk_size;
 
-  ECUtil::stripe_info_t s(k, m, swidth, vector<shard_id_t>(0));
+  ECUtil::stripe_info_base_t s_base(k, m, swidth, vector<shard_id_t>(0));
+
+  ECUtil::stripe_info_t s = s_base.for_default();
   ECListenerStub listenerStub;
   listenerStub.acting_shards.clear();
   for (auto s : acting_set) {
@@ -1116,10 +1130,10 @@ void test_decode(unsigned int k, unsigned int m, uint64_t chunk_size, uint64_t o
   const std::vector<int> chunk_mapping = {}; // no remapping
   MockErasureCode *ecode = new MockErasureCode(k, k + m);
   ErasureCodeInterfaceRef ec_impl(ecode);
-  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s_base, &listenerStub);
 
 
-  ECUtil::shard_extent_map_t semap(&s);
+  ECUtil::shard_extent_map_t semap(s);
   hobject_t hoid;
   ECCommon::read_request_t read_request(
     want, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No,
