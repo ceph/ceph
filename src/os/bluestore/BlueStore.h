@@ -2906,7 +2906,7 @@ private:
   int _write_out_fm_meta(uint64_t target_size);
   int _create_alloc();
   int _init_alloc();
-  void _post_init_alloc();
+  void _post_init_alloc(bool repair);
   void _close_alloc();
   int _open_collections();
   void _fsck_collections(int64_t* errors);
