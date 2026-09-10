@@ -10,6 +10,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/scope_guard.h"
+#include "test/librados/crimson_utils.h"
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
@@ -53,7 +54,13 @@ inline std::string create_pool_by_type(
       if (result != "") {
         return result;
       }
-      result = set_allow_ec_overwrites_pp(pool_name, cluster, true);
+      // Crimson natively supports overwrites, we do not need to set the flag 
+      if (!is_crimson_cluster()) {
+        result = set_allow_ec_overwrites_pp(pool_name, cluster, true);
+        if (result != "") {
+          return result;
+        }
+      }
       cluster.wait_for_latest_osdmap();
       return result;
     }
