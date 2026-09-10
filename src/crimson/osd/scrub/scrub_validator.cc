@@ -1006,25 +1006,44 @@ chunk_result_t validate_chunk(
     }
 
     // Check whether we need to write back computed digests to oi.
-    // Matches classic ScrubBackend::should_fix_digest / missing_digest logic:
-    // if the deep scan produced a digest that the stored oi doesn't have (or
-    // has a different value), record it so emit_chunk_result can write it back.
+    // Matches classic OSD ScrubBackend::should_fix_digest logic:
+    //   - digest_fixing_t::if_aged: OI is missing the digest → always record
+    //     (regardless of repair flag); classic writes it back after an age
+    //     threshold, but crimson records it unconditionally here.
+    //   - digest_fixing_t::force: OI has a digest but it disagrees with the
+    //     freshly-computed value → only record during a repair scrub.
+    //     During a detection deep-scrub this case is deliberately skipped so
+    //     that we do not normalise a corrupted copy into the OI (e.g. when the
+    //     primary's omap is corrupted and selected as auth, writing D_bad to
+    //     the OI would prevent a subsequent repair from detecting the mismatch).
     if (eval.object_info) {
       digest_update_t du;
       du.oid = oid;
       bool needs_update = false;
 
-      if (eval.auth_data_digest_present &&
-          (!eval.object_info->is_data_digest() ||
-           eval.object_info->data_digest != eval.auth_data_digest)) {
-        du.data_digest = eval.auth_data_digest;
-        needs_update = true;
+      if (eval.auth_data_digest_present) {
+        if (!eval.object_info->is_data_digest()) {
+          // OI has no digest yet — always fill it in (if_aged case).
+          du.data_digest = eval.auth_data_digest;
+          needs_update = true;
+        } else if (eval.object_info->data_digest != eval.auth_data_digest &&
+                   policy.is_repair) {
+          // OI digest differs from actual — only force-update during repair.
+          du.data_digest = eval.auth_data_digest;
+          needs_update = true;
+        }
       }
-      if (eval.auth_omap_digest_present &&
-          (!eval.object_info->is_omap_digest() ||
-           eval.object_info->omap_digest != eval.auth_omap_digest)) {
-        du.omap_digest = eval.auth_omap_digest;
-        needs_update = true;
+      if (eval.auth_omap_digest_present) {
+        if (!eval.object_info->is_omap_digest()) {
+          // OI has no digest yet — always fill it in (if_aged case).
+          du.omap_digest = eval.auth_omap_digest;
+          needs_update = true;
+        } else if (eval.object_info->omap_digest != eval.auth_omap_digest &&
+                   policy.is_repair) {
+          // OI digest differs from actual — only force-update during repair.
+          du.omap_digest = eval.auth_omap_digest;
+          needs_update = true;
+        }
       }
       if (needs_update) {
         ret.missing_digest.push_back(std::move(du));

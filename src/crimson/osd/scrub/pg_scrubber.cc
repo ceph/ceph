@@ -1021,7 +1021,8 @@ chunk_validation_policy_t PGScrubber::get_policy() const
     crimson::common::local_conf().get_val<uint64_t>(
       "osd_deep_scrub_large_omap_object_key_threshold"),
     pg.get_pgid(),
-    m_is_deep ? std::string("deep-scrub") : std::string("scrub")
+    m_is_deep ? std::string("deep-scrub") : std::string("scrub"),
+    m_is_repair
   };
 }
 
