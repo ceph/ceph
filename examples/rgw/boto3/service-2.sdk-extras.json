@@ -43,9 +43,13 @@
                 "requestUri":"/?usage",
                 "responseCode":200
             },
-            "output": {"shape": "GetUsageStatsOutput"},
+            "input":{"shape":"GetUsageStatsRequest"},
+            "output":{
+                "shape":"GetUsageStatsOutput",
+                "resultWrapper":"Usage"
+            },
             "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/serviceops#get-usage-stats",
-            "documentation":"<p>Get usage stats for the user</p>"
+            "documentation":"<p>Get usage stats for the authenticated user. Returns storage totals, per-bucket capacity, and (when usage logging is enabled) per-operation statistics.</p>"
         }
     },
     "shapes": {
@@ -260,30 +264,42 @@
             },
             "documentation":"<p>A container for object tags filtering rules.</p>"
         },
-        "GetUsageStatsOutput": {
-            "type": "structure",
+        "GetUsageStatsOutput":{
+            "type":"structure",
             "members": {
-                "Summary": {
-                    "shape":"UsageStatsSummary",
-                    "documentation": "<p/>"
+                "Entries":{
+                    "shape": "UsageStatsEntries",
+                    "documentation":"<p>Per-hour usage log entries (ops and bandwidth). Empty unless <code>rgw enable usage log = true</code>.</p>"
+                },
+                "Summary":{
+                    "shape": "UsageStatsSummary",
+                    "documentation":"<p>Aggregated quota and storage totals for the user.</p>"
+                },
+                "CapacityUsed":{
+                    "shape": "UsageStatsCapacityUsed",
+                    "documentation":"<p>Current storage usage per bucket.</p>"
                 }
             }
         },
-        "UsageStatsSummary": {
-            "type": "structure",
+        "UsageStatsSummary":{
+            "type":"structure",
             "members": {
-                "QuotaMaxBytes":{"shape":"QuotaMaxBytes"},
+                "User":{
+                    "shape": "UsageStatsSummaryUserList",
+                    "locationName": "User"
+                },
+                "QuotaMaxBytes":{"shape": "QuotaMaxBytes"},
                 "QuotaMaxBuckets":{"shape": "QuotaMaxBuckets"},
-                "QuotaMaxObjCount":{"shape":"QuotaMaxObjCount"},
-                "QuotaMaxBytesPerBucket":{"shape":"QuotaMaxBytesPerBucket"},
-                "QuotaMaxObjCountPerBucket":{"shape":"QuotaMaxObjCountPerBucket"},
-                "TotalBytes":{"shape":"TotalBytes"},
-                "TotalBytesRounded":{"shape":"TotalBytesRounded"},
-                "TotalEntries":{"shape":"TotalEntries"}
+                "QuotaMaxObjCount":{"shape": "QuotaMaxObjCount"},
+                "QuotaMaxBytesPerBucket":{"shape": "QuotaMaxBytesPerBucket" },
+                "QuotaMaxObjCountPerBucket":{"shape": "QuotaMaxObjCountPerBucket"},
+                "TotalBytes":{"shape": "TotalBytes"},
+                "TotalBytesRounded":{"shape": "TotalBytesRounded"},
+                "TotalEntries":{"shape": "TotalEntries"}
             }
         },
         "QuotaMaxBytes":{"type":"integer"},
-        "QuotaMaxBuckets":{"type": "integer"},
+        "QuotaMaxBuckets":{"type":"integer"},
         "QuotaMaxObjCount":{"type":"integer"},
         "QuotaMaxBytesPerBucket":{"type":"integer"},
         "QuotaMaxObjCountPerBucket":{"type":"integer"},
@@ -478,7 +494,233 @@
             ]
         },
         "BucketIndexNumShards":{"type":"integer"}
-    },
+    ,
+        "BucketName":{
+            "type":"string"
+        },
+        "BytesProcessed":{
+            "type":"integer"
+        },
+        "BytesReceived":{
+            "type":"integer"
+        },
+        "BytesReturned":{
+            "type":"integer"
+        },
+        "BytesSent":{
+            "type":"integer"
+        },
+        "CategoryName":{
+            "type":"string"
+        },
+        "EndDate":{
+            "type":"string"
+        },
+        "GetUsageStatsRequest":{
+            "type":"structure",
+            "members": {
+                "StartDate":{
+                    "shape": "StartDate",
+                    "documentation":"<p>Start of the usage log time range (inclusive).</p>",
+                    "location":"querystring",
+                    "locationName": "start-date"
+                },
+                "EndDate":{
+                    "shape": "EndDate",
+                    "documentation":"<p>End of the usage log time range.</p>",
+                    "location":"querystring",
+                    "locationName": "end-date"
+                }
+            }
+        },
+        "Ops":{
+            "type":"integer"
+        },
+        "OwnerName":{
+            "type":"string"
+        },
+        "StartDate":{
+            "type":"string"
+        },
+        "SuccessfulOps":{
+            "type":"integer"
+        },
+        "UsageBucketName":{
+            "type":"string"
+        },
+        "UsageCategoryEntry":{
+            "type":"structure",
+            "members": {
+                "Category":{"shape": "CategoryName"},
+                "BytesSent":{"shape": "BytesSent"},
+                "BytesReceived":{"shape": "BytesReceived"},
+                "Ops":{"shape": "Ops"},
+                "SuccessfulOps":{"shape": "SuccessfulOps"}
+            }
+        },
+        "UsageCategoryEntryList":{
+            "type":"list",
+            "member":{"shape": "UsageCategoryEntry"},
+            "flattened":true
+        },
+        "UsageEpoch":{
+            "type":"integer"
+        },
+        "UsageStatsBucketEntry":{
+            "type":"structure",
+            "members": {
+                "Time":{"shape": "UsageTime"},
+                "Epoch":{"shape": "UsageEpoch"},
+                "Categories":{
+                    "shape": "UsageStatsCategories",
+                    "locationName": "categories"
+                },
+                "S3Select":{
+                    "shape": "UsageStatsS3Select",
+                    "locationName": "s3select"
+                },
+                "Bucket":{
+                    "shape": "UsageBucketName",
+                    "locationName": "Bucket"
+                }
+            }
+        },
+        "UsageStatsCapacityBucketEntry":{
+            "type":"structure",
+            "members": {
+                "Bytes":{"shape": "TotalBytes"},
+                "BytesRounded":{
+                    "shape": "TotalBytesRounded",
+                    "locationName": "Bytes_Rounded"
+                },
+                "Bucket":{
+                    "shape": "UsageBucketName",
+                    "locationName": "Bucket"
+                }
+            }
+        },
+        "UsageStatsCapacityBucketItemList":{
+            "type":"list",
+            "member":{"shape": "UsageStatsCapacityBucketEntry"},
+            "flattened":true
+        },
+        "UsageStatsCapacityBuckets":{
+            "type":"structure",
+            "members": {
+                "Entry":{
+                    "shape": "UsageStatsCapacityBucketItemList",
+                    "locationName": "Entry"
+                }
+            }
+        },
+        "UsageStatsCapacityUsed":{
+            "type":"structure",
+            "members": {
+                "User":{
+                    "shape": "UsageStatsCapacityUserList",
+                    "locationName": "User"
+                }
+            }
+        },
+        "UsageStatsCapacityUser":{
+            "type":"structure",
+            "members": {
+                "Buckets":{"shape": "UsageStatsCapacityBuckets"}
+            }
+        },
+        "UsageStatsCapacityUserList":{
+            "type":"list",
+            "member":{"shape": "UsageStatsCapacityUser"},
+            "flattened":true
+        },
+        "UsageStatsCategories":{
+            "type":"structure",
+            "members": {
+                "Entry":{
+                    "shape": "UsageCategoryEntryList",
+                    "locationName": "Entry"
+                }
+            }
+        },
+        "UsageStatsEntries":{
+            "type":"structure",
+            "members": {
+                "User":{
+                    "shape": "UsageStatsEntryUserList",
+                    "locationName": "User"
+                }
+            }
+        },
+        "UsageStatsEntryBucketItemList":{
+            "type":"list",
+            "member":{"shape": "UsageStatsBucketEntry"},
+            "flattened":true
+        },
+        "UsageStatsEntryBuckets":{
+            "type":"structure",
+            "members": {
+                "Bucket":{
+                    "shape": "UsageStatsEntryBucketItemList",
+                    "locationName": "Bucket"
+                }
+            }
+        },
+        "UsageStatsEntryUser":{
+            "type":"structure",
+            "members": {
+                "Owner":{"shape": "OwnerName"},
+                "Buckets":{"shape": "UsageStatsEntryBuckets"}
+            }
+        },
+        "UsageStatsEntryUserList":{
+            "type":"list",
+            "member":{"shape": "UsageStatsEntryUser"},
+            "flattened":true
+        },
+        "UsageStatsS3Select":{
+            "type":"structure",
+            "members": {
+                "BytesProcessed":{"shape": "BytesProcessed"},
+                "BytesReturned":{"shape": "BytesReturned"}
+            }
+        },
+        "UsageStatsSummaryUser":{
+            "type":"structure",
+            "members": {
+                "User":{
+                    "shape": "OwnerName",
+                    "locationName": "User"
+                },
+                "Categories":{
+                    "shape": "UsageStatsCategories",
+                    "locationName": "categories"
+                },
+                "Total":{
+                    "shape": "UsageStatsTotal",
+                    "locationName": "Total"
+                }
+            }
+        },
+        "UsageStatsSummaryUserList":{
+            "type":"list",
+            "member":{"shape": "UsageStatsSummaryUser"},
+            "flattened":true
+        },
+        "UsageStatsTotal":{
+            "type":"structure",
+            "members": {
+                "BytesSent":{"shape": "BytesSent"},
+                "BytesReceived":{"shape": "BytesReceived"},
+                "Ops":{"shape": "Ops"},
+                "SuccessfulOps":{"shape": "SuccessfulOps"},
+                "BytesProcessed":{"shape": "BytesProcessed"},
+                "BytesReturned":{"shape": "BytesReturned"}
+            }
+        },
+        "UsageTime":{
+            "type":"string"
+        }
+},
     "documentation":"<p/>"
 }
 }
