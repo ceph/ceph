@@ -1,5 +1,9 @@
 tasks:
 - install:
+    # the aws CLI creates the test bucket for rgw/run-radosgw-admin-exit-codes.sh
+    extra_system_packages:
+      deb: ['awscli']
+      rpm: ['awscli2']
 - ceph:
 - rgw:
     client.0:
@@ -11,6 +15,12 @@ tasks:
        client.0:
            - rgw/test_rgw_orphan_list.sh
            - rgw/test_rgw_heap_profiler.sh
+           - rgw/run-radosgw-admin-exit-codes.sh
+    env:
+      # rgw/run-radosgw-admin-exit-codes.sh creates a bucket with the aws CLI,
+      # which sends the region as the LocationConstraint. The rgw task above
+      # runs with its default zonegroup, whose api name is 'default'.
+      AWS_DEFAULT_REGION: default
 overrides:
   ceph:
     conf:

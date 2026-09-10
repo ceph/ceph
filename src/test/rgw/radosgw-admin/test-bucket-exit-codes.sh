@@ -5,6 +5,7 @@
 #   ./test-bucket-exit-codes.sh
 #   RGW_ADMIN=/path/to/radosgw-admin ./test-bucket-exit-codes.sh
 #   CEPH_CONF=/path/to/ceph.conf ./test-bucket-exit-codes.sh
+#   RGW_ENDPOINT=http://host:port ./test-bucket-exit-codes.sh
 #
 # Test types:
 #   check()        - no cluster needed; runs with --no-mon-config
@@ -1787,7 +1788,11 @@ if cluster_running; then
       python3 -c "import sys,json; d=json.load(sys.stdin); print(d['keys'][0]['access_key'])" 2>/dev/null)
     _secret_key=$("$RGW_ADMIN" user info --uid "$_test_uid" 2>/dev/null | \
       python3 -c "import sys,json; d=json.load(sys.stdin); print(d['keys'][0]['secret_key'])" 2>/dev/null)
-    _rgw_endpoint="http://localhost:8000"
+    # RGW_ENDPOINT points the aws CLI at a radosgw that is not on the vstart
+    # port. The CLI sends the region as the bucket's LocationConstraint, so
+    # it has to be the zonegroup's api name; "default" is the vstart one.
+    _rgw_endpoint="${RGW_ENDPOINT:-http://localhost:8000}"
+    export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-default}"
 
     if [ -n "$_access_key" ] && [ -n "$_secret_key" ]; then
       # Create the test bucket

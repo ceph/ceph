@@ -50,3 +50,17 @@ different cluster. Put either one on the line that runs the suite. For example:
 ```
 RGW_ADMIN=/other/ceph/build/bin/radosgw-admin bash ../src/test/rgw/radosgw-admin/test-globals.sh
 ```
+
+The bucket suite reaches radosgw at `http://localhost:8000`, the vstart port.
+Set `RGW_ENDPOINT` when it listens somewhere else. It creates its bucket in
+the `default` zonegroup; set `AWS_DEFAULT_REGION` to the api name of the
+zonegroup when the cluster uses another one.
+
+## Running them in teuthology
+
+The `rgw/tools` suite runs all three through the
+`qa/workunits/rgw/run-radosgw-admin-exit-codes.sh` workunit. It points the
+suites at the installed `radosgw-admin`, the cluster in `/etc/ceph/ceph.conf`
+and the radosgw the `rgw` task started. The suite's `install` task adds the
+`aws` CLI package so the bucket rows are not skipped, and its `workunit` task
+passes the zonegroup the `rgw` task created as `AWS_DEFAULT_REGION`.
