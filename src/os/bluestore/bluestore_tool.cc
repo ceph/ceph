@@ -1401,6 +1401,12 @@ int main(int argc, char **argv)
     } else {
       cout << "reshard success" << std::endl;
     }
+    // do reopen DB to do required post processing,
+    // e.g. allocmap commit
+    r = bluestore.reopen_repaired_db_environment();
+    if (r < 0) {
+      cerr << "error opening DB after resharding: " << cpp_strerror(r) << std::endl;
+    }
     bluestore.close_db_environment();
   } else if (action == "show-sharding") {
     BlueStore bluestore(cct.get(), path);

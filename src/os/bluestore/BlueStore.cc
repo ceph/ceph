@@ -8127,6 +8127,22 @@ int BlueStore::open_db_environment(KeyValueDB **pdb, bool read_only, bool to_rep
   return r;
 }
 
+int BlueStore::reopen_repaired_db_environment()
+{
+  ceph_assert(db_in_repair);
+  ceph_assert(!db_in_read_only);
+  ceph_assert(db);
+
+  stringstream err;
+  int r = db->open(err);
+  if (r) {
+    derr << __func__ << " erroring opening db: " << err.str() << dendl;
+    return -EIO;
+  }
+  db_in_repair = false;
+  return 0;
+}
+
 int BlueStore::close_db_environment()
 {
   _close_db_and_around();
