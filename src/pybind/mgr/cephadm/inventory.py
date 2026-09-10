@@ -839,6 +839,10 @@ class HostCache():
                     self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
                 for name, d in j.get('daemon_config_deps', {}).items():
+                    # drop potential leftover daemon_config_deps entries
+                    # assume if we didn't find a daemon entry, it's a leftover
+                    if name not in self.daemons.get(host, {}):
+                        continue
                     self.daemon_config_deps[host][name] = {
                         'deps': d.get('deps', []),
                         'last_config': str_to_datetime(d['last_config']),
@@ -1549,6 +1553,9 @@ class HostCache():
         if host in self.daemons:
             if name in self.daemons[host]:
                 del self.daemons[host][name]
+        if host in self.daemon_config_deps:
+            if name in self.daemon_config_deps[host]:
+                del self.daemon_config_deps[host][name]
 
     def daemon_cache_filled(self) -> bool:
         """
