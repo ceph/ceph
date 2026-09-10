@@ -662,6 +662,40 @@ public:
     return default_chunk_size * k;
   }
 
+  static constexpr uint64_t DEFAULT_MAX_DYNAMIC_CHUNK_SIZE = 1ul << 20; // 1 MiB
+
+  /* Choose the per-object chunk size for the dynamic-object-size feature from
+   * an object size hint.  The object stays a single chunk per shard until a
+   * shard would exceed max_chunk_size, at which point further growth adds
+   * stripes instead.  The result is always a power of two (the geometry maths
+   * assumes this), at least the pool default chunk size, and no larger than the
+   * largest power of two <= max_chunk_size.  A zero hint yields the default. */
+  uint64_t chunk_size_for_hint(uint64_t hint_object_size,
+                               uint64_t max_chunk_size =
+                                   DEFAULT_MAX_DYNAMIC_CHUNK_SIZE) const {
+    if (hint_object_size == 0) {
+      return default_chunk_size;
+    }
+    // Size needed on a single shard to hold the whole object in one stripe.
+    uint64_t per_shard = (hint_object_size + k - 1) / k;
+    uint64_t cs = 1;
+    while (cs < per_shard) {
+      cs <<= 1;
+    }
+    // Clamp to the largest power of two not exceeding max_chunk_size.
+    uint64_t max_pow2 = 1;
+    while ((max_pow2 << 1) <= max_chunk_size) {
+      max_pow2 <<= 1;
+    }
+    if (cs > max_pow2) {
+      cs = max_pow2;
+    }
+    if (cs < default_chunk_size) {
+      cs = default_chunk_size;
+    }
+    return cs;
+  }
+
   unsigned int get_m() const {
     return m;
   }

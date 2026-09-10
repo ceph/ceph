@@ -1147,6 +1147,15 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
+    /**
+     * EC_DYNAMIC_MAX_CHUNK_SIZE
+     *
+     * For erasure-coded pools with the dynamic-object-size flag: the maximum
+     * per-shard chunk size the primary may choose from an object's size hint.
+     * The object stays a single chunk per shard until a shard would exceed
+     * this size. Defaults to 1 MiB when unset.
+     */
+    EC_DYNAMIC_MAX_CHUNK_SIZE,
   };
 
   enum type_t {
@@ -1334,6 +1343,9 @@ struct pg_pool_t {
     // Allow decreasing pg_num/pgp_num (PG merge) for crimson pools.
     // Note: requires that the pool is currently all bluestore.
     FLAG_CRIMSON_ALLOW_PG_MERGE = 1<<22,
+    // Optimized EC picks a per-object chunk size from the object's size hint
+    // and stashes it in the object_info. Once enabled, cannot be disabled.
+    FLAG_DYNAMIC_OBJECT_SIZE = 1<<23,
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1361,6 +1373,7 @@ struct pg_pool_t {
     case FLAG_CLIENT_SPLIT_READS: return "split_reads";
     case FLAG_OMAP: return "supports_omap";
     case FLAG_CRIMSON_ALLOW_PG_MERGE: return "crimson_allow_pg_merge";
+    case FLAG_DYNAMIC_OBJECT_SIZE: return "dynamic_object_size";
     default: return "???";
     }
   }
@@ -1425,6 +1438,8 @@ struct pg_pool_t {
       return FLAG_CLIENT_SPLIT_READS;
     if (name == "supports_omap")
       return FLAG_OMAP;
+    if (name == "dynamic_object_size")
+      return FLAG_DYNAMIC_OBJECT_SIZE;
     return 0;
   }
 
@@ -1862,6 +1877,10 @@ public:
 
   bool allows_ecoptimizations() const {
     return has_flag(FLAG_EC_OPTIMIZATIONS);
+  }
+
+  bool allows_dynamic_object_size() const {
+    return has_flag(FLAG_DYNAMIC_OBJECT_SIZE);
   }
 
   bool is_crimson() const {
@@ -6425,6 +6444,11 @@ struct object_info_t {
   struct object_manifest_t manifest;
 
   std::map<shard_id_t,eversion_t> shard_versions;
+
+  // For erasure-coded pools with the dynamic-object-size feature: the per-shard
+  // chunk size chosen for this object when it was first written. 0 means unset
+  // (use the pool default). Immutable once set.
+  uint64_t ec_chunk_size = 0;
 
   void copy_user_bits(const object_info_t& other);
 
