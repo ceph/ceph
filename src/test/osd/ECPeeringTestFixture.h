@@ -45,9 +45,12 @@ protected:
   };
   std::map<int, std::unique_ptr<ShardDpp>> shard_dpps;
 
+  // Park recovery reservation grants so peering completes without launching
+  // recovery (a grant delivered into a later interval hits Reset and aborts).
+  bool stall_recovery_reservations = false;
+
   // Child-PG state populated by split_pg().  Empty until a split is performed.
   pg_t child_pgid;
-  bool stall_recovery_reservations = false;
   std::map<int, std::unique_ptr<PeeringState>> child_peering_states;
   std::map<int, std::unique_ptr<PeeringCtx>> child_peering_ctxs;
   std::map<int, std::unique_ptr<MockPeeringListener>> child_peering_listeners;
