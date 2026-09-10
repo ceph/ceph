@@ -20,6 +20,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { OptionalFieldDirective } from './optional-field.directive';
 import { DimlessBinaryPerMinuteDirective } from './dimless-binary-per-minute.directive';
 import { DynamicInputComboboxDirective } from './dynamic-input-combobox.directive';
+import { ComboBoxSearchResetDirective } from './combo-box-search-reset.directive';
 import { ValidateDirective } from './validate.directive';
 
 @NgModule({
@@ -44,6 +45,7 @@ import { ValidateDirective } from './validate.directive';
     OptionalFieldDirective,
     DimlessBinaryPerMinuteDirective,
     DynamicInputComboboxDirective,
+    ComboBoxSearchResetDirective,
     ValidateDirective
   ],
   exports: [
@@ -66,6 +68,7 @@ import { ValidateDirective } from './validate.directive';
     OptionalFieldDirective,
     DimlessBinaryPerMinuteDirective,
     DynamicInputComboboxDirective,
+    ComboBoxSearchResetDirective,
     ValidateDirective
   ]
 })

@@ -104,6 +104,7 @@
           }
           @if (field.type === 'select-badges') {
             <cds-combo-box
+              cdComboBoxSearchReset
               type="multi"
               selectionFeedback="top-after-reopen"
               [label]="field.label"
