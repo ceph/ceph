@@ -114,6 +114,13 @@ private:
   // predicates, and stores everything in the unified pg_* maps.
   PeeringState* create_peering_state_common(spg_t spgid);
 
+  // Core of new_epoch(): checks up_thru/pg_temp for the given PG and, if any
+  // work was found (or if_required is false), bumps the osdmap epoch and
+  // updates all listener current_epochs.  Returns true iff a new epoch was
+  // applied.  Shared between new_epoch() (parent PG) and the child-peering
+  // loop inside split_pg() (child PG).
+  bool apply_new_epoch(pg_t which_pg, bool if_required);
+
 public:
 
   void update_osdmap_with_peering(

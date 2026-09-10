@@ -664,51 +664,9 @@ pg_t ECPeeringTestFixture::split_pg()
   event_loop->run_until_idle();
 
   // Returns true if any up_thru or pg_temp was applied (more cycles needed).
+  // Delegates to apply_new_epoch() which shares the implementation with new_epoch().
   auto child_apply_new_epoch = [this]() -> bool {
-    bool did_work = false;
-    epoch_t e = osdmap->get_epoch();
-    OSDMap::Incremental inc(e + 1);
-    inc.fsid = osdmap->get_fsid();
-
-    std::vector<int> acting_osds;
-    int acting_primary = -1;
-    osdmap->pg_to_acting_osds(child_pgid, &acting_osds, &acting_primary);
-    for (int shard : acting_osds) {
-      if (shard == CRUSH_ITEM_NONE) continue;
-      if (get_child_peering_state(shard)->get_need_up_thru()) {
-        inc.new_up_thru[shard] = e;
-        did_work = true;
-      }
-    }
-    if (acting_primary >= 0 && acting_primary != CRUSH_ITEM_NONE) {
-      auto& listener = pg_listeners.at(spg_t(child_pgid, shard_id_t(acting_primary)));
-      if (listener->pg_temp_wanted) {
-        std::vector<int> up_osds;
-        int up_primary = -1;
-        osdmap->pg_to_up_acting_osds(child_pgid, &up_osds, &up_primary,
-                                     nullptr, nullptr);
-        std::vector<int> acting_temp = listener->next_acting;
-        if (acting_temp.empty()) {
-          acting_temp = up_osds;
-        }
-        const pg_pool_t* pool = osdmap->get_pg_pool(child_pgid.pool());
-        if (pool && pool->allows_ecoptimizations()) {
-          acting_temp = osdmap->pgtemp_primaryfirst(*pool, acting_temp);
-        }
-        inc.new_pg_temp[child_pgid] =
-          mempool::osdmap::vector<int32_t>(acting_temp.begin(), acting_temp.end());
-        listener->pg_temp_wanted = false;
-        did_work = true;
-      }
-    }
-    if (!did_work) {
-      return false;
-    }
-    osdmap->apply_incremental(inc);
-    for (auto& [spgid, listener] : pg_listeners) {
-      listener->current_epoch = osdmap->get_epoch();
-    }
-    return true;
+    return apply_new_epoch(child_pgid, /*if_required=*/true);
   };
 
   int max_cycles = 10;
@@ -795,33 +753,38 @@ void ECPeeringTestFixture::new_epoch_loop() {
 
 bool ECPeeringTestFixture::new_epoch(bool if_required)
 {
+  return apply_new_epoch(this->pgid, if_required);
+}
+
+bool ECPeeringTestFixture::apply_new_epoch(pg_t which_pg, bool if_required)
+{
   bool did_work = false;
   epoch_t e = osdmap->get_epoch();
   OSDMap::Incremental pending_inc(e + 1);
   pending_inc.fsid = osdmap->get_fsid();
 
-  // Get acting set from OSDMap
   std::vector<int> acting_osds;
   int acting_primary = -1;
-  osdmap->pg_to_acting_osds(this->pgid, &acting_osds, &acting_primary);
+  osdmap->pg_to_acting_osds(which_pg, &acting_osds, &acting_primary);
 
   for (int shard : acting_osds) {
-    // Skip failed OSDs (marked as CRUSH_ITEM_NONE)
-    if (shard == CRUSH_ITEM_NONE) {
-      continue;
-    }
-    if (get_peering_state(shard)->get_need_up_thru()) {
+    if (shard == CRUSH_ITEM_NONE) continue;
+    spg_t key(which_pg, shard_id_t(shard));
+    auto it = pg_states.find(key);
+    if (it != pg_states.end() && it->second->get_need_up_thru()) {
       pending_inc.new_up_thru[shard] = e;
       did_work = true;
     }
   }
 
-  if (acting_primary >= 0) {
-    auto& listener = pg_listeners[spg_t(this->pgid, shard_id_t(acting_primary))];
-    if (listener->pg_temp_wanted) {
+  if (acting_primary >= 0 && acting_primary != CRUSH_ITEM_NONE) {
+    spg_t primary_key(which_pg, shard_id_t(acting_primary));
+    auto lit = pg_listeners.find(primary_key);
+    if (lit != pg_listeners.end() && lit->second->pg_temp_wanted) {
+      auto& listener = lit->second;
       std::vector<int> up_osds;
       int up_primary = -1;
-      osdmap->pg_to_up_acting_osds(this->pgid, &up_osds, &up_primary, nullptr, nullptr);
+      osdmap->pg_to_up_acting_osds(which_pg, &up_osds, &up_primary, nullptr, nullptr);
 
       std::vector<int> acting_temp = listener->next_acting;
       if (acting_temp.empty()) {
@@ -829,15 +792,15 @@ bool ECPeeringTestFixture::new_epoch(bool if_required)
       }
 
       // For EC pools with optimizations, transform to primaryfirst order before
-      // storing in pg_temp. This matches what the real monitor does and what
+      // storing in pg_temp.  This matches what the real monitor does and what
       // _get_temp_osds() expects when it calls pgtemp_undo_primaryfirst().
-      const pg_pool_t* pool = osdmap->get_pg_pool(this->pgid.pool());
+      const pg_pool_t* pool = osdmap->get_pg_pool(which_pg.pool());
       if (pool && pool->allows_ecoptimizations()) {
         acting_temp = osdmap->pgtemp_primaryfirst(*pool, acting_temp);
       }
 
-      pending_inc.new_pg_temp[this->pgid] =
-      mempool::osdmap::vector<int32_t>(acting_temp.begin(), acting_temp.end());
+      pending_inc.new_pg_temp[which_pg] =
+        mempool::osdmap::vector<int32_t>(acting_temp.begin(), acting_temp.end());
 
       listener->pg_temp_wanted = false;
       did_work = true;
