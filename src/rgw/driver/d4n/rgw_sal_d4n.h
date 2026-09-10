@@ -593,6 +593,24 @@ class D4NFilterObject : public FilterObject {
       virtual ~D4NFilterDeleteOp() = default;
 
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
+
+    private:
+      int update_directory_entries(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    rgw::d4n::Transaction& txn,
+                                    bool objDirty,
+                                    const std::string& version,
+                                    const std::string& objName,
+                                    rgw::d4n::CacheBlock& block,
+                                    const std::string& dm_version,
+                                    bool& delete_marker_created);
+
+      int send_remote_delete(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            const std::string& objName,
+                            const std::string& version,
+                            bool objDirty,
+                            const std::string& dm_version);
     };
 
     D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterDriver* _driver) : FilterObject(std::move(_next)),
@@ -661,17 +679,18 @@ class D4NFilterObject : public FilterObject {
     int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
     void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
-    int set_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool is_latest_version = true, bool dirty = false);
+    int set_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool is_latest_version = true, bool dirty = false, std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn = std::nullopt);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
-    bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y, bool acquire_lease = false);
+    bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y, bool acquire_lease = false, std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn = std::nullopt);
     rgw::sal::Bucket* get_destination_bucket(const DoutPrefixProvider* dpp) { return dest_bucket;}
     rgw::sal::Object* get_destination_object(const DoutPrefixProvider* dpp) { return dest_object; }
     bool is_multipart() { return multipart; }
     int set_attr_crypt_parts(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
     int create_delete_marker(const DoutPrefixProvider* dpp, optional_yield y,
                              const std::string& forced_version = "",
-                             bool remote = false);
+                             bool remote = false,
+                             std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn = std::nullopt);
     bool is_delete_marker() { return delete_marker; }
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }

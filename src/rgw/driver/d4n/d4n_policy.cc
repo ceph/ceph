@@ -350,7 +350,7 @@ bool LFUDAPolicy::invalidate_dirty_object(const DoutPrefixProvider* dpp, const s
       obj_size = entry->size;
       is_delete_marker = entry->delete_marker;
     } else if (p->second.second == State::IN_PROGRESS) {
-      state_cond.wait(l, [this, &key]{ return (o_entries_map.find(key) == o_entries_map.end()); });
+      // Do not wait - writeback in progress will handle cleanup
       return false;
     } else {
       return false;
@@ -1351,6 +1351,42 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     }
   });
 
+  // Step 3: Re-check if object was deleted while acquiring lease (TOCTOU protection)
+  rgw::d4n::CacheBlock ver_head_recheck {
+    .cacheObj = {
+      .objName = rgw::sal::get_versioned_head_block_name(e->version, e->obj_key.name),
+      .bucketName = e->bucket_id,
+    },
+    .blockID = 0,
+    .size = 0,
+  };
+
+  ret = blockDir.get(dpp, y, &ver_head_recheck, std::nullopt);
+  if (ret == -ENOENT) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                       << "(): Object deleted while acquiring lease (versioned HEAD gone), key=" << e->key << dendl;
+    return -ECANCELED;
+  } else if (ret < 0) {
+    ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                      << "(): Failed to re-check versioned HEAD after acquiring lease, ret=" << ret << dendl;
+    return ret;
+  }
+
+  if (ver_head_recheck.invalid) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                       << "(): Object marked invalid while acquiring lease (concurrent delete), key=" << e->key
+                       << " - aborting writeback" << dendl;
+    return -ECANCELED;
+  }
+
+  if (!ver_head_recheck.cacheObj.dirty) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                       << "(): Object marked clean while acquiring lease (concurrent writeback), key=" << e->key
+                       << " - reconciling local state" << dendl;
+    mark_local_blocks_clean(dpp, e, y);
+    return 0;
+  }
+
   rgw::sal::Attrs obj_attrs;
   uint64_t len = 0;
   rgw_user c_rgw_user = e->user; 
@@ -1546,6 +1582,73 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     if (op_ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << block.cacheObj.objName << ", ret=" << op_ret << dendl;
       return op_ret;
+    }
+
+    // Check if object was deleted during writeback
+    if (block.invalid) {
+      ldpp_dout(dpp, 10) << __func__
+                         << "(): Object marked invalid during writeback (concurrent delete detected)"
+                         << " - completing writeback but deleting from backend, key=" << e->key << dendl;
+
+      // Still mark directory clean (writeback to backend succeeded)
+      block.cacheObj.dirty = false;
+      op_ret = blockDir.set(dpp, y, &block, std::ref(*txn));
+      if (op_ret < 0) {
+        ldpp_dout(dpp, 0) << __func__ << "(): Failed to mark block clean, ret=" << op_ret << dendl;
+        return op_ret;
+      }
+
+      // Mark null block clean as well
+      rgw::d4n::CacheBlock null_block = block;
+      null_block.cacheObj.objName = rgw::sal::get_versioned_head_block_name("null", c_obj->get_name());
+      op_ret = blockDir.get(dpp, y, &null_block, std::ref(*txn));
+      if (op_ret == 0 && null_block.version == e->version) {
+        null_block.cacheObj.dirty = false;
+        blockDir.set(dpp, y, &null_block, std::ref(*txn));
+      }
+
+      // Mark version-specific head clean
+      rgw::d4n::CacheBlock ver_block {
+        .cacheObj = {
+          .objName = rgw::sal::get_versioned_head_block_name(e->version, c_obj->get_name()),
+          .bucketName = c_obj->get_bucket()->get_bucket_id(),
+        },
+        .blockID = 0, .size = 0,
+      };
+      if (blockDir.get(dpp, y, &ver_block, std::ref(*txn)) == 0 && ver_block.version == e->version) {
+        ver_block.cacheObj.dirty = false;
+        blockDir.set(dpp, y, &ver_block, std::ref(*txn));
+      }
+
+      // Remove from ordered set (tolerate -ENOENT)
+      rgw::d4n::CacheObj dir_obj = {
+        .objName = c_obj->get_name(),
+        .bucketName = e->bucket_id,
+      };
+      ret = objDir.remove_version_by_creation_time(dpp, y, dir_obj.bucketName, dir_obj.objName, e->creationTime, std::ref(*txn));
+      if (ret < 0 && ret != -ENOENT) {
+        ldpp_dout(dpp, 0) << __func__ << "(): Failed to remove object from ordered set, ret=" << ret << dendl;
+        return ret;
+      }
+
+      // Commit directory transaction
+      ret = txn->commit(dpp, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << __func__ << "(): Failed to commit transaction, ret=" << ret << dendl;
+        return ret;
+      }
+
+      // Mark local blocks clean
+      mark_local_blocks_clean(dpp, e, y);
+
+      // Delete from backend since object was deleted during writeback
+      std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = c_obj->get_delete_op();
+      int del_ret = del_op->delete_obj(dpp, y, 0);
+      if (del_ret < 0 && del_ret != -ENOENT) {
+        ldpp_dout(dpp, 0) << __func__ << "(): Failed to delete from backend, ret=" << del_ret << dendl;
+      }
+
+      return 0;  // Writeback completed, object deleted from backend
     } else {
       // if this entry is not the latest, it could have been overwritten by a newer one
       if (block.version == e->version) {
@@ -1591,7 +1694,8 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     };
     /* remove the entry from the ordered set using its score, as the object is already cleaned */
     ret = objDir.remove_version_by_creation_time(dpp, y, dir_obj.bucketName, dir_obj.objName, e->creationTime, std::ref(*txn));
-    if (ret < 0) {
+    if (ret < 0 && ret != -ENOENT) {
+      // -ENOENT is OK: concurrent delete_obj already removed it
       ldpp_dout(dpp, 0) << __func__ << "(): Failed to remove object from ordered set with error: " << ret << dendl;
       return ret;
     }
@@ -1671,7 +1775,8 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
       };
 
       ret = objDir.remove_version_by_creation_time(dpp, y, dir_obj.bucketName, dir_obj.objName, e->creationTime, std::ref(*txn));
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
+        // -ENOENT is OK: concurrent delete_obj already removed it
         ldpp_dout(dpp, 0) << __func__ << "(): Failed to remove object from ordered set with error: " << ret << dendl;
         return ret;
       }
@@ -1717,6 +1822,10 @@ static bool is_transient_error(int ret)
       // If object becomes clean → pre-flight returns 0 (verified success)
       // If lease released but object still dirty → we acquire and clean
       // If still being cleaned → returns -EEXIST again → retry continues
+      return true;
+    case ECANCELED:
+      // Concurrent delete detected during writeback - object was marked invalid.
+      // Retry will transition state to INVALID and call do_delete to clean up cache blocks.
       return true;
     case ENOENT:
     case EACCES:
@@ -1935,7 +2044,16 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
             // State transition: IN_PROGRESS -> INIT/INVALID (allows re-processing)
             auto p = o_entries_map.find((*e)->key);
             if (p != o_entries_map.end()) {
-              p->second.second = s;  // s is INIT (for writeback) or INVALID (for delete)
+              // Special case: -ECANCELED means concurrent delete detected during writeback
+              // Transition to INVALID so retry calls do_delete to clean up cache blocks
+              if (ret == -ECANCELED) {
+                p->second.second = State::INVALID;
+                ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                                   << "() transitioning to INVALID state after -ECANCELED, retry will call do_delete"
+                                   << " key=" << (*e)->key << dendl;
+              } else {
+                p->second.second = s;  // s is INIT (for writeback) or INVALID (for delete)
+              }
             }
 
             // Set retry deferral time to prevent tight retry loop on small heaps
