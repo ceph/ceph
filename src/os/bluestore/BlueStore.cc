@@ -7388,11 +7388,6 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
   if (t) {
     // create mode. initialize freespace
     dout(20) << __func__ << " initializing freespace" << dendl;
-    {
-      bufferlist bl;
-      bl.append(freelist_type);
-      t->set(PREFIX_SUPER, "freelist_type", bl);
-    }
     // being able to allocate in units less than bdev block size 
     // seems to be a bad idea.
     ceph_assert(cct->_conf->bdev_block_size <= min_alloc_size);
@@ -7410,12 +7405,10 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
       fm->allocate(BDEV_FIRST_LABEL_POSITION, reserved, t);
       // we do not mark other label positions
     }
+    commit_freelist_type(t);
     r = _write_out_fm_meta(0);
     ceph_assert(r == 0);
   } else {
-    if (can_have_null_fm) {
-      commit_to_null_manager();
-    }
     r = fm->init(db, read_only,
       [&](const std::string& key, std::string* result) {
         return read_meta(key, result);
@@ -7575,25 +7568,6 @@ int BlueStore::_init_alloc()
           << std::dec << dendl;
 
   return 0;
-}
-
-void BlueStore::_post_init_alloc(bool repair)
-{
-  if (fm->is_null_manager()) {
-    // Now that we load the allocation map we need to invalidate the file as new allocation won't be reflected
-    // Changes to the allocation map (alloc/release) are not updated inline and will only be stored on umount()
-    // This means that we should not use the existing file on failure case (unplanned shutdown) and must resort
-    //  to recovery from RocksDB::ONodes
-    int r = invalidate_allocation_file_on_bluefs();
-    ceph_assert(r >= 0);
-  }
-
-  // when function is called in repair mode (repair=true) we skip db->open()/create()
-  if (!is_db_rotational() && !repair && cct->_conf->bluestore_allocation_from_file) {
-    dout(5) << __func__ << "::NCB::Commit to Null-Manager" << dendl;
-    commit_to_null_manager();
-    need_to_destage_allocation_file = true;
-  }
 }
 
 void BlueStore::_close_alloc()
@@ -8096,8 +8070,13 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair,
     goto out_alloc;
   }
 
-  if (!read_only) {
-    _post_init_alloc(to_repair);
+  if (!read_only && fm->is_null_manager()) {
+    // Now that we load the allocation map we need to invalidate the file as new allocation won't be reflected
+    // Changes to the allocation map (alloc/release) are not updated inline and will only be stored on umount()
+    // This means that we should not use the existing file on failure case (unplanned shutdown) and must resort
+    //  to recovery from RocksDB::ONodes
+    int r = invalidate_allocation_file_on_bluefs();
+    ceph_assert(r >= 0);
   }
 
   return 0;
@@ -21715,22 +21694,25 @@ int BlueStore::push_allocation_to_rocksdb()
 #endif // CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
 
 //-------------------------------------------------------------------------------------
-int BlueStore::commit_freelist_type()
+int BlueStore::commit_freelist_type(KeyValueDB::Transaction t0)
 {
   // When freelist_type to "bitmap" we will store allocation in RocksDB
   // When allocation-info is stored in a single file we set freelist_type to "null"
   // This will direct the startup code to read allocation from file and not RocksDB
-  KeyValueDB::Transaction t = db->get_transaction();
+  KeyValueDB::Transaction t = t0;
   if (t == nullptr) {
-    derr << "db->get_transaction() failed!!!" << dendl;
-    return -1;
+    t = db->get_transaction();
+    if (t == nullptr) {
+      derr << "db->get_transaction() failed!!!" << dendl;
+      return -1;
+    }
   }
 
   bufferlist bl;
   bl.append(freelist_type);
   t->set(PREFIX_SUPER, "freelist_type", bl);
 
-  int ret = db->submit_transaction_sync(t);
+  int ret = t != t0 ? db->submit_transaction_sync(t) : 0;
   if (ret != 0) {
     derr << "Failed db->submit_transaction_sync(t)" << dendl;
   }
@@ -21738,30 +21720,12 @@ int BlueStore::commit_freelist_type()
 }
 
 //-------------------------------------------------------------------------------------
-int BlueStore::commit_to_null_manager()
-{
-  dout(5) << __func__ << " Set FreelistManager to NULL FM..." << dendl;
-  fm->set_null_manager();
-  freelist_type = "null";
-#if 1
-  return commit_freelist_type();
-#else
-  // should check how long this step take on a big configuration as deletes are expensive
-  if (commit_freelist_type() == 0) {
-    // remove all objects of PREFIX_ALLOC_BITMAP from RocksDB to guarantee a clean start
-    clear_allocation_objects_from_rocksdb(db, cct, path);
-  }
-#endif
-}
-
-
-//-------------------------------------------------------------------------------------
 int BlueStore::commit_to_real_manager()
 {
   dout(5) << "Set FreelistManager to Real FM..." << dendl;
   ceph_assert(!fm->is_null_manager());
   freelist_type = "bitmap";
-  int ret = commit_freelist_type();
+  int ret = commit_freelist_type(nullptr);
   if (ret == 0) {
     //remove the allocation_file
     invalidate_allocation_file_on_bluefs();
