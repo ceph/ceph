@@ -827,8 +827,8 @@ public:
       size_t _max_inflight,
       size_t _max_queue,
       long _usec_timeout,
-      unsigned reconnect_time_ms,
       unsigned idle_time_ms,
+      unsigned reconnect_time_ms,
       CephContext* _cct) :
     max_connections(_max_connections),
     max_inflight(_max_inflight),
