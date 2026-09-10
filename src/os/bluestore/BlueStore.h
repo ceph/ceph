@@ -2440,7 +2440,8 @@ private:
   };
 
   // store open_db options:
-  bool db_was_opened_read_only = true;
+  bool db_in_read_only = true;
+  bool db_in_repair = false;
   bool need_to_destage_allocation_file = false;
 
   alloc_recovery_policy_t alloc_recovery_policy = alloc_recovery_policy_t::strict;

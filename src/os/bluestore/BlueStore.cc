@@ -7953,7 +7953,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
 
 void BlueStore::_close_bluefs()
 {
-  bluefs->umount(db_was_opened_read_only);
+  bluefs->umount(db_in_read_only);
   _minimal_close_bluefs();
 }
 
@@ -8129,11 +8129,7 @@ int BlueStore::open_db_environment(KeyValueDB **pdb, bool read_only, bool to_rep
 
 int BlueStore::close_db_environment()
 {
-  if (db) {
-    delete db;
-    db = nullptr;
-  }
-  _close_around_db();
+  _close_db_and_around();
   return 0;
 }
 
@@ -8302,15 +8298,18 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   string kv_backend;
   std::string sharding_def;
   // prevent write attempts to BlueFS in case we failed before BlueFS was opened
-  db_was_opened_read_only = true;
+  ceph_assert(db_in_read_only); // this is a default state
   r = _prepare_db_environment(create, read_only, &kv_dir_fn, &kv_backend);
   if (r < 0) {
     derr << __func__ << " failed to prepare db environment: " << err.str() << dendl;
     return -EIO;
   }
   // if reached here then BlueFS is already opened
-  db_was_opened_read_only = read_only;
-  dout(10) << __func__ << "::db_was_opened_read_only was set to " << read_only << dendl;
+  db_in_read_only = read_only;
+  db_in_repair = to_repair_db;
+  dout(10) << __func__ << "::db_in_read_only set to " << read_only
+           <<", db_in_repair set to " << to_repair_db
+           << dendl;
   if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
     options_annex = cct->_conf->bluestore_rocksdb_options_annex;
@@ -8351,13 +8350,17 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
 
 void BlueStore::_close_db()
 {
-  dout(10) << __func__ << ":read_only=" << db_was_opened_read_only
+  dout(10) << __func__
+	   << ":read_only=" << db_in_read_only
+	   << " repair=" << db_in_repair
            << " fm=" << fm
            << " destage_alloc_file=" << need_to_destage_allocation_file
            << " per_pool=" << per_pool_stat_collection
            << " pool stats=" << osd_pools.size()
            << dendl;
-  bool do_destage = !db_was_opened_read_only && need_to_destage_allocation_file;
+  bool do_destage = !db_in_read_only &&
+                    !db_in_repair &&
+		    need_to_destage_allocation_file;
   if (do_destage && is_statfs_recoverable()) {
     auto t = db->get_transaction();
     store_statfs_t s;
@@ -8433,6 +8436,8 @@ void BlueStore::_close_db()
   if (bluefs) {
     _close_bluefs();
   }
+  db_in_read_only = true;
+  db_in_repair = false;
 }
 
 void BlueStore::_dump_alloc_on_failure()
@@ -15547,7 +15552,7 @@ void BlueStore::_kv_sync_thread()
       auto sync_start = mono_clock::now();
 #endif
       // submit synct synchronously (block and wait for it to commit)
-      int r = db_was_opened_read_only || cct->_conf->bluestore_debug_omit_kv_commit ?
+      int r = db_in_read_only || cct->_conf->bluestore_debug_omit_kv_commit ?
 	0 : db->submit_transaction_sync(synct);
       ceph_assert(r == 0);
 
