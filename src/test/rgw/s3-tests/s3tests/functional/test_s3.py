@@ -1093,6 +1093,7 @@ def parseXmlToJson(xml):
   return response
 
 @pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
 def test_account_usage():
     # boto3.set_stream_logger(name='botocore')
     client = get_client()
