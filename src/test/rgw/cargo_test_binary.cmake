@@ -144,12 +144,23 @@ function(add_rgw_cargo_test_binary)
   # This same file, re-invoked in script mode to do the build-time work.
   set(_runner "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/cargo_test_binary.cmake")
 
+  # Only the unit-test binary, which runs from the build tree and is never
+  # installed, gets the build tree's lib dir baked in as its rpath. The
+  # installed binary must carry no rpath: rpm rejects both a build tree path
+  # and a standard library directory, and libceph_rgw_sal_test_env.so is
+  # installed to the library directory that is searched by default.
+  if(CT_UNIT_TEST)
+    set(_rpath "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+  else()
+    set(_rpath "")
+  endif()
+
   add_custom_command(
     OUTPUT ${_output}
     COMMAND ${CMAKE_COMMAND} -E env
       CARGO_TARGET_DIR=${_target_dir}
       RGW_SAL_TEST_ENV_DIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-      RGW_SAL_TEST_ENV_RPATH=${CMAKE_INSTALL_FULL_LIBDIR}
+      RGW_SAL_TEST_ENV_RPATH=${_rpath}
       ${CMAKE_COMMAND}
         -DCARGO=${CARGO_EXECUTABLE}
         -DMANIFEST=${_manifest}

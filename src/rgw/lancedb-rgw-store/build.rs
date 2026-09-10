@@ -36,9 +36,8 @@ fn main() {
         // binary.  It never reaches the staticlib radosgw links, both because
         // staticlibs are not a target kind rustc-link-arg applies to and
         // because RGW_SAL_TEST_ENV_DIR is only set for cargo test.
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{dir}");
-        if let Ok(extra) = std::env::var("RGW_SAL_TEST_ENV_RPATH") {
-            for path in extra.split(':').filter(|p| !p.is_empty()) {
+        if let Ok(rpath) = std::env::var("RGW_SAL_TEST_ENV_RPATH") {
+            for path in rpath.split(':').filter(|p| !p.is_empty()) {
                 println!("cargo:rustc-link-arg=-Wl,-rpath,{path}");
             }
         }

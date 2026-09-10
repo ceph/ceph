@@ -3038,6 +3038,9 @@ fi
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
+%if 0%{with lancedb}
+%{_libdir}/libceph_rgw_sal_test_env.so
+%endif
 %endif
 
 %if 0%{with cephfs_java}
