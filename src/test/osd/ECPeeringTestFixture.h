@@ -28,35 +28,32 @@ class ECPeeringTestFixture;
 
 class ECPeeringTestFixture : public PGBackendTestFixture {
 protected:
-  std::map<int, std::unique_ptr<PeeringState>> shard_peering_states;
-  std::map<int, std::unique_ptr<PeeringCtx>> shard_peering_ctxs;
-  std::map<int, std::unique_ptr<MockPeeringListener>> shard_peering_listeners;
-
   class ShardDpp : public NoDoutPrefix {
   public:
     ECPeeringTestFixture *fixture;
-    int shard;
-    bool is_child;
+    spg_t spgid;
 
-    ShardDpp(CephContext *cct, ECPeeringTestFixture *f, int s, bool child = false)
-      : NoDoutPrefix(cct, ceph_subsys_osd), fixture(f), shard(s), is_child(child) {}
+    ShardDpp(CephContext *cct, ECPeeringTestFixture *f, spg_t id)
+      : NoDoutPrefix(cct, ceph_subsys_osd), fixture(f), spgid(id) {}
 
     std::ostream& gen_prefix(std::ostream& out) const override;
   };
-  std::map<int, std::unique_ptr<ShardDpp>> shard_dpps;
+
+  // All peering state is stored in a single set of maps keyed by spg_t so
+  // that parent and child PG shards are handled uniformly (e.g. new_epoch()
+  // iterates once over all listeners regardless of which PG they belong to).
+  // The parent PG uses pgid; the child PG uses child_pgid (set by split_pg()).
+  std::map<spg_t, std::unique_ptr<PeeringState>>       pg_states;
+  std::map<spg_t, std::unique_ptr<PeeringCtx>>         pg_ctxs;
+  std::map<spg_t, std::unique_ptr<MockPeeringListener>> pg_listeners;
+  std::map<spg_t, std::unique_ptr<ShardDpp>>           pg_dpps;
 
   // Park recovery reservation grants so peering completes without launching
   // recovery (a grant delivered into a later interval hits Reset and aborts).
   bool stall_recovery_reservations = false;
 
-  // Child-PG state populated by split_pg().  Empty until a split is performed.
+  // Child-PG identity set by split_pg().  Zero until a split is performed.
   pg_t child_pgid;
-  std::map<int, std::unique_ptr<PeeringState>> child_peering_states;
-  std::map<int, std::unique_ptr<PeeringCtx>> child_peering_ctxs;
-  std::map<int, std::unique_ptr<MockPeeringListener>> child_peering_listeners;
-  std::map<int, coll_t> child_colls;
-  std::map<int, ObjectStore::CollectionHandle> child_chs;
-  std::map<int, std::unique_ptr<ShardDpp>> child_dpps;
 
   IsPGRecoverablePredicate *get_is_recoverable_predicate();
   IsPGReadablePredicate *get_is_readable_predicate();
@@ -110,18 +107,12 @@ public:
   pg_t get_child_pgid() const { return child_pgid; }
 
 private:
-  void dispatch_buffered_messages(int from_shard, PeeringCtx* ctx);
+  void dispatch_buffered_messages(spg_t spgid, PeeringCtx* ctx);
 
   // Shared tail of create_peering_state() and create_child_peering_state():
   // constructs the PeeringState, wires pl->ps / pl->ctx, sets backend
-  // predicates, and stores everything in the supplied maps.
-  PeeringState* create_peering_state_common(
-    int shard,
-    spg_t spgid,
-    std::map<int, std::unique_ptr<PeeringState>>& states,
-    std::map<int, std::unique_ptr<PeeringCtx>>& ctxs,
-    std::map<int, std::unique_ptr<MockPeeringListener>>& listeners_map,
-    std::map<int, std::unique_ptr<ShardDpp>>& dpps);
+  // predicates, and stores everything in the unified pg_* maps.
+  PeeringState* create_peering_state_common(spg_t spgid);
 
 public:
 
