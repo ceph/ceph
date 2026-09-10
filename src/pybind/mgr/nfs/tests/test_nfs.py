@@ -2355,6 +2355,211 @@ EXPORT {
         assert self.io_mock.notify.call_count == 1
 
 
+    def test_cephfs_client_pool_rotate_key(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_rotate_key, clients_per_pool=2)
+
+    def _do_test_cephfs_client_pool_rotate_key(self):
+        from nfs.export import get_pool_user_id, get_user_id
+        from nfs.utils import ceph_users_obj_name
+        from nfs.ganesha_conf import CephUsers
+
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+        cluster = nfs_mod.nfs
+
+        pool0 = get_pool_user_id(self.cluster_id, 'myfs', 0)
+        pool1 = get_pool_user_id(self.cluster_id, 'myfs', 1)
+        entity0 = f'client.{pool0}'
+        entity1 = f'client.{pool1}'
+        hashed_user = f'nfs.{get_user_id(self.cluster_id, "myfs", "/volumes")}'
+        hashed_entity = f'client.{hashed_user}'
+
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/poolrot',
+            read_only=False,
+            squash='none',
+        )
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/volumes',
+            pseudo_path='/sub',
+            read_only=False,
+            squash='none',
+            cmount_path='/volumes',
+        )
+
+        def mock_create_user_key(self, cluster_id, entity_name, path, fs_name):
+            return f'rotated-{entity_name}'
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=[entity0],
+                key_type='aes256k',
+            )
+
+        check_mon.assert_called_once_with({
+            'prefix': 'auth rotate',
+            'entity': entity0,
+            'key_type': 'aes256k',
+        })
+        redeploy.assert_not_called()
+        assert result['rotated'] == [entity0]
+        assert result['export_keys'] == [entity0]
+        assert result['daemon_keys'] == []
+        assert result['service_redeployed'] is False
+        # Slot 0 is refreshed both in CEPH_USERS and in the FSAL that carries it.
+        assert result['updated_exports'] == [pool0, '/poolrot']
+
+        export = conf._fetch_export(self.cluster_id, '/poolrot')
+        assert export.fsal.user_id == pool0
+        assert export.fsal.cephx_key == f'rotated-{pool0}'
+        hashed = conf._fetch_export(self.cluster_id, '/sub')
+        assert hashed.fsal.user_id == hashed_user
+        assert hashed.fsal.cephx_key == 'thekeyforclientabc'
+
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        keys = {u.user_id: u.secret_access_key for u in ceph_users.users}
+        assert keys[pool0] == f'rotated-{pool0}'
+        assert keys[pool1] == 'thekeyforclientabc'
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=[hashed_entity],
+            )
+
+        check_mon.assert_called_once_with({
+            'prefix': 'auth rotate',
+            'entity': hashed_entity,
+        })
+        redeploy.assert_not_called()
+        assert result['export_keys'] == [hashed_entity]
+        assert result['updated_exports'] == ['/sub']
+        hashed = conf._fetch_export(self.cluster_id, '/sub')
+        assert hashed.fsal.cephx_key == f'rotated-{hashed_user}'
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        keys = {u.user_id: u.secret_access_key for u in ceph_users.users}
+        assert keys[pool0] == f'rotated-{pool0}'
+        assert keys[pool1] == 'thekeyforclientabc'
+
+        daemon_entity = 'client.nfs.foo.0.0.host.hash-rgw'
+        cluster_entity = 'client.nfs.foo'
+        auth_ls = {
+            'auth_dump': [
+                {'entity': cluster_entity},
+                {'entity': daemon_entity},
+                {'entity': entity0},
+                {'entity': entity1},
+                {'entity': hashed_entity},
+                {'entity': 'client.nfs.other.fs.deadbeef'},
+            ]
+        }
+
+        def mock_check_mon(cmd):
+            if cmd.get('prefix') == 'auth ls':
+                return mock.Mock(stdout=json.dumps(auth_ls), retval=0, stderr='')
+            return mock.Mock(stdout='', retval=0, stderr='')
+
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon) as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                all_daemon_and_export_keys=True,
+                key_type='aes256k',
+            )
+
+        rotate_calls = [
+            c.args[0] for c in check_mon.call_args_list
+            if c.args[0].get('prefix') == 'auth rotate'
+        ]
+        rotated = [c['entity'] for c in rotate_calls]
+        assert sorted(rotated) == sorted(
+            [cluster_entity, daemon_entity, entity0, entity1, hashed_entity])
+        redeploy.assert_called_once_with(nfs_mod, self.cluster_id)
+        assert result['service_redeployed'] is True
+        assert sorted(result['daemon_keys']) == sorted([cluster_entity, daemon_entity])
+        assert sorted(result['export_keys']) == sorted([entity0, entity1, hashed_entity])
+        export = conf._fetch_export(self.cluster_id, '/poolrot')
+        assert export.fsal.user_id == pool0
+        assert export.fsal.cephx_key == f'rotated-{pool0}'
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        keys = {u.user_id: u.secret_access_key for u in ceph_users.users}
+        assert keys[pool0] == f'rotated-{pool0}'
+        assert keys[pool1] == f'rotated-{pool1}'
+
+    def test_cephfs_client_pool_rotate_key_notifies_without_export(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_rotate_key_notifies_without_export,
+                           clients_per_pool=2)
+
+    def _do_test_cephfs_client_pool_rotate_key_notifies_without_export(self):
+        """A pool slot other than 0 lives in CEPH_USERS alone.
+
+        No export FSAL carries it, so no export write follows to notify
+        ganesha: the CEPH_USERS rewrite has to do it itself, or the pool keeps
+        serving a key that auth rotate has already invalidated.
+        """
+        from nfs.export import get_pool_user_id
+        from nfs.utils import ceph_users_obj_name
+        from nfs.ganesha_conf import CephUsers
+
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+        cluster = nfs_mod.nfs
+
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/poolrot',
+            read_only=False,
+            squash='none',
+        )
+        pool0 = get_pool_user_id(self.cluster_id, 'myfs', 0)
+        pool1 = get_pool_user_id(self.cluster_id, 'myfs', 1)
+
+        def mock_create_user_key(self, cluster_id, entity_name, path, fs_name):
+            return f'rotated-{entity_name}'
+
+        self.io_mock.notify.reset_mock()
+        with mock.patch.object(nfs_mod, 'check_mon_command'), \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=[f'client.{pool1}'],
+            )
+
+        # Neither an export write nor a redeploy would have notified here.
+        redeploy.assert_not_called()
+        assert result['updated_exports'] == [pool1]
+        assert self.io_mock.notify.call_count == 1
+
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        keys = {u.user_id: u.secret_access_key for u in ceph_users.users}
+        assert keys[pool1] == f'rotated-{pool1}'
+        # Slot 0 was not rotated, so it keeps the key its export still carries.
+        assert keys[pool0] == 'thekeyforclientabc'
+        assert conf._fetch_export(self.cluster_id, '/poolrot').fsal.cephx_key == \
+            'thekeyforclientabc'
+
+
 class TestNFSClusterIngressPlacement:
     cluster_id = 'mynfs'
     virtual_ip = '192.168.1.100/24'
