@@ -32,6 +32,11 @@ struct chunk_validation_policy_t {
   spg_t pgid;
   std::string mode_desc;  // "scrub" or "deep-scrub"
 
+  // True when this is a repair scrub.  Controls whether a digest mismatch
+  // between the stored OI and the freshly-computed value is force-written
+  // back (matches classic OSD should_fix_digest: force only in repair mode).
+  bool is_repair{false};
+
   bool is_ec() const {
     // FIXME: See scrub_backend in classic for reference.
     return false;
