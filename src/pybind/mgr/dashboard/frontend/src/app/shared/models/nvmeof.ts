@@ -24,6 +24,7 @@ export interface NvmeofSubsystem {
   gw_group?: string;
   initiator_count?: number;
   has_dhchap_key: boolean;
+  network_mask?: string[];
 }
 
 export interface NvmeofSubsystemData extends NvmeofSubsystem {
@@ -52,6 +53,7 @@ export interface NvmeofSubsystemNamespace {
   bdev_name: string;
   rbd_image_name: string;
   rbd_pool_name: string;
+  rados_namespace_name?: string; // empty string or absent means default RADOS namespace
   load_balancing_group: number;
   rbd_image_size: number | string;
   block_size: number;
@@ -61,6 +63,11 @@ export interface NvmeofSubsystemNamespace {
   w_mbytes_per_second: number | string;
   subsystem_nqn?: string; // Field from JSON (mapped from ns_subsystem_nqn if needed)
 }
+
+export type RadosNamespace = {
+  namespace: string;
+  num_images: number;
+};
 
 export interface NvmeofGatewayGroup extends CephServiceSpec {
   name: string;
@@ -72,12 +79,24 @@ export interface NvmeofGatewayGroup extends CephServiceSpec {
   nodeCount: number;
 }
 
+export enum NvmeofSubsystemAuthType {
+  NO_AUTH = 'No authentication',
+  UNIDIRECTIONAL = 'Unidirectional',
+  BIDIRECTIONAL = 'Bi-directional'
+}
+
+export enum NvmeofGatewayNodeMode {
+  SELECTOR = 'selector',
+  DETAILS = 'details'
+}
+
 export enum AUTHENTICATION {
   Unidirectional = 'unidirectional',
   Bidirectional = 'bidirectional',
   None = 'none'
 }
 
+export const ALLOW_ALL_HOST = '*';
 export const NO_AUTH = 'No authentication';
 
 export const HOST_TYPE = {
@@ -90,13 +109,44 @@ export interface ListenerItem {
   addr: string;
 }
 
+export type NvmeofInitiatorsResponse =
+  NvmeofSubsystemInitiator[] | { hosts?: NvmeofSubsystemInitiator[] };
+
+export function normalizeInitiators(
+  initiators: NvmeofInitiatorsResponse
+): NvmeofSubsystemInitiator[] {
+  if (initiators && 'hosts' in initiators && Array.isArray(initiators.hosts)) {
+    return initiators.hosts;
+  }
+  if (Array.isArray(initiators)) {
+    return initiators;
+  }
+  return [];
+}
+
+/**
+ * When `allow_any_host` is true, the subsystem allows all hosts unless specific
+ * (non-wildcard) initiators are present, indicating the wildcard was removed and
+ * access is now restricted.
+ */
+export function isSubsystemAllowAllHosts(
+  subsystem: Pick<NvmeofSubsystem, 'allow_any_host'> | null | undefined,
+  initiators: NvmeofInitiatorsResponse
+): boolean {
+  if (!subsystem?.allow_any_host) {
+    return false;
+  }
+  const hostsList = normalizeInitiators(initiators);
+  return hostsList.length === 0 || hostsList.some((initiator) => initiator.nqn === ALLOW_ALL_HOST);
+}
+
 /**
  * Determines the authentication status of a subsystem based on PSK and initiators.
  * Can be reused across subsystem pages.
  */
 export function getSubsystemAuthStatus(
   subsystem: NvmeofSubsystem,
-  _initiators: NvmeofSubsystemInitiator[] | { hosts?: NvmeofSubsystemInitiator[] }
+  _initiators: NvmeofInitiatorsResponse
 ): string {
   // Import enum value strings to avoid circular dependency
   const UNIDIRECTIONAL = 'Unidirectional';
@@ -104,13 +154,7 @@ export function getSubsystemAuthStatus(
 
   let auth = NO_AUTH;
 
-  let hostsList: NvmeofSubsystemInitiator[] = [];
-  if (_initiators && 'hosts' in _initiators && Array.isArray(_initiators.hosts)) {
-    hostsList = _initiators.hosts;
-  } else if (Array.isArray(_initiators)) {
-    hostsList = _initiators as NvmeofSubsystemInitiator[];
-  }
-
+  const hostsList = normalizeInitiators(_initiators);
   const hostHasDhchapKey = hostsList.some((host) => !!host.use_dhchap);
 
   if (hostHasDhchapKey) {
@@ -168,4 +212,6 @@ export type AuthStepType = {
 export type DetailsStepType = {
   nqn: string;
   listeners: Array<string>;
+  listenerMode?: string;
+  subnetMask?: string;
 };

@@ -1,7 +1,15 @@
-import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { Subscription, merge, of, timer } from 'rxjs';
+import { filter, switchMap, tap } from 'rxjs/operators';
+
+import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 
 const NVMEOF_PATH = 'block/nvmeof';
+
+/** How long to keep showing success cards after gateway/subsystem/namespace exist. */
+export const SETUP_CARDS_HIDE_DELAY_MS = 5000;
 
 enum TABS {
   gateways = 'gateways',
@@ -9,26 +17,121 @@ enum TABS {
   namespaces = 'namespaces'
 }
 
+const TAB_ROUTES = [
+  '/block/nvmeof/gateways',
+  '/block/nvmeof/subsystems',
+  '/block/nvmeof/namespaces'
+];
+
 @Component({
   selector: 'cd-nvmeof-tabs',
   templateUrl: './nvmeof-tabs.component.html',
   styleUrls: ['./nvmeof-tabs.component.scss'],
-  standalone: false
+  standalone: false,
+  providers: [NvmeofStateService]
 })
-export class NvmeofTabsComponent implements OnInit {
-  selectedTab: TABS;
+export class NvmeofTabsComponent implements OnInit, OnDestroy {
   activeTab: TABS = TABS.gateways;
+  showTabsShell = true;
+  showSetupCards = false;
+  hasGatewayGroups = false;
+  hasSubsystems = false;
+  hasNamespaces = false;
+  isAllConfigured = false;
+  private setupSubscription?: Subscription;
+  private hideSetupCardsSubscription?: Subscription;
+  private setupCardsDismissed = false;
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private route: ActivatedRoute,
+    private nvmeofService: NvmeofService,
+    private nvmeofStateService: NvmeofStateService
+  ) {}
 
-  ngOnInit(): void {
-    const currentPath = this.router.url;
+  private updateActiveTab(currentPath: string): void {
     this.activeTab = Object.values(TABS).find((tab) => currentPath.includes(tab)) || TABS.gateways;
   }
 
+  private updateShellVisibility(currentPath: string): void {
+    const urlTree = this.router.parseUrl(currentPath);
+    const primarySegments =
+      urlTree.root.children['primary']?.segments.map((segment) => segment.path) ?? [];
+    const primaryPath = `/${primarySegments.join('/')}`;
+
+    this.showTabsShell = TAB_ROUTES.includes(primaryPath);
+  }
+
+  private scheduleHideSetupCards(): void {
+    if (this.hideSetupCardsSubscription || this.setupCardsDismissed) {
+      return;
+    }
+    this.hideSetupCardsSubscription = timer(SETUP_CARDS_HIDE_DELAY_MS).subscribe(() => {
+      this.showSetupCards = false;
+      this.setupCardsDismissed = true;
+      this.hideSetupCardsSubscription = undefined;
+    });
+  }
+
+  private cancelHideSetupCards(): void {
+    this.hideSetupCardsSubscription?.unsubscribe();
+    this.hideSetupCardsSubscription = undefined;
+  }
+
+  private updateSetupCardsVisibility(): void {
+    if (this.isAllConfigured) {
+      if (this.setupCardsDismissed) {
+        this.showSetupCards = false;
+        return;
+      }
+      // Keep success state visible briefly, then dismiss the banner.
+      this.showSetupCards = true;
+      this.scheduleHideSetupCards();
+      return;
+    }
+
+    this.setupCardsDismissed = false;
+    this.cancelHideSetupCards();
+    this.showSetupCards = true;
+  }
+
+  ngOnInit(): void {
+    this.updateActiveTab(this.router.url);
+    this.updateShellVisibility(this.router.url);
+
+    // Merge all trigger streams to prevent memory leaks and race conditions
+    this.setupSubscription = merge(
+      of(null), // Initial load
+      this.router.events.pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        tap((event) => {
+          this.updateActiveTab(event.urlAfterRedirects);
+          this.updateShellVisibility(event.urlAfterRedirects);
+        })
+      ),
+      this.route.queryParams,
+      this.nvmeofStateService.refresh$
+    )
+      .pipe(switchMap(() => this.nvmeofService.fetchSetupState()))
+      .subscribe(({ hasGatewayGroups, hasSubsystems, hasNamespaces }) => {
+        this.hasGatewayGroups = hasGatewayGroups;
+        this.hasSubsystems = hasSubsystems;
+        this.hasNamespaces = hasNamespaces;
+        this.isAllConfigured = hasGatewayGroups && hasSubsystems && hasNamespaces;
+        this.updateSetupCardsVisibility();
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.cancelHideSetupCards();
+    this.setupSubscription?.unsubscribe();
+  }
+
   onSelected(tab: TABS) {
-    this.selectedTab = tab;
-    this.router.navigate([`${NVMEOF_PATH}/${tab}`]);
+    this.activeTab = tab;
+    this.router.navigate([NVMEOF_PATH, tab], {
+      queryParamsHandling: 'preserve'
+    });
   }
 
   public get Tabs(): typeof TABS {
