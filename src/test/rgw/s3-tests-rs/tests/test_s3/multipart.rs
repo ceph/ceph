@@ -1893,7 +1893,25 @@ async fn test_multipart_reupload_checksum_and_etag() {
         .await
         .unwrap();
 
-    assert_eq!(res1.e_tag().unwrap().trim_matches('"'), composite_etag);
+    /* The composite ETag stays <32hex>-<parts> in both modes -- MPU
+     * complete folds the part ETags through rgw_part_etag_to_digest() and
+     * hashes the digests -- but under rgw_non_md5_etag the part ETags are
+     * per-write tokens, so the composite is not reproducible across runs
+     * and cannot be pinned to a literal.  Assert the form instead, which
+     * is what proves the fold happened at all.  The SHA256 checksums are
+     * client-supplied and unaffected either way. */
+    let cfg = s3_tests_rs::config::get_config();
+    let seen_etag = res1.e_tag().unwrap().trim_matches('"').to_string();
+    if cfg.non_md5_etag {
+        let (digest, nparts) = seen_etag.rsplit_once('-')
+            .unwrap_or_else(|| panic!("composite ETag is not <hex>-<parts>: {seen_etag}"));
+        assert_eq!(nparts, "3", "composite ETag part count: {seen_etag}");
+        assert_eq!(digest.len(), 32, "composite digest is not 32 hex: {seen_etag}");
+        assert!(digest.chars().all(|c| c.is_ascii_hexdigit()),
+                "composite digest is not hex: {seen_etag}");
+    } else {
+        assert_eq!(seen_etag, composite_etag);
+    }
     assert_eq!(res1.checksum_sha256().unwrap(), composite_sha256);
 
     // idempotent retry should return matching etag and checksum

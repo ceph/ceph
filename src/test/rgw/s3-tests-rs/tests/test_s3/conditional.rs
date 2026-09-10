@@ -348,11 +348,36 @@ async fn test_put_object_if_match() {
         .unwrap()
         .to_string();
 
+    let cfg = s3_tests_rs::config::get_config();
+
     let result = client.put_object().bucket(&bucket).key(key).if_none_match("*").send().await;
     assert_s3_err!(result, 412, "PreconditionFailed");
     let result = client.put_object().bucket(&bucket).key(key).if_none_match(&etag).send().await;
     assert_s3_err!(result, 412, "PreconditionFailed");
-    client.put_object().bucket(&bucket).key(key).if_none_match("badetag").send().await.unwrap();
+
+    /* This overwrites the object, so the current ETag is whatever that
+     * write returned.  Every body here is empty, so under the classic MD5
+     * ETag the value is unchanged and the original stays usable -- which
+     * is why the rest of this test could get away with holding one ETag
+     * throughout.  Under rgw_non_md5_etag each write mints a new one, the
+     * superseded value must stop satisfying If-Match, and that difference
+     * is the thing worth asserting. */
+    let overwritten = client
+        .put_object().bucket(&bucket).key(key)
+        .if_none_match("badetag").send().await.unwrap()
+        .e_tag().unwrap().to_string();
+
+    if cfg.non_md5_etag {
+        assert_ne!(overwritten, etag,
+                   "rgw_non_md5_etag must mint a new ETag for each write");
+        let result = client.put_object().bucket(&bucket).key(key)
+            .if_match(&etag).send().await;
+        assert_s3_err!(result, 412, "PreconditionFailed");
+    } else {
+        assert_eq!(overwritten, etag,
+                   "rewriting identical content must reproduce the ETag");
+    }
+    let etag = overwritten;
 
     client.put_object().bucket(&bucket).key(key).if_match(&etag).send().await.unwrap();
 
@@ -364,7 +389,10 @@ async fn test_put_object_if_match() {
     assert_s3_err!(result, 404, "NoSuchKey");
 
     client.put_object().bucket(&bucket).key(key).if_none_match(&etag).send().await.unwrap();
-    client.put_object().bucket(&bucket).key(key).if_match("*").send().await.unwrap();
+    let etag = client
+        .put_object().bucket(&bucket).key(key)
+        .if_match("*").send().await.unwrap()
+        .e_tag().unwrap().to_string();
     let result = client.put_object().bucket(&bucket).key(key).if_match("badetag").send().await;
     assert_s3_err!(result, 412, "PreconditionFailed");
     client.put_object().bucket(&bucket).key(key).if_match(&etag).send().await.unwrap();
@@ -385,11 +413,28 @@ async fn test_multipart_put_object_if_match() {
     failing_conditional_multipart_upload(&client, &bucket, key, body, None, Some("*"), 412, "PreconditionFailed").await;
     failing_conditional_multipart_upload(&client, &bucket, key, body, None, Some(&etag), 412, "PreconditionFailed").await;
 
+    /* Each upload replaces the object, so the current ETag is whatever the
+     * last one returned.  The body is identical every time, so under the
+     * classic MD5 ETag the composite value never changes and a stale
+     * handle keeps working;  under rgw_non_md5_etag each upload mints a
+     * new one and a superseded value must stop satisfying If-Match.
+     * Carry the current ETag forward so the conditions below mean the
+     * same thing in both modes. */
+    let cfg = s3_tests_rs::config::get_config();
     let resp = successful_conditional_multipart_upload(&client, &bucket, key, body, None, Some("badetag")).await;
-    let etag = resp.e_tag().unwrap().to_string();
+    let overwritten = resp.e_tag().unwrap().to_string();
+    if cfg.non_md5_etag {
+        assert_ne!(overwritten, etag,
+                   "rgw_non_md5_etag must mint a new ETag for each upload");
+        failing_conditional_multipart_upload(&client, &bucket, key, body, Some(&etag), None, 412, "PreconditionFailed").await;
+    } else {
+        assert_eq!(overwritten, etag,
+                   "re-uploading identical content must reproduce the ETag");
+    }
+    let etag = overwritten;
 
     let resp = successful_conditional_multipart_upload(&client, &bucket, key, body, Some(&etag), None).await;
-    let _etag = resp.e_tag().unwrap().to_string();
+    let etag = resp.e_tag().unwrap().to_string();
 
     client.delete_object().bucket(&bucket).key(key).send().await.unwrap();
 
@@ -397,8 +442,10 @@ async fn test_multipart_put_object_if_match() {
     failing_conditional_multipart_upload(&client, &bucket, key, body, Some("badetag"), None, 404, "NoSuchKey").await;
 
     let resp = successful_conditional_multipart_upload(&client, &bucket, key, body, None, Some(&etag)).await;
-    let _etag2 = resp.e_tag().unwrap().to_string();
-    successful_conditional_multipart_upload(&client, &bucket, key, body, Some("*"), None).await;
+    let etag = resp.e_tag().unwrap().to_string();
+    let _ = etag;
+    let resp = successful_conditional_multipart_upload(&client, &bucket, key, body, Some("*"), None).await;
+    let etag = resp.e_tag().unwrap().to_string();
     failing_conditional_multipart_upload(&client, &bucket, key, body, Some("badetag"), None, 412, "PreconditionFailed").await;
     let resp = successful_conditional_multipart_upload(&client, &bucket, key, body, Some(&etag), None).await;
     assert!(resp.e_tag().is_some());

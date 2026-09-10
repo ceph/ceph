@@ -41,6 +41,11 @@ pub struct S3TestConfig {
     pub main_kms_keyid2: String,
     pub main_api_name: String,
     pub storage_classes: String,
+    /// Set when the gateway runs with rgw_non_md5_etag.  ETags are then
+    /// unique-per-write tokens rather than content MD5s, so tests that
+    /// compare an ETag to a digest, or expect one to survive an identical
+    /// rewrite, must assert the other behaviour instead of the usual one.
+    pub non_md5_etag: bool,
     pub lc_debug_interval: u64,
     pub rgw_restore_debug_interval: u64,
     pub rgw_restore_processor_period: u64,
@@ -262,6 +267,7 @@ fn load_config() -> Result<S3TestConfig, String> {
         main_kms_keyid2: get_str_or(&ini, "s3 main", "kms_keyid2", "testkey-2"),
         main_api_name: get_str_or(&ini, "s3 main", "api_name", ""),
         storage_classes: get_str_or(&ini, "s3 main", "storage_classes", ""),
+        non_md5_etag: get_bool(&ini, "s3 main", "non_md5_etag", false),
         lc_debug_interval: get_u64(&ini, "s3 main", "lc_debug_interval", 10),
         rgw_restore_debug_interval: get_u64(&ini, "s3 main", "rgw_restore_debug_interval", 100),
         rgw_restore_processor_period: get_u64(&ini, "s3 main", "rgw_restore_processor_period", 100),

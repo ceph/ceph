@@ -52,6 +52,11 @@ secret_key = h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==
 ## Storage classes
 #storage_classes = "LUKEWARM, FROZEN"
 
+## Set to True when the gateway runs with rgw_non_md5_etag.  ETags are then
+## unique per write rather than a digest of the content, so tests assert the
+## non-MD5 behaviour instead of ETag == Content-MD5 (default: False)
+#non_md5_etag = False
+
 ## Lifecycle debug interval (default: 10)
 #lc_debug_interval = 20
 ## Restore debug interval (default: 100)

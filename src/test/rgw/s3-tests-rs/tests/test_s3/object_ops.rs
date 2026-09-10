@@ -138,8 +138,35 @@ async fn test_object_write_check_etag() {
         .send()
         .await
         .unwrap();
-    let etag = response.e_tag().unwrap_or_default();
-    assert_eq!(etag, "\"37b51d194a7513e45b56f6524f2d51f2\"");
+    let etag = response.e_tag().unwrap_or_default().to_string();
+
+    let cfg = s3_tests_rs::config::get_config();
+    if cfg.non_md5_etag {
+        /* The ETag is a unique-per-write token, not a digest.  Assert what
+         * the option actually promises rather than skipping:  the value is
+         * not the content MD5, it carries a dash (which is what makes an
+         * SDK treat it as a multipart ETag and skip MD5 validation), and a
+         * second write of the same bytes mints a different one. */
+        let unquoted = etag.trim_matches('"');
+        assert_ne!(unquoted, "37b51d194a7513e45b56f6524f2d51f2",
+                   "rgw_non_md5_etag returned the content MD5");
+        assert!(unquoted.contains('-'),
+                "non-MD5 ETag must contain a dash so SDKs skip MD5 \
+                 validation, got {etag}");
+
+        let again = client
+            .put_object()
+            .bucket(&bucket_name)
+            .key("foo")
+            .body(ByteStream::from_static(b"bar"))
+            .send()
+            .await
+            .unwrap();
+        assert_ne!(again.e_tag().unwrap_or_default(), etag,
+                   "rgw_non_md5_etag must mint a new ETag for each write");
+    } else {
+        assert_eq!(etag, "\"37b51d194a7513e45b56f6524f2d51f2\"");
+    }
 }
 
 #[tokio::test]
