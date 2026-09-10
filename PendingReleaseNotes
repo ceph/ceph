@@ -145,6 +145,16 @@
   - CephCertificateError: Fires when a Ceph certificate has expired (critical severity).
   - CephCertificateWarning: Fires when a Ceph certificate is about to expire (warning severity).
 
+
+* DASHBOARD: Introduces a new landing page - "Overview". This revamps UX and adds more information in the landing page - overall cluster health, health checks, resilency panel (showing PG status, active/clean percent), total and used raw capacity, alerts, capacity breakdown by object, file and block and performance charts - throughput, latency and IOPS. This renames the landing page from "Dashboard" to "Overview"
+* DASHBOARD: Removed the older landing page which was deprecated in Quincy.
+  Admins can no longer enable the older, deprecated landing page layout by
+  adjusting FEATURE_TOGGLE_DASHBOARD.
+* DASHBOARD: RGW Service form updated to take input regarding QAT compression.
+  - QAT compression is an optional field which can be set to 'Hardware' or 'Software' by selecting options from provided dropdwon. If 'None' is selected, compression is removed altogether.
+* Monitoring: Added new Prometheus alerts for certificate management:
+  - CephCertificateError: Fires when a Ceph certificate has expired (critical severity).
+  - CephCertificateWarning: Fires when a Ceph certificate is about to expire (warning severity).
 * CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
 * RGW: For `radosgw-admin account rm`, the `--purge-data` option previously applied only
   to buckets and objects, but now deletes account users, roles, groups, and oidc-providers
