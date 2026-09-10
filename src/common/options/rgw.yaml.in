@@ -745,15 +745,13 @@ options:
     For compatibility, setting this configuration variable to the empty string causes
     the default ``swift`` to be used; if you do want an empty prefix, set this option
     to ``/``.
-
-    .. warning::
-
-       If you set this option to ``/``, you must disable the S3 API by modifying
-       ``rgw_enable_apis`` to exclude ``s3``. It is not possible to operate radosgw
-       with ``rgw_swift_url_prefix = /`` and simultaneously support both the S3 and
-       Swift APIs. If you do need to support both APIs without prefixes, deploy
-       multiple radosgw instances to listen on different hosts (or ports) instead,
-       enabling some for S3 and some for Swift.
+  warning: |
+    If you set this option to ``/``, you must disable the S3 API by modifying
+    ``rgw_enable_apis`` to exclude ``s3``. It is not possible to operate radosgw
+    with ``rgw_swift_url_prefix = /`` and simultaneously support both the S3 and
+    Swift APIs. If you do need to support both APIs without prefixes, deploy
+    multiple radosgw instances to listen on different hosts (or ports) instead,
+    enabling some for S3 and some for Swift.
   example: /swift-testing
   default: swift
   services:

@@ -167,12 +167,11 @@ internal error, and log a failure message.
 
 Three different Cache Time-to-Live (TTL) values can be set:
 
-- **Positive TTL**: How long a successfully retrieved secret remains
-  in the cache.
-- **Negative TTL**: How long to remember that a key does not exist,
-  preventing unnecessary requests to the KMS.
-- **Transient Error TTL**: How long to cache failures due to temporary
-  issues like KMS timeouts.
+- **Positive TTL**: How long a successfully retrieved secret remains in the cache.
+- **Negative TTL**: How long to remember that a key does not exist, preventing
+  unnecessary requests to the KMS.
+- **Transient Error TTL**: How long to cache failures due to temporary issues
+  like KMS timeouts.
 
 Metrics
 ---------
@@ -184,14 +183,13 @@ The cache exports metrics under the ``kms-cache`` collection.
 - ``expired``: Number of TTL expired entries
 - ``size``: Current cache size
 - ``capacity``: Cache maximum size
-- ``clear``: Number of cache clears. Resets ``size``, ``hit``,
-  ``miss``, ``expired``
+- ``clear``: Number of cache clears. Resets ``size``, ``hit``, ``miss``, and
+  ``expired``.
 
 In addition the ``rgw`` collection has:
 
-- ``kms_fetch_lat``: Average KMS fetch latency. Also includes a
-  successful request counter. Each event results in a positive cache
-  entry.
+- ``kms_fetch_lat``: Average KMS fetch latency. Also includes a successful
+  request counter. Each event results in a positive cache entry.
 - ``kms_error_transient``: Transient KMS fetch error counter. Each
   event results in a transient error cache entry.
 - ``kms_error_permanent``: Permanent KMS fetch error counter. Each
