@@ -4758,10 +4758,11 @@ void RGWPutObj::execute(optional_yield y)
 
   auto counters = rgw::op_counters::get(s);
 
-  // FOR BENCHMARKING ONLY: skips ETag/MD5 computation on ordinary PUT/UploadPart
-  // bodies, trading away ETag integrity semantics for reduced PUT CPU cost.
-  const bool skip_md5 = s->cct->_conf->rgw_debug_skip_put_md5;
-  bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL) && !skip_md5;
+  // rgw_non_md5_etag: skip body MD5 on PUT/UploadPart; return a dashed
+  // non-MD5 ETag (mtime-<ns>-req-<id>; nsfs overwrites with mtime-ino
+  // from the object file's inode after publish).
+  const bool non_md5_etag = s->cct->_conf->rgw_non_md5_etag;
+  bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL) && !non_md5_etag;
   rgw::op_counters::inc(counters, l_rgw_op_put_obj, 1);
 
   // report latency on return
@@ -4787,8 +4788,8 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   if (supplied_md5_b64) {
-    if (skip_md5) {
-      ldpp_dout(this, 5) << "WARNING: rgw_debug_skip_put_md5 is enabled; "
+    if (non_md5_etag) {
+      ldpp_dout(this, 5) << "rgw_non_md5_etag is enabled; "
           "ignoring client-supplied Content-MD5 and skipping verification"
           << dendl;
     } else {
@@ -5093,7 +5094,7 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
-  if (!skip_md5) {
+  if (!non_md5_etag) {
     hash.Final(m);
   }
 
@@ -5124,18 +5125,26 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  if (skip_md5) {
-    // Fixed placeholder ETag: must stay CEPH_CRYPTO_MD5_DIGESTSIZE*2 hex chars
-    // so downstream hex_to_buf() calls (e.g. multipart-complete composite ETag)
-    // keep working.
-    calc_md5.assign(CEPH_CRYPTO_MD5_DIGESTSIZE * 2, '0');
+  if (non_md5_etag) {
+    // Non-MD5 ETag: "mtime-<ns>-req-<id>" on non-nsfs backends. The
+    // nsfs writer replaces this with mtime-ino from stat (same form as
+    // nsfs version ids). Dashes stop AWS SDKs from treating the value
+    // as content MD5. MPU complete folds these via
+    // rgw_part_etag_to_digest().
+    const auto ts = ceph::real_clock::to_timespec(ceph::real_clock::now());
+    const uint64_t mtime_ns =
+        static_cast<uint64_t>(ts.tv_sec) * 1000000000ull +
+        static_cast<uint64_t>(ts.tv_nsec);
+    const std::string_view opaque_id = !s->req_id.empty() ?
+        std::string_view(s->req_id) : std::string_view(s->trans_id);
+    calc_md5 = rgw_make_opaque_etag(opaque_id, mtime_ns);
   } else {
     buf_to_hex(m, std::back_inserter(calc_md5));
   }
 
   etag = calc_md5;
 
-  if (!skip_md5 && supplied_md5_b64 && (calc_md5 != supplied_md5)) {
+  if (!non_md5_etag && supplied_md5_b64 && (calc_md5 != supplied_md5)) {
     op_ret = -ERR_BAD_DIGEST;
     return;
   }
@@ -5264,6 +5273,13 @@ void RGWPutObj::execute(optional_yield y)
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
   if (op_ret < 0) {
     return;
+  }
+
+  if (non_md5_etag) {
+    auto eit = attrs.find(RGW_ATTR_ETAG);
+    if (eit != attrs.end() && eit->second.length()) {
+      etag.assign(eit->second.c_str(), eit->second.length());
+    }
   }
 
   if (s->bucket->versioning_enabled() && version_id.empty()) {
@@ -7919,7 +7935,7 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
   for (const auto& [index, part] : parts->parts) {
     std::string partetag = rgw_string_unquote(part);
     char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    hex_to_buf(partetag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+    rgw_part_etag_to_digest(partetag, petag);
     hash.Update((const unsigned char *)petag, sizeof(petag));
     ldpp_dout(this, 20)
       << __func__ << "() re-calculating multipart etag: part: "

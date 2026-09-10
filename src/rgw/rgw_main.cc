@@ -125,12 +125,11 @@ int main(int argc, char *argv[])
 
   common_init_finish(g_ceph_context);
 
-  if (g_ceph_context->_conf->rgw_debug_skip_put_md5) {
-    derr << "WARNING: rgw_debug_skip_put_md5 is enabled -- ETag/MD5 "
-            "computation on PutObject/UploadPart is disabled. This is for "
-            "benchmarking ONLY and must never be used in production (it "
-            "breaks ETag integrity semantics: conditional requests, "
-            "client-side ETag==MD5 checks, multisite/lifecycle consumers)."
+  if (g_ceph_context->_conf->rgw_non_md5_etag) {
+    derr << "rgw_non_md5_etag is enabled -- PutObject/UploadPart will not "
+            "compute content MD5. ETags are dashed non-MD5 (nsfs: mtime-ino "
+            "from inode; others: mtime-req from request id); "
+            "AWS SDKs will not validate them as MD5, and Content-MD5 is ignored."
          << dendl;
   }
 

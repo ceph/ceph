@@ -5696,8 +5696,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
         return ret;
       }
 
-      hex_to_buf(part->get_etag().c_str(), petag,
-		CEPH_CRYPTO_MD5_DIGESTSIZE);
+      rgw_part_etag_to_digest(part->get_etag(), petag);
       hash.Update((const unsigned char *)petag, sizeof(petag));
 
       // Compression is not supported yet

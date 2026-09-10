@@ -518,6 +518,13 @@ add_ceph_unittest(unittest_rgw_http_client)
 target_link_libraries(unittest_rgw_http_client
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
+add_executable(unittest_rgw_opaque_etag test_rgw_opaque_etag.cc)
+add_ceph_unittest(unittest_rgw_opaque_etag)
+target_include_directories(unittest_rgw_opaque_etag
+  SYSTEM PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/rgw)
+target_link_libraries(unittest_rgw_opaque_etag
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
 if(WITH_RADOSGW_FDB)
  list(APPEND rgw_incs "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
  add_catch2_test_rgw(rgw_hex)

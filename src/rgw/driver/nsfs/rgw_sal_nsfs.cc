@@ -340,6 +340,25 @@ static std::string synthesize_etag(const struct statx& stx)
   return nsfs_version_id_from_statx(stx);
 }
 
+/* rgw_non_md5_etag on NSFS: use the same mtime-ino string as version ids
+ * (filesystem inode from this file's stat), not the generic req-id form. */
+static bool nsfs_apply_non_md5_etag(const DoutPrefixProvider* dpp, int fd,
+                                    const struct statx& stx, Attrs& attrs)
+{
+  if (!dpp->get_cct()->_conf->rgw_non_md5_etag) {
+    return false;
+  }
+  std::string etag = nsfs_version_id_from_statx(stx);
+  bufferlist bl;
+  bl.append(etag);
+  attrs[RGW_ATTR_ETAG] = std::move(bl);
+  if (fd >= 0) {
+    std::string xattr = make_xattr_name(RGW_ATTR_ETAG);
+    ::fsetxattr(fd, xattr.c_str(), etag.c_str(), etag.size(), 0);
+  }
+  return true;
+}
+
 
 /* LMDB comparator for versioned bucket listing.
  * Key format: name \0 instance.
@@ -6099,6 +6118,8 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
     return ret;
   }
 
+  nsfs_apply_non_md5_etag(dpp, ent->get_fd(), ent->get_stx(), get_attrs());
+
   uint32_t flags = FSEnt::FLAG_NONE;
   const auto& binfo = b->get_info();
   if (binfo.versioned()) {
@@ -7565,8 +7586,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         return ret;
       }
 
-      hex_to_buf(part->get_etag().c_str(), petag,
-		CEPH_CRYPTO_MD5_DIGESTSIZE);
+      rgw_part_etag_to_digest(part->get_etag(), petag);
       hash.Update((const unsigned char *)petag, sizeof(petag));
 
       // Compression is not supported yet
@@ -8047,15 +8067,27 @@ int NSFSMultipartWriter::complete(
     }
   }
 
+  std::string part_etag = etag;
+  if (part_file) {
+    int sret = part_file->stat(dpp, /*force=*/true);
+    if (sret == 0 && nsfs_apply_non_md5_etag(dpp, part_file->get_fd(),
+                                             part_file->get_stx(), attrs)) {
+      bufferlist bl;
+      if (get_attr(attrs, RGW_ATTR_ETAG, bl)) {
+        part_etag.assign(bl.c_str(), bl.length());
+      }
+    }
+  }
+
   info.num = part_num;
   info.size = accounted_size;
-  info.etag = etag;
+  info.etag = part_etag;
   info.cksum = cksum;
   info.mtime = set_mtime;
 
   auto* mc = driver->get_multipart_cache();
   bool added = mc ? mc->add_part(mp_cache_key,
-    {static_cast<uint32_t>(part_num), accounted_size, etag, set_mtime, cksum}) : false;
+    {static_cast<uint32_t>(part_num), accounted_size, part_etag, set_mtime, cksum}) : false;
 
   if (!added || mc->policy == file::listing::MultipartCachePolicy::writethrough) {
     bufferlist bl;
@@ -8236,6 +8268,13 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     ldpp_dout(dpp, 20) << "ERROR: NSFSAtomicWriter failed writing temp file"
                        << dendl;
     return ret;
+  }
+
+  if (dpp->get_cct()->_conf->rgw_non_md5_etag) {
+    auto it = obj->get_attrs().find(RGW_ATTR_ETAG);
+    if (it != obj->get_attrs().end()) {
+      attrs[RGW_ATTR_ETAG] = it->second;
+    }
   }
 
   /* versioned PUT: link_temp_file already set the version_id xattr,
