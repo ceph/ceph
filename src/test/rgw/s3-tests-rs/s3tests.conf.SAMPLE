@@ -135,6 +135,30 @@ email = quota@example.com
 access_key = QUOTAACCESSKEY01234Q
 secret_key = quotasecretkey0123456789abcdefghijklm
 
+[s3 policy only]
+# A user whose permissions nothing else may depend on.  Tests that attach
+# an identity policy with global reach -- Resource arn:aws:s3:::* -- use
+# this user rather than main or alt, because an explicit deny in an
+# identity policy overrides a bucket-policy allow, and would then deny
+# every concurrently-running test sharing that identity.
+#
+# Optional:  tests needing it skip when it is unset.  Created by vstart.sh.
+
+# policy-only display_name set in vstart.sh
+display_name = policy.only
+
+# policy-only email set in vstart.sh
+email = policy.only@example.com
+
+# policy-only user_id set in vstart.sh
+user_id = s3policyonly
+
+# policy-only AWS access key set in vstart.sh
+access_key = STUVWXYZABCDEFGHIJKL
+
+# policy-only AWS secret key set in vstart.sh
+secret_key = stuvwxyzabcdefghijklmnopqrstuvwxyzabcdef
+
 #following section needs to be added for all sts-tests
 [iam]
 #used for iam operations in sts-tests

@@ -59,6 +59,19 @@ pub struct S3TestConfig {
     pub quota_user_id: String,
     pub quota_email: String,
 
+    /* s3 policy only (optional).  Nothing but the policy tests may depend
+     * on this user's permissions:  tests attach identity policies to it that
+     * have global reach, e.g. Resource arn:aws:s3:::*.
+     * identity policies with global reach, e.g. Resource arn:aws:s3:::*.
+     * Such a policy on a shared user denies concurrently-running tests
+     * that rely on the same identity, which is not a driver bug but is
+     * indistinguishable from one in a parallel run. */
+    pub policy_only_access_key: String,
+    pub policy_only_secret_key: String,
+    pub policy_only_display_name: String,
+    pub policy_only_user_id: String,
+    pub policy_only_email: String,
+
     // s3 tenant
     pub tenant_access_key: String,
     pub tenant_secret_key: String,
@@ -259,6 +272,11 @@ fn load_config() -> Result<S3TestConfig, String> {
         alt_user_id: get_str(&ini, "s3 alt", "user_id")?,
         alt_email: get_str(&ini, "s3 alt", "email")?,
 
+        policy_only_access_key: get_str_or(&ini, "s3 policy only", "access_key", ""),
+        policy_only_secret_key: get_str_or(&ini, "s3 policy only", "secret_key", ""),
+        policy_only_display_name: get_str_or(&ini, "s3 policy only", "display_name", ""),
+        policy_only_user_id: get_str_or(&ini, "s3 policy only", "user_id", ""),
+        policy_only_email: get_str_or(&ini, "s3 policy only", "email", ""),
         quota_access_key: get_str_or(&ini, "s3 quota", "access_key", ""),
         quota_secret_key: get_str_or(&ini, "s3 quota", "secret_key", ""),
         quota_display_name: get_str_or(&ini, "s3 quota", "display_name", ""),

@@ -1,5 +1,5 @@
 use aws_sdk_s3::primitives::ByteStream;
-use s3_tests_rs::client::{get_alt_client, get_iam_client, get_iam_s3client};
+use s3_tests_rs::client::{get_alt_client, get_iam_client, get_policy_only_client, get_iam_s3client};
 use s3_tests_rs::config::get_config;
 use s3_tests_rs::fixtures::get_new_bucket;
 use s3_tests_rs::{assert_s3_err, expect_s3_err};
@@ -1051,13 +1051,27 @@ async fn test_deny_tagging_actions_in_user_policy() {
 
     let bucket = get_new_bucket(Some(&s3_client_alt)).await;
 
+    /* Scoped to this test's own bucket, not arn:aws:s3:::*.
+     *
+     * The policy is attached to the *shared* alt user, so a wildcard
+     * resource denies tagging for every other test using that identity
+     * while it is attached -- and an explicit deny in a user policy
+     * overrides a bucket policy allow, which is exactly what those tests
+     * rely on.  That made tagging::test_put_tags_acl_public and
+     * tagging::test_delete_tags_obj_public fail intermittently under
+     * parallel runs, whichever happened to overlap this window.
+     *
+     * Both forms are needed:  the bare bucket ARN for the bucket-level
+     * actions, and the wildcard-suffixed one for the object-level
+     * actions. */
     let policy = serde_json::json!({
         "Version": "2012-10-17",
         "Statement": {
             "Effect": "Deny",
             "Action": ["s3:PutBucketTagging", "s3:GetBucketTagging",
                        "s3:PutObjectTagging", "s3:DeleteObjectTagging"],
-            "Resource": "arn:aws:s3:::*"
+            "Resource": [format!("arn:aws:s3:::{bucket}"),
+                         format!("arn:aws:s3:::{bucket}/*")]
         }
     })
     .to_string();
@@ -1128,6 +1142,87 @@ async fn test_deny_tagging_actions_in_user_policy() {
         .delete_user_policy()
         .policy_name("DenyAccessPolicy")
         .user_name(&cfg.alt_user_id)
+        .send()
+        .await
+        .unwrap();
+}
+
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_deny_tagging_actions_wildcard_resource() {
+    /* The sibling above scopes its Deny to its own bucket, so it can run
+     * beside anything.  This one keeps Resource arn:aws:s3:::* , which is
+     * the case worth covering separately -- that a wildcard resource in a
+     * user policy matches at all.
+     *
+     * It therefore runs against the policy-only user, whose permissions
+     * nothing else depends on.  Attaching this to the shared alt user is
+     * what made the tagging tests fail intermittently:  an explicit deny
+     * in an identity policy overrides a bucket-policy allow, so any
+     * concurrent test tagging as that identity got a correct 403 that
+     * looked like a driver bug. */
+    if !s3_tests_rs::client::policy_only_configured() {
+        eprintln!("skipping: no [s3 policy only] user configured");
+        return;
+    }
+
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let iam_client = get_iam_client();
+    let s3_client = get_policy_only_client();
+    let cfg = get_config();
+
+    let bucket = get_new_bucket(Some(&s3_client)).await;
+
+    let policy = serde_json::json!({
+        "Version": "2012-10-17",
+        "Statement": {
+            "Effect": "Deny",
+            "Action": ["s3:PutBucketTagging", "s3:GetBucketTagging",
+                       "s3:PutObjectTagging", "s3:DeleteObjectTagging"],
+            "Resource": "arn:aws:s3:::*"
+        }
+    })
+    .to_string();
+
+    iam_client
+        .put_user_policy()
+        .policy_document(&policy)
+        .policy_name("DenyTaggingWildcard")
+        .user_name(&cfg.policy_only_user_id)
+        .send()
+        .await
+        .unwrap();
+
+    let tags = aws_sdk_s3::types::Tagging::builder()
+        .tag_set(
+            aws_sdk_s3::types::Tag::builder()
+                .key("Hello")
+                .value("World")
+                .build()
+                .unwrap(),
+        )
+        .build()
+        .unwrap();
+
+    let result = s3_client
+        .put_bucket_tagging()
+        .bucket(&bucket)
+        .tagging(tags)
+        .send()
+        .await;
+    assert_s3_err!(result, 403, "AccessDenied");
+
+    let result = s3_client
+        .get_bucket_tagging()
+        .bucket(&bucket)
+        .send()
+        .await;
+    assert_s3_err!(result, 403, "AccessDenied");
+
+    iam_client
+        .delete_user_policy()
+        .policy_name("DenyTaggingWildcard")
+        .user_name(&cfg.policy_only_user_id)
         .send()
         .await
         .unwrap();

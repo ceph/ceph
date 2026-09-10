@@ -135,6 +135,18 @@ pub fn get_alt_client() -> S3Client {
     build_s3_client(&cfg.alt_access_key, &cfg.alt_secret_key)
 }
 
+/* Clients for the policy-only user.  Empty credentials mean the category is
+ * not configured;  callers should skip rather than fail, the way the
+ * quota tests treat theirs. */
+pub fn policy_only_configured() -> bool {
+    !get_config().policy_only_access_key.is_empty()
+}
+
+pub fn get_policy_only_client() -> S3Client {
+    let cfg = get_config();
+    build_s3_client(&cfg.policy_only_access_key, &cfg.policy_only_secret_key)
+}
+
 pub fn get_quota_client() -> S3Client {
     let cfg = get_config();
     assert!(!cfg.quota_access_key.is_empty(),
