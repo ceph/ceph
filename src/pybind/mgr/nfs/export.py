@@ -2,10 +2,13 @@ import errno
 import hashlib
 import json
 import logging
+import threading
+from contextlib import contextmanager
 from typing import (
     List,
     Any,
     Dict,
+    Iterator,
     Optional,
     TYPE_CHECKING,
     TypeVar,
@@ -19,13 +22,15 @@ from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 import cephfs
 
 from mgr_util import CephFSEarmarkResolver, open_filesystem
-from rados import TimedOut, ObjectNotFound
+from rados import ObjectNotFound
 
 from object_format import ErrorResponse
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
 from .ganesha_conf import (
     CephFSFSAL,
+    CephUsers,
+    CephUser,
     Export,
     GaneshaConfParser,
     RGWFSAL,
@@ -42,6 +47,7 @@ from .utils import (
     NonFatalError,
     export_obj_name,
     conf_obj_name,
+    ceph_users_obj_name,
     available_clusters,
     check_fs,
     get_nfs_spec_for_cluster,
@@ -62,13 +68,6 @@ log = logging.getLogger(__name__)
 def known_cluster_ids(mgr: 'Module') -> Set[str]:
     """Return the set of known cluster IDs."""
     return set(available_clusters(mgr))
-
-
-def _check_rados_notify(ioctx: Any, obj: str) -> None:
-    try:
-        ioctx.notify(obj)
-    except TimedOut:
-        log.exception("Ganesha timed out")
 
 
 def normalize_path(path: str) -> str:
@@ -185,6 +184,9 @@ class ExportMgr:
         self.rados_pool = POOL_NAME
         self._exports: Optional[Dict[str, List[Export]]] = export_ls
         self.skip_notify_nfs_server = False
+        # One lock per cluster, created on demand, see _ceph_users_locked().
+        self._ceph_users_locks: Dict[str, Any] = {}
+        self._ceph_users_locks_guard = threading.Lock()
 
     def _get_cluster_protocols(self, cluster_id: str) -> List[int]:
         """Get the list of supported NFS protocols for a cluster.
@@ -295,6 +297,151 @@ class ExportMgr:
         )
         log.debug(f"Established user {fsal.user_id} for cephfs {fsal.fs_name}")
 
+    def _get_cephfs_clients_per_pool(self, cluster_id: str) -> Optional[int]:
+        spec = get_nfs_spec_for_cluster(self.mgr, cluster_id)
+        if spec is None:
+            return None
+        n = getattr(spec, 'clients_per_pool', None)
+        if n is None or n < 2:
+            return None
+        return int(n)
+
+    def _uses_cephfs_client_pool(self, cluster_id: str, cmount_path: Optional[str]) -> bool:
+        """Pool users are only used for the default cmount_path=/."""
+        if cmount_path and cmount_path != "/":
+            return False
+        return self._get_cephfs_clients_per_pool(cluster_id) is not None
+
+    def _setup_cephfs_export_credentials(self, export: Export) -> None:
+        fsal = cast(CephFSFSAL, export.fsal)
+        if self._uses_cephfs_client_pool(export.cluster_id, fsal.cmount_path):
+            assert fsal.fs_name
+            pool_users = self._ensure_pool_users_for_fs(export.cluster_id, fsal.fs_name)
+            if pool_users:
+                # The FSAL block carries the first identity of the pool, so the
+                # export stays usable on its own, Ganesha picks a handle out of
+                # the CEPH_USERS block for the actual client pool.
+                primary = pool_users[0]
+                fsal.user_id = primary.user_id
+                fsal.cephx_key = primary.secret_access_key
+                log.debug("Pool mode: export for cephfs %s uses pool user %s",
+                          fsal.fs_name, fsal.user_id)
+                return
+        self._ensure_cephfs_export_user(export)
+
+    @contextmanager
+    def _ceph_users_locked(self, cluster_id: str) -> Iterator[None]:
+        with self._ceph_users_locks_guard:
+            lock = self._ceph_users_locks.setdefault(cluster_id, threading.RLock())
+        with lock:
+            yield
+
+    def _read_ceph_users(self, cluster_id: str) -> Optional[CephUsers]:
+        raw = self._rados(cluster_id).read_obj(ceph_users_obj_name(cluster_id))
+        if raw is None:
+            return None
+        return CephUsers.from_raw(raw)
+
+    def _write_ceph_users(
+            self,
+            cluster_id: str,
+            ceph_users: CephUsers,
+            link: bool = False,
+            should_notify: bool = False
+    ) -> None:
+        rados_obj = self._rados(cluster_id)
+        block = format_block(ceph_users.to_block())
+        obj = ceph_users_obj_name(cluster_id)
+        conf = conf_obj_name(cluster_id)
+        if link:
+            rados_obj.write_obj(block, obj, conf, should_notify=should_notify)
+        else:
+            rados_obj.update_obj(block, obj, conf, should_notify=should_notify)
+
+    def _pool_slot_ids(self, cluster_id: str, fs_name: str) -> List[str]:
+        """The CephX ids a pool of this filesystem is made of, in slot order.
+
+        Derived from the naming scheme alone, so it says what the pool should
+        hold rather than what CEPH_USERS happens to record.
+        """
+        n = self._get_cephfs_clients_per_pool(cluster_id) or 0
+        return [get_pool_user_id(cluster_id, fs_name, i) for i in range(n)]
+
+    def _remove_pool_users(self, users: List[CephUser]) -> None:
+        for user in users:
+            self.mgr.check_mon_command({
+                'prefix': 'auth rm',
+                'entity': f'client.{user.user_id}',
+            })
+            log.info("Deleted pool user %s", user.user_id)
+
+    def _ensure_pool_users_for_fs(self, cluster_id: str, fs_name: str) -> List[CephUser]:
+        n = self._get_cephfs_clients_per_pool(cluster_id)
+        if not n:
+            return []
+        with self._ceph_users_locked(cluster_id):
+            current = self._read_ceph_users(cluster_id)
+            ceph_users = current or CephUsers()
+            wanted = self._pool_slot_ids(cluster_id, fs_name)
+            existing = ceph_users.users_for_fs(fs_name)
+            if [u.user_id for u in existing] == wanted:
+                log.debug("Pool users already exist for fs %s on cluster %s", fs_name, cluster_id)
+                return existing
+            if existing:
+                # The pool on disk is not the size the cluster now asks for.
+                # A cluster removed with `orch rm` and recreated with another
+                # clients_per_pool leaves its CEPH_USERS object behind, and
+                # ganesha refuses a USERS block that does not hold exactly
+                # clients_per_pool identities, so the pool is resized to match
+                # rather than handed back as it is.
+                log.warning(
+                    "Pool of fs %s on cluster %s holds %d users but "
+                    "clients_per_pool is %d, resizing it",
+                    fs_name, cluster_id, len(existing), n
+                )
+                self._remove_pool_users(
+                    [u for u in existing if u.user_id not in set(wanted)])
+                ceph_users.remove_fs(fs_name)
+            # get-or-create returns the key a slot that survived the resize
+            # already had, so only the slots that are really new change.
+            new_users = [
+                CephUser(
+                    user_id=user_id,
+                    secret_access_key=self._create_user_key(cluster_id, user_id, "/", fs_name),
+                    filesystem=fs_name,
+                )
+                for user_id in wanted
+            ]
+            ceph_users.users.extend(new_users)
+            self._write_ceph_users(cluster_id, ceph_users, link=current is None)
+            log.info("Created %s pool users for fs %s on cluster %s", n, fs_name, cluster_id)
+            return new_users
+
+    def _cleanup_pool_users_for_fs(self, cluster_id: str, fs_name: str) -> None:
+        with self._ceph_users_locked(cluster_id):
+            ceph_users = self._read_ceph_users(cluster_id)
+            users_to_rm: List[CephUser] = []
+            if ceph_users:
+                users_to_rm = ceph_users.users_for_fs(fs_name)
+                ceph_users.remove_fs(fs_name)
+            else:
+                users_to_rm = [
+                    CephUser(user_id, '', fs_name)
+                    for user_id in self._pool_slot_ids(cluster_id, fs_name)
+                ]
+            self._remove_pool_users(users_to_rm)
+            if ceph_users is None:
+                return
+            if ceph_users.users:
+                self._write_ceph_users(cluster_id, ceph_users)
+            else:
+                # The last pool of the cluster is gone, so is the object.
+                self._rados(cluster_id).remove_obj(
+                    ceph_users_obj_name(cluster_id),
+                    conf_obj_name(cluster_id),
+                    should_notify=False,
+                )
+
     def _gen_export_id(self, cluster_id: str) -> int:
         exports = sorted([ex.export_id for ex in self.exports[cluster_id]])
         nid = 1
@@ -342,16 +489,27 @@ class ExportMgr:
                 export = self._fetch_export(cluster_id, pseudo_path)
 
             if export:
-                exports_count = 0
+                fs_name = None
+                uses_pool = False
+                if isinstance(export.fsal, CephFSFSAL):
+                    fs_name = export.fsal.fs_name
+                    uses_pool = self._uses_cephfs_client_pool(cluster_id,
+                                                              export.fsal.cmount_path)
                 if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
-                    exports_count = self.get_export_count_with_same_fsal(export.fsal.cmount_path,  # type: ignore
-                                                                         cluster_id, export.fsal.fs_name)  # type: ignore
-                    if exports_count == 1:
-                        self._delete_export_user(export)
+                    if uses_pool:
+                        if fs_name and self.get_export_count_with_same_fsal(
+                                "/", cluster_id, fs_name) == 1:
+                            self._cleanup_pool_users_for_fs(cluster_id, fs_name)
+                    else:
+                        exports_count = self.get_export_count_with_same_fsal(export.fsal.cmount_path,  # type: ignore
+                                                                             cluster_id, export.fsal.fs_name)  # type: ignore
+                        if exports_count == 1:
+                            self._delete_export_user(export)
                 if pseudo_path:
                     self._rados(cluster_id).remove_obj(
                         export_obj_name(export.export_id), conf_obj_name(cluster_id),
                         (not self.skip_notify_nfs_server))
+
                 self.exports[cluster_id].remove(export)
                 if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
                     self._delete_export_user(export)
@@ -380,14 +538,23 @@ class ExportMgr:
         return None
 
     def _update_export(self, cluster_id: str, export: Export,
-                       need_nfs_service_restart: bool) -> None:
+                       need_nfs_service_restart: bool,
+                       defer_reload: bool = False) -> None:
         self.exports[cluster_id].append(export)
         self._rados(cluster_id).update_obj(
             format_block(export.to_export_block()),
             export_obj_name(export.export_id), conf_obj_name(export.cluster_id),
-            should_notify=(not need_nfs_service_restart and not self.skip_notify_nfs_server))
-        if need_nfs_service_restart:
+            should_notify=(not defer_reload and not need_nfs_service_restart
+                           and not self.skip_notify_nfs_server))
+        if need_nfs_service_restart and not defer_reload:
             restart_nfs_service(self.mgr, export.cluster_id)
+
+    def _reload_nfs_service(self, cluster_id: str, need_nfs_service_restart: bool) -> None:
+        """Make ganesha pick up configuration that is already persisted."""
+        if need_nfs_service_restart:
+            restart_nfs_service(self.mgr, cluster_id)
+        elif not self.skip_notify_nfs_server:
+            self._rados(cluster_id).notify_conf(conf_obj_name(cluster_id))
 
     def _validate_cluster_id(self, cluster_id: str) -> None:
         """Raise an exception if cluster_id is not valid."""
@@ -521,11 +688,74 @@ class ExportMgr:
 
     def get_cephfs_export_user_ids(self, cluster_id: str) -> Set[str]:
         """Return CephFS export user_ids for the cluster."""
-        return {
+        user_ids = {
             export.fsal.user_id
             for export in self.exports.get(cluster_id, [])
-            if isinstance(export.fsal, CephFSFSAL) and export.fsal.user_id
+            if isinstance(export.fsal, CephFSFSAL)
+            and export.fsal.user_id
         }
+        ceph_users = self._read_ceph_users(cluster_id)
+        if ceph_users:
+            user_ids.update(u.user_id for u in ceph_users.users if u.user_id)
+        return user_ids
+
+    def _refresh_pool_user_keys(
+            self,
+            cluster_id: str,
+            entity_set: Set[str]
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Re-fetch rotated CephX keys into CEPH_USERS.
+
+        Returns the pool user ids that were rewritten and the ones that could
+        not be. The write is quiet: the caller knows whether an export write
+        follows that will make ganesha reread anyway.
+        """
+        with self._ceph_users_locked(cluster_id):
+            ceph_users = self._read_ceph_users(cluster_id)
+            if not ceph_users or not ceph_users.users:
+                return [], []
+
+            updated: List[str] = []
+            stale: List[str] = []
+
+            for user in ceph_users.users:
+                entity = f'client.{user.user_id}'
+                if entity not in entity_set:
+                    continue
+                old_key = user.secret_access_key
+                try:
+                    key = self._create_user_key(
+                        cluster_id, user.user_id, "/", user.filesystem)
+                    if key == old_key:
+                        log.warning(
+                            "Pool user %s key did not change after rotate",
+                            user.user_id
+                        )
+                    user.secret_access_key = key
+                    updated.append(user.user_id)
+                except Exception:
+                    stale.append(user.user_id)
+                    log.exception(
+                        "Failed to update pool user %s after key rotation",
+                        user.user_id
+                    )
+
+            if updated:
+                try:
+                    self._write_ceph_users(cluster_id, ceph_users)
+                except Exception:
+                    log.exception(
+                        "Failed to write CEPH_USERS for cluster %s after key rotation",
+                        cluster_id
+                    )
+                    # Nothing was persisted, so none of them made it.
+                    return [], stale + updated
+                log.info(
+                    "Updated CEPH_USERS for cluster %s after rotating pool users %s",
+                    cluster_id, updated
+                )
+            return updated, stale
 
     def refresh_export_keys(
             self,
@@ -541,23 +771,27 @@ class ExportMgr:
         rotated, so an export left behind is one Ganesha cannot authenticate.
         """
         entity_set = {normalize_auth_entity(e) for e in entities}
+        matching = [
+            export for export in self.exports.get(cluster_id, [])
+            if isinstance(export.fsal, CephFSFSAL) and export.fsal.user_id
+            and f'client.{export.fsal.user_id}' in entity_set
+        ]
+        # The CEPH_USERS write is quiet, every export write that follows
+        # notifies ganesha on its own, as it does outside key rotation.
+        pool_updated, stale = self._refresh_pool_user_keys(cluster_id, entity_set)
+
         updated_pseudos: List[str] = []
         stale_pseudos: List[str] = []
 
-        for export in list(self.exports.get(cluster_id, [])):
-            if not isinstance(export.fsal, CephFSFSAL) or not export.fsal.user_id:
-                continue
-            entity = f'client.{export.fsal.user_id}'
-            if entity not in entity_set:
-                continue
-
-            old_key = export.fsal.cephx_key
+        for export in matching:
+            fsal = cast(CephFSFSAL, export.fsal)
+            old_key = fsal.cephx_key
             try:
                 self._ensure_cephfs_export_user(export)
-                if export.fsal.cephx_key == old_key:
+                if fsal.cephx_key == old_key:
                     log.warning(
                         "Export %s key for user %s did not change after rotate",
-                        export.pseudo, export.fsal.user_id
+                        export.pseudo, fsal.user_id
                     )
                 self.exports[cluster_id].remove(export)
                 self._update_export(cluster_id, export, need_nfs_service_restart=False)
@@ -569,9 +803,26 @@ class ExportMgr:
             updated_pseudos.append(export.pseudo)
             log.info(
                 "Updated export %s with rotated key for user %s",
-                export.pseudo, export.fsal.user_id
+                export.pseudo, fsal.user_id
             )
-        return updated_pseudos, stale_pseudos
+
+        if pool_updated and not updated_pseudos and not self.skip_notify_nfs_server:
+            # No export write happened, or every one of them failed, but the
+            # pool's new keys are persisted: notify here so ganesha does not
+            # keep using a credential that no longer exists.
+            log.info(
+                "Notifying ganesha for cluster %s: pool users %s were rotated "
+                "but no export write succeeded to announce it",
+                cluster_id, pool_updated
+            )
+            try:
+                self._rados(cluster_id).notify_conf(conf_obj_name(cluster_id))
+            except Exception:
+                log.exception(
+                    "Failed to notify ganesha for cluster %s after rotating "
+                    "pool users %s", cluster_id, pool_updated
+                )
+        return updated_pseudos, stale + stale_pseudos
 
     # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
     # Do not change interface without updating the Dashboard code
@@ -796,7 +1047,10 @@ class ExportMgr:
             if fsal["cmount_path"] != "/":
                 _validate_cmount_path(fsal["cmount_path"], path)  # type: ignore
 
-            user_id = f"nfs.{get_user_id(cluster_id, fs_name, fsal['cmount_path'])}"
+            cmount_path = fsal.get("cmount_path", "/")
+            # In client-pool mode the FSAL still carries slot 0 of the pool,
+            # which is this very id, so the rule is the same either way.
+            user_id = f"nfs.{get_user_id(cluster_id, fs_name, cmount_path)}"
             if "user_id" in fsal and fsal["user_id"] != user_id:
                 raise NFSInvalidOperation(f"export FSAL user_id must be '{user_id}'")
         else:
@@ -814,9 +1068,10 @@ class ExportMgr:
             raise NFSInvalidOperation("Can't set Transport as RDMA as RDMA not enabled at NFS cluster level")
 
         export = Export.from_dict(ex_id, ex_dict)
-        if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
-            self._ensure_cephfs_export_user(export)
         export.validate(self.mgr)
+
+        if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
+            self._setup_cephfs_export_credentials(export)
         log.debug("Successfully created %s export-%s from dict for cluster %s",
                   fsal_type, ex_id, cluster_id)
         return export
@@ -872,7 +1127,6 @@ class ExportMgr:
                 earmark_resolver
             )
             log.debug("creating cephfs export %s", export)
-            self._ensure_cephfs_export_user(export)
             self._save_export(cluster_id, export)
             result = {
                 "bind": export.pseudo,
@@ -984,6 +1238,17 @@ class ExportMgr:
         if 'protocols' not in new_export_dict:
             new_export_dict['protocols'] = self._get_cluster_protocols(cluster_id)
 
+        if old_export:
+            if fsal_dict and fsal_dict.get('name') != old_export.fsal.name:
+                raise NFSInvalidOperation('FSAL change not allowed')
+            if new_export_dict.get('qos_block'):
+                old_qos = {}
+                if old_export.qos_block:
+                    old_qos = old_export.qos_block.to_dict()
+                export_dict_qos_bw_ops_checks(
+                    cluster_id, self.mgr,
+                    dict(new_export_dict.get('qos_block', {})), old_qos)
+
         new_export = self.create_export_from_dict(
             cluster_id,
             new_export_dict.get('export_id', self._gen_export_id(cluster_id)),
@@ -998,8 +1263,6 @@ class ExportMgr:
             return {"pseudo": new_export.pseudo, "state": "added"}
 
         need_nfs_service_restart = True
-        if old_export.fsal.name != new_export.fsal.name:
-            raise NFSInvalidOperation('FSAL change not allowed')
         if old_export.pseudo != new_export.pseudo:
             log.debug('export %s pseudo %s -> %s',
                       new_export.export_id, old_export.pseudo, new_export.pseudo)
@@ -1007,7 +1270,6 @@ class ExportMgr:
         if old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
             old_fsal = cast(CephFSFSAL, old_export.fsal)
             new_fsal = cast(CephFSFSAL, new_export.fsal)
-            self._ensure_cephfs_export_user(new_export)
             need_nfs_service_restart = not (old_fsal.user_id == new_fsal.user_id
                                             and old_fsal.fs_name == new_fsal.fs_name
                                             and old_export.path == new_export.path
@@ -1024,17 +1286,44 @@ class ExportMgr:
             elif old_rgw_fsal.secret_access_key != new_rgw_fsal.secret_access_key:
                 raise NFSInvalidOperation('secret_access_key change is not allowed')
 
-        # check QOS
-        if new_export_dict.get('qos_block'):
-            old_qos = {}
-            if old_export.qos_block:
-                old_qos = old_export.qos_block.to_dict()
-            export_dict_qos_bw_ops_checks(cluster_id, self.mgr, dict(new_export_dict.get('qos_block', {})),
-                                          old_qos)
-
         self.exports[cluster_id].remove(old_export)
 
-        self._update_export(cluster_id, new_export, need_nfs_service_restart)
+        # The export that leaves a client pool behind is the only user of that
+        # pool left, so the pool has to go, but only once the export that
+        # replaces it is safely on disk: see below.
+        orphaned_pool_fs: Optional[str] = None
+        if (old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]
+                and new_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]):
+            old_fsal = cast(CephFSFSAL, old_export.fsal)
+            new_fsal = cast(CephFSFSAL, new_export.fsal)
+            old_fs = old_fsal.fs_name
+            new_uses_same_pool = (
+                old_fs
+                and new_fsal.fs_name == old_fs
+                and self._uses_cephfs_client_pool(cluster_id, new_fsal.cmount_path)
+            )
+            if (old_fs
+                    and self._uses_cephfs_client_pool(cluster_id, old_fsal.cmount_path)
+                    and not new_uses_same_pool
+                    and self.get_export_count_with_same_fsal("/", cluster_id, old_fs) == 0):
+                orphaned_pool_fs = old_fs
+
+        if orphaned_pool_fs is None:
+            self._update_export(cluster_id, new_export, need_nfs_service_restart)
+            return {"pseudo": new_export.pseudo, "state": "updated"}
+
+        # Write the replacement export before revoking the pool it is moving
+        # away from. The export object on disk still carries the old pool's
+        # credentials until that write lands, so tearing the pool down first
+        # would leave a working export unable to authenticate if the write
+        # failed. Ganesha is told once, after both changes are persisted, so it
+        # never reloads a configuration that is half way through the move.
+        self._update_export(cluster_id, new_export, need_nfs_service_restart,
+                            defer_reload=True)
+        try:
+            self._cleanup_pool_users_for_fs(cluster_id, orphaned_pool_fs)
+        finally:
+            self._reload_nfs_service(cluster_id, need_nfs_service_restart)
 
         return {"pseudo": new_export.pseudo, "state": "updated"}
 
@@ -1046,7 +1335,9 @@ class ExportMgr:
         exports = self.list_exports(cluster_id, detailed=True)
         exports_count = 0
         for export in exports:
-            if export['fsal']['name'] == 'CEPH' and export['fsal']['cmount_path'] == cmount_path and export['fsal']['fs_name'] == fs_name:
+            if (export['fsal']['name'] == 'CEPH'
+                    and export['fsal'].get('cmount_path', '/') == cmount_path
+                    and export['fsal']['fs_name'] == fs_name):
                 exports_count += 1
         return exports_count
 
@@ -1177,3 +1468,9 @@ def get_user_id(cluster_id: str, fs_name: str, cmount_path: str) -> str:
     unique_id = f"{cluster_id}.{fs_name}.{hash_hex[:8]}"  # Use the first 8 characters of the hash
 
     return unique_id
+
+
+def get_pool_user_id(cluster_id: str, fs_name: str, index: int) -> str:
+    if index == 0:
+        return f"nfs.{get_user_id(cluster_id, fs_name, '/')}"
+    return f"nfs.{cluster_id}.{fs_name}.pool.{index}"

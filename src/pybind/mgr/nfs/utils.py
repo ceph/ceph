@@ -21,6 +21,7 @@ EXPORT_PREFIX: str = "export-"
 CONF_PREFIX: str = "conf-nfs."
 USER_CONF_PREFIX: str = "userconf-nfs."
 QOS_CONF_PREFIX: str = "qosconf-nfs."
+CEPH_USERS_CONF_PREFIX: str = "ceph-users-nfs."
 
 log = logging.getLogger(__name__)
 
@@ -83,6 +84,11 @@ def user_conf_obj_name(cluster_id: str) -> str:
 def qos_conf_obj_name(cluster_id: str) -> str:
     """Return a rados object name for the qos config."""
     return f"{QOS_CONF_PREFIX}{cluster_id}"
+
+
+def ceph_users_obj_name(cluster_id: str) -> str:
+    """Return a rados object name for the CEPH_USERS (client pool) config."""
+    return f"{CEPH_USERS_CONF_PREFIX}{cluster_id}"
 
 
 def available_clusters(mgr: 'Module') -> List[str]:

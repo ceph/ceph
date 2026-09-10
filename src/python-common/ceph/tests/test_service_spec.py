@@ -907,6 +907,27 @@ def test_nfs_spec_cephfs_client_log_dir_rejects_root_aliases(log_dir):
         ).validate()
 
 
+@pytest.mark.parametrize('clients_per_pool', [2, 3, 64])
+def test_nfs_spec_clients_per_pool_accepted(clients_per_pool):
+    """Pool sizes within the range NFS-Ganesha supports are accepted."""
+    NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        clients_per_pool=clients_per_pool,
+    ).validate()
+
+
+@pytest.mark.parametrize('clients_per_pool', [-1, 0, 1, 65, 1000])
+def test_nfs_spec_clients_per_pool_out_of_range(clients_per_pool):
+    """Ganesha rejects pools outside 2..64, so the spec must not accept them."""
+    with pytest.raises(SpecValidationError, match='clients_per_pool'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            clients_per_pool=clients_per_pool,
+        ).validate()
+
+
 def test_repr():
     val = """ServiceSpec.from_json(yaml.safe_load('''service_type: crash
 service_name: crash
