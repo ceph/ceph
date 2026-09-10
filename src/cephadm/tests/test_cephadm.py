@@ -56,6 +56,40 @@ def bootstrap_test_ctx(*args, **kwargs):
 
 class TestCephAdm(object):
 
+    def test_extract_keyring_secret_ignores_caps_and_formatting(self):
+        secret = 'AQBexample=='
+        full_keyring = dedent(f'''\
+            [osd.0]
+                    key = {secret}
+                    caps mgr = "allow profile osd"
+                    caps mon = "allow profile osd"
+                    caps osd = "allow *"
+        ''')
+        minimal_keyring = f'[osd.0]\nkey = {secret}\n'
+
+        pending_keyring = (
+            f'[osd.0]\nkey = old-secret\npending key = {secret}\n')
+
+        assert _cephadm._extract_keyring_secret(full_keyring) == secret
+        assert _cephadm._extract_keyring_secret(minimal_keyring) == secret
+        assert _cephadm._extract_keyring_secret(pending_keyring) == secret
+
+    def test_osd_keyring_comparison_uses_secret(self):
+        secret = 'AQBexample=='
+        minimal_keyring = f'[osd.0]\nkey = {secret}\n'
+        full_keyring = (
+            f'[osd.0]\n\tkey = {secret}\n'
+            '\tcaps mgr = "allow profile osd"\n'
+            '\tcaps mon = "allow profile osd"\n'
+            '\tcaps osd = "allow *"\n'
+        )
+        changed_keyring = '[osd.0]\nkey = AQBchanged==\n'
+
+        assert not _cephadm._keyring_secrets_differ(
+            minimal_keyring, full_keyring)
+        assert _cephadm._keyring_secrets_differ(
+            minimal_keyring, changed_keyring)
+
     @mock.patch('cephadm.logger')
     def test_attempt_bind(self, _logger):
         from cephadmlib.net_utils import PortOccupiedError, attempt_bind

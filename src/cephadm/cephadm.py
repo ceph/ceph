@@ -639,6 +639,26 @@ def lookup_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -
         raise Error('Failed to get unit name for {}'.format(daemon))
 
 
+def _extract_keyring_secret(keyring: str) -> Optional[str]:
+    """Extract the effective secret from a cephx keyring."""
+    secrets: Dict[str, str] = {}
+    for line in keyring.splitlines():
+        name, separator, value = line.partition('=')
+        name = name.strip().replace('_', ' ')
+        if separator and name in ('key', 'pending key'):
+            secrets[name] = value.strip()
+    return secrets.get('pending key') or secrets.get('key')
+
+
+def _keyring_secrets_differ(old_keyring: str, new_keyring: str) -> bool:
+    old_secret = _extract_keyring_secret(old_keyring)
+    new_secret = _extract_keyring_secret(new_keyring)
+    if old_secret is None or new_secret is None:
+        # Retain the whole-file comparison for malformed keyrings.
+        return old_keyring != new_keyring
+    return old_secret != new_secret
+
+
 def create_daemon_dirs(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -670,13 +690,9 @@ def create_daemon_dirs(
         except Exception:
             pass
         update_bluestore_label_osd_keyring = False
-        if (
-            ident.daemon_type == 'osd'
-            and key_path_exists
-            and key_path_content != keyring
-        ):
-            # need to update keyring with ceph-bluestore-tool
-            update_bluestore_label_osd_keyring = True
+        if ident.daemon_type == 'osd' and key_path_exists:
+            update_bluestore_label_osd_keyring = _keyring_secrets_differ(
+                key_path_content, keyring)
         with write_new(keyring_path, owner=(uid, gid)) as f:
             f.write(keyring)
         if update_bluestore_label_osd_keyring:
