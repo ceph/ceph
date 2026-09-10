@@ -584,6 +584,17 @@ PeeringState* ECPeeringTestFixture::create_peering_state_common(
 
 pg_t ECPeeringTestFixture::split_pg()
 {
+  // This harness supports exactly one 1→2 PG split.  Multiple splits or an
+  // N-way split are not modelled: child listeners/states/collections are stored
+  // in flat maps indexed by shard, so a second call would silently overwrite
+  // them.  A single 1→2 split is sufficient to reproduce all known split-
+  // related bugs; assert the pool is still at pg_num 1 to catch misuse.
+  {
+    const pg_pool_t* p = osdmap->get_pg_pool(pool_id);
+    ceph_assert(p != nullptr);
+    ceph_assert(p->get_pg_num() == 1 && "split_pg() supports only a single 1→2 split");
+  }
+
   const unsigned new_pg_num = 2;
   const unsigned split_bits = pgid.get_split_bits(new_pg_num);
   child_pgid = pg_t(1, pool_id);  // seed 1 = child of seed 0 for pg_num 1 -> 2
