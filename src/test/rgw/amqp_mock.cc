@@ -311,15 +311,20 @@ int amqp_simple_wait_frame_noblock(amqp_connection_state_t state, amqp_frame_t *
     usleep(tv->tv_sec*1000000+tv->tv_usec);
     // read from queue
     if (g_multiple) {
-      // pop multiples and reply once at the end
+      // pop up to "tag skip" replies and reply once for the last one popped.
+      // replies already popped must not be dropped if the queue runs out
+      // before that, otherwise their callbacks are never invoked
+      auto popped = 0U;
       for (auto i = 0U; i < g_tag_skip; ++i) {
-        if (REPLY_ACK && !state->ack_list.pop(state->ack)) {
-          // queue is empty
-          return AMQP_STATUS_TIMEOUT;
-        } else if (!REPLY_ACK && !state->nack_list.pop(state->nack)) {
-          // queue is empty
-          return AMQP_STATUS_TIMEOUT;
+        if (!(REPLY_ACK ? state->ack_list.pop(state->ack) :
+                          state->nack_list.pop(state->nack))) {
+          break;
         }
+        ++popped;
+      }
+      if (popped == 0) {
+        // queue is empty
+        return AMQP_STATUS_TIMEOUT;
       }
       if (REPLY_ACK) {
         state->ack.multiple = g_multiple;
