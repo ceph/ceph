@@ -399,3 +399,32 @@ class TestNodeProxyCacheSave:
         key, value = cache.mgr.set_store.call_args[0]
         assert 'host01' in key
         assert json.loads(value) == data
+
+
+class TestNodeProxyCacheCommon:
+    def _make_cache(self) -> NodeProxyCache:
+        mgr = MagicMock()
+        mgr.get_store = MagicMock(return_value='{}')
+        mgr.set_store = MagicMock()
+        mgr.inventory = {}
+        cache = NodeProxyCache(mgr)
+        cache.data = {
+            'at4n1': {'sn': '1', 'status': {'storage': {}, 'fcm': {'local': {'nvme0n1': {}}}}},
+            'at4n2': {'sn': '2', 'status': {'storage': {}, 'fans': {}}},
+        }
+        return cache
+
+    def test_common_includes_hosts_missing_component(self):
+        cache = self._make_cache()
+        result = cache.common('fcm')
+        assert result['at4n1'] == {'local': {'nvme0n1': {}}}
+        assert result['at4n2'] == {}
+
+    def test_common_hostname_without_component_returns_empty(self):
+        cache = self._make_cache()
+        assert cache.common('fcm', hostname='at4n2') == {'at4n2': {}}
+
+    def test_common_hostname_with_component(self):
+        cache = self._make_cache()
+        result = cache.common('fcm', hostname='at4n1')
+        assert result == {'at4n1': {'local': {'nvme0n1': {}}}}
