@@ -1393,11 +1393,12 @@ void ECCommon::RecoveryBackend::update_object_size_after_read(
     read_result_t &res,
     read_request_t &req) {
   // We didn't know the size before, meaning the zero for decode calculations
-  // will be off. Recalculate them!
+  // will be off. Recalculate them! Use the object's per-object chunk size.
+  const auto obj_sinfo = sinfo.for_object_chunk_size(req.chunk_size);
   ECUtil::shard_extent_set_t zero_mask(sinfo.get_k_plus_m());
-  sinfo.for_default().ro_size_to_zero_mask(size, zero_mask);
+  obj_sinfo.ro_size_to_zero_mask(size, zero_mask);
   ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
-  sinfo.for_default().ro_size_to_read_mask(size, read_mask);
+  obj_sinfo.ro_size_to_read_mask(size, read_mask);
   extent_set superset = res.buffers_read.get_extent_superset();
 
   for (auto &&[shard, eset] : zero_mask) {
@@ -1627,8 +1628,16 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           read_size = read_to_end;
         }
       }
-      sinfo.for_default().ro_range_to_shard_extent_set_with_parity(
-        op.recovery_progress.data_recovered_to, read_size, want);
+      // Use the object's per-object chunk size when known (it may not be on
+      // the very first read of an object whose OI has not been fetched yet, in
+      // which case this falls back to the pool default).
+      {
+        const uint64_t ec_cs = op.obc ? op.obc->obs.oi.ec_chunk_size
+                                      : op.recovery_info.oi.ec_chunk_size;
+        sinfo.for_object_chunk_size(ec_cs).
+          ro_range_to_shard_extent_set_with_parity(
+            op.recovery_progress.data_recovered_to, read_size, want);
+      }
 
       op.recovery_progress.data_recovered_to += read_size;
       available -= read_size;
