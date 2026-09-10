@@ -248,7 +248,12 @@ Deployment notes
   still start, so the gateway's fence (lease plus
   ``rgw_cuobj_fence_drain_ms``, applied before any fallback rewrite)
   outlasts lease-plus-transport-drain and the window is quiescent
-  before it is written again. The lease is measured against the
+  before it is written again. An OSD also re-checks its PG read lease
+  (``readable_until``) immediately before starting a push, since the
+  readability check at dispatch does not cover a read that stalled
+  afterward: a primary that has lost contact with its peers delivers
+  inline rather than write into a window the new acting set may
+  already be serving. The delivery lease is measured against the
   wall clock, so it is best-effort fencing across clock steps —
   size it with slack rather than treating it as a hard barrier. The
   ``cuobj status`` OSD admin-socket command exposes plan and

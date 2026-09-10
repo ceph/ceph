@@ -9370,6 +9370,18 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
   if (m->get_retry_attempt() > 0) {
     return false;
   }
+  // check_laggy ran at dispatch, but the push runs after the read
+  // completes; a read that stalled in between can find the PG's read
+  // lease has lapsed. Past readable_until another acting set may be
+  // serving this object (and the client re-driving the request into
+  // the same window), so a push now would be a stale write - deliver
+  // inline, the same way a laggy PG stops serving reads.
+  if (osd->get_mnow() > recovery_state.get_readable_until()) {
+    dout(10) << __func__ << " past readable_until "
+	     << recovery_state.get_readable_until()
+	     << ", delivering inline" << dendl;
+    return false;
+  }
   // the pool's delivery lease bounds how long after receipt a push may
   // still start; the client waits it out before reusing the window,
   // so a late push must degrade to inline rather than race that reuse
