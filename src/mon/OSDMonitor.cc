@@ -14668,12 +14668,19 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
     }
     break;
   default:
-    if (!session->is_capable("osd", MON_CAP_W)) {
-      dout(0) << "got pool op from entity with insufficient privileges. "
-              << "message: " << *m  << std::endl
-              << "caps: " << session->caps << dendl;
-      _pool_op_reply(op, -EPERM, osdmap.get_epoch());
-      return true;
+    {
+      // pool create can also be authorized by an 'osd pool create' command
+      // grant; MPoolOp carries no command name, so supply one here
+      const char *cmd = (m->op == POOL_OP_CREATE) ? "osd pool create" : "";
+      if (!session->caps.is_capable(
+            cct, session->entity_name, "osd", cmd, {},
+            false, true, false, session->get_peer_socket_addr())) {
+        dout(0) << "got pool op from entity with insufficient privileges. "
+                << "message: " << *m  << std::endl
+                << "caps: " << session->caps << dendl;
+        _pool_op_reply(op, -EPERM, osdmap.get_epoch());
+        return true;
+      }
     }
     break;
   }
