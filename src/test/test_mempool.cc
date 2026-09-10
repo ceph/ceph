@@ -18,6 +18,7 @@
 #include <stdio.h>
 
 #include <iostream> // for std::cout
+#include <thread>
 
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
