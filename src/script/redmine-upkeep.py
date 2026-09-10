@@ -1053,7 +1053,7 @@ class RedmineUpkeep:
             return False
 
 
-    @transformation(10000)
+    @transformation(100)
     def _transform_create_backports(self, issue_update):
         """
         Transformation: Creates missing backport issues when the main issue is in
