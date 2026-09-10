@@ -2,7 +2,9 @@ use aws_sdk_s3::error::ProvideErrorMetadata;
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Utc};
 
-use crate::client::{get_alt_client, get_client, get_quota_client, get_tenant_client};
+use crate::client::{
+    get_alt_client, get_client, get_policy_only_client, get_quota_client, get_tenant_client,
+};
 use crate::config::get_config;
 
 const NUKE_BATCH_SIZE: i32 = 1000;
@@ -25,6 +27,12 @@ pub async fn nuke_bucket(client: &S3Client, bucket: &str) -> Result<(), Box<dyn 
             }
         }
     }
+
+    /* Incomplete multipart uploads keep a bucket non-empty but appear in
+     * neither list_objects nor list_object_versions, so a bucket holding
+     * one can never be deleted however thoroughly the object listings are
+     * drained.  Abort them before draining. */
+    abort_multipart_uploads(client, bucket).await;
 
     let mut max_retain_date: Option<DateTime<Utc>> = None;
 
@@ -86,6 +94,15 @@ pub async fn nuke_bucket(client: &S3Client, bucket: &str) -> Result<(), Box<dyn 
 
         for err in result.errors() {
             if err.code() != Some("AccessDenied") {
+                /* Anything else here is why a later delete_bucket will
+                 * report BucketNotEmpty:  the object survived and nothing
+                 * said so.  Report it rather than discarding it. */
+                eprintln!(
+                    "nuke_bucket {bucket}: delete_objects left {} ({}): {}",
+                    err.key().unwrap_or("?"),
+                    err.code().unwrap_or("?"),
+                    err.message().unwrap_or("")
+                );
                 continue;
             }
             if let (Some(key), Some(vid)) = (err.key(), err.version_id()) {
@@ -207,6 +224,49 @@ pub async fn nuke_bucket(client: &S3Client, bucket: &str) -> Result<(), Box<dyn 
     Ok(())
 }
 
+async fn abort_multipart_uploads(client: &S3Client, bucket: &str) {
+    let mut key_marker: Option<String> = None;
+    let mut upload_id_marker: Option<String> = None;
+
+    loop {
+        let mut req = client.list_multipart_uploads().bucket(bucket);
+        if let Some(ref km) = key_marker {
+            req = req.key_marker(km);
+        }
+        if let Some(ref um) = upload_id_marker {
+            req = req.upload_id_marker(um);
+        }
+
+        let listing = match req.send().await {
+            Ok(l) => l,
+            /* the bucket may be gone, or the driver may not support the
+             * listing;  either way there is nothing to abort */
+            Err(_) => return,
+        };
+
+        for u in listing.uploads() {
+            if let (Some(key), Some(id)) = (u.key(), u.upload_id()) {
+                let _ = client
+                    .abort_multipart_upload()
+                    .bucket(bucket)
+                    .key(key)
+                    .upload_id(id)
+                    .send()
+                    .await;
+            }
+        }
+
+        if !listing.is_truncated().unwrap_or(false) {
+            return;
+        }
+        key_marker = listing.next_key_marker().map(|s| s.to_string());
+        upload_id_marker = listing.next_upload_id_marker().map(|s| s.to_string());
+        if key_marker.is_none() && upload_id_marker.is_none() {
+            return;
+        }
+    }
+}
+
 pub async fn nuke_prefixed_buckets(client: &S3Client, prefix: &str) {
     let response = match client.list_buckets().send().await {
         Ok(r) => r,
@@ -235,23 +295,31 @@ pub async fn nuke_prefixed_buckets(client: &S3Client, prefix: &str) {
     while set.join_next().await.is_some() {}
 }
 
+pub async fn nuke_all_prefixed_public(prefix: &str) {
+    nuke_all_prefixed(prefix).await
+}
+
 async fn nuke_all_prefixed(prefix: &str) {
     let client = get_client();
     let alt_client = get_alt_client();
     let tenant_client = get_tenant_client();
     let cfg = get_config();
     let has_quota = !cfg.quota_access_key.is_empty();
+    let has_policy_only = !cfg.policy_only_access_key.is_empty();
 
     let main_f = nuke_prefixed_buckets(&client, prefix);
     let alt_f = nuke_prefixed_buckets(&alt_client, prefix);
     let tenant_f = nuke_prefixed_buckets(&tenant_client, prefix);
+    tokio::join!(main_f, alt_f, tenant_f);
 
+    /* a bucket can only be deleted by its owner, so every configured
+     * category needs sweeping;  one missed here is a category whose
+     * buckets nothing can ever remove */
     if has_quota {
-        let quota_client = get_quota_client();
-        let quota_f = nuke_prefixed_buckets(&quota_client, prefix);
-        tokio::join!(main_f, alt_f, tenant_f, quota_f);
-    } else {
-        tokio::join!(main_f, alt_f, tenant_f);
+        nuke_prefixed_buckets(&get_quota_client(), prefix).await;
+    }
+    if has_policy_only {
+        nuke_prefixed_buckets(&get_policy_only_client(), prefix).await;
     }
 }
 

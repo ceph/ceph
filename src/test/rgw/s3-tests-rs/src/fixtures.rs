@@ -14,13 +14,6 @@ static CREATED_BUCKETS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 static SERVER_DEAD: AtomicBool = AtomicBool::new(false);
 
-fn track_bucket(_client: &S3Client, name: &str) {
-    CREATED_BUCKETS
-        .lock()
-        .unwrap()
-        .push(name.to_string());
-}
-
 /// Register a bucket for cleanup that was created directly (not via get_new_bucket).
 pub fn register_bucket_for_cleanup(_client: &S3Client, name: &str) {
     CREATED_BUCKETS.lock().unwrap().push(name.to_string());
@@ -43,12 +36,26 @@ async fn cleanup_tracked_buckets_inner() {
         let c = client.clone();
         set.spawn(async move {
             if let Err(e) = nuke_bucket(&c, &name).await {
-                eprintln!("cleanup: failed to nuke {name}: {e}");
+                eprintln!("cleanup: failed to nuke {name}: {e:?}");
             }
         });
     }
 
     while set.join_next().await.is_some() {}
+
+    /* Backstop.  The pass above is best-effort:  it nukes as the *main*
+     * client whatever the bucket's owner, it gets one attempt with no
+     * retry, and it only knows about buckets that were tracked.  Sweep
+     * the prefix afterwards to catch what it missed.
+     *
+     * This is safe to do per test because the bucket prefix carries a
+     * per-process random component (choose_bucket_prefix), so the sweep
+     * only ever matches this process's own buckets -- under nextest each
+     * test is its own process, and concurrent tests have different
+     * prefixes.  It also sweeps as each configured category's own client,
+     * which is the only way a non-main-owned bucket can be removed at
+     * all. */
+    crate::cleanup::nuke_all_prefixed_public(&get_config().bucket_prefix).await;
 }
 
 /// RAII guard that cleans up all tracked buckets when dropped.
@@ -110,10 +117,27 @@ impl Drop for TestGuard {
     }
 }
 
+/* Registers the name it hands out, so cleanup covers a bucket however it
+ * was created.
+ *
+ * Most tests create buckets through get_new_bucket(), which tracked them
+ * already.  But 116 call sites do `client.create_bucket()` directly --
+ * they still need a prefixed name, so they come here first -- and only
+ * two of them ever called register_bucket_for_cleanup().  The rest were
+ * invisible to cleanup and leaked;  a baseline run left 174 buckets
+ * behind, enough to exhaust the 1000-bucket user quota in five runs and
+ * then fail the whole suite with TooManyBuckets.
+ *
+ * Registering here rather than at each creation means no call site has to
+ * remember, and a future test cannot forget.  Registering a name that is
+ * never created is harmless:  nuke_bucket()'s first delete returns
+ * NoSuchBucket, which it treats as success. */
 pub fn get_new_bucket_name() -> String {
     let cfg = get_config();
     let num = BUCKET_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{}{}", cfg.bucket_prefix, num)
+    let name = format!("{}{}", cfg.bucket_prefix, num);
+    CREATED_BUCKETS.lock().unwrap().push(name.clone());
+    name
 }
 
 pub async fn get_new_bucket(client: Option<&S3Client>) -> String {
@@ -131,7 +155,7 @@ pub async fn get_new_bucket(client: Option<&S3Client>) -> String {
         .send()
         .await
         .expect("Failed to create bucket");
-    track_bucket(c, &name);
+    /* already registered by get_new_bucket_name() */
     name
 }
 
