@@ -8139,7 +8139,6 @@ void BlueStore::_close_around_db()
 
 int BlueStore::open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair)
 {
-  _kv_only = true;
   int r = _open_db_and_around(read_only, to_repair);
   if (r == 0) {
     *pdb = db;
@@ -9597,21 +9596,19 @@ out_path:
 
 int BlueStore::umount_readonly()
 {
-  ceph_assert(_kv_only || mounted);
+  ceph_assert(mounted);
   _osr_drain_all();
 
   mounted = false;
 
-  if (!_kv_only) {
-    mempool_thread.shutdown();
-    dout(20) << __func__ << " stopping kv thread" << dendl;
-    _kv_stop();
-    // skip cache cleanup step on fast shutdown
-    if (likely(!m_fast_shutdown)) {
-      _shutdown_cache();
-    }
-    dout(20) << __func__ << " closing" << dendl;
+  mempool_thread.shutdown();
+  dout(20) << __func__ << " stopping kv thread" << dendl;
+  _kv_stop();
+  // skip cache cleanup step on fast shutdown
+  if (likely(!m_fast_shutdown)) {
+    _shutdown_cache();
   }
+  dout(20) << __func__ << " closing" << dendl;
   return _umount_readonly();
 }
 
@@ -9653,7 +9650,6 @@ int BlueStore::_mount()
     }
   }
   debug_extent_map_encode_check = cct->_conf.get_val<bool>("bluestore_debug_extent_map_encode_check");
-  _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);
     if (rc < 0)
@@ -9742,7 +9738,7 @@ int BlueStore::_mount()
 int BlueStore::umount()
 {
   dout(5) << __func__ << dendl;
-  ceph_assert(_kv_only || mounted);
+  ceph_assert(mounted);
   _osr_drain_all();
 
   if (bluefs) {
@@ -9753,16 +9749,14 @@ int BlueStore::umount()
 
   ceph_assert(alloc);
 
-  if (!_kv_only) {
-    mempool_thread.shutdown();
-    dout(20) << __func__ << " stopping kv thread" << dendl;
-    _kv_stop();
-    // skip cache cleanup step on fast shutdown
-    if (likely(!m_fast_shutdown)) {
-      _shutdown_cache();
-    }
-    dout(20) << __func__ << " closing" << dendl;
+  mempool_thread.shutdown();
+  dout(20) << __func__ << " stopping kv thread" << dendl;
+  _kv_stop();
+  // skip cache cleanup step on fast shutdown
+  if (likely(!m_fast_shutdown)) {
+    _shutdown_cache();
   }
+  dout(20) << __func__ << " closing" << dendl;
   _close_db_and_around();
   // disable fsck on fast-shutdown
   if (cct->_conf->bluestore_fsck_on_umount && !m_fast_shutdown) {
