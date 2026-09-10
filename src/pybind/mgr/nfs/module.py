@@ -187,6 +187,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 enable_nfsv3: bool = False,
                                 enable_nfs_metrics: bool = False,
                                 ingress_placement: Optional[str] = None,
+                                clients_per_pool: Optional[int] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
         cluster_qos_config = None
@@ -240,7 +241,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            tls_ciphers=tls_ciphers,
                                            enable_rdma=enable_rdma,
                                            rdma_port=rdma_port,
-                                           ingress_placement=ingress_placement)
+                                           ingress_placement=ingress_placement,
+                                           clients_per_pool=clients_per_pool)
 
     @NFSCLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
