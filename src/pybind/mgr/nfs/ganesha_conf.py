@@ -310,6 +310,59 @@ class RGWFSAL(FSAL):
         return r
 
 
+class CephUser:
+    """One CephX identity in a CEPH_USERS client-pool mapping."""
+    def __init__(self, user_id: str, secret_access_key: str, filesystem: str) -> None:
+        self.user_id = user_id
+        self.secret_access_key = secret_access_key
+        self.filesystem = filesystem
+
+    def to_user_block(self) -> RawBlock:
+        return RawBlock('USER', values={
+            'user_id': self.user_id,
+            'secret_access_key': self.secret_access_key,
+            'filesystem': self.filesystem,
+        })
+
+    @classmethod
+    def from_user_block(cls, block: RawBlock) -> 'CephUser':
+        return cls(
+            block.values.get('user_id', ''),
+            block.values.get('secret_access_key', ''),
+            block.values.get('filesystem', ''),
+        )
+
+
+class CephUsers:
+    """Ganesha CEPH_USERS block storing pool-mode CephX credentials."""
+    def __init__(self, users: Optional[List[CephUser]] = None) -> None:
+        self.users = users or []
+
+    @classmethod
+    def from_block(cls, block: RawBlock) -> 'CephUsers':
+        users = [CephUser.from_user_block(b) for b in block.blocks if b.block_name == 'USER']
+        return cls(users)
+
+    @classmethod
+    def from_raw(cls, raw: str) -> 'CephUsers':
+        if not raw:
+            return cls()
+        blocks = GaneshaConfParser(raw).parse()
+        for block in blocks:
+            if block.block_name == 'CEPH_USERS':
+                return cls.from_block(block)
+        return cls()
+
+    def to_block(self) -> RawBlock:
+        return RawBlock('CEPH_USERS', blocks=[u.to_user_block() for u in self.users])
+
+    def users_for_fs(self, fs_name: str) -> List[CephUser]:
+        return [u for u in self.users if u.filesystem == fs_name]
+
+    def remove_fs(self, fs_name: str) -> None:
+        self.users = [u for u in self.users if u.filesystem != fs_name]
+
+
 class Client:
     def __init__(self,
                  addresses: List[str],

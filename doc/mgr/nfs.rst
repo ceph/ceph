@@ -34,7 +34,8 @@ Create NFS-Ganesha Cluster
    ceph nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] \
           [--ingress-mode {default|keepalive-only|haproxy-standard|haproxy-protocol}] \
           [--ingress-placement <placement>] [--port <int>] \
-          [--enable-rdma] [--rdma_port <int>] [--enable-nfsv3] [-i <spec_file>]
+          [--enable-rdma] [--rdma_port <int>] [--enable-nfsv3] \
+          [--clients-per-pool <int>] [-i <spec_file>]
 
 This creates a common recovery pool for all NFS-Ganesha daemons, a new user based on
 ``cluster_id``, and a common NFS-Ganesha config RADOS object.
@@ -68,6 +69,35 @@ NFS can be deployed on a port other than 2049 (the default) with ``--port <port>
 
 By default, only NFSv4 protocol is enabled. To enable both NFSv3 and NFSv4 protocols,
 add the ``--enable-nfsv3`` flag.
+
+By default, NFS-Ganesha shares a single CephFS client handle among all exports
+of the same filesystem (the default ``cmount_path`` is ``/``).  To spread
+export load across a bounded number of independent CephFS client handles,
+create the NFS cluster with ``--clients-per-pool N`` where ``N`` is an
+integer greater than or equal to 2:
+
+.. prompt:: bash #
+
+   ceph nfs cluster create mynfs --clients-per-pool 3
+
+When the first CephFS export with ``cmount_path=/`` for a filesystem is
+created, cephadm provisions ``N`` distinct CephX users and stores them in a
+``CEPH_USERS`` RADOS object
+(``ceph-users-nfs.<cluster_id>``). NFS-Ganesha loads that object alongside
+the existing export configuration and cycles through the handles in
+round-robin. The export block itself carries the first identity of the pool,
+so the export stays usable on its own.
+
+Exports with a non-root ``cmount_path`` keep a dedicated CephX user, as they
+did before client-pool mode.
+
+Pool users are removed when the last ``cmount_path=/`` export for that
+filesystem is deleted.
+
+``clients_per_pool`` is immutable after cluster creation. It cannot be set or
+changed on an already-running nfs cluster (including after an upgrade). To change
+the pool size, delete the cluster and create a new one. RGW exports are not
+supported by client-pool mode.
 
 To deploy NFS with a high-availability front-end (virtual IP and load balancer), add the
 ``--ingress`` flag and specify a virtual IP address. This will deploy a combination

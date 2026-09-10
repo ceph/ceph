@@ -25,6 +25,8 @@ from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
 from .ganesha_conf import (
     CephFSFSAL,
+    CephUsers,
+    CephUser,
     Export,
     GaneshaConfParser,
     RGWFSAL,
@@ -41,6 +43,7 @@ from .utils import (
     NonFatalError,
     export_obj_name,
     conf_obj_name,
+    ceph_users_obj_name,
     available_clusters,
     check_fs,
     get_nfs_spec_for_cluster,
@@ -273,6 +276,126 @@ class ExportMgr:
         )
         log.debug(f"Established user {fsal.user_id} for cephfs {fsal.fs_name}")
 
+    def _get_cephfs_clients_per_pool(self, cluster_id: str) -> Optional[int]:
+        spec = get_nfs_spec_for_cluster(self.mgr, cluster_id)
+        if spec is None:
+            return None
+        n = getattr(spec, 'clients_per_pool', None)
+        if n is None or n < 2:
+            return None
+        return int(n)
+
+    def _uses_cephfs_client_pool(self, cluster_id: str, cmount_path: Optional[str]) -> bool:
+        """Pool users are only used for the default cmount_path=/."""
+        if cmount_path and cmount_path != "/":
+            return False
+        return self._get_cephfs_clients_per_pool(cluster_id) is not None
+
+    def _setup_cephfs_export_credentials(self, export: Export) -> None:
+        fsal = cast(CephFSFSAL, export.fsal)
+        if self._uses_cephfs_client_pool(export.cluster_id, fsal.cmount_path):
+            assert fsal.fs_name
+            pool_users = self._ensure_pool_users_for_fs(export.cluster_id, fsal.fs_name)
+            if pool_users:
+                # The FSAL block carries the first identity of the pool, so the
+                # export stays usable on its own, Ganesha picks a handle out of
+                # the CEPH_USERS block for the actual client pool.
+                primary = pool_users[0]
+                fsal.user_id = primary.user_id
+                fsal.cephx_key = primary.secret_access_key
+                log.debug("Pool mode: export for cephfs %s uses pool user %s",
+                          fsal.fs_name, fsal.user_id)
+                return
+        self._ensure_cephfs_export_user(export)
+
+    def _read_ceph_users(self, cluster_id: str) -> Optional[CephUsers]:
+        raw = self._rados(cluster_id).read_obj(ceph_users_obj_name(cluster_id))
+        if raw is None:
+            return None
+        return CephUsers.from_raw(raw)
+
+    def _write_ceph_users(self, cluster_id: str, ceph_users: CephUsers) -> None:
+        # Never notifies: this object is only ever written as part of an export
+        # change, and the export object write that follows it does the notify.
+        self._rados(cluster_id).write_obj(
+            format_block(ceph_users.to_block()),
+            ceph_users_obj_name(cluster_id),
+            conf_obj_name(cluster_id),
+            should_notify=False,
+        )
+
+    def _pool_user_ids(self, cluster_id: str, fs_name: str) -> List[str]:
+        """CephX ids that may appear in the FSAL of a pool-mode export.
+
+        The pool is whatever CEPH_USERS records, so ids are only derived from
+        the naming scheme when the pool has not been created yet. A pool that
+        adopts identities not following that scheme (e.g. the dedicated user of
+        an export that predates client-pool mode) keeps working unchanged.
+        """
+        ceph_users = self._read_ceph_users(cluster_id)
+        users = ceph_users.users_for_fs(fs_name) if ceph_users else []
+        if users:
+            return [u.user_id for u in users]
+        n = self._get_cephfs_clients_per_pool(cluster_id) or 0
+        return [get_pool_user_id(cluster_id, fs_name, i) for i in range(n)]
+
+    def _ensure_pool_users_for_fs(self, cluster_id: str, fs_name: str) -> List[CephUser]:
+        n = self._get_cephfs_clients_per_pool(cluster_id)
+        if not n:
+            return []
+        ceph_users = self._read_ceph_users(cluster_id) or CephUsers()
+        existing = ceph_users.users_for_fs(fs_name)
+        if existing:
+            log.debug("Pool users already exist for fs %s on cluster %s", fs_name, cluster_id)
+            return existing
+        new_users = []
+        for i in range(n):
+            user_id = get_pool_user_id(cluster_id, fs_name, i)
+            key = self._create_user_key(cluster_id, user_id, "/", fs_name)
+            new_users.append(CephUser(
+                user_id=user_id,
+                secret_access_key=key,
+                filesystem=fs_name,
+            ))
+        ceph_users.users.extend(new_users)
+        self._write_ceph_users(cluster_id, ceph_users)
+        log.info("Created %s pool users for fs %s on cluster %s", n, fs_name, cluster_id)
+        return new_users
+
+    def _cleanup_pool_users_for_fs(self, cluster_id: str, fs_name: str) -> None:
+        ceph_users = self._read_ceph_users(cluster_id)
+        users_to_rm: List[CephUser] = []
+        if ceph_users:
+            users_to_rm = ceph_users.users_for_fs(fs_name)
+            ceph_users.remove_fs(fs_name)
+        else:
+            n = self._get_cephfs_clients_per_pool(cluster_id)
+            if n:
+                users_to_rm = [
+                    CephUser(get_pool_user_id(cluster_id, fs_name, i), '', fs_name)
+                    for i in range(n)
+                ]
+        for user in users_to_rm:
+            self.mgr.check_mon_command({
+                'prefix': 'auth rm',
+                'entity': f'client.{user.user_id}',
+            })
+            log.info("Deleted pool user %s", user.user_id)
+        rados_obj = self._rados(cluster_id)
+        obj = ceph_users_obj_name(cluster_id)
+        conf = conf_obj_name(cluster_id)
+        if ceph_users is None:
+            return
+        if ceph_users.users:
+            rados_obj.update_obj(
+                format_block(ceph_users.to_block()),
+                obj,
+                conf,
+                should_notify=False,
+            )
+        else:
+            rados_obj.remove_obj(obj, conf, should_notify=False)
+
     def _gen_export_id(self, cluster_id: str) -> int:
         exports = sorted([ex.export_id for ex in self.exports[cluster_id]])
         nid = 1
@@ -320,8 +443,13 @@ class ExportMgr:
                 export = self._fetch_export(cluster_id, pseudo_path)
 
             if export:
-                exports_count = 0
-                if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
+                fs_name = None
+                uses_pool = False
+                if isinstance(export.fsal, CephFSFSAL):
+                    fs_name = export.fsal.fs_name
+                    uses_pool = self._uses_cephfs_client_pool(cluster_id,
+                                                              export.fsal.cmount_path)
+                if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0] and not uses_pool:
                     exports_count = self.get_export_count_with_same_fsal(export.fsal.cmount_path,  # type: ignore
                                                                          cluster_id, export.fsal.fs_name)  # type: ignore
                     if exports_count == 1:
@@ -330,9 +458,14 @@ class ExportMgr:
                     self._rados(cluster_id).remove_obj(
                         export_obj_name(export.export_id), conf_obj_name(cluster_id),
                         (not self.skip_notify_nfs_server))
+
                 self.exports[cluster_id].remove(export)
                 if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
                     self._delete_export_user(export)
+                if uses_pool and fs_name:
+                    remaining = self.get_export_count_with_same_fsal("/", cluster_id, fs_name)
+                    if remaining == 0:
+                        self._cleanup_pool_users_for_fs(cluster_id, fs_name)
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
                     log.debug("Deleted all exports for cluster %s", cluster_id)
@@ -729,8 +862,19 @@ class ExportMgr:
             if fsal["cmount_path"] != "/":
                 _validate_cmount_path(fsal["cmount_path"], path)  # type: ignore
 
-            user_id = f"nfs.{get_user_id(cluster_id, fs_name, fsal['cmount_path'])}"
-            if "user_id" in fsal and fsal["user_id"] != user_id:
+            cmount_path = fsal.get("cmount_path", "/")
+            user_id = f"nfs.{get_user_id(cluster_id, fs_name, cmount_path)}"
+            if self._uses_cephfs_client_pool(cluster_id, cmount_path):
+                # Any identity of the filesystem's client pool is valid here.
+                # Slot 0 is the dedicated user id, so an export created before
+                # client-pool mode was enabled keeps validating unchanged.
+                allowed = self._pool_user_ids(cluster_id, fs_name)
+                if "user_id" in fsal and fsal["user_id"] not in allowed:
+                    raise NFSInvalidOperation(
+                        f"export FSAL user_id must be one of {allowed} when "
+                        "clients_per_pool is enabled and cmount_path is '/'"
+                    )
+            elif "user_id" in fsal and fsal["user_id"] != user_id:
                 raise NFSInvalidOperation(f"export FSAL user_id must be '{user_id}'")
         else:
             raise NFSInvalidOperation(f"NFS Ganesha supported FSALs are {NFS_GANESHA_SUPPORTED_FSALS}."
@@ -748,7 +892,7 @@ class ExportMgr:
 
         export = Export.from_dict(ex_id, ex_dict)
         if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
-            self._ensure_cephfs_export_user(export)
+            self._setup_cephfs_export_credentials(export)
         export.validate(self.mgr)
         log.debug("Successfully created %s export-%s from dict for cluster %s",
                   fsal_type, ex_id, cluster_id)
@@ -803,7 +947,6 @@ class ExportMgr:
                 earmark_resolver
             )
             log.debug("creating cephfs export %s", export)
-            self._ensure_cephfs_export_user(export)
             self._save_export(cluster_id, export)
             result = {
                 "bind": export.pseudo,
@@ -938,7 +1081,6 @@ class ExportMgr:
         if old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
             old_fsal = cast(CephFSFSAL, old_export.fsal)
             new_fsal = cast(CephFSFSAL, new_export.fsal)
-            self._ensure_cephfs_export_user(new_export)
             need_nfs_service_restart = not (old_fsal.user_id == new_fsal.user_id
                                             and old_fsal.fs_name == new_fsal.fs_name
                                             and old_export.path == new_export.path
@@ -965,6 +1107,22 @@ class ExportMgr:
 
         self.exports[cluster_id].remove(old_export)
 
+        if (old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]
+                and new_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]):
+            old_fsal = cast(CephFSFSAL, old_export.fsal)
+            new_fsal = cast(CephFSFSAL, new_export.fsal)
+            old_fs = old_fsal.fs_name
+            new_uses_same_pool = (
+                old_fs
+                and new_fsal.fs_name == old_fs
+                and self._uses_cephfs_client_pool(cluster_id, new_fsal.cmount_path)
+            )
+            if (old_fs
+                    and self._uses_cephfs_client_pool(cluster_id, old_fsal.cmount_path)
+                    and not new_uses_same_pool
+                    and self.get_export_count_with_same_fsal("/", cluster_id, old_fs) == 0):
+                self._cleanup_pool_users_for_fs(cluster_id, old_fs)
+
         self._update_export(cluster_id, new_export, need_nfs_service_restart)
 
         return {"pseudo": new_export.pseudo, "state": "updated"}
@@ -977,7 +1135,9 @@ class ExportMgr:
         exports = self.list_exports(cluster_id, detailed=True)
         exports_count = 0
         for export in exports:
-            if export['fsal']['name'] == 'CEPH' and export['fsal']['cmount_path'] == cmount_path and export['fsal']['fs_name'] == fs_name:
+            if (export['fsal']['name'] == 'CEPH'
+                    and export['fsal'].get('cmount_path', '/') == cmount_path
+                    and export['fsal']['fs_name'] == fs_name):
                 exports_count += 1
         return exports_count
 
@@ -1108,3 +1268,16 @@ def get_user_id(cluster_id: str, fs_name: str, cmount_path: str) -> str:
     unique_id = f"{cluster_id}.{fs_name}.{hash_hex[:8]}"  # Use the first 8 characters of the hash
 
     return unique_id
+
+
+def get_pool_user_id(cluster_id: str, fs_name: str, index: int) -> str:
+    """Return the CephX user id (without client. prefix) for a pool slot.
+
+    Slot 0 keeps the id a cmount_path=/ export gets without client-pool mode,
+    the remaining slots use a pool suffix. A pool built for a filesystem that
+    already has exports therefore adopts the user those exports carry instead
+    of orphaning it: only the other clients_per_pool - 1 users are new.
+    """
+    if index == 0:
+        return f"nfs.{get_user_id(cluster_id, fs_name, '/')}"
+    return f"nfs.{cluster_id}.{fs_name}.pool.{index}"

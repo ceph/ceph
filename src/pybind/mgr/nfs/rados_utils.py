@@ -43,12 +43,18 @@ class NFSRados:
             log.debug("write configuration into rados object %s/%s/%s",
                       self.pool, self.namespace, obj)
 
-            # Add created obj url to common config obj
-            ioctx.append(config_obj, format_block(
-                         self._create_url_block(obj)).encode('utf-8'))
+            # Add created obj url to common config obj if not already present
+            try:
+                size, _ = ioctx.stat(config_obj)
+                existing = ioctx.read(config_obj, size).decode('utf-8')
+            except ObjectNotFound:
+                existing = ''
+            url_block = format_block(self._create_url_block(obj))
+            if url_block not in existing:
+                ioctx.append(config_obj, url_block.encode('utf-8'))
+                log.debug("Added %s url to %s", obj, config_obj)
             if should_notify:
                 _check_rados_notify(ioctx, config_obj)
-            log.debug("Added %s url to %s", obj, config_obj)
 
     def read_obj(self, obj: str) -> Optional[str]:
         with self.rados.open_ioctx(self.pool) as ioctx:
