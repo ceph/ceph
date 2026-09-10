@@ -553,11 +553,22 @@ test_trash_partially_removed() {
 
     rbd ls -l
     rbd ls -l | grep 'test1.*1 MiB.*2'
+    rbd ls -l 2>&1 >/dev/null | grep 'test2 is being removed'
     rbd ls -l --format json
     rbd du
     rbd du | grep test1
+    rbd du 2>&1 >/dev/null | grep 'test2 is being removed'
     expect_fail rbd du test2
 
+    rbd create $RBD_CREATE_ARGS -s 2 test2
+    rbd ls -l
+    test "$(rbd ls -l | grep -c test2)" = 1
+    rbd du
+    test "$(rbd du | grep -c test2)" = 1
+    rbd du test2
+
+    rbd rm test2
+    rbd ls | grep test2
     rbd rm test2
     rbd ls | expect_fail grep test2
     rbd ls -l
