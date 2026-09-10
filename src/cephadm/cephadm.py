@@ -3650,16 +3650,32 @@ def command_unit(ctx: CephadmContext) -> int:
     unit_name = lookup_unit_name_by_daemon_name(
         ctx, ident.fsid, ident.daemon_name
     )
-    command = ['systemctl', ctx.command, unit_name]
+    if ctx.command == 'kill':
+        commands = [
+            ['systemctl', 'stop', '--no-block', unit_name],
+            [
+                'systemctl',
+                'kill',
+                '--kill-whom=all',
+                '--signal=SIGKILL',
+                unit_name,
+            ],
+        ]
+    else:
+        commands = [['systemctl', ctx.command, unit_name]]
     if ctx.dry_run:
-        print(' '.join(shlex.quote(arg) for arg in command))
+        for command in commands:
+            print(' '.join(shlex.quote(arg) for arg in command))
         return 0
-    _, _, code = call(
-        ctx,
-        command,
-        verbosity=CallVerbosity.VERBOSE,
-        desc='',
-    )
+    for command in commands:
+        _, _, code = call(
+            ctx,
+            command,
+            verbosity=CallVerbosity.VERBOSE,
+            desc='',
+        )
+        if code:
+            return code
     return code
 
 
