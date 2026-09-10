@@ -1,8 +1,16 @@
-import { Component, OnInit, TemplateRef, ViewChild, ViewEncapsulation } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnInit,
+  TemplateRef,
+  ViewChild,
+  ViewEncapsulation
+} from '@angular/core';
 import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { ComboBox } from 'carbon-components-angular';
 import _ from 'lodash';
 import moment from 'moment';
 import { forkJoin as observableForkJoin } from 'rxjs';
@@ -41,6 +49,10 @@ const DASHBOARD_USERNAME_PATTERN = /^(?!\.+$)[a-zA-Z0-9._@+-]+$/;
 export class UserFormComponent extends CdForm implements OnInit {
   @ViewChild('removeSelfUserReadUpdatePermissionTpl', { static: true })
   removeSelfUserReadUpdatePermissionTpl: TemplateRef<any>;
+  @ViewChild('rolesComboBox')
+  rolesComboBox: ComboBox;
+  @ViewChild('rolesComboBox', { read: ElementRef })
+  rolesComboBoxEl: ElementRef<HTMLElement>;
 
   modalRef: NgbModalRef;
 
@@ -305,6 +317,31 @@ export class UserFormComponent extends CdForm implements OnInit {
     const roles = this.userForm.getValue('roles') ?? [];
     if (!roles.includes('administrator')) {
       this.userForm.get('roles').setValue([...roles, 'administrator'], { emitEvent: false });
+    }
+  }
+
+  onRolesSelected(): void {
+    setTimeout(() => this.clearRolesSearchInput());
+  }
+
+  private clearRolesSearchInput(): void {
+    const comboBox = this.rolesComboBox;
+    const inputEl =
+      (comboBox?.input?.nativeElement as HTMLInputElement | undefined) ||
+      this.rolesComboBoxEl?.nativeElement?.querySelector<HTMLInputElement>('input.cds--text-input');
+
+    if (comboBox) {
+      if (inputEl?.value) {
+        comboBox.selectedValue = inputEl.value;
+      }
+      comboBox.selectedValue = '';
+      comboBox.showClearButton = false;
+      comboBox.onSearch('', false);
+      comboBox.closeDropdown();
+    }
+
+    if (inputEl) {
+      inputEl.value = '';
     }
   }
 
