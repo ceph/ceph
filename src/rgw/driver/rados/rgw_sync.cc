@@ -2120,8 +2120,15 @@ public:
 
             std::string period_marker;
             if (next) {
+              const auto& next_sync_status = next.get_period().get_sync_status();
+              if (shard_id >= next_sync_status.size()) {
+                ldpp_dout(dpp, 10) << "RGWMetaSyncCR: skipping shard " << shard_id
+                    << " for period " << next.get_period().get_id()
+                    << " with no sync status entry" << dendl;
+                continue;
+              }
               // read the maximum marker from the next period's sync status
-              period_marker = next.get_period().get_sync_status()[shard_id];
+              period_marker = next_sync_status[shard_id];
               if (period_marker.empty()) {
                 // no metadata changes have occurred on this shard, skip it
                 ldpp_dout(dpp, 10) << "RGWMetaSyncCR: skipping shard " << shard_id
