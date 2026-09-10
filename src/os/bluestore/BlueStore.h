@@ -3236,9 +3236,12 @@ public:
   int expand_devices(std::ostream& out);
   std::string get_device_path(unsigned id);
 
+  bool get_db_sharding(std::string& res_sharding);
+
   int dump_bluefs_sizes(std::ostream& out);
   void trim_free_space(const std::string& type, std::ostream& outss);
   static int zap_device(CephContext* cct, const std::string& dev);
+
 
 public:
   int statfs(struct store_statfs_t *buf,
@@ -3662,6 +3665,7 @@ private:
   std::string no_per_pg_omap_alert;
   std::string disk_size_mismatch_alert;
   std::string spurious_read_errors_alert;
+  std::string no_db_sharding_alert;
   std::queue <ceph::mono_clock::time_point> slow_op_event_queue;
 
   size_t _trim_slow_op_event_queue(ceph::mono_clock::time_point cur_time);
@@ -3684,6 +3688,7 @@ private:
 
   void _check_legacy_statfs_alert();
   void _check_no_per_pg_or_pool_omap_alert();
+  void _check_no_db_sharding_alert();
   void _set_disk_size_mismatch_alert(const std::string& s) {
     std::lock_guard l(qlock);
     disk_size_mismatch_alert = s;
