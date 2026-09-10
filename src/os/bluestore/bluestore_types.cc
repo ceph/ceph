@@ -1151,7 +1151,9 @@ uint32_t bluestore_blob_t::release_extents(
   uint32_t released_length = 0;
   constexpr auto EMPTY = bluestore_pextent_t::INVALID_OFFSET;
   if (offset == 0 && length == get_logical_length()) {
-    released_length = get_ondisk_length();
+    // There are 2 distinct cases for releasing whole blob:
+    // a) releasing compressed blob b) speedup for releasing whole regular blob
+    released_length = get_ondisk_capacity();
     released_disk->insert(released_disk->end(), extents.begin(), extents.end());
     extents.resize(1);
     extents[0].offset = EMPTY;
