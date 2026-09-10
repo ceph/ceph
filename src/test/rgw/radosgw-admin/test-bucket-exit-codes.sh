@@ -9,8 +9,9 @@
 # Test types:
 #   check()        - no cluster needed; runs with --no-mon-config
 #   check_cluster()- needs a running cluster, SKIPs when there is none
+#   check_bucket() - also needs the test bucket, SKIPs when there is none
 #
-# Both verify the exit code.
+# All three verify the exit code.
 #
 # Run from the build directory:
 #   cd /path/to/ceph/build && bash /path/to/test-bucket-exit-codes.sh
@@ -82,6 +83,18 @@ check_cluster() {
     FAIL=$((FAIL+1))
   fi
   rm -f "$tmpfile"
+}
+
+# check_bucket "desc" expected_exit -- args
+# For the rows that need the test bucket the lifecycle section creates.
+check_bucket() {
+  local desc="$1"
+  if [ "$_have_bucket" != "1" ]; then
+    echo "SKIP [$desc]: $_bucket_skip_reason"
+    SKIP=$((SKIP+1))
+    return
+  fi
+  check_cluster "$@"
 }
 
 # ============================================================
@@ -1745,30 +1758,30 @@ echo ""
 echo "=== integration: full bucket lifecycle (cluster) ==="
 # ============================================================
 # Creates a test user and bucket, runs link/unlink/rm, then cleans up.
-# Skipped automatically if no cluster is running.
+# Rows are skipped when there is no cluster, or when the test bucket cannot
+# be created.
 
 _test_uid="bucket_test_user"
 _test_bucket="bucket-test"
 _test_display="Bucket Test User"
 
+_have_bucket=0
+_bucket_skip_reason="no cluster running"
+
 if cluster_running; then
   # Create a test user
   "$RGW_ADMIN" user create --uid "$_test_uid" --display-name "$_test_display" \
     >/dev/null 2>&1
+fi
 
-  check_cluster "integration: bucket list --uid (owner with no buckets)" 0 -- bucket list --uid "$_test_uid"
+check_cluster "integration: bucket list --uid (owner with no buckets)" 0 -- bucket list --uid "$_test_uid"
 
-  # The rows below need a bucket that exists: 'bucket link' only links one
-  # that is already there, so the aws CLI creates it, and they are skipped
-  # when it is not installed.
-  _aws_available=0
+# The rows below need a bucket that exists: 'bucket link' only links one
+# that is already there, so the aws CLI creates it over S3, signed with the
+# test user's keys. If any step fails, check_bucket skips those rows with
+# the reason set below.
+if cluster_running; then
   if command -v aws >/dev/null 2>&1; then
-    _aws_available=1
-  fi
-
-  # Nothing in this block runs unless the aws CLI and the credentials are there.
-  # The SKIP lines below stand in for all of its rows, so update them together.
-  if [ "$_aws_available" = "1" ]; then
     # Get credentials for the test user
     _access_key=$("$RGW_ADMIN" user info --uid "$_test_uid" 2>/dev/null | \
       python3 -c "import sys,json; d=json.load(sys.stdin); print(d['keys'][0]['access_key'])" 2>/dev/null)
@@ -1778,223 +1791,235 @@ if cluster_running; then
 
     if [ -n "$_access_key" ] && [ -n "$_secret_key" ]; then
       # Create the test bucket
-      AWS_ACCESS_KEY_ID="$_access_key" \
-      AWS_SECRET_ACCESS_KEY="$_secret_key" \
-      aws --endpoint-url "$_rgw_endpoint" \
-        s3 mb "s3://$_test_bucket" >/dev/null 2>&1
-
-      # bucket list: lists objects in the test bucket (empty)
-      check_cluster "integration: bucket list (named, empty)" 0 -- bucket list --bucket "$_test_bucket"
-
-      # short flags -b and -i work the same as --bucket and --uid
-      check_cluster "integration: bucket list -b (short flag)" 0 -- bucket list -b "$_test_bucket"
-      check_cluster "integration: bucket stats -b (short flag)" 0 -- bucket stats -b "$_test_bucket"
-
-      # bucket stats: returns stats for the test bucket
-      check_cluster "integration: bucket stats (named)" 0 -- bucket stats --bucket "$_test_bucket"
-
-      # '=' normalization shapes that execute (cluster):
-      # string flag with empty '=': the value is "", command runs
-      check_cluster "integration: empty-= on string flag runs" 0 -- bucket stats --bucket=
-      # empty-= must not eat a following flag
-      check_cluster "integration: empty-= then flag parses normally" 0 -- bucket list --bucket= --max-entries 7
-      # binary flag empty-= keeps its silent-set behavior
-      check_cluster "integration: binary flag empty-= unchanged" 0 -- bucket list --bucket "$_test_bucket" --allow-unordered=
-      # -i=<uid>: the value is captured correctly (lists the user's bucket)
-      check_cluster "integration: bucket list -i=uid (=form)" 0 -- bucket list -i="$_test_uid"
-      # value position: a token after a value-taking flag is its value, even
-      # if it looks like a flag (the handler then fails)
-      check_cluster "integration: flag value may look like a flag" 2 -- bucket stats --bucket --max-entries
-      check_cluster "lifecycle: bucket list --allow-unordered" 0 -- bucket list --allow-unordered --bucket "$_test_bucket"
-      check_cluster "lifecycle: bucket list --format json" 0 -- bucket list --format json --bucket "$_test_bucket"
-      check_cluster "lifecycle: bucket stats --show-restore-stats" 0 -- bucket stats --show-restore-stats --bucket "$_test_bucket"
-      check_cluster "lifecycle: bucket stats --format json" 0 -- bucket stats --format json --bucket "$_test_bucket"
-
-      # bucket layout: dumps the bucket's layout as JSON (index/log generations)
-      check_cluster "integration: bucket layout" 0 -- bucket layout --bucket "$_test_bucket"
-      check_cluster "integration: bucket layout --format json" 0 -- bucket layout --bucket "$_test_bucket" --format json
-      check_cluster "integration: bucket layout --tenant ''" 0 -- bucket layout --bucket "$_test_bucket" --tenant ""
-
-      # bucket rewrite: rewrites all objects in the bucket (empty bucket -> empty
-      # "objects" array, exit 0). Exercises -b, --format, the size flags, the
-      # date aliases, and the atoll path on a REAL bucket.
-      check_cluster "integration: bucket rewrite" 0 -- bucket rewrite --bucket "$_test_bucket"
-      check_cluster "integration: bucket rewrite -b (short flag)" 0 -- bucket rewrite -b "$_test_bucket"
-      check_cluster "integration: bucket rewrite --format json" 0 -- bucket rewrite --bucket "$_test_bucket" --format json
-      check_cluster "integration: bucket rewrite --min-rewrite-size (numeric)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1
-      check_cluster "integration: bucket rewrite --min-rewrite-size=abc (atoll -> 0)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size=abc
-      check_cluster "integration: bucket rewrite --start-time/--end-time (aliases)" 0 -- bucket rewrite --bucket "$_test_bucket" --start-time 2000-01-01 --end-time 2100-01-01
-      # bad date is parsed AFTER init_bucket, so on a real bucket it reaches the
-      # date check and fails with exit 22
-      check_cluster "integration: bucket rewrite bad --start-date (exit 22)" 22 -- bucket rewrite --bucket "$_test_bucket" --start-date notadate
-
-      # rerun with a small (<4MB) object in the bucket, so the per-object filters
-      # actually run: the default 4MB minimum, atoll("abc")=0 which disables it,
-      # an explicit minimum, and a past --end-time.
-      echo "rewrite-status-probe" > /tmp/rw_small.txt
-      AWS_ACCESS_KEY_ID="$_access_key" \
-      AWS_SECRET_ACCESS_KEY="$_secret_key" \
-      aws --endpoint-url "$_rgw_endpoint" \
-        s3 cp /tmp/rw_small.txt "s3://$_test_bucket/" >/dev/null 2>&1
-
-      check_cluster "integration: rewrite (object in the bucket)" 0 -- bucket rewrite --bucket "$_test_bucket"
-      check_cluster "integration: rewrite --min-rewrite-size=abc (object in the bucket)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size=abc
-      check_cluster "integration: rewrite --min-rewrite-size 1 (object in the bucket)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1
-      check_cluster "integration: rewrite --end-time 2000-01-01" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1 --end-time 2000-01-01
-
-      # remove the probe object so later lifecycle tests see an empty bucket
-      AWS_ACCESS_KEY_ID="$_access_key" \
-      AWS_SECRET_ACCESS_KEY="$_secret_key" \
-      aws --endpoint-url "$_rgw_endpoint" \
-        s3 rm "s3://$_test_bucket/rw_small.txt" >/dev/null 2>&1
-      rm -f /tmp/rw_small.txt
-
-      # bucket chown: chown to the (already-owning) test user — a no-op ownership
-      # change that still exercises the full chown path; exit 0, no output
-      check_cluster "integration: bucket chown" 0 -- bucket chown --bucket "$_test_bucket" --uid "$_test_uid"
-
-      # bucket limit check for the test user: JSON with user_id + buckets
-      check_cluster "integration: limit check --uid" 0 -- bucket limit check --uid "$_test_uid"
-      check_cluster "integration: limit check --uid --warnings-only" 0 -- bucket limit check --uid "$_test_uid" --warnings-only
-
-      # bucket set-min-shards: set the dynamic-resharding minimum on the (Normal)
-      # test bucket; succeeds with no output (exit 0). Exercises -b, the =form,
-      # and an empty --tenant.
-      check_cluster "integration: bucket set-min-shards (num 7)" 0 -- bucket set-min-shards --bucket "$_test_bucket" --num-shards 7
-      check_cluster "integration: bucket set-min-shards -b --num-shards=9 (short + =form)" 0 -- bucket set-min-shards -b "$_test_bucket" --num-shards=9
-      check_cluster "integration: bucket set-min-shards --tenant '' (empty)" 0 -- bucket set-min-shards --bucket "$_test_bucket" --num-shards 11 --tenant ""
-
-      # bucket object shard: pure computation (no bucket needed), but runs after
-      # driver init so a cluster is required. Deterministic: foo % 11 -> 10,
-      # any object % 1 -> 0. Exercises -o short form, =form, and --format xml.
-      check_cluster "integration: object shard --num-shards 11" 0 -- bucket object shard --object foo --num-shards 11
-      check_cluster "integration: object shard --num-shards 1" 0 -- bucket object shard --object foo --num-shards 1
-      check_cluster "integration: object shard -o --num-shards=11 (short + =form)" 0 -- bucket object shard -o foo --num-shards=11
-      check_cluster "integration: object shard --format xml" 0 -- bucket object shard --object foo --num-shards 11 --format xml
-
-      # bucket shard objects: pure computation (no bucket needed), runs after
-      # driver init. Deterministic sample object names per shard; --shard-id
-      # picks one shard; --prefix changes the name prefix (default "obj").
-      # Exercises the 'shard object' alias, =form, --prefix "", and --format xml.
-      check_cluster "integration: shard objects --num-shards 4" 0 -- bucket shard objects --num-shards 4
-      check_cluster "integration: shard objects --num-shards 1" 0 -- bucket shard objects --num-shards 1
-      check_cluster "integration: shard objects --shard-id 1" 0 -- bucket shard objects --num-shards 4 --shard-id 1
-      check_cluster "integration: shard object (alias) --shard-id=1 (=form)" 0 -- bucket shard object --num-shards 4 --shard-id=1
-      check_cluster "integration: shard objects --prefix myobj" 0 -- bucket shard objects --num-shards 4 --prefix myobj
-      check_cluster "integration: shard objects --prefix '' (empty value)" 0 -- bucket shard objects --num-shards 4 --prefix ""
-      check_cluster "integration: shard objects --format xml" 0 -- bucket shard objects --num-shards 4 --shard-id 0 --format xml
-
-      # bucket resync encrypted multipart: a repair op. On a non-replicated single-zone
-      # cluster it needs --yes-i-really-mean-it; without it -> EPERM (exit 1). With it,
-      # runs and emits the "modified" report (exit 0, idempotent on a normal bucket).
-      # The binary flag's =false / space-form 'false' both leave it unset -> EPERM.
-      check_cluster "integration: resync without --yes (EPERM)" 1 -- bucket resync encrypted multipart --bucket "$_test_bucket"
-      check_cluster "integration: resync --yes-i-really-mean-it" 0 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it
-      check_cluster "integration: resync --yes-i-really-mean-it=false (=form -> EPERM)" 1 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it=false
-      check_cluster "integration: resync --yes-i-really-mean-it false (space form -> EPERM)" 1 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it false
-      # a value that is not true/1/false/0 still leaves the flag set, so =banana
-      # runs the repair where =false refuses it
-      check_cluster "integration: resync --yes-i-really-mean-it=banana (=form, non-bool)" 0 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it=banana
-
-      # bucket radoslist: read-only, lists the rados objects backing the bucket
-      # (exit 0). Exercises both entry points (radoslist + 'rados list' alias),
-      # the -b short form, and the --rgw-obj-fs field separator.
-      check_cluster "integration: radoslist --bucket" 0 -- bucket radoslist --bucket "$_test_bucket"
-      check_cluster "integration: radoslist -b (short)" 0 -- bucket radoslist -b "$_test_bucket"
-      check_cluster "integration: radoslist --rgw-obj-fs" 0 -- bucket radoslist --bucket "$_test_bucket" --rgw-obj-fs ":"
-      check_cluster "integration: rados list --bucket (alias)" 0 -- bucket rados list --bucket "$_test_bucket"
-
-      # bucket logging on a bucket WITHOUT logging configured: info is silent
-      # (exit 0, no output); list and flush print an error but still exit 0
-      check_cluster "integration: logging info (no logging, silent)" 0 -- bucket logging info --bucket "$_test_bucket"
-      check_cluster "integration: logging list (no logging configured)" 0 -- bucket logging list --bucket "$_test_bucket"
-      check_cluster "integration: logging flush (no logging configured)" 0 -- bucket logging flush --bucket "$_test_bucket"
-
-      # bucket unlink: unlink the bucket from the user
-      check_cluster "integration: bucket unlink" 0 -- bucket unlink --bucket "$_test_bucket" --uid "$_test_uid"
-
-      # re-link using short flags -b and -i
-      check_cluster "integration: bucket link -b -i (short flags)" 0 -- bucket link -b "$_test_bucket" -i "$_test_uid"
-
-      # bucket unlink using short flags
-      check_cluster "integration: bucket unlink -b -i (short flags)" 0 -- bucket unlink -b "$_test_bucket" -i "$_test_uid"
-
-      # bucket link: re-link for remaining tests
-      check_cluster "integration: bucket link" 0 -- bucket link --bucket "$_test_bucket" --uid "$_test_uid"
-
-      # bucket check: check the bucket index, with and without --fix
-      check_cluster "integration: bucket check (named)" 0 -- bucket check --bucket "$_test_bucket"
-      check_cluster "lifecycle: bucket check --fix" 0 -- bucket check --fix --bucket "$_test_bucket"
-
-      # bucket check olh and unlinked with named bucket and new flags
-      check_cluster "integration: bucket check olh (named)" 0 -- bucket check olh --bucket "$_test_bucket"
-      check_cluster "lifecycle: bucket check olh --fix (named)" 0 -- bucket check olh --fix --bucket "$_test_bucket"
-      check_cluster "lifecycle: bucket check olh --dump-keys (named)" 0 -- bucket check olh --dump-keys --bucket "$_test_bucket"
-      check_cluster "integration: bucket check unlinked (named)" 0 -- bucket check unlinked --bucket "$_test_bucket"
-      check_cluster "lifecycle: bucket check unlinked --fix (named)" 0 -- bucket check unlinked --fix --bucket "$_test_bucket"
-      check_cluster "lifecycle: bucket check unlinked --dump-keys (named)" 0 -- bucket check unlinked --dump-keys --bucket "$_test_bucket"
-
-      # bucket sync on a real bucket. This is a single-zone cluster, so nothing
-      # is replicated: info and checkpoint report that sync is disabled, and the
-      # three leaves that need a source zone fail to resolve the zone name.
-      check_cluster "integration: sync info" 0 -- bucket sync info --bucket "$_test_bucket"
-      check_cluster "integration: sync info -b (short)" 0 -- bucket sync info -b "$_test_bucket"
-      check_cluster "integration: sync status" 0 -- bucket sync status --bucket "$_test_bucket"
-      check_cluster "integration: sync status --format json" 0 -- bucket sync status --bucket "$_test_bucket" --format json
-      check_cluster "integration: sync status --source-zone (unknown zone)" 0 -- bucket sync status --bucket "$_test_bucket" --source-zone z1
-      check_cluster "integration: sync checkpoint" 0 -- bucket sync checkpoint --bucket "$_test_bucket"
-      check_cluster "integration: sync checkpoint --timeout-sec --retry-delay-ms" 0 -- bucket sync checkpoint --bucket "$_test_bucket" --timeout-sec 1 --retry-delay-ms 10
-      check_cluster "integration: sync markers (unknown source zone)" 22 -- bucket sync markers --source-zone z1 --bucket "$_test_bucket"
-      check_cluster "integration: sync init (unknown source zone)" 22 -- bucket sync init --source-zone z1 --bucket "$_test_bucket"
-      check_cluster "integration: sync run (unknown source zone)" 22 -- bucket sync run --source-zone z1 --bucket "$_test_bucket"
-      # --source-bucket names a second bucket, which is looked up as well
-      check_cluster "integration: sync init --source-bucket nonexistent" 2 -- bucket sync init --source-zone z1 --source-bucket no-such-bucket --bucket "$_test_bucket"
-      # disable and enable both succeed without printing anything
-      check_cluster "integration: sync disable" 0 -- bucket sync disable --bucket "$_test_bucket"
-      check_cluster "integration: sync enable" 0 -- bucket sync enable --bucket "$_test_bucket"
-
-      # bucket reshard on a real bucket. Resharding up needs nothing extra;
-      # resharding to the same or fewer shards needs --yes-i-really-mean-it.
-      # The test bucket starts at the default 11 index shards.
-      check_cluster "integration: reshard down without --yes" 22 -- bucket reshard --bucket "$_test_bucket" --num-shards 1
-      check_cluster "integration: reshard up" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 23
-      check_cluster "integration: reshard down with --yes-i-really-mean-it" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it
-      check_cluster "integration: reshard bucket (alias)" 0 -- reshard bucket --bucket "$_test_bucket" --num-shards 9
-      check_cluster "integration: reshard -b (short)" 0 -- bucket reshard -b "$_test_bucket" --num-shards 13
-      check_cluster "integration: reshard --max-entries" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 17 --max-entries 10
-      # --format is accepted but this command reports its progress as plain text
-      # either way
-      check_cluster "integration: reshard --format json" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 19 --format json
-      check_cluster "integration: reshard --yes-i-really-mean-it=false (=form)" 22 -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it=false
-
-      # bucket rm: remove the test bucket (it's empty, so no --purge-objects needed)
-      check_cluster "integration: bucket rm" 0 -- bucket rm --bucket "$_test_bucket"
-
-      # bucket rm via 'remove' alias — re-create then remove
-      AWS_ACCESS_KEY_ID="$_access_key" \
-      AWS_SECRET_ACCESS_KEY="$_secret_key" \
-      aws --endpoint-url "$_rgw_endpoint" \
-        s3 mb "s3://$_test_bucket" >/dev/null 2>&1
-
-      check_cluster "integration: bucket remove (alias for rm)" 0 -- bucket remove --bucket "$_test_bucket"
-
-      # Re-create to test --purge-objects (bucket is empty, so purge is a no-op)
-      AWS_ACCESS_KEY_ID="$_access_key" \
-      AWS_SECRET_ACCESS_KEY="$_secret_key" \
-      aws --endpoint-url "$_rgw_endpoint" \
-        s3 mb "s3://$_test_bucket" >/dev/null 2>&1
-
-      check_cluster "lifecycle: bucket rm --purge-objects (empty bucket)" 0 -- bucket rm --purge-objects --bucket "$_test_bucket"
+      if AWS_ACCESS_KEY_ID="$_access_key" \
+        AWS_SECRET_ACCESS_KEY="$_secret_key" \
+        aws --endpoint-url "$_rgw_endpoint" \
+          s3 mb "s3://$_test_bucket" >/dev/null 2>&1; then
+        _have_bucket=1
+      else
+        _bucket_skip_reason="could not create or access the test bucket"
+      fi
     else
-      echo "SKIP [integration: lifecycle tests]: could not get credentials for test user"
-      SKIP=$((SKIP+92))
+      _bucket_skip_reason="could not get credentials for test user"
     fi
   else
-    echo "SKIP [integration: lifecycle tests]: aws CLI not available (needed to create test bucket)"
-    SKIP=$((SKIP+92))
+    _bucket_skip_reason="aws CLI not available (needed to create test bucket)"
   fi
+fi
 
-  # Cleanup: remove the test user
+# bucket list: lists objects in the test bucket (empty)
+check_bucket "integration: bucket list (named, empty)" 0 -- bucket list --bucket "$_test_bucket"
+
+# short flags -b and -i work the same as --bucket and --uid
+check_bucket "integration: bucket list -b (short flag)" 0 -- bucket list -b "$_test_bucket"
+check_bucket "integration: bucket stats -b (short flag)" 0 -- bucket stats -b "$_test_bucket"
+
+# bucket stats: returns stats for the test bucket
+check_bucket "integration: bucket stats (named)" 0 -- bucket stats --bucket "$_test_bucket"
+
+# '=' normalization shapes that execute (cluster):
+# string flag with empty '=': the value is "", command runs
+check_bucket "integration: empty-= on string flag runs" 0 -- bucket stats --bucket=
+# empty-= must not eat a following flag
+check_bucket "integration: empty-= then flag parses normally" 0 -- bucket list --bucket= --max-entries 7
+# binary flag empty-= keeps its silent-set behavior
+check_bucket "integration: binary flag empty-= unchanged" 0 -- bucket list --bucket "$_test_bucket" --allow-unordered=
+# -i=<uid>: the value is captured correctly (lists the user's bucket)
+check_bucket "integration: bucket list -i=uid (=form)" 0 -- bucket list -i="$_test_uid"
+# value position: a token after a value-taking flag is its value, even
+# if it looks like a flag (the handler then fails)
+check_bucket "integration: flag value may look like a flag" 2 -- bucket stats --bucket --max-entries
+check_bucket "lifecycle: bucket list --allow-unordered" 0 -- bucket list --allow-unordered --bucket "$_test_bucket"
+check_bucket "lifecycle: bucket list --format json" 0 -- bucket list --format json --bucket "$_test_bucket"
+check_bucket "lifecycle: bucket stats --show-restore-stats" 0 -- bucket stats --show-restore-stats --bucket "$_test_bucket"
+check_bucket "lifecycle: bucket stats --format json" 0 -- bucket stats --format json --bucket "$_test_bucket"
+
+# bucket layout: dumps the bucket's layout as JSON (index/log generations)
+check_bucket "integration: bucket layout" 0 -- bucket layout --bucket "$_test_bucket"
+check_bucket "integration: bucket layout --format json" 0 -- bucket layout --bucket "$_test_bucket" --format json
+check_bucket "integration: bucket layout --tenant ''" 0 -- bucket layout --bucket "$_test_bucket" --tenant ""
+
+# bucket rewrite: rewrites all objects in the bucket (empty bucket -> empty
+# "objects" array, exit 0). Exercises -b, --format, the size flags, the
+# date aliases, and the atoll path on a REAL bucket.
+check_bucket "integration: bucket rewrite" 0 -- bucket rewrite --bucket "$_test_bucket"
+check_bucket "integration: bucket rewrite -b (short flag)" 0 -- bucket rewrite -b "$_test_bucket"
+check_bucket "integration: bucket rewrite --format json" 0 -- bucket rewrite --bucket "$_test_bucket" --format json
+check_bucket "integration: bucket rewrite --min-rewrite-size (numeric)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1
+check_bucket "integration: bucket rewrite --min-rewrite-size=abc (atoll -> 0)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size=abc
+check_bucket "integration: bucket rewrite --start-time/--end-time (aliases)" 0 -- bucket rewrite --bucket "$_test_bucket" --start-time 2000-01-01 --end-time 2100-01-01
+# bad date is parsed AFTER init_bucket, so on a real bucket it reaches the
+# date check and fails with exit 22
+check_bucket "integration: bucket rewrite bad --start-date (exit 22)" 22 -- bucket rewrite --bucket "$_test_bucket" --start-date notadate
+
+# rerun with a small (<4MB) object in the bucket, so the per-object filters
+# actually run: the default 4MB minimum, atoll("abc")=0 which disables it,
+# an explicit minimum, and a past --end-time.
+if [ "$_have_bucket" = "1" ]; then
+  echo "rewrite-status-probe" > /tmp/rw_small.txt
+  AWS_ACCESS_KEY_ID="$_access_key" \
+  AWS_SECRET_ACCESS_KEY="$_secret_key" \
+  aws --endpoint-url "$_rgw_endpoint" \
+    s3 cp /tmp/rw_small.txt "s3://$_test_bucket/" >/dev/null 2>&1
+fi
+
+check_bucket "integration: rewrite (object in the bucket)" 0 -- bucket rewrite --bucket "$_test_bucket"
+check_bucket "integration: rewrite --min-rewrite-size=abc (object in the bucket)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size=abc
+check_bucket "integration: rewrite --min-rewrite-size 1 (object in the bucket)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1
+check_bucket "integration: rewrite --end-time 2000-01-01" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1 --end-time 2000-01-01
+
+# remove the probe object so later lifecycle tests see an empty bucket
+if [ "$_have_bucket" = "1" ]; then
+  AWS_ACCESS_KEY_ID="$_access_key" \
+  AWS_SECRET_ACCESS_KEY="$_secret_key" \
+  aws --endpoint-url "$_rgw_endpoint" \
+    s3 rm "s3://$_test_bucket/rw_small.txt" >/dev/null 2>&1
+  rm -f /tmp/rw_small.txt
+fi
+
+# bucket chown: chown to the (already-owning) test user — a no-op ownership
+# change that still exercises the full chown path; exit 0, no output
+check_bucket "integration: bucket chown" 0 -- bucket chown --bucket "$_test_bucket" --uid "$_test_uid"
+
+# bucket limit check for the test user: JSON with user_id + buckets
+check_bucket "integration: limit check --uid" 0 -- bucket limit check --uid "$_test_uid"
+check_bucket "integration: limit check --uid --warnings-only" 0 -- bucket limit check --uid "$_test_uid" --warnings-only
+
+# bucket set-min-shards: set the dynamic-resharding minimum on the (Normal)
+# test bucket; succeeds with no output (exit 0). Exercises -b, the =form,
+# and an empty --tenant.
+check_bucket "integration: bucket set-min-shards (num 7)" 0 -- bucket set-min-shards --bucket "$_test_bucket" --num-shards 7
+check_bucket "integration: bucket set-min-shards -b --num-shards=9 (short + =form)" 0 -- bucket set-min-shards -b "$_test_bucket" --num-shards=9
+check_bucket "integration: bucket set-min-shards --tenant '' (empty)" 0 -- bucket set-min-shards --bucket "$_test_bucket" --num-shards 11 --tenant ""
+
+# bucket object shard: pure computation (no bucket needed), but runs after
+# driver init so a cluster is required. Deterministic: foo % 11 -> 10,
+# any object % 1 -> 0. Exercises -o short form, =form, and --format xml.
+check_bucket "integration: object shard --num-shards 11" 0 -- bucket object shard --object foo --num-shards 11
+check_bucket "integration: object shard --num-shards 1" 0 -- bucket object shard --object foo --num-shards 1
+check_bucket "integration: object shard -o --num-shards=11 (short + =form)" 0 -- bucket object shard -o foo --num-shards=11
+check_bucket "integration: object shard --format xml" 0 -- bucket object shard --object foo --num-shards 11 --format xml
+
+# bucket shard objects: pure computation (no bucket needed), runs after
+# driver init. Deterministic sample object names per shard; --shard-id
+# picks one shard; --prefix changes the name prefix (default "obj").
+# Exercises the 'shard object' alias, =form, --prefix "", and --format xml.
+check_bucket "integration: shard objects --num-shards 4" 0 -- bucket shard objects --num-shards 4
+check_bucket "integration: shard objects --num-shards 1" 0 -- bucket shard objects --num-shards 1
+check_bucket "integration: shard objects --shard-id 1" 0 -- bucket shard objects --num-shards 4 --shard-id 1
+check_bucket "integration: shard object (alias) --shard-id=1 (=form)" 0 -- bucket shard object --num-shards 4 --shard-id=1
+check_bucket "integration: shard objects --prefix myobj" 0 -- bucket shard objects --num-shards 4 --prefix myobj
+check_bucket "integration: shard objects --prefix '' (empty value)" 0 -- bucket shard objects --num-shards 4 --prefix ""
+check_bucket "integration: shard objects --format xml" 0 -- bucket shard objects --num-shards 4 --shard-id 0 --format xml
+
+# bucket resync encrypted multipart: a repair op. On a non-replicated single-zone
+# cluster it needs --yes-i-really-mean-it; without it -> EPERM (exit 1). With it,
+# runs and emits the "modified" report (exit 0, idempotent on a normal bucket).
+# The binary flag's =false / space-form 'false' both leave it unset -> EPERM.
+check_bucket "integration: resync without --yes (EPERM)" 1 -- bucket resync encrypted multipart --bucket "$_test_bucket"
+check_bucket "integration: resync --yes-i-really-mean-it" 0 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it
+check_bucket "integration: resync --yes-i-really-mean-it=false (=form -> EPERM)" 1 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it=false
+check_bucket "integration: resync --yes-i-really-mean-it false (space form -> EPERM)" 1 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it false
+# a value that is not true/1/false/0 still leaves the flag set, so =banana
+# runs the repair where =false refuses it
+check_bucket "integration: resync --yes-i-really-mean-it=banana (=form, non-bool)" 0 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it=banana
+
+# bucket radoslist: read-only, lists the rados objects backing the bucket
+# (exit 0). Exercises both entry points (radoslist + 'rados list' alias),
+# the -b short form, and the --rgw-obj-fs field separator.
+check_bucket "integration: radoslist --bucket" 0 -- bucket radoslist --bucket "$_test_bucket"
+check_bucket "integration: radoslist -b (short)" 0 -- bucket radoslist -b "$_test_bucket"
+check_bucket "integration: radoslist --rgw-obj-fs" 0 -- bucket radoslist --bucket "$_test_bucket" --rgw-obj-fs ":"
+check_bucket "integration: rados list --bucket (alias)" 0 -- bucket rados list --bucket "$_test_bucket"
+
+# bucket logging on a bucket WITHOUT logging configured: info is silent
+# (exit 0, no output); list and flush print an error but still exit 0
+check_bucket "integration: logging info (no logging, silent)" 0 -- bucket logging info --bucket "$_test_bucket"
+check_bucket "integration: logging list (no logging configured)" 0 -- bucket logging list --bucket "$_test_bucket"
+check_bucket "integration: logging flush (no logging configured)" 0 -- bucket logging flush --bucket "$_test_bucket"
+
+# bucket unlink: unlink the bucket from the user
+check_bucket "integration: bucket unlink" 0 -- bucket unlink --bucket "$_test_bucket" --uid "$_test_uid"
+
+# re-link using short flags -b and -i
+check_bucket "integration: bucket link -b -i (short flags)" 0 -- bucket link -b "$_test_bucket" -i "$_test_uid"
+
+# bucket unlink using short flags
+check_bucket "integration: bucket unlink -b -i (short flags)" 0 -- bucket unlink -b "$_test_bucket" -i "$_test_uid"
+
+# bucket link: re-link for remaining tests
+check_bucket "integration: bucket link" 0 -- bucket link --bucket "$_test_bucket" --uid "$_test_uid"
+
+# bucket check: check the bucket index, with and without --fix
+check_bucket "integration: bucket check (named)" 0 -- bucket check --bucket "$_test_bucket"
+check_bucket "lifecycle: bucket check --fix" 0 -- bucket check --fix --bucket "$_test_bucket"
+
+# bucket check olh and unlinked with named bucket and new flags
+check_bucket "integration: bucket check olh (named)" 0 -- bucket check olh --bucket "$_test_bucket"
+check_bucket "lifecycle: bucket check olh --fix (named)" 0 -- bucket check olh --fix --bucket "$_test_bucket"
+check_bucket "lifecycle: bucket check olh --dump-keys (named)" 0 -- bucket check olh --dump-keys --bucket "$_test_bucket"
+check_bucket "integration: bucket check unlinked (named)" 0 -- bucket check unlinked --bucket "$_test_bucket"
+check_bucket "lifecycle: bucket check unlinked --fix (named)" 0 -- bucket check unlinked --fix --bucket "$_test_bucket"
+check_bucket "lifecycle: bucket check unlinked --dump-keys (named)" 0 -- bucket check unlinked --dump-keys --bucket "$_test_bucket"
+
+# bucket sync on a real bucket. This is a single-zone cluster, so nothing
+# is replicated: info and checkpoint report that sync is disabled, and the
+# three leaves that need a source zone fail to resolve the zone name.
+check_bucket "integration: sync info" 0 -- bucket sync info --bucket "$_test_bucket"
+check_bucket "integration: sync info -b (short)" 0 -- bucket sync info -b "$_test_bucket"
+check_bucket "integration: sync status" 0 -- bucket sync status --bucket "$_test_bucket"
+check_bucket "integration: sync status --format json" 0 -- bucket sync status --bucket "$_test_bucket" --format json
+check_bucket "integration: sync status --source-zone (unknown zone)" 0 -- bucket sync status --bucket "$_test_bucket" --source-zone z1
+check_bucket "integration: sync checkpoint" 0 -- bucket sync checkpoint --bucket "$_test_bucket"
+check_bucket "integration: sync checkpoint --timeout-sec --retry-delay-ms" 0 -- bucket sync checkpoint --bucket "$_test_bucket" --timeout-sec 1 --retry-delay-ms 10
+check_bucket "integration: sync markers (unknown source zone)" 22 -- bucket sync markers --source-zone z1 --bucket "$_test_bucket"
+check_bucket "integration: sync init (unknown source zone)" 22 -- bucket sync init --source-zone z1 --bucket "$_test_bucket"
+check_bucket "integration: sync run (unknown source zone)" 22 -- bucket sync run --source-zone z1 --bucket "$_test_bucket"
+# --source-bucket names a second bucket, which is looked up as well
+check_bucket "integration: sync init --source-bucket nonexistent" 2 -- bucket sync init --source-zone z1 --source-bucket no-such-bucket --bucket "$_test_bucket"
+# disable and enable both succeed without printing anything
+check_bucket "integration: sync disable" 0 -- bucket sync disable --bucket "$_test_bucket"
+check_bucket "integration: sync enable" 0 -- bucket sync enable --bucket "$_test_bucket"
+
+# bucket reshard on a real bucket. Resharding up needs nothing extra;
+# resharding to the same or fewer shards needs --yes-i-really-mean-it.
+# The test bucket starts at the default 11 index shards.
+check_bucket "integration: reshard down without --yes" 22 -- bucket reshard --bucket "$_test_bucket" --num-shards 1
+check_bucket "integration: reshard up" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 23
+check_bucket "integration: reshard down with --yes-i-really-mean-it" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it
+check_bucket "integration: reshard bucket (alias)" 0 -- reshard bucket --bucket "$_test_bucket" --num-shards 9
+check_bucket "integration: reshard -b (short)" 0 -- bucket reshard -b "$_test_bucket" --num-shards 13
+check_bucket "integration: reshard --max-entries" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 17 --max-entries 10
+# --format is accepted but this command reports its progress as plain text
+# either way
+check_bucket "integration: reshard --format json" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 19 --format json
+check_bucket "integration: reshard --yes-i-really-mean-it=false (=form)" 22 -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it=false
+
+# bucket rm: remove the test bucket (it's empty, so no --purge-objects needed)
+check_bucket "integration: bucket rm" 0 -- bucket rm --bucket "$_test_bucket"
+
+# bucket rm via 'remove' alias — re-create then remove
+if [ "$_have_bucket" = "1" ]; then
+  AWS_ACCESS_KEY_ID="$_access_key" \
+  AWS_SECRET_ACCESS_KEY="$_secret_key" \
+  aws --endpoint-url "$_rgw_endpoint" \
+    s3 mb "s3://$_test_bucket" >/dev/null 2>&1
+fi
+
+check_bucket "integration: bucket remove (alias for rm)" 0 -- bucket remove --bucket "$_test_bucket"
+
+# Re-create to test --purge-objects (bucket is empty, so purge is a no-op)
+if [ "$_have_bucket" = "1" ]; then
+  AWS_ACCESS_KEY_ID="$_access_key" \
+  AWS_SECRET_ACCESS_KEY="$_secret_key" \
+  aws --endpoint-url "$_rgw_endpoint" \
+    s3 mb "s3://$_test_bucket" >/dev/null 2>&1
+fi
+
+check_bucket "lifecycle: bucket rm --purge-objects (empty bucket)" 0 -- bucket rm --purge-objects --bucket "$_test_bucket"
+
+# Cleanup: remove the test user
+if cluster_running; then
   "$RGW_ADMIN" user rm --uid "$_test_uid" --purge-data >/dev/null 2>&1
 fi
 
@@ -2002,6 +2027,6 @@ fi
 echo ""
 echo "========================================"
 echo "Results: $PASS passed, $FAIL failed, $SKIP skipped"
-[ "$SKIP" -gt 0 ] && echo "(some tests require a running cluster or aws CLI)"
+[ "$SKIP" -gt 0 ] && echo "(skipped tests need a running cluster, and some of those also need the aws CLI to create a test bucket)"
 echo "========================================"
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1
