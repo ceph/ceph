@@ -3036,6 +3036,11 @@ void RGWGetObj::execute(optional_yield y)
     rdma_bytes = 0;
     rdma_crc64.reset();
     select_rdma_mode(false);
+    // send_response_data() emits the response header from op_ret on the
+    // first handle_data() of the retry, and skips the body when it is
+    // set; leaving the failed attempt's -EOPNOTSUPP here turns the
+    // transparent fallback into a 500.
+    op_ret = 0;
     op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
   }
 
