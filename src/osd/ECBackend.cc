@@ -423,9 +423,10 @@ void ECBackend::handle_sub_write(
   dout(30) << __func__ << " missing before " <<
     get_parent()->get_log().get_missing().get_items() << dendl;
 
-  // Update EC omap journal on non-primary shards from log entries
-  // This ensures the journal has the correct generation info when transactions are applied
-  if (get_parent()->get_pool().supports_omap()) {
+  // Update EC omap journal on primary-capable non-acting-primary shards from log entries.
+  if (get_parent()->get_pool().supports_omap() &&
+      !get_parent()->pgb_is_primary() &&
+      !sinfo.is_nonprimary_shard(get_parent()->whoami_shard().shard)) {
     for (auto &&e: op.log_entries) {
       if (e.is_delete() || e.is_lost_delete() || e.is_replace() || (e.is_clone() && !e.soid.is_snap())) {
         if (!op.backfill_or_async_recovery) {
