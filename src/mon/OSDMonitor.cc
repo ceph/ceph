@@ -5584,7 +5584,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP, DYNAMIC_OBJECT_SIZE };
+    SUPPORTS_OMAP, DYNAMIC_OBJECT_SIZE, EC_DYNAMIC_MAX_CHUNK_SIZE };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6408,6 +6408,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
       {"supports_omap", SUPPORTS_OMAP},
       {"dynamic_object_size", DYNAMIC_OBJECT_SIZE},
+      {"ec_dynamic_max_chunk_size", EC_DYNAMIC_MAX_CHUNK_SIZE},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6655,6 +6656,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case EC_DYNAMIC_MAX_CHUNK_SIZE:
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
@@ -6840,6 +6842,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case EC_DYNAMIC_MAX_CHUNK_SIZE:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;

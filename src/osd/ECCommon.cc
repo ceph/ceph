@@ -1325,8 +1325,10 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
   }
 
   if (op.after_progress.data_complete && op.after_progress.omap_complete) {
-    uint64_t shard_size = sinfo.for_default().object_size_to_shard_size(op.recovery_info.size,
-      get_parent()->whoami_shard().shard);
+    uint64_t shard_size =
+      sinfo.for_object_chunk_size(op.recovery_info.oi.ec_chunk_size).
+        object_size_to_shard_size(op.recovery_info.size,
+          get_parent()->whoami_shard().shard);
     ceph_assert(shard_size >= tobj_size);
     if (shard_size != tobj_size) {
       m->t.truncate( coll, tobj, shard_size);

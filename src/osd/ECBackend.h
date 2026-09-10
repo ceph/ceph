@@ -334,9 +334,11 @@ public:
     return sinfo.supports_encode_decode_crcs();
   }
 
-  uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard
+  uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard,
+      uint64_t chunk_size = 0
     ) const {
-    return sinfo.for_default().object_size_to_shard_size(size, shard);
+    return sinfo.for_object_chunk_size(chunk_size).object_size_to_shard_size(
+        size, shard);
   }
 
   uint64_t get_is_nonprimary_shard(shard_id_t shard) const {
@@ -403,12 +405,13 @@ public:
     );
 
   uint64_t be_get_ondisk_size(uint64_t logical_size, shard_id_t shard_id,
-      bool object_is_legacy_ec) const {
+      bool object_is_legacy_ec, uint64_t chunk_size = 0) const {
     if (object_is_legacy_ec) {
       // In legacy EC, all shards were padded to the next chunk boundry.
-      return sinfo.for_default().ro_offset_to_next_chunk_offset(logical_size);
+      return sinfo.for_object_chunk_size(chunk_size).
+          ro_offset_to_next_chunk_offset(logical_size);
     }
-    return object_size_to_shard_size(logical_size, shard_id);
+    return object_size_to_shard_size(logical_size, shard_id, chunk_size);
   }
 
   bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);

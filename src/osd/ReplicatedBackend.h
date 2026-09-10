@@ -547,7 +547,8 @@ private:
 
   uint64_t be_get_ondisk_size(uint64_t logical_size,
                               shard_id_t unused,
-                              bool unused2) const final {
+                              bool unused2,
+                              uint64_t unused3 = 0) const final {
     return logical_size;
   }
 };

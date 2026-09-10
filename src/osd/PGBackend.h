@@ -434,7 +434,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual unsigned int get_ec_data_chunk_count() const { return 0; };
    virtual int get_ec_stripe_chunk_size() const { return 0; };
    virtual bool get_ec_supports_crc_encode_decode() const = 0;
-   virtual uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const { return size; };
+   virtual uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard, uint64_t chunk_size = 0) const { return size; };
    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
    virtual bool get_is_nonprimary_shard(shard_id_t shard) const {
      return false; // Only EC has nonprimary shards.
@@ -690,7 +690,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual uint64_t be_get_ondisk_size(uint64_t logical_size,
                                        shard_id_t shard_id,
-                                       bool object_is_legacy_ec) const = 0;
+                                       bool object_is_legacy_ec,
+                                       uint64_t chunk_size = 0) const = 0;
 
    virtual int be_deep_scrub(
      [[maybe_unused]] const Scrub::ScrubCounterSet& io_counters,

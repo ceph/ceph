@@ -92,9 +92,10 @@ class MockPgScrubBeListener : public Scrub::PgScrubBeListener {
   const pg_info_t& get_pg_info(ScrubberPasskey) const override { return info; }
 
   uint64_t logical_to_ondisk_size(uint64_t logical_size, shard_id_t shard_id,
-                                  bool object_is_legacy_ec) const override {
+                                  bool object_is_legacy_ec,
+                                  uint64_t chunk_size = 0) const override {
     return backend->be_get_ondisk_size(logical_size, shard_id_t(shard_id),
-                                       object_is_legacy_ec);
+                                       object_is_legacy_ec, chunk_size);
   }
 
   bool ec_can_decode(const shard_id_set& available_shards) const override {

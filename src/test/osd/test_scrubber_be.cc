@@ -97,7 +97,8 @@ class TestPg : public PgScrubBeListener {
 
   virtual uint64_t logical_to_ondisk_size(uint64_t logical_size,
                                           shard_id_t shard_id,
-                                          bool unused) const
+                                          bool unused,
+                                          uint64_t chunk_size = 0) const
   {
     return logical_size;
   }
@@ -1001,7 +1002,8 @@ class ECOptimisedPg : public TestPg {
 
   uint64_t logical_to_ondisk_size(uint64_t logical_size,
                                   shard_id_t shard_id,
-                                  bool object_is_legacy_ec) const final {
+                                  bool object_is_legacy_ec,
+                                  uint64_t chunk_size = 0) const final {
     if (object_is_legacy_ec) {
       uint64_t chunks = (logical_size + STRIPE_WIDTH - 1) / STRIPE_WIDTH;
       return chunks * CHUNK_SIZE;

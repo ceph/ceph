@@ -333,10 +333,11 @@ public:
 
   uint64_t be_get_ondisk_size(uint64_t logical_size,
                               shard_id_t shard_id,
-                              bool object_is_legacy_ec) const final {
+                              bool object_is_legacy_ec,
+                              uint64_t chunk_size = 0) const final {
     if (is_optimized())
     {
-      return optimized.be_get_ondisk_size(logical_size, shard_id, object_is_legacy_ec);
+      return optimized.be_get_ondisk_size(logical_size, shard_id, object_is_legacy_ec, chunk_size);
     }
     return legacy.be_get_ondisk_size(logical_size);
   }
@@ -435,10 +436,10 @@ public:
   }
 
   uint64_t
-  object_size_to_shard_size(const uint64_t size, shard_id_t shard) const override
+  object_size_to_shard_size(const uint64_t size, shard_id_t shard, uint64_t chunk_size = 0) const override
   {
     if (is_optimized()) {
-      return optimized.object_size_to_shard_size(size, shard);
+      return optimized.object_size_to_shard_size(size, shard, chunk_size);
     }
     return legacy.object_size_to_shard_size(size);
     // All shards are the same size.

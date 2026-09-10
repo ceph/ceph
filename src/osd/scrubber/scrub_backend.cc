@@ -139,9 +139,10 @@ std::string ScrubBackend::extract_crc_from_bufferlist(
 uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size,
                                  shard_id_t shard_id,
                                  bool hinfo_present,
-                                 uint64_t expected_size) const
+                                 uint64_t expected_size,
+                                 uint64_t chunk_size) const
 {
-  uint64_t ondisk_size = m_pg.logical_to_ondisk_size(logical_size, shard_id, false);
+  uint64_t ondisk_size = m_pg.logical_to_ondisk_size(logical_size, shard_id, false, chunk_size);
 
   if (!hinfo_present || ondisk_size == expected_size) {
     return ondisk_size;
@@ -151,7 +152,7 @@ uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size,
   // case there are valid reasons for the shard to be *either* size when using
   // optimised EC. The following function checks the expected size from legacy
   // EC.
-  uint64_t legacy_ondisk_size = m_pg.logical_to_ondisk_size(logical_size, shard_id, true);
+  uint64_t legacy_ondisk_size = m_pg.logical_to_ondisk_size(logical_size, shard_id, true, chunk_size);
   if (expected_size == legacy_ondisk_size) {
     return legacy_ondisk_size;
   }
@@ -765,7 +766,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
 
   uint64_t ondisk_size = logical_to_ondisk_size(oi.size, srd.shard,
     smap_obj.attrs.contains(ECUtil::get_hinfo_key()),
-    smap_obj.size);
+    smap_obj.size, oi.ec_chunk_size);
   if (test_error_cond(smap_obj.size != ondisk_size, shard_info,
                       &shard_info_wrapper::set_obj_size_info_mismatch)) {
 
@@ -910,7 +911,9 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
         bufferlist crc_bl;
         uint32_t zero_data_crc = ceph_crc32c_zeros(
             -1, logical_to_ondisk_size(auth_selection.auth_oi.size,
-                                       auth_selection.auth_shard.shard));
+                                       auth_selection.auth_shard.shard,
+                                       false, 0,
+                                       auth_selection.auth_oi.ec_chunk_size));
 
         for (const auto& shard_id : m_pg.get_ec_sinfo().get_data_shards()) {
           for (std::size_t i = 0; i < sizeof(zero_data_crc); i++) {
@@ -1415,7 +1418,9 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
       for (auto& [srd, bl] : digests) {
         uint32_t zero_data_crc = ceph_crc32c_zeros(
             -1, logical_to_ondisk_size(auth_sel.auth_oi.size,
-                                       auth_sel.auth_shard.shard));
+                                       auth_sel.auth_shard.shard,
+                                       false, 0,
+                                       auth_sel.auth_oi.ec_chunk_size));
 
         for (uint32_t i = 0; i < sizeof(zero_data_crc); i++) {
           bl.c_str()[i] ^= retrieve_byte(zero_data_crc, i);
@@ -1672,7 +1677,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   // sizes:
   uint64_t oi_size = logical_to_ondisk_size(auth_oi.size, shard.shard,
   candidate.attrs.contains(ECUtil::get_hinfo_key()),
-  candidate.size);
+  candidate.size, auth_oi.ec_chunk_size);
   if (oi_size != candidate.size) {
     fmt::format_to(std::back_inserter(out),
                    "{}size {} != size {} from auth oi {}",
@@ -1856,7 +1861,7 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map, const pg_shard_t &srd)
     if (oi) {
       bool has_hinfo = p->second.attrs.contains(
         ECLegacy::ECUtilL::get_hinfo_key());
-      if (logical_to_ondisk_size(oi->size, srd.shard, has_hinfo, p->second.size)
+      if (logical_to_ondisk_size(oi->size, srd.shard, has_hinfo, p->second.size, oi->ec_chunk_size)
           != p->second.size) {
         clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
                       << " : on disk size (" << p->second.size
