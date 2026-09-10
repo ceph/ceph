@@ -731,6 +731,18 @@
 }
 
 {
+   glibc_2.34+_dlopen reachable leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   obj:*/lib*/ld-linux-x86-64.so.2
+   ...
+   fun:_dl_open
+   ...
+   fun:dlopen@@GLIBC_2.34
+}
+
+{
   ethdev_init_log thing
   Memcheck:Leak
   match-leak-kinds: reachable
