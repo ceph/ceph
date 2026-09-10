@@ -1425,6 +1425,77 @@ void POSIXDriver::meta_list_keys_complete(void* handle)
   return;
 }
 
+/* LMDB comparator for versioned bucket listing.
+ * Key format: name \0 instance.
+ * Sort: name ascending, then instance descending (newest version first).
+ * Instance is "mtime-{base36}-ino-{base36}" — we extract and compare
+ * the mtime numerically for correct ordering regardless of base36 width. */
+static int posix_lmdb_cmp(const MDB_val *a, const MDB_val *b)
+{
+  std::string_view sa(static_cast<const char*>(a->mv_data), a->mv_size);
+  std::string_view sb(static_cast<const char*>(b->mv_data), b->mv_size);
+
+  auto sep_a = sa.find('\0');
+  auto sep_b = sb.find('\0');
+  std::string_view name_a = sa.substr(0, sep_a);
+  std::string_view name_b = sb.substr(0, sep_b);
+
+  int cmp = name_a.compare(name_b);
+  if (cmp != 0) {
+    return cmp;
+  }
+
+  /* same name — compare instances in reverse (newest first) */
+  std::string_view inst_a = (sep_a != std::string_view::npos)
+    ? sa.substr(sep_a + 1) : std::string_view{};
+  std::string_view inst_b = (sep_b != std::string_view::npos)
+    ? sb.substr(sep_b + 1) : std::string_view{};
+
+  /* empty instance (non-versioned) sorts before any version */
+  if (inst_a.empty() && inst_b.empty()) { return 0; }
+  if (inst_a.empty()) { return -1; }
+  if (inst_b.empty()) { return 1; }
+
+  /* extract mtime from "mtime-{base36}-ino-{base36}" */
+  auto extract_mtime = [](std::string_view inst) -> uint64_t {
+    static constexpr std::string_view pfx = "mtime-";
+    static constexpr std::string_view sep = "-ino-";
+    if (inst.substr(0, pfx.size()) != pfx) {
+      return 0;
+    }
+    auto ino_pos = inst.find(sep, pfx.size());
+    if (ino_pos == std::string_view::npos) {
+      return 0;
+    }
+    uint64_t val = 0;
+    for (size_t i = pfx.size(); i < ino_pos; ++i) {
+      char c = inst[i];
+      uint64_t d;
+      if (c >= '0' && c <= '9') { d = c - '0'; }
+      else if (c >= 'a' && c <= 'z') { d = 10 + (c - 'a'); }
+      else { return 0; }
+      val = val * 36 + d;
+    }
+    return val;
+  };
+
+  uint64_t mt_a = extract_mtime(inst_a);
+  uint64_t mt_b = extract_mtime(inst_b);
+
+  /* descending: larger mtime sorts first */
+  if (mt_a > mt_b) { return -1; }
+  if (mt_a < mt_b) { return 1; }
+
+  /* same mtime — compare full instance for determinism */
+  return inst_b.compare(inst_a);
+}
+
+
+MDB_cmp_func* POSIXBucket::lmdb_cmp()
+{
+  return posix_lmdb_cmp;
+}
+
 int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
                             fill_cache_cb_t& cb)
 {
@@ -1469,16 +1540,16 @@ int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
     return 0;
   }
 
-int count{0};
-bool in_prefix{false};
-// Names in the cache are in OID format
-rgw_obj_key marker_key(params.marker);
-params.marker = marker_key.get_oid();
-{
-  rgw_obj_key key(params.prefix);
-  params.prefix = key.name;
-}
-if (max <= 0) {
+  int count{0};
+  bool in_prefix{false};
+  // Names in the cache are in OID format
+  rgw_obj_key marker_key(params.marker);
+  params.marker = marker_key.get_oid();
+  {
+    rgw_obj_key key(params.prefix);
+    params.prefix = key.name;
+  }
+  if (max <= 0) {
     return 0;
   }
 
@@ -1489,6 +1560,7 @@ if (max <= 0) {
 	std::string ns;
 	// bde.key can be encoded with the namespace.  Decode it here
 	rgw_obj_key bde_key{bde.key};
+
 	if (!params.list_versions && !bde.is_visible()) {
 	  return true;
 	}
@@ -1999,64 +2071,139 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
   }
 
   int ret = stat(dpp);
-  if (ret < 0) {
-      if (ret == -ENOENT) {
-	// Nothing to do
-	return 0;
-      }
-      return ret;
-  }
-  ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
 
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
 
-  driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
 
+  if (!versioned()) {
+    if (ret == -ENOENT) {
+      return 0;
+    }
+    ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
+
+    if (ret < 0) {
+      return ret;
+    }
+    driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
+    driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
+                                              -1, 0, state.accounted_size);
+    return 0;
+  }
+
+  bool created = false;
+  auto* vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
+
+  if (key.instance.empty() && !vd_ent){
+    // A delete marker must be created even if the key does not exist
+    // Create the versioned directory in order to be able to create a delete marker
+    ret = make_ent(posix::ObjectType::VERSIONED);
+    if (ret < 0) {
+      return ret;
+    }
+
+    ret = ent->create(dpp, nullptr, false);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not create " << ent->get_name() << dendl;
+      return ret;
+    }
+    created = true;
+    vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
+  }
+
+  if (!vd_ent) {
+    return 0;
+  }
+
+  bool update_cur_version = false;
+  std::string remove_ver_id = ent->get_instance();
+
+  std::unique_ptr<posix::FSEnt> old_cur_ent;
+  // The cur version exists
+  if (!created && !key.instance.empty()) {
+    ret = vd_ent->get_latest_version_ent(dpp, old_cur_ent);
+    if (ret < 0) {
+      return ret;
+    }
+    if (old_cur_ent){
+      old_cur_ent->stat(dpp, true);
+    }
+  }
+
+  // A new delete maker will be created
+  if (old_cur_ent && remove_ver_id.empty()) {
+    update_cur_version = true;
+  }
+
+  ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if ((ent->get_type() == posix::ObjectType::VERSIONED) && !remove_ver_id.empty())  {
+    // key.instance will be the same as ent->instance_id
+    driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
+  }
+
+
+  // Last version was removed
   if (!key.instance.empty() && !ent->exists()) {
     /* Remove the non-versioned key as well */
     key.instance.clear();
     driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
+    driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
+                                            -1, 0, state.accounted_size);
+    return 0;
   }
 
   /* after removing a versioned entry, the current version may have
    * changed — if the symlink now points to a delete marker, update
    * its cache entry to add FLAG_CURRENT so the LC can expire it */
-  if (!get_key().instance.empty() && ent->get_parent()) {
-    auto* vdir = dynamic_cast<posix::VersionedDirectory*>(ent->get_parent());
-    if (vdir) {
-      std::unique_ptr<posix::Symlink> sl =
-	std::make_unique<posix::Symlink>(vdir->get_name(), vdir, driver->ctx());
-      if (sl->stat(dpp) >= 0 && sl->exists()) {
-	auto* target = sl->get_target();
-	std::string cur_name = target->get_name();
-	if (!cur_name.empty()) {
-	  std::unique_ptr<posix::FSEnt> cur_ent;
-	  ret = vdir->get_ent(dpp, y, cur_name, std::string(), cur_ent);
-	  if (ret == 0) {
-	    cur_ent->stat(dpp);
-	    rgw_bucket_dir_entry bde{};
-	    rgw_obj_key cur_key = posix::decode_obj_key(cur_name);
-	    cur_key.get_index_key(&bde.key);
-	    bde.flags = rgw_bucket_dir_entry::FLAG_VER
-	      | rgw_bucket_dir_entry::FLAG_CURRENT;
-	    bde.ver.pool = 1;
-	    bde.ver.epoch = 1;
-	    bde.exists = true;
-	    bde.meta.mtime = from_statx_timestamp(cur_ent->get_stx().stx_mtime);
-	    bde.meta.size = cur_ent->get_stx().stx_size;
-	    bde.meta.accounted_size = bde.meta.size;
-	    if (bde.meta.size == 0) {
-	      Attrs attrs;
-	      bufferlist bl;
-	      if (cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
-		  posix::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
-		bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
-	      }
-	    }
-	    driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
-	  }
-	}
+
+  if (update_cur_version) {
+    if (old_cur_ent) {
+      std::string old_cur_name = old_cur_ent->get_name();
+      if (!old_cur_name.empty()) {
+        old_cur_ent->stat(dpp);
+        uint32_t fill_flags = posix::FSEnt::FLAG_NONE;
+        Attrs attrs;
+        bufferlist bl;
+        if (old_cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
+            ::rgw::sal::posix::get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
+          fill_flags |= posix::FSEnt::FLAG_DELETE_MARKER;
+        }
+        old_cur_ent->fill_cache( dpp, null_yield,
+          [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
+          driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
+          return 0;
+        }, fill_flags);
+      }
+    }
+  }
+  if (vd_ent) {
+    std::unique_ptr<posix::FSEnt> new_cur_ent;
+    ret = vd_ent->get_latest_version_ent(dpp, new_cur_ent);
+    if (ret < 0) {
+      return ret;
+    }
+    auto *cur_ent = new_cur_ent.get();
+    if (cur_ent) {
+      std::string cur_name = cur_ent->get_name();
+      if (!cur_name.empty()) {
+        cur_ent->stat(dpp);
+        uint32_t fill_flags = posix::FSEnt::FLAG_CURRENT;
+        Attrs attrs;
+        bufferlist bl;
+        if (cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
+            ::rgw::sal::posix::get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
+          fill_flags |= posix::FSEnt::FLAG_DELETE_MARKER;
+        }
+        cur_ent->fill_cache( dpp, null_yield,
+          [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
+          driver->get_bucket_cache()->add_entry(dpp, b->get_name(), bde);
+        return 0;
+      }, fill_flags);
+
       }
     }
   }
@@ -2541,6 +2688,11 @@ int POSIXObject::set_cur_version(const DoutPrefixProvider *dpp)
   }
 
   ret = vdir->set_cur_version_ent(dpp, child.get());
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = vdir->stat(dpp, true);
   return ret;
 }
 
@@ -2565,6 +2717,15 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
 
   if (state.obj.key.instance.empty()) {
     state.obj.key.instance = ent->get_cur_version();
+  }
+
+  if (ent->get_type() == posix::ObjectType::VERSIONED) {
+    auto* vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
+    if (vd_ent && vd_ent->cur_is_delete_marker()) {
+      state.exists = false;
+      state.is_dm = true;
+      return -ENOENT;
+    }
   }
 
   state.exists = ent->exists();
@@ -2679,6 +2840,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
   if (ret < 0)
     return ret;
 
+  state.obj.key.set_instance(ent->get_cur_version());
   POSIXBucket *b = static_cast<POSIXBucket *>(get_bucket());
   if (!b) {
     ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name()
@@ -3462,6 +3624,21 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // save shadow name before rename changes info.bucket.name
   std::string shadow_cache_name = shadow->get_name();
 
+  // If versioned, update the version id in the POSIXObject to the mtime+inode
+  // so the directory will be renamed to the correct name.
+
+  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
+  POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
+
+  if (sb->versioned()) {
+    auto *shadow_dir = shadow->get_dir();
+    ret = shadow_dir->stat(dpp, true);
+    struct statx f_stx = shadow_dir->get_stx();
+    std::string ver_id = posix::posix_version_id_from_statx (f_stx);
+    to->set_instance_id(ver_id);
+  }
+
+
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
   if (ret < 0) {
@@ -3470,8 +3647,6 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
-  POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
   if (sb->versioned()) {
     ret = to->set_cur_version(dpp);
     if (ret < 0) {
@@ -3481,6 +3656,12 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   // remove staging directory listing cache entry (frees LMDB DBI slot)
   driver->get_bucket_cache()->invalidate_bucket(dpp, shadow_cache_name, true);
+  to->stat(dpp);
+  to->fill_cache( nullptr, null_yield,
+      [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
+	driver->get_bucket_cache()->add_entry(dpp, sb->get_name(), bde);
+	return 0;
+      });
 
   return 0;
 }
@@ -3691,6 +3872,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 {
   int ret;
   uint64_t orig_size = 0;
+
   auto exists = obj->check_exists(dpp);
   if (exists) {
     orig_size = obj->get_size();
