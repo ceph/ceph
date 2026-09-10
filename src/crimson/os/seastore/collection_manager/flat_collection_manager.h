@@ -20,15 +20,13 @@ class FlatCollectionManager : public CollectionManager {
   }
 
   using get_root_iertr = base_iertr;
-  using get_root_ret = get_root_iertr::future<CollectionNodeRef>;
+  using get_root_ret = get_root_iertr::future<FlatCollectionNodeRef>;
   get_root_ret get_coll_root(const coll_root_t &coll_root, Transaction &t);
 
 public:
   explicit FlatCollectionManager(TransactionManager &tm);
 
-  get_root_ret get_coll_node(const coll_root_t &coll_root, Transaction &t) {
-    return get_coll_root(coll_root, t);
-  }
+  get_coll_node_ret get_coll_node(const coll_root_t &coll_root, Transaction &t) final;
 
   mkfs_ret mkfs(Transaction &t) final;
 

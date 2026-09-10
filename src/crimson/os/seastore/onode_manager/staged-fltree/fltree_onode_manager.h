@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
+#include "crimson/os/seastore/collection_manager.h"
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/value.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
@@ -402,7 +402,7 @@ using crimson::common::get_conf;
 
 class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
   TransactionManager &tm;
-  collection_manager::FlatCollectionManager &collection_manager;
+  CollectionManager &collection_manager;
 
   uint32_t default_data_reservation = 0;
 
@@ -446,7 +446,7 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
 public:
   FLTreeOnodeManager(
     TransactionManager &tm,
-    collection_manager::FlatCollectionManager &collection_manager) :
+    CollectionManager &collection_manager) :
     tm(tm), collection_manager(collection_manager),
     default_data_reservation(
       get_conf<uint64_t>("seastore_default_max_object_size"))

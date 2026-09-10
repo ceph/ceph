@@ -20,7 +20,7 @@ NodeExtentManagerURef NodeExtentManager::create_dummy(bool is_sync)
 NodeExtentManagerURef NodeExtentManager::create_seastore(
     TransactionManager &tm,
     coll_t cid,
-    collection_manager::FlatCollectionManager &collection_manager,
+    CollectionManager &collection_manager,
     laddr_t min_laddr, double p_eagain)
 {
   if (p_eagain == 0.0) {

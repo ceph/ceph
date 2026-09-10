@@ -38,15 +38,15 @@ void delta_t::replay(coll_map_t &l) const
 }
 
 
-std::ostream &CollectionNode::print_detail_l(std::ostream &out) const
+std::ostream &FlatCollectionNode::print_detail_l(std::ostream &out) const
 {
   return out;
 }
 
-CollectionNode::list_ret
-CollectionNode::list()
+FlatCollectionNode::list_ret
+FlatCollectionNode::list()
 {
-  logger().debug("CollectionNode:{}, {}", __func__, *this);
+  logger().debug("FlatCollectionNode:{}, {}", __func__, *this);
   CollectionManager::list_ret_bare list_result;
   for (auto &[coll, value] : decoded) {
     list_result.emplace_back(coll, coll_info_t(value.bits, value.onode_root));
@@ -56,15 +56,15 @@ CollectionNode::list()
     std::move(list_result));
 }
 
-CollectionNode::create_ret
-CollectionNode::create(coll_context_t cc, coll_t coll, coll_value_t value)
+FlatCollectionNode::create_ret
+FlatCollectionNode::create(coll_context_t cc, coll_t coll, coll_value_t value)
 {
-  logger().debug("CollectionNode:{}", __func__);
+  logger().debug("FlatCollectionNode:{}", __func__);
   if (!is_mutable()) {
-    auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
+    auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<FlatCollectionNode>();
     return mut->create(cc, coll, value);
   }
-  logger().debug("CollectionNode::create {} {} {}", coll, value.bits, *this);
+  logger().debug("FlatCollectionNode::create {} {} {}", coll, value.bits, *this);
   auto [iter, inserted] = decoded.insert(coll, value);
   assert(inserted);
   if (encoded_sizeof((base_coll_map_t&)decoded) > get_bptr().length()) {
@@ -83,13 +83,13 @@ CollectionNode::create(coll_context_t cc, coll_t coll, coll_value_t value)
   }
 }
 
-CollectionNode::update_ret
-CollectionNode::update(coll_context_t cc, coll_t coll, coll_value_t value)
+FlatCollectionNode::update_ret
+FlatCollectionNode::update(coll_context_t cc, coll_t coll, coll_value_t value)
 {
-  logger().debug("trans.{} CollectionNode:{} {} {}",
+  logger().debug("trans.{} FlatCollectionNode:{} {} {}",
     cc.t.get_trans_id(), __func__, coll, value.bits);
   if (!is_mutable()) {
-    auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
+    auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<FlatCollectionNode>();
     return mut->update(cc, coll, value);
   }
   if (auto buffer = maybe_get_delta_buffer(); buffer) {
@@ -100,9 +100,9 @@ CollectionNode::update(coll_context_t cc, coll_t coll, coll_value_t value)
   return seastar::now();
 }
 
-void CollectionNode::update_value(coll_context_t cc, coll_t coll, coll_value_t value)
+void FlatCollectionNode::update_value(coll_context_t cc, coll_t coll, coll_value_t value)
 {
-  logger().debug("trans.{} CollectionNode:{} {} {}",
+  logger().debug("trans.{} FlatCollectionNode:{} {} {}",
     cc.t.get_trans_id(), __func__, coll, value.bits);
   ceph_assert(is_mutable());
   if (auto buffer = maybe_get_delta_buffer(); buffer) {
@@ -112,13 +112,13 @@ void CollectionNode::update_value(coll_context_t cc, coll_t coll, coll_value_t v
   copy_to_node();
 }
 
-CollectionNode::remove_ret
-CollectionNode::remove(coll_context_t cc, coll_t coll)
+FlatCollectionNode::remove_ret
+FlatCollectionNode::remove(coll_context_t cc, coll_t coll)
 {
-  logger().debug("trans.{} CollectionNode:{} {}",
+  logger().debug("trans.{} FlatCollectionNode:{} {}",
     cc.t.get_trans_id(),__func__, coll);
   if (!is_mutable()) {
-    auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
+    auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<FlatCollectionNode>();
     return mut->remove(cc, coll);
   }
   if (auto buffer = maybe_get_delta_buffer(); buffer) {

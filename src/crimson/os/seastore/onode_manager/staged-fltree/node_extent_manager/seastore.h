@@ -6,7 +6,7 @@
 #include <random>
 
 #include "crimson/os/seastore/logging.h"
-#include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
+#include "crimson/os/seastore/collection_manager.h"
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_delta_recorder.h"
@@ -28,7 +28,7 @@ class SeastoreSuper final: public Super {
   // root lives in that collection's coll_info_t
   SeastoreSuper(Transaction& t, RootNodeTracker& tracker,
                 laddr_t root_addr, TransactionManager& tm, coll_t cid,
-                collection_manager::CollectionNode::CollectionNodeRef coll_node,
+                CollectionNode::CollectionNodeRef coll_node,
                 unsigned split_bits)
     : Super(t, tracker), root_addr{root_addr}, tm{tm}, cid{cid},
       coll_node{std::move(coll_node)}, split_bits{split_bits} {}
@@ -44,7 +44,7 @@ class SeastoreSuper final: public Super {
       SUBDEBUGT(seastore_onode, "update coll {} onode root {} ...",
                 c.t, cid, addr);
       coll_node = tm.get_mutable_extent(c.t, coll_node)
-        ->cast<collection_manager::CollectionNode>();
+        ->cast<CollectionNode>();
       coll_node->update_value(
         collection_manager::coll_context_t{tm, c.t}, cid,
         collection_manager::coll_value_t{split_bits, addr});
@@ -57,7 +57,7 @@ class SeastoreSuper final: public Super {
   laddr_t root_addr;
   TransactionManager &tm;
   coll_t cid;
-  collection_manager::CollectionNode::CollectionNodeRef coll_node;
+  CollectionNode::CollectionNodeRef coll_node;
   unsigned split_bits = 0;
 };
 
@@ -112,7 +112,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
  public:
   SeastoreNodeExtentManager(
       TransactionManager &tm, laddr_t min, double p_eagain,
-      coll_t cid, collection_manager::FlatCollectionManager &collection_manager)
+      coll_t cid, CollectionManager &collection_manager)
       : TransactionManagerHandle(tm), addr_min{min},
         cid{cid}, collection_manager{collection_manager}, p_eagain{p_eagain} {
     if constexpr (INJECT_EAGAIN) {
@@ -257,7 +257,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
 
   // collection_manager of this cid.
   const coll_t cid;
-  collection_manager::FlatCollectionManager &collection_manager;
+  CollectionManager &collection_manager;
 
   // XXX: conditional members by INJECT_EAGAIN
   bool trigger_eagain() {

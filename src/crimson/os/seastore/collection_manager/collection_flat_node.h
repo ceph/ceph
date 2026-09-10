@@ -9,23 +9,6 @@
 #include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore::collection_manager {
-struct coll_context_t {
-  TransactionManager &tm;
-  Transaction &t;
-};
-
-struct coll_value_t {
-  uint32_t bits = 0;
-  laddr_t onode_root = L_ADDR_NULL;
-
-  DENC(coll_value_t, v, p) {
-    DENC_START(1, 1, p);
-    denc(v.bits, p);
-    denc(v.onode_root, p);
-    DENC_FINISH(p);
-  }
-};
-
 using base_coll_map_t = std::map<denc_coll_t, coll_value_t>;
 struct coll_map_t : base_coll_map_t {
   auto insert(coll_t coll, coll_value_t value) {
@@ -65,7 +48,6 @@ struct delta_t {
   void replay(coll_map_t &l) const;
 };
 }
-WRITE_CLASS_DENC(crimson::os::seastore::collection_manager::coll_value_t)
 WRITE_CLASS_DENC(crimson::os::seastore::collection_manager::delta_t)
 
 namespace crimson::os::seastore::collection_manager {
@@ -104,15 +86,15 @@ WRITE_CLASS_DENC(crimson::os::seastore::collection_manager::delta_buffer_t)
 
 namespace crimson::os::seastore::collection_manager {
 
-struct CollectionNode : LogicalChildNode {
-  using CollectionNodeRef = TCachedExtentRef<CollectionNode>;
+struct FlatCollectionNode : CollectionNode {
+  using FlatCollectionNodeRef = TCachedExtentRef<FlatCollectionNode>;
 
-  explicit CollectionNode(ceph::bufferptr &&ptr)
-    : LogicalChildNode(std::move(ptr)) {}
-  explicit CollectionNode(extent_len_t length)
-    : LogicalChildNode(length) {}
-  explicit CollectionNode(const CollectionNode &other)
-    : LogicalChildNode(other),
+  explicit FlatCollectionNode(ceph::bufferptr &&ptr)
+    : CollectionNode(std::move(ptr)) {}
+  explicit FlatCollectionNode(extent_len_t length)
+    : CollectionNode(length) {}
+  explicit FlatCollectionNode(const FlatCollectionNode &other)
+    : CollectionNode(other),
       decoded(other.decoded) {}
 
   static constexpr extent_types_t type = extent_types_t::COLL_BLOCK;
@@ -122,19 +104,19 @@ struct CollectionNode : LogicalChildNode {
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     assert(delta_buffer.empty());
-    return CachedExtentRef(new CollectionNode(*this));
+    return CachedExtentRef(new FlatCollectionNode(*this));
   }
   delta_buffer_t *maybe_get_delta_buffer() {
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
-  const coll_value_t &get_value(coll_t cid) const {
+  const coll_value_t &get_value(coll_t cid) const final {
     auto it = decoded.find(denc_coll_t{cid});
     ceph_assert(it != decoded.end());
     return it->second;
   }
 
-  bool contains(coll_t cid) const {
+  bool contains(coll_t cid) const final {
     return decoded.find(denc_coll_t{cid}) != decoded.end();
   }
 
@@ -159,7 +141,7 @@ struct CollectionNode : LogicalChildNode {
   using update_ret = CollectionManager::update_ret;
   update_ret update(coll_context_t cc, coll_t coll, coll_value_t value);
 
-  void update_value(coll_context_t cc, coll_t coll, coll_value_t value);
+  void update_value(coll_context_t cc, coll_t coll, coll_value_t value) final;
 
 
   void on_clean_read() final {
@@ -182,7 +164,7 @@ struct CollectionNode : LogicalChildNode {
 
   ceph::bufferlist get_delta() final {
     ceph::bufferlist bl;
-    // FIXME: CollectionNodes are always first mutated and
+    // FIXME: FlatCollectionNodes are always first mutated and
     // 	      then checked whether they have enough space,
     // 	      and if not, new ones will be created and the
     // 	      mutation_pending ones are left untouched.
@@ -213,9 +195,9 @@ struct CollectionNode : LogicalChildNode {
 
   std::ostream &print_detail_l(std::ostream &out) const final;
 };
-using CollectionNodeRef = CollectionNode::CollectionNodeRef;
+using FlatCollectionNodeRef = FlatCollectionNode::FlatCollectionNodeRef;
 }
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::collection_manager::CollectionNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::collection_manager::FlatCollectionNode> : fmt::ostream_formatter {};
 #endif

@@ -9,6 +9,7 @@
 
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction_manager.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
@@ -31,6 +32,46 @@ struct coll_info_t {
   }
 };
 
+namespace collection_manager {
+struct coll_context_t {
+  TransactionManager &tm;
+  Transaction &t;
+};
+
+struct coll_value_t {
+  uint32_t bits = 0;
+  laddr_t onode_root = L_ADDR_NULL;
+
+  DENC(coll_value_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.bits, p);
+    denc(v.onode_root, p);
+    DENC_FINISH(p);
+  }
+};
+}
+}
+WRITE_CLASS_DENC(crimson::os::seastore::collection_manager::coll_value_t)
+
+namespace crimson::os::seastore {
+
+/// Interface for a collection's persisted onode-tree root node.
+struct CollectionNode : LogicalChildNode {
+  using CollectionNodeRef = TCachedExtentRef<CollectionNode>;
+
+  explicit CollectionNode(ceph::bufferptr &&ptr)
+    : LogicalChildNode(std::move(ptr)) {}
+  explicit CollectionNode(extent_len_t length)
+    : LogicalChildNode(length) {}
+
+  virtual const collection_manager::coll_value_t &get_value(coll_t cid) const = 0;
+  virtual bool contains(coll_t cid) const = 0;
+  virtual void update_value(
+    collection_manager::coll_context_t cc, coll_t coll,
+    collection_manager::coll_value_t value) = 0;
+};
+using CollectionNodeRef = CollectionNode::CollectionNodeRef;
+
 /// Interface for maintaining set of collections
 class CollectionManager {
 public:
@@ -40,6 +81,13 @@ public:
   using mkfs_iertr = TransactionManager::alloc_extent_iertr;
   using mkfs_ret = mkfs_iertr::future<coll_root_t>;
   virtual mkfs_ret mkfs(
+    Transaction &t) = 0;
+
+  /// Get the collection's persisted root node
+  using get_coll_node_iertr = base_iertr;
+  using get_coll_node_ret = get_coll_node_iertr::future<CollectionNode::CollectionNodeRef>;
+  virtual get_coll_node_ret get_coll_node(
+    const coll_root_t &coll_root,
     Transaction &t) = 0;
 
   /// Create collection
