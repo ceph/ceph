@@ -2072,3 +2072,118 @@ async fn test_versioning_demoted_version_listed_warm_cache() {
         "exactly one version must be current"
     );
 }
+
+/* Exactly one version of a key may be IsLatest, whichever write path
+ * superseded the previous one.  There is a separate path per operation --
+ * PUT, COPY and multipart-complete each demote the current version
+ * themselves -- so each gets its own check.
+ *
+ * A real case:  nsfs's NFS write path demoted the current version on disk but
+ * never recorded the demotion in its listing cache, so two versions came back
+ * IsLatest.  These are the S3-side equivalents.
+ *
+ * They interleave a ListObjectVersions between the writes, which was an
+ * attempt to force a cache update rather than a rebuild.  It does not
+ * demonstrably do that:  disabling the demotion bookkeeping in the nsfs
+ * driver leaves all three passing, so they exercise the invariant and not the
+ * incremental path.  The guard which does catch it is
+ * OPEN2.VER_WRITE_TWICE_MAKES_TWO_VERSIONS in ceph_test_librgw_file_write2,
+ * which warms the cache explicitly and was verified to fail when the
+ * bookkeeping is removed.
+ */
+async fn latest_count(client: &aws_sdk_s3::Client, bucket: &str, key: &str) -> usize {
+    let resp = client
+        .list_object_versions()
+        .bucket(bucket)
+        .prefix(key)
+        .send()
+        .await
+        .unwrap();
+    resp.versions()
+        .iter()
+        .filter(|v| v.key().unwrap_or_default() == key)
+        .filter(|v| v.is_latest().unwrap_or(false))
+        .count()
+}
+
+#[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+async fn test_versioned_put_one_latest_after_incremental_update() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket, "Enabled", "Enabled").await;
+    let key = "putlatest";
+
+    client.put_object().bucket(&bucket).key(key)
+        .body(ByteStream::from_static(b"one")).send().await.unwrap();
+
+    assert_eq!(latest_count(&client, &bucket, key).await, 1);
+
+    client.put_object().bucket(&bucket).key(key)
+        .body(ByteStream::from_static(b"two")).send().await.unwrap();
+
+    assert_eq!(latest_count(&client, &bucket, key).await, 1,
+        "a superseded version is still marked latest after an overwrite");
+}
+
+#[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+async fn test_versioned_copy_one_latest_after_incremental_update() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket, "Enabled", "Enabled").await;
+    let src = "copylatest-src";
+    let key = "copylatest";
+
+    client.put_object().bucket(&bucket).key(src)
+        .body(ByteStream::from_static(b"source")).send().await.unwrap();
+    client.put_object().bucket(&bucket).key(key)
+        .body(ByteStream::from_static(b"one")).send().await.unwrap();
+
+    assert_eq!(latest_count(&client, &bucket, key).await, 1);
+
+    /* a copy onto an existing key demotes that key's current version */
+    client.copy_object().bucket(&bucket).key(key)
+        .copy_source(format!("{bucket}/{src}")).send().await.unwrap();
+
+    assert_eq!(latest_count(&client, &bucket, key).await, 1,
+        "a superseded version is still marked latest after a copy");
+}
+
+#[tokio::test]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+async fn test_versioned_mpu_one_latest_after_incremental_update() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket, "Enabled", "Enabled").await;
+    let key = "mpulatest";
+
+    client.put_object().bucket(&bucket).key(key)
+        .body(ByteStream::from_static(b"one")).send().await.unwrap();
+
+    assert_eq!(latest_count(&client, &bucket, key).await, 1);
+
+    /* completing a multipart upload onto an existing key demotes it too */
+    let create = client.create_multipart_upload()
+        .bucket(&bucket).key(key).send().await.unwrap();
+    let upload_id = create.upload_id().unwrap().to_string();
+    let part = client.upload_part()
+        .bucket(&bucket).key(key).upload_id(&upload_id).part_number(1)
+        .body(ByteStream::from_static(b"multipart body"))
+        .send().await.unwrap();
+    client.complete_multipart_upload()
+        .bucket(&bucket).key(key).upload_id(&upload_id)
+        .multipart_upload(
+            aws_sdk_s3::types::CompletedMultipartUpload::builder()
+                .parts(aws_sdk_s3::types::CompletedPart::builder()
+                    .e_tag(part.e_tag().unwrap_or_default())
+                    .part_number(1).build())
+                .build())
+        .send().await.unwrap();
+
+    assert_eq!(latest_count(&client, &bucket, key).await, 1,
+        "a superseded version is still marked latest after a multipart complete");
+}
