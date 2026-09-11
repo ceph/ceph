@@ -757,7 +757,7 @@ class Orchestrator(object):
         :param replace_block: marks the corresponding block device as being replaced.
         :param replace_db: marks the corresponding db device as being replaced.
         :param replace_wal: marks the corresponding wal device as being replaced.
-        :param force: Forces the OSD removal process without waiting for the data to be drained first.
+        :param force: Forces OSD removal without waiting for PG drain or osd safe-to-destroy.
         :param zap: Zap/Erase all devices associated with the OSDs (DESTROYS DATA)
         :param no_destroy: Do not destroy associated VGs/LVs with the OSD.
 
