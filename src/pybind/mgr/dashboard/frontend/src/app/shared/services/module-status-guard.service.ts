@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { ActivatedRouteSnapshot, Router } from '@angular/router';
 
 import { of as observableOf } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -13,7 +13,9 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
  * This service checks if a route can be activated by executing a
  * REST API call to '/ui-api/<uiApiPath>/status'. If the returned response
  * states that the module is not available, then the user is redirected
- * to the specified <redirectTo> URL path.
+ * to the specified <redirectTo> URL path unless the configured backend matches.
+ * The backend is checked only when the module is unavailable and the user can
+ * read its configuration.
  *
  * A controller implementing this endpoint should return an object of
  * the following form:
@@ -64,49 +66,55 @@ export class ModuleStatusGuardService {
     if (!config?.uiApiPath) {
       return observableOf(true);
     }
-    let backendCheck = false;
-    if (config.backend && this.authStorageService.getPermissions().configOpt?.read) {
-      this.mgrModuleService.getConfig('orchestrator').subscribe(
-        (resp) => {
-          backendCheck = config.backend === resp['orchestrator'];
-        },
-        () => {
+    return this.http
+      .get<{ available: boolean; message?: string | null }>(`ui-api/${config.uiApiPath}/status`)
+      .pipe(
+        switchMap((status) => {
+          if (
+            status.available ||
+            !config.backend ||
+            !this.authStorageService.getPermissions().configOpt?.read
+          ) {
+            return observableOf(status);
+          }
+          return this.mgrModuleService.getConfig('orchestrator').pipe(
+            map((backend) => ({
+              ...status,
+              available: config.backend === backend['orchestrator']
+            })),
+            catchError(() => observableOf(status))
+          );
+        }),
+        map((resp) => {
+          if (!resp.available) {
+            this.router.navigate([config.redirectTo || ''], {
+              state: {
+                header: config.header,
+                message: resp.message,
+                section: config.section,
+                section_info: config.section_info,
+                button_name: config.button_name,
+                button_route: config.button_route,
+                button_title: config.button_title,
+                secondary_button_name: config.secondary_button_name,
+                secondary_button_route: config.secondary_button_route,
+                secondary_button_title: config.secondary_button_title,
+                module_name: config.module_name,
+                navigate_to: config.navigate_to,
+                uiConfig: config.uiConfig,
+                uiApiPath: config.uiApiPath,
+                icon: Icons.wrench,
+                component: config.component
+              }
+            });
+          }
+          return resp.available;
+        }),
+        catchError(() => {
           this.router.navigate([config.redirectTo]);
           return observableOf(false);
-        }
+        })
       );
-    }
-    return this.http.get(`ui-api/${config.uiApiPath}/status`).pipe(
-      map((resp: any) => {
-        if (!resp.available && !backendCheck) {
-          this.router.navigate([config.redirectTo || ''], {
-            state: {
-              header: config.header,
-              message: resp.message,
-              section: config.section,
-              section_info: config.section_info,
-              button_name: config.button_name,
-              button_route: config.button_route,
-              button_title: config.button_title,
-              secondary_button_name: config.secondary_button_name,
-              secondary_button_route: config.secondary_button_route,
-              secondary_button_title: config.secondary_button_title,
-              module_name: config.module_name,
-              navigate_to: config.navigate_to,
-              uiConfig: config.uiConfig,
-              uiApiPath: config.uiApiPath,
-              icon: Icons.wrench,
-              component: config.component
-            }
-          });
-        }
-        return resp.available;
-      }),
-      catchError(() => {
-        this.router.navigate([config.redirectTo]);
-        return observableOf(false);
-      })
-    );
   }
 
   private getGuardConfig(route: ActivatedRouteSnapshot): any {
