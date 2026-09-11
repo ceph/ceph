@@ -38,6 +38,7 @@ from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now, str_to_datetime
 from orchestrator import DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError, DaemonDescriptionStatus, OrchestratorEvent
+from mgr_module import MonCommandFailed
 from tests import mock
 from .fixtures import wait, _run_cephadm, match_glob, with_host, \
     with_cephadm_module, with_service, make_daemons_running, async_side_effect
@@ -2980,6 +2981,18 @@ Traceback (most recent call last):
             with with_host(cephadm_module, 'test2', refresh_hosts=False, rm_with_force=False):
                 cephadm_module.inventory.add_label('test2', SpecialHostLabels.ADMIN)
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_remove_host_crush_leftover_osds(self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=True):
+            with mock.patch.object(
+                    cephadm_module, 'check_mon_command',
+                    side_effect=MonCommandFailed(
+                        'osd crush remove failed: (39) Directory not empty retval: -39')):
+                out = wait(cephadm_module, cephadm_module.remove_host(
+                    'test', force=True, rm_crush_entry=True))
+            assert 'OSDs may still be present' in out
+            assert 'ceph orch host drain test' in out
+
     @pytest.mark.parametrize("facts, settings, expected_value",
                              [
                                  # All options are available on all hosts
@@ -3236,6 +3249,23 @@ Traceback (most recent call last):
         with pytest.raises(OrchestratorError, match=r"Cannot find host 'host1' in the inventory."):
             cephadm_module.drain_host('host1', force=True, zap_osd_devices=True)
             _rm_osds.assert_called_with([], zap=True)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.CephadmOrchestrator.remove_osds")
+    @mock.patch("cephadm.CephadmOrchestrator.add_host_label", lambda *a, **kw: None)
+    def test_host_drain_error_osds(self, _rm_osds, cephadm_module):
+        error_dd = DaemonDescription(
+            daemon_type='osd', daemon_id='0', hostname='test',
+            status=DaemonDescriptionStatus.error)
+        running_dd = DaemonDescription(
+            daemon_type='osd', daemon_id='1', hostname='test',
+            status=DaemonDescriptionStatus.running)
+        with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=True):
+            with mock.patch.object(cephadm_module.cache, 'get_daemons_by_host',
+                                   return_value=[error_dd, running_dd]):
+                cephadm_module.drain_host('test', force=True, zap_osd_devices=True)
+            _rm_osds.assert_any_call(['0'], zap=True, force=True)
+            _rm_osds.assert_any_call(['1'], zap=True)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     @mock.patch("cephadm.CephadmOrchestrator.stop_remove_osds")
