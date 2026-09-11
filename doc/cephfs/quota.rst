@@ -130,7 +130,7 @@ Limitations
 
    An example command to create such a user::
 
-     $ ceph auth get-or-create client.guest mds 'allow r path=/home/volumes, allow rw path=/home/volumes/group' mgr 'allow rw' osd 'allow rw tag cephfs metadata=*' mon 'allow r'
+     $ ceph auth get-or-create client.guest mds 'allow r path=/home/volumes, allow rw path=/home/volumes/group' mgr 'allow rw' osd 'allow rw tag cephfs data=*' mon 'allow r'
 
    A related known issue: when the kernel client mounts a subdirectory
    below the directory on which the quota is set, tools such as ``df``
