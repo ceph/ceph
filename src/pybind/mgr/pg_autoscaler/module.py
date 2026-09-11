@@ -19,8 +19,6 @@ Some terminology is made up for the purposes of this module:
  - "raw pgs": pg count after applying replication, i.e. the real resource
               consumption of a pool.
  - "grow/shrink" - increase/decrease the pg_num in a pool
- - "crush subtree" - non-overlapping domains in crush hierarchy: used as
-                     units of resource management.
 """
 
 INTERVAL = 5
@@ -113,12 +111,12 @@ class PgAdjustmentProgress(object):
                       refs=[("pool", self.pool_id)])
 
 
-class CrushSubtreeResourceStatus:
+class CrushRootResourceStatus:
     def __init__(self) -> None:
-        self.root_ids: List[int] = []
+        self.root_id: int
         self.osds: Set[int] = set()
         self.osd_count: Optional[int] = None  # Number of OSDs
-        self.pg_target: Optional[int] = None  # Ideal full-capacity PG count?
+        self.pg_target = 0 # Ideal full-capacity PG count?
         self.pg_current = 0  # How many PGs already?
         self.pg_left = 0
         self.capacity: Optional[int] = None  # Total capacity of OSDs in subtree
@@ -425,17 +423,18 @@ class PgAutoscaler(MgrModule):
         self.log.info('Stopping pg_autoscaler')
         self._shutdown.set()
 
-    def identify_subtrees_and_overlaps(self,
-                                       osdmap: OSDMap,
-                                       pools: Dict[str, Dict[str, Any]],
-                                       crush: CRUSHMap,
-                                       result: Dict[int, CrushSubtreeResourceStatus],
-                                       overlapped_roots: Set[int],
-                                       roots: List[CrushSubtreeResourceStatus]) -> \
-        Tuple[List[CrushSubtreeResourceStatus],
-              Set[int]]:
+    def identify_subtrees(self,
+                          osdmap: OSDMap,
+                          pools: Dict[str, Dict[str, Any]],
+                          crush: CRUSHMap,
+                          result: Dict[int, CrushRootResourceStatus],
+                          roots: List[CrushRootResourceStatus],
+                          osd_uses_by_root: Dict[int, Set[int]]) -> \
+        Tuple[List[CrushRootResourceStatus],
+              Dict[int, Set[int]]]:
 
-        # We identify subtrees and overlapping roots from osdmap
+        # We identify subtrees from osdmap
+
         for pool_name, pool in pools.items():
             crush_rule = crush.get_rule_by_id(pool['crush_rule'])
             assert crush_rule is not None
@@ -443,26 +442,15 @@ class PgAutoscaler(MgrModule):
             root_id = crush.get_rule_root(cr_name)
             assert root_id is not None
             osds = set(crush.get_osds_under(root_id))
-
-            # Are there overlapping roots?
+            for osd in osds:
+                osd_uses_by_root[osd].add(root_id)
             s = None
-            for prev_root_id, prev in result.items():
-                if osds & prev.osds:
-                    s = prev
-                    if prev_root_id != root_id:
-                        overlapped_roots.add(prev_root_id)
-                        overlapped_roots.add(root_id)
-                        self.log.warning("pool %s won't scale due to overlapping roots: %s",
-                                      pool_name, overlapped_roots)
-                        self.log.warning("Please See: https://docs.ceph.com/en/"
-                                         "latest/rados/operations/placement-groups"
-                                         "/#automated-scaling")
-                    break
-            if not s:
-                s = CrushSubtreeResourceStatus()
+            if root_id not in result:
+                s = CrushRootResourceStatus()
                 roots.append(s)
-            result[root_id] = s
-            s.root_ids.append(root_id)
+                result[root_id] = s
+                s.root_id = root_id
+            s = result[root_id]
             s.osds |= osds
             s.pool_ids.append(pool['pool'])
             s.pool_names.append(pool_name)
@@ -474,32 +462,33 @@ class PgAutoscaler(MgrModule):
                 target_bytes = pool['options'].get('target_size_bytes', 0)
                 if target_bytes:
                     s.total_target_bytes += target_bytes * osdmap.pool_raw_used_rate(pool['pool'])
-        return roots, overlapped_roots
+        return roots, osd_uses_by_root
 
     def get_subtree_resource_status(self,
                                     osdmap: OSDMap,
                                     pools: Dict[str, Dict[str, Any]],
-                                    crush: CRUSHMap) -> Tuple[Dict[int, CrushSubtreeResourceStatus],
-                                                              Set[int]]:
+                                    crush: CRUSHMap) -> Dict[int, CrushRootResourceStatus]:
         """
         For each CRUSH subtree of interest (i.e. the roots under which
         we have pools), calculate the current resource usages and targets,
         such as how many PGs there are, vs. how many PGs we would
         like there to be.
         """
-        result: Dict[int, CrushSubtreeResourceStatus] = {}
-        roots: List[CrushSubtreeResourceStatus] = []
-        overlapped_roots: Set[int] = set()
-        # identify subtrees and overlapping roots
-        roots, overlapped_roots = self.identify_subtrees_and_overlaps(
-            osdmap, pools, crush, result, overlapped_roots, roots
+        result: Dict[int, CrushRootResourceStatus] = {}
+        roots: List[CrushRootResourceStatus] = []
+        osd_uses_by_root: Dict[int, Set[int]] = defaultdict(set[int])
+        # identify subtrees and roots
+        roots, osd_uses_by_root = self.identify_subtrees(
+            osdmap, pools, crush, result, roots, osd_uses_by_root
         )
         # finish subtrees
         all_stats = self.get('osd_stats')
+        for osd, root_ids in osd_uses_by_root.items():
+            for root_id in root_ids:
+                result[root_id].pg_target += self.mon_target_pg_per_osd // len(root_ids)
         for s in roots:
             assert s.osds is not None
             s.osd_count = len(s.osds)
-            s.pg_target = s.osd_count * self.mon_target_pg_per_osd
             s.pg_left = s.pg_target
             s.pool_count = len(s.pool_ids)
             capacity = 0
@@ -512,13 +501,12 @@ class PgAutoscaler(MgrModule):
                     capacity += osd_stats['kb'] * 1024
 
             s.capacity = capacity
-            self.log.debug('root_ids %s pools %s with %d osds, pg_target %d',
-                           s.root_ids,
+            self.log.debug('root_id %s pools %s with %d osds, pg_target %d',
+                           s.root_id,
                            s.pool_ids,
                            s.osd_count,
                            s.pg_target)
-
-        return result, overlapped_roots
+        return result
 
     def _append_result (
             self,
@@ -568,7 +556,7 @@ class PgAutoscaler(MgrModule):
 
     def _find_optimal_pg_distribution (
             self,
-            root_map: Dict[int, CrushSubtreeResourceStatus],
+            root_map: Dict[int, CrushRootResourceStatus],
             root_id: int,
             base: int,
             cost: int,
@@ -617,7 +605,7 @@ class PgAutoscaler(MgrModule):
 
     def _calculate_final_pool_pg_target(
             self,
-            root_map: Dict[int, CrushSubtreeResourceStatus],
+            root_map: Dict[int, CrushRootResourceStatus],
             root_id: int,
             func_pass: 'PassT',
             pool_group: Dict[GroupKey, PoolGroup],
@@ -736,7 +724,7 @@ class PgAutoscaler(MgrModule):
     def _calculate_pool_metrics(
             self,
             osdmap: OSDMap,
-            root_map: Dict[int, CrushSubtreeResourceStatus],
+            root_map: Dict[int, CrushRootResourceStatus],
             root_id: int,
             pool_id: int,
             pool_stats: Dict[int, Dict[str, int]],
@@ -781,7 +769,7 @@ class PgAutoscaler(MgrModule):
 
     def _get_pool_pg_targets(
             self,
-            root_map: Dict[int, CrushSubtreeResourceStatus],
+            root_map: Dict[int, CrushRootResourceStatus],
             ret: List[Dict[str, Any]],
             threshold: float,
             func_pass: 'PassT',
@@ -879,9 +867,8 @@ class PgAutoscaler(MgrModule):
         osdmap: OSDMap,
         pools: Dict[str, Dict[str, Any]],
         crush_map: CRUSHMap,
-        root_map: Dict[int, CrushSubtreeResourceStatus],
+        root_map: Dict[int, CrushRootResourceStatus],
         pool_stats: Dict[int, Dict[str, int]],
-        overlapped_roots: Set[int],
         pool_groups_by_root: Dict[int, Dict[GroupKey, PoolGroup]],
         pool_metrics: Dict[str, Dict[str, Any]],
     ) -> None:
@@ -901,12 +888,6 @@ class PgAutoscaler(MgrModule):
             cr_name = crush_rule['rule_name']
             root_id = crush_map.get_rule_root(cr_name)
             assert root_id is not None
-            if root_id in overlapped_roots:
-                # skip pools
-                # with overlapping roots
-                self.log.warn("pool %d contains an overlapping root %d"
-                              "... skipping scaling", pool_id, root_id)
-                continue
             capacity = root_map[root_id].capacity
             assert capacity is not None
             if capacity == 0:
@@ -944,12 +925,12 @@ class PgAutoscaler(MgrModule):
             osdmap: OSDMap,
             pools: Dict[str, Dict[str, Any]],
     ) -> Tuple[List[Dict[str, Any]],
-               Dict[int, CrushSubtreeResourceStatus]]:
+               Dict[int, CrushRootResourceStatus]]:
         threshold = self.threshold
         assert threshold >= 1.0
 
         crush_map = osdmap.get_crush()
-        root_map, overlapped_roots = self.get_subtree_resource_status(osdmap, pools, crush_map)
+        root_map = self.get_subtree_resource_status(osdmap, pools, crush_map)
         df = self.get('df')
         pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
 
@@ -977,7 +958,7 @@ class PgAutoscaler(MgrModule):
         #     'target_ratio': float
         #     'bulk': bool
         # }
-        self._compute_pool_group_metrics(osdmap, pools, crush_map, root_map, pool_stats, overlapped_roots, pool_groups_by_root, pool_metrics)
+        self._compute_pool_group_metrics(osdmap, pools, crush_map, root_map, pool_stats, pool_groups_by_root, pool_metrics)
 
         ret = self._get_pool_pg_targets(root_map, ret, threshold, 'first', pool_groups_by_root, pool_metrics)
         ret = self._get_pool_pg_targets(root_map, ret, threshold, 'second', pool_groups_by_root, pool_metrics)
