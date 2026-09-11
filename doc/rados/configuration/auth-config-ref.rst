@@ -653,7 +653,7 @@ Emergency Allowed Ciphers
 
 The Monitors maintain the set of allowed ciphers for credential keys in the ``MonMap``. This is normally set live on the cluster using:
 
-.. prompt: bash
+.. code:: bash
 
    ceph mon set auth_allowed_ciphers <cipher1,cipher2,...>
 
