@@ -17,6 +17,8 @@
 #include "crimson/osd/osd.h"
 #include "crimson/osd/pg.h"
 
+#include "json_spirit/json_spirit.h"
+
 SET_SUBSYS(osd);
 
 using crimson::osd::OSD;

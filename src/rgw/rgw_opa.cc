@@ -78,18 +78,15 @@ int rgw_opa_authorize(RGWOp *& op,
   }
 
   /* check OPA response */
-  JSONParser parser;
-  if (!parser.parse(bl.c_str(), bl.length())) {
-    ldpp_dout(op, 2) << "OPA parse error: malformed json" << dendl;
+  try {
+    const auto response = ceph_json::parse(bl);
+    if (!ceph_json::require<bool>(response, "result")) {
+      ldpp_dout(op, 2) << "OPA rejecting request" << dendl;
+      return -EPERM;
+    }
+  } catch (const JSONDecoder::err& err) {
+    ldpp_dout(op, 2) << "OPA parse error: " << err.what() << dendl;
     return -EINVAL;
-  }
-
-  bool opa_result;
-  JSONDecoder::decode_json("result", opa_result, &parser);
-
-  if (opa_result == false) {
-    ldpp_dout(op, 2) << "OPA rejecting request" << dendl;
-    return -EPERM;
   }
 
   ldpp_dout(op, 2) << "OPA accepting request" << dendl;
