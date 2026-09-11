@@ -3468,7 +3468,7 @@ public:
 
 #ifdef BLUESTORE_COMMON_CPUTRACE
   static cpucounter_group cputrace_bluestore;
-#define BLUE_SCOPE(y) MEASURE_SCOPE(cputrace_bluestore, y)
+#define BLUE_SCOPE(y) MEASURE_SCOPE(BlueStore::cputrace_bluestore, y)
 #else //BLUESTORE_COMMON_CPUTRACE
 #define BLUE_SCOPE(y)
 #endif //BLUESTORE_COMMON_CPUTRACE
