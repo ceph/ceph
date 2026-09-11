@@ -91,6 +91,10 @@ set(librgw_common_srcs
   rgw_pubsub.cc
   rgw_cr_rest.cc
   rgw_op.cc
+  rgw_op_acl.cc
+  rgw_op_forward.cc
+  rgw_op_obj_lock.cc
+  rgw_op_obj_attrs.cc
   rgw_policy_s3.cc
   rgw_public_access.cc
   rgw_putobj.cc

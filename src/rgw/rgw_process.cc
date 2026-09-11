@@ -115,8 +115,8 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   bool is_sts_user = (s->auth.identity && s->auth.identity->get_identity_type() == TYPE_ROLE);
   if (is_sts_user) {
     ldpp_dout(s, 21) << "STS user detected: uid=" << std::quoted(s->user->get_id().to_str()) << dendl;
-    auto op_ret = s->user->read_attrs(s, s->yield);
-    if (op_ret < 0) {
+    if (auto op_ret = s->user->read_attrs(s, s->yield);
+        op_ret < 0) {
       ldpp_dout(s, 0) << "checking rate_limit: uid=" << std::quoted(s->user->get_id().to_str()) << " failed to read user attrs" << dendl;
     }
   }
@@ -358,6 +358,18 @@ int process_request(const RGWProcessEnv& penv,
                                                *penv.auth_registry,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
+
+  // RAII handlers to keep these around during process_request():
+  auto put_handler_guard = make_scope_guard([rest, &handler] {
+    rest->put_handler(handler);
+  });
+
+  auto put_op_guard = make_scope_guard([&handler, &op] {
+    if (handler) {
+      handler->put_op(op);
+    }
+  });
+
   rgw::dmclock::SchedulerCompleter c;
 
   if (init_error != 0) {
@@ -556,10 +568,6 @@ done:
           << " request_id=" << s->trans_id
           << " ======"
           << dendl;
-
-  if (handler)
-    handler->put_op(op);
-  rest->put_handler(handler);
 
   return (ret < 0 ? ret : s->err.ret);
 } /* process_request */
