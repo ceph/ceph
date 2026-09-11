@@ -3,7 +3,7 @@
     [data]="osds"
     (fetchData)="getOsdList($event)"
     [columns]="columns"
-    selectionType="multiClick"
+    [selectionType]="permissions.osd.update || permissions.osd.delete ? 'multiClick' : undefined"
     [hasDetails]="true"
     (setExpandedRow)="setExpandedRow($event)"
     (updateSelection)="updateSelection($event)"
