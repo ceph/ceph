@@ -13,7 +13,7 @@ from ..services.exception import handle_send_command_error
 from ..services.rbd import RbdConfiguration, RbdMirroringService
 from ..tools import TaskManager, str_to_bool
 from . import APIDoc, APIRouter, Endpoint, EndpointDoc, ReadPermission, \
-    RESTController, Task, UIRouter
+    RESTController, Task, UIRouter, allow_empty_body
 from .rbd_mirroring import RbdMirroringPoolMode
 
 POOL_SCHEMA = ([{
@@ -216,6 +216,59 @@ class Pool(RESTController):
         if rbd_mirroring is not None:
             self._set_mirroring_mode(rbd_mirroring, pool)
         self._wait_for_pgs(pool)
+
+    @RESTController.Resource(method='POST', path='/migrate', status=201)
+    @pool_task('migrate', ['{pool_name}'])
+    @handle_send_command_error('pool')
+    @allow_empty_body
+    def migrate(self, pool_name, pg_num=None, pgp_num=None, pool_type=None,
+                erasure_code_profile=None, rule=None, expected_num_objects=None,
+                size=None, pg_num_min=None, pg_num_max=None, autoscale_mode=None,
+                bulk=None, target_size_bytes=None, target_size_ratio=None,
+                force_pg_limit=None, yes_i_really_mean_it=None, crimson=None,
+                enable_ec_optimizations=None):
+        """
+        Migrate a pool to a new pool with the given parameters while keeping the
+        same name. Accepts the same parameters as pool creation; any parameter
+        left unset keeps its default. See the 'osd pool migrate' mon command.
+        """
+        params = {
+            'pg_num': pg_num,
+            'pgp_num': pgp_num,
+            'pool_type': pool_type,
+            'erasure_code_profile': erasure_code_profile,
+            'rule': rule,
+            'expected_num_objects': expected_num_objects,
+            'size': size,
+            'pg_num_min': pg_num_min,
+            'pg_num_max': pg_num_max,
+            'autoscale_mode': autoscale_mode,
+            'bulk': bulk,
+            'target_size_bytes': target_size_bytes,
+            'target_size_ratio': target_size_ratio,
+            'force_pg_limit': force_pg_limit,
+            'yes_i_really_mean_it': yes_i_really_mean_it,
+            'crimson': crimson,
+            'enable_ec_optimizations': enable_ec_optimizations,
+        }
+        int_params = ['pg_num', 'pgp_num', 'expected_num_objects', 'size',
+                      'pg_num_min', 'pg_num_max', 'target_size_bytes']
+        bool_params = ['bulk', 'force_pg_limit', 'yes_i_really_mean_it',
+                       'crimson', 'enable_ec_optimizations']
+        cmd_args = {}
+        for key, value in params.items():
+            if value is None:
+                continue
+            if key in int_params:
+                cmd_args[key] = int(value)
+            elif key in bool_params:
+                cmd_args[key] = str_to_bool(value)
+            elif key == 'target_size_ratio':
+                cmd_args[key] = float(value)
+            else:
+                cmd_args[key] = value
+        CephService.send_command('mon', 'osd pool migrate', pool=pool_name,
+                                 **cmd_args)
 
     def _set_mirroring_mode(self, mirroring_enabled, pool):
         rbd_mirroring = RbdMirroringPoolMode()
