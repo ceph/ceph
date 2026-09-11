@@ -122,13 +122,10 @@ export class UserListComponent implements OnInit {
         cellTemplate: this.durationTpl
       }
     ];
-    if (this.authStorageService.getPermissions().configOpt.read) {
-      const settings: string[] = ['USER_PWD_EXPIRATION_WARNING_1', 'USER_PWD_EXPIRATION_WARNING_2'];
-      this.settingsService.getValues(settings).subscribe((data) => {
-        this.expirationWarningAlert = data['USER_PWD_EXPIRATION_WARNING_1'];
-        this.expirationDangerAlert = data['USER_PWD_EXPIRATION_WARNING_2'];
-      });
-    }
+    this.settingsService.getStandardSettings().subscribe((data) => {
+      this.expirationWarningAlert = data['user_pwd_expiration_warning_1'];
+      this.expirationDangerAlert = data['user_pwd_expiration_warning_2'];
+    });
   }
 
   getUsers() {
