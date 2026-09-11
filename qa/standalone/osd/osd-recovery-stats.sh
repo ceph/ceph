@@ -717,20 +717,35 @@ function TEST_recovery_last_degraded_undersized() {
 }
 
 # Verify that the rebuild perf counters on the primary OSD increment after a
-# real EC shard recovery.  Kill one non-primary OSD so the PG goes degraded,
-# then let recovery run to completion.  After the PG is clean again:
-#   - pg_rebuild_duration.avgcount must be >= 1
-#   - pg_rebuild_duration.sum must be > 0 (real time elapsed)
+# real EC shard recovery, AND that a same-primary peering-interval restart
+# occurring mid-rebuild does not truncate or drop the recorded duration.
+#
+# Sequence:
+#  1. Kill one non-primary OSD so the PG goes degraded (1st interval restart)
+#  2. Grep primary's log for rebuild latch firing, hold a deliberate gap before
+#     the second restart to unambiguously distinguish the duration.
+#  3. Mark the non-primary OSD out which results in the 4th OSD added to the
+#     acting set and becomes a backfill target (2nd interval restart).
+#  4. Assert that "latched failure start" line appears only once in the logs.
+#     This confirms that the second restart does not reset the counters.
+#  5. Let recovery run to completion. Assert exactly one "recorded rebuild"
+#     line, and that the recorded duration covers at least the deliberate gap
+#     from step 2 -- proving the full window survived.
 function TEST_rebuild_perf_ec_increments() {
     local dir=$1
     local OSDS=4
     local ecpoolname=ectest
+    # Deliberate gap between the latch firing and the second interval
+    # restart, long enough to be unambiguous against scheduling jitter.
+    local gap_secs=5
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd --osd-mclock-skip-benchmark=true || return 1
+      # debug-osd=15 so the "rebuild-stats: latched/recorded" lines emitted
+      # by prepare_stats_for_publish() are captured in the OSD log.
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 || return 1
     done
 
     ceph osd erasure-code-profile set ecprofile \
@@ -749,17 +764,76 @@ function TEST_rebuild_perf_ec_increments() {
 
     local primary
     primary=$(get_primary $ecpoolname obj1)
+    local PG
+    PG=$(get_pg $ecpoolname obj1)
+    # Derive the primary's actual shard for a given object (obj1)
+    local primary_shard
+    primary_shard=$(ceph --format json osd map $ecpoolname obj1 2>/dev/null | \
+      jq ".acting | index($primary)")
+    local PG_SPG="${PG}s${primary_shard}"
     local replica
     replica=$(get_not_primary $ecpoolname obj1)
+    local log=$dir/osd.${primary}.log
 
     # Pause recovery so the PG stays degraded long enough for the latch to
     # fire inside prepare_stats_for_publish before recovery completes.
     ceph osd set norecover || return 1
 
     # Kill one non-primary OSD so the PG becomes degraded.
+    # ---1st interval restart---
     kill $(cat $dir/osd.${replica}.pid)
     ceph osd down osd.${replica} || return 1
+
+    if [ "$(get_primary $ecpoolname obj1)" != "$primary" ]; then
+      echo "FAIL: primary changed after killing a non-primary OSD;" \
+           "test topology assumption broken"
+      return 1
+    fi
+
+    # Wait for the latch to fire.
+    local latched=0
+    for i in $(seq 1 30)
+    do
+      flush_pg_stats || return 1
+      if grep -q "rebuild-stats: latched failure start for ${PG_SPG} " $log
+      then
+        latched=1
+        break
+      fi
+      sleep 1
+    done
+    test "$latched" = 1 || {
+      echo "FAIL: rebuild latch never fired after opening the acting-set hole"
+      return 1
+    }
+
+    # Deliberate gap before the second restart. A duration truncated by a
+    # re-latch after that restart would come out well under this.
+    sleep $gap_secs
+
+    # --- 2nd interval restart: mark the OSD out to force a remap of a spare
+    # OSD into the acting set as a backfill target. Primary is unaffected.
     ceph osd out osd.${replica} || return 1
+
+    if [ "$(get_primary $ecpoolname obj1)" != "$primary" ]; then
+      echo "FAIL: primary changed after marking the OSD out;" \
+           "test topology assumption broken"
+      return 1
+    fi
+
+    # Let the new interval settle and force another stats publish so a
+    # pre-fix reset-and-relatch would already be visible in the log here.
+    sleep 2
+    flush_pg_stats || return 1
+
+    local latch_count
+    latch_count=$(grep -c "rebuild-stats: latched failure start for ${PG_SPG} " $log)
+    test "$latch_count" = 1 || {
+      echo "FAIL: expected exactly 1 'latched failure start' for ${PG_SPG}," \
+           "got $latch_count -- the same-primary interval restart reset" \
+           "the in-progress latch"
+      return 1
+    }
 
     # Release the hold and wait for full recovery.
     ceph osd unset norecover || return 1
@@ -772,6 +846,7 @@ function TEST_rebuild_perf_ec_increments() {
     # The primary may be the same OSD we started with (we only killed a
     # replica), but re-query in case CRUSH remapped the primary shard.
     primary=$(get_primary $ecpoolname obj1)
+    log=$dir/osd.${primary}.log
 
     local dump
     dump=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
@@ -785,11 +860,32 @@ function TEST_rebuild_perf_ec_increments() {
       return 1
     }
 
+    local rebuild_sum
+    rebuild_sum=$(jq '.recoverystate_perf.pg_rebuild_duration.sum' <<< "$dump")
     echo "$dump" | \
       jq -e '.recoverystate_perf.pg_rebuild_duration.sum > 0' > /dev/null || {
-      local rebuild_sum
-      rebuild_sum=$(jq '.recoverystate_perf.pg_rebuild_duration.sum' <<< "$dump")
       echo "FAIL: expected pg_rebuild_duration.sum>0, got $rebuild_sum"
+      return 1
+    }
+
+    # Exactly one full rebuild event must have been recorded.
+    local record_count
+    record_count=$(grep -c "rebuild-stats: recorded rebuild for ${PG_SPG} " $log)
+    test "$record_count" = 1 || {
+      echo "FAIL: expected exactly 1 'recorded rebuild' for ${PG_SPG}," \
+           "got $record_count"
+      return 1
+    }
+
+    # The recorded duration must cover at least the deliberate gap held
+    # before the second restart i.e., $gap_secs. pg_rebuild_duration.sum is
+    # reported in fractional seconds.
+    echo "$dump" | \
+      jq -e ".recoverystate_perf.pg_rebuild_duration.sum >= ${gap_secs}" \
+      > /dev/null || {
+      echo "FAIL: expected pg_rebuild_duration.sum >= ${gap_secs}s" \
+           "(the ${gap_secs}s gap held before the second interval restart)," \
+           "got ${rebuild_sum}s -- duration looks truncated"
       return 1
     }
 
