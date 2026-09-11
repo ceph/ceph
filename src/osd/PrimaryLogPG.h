@@ -584,6 +584,15 @@ public:
 	stats = stat;
 	return false;
       });
+    // 'stat' is a replica's copy of the SENDING peer's whole pg_stat_t --
+    // this override is invoked from ReplicatedBackend.cc on every ordinary
+    // replicated write, unconditionally, not just on special peering
+    // transitions. This is far more frequent than the Stray::react()/
+    // merge_log()/update_backfill_progress() sites already guarded in
+    // PeeringState.cc). It may carry an open-but-unrecorded window; we must
+    // not adopt it as our own (see discard_inherited_vulnerability_window()'s
+    // comment in PeeringState.h).
+    recovery_state.discard_inherited_vulnerability_window();
   }
 
   void schedule_recovery_work(
