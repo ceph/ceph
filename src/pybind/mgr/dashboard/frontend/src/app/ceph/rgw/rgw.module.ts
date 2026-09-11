@@ -565,7 +565,7 @@ const routes: Routes = [
         section_info: 'NFS GANESHA',
         header: 'NFS-Ganesha is not configured'
       },
-      breadcrumbs: 'NFS'
+      breadcrumbs: 'Network Filesystem'
     },
     children: [
       { path: '', component: NfsClusterComponent },

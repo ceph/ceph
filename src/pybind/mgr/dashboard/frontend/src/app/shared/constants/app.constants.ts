@@ -399,6 +399,12 @@ export const SSL_CIPHERS = [
 export const USER = 'user';
 export const VERSION_PREFIX = 'ceph version';
 
+export const NFS_PAGE_HEADER = {
+  title: $localize`Network File System (NFS)`,
+  subtitle: '',
+  description: $localize`Access CephFS file shares through NFS. NFS File Services enable clients and applications to share files across multiple systems.`
+};
+
 export const CEPHFS_MIRRORING_PAGE_HEADER = {
   title: $localize`Filesystem Mirroring`,
   subtitle: $localize`Manage snapshot-based replication for CephFS across clusters.`,
