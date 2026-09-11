@@ -203,7 +203,7 @@ from cephadmlib.cluster_ops import (
 )
 from cephadmlib.firewalld import Firewalld, update_firewalld
 from cephadmlib import templating
-from cephadmlib.daemons.ceph import get_ceph_mounts_for_type, ceph_daemons
+from cephadmlib.daemons.ceph import get_ceph_mounts_for_type, ceph_daemons, update_osd_bluestore_affinity
 from cephadmlib.daemons import (
     Ceph,
     CephExporter,
@@ -4856,13 +4856,21 @@ def update_service_for_daemon(ctx: CephadmContext,
     # check if all the daemon names are valid
     if not set(update_daemons).issubset(set(available_daemons)):
         raise Error(f'Error EINVAL: one or more daemons of {update_daemons} does not exist on this host')
+    # osdspec_affinity stores the bare service id (e.g. "foobar"), not the
+    # full service name (e.g. "osd.foobar"), consistent with how ceph-volume
+    # writes it at OSD creation time via CEPH_VOLUME_OSDSPEC_AFFINITY.
+    _, _, service_id = ctx.service_name.partition('.')
+    if not service_id:
+        service_id = ctx.service_name
     for name in update_daemons:
         path = os.path.join(ctx.data_dir, ctx.fsid, name, 'unit.meta')
         update_meta_file(path, data)
+        update_osd_bluestore_affinity(ctx, name, service_id)
         print(f'Successfully updated daemon {name} with service {ctx.service_name}')
 
 
 @infer_fsid
+@infer_image
 def command_update_osd_service(ctx: CephadmContext) -> int:
     """update service for provided daemon"""
     update_daemons = [f'osd.{osd_id}' for osd_id in ctx.osd_ids.split(',')]
