@@ -69,6 +69,7 @@ the executable build steps with short descriptions of what they do.
 import argparse
 import contextlib
 import enum
+import errno
 import glob
 import hashlib
 import json
@@ -80,6 +81,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 log = logging.getLogger()
@@ -249,6 +251,55 @@ def _run(cmd, *args, **kwargs):
     return subprocess.run(cmd, *args, **kwargs)
 
 
+def _seccomp_profile(ctx):
+    """Return a --security-opt argument working around libaio's assumption
+    that a blocked io_pgetevents reports ENOSYS, or None if not applicable.
+
+    libaio 0.3.113 (ubuntu 24.04 and later) implements io_getevents as "call
+    io_pgetevents, and fall back to io_getevents if that returns -ENOSYS".
+    Podman's default seccomp profile denies io_pgetevents with EPERM, so the
+    fallback never happens and the EPERM reaches the caller.  Ceph treats that
+    as fatal -- KernelDevice::_aio_thread aborts on any negative return -- so
+    every test that opens a block device dies immediately.
+
+    Removing io_pgetevents from the profile's deny lists grants nothing new:
+    the syscall falls through to the profile's default errno, which is already
+    ENOSYS, and libaio then retries with io_getevents, which is permitted.
+    """
+    if "podman" not in ctx.container_engine:
+        return None
+    cmd = [
+        ctx.container_engine,
+        "info",
+        "--format",
+        "{{.Host.Security.SECCOMPProfilePath}}",
+    ]
+    res = _run(cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        return None
+    try:
+        path = pathlib.Path(res.stdout.decode().strip())
+        profile = json.loads(path.read_text())
+        if profile.get("defaultErrnoRet") != errno.ENOSYS:
+            return None  # libaio's fallback needs ENOSYS specifically
+        for block in profile["syscalls"]:
+            if block.get("action") != "SCMP_ACT_ALLOW":
+                block["names"] = [
+                    n for n in block["names"]
+                    if not n.startswith("io_pgetevents")
+                ]
+        profile["syscalls"] = [b for b in profile["syscalls"] if b["names"]]
+        dest = (
+            pathlib.Path(tempfile.gettempdir())
+            / f"ceph-build-seccomp-{os.getuid()}.json"
+        )
+        dest.write_text(json.dumps(profile))
+    except (OSError, ValueError, KeyError) as err:
+        log.debug("not adjusting the seccomp profile: %s", err)
+        return None
+    return f"--security-opt=seccomp={dest}"
+
+
 def _container_cmd(
     ctx, args, *, workdir=None, interactive=False, extra_args=None
 ):
@@ -264,6 +315,9 @@ def _container_cmd(
         cmd.append("--rm")
     if "podman" in ctx.container_engine:
         cmd.append("--pids-limit=-1")
+    seccomp = _seccomp_profile(ctx)
+    if seccomp:
+        cmd.append(seccomp)
     if ctx.map_user:
         cmd.append("--user=0")
     if ctx.cli.env_file:
