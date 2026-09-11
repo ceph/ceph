@@ -350,3 +350,5 @@ export const AclHelperText: AclMaps = {
 export const POOL = {
   PATH: '/pool/create'
 };
+
+export const FROM_STORAGE_CLASS = 'from-storage-class';
