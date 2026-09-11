@@ -18,10 +18,16 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
       " ${_support_x64})
       set(CMAKE_REQUIRED_QUIET ${save_quiet})
       if(${_support_x64})
+        # nasm deletes its output file when assembly fails, which is
+        # what a feature probe does by design; pointing -o at /dev/null
+        # therefore unlinks the device node when the probe runs as root.
+        set(nasm_probe_dir "${CMAKE_BINARY_DIR}/CMakeFiles/CheckNasm")
+        file(MAKE_DIRECTORY "${nasm_probe_dir}")
+        set(nasm_probe_out "${nasm_probe_dir}/probe.o")
         execute_process(COMMAND nasm -f ${object_format} -i
           ${CMAKE_SOURCE_DIR}/src/isa-l/include/
           ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
-          -o /dev/null
+          -o ${nasm_probe_out}
           RESULT_VARIABLE rc
           OUTPUT_QUIET
           ERROR_QUIET)
@@ -31,7 +37,7 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
         execute_process(COMMAND nasm -D HAVE_AS_KNOWS_AVX512 -f ${object_format}
           -i ${CMAKE_SOURCE_DIR}/src/isa-l/include/
           ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx512.asm
-          -o /dev/null
+          -o ${nasm_probe_out}
           RESULT_VARIABLE rt
           OUTPUT_QUIET
           ERROR_QUIET)
@@ -41,7 +47,7 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
 	execute_process(COMMAND nasm -D AS_FEATURE_LEVEL=10 -f ${object_format}
           -i ${CMAKE_SOURCE_DIR}/src/isa-l/include/
           ${CMAKE_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm
-          -o /dev/null
+          -o ${nasm_probe_out}
           RESULT_VARIABLE rt
           OUTPUT_QUIET
           ERROR_QUIET)
