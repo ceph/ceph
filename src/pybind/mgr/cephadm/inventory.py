@@ -1984,10 +1984,8 @@ class NodeProxyCache:
         _result = {}
 
         for host in hosts:
-            try:
-                _result[host] = self.data[host]['status'][endpoint]
-            except KeyError:
-                raise KeyError(f'Invalid host {host} or component {endpoint}.')
+            status = self.data[host].get('status', {})
+            _result[host] = status.get(endpoint, {})
         return _result
 
     def firmware(self, **kw: Any) -> Dict[str, Any]:
