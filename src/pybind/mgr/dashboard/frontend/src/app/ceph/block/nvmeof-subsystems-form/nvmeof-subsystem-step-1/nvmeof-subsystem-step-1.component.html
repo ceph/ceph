@@ -22,7 +22,6 @@
         <cds-text-label
           i18n
           [invalid]="nqnRef.isInvalid"
-          [invalidText]="nqnInvalidTemplate"
           helperText="A unique identifier for the subsystem."
           i18n-helperText>
           Subsystem NQN (NVMe Qualified Name)
@@ -36,6 +35,11 @@
                  formControlName="nqn"
                  [invalid]="nqnRef.isInvalid">
         </cds-text-label>
+        @if (nqnRef.isInvalid) {
+          @for (err of formGroup.get('nqn')?.errors | keyvalue; track err.key) {
+            <span class="invalid-feedback">{{ INVALID_TEXTS[err.key] }}</span>
+          }
+        }
       </div>
       <div cdsRow
            class="form-item">
@@ -55,8 +59,55 @@
       }
       <div cdsRow
            class="form-item">
+        <fieldset class="cds--fieldset">
+          <legend class="cds--label" 
+                  i18n>Listeners</legend>
+          <p class="cds--form__helper-text" i18n>Determine where and how hosts can connect to the subsystem over the network.</p>
+          <cds-radio-group
+            formControlName="listenerMode"
+            orientation="horizontal">
+            <cds-radio
+              [value]="LISTENER_MODE.AUTO_FETCH">
+              <span i18n>Auto-fetch</span>
+            </cds-radio>
+            <cds-radio
+              [value]="LISTENER_MODE.MANUAL">
+              <span i18n>Add manually</span>
+            </cds-radio>
+          </cds-radio-group>
+        </fieldset>
+      </div>
+      @if (listenerMode === LISTENER_MODE.AUTO_FETCH) {
+      <div cdsRow
+           class="form-item">
+        <cds-text-label
+          i18n
+          [invalid]="subnetMaskRef.isInvalid"
+          [invalidText]="subnetMaskInvalidText"
+          helperText="Listeners from this subnet-masks will be use."
+          i18n-helperText>
+          Subnet-mask
+          <input cdsText
+                 cdValidate
+                 #subnetMaskRef="cdValidate"
+                 type="text"
+                 placeholder="e.g. 255.0.0.0"
+                 i18n-placeholder
+                 id="subnetMask"
+                 name="subnetMask"
+                 formControlName="subnetMask"
+                 [invalid]="subnetMaskRef.isInvalid">
+        </cds-text-label>
+        <ng-template #subnetMaskInvalidText>
+          <span i18n>This field is required.</span>
+        </ng-template>
+      </div>
+      }
+      @if (listenerMode === LISTENER_MODE.MANUAL) {
+      <div cdsRow
+           class="form-item">
         <cds-combo-box i18n
-                       [invalid]="formGroup.get('listeners').invalid && (formGroup.get('listeners').dirty || formGroup.get('listeners').touched)"
+                       [invalid]="formGroup.get('listeners')?.invalid && (formGroup.get('listeners')?.dirty || formGroup.get('listeners')?.touched)"
                        [invalidText]="listenersInvalidText"
                        [label]="listenersLabel"
                        [helperText]="listenersHelperText"
@@ -79,7 +130,7 @@
           </div>
         }
         <ng-template #listenersLabel>
-          <span i18n>Listeners</span>
+          <span i18n>Select listeners</span>
         </ng-template>
         <ng-template #listenersHelperText>
           <span i18n>Select listeners for this subsystem.</span>
@@ -88,6 +139,7 @@
           <span i18n>This field is required.</span>
         </ng-template>
       </div>
+      }
     </div>
   </div>
 </form>

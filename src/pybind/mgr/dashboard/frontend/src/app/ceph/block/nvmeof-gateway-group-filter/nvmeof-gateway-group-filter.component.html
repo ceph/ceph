@@ -1,0 +1,14 @@
+<div class="nvmeof-gateway-group-filter cds-mt-3">
+  <span class="nvmeof-gateway-group-filter__label cds--type-body-compact-01"
+        i18n>Gateway group:</span>
+  <cds-combo-box type="single"
+                 size="sm"
+                 class="nvmeof-gateway-group-filter__combo"
+                 [placeholder]="placeholder"
+                 [items]="items"
+                 [disabled]="disabled"
+                 (selected)="onSelected($event)"
+                 (clear)="onClear()">
+    <cds-dropdown-list></cds-dropdown-list>
+  </cds-combo-box>
+</div>

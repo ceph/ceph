@@ -23,6 +23,10 @@
 
 .sidebar-layout-nav {
   background-color: var(--cds-layer-03);
+
+  .cds--side-nav__icon:not(.cds--side-nav__submenu-chevron) {
+    display: none;
+  }
 }
 
 .sidebar-layout-main {
