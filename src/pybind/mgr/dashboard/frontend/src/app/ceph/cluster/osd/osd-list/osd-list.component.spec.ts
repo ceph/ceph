@@ -295,7 +295,7 @@ describe('OsdListComponent', () => {
   describe('show osd actions as defined', () => {
     const getOsdActions = () => {
       fixture.detectChanges();
-      return fixture.debugElement.query(By.css('#cluster-wide-actions')).componentInstance
+      return fixture.debugElement.query(By.css('#cluster-wide-actions'))?.componentInstance
         .dropDownActions;
     };
 
@@ -320,7 +320,7 @@ describe('OsdListComponent', () => {
     });
 
     it('shows only "Recovery Priority" action', () => {
-      component.permissions.osd.read = false;
+      component.permissions.osd.update = false;
       const osdActions = getOsdActions();
       expect(osdActions[0].name).toBe('Recovery Priority');
       expect(osdActions[1].name).toBe('PG scrub');
@@ -329,9 +329,9 @@ describe('OsdListComponent', () => {
 
     it('shows no osd actions', () => {
       component.permissions.configOpt.read = false;
-      component.permissions.osd.read = false;
-      const osdActions = getOsdActions();
-      expect(osdActions).toEqual([]);
+      component.permissions.osd.update = false;
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('#cluster-wide-actions'))).toBeNull();
     });
   });
 
