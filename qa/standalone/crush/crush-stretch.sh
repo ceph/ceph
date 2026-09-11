@@ -752,7 +752,7 @@ function TEST_stretch_diff_bucket_barrier() {
     ceph mon dump | grep "stretch_mode_enabled 1" || return 1
 
     # Try to create pool with datacenter failure domain when only zones exist in CRUSH
-    ceph osd pool create pool_dc replicated --zone-failure-domain=datacenter --num-zones 2 --class=ssd 2>&1 | grep "Error EINVAL: number of zones 0 for type datacenter is less than num_failure_domains 2" || return 1
+    ceph osd pool create pool_dc replicated --zone-failure-domain=datacenter --num-zones 2 --class=ssd 2>&1 | grep "Error EINVAL: number of zones 0 for type datacenter is not equal to num_failure_domains 2" || return 1
 }
 
 main crush-stretch "$@"
