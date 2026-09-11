@@ -90,17 +90,18 @@ export class RgwMultisiteSyncFlowModalComponent extends BaseModal implements OnI
             zones.push(new SelectOption(false, zone.name, ''));
           });
           this.zones = [...zones].map((zone: { name: string }) => {
-            return { name: zone.name, content: zone.name };
+            return { name: zone.name, content: zone.name, selected: false };
           });
           if (this.editing) {
             // @TODO: Editing/deletion of directional flow not supported yet.
             // Integrate it once the backend supports it.
             if (this.groupType === FlowType.symmetrical) {
               this.zones = [...zones].map((zone: { name: string }) => {
-                if (this.flowSelectedRow.zones.includes(zone.name)) {
-                  return { name: zone.name, content: zone.name, selected: true };
-                }
-                return { name: zone.name, content: zone.name };
+                return {
+                  name: zone.name,
+                  content: zone.name,
+                  selected: this.flowSelectedRow.zones.includes(zone.name)
+                };
               });
               this.currentFormGroupContext.patchValue({ zones: this.zones });
             }
