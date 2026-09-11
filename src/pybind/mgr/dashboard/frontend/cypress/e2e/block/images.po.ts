@@ -58,29 +58,26 @@ export class ImagesPageHelper extends PageHelper {
 
   // Checks trash tab table for image and then restores it to the RBD Images table
   // (could change name if new name is given)
-  restoreImage(_name: string, newName?: string) {
+  restoreImage(name: string, newName = name) {
     // clicks on trash tab
     cy.contains('.nav-link', 'Trash').click();
 
-    // wait for table to load
-    cy.get('[data-testid="table-action-btn"]').click({ multiple: true });
-    cy.get('button.restore').click({ force: true });
+    this.clickRowActionButton(name, 'restore');
 
-    // wait for pop-up to be visible (checks for title of pop-up)
-    cy.get('cds-modal #name').should('be.visible');
+    // Wait for the modal's initial focus before replacing the initialized value.
+    cy.get('cds-modal #name')
+      .should('have.value', name)
+      .and('be.focused')
+      .type(`{selectall}${newName}`);
+    cy.get('cds-modal #name').should('have.value', newName);
 
-    // If a new name for the image is passed, it changes the name of the image
-    if (newName !== undefined) {
-      // click name box and send new name
-      cy.get('cds-modal #name').clear().type(newName);
-    }
-
-    cy.get('[data-testid=submitBtn]').click();
+    cy.get('cds-modal [data-testid=submitBtn]').click();
+    cy.get('cds-modal').should('not.exist');
 
     // clicks images tab
     cy.contains('.nav-link', 'Images').click();
 
-    this.getFirstTableCell(newName).should('exist');
+    this.getTableCell(1, newName).should('exist');
   }
 
   // Enters trash tab and purges trash, thus emptying the trash table.

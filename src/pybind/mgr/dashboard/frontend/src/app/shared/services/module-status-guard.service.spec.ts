@@ -4,7 +4,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { of as observableOf, throwError } from 'rxjs';
+import { of as observableOf, Subject, throwError } from 'rxjs';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { MgrModuleService } from '../api/mgr-module.service';
@@ -130,4 +130,115 @@ describe('ModuleStatusGuardService', () => {
     expect(result).toBe(true);
     expect(httpClient.get).not.toHaveBeenCalled();
   }));
+
+  describe('asynchronous backend fallback', () => {
+    let status: Subject<{ available: boolean; message: string }>;
+    let backend: Subject<object>;
+    let results: boolean[];
+
+    beforeEach(() => {
+      status = new Subject();
+      backend = new Subject();
+      results = [];
+      spyOn(httpClient, 'get').and.returnValue(status.asObservable());
+      spyOn(mgrModuleService, 'getConfig').and.returnValue(backend.asObservable());
+      spyOn(authStorageService, 'getPermissions').and.returnValue({
+        configOpt: { read: true }
+      } as any);
+      spyOn(router, 'navigate').and.returnValue(Promise.resolve(true));
+    });
+
+    afterEach(() => {
+      status.complete();
+      backend.complete();
+    });
+
+    it('waits for the selected backend before deciding an unavailable status', () => {
+      service.canActivate(route).subscribe((allowed) => results.push(allowed));
+      status.next({ available: false, message: 'initializing' });
+      status.complete();
+      expect(results).toEqual([]);
+
+      backend.next({ orchestrator: 'rook' });
+      backend.complete();
+      expect(results).toEqual([true]);
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('does not query the backend when the module is available', () => {
+      service.canActivate(route).subscribe((allowed) => results.push(allowed));
+      status.next({ available: true, message: null });
+
+      expect(results).toEqual([true]);
+      expect(mgrModuleService.getConfig).not.toHaveBeenCalled();
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('waits for the backend using the parent route configuration', () => {
+      const child = new ActivatedRouteSnapshot();
+      child.url = [];
+      child.data = { breadcrumbs: 'Overview' };
+      jest.spyOn(child, 'parent', 'get').mockReturnValue(route);
+
+      service.canActivateChild(child).subscribe((allowed) => results.push(allowed));
+      status.next({ available: false, message: 'initializing' });
+      status.complete();
+      expect(results).toEqual([]);
+      expect(httpClient.get).toHaveBeenCalledWith('ui-api/bar/status');
+
+      backend.next({ orchestrator: 'rook' });
+      backend.complete();
+      expect(results).toEqual([true]);
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('denies access when an unavailable module has a failed backend lookup', () => {
+      service.canActivate(route).subscribe((allowed) => results.push(allowed));
+      status.next({ available: false, message: 'initializing' });
+      backend.error(new Error('backend lookup failed'));
+
+      expect(results).toEqual([false]);
+      expect(router.navigate).toHaveBeenCalledWith(
+        ['/foo'],
+        jasmine.objectContaining({ state: jasmine.objectContaining({ message: 'initializing' }) })
+      );
+    });
+
+    it('denies access on a failed status lookup without querying the backend', () => {
+      service.canActivate(route).subscribe((allowed) => results.push(allowed));
+      status.error(new Error('status lookup failed'));
+
+      expect(results).toEqual([false]);
+      expect(mgrModuleService.getConfig).not.toHaveBeenCalled();
+      expect(router.navigate).toHaveBeenCalledWith(['/foo']);
+    });
+
+    it('skips the fallback when the user cannot read the configuration', () => {
+      (authStorageService.getPermissions as jasmine.Spy).and.returnValue({ configOpt: {} });
+      service.canActivate(route).subscribe((allowed) => results.push(allowed));
+      status.next({ available: false, message: 'initializing' });
+
+      expect(results).toEqual([false]);
+      expect(mgrModuleService.getConfig).not.toHaveBeenCalled();
+    });
+
+    it('skips the fallback when no backend is required', () => {
+      delete route.data.moduleStatusGuardConfig.backend;
+      service.canActivate(route).subscribe((allowed) => results.push(allowed));
+      status.next({ available: false, message: 'initializing' });
+
+      expect(results).toEqual([false]);
+      expect(mgrModuleService.getConfig).not.toHaveBeenCalled();
+    });
+
+    it('cancels a pending backend lookup when navigation is canceled', () => {
+      const subscription = service.canActivate(route).subscribe();
+      status.next({ available: false, message: 'initializing' });
+      status.complete();
+      expect(backend.observers.length).toBe(1);
+
+      subscription.unsubscribe();
+      expect(backend.observers.length).toBe(0);
+    });
+  });
 });

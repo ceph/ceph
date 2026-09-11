@@ -9,4 +9,4 @@ set(librados_test_stub_srcs
   TestRadosClient.cc
   TestWatchNotify.cc)
 add_library(rados_test_stub STATIC ${librados_test_stub_srcs})
-
+target_link_libraries(rados_test_stub PRIVATE ceph-json-headers)

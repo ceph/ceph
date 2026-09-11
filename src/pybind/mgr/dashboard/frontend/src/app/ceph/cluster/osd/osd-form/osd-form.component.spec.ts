@@ -5,7 +5,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 import { CheckboxModule, NumberModule, RadioModule } from 'carbon-components-angular';
 
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, of, Subject } from 'rxjs';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
@@ -408,6 +408,37 @@ describe('OsdFormComponent', () => {
       );
       fixture.detectChanges();
       expect(osdService.getDeploymentOptions).toHaveBeenCalled();
+    });
+
+    it('preserves manual selection when deployment options arrive later', () => {
+      const options = new Subject<DeploymentOptions>();
+      (osdService.getDeploymentOptions as jasmine.Spy).and.returnValue(options.asObservable());
+      (orchService.status as jasmine.Spy).and.returnValue(of({ available: true }));
+      spyOn(hostService, 'inventoryDeviceList').and.returnValue(of(devices));
+      spyOn(authStorageService, 'getPermissions').and.returnValue(
+        new Permissions({ osd: ['read'] })
+      );
+      fixture.detectChanges();
+
+      form.get('deploymentMode').setValue('manual');
+      fixture.detectChanges();
+      options.next({
+        ...deploymentOptions,
+        recommended_option: OsdDeploymentOptions.COST_CAPACITY
+      });
+      options.complete();
+      fixture.detectChanges();
+
+      expect(form.get('deploymentMode').value).toBe('manual');
+      expect(form.get('deploymentOption').value).toBe(OsdDeploymentOptions.COST_CAPACITY);
+      expect(component.simpleDeployment).toBe(false);
+      expect(component.tearsheet.stepContents.length).toBe(4);
+
+      component.tearsheet.onStepSelect({ step: component.steps[1], index: 1 });
+      fixture.detectChanges();
+      expect(
+        fixture.nativeElement.querySelector('cd-osd-devices-selection-groups[name="Primary"]')
+      ).toBeTruthy();
     });
   });
 });

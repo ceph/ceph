@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/osd', id: 'cd-osd-list' },
-  create: { url: '#/osd/create', id: 'cd-osd-form' }
+  create: { url: '#/osd/(modal:create)', id: 'cd-osd-form' }
 };
 
 export class OSDsPageHelper extends PageHelper {
@@ -13,39 +13,25 @@ export class OSDsPageHelper extends PageHelper {
     status: 5
   };
 
-  create(deviceType: 'hdd' | 'ssd', hostname?: string, expandCluster = false) {
-    cy.get('[aria-label="toggle advanced mode"]').click();
-    cy.get('[aria-label="toggle advanced mode"]').then(($button) => {
-      if ($button.hasClass('collapsed')) {
-        cy.wrap($button).click();
-      }
-    });
-    // Click Primary devices Add button
-    cy.get('cd-osd-devices-selection-groups[name="Primary"]').as('primaryGroups');
-    cy.get('@primaryGroups').find('button').click();
+  create(deviceType: 'hdd' | 'ssd', hostname?: string) {
+    cy.get('cd-osd-form').within(() => {
+      cy.get('cds-radio[value="manual"] input[type="radio"]').check({ force: true });
+      cy.get('cds-progress-indicator').contains('Select data devices').click();
 
-    // Select all devices with `deviceType`
-    cy.get('cd-osd-devices-selection-modal').within(() => {
-      cy.get('.modal-footer .tc_submitButton').as('addButton').should('be.disabled');
-      this.filterTable('Type', deviceType);
-      if (hostname) {
-        this.filterTable('Hostname', hostname);
-      }
-
-      if (expandCluster) {
-        this.getTableCount('total').should('be.gte', 1);
-      }
-      cy.get('@addButton').click({ force: true });
-    });
-
-    if (!expandCluster) {
-      cy.get('@primaryGroups').within(() => {
-        this.getTableCount('total').as('newOSDCount');
+      cy.get('cd-osd-devices-selection-groups[name="Primary"]').within(() => {
+        cy.get('[data-testid="device-filter-human_readable_type"] select').select(
+          deviceType === 'ssd' ? 'nvme/ssd' : deviceType
+        );
+        if (hostname) {
+          cy.get('[data-testid="device-filter-hostname"] select').select(hostname);
+        }
+        this.getTableCount('total').should('be.gte', 1).as('newOSDCount');
       });
 
-      cy.get(`${pages.create.id} .card-footer .tc_submitButton`).click();
-      cy.get(`cd-osd-creation-preview-modal .modal-footer .tc_submitButton`).click();
-    }
+      cy.get('cds-progress-indicator').contains('Review').click();
+      cy.get('.tearsheet-footer-submit').click();
+    });
+    cy.get('cd-osd-form').should('not.exist');
   }
 
   @PageHelper.restrictTo(pages.index.url)

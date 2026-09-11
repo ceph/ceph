@@ -162,6 +162,7 @@ set_property(SOURCE ${PROJECT_SOURCE_DIR}/src/common/version.cc
 target_link_libraries(crimson-common
   PUBLIC
     $<$<BOOL:${WITH_JAEGER}>:jaeger_base>
+    ceph-json-headers
     crimson::cflags
   PRIVATE
     crc32 arch
