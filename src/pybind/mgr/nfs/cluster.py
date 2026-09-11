@@ -18,7 +18,6 @@ from .utils import (
     NonFatalError,
     available_clusters,
     conf_obj_name,
-    get_nfs_spec_for_cluster,
     restart_nfs_service,
     redeploy_nfs_service,
     user_conf_obj_name,
@@ -103,6 +102,21 @@ def create_ganesha_pool(mgr: 'MgrModule') -> None:
                                'pool': POOL_NAME,
                                'app': 'nfs'})
         log.debug("Successfully created nfs-ganesha pool %s", POOL_NAME)
+
+
+def get_nfs_spec_for_cluster(mgr: 'Module', cluster_id: str) -> Optional[NFSServiceSpec]:
+    nfs_sc = mgr.describe_service(
+        service_type='nfs',
+        service_name=f'nfs.{cluster_id}'
+    )
+    try:
+        nfs_services = orchestrator.raise_if_exception(nfs_sc)
+    except orchestrator.OrchestratorError:
+        return None
+    for svc in nfs_services:
+        if getattr(svc.spec, 'service_id', None) == cluster_id:
+            return cast(NFSServiceSpec, svc.spec)
+    return None
 
 
 def config_cluster_qos_from_dict(
@@ -673,13 +687,27 @@ class NFSCluster:
 
         deployment_type = "standalone"
         placement = None
+        enable_nfsv3 = False
         enable_rdma = False
 
-        # Use the same spec lookup as export creation so enable_rdma is consistent.
+        # Use live describe_service output, not export matching, for the current cluster config.
         nfs_spec = get_nfs_spec_for_cluster(self.mgr, cluster_id)
         if nfs_spec:
             placement = nfs_spec.placement
             enable_rdma = bool(getattr(nfs_spec, 'enable_rdma', False))
+
+        # Read the live NFS service spec from the orchestrator to reflect the current cluster config.
+        nfs_sc = self.mgr.describe_service(
+            service_type='nfs',
+            service_name=f'nfs.{cluster_id}'
+        )
+        nfs_services = orchestrator.raise_if_exception(nfs_sc)
+        for svc in nfs_services:
+            if svc.spec.service_id == cluster_id:
+                placement = svc.spec.placement
+                enable_nfsv3 = bool(getattr(svc.spec, 'enable_nfsv3', False))
+                enable_rdma = bool(getattr(svc.spec, 'enable_rdma', False))
+                break
 
         if ingress_mode:
             if placement and placement.count and placement.count > 1:
@@ -694,6 +722,7 @@ class NFSCluster:
             'virtual_ip': virtual_ip,
             'backend': backends,
             'placement': placement.to_json() if placement else {},
+            'enable_nfsv3': enable_nfsv3,
             'enable_rdma': enable_rdma,
         }
 
