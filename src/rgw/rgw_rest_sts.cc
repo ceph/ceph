@@ -340,7 +340,7 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
   ldpp_dout(dpp, 20) << "JSON Response is: " << openidc_resp.c_str() << dendl;
 
   JSONParser parser;
-  if (parser.parse(openidc_resp.c_str(), openidc_resp.length())) {
+  if (parser.parse(openidc_resp)) {
     JSONObj::data_val val;
     if (parser.get_data("jwks_uri", &val)) {
       cert_url = val.str.c_str();
@@ -627,164 +627,154 @@ bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const
 }
 
 void
-WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
+WebTokenEngine::validate_signature(
+    const DoutPrefixProvider *dpp,
+    const jwt::decoded_jwt& decoded,
+    const string& algorithm,
+    const string& iss,
+    const vector<string>& thumbprints,
+    optional_yield y) const
 {
-  if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
-    const auto cert_url = get_cert_url(iss, dpp, y);
-    if (cert_url.empty() || !verify_oidc_thumbprint(dpp, cert_url, thumbprints)) {
-      ldpp_dout(dpp, 5) << "Not able to validate JWKS url with registered thumbprints" << dendl;
-      throw std::system_error(EINVAL, std::system_category());
-    }
+  if ("HS256" == algorithm || "HS384" == algorithm || "HS512" == algorithm) {
+    ldpp_dout(dpp, 0) << "JWT signed by HMAC algos are currently not supported"
+                      << dendl;
+    throw std::system_error(EINVAL, std::system_category());
+  }
 
-    // Get certificate
-    bufferlist cert_resp;
-    RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
+  const auto cert_url = get_cert_url(iss, dpp, y);
+  if (cert_url.empty() || !verify_oidc_thumbprint(dpp, cert_url, thumbprints)) {
+    ldpp_dout(dpp, 5)
+        << "Not able to validate JWKS url with registered thumbprints" << dendl;
+    throw std::system_error(EINVAL, std::system_category());
+  }
 
-    int res = cert_req.process(dpp, y);
-    if (res < 0) {
-      ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
-      throw std::system_error(EINVAL, std::system_category());
-    }
-    //Debug only
-    ldpp_dout(dpp, 20) << "HTTP status: " << cert_req.get_http_status() << dendl;
-    ldpp_dout(dpp, 20) << "JSON Response is: " << cert_resp.c_str() << dendl;
+  // Get certificate
+  bufferlist cert_resp;
+  RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
 
-    JSONParser parser;
-    if (parser.parse(cert_resp.c_str(), cert_resp.length())) {
-      JSONObj* val = parser.find_obj("keys");
-      if (val && val->is_array()) {
-        vector<string> keys = val->get_array_elements();
-        for (auto &key : keys) {
-          JSONParser k_parser;
-          vector<string> x5c;
-          std::string use, kid;
-          if (k_parser.parse(key.c_str(), key.size())) {
-            if (JSONDecoder::decode_json("kid", kid, &k_parser)) {
-              ldpp_dout(dpp, 20) << "Checking key id: " << kid << dendl;
-            }
-            if (JSONDecoder::decode_json("use", use, &k_parser) && use != "sig") {
-                continue;
-            }
+  const int res = cert_req.process(dpp, y);
+  if (res < 0) {
+    ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
+    throw std::system_error(EINVAL, std::system_category());
+  }
+  //Debug only
+  ldpp_dout(dpp, 20) << "HTTP status: " << cert_req.get_http_status() << dendl;
+  ldpp_dout(dpp, 20) << "JSON Response is: " << cert_resp.c_str() << dendl;
 
-            if (JSONDecoder::decode_json("x5c", x5c, &k_parser)) {
-              string cert;
-              bool found_valid_cert = false;
-              bool skip_thumbprint_verification = cct->_conf.get_val<bool>(
-                  "rgw_enable_jwks_url_verification");
-              if (!skip_thumbprint_verification && thumbprints.empty()) {
-                ldpp_dout(dpp, 0) << "x5c cert validation requires registered "
-                                     "thumbprints, but thumbprint list is empty"
-                                  << dendl;
-                throw std::system_error(EINVAL, std::system_category());
-              }
-              for (auto& it : x5c) {
-                cert = "-----BEGIN CERTIFICATE-----\n" + it + "\n-----END CERTIFICATE-----";
-                ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
-                if (skip_thumbprint_verification || is_cert_valid(thumbprints, cert)) {
-                  found_valid_cert = true;
-                  break;
-                }
-              }
-              if (!found_valid_cert) {
-                ldpp_dout(dpp, 10) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
-                continue;
-              }
-              try {
-                //verify method takes care of expired tokens also
-                if (algorithm == "RS256") {
-                  auto verifier = jwt::verify()
-                              .allow_algorithm(jwt::algorithm::rs256{cert});
+  ceph_json::value cert_json;
+  if (!ceph_json::parse(cert_resp, cert_json)) {
+    ldpp_dout(dpp, 0) << "Malformed json returned while fetching cert" << dendl;
+    throw std::system_error(EINVAL, std::system_category());
+  }
 
-                  verifier.verify(decoded);
-                  return;
-                } else if (algorithm == "RS384") {
-                  auto verifier = jwt::verify()
-                              .allow_algorithm(jwt::algorithm::rs384{cert});
-
-                  verifier.verify(decoded);
-                  return;
-                } else if (algorithm == "RS512") {
-                  auto verifier = jwt::verify()
-                              .allow_algorithm(jwt::algorithm::rs512{cert});
-
-                  verifier.verify(decoded);
-                  return;
-                } else if (algorithm == "ES256") {
-                  auto verifier = jwt::verify()
-                              .allow_algorithm(jwt::algorithm::es256{cert});
-
-                  verifier.verify(decoded);
-                  return;
-                } else if (algorithm == "ES384") {
-                  auto verifier = jwt::verify()
-                              .allow_algorithm(jwt::algorithm::es384{cert});
-
-                  verifier.verify(decoded);
-                  return;
-                } else if (algorithm == "ES512") {
-                  auto verifier = jwt::verify()
-                                .allow_algorithm(jwt::algorithm::es512{cert});
-
-                  verifier.verify(decoded);
-                  return;
-                } else if (algorithm == "PS256") {
-                  auto verifier = jwt::verify()
-                                .allow_algorithm(jwt::algorithm::ps256{cert});
-
-                  verifier.verify(decoded);
-                  return;
-                } else if (algorithm == "PS384") {
-                  auto verifier = jwt::verify()
-                                .allow_algorithm(jwt::algorithm::ps384{cert});
-
-                  verifier.verify(decoded);
-                  return;
-                } else if (algorithm == "PS512") {
-                  auto verifier = jwt::verify()
-                                .allow_algorithm(jwt::algorithm::ps512{cert});
-
-                  verifier.verify(decoded);
-                  return;
-                } else {
-                  ldpp_dout(dpp, 5) << "Unsupported algorithm: " << algorithm << dendl;
-                }
-              }
-              catch (const std::exception& e) {
-                ldpp_dout(dpp, 10) << "Signature validation using x5c failed" << e.what() << dendl;
-              }
-            } else {
-              // Try bare key validation
-              ldpp_dout(dpp, 20) << "Trying bare key validation" << dendl;
-              std::string kty;
-              if (JSONDecoder::decode_json("kty", kty, &k_parser) && kty != "RSA") {
-                ldpp_dout(dpp, 10) << "Only RSA bare key validation is currently supported" << dendl;
-                continue;
-              }
-
-              if (algorithm == "RS256" || algorithm == "RS384" || algorithm == "RS512") {
-                std::string n, e; //modulus and exponent
-                if (JSONDecoder::decode_json("n", n, &k_parser) && JSONDecoder::decode_json("e", e, &k_parser)) {
-                  if (validate_signature_using_n_e(dpp, decoded, algorithm, n, e)) {
-                    return;
-                  }
-                }
-                ldpp_dout(dpp, 10) << "Bare key parameters (n&e) are not present for key" << dendl;
-              }
-            }
-          } //end k_parser.parse
-        } //end for iterate through keys
-        ldpp_dout(dpp, 0) << "Signature can not be validated with the JWKS present." << dendl;
-        throw std::system_error(EINVAL, std::system_category());
-      } else { //end val->is_array
-        ldpp_dout(dpp, 0) << "keys not present in JSON" << dendl;
-        throw std::system_error(EINVAL, std::system_category());
+  try {
+    for (const auto& key : ceph_json::require_array(cert_json, "keys")) {
+      if (const auto kid = ceph_json::field<std::string>(key, "kid"); kid) {
+        ldpp_dout(dpp, 20) << "Checking key id: " << *kid << dendl;
       }
-    } else {
-      ldpp_dout(dpp, 0) << "Malformed json returned while fetching cert" << dendl;
-      throw std::system_error(EINVAL, std::system_category());
-    } //if-else get-data
-  } else {
-    ldpp_dout(dpp, 0) << "JWT signed by HMAC algos are currently not supported" << dendl;
+
+      if (const auto use = ceph_json::field<std::string>(key, "use");
+          use && "sig" != *use) {
+        continue;
+      }
+
+      if (const auto x5c =
+              ceph_json::field<std::vector<std::string>>(key, "x5c");
+          x5c) {
+        string cert;
+        bool found_valid_cert = false;
+        const bool skip_thumbprint_verification =
+            cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification");
+        if (!skip_thumbprint_verification && thumbprints.empty()) {
+          ldpp_dout(dpp, 0) << "x5c cert validation requires registered "
+                               "thumbprints, but thumbprint list is empty"
+                            << dendl;
+          throw std::system_error(EINVAL, std::system_category());
+        }
+        for (const auto& encoded_cert : *x5c) {
+          cert = "-----BEGIN CERTIFICATE-----\n" + encoded_cert +
+                 "\n-----END CERTIFICATE-----";
+          ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
+          if (skip_thumbprint_verification || is_cert_valid(thumbprints, cert)) {
+            found_valid_cert = true;
+            break;
+          }
+        }
+        if (!found_valid_cert) {
+          ldpp_dout(dpp, 10) << "Cert doesn't match that with the "
+                                "thumbprints registered with oidc provider: "
+                             << cert.c_str() << dendl;
+          continue;
+        }
+        try {
+          //verify method takes care of expired tokens also
+          const auto verify_with = [&decoded](auto allowed_algorithm) {
+            jwt::verify()
+                .allow_algorithm(std::move(allowed_algorithm))
+                .verify(decoded);
+          };
+
+          if ("RS256" == algorithm) {
+            return verify_with(jwt::algorithm::rs256 {cert});
+          }
+          if ("RS384" == algorithm) {
+            return verify_with(jwt::algorithm::rs384 {cert});
+          }
+          if ("RS512" == algorithm) {
+            return verify_with(jwt::algorithm::rs512 {cert});
+          }
+          if ("ES256" == algorithm) {
+            return verify_with(jwt::algorithm::es256 {cert});
+          }
+          if ("ES384" == algorithm) {
+            return verify_with(jwt::algorithm::es384 {cert});
+          }
+          if ("ES512" == algorithm) {
+            return verify_with(jwt::algorithm::es512 {cert});
+          }
+          if ("PS256" == algorithm) {
+            return verify_with(jwt::algorithm::ps256 {cert});
+          }
+          if ("PS384" == algorithm) {
+            return verify_with(jwt::algorithm::ps384 {cert});
+          }
+          if ("PS512" == algorithm) {
+            return verify_with(jwt::algorithm::ps512 {cert});
+          }
+
+          ldpp_dout(dpp, 5) << "Unsupported algorithm: " << algorithm << dendl;
+        } catch (const std::exception& e) {
+          ldpp_dout(dpp, 10)
+              << "Signature validation using x5c failed" << e.what() << dendl;
+        }
+        continue;
+      }
+
+      // Try bare key validation
+      ldpp_dout(dpp, 20) << "Trying bare key validation" << dendl;
+      if (const auto kty = ceph_json::field<std::string>(key, "kty");
+          kty && "RSA" != *kty) {
+        ldpp_dout(dpp, 10)
+            << "Only RSA bare key validation is currently supported" << dendl;
+        continue;
+      }
+
+      if ("RS256" == algorithm || "RS384" == algorithm || "RS512" == algorithm) {
+        const auto n = ceph_json::field<std::string>(key, "n"); // modulus
+        const auto e = ceph_json::field<std::string>(key, "e"); // exponent
+        if (n && e &&
+            validate_signature_using_n_e(dpp, decoded, algorithm, *n, *e)) {
+          return;
+        }
+        ldpp_dout(dpp, 10)
+            << "Bare key parameters (n&e) are not present for key" << dendl;
+      }
+    }
+    ldpp_dout(dpp, 0) << "Signature can not be validated with the JWKS present."
+                      << dendl;
+    throw std::system_error(EINVAL, std::system_category());
+  } catch (const JSONDecoder::err&) {
+    ldpp_dout(dpp, 0) << "keys not present in JSON" << dendl;
     throw std::system_error(EINVAL, std::system_category());
   }
 }
