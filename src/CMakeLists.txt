@@ -450,6 +450,11 @@ else()
   set(fmt_VERSION "${FMT_VERSION}")
 endif()
 
+add_library(ceph-json-headers INTERFACE)
+target_link_libraries(ceph-json-headers INTERFACE
+  glaze::glaze
+  ${FMT_LIB})
+
 # in osd/PeeringState.h, the number of elements in PeeringState::Active::reactions
 # is now 21 which exceeds the default value of BOOST_MPL_LIMIT_VECTOR_SIZE, which
 # is 20. so we need to override it. see
@@ -577,13 +582,13 @@ set(libcommon_files
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
-target_link_libraries(common-objs legacy-option-headers)
-target_compile_definitions(common-objs PRIVATE
-  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+target_link_libraries(common-objs
+  PUBLIC legacy-option-headers
+  PRIVATE ceph-json-headers)
 
 if(WITH_JAEGER)
   add_dependencies(common-objs jaeger_base)
-  target_link_libraries(common-objs jaeger_base)
+  target_link_libraries(common-objs PUBLIC jaeger_base)
 endif()
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
@@ -609,6 +614,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:erasure_code>)
 set(ceph_common_deps
   common_utf8 extblkdev arch crc32
+  ceph-json
   ${LIB_RESOLV}
   Boost::thread
   Boost::context

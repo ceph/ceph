@@ -40,10 +40,13 @@ endif()
 add_library(mon STATIC
   ${lib_mon_srcs})
 target_link_libraries(mon
-  legacy-option-headers
-  kv
-  heap_profiler
-  ${FMT_LIB})
+  PUBLIC
+    legacy-option-headers
+    kv
+    heap_profiler
+    ${FMT_LIB}
+  PRIVATE
+    ceph-json-headers)
 if(WITH_JAEGER)
-  target_link_libraries(mon jaeger_base)
+  target_link_libraries(mon PUBLIC jaeger_base)
 endif()

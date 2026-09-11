@@ -150,6 +150,7 @@ target_compile_definitions(crimson-common PRIVATE
 target_link_libraries(crimson-common
   PUBLIC
     $<$<BOOL:${WITH_JAEGER}>:jaeger_base>
+    ceph-json-headers
     crimson::cflags
   PRIVATE
     crc32 arch

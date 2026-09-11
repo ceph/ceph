@@ -175,7 +175,6 @@ if(FREEBSD)
   list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
 endif(FREEBSD)
 
-
 #put all the libs and binaries in one place
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -212,6 +211,24 @@ include(CheckCxxAtomic)
 if(NOT HAVE_CXX11_ATOMIC)
   string(APPEND CMAKE_CXX_STANDARD_LIBRARIES
     " ${LIBATOMIC_LINK_FLAGS}")
+endif()
+
+set(CPM_DONT_UPDATE_MODULE_PATH ON)
+include(${CMAKE_MODULE_PATH}/CPM.cmake)
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/glaze/CMakeLists.txt")
+  CPMAddPackage(
+    NAME glaze
+    VERSION 7.6.0
+    SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/glaze"
+    EXCLUDE_FROM_ALL YES
+    SYSTEM YES)
+else()
+  CPMAddPackage("gh:stephenberry/glaze@7.6.0#v7.6.0")
+endif()
+
+if(NOT TARGET glaze::glaze)
+  message(FATAL_ERROR "Glaze is required to build ceph-json")
 endif()
 
 option(WITH_RDMA "Enable RDMA in async messenger" ON)
@@ -552,26 +569,21 @@ option(WITH_CATCH2 "Enable Catch2 unit tests" ON)
 option(WITH_SYSTEM_CATCH2 "Enable Catch2 unit tests (require system packages)" OFF)
 
 if(WITH_CATCH2)
-  # Save pre-existing definitions (if any):
-  set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_USE_LOCAL_PACKAGES_ONLY})
-
-    if(WITH_SYSTEM_CATCH2)
-   set(CPM_LOCAL_PACKAGES_ONLY ON)
+  set(_cpm_local_packages_only ${CPM_LOCAL_PACKAGES_ONLY})
+  if(WITH_SYSTEM_CATCH2)
+    set(CPM_LOCAL_PACKAGES_ONLY ON)
   endif()
 
-  include(${CMAKE_MODULE_PATH}/CPM.cmake)
   CPMAddPackage("gh:catchorg/Catch2@3.8.1")
+  set(CPM_LOCAL_PACKAGES_ONLY ${_cpm_local_packages_only})
+  unset(_cpm_local_packages_only)
 
-  # Restore the original CPM settings in case someone else wants to use the module:
-  set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
-
-  # CPM skips the fetch silently if downloads are disabled,
-  # e.g. with FETCHCONTENT_FULLY_DISCONNECTED=ON on deb builds
+  # CPM skips the fetch silently when downloads are disabled.
   if(NOT TARGET Catch2::Catch2WithMain)
     message(WARNING "Catch2 unavailable, disabling Catch2 tests")
     set(WITH_CATCH2 OFF)
   else()
-    message("-- Enabled Catch2 support")
+    message(STATUS "Enabled Catch2 support")
   endif()
 endif()
 

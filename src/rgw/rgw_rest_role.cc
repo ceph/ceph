@@ -449,7 +449,7 @@ int RGWModifyRoleTrustPolicy::init_processing(optional_yield y)
   }
 
   JSONParser p;
-  if (!p.parse(trust_policy.c_str(), trust_policy.length())) {
+  if (!p.parse(trust_policy)) {
     ldpp_dout(this, 20) << "ERROR: failed to parse assume role policy doc" << dendl;
     return -ERR_MALFORMED_DOC;
   }

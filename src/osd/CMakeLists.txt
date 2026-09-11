@@ -68,6 +68,7 @@ add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
   PUBLIC dmclock::dmclock Boost::MPL
   PRIVATE
+    ceph-json-headers
     legacy-option-headers
     os heap_profiler cpu_profiler ${FMT_LIB} ${CMAKE_DL_LIBS})
 if(WITH_LTTNG)
