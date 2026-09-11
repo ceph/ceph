@@ -34,6 +34,14 @@ std::optional<token_window> parse_rdma_token(std::string_view token);
 /**
  * Per-op out-of-band delivery descriptor carried on a MOSDOp.
  *
+ * The descriptor names a client memory window and an offset into it.
+ * It does not name a direction: the fields say where the client's
+ * bytes live, not who moves them, and the encoding is versioned so a
+ * direction that needs more can add it. Today the only implemented
+ * direction is read delivery, described below; an OSD pulling its
+ * share of a write payload out of client memory would address it the
+ * same way.
+ *
  * The MOSDOp carries one descriptor per op (a vector aligned with the
  * ops, mirroring the reply's per-op oob results); an entry with an
  * empty token means that op's data stays inline. The descriptor is
@@ -72,7 +80,7 @@ struct delivery_t {
   static constexpr uint32_t KNOWN_FLAGS = FLAG_CRC64NVME;
 
   std::string token;      ///< opaque cuObject RDMA descriptor
-  uint64_t base_offset = 0; ///< client-window offset for the read's first byte
+  uint64_t base_offset = 0; ///< client-window offset for the op's first byte
   uint32_t flags = 0;     ///< FLAG_* above; OSDs deliver inline on unknown bits
 
   /// true when no delivery is requested for this op
