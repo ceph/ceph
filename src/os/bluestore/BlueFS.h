@@ -7,7 +7,6 @@
 #include <atomic>
 #include <mutex>
 #include <limits>
-#include <uuid/uuid.h>
 
 #include "bluefs_types.h"
 #include "blk/BlockDevice.h"
