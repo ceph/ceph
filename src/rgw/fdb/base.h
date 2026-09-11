@@ -148,7 +148,7 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
 [[nodiscard]] inline std::uint64_t extract_uint64(future_value result_owner);
 [[nodiscard]] inline std::string extract_byte_string(future_value result_owner);
 [[nodiscard]] inline ceph::libfdb::database& database_or_throw(const ceph::libfdb::database_handle& dbh);
-inline bool retry_after_error(transaction_handle& txn, fdb_error_t r);
+[[nodiscard]] inline bool reset_for_replay_if_needed(transaction_handle& txn, fdb_error_t error);
 
 // A generator that produces successive spans for a range:
 inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn,
@@ -296,6 +296,7 @@ class key_selector final
     offset(offset_)
  {}
 
+ private:
  template <concepts::libfdb_key KeyT>
  friend constexpr key_selector lower(const KeyT& key);
 
@@ -701,7 +702,7 @@ using transaction_options = option_map<FDBTransactionOption>;
 
 // Caller-supplied database sources are tagged so paths and connection strings
 // cannot be confused:
-class connection_source final
+struct connection_source final
 {
  private:
  enum class source_kind {
@@ -752,25 +753,19 @@ inline const std::uint8_t *data_of(const std::vector<std::uint8_t>& xs) { return
 inline const std::uint8_t *data_of(const std::string& xs) { return reinterpret_cast<const std::uint8_t *>(xs.data()); }
 inline const std::uint8_t *data_of(const std::int64_t& x) { return reinterpret_cast<const std::uint8_t *>(&x); }
 inline const std::uint8_t *data_of(const option_flag_t&) { return nullptr; }
+inline const std::uint8_t *data_of(std::string_view xs) { return reinterpret_cast<const std::uint8_t *>(xs.data()); }
 
-// Note that these are specific to FDB's needs (see return type, casts):
 constexpr int size_of(const std::vector<std::uint8_t>& xs) { return static_cast<int>(xs.size()); }
 constexpr int size_of(const std::string& xs) { return static_cast<int>(xs.size()); }
 constexpr int size_of(const std::int64_t) { return sizeof(std::int64_t); }
 constexpr int size_of(const option_flag_t&) { return 0; }
-
-// ...also used:
-inline const std::uint8_t *data_of(std::string_view xs) { return reinterpret_cast<const std::uint8_t *>(xs.data()); }
 constexpr int size_of(std::string_view xs) { return static_cast<int>(xs.size()); }
 
 inline auto as_fdb_option_args(const auto& option)
 {
- auto [data, size] = std::visit([](const auto& x) {
-                         return std::tuple { data_of(x), size_of(x) };
-                       },
-                       option.second);
-
- return std::tuple { option.first, data, size };
+ return std::visit([&option](const auto& value) {
+  return std::tuple { option.first, data_of(value), size_of(value) };
+ }, option.second);
 }
 
 inline void apply_options(const auto& option_map, auto&& set_option)
@@ -785,7 +780,6 @@ inline void apply_options(const auto& option_map, auto&& set_option)
 }
 
 // The global DB state and management thread:
-// JFW: more user hooks that go into FDB system possible here
 namespace database_system
 {
 inline bool was_initialized = false;
@@ -853,7 +847,7 @@ inline void shutdown_fdb()
 class database final
 {
  private:
- using open_fn_t = fdb_error_t (*)(const char *, FDBDatabase **);
+ using create_db_fn_t = decltype(&fdb_create_database);
 
  struct database_deleter final
  {
@@ -874,7 +868,7 @@ class database final
  }
 
  static FDBDatabase *create_database_ptr(const char *source,
-                                         const open_fn_t open,
+                                         const create_db_fn_t create_db_fn,
                                          const network_options& network_opts) {
     std::call_once(detail::database_system::fdb_was_initialized,
                    detail::database_system::initialize_fdb,
@@ -886,7 +880,7 @@ class database final
 
     FDBDatabase *fdbp = nullptr;
 
-    if (fdb_error_t r = open(source, &fdbp); 0 != r) {
+    if (fdb_error_t r = create_db_fn(source, &fdbp); 0 != r) {
       throw libfdb_exception(r);
     }
     
@@ -894,19 +888,19 @@ class database final
  }
 
  database(const char *source,
-          const open_fn_t open,
+          const create_db_fn_t create_db_fn,
           const ceph::libfdb::database_options& db_opts,
           const network_options& network_opts)
-  : db_handle(create_database_ptr(source, open, network_opts))
+  : db_handle(create_database_ptr(source, create_db_fn, network_opts))
  {
   apply_database_options(db_opts);
  }
 
  database(std::string source,
-          const open_fn_t open,
+          const create_db_fn_t create_db_fn,
           const ceph::libfdb::database_options& db_opts,
           const network_options& network_opts)
-  : database(source.c_str(), open, db_opts, network_opts)
+  : database(source.c_str(), create_db_fn, db_opts, network_opts)
  {}
 
  FDBTransaction *create_transaction() {
@@ -953,7 +947,8 @@ class database final
  public:
  FDBDatabase *raw_handle() const noexcept { return db_handle.get(); }
 
- [[nodiscard]] double main_thread_busyness() const
+ // FDB client-network load: zero is idle; one or greater is saturated.
+ [[nodiscard]] double client_network_load() const
  {
   return fdb_database_get_main_thread_busyness(raw_handle());
  }
@@ -1041,6 +1036,7 @@ class transaction final
 
  state_t state = state_t::active;
 
+ // State guards to save tedious code repetition and provide consistent handling:
  private:
  void require_active(const std::string_view operation) const
  {
@@ -1053,6 +1049,23 @@ class transaction final
  {
   if (state_t::committed != state || nullptr == raw_handle()) {
    throw std::invalid_argument(fmt::format("{} requires committed transaction", operation));
+  }
+ }
+
+ // Transaction recovery:
+ void reset_for_replay(const fdb_error_t error)
+ {
+  require_active("reset_for_replay()");
+
+  if (not fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, error)) {
+   // Non-retryable errors cannot be repaired by on_error():
+   throw libfdb_exception(error);
+  }
+
+  auto on_error_result = detail::wait_for_on_error(raw_handle(), error);
+
+  if (fdb_error_t on_error_r = detail::get_future_error(on_error_result); 0 != on_error_r) {
+   throw libfdb_exception(on_error_r);
   }
  }
 
@@ -1167,7 +1180,8 @@ class transaction final
   }
 
   if (FDB_CONFLICT_RANGE_TYPE_READ == type) {
-   (void)read_version();
+   // just anchor the transaction to a read version:
+   std::ignore = read_version();
   }
 
   const auto begin = detail::as_fdb_span(half_open_range.begin_key);
@@ -1267,31 +1281,9 @@ class transaction final
             detail::future_value(fdb_transaction_get_approximate_size(raw_handle()))));
  }
 
- [[nodiscard]] bool prepare_replay(const fdb_error_t r)
- {
-  require_active("prepare_replay()");
-
-  if (0 == r) {
-   return false;
-  }
-
-  if (not fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, r)) {
-   // Non-retryable errors cannot be repaired by on_error():
-   throw libfdb_exception(r);
-  }
-
-  auto on_error_result = detail::wait_for_on_error(raw_handle(), r);
-
-  if (fdb_error_t on_error_r = detail::get_future_error(on_error_result); 0 != on_error_r) {
-   throw libfdb_exception(on_error_r);
-  }
-
-  return true;
- }
-
  void set_read_version(const std::int64_t version)
  {
-  fdb_transaction_set_read_version(raw_handle(), version);
+  return fdb_transaction_set_read_version(raw_handle(), version);
  }
 
  bool commit();
@@ -1351,7 +1343,7 @@ class transaction final
  friend inline std::int64_t committed_version(const transaction_handle& txn);
  friend inline std::int64_t read_version(const transaction_handle& txn);
  friend inline std::int64_t approximate_commit_bytes(const transaction_handle& txn);
- friend inline bool ceph::libfdb::detail::retry_after_error(transaction_handle& txn, fdb_error_t r);
+ friend inline bool ceph::libfdb::detail::reset_for_replay_if_needed(transaction_handle&, fdb_error_t);
  friend inline void set_read_version(const transaction_handle& txn, std::int64_t version);
  friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);
@@ -1803,9 +1795,16 @@ inline std::size_t get_value_range_from_transaction(transaction& txn,
           });
 }
 
-inline bool retry_after_error(ceph::libfdb::transaction_handle& txn, const fdb_error_t r)
+// Return true only after FDB has reset the transaction for replay:
+[[nodiscard]] inline bool reset_for_replay_if_needed(transaction_handle& txn, const fdb_error_t error)
 {
- return txn->prepare_replay(r);
+ if (0 == error) {
+  return false;
+ }
+
+ txn->reset_for_replay(error);
+
+ return true;
 }
 
 // Convert FDBKey array into something useful:
@@ -1904,7 +1903,7 @@ inline range_work_plan plan_range_work(ceph::libfdb::database_handle dbh,
 
   auto split_points = extract_split_points(std::move(result_owner));
 
-  if (retry_after_error(txn, split_points.error)) {
+  if (reset_for_replay_if_needed(txn, split_points.error)) {
    continue;
   }
 

@@ -68,6 +68,10 @@ auto dbh = lfdb::create_database(
   lfdb::connection_source{"description:id@127.0.0.1:4500"});
 ```
 
+The source type makes the distinction explicit: a string is a FoundationDB
+connection string, while a cluster-file name must be passed as a
+`std::filesystem::path`.
+
 ## Basic Operations
 
 Use a `database_handle` when you want libfdb to create, commit, and retry a
@@ -267,11 +271,11 @@ if (not lfdb::commit(txn)) {
 }
 ```
 
-`prepare_replay()` is the lower-level hook for application-managed replay. Most
+`reset_for_replay()` is the lower-level hook for application-managed replay. Most
 callers should use a transactor instead; use this when the application needs to
 keep its own progress marker before re-running part of a larger operation.
-`commit()` already prepares replay before returning `false`; call
-`prepare_replay()` only for retryable errors that escape before commit.
+`commit()` already resets the transaction before returning `false`; call
+`reset_for_replay()` only for retryable errors that escape before commit.
 
 ```cpp
 auto txn = lfdb::make_transaction(dbh);
@@ -284,7 +288,7 @@ try {
   }
 }
 catch (const lfdb::libfdb_exception& e) {
-  lfdb::prepare_replay(txn, e.fdb_error_value);
+  lfdb::reset_for_replay(txn, e.fdb_error_value);
   retry_from(marker);
 }
 ```
@@ -1340,9 +1344,11 @@ functions:
 <https://apple.github.io/foundationdb/api-c.html#c.fdb_database_get_client_status>
 and
 <https://apple.github.io/foundationdb/api-c.html#c.fdb_database_get_main_thread_busyness>.
+`client_network_load()` reports load on FoundationDB's client network thread:
+zero is idle, while one or greater indicates saturation.
 
 ```cpp
-const auto busyness = lfdb::system::main_thread_busyness(dbh);
+const auto client_load = lfdb::system::client_network_load(dbh);
 const auto protocol = lfdb::system::server_protocol(dbh);
 const auto status_json = lfdb::system::client_status_json(dbh);
 ```

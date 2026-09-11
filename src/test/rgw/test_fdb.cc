@@ -845,7 +845,7 @@ TEST_CASE("api and system diagnostics", "[fdb]")
  }
 
  SECTION("system namespace rejects invalid database handles") {
-  CHECK_THROWS_AS(lfdb::system::main_thread_busyness({}), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::client_network_load({}), std::invalid_argument);
   CHECK_THROWS_AS(lfdb::system::client_status_json({}), std::invalid_argument);
   CHECK_THROWS_AS(lfdb::system::server_protocol({}), std::invalid_argument);
   CHECK_THROWS_AS(lfdb::system::reboot_worker({}, "127.0.0.1:4500", false, 0),
@@ -859,8 +859,8 @@ TEST_CASE("api and system diagnostics", "[fdb]")
  SECTION("system namespace reports live database diagnostics") {
   janitor dbh;
 
-  const auto busyness = lfdb::system::main_thread_busyness(dbh);
-  CHECK(0.0 <= busyness);
+  const auto client_load = lfdb::system::client_network_load(dbh);
+  CHECK(0.0 <= client_load);
 
   const auto protocol = lfdb::system::server_protocol(dbh);
   CHECK(0 < protocol);
@@ -2630,6 +2630,19 @@ TEST_CASE("explicit conflict ranges", "[fdb]") {
  }
 }
 
+TEST_CASE("FoundationDB integer encoding is little endian", "[fdb]") {
+ constexpr auto bytes = std::array<std::uint8_t, 4> {0x78, 0x56, 0x34, 0x12};
+ constexpr auto short_bytes = std::array<std::uint8_t, 2> {0x78, 0x56};
+ constexpr auto negative_one = std::array<std::uint8_t, 4> {0xff, 0xff, 0xff, 0xff};
+
+ STATIC_REQUIRE(bytes == lfdb::detail::little_endian_bytes(std::uint32_t {0x12345678}));
+ STATIC_REQUIRE(std::uint32_t {0x12345678} ==
+                lfdb::detail::little_endian_integer<std::uint32_t>(bytes));
+ STATIC_REQUIRE(std::uint32_t {0x5678} ==
+                lfdb::detail::little_endian_integer<std::uint32_t>(short_bytes));
+ STATIC_REQUIRE(negative_one == lfdb::detail::little_endian_bytes(std::int32_t {-1}));
+}
+
 TEST_CASE("atomic mutations", "[fdb]") {
  janitor j;
 
@@ -2931,22 +2944,34 @@ SCENARIO("transactor", "[fdb]")
   return 7;
  })>);
 
- SECTION("prepare_replay handles retryable errors") {
+ SECTION("reset_for_replay handles retryable errors") {
   constexpr fdb_error_t not_committed = 1020;
   REQUIRE(0 != fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, not_committed));
 
   auto txn = lfdb::make_transaction(j);
 
-  CHECK_NOTHROW(lfdb::prepare_replay(txn, not_committed));
+  CHECK_NOTHROW(lfdb::reset_for_replay(txn, not_committed));
+
+  const auto key = test_key("reset-for-replay");
+  lfdb::set(txn, key, "value");
+
+  CHECK(lfdb::commit(txn));
+  CHECK(lfdb::key_exists(j, key));
  }
 
- SECTION("prepare_replay rejects non-retryable errors") {
+ SECTION("reset_for_replay rejects non-retryable errors") {
   constexpr fdb_error_t operation_cancelled = 1101;
   REQUIRE_FALSE(fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, operation_cancelled));
 
   auto txn = lfdb::make_transaction(j);
 
-  CHECK_THROWS_AS(lfdb::prepare_replay(txn, operation_cancelled), lfdb::libfdb_exception);
+  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, operation_cancelled), lfdb::libfdb_exception);
+ }
+
+ SECTION("reset_for_replay requires an error") {
+  auto txn = lfdb::make_transaction(j);
+
+  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, 0), std::invalid_argument);
  }
 
  SECTION("successful commit ends ordinary transaction work") {
@@ -2956,7 +2981,7 @@ SCENARIO("transactor", "[fdb]")
   REQUIRE(lfdb::commit(txn));
 
   CHECK(0 < lfdb::committed_version(txn));
-  CHECK_THROWS_AS(lfdb::prepare_replay(txn, 1020), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::reset_for_replay(txn, 1020), std::invalid_argument);
  }
 
  SECTION("transaction function returns nothing") {

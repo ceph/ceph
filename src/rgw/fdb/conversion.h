@@ -122,7 +122,7 @@ inline std::string decode_zpp_string_value(const std::span<const std::uint8_t> f
   throw ceph::libfdb::libfdb_exception("unable to decode string value");
  }
 
- const auto data = reinterpret_cast<const char *>(size_prefix + from.data());
+ const auto data = reinterpret_cast<const char *>(from.data() + size_prefix);
 
  return std::string(data, static_cast<std::string::size_type>(size));
 }

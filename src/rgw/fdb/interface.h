@@ -106,9 +106,9 @@ namespace api {
 
 namespace system {
 
-[[nodiscard]] inline double main_thread_busyness(database_handle dbh)
+[[nodiscard]] inline double client_network_load(database_handle dbh)
 {
- return detail::database_or_throw(dbh).main_thread_busyness();
+ return detail::database_or_throw(dbh).client_network_load();
 }
 
 [[nodiscard]] inline std::string client_status_json(database_handle dbh)
@@ -168,8 +168,8 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
  return txn->commit();
 }
 
-// Prepare a transaction to replay after a retryable operation-body error:
-void prepare_replay(transaction_handle& txn, fdb_error_t error);
+// Reset a transaction after a retryable operation-body error so its complete body can be replayed:
+void reset_for_replay(transaction_handle& txn, fdb_error_t error);
 
 [[nodiscard]] commit_result commit(with_result_t, transaction_handle& txn);
 
@@ -1859,10 +1859,10 @@ inline bool commit_or_throw(transaction_handle& txn)
 
 namespace ceph::libfdb {
 
-inline void prepare_replay(transaction_handle& txn, const fdb_error_t error)
+inline void reset_for_replay(transaction_handle& txn, const fdb_error_t error)
 {
- if (not detail::retry_after_error(txn, error)) {
-  throw libfdb_exception(error);
+ if (not detail::reset_for_replay_if_needed(txn, error)) {
+  throw std::invalid_argument("reset_for_replay() requires a nonzero FoundationDB error");
  }
 }
 
@@ -1984,7 +1984,7 @@ auto attempt_invocation(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn
    throw;
   }
 
-  prepare_replay(txn, e.fdb_error_value);
+  reset_for_replay(txn, e.fdb_error_value);
   return std::nullopt;
  }
 
@@ -2035,7 +2035,7 @@ transaction_result maybe_retry_with_result(transaction_handle txn, FnT&& fn)
     throw;
    }
 
-   prepare_replay(txn, e.fdb_error_value);
+   reset_for_replay(txn, e.fdb_error_value);
    record_transaction_replay(result, e.fdb_error_value, 1 < attempts_left);
 
    continue;
