@@ -9,6 +9,8 @@
       <cd-table [data]="image_error.data"
                 columnMode="flex"
                 [columns]="image_error.columns"
+                identifier="name"
+                forceIdentifier="true"
                 [autoReload]="-1"
                 (fetchData)="refresh()"
                 [status]="tableStatus">
@@ -22,6 +24,8 @@
       <cd-table [data]="image_syncing.data"
                 columnMode="flex"
                 [columns]="image_syncing.columns"
+                identifier="name"
+                forceIdentifier="true"
                 [autoReload]="-1"
                 (fetchData)="refresh()"
                 [status]="tableStatus">
@@ -35,6 +39,8 @@
       <cd-table [data]="image_ready.data"
                 columnMode="flex"
                 [columns]="image_ready.columns"
+                identifier="name"
+                forceIdentifier="true"
                 [autoReload]="-1"
                 (fetchData)="refresh()"
                 [status]="tableStatus">
