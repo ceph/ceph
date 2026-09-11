@@ -1593,21 +1593,6 @@ public:
   bool backfill_reserved = false;
   bool backfill_reserving = false;
 
-  /**
-   * Per-PG latch state for rebuild time tracking. Cleared after each
-   * completed rebuild event is recorded in the perf counters.
-   * The state is also cleared in start_peering_interval() when the
-   * primary role actually changes across the transition, so that a
-   * role change (primary -> replica, or vice versa) does not carry a
-   * stale start time or baseline recovered count into a future primary
-   * stint. Peering-interval restarts that leave this OSD as primary
-   * throughout preserve the latch so an in-progress rebuild keeps
-   * accruing across them.
-   */
-  utime_t rebuild_start_time;
-  int64_t rebuild_base_recovered = 0;
-  bool rebuild_had_redundancy_loss = false;
-
   PeeringMachine machine;
 
   void update_osdmap_ref(OSDMapRef newmap) {
@@ -1656,17 +1641,6 @@ public:
   void on_new_interval();
   void clear_recovery_state();
   void clear_primary_state();
-  /**
-   * This is used by:
-   * a) start_peering_interval(): If this OSD is losing the primary role
-   *    while rebuild_start_time is still armed -- close out and record this
-   *    OSD's own segment of the vulnerability window instead of discarding it.
-   * b) prepare_stats_for_publish(): The case where this OSD is the primary
-   *   and completes a rebuild and records the OSD's vulnerability window.
-   *
-   * So both paths use identical filter/record/log logic.
-   */
-  void try_record_rebuild_segment(utime_t end_time, std::string_view reason);
   void check_past_interval_bounds() const;
   bool set_force_recovery(bool b);
   bool set_force_backfill(bool b);
@@ -1718,17 +1692,6 @@ public:
       pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
       return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
     }
-  }
-
-  // Accessors for the per-PG rebuild latch state.
-  utime_t get_rebuild_start_time() const {
-    return rebuild_start_time;
-  }
-  int64_t get_rebuild_base_recovered() const {
-    return rebuild_base_recovered;
-  }
-  bool get_rebuild_had_redundancy_loss() const {
-    return rebuild_had_redundancy_loss;
   }
 
 private:
@@ -2409,6 +2372,24 @@ public:
   bool state_test(uint64_t m) const { return (state & m) != 0; }
   void state_set(uint64_t m) { state |= m; }
   void state_clear(uint64_t m) { state &= ~m; }
+
+  /**
+   * Vulnerability-window tracking (last_degraded/last_clean in info.stats)
+   * is gated by is_primary(): only the primary ever advances it, so a replica
+   * has no way to correctly finish (record) a window it did not open
+   * itself. Call this right after any code path that adopts a peer's
+   * pg_stat_t wholesale -- if the inherited info.stats carried an
+   * open-but-unrecorded window (last_degraded > last_clean), collapse it so
+   * this OSD's local copy always reads "no window open". Without this, a
+   * replica silently inherits a stuck, already resolved onset from whichever
+   * primary sent the info, and permanently fails to track its own vulnerability
+   * the next time it becomes primary.
+   */
+  void discard_inherited_vulnerability_window() {
+    if (info.stats.last_degraded > info.stats.last_clean) {
+      info.stats.last_degraded = info.stats.last_clean;
+    }
+  }
 
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
