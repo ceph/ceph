@@ -103,11 +103,66 @@ static inline rgw_obj_key make_obj_key(const CRgwObject* obj) {
   return rgw_obj_key(name);
 }
 
+
+// Helper function to convert CRgwObjectMeta to rgw::sal::Attrs
+static void c_meta_to_attrs(const CRgwObjectMeta* user_attrs, rgw::sal::Attrs& attrs) {
+  if (!user_attrs) {
+    return;
+  }
+
+  if (user_attrs->content_type) {
+    bufferlist ct_bl;
+    ct_bl.append(user_attrs->content_type);
+    attrs[RGW_ATTR_CONTENT_TYPE] = std::move(ct_bl);
+  }
+  if (user_attrs->content_encoding) {
+    bufferlist ce_bl;
+    ce_bl.append(user_attrs->content_encoding);
+    attrs[RGW_ATTR_CONTENT_ENC] = std::move(ce_bl);
+  }
+  if (user_attrs->content_disposition) {
+    bufferlist cd_bl;
+    cd_bl.append(user_attrs->content_disposition);
+    attrs[RGW_ATTR_CONTENT_DISP] = std::move(cd_bl);
+  }
+  if (user_attrs->content_language) {
+    bufferlist cl_bl;
+    cl_bl.append(user_attrs->content_language);
+    attrs[RGW_ATTR_CONTENT_LANG] = std::move(cl_bl);
+  }
+  if (user_attrs->cache_control) {
+    bufferlist cc_bl;
+    cc_bl.append(user_attrs->cache_control);
+    attrs[RGW_ATTR_CACHE_CONTROL] = std::move(cc_bl);
+  }
+  // Parse custom metadata from JSON
+  if (user_attrs->metadata) {
+    std::string metadata_json(user_attrs->metadata);
+    try {
+      json_spirit::mValue json_obj;
+      if (json_spirit::read(metadata_json, json_obj) && json_obj.type() == json_spirit::obj_type) {
+        const json_spirit::mObject& obj_map = json_obj.get_obj();
+        for (const auto& [key, value] : obj_map) {
+          if (value.type() == json_spirit::str_type) {
+            std::string attr_name = std::string(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX) + key;
+            bufferlist meta_bl;
+            meta_bl.append(value.get_str());
+            attrs[attr_name] = std::move(meta_bl);
+          }
+        }
+      }
+    } catch (...) {
+      // Silently ignore JSON parsing errors
+    }
+  }
+}
+
+
 extern "C" {
 
 int rgw_put_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
       CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
-      const CRgwBuffer* buffer, char** etag_out) {
+      const CRgwBuffer* buffer, const CRgwObjectMeta* user_attrs, char** etag_out) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
@@ -182,6 +237,55 @@ int rgw_put_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   etag_bl.append(etag);
   attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
 
+  // Set user-provided attributes if present
+  if (user_attrs) {
+    if (user_attrs->content_type) {
+      bufferlist ct_bl;
+      ct_bl.append(user_attrs->content_type);
+      attrs[RGW_ATTR_CONTENT_TYPE] = std::move(ct_bl);
+    }
+    if (user_attrs->content_encoding) {
+      bufferlist ce_bl;
+      ce_bl.append(user_attrs->content_encoding);
+      attrs[RGW_ATTR_CONTENT_ENC] = std::move(ce_bl);
+    }
+    if (user_attrs->content_disposition) {
+      bufferlist cd_bl;
+      cd_bl.append(user_attrs->content_disposition);
+      attrs[RGW_ATTR_CONTENT_DISP] = std::move(cd_bl);
+    }
+    if (user_attrs->content_language) {
+      bufferlist cl_bl;
+      cl_bl.append(user_attrs->content_language);
+      attrs[RGW_ATTR_CONTENT_LANG] = std::move(cl_bl);
+    }
+    if (user_attrs->cache_control) {
+      bufferlist cc_bl;
+      cc_bl.append(user_attrs->cache_control);
+      attrs[RGW_ATTR_CACHE_CONTROL] = std::move(cc_bl);
+    }
+    // Parse custom metadata from JSON
+    if (user_attrs->metadata) {
+      std::string metadata_json(user_attrs->metadata);
+      try {
+        json_spirit::mValue json_obj;
+        if (json_spirit::read(metadata_json, json_obj) && json_obj.type() == json_spirit::obj_type) {
+          const json_spirit::mObject& obj_map = json_obj.get_obj();
+          for (const auto& [key, value] : obj_map) {
+            if (value.type() == json_spirit::str_type) {
+              std::string attr_name = std::string(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX) + key;
+              bufferlist meta_bl;
+              meta_bl.append(value.get_str());
+              attrs[attr_name] = std::move(meta_bl);
+            }
+          }
+        }
+      } catch (...) {
+        ldpp_dout(dpp, 5) << "WARNING: sal_wrapper: rgw_put_object: failed to parse metadata JSON" << dendl;
+      }
+    }
+  }
+
   ceph::real_time mtime = ceph::real_clock::now();
   req_context rctx{dpp, y, nullptr};
 
@@ -210,7 +314,7 @@ int rgw_put_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
 int rgw_put_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
       CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
       const CRgwBuffer* buffer,
-      const char* if_match, const char* if_nomatch, int* canceled, char** etag_out) {
+      const char* if_match, const char* if_nomatch, int* canceled, const CRgwObjectMeta* user_attrs, char** etag_out) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
@@ -286,6 +390,55 @@ int rgw_put_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dp
   etag_bl.append(etag);
   attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
 
+  // Set user-provided attributes if present
+  if (user_attrs) {
+    if (user_attrs->content_type) {
+      bufferlist ct_bl;
+      ct_bl.append(user_attrs->content_type);
+      attrs[RGW_ATTR_CONTENT_TYPE] = std::move(ct_bl);
+    }
+    if (user_attrs->content_encoding) {
+      bufferlist ce_bl;
+      ce_bl.append(user_attrs->content_encoding);
+      attrs[RGW_ATTR_CONTENT_ENC] = std::move(ce_bl);
+    }
+    if (user_attrs->content_disposition) {
+      bufferlist cd_bl;
+      cd_bl.append(user_attrs->content_disposition);
+      attrs[RGW_ATTR_CONTENT_DISP] = std::move(cd_bl);
+    }
+    if (user_attrs->content_language) {
+      bufferlist cl_bl;
+      cl_bl.append(user_attrs->content_language);
+      attrs[RGW_ATTR_CONTENT_LANG] = std::move(cl_bl);
+    }
+    if (user_attrs->cache_control) {
+      bufferlist cc_bl;
+      cc_bl.append(user_attrs->cache_control);
+      attrs[RGW_ATTR_CACHE_CONTROL] = std::move(cc_bl);
+    }
+    // Parse custom metadata from JSON
+    if (user_attrs->metadata) {
+      std::string metadata_json(user_attrs->metadata);
+      try {
+        json_spirit::mValue json_obj;
+        if (json_spirit::read(metadata_json, json_obj) && json_obj.type() == json_spirit::obj_type) {
+          const json_spirit::mObject& obj_map = json_obj.get_obj();
+          for (const auto& [key, value] : obj_map) {
+            if (value.type() == json_spirit::str_type) {
+              std::string attr_name = std::string(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX) + key;
+              bufferlist meta_bl;
+              meta_bl.append(value.get_str());
+              attrs[attr_name] = std::move(meta_bl);
+            }
+          }
+        }
+      } catch (...) {
+        ldpp_dout(dpp, 5) << "WARNING: sal_wrapper: rgw_put_object_conditional: failed to parse metadata JSON" << dendl;
+      }
+    }
+  }
+
   ceph::real_time mtime = ceph::real_clock::now();
   req_context rctx{dpp, y, nullptr};
   bool was_canceled = false;
@@ -295,7 +448,7 @@ int rgw_put_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dp
                             etag,             /* etag */
                             &mtime,           /* mtime (output) */
                             mtime,            /* set_mtime */
-                            attrs,            /* attrs (includes RGW_ATTR_ETAG) */
+                            attrs,            /* attrs (includes RGW_ATTR_ETAG and user attrs) */
                             std::nullopt,     /* cksum */
                             ceph::real_time(),/* delete_at (epoch = no expiry) */
                             if_match,         /* if_match */
@@ -581,6 +734,12 @@ int rgw_head_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   meta->etag = nullptr;
   meta->content_type = nullptr;
   meta->last_modified = 0;
+  meta->last_modified_ns = 0;
+  meta->content_encoding = nullptr;
+  meta->content_disposition = nullptr;
+  meta->content_language = nullptr;
+  meta->cache_control = nullptr;
+  meta->metadata = nullptr;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
@@ -628,6 +787,42 @@ int rgw_head_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
       ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_head_object: allocation failed" << dendl;
       return -ENOMEM;
     }
+  }
+
+  // Extract additional attributes
+  auto ce_iter = attrs.find(RGW_ATTR_CONTENT_ENC);
+  if (ce_iter != attrs.end()) {
+    meta->content_encoding = strdup(ce_iter->second.to_str().c_str());
+  }
+
+  auto cd_iter = attrs.find(RGW_ATTR_CONTENT_DISP);
+  if (cd_iter != attrs.end()) {
+    meta->content_disposition = strdup(cd_iter->second.to_str().c_str());
+  }
+
+  auto cl_iter = attrs.find(RGW_ATTR_CONTENT_LANG);
+  if (cl_iter != attrs.end()) {
+    meta->content_language = strdup(cl_iter->second.to_str().c_str());
+  }
+
+  auto cc_iter = attrs.find(RGW_ATTR_CACHE_CONTROL);
+  if (cc_iter != attrs.end()) {
+    meta->cache_control = strdup(cc_iter->second.to_str().c_str());
+  }
+
+  // Extract custom metadata (x-amz-meta-*) as JSON
+  json_spirit::mObject metadata_obj;
+  std::string meta_prefix = std::string(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX);
+  for (const auto& [attr_name, attr_value] : attrs) {
+    if (attr_name.compare(0, meta_prefix.length(), meta_prefix) == 0) {
+      std::string key = attr_name.substr(meta_prefix.length());
+      metadata_obj[key] = attr_value.to_str();
+    }
+  }
+
+  if (!metadata_obj.empty()) {
+    std::string metadata_json = json_spirit::write(metadata_obj);
+    meta->metadata = strdup(metadata_json.c_str());
   }
 
   return 0;
@@ -1006,19 +1201,19 @@ int rgw_delete_objects( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   return 0;
 }
 
-int rgw_init_multipart( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
+int rgw_multipart_init( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
       CRgwYieldContext* yield_ctx, const CRgwBucket* bucket_id, const CRgwObject* obj_id,
-      char** upload_id) {
+      const CRgwObjectMeta* meta, char** upload_id) {
   auto* driver = get_driver(driver_ptr);
   auto* dpp = get_dpp(dpp_ptr);
   auto y = get_yield(yield_ctx);
 
   if (!driver || !bucket_id || !obj_id || !obj_id->key || !upload_id) {
-    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_init_multipart: invalid args" << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_init: invalid args" << dendl;
     return -EINVAL;
   }
 
-  ldpp_dout(dpp, 10) << "rgw_init_multipart: bucket=" << bucket_id->name
+  ldpp_dout(dpp, 10) << "rgw_multipart_init: bucket=" << bucket_id->name
                      << " obj=" << obj_id->key << dendl;
 
   *upload_id = nullptr;
@@ -1033,13 +1228,18 @@ int rgw_init_multipart( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
     bucket->get_multipart_upload(obj_id->key, initial_upload_id);
   if (!upload) {
-    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_init_multipart: allocation failed" << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_init: allocation failed" << dendl;
     return -ENOMEM;
   }
 
   ACLOwner owner = bucket->get_acl().get_owner();
   rgw_placement_rule placement = bucket->get_placement_rule();
   rgw::sal::Attrs attrs;
+
+  // Convert CRgwObjectMeta to rgw::sal::Attrs if provided
+  if (meta) {
+    c_meta_to_attrs(meta, attrs);
+  }
 
   ret = upload->init(dpp, y, owner, placement, attrs);
   if (ret < 0) {
@@ -1049,7 +1249,7 @@ int rgw_init_multipart( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   std::string id = upload->get_upload_id();
   *upload_id = strndup(id.c_str(), MAX_UPLOAD_ID_LEN);
   if (!*upload_id) {
-    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_init_multipart: allocation failed" << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_init: allocation failed" << dendl;
     return -ENOMEM;
   }
 
@@ -1221,11 +1421,43 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   meta_obj->set_in_extra_data(true);
   meta_obj->set_hash_source(target_obj->get_name());
   
-
-  /* XXX: Do we need cls lock here for racing completions? like done in 
-   * frontend RGWCompleteMultipart::execute().
+  /* Take a cls lock on meta_obj to prevent racing completions (or retries)
+   * from deleting the parts. This matches the behavior in frontend
+   * RGWCompleteMultipart::execute().
    */
+  int max_lock_secs_mp = g_ceph_context->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
+  const ceph::timespan dur = std::chrono::seconds(max_lock_secs_mp);
+  
+  std::unique_ptr<rgw::sal::MPSerializer> serializer = 
+    meta_obj->get_serializer(dpp, y, "rgw_multipart_complete");
+  ret = serializer->try_lock(dpp, dur, y);
+  if (ret == -ENOENT) {
+    // Multipart upload was already completed or doesn't exist
+    ldpp_dout(dpp, 4) << "NOTICE: Multipart upload already completed or doesn't exist" << dendl;
+    return -ERR_NO_SUCH_UPLOAD;
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to acquire lock on meta_obj, ret=" << ret << dendl;
+    if (ret == -EBUSY || ret == -EEXIST) {
+      return -ERR_BUSY_RESHARDING;
+    }
+    return ret;
+  }
    
+  // Get attributes from meta object before completing
+  // This preserves attributes set during init_multipart
+  ret = meta_obj->get_obj_attrs(y, dpp);
+  if (ret == 0) {
+    target_obj->set_attrs(meta_obj->get_attrs());
+  }
+
+  if (!serializer->is_locked()) {
+    // lock renewal failed, it's not safe to commit the head object
+    ret = -ERR_INTERNAL_ERROR;
+    ldpp_dout(dpp, 0) << "This multipart completion is already in progress" << ret << dendl;
+    return ret;
+  }
+
   ret = upload->complete(
     dpp, y, g_ceph_context, part_etags, remove_objs,
     accounted_size, compressed, cs_info, ofs, tag, owner,
@@ -1234,6 +1466,7 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   if (ret < 0) {
     return ret;
   }
+  target_obj->set_attrs(meta_obj->get_attrs());
 
   RGWObjVersionTracker objv_tracker = meta_obj->get_version_tracker();
   remove_objs.clear();
@@ -1249,7 +1482,10 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     int del_ret = meta_obj->delete_object(dpp, y, rgw::sal::FLAG_PREVENT_VERSIONING, 
                                           &remove_objs, &objv_tracker);
     if (del_ret != -ECANCELED || i == MAX_DELETE_RETRIES - 1) {
-      if (del_ret < 0 && del_ret != -ENOENT) {
+      if (ret >= 0) {
+        /* serializer's exclusive lock is released */
+        serializer->clear_locked();
+      } else {
         ldpp_dout(dpp, 1) << "WARNING: failed to remove multipart metadata object " << meta_obj << " ret: " << del_ret << dendl;
         // Don't fail the complete operation if metadata deletion fails
         // The metadata will be cleaned up during bucket deletion
@@ -1262,7 +1498,7 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     del_ret = meta_obj->get_obj_attrs(y, dpp);
     if (del_ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to get obj attrs, obj=" << meta_obj
-			 << " del_ret=" << ret << dendl;
+			 << " del_ret=" << del_ret << dendl;
 
       if (del_ret != -ENOENT) {
 	ldpp_dout(dpp, 0) << "ERROR: failed to remove object " << meta_obj << dendl;
@@ -1335,8 +1571,29 @@ void rgw_free_object_meta(CRgwObjectMeta* meta) {
       free(meta->content_type);
       meta->content_type = nullptr;
     }
+    if (meta->content_encoding) {
+      free(meta->content_encoding);
+      meta->content_encoding = nullptr;
+    }
+    if (meta->content_disposition) {
+      free(meta->content_disposition);
+      meta->content_disposition = nullptr;
+    }
+    if (meta->content_language) {
+      free(meta->content_language);
+      meta->content_language = nullptr;
+    }
+    if (meta->cache_control) {
+      free(meta->cache_control);
+      meta->cache_control = nullptr;
+    }
+    if (meta->metadata) {
+      free(meta->metadata);
+      meta->metadata = nullptr;
+    }
     meta->size = 0;
     meta->last_modified = 0;
+    meta->last_modified_ns = 0;
   }
 }
 
@@ -1364,6 +1621,13 @@ void rgw_free_list_result(CRgwListResult* result) {
     result->count = 0;
     result->is_truncated = 0;
   }
+}
+
+void rgw_free_string(char* s) {
+  // Frees strings handed back through char** out-params (etag, upload_id),
+  // which are allocated here with strdup/strndup. Freeing on this side keeps
+  // allocation and deallocation in the same allocator (free(nullptr) is a no-op).
+  free(s);
 }
 
 uint64_t rgw_get_max_chunk_size(CRgwDriver* driver_ptr) {
