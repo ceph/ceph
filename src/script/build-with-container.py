@@ -234,6 +234,52 @@ def _cmdstr(cmd):
     return " ".join(shlex.quote(c) for c in cmd)
 
 
+def _podman_requires_system_migrate(output):
+    text = output.lower()
+    return (
+        "invalid internal status" in text
+        and "podman system migrate" in text
+    )
+
+
+def _podman_preflight(ctx):
+    """Detect and self-heal a known podman failure mode where an
+    interrupted or version-skewed store reports an invalid internal
+    status until `podman system migrate` is run.
+    """
+    if ctx._podman_preflight_done:
+        return
+    if "podman" not in ctx.container_engine:
+        ctx._podman_preflight_done = True
+        return
+
+    ctx._podman_preflight_done = True
+    info_cmd = [ctx.container_engine, "info"]
+    res = subprocess.run(info_cmd, capture_output=True, text=True)
+    if res.returncode == 0:
+        return
+
+    output = f"{res.stdout}\n{res.stderr}"
+    if not _podman_requires_system_migrate(output):
+        log.warning("podman runtime preflight failed: %s", res.stderr.strip())
+        return
+
+    log.warning(
+        "podman reported invalid internal status; attempting self-heal with 'podman system migrate'"
+    )
+    migrate_cmd = [ctx.container_engine, "system", "migrate"]
+    mig = subprocess.run(migrate_cmd, capture_output=True, text=True)
+    if mig.returncode != 0:
+        log.warning("podman system migrate failed: %s", mig.stderr.strip())
+        return
+
+    res2 = subprocess.run(info_cmd, capture_output=True, text=True)
+    if res2.returncode == 0:
+        log.info("podman runtime preflight recovered after system migrate")
+    else:
+        log.warning("podman info still failing after migrate: %s", res2.stderr.strip())
+
+
 def _run(cmd, *args, **kwargs):
     ctx = kwargs.pop("ctx", None)
     if ctx and ctx.dry_run:
@@ -241,6 +287,10 @@ def _run(cmd, *args, **kwargs):
         # because we can not return a result (as we did nothing)
         # raise a specific exception to be caught by higher layer
         raise DidNotExecute(cmd)
+
+    cmd0 = str(cmd[0]) if cmd else ""
+    if ctx and "podman" in cmd0:
+        _podman_preflight(ctx)
 
     log.info("Executing command: %s", _cmdstr(cmd))
     return subprocess.run(cmd, *args, **kwargs)
@@ -415,6 +465,7 @@ class Context:
     def __init__(self, cli):
         self.cli = cli
         self._engine = None
+        self._podman_preflight_done = False
         self.distro_cache_name = ""
         self.current_srpm = None
 
