@@ -7,6 +7,7 @@
 #include <string>
 
 #include "Types.h"
+#include "json_spirit/json_spirit.h"
 
 namespace cephfs {
 namespace mirror {
@@ -22,6 +23,21 @@ int connect(std::string_view client_name, std::string_view cluster_name,
 
 int mount(RadosRef cluster, const Filesystem &filesystem, bool cross_check_fscid,
           MountRef *mount);
+
+// Typed JSON field getters. Use a local mValue so callers can keep a live
+// copy/reference of a parent object without get_json_value() overwriting it.
+bool get_json_value(const json_spirit::mObject& obj,
+                    const std::string& key,
+                    json_spirit::mValue *val);
+bool get_json_string(const json_spirit::mObject& obj,
+                     const std::string& key,
+                     std::string *val);
+bool get_json_uint64(const json_spirit::mObject& obj,
+                     const std::string& key,
+                     uint64_t *val);
+bool get_json_real(const json_spirit::mObject& obj,
+                   const std::string& key,
+                   double *val);
 
 } // namespace mirror
 } // namespace cephfs
