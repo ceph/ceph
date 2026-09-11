@@ -121,6 +121,55 @@ class PoolControllerTest(ControllerTestCase):
         self.assertEqual(task.percentages, [0, 5, 50, 73, 98])
         TaskManager.current_task = orig_method
 
+    @mock.patch('dashboard.services.progress.get_progress_tasks')
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_migrate(self, send_command, get_progress_tasks):
+        NotificationQueue.start_queue()
+        TaskManager.init()
+
+        def _send_cmd(*args, **kwargs):  # pylint: disable=unused-argument
+            pass
+
+        send_command.side_effect = _send_cmd
+        get_progress_tasks.return_value = [], []
+
+        self._task_post('/api/pool/test-pool/migrate', {
+            'pg_num': '64',
+            'pool_type': 'replicated',
+            'size': '3',
+            'target_size_ratio': '0.5',
+            'bulk': 'true',
+            'yes_i_really_mean_it': 'true',
+            'autoscale_mode': 'on'
+        }, 10)
+        self.assertStatus(201)
+        send_command.assert_called_once_with(
+            'mon', 'osd pool migrate', pool='test-pool',
+            pg_num=64, pool_type='replicated', size=3,
+            target_size_ratio=0.5, bulk=True, yes_i_really_mean_it=True,
+            autoscale_mode='on')
+        NotificationQueue.stop()
+
+    @mock.patch('dashboard.services.progress.get_progress_tasks')
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_migrate_defaults(self, send_command, get_progress_tasks):
+        NotificationQueue.start_queue()
+        TaskManager.init()
+
+        def _send_cmd(*args, **kwargs):  # pylint: disable=unused-argument
+            pass
+
+        send_command.side_effect = _send_cmd
+        get_progress_tasks.return_value = [], []
+
+        # An empty body must be accepted: every parameter except the pool name
+        # is optional, matching the 'osd pool migrate' CLI.
+        self._task_post('/api/pool/test-pool/migrate', {}, 10)
+        self.assertStatus(201)
+        send_command.assert_called_once_with(
+            'mon', 'osd pool migrate', pool='test-pool')
+        NotificationQueue.stop()
+
     @mock.patch('dashboard.controllers.osd.CephService.get_pool_list_with_stats')
     @mock.patch('dashboard.controllers.osd.CephService.get_pool_list')
     def test_pool_list(self, get_pool_list, get_pool_list_with_stats):
