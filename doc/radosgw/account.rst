@@ -94,6 +94,8 @@ These identity policies are evaluated according to the rules in
 `Evaluating policies within a single account`_ and
 `Cross-account policy evaluation logic`_.
 
+.. _radosgw-account-principals:
+
 Principals
 ----------
 

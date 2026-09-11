@@ -34,79 +34,8 @@ For example, one may use ``s3cmd`` to set or delete a policy thus::
 Limitations
 ===========
 
-Currently, we support only the following actions:
-
-- s3:AbortMultipartUpload
-- s3:CreateBucket
-- s3:DeleteBucketPolicy
-- s3:DeleteBucket
-- s3:DeleteBucketWebsite
-- s3:DeleteObject
-- s3:DeleteObjectVersion
-- s3:DeleteReplicationConfiguration
-- s3:GetAccelerateConfiguration
-- s3:GetBucketAcl
-- s3:GetBucketCORS
-- s3:GetBucketLocation
-- s3:GetBucketLogging
-- s3:GetBucketNotification
-- s3:GetBucketPolicy
-- s3:GetBucketRequestPayment
-- s3:GetBucketTagging
-- s3:GetBucketVersioning
-- s3:GetBucketWebsite
-- s3:GetLifecycleConfiguration
-- s3:GetObjectAcl
-- s3:GetObject
-- s3:GetObjectTorrent
-- s3:GetObjectVersionAcl
-- s3:GetObjectVersion
-- s3:GetObjectVersionTorrent
-- s3:GetReplicationConfiguration
-- s3:IPAddress
-- s3:NotIpAddress
-- s3:ListAllMyBuckets
-- s3:ListBucketMultipartUploads
-- s3:ListBucket
-- s3:ListBucketVersions
-- s3:ListMultipartUploadParts
-- s3:PutAccelerateConfiguration
-- s3:PutBucketAcl
-- s3:PutBucketCORS
-- s3:PutBucketLogging
-- s3:PutBucketNotification
-- s3:PutBucketPolicy
-- s3:PutBucketRequestPayment
-- s3:PutBucketTagging
-- s3:PutBucketVersioning
-- s3:PutBucketWebsite
-- s3:PutLifecycleConfiguration
-- s3:PutObjectAcl
-- s3:PutObject
-- s3:PutObjectVersionAcl
-- s3:PutReplicationConfiguration
-- s3:RestoreObject
-
-We do not yet support setting policies on users, groups, or roles.
-
-We use the RGW ‘tenant’ identifier in place of the Amazon twelve-digit
-account ID. In the future we may allow you to assign an account ID to
-a tenant, but for now if you want to use policies between AWS S3 and
-RGW S3 you will have to use the Amazon account ID as the tenant ID when
-creating users.
-
-Under AWS, all tenants share a single namespace. RGW gives every
-tenant its own namespace of buckets. There may be an option to enable
-an AWS-like 'flat' bucket namespace in future versions. At present, to
-access a bucket belonging to another tenant, address it as
-``tenant:bucket`` in the S3 request.
-
-In AWS, a bucket policy can grant access to another account, and that
-account owner can then grant access to individual users with user
-permissions. Since we do not yet support user, role, and group
-permissions, account owners will currently need to grant access
-directly to individual users, and granting an entire account access to
-a bucket grants access to all users in that account.
+See :ref:`Principals <radosgw-account-principals>` regarding
+the interactions between policy Principals and User Accounts.
 
 Bucket policies do not yet support string interpolation.
 
@@ -210,9 +139,6 @@ Object Related Operations
 |s3:DeleteObjectVersionTagging|                                                   |                   |
 +-----------------------------+---------------------------------------------------+-------------------+
 
-
-More may be supported soon as we integrate with the recently rewritten
-Authentication/Authorization subsystem.
 
 Swift
 =====
