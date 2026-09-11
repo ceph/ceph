@@ -253,7 +253,29 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(11, 6, blist);
+  if (!HAVE_FEATURE(con_features, SERVER_UMBRELLA)) {
+    ENCODE_START(9, 6, blist);
+    ceph::encode_raw(fsid, blist);
+    encode(epoch, blist);
+    encode(last_changed, blist);
+    encode(created, blist);
+    encode(persistent_features, blist);
+    encode(optional_features, blist);
+    encode(mon_info, blist, con_features);
+    encode(ranks, blist);
+    encode(min_mon_release, blist);
+    encode(removed_ranks, blist);
+    uint8_t t = strategy;
+    encode(t, blist);
+    encode(disallowed_leaders, blist);
+    encode(stretch_mode_enabled, blist);
+    encode(tiebreaker_mon, blist);
+    encode(stretch_marked_down_mons, blist);
+    ENCODE_FINISH(blist);
+    return;
+  }
+
+  ENCODE_START(10, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
