@@ -47,6 +47,11 @@ The ``local`` backend is configured with:
 
 .. confval:: rgw_s3vector_local_path
 
+.. note:: The files are written by the RGW process, as the user it runs as
+   so the path must be writable by that user. Purging the data of a user
+   or an account with ``radosgw-admin`` removes the files as well,
+   and the command therefore has to run on the RGW host, as a user with
+   write access to the path.
 
 Backing Buckets
 ~~~~~~~~~~~~~~~
