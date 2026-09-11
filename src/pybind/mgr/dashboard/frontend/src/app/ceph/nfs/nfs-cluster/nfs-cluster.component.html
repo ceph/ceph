@@ -1,26 +1,39 @@
 <ng-container *ngIf="orchStatus?.available && clusters$ | async as clusters">
-  <cd-table
-    [autoReload]="true"
-    [data]="clusters"
-    columnMode="flex"
-    [columns]="columns"
-    selectionType="single"
-    [hasDetails]="true"
-    (setExpandedRow)="setExpandedRow($event)"
-    (fetchData)="loadData()"
-    (updateSelection)="updateSelection($event)"
-  >
-    <cd-table-actions
-      class="table-actions"
-      [selection]="selection"
-      [permission]="permission"
-      [tableActions]="tableActions"
-    ></cd-table-actions>
-    <cd-nfs-cluster-details
-      *cdTableDetail
-      [selection]="expandedRow"
-    ></cd-nfs-cluster-details>
-  </cd-table>
+  <section class="cds-mt-6">
+    <p
+      class="cds--type-heading-03 cds-mb-3"
+      i18n
+    >
+      Network file system clusters
+    </p>
+    <cd-table
+      [autoReload]="true"
+      [data]="clusters"
+      columnMode="flex"
+      [columns]="columns"
+      selectionType="single"
+      [hasDetails]="true"
+      emptyStateTitle="No NFS clusters exists."
+      i18n-emptyStateTitle
+      emptyStateMessage="Create one to start serving NFS exports."
+      i18n-emptyStateMessage
+      (setExpandedRow)="setExpandedRow($event)"
+      (fetchData)="loadData()"
+      (updateSelection)="updateSelection($event)"
+    >
+      <div class="table-actions">
+        <cd-table-actions
+          [selection]="selection"
+          [permission]="permission"
+          [tableActions]="tableActions"
+        ></cd-table-actions>
+      </div>
+      <cd-nfs-cluster-details
+        *cdTableDetail
+        [selection]="expandedRow"
+      ></cd-nfs-cluster-details>
+    </cd-table>
+  </section>
 </ng-container>
 
 <ng-template
