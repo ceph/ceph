@@ -27,6 +27,7 @@
 #include "common/ceph_crypto.h"
 #include "global/global_context.h"
 #include "common/async/yield_context.h"
+#include "json_spirit/json_spirit.h"
 
 #include <cstdio>
 #include <cstring>
