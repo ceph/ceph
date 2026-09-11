@@ -20,17 +20,19 @@
         [tableActions]="tableActions"
       >
       </cd-table-actions>
-      <cd-table-actions
-        [permission]="{ read: true }"
-        [selection]="selection"
-        dropDownOnly="Cluster-wide configuration"
-        [dropDownOnlyOffset]="{ x: 110, y: 0 }"
-        [dropDownOnlyBtnColor]="'tertiary'"
-        class="btn-group"
-        id="cluster-wide-actions"
-        [tableActions]="clusterWideActions"
-      >
-      </cd-table-actions>
+      @if (permissions.osd.update || permissions.configOpt.read) {
+        <cd-table-actions
+          [permission]="permissions.osd"
+          [selection]="selection"
+          dropDownOnly="Cluster-wide configuration"
+          [dropDownOnlyOffset]="{ x: 110, y: 0 }"
+          [dropDownOnlyBtnColor]="'tertiary'"
+          class="btn-group"
+          id="cluster-wide-actions"
+          [tableActions]="clusterWideActions"
+        >
+        </cd-table-actions>
+      }
     </div>
 
     <cd-osd-details
