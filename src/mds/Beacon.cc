@@ -341,6 +341,22 @@ void Beacon::notify_health(MDSRank const *mds)
     }
   }
 
+  // Detect the journal hard limit: new client mutations are parked
+  {
+    if (mds->mdlog->is_hard_limit_reached()) {
+      auto num_segments = mds->mdlog->get_num_segments();
+      auto hard_limit = mds->mdlog->get_hard_limit_segments();
+      CachedStackStringStream css;
+      *css << "Journal reached hard limit (" << num_segments << "/" << hard_limit
+           << "); client mutating operations are blocked until trimming catches up";
+
+      MDSHealthMetric m(MDS_HEALTH_JOURNAL_HARD_LIMIT, HEALTH_ERR, css->strv());
+      m.metadata["num_segments"] = stringify(num_segments);
+      m.metadata["hard_limit_segments"] = stringify(hard_limit);
+      health.metrics.push_back(m);
+    }
+  }
+
   // Detect clients failing to respond to modifications to capabilities in
   // CLIENT_CAPS messages.
   {

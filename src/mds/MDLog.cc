@@ -61,6 +61,10 @@ MDLog::MDLog(MDSRank* m)
   skip_unbounded_events = g_conf().get_val<bool>("mds_log_skip_unbounded_events");
   log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
   minor_segments_per_major_segment = g_conf().get_val<uint64_t>("mds_log_minor_segments_per_major_segment");
+  log_hard_limit_factor = g_conf().get_val<double>("mds_log_hard_limit_factor");
+  load_admission_delays();
+  recompute_limits();
+  // Start the upkeep thread last: it reads the limit fields set above.
   upkeep_thread = std::thread(&MDLog::log_trim_upkeep, this);
 }
 
@@ -633,6 +637,9 @@ void MDLog::shutdown()
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
   dout(5) << "shutdown" << dendl;
+  // Parked client requests must not stall shutdown waiting for trimming.
+  // Resume them now; dispatch answers them with -EAGAIN while stopping.
+  wake_hard_limit_waiters(true);
   if (submit_thread.is_started()) {
     ceph_assert(mds->is_daemon_stopping());
 
@@ -715,6 +722,9 @@ void MDLog::log_trim_upkeep(void) {
       MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_log_trim);
       trim();
     }
+    // trim() runs with submit_mutex released by now; resuming parked requests
+    // re-enters the journal, so this must not happen inside trim().
+    wake_hard_limit_waiters();
 
     cond.wait_for(mds_lock, g_conf().get_val<std::chrono::milliseconds>("mds_log_trim_upkeep_interval"));
   }
@@ -1693,6 +1703,50 @@ void MDLog::dump_replay_status(Formatter *f) const
 }
 
 
+void MDLog::recompute_limits()
+{
+  if (log_hard_limit_factor <= 0) {
+    hard_limit_segments = 0;  // disabled
+    return;
+  }
+
+  const uint64_t warn = static_cast<uint64_t>(max_segments * log_warn_factor);
+  uint64_t hard = static_cast<uint64_t>(max_segments * log_hard_limit_factor);
+  if (hard <= warn) {
+    derr << "mds_log_hard_limit_factor (" << log_hard_limit_factor
+         << ") gives a hard limit of " << hard
+         << " segments, at or below the warn threshold of " << warn
+         << "; clamping to " << (warn + 1) << dendl;
+    hard = warn + 1;
+  }
+  hard_limit_segments = hard;
+}
+
+void MDLog::load_admission_delays() {
+  double min_delay = g_conf().get_val<double>("mds_log_admission_min_delay");
+  double max_delay = g_conf().get_val<double>("mds_log_admission_max_delay");
+  if (max_delay < min_delay) {
+    derr << "mds_log_admission_max_delay (" << max_delay
+         << ") is below mds_log_admission_min_delay (" << min_delay
+         << "); using " << min_delay << " as the maximum" << dendl;
+    max_delay = min_delay;
+  }
+  admission_max_delay = max_delay;
+  admission_min_delay = min_delay;
+}
+
+void MDLog::wake_hard_limit_waiters(bool force)
+{
+  if (hard_limit_waiters.empty() || (!force && is_hard_limit_reached())) {
+    return;
+  }
+  dout(10) << __func__ << ": resuming " << hard_limit_waiters.size()
+           << " parked client request(s)" << dendl;
+  std::vector<MDSContext*> waiters;
+  waiters.swap(hard_limit_waiters);
+  finish_contexts(g_ceph_context, waiters);
+}
+
 void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mdsmap)
 {
   if (changed.count("mds_debug_subtrees")) {
@@ -1706,9 +1760,6 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   }
   if (changed.count("mds_log_max_events")) {
     max_events = g_conf().get_val<int64_t>("mds_log_max_events");
-  }
-  if (changed.count("mds_log_max_segments")) {
-    max_segments = g_conf().get_val<uint64_t>("mds_log_max_segments");
   }
   if (changed.count("mds_log_pause")) {
     pause = g_conf().get_val<bool>("mds_log_pause");
@@ -1725,10 +1776,26 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   if (changed.count("mds_log_trim_decay_rate")){
     log_trim_counter = DecayCounter(g_conf().get_val<double>("mds_log_trim_decay_rate"));
   }
-  if (changed.count("mds_log_warn_factor")) {
-    log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
-  }
   if (changed.count("mds_log_minor_segments_per_major_segment")) {
     minor_segments_per_major_segment = g_conf().get_val<uint64_t>("mds_log_minor_segments_per_major_segment");
+  }
+  if (changed.count("mds_log_trim_upkeep_interval")) {
+    // The upkeep thread sleeps for the interval it read last time. Wake it so
+    // the new interval takes effect now, not after the old sleep ends.
+    cond.notify_all();
+  }
+  if (changed.count("mds_log_admission_min_delay") ||
+      changed.count("mds_log_admission_max_delay")) {
+    load_admission_delays();
+  }
+  if (changed.count("mds_log_max_segments") ||
+      changed.count("mds_log_warn_factor") ||
+      changed.count("mds_log_hard_limit_factor")) {
+    max_segments = g_conf().get_val<uint64_t>("mds_log_max_segments");
+    log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
+    log_hard_limit_factor = g_conf().get_val<double>("mds_log_hard_limit_factor");
+    recompute_limits();
+    // A raised or disabled limit may let parked requests through immediately.
+    wake_hard_limit_waiters();
   }
 }

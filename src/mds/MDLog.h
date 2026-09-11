@@ -139,6 +139,19 @@ public:
   bool is_capped() const { return mds_is_shutting_down; }
   void cap();
 
+  bool is_hard_limit_reached() const {
+    return hard_limit_segments > 0 && segments.size() >= hard_limit_segments;
+  }
+  uint64_t get_hard_limit_segments() const { return hard_limit_segments; }
+  uint64_t get_warn_segments() const {
+    return static_cast<uint64_t>(max_segments * log_warn_factor);
+  }
+  // Park a client request until the journal is back under the hard limit.
+  // MDLog takes ownership of c and completes it from the upkeep thread.
+  void add_hard_limit_waiter(MDSContext* c) { hard_limit_waiters.push_back(c); }
+  double get_admission_min_delay() const { return admission_min_delay; }
+  double get_admission_max_delay() const { return admission_max_delay;}
+
   void kick_submitter();
   void shutdown();
 
@@ -312,12 +325,20 @@ private:
 
   void trim();
   void log_trim_upkeep(void);
+  void recompute_limits();
+  void load_admission_delays();
+  void wake_hard_limit_waiters(bool force=false);
 
   bool debug_subtrees;
   std::atomic_uint64_t event_large_threshold; // accessed by submit thread
   uint64_t events_per_segment;
   int64_t max_events;
   uint64_t max_segments;
+  double log_hard_limit_factor;
+  uint64_t hard_limit_segments;
+  std::vector<MDSContext*> hard_limit_waiters;  // guarded by mds_lock
+  double admission_min_delay = 0.01;  // seconds, soft-band delay at the warn threshold
+  double admission_max_delay = 0.5;   // seconds, soft-band delay near the hard limit
   uint64_t minor_segments_per_major_segment;
   bool pause;
   bool skip_corrupt_events;

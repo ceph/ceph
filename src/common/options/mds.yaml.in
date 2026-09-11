@@ -1829,6 +1829,8 @@ options:
   default: 1000
   services:
   - mds
+  flags:
+  - runtime
 - name: mds_delay_journal_replay_for_testing
   type: millisecs
   level: dev
@@ -1912,6 +1914,50 @@ options:
   level: advanced
   desc: dmclock limit for each MDS client
   default: 1000.0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_log_hard_limit_factor
+  type: float
+  level: advanced
+  desc: the journal segment count at which new client mutations are parked,
+        computed as this factor times ``mds_log_max_segments``.
+  fmt_desc: When the journal reaches ``mds_log_max_segments * mds_log_hard_limit_factor``
+    segments, the MDS parks new client mutating operations until trimming brings the
+    journal back under that limit. This bounds the memory needed to replay the journal.
+    The resulting limit is clamped to be strictly greater than
+    ``mds_log_max_segments * mds_log_warn_factor``. Between the warn and hard limits,
+    new mutations are delayed in proportion to the backlog. Set to 0 to disable.
+  default: 250
+  min: 0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_log_admission_min_delay
+  type: float
+  level: advanced
+  desc: minimum delay in seconds applied to each new client mutation just above the
+        warn threshold.
+  fmt_desc: When the journal is above its warn threshold but below the hard limit,
+            each new client mutating operation is delayed. The delay grows from this
+            minimum at the warn threshold toward mds_log_admission_max_delay near the hard limit.
+  default: 0.01
+  min: 0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_log_admission_max_delay
+  type: float
+  level: advanced
+  desc: maximum delay in seconds applied to each new client mutation near the hard limit.
+  fmt_desc: The delay applied to new client mutating operations as the journal approaches
+            mds_log_max_segments * mds_log_hard_limit_factor. Should be at least
+            mds_log_admission_min_delay.
+  default: 0.5
+  min: 0
   services:
   - mds
   flags:
