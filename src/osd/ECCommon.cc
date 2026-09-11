@@ -1324,7 +1324,14 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
   if (op.after_progress.data_complete && op.after_progress.omap_complete) {
     uint64_t shard_size = sinfo.object_size_to_shard_size(op.recovery_info.size,
       get_parent()->whoami_shard().shard);
-    ceph_assert(shard_size >= tobj_size);
+    if (shard_size < tobj_size) {
+      derr << __func__ << ": shard_size=" << shard_size
+           << " < tobj_size=" << tobj_size
+           << " recovery_info.size=" << op.recovery_info.size
+           << " shard=" << get_parent()->whoami_shard()
+           << " soid=" << op.soid << dendl;
+      ceph_abort_msg("shard_size < tobj_size: stale FAE or size inconsistency");
+    }
     if (shard_size != tobj_size) {
       m->t.truncate( coll, tobj, shard_size);
     }
@@ -1731,7 +1738,8 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         interval_set<uint64_t> shard_fae;
         // [temp]: Umbrella needs to replaced with Vampire here once it is available
         if (get_osdmap()->require_osd_release >= ceph_release_t::umbrella &&
-            op.obc && !sinfo.get_parity_shards().contains(pg_shard.shard)) {
+            op.obc && !sinfo.get_parity_shards().contains(pg_shard.shard) &&
+            !op.obc->obs.oi.is_whiteout()) {
           const interval_set<uint64_t> ro_fae =
             op.obc->obs.oi.force_allocated_extents.get_intervals();
           if (!ro_fae.empty()) {
@@ -1741,6 +1749,9 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
             dout(20) << __func__ << ": shard=" << pg_shard.shard
                      << " force_alloc_shard=" << shard_fae << dendl;
           }
+        } else if (op.obc && op.obc->obs.oi.is_whiteout()) {
+          dout(10) << __func__ << ": skipping FAE for whiteout soid="
+                   << op.hoid << dendl;
         }
 
         ECUtil::ec_recovery_compute_shard_push(*op.returned_data, pg_shard.shard,

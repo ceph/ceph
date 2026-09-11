@@ -8779,6 +8779,7 @@ inline int PrimaryLogPG::_delete_oid(
   if (whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    oi.force_allocated_extents.clear();
     ctx->delta_stats.num_whiteouts++;
     t->create(soid);
     ctx->use_replace_op = true;
@@ -9034,6 +9035,7 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
   ctx->clean_regions.mark_data_region_dirty(0, std::max(obs.oi.size, rollback_to->obs.oi.size));
   ctx->clean_regions.mark_omap_dirty();
   obs.oi.size = rollback_to->obs.oi.size;
+  obs.oi.force_allocated_extents = rollback_to->obs.oi.force_allocated_extents;
   if (rollback_to->obs.oi.is_data_digest())
     obs.oi.set_data_digest(rollback_to->obs.oi.data_digest);
   else
@@ -10889,6 +10891,7 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     // create a whiteout
     tctx->op_t->create(soid);
     tctx->new_obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    tctx->new_obs.oi.force_allocated_extents.clear();
     ++tctx->delta_stats.num_whiteouts;
     dout(20) << __func__ << " creating whiteout on " << soid << dendl;
     osd->logger->inc(l_osd_tier_whiteout);
