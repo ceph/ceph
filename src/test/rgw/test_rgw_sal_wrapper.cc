@@ -80,7 +80,7 @@ TEST(NullSafety, NullDriverReturnsError) {
 
   // multipart
   char* upload_id = nullptr;
-  EXPECT_LT(rgw_init_multipart(nullptr, nullptr, nullptr, &b, &o, &upload_id), 0);
+  EXPECT_LT(rgw_multipart_init(nullptr, nullptr, nullptr, &b, &o, &upload_id), 0);
 
   char* etag = nullptr;
   uint8_t data[] = {0};
@@ -119,7 +119,7 @@ TEST(NullSafety, NullBucketAndKeyReturnsError) {
              nullptr, nullptr, nullptr, 100, nullptr), 0);
 
   // multipart null output
-  EXPECT_LT(rgw_init_multipart(driver, nullptr, nullptr, &b, &o, nullptr), 0);
+  EXPECT_LT(rgw_multipart_init(driver, nullptr, nullptr, &b, &o, nullptr), 0);
   EXPECT_LT(rgw_multipart_put_part(driver, nullptr, nullptr,
              &b, &o, "id", 1, nullptr, 0, nullptr), 0);
 }
@@ -936,7 +936,7 @@ TEST_F(SALWrapperTest, MultipartBasic) {
   CRgwObject obj{"test/multipart-obj", nullptr};
   char* upload_id = nullptr;
 
-  int ret = rgw_init_multipart(driver(), dpp(), nullptr, &bucket_, &obj, &upload_id);
+  int ret = rgw_multipart_init(driver(), dpp(), nullptr, &bucket_, &obj, &upload_id);
   ASSERT_EQ(0, ret);
   ASSERT_NE(upload_id, nullptr);
   EXPECT_GT(strlen(upload_id), 0u);
@@ -982,7 +982,7 @@ TEST_F(SALWrapperTest, MultipartAbort) {
   CRgwObject obj{"test/multipart-abort", nullptr};
   char* upload_id = nullptr;
 
-  ASSERT_EQ(0, rgw_init_multipart(driver(), dpp(), nullptr,
+  ASSERT_EQ(0, rgw_multipart_init(driver(), dpp(), nullptr,
                                   &bucket_, &obj, &upload_id));
   ASSERT_NE(upload_id, nullptr);
 
@@ -1028,7 +1028,7 @@ TEST_F(SALWrapperTest, MultipartSinglePart) {
   CRgwObject obj{"test/multipart-single", nullptr};
   char* upload_id = nullptr;
 
-  ASSERT_EQ(0, rgw_init_multipart(driver(), dpp(), nullptr,
+  ASSERT_EQ(0, rgw_multipart_init(driver(), dpp(), nullptr,
                                   &bucket_, &obj, &upload_id));
   ASSERT_NE(upload_id, nullptr);
 
