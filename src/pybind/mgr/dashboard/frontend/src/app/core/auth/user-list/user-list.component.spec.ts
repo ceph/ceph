@@ -4,8 +4,10 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
+import { of } from 'rxjs';
 
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { SettingsService } from '~/app/shared/api/settings.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { UserTabsComponent } from '../user-tabs/user-tabs.component';
@@ -131,5 +133,29 @@ describe('UserListComponent', () => {
     expect(component.getRemainingDays(today - (day + 1))).toBe(0);
     expect(component.getRemainingDays(null)).toBe(undefined);
     expect(component.getRemainingDays(undefined)).toBe(undefined);
+  });
+  describe('password expiry thresholds', () => {
+    let settingsService: SettingsService;
+
+    beforeEach(() => {
+      settingsService = TestBed.inject(SettingsService);
+    });
+
+    it('should call getStandardSettings on init and set expiration thresholds', () => {
+      spyOn(settingsService, 'getStandardSettings').and.returnValue(
+        of({ user_pwd_expiration_warning_1: 10, user_pwd_expiration_warning_2: 5 })
+      );
+      fixture.detectChanges();
+      expect(settingsService.getStandardSettings).toHaveBeenCalled();
+      expect(component.expirationWarningAlert).toBe(10);
+      expect(component.expirationDangerAlert).toBe(5);
+    });
+
+    it('should not call getValues on init', () => {
+      spyOn(settingsService, 'getValues').and.callThrough();
+      spyOn(settingsService, 'getStandardSettings').and.returnValue(of({}));
+      fixture.detectChanges();
+      expect(settingsService.getValues).not.toHaveBeenCalled();
+    });
   });
 });

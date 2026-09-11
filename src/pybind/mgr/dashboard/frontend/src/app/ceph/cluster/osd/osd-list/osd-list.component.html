@@ -22,7 +22,7 @@
       </cd-table-actions>
       @if (permissions.osd.update || permissions.configOpt.read) {
         <cd-table-actions
-          [permission]="permissions.osd"
+          [permission]="permissions.osd.update ? permissions.osd : permissions.configOpt"
           [selection]="selection"
           dropDownOnly="Cluster-wide configuration"
           [dropDownOnlyOffset]="{ x: 110, y: 0 }"
