@@ -149,6 +149,34 @@ def normalize_dict(test_dict: Dict) -> Dict:
     return res
 
 
+def is_unknown(value: Any) -> bool:
+    if value is None:
+        return True
+    return isinstance(value, str) and value.strip().lower() in ("", "unknown")
+
+
+def fill_missing_identity(member_data: Dict[str, Any], member_key: Any) -> None:
+    """Fill description/name from Redfish Id, endpoint, or collection member key."""
+    endpoint = member_data.get("redfish_endpoint")
+    endpoint_name = None
+    if isinstance(endpoint, str) and endpoint.strip():
+        endpoint_name = endpoint.rstrip("/").split("/")[-1]
+    fallback = next(
+        (
+            candidate
+            for candidate in (endpoint_name, member_data.get("id"), member_key)
+            if not is_unknown(candidate)
+        ),
+        None,
+    )
+    if is_unknown(fallback):
+        return
+    if is_unknown(member_data.get("description")):
+        member_data["description"] = fallback
+    if "name" in member_data and is_unknown(member_data.get("name")):
+        member_data["name"] = fallback
+
+
 def retry(
     exceptions: Any = Exception, retries: int = 20, delay: int = 1
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
