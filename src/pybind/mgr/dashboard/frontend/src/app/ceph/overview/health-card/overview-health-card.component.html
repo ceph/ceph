@@ -63,16 +63,18 @@
         >
           <cd-icon type="cloudMonitoring"></cd-icon>
         </cds-icon-button>
-        <cds-icon-button
-          type="button"
-          kind="ghost"
-          size="sm"
-          description="Check logs"
-          i18n-description
-          [routerLink]="['/logs']"
-        >
-          <cd-icon type="dataViewAlt"></cd-icon>
-        </cds-icon-button>
+        @if (permissions?.log?.read) {
+          <cds-icon-button
+            type="button"
+            kind="ghost"
+            size="sm"
+            description="Check logs"
+            i18n-description
+            [routerLink]="['/logs']"
+          >
+            <cd-icon type="dataViewAlt"></cd-icon>
+          </cds-icon-button>
+        }
       </div>
     </ng-template>
   } @else {
