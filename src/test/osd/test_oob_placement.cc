@@ -60,8 +60,8 @@ static void check_against_oracle(uint64_t ro_off, uint64_t ro_len,
     ASSERT_LT(next_triple[shard], plans[shard].size())
       << "shard " << shard << " plan too short at ro " << ro;
     const auto& t = plans[shard][next_triple[shard]++];
-    // reply bytes are consumed strictly sequentially per shard
-    EXPECT_EQ(consumed[shard], t.reply_data_ofs);
+    // local bytes are consumed strictly sequentially per shard
+    EXPECT_EQ(consumed[shard], t.local_ofs);
     // and land at the chunk's logical position within the range
     EXPECT_EQ(ro - ro_off, t.client_ofs);
     EXPECT_EQ(len, t.len);

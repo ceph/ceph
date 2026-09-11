@@ -289,16 +289,16 @@ ssize_t OSDCuObj::execute_plan(const std::string& key,
       continue;
     }
     if (t.client_ofs > window->size || t.len > window->size - t.client_ofs ||
-	t.reply_data_ofs > data.length() ||
-	t.len > data.length() - t.reply_data_ofs) {
-      dout(5) << "placement triple " << t.reply_data_ofs << "/" << t.client_ofs
+	t.local_ofs > data.length() ||
+	t.len > data.length() - t.local_ofs) {
+      dout(5) << "placement triple " << t.local_ofs << "/" << t.client_ofs
 	      << "~" << t.len << " outside window (" << window->size
 	      << ") or data (" << data.length() << ") for " << key << dendl;
       return -EINVAL;
     }
     for (uint64_t done = 0; done < t.len; ) {
       const uint64_t chunk = std::min(t.len - done, MAX_RDMA_OP_SIZE);
-      items.push_back({t.reply_data_ofs + done, t.client_ofs + done, chunk});
+      items.push_back({t.local_ofs + done, t.client_ofs + done, chunk});
       done += chunk;
     }
     total += t.len;
