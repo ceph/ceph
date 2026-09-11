@@ -73,8 +73,9 @@ std::optional<token_window> parse_rdma_token(std::string_view token);
  */
 struct delivery_t {
   /// request the canonical CRC-64/NVME of the delivered bytes in the
-  /// reply's oob result (linear placements only; best effort - check
-  /// oob_result_t::FLAG_CRC64NVME)
+  /// reply's oob result (best effort - check
+  /// oob_result_t::FLAG_CRC64NVME, and FLAG_CRC64_COMBINABLE before
+  /// folding it with other results)
   static constexpr uint32_t FLAG_CRC64NVME = 1u << 0;
   /// flag bits the OSD understands; unknown bits deliver inline
   static constexpr uint32_t KNOWN_FLAGS = FLAG_CRC64NVME;
@@ -108,16 +109,30 @@ WRITE_CLASS_ENCODER(delivery_t)
 /**
  * Per-op out-of-band delivery result carried on the MOSDOpReply.
  * bytes is how much of the op's data went out of band (0 = inline);
- * crc64 is the canonical CRC-64/NVME of exactly those bytes, valid
- * only when FLAG_CRC64NVME is set (the OSD computes it on request for
- * linear placements).
+ * crc64 is the canonical CRC-64/NVME of exactly those bytes.
+ *
+ * Two separate properties, because they have separate consumers.
+ * FLAG_CRC64NVME says the checksum covers the bytes this OSD moved,
+ * which is what a caller verifying one transfer needs.
+ * FLAG_CRC64_COMBINABLE additionally says those bytes are one
+ * contiguous logical extent, so the value concatenate-combines with
+ * adjacent results in logical order - which is what a caller
+ * reassembling a whole object's checksum out of per-stripe results
+ * needs, and which interleaved EC-direct chunks and sparse extents
+ * cannot offer. Conflating the two would leave a scattered transfer
+ * with no integrity value at all rather than a usable one that just
+ * does not fold.
  */
 struct oob_result_t {
-  static constexpr uint32_t FLAG_CRC64NVME = 1u << 0; ///< crc64 is valid
+  /// crc64 covers exactly the bytes that went out of band
+  static constexpr uint32_t FLAG_CRC64NVME = 1u << 0;
+  /// ...and those bytes are one contiguous logical extent, so crc64
+  /// may be concatenate-combined in logical order
+  static constexpr uint32_t FLAG_CRC64_COMBINABLE = 1u << 1;
 
   uint64_t bytes = 0;
   uint64_t crc64 = 0;
-  uint32_t flags = 0;
+  uint32_t flags = 0;  ///< FLAG_* above
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);

@@ -1150,8 +1150,12 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
         // zero shift for EC-direct subs (they carry the parent extent)
         d.base_offset += sub_op->ops[j].op.extent.offset -
                          op->ops[parent].op.extent.offset;
-        // per-sub CRCs of interleaved shard chunks cannot be combined
-        // into the parent's checksum; don't request them
+        // an EC-direct sub-read's chunks are not one contiguous
+        // logical extent, so its CRC would come back valid but not
+        // combinable and the parent could not fold it. Replicated
+        // sub-reads are contiguous and could report a combinable one,
+        // but nothing consumes a per-sub value yet; don't pay for
+        // either.
         d.flags &= ~ceph::rdma::delivery_t::FLAG_CRC64NVME;
         sub_op->rdma_delivery[j] = std::move(d);
         sub_op->rdma_oob_result[j] = &sub_read.oob[j];

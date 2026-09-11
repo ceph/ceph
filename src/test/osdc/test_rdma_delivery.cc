@@ -109,3 +109,37 @@ TEST(RdmaDelivery, PerOpVectorRoundTrip)
   EXPECT_EQ(ceph::rdma::delivery_t::FLAG_CRC64NVME, out2[2].flags);
   EXPECT_TRUE(p.end());
 }
+
+TEST(RdmaDelivery, Crc64ValidityIsSeparateFromCombinability)
+{
+  // distinct bits: a scattered placement reports a checksum of the
+  // bytes it moved without claiming it folds with its neighbours
+  static_assert(ceph::rdma::oob_result_t::FLAG_CRC64NVME !=
+		ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE);
+
+  ceph::rdma::oob_result_t scattered;
+  scattered.bytes = 1048576;
+  scattered.crc64 = 0x0123456789abcdefull;
+  scattered.flags = ceph::rdma::oob_result_t::FLAG_CRC64NVME;
+  EXPECT_TRUE(scattered.flags & ceph::rdma::oob_result_t::FLAG_CRC64NVME);
+  EXPECT_FALSE(scattered.flags &
+	       ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE);
+
+  ceph::rdma::oob_result_t linear = scattered;
+  linear.flags |= ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE;
+
+  // the extra bit rides in the existing flags field, so neither
+  // combination changes the encoded length
+  bufferlist a, b;
+  encode(scattered, a);
+  encode(linear, b);
+  EXPECT_EQ(a.length(), b.length());
+
+  ceph::rdma::oob_result_t out;
+  auto p = b.cbegin();
+  decode(out, p);
+  EXPECT_EQ(linear.crc64, out.crc64);
+  EXPECT_TRUE(out.flags & ceph::rdma::oob_result_t::FLAG_CRC64NVME);
+  EXPECT_TRUE(out.flags & ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE);
+  EXPECT_TRUE(p.end());
+}

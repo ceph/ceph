@@ -9496,14 +9496,21 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
     encode(bufferlist(), data_op->outdata);
   }
   res.bytes = static_cast<uint64_t>(pushed);
-  if ((d.flags & ceph::rdma::delivery_t::FLAG_CRC64NVME) && linear) {
+  if (d.flags & ceph::rdma::delivery_t::FLAG_CRC64NVME) {
     // checksum the exact bytes that went out of band, at the storage
-    // node, after they crossed the fabric - the client (RGW) combines
-    // per-stripe values in logical order for end-to-end verification.
-    // Non-linear placements (EC-direct interleave, sparse extents) do
-    // not concatenate-combine, so the crc is best-effort omitted.
+    // node, after they crossed the fabric
     res.crc64 = ceph::crc64nvme(payload);
     res.flags |= ceph::rdma::oob_result_t::FLAG_CRC64NVME;
+    if (linear) {
+      // one contiguous logical extent, so a caller folding this with
+      // adjacent stripes in logical order gets the checksum of the
+      // whole range - RGW does that for end-to-end verification.
+      // Interleaved EC-direct chunks and sparse extents do not
+      // concatenate-combine; their crc still covers what this OSD
+      // pushed, so report it without the combinable bit rather than
+      // reporting nothing.
+      res.flags |= ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE;
+    }
   }
   return true;
 }
