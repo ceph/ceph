@@ -1,0 +1,1 @@
+  GLOBAL_CORS_GET,

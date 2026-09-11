@@ -1,0 +1,4 @@
+#ifdef WITH_RADOSGW_RADOS
+  OLH_GET,
+  OLH_READLOG,
+#endif

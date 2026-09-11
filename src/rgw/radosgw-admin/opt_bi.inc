@@ -1,0 +1,6 @@
+#ifdef WITH_RADOSGW_RADOS
+  BI_GET,
+  BI_PUT,
+  BI_LIST,
+  BI_PURGE,
+#endif

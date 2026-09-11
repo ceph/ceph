@@ -1,0 +1,4 @@
+#ifdef WITH_RADOSGW_RADOS
+  GC_LIST,
+  GC_PROCESS,
+#endif
