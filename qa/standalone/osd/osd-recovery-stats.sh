@@ -605,18 +605,23 @@ function TEST_recovery_last_degraded_latching() {
     wait_for_clean || return 1
 
     # --- Step 4: Final Verification ---
+    # After the window closes and is recorded, prepare_stats_for_publish()
+    # collapses last_degraded up to last_clean (so the closed window is never
+    # re-recorded). The post-recovery resting state is therefore
+    # last_degraded == last_clean, not last_degraded < last_clean.
     local final_stats=$(ceph pg $pgid query | \
       jq -r '.info.stats | "\(.last_degraded) \(.last_clean)"')
     read -r last_degraded_final last_clean_final <<< "$final_stats"
 
     echo "Final Timestamps -> Last Degraded: $last_degraded_final, " \
          "Last Clean: $last_clean_final"
-    if [[ "$last_clean_final" > "$last_degraded_final" ]]; then
-      echo "Test Passed: Recovery successful. last_clean ($last_clean_final) " \
-           "is newer than last_degraded ($last_degraded_final)."
+    if [[ ! "$last_degraded_final" > "$last_clean_final" ]]; then
+      echo "Test Passed: Recovery successful. last_degraded" \
+           "($last_degraded_final) collapsed to <= last_clean" \
+           "($last_clean_final)."
     else
-      echo "Test Failed: last_clean ($last_clean_final) was not updated " \
-           "correctly after recovery."
+      echo "Test Failed: last_degraded ($last_degraded_final) is still ahead" \
+           "of last_clean ($last_clean_final) after recovery."
       return 1
     fi
 
@@ -795,7 +800,7 @@ function TEST_rebuild_perf_ec_increments() {
     for i in $(seq 1 30)
     do
       flush_pg_stats || return 1
-      if grep -q "rebuild-stats: latched failure start for ${PG_SPG} " $log
+      if grep -q "rebuild-stats: vulnerability window opened for ${PG_SPG} " $log
       then
         latched=1
         break
@@ -827,7 +832,7 @@ function TEST_rebuild_perf_ec_increments() {
     flush_pg_stats || return 1
 
     local latch_count
-    latch_count=$(grep -c "rebuild-stats: latched failure start for ${PG_SPG} " $log)
+    latch_count=$(grep -c "rebuild-stats: vulnerability window opened for ${PG_SPG} " $log)
     test "$latch_count" = 1 || {
       echo "FAIL: expected exactly 1 'latched failure start' for ${PG_SPG}," \
            "got $latch_count -- the same-primary interval restart reset" \
@@ -873,7 +878,7 @@ function TEST_rebuild_perf_ec_increments() {
 
     # Exactly one full rebuild event must have been recorded.
     local record_count
-    record_count=$(grep -c "rebuild-stats: recorded rebuild for ${PG_SPG} " $log)
+    record_count=$(grep -c "rebuild-stats: recorded vulnerability window for ${PG_SPG} " $log)
     test "$record_count" = 1 || {
       echo "FAIL: expected exactly 1 'recorded rebuild' for ${PG_SPG}," \
            "got $record_count"
@@ -889,6 +894,24 @@ function TEST_rebuild_perf_ec_increments() {
       echo "FAIL: expected pg_vulnerability_duration.sum >= ${gap_secs}s" \
            "(the ${gap_secs}s gap held before the second interval restart)," \
            "got ${rebuild_sum}s -- duration looks truncated"
+      return 1
+    }
+
+    # min/max: exactly one window recorded here, so the longest single
+    # window (pg_vulnerability_duration.max_inc, from tinc_with_max) and the
+    # shortest (the companion pg_vulnerability_duration_min gauge) both equal
+    # the sum, in fractional seconds, and neither is truncated to 0.
+    local rebuild_max rebuild_min
+    rebuild_max=$(jq '.recoverystate_perf.pg_vulnerability_duration.max_inc' <<< "$dump")
+    rebuild_min=$(jq '.recoverystate_perf.pg_vulnerability_duration_min' <<< "$dump")
+    echo "INFO: max_inc=${rebuild_max}s pg_vulnerability_duration_min=${rebuild_min}s"
+    echo "$dump" | jq -e \
+      ".recoverystate_perf.pg_vulnerability_duration.max_inc >= ${gap_secs} and \
+       .recoverystate_perf.pg_vulnerability_duration_min > 0 and \
+       .recoverystate_perf.pg_vulnerability_duration_min <= \
+       .recoverystate_perf.pg_vulnerability_duration.max_inc" > /dev/null || {
+      echo "FAIL: pg_vulnerability_duration max_inc / _min not sane" \
+           "(max_inc=${rebuild_max}s, min=${rebuild_min}s, gap=${gap_secs}s)"
       return 1
     }
 
@@ -951,7 +974,7 @@ function TEST_rebuild_perf_multihop_handover() {
     for i in $(seq 1 30)
     do
       flush_pg_stats || return 1
-      grep -q "rebuild-stats: latched failure start for ${PG} " $log_b && {
+      grep -q "rebuild-stats: vulnerability window opened for ${PG} " $log_b && {
         latched_b=1
         break
       }
@@ -984,98 +1007,77 @@ function TEST_rebuild_perf_multihop_handover() {
     }
     local log_c=$dir/osd.${primary_c}.log
 
-    local recorded_b=0
-    for i in $(seq 1 30)
-    do
-      flush_pg_stats || return 1
-      grep -q "rebuild-stats: recorded rebuild for ${PG} .*reason=handover-away" $log_b && {
-        recorded_b=1
-        break
-      }
-      sleep 1
-    done
-    test "$recorded_b" = 1 || {
-      echo "FAIL: osd.${primary_b}'s segment was not recorded on its own handover-away"
-      return 1
-    }
-
     local latched_c=0
     for i in $(seq 1 30)
     do
-      grep -q "rebuild-stats: latched failure start for ${PG} " $log_c && {
+      flush_pg_stats || return 1
+      grep -q "rebuild-stats: vulnerability window opened for ${PG} " $log_c && {
         latched_c=1
         break
       }
       sleep 1
     done
     test "$latched_c" = 1 || {
-      echo "FAIL: osd.${primary_c} never latched after taking over primary" \
-           "(the multi-hop chain, requires a fresh arming of the latch here)"
+      echo "FAIL: osd.${primary_c} never opened a window after taking over"
       return 1
     }
 
-    # --- Bring both A and B back and let the episode resolve. Which OSD
-    # ends up recording the eventual "reached-clean" segment, and how many
-    # more handovers happen in between, is deliberately not predicted here.
+    # --- Bring both A and B back and let the episode resolve.
     ceph osd unset noup || return 1
     wait_for_clean || return 1
     flush_pg_stats || return 1
 
-    local final_primary
-    final_primary=$(get_primary $poolname obj1)
-    local log_final=$dir/osd.${final_primary}.log
-    grep -q "rebuild-stats: recorded rebuild for ${PG} .*reason=reached-clean" $log_final || {
-      echo "FAIL: no OSD recorded a reached-clean segment once the PG went clean" \
-           "(checked the final primary, osd.${final_primary})"
+    # test current behavior before peering and persistence of last_degraded
+    # are implemented: pg_stat_t.last_degraded is not synced to peers, so
+    # each new primary opens a fresh window from its own takeover and the
+    # pre-handover exposure is not carried forward. The window is recorded
+    # exactly ONCE for this episode -- by whichever OSD is primary when the
+    # PG finally reaches clean -- and its duration reflects only that last
+    # primary's tenure, not the whole episode.
+    #
+    # The persistence phase (last_degraded in pg_history_t) changes this:
+    # the single record will then span the true onset. When that lands, this
+    # test gains an assertion that the recorded duration covers the full
+    # wall-clock episode; for now it only pins "exactly one record".
+    local total_recorded
+    total_recorded=$(grep -h "rebuild-stats: recorded vulnerability window for ${PG} " \
+      $dir/osd.*.log | wc -l)
+    test "$total_recorded" = 1 || {
+      echo "FAIL: expected exactly 1 'recorded vulnerability window' line for" \
+           "${PG} across all four OSDs, got $total_recorded"
       return 1
     }
 
-    # Soft observation (not asserted either way): did osd.a or osd.b show any
-    # of their own rebuild-stats activity after coming back up? Either outcome
-    # is informative and is just logged here. A genuinely open, likely
-    # timing-dependent question with no settled answer (whether the
-    # async-recovery quick-promotion ever arms a spurious segment that gets
-    # recorded or discarded before being demoted again). The following 2 checks
-    # will confirm this observation:
-    #
-    # 1. A "discarded rebuild" line for this PG on ANY of the four OSDs is
-    #    unambiguous: A discarded line can only be residue of an UNPLANNED
-    #    arm-then-filtered-out cycle, exactly the quick-promotion signature,
-    #    regardless of which OSD ends up primary or how many real handovers occur.
+    # Cross-check against the OSD-wide perf counter: summed avgcount across
+    # all four OSDs must also be exactly 1.
+    local total_avgcount=0
     for osd in 0 1 2 3
     do
-      if grep -q "rebuild-stats: discarded rebuild for ${PG} " $dir/osd.${osd}.log
-      then
-        echo "OBSERVATION: osd.${osd} shows a DISCARDED rebuild-stats segment" \
-             "for ${PG}; likely evidence of the async-recovery quick-promotion" \
-             "arming and then being filtered out at record time"
-      fi
+      test -S $(get_asok_path osd.${osd}) || continue
+      local d
+      d=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${osd}) perf dump 2>/dev/null) || continue
+      local c
+      c=$(jq '.recoverystate_perf.pg_vulnerability_duration.avgcount' <<< "$d")
+      total_avgcount=$(expr $total_avgcount + ${c:-0})
     done
 
-    # 2. Total "latched failure start" lines for this PG, across all four
-    # OSDs, as a coarser but still useful signal: exactly 2 are
-    # structurally guaranteed by this test's design (primary_b's and
-    # primary_c's own arms), plus one more if whichever OSD ends up as
-    # final_primary needed a fresh arm of its own (i.e. a third real
-    # handover happened beyond the two this test forces). A count higher than
-    # that baseline would mean an extra, unplanned arm occurred somewhere --
-    # whether or not it went on to be recorded or discarded.
-    local total_latches
-    total_latches=$(grep -h "rebuild-stats: latched failure start for ${PG} " \
-      $dir/osd.*.log | wc -l)
-    echo "OBSERVATION: ${total_latches} total 'latched' lines for ${PG} across" \
-         "all four OSDs this run (2 expected structurally, 3 if the final" \
-         "primary needed its own fresh arm; more than that would mean an" \
-         "extra, unplanned arm occurred)"
+    test "$total_avgcount" = 1 || {
+      echo "FAIL: expected summed pg_vulnerability_duration.avgcount=1 across" \
+           "all OSDs, got $total_avgcount"
+      return 1
+    }
 
     delete_pool $poolname
     kill_daemons $dir || return 1
 }
 
-# Test that verifies that an empty PG (no objects ever written) going
-# undersized+degraded and back to active+clean must not be recorded at all --
-# the interim solution's documented, deliberately-unfixed limitation.
-function TEST_rebuild_perf_empty_pg_not_counted() {
+# An empty (zero-object) PG that goes undersized/degraded and back to clean
+# IS counted by pg_vulnerability_duration under the full solution: the
+# counter measures exposure time from the state transition, independent of
+# whether any object was ever at risk. (The interim solution deliberately
+# discarded these via a delta_recovered/had_redundancy_loss filter; the full
+# solution drops that filter.)
+function TEST_rebuild_perf_empty_pg_counted() {
     local dir=$1
     local OSDS=4
 
@@ -1109,14 +1111,12 @@ function TEST_rebuild_perf_empty_pg_not_counted() {
       sleep 1
     done
 
-    # Confirm the latch actually armed (state genuinely went
-    # undersized) before checking it was correctly discarded -- a test
-    # that just sees "nothing recorded" without this is equally
-    # consistent with the mechanism never engaging at all.
-    grep -q "rebuild-stats: latched failure start for ${PG} " $log || {
-      echo "FAIL: the latch never armed at all -- test setup didn't" \
-           "actually make the PG undersized, this isn't testing what" \
-           "it claims to"
+    # Confirm the window actually opened (state genuinely went undersized)
+    # before checking it was recorded -- a test that just sees "recorded"
+    # without this could be picking up unrelated activity.
+    grep -q "rebuild-stats: vulnerability window opened for ${PG} " $log || {
+      echo "FAIL: the window never opened -- test setup didn't actually" \
+           "make the PG undersized, this isn't testing what it claims to"
       return 1
     }
 
@@ -1124,16 +1124,10 @@ function TEST_rebuild_perf_empty_pg_not_counted() {
     wait_for_clean || return 1
     flush_pg_stats || return 1
 
-    if grep -q "rebuild-stats: recorded rebuild for ${PG} " $log
-    then
-      echo "FAIL: an empty PG's undersized/degraded window was recorded --" \
-           "this is supposed to remain a known, unfixed limitation"
-      return 1
-    fi
-
-    grep -q "rebuild-stats: discarded rebuild for ${PG} .*delta_recovered=0 had_redundancy_loss=0" $log || {
-      echo "FAIL: expected a 'discarded' line confirming the filter" \
-           "correctly rejected this empty-PG episode, found none"
+    grep -q "rebuild-stats: recorded vulnerability window for ${PG} " $log || {
+      echo "FAIL: an empty PG's undersized/degraded window was NOT recorded" \
+           "-- the full solution counts these (exposure time, not data" \
+           "movement)"
       return 1
     }
 
@@ -1143,8 +1137,8 @@ function TEST_rebuild_perf_empty_pg_not_counted() {
     local avgcount
     avgcount=$(jq '.recoverystate_perf.pg_vulnerability_duration.avgcount' \
       <<< "$dump")
-    test "$avgcount" = "0" || {
-      echo "FAIL: expected pg_vulnerability_duration.avgcount=0 for an" \
+    test "$avgcount" -ge 1 || {
+      echo "FAIL: expected pg_vulnerability_duration.avgcount>=1 for an" \
            "empty-PG episode, got $avgcount"
       return 1
     }
@@ -1210,7 +1204,7 @@ function TEST_rebuild_perf_pg_split_inherits_latch() {
       flush_pg_stats || return 1
       sleep 1
     done
-    grep -q "rebuild-stats: latched failure start for ${PG} " $log || {
+    grep -q "rebuild-stats: vulnerability window opened for ${PG} " $log || {
       echo "FAIL: the priming latch never armed -- test setup didn't" \
            "actually make the PG degraded"
       return 1
@@ -1221,7 +1215,7 @@ function TEST_rebuild_perf_pg_split_inherits_latch() {
     ceph osd unset noup || return 1
     wait_for_clean || return 1
     flush_pg_stats || return 1
-    grep -q "rebuild-stats: recorded rebuild for ${PG} " $log || {
+    grep -q "rebuild-stats: recorded vulnerability window for ${PG} " $log || {
       echo "FAIL: the priming cycle's recovery was never recorded --" \
            "num_objects_recovered won't be primed, the real test below" \
            "would be vacuous"
@@ -1238,7 +1232,7 @@ function TEST_rebuild_perf_pg_split_inherits_latch() {
     for i in $(seq 1 10)
     do
       flush_pg_stats || return 1
-      if test "$(grep -c "rebuild-stats: latched failure start for ${PG} " $log)" -ge 2
+      if test "$(grep -c "rebuild-stats: vulnerability window opened for ${PG} " $log)" -ge 2
       then
         second_armed=true
         break
@@ -1298,32 +1292,22 @@ function TEST_rebuild_perf_pg_split_inherits_latch() {
       local discarded=false
       for osd in $(seq 0 $(expr $OSDS - 1))
       do
-        grep -q "rebuild-stats: recorded rebuild for ${pg} " $dir/osd.${osd}.log \
+        grep -q "rebuild-stats: recorded vulnerability window for ${pg} " $dir/osd.${osd}.log \
           && recorded=true
-        grep -q "rebuild-stats: discarded rebuild for ${pg} " $dir/osd.${osd}.log \
+         grep -q "rebuild-stats: discarded vulnerability window for ${pg} " $dir/osd.${osd}.log \
           && discarded=true
       done
 
       $recorded || {
-        echo "FAIL: no 'recorded rebuild' line found anywhere for ${pg} --" \
-             "the split-inherited latch was lost or never resolved"
+        echo "FAIL: no 'recorded vulnerability window' line found anywhere" \
+             "for ${pg} -- the split-inherited window was lost or never" \
+             "resolved"
         return 1
       }
       ! $discarded || {
-        echo "FAIL: a 'discarded rebuild' line was found for ${pg} -- likely" \
-             "delta_recovered went negative after the split, discarding a" \
-             "genuine rebuild instead of recording it"
-        return 1
-      }
-
-      # Directly confirm delta_recovered isn't negative in the recorded line
-      # itself, not just that it recorded instead of being discarded -- the
-      # two filters overlap but aren't identical.
-      grep -h "rebuild-stats: recorded rebuild for ${pg} " $dir/osd.*.log \
-        | grep -q "delta_recovered=-" && {
-        echo "FAIL: ${pg} recorded a NEGATIVE delta_recovered -- the" \
-             "split-time num_objects_recovered redistribution bug is" \
-             "present"
+        echo "FAIL: a 'discarded vulnerability window' line was found for" \
+             "${pg} -- the split-inherited window collapsed to a sub-ms" \
+             "duration instead of being recorded"
         return 1
       }
     done
@@ -1340,14 +1324,14 @@ function TEST_rebuild_perf_pg_split_inherits_latch() {
     # later, due to a real misplacement. Therefore, this tests the actual
     # inheritance mechanism directly rather than through inference.
     local child_first_recorded_ts
-   child_first_recorded_ts=$(grep -h "rebuild-stats: recorded rebuild for ${child_pg} " \
+    child_first_recorded_ts=$(grep -h "rebuild-stats: recorded vulnerability window for ${child_pg} " \
       $dir/osd.*.log | sort | head -1 | awk '{print $1}')
     test -n "$child_first_recorded_ts" || {
       echo "FAIL: could not determine ${child_pg}'s first recorded timestamp"
       return 1
     }
     local child_earliest_latched_ts
-    child_earliest_latched_ts=$(grep -h "rebuild-stats: latched failure start for ${child_pg} " \
+    child_earliest_latched_ts=$(grep -h "rebuild-stats: vulnerability window opened for ${child_pg} " \
       $dir/osd.*.log | sort | head -1 | awk '{print $1}')
     if [ -n "$child_earliest_latched_ts" ] \
       && [[ "$child_earliest_latched_ts" < "$child_first_recorded_ts" ]]
@@ -1370,7 +1354,7 @@ function TEST_rebuild_perf_pg_split_inherits_latch() {
     # `tail -1` reliably picks the real (second) one, not the priming
     # cycle's first one, without relying on cross-file ordering.
     local parent_duration
-    parent_duration=$(grep "rebuild-stats: recorded rebuild for ${PG} " $log \
+    parent_duration=$(grep "rebuild-stats: recorded vulnerability window for ${PG} " $log \
       | tail -1 | grep -o "duration=[0-9.]*" | cut -d= -f2)
     test -n "$parent_duration" || {
       echo "FAIL: could not extract ${PG}'s (parent) recorded duration"
@@ -1391,7 +1375,7 @@ function TEST_rebuild_perf_pg_split_inherits_latch() {
     # inheritance, comfortably above what a fresh split-time arm could
     # plausibly accumulate before this test's own wait_for_clean returns.
     local child_duration
-    child_duration=$(grep -h "rebuild-stats: recorded rebuild for ${child_pg} " \
+    child_duration=$(grep -h "rebuild-stats: recorded vulnerability window for ${child_pg} " \
       $dir/osd.*.log | grep -o "duration=[0-9.]*" | head -1 | cut -d= -f2)
     test -n "$child_duration" || {
       echo "FAIL: could not extract ${child_pg}'s recorded duration"
@@ -1413,8 +1397,21 @@ function TEST_rebuild_perf_pg_split_inherits_latch() {
     local total_log_recorded total_log_duration total_avgcount total_sum
     for i in $(seq 1 10)
     do
-      total_log_recorded=$(grep -h "rebuild-stats: recorded rebuild for " \
-        $dir/osd.*.log | wc -l)
+      local recorded_lines
+      recorded_lines=$(grep -h "rebuild-stats: recorded vulnerability window for " \
+        $dir/osd.*.log)
+      if test -z "$recorded_lines"
+      then
+        # `wc -l <<< ""` reports 1, not 0 (a here-string always supplies a
+        # trailing newline) -- guard the truly-empty case explicitly rather
+        # than let that gotcha miscount "no recorded lines yet" as one.
+        total_log_recorded=0
+        total_log_duration=0
+      else
+        total_log_recorded=$(wc -l <<< "$recorded_lines")
+        total_log_duration=$(grep -o "duration=[0-9.]*" <<< "$recorded_lines" \
+          | cut -d= -f2 | awk '{s+=$1} END {print s+0}')
+      fi
       total_avgcount=0
       total_sum=0
       for osd in $(seq 0 $(expr $OSDS - 1))
@@ -1432,8 +1429,6 @@ function TEST_rebuild_perf_pg_split_inherits_latch() {
       test "$total_avgcount" = "$total_log_recorded" && break
       sleep 1
     done
-    total_log_duration=$(grep -h "rebuild-stats: recorded rebuild for " $dir/osd.*.log \
-      | grep -o "duration=[0-9.]*" | cut -d= -f2 | awk '{s+=$1} END {print s+0}')
 
     echo "INFO: total recorded (logs)=${total_log_recorded}," \
          "total avgcount (perf dump)=${total_avgcount}"
