@@ -60,7 +60,7 @@ real FFI boundary:
 cd ceph/build
 # Force Rust rebuild if sources changed
 ninja ceph_test_rgw_lancedb_object_store
-./bin/ceph_test_rgw_lancedb_object_store -c ./ceph.conf
+LD_LIBRARY_PATH=$PWD/lib ./bin/ceph_test_rgw_lancedb_object_store -c ./ceph.conf
 ```
 
 ### S3 Vector Integration Tests
