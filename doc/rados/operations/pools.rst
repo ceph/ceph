@@ -596,7 +596,7 @@ You may set values for the following keys:
 
 .. describe:: rdma_delivery_lease
    
-   :Description: Sets how long (in seconds) after receiving a read that requests out-of-band RDMA delivery an OSD may still start the RDMA write into the client's memory window; a write that would start later is delivered inline instead. A client that reuses a memory window waits this long (plus its transport drain bound) after giving up on a request before writing the window again, so this value must be visible to both sides, which is why it is a pool option rather than a daemon option. Setting ``0`` restores the built-in default.
+   :Description: Sets how long (in seconds) after receiving an operation that carries an out-of-band RDMA delivery descriptor an OSD may still *initiate* a transfer against that descriptor; a transfer that would start later is delivered inline instead. The value bounds the OSD's side only, and must be visible to both sides, which is why it is a pool option rather than a daemon option. On the read path it also tells a client that gave up on a request when its memory window is quiescent: once the lease plus the client's transport drain bound have elapsed, nothing will write the window again. It is not a bound on how long a client must keep a window registered in general. Setting ``0`` restores the built-in default.
 
    :Type: Double
    :Default: ``5``

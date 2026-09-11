@@ -47,11 +47,21 @@ std::optional<token_window> parse_rdma_token(std::string_view token);
  * were present. Degradation is therefore always plain, correct,
  * in-band data.
  *
- * The lease bounding how long after receipt an OSD may still start
- * the write is not carried here: it is the pool's rdma_delivery_lease
- * option (pg_pool_t::get_rdma_delivery_lease()), so the value the OSD
- * enforces and the value the client waits out before reusing the
- * window come from the same place.
+ * The lease bounding how long after receipt an OSD may still
+ * initiate a transfer against a descriptor is not carried here: it is
+ * the pool's rdma_delivery_lease option
+ * (pg_pool_t::get_rdma_delivery_lease()), so the OSD that enforces it
+ * and the client that reasons about it read the same value.
+ *
+ * The lease bounds the OSD's side only - when a transfer may start,
+ * not how long a client must keep its window registered. On the read
+ * path the two coincide: nothing else will touch the window, so a
+ * client that abandons a request may reuse it once the lease plus its
+ * transport's drain bound have elapsed. A caller whose window must
+ * stay valid until some later event instead - every OSD in a PG
+ * having pulled its share of a write payload, say - waits for that
+ * event. The lease does not bound it, and must not be read as though
+ * it did.
  */
 struct delivery_t {
   /// request the canonical CRC-64/NVME of the delivered bytes in the

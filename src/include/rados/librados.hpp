@@ -613,11 +613,13 @@ inline namespace v14_2_0 {
      * that cannot or will not push (no RDMA support, expired lease,
      * retransmitted op) returns the data inline as usual with
      * result->bytes = 0, so degradation is always plain in-band data.
-     * An OSD will not start an RDMA write later than the pool's
-     * rdma_delivery_lease after receiving the op; a caller that
-     * reuses the window after abandoning a request must wait that
-     * long (see IoCtx::pool_rdma_delivery_lease()) plus its
-     * transport's drain bound before writing it again. Passing
+     * An OSD will not initiate a transfer against the descriptor
+     * later than the pool's rdma_delivery_lease after receiving the
+     * op. That bounds the OSD's side only; on this path it also means
+     * a caller that abandoned a request may reuse the window once
+     * that long (see IoCtx::pool_rdma_delivery_lease()) plus its
+     * transport's drain bound have elapsed, because nothing else
+     * will write it. Passing
      * RDMA_DELIVERY_WANT_CRC64 in flags asks the OSD to also report
      * the canonical CRC-64/NVME of the delivered bytes; it is valid
      * only when result->flags has RDMA_DELIVERY_CRC64_VALID set (best
@@ -929,10 +931,12 @@ inline namespace v14_2_0 {
     int pool_required_alignment2(uint64_t * alignment);
     /**
      * The pool's rdma_delivery_lease in seconds: how long after
-     * receiving a read with an out-of-band delivery request
-     * (ObjectReadOperation::set_rdma_delivery()) an OSD may still
-     * start the RDMA write. Reflects the pool option or its built-in
-     * default, from the OSDMap this client holds.
+     * receiving an operation that carries an out-of-band delivery
+     * descriptor (ObjectReadOperation::set_rdma_delivery()) an OSD
+     * may still initiate a transfer against it. Reflects the pool
+     * option or its built-in default, from the OSDMap this client
+     * holds. It bounds when an OSD may start, not how long a caller
+     * must keep a window registered.
      */
     int pool_rdma_delivery_lease(double *seconds);
 

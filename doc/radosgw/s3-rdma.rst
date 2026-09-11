@@ -182,12 +182,15 @@ Gateway (staged mode and protocol handling):
 Pool (enforced by the OSDs, read by the gateway from the OSDMap):
 
 * ``rdma_delivery_lease`` — how long, in seconds, after receiving a
-  stripe operation an OSD may still *start* the RDMA write; a push
-  that would start later is delivered inline instead. Set it with
-  ``ceph osd pool set <pool> rdma_delivery_lease <seconds>``; the
-  default is 5. The gateway sizes its fence from the same OSDMap
-  value the OSDs enforce, so there is no per-daemon setting to keep
-  in step.
+  stripe operation an OSD may still *initiate* a transfer against its
+  delivery descriptor; one that would start later is delivered inline
+  instead. Set it with ``ceph osd pool set <pool>
+  rdma_delivery_lease <seconds>``; the default is 5. The gateway sizes
+  its fence from the same OSDMap value the OSDs enforce, so there is
+  no per-daemon setting to keep in step. The lease bounds the OSD
+  side; it is what makes an abandoned window quiescent on this path,
+  not a general bound on how long a client holds a window
+  registered.
 
 OSD (passthrough execution):
 

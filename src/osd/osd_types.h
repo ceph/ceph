@@ -1688,7 +1688,7 @@ public:
 
   /// default for pool_opts_t::RDMA_DELIVERY_LEASE (seconds); a
   /// constant rather than a daemon option so that OSDs, which enforce
-  /// it, and clients, which wait it out, cannot disagree
+  /// it, and clients, which reason about it, cannot disagree
   static constexpr double DEFAULT_RDMA_DELIVERY_LEASE = 5.0;
   double get_rdma_delivery_lease() const {
     return opts.value_or(pool_opts_t::RDMA_DELIVERY_LEASE,

@@ -9382,9 +9382,11 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
 	     << ", delivering inline" << dendl;
     return false;
   }
-  // the pool's delivery lease bounds how long after receipt a push may
-  // still start; the client waits it out before reusing the window,
-  // so a late push must degrade to inline rather than race that reuse
+  // the pool's delivery lease bounds how long after receipt this OSD
+  // may still initiate a transfer against the descriptor; a client
+  // that abandoned the request reasons about window reuse from the
+  // same bound, so a late push must degrade to inline rather than
+  // race that reuse
   const double lease = pool.info.get_rdma_delivery_lease();
   const double age = ceph_clock_now() - m->get_recv_stamp();
   if (age > lease) {
