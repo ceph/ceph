@@ -14,40 +14,9 @@ class AtollonRedfishProvider(BaseRedfishSystem):
         super().__init__(**kw)
         self.log = get_logger(__name__)
 
-    def get_component_spec_overrides(self) -> Dict[str, Dict[str, Any]]:
-        return {
-            "memory": {
-                "fields": [
-                    "Id" if field == "Description" else field
-                    for field in BaseRedfishSystem.MEMORY_FIELDS
-                ],
-            },
-        }
-
-    def _update_memory(self) -> None:
-        super()._update_memory()
-        for members in self._sys.get("memory", {}).values():
-            for member_data in members.values():
-                member_id = member_data.get("id")
-                if member_id is not None and member_data.get("description") is None:
-                    member_data["description"] = member_id
-
     def _update_storage(self) -> None:
         super()._update_storage()
-        self.fix_storage_descriptions()
         self.enrich_storage_from_controllers()
-
-    def fix_storage_descriptions(self) -> None:
-        for members in self._sys.get("storage", {}).values():
-            for drive_id, drive_data in members.items():
-                description = drive_data.get("description")
-                if description is not None and description != "unknown":
-                    continue
-                endpoint = drive_data.get("redfish_endpoint", "")
-                if isinstance(endpoint, str) and endpoint:
-                    drive_data["description"] = endpoint.rstrip("/").split("/")[-1]
-                else:
-                    drive_data["description"] = drive_id
 
     def enrich_storage_from_controllers(self) -> None:
         for member in self.endpoints["systems"].get_members_names():

@@ -12,13 +12,20 @@ from ceph_node_proxy.redfish import (
     update_component,
 )
 from ceph_node_proxy.redfish_client import RedFishClient
-from ceph_node_proxy.util import DEFAULTS, get_logger, normalize_dict, to_snake_case
+from ceph_node_proxy.util import (
+    DEFAULTS,
+    fill_missing_identity,
+    get_logger,
+    normalize_dict,
+    to_snake_case,
+)
 
 
 class BaseRedfishSystem(BaseSystem):
-    NETWORK_FIELDS: List[str] = ["Description", "Name", "SpeedMbps", "Status"]
+    NETWORK_FIELDS: List[str] = ["Description", "Name", "Id", "SpeedMbps", "Status"]
     PROCESSORS_FIELDS: List[str] = [
         "Description",
+        "Id",
         "TotalCores",
         "TotalThreads",
         "ProcessorType",
@@ -28,13 +35,15 @@ class BaseRedfishSystem(BaseSystem):
     ]
     MEMORY_FIELDS: List[str] = [
         "Description",
+        "Id",
         "MemoryDeviceType",
         "CapacityMiB",
         "Status",
     ]
-    POWER_FIELDS: List[str] = ["Name", "Model", "Manufacturer", "Status"]
+    POWER_FIELDS: List[str] = ["Name", "Id", "Model", "Manufacturer", "Status"]
     FANS_FIELDS: List[str] = [
         "Name",
+        "Id",
         "PhysicalContext",
         "Reading",
         "ReadingUnits",
@@ -42,6 +51,7 @@ class BaseRedfishSystem(BaseSystem):
     ]
     TEMPERATURES_FIELDS: List[str] = [
         "Name",
+        "Id",
         "PhysicalContext",
         "Reading",
         "ReadingUnits",
@@ -50,6 +60,7 @@ class BaseRedfishSystem(BaseSystem):
     FIRMWARE_FIELDS: List[str] = [
         "Name",
         "Description",
+        "Id",
         "ReleaseDate",
         "Version",
         "Updateable",
@@ -320,6 +331,7 @@ class BaseRedfishSystem(BaseSystem):
                             if use_single_key
                             else f"{path_prefix}_{member_id}"
                         )
+                        fill_missing_identity(data, key)
                         self._sys[component][sys_id][key] = data
             except Exception as e:
                 self.log.debug(
@@ -338,6 +350,7 @@ class BaseRedfishSystem(BaseSystem):
     def _update_storage(self) -> None:
         fields = [
             "Description",
+            "Id",
             "CapacityBytes",
             "Model",
             "Protocol",
@@ -367,6 +380,8 @@ class BaseRedfishSystem(BaseSystem):
                         result[member][drive_id]["entity"] = entity
             # do not normalize the first level of the dictionary
             result[member] = normalize_dict(result[member])
+            for drive_id, drive_data in result[member].items():
+                fill_missing_identity(drive_data, drive_id)
             self._sys["storage"] = result
 
     def _update_sn(self) -> None:

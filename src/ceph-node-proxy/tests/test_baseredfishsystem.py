@@ -166,6 +166,8 @@ class TestBaseRedfishSystemGetSpecs:
         assert specs[0].collection == "systems"
         assert specs[0].path == "Memory"
         assert "CapacityMiB" in specs[0].fields
+        assert "Description" in specs[0].fields
+        assert "Id" in specs[0].fields
 
     def test_get_specs_power(self, system):
         specs = system.get_specs("power")
@@ -258,3 +260,73 @@ class TestBaseRedfishSystemComponentSpecs:
         assert len(BaseRedfishSystem.NETWORK_FIELDS) > 0
         assert len(BaseRedfishSystem.MEMORY_FIELDS) > 0
         assert len(BaseRedfishSystem.POWER_FIELDS) > 0
+
+
+class TestFillMissingIdentityDuringUpdate:
+    def test_run_update_keeps_existing_description(self, system):
+        with patch("ceph_node_proxy.baseredfishsystem.get_component_data") as mock_gcd:
+            mock_gcd.return_value = {
+                "Self": {
+                    "dimm0": {
+                        "id": "DevType2_DIMM0",
+                        "description": "DIMM A1",
+                        "memory_device_type": "DDR4",
+                        "status": {"health": "OK", "state": "Enabled"},
+                    }
+                }
+            }
+            system._run_update("memory")
+        assert system._sys["memory"]["Self"]["dimm0"]["description"] == "DIMM A1"
+
+    def test_run_update_fills_unknown_description_from_id(self, system):
+        with patch("ceph_node_proxy.baseredfishsystem.get_component_data") as mock_gcd:
+            mock_gcd.return_value = {
+                "Self": {
+                    "dimm0": {
+                        "id": "DevType2_DIMM0",
+                        "description": "unknown",
+                        "memory_device_type": "DDR4",
+                        "status": {"health": "OK", "state": "Enabled"},
+                    }
+                }
+            }
+            system._run_update("memory")
+        assert (
+            system._sys["memory"]["Self"]["dimm0"]["description"] == "DevType2_DIMM0"
+        )
+
+    def test_run_update_fills_unknown_description_from_member_key(self, system):
+        with patch("ceph_node_proxy.baseredfishsystem.get_component_data") as mock_gcd:
+            mock_gcd.return_value = {
+                "Self": {
+                    "DevType2_DIMM3": {
+                        "id": "unknown",
+                        "description": "unknown",
+                        "memory_device_type": "DDR4",
+                        "status": {"health": "OK", "state": "Enabled"},
+                    }
+                }
+            }
+            system._run_update("memory")
+        assert (
+            system._sys["memory"]["Self"]["DevType2_DIMM3"]["description"]
+            == "DevType2_DIMM3"
+        )
+
+    def test_run_update_fills_unknown_name_from_id(self, system):
+        with patch("ceph_node_proxy.baseredfishsystem.get_component_data") as mock_gcd:
+            mock_gcd.return_value = {
+                "Self": {
+                    "nic1": {
+                        "id": "NIC.Slot.1",
+                        "name": "unknown",
+                        "description": "unknown",
+                        "speed_mbps": 25000,
+                        "status": {"health": "OK", "state": "Enabled"},
+                    }
+                }
+            }
+            system._run_update("network")
+        nic = system._sys["network"]["Self"]["ethernetinterfaces_nic1"]
+        assert nic["name"] == "NIC.Slot.1"
+        assert nic["description"] == "NIC.Slot.1"
