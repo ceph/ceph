@@ -663,7 +663,9 @@ startup configuration:
 
 .. confval:: mon_auth_emergency_allowed_ciphers
 
-This will allow your existing ``client.admin`` or other administrative key to authenticate as normal.
+Setting this config to include ``aes,aes256k`` or whatever the missing ciphers
+are will allow your existing ``client.admin`` or other administrative keys to
+authenticate as normal.
 
 When this configuration is set, the Monitors will raise the
 :ref:`auth-emergency-ciphers-set` health warning. It should only be set on a
