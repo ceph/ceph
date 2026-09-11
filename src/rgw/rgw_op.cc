@@ -5280,9 +5280,6 @@ void RGWPutObj::execute(optional_yield y)
 			(user_data.empty() ? nullptr : &user_data),
 			nullptr, nullptr, rctx, complete_flags);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
-  if (op_ret < 0) {
-    return;
-  }
 
   auto ret = rgw::bucketlogging::log_record(driver,
       rgw::bucketlogging::LoggingType::Standard,
@@ -5297,8 +5294,11 @@ void RGWPutObj::execute(optional_yield y)
       false);
   if (ret  < 0) {
     ldpp_dout(this, 5) << "WARNING: in Standard mode, put object operation ignores bucket logging failure: " << ret << dendl;
- }
-
+  }
+  log_op = false;
+  if (op_ret < 0) {
+    return;
+  }
   // send request to notification manager
   ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
@@ -7849,15 +7849,16 @@ void RGWCompleteMultipart::execute(optional_yield y)
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
                      s->object.get(), processed_prefixes, if_match, if_nomatch);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
-    return;
-  }
 
   // size is logged in stadared mode
   int ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Standard, s->object.get(), s, canonical_name(), "", ofs, this, y, true, false);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: in Standard mode, complete MPU operation ignores bucket logging failure: " << ret << dendl;
+  }
+  log_op = false;
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
+    return;
   }
 
   remove_objs.clear();

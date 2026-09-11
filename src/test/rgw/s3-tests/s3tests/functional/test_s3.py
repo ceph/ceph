@@ -18208,6 +18208,51 @@ def test_bucket_logging_put_concurrency():
     assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', src_keys, record_type, num_keys)
 
 
+@pytest.mark.bucket_logging
+@pytest.mark.fails_on_aws
+def test_bucket_logging_put_failure():
+    src_bucket_name = get_new_bucket()
+    log_bucket_name = get_new_bucket_name()
+    log_bucket = get_new_bucket_resource(name=log_bucket_name)
+    client = get_client()
+    alt_client = get_alt_client()
+    has_extensions = _has_bucket_logging_extension()
+    prefix = 'log/'
+    _set_log_bucket_policy(client, log_bucket_name, [src_bucket_name], [prefix])
+    key = 'test-put'
+
+    # minimal configuration
+    logging_enabled = {'TargetBucket': log_bucket_name, 'TargetPrefix': prefix}
+    if has_extensions:
+        logging_enabled['LoggingType'] = 'Standard'
+    response = client.put_bucket_logging(Bucket=src_bucket_name, BucketLoggingStatus={
+        'LoggingEnabled': logging_enabled,
+    })
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    e = assert_raises(ClientError, alt_client.put_object, Bucket=src_bucket_name, Key=key, Body=randcontent())
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+    response = client.list_objects_v2(Bucket=src_bucket_name)
+    src_keys = _get_keys(response)
+
+    flushed_obj = _flush_logs(client, src_bucket_name)
+
+    response = client.list_objects_v2(Bucket=log_bucket_name)
+    keys = _get_keys(response)
+    assert len(keys) == 1
+
+    record_type = 'Standard' if not has_extensions else 'Journal'
+
+    if flushed_obj is not None:
+      assert keys[0] == flushed_obj
+
+    assert keys[0].startswith('log/')
+    response = client.get_object(Bucket=log_bucket_name, Key=keys[0])
+    body = _get_body(response)
+    assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', key, "Standard", 1)
+    assert _verify_record_field(body, src_bucket_name, 'REST.PUT.OBJECT', key, "Standard", "ErrorCode", "AccessDenied")
+
 def _bucket_logging_delete_objects(versioned):
     src_bucket_name = get_new_bucket()
     if versioned:
