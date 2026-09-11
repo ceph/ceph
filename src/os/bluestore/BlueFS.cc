@@ -4387,9 +4387,8 @@ uint64_t BlueFS::_flush_special(FileWriter *h)
   return new_data;
 }
 
-int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
+int BlueFS::truncate(FileWriter *h, uint64_t offset) /*_WF_WLDF*/
 {
-  auto t0 = mono_clock::now();
   std::lock_guard hl(h->lock);
   auto& fnode = h->file->fnode;
 
@@ -4419,6 +4418,34 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
       offset = h->file->fnode.size;
     }
   }
+  return _truncate_LDF(h, offset);
+}
+
+int BlueFS::truncate_unused(FileWriter *h) /*_WF_WLDF*/
+{
+  std::lock_guard hl(h->lock);
+
+  // we never truncate internal log files
+  ceph_assert(h->file->fnode.ino > 1);
+
+  if (h->get_buffer_length()) {
+    int r = _flush_F(h, true);
+    if (r < 0)
+      return r;
+  }
+  // Everything this file will ever hold has been flushed by now, so truncating
+  // it to its current size gives back exactly the tail that preallocate() has
+  // reserved and that was never written to. This works for envelope mode files
+  // too, as fnode.size is the on-disk size there as well.
+  dout(10) << __func__ << " file " << h->file->fnode << dendl;
+  return _truncate_LDF(h, h->file->fnode.size);
+}
+
+int BlueFS::_truncate_LDF(FileWriter *h, uint64_t offset) /*_WF_WLDF*/
+{
+  auto t0 = mono_clock::now();
+  ceph_assert(ceph_mutex_is_locked(h->lock));
+  auto& fnode = h->file->fnode;
   if (offset > fnode.size) {
     ceph_abort_msg("truncate up not supported");
   }
@@ -4427,6 +4454,7 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
   {
     std::lock_guard ll(log.lock);
     std::lock_guard dl(dirty.lock);
+    std::lock_guard fl(h->file->lock);
     if (h->file->deleted) {
       dout(10) << __func__ << " deleted, no-op" << dendl;
       return 0;
