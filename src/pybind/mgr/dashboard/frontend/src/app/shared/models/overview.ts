@@ -10,11 +10,11 @@ type ResileincyHealthType = {
   severity: ResiliencyState;
 };
 
-type ResiliencyState = typeof DATA_RESILIENCY_STATE[keyof typeof DATA_RESILIENCY_STATE];
+type ResiliencyState = (typeof DATA_RESILIENCY_STATE)[keyof typeof DATA_RESILIENCY_STATE];
 
-type PG_STATES = typeof PG_STATES[number];
+type PG_STATES = (typeof PG_STATES)[number];
 
-type SCRUBBING_STATES = typeof SCRUBBING_STATES[number];
+type SCRUBBING_STATES = (typeof SCRUBBING_STATES)[number];
 
 export type TrendPoint = {
   timestamp: Date;

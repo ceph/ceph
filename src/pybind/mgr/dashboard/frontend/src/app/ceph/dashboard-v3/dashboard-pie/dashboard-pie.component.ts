@@ -57,7 +57,10 @@ export class DashboardPieComponent implements OnChanges, OnInit {
     }
   ];
 
-  constructor(private cssHelper: CssHelper, private dimlessBinary: DimlessBinaryPipe) {
+  constructor(
+    private cssHelper: CssHelper,
+    private dimlessBinary: DimlessBinaryPipe
+  ) {
     this.chartConfig = {
       chartType: 'doughnut',
       labels: [],

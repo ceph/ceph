@@ -104,9 +104,9 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
   }
 
   get forceDeleteAckSatisfied(): boolean {
-    if (
-      !(this.impact === this.impactEnum.high && this.bodyContext?.forceDeleteAcknowledgementMessage)
-    ) {
+    if (!(
+      this.impact === this.impactEnum.high && this.bodyContext?.forceDeleteAcknowledgementMessage
+    )) {
       return true;
     }
     const c = this.deletionForm?.get('forceDeleteAck');

@@ -119,9 +119,8 @@ describe('RgwOverviewDashboardComponent', () => {
   });
 
   it('should render all cards', () => {
-    const productiveCards = fixture.debugElement.nativeElement.querySelectorAll(
-      'cd-productive-card'
-    );
+    const productiveCards =
+      fixture.debugElement.nativeElement.querySelectorAll('cd-productive-card');
     expect(productiveCards.length).toBe(3);
   });
 

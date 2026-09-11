@@ -11,7 +11,10 @@ import { AuthStorageService } from './auth-storage.service';
   providedIn: 'root'
 })
 export class ChangePasswordGuardService {
-  constructor(private router: Router, private authStorageService: AuthStorageService) {}
+  constructor(
+    private router: Router,
+    private authStorageService: AuthStorageService
+  ) {}
 
   canActivate(_route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
     // Redirect to '/login-change-password' when the following constraints

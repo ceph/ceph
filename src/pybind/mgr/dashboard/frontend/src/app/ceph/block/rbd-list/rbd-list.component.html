@@ -1,94 +1,126 @@
 <cd-rbd-tabs></cd-rbd-tabs>
 
-<cd-table #table
-          [data]="images"
-          columnMode="flex"
-          [columns]="columns"
-          identifier="unique_id"
-          [searchableObjects]="true"
-          [serverSide]="true"
-          [count]="count"
-          forceIdentifier="true"
-          selectionType="single"
-          [hasDetails]="true"
-          [status]="tableStatus"
-          [maxLimit]="25"
-          [autoReload]="-1"
-          (fetchData)="taskListService.fetch($event)"
-          (setExpandedRow)="setExpandedRow($event)"
-          (updateSelection)="updateSelection($event)">
-  <cd-table-actions class="table-actions"
-                    [permission]="permission"
-                    [selection]="selection"
-                    [tableActions]="tableActions">
+<cd-table
+  #table
+  [data]="images"
+  columnMode="flex"
+  [columns]="columns"
+  identifier="unique_id"
+  [searchableObjects]="true"
+  [serverSide]="true"
+  [count]="count"
+  forceIdentifier="true"
+  selectionType="single"
+  [hasDetails]="true"
+  [status]="tableStatus"
+  [maxLimit]="25"
+  [autoReload]="-1"
+  (fetchData)="taskListService.fetch($event)"
+  (setExpandedRow)="setExpandedRow($event)"
+  (updateSelection)="updateSelection($event)"
+>
+  <cd-table-actions
+    class="table-actions"
+    [permission]="permission"
+    [selection]="selection"
+    [tableActions]="tableActions"
+  >
   </cd-table-actions>
-  <cd-rbd-details *cdTableDetail
-                  [selection]="expandedRow">
+  <cd-rbd-details
+    *cdTableDetail
+    [selection]="expandedRow"
+  >
   </cd-rbd-details>
 </cd-table>
 
-<ng-template #parentTpl
-             let-value="data.value">
-  <span *ngIf="value">{{ value.pool_name }}<span
-          *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}&#64;{{ value.snap_name }}</span>
+<ng-template
+  #parentTpl
+  let-value="data.value"
+>
+  <span *ngIf="value"
+    >{{ value.pool_name }}<span *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span
+    >/{{ value.image_name }}&#64;{{ value.snap_name }}</span
+  >
   <span *ngIf="!value">-</span>
 </ng-template>
 
-<ng-template #mirroringTpl
-             let-value="data.value"
-             let-row="data.row">
-  <cds-tag *ngIf="value?.length === 3; else probb"
-           class="tag-info">
-    {{ value[0] }}
-  </cds-tag>&nbsp;
-  <cds-tag *ngIf="value?.length === 3"
-           class="tag-info">
-    {{ value[1] }}
-  </cds-tag>&nbsp;
-  <cds-tag *ngIf="row?.primary === true"
-           class="tag-info"
-           i18n>
+<ng-template
+  #mirroringTpl
+  let-value="data.value"
+  let-row="data.row"
+>
+  <cds-tag
+    *ngIf="value?.length === 3; else probb"
+    class="tag-info"
+  >
+    {{ value[0] }} </cds-tag
+  >&nbsp;
+  <cds-tag
+    *ngIf="value?.length === 3"
+    class="tag-info"
+  >
+    {{ value[1] }} </cds-tag
+  >&nbsp;
+  <cds-tag
+    *ngIf="row?.primary === true"
+    class="tag-info"
+    i18n
+  >
     primary
   </cds-tag>
-  <cds-tag *ngIf="row?.primary === false"
-           class="tag-info"
-           i18n>
+  <cds-tag
+    *ngIf="row?.primary === false"
+    class="tag-info"
+    i18n
+  >
     secondary
   </cds-tag>
   <ng-template #probb>
     <cds-tag class="tag-info">
       {{ value }}
-    </cds-tag >
+    </cds-tag>
   </ng-template>
 </ng-template>
 
-<ng-template #ScheduleTpl
-             let-value="data.value"
-             let-row="data.row">
-  <cds-tag *ngIf="value?.length === 3"
-           class="tag-info">
-  {{ value[2] | cdDate  }}
+<ng-template
+  #ScheduleTpl
+  let-value="data.value"
+  let-row="data.row"
+>
+  <cds-tag
+    *ngIf="value?.length === 3"
+    class="tag-info"
+  >
+    {{ value[2] | cdDate }}
   </cds-tag>
 </ng-template>
 
-<ng-template #flattenTpl
-             let-value>
+<ng-template
+  #flattenTpl
+  let-value
+>
   You are about to flatten
-  <strong>{{ value.child }}</strong>.
-  <br>
-  <br> All blocks will be copied from parent
-  <strong>{{ value.parent }}</strong> to child
-  <strong>{{ value.child }}</strong>.
+  <strong>{{ value.child }}</strong
+  >.
+  <br />
+  <br />
+  All blocks will be copied from parent <strong>{{ value.parent }}</strong> to child
+  <strong>{{ value.child }}</strong
+  >.
 </ng-template>
 
-<ng-template #deleteTpl
-             let-hasSnapshots="hasSnapshots"
-             let-snapshots="snapshots">
-  <div class="alert alert-warning"
-       *ngIf="hasSnapshots"
-       role="alert">
+<ng-template
+  #deleteTpl
+  let-hasSnapshots="hasSnapshots"
+  let-snapshots="snapshots"
+>
+  <div
+    class="alert alert-warning"
+    *ngIf="hasSnapshots"
+    role="alert"
+  >
     <span i18n>Deleting this image will also delete all its snapshots.</span>
-    <br>
+    <br />
     <ng-container *ngIf="snapshots.length > 0">
       <span i18n>The following snapshots are currently protected and will be removed:</span>
       <ul>
@@ -98,55 +130,71 @@
   </div>
 </ng-template>
 
-<ng-template #removingStatTpl
-             let-column="data.column"
-             let-value="data.value"
-             let-row="data.row">
+<ng-template
+  #removingStatTpl
+  let-column="data.column"
+  let-value="data.value"
+  let-row="data.row"
+>
   <cds-inline-loading *ngIf="row.cdExecuting"></cds-inline-loading>
-    <span [ngClass]="column?.customTemplateConfig?.valueClass">
+  <span [ngClass]="column?.customTemplateConfig?.valueClass">
     {{ value }}
   </span>
-  <span *ngIf="row.cdExecuting"
-        [ngClass]="column?.customTemplateConfig?.executingClass ?
-        column.customTemplateConfig.executingClass :
-        'text-muted italic'">
+  <span
+    *ngIf="row.cdExecuting"
+    [ngClass]="
+      column?.customTemplateConfig?.executingClass
+        ? column.customTemplateConfig.executingClass
+        : 'text-muted italic'
+    "
+  >
     ({{ row.cdExecuting }})
   </span>
-  <svg  *ngIf="row.source && row.source === 'REMOVING'"
-        i18n-title
-        title="RBD in status 'Removing'"
-        [cdsIcon]="icons.warning"
-        [size]="icons.size16"
-        class="cds-warning-color"></svg>
+  <svg
+    *ngIf="row.source && row.source === 'REMOVING'"
+    i18n-title
+    title="RBD in status 'Removing'"
+    [cdsIcon]="icons.warning"
+    [size]="icons.size16"
+    class="cds-warning-color"
+  ></svg>
 </ng-template>
 
 <ng-template #forcePromoteConfirmation>
   <cd-alert-panel type="warning">{{ errorMessage }}</cd-alert-panel>
-  <div class="m-4"
-       i18n>
-    <strong>
-       Do you want to force the operation?
-    </strong>
+  <div
+    class="m-4"
+    i18n
+  >
+    <strong> Do you want to force the operation? </strong>
   </div>
 </ng-template>
 
-<ng-template #imageUsageTpl
-             let-row="data.row">
-  <span *ngIf="row.features_name && !row.features_name.includes('fast-diff') ; else usageBar"
-        [ngbTooltip]="usageTooltip">
+<ng-template
+  #imageUsageTpl
+  let-row="data.row"
+>
+  <span
+    *ngIf="row.features_name && !row.features_name.includes('fast-diff'); else usageBar"
+    [ngbTooltip]="usageTooltip"
+  >
     <span>-</span>
   </span>
   <ng-template #usageBar>
-    <cd-usage-bar *ngIf="row"
-                  [total]="row.size"
-                  [used]="row.disk_usage"
-                  [title]="row.name"
-                  decimals="2">
-  </cd-usage-bar>
+    <cd-usage-bar
+      *ngIf="row"
+      [total]="row.size"
+      [used]="row.disk_usage"
+      [title]="row.name"
+      decimals="2"
+    >
+    </cd-usage-bar>
   </ng-template>
 </ng-template>
 
 <ng-template #usageTooltip>
-  <div i18n
-       [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled and without snapshot mirroring'"></div>
+  <div
+    i18n
+    [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled and without snapshot mirroring'"
+  ></div>
 </ng-template>

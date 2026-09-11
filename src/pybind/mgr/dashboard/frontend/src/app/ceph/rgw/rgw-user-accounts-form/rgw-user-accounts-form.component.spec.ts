@@ -41,9 +41,9 @@ describe('RgwUserAccountsFormComponent', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwUserAccountsFormComponent);
-    rgwUserAccountsService = (TestBed.inject(
+    rgwUserAccountsService = TestBed.inject(
       RgwUserAccountsService
-    ) as unknown) as MockRgwUserAccountsService;
+    ) as unknown as MockRgwUserAccountsService;
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

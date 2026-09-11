@@ -72,7 +72,10 @@ export class OsdService {
     ]
   };
 
-  constructor(private http: HttpClient, private deviceService: DeviceService) {}
+  constructor(
+    private http: HttpClient,
+    private deviceService: DeviceService
+  ) {}
 
   create(driveGroups: Object[], trackingId: string, method = 'drive_groups') {
     const request = {

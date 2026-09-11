@@ -14,7 +14,10 @@ export class NvmeofSubsystemPerformanceComponent implements OnInit {
   groupName: string;
   permissions: Permissions;
 
-  constructor(private route: ActivatedRoute, private authStorageService: AuthStorageService) {
+  constructor(
+    private route: ActivatedRoute,
+    private authStorageService: AuthStorageService
+  ) {
     this.permissions = this.authStorageService.getPermissions();
   }
 

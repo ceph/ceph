@@ -91,8 +91,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
       route = route.firstChild;
     }
     const pageHeader = route?.routeConfig?.data?.['pageHeader'] as
-      | { title?: string; description?: string }
-      | undefined;
+      { title?: string; description?: string } | undefined;
     this.pageHeaderTitle = pageHeader?.title ?? null;
     this.pageHeaderDescription = pageHeader?.description ?? null;
   }

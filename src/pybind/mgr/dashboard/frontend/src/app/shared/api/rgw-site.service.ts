@@ -15,7 +15,10 @@ import { cdEncode } from '~/app/shared/decorators/cd-encode';
 export class RgwSiteService {
   private url = 'api/rgw/site';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
+  constructor(
+    private http: HttpClient,
+    private rgwDaemonService: RgwDaemonService
+  ) {}
 
   get(query?: string) {
     return this.rgwDaemonService.request((params: HttpParams) => {

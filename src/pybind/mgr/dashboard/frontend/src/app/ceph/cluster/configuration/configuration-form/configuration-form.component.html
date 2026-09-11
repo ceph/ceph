@@ -42,91 +42,95 @@
 
         <!-- Long description -->
         @if (response?.long_desc) {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <label
-            class="cds--label"
-            i18n
-          >Description</label>
-          <p class="cds--type-body-01 mb-0">{{ response.long_desc }}</p>
-        </div>
+          <div
+            cdsRow
+            class="form-item"
+          >
+            <legend
+              class="cds--label"
+              i18n
+            >
+              Description
+            </legend>
+            <p class="cds--type-body-01 mb-0">{{ response.long_desc }}</p>
+          </div>
         }
 
         <!-- Default -->
         @if (configForm.getValue('default') !== '') {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <cds-text-label
-            labelInputID="default"
-            i18n
+          <div
+            cdsRow
+            class="form-item"
           >
-            Default
-            <input
-              cdsText
-              type="text"
-              id="default"
-              formControlName="default"
-              readonly
-            />
-          </cds-text-label>
-        </div>
+            <cds-text-label
+              labelInputID="default"
+              i18n
+            >
+              Default
+              <input
+                cdsText
+                type="text"
+                id="default"
+                formControlName="default"
+                readonly
+              />
+            </cds-text-label>
+          </div>
         }
 
         <!-- Daemon default -->
         @if (configForm.getValue('daemon_default') !== '') {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <cds-text-label
-            labelInputID="daemon_default"
-            i18n
+          <div
+            cdsRow
+            class="form-item"
           >
-            Daemon default
-            <input
-              cdsText
-              type="text"
-              id="daemon_default"
-              formControlName="daemon_default"
-              readonly
-            />
-          </cds-text-label>
-        </div>
+            <cds-text-label
+              labelInputID="daemon_default"
+              i18n
+            >
+              Daemon default
+              <input
+                cdsText
+                type="text"
+                id="daemon_default"
+                formControlName="daemon_default"
+                readonly
+              />
+            </cds-text-label>
+          </div>
         }
 
         <!-- Services -->
         @if (configForm.getValue('services')?.length > 0) {
-        <div
-          cdsRow
-          class="form-item form-item-append align-items-center"
-        >
           <div
-            cdsCol
-            [columnNumbers]="{ sm: 2, md: 2, lg: 2 }"
+            cdsRow
+            class="form-item form-item-append align-items-center"
           >
-            <label
-              class="cds--label mb-0"
-              i18n
-            >Services</label>
-          </div>
-          <div
-            cdsCol
-            [columnNumbers]="{ sm: 6, md: 6, lg: 6 }"
-          >
-            @for (service of configForm.getValue('services'); track service) {
-            <cds-tag
-              [size]="'md'"
-              class="tag-dark me-2"
+            <div
+              cdsCol
+              [columnNumbers]="{ sm: 2, md: 2, lg: 2 }"
             >
-              {{ service }}
-            </cds-tag>
-            }
+              <legend
+                class="cds--label mb-0"
+                i18n
+              >
+                Services
+              </legend>
+            </div>
+            <div
+              cdsCol
+              [columnNumbers]="{ sm: 6, md: 6, lg: 6 }"
+            >
+              @for (service of configForm.getValue('services'); track service) {
+                <cds-tag
+                  [size]="'md'"
+                  class="tag-dark me-2"
+                >
+                  {{ service }}
+                </cds-tag>
+              }
+            </div>
           </div>
-        </div>
         }
 
         <!-- Values -->
@@ -426,19 +430,21 @@
       </div>
     }
     @if (control.hasError('min')) {
-    <span
-      class="invalid-feedback"
-      i18n
-    >The entered value is too low! It must not be lower than {{ minValue }}.</span>
+      <span
+        class="invalid-feedback"
+        i18n
+        >The entered value is too low! It must not be lower than {{ minValue }}.</span
+      >
     }
     @if (control.hasError('max')) {
-    <span
-      class="invalid-feedback"
-      i18n
-    >The entered value is too high! It must not be greater than {{ maxValue }}.</span>
+      <span
+        class="invalid-feedback"
+        i18n
+        >The entered value is too high! It must not be greater than {{ maxValue }}.</span
+      >
     }
     @if (control.hasError('pattern') || control.hasError('invalidUuid')) {
-    <span class="invalid-feedback">{{ patternHelpText }}</span>
+      <span class="invalid-feedback">{{ patternHelpText }}</span>
     }
   }
 </ng-template>

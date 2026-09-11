@@ -25,15 +25,15 @@ describe('CephfsMirroringWizardComponent', () => {
   ];
 
   beforeEach(async () => {
-    wizardStepsService = ({
+    wizardStepsService = {
       setTotalSteps: jest.fn(),
       setCurrentStep: jest.fn(),
       steps$: new BehaviorSubject<WizardStepModel[]>(mockSteps)
-    } as unknown) as jest.Mocked<WizardStepsService>;
+    } as unknown as jest.Mocked<WizardStepsService>;
 
-    router = ({
+    router = {
       navigate: jest.fn()
-    } as unknown) as jest.Mocked<Router>;
+    } as unknown as jest.Mocked<Router>;
 
     await TestBed.configureTestingModule({
       imports: [ReactiveFormsModule, RadioModule],
