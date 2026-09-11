@@ -412,7 +412,7 @@ class CRUDEndpoint:
                           {
                               **funcs,
                               'outer_self': self,
-                          })
+                          })  # noqa: E126
         self.router(self.doc(crud_class))
         cls.CRUDClass = crud_class
 
@@ -494,6 +494,6 @@ class CRUDEndpoint:
                               'set_table_resource': set_table_resource,
                               'get_detail_columns': get_detail_columns,
                               'outer_self': self,
-                          })
+                          })  # noqa: E126
         UIRouter(self.router.path, self.router.security_scope)(meta_class)
         cls.CRUDClassMetadata = meta_class
