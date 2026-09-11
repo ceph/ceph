@@ -850,6 +850,296 @@ function TEST_divergent_3() {
     kill_daemons $dir || return 1
 }
 
+# ============================================================================
+# A replica whose PG log is genuinely AHEAD of what the current primary
+# describes rejoins via PeeringState::Stray::react(MInfoRec)'s "rewind
+# divergent log entries" branch (PeeringState.cc). This test exercises this
+# patch that discards the inherited vulnerability window.
+#
+# Real log divergence is built exactly the way TEST_divergent above does it:
+# blackhole the replicas that will come back FIRST, let the soon-to-be-
+# divergent OSD accept one more write alone (which the client abandons
+# before it can ever be acked, since min_size can't be met with both other
+# replicas blackholed), then kill everyone and revive the blackholed
+# replicas before the divergent one. The test only cares that the rejoining
+# OSD's log is genuinely ahead when it processes its first MInfoRec back as
+# a Stray.
+#
+# Once the PG is back to active+clean, this forces PRIMARY role onto that
+# same OSD via `ceph osd primary-affinity` (not a kill -- all three OSDs
+# stay up+in throughout, so this introduces no NEW degradation on its own)
+# and checks its own local pg_vulnerability_duration counter. With the
+# discard fix, last_degraded was already collapsed to last_clean at rewind time,
+# so nothing closes and nothing is recorded (short of a legitimate, correctly-
+# small transient blip -- see the duration-bound check below).
+# ============================================================================
+function TEST_divergent_vulnerability_window() {
+    local dir=$1
+
+    local dummyfile=$(file_with_random_data)
+    local num_osds=3
+    local osds="$(seq 0 $(expr $num_osds - 1))"
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for i in $osds
+    do
+      run_osd $dir $i --debug-osd=15 || return 1
+    done
+
+    ceph osd set noout
+    ceph osd set noin
+    ceph osd set nodown
+    create_pool $poolname 1 1 || return 1
+    ceph osd pool set $poolname size 3 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    ceph osd pool set $poolname pg_autoscale_mode off || return 1
+
+    flush_pg_stats || return 1
+    wait_for_clean || return 1
+
+    # The initial primary is the one we'll make log-divergent -- same
+    # convention as TEST_divergent above.
+    local divergent="$(ceph pg dump pgs --format=json | jq '.pg_stats[0].up_primary')"
+    echo "primary and soon to be divergent is $divergent"
+    local non_divergent=""
+    for i in $osds
+    do
+      if [ "$i" = "$divergent" ]; then
+          continue
+      fi
+      non_divergent="$non_divergent $i"
+    done
+
+    echo "writing initial objects"
+    local num_objects=20
+    for i in $(seq 1 $num_objects)
+    do
+      rados -p $poolname put existing_$i $dummyfile || return 1
+    done
+    WAIT_FOR_CLEAN_TIMEOUT=20 wait_for_clean || return 1
+
+    local pgid=$(get_pg $poolname existing_1)
+
+    # Blackhole the two OSDs that will come back FIRST -- same technique as
+    # TEST_divergent -- so the divergent write below lands only on
+    # $divergent's own PG log and never actually replicates.
+    echo "blackholing osds $non_divergent"
+    for i in $non_divergent
+    do
+      CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${i}) config set objectstore_blackhole 1
+    done
+
+    echo 'writing divergent object'
+    rados -p $poolname put existing_divergent $dummyfile &
+    sleep 10
+    killall -9 rados
+
+    echo 'killing all the osds'
+    kill_daemons $dir KILL osd || return 1
+    for i in $osds
+    do
+      ceph osd down osd.$i
+    done
+    for i in $non_divergent
+    do
+      ceph osd out osd.$i
+    done
+
+    echo "bringing up non_divergent $non_divergent"
+    for i in $non_divergent
+    do
+      activate_osd $dir $i || return 1
+    done
+    for i in $non_divergent
+    do
+      ceph osd in osd.$i
+    done
+
+    # $divergent stays down+in here -- the PG is active+undersized+degraded
+    # (2 of 3, min_size=2) for as long as we hold it, which is exactly the
+    # real, unrecorded vulnerability window this test needs open on the
+    # current (non-divergent) primary when $divergent later rejoins. Do NOT
+    # wait_for_clean here -- the PG genuinely can't reach clean while
+    # $divergent is deliberately kept down; that's the point.
+    local current_primary=""
+    for i in $(seq 1 30)
+    do
+      current_primary=$(get_primary $poolname existing_1)
+      test -n "$current_primary" && break
+      sleep 1
+    done
+    test -n "$current_primary" || {
+      echo "FAIL: could not determine the primary after bringing up" \
+           "$non_divergent while osd.${divergent} was down"
+      return 1
+    }
+    local current_log=$dir/osd.${current_primary}.log
+
+    local latched=false
+    for i in $(seq 1 30)
+    do
+      flush_pg_stats || return 1
+      grep -q "rebuild-stats: vulnerability window opened for ${pgid} " $current_log && {
+        latched=true
+        break
+      }
+      sleep 1
+    done
+    $latched || {
+      echo "FAIL: the vulnerability window never opened on osd.${current_primary}" \
+           "while osd.${divergent} was away -- test setup didn't actually" \
+           "degrade the PG"
+      return 1
+    }
+    # Hold it open for a while, deliberately generous: the forced-primary
+    # duration check below relies on a real, wide gap between a legitimate
+    # transient remap blip and the minimum possible duration an
+    # inherited-window bug could produce here (this sleep, plus whatever
+    # setup/poll overhead follows).
+    #
+    # The bug this test exists to catch: osd.${divergent} inheriting
+    # osd.${current_primary}'s window and reporting a duration that reaches
+    # all the way back to this episode's true onset. This duration cannot be
+    # shorter than several tens of seconds (sleep below + all the real
+    # wall-clock setup/polling).
+    sleep 25
+
+    # Ensure no recovery of the up OSDs yet, same as TEST_divergent.
+    echo 'delay recovery'
+    for i in $non_divergent
+    do
+      CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${i}) set_recovery_delay 100000
+    done
+
+    # Hold primary-affinity at 0 through the revival so
+    # osd.${current_primary} keeps primary long enough to close its own
+    # window normally; the controlled handover below is what raises it
+    # back.
+    ceph osd primary-affinity osd.${divergent} 0 || return 1
+
+    echo "reviving divergent $divergent"
+    ceph osd set noup || return 1
+    activate_osd $dir $divergent || return 1
+    sleep 5
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${divergent}) set_recovery_delay 100000
+    ceph osd unset noup || return 1
+
+    wait_for_osd up 0
+    wait_for_osd up 1
+    wait_for_osd up 2
+
+    echo "allowing recovery"
+    for i in $osds
+    do
+      ceph tell osd.$i debug kick_recovery_wq 0
+    done
+
+    WAIT_FOR_CLEAN_TIMEOUT=60 wait_for_clean || {
+      echo "FAIL: PG never returned to active+clean after osd.${divergent}" \
+           "rejoined"
+      return 1
+    }
+    flush_pg_stats || return 1
+
+    # Confirm the rewind actually resolved the original episode: it must
+    # have been recorded exactly once by now, by whichever non-divergent
+    # OSD was primary when the PG returned to clean.
+    local total_recorded_before
+    total_recorded_before=$(grep -h "rebuild-stats: recorded vulnerability window for ${pgid} " \
+      $dir/osd.*.log | wc -l)
+    test "$total_recorded_before" = 1 || {
+      echo "FAIL: expected exactly 1 'recorded vulnerability window' line for" \
+           "${pgid} after osd.${divergent} rejoined, got $total_recorded_before" \
+           "-- the original episode wasn't resolved the way this test expects"
+      return 1
+    }
+
+    # --- The actual regression check: force PRIMARY role onto the
+    # once-divergent OSD via primary-affinity (not a kill -- all three OSDs
+    # stay up+in throughout, so this introduces no NEW degradation) and
+    # confirm it never surfaces the pre-rejoin episode as its own. Raise
+    # $divergent's own affinity back (it was held at 0 above) and lower its
+    # peers', since either alone should suffice but the combination removes
+    # any doubt about which one wins.
+    ceph osd primary-affinity osd.${divergent} 1 || return 1
+    for i in $non_divergent
+    do
+      ceph osd primary-affinity osd.$i 0 || return 1
+    done
+
+    local became_primary=false
+    for i in $(seq 1 30)
+    do
+      test "$(get_primary $poolname existing_1)" = "$divergent" && {
+        became_primary=true
+        break
+      }
+      sleep 1
+    done
+    $became_primary || {
+      echo "FAIL: osd.${divergent} never became primary after its peers'" \
+           "primary-affinity was lowered -- can't exercise the regression" \
+           "check without it"
+      return 1
+    }
+
+    WAIT_FOR_CLEAN_TIMEOUT=20 wait_for_clean || return 1
+    flush_pg_stats || return 1
+    sleep 2
+    flush_pg_stats || return 1
+
+    local divergent_dump
+    divergent_dump=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${divergent}) \
+      perf dump) || return 1
+    local divergent_avgcount
+    divergent_avgcount=$(jq '.recoverystate_perf.pg_vulnerability_duration.avgcount' \
+      <<< "$divergent_dump")
+
+    if [ "$divergent_avgcount" -ge 1 ]
+    then
+      # Not automatically a failure: a primary-affinity handover can
+      # legitimately cause a brief, genuine remap-driven blip. Only a duration
+      # reaching back toward the ORIGINAL episode's onset (guaranteed to be
+      # at least the 25s slept above, plus real setup/poll overhead on both
+      # sides) indicates the inherited-window bug. The threshold is well
+      # above that and well below this scenario's minimum possible bug duration.
+      local divergent_duration
+      divergent_duration=$(grep -h "rebuild-stats: recorded vulnerability window for ${pgid} " \
+        $dir/osd.${divergent}.log | grep -o "duration=[0-9.]*" | tail -1 | cut -d= -f2)
+      test -n "$divergent_duration" || {
+        echo "FAIL: osd.${divergent}'s perf dump shows" \
+             "pg_vulnerability_duration.avgcount=${divergent_avgcount} but no" \
+             "matching log line was found to check its duration"
+        return 1
+      }
+      echo "INFO: osd.${divergent} (new primary) recorded duration=${divergent_duration}s"
+      awk -v d="$divergent_duration" 'BEGIN { exit !(d < 40) }' || {
+        echo "FAIL: osd.${divergent} recorded a vulnerability window of" \
+             "${divergent_duration}s right after becoming primary -- this" \
+             "reaches back into the ORIGINAL pre-rejoin episode, meaning it" \
+             "inherited osd.${current_primary}'s open-but-unrecorded window" \
+             "via the Stray::react(MInfoRec) rewind instead of discarding it"
+        return 1
+      }
+    fi
+
+    # Global cross-check: at most the original episode plus one legitimate
+    # post-handover blip -- osd.${divergent} becoming primary must not add
+    # more than that.
+    local total_recorded_after
+    total_recorded_after=$(grep -h "rebuild-stats: recorded vulnerability window for ${pgid} " \
+      $dir/osd.*.log | wc -l)
+    test "$total_recorded_after" -le 2 || {
+      echo "FAIL: ${pgid} shows ${total_recorded_after} 'recorded vulnerability" \
+           "window' lines total -- more than the original episode plus at" \
+           "most one legitimate post-handover blip"
+      return 1
+    }
+
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
 
 main divergent-priors "$@"
 

@@ -839,29 +839,6 @@ void PeeringState::start_peering_interval(
     pl->clear_want_pg_temp();
   }
 
-  // if this OSD specifically is *losing* the primary role (as opposed to
-  // gaining it) while the latch is still armed, close out and record this
-  // OSD's own segment of the vulnerability window before discarding the
-  // latch fields below -- otherwise a primary handover mid-rebuild
-  // silently drops the whole in-progress duration with no trace on any OSD.
-  // This does not recover the true total across a multi-handover chain --
-  // see try_record_rebuild_segment()'s doc comment.
-  const bool losing_primary = was_old_primary && !is_primary();
-  if (losing_primary && rebuild_start_time != utime_t()) {
-    try_record_rebuild_segment(ceph_clock_now(), "handover-away");
-  }
-
-  // Only reset the rebuild-time latch when the primary role actually
-  // changes across this interval transition. Routine peering restarts
-  // (e.g. acting-set churn from backfill peers being added/removed)
-  // that leave this OSD as primary throughout must not wipe an
-  // in-progress rebuild's start time.
-  if (!(was_old_primary && is_primary())) {
-    rebuild_start_time = utime_t();
-    rebuild_base_recovered = 0;
-    rebuild_had_redundancy_loss = false;
-  }
-
   clear_primary_state();
 
   pl->on_change(t);
@@ -1089,35 +1066,6 @@ void PeeringState::clear_primary_state()
   pg_committed_to = eversion_t();
   missing_loc.clear();
   pl->clear_primary_state();
-}
-
-void PeeringState::try_record_rebuild_segment(
-  utime_t end_time,
-  std::string_view reason)
-{
-  // Caller (prepare_stats_for_publish()'s "reached clean" branch, or
-  // start_peering_interval()'s "handover-away" check) is responsible for
-  // guarding rebuild_start_time != utime_t() before calling this, and for
-  // resetting the three latch fields immediately afterward -- this method
-  // only computes, filters, records, and logs; it does not reset state.
-  const int64_t num_recovered = info.stats.stats.sum.num_objects_recovered;
-  const int64_t delta_recovered = num_recovered - rebuild_base_recovered;
-  const utime_t rebuild_dur = end_time - rebuild_start_time;
-
-  if (rebuild_dur.to_msec() > 0 &&
-      (delta_recovered > 0 || rebuild_had_redundancy_loss)) {
-    pl->get_peering_perf().tinc(rs_pg_rebuild_duration, rebuild_dur);
-    psdout(15) << "rebuild-stats: recorded rebuild for " << info.pgid
-              << " duration=" << rebuild_dur
-              << " delta_recovered=" << delta_recovered
-              << " reason=" << reason << dendl;
-  } else {
-    psdout(15) << "rebuild-stats: discarded rebuild for " << info.pgid
-              << " duration=" << rebuild_dur
-              << " delta_recovered=" << delta_recovered
-              << " had_redundancy_loss=" << rebuild_had_redundancy_loss
-              << " reason=" << reason << dendl;
-  }
 }
 
 /// return [start,end) bounds for required past_intervals
@@ -3352,6 +3300,13 @@ void PeeringState::merge_log(
     oinfo, std::move(olog), from, info, pool.info, pg_whoami,
     rollbacker.get(), dirty_info, dirty_big_info,
     pool.info.allows_ecoptimizations());
+
+  // ReplicaActive::react(MLogRec) calls this on every write once a
+  // replica has caught up, not just on special transitions). That copy
+  // may carry an open-but-unrecorded vulnerability window; we must not
+  // adopt it as our own (see discard_inherited_vulnerability_window()'s
+  // comment in PeeringState.h).
+  discard_inherited_vulnerability_window();
 }
 
 void PeeringState::rewind_divergent_log(
@@ -3882,13 +3837,6 @@ void PeeringState::split_into(
   child->info.last_epoch_started = info.last_epoch_started;
   child->info.last_interval_started = info.last_interval_started;
 
-  // rebuild-stats: Make the child inherit the parent's latch. Otherwise the
-  // child's share of a pre-split, still-ongoing failure would understate its
-  // true duration (or vanish from delta_recovered's filter entirely) once it
-  // independently detects its own degradation post-split.
-  child->rebuild_start_time = rebuild_start_time;
-  child->rebuild_had_redundancy_loss = rebuild_had_redundancy_loss;
-
   increment_stats_invalidations_counter(rs_pg_split_parent_stats_invalidated,
                                         info.stats.stats_invalid);
   increment_stats_invalidations_counter(rs_pg_split_child_stats_invalidated,
@@ -4123,21 +4071,6 @@ void PeeringState::finish_split_stats(
   const object_stat_sum_t& stats, ObjectStore::Transaction &t)
 {
   info.stats.stats.sum = stats;
-
-  // rebuild-stats: object_stat_sum_t::split() (see its SPLIT(num_objects_
-  // recovered) macro) divides num_objects_recovered evenly across the
-  // parent and every child -- so info.stats.stats.sum.num_objects_recovered
-  // just dropped to a fraction of whatever it was when rebuild_base_
-  // recovered was last snapshotted, on BOTH the parent and the child. Without
-  // the redistributed value (via split()), try_record_rebuild_segment()'s
-  // delta_recovered = num_recovered - rebuild_base_recovered can go negative
-  // can reflect inaccurate value and result in discarding a genuine rebuild.
-  // Therefore, re-anchor the baseline to the just-applied, already
-  // redistributed value and make the child's inheritance numerically correct.
-  if (rebuild_start_time != utime_t()) {
-    rebuild_base_recovered = info.stats.stats.sum.num_objects_recovered;
-  }
-
   write_if_dirty(t);
 }
 
@@ -4493,6 +4426,16 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   }
 
   utime_t now = ceph_clock_now();
+
+  // Snapshot whether a vulnerability window is currently open, *before* the
+  // clean-stamp below advances last_clean. last_degraded > last_clean means
+  // a window opened and has not yet been closed/recorded; once last_clean is
+  // re-stamped to "now" for a clean PG, that ordering no longer tells us
+  // whether the window closed on this very publish or many publishes ago.
+  // See the vulnerability-window block further down.
+  const bool vulnerability_window_was_open =
+    info.stats.last_degraded > info.stats.last_clean;
+
   if (info.stats.state != state) {
     info.stats.last_change = now;
     // Optimistic estimation, if we just find out an inactive PG,
@@ -4574,110 +4517,109 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
       info.stats.last_fullsized = now;
 
     /**
-     * The following block is an interim solution to aggregate PG rebuild stats
-     * into a perf counter. The counter is set based on the following
-     * existing pg_stat_t fields:
-     *  - last_clean, last_change
-     *  - num_objects_degraded, num_objects_misplaced, num_objects_recovered
+     * PG vulnerability-window tracking.
      *
-     * The PG rebuild stats are aggregated into the following recoverystate
-     * perf counter:
-     *  - rs_pg_rebuild_duration: rebuild duration LONGRUNAVG time counter
+     *  A "vulnerability window" is the wall-clock span from the moment a PG
+     * first loses redundancy or placement health -- it enters
+     * DEGRADED/UNDERSIZED, or shows missing (degraded) / misplaced objects
+     * -- until it next returns to active+clean. Two pg_stat_t timestamps
+     * bracket it:
+     *  - info.stats.last_degraded: latched, on the first publish of a new
+     *    window, to the onset (last_change, i.e. when the state transition
+     *    happened). It is then collapsed back up to last_clean once the
+     *    window has been recorded, so last_degraded > last_clean is exactly
+     *    "a window is open and not yet recorded".
+     *  - info.stats.last_clean: (re-)stamped to "now" on every publish of a
+     *    clean PG, above -- so it is NOT a stable marker on its own; the
+     *    vulnerability_window_was_open snapshot taken before that stamp is
+     *    what tells us the window closed on this very publish.
+     * Both fields live in pg_stat_t, which is persisted with the PG info, so
+     * a single primary times a window from its true onset across any number
+     * of its own interval restarts and records it exactly once when the
+     * window closes.
      *
-     * Workflow:
-     *  1. Only the acting primary OSD of the PG executes the logic to
-     *     determine the rebuild stats.
-     *  2. The logic uses rebuild_start_time as a per-PG in-memory latch that
-     *     captures the failure entry point. When a PG is considered vulnerable,
-     *     rebuild_start_time latches info.stats.last_change as the start time,
-     *     provided last_change > last_clean, which ensures only genuine new
-     *     failures after the prior clean interval are tracked.
-     *  3. On recovery, the rebuild duration is computed as
-     *     (now - rebuild_start_time) and is only recorded if delta
-     *     num_objects_recovered > 0 or the PG had confirmed redundancy loss
-     *     at latch time, filtering out spurious state transitions. The latch
-     *     is cleared after each recorded event.
-     *  4. The "recovered" (record) branch additionally requires the live
-     *     PG_STATE_ACTIVE bit, not just an empty degraded/misplaced count.
-     *     Right after a peering-interval restart, clear_primary_state()
-     *     wipes acting_recovery_backfill/missing_loc before peering has
-     *     repopulated them for the new interval; a publish landing in that
-     *     narrow mid-peering window sees num_objects_degraded == 0 and no
-     *     DEGRADED/UNDERSIZED bit set, which looks identical to a genuine
-     *     recovery completion even though the PG is still mid-transition
-     *     and about to go degraded again. Requiring PG_STATE_ACTIVE (never
-     *     set while PEERING) filters out that transient situation so it can't
-     *     prematurely record a truncated duration and reset the latch out
-     *     from under an in-progress rebuild.
-     *  5. A primary handover mid-vulnerability window closes out and records
-     *     the departing OSD's own segment instead of silently discarding it.
-     *     This means a PG that changes primary N times while continuously
-     *     vulnerable is recorded as N separate rebuild_duration samples
-     *     (whose durations sum to roughly, not exactly, the true total episode
-     *     length) rather than one -- a real, understood, and accepted
-     *     trade-off for this interim solution: avgcount can overcount the true
-     *     number of distinct redundancy-loss incidents whenever a handover
-     *     occurs mid-episode, though avgtime/the summed exposure duration stay
-     *     roughly accurate. A PG whose primary never changes is entirely
-     *     unaffected and continues to produce exactly one sample.
+     * Not yet handled here (completed in the persistence phase, which moves
+     * the onset into pg_history_t): pg_stat_t is NOT synced to non-primary
+     * peers (proc_primary_info() merges only history/purged_snaps), so a new
+     * primary taking over mid-window sees a stale last_degraded and opens a
+     * fresh window from the handover point -- the pre-handover exposure time
+     * is not attributed. A primary crash in the narrow gap between reaching
+     * clean and the next publish can likewise lose or double-count that one
+     * window. pg_history_t propagation plus a persisted "recorded up to"
+     * marker close both gaps.
      *
-     * last_degraded is intentionally not used in the interim solution to
-     * retain compatibility with older Ceph releases where this field doesn't
-     * exist and requires encoding changes. The interim solution is a
-     * close approximation of the PG rebuild time.
-     *
-     * A future simplification can replace the latch with a direct
-     * (last_clean - last_degraded) calculation once last_degraded is
-     * consistently available.
+     * Scope: this counter measures *exposure* time, not data-movement time.
+     * An empty or dataless window still counts (durability risk exists from
+     * the state transition itself, independent of whether any object was
+     * ever at risk), and a misplacement-only window (e.g. benign CRUSH
+     * rebalancing) still counts, indistinguishable here from a genuine failure
+     * -- separating those needs OSDMap correlation, NOT scoped in the current
+     * solution. A companion counter for the active recovery/backfill portion
+     * of the window only is added in a follow-up change.
      */
     if (is_primary()) {
       const int64_t num_degraded  = info.stats.stats.sum.num_objects_degraded;
       const int64_t num_misplaced = info.stats.stats.sum.num_objects_misplaced;
-      const int64_t num_recovered = info.stats.stats.sum.num_objects_recovered;
-      const bool is_vulnerable =
-        (info.stats.state & (PG_STATE_DEGRADED | PG_STATE_UNDERSIZED)) ||
+      // Deliberately read the live state bits (is_degraded()/is_undersized()),
+      // rather than info.stats.state which is a snapshot synced earlier in this
+      // same function, *before* update_calc_stats(). The state_set()/
+      // state_clear(PG_STATE_DEGRADED) above, called after update_calc_stats()
+      // had a chance to update the live "state". Therefore, on a call where the
+      // PG just became clean, info.stats.state can still carry a stale DEGRADED
+      // and miss closing the window.
+      const bool vulnerable =
+        is_degraded() || is_undersized() ||
         num_degraded > 0 || num_misplaced > 0;
 
-      if (is_vulnerable) {
-        // Latch the failure entry point on the first publish after a new
-        // failure; last_change captures when the state transition occurred.
-        if (rebuild_start_time == utime_t()) {
-          const bool new_failure =
-            info.stats.last_clean == utime_t() ||
-            info.stats.last_change > info.stats.last_clean;
-          if (new_failure) {
-            rebuild_start_time = info.stats.last_change;
-            rebuild_base_recovered = num_recovered;
-            rebuild_had_redundancy_loss =
-              (num_degraded > 0 || num_misplaced > 0);
-            psdout(15) << "rebuild-stats: latched failure start for "
-                       << info.pgid << " at " << rebuild_start_time << dendl;
-          }
+      if (vulnerable) {
+        // Latch the window onset once, on the first publish of a new window.
+        // last_degraded <= last_clean means no window is currently open
+        // (never opened, or the previous one already recorded and collapsed).
+        // Prefer last_change (when the state transition happened) over "now"
+        // so the window includes the pre-publish detection lag.
+        if (info.stats.last_degraded <= info.stats.last_clean) {
+          info.stats.last_degraded =
+            (info.stats.last_change > info.stats.last_clean)
+              ? info.stats.last_change : now;
+          psdout(15) << "rebuild-stats: vulnerability window opened for "
+                     << info.pgid << " at " << info.stats.last_degraded
+                     << dendl;
         }
-      } else if (rebuild_start_time != utime_t() && (state & PG_STATE_ACTIVE)) {
-        // PG recovered — record rebuild time if this was a genuine event.
-        // The PG_STATE_ACTIVE check excludes the transient mid-peering
-        // window (see point 4 above) where the degraded/misplaced counts
-        // can momentarily read as zero before peering has finished
-        // repopulating them for the new interval.
-        try_record_rebuild_segment(now, "reached-clean");
-        // reset for the next event
-        rebuild_start_time = utime_t();
-        rebuild_base_recovered = 0;
-        rebuild_had_redundancy_loss = false;
+      } else if (vulnerability_window_was_open &&
+                 info.stats.last_clean > info.stats.last_degraded) {
+        // The window that was open at entry to this call has just closed:
+        // the PG reached clean and the clean-stamp above advanced last_clean
+        // past the latched onset. (Leaving the vulnerable state without
+        // reaching clean -- e.g. a transient mid-peering reading where the
+        // degraded count momentarily drops to zero -- does not satisfy
+        // last_clean > last_degraded, so the window stays open until the PG
+        // is genuinely clean.) Record it once, then collapse last_degraded
+        // so it is never recorded again (by a later publish, a peer that
+        // inherits these stats, or this OSD after a restart).
+        const utime_t dur = info.stats.last_clean - info.stats.last_degraded;
+        if (dur.to_msec() > 0) {
+          PerfCounters &perf = pl->get_peering_perf();
+          // tinc_with_max() accumulates the sum/avgcount AND tracks the
+          // longest single window (exposed as pg_vulnerability_duration's
+          // max_inc) with an atomic compare-exchange -- recoverystate_perf
+          // is one OSD-wide object shared by every PG shard. There is no
+          // built-in running min, so a companion gauge is updated the same
+          // way via set_min_nonzero(). Both are nanosecond-precision, so a
+          // sub-second window is not lost.
+          perf.tinc_with_max(rs_pg_vulnerability_duration, dur);
+          perf.set_min_nonzero(rs_pg_vulnerability_duration_min, dur.to_nsec());
+          psdout(15) << "rebuild-stats: recorded vulnerability window for "
+                     << info.pgid << " duration=" << dur << dendl;
+        } else {
+          psdout(15) << "rebuild-stats: discarded vulnerability window for "
+                     << info.pgid << " duration=" << dur
+                     << " (below timer resolution)" << dendl;
+        }
+        info.stats.last_degraded = info.stats.last_clean;
       }
+      // last_degraded may have just changed above; resend it immediately.
+      pre_publish.last_degraded = info.stats.last_degraded;
     }
-
-    // check if the PG is vulnerable
-    if (info.stats.state & (PG_STATE_DEGRADED|PG_STATE_UNDERSIZED)) {
-      // set last_degraded only if we are entering a new
-      // failure state and if it's older than last_clean
-      if (info.stats.last_degraded <= info.stats.last_clean) {
-        info.stats.last_degraded = now;
-      }
-    }
-    // update pre_publish so the change is sent immediately
-    pre_publish.last_degraded = info.stats.last_degraded;
 
     psdout(15) << "publish_stats_to_osd " << pre_publish.reported_epoch
 	       << ":" << pre_publish.reported_seq << dendl;
@@ -5113,6 +5055,12 @@ void PeeringState::update_backfill_progress(
 	       << " replaces local " << info.stats.stats.sum.num_bytes << dendl;
     info.stats = updated_stats;
   }
+
+  // updated_stats is the PRIMARY's own snapshot (this OSD is a backfill
+  // target receiving progress from it) and may carry an open-but-unrecorded
+  // vulnerability window; we must not adopt it as our own (see
+  // discard_inherited_vulnerability_window()'s comment in PeeringState.h).
+  discard_inherited_vulnerability_window();
 
   dirty_info = true;
   write_if_dirty(t);
@@ -5684,6 +5632,7 @@ PeeringState::Primary::Primary(my_context ctx)
     ps->info.stats.last_change = t;
     ps->info.stats.last_peered = t;
     ps->info.stats.last_clean = t;
+    ps->info.stats.last_degraded = t;
     ps->info.stats.last_unstale = t;
     ps->info.stats.last_undegraded = t;
     ps->info.stats.last_fullsized = t;
@@ -7473,6 +7422,11 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
     ps->info = msg->info;
+    // The peer's stats snapshot (fully-copied above) may carry an
+    // open-but-unrecorded vulnerability window; we must not adopt it as our
+    // own (see discard_inherited_vulnerability_window()'s comment in
+    // PeeringState.h).
+    ps->discard_inherited_vulnerability_window();
     ps->dirty_info = true;
     ps->dirty_big_info = true;  // maybe.
 
@@ -7509,6 +7463,10 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
     ps->rewind_divergent_log(t, infoevt.info.last_update);
     ps->info.stats = infoevt.info.stats;
     ps->info.hit_set = infoevt.info.hit_set;
+    // The peer's stats snapshot may carry an open-but-unrecorded
+    // vulnerability window; we must not adopt it as our own (see
+    // discard_inherited_vulnerability_window()'s comment in PeeringState.h).
+    ps->discard_inherited_vulnerability_window();
   }
 
   if (infoevt.lease) {
