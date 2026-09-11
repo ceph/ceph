@@ -6,6 +6,7 @@
  */
 
 #include <sys/stat.h>
+#include <optional>
 #include "include/str_map.h"
 #include "common/safe_io.h"
 #include "rgw/rgw_crypt.h"
@@ -1191,10 +1192,12 @@ static int maybe_cache_kms_fetch(
   if (kms_cache == nullptr ||
       !dpp->get_cct()->_conf->rgw_crypt_s3_kms_cache_enabled) {
     const auto ret = fetch(actual_key);
-    if (ret == -ENOENT) {
-      perfcounter->inc(l_rgw_kms_error_permanent);
-    } else if (ret < 0) {
-      perfcounter->inc(l_rgw_kms_error_transient);
+    if (perfcounter) {
+      if (ret == -ENOENT) {
+        perfcounter->inc(l_rgw_kms_error_permanent);
+      } else if (ret < 0) {
+        perfcounter->inc(l_rgw_kms_error_transient);
+      }
     }
     return ret;
   }
@@ -1235,7 +1238,10 @@ int reconstitute_actual_key_from_kms(
   }
 
   const auto fetch = [&](std::string& out_secret) -> int {
-    PerfGuard perf(perfcounter, l_rgw_kms_fetch_lat);
+    std::optional<PerfGuard> perf;
+    if (perfcounter) {
+      perf.emplace(perfcounter, l_rgw_kms_fetch_lat);
+    }
     if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
       return get_actual_key_from_barbican(dpp, key_id, y, out_secret);
     }
