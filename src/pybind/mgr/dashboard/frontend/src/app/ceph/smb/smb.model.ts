@@ -83,8 +83,8 @@ export interface SMBShareQoS {
   write_iops_limit?: number;
   read_bw_limit?: number;
   write_bw_limit?: number;
-  read_delay_max?: number;
-  write_delay_max?: number;
+  read_burst_mult?: number;
+  write_burst_mult?: number;
 }
 
 export interface SMBShare {
