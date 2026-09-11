@@ -91,3 +91,4 @@ Table of contents
    Sparse reads implementation plan <erasure_coding/sparse_reads_implementation>
    EC Stretch Cluster design document <erasure_coding/ec_stretch_cluster>
    Client support (RBD, RGW, CephFS) <erasure_coding/client_support>
+   Dynamic per-object chunk size design document <erasure_coding/dynamic_object_size>
