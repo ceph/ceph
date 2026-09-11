@@ -3601,6 +3601,17 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
      m->otel_trace = jspan_context(*op->otel_trace);
   }
 
+  if (op->has_rdma_delivery() &&
+      osdmap->require_osd_release >= ceph_release_t::umbrella) {
+    // advisory out-of-band delivery: never emit the descriptors to a
+    // cluster that may not decode them (an unknown-version MOSDOp is
+    // garbage-decoded by old OSDs). When the gate fails the data
+    // simply returns inline, which is always correct.
+    ceph_assert(op->rdma_delivery.size() == op->ops.size());
+    m->set_rdma_deliveries(std::vector<ceph::rdma::delivery_t>(
+      op->rdma_delivery.begin(), op->rdma_delivery.end()));
+  }
+
   logger->inc(l_osdc_op_send);
   ssize_t sum = 0;
   for (unsigned i = 0; i < m->ops.size(); i++) {
@@ -3981,6 +3992,21 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     ldout(cct, 0) << "WARNING: tid " << op->tid << " reply ops " << out_ops
 		  << " != request ops " << op->ops
 		  << " from " << m->get_source_inst() << dendl;
+
+  {
+    // per-op out-of-band delivery results: an OSD that pushed fills
+    // oob_results aligned with the ops; an inline reply (old OSD,
+    // refusal, or nothing requested) carries none, which reads back
+    // as all-zero results
+    const auto& oob = m->get_oob_results();
+    for (unsigned i = 0; i < op->rdma_oob_result.size(); ++i) {
+      if (!op->rdma_oob_result[i]) {
+	continue;
+      }
+      *op->rdma_oob_result[i] =
+	i < oob.size() ? oob[i] : ceph::rdma::oob_result_t{};
+    }
+  }
 
   bs::error_code handler_error = process_op_reply_handlers(op, out_ops);
 

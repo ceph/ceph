@@ -138,6 +138,7 @@ public:
   int pool_requires_alignment2(int64_t pool_id, bool *req);
   uint64_t pool_required_alignment(int64_t pool_id);
   int pool_required_alignment2(int64_t pool_id, uint64_t *alignment);
+  int pool_rdma_delivery_lease(int64_t pool_id, double *seconds);
   int pool_get_name(uint64_t pool_id, std::string *name,
 		    bool wait_latest_map = false);
 

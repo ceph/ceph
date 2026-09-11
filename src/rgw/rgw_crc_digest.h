@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include "include/crc32c.h"
 #include <boost/crc.hpp>
-#include "spdk/crc64.h"
+#include "common/spdk/crc64.h"
 
 namespace rgw { namespace digest {
 

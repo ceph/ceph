@@ -16,6 +16,7 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <algorithm>
 #include <list>
 #include <map>
 #include <mutex>
@@ -48,6 +49,7 @@
 
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
+#include "common/rdma_token.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_timer.h"
 #include "common/config_obs.h"
@@ -102,6 +104,18 @@ struct ObjectOperation {
   boost::container::small_vector<boost::system::error_code*,
 				 osdc_opvec_len> out_ec;
 
+  /// per-op advisory out-of-band delivery descriptors, carried on the
+  /// MOSDOp aligned with ops (see common/rdma_token.h; an empty token
+  /// means inline for that op): an OSD that can honor one RDMA-writes
+  /// that op's read data straight into the client window and returns
+  /// only a byte count (plus, on request, a CRC64-NVME of the
+  /// delivered bytes); any other OSD returns the data inline as usual
+  boost::container::small_vector<ceph::rdma::delivery_t, osdc_opvec_len>
+    rdma_delivery;
+  /// out: per-op out-of-band delivery result (bytes 0 = inline)
+  boost::container::small_vector<ceph::rdma::oob_result_t*, osdc_opvec_len>
+    rdma_oob_result;
+
   ObjectOperation() = default;
   ObjectOperation(const ObjectOperation&) = delete;
   ObjectOperation& operator =(const ObjectOperation&) = delete;
@@ -121,6 +135,22 @@ struct ObjectOperation {
     out_handler.clear();
     out_rval.clear();
     out_ec.clear();
+    rdma_delivery.clear();
+    rdma_oob_result.clear();
+  }
+
+  /// request out-of-band delivery for the most recently added op
+  void set_rdma_delivery(std::string_view token, uint64_t base_offset,
+			 uint32_t flags, ceph::rdma::oob_result_t* result) {
+    ceph_assert(!ops.empty());
+    ceph_assert(rdma_delivery.size() == ops.size());
+    rdma_delivery.back() = ceph::rdma::delivery_t{std::string(token),
+						  base_offset, flags};
+    rdma_oob_result.back() = result;
+  }
+  bool has_rdma_delivery() const {
+    return std::any_of(rdma_delivery.begin(), rdma_delivery.end(),
+		       [](const auto& d) { return !d.empty(); });
   }
 
   void set_last_op_flags(int flags) {
@@ -177,6 +207,10 @@ struct ObjectOperation {
     ceph_assert(ops.size() == out_rval.size());
     out_ec.push_back(nullptr);
     ceph_assert(ops.size() == out_ec.size());
+    rdma_delivery.emplace_back();
+    ceph_assert(ops.size() == rdma_delivery.size());
+    rdma_oob_result.push_back(nullptr);
+    ceph_assert(ops.size() == rdma_oob_result.size());
     return ops.back();
   }
   void add_data(int op, uint64_t off, uint64_t len, ceph::buffer::list& bl) {
@@ -2059,6 +2093,19 @@ public:
 
     int *data_offset;
 
+    /// per-op advisory out-of-band delivery (aligned with ops; empty
+    /// token = inline); re-stamped onto every MOSDOp this Op sends
+    /// (resends included, where the OSD-side retry refusal keeps the
+    /// descriptors inert)
+    boost::container::small_vector<ceph::rdma::delivery_t, osdc_opvec_len>
+      rdma_delivery;
+    boost::container::small_vector<ceph::rdma::oob_result_t*, osdc_opvec_len>
+      rdma_oob_result;
+    bool has_rdma_delivery() const {
+      return std::any_of(rdma_delivery.begin(), rdma_delivery.end(),
+			 [](const auto& d) { return !d.empty(); });
+    }
+
     osd_reqid_t reqid; // explicitly setting reqid
     ZTracer::Trace trace;
     std::uint64_t subsystem = 0;
@@ -2103,7 +2150,10 @@ public:
       out_ec(ops.size(), nullptr),
       onfinish(std::move(fin)),
       objver(ov),
-      data_offset(offset), subsystem(subsystem) {
+      data_offset(offset),
+      rdma_delivery(ops.size()),
+      rdma_oob_result(ops.size(), nullptr),
+      subsystem(subsystem) {
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
       if (parent_trace && parent_trace->valid()) {
@@ -2125,6 +2175,8 @@ public:
       onfinish(fin),
       objver(ov),
       data_offset(offset),
+      rdma_delivery(ops.size()),
+      rdma_oob_result(ops.size(), nullptr),
       subsystem(subsystem),
       otel_trace(otel_trace) {
       if (target.base_oloc.key == o)
@@ -2153,6 +2205,8 @@ public:
       other.out_rval.resize(p + 1);
       other.out_ec.resize(p + 1);
       other.out_handler.resize(p + 1);
+      other.rdma_delivery.resize(p + 1);
+      other.rdma_oob_result.resize(p + 1);
 
       other.out_bl[p] = bl;
       other.out_rval[p] = rval;
@@ -3153,6 +3207,8 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
+    o->rdma_delivery.swap(op.rdma_delivery);
+    o->rdma_oob_result.swap(op.rdma_oob_result);
     op.clear();
     return o;
   }
@@ -3192,6 +3248,8 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
+    o->rdma_delivery.swap(op.rdma_delivery);
+    o->rdma_oob_result.swap(op.rdma_oob_result);
     if (features)
       o->features = features;
     op.clear();

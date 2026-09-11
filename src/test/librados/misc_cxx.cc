@@ -883,6 +883,78 @@ TEST_P(LibRadosMiscPP, CmpExtPP) {
   ASSERT_EQ(-MAX_ERRNO - 5, ioctx.cmpext("cmpextpp", 0, bad_cmp_bl));
 }
 
+TEST_P(LibRadosMiscPP, RdmaDeliveryInlineFallbackPP) {
+  // exercises the advisory rdma delivery descriptor against an OSD
+  // without RDMA support (not built with cuObject, osd_cuobj_enabled
+  // off, or an OSD that predates the MOSDOp field): the read must
+  // succeed with the data returned INLINE and zero bytes reported as
+  // delivered out of band - the transparent degradation the RGW
+  // passthrough fallback keys on
+  const std::string payload = "0123456789";
+  bufferlist write_bl;
+  write_bl.append(payload);
+  // NB: write_full claims the bufferlist, so write_bl is empty after
+  ASSERT_EQ(0, ioctx.write_full("rdma_delivery_obj", write_bl));
+
+  // well-formed descriptor token (addr:size:rkey:lid:qp:has_gid:gid)
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  // two reads in one compound op, each carrying its own descriptor
+  // (the delivery request is per op, like the reply's result): both
+  // must degrade independently
+  ObjectReadOperation::rdma_delivery_result res1, res2;
+  res1.bytes = res2.bytes = 42;
+  res1.flags = res2.flags = 7;
+  int rval1 = 0, rval2 = 0;
+  bufferlist read_bl1, read_bl2;
+  ObjectReadOperation op;
+  op.read(0, 4, &read_bl1, &rval1);
+  op.set_rdma_delivery(token, 0,
+                       ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64, &res1);
+  op.read(4, payload.size() - 4, &read_bl2, &rval2);
+  op.set_rdma_delivery(token, 4, 0, &res2);
+  int r = ioctx.operate("rdma_delivery_obj", &op, nullptr);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, rval1);
+  ASSERT_EQ(0, rval2);
+  ASSERT_EQ(0u, res1.bytes);  // nothing was delivered out of band
+  ASSERT_EQ(0u, res1.flags);  // and no crc came back
+  ASSERT_EQ(0u, res2.bytes);
+  ASSERT_EQ(0u, res2.flags);
+  bufferlist expected1, expected2;
+  expected1.append(payload.substr(0, 4));
+  expected2.append(payload.substr(4));
+  ASSERT_TRUE(read_bl1.contents_equal(expected1));  // data arrived inline
+  ASSERT_TRUE(read_bl2.contents_equal(expected2));
+}
+
+TEST_P(LibRadosMiscPP, RdmaDeliveryLeasePP) {
+  // the lease an OSD enforces on out-of-band delivery is a pool option
+  // the client reads from its OSDMap: the built-in default when unset,
+  // the pool's value once set, and the default again after clearing it
+  double lease = 0;
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(5.0, lease);
+  ASSERT_EQ(-EINVAL, ioctx.pool_rdma_delivery_lease(nullptr));
+
+  auto set_lease = [&](const std::string& val) {
+    bufferlist inbl, outbl;
+    std::string outs;
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+      "\", \"var\": \"rdma_delivery_lease\", \"val\": \"" + val +
+      "\"}", std::move(inbl), &outbl, &outs)) << outs;
+    ASSERT_EQ(0, cluster.wait_for_latest_osdmap());
+  };
+  set_lease("2.5");
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(2.5, lease);
+  set_lease("0");  // 0 clears the option, restoring the default
+  ASSERT_EQ(0, ioctx.pool_rdma_delivery_lease(&lease));
+  ASSERT_DOUBLE_EQ(5.0, lease);
+}
+
 TEST_P(LibRadosMiscPP, Applications) {
   // Applications are pool-level, not namespace-level, so they persist across
   // parameterized test runs. Skip this test for split_ops to avoid conflicts.

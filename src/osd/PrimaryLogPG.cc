@@ -63,6 +63,11 @@
 #include "OpRequest.h"
 #include "PG.h"
 #include "Session.h"
+#ifdef WITH_OSD_CUOBJ
+#include "osd_cuobj.h"
+#include "osd/oob_placement.h"
+#include "common/crc64nvme.h"
+#endif
 
 // required includes order:
 #include "json_spirit/json_spirit_value.h"
@@ -9362,6 +9367,164 @@ void PrimaryLogPG::apply_stats(
   m_scrubber->stats_of_handled_objects(delta_stats, soid);
 }
 
+#ifdef WITH_OSD_CUOBJ
+bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
+			       std::vector<ceph::rdma::oob_result_t>& oob)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  const auto& deliveries = m->get_rdma_deliveries();
+  ceph_assert(oob.size() == rops.size());
+  if (deliveries.size() != rops.size()) {
+    // the descriptor vector must mirror the ops; anything else is
+    // malformed and everything stays inline
+    dout(10) << __func__ << " " << deliveries.size()
+	     << " delivery descriptors for " << rops.size()
+	     << " ops, delivering inline" << dendl;
+    return false;
+  }
+  // a resent op could double-execute against client memory while the
+  // superseded attempt's write is still in flight on another OSD;
+  // deliver inline so at most one attempt ever writes the window
+  if (m->get_retry_attempt() > 0) {
+    return false;
+  }
+  // check_laggy ran at dispatch, but the push runs after the read
+  // completes; a read that stalled in between can find the PG's read
+  // lease has lapsed. Past readable_until another acting set may be
+  // serving this object (and the client re-driving the request into
+  // the same window), so a push now would be a stale write - deliver
+  // inline, the same way a laggy PG stops serving reads.
+  if (osd->get_mnow() > recovery_state.get_readable_until()) {
+    dout(10) << __func__ << " past readable_until "
+	     << recovery_state.get_readable_until()
+	     << ", delivering inline" << dendl;
+    return false;
+  }
+  // the pool's delivery lease bounds how long after receipt a push may
+  // still start; the client waits it out before reusing the window,
+  // so a late push must degrade to inline rather than race that reuse
+  const double lease = pool.info.get_rdma_delivery_lease();
+  const double age = ceph_clock_now() - m->get_recv_stamp();
+  if (age > lease) {
+    dout(10) << __func__ << " lease expired (" << age << "s > " << lease
+	     << "s), delivering inline" << dendl;
+    return false;
+  }
+  bool any = false;
+  for (size_t i = 0; i < rops.size(); i++) {
+    if (deliveries[i].empty()) {
+      continue;
+    }
+    if (deliver_op_oob(ctx, i, rops[i], deliveries[i], oob[i])) {
+      any = true;
+    }
+  }
+  return any;
+}
+
+bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
+				  const ceph::rdma::delivery_t& d,
+				  ceph::rdma::oob_result_t& res)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  if (d.flags & ~ceph::rdma::delivery_t::KNOWN_FLAGS) {
+    // flag bits we do not implement: deliver inline so future
+    // semantics degrade safely
+    return false;
+  }
+  // only data-bearing reads go out of band; a descriptor on anything
+  // else (guards, version reads, ...) is ignored and the op stays inline
+  switch (op.op.op) {
+  case CEPH_OSD_OP_READ:
+  case CEPH_OSD_OP_SYNC_READ:
+  case CEPH_OSD_OP_SPARSE_READ:
+    break;
+  default:
+    return false;
+  }
+  OSDOp* data_op = &op;
+  if (data_op->rval < 0 || !data_op->outdata.length()) {
+    return false;
+  }
+
+  const bool ec_direct = ctx->op->ec_direct_read();
+  ceph::osd::oob::placement_plan plan;
+  bufferlist payload;  // the bytes the plan indexes
+  bool linear = false; // payload is one contiguous logical extent
+  std::map<uint64_t, uint64_t> sparse_extents;
+  if (data_op->op.op == CEPH_OSD_OP_SPARSE_READ) {
+    if (ec_direct) {
+      // the fiemap extent map is in shard-offset space; interleaving
+      // sparse data is a follow-up - deliver inline
+      return false;
+    }
+    bufferlist databl;
+    try {
+      auto bp = data_op->outdata.cbegin();
+      decode(sparse_extents, bp);
+      decode(databl, bp);
+    } catch (const ceph::buffer::error&) {
+      return false;
+    }
+    plan = ceph::osd::oob::sparse_plan(d.base_offset,
+				       data_op->op.extent.offset,
+				       sparse_extents, databl.length());
+    payload = std::move(databl);
+  } else if (ec_direct) {
+    if (!pool.info.is_erasure() || !pool.info.allows_ecoptimizations()) {
+      return false;
+    }
+    const auto sinfo = pgbackend->ec_get_sinfo();
+    if (!sinfo.supports_direct_reads()) {
+      return false;
+    }
+    // the reply holds this shard's chunks in ascending stripe order;
+    // scatter them to their logical positions in the client window
+    plan = ceph::osd::oob::ec_direct_plan(
+      d.base_offset, data_op->op.extent.offset, data_op->op.extent.length,
+      sinfo.get_chunk_size(), sinfo.get_k(),
+      static_cast<uint32_t>(
+	static_cast<int>(sinfo.get_raw_shard(pg_whoami.shard))),
+      data_op->outdata.length());
+    payload = data_op->outdata;
+  } else {
+    plan = ceph::osd::oob::linear_plan(d.base_offset,
+				       data_op->outdata.length());
+    payload = data_op->outdata;
+    linear = true;
+  }
+  if (plan.empty()) {
+    return false;
+  }
+
+  ssize_t pushed = osd->cuobj->execute_plan(m->get_hobj().oid.name, d.token,
+					    payload, plan);
+  if (pushed < 0) {
+    dout(10) << __func__ << " op " << idx << " plan execution failed ("
+	     << pushed << "), delivering inline" << dendl;
+    return false;
+  }
+  // strip the delivered data from the reply; sparse reads keep their
+  // extent map inline with an empty data blob
+  data_op->outdata.clear();
+  if (data_op->op.op == CEPH_OSD_OP_SPARSE_READ) {
+    encode(sparse_extents, data_op->outdata);
+    encode(bufferlist(), data_op->outdata);
+  }
+  res.bytes = static_cast<uint64_t>(pushed);
+  if ((d.flags & ceph::rdma::delivery_t::FLAG_CRC64NVME) && linear) {
+    // checksum the exact bytes that went out of band, at the storage
+    // node, after they crossed the fabric - the client (RGW) combines
+    // per-stripe values in logical order for end-to-end verification.
+    // Non-linear placements (EC-direct interleave, sparse extents) do
+    // not concatenate-combine, so the crc is best-effort omitted.
+    res.crc64 = ceph::crc64nvme(payload);
+    res.flags |= ceph::rdma::oob_result_t::FLAG_CRC64NVME;
+  }
+  return true;
+}
+#endif // WITH_OSD_CUOBJ
+
 void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 {
   auto m = ctx->op->get_req<MOSDOp>();
@@ -9379,6 +9542,24 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 
   MOSDOpReply *reply = ctx->reply;
   ctx->reply = nullptr;
+
+#ifdef WITH_OSD_CUOBJ
+  if (result >= 0 && osd->cuobj && m->has_rdma_delivery()) {
+    // advisory out-of-band delivery: try to RDMA-write each
+    // descriptor-bearing op's read data straight into the client
+    // window; on any refusal or failure the reply simply keeps that
+    // op's data inline. The reply constructor
+    // already copied the ops (shallow bufferlists), so mutate the
+    // reply's own copy via the claim_ops swap.
+    std::vector<OSDOp> rops;
+    reply->claim_ops(rops);
+    std::vector<ceph::rdma::oob_result_t> oob(rops.size());
+    if (deliver_oob(ctx, rops, oob)) {
+      reply->set_oob_results(std::move(oob));
+    }
+    reply->claim_ops(rops);
+  }
+#endif
 
   if (result >= 0) {
     if (!ctx->ignore_log_op_stats) {

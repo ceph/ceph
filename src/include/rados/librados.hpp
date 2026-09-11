@@ -602,6 +602,36 @@ inline namespace v14_2_0 {
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+    /**
+     * Request out-of-band delivery of the most recently added read's
+     * data (call it right after read() or sparse_read(); each read in
+     * a compound operation may carry its own request and result): an
+     * OSD that can honor it RDMA-writes the data into the client
+     * memory window identified by the opaque RDMA descriptor token,
+     * at the token's base address plus base_offset, and reports only
+     * byte counts through *result. The request is advisory - an OSD
+     * that cannot or will not push (no RDMA support, expired lease,
+     * retransmitted op) returns the data inline as usual with
+     * result->bytes = 0, so degradation is always plain in-band data.
+     * An OSD will not start an RDMA write later than the pool's
+     * rdma_delivery_lease after receiving the op; a caller that
+     * reuses the window after abandoning a request must wait that
+     * long (see IoCtx::pool_rdma_delivery_lease()) plus its
+     * transport's drain bound before writing it again. Passing
+     * RDMA_DELIVERY_WANT_CRC64 in flags asks the OSD to also report
+     * the canonical CRC-64/NVME of the delivered bytes; it is valid
+     * only when result->flags has RDMA_DELIVERY_CRC64_VALID set (best
+     * effort - older OSDs and non-linear placements omit it).
+     */
+    struct rdma_delivery_result {
+      uint64_t bytes = 0;   ///< bytes delivered out of band
+      uint64_t crc64 = 0;   ///< canonical CRC-64/NVME of those bytes
+      uint32_t flags = 0;   ///< RDMA_DELIVERY_CRC64_VALID when crc64 is set
+    };
+    static constexpr uint32_t RDMA_DELIVERY_WANT_CRC64 = 1;  // request flag
+    static constexpr uint32_t RDMA_DELIVERY_CRC64_VALID = 1; // result flag
+    void set_rdma_delivery(const std::string& token, uint64_t base_offset,
+			   uint32_t flags, rdma_delivery_result *result);
     void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,
 		  uint64_t off, size_t len, size_t chunk_size, bufferlist *pbl,
 		  int *prval);
@@ -897,6 +927,14 @@ inline namespace v14_2_0 {
     int pool_requires_alignment2(bool * req);
     uint64_t pool_required_alignment();
     int pool_required_alignment2(uint64_t * alignment);
+    /**
+     * The pool's rdma_delivery_lease in seconds: how long after
+     * receiving a read with an out-of-band delivery request
+     * (ObjectReadOperation::set_rdma_delivery()) an OSD may still
+     * start the RDMA write. Reflects the pool option or its built-in
+     * default, from the OSDMap this client holds.
+     */
+    int pool_rdma_delivery_lease(double *seconds);
 
     // create an object
     int create(const std::string& oid, bool exclusive);

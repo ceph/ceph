@@ -59,10 +59,14 @@ set(osd_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}
   ${osdc_osd_srcs}
+  oob_placement.cc
   osd_tracer.cc)
 if(HAS_VTA)
   set_source_files_properties(osdcap.cc
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+endif()
+if(WITH_OSD_CUOBJ)
+  list(APPEND osd_srcs osd_cuobj.cc)
 endif()
 add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
@@ -70,6 +74,9 @@ target_link_libraries(osd
   PRIVATE
     legacy-option-headers
     os heap_profiler cpu_profiler ${FMT_LIB} ${CMAKE_DL_LIBS})
+if(WITH_OSD_CUOBJ)
+  target_link_libraries(osd PRIVATE ${CUOBJSERVER_LIBRARY} IBVerbs::verbs)
+endif()
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()

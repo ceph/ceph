@@ -276,6 +276,12 @@ class SplitOp {
     mini_flat_map<int, Details> details;
     int rc = -EIO;
     std::optional<InternalVersion> internal_version;
+    /// parent op index behind each op of rd, in rd op order (-1 for
+    /// ops the split adds itself, e.g. the internal version read)
+    std::vector<int> parent_ops;
+    /// per-op out-of-band delivery results for this sub-read's ops
+    /// (rdma delivery fan-out); stable addresses handed to the sub op
+    std::vector<ceph::rdma::oob_result_t> oob;
 
     SubRead(int count) : details(count) {}
   };
@@ -343,6 +349,11 @@ class SplitOp {
   int flags = 0;
   int reference_sub_read = -1;
   std::map<int, std::vector<int>> op_offset_map;
+  /// rdma delivery fan-out state: the parent op indexes whose
+  /// descriptor was fanned out to the sub-reads (plain READ ops
+  /// carrying a descriptor - the only shape with well-defined per-sub
+  /// placement)
+  std::vector<unsigned> oob_ops;
 
  public:
  /**

@@ -1147,6 +1147,19 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
+    /**
+     * RDMA_DELIVERY_LEASE
+     *
+     * Seconds after receiving a read that asks for out-of-band RDMA
+     * delivery during which an OSD may still start the RDMA write
+     * into the client's memory window; a push that would start later
+     * is delivered inline instead. A client that reuses a window
+     * waits this out (plus the transport drain bound) before writing
+     * it again, so the value the OSDs enforce must be the value the
+     * clients see - hence a pool option rather than a daemon option.
+     * Unset means pg_pool_t::DEFAULT_RDMA_DELIVERY_LEASE.
+     */
+    RDMA_DELIVERY_LEASE,
   };
 
   enum type_t {
@@ -1674,6 +1687,15 @@ public:
   bool fast_read = false;            ///< whether turn on fast read on the pool or not
   shard_id_set nonprimary_shards; ///< EC partial writes: shards that cannot become a primary
   pool_opts_t opts; ///< options
+
+  /// default for pool_opts_t::RDMA_DELIVERY_LEASE (seconds); a
+  /// constant rather than a daemon option so that OSDs, which enforce
+  /// it, and clients, which wait it out, cannot disagree
+  static constexpr double DEFAULT_RDMA_DELIVERY_LEASE = 5.0;
+  double get_rdma_delivery_lease() const {
+    return opts.value_or(pool_opts_t::RDMA_DELIVERY_LEASE,
+			 double{DEFAULT_RDMA_DELIVERY_LEASE});
+  }
 
   typedef enum {
     TYPE_FINGERPRINT_NONE = 0,

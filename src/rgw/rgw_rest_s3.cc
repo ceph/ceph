@@ -76,6 +76,9 @@
 #include "rgw_sts.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
+#ifdef WITH_RADOSGW_CUOBJ
+#include "rgw_cuobj.h"
+#endif
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -336,7 +339,27 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
     }
   }
 
+  if (auto rdma_hdr = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
+      rdma_hdr) {
+    // opaque cuObject descriptor; RGWGetObj::execute() decides between
+    // OSD passthrough, staged RDMA and plain-HTTP fallback
+    rdma_token = *rdma_hdr;
+  }
+
   return RGWGetObj_ObjStore::get_params(y);
+}
+
+RGWGetObj_ObjStore_S3::~RGWGetObj_ObjStore_S3()
+{
+#ifdef WITH_RADOSGW_CUOBJ
+  if (rdma_buf) {
+    auto* cuobj = RGWCuObjServer::get_instance();
+    if (cuobj) {
+      cuobj->release_buffer(static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf));
+    }
+    rdma_buf = nullptr;
+  }
+#endif
 }
 
 int RGWGetObj_ObjStore_S3::send_response_data_error(optional_yield y)
@@ -499,10 +522,21 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   for (auto &it : crypt_http_responses)
     dump_header(s, it.first, it.second);
 
-  dump_content_length(s, total_len);
+  if (rdma_mode != RdmaMode::NONE) {
+    dump_content_length(s, 0);
+    dump_header(s, "x-amz-rdma-reply", "200");
+    dump_header(s, "x-amz-rdma-bytes-transferred", total_len);
+  } else {
+    if (!rdma_token.empty()) {
+      // token sent but RDMA is unavailable: valid fallback per the
+      // cuObject protocol, the client reads the body instead
+      dump_header(s, "x-amz-rdma-reply", "501");
+    }
+    dump_content_length(s, total_len);
+  }
   dump_last_modified(s, lastmod);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
-  dump_header_if_nonempty(s, "x-amz-expiration", expires);  
+  dump_header_if_nonempty(s, "x-amz-expiration", expires);
   if (attrs.find(RGW_ATTR_APPEND_PART_NUM) != attrs.end()) {
     dump_header(s, "x-rgw-object-type", "Appendable");
     dump_header(s, "x-rgw-next-append-position", s->obj_size);
@@ -785,6 +819,45 @@ done:
 
 send_data:
   if (get_data && !op_ret) {
+    if (rdma_mode == RdmaMode::PASSTHROUGH) {
+      // the OSDs deliver all data; a store streaming bytes here would
+      // violate the passthrough contract
+      if (bl_len > 0) {
+        ldpp_dout(this, 0) << "ERROR: unexpected inline data in RDMA "
+                           << "passthrough GET" << dendl;
+        return -EIO;
+      }
+      return 0;
+    }
+#ifdef WITH_RADOSGW_CUOBJ
+    if (rdma_mode == RdmaMode::STAGED) {
+      // the staging buffer was reserved in select_rdma_mode(), before
+      // the response headers were committed
+      auto* entry = static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf);
+      if (bl_len > 0) {
+        if (!entry || rdma_buf_offset + bl_len > entry->size) {
+          ldpp_dout(this, 0) << "rgw_cuobj: ERROR: staging buffer overflow at "
+                             << rdma_buf_offset << "+" << bl_len << dendl;
+          return -EIO;
+        }
+        memcpy(static_cast<char*>(entry->ptr) + rdma_buf_offset, bl.c_str() + bl_ofs, bl_len);
+        rdma_buf_offset += bl_len;
+      } else if (entry && rdma_buf_offset > 0) {
+        auto* cuobj = RGWCuObjServer::get_instance();
+        ssize_t ret = cuobj->rdma_write_to_client(
+            s->object->get_name(), entry, 0,
+            rdma_buf_offset, rdma_token);
+        cuobj->release_buffer(entry);
+        rdma_buf = nullptr;
+        if (ret < 0) {
+          ldout(s->cct, 0) << "rgw_cuobj: ERROR: failed to write to client via RDMA: " << cpp_strerror(ret) << dendl;
+          return ret;
+        }
+        s->rdma_bytes_transferred = rdma_buf_offset;
+      }
+      return 0;
+    }
+#endif
     int r = dump_body(s, bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
@@ -2877,6 +2950,15 @@ static inline void map_qs_metadata(req_state* s, bool crypto_too)
 
 int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 {
+#ifdef WITH_RADOSGW_CUOBJ
+  if (auto* cuobj = RGWCuObjServer::get_instance();
+      cuobj && cuobj->is_available()) {
+    if (s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN")) {
+      rdma_active = true;
+    }
+  }
+#endif
+
   if (!s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!encoding || strcmp(encoding, "chunked") != 0) {
@@ -3033,6 +3115,12 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
+#ifdef WITH_RADOSGW_CUOBJ
+      if (rdma_active) {
+        dump_header(s, "x-amz-rdma-reply", "200");
+        dump_header(s, "x-amz-rdma-bytes-transferred", s->obj_size);
+      }
+#endif
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
       if (cksum && cksum->aws()) {

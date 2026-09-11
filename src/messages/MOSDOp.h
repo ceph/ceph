@@ -19,12 +19,14 @@
 
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
 #include "common/hobject.h"
+#include "common/rdma_token.h"
 
 /*
  * OSD op
@@ -40,7 +42,7 @@ namespace _mosdop {
 template<typename V>
 class MOSDOp final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 9;
+  static constexpr int HEAD_VERSION = 10;
   static constexpr int COMPAT_VERSION = 3;
 
 private:
@@ -69,7 +71,23 @@ private:
   bool bdata_encode;
   osd_reqid_t reqid; // reqid explicitly set by sender
 
+  /// per-op advisory out-of-band delivery descriptors (see
+  /// common/rdma_token.h): empty when no op requests delivery,
+  /// otherwise aligned with ops (mirroring the reply's oob_results);
+  /// decoded in the finish_decode() tail for header.version >= 10
+  std::vector<ceph::rdma::delivery_t> rdma_deliveries;
+
 public:
+  bool has_rdma_delivery() const {
+    return !rdma_deliveries.empty();
+  }
+  const std::vector<ceph::rdma::delivery_t>& get_rdma_deliveries() const {
+    return rdma_deliveries;
+  }
+  void set_rdma_deliveries(std::vector<ceph::rdma::delivery_t>&& v) {
+    rdma_deliveries = std::move(v);
+  }
+
   friend MOSDOpReply;
 
   ceph_tid_t get_client_tid() { return header.tid; }
@@ -398,9 +416,13 @@ struct ceph_osd_request_head {
 
       encode(retry_attempt, payload);
       encode(features, payload);
-    } else {
-      // latest v9 opentelemetry trace
-      header.version = HEAD_VERSION;
+    } else if (!HAVE_FEATURE(features, SERVER_UMBRELLA)) {
+      // v9 opentelemetry trace, no rdma delivery descriptors. Peers
+      // without SERVER_UMBRELLA silently lose the descriptors, which
+      // is safe because they are advisory (data comes back inline);
+      // the Objecter additionally refuses to attach them unless
+      // require_osd_release >= umbrella.
+      header.version = 9;
 
       encode(pgid, payload);
       encode(hobj.get_hash(), payload);
@@ -428,6 +450,39 @@ struct ceph_osd_request_head {
 
       encode(retry_attempt, payload);
       encode(features, payload);
+    } else {
+      // latest v10: v9 plus the trailing per-op rdma delivery
+      // descriptor vector
+      header.version = HEAD_VERSION;
+
+      encode(pgid, payload);
+      encode(hobj.get_hash(), payload);
+      encode(osdmap_epoch, payload);
+      encode(flags, payload);
+      encode(reqid, payload);
+      encode_trace(payload, features);
+      encode_otel_trace(payload, features);
+
+      // -- above decoded up front; below decoded post-dispatch thread --
+
+      encode(client_inc, payload);
+      encode(mtime, payload);
+      encode(get_object_locator(), payload);
+      encode(hobj.oid, payload);
+
+      __u16 num_ops = ops.size();
+      encode(num_ops, payload);
+      for (unsigned i = 0; i < ops.size(); i++)
+	encode(ops[i].op, payload);
+
+      encode(hobj.snap, payload);
+      encode(snap_seq, payload);
+      encode(snaps, payload);
+
+      encode(retry_attempt, payload);
+      encode(features, payload);  // NB: the connection-features parameter
+
+      encode(rdma_deliveries, payload);
     }
   }
 
@@ -437,7 +492,10 @@ struct ceph_osd_request_head {
     p = std::cbegin(payload);
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    if (header.version == HEAD_VERSION || header.version == 9) {
+      // v10 differs from v9 only in the finish_decode() tail (the
+      // trailing per-op rdma delivery descriptors); the up-front
+      // section is identical
       decode(pgid, p);
       uint32_t hash;
       decode(hash, p);
@@ -606,6 +664,10 @@ struct ceph_osd_request_head {
     decode(retry_attempt, p);
 
     decode(features, p);
+
+    if (header.version >= 10) {
+      decode(rdma_deliveries, p);
+    }
 
     hobj.pool = pgid.pgid.pool();
     hobj.set_key(oloc.key);

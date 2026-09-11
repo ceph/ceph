@@ -154,6 +154,12 @@
 /*define if D4N filter enabled */
 #cmakedefine WITH_RADOSGW_D4N 
 
+/* define if cuObject RDMA enabled */
+#cmakedefine WITH_RADOSGW_CUOBJ
+
+/* define if OSD cuObject RDMA (READ_RDMA pushdown) enabled */
+#cmakedefine WITH_OSD_CUOBJ
+
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
 

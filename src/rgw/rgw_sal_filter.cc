@@ -1268,6 +1268,11 @@ int FilterObject::FilterReadOp::get_attr(const DoutPrefixProvider* dpp, const ch
 int FilterObject::FilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
+  /* the rdma passthrough params are set after prepare(), so forward
+   * them here rather than relying on prepare()'s params copy */
+  next->params.rdma_token = params.rdma_token;
+  next->params.rdma_bytes = params.rdma_bytes;
+
   int ret = next->iterate(dpp, ofs, end, cb, y);
   if (ret < 0)
     return ret;

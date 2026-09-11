@@ -592,6 +592,15 @@ You may set values for the following keys:
    :Type: Double
    :Default: ``0``
 
+.. _rdma_delivery_lease:
+
+.. describe:: rdma_delivery_lease
+   
+   :Description: Sets how long (in seconds) after receiving a read that requests out-of-band RDMA delivery an OSD may still start the RDMA write into the client's memory window; a write that would start later is delivered inline instead. A client that reuses a memory window waits this long (plus its transport drain bound) after giving up on a request before writing the window again, so this value must be visible to both sides, which is why it is a pool option rather than a daemon option. Setting ``0`` restores the built-in default.
+
+   :Type: Double
+   :Default: ``5``
+
 .. _recovery_priority:
 
 .. describe:: recovery_priority
