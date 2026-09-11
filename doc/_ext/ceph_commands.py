@@ -200,9 +200,8 @@ TEMPLATE = '''
 
        {{ command.mk_bash_example() | wordwrap(70) | indent(9) }}
 
-{% if command.params %}
-:Parameters:
-{% for param in command.params -%}
+{%- if command.params %}
+:Parameters:{% for param in command.params -%}
 {{" -" | indent(12, not loop.first) }} **{% if param.positional %}{{param.name}}{% else %}--{{param.name}}{% endif %}**: {{ param.help() }}
 {% endfor %}
 {% endif %}
