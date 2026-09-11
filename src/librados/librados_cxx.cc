@@ -244,6 +244,8 @@ void librados::ObjectReadOperation::set_rdma_delivery(
 		ceph::rdma::delivery_t::FLAG_CRC64NVME);
   static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_VALID ==
 		ceph::rdma::oob_result_t::FLAG_CRC64NVME);
+  static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_COMBINABLE ==
+		ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE);
   o->set_rdma_delivery(token, base_offset, flags,
 		       reinterpret_cast<ceph::rdma::oob_result_t*>(result));
 }

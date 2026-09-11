@@ -8869,10 +8869,13 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
     // slots were pushed in logical stripe order, so folding them with
     // the concatenation combine yields the checksum of the whole
     // delivered range; usable only when every stripe reported one
+    // that is combinable - a stripe whose bytes are not a contiguous
+    // logical extent still reports a valid crc, but folding it would
+    // be wrong
     std::optional<uint64_t> combined;
     for (const auto& r : data.rdma_slots) {
       if (!(r.flags &
-            librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_VALID)) {
+            librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_COMBINABLE)) {
         combined.reset();
         break;
       }
