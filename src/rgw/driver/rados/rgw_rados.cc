@@ -31,6 +31,7 @@
 #include "rgw_cache.h"
 #include "rgw_acl.h"
 #include "common/crc64nvme.h"
+#include "common/rdma_token.h"
 #include "rgw_acl_s3.h" /* for dumping s3policy in debug log */
 #include "rgw_aio_throttle.h"
 #include "driver/rados/rgw_bucket.h"
@@ -8868,21 +8869,39 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
   if (data.rdma && params.rdma_crc64) {
     // slots were pushed in logical stripe order, so folding them with
     // the concatenation combine yields the checksum of the whole
-    // delivered range; usable only when every stripe reported one
-    // that is combinable - a stripe whose bytes are not a contiguous
-    // logical extent still reports a valid crc, but folding it would
-    // be wrong
+    // delivered range. A slot contributes its crc64 directly when the
+    // OSD marked it combinable (one contiguous extent), or the fold
+    // of its ranges when it was placed as several - a stripe served
+    // by interleaved EC shards arrives that way. A slot offering
+    // neither ends verification: folding a non-contiguous crc would
+    // be wrong, and skipping a slot would verify the wrong bytes.
     std::optional<uint64_t> combined;
     for (const auto& r : data.rdma_slots) {
-      if (!(r.flags &
-            librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_COMBINABLE)) {
+      std::optional<uint64_t> slot_crc;
+      if (r.flags &
+          librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_COMBINABLE) {
+        slot_crc = r.crc64;
+      } else if (r.flags &
+                 librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_RANGES) {
+        std::vector<ceph::rdma::crc_range_t> ranges;
+        ranges.reserve(r.ranges.size());
+        uint64_t ranged = 0;
+        for (const auto& x : r.ranges) {
+          ranges.push_back({x.ofs, x.len, x.crc64});
+          ranged += x.len;
+        }
+        if (ranged == r.bytes) {
+          slot_crc = ceph::rdma::fold_crc64_ranges(std::move(ranges));
+        }
+      }
+      if (!slot_crc) {
         combined.reset();
         break;
       }
       if (!combined) {
-        combined = r.crc64;
+        combined = *slot_crc;
       } else {
-        combined = ceph::crc64nvme_combine(*combined, r.crc64, r.bytes);
+        combined = ceph::crc64nvme_combine(*combined, *slot_crc, r.bytes);
       }
     }
     *params.rdma_crc64 = combined;

@@ -230,24 +230,27 @@ void librados::ObjectReadOperation::set_rdma_delivery(
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
-  // the public POD mirrors ceph::rdma::oob_result_t so the Objecter
-  // can fill it directly
-  static_assert(sizeof(rdma_delivery_result) ==
-		sizeof(ceph::rdma::oob_result_t));
-  static_assert(offsetof(rdma_delivery_result, bytes) ==
-		offsetof(ceph::rdma::oob_result_t, bytes));
-  static_assert(offsetof(rdma_delivery_result, crc64) ==
-		offsetof(ceph::rdma::oob_result_t, crc64));
-  static_assert(offsetof(rdma_delivery_result, flags) ==
-		offsetof(ceph::rdma::oob_result_t, flags));
+  // the public flag values are the wire ones; the result itself is
+  // copied field by field when the reply is processed
   static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64 ==
 		ceph::rdma::delivery_t::FLAG_CRC64NVME);
   static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_VALID ==
 		ceph::rdma::oob_result_t::FLAG_CRC64NVME);
   static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_COMBINABLE ==
 		ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE);
+  static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_RANGES ==
+		ceph::rdma::oob_result_t::FLAG_CRC64_RANGES);
   o->set_rdma_delivery(token, base_offset, flags,
-		       reinterpret_cast<ceph::rdma::oob_result_t*>(result));
+		       [result](const ceph::rdma::oob_result_t& r) {
+			 result->bytes = r.bytes;
+			 result->crc64 = r.crc64;
+			 result->flags = r.flags;
+			 result->ranges.clear();
+			 result->ranges.reserve(r.ranges.size());
+			 for (const auto& x : r.ranges) {
+			   result->ranges.push_back({x.ofs, x.len, x.crc64});
+			 }
+		       });
 }
 
 void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,

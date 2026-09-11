@@ -172,7 +172,10 @@ Gateway (staged mode and protocol handling):
   memory, the fabric and the storage node — corruption anywhere on
   that path fails the GET instead of reaching the application. On by
   default; per-stripe checksums are computed with carry-less-multiply
-  accelerated tables.
+  accelerated tables. A stripe served by shard-direct EC reads is
+  checksummed one chunk at a time by each shard OSD and folded in
+  logical order on the client, so interleaved placements verify the
+  same way contiguous ones do.
 * ``rgw_cuobj_fence_drain_ms`` — transport drain bound added to the
   pool's ``rdma_delivery_lease`` when a passthrough attempt that
   already reached the OSDs restarts in a fallback mode; size it to
