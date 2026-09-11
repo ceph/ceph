@@ -551,3 +551,20 @@ if(WITH_RADOSGW_FDB)
  add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_content)
 endif()
+
+# unittest_rgw_inventory_parquet
+if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  add_executable(unittest_rgw_inventory_parquet
+    test_rgw_inventory_parquet.cc)
+  target_include_directories(unittest_rgw_inventory_parquet
+    SYSTEM PRIVATE
+      "${CMAKE_SOURCE_DIR}/src/rgw"
+      "${CMAKE_BINARY_DIR}/src/arrow/include")
+  target_link_libraries(unittest_rgw_inventory_parquet
+    rgw_common
+    ${rgw_libs}
+    Catch2::Catch2WithMain)
+  add_test(NAME unittest_rgw_inventory_parquet
+           COMMAND unittest_rgw_inventory_parquet
+           WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+endif()

@@ -92,6 +92,10 @@ enum action_t {
   s3DeleteBucketWebsite,
   s3GetLifecycleConfiguration,
   s3PutLifecycleConfiguration,
+  s3GetBucketInventoryConfiguration,
+  s3PutBucketInventoryConfiguration,
+  s3DeleteBucketInventoryConfiguration,
+  s3ListBucketInventoryConfigurations,
   s3PutReplicationConfiguration,
   s3GetReplicationConfiguration,
   s3DeleteReplicationConfiguration,
@@ -306,6 +310,8 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetBucketVersioning:
   case s3GetBucketWebsite:
   case s3GetLifecycleConfiguration:
+  case s3GetBucketInventoryConfiguration:
+  case s3ListBucketInventoryConfigurations:
   case s3GetObjectAcl:
   case s3GetObjectVersionAcl:
   case s3GetReplicationConfiguration:
@@ -330,6 +336,8 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutBucketVersioning:
   case s3PutBucketWebsite:
   case s3PutLifecycleConfiguration:
+  case s3PutBucketInventoryConfiguration:
+  case s3DeleteBucketInventoryConfiguration:
   case s3PutObjectAcl:
   case s3PutObjectVersionAcl:
   case s3PutReplicationConfiguration:

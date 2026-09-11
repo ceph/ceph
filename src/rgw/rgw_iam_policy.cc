@@ -100,6 +100,10 @@ static const actpair actpairs[] =
  { "s3:GetBucketVersioning", s3GetBucketVersioning },
  { "s3:GetBucketWebsite", s3GetBucketWebsite },
  { "s3:GetLifecycleConfiguration", s3GetLifecycleConfiguration },
+ { "s3:PutBucketInventoryConfiguration", s3PutBucketInventoryConfiguration },
+ { "s3:GetBucketInventoryConfiguration", s3GetBucketInventoryConfiguration },
+ { "s3:DeleteBucketInventoryConfiguration", s3DeleteBucketInventoryConfiguration },
+ { "s3:ListBucketInventoryConfigurations", s3ListBucketInventoryConfigurations },
  { "s3:GetBucketObjectLockConfiguration", s3GetBucketObjectLockConfiguration },
  { "s3:GetPublicAccessBlock", s3GetPublicAccessBlock },
  { "s3:GetObjectAcl", s3GetObjectAcl },
@@ -1562,6 +1566,14 @@ std::string_view action_bit_string(action_t action) {
 
   case s3GetLifecycleConfiguration:
     return "s3:GetLifecycleConfiguration";
+  case s3GetBucketInventoryConfiguration:
+    return "s3:GetBucketInventoryConfiguration";
+  case s3PutBucketInventoryConfiguration:
+    return "s3:PutBucketInventoryConfiguration";
+  case s3DeleteBucketInventoryConfiguration:
+    return "s3:DeleteBucketInventoryConfiguration";
+  case s3ListBucketInventoryConfigurations:
+    return "s3:ListBucketInventoryConfigurations";
 
   case s3PutLifecycleConfiguration:
     return "s3:PutLifecycleConfiguration";

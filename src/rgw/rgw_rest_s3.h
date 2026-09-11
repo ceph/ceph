@@ -734,6 +734,9 @@ protected:
   bool is_lc_op() const {
       return s->info.args.exists("lifecycle");
   }
+  bool is_inventory_op() const {
+    return s->info.args.exists("inventory");
+  }
   bool is_obj_update_op() const override {
     return is_acl_op() || is_cors_op();
   }
