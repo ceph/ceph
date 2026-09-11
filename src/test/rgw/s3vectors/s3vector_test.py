@@ -15,6 +15,7 @@ from . import(
     get_config_host,
     get_config_port,
     get_config_zonegroup,
+    get_user_id,
     get_access_key,
     get_secret_key,
     get_config_host2,
@@ -46,7 +47,7 @@ def bash(cmd, **kwargs):
     # errors are part of the output, so that they are reported when a command fails
     kwargs.setdefault('stderr', subprocess.STDOUT)
     process = subprocess.Popen(cmd, **kwargs)
-    s = process.communicate()[0].decode('utf-8')
+    s = process.communicate()[0].decode('utf-8', errors='replace')
     return (s, process.returncode)
 
 
@@ -161,7 +162,8 @@ def configure_backend(configfile):
         _configure_backend(get_config_host2(), get_config_port2(), get_config_cluster2())
 
 
-# the group is created on the zonegroup, and applies to all of its buckets
+# the group is created on the zonegroup, and applies to all of its buckets. the
+# teuthology task creates it before the run, with the same id
 data_sync_group_id = 's3vector-tests-no-data-sync'
 
 
@@ -182,6 +184,15 @@ def forbid_data_sync(configfile):
     # the sync policy may be changed only on the master zone, and a change of the
     # zonegroup policy requires a period update
     cluster = get_config_master_cluster()
+    _, ret = admin(['sync', 'group', 'get', '--group-id', data_sync_group_id],
+                   cluster=cluster)
+    if ret == 0:
+        # already forbidden, e.g. by the teuthology task before the run started.
+        # nothing is changed, so nothing is restored at the end either
+        log.info("data sync is already forbidden on the zonegroup")
+        yield
+        return
+
     out, ret = admin(['sync', 'group', 'create',
                       '--group-id', data_sync_group_id,
                       '--status', 'forbidden'], cluster=cluster)
@@ -195,6 +206,12 @@ def forbid_data_sync(configfile):
            '--dest-zones', '*', '--dest-bucket', '*'], cluster=cluster)
     admin(['period', 'update', '--commit'], cluster=cluster)
     log.info("data sync is forbidden on the zonegroup")
+
+    # the period change makes the other zone reload its realm, which aborts
+    # the metadata sync in progress and restarts it from scratch. until it
+    # catches up again, the user of the tests is unknown there and all of its
+    # requests are denied, so wait for it before the tests start
+    _wait_for_user(get_user_id(), cluster=get_config_cluster2(), retries=60)
 
     yield
 
@@ -245,20 +262,22 @@ def connection2(service_name='s3vectors'):
     return service_connection(service_name, get_access_key(), get_secret_key(), hostname, port_no)
 
 
-def _wait_for_user(uid, tenant=None, retries=12, delay=5):
-    """ wait for a user of the master zone to be synced to the tested zone """
-    if get_config_cluster() == (get_config_master_cluster() or get_config_cluster()):
-        # the user was created on the tested zone
+def _wait_for_user(uid, tenant=None, cluster=None, retries=12, delay=5):
+    """ wait for a user of the master zone to be synced to a zone: the tested
+    one, unless another cluster is given """
+    cluster = cluster or get_config_cluster()
+    if cluster == (get_config_master_cluster() or get_config_cluster()):
+        # the user was created on that zone
         return
     args = ['user', 'info', '--uid', uid]
     if tenant:
         args += ['--tenant', tenant]
     for _ in range(retries):
-        _, result = admin(args)
+        _, result = admin(args, cluster=cluster)
         if result == 0:
             return
         time.sleep(delay)
-    log.warning("user '%s' was not synced to cluster '%s'", uid, get_config_cluster())
+    log.warning("user '%s' was not synced to cluster '%s'", uid, cluster)
 
 
 def another_user(tenant=None):

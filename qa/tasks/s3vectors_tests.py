@@ -9,6 +9,7 @@ import logging
 import os
 import random
 import string
+import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -70,6 +71,55 @@ def _config_user(s3vtests_conf, section, user):
         base64.b64encode(os.urandom(40)).decode())
 
 
+# the group is created on the zonegroup, and applies to all of its buckets.
+# the tests check for it, and create it themselves when it is missing
+data_sync_group_id = 's3vector-tests-no-data-sync'
+
+
+@contextlib.contextmanager
+def forbid_data_sync(ctx, config):
+    """
+    Forbid data sync between the zones of the zonegroup. The buckets backing
+    the vector buckets hold LanceDB files, and each zone must have its own
+    copy of them. This is done before the user of the tests is created, so
+    that the period change it requires is handled by the zones before there
+    is anything to sync, and not while the tests are running.
+    The policy is not removed at the end of the run: the clusters are torn
+    down right after, and a period change then races their shutdown.
+    """
+    master_client = config.get('master_client')
+    if not master_client:
+        # not a multisite configuration, so there is nothing that may be synced
+        yield
+        return
+
+    log.info('forbidding data sync on the zonegroup of %s', master_client)
+    testdir = teuthology.get_testdir(ctx)
+    cluster_name, daemon_type, client_id = teuthology.split_role(master_client)
+    rgw_admin = [
+        'adjust-ulimits',
+        'ceph-coverage',
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        'radosgw-admin',
+        '-n', daemon_type + '.' + client_id,
+        '--cluster', cluster_name,
+        ]
+    master = ctx.cluster.only(master_client)
+    master.run(args=rgw_admin + [
+        'sync', 'group', 'create',
+        '--group-id', data_sync_group_id,
+        '--status', 'forbidden',
+        ])
+    master.run(args=rgw_admin + [
+        'sync', 'group', 'pipe', 'create',
+        '--group-id', data_sync_group_id, '--pipe-id', 'all',
+        '--source-zones', '*', '--source-bucket', '*',
+        '--dest-zones', '*', '--dest-bucket', '*',
+        ])
+    master.run(args=rgw_admin + ['period', 'update', '--commit'])
+    yield
+
+
 @contextlib.contextmanager
 def create_users(ctx, config):
     """
@@ -117,6 +167,37 @@ def create_users(ctx, config):
                     '--cluster', cluster_name,
                     ],
                 )
+
+    # the user is synced from the master zone to the other zones, and the tests
+    # use it on all of them, so wait until it exists everywhere. the sync may
+    # take a while, since the zones have just reloaded their realm, which
+    # restarts the metadata sync from scratch
+    for client in clients:
+        if not master_client or client == master_client:
+            continue
+        uid = config['s3vtests_conf'][client]['s3 main']['user_id']
+        cluster_name, daemon_type, client_id = teuthology.split_role(client)
+        args = [
+            'adjust-ulimits',
+            'ceph-coverage',
+            '{tdir}/archive/coverage'.format(tdir=testdir),
+            'radosgw-admin',
+            '-n', daemon_type + '.' + client_id,
+            'user', 'info',
+            '--uid', uid,
+            '--cluster', cluster_name,
+            ]
+        for attempt in range(60):
+            proc, = ctx.cluster.only(client).run(args=args, check_status=False,
+                                                 stdout=BytesIO(), stderr=BytesIO())
+            if proc.exitstatus == 0:
+                log.info('user %s was synced to %s', uid, client)
+                break
+            log.debug('user %s is not synced to %s yet, attempt %d/60', uid, client, attempt + 1)
+            time.sleep(5)
+        else:
+            raise RuntimeError('user {uid} was not synced to {client} within 300 seconds'.format(
+                uid=uid, client=client))
 
     try:
         yield
@@ -351,6 +432,9 @@ def task(ctx,config):
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
+        lambda: forbid_data_sync(ctx=ctx, config=dict(
+                master_client=master_client,
+                )),
         lambda: create_users(ctx=ctx, config=dict(
                 clients=clients,
                 s3vtests_conf=s3vtests_conf,
