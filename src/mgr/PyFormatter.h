@@ -125,11 +125,12 @@ public:
 
   void finish_pending_streams();
 
+  void dump_pyobject(std::string_view name, PyObject *p);
+
 protected:
   PyObject *root;
   PyObject *cursor;
   std::stack<PyObject *> stack;
-  void dump_pyobject(std::string_view name, PyObject *p);
 private:
   class PendingStream {
     public:
