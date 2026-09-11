@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/rdma_token.h"
+#include "common/crc64nvme.h"
 
 #include "gtest/gtest.h"
 
@@ -54,12 +55,14 @@ TEST(RdmaDelivery, OobResultWireFormat)
 
   bufferlist bl;
   encode(r, bl);
-  // ENCODE_START(1,1) header, le64 bytes, le64 crc64, le32 flags
+  // ENCODE_START(1,1) header, le64 bytes, le64 crc64, le32 flags,
+  // then the ranges vector (le32 count, empty here)
   static const unsigned char expected_bytes[] = {
-    0x01, 0x01, 0x14, 0x00, 0x00, 0x00,              // v1, compat 1, len 20
+    0x01, 0x01, 0x18, 0x00, 0x00, 0x00,              // v1, compat 1, len 24
     0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,  // bytes (le64)
     0x88, 0x98, 0x79, 0x0a, 0x86, 0x14, 0x8b, 0xae,  // crc64 (le64)
     0x01, 0x00, 0x00, 0x00,                          // flags (le32)
+    0x00, 0x00, 0x00, 0x00,                          // ranges: 0 entries
   };
   bufferlist expected;
   expected.append(reinterpret_cast<const char*>(expected_bytes),
@@ -142,4 +145,72 @@ TEST(RdmaDelivery, Crc64ValidityIsSeparateFromCombinability)
   EXPECT_TRUE(out.flags & ceph::rdma::oob_result_t::FLAG_CRC64NVME);
   EXPECT_TRUE(out.flags & ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE);
   EXPECT_TRUE(p.end());
+}
+
+TEST(RdmaDelivery, OobResultRangesRoundTrip)
+{
+  ceph::rdma::oob_result_t r;
+  r.bytes = 3 * 65536;
+  r.flags = ceph::rdma::oob_result_t::FLAG_CRC64NVME |
+	    ceph::rdma::oob_result_t::FLAG_CRC64_RANGES;
+  r.ranges = {{0, 65536, 1}, {131072, 65536, 2}, {262144, 65536, 3}};
+  r.crc64 = 42;
+
+  bufferlist bl;
+  encode(r, bl);
+  ceph::rdma::oob_result_t out;
+  auto p = bl.cbegin();
+  decode(out, p);
+  EXPECT_TRUE(p.end());
+  EXPECT_EQ(r.bytes, out.bytes);
+  EXPECT_EQ(r.flags, out.flags);
+  ASSERT_EQ(3u, out.ranges.size());
+  EXPECT_EQ(r.ranges, out.ranges);
+
+  // an empty result round-trips with no ranges
+  ceph::rdma::oob_result_t empty, eout;
+  bufferlist ebl;
+  encode(empty, ebl);
+  auto q = ebl.cbegin();
+  decode(eout, q);
+  EXPECT_TRUE(q.end());
+  EXPECT_EQ(0u, eout.bytes);
+  EXPECT_TRUE(eout.ranges.empty());
+}
+
+TEST(RdmaDelivery, FoldCrc64Ranges)
+{
+  // three chunks of a 6-chunk logical range, as two EC shards would
+  // place them: shard 0 holds chunks 0,2,4 and shard 1 holds 1,3,5
+  std::string data;
+  for (int c = 0; c < 6; ++c) {
+    data += std::string(1000, static_cast<char>('a' + c));
+  }
+  bufferlist whole;
+  whole.append(data);
+  const uint64_t expect = ceph::crc64nvme(whole);
+
+  std::vector<ceph::rdma::crc_range_t> ranges;
+  for (int c : {4, 0, 2, 5, 1, 3}) {  // deliberately out of order
+    bufferlist part;
+    part.append(data.data() + c * 1000, 1000);
+    ranges.push_back({uint64_t(c) * 1000, 1000, ceph::crc64nvme(part)});
+  }
+  auto folded = ceph::rdma::fold_crc64_ranges(ranges);
+  ASSERT_TRUE(folded.has_value());
+  EXPECT_EQ(expect, *folded);
+
+  // a single range folds to itself
+  auto one = ceph::rdma::fold_crc64_ranges({ranges[1]});
+  ASSERT_TRUE(one.has_value());
+  EXPECT_EQ(ranges[1].crc64, *one);
+
+  // a gap or an overlap is not a contiguous extent
+  auto gapped = ranges;
+  gapped.erase(gapped.begin() + 2);
+  EXPECT_FALSE(ceph::rdma::fold_crc64_ranges(gapped).has_value());
+  auto overlapped = ranges;
+  overlapped[0].ofs -= 1;
+  EXPECT_FALSE(ceph::rdma::fold_crc64_ranges(overlapped).has_value());
+  EXPECT_FALSE(ceph::rdma::fold_crc64_ranges({}).has_value());
 }

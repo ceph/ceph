@@ -566,14 +566,51 @@ void SplitOp::complete() {
 
   if (rc >= 0) {
 
-    // sub-read CRCs are not requested (interleaved shard data does
-    // not concatenate-combine), so each op's aggregate carries bytes only
+    // Each op's aggregate: bytes summed over its sub-reads, and every
+    // sub-read's crc ranges gathered. The sub-reads tile the op's
+    // logical range between them - replica sub-reads by disjoint
+    // extents, EC-direct ones by interleaved chunks - so when every
+    // pushing sub-read reported ranges, they fold into the crc64 of
+    // the op as one contiguous extent.
     for (unsigned i = 0; i < orig_op->rdma_oob_result.size(); ++i) {
-      if (orig_op->rdma_oob_result[i]) {
-        *orig_op->rdma_oob_result[i] =
-          ceph::rdma::oob_result_t{i < oob_total.size() ? oob_total[i] : 0,
-                                   0, 0};
+      if (!orig_op->rdma_oob_result[i]) {
+        continue;
       }
+      ceph::rdma::oob_result_t agg;
+      agg.bytes = i < oob_total.size() ? oob_total[i] : 0;
+      bool all_ranged = agg.bytes > 0;
+      uint64_t ranged_bytes = 0;
+      for (auto& [index, sub_read] : sub_reads) {
+        for (unsigned j = 0; j < sub_read.parent_ops.size(); ++j) {
+          if (sub_read.parent_ops[j] != (int)i || j >= sub_read.oob.size()) {
+            continue;
+          }
+          const auto& r = sub_read.oob[j];
+          if (r.bytes == 0) {
+            continue;
+          }
+          if (!(r.flags & ceph::rdma::oob_result_t::FLAG_CRC64_RANGES)) {
+            all_ranged = false;
+            continue;
+          }
+          for (const auto& range : r.ranges) {
+            ranged_bytes += range.len;
+          }
+          agg.ranges.insert(agg.ranges.end(), r.ranges.begin(),
+                            r.ranges.end());
+        }
+      }
+      if (all_ranged && ranged_bytes == agg.bytes) {
+        agg.flags |= ceph::rdma::oob_result_t::FLAG_CRC64_RANGES;
+        if (auto crc = ceph::rdma::fold_crc64_ranges(agg.ranges)) {
+          agg.crc64 = *crc;
+          agg.flags |= ceph::rdma::oob_result_t::FLAG_CRC64NVME |
+                       ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE;
+        }
+      } else {
+        agg.ranges.clear();
+      }
+      *orig_op->rdma_oob_result[i] = std::move(agg);
     }
 
     // In a "normal" completion, out_ops is generated in the MOSDOpReply reply
@@ -1150,13 +1187,10 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
         // zero shift for EC-direct subs (they carry the parent extent)
         d.base_offset += sub_op->ops[j].op.extent.offset -
                          op->ops[parent].op.extent.offset;
-        // an EC-direct sub-read's chunks are not one contiguous
-        // logical extent, so its CRC would come back valid but not
-        // combinable and the parent could not fold it. Replicated
-        // sub-reads are contiguous and could report a combinable one,
-        // but nothing consumes a per-sub value yet; don't pay for
-        // either.
-        d.flags &= ~ceph::rdma::delivery_t::FLAG_CRC64NVME;
+        // the crc request rides along unchanged: a shard OSD reports
+        // one range per chunk it placed, and the aggregate on
+        // completion folds every sub-read's ranges in window order,
+        // so interleaving across shards costs the caller nothing
         sub_op->rdma_delivery[j] = std::move(d);
         sub_op->rdma_oob_result[j] = &sub_read.oob[j];
       }

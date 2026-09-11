@@ -628,18 +628,31 @@ inline namespace v14_2_0 {
      * RDMA_DELIVERY_CRC64_COMBINABLE on each: a result whose bytes
      * are not one contiguous logical extent carries a valid checksum
      * of what that OSD moved, but one that cannot be concatenated
-     * with its neighbours.
+     * with its neighbours. Such a result instead carries one entry
+     * per contiguous range it placed when RDMA_DELIVERY_CRC64_RANGES
+     * is set; a caller holding every range of a window can fold them
+     * in offset order regardless of how the OSDs interleaved them.
      */
+    struct rdma_delivery_range {
+      uint64_t ofs = 0;     ///< client-window offset (token base relative)
+      uint64_t len = 0;
+      uint64_t crc64 = 0;   ///< canonical CRC-64/NVME of that range
+    };
     struct rdma_delivery_result {
       uint64_t bytes = 0;   ///< bytes delivered out of band
       uint64_t crc64 = 0;   ///< canonical CRC-64/NVME of those bytes
       uint32_t flags = 0;   ///< RDMA_DELIVERY_CRC64_* below
+      /// one entry per contiguous placed range, with
+      /// RDMA_DELIVERY_CRC64_RANGES
+      std::vector<rdma_delivery_range> ranges;
     };
     static constexpr uint32_t RDMA_DELIVERY_WANT_CRC64 = 1;  // request flag
     static constexpr uint32_t RDMA_DELIVERY_CRC64_VALID = 1; // result flag
     /// result flag: crc64 covers one contiguous logical extent and so
     /// may be concatenate-combined with adjacent results
     static constexpr uint32_t RDMA_DELIVERY_CRC64_COMBINABLE = 2;
+    /// result flag: ranges is populated
+    static constexpr uint32_t RDMA_DELIVERY_CRC64_RANGES = 4;
     void set_rdma_delivery(const std::string& token, uint64_t base_offset,
 			   uint32_t flags, rdma_delivery_result *result);
     void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,

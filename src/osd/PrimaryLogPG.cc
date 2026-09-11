@@ -9434,7 +9434,6 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
   const bool ec_direct = ctx->op->ec_direct_read();
   ceph::osd::oob::placement_plan plan;
   bufferlist payload;  // the bytes the plan indexes
-  bool linear = false; // payload is one contiguous logical extent
   std::map<uint64_t, uint64_t> sparse_extents;
   if (data_op->op.op == CEPH_OSD_OP_SPARSE_READ) {
     if (ec_direct) {
@@ -9475,7 +9474,6 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
     plan = ceph::osd::oob::linear_plan(d.base_offset,
 				       data_op->outdata.length());
     payload = data_op->outdata;
-    linear = true;
   }
   if (plan.empty()) {
     return false;
@@ -9497,18 +9495,31 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
   }
   res.bytes = static_cast<uint64_t>(pushed);
   if (d.flags & ceph::rdma::delivery_t::FLAG_CRC64NVME) {
-    // checksum the exact bytes that went out of band, at the storage
-    // node, after they crossed the fabric
-    res.crc64 = ceph::crc64nvme(payload);
-    res.flags |= ceph::rdma::oob_result_t::FLAG_CRC64NVME;
-    if (linear) {
-      // one contiguous logical extent, so a caller folding this with
-      // adjacent stripes in logical order gets the checksum of the
-      // whole range - RGW does that for end-to-end verification.
-      // Interleaved EC-direct chunks and sparse extents do not
-      // concatenate-combine; their crc still covers what this OSD
-      // pushed, so report it without the combinable bit rather than
-      // reporting nothing.
+    // checksum each placed range at the storage node, after it
+    // crossed the fabric. Every triple is one contiguous logical
+    // extent, so a caller holding all of a window's ranges can fold
+    // them in offset order however they were interleaved across
+    // shards; the whole-payload value comes from the same pass, since
+    // the builders emit triples contiguous and ascending in payload
+    // order.
+    res.ranges.reserve(plan.size());
+    uint64_t whole = 0;
+    for (const auto& t : plan) {
+      bufferlist part;
+      part.substr_of(payload, t.local_ofs, t.len);
+      const uint64_t crc = ceph::crc64nvme(part);
+      res.ranges.push_back({t.client_ofs, t.len, crc});
+      whole = res.ranges.size() == 1 ? crc
+	    : ceph::crc64nvme_combine(whole, crc, t.len);
+    }
+    res.crc64 = whole;
+    res.flags |= ceph::rdma::oob_result_t::FLAG_CRC64NVME |
+		 ceph::rdma::oob_result_t::FLAG_CRC64_RANGES;
+    if (plan.size() == 1) {
+      // one contiguous logical extent: crc64 itself folds with
+      // adjacent stripes, so a caller needs no ranges. This is the
+      // plain read, and also the EC-direct read whose range fits in
+      // one chunk of this shard.
       res.flags |= ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE;
     }
   }

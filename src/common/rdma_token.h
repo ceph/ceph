@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "include/encoding.h"
 
@@ -74,8 +75,9 @@ std::optional<token_window> parse_rdma_token(std::string_view token);
 struct delivery_t {
   /// request the canonical CRC-64/NVME of the delivered bytes in the
   /// reply's oob result (best effort - check
-  /// oob_result_t::FLAG_CRC64NVME, and FLAG_CRC64_COMBINABLE before
-  /// folding it with other results)
+  /// oob_result_t::FLAG_CRC64NVME; fold crc64 only under
+  /// FLAG_CRC64_COMBINABLE, else fold the per-range values under
+  /// FLAG_CRC64_RANGES)
   static constexpr uint32_t FLAG_CRC64NVME = 1u << 0;
   /// flag bits the OSD understands; unknown bits deliver inline
   static constexpr uint32_t KNOWN_FLAGS = FLAG_CRC64NVME;
@@ -107,21 +109,57 @@ struct delivery_t {
 WRITE_CLASS_ENCODER(delivery_t)
 
 /**
+ * One contiguous range of an out-of-band transfer: the bytes that
+ * landed at client-window offset [ofs, ofs+len), and their canonical
+ * CRC-64/NVME. A placement plan is a list of such ranges by
+ * construction, so an executor can report one of these per plan
+ * triple, and any set of them covering a window range without gaps
+ * concatenate-combines in ofs order (see fold_crc64_ranges()).
+ */
+struct crc_range_t {
+  uint64_t ofs = 0;    ///< client-window offset (token base relative)
+  uint64_t len = 0;
+  uint64_t crc64 = 0;
+
+  bool operator==(const crc_range_t&) const = default;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    ceph::encode(ofs, bl);
+    ceph::encode(len, bl);
+    ceph::encode(crc64, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(1, p);
+    ceph::decode(ofs, p);
+    ceph::decode(len, p);
+    ceph::decode(crc64, p);
+    DECODE_FINISH(p);
+  }
+};
+WRITE_CLASS_ENCODER(crc_range_t)
+
+/**
  * Per-op out-of-band delivery result carried on the MOSDOpReply.
  * bytes is how much of the op's data went out of band (0 = inline);
- * crc64 is the canonical CRC-64/NVME of exactly those bytes.
+ * crc64 is the canonical CRC-64/NVME of exactly those bytes, in the
+ * order they were pushed.
  *
- * Two separate properties, because they have separate consumers.
- * FLAG_CRC64NVME says the checksum covers the bytes this OSD moved,
- * which is what a caller verifying one transfer needs.
- * FLAG_CRC64_COMBINABLE additionally says those bytes are one
- * contiguous logical extent, so the value concatenate-combines with
- * adjacent results in logical order - which is what a caller
- * reassembling a whole object's checksum out of per-stripe results
- * needs, and which interleaved EC-direct chunks and sparse extents
- * cannot offer. Conflating the two would leave a scattered transfer
- * with no integrity value at all rather than a usable one that just
- * does not fold.
+ * Three separate properties, because they have separate consumers.
+ * FLAG_CRC64NVME says crc64 covers the bytes this OSD moved, which is
+ * what a caller verifying one transfer needs. FLAG_CRC64_COMBINABLE
+ * additionally says those bytes are one contiguous logical extent,
+ * so crc64 concatenate-combines with adjacent results in logical
+ * order - what a caller reassembling a whole object's checksum out
+ * of per-stripe results needs. A scattered placement (interleaved
+ * EC-direct chunks, sparse extents) cannot offer that for its single
+ * crc64: a CRC over the concatenation of every other chunk is not a
+ * function of the per-chunk values. But each of its ranges is one
+ * contiguous extent, so FLAG_CRC64_RANGES carries one crc_range_t per
+ * placement triple instead, and a caller that has every range of a
+ * window can fold them in ofs order regardless of which OSD moved
+ * which chunk. crc64 alone is the N=1 special case of that.
  */
 struct oob_result_t {
   /// crc64 covers exactly the bytes that went out of band
@@ -129,16 +167,20 @@ struct oob_result_t {
   /// ...and those bytes are one contiguous logical extent, so crc64
   /// may be concatenate-combined in logical order
   static constexpr uint32_t FLAG_CRC64_COMBINABLE = 1u << 1;
+  /// ranges holds one crc_range_t per contiguous placed extent
+  static constexpr uint32_t FLAG_CRC64_RANGES = 1u << 2;
 
   uint64_t bytes = 0;
   uint64_t crc64 = 0;
   uint32_t flags = 0;  ///< FLAG_* above
+  std::vector<crc_range_t> ranges;  ///< valid with FLAG_CRC64_RANGES
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     ceph::encode(bytes, bl);
     ceph::encode(crc64, bl);
     ceph::encode(flags, bl);
+    ceph::encode(ranges, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& p) {
@@ -146,9 +188,18 @@ struct oob_result_t {
     ceph::decode(bytes, p);
     ceph::decode(crc64, p);
     ceph::decode(flags, p);
+    ceph::decode(ranges, p);
     DECODE_FINISH(p);
   }
 };
 WRITE_CLASS_ENCODER(oob_result_t)
+
+/**
+ * Concatenate-combine a set of ranges into the CRC-64/NVME of the
+ * window range they cover. The ranges may arrive in any order (they
+ * are sorted by ofs here) but must tile [first.ofs, last.ofs+len)
+ * without gaps or overlaps; returns nullopt otherwise, or when empty.
+ */
+std::optional<uint64_t> fold_crc64_ranges(std::vector<crc_range_t> ranges);
 
 } // namespace ceph::rdma

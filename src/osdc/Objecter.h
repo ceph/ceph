@@ -17,6 +17,7 @@
 #define CEPH_OBJECTER_H
 
 #include <algorithm>
+#include <deque>
 #include <list>
 #include <map>
 #include <mutex>
@@ -115,6 +116,11 @@ struct ObjectOperation {
   /// out: per-op out-of-band delivery result (bytes 0 = inline)
   boost::container::small_vector<ceph::rdma::oob_result_t*, osdc_opvec_len>
     rdma_oob_result;
+  /// results a caller takes through a callback rather than a pointer
+  /// live here; a deque keeps their addresses stable for the Op, and
+  /// it is allocated only when that form is used so the common case
+  /// pays one pointer (neorados embeds this struct in fixed storage)
+  std::unique_ptr<std::deque<ceph::rdma::oob_result_t>> rdma_oob_storage;
 
   ObjectOperation() = default;
   ObjectOperation(const ObjectOperation&) = delete;
@@ -137,6 +143,7 @@ struct ObjectOperation {
     out_ec.clear();
     rdma_delivery.clear();
     rdma_oob_result.clear();
+    rdma_oob_storage.reset();
   }
 
   /// request out-of-band delivery for the most recently added op
@@ -147,6 +154,25 @@ struct ObjectOperation {
     rdma_delivery.back() = ceph::rdma::delivery_t{std::string(token),
 						  base_offset, flags};
     rdma_oob_result.back() = result;
+  }
+  /// as above, but hand the result to on_result when the reply is
+  /// processed (after the pointer form's copy, before the op's
+  /// completion), for callers whose result type is not the wire one
+  void set_rdma_delivery(std::string_view token, uint64_t base_offset,
+			 uint32_t flags,
+			 fu2::unique_function<
+			   void(const ceph::rdma::oob_result_t&) &&> on_result) {
+    if (!rdma_oob_storage) {
+      rdma_oob_storage =
+	std::make_unique<std::deque<ceph::rdma::oob_result_t>>();
+    }
+    auto& slot = rdma_oob_storage->emplace_back();
+    set_rdma_delivery(token, base_offset, flags, &slot);
+    set_handler([&slot, f = std::move(on_result)]
+		(boost::system::error_code, int,
+		 const ceph::buffer::list&) mutable {
+		  std::move(f)(slot);
+		});
   }
   bool has_rdma_delivery() const {
     return std::any_of(rdma_delivery.begin(), rdma_delivery.end(),

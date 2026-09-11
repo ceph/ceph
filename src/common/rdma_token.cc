@@ -2,7 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/rdma_token.h"
+#include "common/crc64nvme.h"
 
+#include <algorithm>
 #include <charconv>
 
 namespace ceph::rdma {
@@ -43,6 +45,28 @@ std::optional<token_window> parse_rdma_token(std::string_view token)
     return std::nullopt;
   }
   return token_window{*addr, *size};
+}
+
+std::optional<uint64_t> fold_crc64_ranges(std::vector<crc_range_t> ranges)
+{
+  if (ranges.empty()) {
+    return std::nullopt;
+  }
+  std::sort(ranges.begin(), ranges.end(),
+	    [](const crc_range_t& a, const crc_range_t& b) {
+	      return a.ofs < b.ofs;
+	    });
+  uint64_t crc = ranges.front().crc64;
+  uint64_t next = ranges.front().ofs + ranges.front().len;
+  for (size_t i = 1; i < ranges.size(); ++i) {
+    const auto& r = ranges[i];
+    if (r.ofs != next) {
+      return std::nullopt;  // gap or overlap
+    }
+    crc = crc64nvme_combine(crc, r.crc64, r.len);
+    next += r.len;
+  }
+  return crc;
 }
 
 } // namespace ceph::rdma
