@@ -720,31 +720,26 @@ get_v4_canonical_headers(CephContext* cct,
 {
   std::map<std::string_view, std::string> canonical_hdrs_map;
   for (const auto& token : get_str_vec<5>(signedheaders, ";")) {
-    /* TODO(rzarzynski): we'd like to switch to sstring here but it should
-     * get push_back() and reserve() first. */
-    std::string token_env = "HTTP_";
-    token_env.reserve(token.length() + sarrlen("HTTP_") + 1);
-
-    /* XXX can we please stop doing this? */
-    uppercase_dash_transform(token, std::back_inserter(token_env), true);
-    if (token_env == "HTTP_CONTENT_LENGTH") {
-      token_env = "CONTENT_LENGTH";
-    } else if (token_env == "HTTP_CONTENT_TYPE") {
-      token_env = "CONTENT_TYPE";
-    }
-    const char* const t = info.env->get(token_env.c_str());
-    if (!t) {
-      dout(10) << "warning env var not available " << token_env.c_str() << dendl;
+    // rebuild what the client signed: the comma-joined value of every
+    // field-line under this name (tracker #75304)
+    auto combined = info.env->get_combined_header(token);
+    if (!combined) {
+      dout(10) << "warning header not available " << token << dendl;
       continue;
     }
+    std::string token_value = std::move(*combined);
 
-    std::string token_value(t);
-    if (token_env == "HTTP_CONTENT_MD5" &&
-        !std::all_of(std::begin(token_value), std::end(token_value),
-                     is_base64_for_content_md5)) {
-      dout(0) << "NOTICE: bad content-md5 provided (not base64)"
-            << ", aborting request" << dendl;
-      return boost::none;
+    // per field-line, not the joined string: Content-MD5 isn't itself a
+    // list, so the comma the join inserts isn't valid base64
+    if (boost::iequals(token, "content-md5")) {
+      for (const std::string_view part : ceph::split(token_value, ",")) {
+        if (!std::all_of(std::begin(part), std::end(part),
+                         is_base64_for_content_md5)) {
+          dout(0) << "NOTICE: bad content-md5 provided (not base64)"
+                << ", aborting request" << dendl;
+          return boost::none;
+        }
+      }
     }
 
     if (force_boto2_compat && using_qs && token == "host") {

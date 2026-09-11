@@ -82,6 +82,11 @@ int ClientIO::init_env(CephContext *cct)
     env.set("SERVER_PORT_SECURE", port_buf);
   }
   env.set("REMOTE_ADDR", remote_endpoint.address().to_string());
+
+  // gives SigV4 the wire copy env_map (last-wins) can't hold (tracker #75304).
+  // only this frontend populates it: RGWLibIO stubs authorize() and
+  // RGWLoadGenIO signs v2, so neither needs it yet
+  env.set_raw_headers(request.base());
   // TODO: set REMOTE_USER if authenticated
   return 0;
 }

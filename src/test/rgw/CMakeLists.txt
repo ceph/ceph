@@ -121,6 +121,17 @@ add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
 target_link_libraries(unittest_rgw_bencode ${rgw_libs})
 
+# unittest_rgw_env
+# unit-main: RGWEnv::set_header() logs its drop paths, and dout needs a
+# global CephContext
+add_executable(unittest_rgw_env
+  test_rgw_env.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_env)
+target_include_directories(unittest_rgw_env
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_env ${rgw_libs})
+
 # unittest_rgw_cors
 add_executable(unittest_rgw_cors
   test_rgw_cors.cc

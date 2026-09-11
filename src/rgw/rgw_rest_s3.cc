@@ -822,14 +822,25 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
   int ret = -EINVAL;
   ldpp_dout(this, 10) << "cache override headers" << dendl;
   RGWEnv* rgw_env = const_cast<RGWEnv *>(s->info.env);
-  const char* backup_range = rgw_env->get("HTTP_RANGE");
+  // own a copy: get() returns a pointer into env_map's own string, and the
+  // loop below can free or overwrite it via a matching override
+  const char* range_hdr = rgw_env->get("HTTP_RANGE");
+  const bool had_range = range_hdr != nullptr;
+  const std::string backup_range = had_range ? range_hdr : "";
+  // verification reads header fields, not env_map, so that view needs
+  // saving too
+  const auto backup_range_field = rgw_env->get_combined_header("range");
   const char hdrs_split[2] = {(char)178,'\0'};
   const char kv_split[2] = {(char)177,'\0'};
-  const char* cache_hdr = rgw_env->get("HTTP_X_AMZ_CACHE");
+  // own a copy: ceph::split keeps a view into this buffer across iterations,
+  // and an override keyed x-amz-cache would free it mid-loop
+  const std::string cache_hdr = rgw_env->get("HTTP_X_AMZ_CACHE", "");
   for (std::string_view hdr : ceph::split(cache_hdr, hdrs_split)) {
     auto kv = ceph::split(hdr, kv_split);
     auto k = kv.begin();
     if (std::distance(k, kv.end()) != 2) {
+      // earlier overrides stay applied and Range isn't restored; the request
+      // fails right after, so this is stale state, not a live data path
       return -EINVAL;
     }
     auto v = std::next(k);
@@ -837,13 +848,22 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
     key.append(*k);
     boost::replace_all(key, "-", "_");
     ldpp_dout(this, 10) << "after splitting cache kv key: " << key  << " " << *v << dendl;
+    // both views: env_map is what the op reads, header fields are what
+    // verify_requester() canonicalizes
+    rgw_env->set_header(lowercase_dash_http_attr(std::string(*k)), *v);
     rgw_env->set(std::move(key), std::string(*v));
   }
   ret = RGWOp::verify_requester(auth_registry, y);
-  if(!ret && backup_range) {
+  // one condition for both views - letting them restore under different
+  // guards is the divergence this pairing exists to prevent. only Range is
+  // restored (other x-amz-cache overrides stay applied, as before), and a
+  // Range split across field-lines comes back joined into one
+  if(!ret && had_range) {
     rgw_env->set("HTTP_RANGE",backup_range);
+    rgw_env->set_header("range", backup_range_field.value_or(backup_range));
   } else {
     rgw_env->remove("HTTP_RANGE");
+    rgw_env->remove_header("range");
   }
   return ret;
 }

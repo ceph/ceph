@@ -6,6 +6,7 @@
 
 #include <string>
 #include <map>
+#include <optional>
 #include "include/ceph_assert.h"
 #include "rgw_crypt_sanitize.h"
 
@@ -24,23 +25,75 @@ void RGWEnv::set(std::string name, std::string val)
   env_map[std::move(name)] = std::move(val);
 }
 
-void RGWEnv::init(CephContext *cct, char **envp)
+void RGWEnv::set_raw_headers(boost::beast::http::fields headers)
 {
-  const char *p;
+  raw_headers = std::move(headers);
+}
 
-  env_map.clear();
+// offset of the first non-tchar byte (RFC 7230), or npos if none. spelled
+// out rather than isalnum(), which is locale-dependent past ASCII
+static size_t find_non_token(std::string_view s)
+{
+  static constexpr std::string_view tchar_punct{"!#$%&'*+-.^_`|~"};
+  for (size_t i = 0; i < s.size(); ++i) {
+    const unsigned char c = s[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') ||
+          tchar_punct.find(c) != std::string_view::npos)) {
+      return i;
+    }
+  }
+  return std::string_view::npos;
+}
 
-  for (int i=0; (p = envp[i]); ++i) {
-    string s(p);
-    int pos = s.find('=');
-    if (pos <= 0) // should never be 0
-      continue;
-    string name = s.substr(0, pos);
-    string val = s.substr(pos + 1);
-    env_map[name] = val;
+void RGWEnv::set_header(std::string_view name, std::string_view val)
+{
+  // reject non-token names: a caller can pass request-derived bytes here,
+  // and the container stores elements as "name: value\r\n" verbatim. don't
+  // log the name itself - it may contain CR/LF into a newline-delimited log
+  if (name.empty()) {
+    dout(10) << "rejecting header with empty name" << dendl;
+    return;
+  }
+  if (const size_t bad = find_non_token(name); bad != std::string_view::npos) {
+    dout(10) << "rejecting header with non-token name, length " << name.size()
+             << ", first offending byte at offset " << bad << dendl;
+    return;
+  }
+  // beast throws past its own field-size limits; drop instead of crashing a
+  // caller with no handler for that
+  if (name.size() > boost::beast::http::fields::max_name_size ||
+      val.size() > boost::beast::http::fields::max_value_size) {
+    dout(10) << "dropping oversized header, name=" << name.size()
+             << " value=" << val.size() << " bytes" << dendl;
+    return;
+  }
+  raw_headers.set(name, val);
+}
+
+void RGWEnv::remove_header(std::string_view name)
+{
+  raw_headers.erase(name);
+}
+
+std::optional<std::string>
+RGWEnv::get_combined_header(std::string_view name) const
+{
+  const auto range = raw_headers.equal_range(name);
+  if (range.first == range.second) {
+    return std::nullopt;
   }
 
-  init(cct);
+  std::string val;
+  bool first = true;
+  for (auto header = range.first; header != range.second; ++header) {
+    if (!first) {
+      val.push_back(',');
+    }
+    first = false;
+    val.append(header->value().data(), header->value().size());
+  }
+  return val;
 }
 
 const char *rgw_conf_get(const map<string, string, ltstr_nocase>& conf_map, const char *name, const char *def_val)
