@@ -2,12 +2,14 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <cerrno>
+#include <limits>
 #include <optional>
 #include <cstdlib>
 #include <system_error>
 #include <span>
 #include <sstream>
 #include <string_view>
+#include <vector>
 
 #include <unistd.h>
 
@@ -31,6 +33,7 @@
 #include "rgw_cksum.h"
 #include "rgw_cksum_digest.h"
 #include "rgw_common.h"
+#include "rgw_range_parse.h"
 #include "common/split.h"
 #include "rgw_tracer.h"
 
@@ -241,55 +244,54 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
 int RGWGetObj::parse_range(void)
 {
   int r = -ERANGE;
-  string rs(range_str);
-  string ofs_str;
-  string end_str;
+  /* positions land in off_t, which is narrower than the uint64_t the grammar
+   * allows, so anything past its maximum is not a range we can serve */
+  constexpr uint64_t max_pos =
+      static_cast<uint64_t>(std::numeric_limits<off_t>::max());
+  std::vector<rgw_byte_range> ranges;
+  rgw_range_parse_result res;
 
   ignore_invalid_range = s->cct->_conf->rgw_ignore_get_invalid_range;
   partial_content = false;
 
-  size_t pos = rs.find("bytes=");
-  if (pos == string::npos) {
-    pos = 0;
-    while (isspace(rs[pos]))
-      pos++;
-    int end = pos;
-    while (isalpha(rs[end]))
-      end++;
-    if (strncasecmp(rs.c_str(), "bytes", end - pos) != 0)
-      return 0;
-    while (isspace(rs[end]))
-      end++;
-    if (rs[end] != '=')
-      return 0;
-    rs = rs.substr(end + 1);
-  } else {
-    rs = rs.substr(pos + 6); /* size of("bytes=")  */
+  res = rgw_parse_byte_ranges(range_str, 0, &ranges);
+  if (res == rgw_range_parse_result::not_bytes) {
+    /* RFC 9110 14.2 requires an origin server to ignore a Range header field
+     * whose range unit it does not understand, and serve the whole object */
+    return 0;
   }
-  pos = rs.find('-');
-  if (pos == string::npos)
+  if (res != rgw_range_parse_result::ok)
     goto done;
+
+  /* Only the first range-spec of the range-set is served. A range-set with
+   * more than one element is well formed, and RFC 9110 15.3.7 does let a
+   * server satisfy a subset of it, but multipart/byteranges is not
+   * implemented; see https://tracker.ceph.com/issues/13412 */
+  if (ranges.front().is_suffix) {
+    /* a suffix-range is carried to the object layer as a negative offset.
+     * RFC 9110 14.1.2 reads a suffix-length longer than the representation as
+     * the whole representation, so one too large for off_t is clamped rather
+     * than refused; range_to_ofs() then folds it back to offset 0. */
+    const uint64_t n = ranges.front().suffix_length;
+    ofs = -static_cast<off_t>(n > max_pos ? max_pos : n);
+    end = -1;
+  } else {
+    /* a first-pos at or past the end is unsatisfiable, which range_to_ofs()
+     * reports as -ERANGE once it knows the size of the object */
+    const uint64_t first = ranges.front().first;
+    ofs = static_cast<off_t>(first > max_pos ? max_pos : first);
+    if (!ranges.front().has_last) {
+      end = -1;
+    } else {
+      /* RFC 9110 14.1.2: a last-pos at or past the end means the remainder of
+       * the representation, so this is clamped too and range_to_ofs() brings
+       * it down to the last byte of the object */
+      const uint64_t last = ranges.front().last;
+      end = static_cast<off_t>(last > max_pos ? max_pos : last);
+    }
+  }
 
   partial_content = true;
-
-  ofs_str = rs.substr(0, pos);
-  end_str = rs.substr(pos + 1);
-  if (end_str.length()) {
-    end = atoll(end_str.c_str());
-    if (end < 0)
-      goto done;
-  }
-
-  if (ofs_str.length()) {
-    ofs = atoll(ofs_str.c_str());
-  } else { // RFC2616 suffix-byte-range-spec
-    ofs = -end;
-    end = -1;
-  }
-
-  if (end >= 0 && end < ofs)
-    goto done;
-
   range_parsed = true;
   return 0;
 
