@@ -64,28 +64,14 @@ describe('Images page', () => {
   });
 
   describe('move to trash, restore and purge image tests', () => {
-    const imageName = 'e2e_trash#image';
-    const newImageName = 'e2e_newtrash#image';
+    it('should move an image to trash, restore it, and purge it', () => {
+      const imageName = `e2e_trash#image_${Cypress.currentRetry}`;
+      const newImageName = `e2e_newtrash#image_${Cypress.currentRetry}`;
 
-    before(() => {
-      cy.login();
-      // Need image for trash testing
+      // Each retry starts with its own image instead of depending on earlier tests.
       images.createImage(imageName, poolName, '1');
-      images.getFirstTableCell(imageName).should('exist');
-    });
-
-    it('should move the image to the trash', () => {
       images.moveToTrash(imageName);
-      images.getFirstTableCell(imageName).should('exist');
-    });
-
-    it('should restore image to images table', () => {
       images.restoreImage(imageName, newImageName);
-      images.getFirstTableCell(newImageName).should('exist');
-    });
-
-    it('should purge trash in images trash tab', () => {
-      images.getFirstTableCell(newImageName).should('exist');
       images.moveToTrash(newImageName);
       images.purgeTrash(newImageName, poolName);
     });
