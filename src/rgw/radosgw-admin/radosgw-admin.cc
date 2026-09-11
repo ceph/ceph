@@ -2371,7 +2371,7 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
   info.method = "GET";
   info.request_uri = "/admin/realm/period";
 
-  map<string, string> &params = info.args.get_params();
+  auto& params = info.args.get_params();
   if (!realm_id.empty())
     params["realm_id"] = realm_id;
   if (!realm_name.empty())
@@ -5737,7 +5737,7 @@ int main(int argc, const char **argv)
         info.method = "GET";
         info.request_uri = "/admin/realm";
 
-        map<string, string> &params = info.args.get_params();
+        auto& params = info.args.get_params();
         if (!realm_id.empty())
           params["id"] = realm_id;
         if (!realm_name.empty())
@@ -7406,7 +7406,7 @@ int main(int argc, const char **argv)
       info.method = "POST";
       info.request_uri = "/admin/realm/period";
 
-      map<string, string> &params = info.args.get_params();
+      auto& params = info.args.get_params();
       if (!realm_id.empty())
         params["realm_id"] = realm_id;
       if (!realm_name.empty())

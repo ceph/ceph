@@ -476,7 +476,7 @@ public:
   ~RGWRESTMgr_SWIFT_Auth() override = default;
 
   RGWRESTMgr *get_resource_mgr(req_state* const s,
-                               const std::string& uri,
+                               std::string_view uri,
                                std::string* const out_uri) override {
     return this;
   }
