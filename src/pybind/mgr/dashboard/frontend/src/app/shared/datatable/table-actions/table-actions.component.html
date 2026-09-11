@@ -74,7 +74,11 @@
 </ng-template>
 
 <ng-template #customTrigger>
-  <button [cdsButton]="dropDownOnlyBtnColor">
+  <button
+    [cdsButton]="dropDownOnlyBtnColor"
+    type="button"
+    [disabled]="disabled"
+  >
     <span i18n>{{ dropDownOnly }}</span>
     <svg class="override-position-static cds--btn__icon"
          [cdsIcon]="icons.chevronDown"></svg>

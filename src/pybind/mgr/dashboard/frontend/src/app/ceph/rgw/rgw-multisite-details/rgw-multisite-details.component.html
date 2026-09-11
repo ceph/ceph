@@ -31,13 +31,16 @@
                       [selection]="selection"
                       [tableActions]="migrateTableAction">
     </cd-table-actions>
-    <cd-table-actions class="btn-group multisite-actions"
-                      [permission]="permissions.rgw"
-                      [selection]="selection"
-                      [tableActions]="createTableActions"
-                      dropDownOnly="Actions"
-                      [dropDownOnlyBtnColor]="'tertiary'"
-                      [dropDownOnlyOffset]="{ x: 45, y: 0 }">
+    <cd-table-actions
+      class="btn-group multisite-actions"
+      [permission]="permissions.rgw"
+      [selection]="selection"
+      [tableActions]="createTableActions"
+      dropDownOnly="Actions"
+      [dropDownOnlyBtnColor]="'tertiary'"
+      [dropDownOnlyOffset]="{ x: 45, y: 0 }"
+      [disabled]="disableActions"
+    >
     </cd-table-actions>
   </div>
 </div>
