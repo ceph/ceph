@@ -22,8 +22,6 @@
 
 #include "include/neorados/RADOS.hpp"
 
-#include "common/ceph_json.h"
-
 #include "test/neorados/common_tests.h"
 
 #include "gtest/gtest.h"

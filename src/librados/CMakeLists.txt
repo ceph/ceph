@@ -5,7 +5,9 @@ add_library(librados_impl STATIC
   librados_util.cc
   librados_tp.cc)
 target_link_libraries(librados_impl
-  PRIVATE legacy-option-headers)
+  PRIVATE
+    legacy-option-headers
+    ceph-json-headers)
 # C/C++ API
 add_library(librados ${CEPH_SHARED}
   librados_c.cc
