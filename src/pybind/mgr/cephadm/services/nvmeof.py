@@ -261,25 +261,29 @@ class NvmeofService(CephService):
                    daemon_ids: List[str],
                    force: bool = False,
                    known: Optional[List[str]] = None) -> HandleCommandResult:
-        # if only 1 nvmeof, alert user (this is not passable with --force)
-        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Nvmeof', 1, True)
-        if warn:
-            return HandleCommandResult(-errno.EBUSY, '', warn_message)
-
-        # if reached here, there is > 1 nvmeof daemon. make sure none are down
-        if not force:
-            warn_message = ('WARNING: Only one nvmeof daemon is running. Please bring another nvmeof daemon up before stopping the current one.')
-            unreachable_hosts = [h.hostname for h in self.mgr.cache.get_unreachable_hosts()]
-            running_nvmeof_daemons = [
-                d for d in self.mgr.cache.get_daemons_by_type(self.TYPE)
-                if d.status == DaemonDescriptionStatus.running and d.hostname not in unreachable_hosts
-            ]
-            if len(running_nvmeof_daemons) < 2:
-                return HandleCommandResult(-errno.EBUSY, '', warn_message)
-
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
-        warn_message = f'It is presumed safe to stop {names}'
-        return HandleCommandResult(0, warn_message, '')
+
+        if not force:
+            all_nvmeof = self.mgr.cache.get_daemons_by_type(self.TYPE)
+            unreachable = {h.hostname for h in self.mgr.cache.get_unreachable_hosts()}
+            group_by_daemon = {d.daemon_id: d.service_name()
+                               for d in all_nvmeof if d.daemon_id in daemon_ids}
+
+            for gateway_group in set(group_by_daemon.values()):
+                ids_to_stop_in_group = {did for did, s in group_by_daemon.items() if s == gateway_group}
+                remaining = [
+                    d for d in self.mgr.cache.get_daemons_by_service(gateway_group)
+                    if d.status == DaemonDescriptionStatus.running
+                    and d.hostname not in unreachable
+                    and d.daemon_id not in ids_to_stop_in_group
+                ]
+                if not remaining:
+                    warn = (f'WARNING: Stopping {[f"{self.TYPE}.{d}" for d in ids_to_stop_in_group]} '
+                            f'would leave no running nvmeof daemons in {gateway_group}. '
+                            f'Please bring another nvmeof daemon up before stopping the current one.')
+                    return HandleCommandResult(-errno.EBUSY, '', warn)
+
+        return HandleCommandResult(0, f'It is presumed safe to stop {names}', '')
 
     def ignore_possible_stray(
         self, service_type: str, daemon_id: str, name: str
