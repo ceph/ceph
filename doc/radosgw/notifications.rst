@@ -130,6 +130,10 @@ the following command:
 
    radosgw-admin topic stats --topic={topic-name} [--tenant={tenant}]
 
+The command also reports, for each queue shard of the topic, the radosgw that
+currently owns it and the time at which that ownership expires. A shard that is
+not owned by any radosgw is reported without an owner.
+
 Dump (in JSON format) all pending bucket notifications of a persistent topic
 by running the following command:
 
