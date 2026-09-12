@@ -240,6 +240,54 @@ class TestRaw:
                                                    'type': 'bluestore'},
                                                    tmpfs=True)]
 
+    @patch('ceph_volume.objectstore.raw.disk.lsblk_all', return_value=[])
+    @patch('ceph_volume.objectstore.raw.lvm_api.ceph_volume_lvm_prepare_lv_paths',
+           return_value=[])
+    @patch('ceph_volume.objectstore.raw.lvm_api.is_ceph_volume_lvm_prepared',
+           return_value=False)
+    @patch('ceph_volume.objectstore.raw.encryption_utils.CephLuks2',
+           return_value=MagicMock(is_ceph_encrypted=False))
+    def test_activate_skips_seastore_rows(self,
+                                          m_luks2,
+                                          m_is_lvm,
+                                          m_lvm_paths,
+                                          m_lsblk,
+                                          is_root,
+                                          monkeypatch):
+        """Raw (BlueStore) activate must ignore seastore rows in direct_report.
+
+        Before the fix, iterating a mixed report would raise KeyError on
+        meta['osd_id'] for any seastore entry.  After the fix the bluestore
+        OSD is activated and the seastore row is silently skipped.
+        """
+        mixed_report = {
+            # bluestore OSD
+            '824f7edf-371f-4b75-9231-4ab62a32d5c0': {
+                'ceph_fsid': '7dccab18-14cf-11ee-837b-5254008f8ca5',
+                'device': '/dev/sda',
+                'osd_id': 8,
+                'osd_uuid': '824f7edf-371f-4b75-9231-4ab62a32d5c0',
+                'type': 'bluestore',
+            },
+            # seastore OSD — no osd_id / ceph_fsid keys
+            'aaaaaaaa-0000-0000-0000-000000000001': {
+                'type': 'seastore',
+                'device': '/dev/sdb',
+                'osd_uuid': 'aaaaaaaa-0000-0000-0000-000000000001',
+                'synthetic_osd_uuid': True,
+            },
+        }
+        monkeypatch.setattr('ceph_volume.objectstore.raw.direct_report',
+                            lambda x: mixed_report)
+        self.raw_bs._activate = MagicMock()
+        # devices non-empty so the assert in activate() passes; no osd filter.
+        self.raw_bs.devices = ['/dev/sda']
+        self.raw_bs.osd_id = None
+        self.raw_bs.osd_fsid = None
+        self.raw_bs.activate()
+        # _activate called exactly once (for the bluestore OSD only)
+        assert self.raw_bs._activate.call_count == 1
+
     @patch('ceph_volume.objectstore.raw.encryption_utils.rename_mapper', Mock(return_value=MagicMock()))
     @patch('ceph_volume.util.disk.get_bluestore_header')
     @patch('ceph_volume.objectstore.raw.encryption_utils.luks_close', Mock(return_value=MagicMock()))

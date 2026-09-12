@@ -93,17 +93,18 @@ class BaseObjectStore:
         in as a keyword argument it is used as part of the ceph-osd command
         """
 
-        if self.wal_device_path:
-            self.osd_mkfs_cmd.extend(
-                ['--bluestore-block-wal-path', self.wal_device_path]
-            )
-            system.chown(self.wal_device_path)
+        if self.objectstore == 'bluestore':
+            if self.wal_device_path:
+                self.osd_mkfs_cmd.extend(
+                    ['--bluestore-block-wal-path', self.wal_device_path]
+                )
+                system.chown(self.wal_device_path)
 
-        if self.db_device_path:
-            self.osd_mkfs_cmd.extend(
-                ['--bluestore-block-db-path', self.db_device_path]
-            )
-            system.chown(self.db_device_path)
+            if self.db_device_path:
+                self.osd_mkfs_cmd.extend(
+                    ['--bluestore-block-db-path', self.db_device_path]
+                )
+                system.chown(self.db_device_path)
 
         if self.get_osdspec_affinity():
             self.osd_mkfs_cmd.extend(['--osdspec-affinity',
@@ -145,7 +146,7 @@ class BaseObjectStore:
         return '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, self.osd_id)
 
     def get_default_entrypoint_cmd(self) -> str:
-        if self.osd_type == "crimson":
+        if self.osd_type == "crimson" or self.objectstore == "seastore":
             return "ceph-osd-crimson"
         return "ceph-osd"
     

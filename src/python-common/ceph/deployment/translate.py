@@ -86,7 +86,6 @@ class to_ceph_volume(object):
                 continue
 
             if self.spec.method == 'raw':
-                assert self.spec.objectstore == 'bluestore'
                 # ceph-volume raw prepare only support 1:1 ratio of data to db/wal devices
                 # for raw prepare each data device needs its own prepare command
                 dev_counter = 0
@@ -95,12 +94,19 @@ class to_ceph_volume(object):
                 wal_devices.reverse()
 
                 while dev_counter < len(data_devices):
-                    cmd = "raw prepare --bluestore"
+                    if self.spec.objectstore == 'bluestore':
+                        cmd = "raw prepare --bluestore"
+                    elif self.spec.objectstore == 'seastore':
+                        cmd = "raw prepare --objectstore seastore"
+                    else:
+                        raise ValueError(
+                            'raw method only supports bluestore or seastore objectstore')
                     cmd += " --data {}".format(data_devices[dev_counter])
-                    if db_devices:
-                        cmd += " --block.db {}".format(db_devices.pop())
-                    if wal_devices:
-                        cmd += " --block.wal {}".format(wal_devices.pop())
+                    if self.spec.objectstore == 'bluestore':
+                        if db_devices:
+                            cmd += " --block.db {}".format(db_devices.pop())
+                        if wal_devices:
+                            cmd += " --block.wal {}".format(wal_devices.pop())
                     if d != self.NO_CRUSH:
                         cmd += " --crush-device-class {}".format(d)
 

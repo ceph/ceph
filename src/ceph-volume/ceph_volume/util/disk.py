@@ -2,6 +2,7 @@ import errno
 import logging
 import os
 import re
+import uuid
 import stat
 import time
 import json
@@ -1053,7 +1054,10 @@ def has_bluestore_label(device_path: str) -> bool:
 
 def has_seastore_label(device_path: str) -> bool:
     is_seastore = False
-    seastore_disk_signature = b'seastore block device\n'  # 23 bytes including newline
+    # 23-byte magic written at offset 0 by all Crimson device types:
+    # "CRIMSON_DEVICE" followed by 9 null bytes.
+    # See src/crimson/os/seastore/device.h: CRIMSON_DEVICE_SUPERBLOCK_MAGIC
+    seastore_disk_signature = b'CRIMSON_DEVICE\x00\x00\x00\x00\x00\x00\x00\x00\x00'
 
     try:
         with open(device_path, "rb") as fd:
@@ -1061,11 +1065,43 @@ def has_seastore_label(device_path: str) -> bool:
             if signature == seastore_disk_signature:
                 is_seastore = True
     except IsADirectoryError:
-        print(f'{device_path} is a directory, skipping.')
-    except Exception as e:
-        print(f'Error reading {device_path}: {e}')
+        logger.info('%s is a directory, skipping.', device_path)
+    except OSError as e:
+        logger.debug('Error reading %s: %s', device_path, e)
 
     return is_seastore
+
+
+def seastore_raw_device_report(device: str) -> Optional[Dict[str, Any]]:
+    """
+    Build a raw-list style dict for a SeaStore whole-disk device.
+
+    Detection uses only the on-disk SeaStore volume header (``has_seastore_label``) on the
+    device path coming from ``lsblk`` — no ``/var/lib/ceph`` tree and no orchestrator-specific
+    layout is consulted.
+
+    ``osd_uuid`` is a deterministic UUIDv5 derived from the canonical device path. It is a
+    **listing identifier**, not necessarily the OSD fsid known to the cluster. The field
+    ``synthetic_osd_uuid`` is always true for SeaStore entries produced this way.
+    """
+    if not has_seastore_label(device):
+        return None
+    try:
+        block_real = os.path.realpath(device)
+    except OSError as e:
+        logger.debug('Cannot resolve %s: %s', device, e)
+        return None
+
+    synthetic = str(
+        uuid.uuid5(uuid.NAMESPACE_URL, 'ceph-volume:seastore-raw:' + block_real)
+    )
+    return {
+        'type': 'seastore',
+        'device': device,
+        'osd_uuid': synthetic,
+        'synthetic_osd_uuid': True,
+    }
+
 
 def get_lvm_mappers(sys_block_path: str = '/sys/block') -> List[str]:
     """
