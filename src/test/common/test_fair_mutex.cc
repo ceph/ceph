@@ -1,10 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 
+#include <gtest/gtest.h>
+
 #include <array>
+#include <condition_variable>
+#include <future>
 #include <mutex>
 #include <numeric>
-#include <future>
-#include <gtest/gtest.h>
+#include <thread>
+#include <vector>
+
 #include "common/fair_mutex.h"
 
 TEST(FairMutex, simple)
@@ -64,5 +69,48 @@ TEST(FairMutex, fair)
   std::array<std::future<void>, NR_TEAMS> completed;
   for (int team = 0; team < NR_TEAMS; team++) {
     completed[team] = std::async(std::launch::async, play, team);
+  }
+}
+
+TEST(FairMutex, fifo_order)
+{
+  // waiters must acquire the lock in the order they queued
+  ceph::fair_mutex mutex{"fair::fifo"};
+  std::mutex gate_mutex;
+  std::condition_variable gate_cv;
+  int ticket = 0;
+
+  mutex.lock();
+
+  const int NR_WAITERS = 16;
+  std::vector<unsigned> acquire_order;
+  std::vector<std::thread> threads;
+  for (int i = 0; i < NR_WAITERS; i++) {
+    threads.emplace_back([&, i]() {
+      {
+        std::unique_lock lock{gate_mutex};
+        gate_cv.wait(lock, [&] { return ticket == i; });
+        ++ticket;
+        gate_cv.notify_all();
+      }
+      std::unique_lock lock{mutex};
+      acquire_order.push_back(i);
+    });
+  }
+
+  {
+    std::unique_lock lock{gate_mutex};
+    gate_cv.wait(lock, [&] { return ticket == NR_WAITERS; });
+  }
+
+  mutex.unlock();
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  ASSERT_EQ(acquire_order.size(), NR_WAITERS);
+  for (int i = 0; i < NR_WAITERS; i++) {
+    ASSERT_EQ(acquire_order[i], i);
   }
 }
