@@ -225,23 +225,12 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
 
   void execute(optional_yield y) override {
 
-    std::unique_ptr<rgw::sal::Bucket> src_bucket;
-    {
-      const rgw_bucket src_bucket_id{s->bucket_tenant, s->bucket_name};
-      op_ret = driver->load_bucket(this, src_bucket_id,
-                                   &src_bucket, y);
-      if (op_ret < 0) {
-        ldpp_dout(this, 1) << "ERROR: failed to get bucket '" << src_bucket_id << "', ret = " << op_ret << dendl;
-        return;
-      }
-    }
-
     if (!configuration.enabled) {
-      op_ret = rgw::bucketlogging::source_bucket_cleanup(this, driver, src_bucket.get(), true, y, &old_obj);
+      op_ret = rgw::bucketlogging::source_bucket_cleanup(this, driver, s->bucket.get(), true, y, &old_obj);
       return;
     }
 
-    const auto src_bucket_id = src_bucket->get_key();
+    const rgw_bucket src_bucket_id{s->bucket_tenant, s->bucket_name};
     const auto& target_bucket_id = target_bucket->get_key();
     if (target_bucket_id == src_bucket_id) {
       // target bucket must be different from source bucket (cannot change later on)
@@ -250,11 +239,11 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       return;
     }
     const auto& target_info = target_bucket->get_info();
-    if (target_info.zonegroup != src_bucket->get_info().zonegroup) {
+    if (target_info.zonegroup != s->bucket->get_info().zonegroup) {
       // target bucket must be in the same zonegroup as source bucket (cannot change later on)
       ldpp_dout(this, 1) << "ERROR: logging bucket '" << target_bucket_id << "' zonegroup '" <<
         target_info.zonegroup << "' is different from the source bucket '" << src_bucket_id  <<
-        "' zonegroup '" << src_bucket->get_info().zonegroup << "'" << dendl;
+        "' zonegroup '" << s->bucket->get_info().zonegroup << "'" << dendl;
       op_ret = -EINVAL;
       return;
     }
@@ -268,8 +257,9 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
     std::optional<rgw::bucketlogging::configuration> old_conf;
     bufferlist conf_bl;
     encode(configuration, conf_bl);
-    op_ret = retry_raced_bucket_write(this, src_bucket.get(), [this, &conf_bl, &src_bucket, &old_conf, y] {
-      auto& attrs = src_bucket->get_attrs();
+    auto src_bucket = s->bucket.get();
+    op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, &conf_bl, &old_conf, y] {
+      auto& attrs = s->bucket->get_attrs();
       auto it = attrs.find(RGW_ATTR_BUCKET_LOGGING);
       if (it != attrs.end()) {
         try {
@@ -279,13 +269,13 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
           old_conf = std::move(tmp_conf);
         } catch (buffer::error& err) {
           ldpp_dout(this, 1) << "WARNING: failed to decode existing logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-              << "' for bucket '" << src_bucket->get_key() << "', error: " << err.what() << dendl;
+              << "' for bucket '" << s->bucket->get_key() << "', error: " << err.what() << dendl;
         }
         if (!old_conf || (old_conf && *old_conf != configuration)) {
           // conf changed (or was unknown) - update
           it->second = conf_bl;
           update_mtime_attribute(this, attrs);
-          return src_bucket->merge_and_store_attrs(this, attrs, y);
+          return s->bucket->merge_and_store_attrs(this, attrs, y);
         }
         // nothing to update
         return 0;
@@ -293,7 +283,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       // conf was added
       attrs.insert(std::make_pair(RGW_ATTR_BUCKET_LOGGING, conf_bl));
       update_mtime_attribute(this, attrs);
-      return src_bucket->merge_and_store_attrs(this, attrs, y);
+      return s->bucket->merge_and_store_attrs(this, attrs, y);
     }, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to set logging attribute '" << RGW_ATTR_BUCKET_LOGGING << "' to bucket '" <<
@@ -323,7 +313,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
             obj_name,
             this,
             region,
-            src_bucket.get(),
+            src_bucket,
             y,
             false, // rollover should happen even if commit failed
             &objv_tracker,
