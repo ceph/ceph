@@ -21,6 +21,7 @@ add_executable(unittest_mds_quiesce_db
   $<TARGET_OBJECTS:unit-main>
 )
 add_ceph_unittest(unittest_mds_quiesce_db)
+set_property(TEST unittest_mds_quiesce_db PROPERTY RUN_SERIAL TRUE)
 target_link_libraries(unittest_mds_quiesce_db ceph-common global Boost::url)
 
 # unittest_mds_quiesce_agent
