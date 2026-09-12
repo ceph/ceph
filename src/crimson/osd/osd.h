@@ -11,6 +11,7 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/timer.hh>
 
+#include "common/debug_level_guard.h"
 #include "crimson/common/logclient.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/auth_handler.h"
@@ -108,6 +109,7 @@ class OSD final : public crimson::net::Dispatcher,
   // which pgs were scanned for min_lec
   std::vector<pg_t> min_last_epoch_clean_pgs;
   void update_stats();
+  void check_debug_levels();
   seastar::future<MessageURef> get_stats() final;
 
   // AuthHandler methods
@@ -129,6 +131,8 @@ class OSD final : public crimson::net::Dispatcher,
   /// caching the total snap trim queue length across all PGs,
   /// updated periodically by the tick_timer
   uint64_t snap_trim_queue_total = 0;
+
+  DebugLevelGuard debug_level_guard;
 
   seastar::timer<seastar::lowres_clock> stats_timer;
   std::vector<ShardServices::shard_stats_t> shard_stats;

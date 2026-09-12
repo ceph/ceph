@@ -1,0 +1,22 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    log-ignorelist:
+      - Auto-reverted debug_
+      - HIGH_DEBUG_LEVEL
+- workunit:
+    clients:
+      all:
+        - mon/debug_level_guard.sh
