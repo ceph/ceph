@@ -27,3 +27,5 @@ overrides:
       - experiencing slow operations in BlueStore
       - MGR_MODULE_ERROR
       - OSD_NEARFULL
+      # SIGKILL of cephfs-mirror leaves the MDS session until autoclose especially with test_cephfs_mirror_sigkill_during_sync_recovers
+      - evicting unresponsive client
