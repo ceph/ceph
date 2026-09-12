@@ -1,0 +1,34 @@
+# begin crush map
+
+# devices
+device 0 device0
+
+# types
+type 0 device
+type 1 host
+type 2 root
+
+# buckets
+host host0 {
+	id -1		# do not change unnecessarily
+	alg straw
+	hash 0	# rjenkins1
+	item device0 weight 1001.00000
+}
+root root0 {
+	id -2		# do not change unnecessarily
+	alg straw
+	hash 0	# rjenkins1
+	item host0 weight 1001.00000
+}
+
+# rules
+rule data {
+	id 0
+	type replicated
+	step take root0
+	step chooseleaf firstn 0 type host
+	step emit
+}
+
+# end crush map
