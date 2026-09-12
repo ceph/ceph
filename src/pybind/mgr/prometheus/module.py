@@ -242,7 +242,6 @@ class LRUCacheDict(OrderedDict[K, V]):
 
 class HealthHistory:
     kv_name = 'health_history'
-    titles = "{healthcheck_name:<24}  {first_seen:<20}  {last_seen:<20}  {count:>5}  {active:^6}"
     date_format = "%Y/%m/%d %H:%M:%S"
 
     def __init__(self, mgr: MgrModule):
@@ -343,16 +342,22 @@ class HealthHistory:
         if len(self.healthcheck.keys()) == 0:
             out.append("No healthchecks have been recorded")
         else:
-            out.append(self.titles.format(
+            col_width = max(len("Healthcheck Name"),
+                            max(len(k) for k in self.healthcheck.keys()))
+            fmt = (f"{{healthcheck_name:<{col_width}}}  {{first_seen:<20}}  "
+                   f"{{last_seen:<20}}  {{count:>5}}  {{active:^6}}")
+            out.append(fmt.format(
                 healthcheck_name="Healthcheck Name",
                 first_seen="First Seen (UTC)",
                 last_seen="Last seen (UTC)",
                 count="Count",
                 active="Active")
             )
-            for k in sorted(self.healthcheck.keys()):
+            for k in sorted(self.healthcheck.keys(),
+                            key=lambda k: self.healthcheck[k].last_seen,
+                            reverse=True):
                 check = self.healthcheck[k]
-                out.append(self.titles.format(
+                out.append(fmt.format(
                     healthcheck_name=check.name,
                     first_seen=time.strftime(self.date_format, time.localtime(check.first_seen)),
                     last_seen=time.strftime(self.date_format, time.localtime(check.last_seen)),
