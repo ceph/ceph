@@ -503,7 +503,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                   hostname: str,
                   addr: Optional[str] = None,
                   labels: Optional[List[str]] = None,
-                  maintenance: Optional[bool] = False) -> HandleCommandResult:
+                  maintenance: Optional[bool] = False,
+                  skip_mtu_check: Optional[bool] = False) -> HandleCommandResult:
         """Add a host"""
         _status = 'maintenance' if maintenance else ''
 
@@ -515,6 +516,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             addr = unwrap_ipv6(addr)
 
         s = HostSpec(hostname=hostname, addr=addr, labels=labels, status=_status)
+        if skip_mtu_check:
+            setattr(s, 'skip_mtu_check', True)
 
         return self._apply_misc([s], False, Format.plain)
 
