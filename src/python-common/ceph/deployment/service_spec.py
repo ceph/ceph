@@ -1383,13 +1383,7 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
-    COLOCATION_PORT_FIELDS = ['data_port', 'monitoring_port', 'cluster_qos_port']
-    COLOCATION_PORT_FIELDS_WITH_RDMA = [
-        'data_port',
-        'monitoring_port',
-        'cluster_qos_port',
-        'rdma_port'
-    ]
+    COLOCATION_PORT_FIELDS = ['data_port', 'monitoring_port']
 
     def __init__(self,
                  service_type: str = 'nfs',
@@ -1479,10 +1473,14 @@ class NFSServiceSpec(ServiceSpec):
         self.tls_min_version = tls_min_version
 
     def get_colocation_port_fields(self) -> List[str]:
-        """Return port fields for colocation; include rdma_port when RDMA is enabled."""
+        """Return port fields for colocation; cluster_qos_port added when QoS is configured,
+        rdma_port added when RDMA is enabled."""
+        fields = list(self.COLOCATION_PORT_FIELDS)
+        if self.cluster_qos_config:
+            fields.append('cluster_qos_port')
         if self.enable_rdma:
-            return self.COLOCATION_PORT_FIELDS_WITH_RDMA
-        return self.COLOCATION_PORT_FIELDS
+            fields.append('rdma_port')
+        return fields
 
     def get_port_start(self) -> List[int]:
         ports = [self.port or 2049, self.monitoring_port or 9587, self.cluster_qos_port or 31311]
@@ -1498,7 +1496,7 @@ class NFSServiceSpec(ServiceSpec):
         if not self.colocation_ports:
             return []
         fields = self.get_colocation_port_fields()
-        return [[port_dict[field] for field in fields]
+        return [[port_dict.get(field, 0) for field in fields]
                 for port_dict in self.colocation_ports]
 
     def rados_config_name(self):
@@ -1528,18 +1526,20 @@ class NFSServiceSpec(ServiceSpec):
                         f"count={self.placement.count} (got {actual}). First daemon uses base "
                         "ports, remaining need custom ports."
                     )
-        # Validate that each entry has the required port fields
+        # cluster_qos_port is required per colocation entry only when QoS is configured.
         fields = self.get_colocation_port_fields()
+        required_fields = [f for f in fields
+                           if f != 'cluster_qos_port' or self.cluster_qos_config]
         for idx, port_dict in enumerate(self.colocation_ports):
             if not isinstance(port_dict, dict):
                 raise SpecValidationError(
                     f"colocation_ports[{idx}] must be a dict with "
-                    f"fields: {', '.join(fields)}"
+                    f"fields: {', '.join(required_fields)}"
                 )
-            missing = [f for f in fields if f not in port_dict]
+            missing = [f for f in required_fields if f not in port_dict]
             if missing:
                 missing_str = ', '.join(missing)
-                format_str = ', '.join(f'{f!r}: <port>' for f in fields)
+                format_str = ', '.join(f'{f!r}: <port>' for f in required_fields)
                 raise SpecValidationError(
                     f"Invalid NFS spec: colocation_ports[{idx}] missing required "
                     f"fields: {missing_str}. Expected format: {{{format_str}}}"
