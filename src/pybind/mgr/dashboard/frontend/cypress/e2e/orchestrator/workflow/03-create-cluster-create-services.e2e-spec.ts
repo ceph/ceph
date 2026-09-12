@@ -14,10 +14,7 @@ describe('Create cluster create services page', () => {
 
   beforeEach(() => {
     cy.login();
-    onboardingPage.navigateTo();
-    onboardingPage.onboarding();
-
-    onboardingPage.selectStep('Create Services');
+    onboardingPage.openWizardStep('Create Services');
   });
 
   it('should check if title contains Create Services', () => {
