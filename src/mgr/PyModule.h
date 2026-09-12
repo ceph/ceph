@@ -28,6 +28,11 @@
 #include "Gil.h"
 #include "mon/MgrMap.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 class MonClient;
 

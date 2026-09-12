@@ -333,12 +333,6 @@ namespace ceph {
   }
 }
 
-
-inline const char *ceph_mon_feature_name(uint64_t b)
-{
-  return ceph::features::mon::get_feature_name(b);
-};
-
 class mon_feature_t {
 
   static constexpr int HEAD_VERSION = 1;
