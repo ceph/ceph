@@ -8,8 +8,60 @@ local.file_match "system" {
 
 loki.source.file "system" {
 	targets               = local.file_match.system.targets
-	forward_to            = [loki.write.default.receiver]
+	forward_to            = [loki.relabel.ceph_component.receiver]
 	legacy_positions_file = "/var/lib/alloy/data/positions.yaml"
+}
+
+loki.relabel "ceph_component" {
+	forward_to = [loki.process.remove_timestamp.receiver]
+
+	// ceph-client.rgw.<host>.log
+	rule {
+		source_labels = ["filename"]
+		regex         = ".*/ceph-client\\.rgw\\.[^/]+\\.log"
+		target_label  = "component"
+		replacement   = "rgw"
+	}
+
+	// ceph-client.<id>.log
+	rule {
+		source_labels = ["filename"]
+		regex         = ".*/ceph-client\\.[^/]+\\.log"
+		target_label  = "component"
+		replacement   = "client"
+	}
+
+	// ceph-<type>.<id>.log
+	rule {
+		source_labels = ["filename"]
+		regex         = ".*/ceph-(osd|mon|mgr|mds|rgw|rbd-mirror|nfs)\\.[^/]+\\.log"
+		target_label  = "component"
+		replacement   = "$1"
+	}
+
+	// ceph.log (cluster log)
+	rule {
+		source_labels = ["filename"]
+		regex         = ".*/ceph\\.log$"
+		target_label  = "component"
+		replacement   = "cluster"
+	}
+}
+
+loki.process "remove_timestamp" {
+	forward_to = [loki.write.default.receiver]
+
+	// Ceph daemon format: 2024-03-15T12:34:56.789012+0530
+	stage.replace {
+		expression = "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}[+-]\\d{4})\\s+"
+		replace    = ""
+	}
+
+	// Fallback for other ISO-like timestamps if present
+	stage.replace {
+		expression = "^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{4})?)\\s+"
+		replace    = ""
+	}
 }
 
 loki.write "default" {
