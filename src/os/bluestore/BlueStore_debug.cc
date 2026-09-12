@@ -268,10 +268,8 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
       for (auto& i : o.bc.buffer_map) {
         if (space) out << " ";
         out << "0x" << std::hex << i.offset << "~" << i.length << std::dec
-          << BlueStore::Buffer::get_state_name_short(i.state);
-        if (i.flags) {
-          out << "," << BlueStore::Buffer::get_flag_name(i.flags);
-        }
+          << BlueStore::Buffer::get_state_name_short(i.state)
+          << BlueStore::Buffer::get_flag_name(",", i.flags);
         space = true;
       }
       out << ")";
