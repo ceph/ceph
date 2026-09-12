@@ -51,7 +51,7 @@ set(librbd_internal_srcs
   api/Snapshot.cc
   api/Trash.cc
   api/Utils.cc
-  asio/ContextWQ.cc
+  asio/AsioContextWQ.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
   cache/ObjectCacherWriteback.cc
@@ -243,6 +243,10 @@ target_link_libraries(rbd_internal PRIVATE
   osdc rbd_types
   OpenSSL::SSL)
 target_include_directories(rbd_internal PRIVATE ${OPENSSL_INCLUDE_DIR})
+
+# Built separately from rbd_internal so shared librbd can compile this TU directly.
+add_library(rbd_asio_context_wq STATIC
+  asio/ContextWQ.cc)
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   target_include_directories(rbd_internal PRIVATE ${LIBCRYPTSETUP_INCLUDE_DIR})
   target_link_libraries(rbd_internal PRIVATE ${LIBCRYPTSETUP_LIBRARIES})
@@ -331,7 +335,8 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
 endif()
 
 add_library(librbd ${CEPH_SHARED}
-  librbd.cc)
+  librbd.cc
+  asio/ContextWQ.cc)
 if(WITH_LTTNG)
   add_dependencies(librbd librbd-tp)
 endif()
@@ -366,3 +371,8 @@ if(ENABLE_SHARED)
     endif()
 endif(ENABLE_SHARED)
 install(TARGETS librbd DESTINATION ${CMAKE_INSTALL_LIBDIR})
+# Install public headers for external ContextWQ implementations
+install(DIRECTORY
+  "${CMAKE_SOURCE_DIR}/src/include/rbd/asio"
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rbd
+  FILES_MATCHING PATTERN "*.hpp")

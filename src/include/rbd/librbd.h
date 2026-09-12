@@ -728,6 +728,9 @@ CEPH_RBD_API void rbd_config_pool_list_cleanup(rbd_config_option_t *options,
 
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
                           rbd_image_t *image, const char *snap_name);
+CEPH_RBD_API int rbd_open_with_context_wq(rados_ioctx_t io, const char *name,
+                                          rbd_image_t *image, const char *snap_name,
+                                          void *context_wq);
 CEPH_RBD_API int rbd_open_by_id(rados_ioctx_t io, const char *id,
                                 rbd_image_t *image, const char *snap_name);
 
@@ -759,8 +762,12 @@ CEPH_RBD_API int rbd_aio_open_by_id(rados_ioctx_t io, const char *id,
  */
 CEPH_RBD_API int rbd_open_read_only(rados_ioctx_t io, const char *name,
                                     rbd_image_t *image, const char *snap_name);
+CEPH_RBD_API int rbd_open_read_only_with_context_wq(rados_ioctx_t io, const char *name,
+                                                    rbd_image_t *image, const char *snap_name,
+                                                    void *context_wq);
 CEPH_RBD_API int rbd_open_by_id_read_only(rados_ioctx_t io, const char *id,
                                           rbd_image_t *image, const char *snap_name);
+
 CEPH_RBD_API int rbd_aio_open_read_only(rados_ioctx_t io, const char *name,
 					rbd_image_t *image, const char *snap_name,
 					rbd_completion_t c);
