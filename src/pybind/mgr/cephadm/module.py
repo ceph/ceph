@@ -3796,7 +3796,7 @@ Then run the following:
                             return f"Error: Device {device.path} is not found on host {host_name}"
                         continue
 
-                    if not matching_device.available:
+                    if not matching_device.available and not explicit_paths_only:
                         return (
                             f"Error: Device {device.path} is present but unavailable for OSD creation. "
                             f"Reason: {', '.join(matching_device.rejected_reasons) if matching_device.rejected_reasons else 'Unknown'}")

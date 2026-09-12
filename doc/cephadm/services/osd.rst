@@ -186,6 +186,23 @@ There are multiple ways to create new OSDs:
 
     ceph orch daemon add osd host1:/dev/sdb
 
+* Create an OSD from a disk partition (NVMe, SCSI, virtio). Partitions are not
+  listed by ``ceph orch device ls`` and cannot be consumed by ``lvm batch``.
+  Pass ``raw`` as the method:
+
+  .. prompt:: bash #
+
+    ceph orch daemon add osd <host>:<partition-path> raw
+
+  For example:
+
+  .. prompt:: bash #
+
+    ceph orch daemon add osd host1:/dev/nvme0n1p1 raw
+
+  The same layout can be applied with a spec file that sets ``method: raw``
+  and lists the partition under ``data_devices.paths``.
+
 * Advanced OSD creation from specific devices on a specific host:
 
   .. prompt:: bash #
