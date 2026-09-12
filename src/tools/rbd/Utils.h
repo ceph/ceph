@@ -238,7 +238,7 @@ void calc_sparse_extent(const bufferptr &bp,
                         uint64_t length,
                         size_t *write_length,
 			bool *zeroed);
-
+std::string get_snap_namespace_name(librbd::snap_namespace_type_t);
 bool is_not_user_snap_namespace(librbd::Image* image,
                                 const librbd::snap_info_t &snap_info);
 
