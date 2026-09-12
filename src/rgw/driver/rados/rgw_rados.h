@@ -1541,6 +1541,27 @@ public:
                        RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats, std::string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb);
+  int read_bucket_stats_summary(const DoutPrefixProvider *dpp,
+                                const RGWBucketInfo& bucket_info,
+                                rgw_bucket_stats_summary* summary,
+                                optional_yield y);
+  int whole_update_bucket_stats_summary(const DoutPrefixProvider *dpp,
+                                        const RGWBucketInfo& bucket_info,
+                                        rgw_bucket_stats_summary* summary,
+                                        optional_yield y);
+  int apply_bucket_stats_summary_delta(
+      const DoutPrefixProvider *dpp,
+      const RGWBucketInfo& bucket_info,
+      const rgw_bucket_dir_stats& stats,
+      const rgw_bucket_dir_stats& dec_stats,
+      rgw_bucket_stats_summary* summary,
+      optional_yield y);
+  int set_bucket_stats_summary_generation(const DoutPrefixProvider *dpp,
+                                          const RGWBucketInfo& bucket_info,
+                                          optional_yield y);
+  int remove_bucket_stats_summary(const DoutPrefixProvider *dpp,
+                                  const RGWBucketInfo& bucket_info,
+                                  optional_yield y);
 
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, const std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp, optional_yield y);
   /* xxx dang obj_ctx -> svc */

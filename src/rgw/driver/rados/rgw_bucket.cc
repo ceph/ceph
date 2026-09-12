@@ -20,6 +20,7 @@
 #include "buckets.h"
 #ifdef WITH_RADOSGW_RADOS
 #include "rgw_metadata_lister.h"
+#include "services/svc_bi_rados.h"
 #endif
 #include "rgw_reshard.h"
 #include "rgw_pubsub.h"
@@ -3746,7 +3747,24 @@ int RGWBucketCtl::sync_owner_stats(const DoutPrefixProvider *dpp,
   if (!pent) {
     pent = &ent;
   }
-  int r = svc.bi->read_stats(dpp, bucket_info, pent, y);
+  int r = -ENOTSUP;
+  if (auto* bi_rados = dynamic_cast<RGWSI_BucketIndex_RADOS*>(svc.bi)) {
+    rgw_bucket_stats_summary summary;
+    r = bi_rados->read_bucket_stats_summary(dpp, bucket_info, &summary, y);
+    if (r == 0) {
+      const auto iter = summary.stats.find(RGWObjCategory::Main);
+      const auto& stats = iter == summary.stats.end() ?
+          rgw_bucket_category_stats{} : iter->second;
+      pent->bucket = bucket_info.bucket;
+      pent->count = stats.num_entries;
+      pent->size = stats.total_size;
+      pent->size_rounded = stats.total_size_rounded;
+      pent->placement_rule = bucket_info.placement_rule;
+    }
+  }
+  if (r < 0) {
+    r = svc.bi->read_stats(dpp, bucket_info, pent, y);
+  }
   if (r < 0) {
     ldpp_dout(dpp, 20) << __func__ << "(): failed to read bucket stats (r=" << r << ")" << dendl;
     return r;
@@ -3891,4 +3909,3 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);
   }
 }
-

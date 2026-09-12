@@ -99,6 +99,20 @@ void read_stats(librados::IoCtx& ioctx, const std::string& oid,
   stats = std::move(header.stats);
 }
 
+rgw_bucket_stats_summary read_summary(librados::IoCtx& ioctx,
+                                      const std::string& oid)
+{
+  bufferlist bl;
+  librados::ObjectReadOperation op;
+  op.omap_get_header(&bl, nullptr);
+  EXPECT_EQ(0, ioctx.operate(oid, &op, nullptr));
+
+  rgw_bucket_stats_summary summary;
+  auto iter = bl.cbegin();
+  decode(summary, iter);
+  return summary;
+}
+
 static void account_entry(rgw_bucket_dir_stats& stats,
                           const rgw_bucket_dir_entry_meta& meta)
 {
@@ -635,3 +649,75 @@ INSTANTIATE_TEST_SUITE_P(PoolTypes, cls_rgw_stats,
   return pool_type_name(info.param);
   }
 );
+
+TEST_P(cls_rgw_stats, bucket_stats_summary)
+{
+  const char* oid = __func__;
+  const auto creation_time = ceph::real_clock::from_time_t(1700000000);
+
+  rgw_bucket_stats_summary summary;
+  summary.bucket_id = "bucket-instance-id";
+  summary.bucket_creation_time = creation_time;
+  summary.index_generation = 7;
+  auto& initial = summary.stats[RGWObjCategory::Main];
+  initial.total_size = 100;
+  initial.total_size_rounded = 128;
+  initial.num_entries = 1;
+  initial.actual_size = 90;
+
+  librados::ObjectWriteOperation set_op;
+  cls_rgw_bucket_stats_summary_set(set_op, summary);
+  ASSERT_EQ(0, ioctx.operate(oid, &set_op));
+
+  rgw_cls_bucket_stats_summary_apply_delta_op delta;
+  delta.bucket_id = summary.bucket_id;
+  delta.bucket_creation_time = summary.bucket_creation_time;
+  auto& add = delta.stats[RGWObjCategory::Main];
+  add.total_size = 30;
+  add.total_size_rounded = 64;
+  add.num_entries = 1;
+  add.actual_size = 25;
+  auto& dec = delta.dec_stats[RGWObjCategory::Main];
+  dec.total_size = 10;
+  dec.actual_size = 10;
+
+  bufferlist out;
+  int op_ret = 0;
+  librados::ObjectWriteOperation delta_op;
+  cls_rgw_bucket_stats_summary_apply_delta(delta_op, delta, &out, &op_ret);
+  ASSERT_EQ(0, ioctx.operate(
+    oid, &delta_op, librados::ObjectOperationGlobalFlags::OPERATION_RETURNVEC));
+  ASSERT_EQ(0, op_ret);
+
+  rgw_bucket_stats_summary updated;
+  auto iter = out.cbegin();
+  decode(updated, iter);
+  const auto& stats = updated.stats.at(RGWObjCategory::Main);
+  EXPECT_EQ(120u, stats.total_size);
+  EXPECT_EQ(192u, stats.total_size_rounded);
+  EXPECT_EQ(2u, stats.num_entries);
+  EXPECT_EQ(105u, stats.actual_size);
+
+  auto stale = delta;
+  stale.bucket_creation_time = ceph::real_clock::from_time_t(1700000001);
+  bufferlist stale_out;
+  int stale_ret = 0;
+  librados::ObjectWriteOperation stale_op;
+  cls_rgw_bucket_stats_summary_apply_delta(stale_op, stale, &stale_out,
+                                           &stale_ret);
+  ASSERT_EQ(-ESTALE, ioctx.operate(
+    oid, &stale_op, librados::ObjectOperationGlobalFlags::OPERATION_RETURNVEC));
+  EXPECT_EQ(-ESTALE, stale_ret);
+
+  rgw_cls_bucket_stats_summary_set_generation_op generation;
+  generation.bucket_id = summary.bucket_id;
+  generation.bucket_creation_time = summary.bucket_creation_time;
+  generation.index_generation = 8;
+  librados::ObjectWriteOperation generation_op;
+  cls_rgw_bucket_stats_summary_set_generation(generation_op, generation);
+  ASSERT_EQ(0, ioctx.operate(oid, &generation_op));
+
+  const auto after_reshard = read_summary(ioctx, oid);
+  EXPECT_EQ(8u, after_reshard.index_generation);
+  EXPECT_EQ(updated.stats, after_reshard.stats);
+}
