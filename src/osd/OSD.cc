@@ -6573,9 +6573,9 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
         }
     } else {
         if ((command == "injectecreaderr") ||
-	    (command == "injecteclearreaderr") ||
+	    (command == "injectecclearreaderr") ||
 	    (command == "injectecwriteerr") ||
-	    (command == "injecteclearwriteerr") ||
+	    (command == "injectecclearwriteerr") ||
             (command == "injectparityread") ||
             (command == "injectclearparityread")) {
             ss << "Only supported on ec pool";
