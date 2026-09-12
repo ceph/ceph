@@ -597,6 +597,54 @@ export class TaskMessageService {
       this.commonOperations.delete,
       (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
     ),
+    'rgw/smb/cluster/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
+    ),
+    'rgw/smb/cluster/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
+    ),
+    'rgw/smb/cluster/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
+    ),
+    'rgw/smb/share/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
+    ),
+    'rgw/smb/share/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
+    ),
+    'rgw/smb/share/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
+    ),
+    'rgw/smb/active-directory/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
+    ),
+    'rgw/smb/active-directory/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
+    ),
+    'rgw/smb/active-directory/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
+    ),
+    'rgw/smb/standalone/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
+    ),
+    'rgw/smb/standalone/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
+    ),
+    'rgw/smb/standalone/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
+    ),
     'ceph-user/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata: { userEntity: string }) => this.cephUser(metadata)

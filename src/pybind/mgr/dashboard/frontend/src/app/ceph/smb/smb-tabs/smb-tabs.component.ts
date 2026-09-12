@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 
-const SMB_PATH = 'cephfs/smb';
+import { getSmbBasePath } from '../utils';
 
 enum TABS {
   cluster = 'cluster',
@@ -29,7 +29,7 @@ export class SmbTabsComponent implements OnInit {
 
   onSelected(tab: TABS) {
     this.selectedTab = tab;
-    this.router.navigate([`${SMB_PATH}/${tab}`]);
+    this.router.navigate([`${getSmbBasePath(this.router.url)}/${tab}`]);
   }
 
   public get Tabs(): typeof TABS {
