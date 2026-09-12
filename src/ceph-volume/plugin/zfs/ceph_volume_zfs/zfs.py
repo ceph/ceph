@@ -21,6 +21,8 @@ from ceph_volume_zfs.devices import zfs
 from ceph_volume_zfs.devices.zfs import inventory
 from ceph_volume_zfs.devices.zfs import prepare
 from ceph_volume_zfs.devices.zfs import zap
+from ceph_volume_zfs.devices.zfs import list as list_
+from ceph_volume_zfs.devices.zfs import activate
 
 
 if __name__ == '__main__':
@@ -43,7 +45,9 @@ class ZFS(object):
 
     def __init__(self, argv=None, parse=True):
         self.zfs_mapper = {
+            'activate': activate.Activate,
             'inventory': inventory.Inventory,
+            'list': list_.List,
             'prepare': prepare.Prepare,
             'zap': zap.Zap,
         }
@@ -129,8 +133,67 @@ class ZFS(object):
             default='/var/log/ceph/',
             help='Change the log path (defaults to /var/log/ceph)',
         )
+        parser.add_argument(
+            '-v', '--verbose',
+            action='store_true',
+            default=False,
+            help='Enable verbose output (detailed per-disk/per-action info where applicable)',
+        )
+        parser.add_argument(
+            '-j', '--json',
+            action='store_true',
+            default=False,
+            help='Output machine-readable JSON where applicable (shorthand for --format json-pretty)',
+        )
+        parser.add_argument(
+            '--format',
+            choices=['plain', 'json', 'json-pretty'],
+            default=None,
+            help='Output format (overrides -v/-j if given)',
+        )
+        parser.add_argument(
+            '--debug',
+            action='store_true',
+            default=False,
+            help='Include raw command output (e.g. gpart show) in reports, where applicable',
+        )
         args = parser.parse_args(main_args)
         conf.log_path = args.log_path
+        # -v/-j/--format/--debug are accepted both before the
+        # subcommand (parsed above, via args.*) and after it --
+        # subcommand_args is scanned and stripped of these tokens here
+        # so that e.g. `ceph-volume zfs inventory -v` works the same
+        # as `ceph-volume zfs -v inventory`, without inventory/
+        # prepare/zap needing to know about these flags themselves.
+        extra_verbose = False
+        extra_json = False
+        extra_format = None
+        extra_debug = False
+        filtered_subcommand_args = []
+        skip_next = False
+        for i, token in enumerate(subcommand_args):
+            if skip_next:
+                skip_next = False
+                continue
+            if token in ('-v', '--verbose'):
+                extra_verbose = True
+            elif token in ('-j', '--json'):
+                extra_json = True
+            elif token == '--debug':
+                extra_debug = True
+            elif token == '--format':
+                if i + 1 < len(subcommand_args):
+                    extra_format = subcommand_args[i + 1]
+                    skip_next = True
+            elif token.startswith('--format='):
+                extra_format = token.split('=', 1)[1]
+            else:
+                filtered_subcommand_args.append(token)
+        subcommand_args = filtered_subcommand_args
+        conf.verbose = args.verbose or extra_verbose
+        conf.json = args.json or extra_json
+        conf.format = args.format or extra_format
+        conf.debug = args.debug or extra_debug
         if os.path.isdir(conf.log_path):
             conf.log_path = os.path.join(args.log_path, 'ceph-volume-zfs.log')
         log.setup()
@@ -150,3 +213,4 @@ class ZFS(object):
             terminal.red(error)
         # dispatch to sub-commands
         terminal.dispatch(self.zfs_mapper, subcommand_args)
+
