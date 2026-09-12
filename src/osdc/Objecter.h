@@ -40,6 +40,7 @@
 #include "include/ceph_assert.h"
 #include "include/ceph_fs.h"
 #include "include/common_fwd.h"
+#include "include/Context.h"
 #include "include/expected.hpp"
 #include "include/types.h"
 #include "include/rados/rados_types.hpp"
@@ -66,7 +67,6 @@
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
 
-class Context;
 class Messenger;
 class MonClient;
 class Message;
