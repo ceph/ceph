@@ -1,0 +1,15 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+cc_binary(
+    name = "libceph_tcmalloc.so.0",
+    srcs = [
+        "perfglue/google_tcmalloc.cc",
+        "perfglue/google_tcmalloc.h",
+    ],
+    linkopts = ["-Wl,-soname,libceph_tcmalloc.so.0", "-Wl,--exclude-libs,libstdc++.a"],
+    linkshared = True,
+    linkstatic = True,
+    deps = [
+        "@com_google_tcmalloc//tcmalloc",
+        "@com_google_tcmalloc//tcmalloc:malloc_extension",
+    ],
+)
