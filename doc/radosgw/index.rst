@@ -51,6 +51,7 @@ Cluster with one API and then retrieve that data with the other API.
    Admin Guide <admin>
    User Accounts <account>
    S3 API <s3>
+   AWS CLI Quickstart <aws-cli-quickstart>
    IAM API <iam>
    Data Caching and CDN <rgw-cache.rst>
    Swift API <swift>
