@@ -2681,9 +2681,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
            const char *if_nomatch)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  MD5 hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  MD5NonCrypto hash;
   bool truncated;
   int rc;
 
@@ -3751,10 +3749,7 @@ enum {
 void MotrStore::index_name_to_motr_fid(string iname, struct m0_uint128 *id)
 {
   unsigned char md5[16];  // 128/8 = 16
-  MD5 hash;
-
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  MD5NonCrypto hash;
   hash.Update((const unsigned char *)iname.c_str(), iname.length());
   hash.Final(md5);
 

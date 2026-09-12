@@ -2448,7 +2448,7 @@ public:
   CompressorRef plugin;
   buffer::list data;
   uint64_t timer_id;
-  MD5 hash;
+  MD5NonCrypto hash;
   off_t real_ofs;
   size_t bytes_written;
   bool eio;
@@ -2467,8 +2467,6 @@ public:
     // invoking this classes's header_init()
     (void) RGWWriteRequest::header_init();
     op = this;
-    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   }
 
   bool only_bucket() override { return true; }

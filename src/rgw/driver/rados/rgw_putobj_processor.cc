@@ -811,9 +811,7 @@ int AppendObjectProcessor::complete(
   attrs[RGW_ATTR_APPEND_PART_NUM] = cur_part_num_bl;
   //calculate the etag
   if (!cur_etag.empty()) {
-    MD5 hash;
-    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+    MD5NonCrypto hash;
     char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     hex_to_buf(cur_etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
