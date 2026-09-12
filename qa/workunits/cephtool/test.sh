@@ -116,6 +116,62 @@ function check_response()
 	fi
 }
 
+# Send a mon command as raw JSON and require that the monitor rejects it with
+# the given errno and message. This bypasses the CLI's client-side argument
+# validation, which is the only way to reach handler paths that a well-formed
+# command line cannot express.
+function expect_raw_mon_command_error()
+{
+	local cmdjson=$1
+	local expected_ret=$2
+	local expected_msg=$3
+
+	python3 - "$cmdjson" "$expected_ret" "$expected_msg" << 'EOF'
+import rados, sys
+
+cmdjson, expected_ret, expected_msg = sys.argv[1:4]
+cluster = rados.Rados(conffile="")
+cluster.connect()
+try:
+    ret, _, err = cluster.mon_command(cmdjson, b"")
+finally:
+    cluster.shutdown()
+if ret != int(expected_ret):
+    print("return code invalid: got %d, expected %s" % (ret, expected_ret),
+          file=sys.stderr)
+    sys.exit(1)
+if expected_msg not in err:
+    print("Didn't find %s in %r" % (expected_msg, err), file=sys.stderr)
+    sys.exit(1)
+EOF
+}
+
+# The same, for a raw JSON mon command that is expected to succeed.
+function expect_raw_mon_command_ok()
+{
+	local cmdjson=$1
+	local expected_msg=$2
+
+	python3 - "$cmdjson" "$expected_msg" << 'EOF'
+import rados, sys
+
+cmdjson, expected_msg = sys.argv[1:3]
+cluster = rados.Rados(conffile="")
+cluster.connect()
+try:
+    ret, _, err = cluster.mon_command(cmdjson, b"")
+finally:
+    cluster.shutdown()
+if ret != 0:
+    print("return code invalid: got %d, expected 0 (%s)" % (ret, err),
+          file=sys.stderr)
+    sys.exit(1)
+if expected_msg not in err:
+    print("Didn't find %s in %r" % (expected_msg, err), file=sys.stderr)
+    sys.exit(1)
+EOF
+}
+
 function get_config_value_or_die()
 {
   local target config_opt raw val
@@ -1583,6 +1639,81 @@ function test_mon_osd()
   done
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
+
+  # a single flag reports in the singular, as it always has
+  ceph osd set noout 2> $TMPFILE
+  check_response "noout is set"
+  ceph osd unset noout 2> $TMPFILE
+  check_response "noout is unset"
+
+  # several flags can be named in one command, and all of them are applied
+  ceph osd set norecover nobackfill norebalance 2> $TMPFILE
+  check_response "nobackfill,norebalance,norecover are set"
+  ceph osd dump | grep flags | grep norecover
+  ceph osd dump | grep flags | grep nobackfill
+  ceph osd dump | grep flags | grep norebalance
+  ceph osd unset norecover nobackfill norebalance 2> $TMPFILE
+  check_response "nobackfill,norebalance,norecover are unset"
+  ! ceph osd dump | grep flags | grep norecover || exit 1
+  ! ceph osd dump | grep flags | grep nobackfill || exit 1
+  ! ceph osd dump | grep flags | grep norebalance || exit 1
+
+  # "pause" is one name covering two flag bits, so it too reports in the plural
+  ceph osd set pause 2> $TMPFILE
+  check_response "pauserd,pausewr are set"
+  ceph osd unset pause 2> $TMPFILE
+  check_response "pauserd,pausewr are unset"
+
+  # naming a flag more than once is not an error and applies it once
+  ceph osd set noout noout 2> $TMPFILE
+  check_response "noout is set"
+  ceph osd unset noout
+
+  # a name that is not a flag at all is refused by the argument parser, before
+  # the command reaches the monitor, and none of the command is applied
+  expect_false ceph osd set noout bogus 2> $TMPFILE || return 1
+  check_response "EINVAL: invalid command"
+  ! ceph osd dump | grep flags | grep noout || exit 1
+  expect_false ceph osd unset noout bogus 2> $TMPFILE || return 1
+  check_response "EINVAL: invalid command"
+
+  # "full" gets past the argument parser but is refused by the monitor, so it
+  # exercises the monitor's own validation, both on its own and alongside a
+  # flag that would otherwise have been applied
+  expect_false ceph osd set full 2> $TMPFILE || return 1
+  check_response "EINVAL: unrecognized flag 'full'"
+  expect_false ceph osd set noout full 2> $TMPFILE || return 1
+  check_response "EINVAL: unrecognized flag 'full'"
+  ! ceph osd dump | grep flags | grep noout || exit 1
+  expect_false ceph osd unset noout full 2> $TMPFILE || return 1
+  check_response "EINVAL: unrecognized flag 'full'"
+
+  # the monitor rejects a flag it does not know even when the argument parser
+  # would never have let it through, and applies nothing when it does
+  expect_raw_mon_command_error '{"prefix": "osd set", "key": ["noout", "bogus"]}' \
+    -22 "unrecognized flag 'bogus'"
+  ! ceph osd dump | grep flags | grep noout || exit 1
+  expect_raw_mon_command_error '{"prefix": "osd unset", "key": ["noout", "bogus"]}' \
+    -22 "unrecognized flag 'bogus'"
+
+  # at least one flag is required. the argument parser rejects an empty flag
+  # list up front, and the monitor rejects one that reaches it anyway
+  expect_false ceph osd set 2> $TMPFILE || return 1
+  check_response "expected at least 1"
+  expect_false ceph osd unset 2> $TMPFILE || return 1
+  check_response "expected at least 1"
+  expect_raw_mon_command_error '{"prefix": "osd set", "key": []}' \
+    -22 "no flags specified"
+  expect_raw_mon_command_error '{"prefix": "osd unset", "key": []}' \
+    -22 "no flags specified"
+
+  # callers that build the command themselves rather than going through the
+  # argument parser pass a bare string, not a list, and must keep working
+  expect_raw_mon_command_ok '{"prefix": "osd set", "key": "noout"}' "noout is set"
+  ceph osd dump | grep flags | grep noout
+  expect_raw_mon_command_ok '{"prefix": "osd unset", "key": "noout"}' "noout is unset"
+  ! ceph osd dump | grep flags | grep noout || exit 1
+
   for f in sortbitwise recover_deletes require_jewel_osds \
 	  require_kraken_osds
   do
