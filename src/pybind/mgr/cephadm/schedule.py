@@ -229,6 +229,7 @@ class HostAssignment(object):
                  blocking_daemon_hosts: Optional[List[orchestrator.HostSpec]] = None,
                  upgrade_in_progress: bool = False,
                  host_selector: Optional[HostSelector] = None,
+                 use_same_port: bool = False,
                  ):
         assert spec
         self.spec = spec  # type: ServiceSpec
@@ -249,6 +250,7 @@ class HostAssignment(object):
         self.rank_map = rank_map
         self.upgrade_in_progress = upgrade_in_progress
         self.host_selector = host_selector
+        self.use_same_port = use_same_port
 
     def hosts_by_label(self, label: str) -> List[orchestrator.HostSpec]:
         return [h for h in self.hosts if label in h.labels]
@@ -369,7 +371,11 @@ class HostAssignment(object):
                             r.extend([dp.renumber_ports(i) for dp in ls])
                     return r
             for offset in range(num):
-                r.extend([dp.renumber_ports(offset) for dp in ls])
+                if self.use_same_port:
+                    # if we're using same port, offset by 0 always
+                    r.extend([dp.renumber_ports(0) for dp in ls])
+                else:
+                    r.extend([dp.renumber_ports(offset) for dp in ls])
             return r
 
         # consider enough slots to fulfill target count-per-host or count

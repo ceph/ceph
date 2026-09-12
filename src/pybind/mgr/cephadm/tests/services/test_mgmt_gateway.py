@@ -275,7 +275,8 @@ class TestMgmtGateway:
                     "nginx.crt": f"{ceph_generated_cert}",
                     "nginx.key": f"{ceph_generated_key}",
                 }
-            }
+            },
+            "skip_port_check": False,
         }
 
         with with_host(cephadm_module, 'ceph-node'):
@@ -619,7 +620,8 @@ class TestMgmtGateway:
                     "nginx.crt": f"{ceph_generated_cert}",
                     "nginx.key": f"{ceph_generated_key}",
                 }
-            }
+            },
+            "skip_port_check": False,
         }
 
         with with_host(cephadm_module, 'ceph-node'):
@@ -801,7 +803,8 @@ class TestMgmtGateway:
                     "oauth2-proxy.crt": f"{ceph_generated_cert}",
                     "oauth2-proxy.key": f"{ceph_generated_key}",
                 }
-            }
+            },
+            "skip_port_check": False,
         }
 
         with with_host(cephadm_module, 'ceph-node'):

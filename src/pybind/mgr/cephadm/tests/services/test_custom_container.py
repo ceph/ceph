@@ -60,6 +60,7 @@ class TestCustomContainer:
                                 "dirs": [],
                                 "files": {},
                             },
+                            "skip_port_check": False,
                         }
                     ),
                     error_ok=True,
@@ -141,6 +142,7 @@ class TestCustomContainer:
                 'dirs': [],
                 'files': {},
             },
+            "skip_port_check": False,
         }
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, spec):
