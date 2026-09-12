@@ -47,6 +47,12 @@ case "$1" in
            usermod --home /var/lib/cephadm -m cephadm
        fi
 
+       # set invoker permissions to match RPM (0700, root:root)
+       if test -f /usr/libexec/cephadm_invoker.py; then
+           chown root:root /usr/libexec/cephadm_invoker.py
+           chmod 0700 /usr/libexec/cephadm_invoker.py
+       fi
+
        # set up (initially empty) .ssh/authorized_keys file
        if ! test -d ~cephadm/.ssh; then
            mkdir ~cephadm/.ssh
