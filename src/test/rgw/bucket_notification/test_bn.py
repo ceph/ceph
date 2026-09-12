@@ -11,6 +11,7 @@ import os
 import io
 import string
 import sys
+from urllib.parse import urlencode
 from botocore.client import Config
 from botocore.exceptions import ClientError
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -32,6 +33,7 @@ from . import(
     get_access_key,
     get_secret_key,
     get_kerberos_config,
+    get_oauthbearer_config,
     )
 
 from .api import PSTopicS3, \
@@ -432,6 +434,35 @@ def get_kerberos_env():
     service_name, principal, keytab = get_kerberos_config()
     return service_name, principal, keytab
 
+def get_oauthbearer_endpoint_attrs():
+    token_endpoint_url, client_id, client_secret, _, scope = get_oauthbearer_config()
+    # an absent token endpoint means OAUTHBEARER is not part of this run at all
+    if not token_endpoint_url:
+        pytest.skip('OAUTHBEARER not configured: no [oauthbearer] token_endpoint_url')
+    missing = [name for name, value in (('client_id', client_id), ('client_secret', client_secret)) if not value]
+    assert not missing, 'OAUTHBEARER is configured but incomplete: missing [oauthbearer] ' + ', '.join(missing)
+
+    attrs = {
+        'sasl-oauthbearer-token-endpoint-url': token_endpoint_url,
+        'sasl-oauthbearer-client-id': client_id,
+        'sasl-oauthbearer-client-secret': client_secret,
+    }
+    if scope:
+        attrs['sasl-oauthbearer-scope'] = scope
+    return attrs
+
+def get_oauthbearer_token_provider():
+    token_endpoint_url, _, _, access_token, _ = get_oauthbearer_config()
+    if not token_endpoint_url:
+        pytest.skip('OAUTHBEARER not configured: no [oauthbearer] token_endpoint_url')
+    assert access_token, 'OAUTHBEARER is configured but [oauthbearer] access_token is empty'
+    from kafka.sasl.oauth import AbstractTokenProvider
+
+    class StaticTokenProvider(AbstractTokenProvider):
+        def token(self):
+            return access_token
+
+    return StaticTokenProvider()
 
 def setup_scram_users_via_kafka_configs(mechanism: str) -> None:
     """to setup SCRAM users using kafka-configs.sh after Kafka is running."""
@@ -563,6 +594,8 @@ class KafkaReceiver(object):
                 kerberos_service_name, _, _ = get_kerberos_env()
                 if kerberos_service_name:
                     base_config['sasl_kerberos_service_name'] = kerberos_service_name
+            elif mechanism == 'OAUTHBEARER':
+                base_config['sasl_oauth_token_provider'] = get_oauthbearer_token_provider()
             else:
                 base_config.update({
                     'sasl_plain_username': KAFKA_TEST_USER,
@@ -575,6 +608,8 @@ class KafkaReceiver(object):
                 kerberos_service_name, _, _ = get_kerberos_env()
                 if kerberos_service_name:
                     base_config['sasl_kerberos_service_name'] = kerberos_service_name
+            elif mechanism == 'OAUTHBEARER':
+                base_config['sasl_oauth_token_provider'] = get_oauthbearer_token_provider()
             else:
                 base_config.update({
                     'sasl_plain_username': KAFKA_TEST_USER,
@@ -4781,6 +4816,10 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
             pytest.skip('Missing GSSAPI options in [kerberos] section of BNTESTS_CONF: ' + ', '.join(missing))
         if not os.path.isfile(keytab):
             pytest.skip(f'[kerberos] keytab does not exist: {keytab}')
+    oauthbearer_endpoint_attrs = None
+    if mechanism == 'OAUTHBEARER':
+        oauthbearer_endpoint_attrs = get_oauthbearer_endpoint_attrs()
+        get_oauthbearer_token_provider()
     
     conn = connection()
     zonegroup = get_config_zonegroup()
@@ -4791,7 +4830,7 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
     topic_name = bucket_name+'_topic'
     # create topic
     if security_type == 'SASL_SSL':
-        if mechanism == 'GSSAPI' or use_topic_attrs_for_creds:
+        if mechanism in ('GSSAPI', 'OAUTHBEARER') or use_topic_attrs_for_creds:
             endpoint_address = 'kafka://' + default_kafka_server + ':9094'
         else:
             endpoint_address = 'kafka://alice:alice-secret@' + default_kafka_server + ':9094'
@@ -4801,7 +4840,7 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
         else:
             endpoint_address = 'kafka://' + default_kafka_server + ':9093'
     elif security_type == 'SASL_PLAINTEXT':
-        if mechanism == 'GSSAPI':
+        if mechanism in ('GSSAPI', 'OAUTHBEARER'):
             endpoint_address = 'kafka://' + default_kafka_server + ':9095'
         else:
             endpoint_address = 'kafka://alice:alice-secret@' + default_kafka_server + ':9095'
@@ -4829,7 +4868,7 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
                 endpoint_args += '&sasl-kerberos-principal=' + kerberos_principal
             if kerberos_keytab:
                 endpoint_args += '&sasl-kerberos-keytab=' + kerberos_keytab
-        elif use_topic_attrs_for_creds:
+        elif use_topic_attrs_for_creds and mechanism not in ('GSSAPI', 'OAUTHBEARER'):
             endpoint_args += '&user-name=alice&password=alice-secret'
     else:
         kafka_cert_dir = _kafka_cert_dir()
@@ -4847,6 +4886,9 @@ def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=F
                 f'mTLS client key not found: {ssl_key_path}'
             endpoint_args += '&ssl-certificate-location=' + ssl_cert_path
             endpoint_args += '&ssl-key-location=' + ssl_key_path
+
+    if oauthbearer_endpoint_attrs:
+        endpoint_args += '&' + urlencode(oauthbearer_endpoint_attrs)
 
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
 
@@ -4968,6 +5010,16 @@ def test_notification_kafka_security_ssl_sasl_gssapi():
 def test_notification_kafka_security_ssl_mtls():
     """test mTLS client certificate authentication to Kafka"""
     kafka_security('SSL', use_mtls=True)
+
+
+@pytest.mark.kafka_security_test
+def test_notification_kafka_security_ssl_sasl_oauthbearer():
+    kafka_security('SASL_SSL', mechanism='OAUTHBEARER')
+
+
+@pytest.mark.kafka_security_test
+def test_notification_kafka_security_sasl_oauthbearer():
+    kafka_security('SASL_PLAINTEXT', mechanism='OAUTHBEARER')
 
 
 @pytest.mark.http_test
