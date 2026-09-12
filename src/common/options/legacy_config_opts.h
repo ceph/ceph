@@ -1,5 +1,6 @@
 #include "global_legacy_options.h"
 #include "cephfs-mirror_legacy_options.h"
+#include "crimson_legacy_options.h"
 #include "mds_legacy_options.h"
 #include "mds-client_legacy_options.h"
 #include "mgr_legacy_options.h"
