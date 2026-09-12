@@ -15,7 +15,7 @@ from cephadm.upgrade import (
 )
 from cephadm.ssh import HostConnectionError
 from cephadm.utils import ContainerInspectInfo
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
 
@@ -826,6 +826,100 @@ def test_to_upgrade_batches_mds_when_fail_fs(
     assert cont
     assert len(to_upgrade) == 1
     assert to_upgrade[0][0].name() == need_upgrade[0][0].name()
+
+
+def _smb_need_upgrade_entries() -> List[Tuple[DaemonDescription, bool]]:
+    return [
+        (DaemonDescription(
+            daemon_type='smb',
+            daemon_id=f'test.host{i}.abcdef',
+            hostname=f'host{i}',
+            container_image_id='old_digest',
+            service_name='smb.test',
+        ), False)
+        for i in range(1, 4)
+    ]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch.object(CephadmUpgrade, '_enough_smb_for_ok_to_stop', return_value=True)
+@mock.patch.object(CephadmUpgrade, '_wait_for_ok_to_stop', return_value=True)
+def test_to_upgrade_batches_smb_one_at_a_time(
+        _wait_for_ok_to_stop: mock.MagicMock,
+        _enough_smb_for_ok_to_stop: mock.MagicMock,
+        cephadm_module: CephadmOrchestrator):
+    # SMB daemons must be upgraded sequentially so an entire SMB/CTDB
+    # cluster is never redeployed in a single pass.
+    need_upgrade = _smb_need_upgrade_entries()
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 1
+    assert to_upgrade[0][0].name() == need_upgrade[0][0].name()
+    _wait_for_ok_to_stop.assert_called_once_with(need_upgrade[0][0], [])
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch.object(CephadmUpgrade, '_enough_smb_for_ok_to_stop', return_value=True)
+@mock.patch.object(CephadmUpgrade, '_wait_for_ok_to_stop', return_value=False)
+def test_to_upgrade_waits_when_smb_not_ok_to_stop(
+        _wait_for_ok_to_stop: mock.MagicMock,
+        _enough_smb_for_ok_to_stop: mock.MagicMock,
+        cephadm_module: CephadmOrchestrator):
+    # if the next SMB daemon isn't confirmed safe to stop then the upgrade must not proceed.
+    need_upgrade = _smb_need_upgrade_entries()
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert not cont
+    assert to_upgrade == []
+
+
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+def test_enough_smb_for_ok_to_stop(get_daemons_by_service, cephadm_module: CephadmOrchestrator):
+    smb_daemon = DaemonDescription(
+        daemon_type='smb', daemon_id='test.host1.abcdef',
+        hostname='host1', service_name='smb.test')
+
+    # only 1 running smb daemon in this service, not enough to gate on
+    get_daemons_by_service.return_value = [
+        DaemonDescription(daemon_type='smb', status=DaemonDescriptionStatus.running),
+    ]
+    assert not cephadm_module.upgrade._enough_smb_for_ok_to_stop(smb_daemon)
+
+    get_daemons_by_service.return_value = [
+        DaemonDescription(daemon_type='smb', status=DaemonDescriptionStatus.running),
+        DaemonDescription(daemon_type='smb', status=DaemonDescriptionStatus.running),
+    ]
+    assert cephadm_module.upgrade._enough_smb_for_ok_to_stop(smb_daemon)
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+@mock.patch.object(CephadmUpgrade, '_wait_for_ok_to_stop')
+def test_to_upgrade_does_not_stall_single_smb_daemon(
+        _wait_for_ok_to_stop: mock.MagicMock,
+        get_daemons_by_service: mock.MagicMock,
+        cephadm_module: CephadmOrchestrator):
+    need_upgrade = [
+        (DaemonDescription(
+            daemon_type='smb',
+            daemon_id='test.host1.abcdef',
+            hostname='host1',
+            container_image_id='old_digest',
+            service_name='smb.test',
+            status=DaemonDescriptionStatus.running,
+        ), False)
+    ]
+    get_daemons_by_service.return_value = [need_upgrade[0][0]]
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 1
+    assert to_upgrade[0][0].name() == need_upgrade[0][0].name()
+    _wait_for_ok_to_stop.assert_not_called()
 
 
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
