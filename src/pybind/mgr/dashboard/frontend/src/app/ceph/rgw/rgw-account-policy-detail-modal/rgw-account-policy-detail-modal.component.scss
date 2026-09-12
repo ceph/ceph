@@ -1,0 +1,30 @@
+.policy-document-panel {
+  background: var(--cds-layer-01, #f4f4f4);
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  border-radius: 0;
+  max-height: 24rem;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.version-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.tag-form__fields {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin-bottom: 1rem;
+}
+
+.selected-row {
+  background: var(--cds-layer-hover-01, #e8e8e8);
+}
+
+.version-form {
+  border: 1px solid var(--cds-border-subtle-01, #e0e0e0);
+  padding: 1rem;
+}

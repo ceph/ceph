@@ -54,6 +54,13 @@
         </cd-rgw-account-roles-list>
       }
     }
+    @case ('policies') {
+      <cd-rgw-account-policies-list
+        [accountId]="selection.id"
+        [accountName]="selection.name"
+      >
+      </cd-rgw-account-policies-list>
+    }
   }
 } @else if (notFound) {
   <cd-alert-panel

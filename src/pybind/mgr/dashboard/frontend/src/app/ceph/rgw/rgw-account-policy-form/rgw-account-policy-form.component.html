@@ -1,0 +1,179 @@
+<cds-modal
+  size="md"
+  [open]="open"
+  [hasScrollingContent]="true"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h4
+      cdsModalHeaderLabel
+      class="cds--type-label-01"
+      i18n
+    >
+      User account
+    </h4>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      Create IAM policy
+    </h3>
+    <p
+      class="cds--modal-header__description cds--type-body-01 cds-mt-3"
+      i18n
+    >
+      Customer-managed policies are reusable permission documents that can be attached to users,
+      groups, and roles.
+    </p>
+  </cds-modal-header>
+
+  <form
+    class="form"
+    #formDir="ngForm"
+    [formGroup]="form"
+  >
+    <div cdsModalContent>
+      <div class="form-item">
+        <legend
+          class="cds--label cds--type-label-01"
+          i18n
+        >
+          Account
+        </legend>
+        <p class="cds--type-body-01">{{ accountName }}</p>
+      </div>
+
+      <div class="form-item">
+        <cds-text-label
+          label="Policy name"
+          for="policy_name"
+          [invalid]="policyName.isInvalid"
+          [invalidText]="policyNameError"
+          helperText="Unique name for this policy within the account."
+          i18n-helperText
+        >
+          Policy name
+          <input
+            cdsText
+            cdValidate
+            #policyName="cdValidate"
+            type="text"
+            id="policy_name"
+            name="policy_name"
+            formControlName="policy_name"
+            placeholder="Enter a policy name (e.g. ReadOnlyS3Access)"
+            [invalid]="policyName.isInvalid"
+            [autofocus]="true"
+            modal-primary-focus
+          />
+        </cds-text-label>
+        <ng-template #policyNameError>
+          @if (form.showError('policy_name', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+        </ng-template>
+      </div>
+
+      <div class="form-item">
+        <cds-text-label
+          label="Policy path"
+          for="policy_path"
+          [invalid]="policyPath.isInvalid"
+          [invalidText]="pathError"
+          helperText='Optional hierarchy for the policy. Use "/" for the root path.'
+          i18n-helperText
+        >
+          Policy path
+          <input
+            cdsText
+            cdValidate
+            #policyPath="cdValidate"
+            type="text"
+            id="policy_path"
+            name="path"
+            formControlName="path"
+            placeholder="/"
+            [invalid]="policyPath.isInvalid"
+          />
+        </cds-text-label>
+        <ng-template #pathError>
+          @if (form.showError('path', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+        </ng-template>
+      </div>
+
+      <div class="form-item">
+        <cds-text-label
+          label="Description"
+          for="policy_description"
+        >
+          Description
+          <input
+            cdsText
+            type="text"
+            id="policy_description"
+            name="description"
+            formControlName="description"
+            placeholder="Optional description for this policy"
+          />
+        </cds-text-label>
+      </div>
+
+      <div class="form-item">
+        <cds-textarea-label
+          labelInputID="policy_doc"
+          [invalid]="policyDoc.isInvalid"
+          [invalidText]="policyDocError"
+          helperText="JSON policy document following the IAM policy grammar."
+          i18n-helperText
+        >
+          Policy document
+          <textarea
+            cdsTextArea
+            cdValidate
+            #policyDoc="cdValidate"
+            id="policy_doc"
+            name="policy_doc"
+            formControlName="policy_doc"
+            rows="10"
+            cols="200"
+            [invalid]="policyDoc.isInvalid"
+            cdRequiredField="Policy document"
+          ></textarea>
+        </cds-textarea-label>
+        <ng-template #policyDocError>
+          @if (form.showError('policy_doc', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (form.showError('policy_doc', formDir, 'json')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Must be valid JSON.</span
+            >
+          }
+        </ng-template>
+      </div>
+    </div>
+
+    <cd-form-button-panel
+      (submitActionEvent)="onSubmit()"
+      [form]="form"
+      submitText="Create"
+      [modalForm]="true"
+    ></cd-form-button-panel>
+  </form>
+</cds-modal>
