@@ -9,6 +9,12 @@ from teuthology.task import Task
 
 log = logging.getLogger(__name__)
 
+CBT_FIRST_RELEASE = 21
+CBT_RELEASE_MAP = {
+    21 : "umbrella",
+    # 22 : "vampire",
+    # 23 : "w_release" ...
+}
 
 class CBT(Task):
     """
@@ -141,10 +147,37 @@ class CBT(Task):
                 ]
             )
 
+    def extract_ceph_major_version(self):
+        ceph_version_str = self.first_mon.sh(['ceph', '-v'])
+        self.log.debug('ceph -v output: %s', ceph_version_str)
+        # ceph version 21.3.0 <sha1> umbrella (dev)
+        
+        full_version_num = ceph_version_str.split()[2]
+        major_version_num = int(full_version_num.split(".")[0])
+
+        self.log.debug('extracted ceph major version: %d', major_version_num)
+        return major_version_num
+
+    def cbt_branch_from_version(self):
+        try:
+            # Extract major version number
+            ceph_major_version = self.extract_ceph_major_version()
+        except Exception as e:
+            self.log.error('Failed to extract ceph version: %s', e)
+            raise
+        
+        # If older than CBT's first release use 'master' CBT branch
+        if ceph_major_version < CBT_FIRST_RELEASE:
+            self.log.debug('ceph major version is %d, so returning master', ceph_major_version)
+            return "master"
+
+        # Otherwise use corresponding or latest release CBT branch
+        return CBT_RELEASE_MAP.get(ceph_major_version, CBT_RELEASE_MAP[max(CBT_RELEASE_MAP)])
+
     def checkout_cbt(self):
         testdir = misc.get_testdir(self.ctx)
         repo = self.config.get('repo', 'https://github.com/ceph/cbt.git')
-        branch = self.config.get('branch', 'master')
+        branch = self.config.get('branch', self.cbt_branch)
         branch = self.config.get('force-branch', branch)
         sha1 = self.config.get('sha1')
         if sha1 is None:
@@ -172,6 +205,7 @@ class CBT(Task):
         super(CBT, self).setup()
         self.first_mon = next(iter(self.ctx.cluster.only(misc.get_first_mon(self.ctx, self.config)).remotes.keys()))
         self.cbt_config = self.generate_cbt_config()
+        self.cbt_branch = self.cbt_branch_from_version()
         self.log.info('cbt configuration is %s', self.cbt_config)
         self.cbt_dir = os.path.join(misc.get_archive_dir(self.ctx), 'cbt')
         self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', self.cbt_dir])
