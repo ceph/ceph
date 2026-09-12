@@ -437,6 +437,11 @@ add_ceph_test(test-ceph-diff-sorted.sh
   ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-diff-sorted.sh)
 
 if(WITH_RADOSGW_RADOS)
+add_ceph_test(test-account-exit-codes.sh
+  ${CMAKE_CURRENT_SOURCE_DIR}/radosgw-admin/test-account-exit-codes.sh)
+endif()
+
+if(WITH_RADOSGW_RADOS)
 # unittest_log_backing
 add_executable(unittest_log_backing test_log_backing.cc)
 target_include_directories(unittest_log_backing

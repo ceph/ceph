@@ -55,6 +55,7 @@ extern "C" {
 #include "radosgw-admin/orphan.h"
 #include "radosgw-admin/sync_checkpoint.h"
 #endif
+#include "radosgw-admin/account.h"
 
 #include "rgw/async_utils.h"
 
@@ -10515,8 +10516,7 @@ next:
 #ifdef WITH_RADOSGW_RADOS
       opt_cmd == OPT::METADATA_LIST ||
 #endif
-      opt_cmd == OPT::USER_LIST ||
-      opt_cmd == OPT::ACCOUNT_LIST) {
+      opt_cmd == OPT::USER_LIST) {
     if (opt_cmd == OPT::USER_LIST) {
       metadata_key = "user";
 
@@ -10538,8 +10538,6 @@ next:
         }
         return 0;
       }
-    } else if (opt_cmd == OPT::ACCOUNT_LIST) {
-      metadata_key = "account";
     }
     void *handle;
     int max = 1000;
@@ -13000,71 +12998,50 @@ next:
       opt_cmd == OPT::ACCOUNT_MODIFY ||
       opt_cmd == OPT::ACCOUNT_GET ||
       opt_cmd == OPT::ACCOUNT_STATS ||
-      opt_cmd == OPT::ACCOUNT_RM)
-  {
-    auto op_state = rgw::account::AdminOpState{
-      .account_id = account_id,
-      .tenant = tenant,
-      .account_name = account_name,
-      .email = user_email,
-      .max_users = max_users,
-      .max_roles = max_roles,
-      .max_groups = max_groups,
-      .max_access_keys = max_access_keys,
-      .max_buckets = max_buckets,
-      .purge_data = static_cast<bool>(purge_data),
-    };
-
-    std::string err_msg;
-    if (opt_cmd == OPT::ACCOUNT_CREATE) {
-      ret = rgw::account::create(dpp(), driver, op_state, err_msg,
-                                 stream_flusher, null_yield);
-      if (ret < 0) {
-        cerr << "ERROR: failed to create account with " << cpp_strerror(-ret)
-            << ": " << err_msg << std::endl;
-        return -ret;
-      }
+      opt_cmd == OPT::ACCOUNT_RM ||
+      opt_cmd == OPT::ACCOUNT_LIST) {
+    rgw_admin_account_options account_opts;
+    switch (opt_cmd) {
+    case OPT::ACCOUNT_CREATE:
+      account_opts.command = account_command::create;
+      break;
+    case OPT::ACCOUNT_MODIFY:
+      account_opts.command = account_command::modify;
+      break;
+    case OPT::ACCOUNT_GET:
+      account_opts.command = account_command::get;
+      break;
+    case OPT::ACCOUNT_STATS:
+      account_opts.command = account_command::stats;
+      break;
+    case OPT::ACCOUNT_RM:
+      account_opts.command = account_command::rm;
+      break;
+    case OPT::ACCOUNT_LIST:
+      account_opts.command = account_command::list;
+      break;
+    default:
+      ceph_abort();
     }
-
-    if (opt_cmd == OPT::ACCOUNT_MODIFY) {
-      ret = rgw::account::modify(dpp(), driver, op_state, err_msg,
-                                 stream_flusher, null_yield);
-      if (ret < 0) {
-        cerr << "ERROR: failed to modify account with " << cpp_strerror(-ret)
-            << ": " << err_msg << std::endl;
-        return -ret;
-      }
+    account_opts.tenant = tenant;
+    account_opts.account_id = account_id;
+    account_opts.account_name = account_name;
+    account_opts.user_email = user_email;
+    account_opts.marker = marker;
+    account_opts.max_users = max_users;
+    account_opts.max_roles = max_roles;
+    account_opts.max_groups = max_groups;
+    account_opts.max_access_keys = max_access_keys;
+    account_opts.max_buckets = max_buckets;
+    account_opts.purge_data = static_cast<bool>(purge_data);
+    account_opts.sync_stats = sync_stats;
+    account_opts.reset_stats = reset_stats;
+    if (max_entries_specified) {
+      account_opts.max_entries = max_entries;
     }
-
-    if (opt_cmd == OPT::ACCOUNT_GET) {
-      ret = rgw::account::info(dpp(), driver, op_state, err_msg,
-                               stream_flusher, null_yield);
-      if (ret < 0) {
-        cerr << "ERROR: failed to read account with " << cpp_strerror(-ret)
-            << ": " << err_msg << std::endl;
-        return -ret;
-      }
-    }
-
-    if (opt_cmd == OPT::ACCOUNT_STATS) {
-      ret = rgw::account::stats(dpp(), driver, op_state,
-                                sync_stats, reset_stats, err_msg,
-                                stream_flusher, null_yield);
-      if (ret < 0) {
-        cerr << "ERROR: failed to read account stats with " << cpp_strerror(-ret)
-            << ": " << err_msg << std::endl;
-        return -ret;
-      }
-    }
-
-    if (opt_cmd == OPT::ACCOUNT_RM) {
-      ret = rgw::account::remove(dpp(), driver, op_state, err_msg,
-                                 stream_flusher, null_yield);
-      if (ret < 0) {
-        cerr << "ERROR: failed to remove account with " << cpp_strerror(-ret)
-            << ": " << err_msg << std::endl;
-        return -ret;
-      }
+    ret = rgw_admin_account(dpp(), driver, stream_flusher, account_opts);
+    if (ret != 0) {
+      return ret;
     }
   }
   if (opt_cmd == OPT::RESTORE_STATUS ||
