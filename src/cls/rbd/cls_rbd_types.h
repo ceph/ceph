@@ -708,6 +708,33 @@ WRITE_CLASS_ENCODER(SnapshotNamespace);
 
 std::ostream& operator<<(std::ostream& os, const SnapshotNamespace& ns);
 
+using SnapshotNameSpaces = std::tuple<UserSnapshotNamespace,
+                                      GroupSnapshotNamespace,
+                                      TrashSnapshotNamespace,
+                                      MirrorSnapshotNamespace>;
+const SnapshotNameSpaces snapshot_namespaces;
+
+using SnapshoNameSpacesIterator =
+  std::function<bool (SnapshotNamespace)>;
+
+template <size_t N>
+constexpr bool iterate_snapshot_namespaces(SnapshoNameSpacesIterator &func) {
+  bool r = iterate_snapshot_namespaces<N-1>(func);
+  if (!r) {
+    return r;
+  }
+  return std::invoke(func, std::get<N>(snapshot_namespaces));
+}
+
+template <>
+constexpr bool iterate_snapshot_namespaces<0>(SnapshoNameSpacesIterator &func) {
+  return std::invoke(func, std::get<0>(snapshot_namespaces));
+}
+
+constexpr void for_each_snapshot_namespace(SnapshoNameSpacesIterator &&func) {
+  iterate_snapshot_namespaces<std::tuple_size_v<SnapshotNameSpaces>-1>(func);
+}
+
 SnapshotNamespaceType get_snap_namespace_type(
     const SnapshotNamespace& snapshot_namespace);
 
