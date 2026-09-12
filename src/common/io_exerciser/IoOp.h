@@ -218,6 +218,63 @@ class TripleTruncateWriteOp : public TruncateWriteOp<OpType::TruncateWrite3, 3> 
       uint64_t length2, uint64_t offset3, uint64_t length3);
 };
 
+class ZeroOp : public ReadWriteOp<OpType::Zero, 1> {
+ public:
+  ZeroOp(uint64_t offset, uint64_t length);
+  static std::unique_ptr<ZeroOp> generate(uint64_t offset, uint64_t length);
+};
+
+class WriteZeroDataOp : public ReadWriteOp<OpType::WriteZeroData, 1> {
+ public:
+  WriteZeroDataOp(uint64_t offset, uint64_t length);
+  static std::unique_ptr<WriteZeroDataOp> generate(uint64_t offset,
+                                                    uint64_t length);
+};
+
+class MapextOp : public ReadWriteOp<OpType::Mapext, 1> {
+ public:
+  MapextOp(uint64_t offset, uint64_t length);
+  static std::unique_ptr<MapextOp> generate(uint64_t offset, uint64_t length);
+};
+
+class DoubleZeroOp : public ReadWriteOp<OpType::Zero2, 2> {
+ public:
+  DoubleZeroOp(uint64_t offset1, uint64_t length1, uint64_t offset2,
+               uint64_t length2);
+  static std::unique_ptr<DoubleZeroOp> generate(uint64_t offset1,
+                                                uint64_t length1,
+                                                uint64_t offset2,
+                                                uint64_t length2);
+};
+
+class WriteAndZeroOp : public TestOp<OpType::WriteAndZero> {
+ public:
+  WriteAndZeroOp(uint64_t write_offset, uint64_t write_length,
+                 uint64_t zero_offset, uint64_t zero_length);
+  static std::unique_ptr<WriteAndZeroOp> generate(uint64_t write_offset,
+                                                  uint64_t write_length,
+                                                  uint64_t zero_offset,
+                                                  uint64_t zero_length);
+  std::string to_string(uint64_t block_size) const override;
+  uint64_t write_offset;
+  uint64_t write_length;
+  uint64_t zero_offset;
+  uint64_t zero_length;
+};
+
+class ZeroAndTruncateOp : public TestOp<OpType::ZeroAndTruncate> {
+ public:
+  ZeroAndTruncateOp(uint64_t zero_offset, uint64_t zero_length,
+                    uint64_t truncate_size);
+  static std::unique_ptr<ZeroAndTruncateOp> generate(uint64_t zero_offset,
+                                                     uint64_t zero_length,
+                                                     uint64_t truncate_size);
+  std::string to_string(uint64_t block_size) const override;
+  uint64_t zero_offset;
+  uint64_t zero_length;
+  uint64_t truncate_size;
+};
+
 class SingleFailedWriteOp : public ReadWriteOp<OpType::FailedWrite, 1> {
  public:
   SingleFailedWriteOp(uint64_t offset, uint64_t length);
