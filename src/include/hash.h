@@ -3,6 +3,8 @@
 
 #include "acconfig.h"
 
+#include <cstdint>
+
 // Robert Jenkins' function for mixing 32-bit values
 // http://burtleburtle.net/bob/hash/evahash.html
 // a, b = random bits, c = input and output
