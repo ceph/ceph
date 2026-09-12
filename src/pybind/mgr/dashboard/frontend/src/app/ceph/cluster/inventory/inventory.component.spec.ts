@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -45,6 +46,13 @@ describe('InventoryComponent', () => {
 
   it('should not display doc panel if orchestrator is available', () => {
     expect(component.showDocPanel).toBeFalsy();
+  });
+
+  it('should enable search on the physical disks table', () => {
+    fixture.detectChanges();
+    const devicesComponent = fixture.debugElement.query(By.directive(InventoryDevicesComponent))
+      .componentInstance as InventoryDevicesComponent;
+    expect(devicesComponent.searchField).toBe(true);
   });
 
   describe('after ngOnInit', () => {
