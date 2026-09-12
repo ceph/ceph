@@ -58,3 +58,4 @@ overrides:
       - AUTH_INSECURE_CLIENT_KEY_TYPE
       - AUTH_INSECURE_SERVICE_KEY_TYPE
       - AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
+      - all OSDs are running umbrella
