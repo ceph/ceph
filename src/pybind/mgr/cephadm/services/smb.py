@@ -142,12 +142,13 @@ class SMBService(CephService):
         return None
 
     def prepare_create(
-        self, daemon_spec: CephadmDaemonDeploySpec
+        self, daemon_spec: CephadmDaemonDeploySpec,
+        spec: Optional[ServiceSpec] = None,
     ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         logger.debug('smb prepare_create')
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(
-            daemon_spec
+            daemon_spec, spec
         )
         return daemon_spec
 
@@ -223,7 +224,8 @@ class SMBService(CephService):
         return self._lookup_rgw_creds_uri(self.mgr, cluster_id)
 
     def generate_config(
-        self, daemon_spec: CephadmDaemonDeploySpec
+        self, daemon_spec: CephadmDaemonDeploySpec,
+        spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         logger.debug('smb generate_config')
         assert self.TYPE == daemon_spec.daemon_type
@@ -306,7 +308,7 @@ class SMBService(CephService):
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
-        deps = sorted(self.get_dependencies(self.mgr, smb_spec))
+        deps = self.get_dependencies(self.mgr, smb_spec, daemon_spec.daemon_type)
         return config_blobs, deps
 
     def _cert_or_uri(self, data: Optional[str]) -> Optional[str]:
@@ -525,7 +527,7 @@ class SMBService(CephService):
         return ip
 
     @classmethod
-    def get_dependencies(
+    def _get_dependencies(
         cls,
         mgr: 'CephadmOrchestrator',
         spec: Optional[ServiceSpec] = None,

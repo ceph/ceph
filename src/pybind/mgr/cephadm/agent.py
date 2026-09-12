@@ -1029,7 +1029,7 @@ class CephadmAgentHelpers:
                         f'(last_deps={last_deps} -> deps={deps}); '
                         f'pushing updated config via HTTP')
                     daemon_spec = service_registry.get_service(daemon_type_to_service(
-                        daemon_spec.daemon_type)).prepare_create(daemon_spec)
+                        daemon_spec.daemon_type)).prepare_create(daemon_spec, spec)
                     self.mgr.agent_helpers._request_agent_acks(
                         hosts={daemon_spec.host},
                         increment=True,
