@@ -76,3 +76,7 @@ tasks:
 # Wait for the smb service to be removed
 - cephadm.wait_for_service_not_present:
     service: smb.modusr1
+# Removing the cluster should clean that mirror entry too
+- cephadm.shell:
+    host.a:
+      - cmd: '! ceph config-key ls | grep -q "ceph.smb.resources.*modusr1"'
