@@ -1924,6 +1924,22 @@ def test_normalize_path(path, expected):
     assert normalize_path(path) == expected
 
 
+def test_create_user_key_uses_aes256k():
+    mgr = MagicMock()
+    mgr.mon_command.return_value = (
+        0,
+        json.dumps([{'entity': 'client.nfs.foo.cephfs.hash', 'key': 'secret'}]),
+        '',
+    )
+    export_mgr = ExportMgr(mgr)
+
+    assert export_mgr._create_user_key('foo', 'nfs.foo.cephfs.hash', '/', 'cephfs') == 'secret'
+
+    command = mgr.mon_command.call_args.args[0]
+    assert command['prefix'] == 'auth get-or-create'
+    assert command['key_type'] == 'aes256k'
+
+
 def test_ganesha_validate_squash():
     """Check error handling of internal validation function for squash value."""
     from nfs.ganesha_conf import _validate_squash
