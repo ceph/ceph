@@ -66,6 +66,8 @@ namespace rgw::dedup {
 
     this->s.shared_manifest = 0;
     memset(this->s.hash, 0, sizeof(this->s.hash));
+    this->s.mtime_sec       = 0;
+    this->s.mtime_nsec      = 0;
     this->ref_tag           = "";
     this->manifest_bl.clear();
   }
@@ -95,6 +97,8 @@ namespace rgw::dedup {
     this->s.stor_class_len  = CEPHTOH_16(p_rec->s.stor_class_len);
     this->s.ref_tag_len     = CEPHTOH_16(p_rec->s.ref_tag_len);
     this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
+    this->s.mtime_sec       = CEPHTOH_32(p_rec->s.mtime_sec);
+    this->s.mtime_nsec      = CEPHTOH_32(p_rec->s.mtime_nsec);
 
     const char *p = buff + sizeof(this->s);
     this->obj_name = std::string(p, this->s.obj_name_len);
@@ -154,6 +158,8 @@ namespace rgw::dedup {
     p_rec->s.stor_class_len  = HTOCEPH_16(this->stor_class.length());
     p_rec->s.ref_tag_len     = HTOCEPH_16(this->ref_tag.length());
     p_rec->s.manifest_len    = HTOCEPH_16(this->manifest_bl.length());
+    p_rec->s.mtime_sec       = HTOCEPH_32(this->s.mtime_sec);
+    p_rec->s.mtime_nsec      = HTOCEPH_32(this->s.mtime_nsec);
     char *p = buff + sizeof(this->s);
     unsigned len = this->obj_name.length();
     std::memcpy(p, this->obj_name.data(), len);

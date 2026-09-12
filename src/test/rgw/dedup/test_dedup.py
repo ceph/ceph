@@ -4373,3 +4373,57 @@ def test_dedup_many_buckets():
         log.info("restore orig_max_buckets=%d", orig_max_buckets)
         admin(['user', 'modify', '--uid', uid,
                '--max-buckets', str(orig_max_buckets)])
+
+#-------------------------------------------------------------------------------
+def collect_object_mtimes(conn, bucket_name, files):
+    """Return LastModified per S3 key for all copies in files."""
+    mtimes = {}
+
+    for f in files:
+        filename = f[0]
+        num_copies = f[2]
+        for i in range(num_copies):
+            key = gen_object_name(filename, i)
+            resp = conn.head_object(Bucket=bucket_name, Key=key)
+            mtimes[key] = resp['LastModified']
+            log.debug("collect_object_mtimes: %s/%s mtime=%s",
+                      bucket_name, key, mtimes[key])
+
+    return mtimes
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_maintain_mtime():
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    bucket_name = gen_bucket_name()
+    conn = get_single_connection()
+    config = default_config
+    files = []
+    for size in (1*MB, 7*MB, 16*MB):
+        gen_files_fixed_copies(files, 1, size, 2)
+
+    try:
+        conn.create_bucket(Bucket=bucket_name)
+        indices = [0] * len(files)
+        ret = upload_objects(bucket_name, files, indices, conn, config, True)
+        dedup_stats = ret[1]
+        mtimes_before = collect_object_mtimes(conn, bucket_name, files)
+        time.sleep(10)
+        exec_dedup(dedup_stats, dry_run=False)
+        mtimes_after = collect_object_mtimes(conn, bucket_name, files)
+
+        success=True
+        for key, mtime_before in mtimes_before.items():
+            assert key in mtimes_after
+            if mtimes_after[key] != mtime_before:
+                log.warning("mtime changed for %s: before=%s, after=%s",
+                            key, mtime_before, mtimes_after[key])
+                success=False
+
+        assert success
+
+    finally:
+        cleanup(bucket_name, conn)
