@@ -147,7 +147,7 @@ class MgmtGatewayService(CephadmService):
             daemon_config["files"]["nginx.crt"] = tls_pair.cert
             daemon_config["files"]["nginx.key"] = tls_pair.key
 
-        return daemon_config, sorted(MgmtGatewayService.get_dependencies(self.mgr))
+        return daemon_config, self.sorted_dependencies(self.mgr, svc_spec, daemon_spec.daemon_type)
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """
