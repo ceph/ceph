@@ -1401,21 +1401,27 @@ int main(int argc, char **argv)
     } else {
       cout << "reshard success" << std::endl;
     }
+    // do reopen DB to do required post processing,
+    // e.g. allocmap commit
+    r = bluestore.reopen_repaired_db_environment();
+    if (r < 0) {
+      cerr << "error opening DB after resharding: " << cpp_strerror(r) << std::endl;
+    }
     bluestore.close_db_environment();
   } else if (action == "show-sharding") {
     BlueStore bluestore(cct.get(), path);
-    KeyValueDB *db_ptr;
-    int r = bluestore.open_db_environment(&db_ptr, false, false);
+    int r = bluestore.cold_open();
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
+    KeyValueDB* db_ptr = bluestore.get_kv();
     ceph_assert(db_ptr);
     RocksDBStore* rocks_db = dynamic_cast<RocksDBStore*>(db_ptr);
     ceph_assert(rocks_db);
     std::string sharding;
     bool res = rocks_db->get_sharding(sharding);
-    bluestore.close_db_environment();
+    bluestore.cold_close();
     if (!res) {
       cerr << "failed to retrieve sharding def" << std::endl;
       exit(EXIT_FAILURE);
