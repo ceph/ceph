@@ -206,7 +206,7 @@ void AvlAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
 
   ceph_assert(size != 0);
 
-  auto rs = range_tree.find(range_t{ start, end },
+  auto rs = range_tree.lower_bound(range_t{ start, end },
     range_tree.key_comp());
 
   if (rs == range_tree.end() || rs->start >= end) {
