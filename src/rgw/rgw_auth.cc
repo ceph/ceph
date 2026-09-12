@@ -646,12 +646,11 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
                                               RGWUserInfo& user_info) const      /* out */
 {
   std::unique_ptr<rgw::sal::User> user = driver->get_user(acct_user);
-  user->get_info().display_name = display_name;
-  user->get_info().type = TYPE_WEB;
-  user->get_info().max_buckets =
-    cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
-  rgw_apply_default_bucket_quota(user->get_info().quota.bucket_quota, cct->_conf);
-  rgw_apply_default_user_quota(user->get_info().quota.user_quota, cct->_conf);
+  user->get_info_mut().display_name = display_name;
+  user->get_info_mut().type = TYPE_WEB;
+  user->set_max_buckets(cct->_conf.get_val<int64_t>("rgw_user_max_buckets"));
+  rgw_apply_default_bucket_quota(user->get_info_mut().quota.bucket_quota, cct->_conf);
+  rgw_apply_default_user_quota(user->get_info_mut().quota.user_quota, cct->_conf);
 
   int ret = user->store_user(dpp, null_yield, true);
   if (ret < 0) {
@@ -672,7 +671,7 @@ auto rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   if (account) {
     // we don't need shadow users for account roles because bucket ownership,
     // quota, and stats are tracked by the account instead of the user
-    RGWUserInfo& user_info = user->get_info();
+    RGWUserInfo& user_info = user->get_info_mut();
     user_info.display_name = user_name;
     user_info.type = TYPE_WEB;
     // the user_info.user_id is initialized by driver->get_user(...)
@@ -717,7 +716,7 @@ auto rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   }
 
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map oidc federated user " << federated_user << dendl;
-  create_account(dpp, federated_user, this->user_name, user->get_info());
+  create_account(dpp, federated_user, this->user_name, user->get_info_mut());
   return user;
 }
 
@@ -961,15 +960,14 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   }
 
   std::unique_ptr<rgw::sal::User> user = driver->get_user(owner_acct_user);
-  user->get_info().display_name = info.acct_name;
+  user->get_info_mut().display_name = info.acct_name;
   if (info.acct_type) {
     //ldap/keystone for s3 users
-    user->get_info().type = info.acct_type;
+    user->get_info_mut().type = info.acct_type;
   }
-  user->get_info().max_buckets =
-    cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
-  rgw_apply_default_bucket_quota(user->get_info().quota.bucket_quota, cct->_conf);
-  rgw_apply_default_user_quota(user->get_info().quota.user_quota, cct->_conf);
+  user->set_max_buckets(cct->_conf.get_val<int64_t>("rgw_user_max_buckets"));
+  rgw_apply_default_bucket_quota(user->get_info_mut().quota.bucket_quota, cct->_conf);
+  rgw_apply_default_user_quota(user->get_info_mut().quota.user_quota, cct->_conf);
   user_info = user->get_info();
 
   int ret = user->store_user(dpp, null_yield, true);
@@ -1055,7 +1053,7 @@ auto rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp) con
   }
 
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
-  create_account(dpp, acct_user, implicit_tenant, user->get_info());
+  create_account(dpp, acct_user, implicit_tenant, user->get_info_mut());
 
   /* Succeeded if we are here (create_account() hasn't thrown). */
   return user;
@@ -1101,8 +1099,8 @@ ACLOwner rgw::auth::LocalApplier::get_aclowner() const
     owner.id = account->id;
     owner.display_name = account->name;
   } else {
-    owner.id = user_info.user_id;
-    owner.display_name = user_info.display_name;
+    owner.id = user_info->user_id;
+    owner.display_name = user_info->display_name;
   }
   return owner;
 }
@@ -1111,7 +1109,7 @@ uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvide
 {
   // match acl grants to the specific user id
   uint32_t mask = rgw_perms_from_aclspec_default_strategy(
-      user_info.user_id.to_str(), aclspec, dpp);
+      user_info->user_id.to_str(), aclspec, dpp);
 
   if (account) {
     // account users also match acl grants to the account id. in aws, grantees
@@ -1125,12 +1123,12 @@ uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvide
 
 bool rgw::auth::LocalApplier::is_admin() const
 {
-  return user_info.admin || user_info.system;
+  return user_info->admin || user_info->system;
 }
 
 bool rgw::auth::LocalApplier::is_owner_of(const rgw_owner& o) const
 {
-  return match_owner(o, user_info.user_id, account);
+  return match_owner(o, user_info->user_id, account);
 }
 
 bool rgw::auth::LocalApplier::is_root() const
@@ -1145,16 +1143,16 @@ bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {
   if (p.is_wildcard()) {
     return true;
   } else if (p.is_account()) {
-    return match_account_or_tenant(account, user_info.user_id.tenant,
+    return match_account_or_tenant(account, user_info->user_id.tenant,
                                    p.get_account());
   } else if (p.is_user()) {
     // account users can match both account- and tenant-based arns
     if (account && p.get_account() == account->id) {
-      return match_principal(user_info.path, user_info.display_name,
+      return match_principal(user_info->path, user_info->display_name,
                              subuser, p.get_id());
     } else {
-      return p.get_account() == user_info.user_id.tenant
-          && match_principal(user_info.path, user_info.user_id.id,
+      return p.get_account() == user_info->user_id.tenant
+          && match_principal(user_info->path, user_info->user_id.id,
                              subuser, p.get_id());
     }
   }
@@ -1162,11 +1160,11 @@ bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {
 }
 
 void rgw::auth::LocalApplier::to_str(std::ostream& out) const {
-  out << "rgw::auth::LocalApplier(acct_user=" << user_info.user_id
-      << ", acct_name=" << user_info.display_name
+  out << "rgw::auth::LocalApplier(acct_user=" << user_info->user_id
+      << ", acct_name=" << user_info->display_name
       << ", subuser=" << subuser
       << ", perm_mask=" << get_perm_mask()
-      << ", is_admin=" << static_cast<bool>(user_info.admin) << ")";
+      << ", is_admin=" << static_cast<bool>(user_info->admin) << ")";
 }
 
 uint32_t rgw::auth::LocalApplier::get_perm_mask(const std::string& subuser_name,
@@ -1197,7 +1195,7 @@ auto rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp) cons
 void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
 {
   string key = "aws:userid";
-  string value = user_info.type == TYPE_ROOT ? user_info.account_id : user_info.user_id.id;
+  string value = user_info->type == TYPE_ROOT ? user_info->account_id : user_info->user_id.id;
   s->env.emplace(key, value);
 
   // copy our identity policies into req_state
@@ -1221,7 +1219,7 @@ rgw::auth::LocalApplier::LocalApplier(CephContext* const cct,
                                       std::string subuser,
                                       const std::optional<uint32_t>& perm_mask,
                                       const std::string access_key_id)
-  : user_info(user->get_info()),
+  : user_info(user->get_info_shared()),
     user(std::move(user)),
     account(std::move(account)),
     policies(std::move(policies)),
@@ -1382,7 +1380,7 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     RGWUserInfo user_info;
     rgw_get_anon_user(user_info);
     std::unique_ptr<rgw::sal::User> user = s->user->clone();
-    user->get_info() = user_info;
+    user->get_info_mut() = std::move(user_info);
     auto apl = \
       apl_factory->create_apl_local(cct, s, std::move(user), std::nullopt, {},
                                     rgw::auth::LocalApplier::NO_SUBUSER,

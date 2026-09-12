@@ -223,10 +223,10 @@ public:
       if (!key.active || swift_key_active(old_info, id))
         continue;
       /* check if swift mapping exists */
-      RGWUserInfo inf;
-      int r = svc.user->get_user_info_by_swift(id, &inf, nullptr, nullptr, nullptr, y, dpp);
-      if (r >= 0 && inf.user_id != info.user_id &&
-          (!old_info || inf.user_id != old_info->user_id)) {
+      std::shared_ptr<const RGWUserInfo> inf;
+      int r = svc.user->get_user_info_by_swift(id, inf, nullptr, nullptr, nullptr, y, dpp);
+      if (r >= 0 && inf->user_id != info.user_id &&
+          (!old_info || inf->user_id != old_info->user_id)) {
         ldpp_dout(dpp, 0) << "WARNING: can't store user info, swift id (" << id
           << ") already mapped to another user (" << info.user_id << ")" << dendl;
         return -EEXIST;
@@ -239,10 +239,10 @@ public:
         continue;
       if (s3_key_active(old_info, id)) // old key already active
         continue;
-      RGWUserInfo inf;
-      int r = svc.user->get_user_info_by_access_key(id, &inf, nullptr, nullptr, nullptr, y, dpp);
-      if (r >= 0 && inf.user_id != info.user_id &&
-          (!old_info || inf.user_id != old_info->user_id)) {
+      std::shared_ptr<const RGWUserInfo> inf;
+      int r = svc.user->get_user_info_by_access_key(id, inf, nullptr, nullptr, nullptr, y, dpp);
+      if (r >= 0 && inf->user_id != info.user_id &&
+          (!old_info || inf->user_id != old_info->user_id)) {
         ldpp_dout(dpp, 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
         return -EEXIST;
       }
@@ -645,7 +645,7 @@ static int read_index(const DoutPrefixProvider* dpp, optional_yield y,
 
 int RGWSI_User_RADOS::get_user_info_from_index(const string& key,
                                                const rgw_pool& pool,
-                                               RGWUserInfo *info,
+                                               std::shared_ptr<const RGWUserInfo>& info,
                                                RGWObjVersionTracker* objv_tracker,
                                                std::map<std::string, bufferlist>* pattrs,
                                                real_time* pmtime, optional_yield y,
@@ -654,7 +654,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(const string& key,
   string cache_key = pool.to_str() + "/" + key;
 
   if (auto e = uinfo_cache->find(cache_key)) {
-    *info = e->info;
+    info = e->info;
     if (objv_tracker)
       *objv_tracker = e->objv_tracker;
     if (pattrs)
@@ -677,16 +677,18 @@ int RGWSI_User_RADOS::get_user_info_from_index(const string& key,
     return -ENOENT;
   }
 
+  RGWUserInfo new_info;
   rgw_cache_entry_info cache_info;
-  ret = read_user_info(rgw_user{uid.id}, &e.info, &e.objv_tracker,
+  ret = read_user_info(rgw_user{uid.id}, &new_info, &e.objv_tracker,
                        nullptr, &cache_info, &e.attrs, y, dpp);
   if (ret < 0) {
     return ret;
   }
+  e.info = std::make_shared<const RGWUserInfo>(std::move(new_info));
 
   uinfo_cache->put(dpp, svc.cache, cache_key, &e, { &cache_info });
 
-  *info = e.info;
+  info = e.info;
   if (objv_tracker)
     *objv_tracker = e.objv_tracker;
   if (pmtime)
@@ -698,11 +700,55 @@ int RGWSI_User_RADOS::get_user_info_from_index(const string& key,
   return 0;
 }
 
+int RGWSI_User_RADOS::get_user_info_by_uid(const rgw_user& uid,
+                                       std::shared_ptr<const RGWUserInfo>& info,
+                                       RGWObjVersionTracker* objv_tracker,
+                                       std::map<std::string, bufferlist>* pattrs,
+                                       real_time* pmtime, optional_yield y,
+                                       const DoutPrefixProvider* dpp)
+{
+  const rgw_pool& pool = svc.zone->get_zone_params().user_uid_pool;
+  const string cache_key = pool.to_str() + "/" + uid.to_str();
+
+  if (auto e = uinfo_cache->find(cache_key)) {
+    info = e->info;
+    if (objv_tracker)
+      *objv_tracker = e->objv_tracker;
+    if (pattrs)
+      *pattrs = e->attrs;
+    if (pmtime)
+      *pmtime = e->mtime;
+    return 0;
+  }
+
+  RGWUserInfo new_info;
+  user_info_cache_entry e;
+  rgw_cache_entry_info cache_info;
+  int ret = read_user_info(uid, &new_info, &e.objv_tracker,
+                           &e.mtime, &cache_info, &e.attrs, y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  e.info = std::make_shared<const RGWUserInfo>(std::move(new_info));
+
+  uinfo_cache->put(dpp, svc.cache, cache_key, &e, { &cache_info });
+
+  info = e.info;
+  if (objv_tracker)
+    *objv_tracker = e.objv_tracker;
+  if (pmtime)
+    *pmtime = e.mtime;
+  if (pattrs)
+    *pattrs = std::move(e.attrs);
+  return 0;
+}
+
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int RGWSI_User_RADOS::get_user_info_by_email(const string& email, RGWUserInfo *info,
+int RGWSI_User_RADOS::get_user_info_by_email(const string& email,
+                                       std::shared_ptr<const RGWUserInfo>& info,
                                        RGWObjVersionTracker *objv_tracker,
                                        std::map<std::string, bufferlist>* pattrs,
                                        real_time *pmtime, optional_yield y,
@@ -719,7 +765,7 @@ int RGWSI_User_RADOS::get_user_info_by_email(const string& email, RGWUserInfo *i
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 int RGWSI_User_RADOS::get_user_info_by_swift(const string& swift_name,
-                                       RGWUserInfo *info,        /* out */
+                                       std::shared_ptr<const RGWUserInfo>& info,
                                        RGWObjVersionTracker * const objv_tracker,
                                        std::map<std::string, bufferlist>* pattrs,
                                        real_time * const pmtime, optional_yield y,
@@ -735,7 +781,7 @@ int RGWSI_User_RADOS::get_user_info_by_swift(const string& swift_name,
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 int RGWSI_User_RADOS::get_user_info_by_access_key(const std::string& access_key,
-                                            RGWUserInfo *info,
+                                            std::shared_ptr<const RGWUserInfo>& info,
                                             RGWObjVersionTracker* objv_tracker,
                                             std::map<std::string, bufferlist>* pattrs,
                                             real_time *pmtime, optional_yield y,

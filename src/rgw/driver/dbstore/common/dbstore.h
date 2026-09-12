@@ -1742,10 +1742,10 @@ class DB {
         RGWUserInfo& uinfo, std::map<std::string, bufferlist> *pattrs,
         RGWObjVersionTracker *pobjv_tracker);
     int store_user(const DoutPrefixProvider *dpp,
-        RGWUserInfo& uinfo, bool exclusive, std::map<std::string, bufferlist> *pattrs,
+        const RGWUserInfo& uinfo, bool exclusive, std::map<std::string, bufferlist> *pattrs,
         RGWObjVersionTracker *pobjv_tracker, RGWUserInfo* pold_info);
     int remove_user(const DoutPrefixProvider *dpp,
-        RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv_tracker);
+        const RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv_tracker);
     int list_users(const DoutPrefixProvider *dpp,
         const std::string& marker,
         uint64_t max,
