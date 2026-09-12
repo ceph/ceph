@@ -220,13 +220,14 @@ ECOmapJournal::get_value_updates(const hobject_t &hoid) {
 }
 
 void ECOmapJournal::process_entries(const hobject_t &hoid) {
-  auto entry_list = get_entries(hoid);
-  ldpp_dout(&dpp, 20) << __func__ << ": hoid=" << hoid
-                      << " processing " << entry_list.size() << " entries" << dendl;
   if (!has_unprocessed_entries(hoid)) {
+    ldpp_dout(&dpp, 20) << __func__ << ": hoid=" << hoid
+                        << " no unprocessed entries" << dendl;
     return;
   }
-  
+  ldpp_dout(&dpp, 20) << __func__ << ": hoid=" << hoid
+                      << " processing " << entries_size(hoid) << " entries" << dendl;
+
   for (auto entry_iter = begin_entries(hoid);
         entry_iter != end_entries(hoid); ++entry_iter) {
     ECOmapRemovedRanges removed_ranges(entry_iter->version);
