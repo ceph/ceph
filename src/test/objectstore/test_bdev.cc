@@ -91,6 +91,156 @@ TEST(KernelDevice, Ticket45337) {
   b->close();
 }
 
+#if defined(HAVE_POSIXAIO)
+TEST(KernelDevice, PosixAioSingleBufferCompletion) {
+  // Single-aiocb async write+read round trip. Regression guard for the
+  // aiocbp[0]/EV_ONESHOT completion path (already correct, but previously
+  // untested) alongside the multi-iovec case below.
+  uint64_t size = 1048576ull * 16;
+  TempBdev bdev{ size };
+  const bool buffered = false;
+
+  std::unique_ptr<BlockDevice> b(
+    BlockDevice::create(g_ceph_context, bdev.path, NULL, NULL,
+      [](void* handle, void* aio) {}, NULL));
+  ASSERT_EQ(b->open(bdev.path), 0);
+
+  string s(4096, 'x');
+  bufferlist wbl;
+  wbl.append(s);
+
+  std::unique_ptr<IOContext> wioc(new IOContext(g_ceph_context, NULL));
+  ASSERT_EQ(b->aio_write(0, wbl, wioc.get(), buffered), 0);
+  if (wioc->has_pending_aios()) {
+    b->aio_submit(wioc.get());
+    wioc->aio_wait();
+  }
+
+  bufferlist rbl;
+  std::unique_ptr<IOContext> rioc(new IOContext(g_ceph_context, NULL));
+  ASSERT_EQ(b->aio_read(0, s.size(), &rbl, rioc.get()), 0);
+  if (rioc->has_pending_aios()) {
+    b->aio_submit(rioc.get());
+    rioc->aio_wait();
+  }
+
+  ASSERT_EQ(rbl.length(), s.size());
+  ASSERT_EQ(memcmp(s.c_str(), rbl.c_str(), s.size()), 0);
+
+  b->close();
+}
+
+TEST(KernelDevice, PosixAioMultiIovecCompletion) {
+  // Multiple discrete bufferlist segments -> multiple iovecs -> the
+  // lio_listio()/n_aiocb > 1 completion path this PR's EV_ONESHOT fix
+  // targets. Segments are appended separately (not rebuilt into one
+  // contiguous buffer) specifically to force that path.
+  uint64_t size = 1048576ull * 16;
+  TempBdev bdev{ size };
+  const bool buffered = false;
+
+  std::unique_ptr<BlockDevice> b(
+    BlockDevice::create(g_ceph_context, bdev.path, NULL, NULL,
+      [](void* handle, void* aio) {}, NULL));
+  ASSERT_EQ(b->open(bdev.path), 0);
+
+  const int nseg = 8;
+  const size_t seglen = 4096;
+  bufferlist wbl;
+  for (int i = 0; i < nseg; i++) {
+    string s(seglen, 'a' + i);
+    wbl.append(s);
+  }
+  ASSERT_GT(wbl.get_num_buffers(), 1u)
+    << "test needs a genuinely multi-segment bufferlist to exercise "
+       "the lio_listio() path -- got a single contiguous segment instead";
+
+  std::unique_ptr<IOContext> wioc(new IOContext(g_ceph_context, NULL));
+  ASSERT_EQ(b->aio_write(0, wbl, wioc.get(), buffered), 0);
+  if (wioc->has_pending_aios()) {
+    b->aio_submit(wioc.get());
+    wioc->aio_wait();
+  }
+
+  bufferlist rbl;
+  std::unique_ptr<IOContext> rioc(new IOContext(g_ceph_context, NULL));
+  ASSERT_EQ(b->aio_read(0, nseg * seglen, &rbl, rioc.get()), 0);
+  if (rioc->has_pending_aios()) {
+    b->aio_submit(rioc.get());
+    rioc->aio_wait();
+  }
+
+  ASSERT_EQ(rbl.length(), nseg * seglen);
+  for (int i = 0; i < nseg; i++) {
+    string expected(seglen, 'a' + i);
+    bufferlist chunk;
+    chunk.substr_of(rbl, i * seglen, seglen);
+    ASSERT_EQ(memcmp(expected.c_str(), chunk.c_str(), seglen), 0)
+      << "segment " << i << " mismatch";
+  }
+
+  b->close();
+}
+
+TEST(KernelDevice, PosixAioConcurrentCompletion) {
+  // Multiple independent aio_t's queued on the same IOContext before a
+  // single aio_submit() -- real queue depth on the kqueue, not just
+  // multiple iovecs within one lio_listio() call. This is the actual
+  // scenario the EV_ONESHOT fix guards against: without it, a persistent
+  // kevent completion could in principle re-fire and be misattributed to
+  // a different, already-completed and already-freed aio_t.
+  uint64_t size = 1048576ull * 16;
+  TempBdev bdev{ size };
+  const bool buffered = false;
+
+  std::unique_ptr<BlockDevice> b(
+    BlockDevice::create(g_ceph_context, bdev.path, NULL, NULL,
+      [](void* handle, void* aio) {}, NULL));
+  ASSERT_EQ(b->open(bdev.path), 0);
+
+  const int ndepth = 6;
+  const size_t seglen = 4096;
+  std::vector<string> patterns;
+  std::vector<bufferlist> wbls(ndepth);
+  for (int i = 0; i < ndepth; i++) {
+    patterns.push_back(string(seglen, 'a' + i));
+    wbls[i].append(patterns[i]);
+  }
+
+  std::unique_ptr<IOContext> wioc(new IOContext(g_ceph_context, NULL));
+  for (int i = 0; i < ndepth; i++) {
+    ASSERT_EQ(b->aio_write(i * seglen, wbls[i], wioc.get(), buffered), 0);
+  }
+  ASSERT_EQ(wioc->num_pending.load(), ndepth)
+    << "test needs genuine queue depth -- aio_write() calls were "
+       "coalesced or already submitted instead of staying pending";
+  if (wioc->has_pending_aios()) {
+    b->aio_submit(wioc.get());
+    wioc->aio_wait();
+  }
+
+  bufferlist rbl;
+  std::unique_ptr<IOContext> rioc(new IOContext(g_ceph_context, NULL));
+  ASSERT_EQ(b->aio_read(0, ndepth * seglen, &rbl, rioc.get()), 0);
+  if (rioc->has_pending_aios()) {
+    b->aio_submit(rioc.get());
+    rioc->aio_wait();
+  }
+
+  ASSERT_EQ(rbl.length(), ndepth * seglen);
+  for (int i = 0; i < ndepth; i++) {
+    bufferlist chunk;
+    chunk.substr_of(rbl, i * seglen, seglen);
+    ASSERT_EQ(memcmp(patterns[i].c_str(), chunk.c_str(), seglen), 0)
+      << "segment " << i << " mismatch -- possible misattributed/stale "
+         "completion";
+  }
+
+  b->close();
+}
+
+#endif // HAVE_POSIXAIO
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   map<string,string> defaults = {
