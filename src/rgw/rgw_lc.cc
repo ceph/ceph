@@ -2651,6 +2651,10 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     << dendl;
 
   entry.status = lc_processing;
+  /* only initialize start_time when it has never been set in an ad-hoc command */
+  if (entry.start_time == 0) {
+    entry.start_time = ceph_clock_now();
+  }
   ret = sal_lc->set_entry(this, null_yield, obj_names[index], entry);
   if (ret < 0) {
     ldpp_dout(this, 0) << "RGWLC::process_bucket() failed to set obj entry "
