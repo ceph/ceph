@@ -487,8 +487,8 @@ TEST_F(QuiesceAgentTest, DuplicateQuiesceRequest) {
 
   // since we have those pinned, they should still be live
 
-  EXPECT_TRUE(pinned1.unique());
-  EXPECT_TRUE(pinned2.unique());
+  EXPECT_TRUE(pinned1.use_count() == 1);
+  EXPECT_TRUE(pinned2.use_count() == 1);
 
   EXPECT_EQ(QS_QUIESCED, pinned1->get_actual_state());
   EXPECT_EQ(QS_QUIESCING, pinned2->get_actual_state());
