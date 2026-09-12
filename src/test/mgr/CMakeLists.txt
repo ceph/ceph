@@ -34,6 +34,17 @@ target_link_libraries(unittest_mgr_daemonstate
   Python3::Python
 )
 
+# unittest_mgr_fail_slow_osd_detector
+add_executable(unittest_mgr_fail_slow_osd_detector
+  test_fail_slow_osd_detector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/FailSlowOSDDetector.cc
+)
+add_ceph_unittest(unittest_mgr_fail_slow_osd_detector)
+target_link_libraries(unittest_mgr_fail_slow_osd_detector
+  ceph-common
+  global
+)
+
 # unittest_mgr_mgrcap
 add_executable(unittest_mgr_mgrcap
   test_mgrcap.cc
