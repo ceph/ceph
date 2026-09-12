@@ -207,7 +207,6 @@ struct seastore_test_t :
     void remove(
       CTransaction &t) {
       t.remove(cid, oid);
-      t.remove_collection(cid);
     }
 
     void remove(
@@ -894,9 +893,100 @@ TEST_P(seastore_test_t, collection_split)
 	coll_t test_coll2{spg_t{pg_t{17, 0}}};
 	sharded_seastore->create_new_collection(test_coll2).get();
 	CTransaction t;
+	t.create_collection(test_coll2, 5);
 	t.split_collection(test_coll, 5, 5, test_coll2);
 	do_transaction(std::move(t));
       }
+    }
+  });
+}
+
+TEST_P(seastore_test_t, collection_split_with_clone)
+{
+  run_async([this] {
+    coll_t test_coll{spg_t{pg_t{1, 0}}};
+    coll_t test_coll2{spg_t{pg_t{17, 0}}};
+    auto src_coll = sharded_seastore->create_new_collection(test_coll).get();
+    {
+      CTransaction t;
+      t.create_collection(test_coll, 0);
+      do_transaction(std::move(t));
+    }
+    auto dst_coll = sharded_seastore->create_new_collection(test_coll2).get();
+    {
+      CTransaction t;
+      t.create_collection(test_coll2, 0);
+      do_transaction(std::move(t));
+    }
+
+    auto src_obj = object_state_t{test_coll, src_coll, make_oid(0)};
+    src_obj.write(*sharded_seastore, 0, 4096, 'a');
+    // No write after clone data mapping is still shared
+    // need_cow() set, no write since sthe clone was taken.
+    src_obj.clone(*sharded_seastore, 10);
+
+    {
+      CTransaction t;
+      t.split_collection(test_coll, 0, 0, test_coll2);
+      do_transaction(std::move(t));
+    }
+
+    auto dst_obj = object_state_t{test_coll2, dst_coll, src_obj.oid};
+    dst_obj.contents = src_obj.contents;
+    dst_obj.omap = src_obj.omap;
+    dst_obj.clone_contents = src_obj.clone_contents;
+    dst_obj.read(*sharded_seastore, 0, 4096);
+
+    auto dst_clone10 = dst_obj.get_clone(10);
+    dst_clone10.read(*sharded_seastore, 0, 4096);
+  });
+}
+
+TEST_P(seastore_test_t, collection_split_with_omap)
+{
+  run_async([this] {
+    coll_t test_coll{spg_t{pg_t{1, 0}}};
+    coll_t test_coll2{spg_t{pg_t{17, 0}}};
+    auto src_coll = sharded_seastore->create_new_collection(test_coll).get();
+    {
+      CTransaction t;
+      t.create_collection(test_coll, 0);
+      do_transaction(std::move(t));
+    }
+    auto dst_coll = sharded_seastore->create_new_collection(test_coll2).get();
+    {
+      CTransaction t;
+      t.create_collection(test_coll2, 0);
+      do_transaction(std::move(t));
+    }
+
+    auto src_obj = object_state_t{test_coll, src_coll, make_oid(0)};
+    // No write -- isolates the metadata-region move from the data-region
+    // move that collection_split_with_clone already covers.
+    src_obj.touch(*sharded_seastore);
+    for (int i = 0; i < 10; i++) {
+      bufferlist bl;
+      std::string val = "value" + std::to_string(i);
+      bl.append(val);
+      src_obj.set_omap(*sharded_seastore, "key" + std::to_string(i), bl);
+    }
+
+    {
+      CTransaction t;
+      // bits=0 matches every object regardless of hash, so this object
+      // is guaranteed to move.
+      t.split_collection(test_coll, 0, 0, test_coll2);
+      do_transaction(std::move(t));
+    }
+
+    auto dst_obj = object_state_t{test_coll2, dst_coll, src_obj.oid};
+    dst_obj.omap = src_obj.omap;
+    auto kvs = dst_obj.get_omaps(*sharded_seastore, std::string());
+    EXPECT_EQ(kvs.size(), src_obj.omap.size());
+    for (auto &[k, v] : src_obj.omap) {
+      auto it = kvs.find(k);
+      ASSERT_NE(it, kvs.end()) << "missing omap key " << k;
+      EXPECT_EQ(it->second, v) << "wrong value for omap key " << k;
     }
   });
 }
@@ -935,6 +1025,58 @@ TEST_P(seastore_test_t, collection_merge)
     EXPECT_TRUE(contains(colls, coll_name));
     EXPECT_TRUE(contains(colls, dest_coll));
     EXPECT_FALSE(contains(colls, src_coll));
+  });
+}
+
+TEST_P(seastore_test_t, collection_merge_with_clone)
+{
+  run_async([this] {
+    coll_t src_coll_id{spg_t{pg_t{17, 0}}};
+    coll_t dest_coll_id{spg_t{pg_t{1, 0}}};
+
+    auto dest_coll = sharded_seastore->create_new_collection(dest_coll_id).get();
+    {
+      CTransaction t;
+      t.create_collection(dest_coll_id, 0);
+      do_transaction(std::move(t));
+    }
+    auto src_coll = sharded_seastore->create_new_collection(src_coll_id).get();
+    {
+      CTransaction t;
+      t.create_collection(src_coll_id, 0);
+      do_transaction(std::move(t));
+    }
+
+    auto src_obj = object_state_t{src_coll_id, src_coll, make_oid(0)};
+    src_obj.write(*sharded_seastore, 0, 4096, 'a');
+    // No write after clone data mapping is still shared
+    // need_cow() set, no write since sthe clone was taken.
+    src_obj.clone(*sharded_seastore, 10);
+
+    {
+      CTransaction t;
+      t.merge_collection(src_coll_id, dest_coll_id, 0);
+      do_transaction(std::move(t));
+    }
+
+    auto dst_obj = object_state_t{dest_coll_id, dest_coll, src_obj.oid};
+    dst_obj.contents = src_obj.contents;
+    dst_obj.omap = src_obj.omap;
+    dst_obj.clone_contents = src_obj.clone_contents;
+    dst_obj.read(*sharded_seastore, 0, 4096);
+
+    auto dst_clone10 = dst_obj.get_clone(10);
+    dst_clone10.read(*sharded_seastore, 0, 4096);
+
+    auto raw = seastore->list_collections().get();
+    std::vector<coll_t> colls;
+    colls.reserve(raw.size());
+    std::ranges::transform(raw, std::back_inserter(colls),
+                           [](const auto& p) { return p.first; });
+    EXPECT_EQ(colls.size(), 2u);
+    EXPECT_TRUE(contains(colls, coll_name));
+    EXPECT_TRUE(contains(colls, dest_coll_id));
+    EXPECT_FALSE(contains(colls, src_coll_id));
   });
 }
 
@@ -1092,6 +1234,25 @@ TEST_P(seastore_test_t, rename)
     test_obj.rename(*sharded_seastore, test_other);
     test_other.read(*sharded_seastore, 0, 4096);
     test_other.check_omap(*sharded_seastore, refiter, callback);
+  });
+}
+
+TEST_P(seastore_test_t, rename_after_clone)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.write(*sharded_seastore, 0, 4096, 'a');
+    test_obj.clone(*sharded_seastore, 10);
+
+    auto test_other = object_state_t{
+      test_obj.cid,
+      test_obj.coll,
+      ghobject_t(hobject_t(sobject_t(std::string("object_1"), CEPH_NOSNAP)))};
+    test_obj.rename(*sharded_seastore, test_other);
+    test_other.read(*sharded_seastore, 0, 4096);
+
+    auto clone_obj10 = test_obj.get_clone(10);
+    clone_obj10.read(*sharded_seastore, 0, 4096);
   });
 }
 

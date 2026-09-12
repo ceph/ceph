@@ -466,6 +466,10 @@ public:
       pin = co_await complete_mapping(t, std::move(pin));
     }
 
+    // for an indirect pin, the intermediate offset is applied internally below.
+    // A caller passing an intermediate/direct offset here would double-apply it.
+    assert(partial_off + partial_len <= pin.get_length());
+
     extent_len_t direct_partial_off = partial_off;
     bool is_clone = pin.is_clone();
     std::optional<indirect_info_t> maybe_indirect_info;
@@ -868,6 +872,41 @@ public:
     laddr_t dst_prefix,
     bool move_indirect);
 
+  /**
+   * alloc_and_copy_non_data_extent
+   *
+   * Used by move_region() to relocate a single-extent metadata mapping
+   * (OMAP_LEAF/OMAP_INNER) by content rather than by paddr.
+   */
+  template <typename T>
+  move_region_iertr::future<> alloc_and_copy_non_data_extent(
+    Transaction &t,
+    laddr_t dst_key,
+    extent_len_t length,
+    T &src_extent) {
+    auto extent = co_await alloc_non_data_extent<T>(
+      t, laddr_hint_t::create_as_fixed(dst_key), length
+    ).handle_error_interruptible(
+      move_region_iertr::pass_further(),
+      crimson::ct_error::assert_all("invalid error"));
+    extent->rewrite(t, src_extent, 0);
+    extent->set_laddr(dst_key);
+    extent->set_last_committed_crc(extent->calc_crc32c());
+  }
+
+  /**
+   * alloc_and_copy_data_extents
+   *
+   * Same as alloc_and_copy_non_data_extent(), for OBJECT_DATA_BLOCK,
+   * which may span multiple destination extents.
+   */
+  move_region_iertr::future<> alloc_and_copy_data_extents(
+    Transaction &t,
+    laddr_t dst_key,
+    extent_len_t length,
+    LBAMapping &dst,
+    ceph::bufferlist bl);
+
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.
@@ -1135,32 +1174,33 @@ public:
   }
 
   /**
-   * read_onode_root
+   * read_meta_onode_root
    *
-   * Get onode-tree root logical address
+   * Get the meta collection's onode-tree root logical address.
    */
-  using read_onode_root_iertr = base_iertr;
-  using read_onode_root_ret = read_onode_root_iertr::future<laddr_t>;
-  read_onode_root_ret read_onode_root(Transaction &t) {
+  using read_meta_onode_root_iertr = base_iertr;
+  using read_meta_onode_root_ret = read_meta_onode_root_iertr::future<laddr_t>;
+  read_meta_onode_root_ret read_meta_onode_root(Transaction &t) {
     return cache->get_root(t).si_then([&t](auto croot) {
-      LOG_PREFIX(TransactionManager::read_onode_root);
-      laddr_t ret = croot->get_root().onode_root;
+      LOG_PREFIX(TransactionManager::read_meta_onode_root);
+      laddr_t ret = croot->get_root().meta_onode_root;
       SUBTRACET(seastore_tm, "{}", t, ret);
       return ret;
     });
   }
 
   /**
-   * write_onode_root
+   * write_meta_onode_root
    *
-   * Write onode-tree root logical address, must be called after read.
+   * Write the meta collection's onode-tree root logical address, must be
+   * called after read.
    */
-  void write_onode_root(Transaction &t, laddr_t addr) {
-    LOG_PREFIX(TransactionManager::write_onode_root);
+  void write_meta_onode_root(Transaction &t, laddr_t addr) {
+    LOG_PREFIX(TransactionManager::write_meta_onode_root);
     SUBDEBUGT(seastore_tm, "{}", t, addr);
     auto croot = cache->get_root_fast(t);
     croot = cache->duplicate_for_write(t, croot)->cast<RootBlock>();
-    croot->get_root().onode_root = addr;
+    croot->get_root().meta_onode_root = addr;
   }
 
   /**
