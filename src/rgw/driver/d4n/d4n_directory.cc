@@ -2,8 +2,10 @@
 #include <boost/asio/consign.hpp>
 #include <boost/algorithm/string.hpp>
 #include <memory>
-#include "common/async/blocked_completion.h"
-#include "common/dout.h" 
+#include "common/dout.h"
+
+#include "rgw/yield_completion.h"
+
 #include "d4n_directory.h"
 
 namespace rgw { namespace d4n {
@@ -36,19 +38,6 @@ auto async_exec(std::shared_ptr<connection> conn,
       initiate_exec{std::move(conn)}, token, req, resp);
 }
 
-template <typename... Types>
-void redis_exec(std::shared_ptr<connection> conn,
-                boost::system::error_code& ec,
-                const boost::redis::request& req,
-                boost::redis::response<Types...>& resp, optional_yield y)
-{
-  if (y) {
-    auto yield = y.get_yield_context();
-    async_exec(std::move(conn), req, resp, yield[ec]);
-  } else {
-    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
-  }
-}
 
 template <typename... Types>
 void redis_exec_cp(const DoutPrefixProvider* dpp,
@@ -62,12 +51,7 @@ void redis_exec_cp(const DoutPrefixProvider* dpp,
 	std::shared_ptr<connection> conn = pool->acquire(dpp);
 	try {
 
-  		if (y) {
-    		auto yield = y.get_yield_context();
-    		async_exec(conn, req, resp, yield[ec]);
-  		} else {
-    		async_exec(conn, req, resp, ceph::async::use_blocked[ec]);
-  		}
+    		async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 	} catch (const std::exception& e) {
 		//release the connection upon exception
     		pool->release(conn);
@@ -77,18 +61,6 @@ void redis_exec_cp(const DoutPrefixProvider* dpp,
 	pool->release(conn);
 }
 
-void redis_exec(std::shared_ptr<connection> conn,
-                boost::system::error_code& ec,
-                const boost::redis::request& req,
-    boost::redis::generic_response& resp, optional_yield y)
-{
-  if (y) {
-    auto yield = y.get_yield_context();
-    async_exec(std::move(conn), req, resp, yield[ec]);
-  } else {
-    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
-  }
-}
 
 void redis_exec_cp(const DoutPrefixProvider* dpp,
                 std::shared_ptr<rgw::d4n::RedisPool> pool,
@@ -100,12 +72,7 @@ void redis_exec_cp(const DoutPrefixProvider* dpp,
 	std::shared_ptr<connection> conn = pool->acquire(dpp);
 
 	try {
-  		if (y) {
-    			auto yield = y.get_yield_context();
-    			async_exec(conn, req, resp, yield[ec]);
-  		} else {
-    			async_exec(conn, req, resp, ceph::async::use_blocked[ec]);
-  		}	
+    		async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 	} catch (const std::exception& e) {
     			pool->release(conn);
     			throw;
@@ -134,7 +101,7 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 {
     if(!redis_pool)[[unlikely]]
     {
-	redis_exec(conn, ec, req, resp, y);
+        async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else[[likely]]
@@ -152,7 +119,7 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 {
     if(!redis_pool)[[unlikely]]
     {
-	redis_exec(conn, ec, req, resp, y);
+        async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else[[likely]]
@@ -1275,7 +1242,7 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
 
   try {
     boost::system::error_code ec;
-    redis_exec(conn, ec, req, resp, y);
+    async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;

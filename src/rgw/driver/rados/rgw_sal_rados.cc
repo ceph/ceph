@@ -67,6 +67,7 @@
 #include "rgw_zone.h"
 #include "rgw_restore.h"
 #include "rgw_multipart_meta_filter.h"
+#include "yield_completion.h"
 
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bi_rados.h"
@@ -4724,12 +4725,7 @@ void MPRadosSerializer::stop_renewal()
 
   // wait for notification of completion
   boost::system::error_code ec_ignored;
-  if (y) {
-    cond.async_wait(lock, y.get_yield_context()[ec_ignored]);
-  } else {
-    maybe_warn_about_blocking(dpp);
-    cond.async_wait(lock, ceph::async::use_blocked[ec_ignored]);
-  }
+  cond.async_wait(lock, rgw::maybe_yield(dpp, y, ec_ignored));
 }
 
 int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y)
@@ -4998,11 +4994,10 @@ int RadosRestore::initialize(const DoutPrefixProvider* dpp, optional_yield y,
   num_objs = n_objs;
   obj_names = o_names;
 
-  maybe_warn_about_blocking(dpp);
   for (auto i=0; i < num_objs; i++) {
     std::unique_ptr<fifo::FIFO> fifo_tmp;
     try {
-      fifo_tmp = fifo::FIFO::create(dpp, r, obj_names[i], neo_ioctx, ceph::async::use_blocked);
+      fifo_tmp = fifo::FIFO::create(dpp, r, obj_names[i], neo_ioctx, rgw::maybe_yield(dpp, y));
     } catch (const sys::system_error& e) {
       ldpp_dout(dpp, -1) << "creating fifo object for index=" << i
 	   << ", objname=" << obj_names[i] << " failed : " << e.what() << dendl;
@@ -5057,9 +5052,8 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
 		int index, std::deque<ceph::buffer::list>&& items) {
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entries to FIFO:" << obj_names[index] << dendl;
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->push(dpp, items, ceph::async::use_blocked);
+    fifos[index]->push(dpp, items, rgw::maybe_yield(dpp, y));
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -5074,9 +5068,8 @@ int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Pushing entry to FIFO:" << obj_names[index] << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->push(dpp, std::move(bl), ceph::async::use_blocked);
+    fifos[index]->push(dpp, std::move(bl), rgw::maybe_yield(dpp, y));
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to push to FIFO: " << obj_names[index]
@@ -5125,10 +5118,9 @@ int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Listing entries from FIFO:" << obj_names[index] << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
     auto [lentries, lmark] = fifos[index]->list(dpp, marker,
-			  	 restore_entries, ceph::async::use_blocked);
+			  	 restore_entries, rgw::maybe_yield(dpp, y));
     entries.clear();
 
     for (const auto& entry : lentries) {
@@ -5186,9 +5178,8 @@ int RadosRestore::trim(const DoutPrefixProvider *dpp, optional_yield y,
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
 		 << "Trimming FIFO:" << obj_names[index] << " upto marker:" << marker << dendl;
 
-  maybe_warn_about_blocking(dpp);
   try {
-    fifos[index]->trim(dpp, std::string(marker), false, ceph::async::use_blocked);
+    fifos[index]->trim(dpp, std::string(marker), false, rgw::maybe_yield(dpp, y));
   } catch (const sys::system_error& e) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 		 << ": unable to trim FIFO: " << obj_names[index]
