@@ -40,6 +40,7 @@ public:
   virtual int read_stats(const DoutPrefixProvider *dpp,
                          const RGWBucketInfo& bucket_info,
                          RGWBucketEnt *stats,
+                         std::optional<std::unordered_map<std::string, RGWBucketEnt>> *storage_class_ents,
                          optional_yield y) = 0;
 
   virtual int handle_overwrite(const DoutPrefixProvider *dpp,

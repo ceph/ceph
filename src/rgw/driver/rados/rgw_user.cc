@@ -106,7 +106,8 @@ static void dump_swift_keys_info(Formatter *f, RGWUserInfo &info)
 }
 
 static void dump_user_info(Formatter *f, RGWUserInfo &info,
-                           bool dump_keys, RGWStorageStats *stats = NULL)
+                           bool dump_keys, RGWStorageStats *stats = NULL,
+                           std::optional<std::unordered_map<std::string, RGWStorageStats>>* sc_stats = NULL)
 {
   f->open_object_section("user_info");
   encode_json("full_user_id", info.user_id, f);
@@ -171,6 +172,13 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("group_ids", info.group_ids, f);
   if (stats) {
     encode_json("stats", *stats, f);
+    if (sc_stats && sc_stats->has_value()) {
+      f->open_object_section("stats.storage-classes");
+      for (const auto& [storage_class, stats] : sc_stats->value()) {
+        encode_json(storage_class.c_str(), stats, f);
+      }
+      f->close_section();
+    }
   }
   f->close_section();
 }
@@ -2333,22 +2341,25 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
 
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
+  std::optional<std::unordered_map<std::string, RGWStorageStats>> sc_stats;
+  std::optional<std::unordered_map<std::string, RGWStorageStats>> *arg_sc_stats = NULL;
   if (op_state.fetch_stats) {
     ceph::real_time last_synced; // ignored
     ceph::real_time last_updated; // ignored
     int ret = driver->load_stats(dpp, y, owner, stats,
-                                 last_synced, last_updated);
+                                 last_synced, last_updated, &sc_stats);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
 
     arg_stats = &stats;
+    arg_sc_stats = &sc_stats;
   }
 
   if (formatter) {
     flusher.start(0);
 
-    dump_user_info(formatter, info, dump_keys, arg_stats);
+    dump_user_info(formatter, info, dump_keys, arg_stats, arg_sc_stats);
     flusher.flush();
   }
 

@@ -161,22 +161,27 @@ struct cls_user_reset_stats2_op {
   ceph::real_time time;
   std::string marker;
   cls_user_stats acc_stats;
+  std::optional<std::unordered_map<std::string, cls_user_stats>> storage_class_stats;
 
   cls_user_reset_stats2_op() {}
-
+''
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(time, bl);
     encode(marker, bl);
     encode(acc_stats, bl);
+    encode(storage_class_stats, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(time, bl);
     decode(marker, bl);
     decode(acc_stats, bl);
+    if (struct_v >= 2) {
+      decode(storage_class_stats, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -189,6 +194,7 @@ struct cls_user_reset_stats2_ret {
   std::string marker;
   cls_user_stats acc_stats; /* 0-initialized */
   bool truncated;
+  std::optional<std::unordered_map<std::string, cls_user_stats>> storage_class_stats;
 
   cls_user_reset_stats2_ret()
     : truncated(false) {}
@@ -196,21 +202,26 @@ struct cls_user_reset_stats2_ret {
   void update_call(cls_user_reset_stats2_op& call) {
     call.marker = marker;
     call.acc_stats = acc_stats;
+    call.storage_class_stats = storage_class_stats;
   }
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(marker, bl);
     encode(acc_stats, bl);
     encode(truncated, bl);
+    encode(storage_class_stats, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(marker, bl);
     decode(acc_stats, bl);
     decode(truncated, bl);
+    if (struct_v >= 2) {
+      decode(storage_class_stats, bl);
+    }
     DECODE_FINISH(bl);
   }
 

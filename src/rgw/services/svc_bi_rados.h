@@ -130,6 +130,7 @@ public:
   int read_stats(const DoutPrefixProvider *dpp,
                  const RGWBucketInfo& bucket_info,
                  RGWBucketEnt *stats,
+                 std::optional<std::unordered_map<std::string, RGWBucketEnt>> *storage_class_ents,
                  optional_yield y) override;
 
   int get_reshard_status(const DoutPrefixProvider *dpp, optional_yield y,
