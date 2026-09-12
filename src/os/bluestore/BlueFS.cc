@@ -4259,7 +4259,8 @@ void BlueFS::_claim_completed_aios(FileWriter *h, list<aio_t> *ls)
 {
   for (auto p : h->iocv) {
     if (p) {
-      ls->splice(ls->end(), p->running_aios);
+      ls->splice(ls->end(), p->writes.running);
+      ls->splice(ls->end(), p->reads.running);
     }
   }
   dout(10) << __func__ << " got " << ls->size() << " aios" << dendl;

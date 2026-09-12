@@ -77,7 +77,7 @@ uint64_t IOContext::get_num_ios() const
   // that to the bytes value.
   uint64_t ios = 0;
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
-  ios += pending_aios.size();
+  ios += writes.pending.size() + reads.pending.size();
 #endif
 #ifdef HAVE_SPDK
   ios += total_nseg;
@@ -90,7 +90,8 @@ void IOContext::release_running_aios()
   ceph_assert(!num_running);
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   // release aio contexts (including pinned buffers).
-  running_aios.clear();
+  writes.running.clear();
+  reads.running.clear();
 #endif
 }
 
