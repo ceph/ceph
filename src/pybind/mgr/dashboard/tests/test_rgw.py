@@ -481,6 +481,88 @@ class RgwUserControllerTestCase(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody(mock_return_value)
 
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_account_limit_reached(self, mock_proxy, mock_cmd):
+        """Creating a user when the account max_users limit is already reached returns 400."""
+        mock_proxy.return_value = {'max_users': 2}
+        mock_cmd.return_value = (0, ['yuva$user1', 'yuva$user2'], '')
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'user3',
+            'display_name': 'User Three',
+            'account_id': 'RGW123456789',
+        })
+        self.assertStatus(400)
+        mock_cmd.assert_called_once_with(
+            ['user', 'list', '--account-id', 'RGW123456789'])
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_account_zero_limit(self, mock_proxy, mock_cmd):
+        """max_users=0 means no users allowed; creation is rejected even with 0 existing."""
+        mock_proxy.return_value = {'max_users': 0}
+        mock_cmd.return_value = (0, [], '')
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'user1',
+            'display_name': 'User One',
+            'account_id': 'RGW123456789',
+        })
+        self.assertStatus(400)
+        mock_cmd.assert_called_once_with(
+            ['user', 'list', '--account-id', 'RGW123456789'])
+
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_account_limit_not_reached(self, mock_proxy, mock_cmd):
+        """Creating a user when the account user count is below max_users succeeds."""
+        mock_proxy.side_effect = [
+            {'max_users': 2},
+            {'full_user_id': 'user2', 'uid': 'user2', 'keys': [], 'swift_keys': [],
+             'account_id': 'RGW123456789', 'type': 'rgw'},
+        ]
+        mock_cmd.return_value = (0, ['yuva$user1'], '')
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'user2',
+            'display_name': 'User Two',
+            'account_id': 'RGW123456789',
+        })
+        self.assertStatus(201)
+        mock_cmd.assert_called_once_with(
+            ['user', 'list', '--account-id', 'RGW123456789'])
+
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_account_unlimited(self, mock_proxy):
+        """max_users < 0 means unlimited; user-list is never called."""
+        mock_proxy.side_effect = [
+            {'max_users': -1},
+            {'full_user_id': 'user1', 'uid': 'user1', 'keys': [], 'swift_keys': [],
+             'account_id': 'RGW123456789', 'type': 'rgw'},
+        ]
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'user1',
+            'display_name': 'User One',
+            'account_id': 'RGW123456789',
+        })
+        self.assertStatus(201)
+
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_create_user_no_account_skips_limit_check(self, mock_proxy):
+        """Creating a user without an account_id skips the limit check entirely."""
+        mock_proxy.return_value = {
+            'full_user_id': 'standalone_user',
+            'uid': 'standalone_user',
+            'keys': [],
+            'swift_keys': [],
+            'account_id': '',
+            'type': 'rgw',
+        }
+        self._post('/test/api/rgw/user?daemon_name=dummy-daemon', data={
+            'uid': 'standalone_user',
+            'display_name': 'Standalone User',
+        })
+        self.assertStatus(201)
+        self.assertEqual(mock_proxy.call_count, 1)
+
 
 class TestRgwTopicController(ControllerTestCase):
 
