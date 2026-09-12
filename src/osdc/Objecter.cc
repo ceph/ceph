@@ -2400,7 +2400,7 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
   op->get();  // Keep alive during async operation
 
   boost::asio::post(service, [this, op, ec, rc]() {
-    shunique_lock rl(rwlock, ceph::acquire_shared);
+    shunique_lock sul(rwlock, ceph::acquire_shared);
 
     bool freed = op->get_nref() == 1;
     op->put();
@@ -2413,6 +2413,7 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
     unique_lock sl(op->session->lock);
 
     if (rc != -EAGAIN) {
+      sul.unlock();
       op->trace.event("post op complete");
       // This removes from session and unlocks sl.
       complete_op_reply(op, ec, op->session, sl, rc);
@@ -2421,7 +2422,7 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
       sl.unlock();
       op->split_op_tids.reset();
       ceph_tid_t tid = 0;
-      _op_submit(op, rl, &tid);
+      _op_submit(op, sul, &tid);
     }
   });
 }
