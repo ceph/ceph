@@ -31,6 +31,7 @@
 #include "include/msgr.h" // for CEPH_ENTITY_TYPE_CLIENT
 #include "gtest/gtest.h"
 
+#include <common/perf_histogram.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <map>
@@ -695,6 +696,1075 @@ TEST(PerfCounters, TestLabelStrings) {
     }
 }
 )", message);
+
+  g_ceph_context->get_perfcounters_collection()->clear();
+}
+
+enum {
+  TEST_PERFCOUNTERS_HIST2_ELEMENT_FIRST = 300,
+  TEST_PERFCOUNTERS_HIST2_LAT_BYTES,
+  TEST_PERFCOUNTERS_HIST2_COUNT_LAT,
+  TEST_PERFCOUNTERS_HIST2_ASYM,
+  TEST_PERFCOUNTERS_HIST2_OFFSET,
+  TEST_PERFCOUNTERS_HIST2_ELEMENT_LAST,
+};
+
+static PerfCounters* setup_test_2d_histograms(CephContext* cct) {
+  using axis = PerfHistogramCommon::axis_config_d;
+  PerfCountersBuilder bld(cct, "test_perfcounter_hist2d",
+      TEST_PERFCOUNTERS_HIST2_ELEMENT_FIRST,
+      TEST_PERFCOUNTERS_HIST2_ELEMENT_LAST);
+
+  // Latency vs. request size used by the OSD op histograms and librbd
+  // persistent write log
+  bld.add_u64_counter_histogram(TEST_PERFCOUNTERS_HIST2_LAT_BYTES, "lat_bytes",
+                                axis{"lat", PerfHistogramCommon::SCALE_LOG2, 0, 1000, 4},
+                                axis{"bytes", PerfHistogramCommon::SCALE_LOG2, 0, 512, 4});
+  // A small linear count against a log2 duration used by OSD scrub reservation
+  bld.add_u64_counter_histogram(TEST_PERFCOUNTERS_HIST2_COUNT_LAT, "count_lat",
+                                axis{"replicas", PerfHistogramCommon::SCALE_LINEAR, 0, 1, 4},
+                                axis{"dur", PerfHistogramCommon::SCALE_LOG2, 0, 250000, 4});
+  // Non-square
+  bld.add_u64_counter_histogram(TEST_PERFCOUNTERS_HIST2_ASYM, "asym",
+                                axis{"x", PerfHistogramCommon::SCALE_LINEAR, 0, 10, 3},
+                                axis{"y", PerfHistogramCommon::SCALE_LOG2, 0, 4096, 2});
+  // Non-zero axis minimums
+  bld.add_u64_counter_histogram(TEST_PERFCOUNTERS_HIST2_OFFSET, "offset",
+                                axis{"off", PerfHistogramCommon::SCALE_LINEAR, 100, 50, 4},
+                                axis{"lg", PerfHistogramCommon::SCALE_LOG2, 8, 4, 3});
+
+  PerfCounters* counters = bld.create_perf_counters();
+  cct->get_perfcounters_collection()->add(counters);
+  return counters;
+}
+
+TEST(PerfCounters, Histograms2D) {
+  g_ceph_context->get_perfcounters_collection()->clear();
+  PerfCounters* p = setup_test_2d_histograms(g_ceph_context);
+  AdminSocketClient client(get_rand_socket_path());
+  std::string msg;
+
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "perf histogram schema", "format": "raw" })", &msg));
+  ASSERT_EQ(R"({
+    "test_perfcounter_hist2d": {
+        "lat_bytes": {
+            "type": 26,
+            "metric_type": "counter",
+            "value_type": "integer-2d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "count_lat": {
+            "type": 26,
+            "metric_type": "counter",
+            "value_type": "integer-2d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "asym": {
+            "type": 26,
+            "metric_type": "counter",
+            "value_type": "integer-2d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "offset": {
+            "type": 26,
+            "metric_type": "counter",
+            "value_type": "integer-2d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        }
+    }
+}
+)", msg);
+
+  p->hinc(TEST_PERFCOUNTERS_HIST2_LAT_BYTES, 500, 100);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_LAT_BYTES, 999, 511);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_LAT_BYTES, 1000, 512);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_LAT_BYTES, 1500, 4096);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_LAT_BYTES, 10000, 1 << 20);
+
+  p->hinc(TEST_PERFCOUNTERS_HIST2_COUNT_LAT, 0, 1000);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_COUNT_LAT, 1, 300000);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_COUNT_LAT, 2, 900000);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_COUNT_LAT, 7, 100);
+
+  p->hinc(TEST_PERFCOUNTERS_HIST2_ASYM, 5, 0);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_ASYM, 5, -1);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_ASYM, 50, 1 << 20);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_ASYM, -1, 4096);
+
+  p->hinc(TEST_PERFCOUNTERS_HIST2_OFFSET, 99, 7);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_OFFSET, 100, 8);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_OFFSET, 175, 12);
+  p->hinc(TEST_PERFCOUNTERS_HIST2_OFFSET, 1000, 100);
+
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "perf histogram dump", "format": "raw" })", &msg));
+  ASSERT_EQ(R"({
+    "test_perfcounter_hist2d": {
+        "lat_bytes": {
+            "axes": [
+                {
+                    "name": "lat",
+                    "min": 0,
+                    "quant_size": 1000,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 999
+                        },
+                        {
+                            "min": 1000,
+                            "max": 1999
+                        },
+                        {
+                            "min": 2000
+                        }
+                    ]
+                },
+                {
+                    "name": "bytes",
+                    "min": 0,
+                    "quant_size": 512,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 511
+                        },
+                        {
+                            "min": 512,
+                            "max": 1023
+                        },
+                        {
+                            "min": 1024
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                13999,
+                1053795
+            ],
+            "values": [
+                [
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                [
+                    0,
+                    2,
+                    0,
+                    0
+                ],
+                [
+                    0,
+                    0,
+                    1,
+                    1
+                ],
+                [
+                    0,
+                    0,
+                    0,
+                    1
+                ]
+            ]
+        },
+        "count_lat": {
+            "axes": [
+                {
+                    "name": "replicas",
+                    "min": 0,
+                    "quant_size": 1,
+                    "buckets": 4,
+                    "scale_type": "linear",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 0
+                        },
+                        {
+                            "min": 1,
+                            "max": 1
+                        },
+                        {
+                            "min": 2
+                        }
+                    ]
+                },
+                {
+                    "name": "dur",
+                    "min": 0,
+                    "quant_size": 250000,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 249999
+                        },
+                        {
+                            "min": 250000,
+                            "max": 499999
+                        },
+                        {
+                            "min": 500000
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                10,
+                1201100
+            ],
+            "values": [
+                [
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                [
+                    0,
+                    1,
+                    0,
+                    0
+                ],
+                [
+                    0,
+                    0,
+                    1,
+                    0
+                ],
+                [
+                    0,
+                    1,
+                    0,
+                    1
+                ]
+            ]
+        },
+        "asym": {
+            "axes": [
+                {
+                    "name": "x",
+                    "min": 0,
+                    "quant_size": 10,
+                    "buckets": 3,
+                    "scale_type": "linear",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 9
+                        },
+                        {
+                            "min": 10
+                        }
+                    ]
+                },
+                {
+                    "name": "y",
+                    "min": 0,
+                    "quant_size": 4096,
+                    "buckets": 2,
+                    "scale_type": "log2",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                59,
+                1052671
+            ],
+            "values": [
+                [
+                    0,
+                    1
+                ],
+                [
+                    1,
+                    1
+                ],
+                [
+                    0,
+                    1
+                ]
+            ]
+        },
+        "offset": {
+            "axes": [
+                {
+                    "name": "off",
+                    "min": 100,
+                    "quant_size": 50,
+                    "buckets": 4,
+                    "scale_type": "linear",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": 99
+                        },
+                        {
+                            "min": 100,
+                            "max": 149
+                        },
+                        {
+                            "min": 150,
+                            "max": 199
+                        },
+                        {
+                            "min": 200
+                        }
+                    ]
+                },
+                {
+                    "name": "lg",
+                    "min": 8,
+                    "quant_size": 4,
+                    "buckets": 3,
+                    "scale_type": "log2",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": 7
+                        },
+                        {
+                            "min": 8,
+                            "max": 11
+                        },
+                        {
+                            "min": 12
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                1374,
+                127
+            ],
+            "values": [
+                [
+                    1,
+                    0,
+                    0
+                ],
+                [
+                    0,
+                    1,
+                    0
+                ],
+                [
+                    0,
+                    0,
+                    1
+                ],
+                [
+                    0,
+                    0,
+                    1
+                ]
+            ]
+        }
+    }
+}
+)", msg);
+
+  g_ceph_context->get_perfcounters_collection()->clear();
+}
+
+enum {
+  TEST_PERFCOUNTERS_HIST_ELEMENT_FIRST = 400,
+  TEST_PERFCOUNTERS_HIST_BYTES,
+  TEST_PERFCOUNTERS_HIST_TIME,
+  TEST_PERFCOUNTERS_HIST_TIME_PROM_LOG2,
+  TEST_PERFCOUNTERS_HIST_TIME_PROM,
+  TEST_PERFCOUNTERS_HIST_COUNT,
+  TEST_PERFCOUNTERS_HIST_ELEMENT_LAST,
+};
+
+static PerfCounters* setup_test_1d_histograms(CephContext* cct) {
+  PerfCountersBuilder bld(cct, "test_perfcounter_hist",
+      TEST_PERFCOUNTERS_HIST_ELEMENT_FIRST,
+      TEST_PERFCOUNTERS_HIST_ELEMENT_LAST);
+  bld.add_u64_counter_histogram(TEST_PERFCOUNTERS_HIST_BYTES, "bytes",
+                                PerfHistogramCommon::axis_config_d::bytes("bytes", 512, 4));
+  bld.add_time_histogram(TEST_PERFCOUNTERS_HIST_TIME, "latency",
+                         PerfHistogramCommon::axis_config_d::latency("lat", 1000, 4));
+  bld.add_time_histogram(TEST_PERFCOUNTERS_HIST_TIME_PROM_LOG2, "web_latency",
+                         PerfHistogramCommon::axis_config_d::web_latency_log2("weblat", 6));
+  bld.add_time_histogram(TEST_PERFCOUNTERS_HIST_TIME_PROM, "prom",
+                         PerfHistogramCommon::axis_config_d::web_latency("prom"));
+  bld.add_u64_counter_histogram(TEST_PERFCOUNTERS_HIST_COUNT, "counter",
+                                PerfHistogramCommon::axis_config_d::count("count", 4, 100));
+
+  PerfCounters* counters = bld.create_perf_counters();
+  cct->get_perfcounters_collection()->add(counters);
+  return counters;
+}
+
+TEST(PerfCounters, Histograms1D) {
+  PerfCounters* p = setup_test_1d_histograms(g_ceph_context);
+  AdminSocketClient client(get_rand_socket_path());
+  std::string msg;
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "perf histogram dump", "format": "raw" })", &msg));
+  ASSERT_EQ(R"({
+    "test_perfcounter_hist": {
+        "bytes": {
+            "axes": [
+                {
+                    "name": "bytes",
+                    "min": 0,
+                    "quant_size": 512,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "bytes",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 511
+                        },
+                        {
+                            "min": 512,
+                            "max": 1023
+                        },
+                        {
+                            "min": 1024
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        "latency": {
+            "axes": [
+                {
+                    "name": "lat",
+                    "min": 0,
+                    "quant_size": 1000,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 999
+                        },
+                        {
+                            "min": 1000,
+                            "max": 1999
+                        },
+                        {
+                            "min": 2000
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        "web_latency": {
+            "axes": [
+                {
+                    "name": "weblat",
+                    "min": 0,
+                    "quant_size": 1000000,
+                    "buckets": 6,
+                    "scale_type": "log2",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 999999
+                        },
+                        {
+                            "min": 1000000,
+                            "max": 1999999
+                        },
+                        {
+                            "min": 2000000,
+                            "max": 3999999
+                        },
+                        {
+                            "min": 4000000,
+                            "max": 7999999
+                        },
+                        {
+                            "min": 8000000
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        "prom": {
+            "axes": [
+                {
+                    "name": "prom",
+                    "min": 0,
+                    "quant_size": 0,
+                    "buckets": 13,
+                    "scale_type": "custom",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 5000000
+                        },
+                        {
+                            "min": 5000001,
+                            "max": 10000000
+                        },
+                        {
+                            "min": 10000001,
+                            "max": 25000000
+                        },
+                        {
+                            "min": 25000001,
+                            "max": 50000000
+                        },
+                        {
+                            "min": 50000001,
+                            "max": 100000000
+                        },
+                        {
+                            "min": 100000001,
+                            "max": 250000000
+                        },
+                        {
+                            "min": 250000001,
+                            "max": 500000000
+                        },
+                        {
+                            "min": 500000001,
+                            "max": 1000000000
+                        },
+                        {
+                            "min": 1000000001,
+                            "max": 2500000000
+                        },
+                        {
+                            "min": 2500000001,
+                            "max": 5000000000
+                        },
+                        {
+                            "min": 5000000001,
+                            "max": 10000000000
+                        },
+                        {
+                            "min": 10000000001
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        "counter": {
+            "axes": [
+                {
+                    "name": "count",
+                    "min": 0,
+                    "quant_size": 100,
+                    "buckets": 4,
+                    "scale_type": "linear",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 99
+                        },
+                        {
+                            "min": 100,
+                            "max": 199
+                        },
+                        {
+                            "min": 200
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                0
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0
+            ]
+        }
+    }
+}
+)", msg);
+
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "perf histogram schema", "format": "raw" })", &msg));
+  ASSERT_EQ(R"({
+    "test_perfcounter_hist": {
+        "bytes": {
+            "type": 26,
+            "metric_type": "counter",
+            "value_type": "integer-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "latency": {
+            "type": 25,
+            "metric_type": "counter",
+            "value_type": "real-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "web_latency": {
+            "type": 25,
+            "metric_type": "counter",
+            "value_type": "real-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "prom": {
+            "type": 25,
+            "metric_type": "counter",
+            "value_type": "real-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        },
+        "counter": {
+            "type": 26,
+            "metric_type": "counter",
+            "value_type": "integer-1d-histogram",
+            "description": "",
+            "nick": "",
+            "priority": 0,
+            "units": "none"
+        }
+    }
+}
+)", msg);
+
+  p->hinc(TEST_PERFCOUNTERS_HIST_BYTES, 511);
+  p->hinc(TEST_PERFCOUNTERS_HIST_BYTES, 1500);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME, utime_t(500ms));
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME, 505ms);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM_LOG2, 100ms);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM_LOG2, 5ms);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM, 100ms);
+  p->htinc(TEST_PERFCOUNTERS_HIST_TIME_PROM, 5ms);
+  p->hinc(TEST_PERFCOUNTERS_HIST_COUNT, 100);
+
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "perf histogram dump", "format": "raw" })", &msg));
+  ASSERT_EQ(R"({
+    "test_perfcounter_hist": {
+        "bytes": {
+            "axes": [
+                {
+                    "name": "bytes",
+                    "min": 0,
+                    "quant_size": 512,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "bytes",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 511
+                        },
+                        {
+                            "min": 512,
+                            "max": 1023
+                        },
+                        {
+                            "min": 1024
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                2011
+            ],
+            "values": [
+                0,
+                1,
+                0,
+                1
+            ]
+        },
+        "latency": {
+            "axes": [
+                {
+                    "name": "lat",
+                    "min": 0,
+                    "quant_size": 1000,
+                    "buckets": 4,
+                    "scale_type": "log2",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 999
+                        },
+                        {
+                            "min": 1000,
+                            "max": 1999
+                        },
+                        {
+                            "min": 2000
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                1005000000
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                2
+            ]
+        },
+        "web_latency": {
+            "axes": [
+                {
+                    "name": "weblat",
+                    "min": 0,
+                    "quant_size": 1000000,
+                    "buckets": 6,
+                    "scale_type": "log2",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 999999
+                        },
+                        {
+                            "min": 1000000,
+                            "max": 1999999
+                        },
+                        {
+                            "min": 2000000,
+                            "max": 3999999
+                        },
+                        {
+                            "min": 4000000,
+                            "max": 7999999
+                        },
+                        {
+                            "min": 8000000
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                105000000
+            ],
+            "values": [
+                0,
+                0,
+                0,
+                0,
+                1,
+                1
+            ]
+        },
+        "prom": {
+            "axes": [
+                {
+                    "name": "prom",
+                    "min": 0,
+                    "quant_size": 0,
+                    "buckets": 13,
+                    "scale_type": "custom",
+                    "unit": "nanoseconds",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 5000000
+                        },
+                        {
+                            "min": 5000001,
+                            "max": 10000000
+                        },
+                        {
+                            "min": 10000001,
+                            "max": 25000000
+                        },
+                        {
+                            "min": 25000001,
+                            "max": 50000000
+                        },
+                        {
+                            "min": 50000001,
+                            "max": 100000000
+                        },
+                        {
+                            "min": 100000001,
+                            "max": 250000000
+                        },
+                        {
+                            "min": 250000001,
+                            "max": 500000000
+                        },
+                        {
+                            "min": 500000001,
+                            "max": 1000000000
+                        },
+                        {
+                            "min": 1000000001,
+                            "max": 2500000000
+                        },
+                        {
+                            "min": 2500000001,
+                            "max": 5000000000
+                        },
+                        {
+                            "min": 5000000001,
+                            "max": 10000000000
+                        },
+                        {
+                            "min": 10000000001
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                105000000
+            ],
+            "values": [
+                0,
+                1,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        "counter": {
+            "axes": [
+                {
+                    "name": "count",
+                    "min": 0,
+                    "quant_size": 100,
+                    "buckets": 4,
+                    "scale_type": "linear",
+                    "unit": "none",
+                    "ranges": [
+                        {
+                            "max": -1
+                        },
+                        {
+                            "min": 0,
+                            "max": 99
+                        },
+                        {
+                            "min": 100,
+                            "max": 199
+                        },
+                        {
+                            "min": 200
+                        }
+                    ]
+                }
+            ],
+            "sum": [
+                100
+            ],
+            "values": [
+                0,
+                0,
+                1,
+                0
+            ]
+        }
+    }
+}
+)", msg);
+}
+
+
+enum {
+  TEST_PERFCOUNTERS_MIXED_FIRST = 900,
+  TEST_PERFCOUNTERS_MIXED_SCALAR,
+  TEST_PERFCOUNTERS_MIXED_HIST,
+  TEST_PERFCOUNTERS_MIXED_LAST,
+};
+
+// Test the histogram selection logic
+static void setup_test_mixed_counters(CephContext* cct) {
+  PerfCountersBuilder bld(cct, "test_perfcounter_mixed",
+      TEST_PERFCOUNTERS_MIXED_FIRST, TEST_PERFCOUNTERS_MIXED_LAST);
+  bld.add_u64_counter(TEST_PERFCOUNTERS_MIXED_SCALAR, "scalar_counter",
+                      "A plain scalar counter");
+  bld.add_time_histogram(TEST_PERFCOUNTERS_MIXED_HIST, "hist_counter",
+                         PerfHistogramCommon::axis_config_d::web_latency("lat"),
+                         "A latency histogram");
+  cct->get_perfcounters_collection()->add(bld.create_perf_counters());
+}
+
+TEST(PerfCounters, HistogramSelection) {
+  g_ceph_context->get_perfcounters_collection()->clear();
+  setup_test_mixed_counters(g_ceph_context);
+
+  AdminSocketClient client(get_rand_socket_path());
+  std::string msg;
+
+  auto has = [](const std::string& haystack, const char* needle) {
+    return haystack.find(needle) != std::string::npos;
+  };
+
+  // `perf histogram dump` predates the flag and must stay histogram-only
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "perf histogram dump", "format": "raw" })", &msg));
+  ASSERT_FALSE(has(msg, "scalar_counter"));
+  ASSERT_TRUE(has(msg, "hist_counter"));
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "perf dump", "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_FALSE(has(msg, "hist_counter"));
+
+  // plain `counter dump` does not dump histograms by default
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "counter dump", "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_FALSE(has(msg, "hist_counter"));
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "counter schema", "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_FALSE(has(msg, "hist_counter"));
+
+  // --histograms adds histograms to the scalar output
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "counter dump", "histograms": true, "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_TRUE(has(msg, "hist_counter"));
+  ASSERT_EQ("", client.do_request(
+      R"({ "prefix": "counter schema", "histograms": true, "format": "raw" })", &msg));
+  ASSERT_TRUE(has(msg, "scalar_counter"));
+  ASSERT_TRUE(has(msg, "hist_counter"));
 
   g_ceph_context->get_perfcounters_collection()->clear();
 }
