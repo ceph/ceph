@@ -504,11 +504,14 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
   RGWSyncTraceNodeRef tn;
 
+  obj_version expected_version;
+
 public:
   RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
                            const std::string& _raw_key, const std::string& _entry_marker,
                            const RGWMDLogStatus& _op_status,
-                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent);
+                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent,
+                           const obj_version& _expected_version = obj_version{});
 
   int operate(const DoutPrefixProvider *dpp) override;
 };
