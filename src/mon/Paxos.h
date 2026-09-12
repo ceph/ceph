@@ -111,7 +111,6 @@ e 12v
 #define CEPH_MON_PAXOS_H
 
 #include "include/types.h"
-#include "mon_types.h"
 #include "include/buffer.h"
 #include "msg/msg_types.h"
 #include "include/Context.h"

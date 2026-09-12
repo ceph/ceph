@@ -18,6 +18,7 @@
 #define CEPH_MEXPORTDIR_H
 
 #include "messages/MMDSOp.h"
+#include "include/encoding_vector.h"
 
 class MExportDir final : public MMDSOp {
 public:

@@ -42,11 +42,13 @@
 #include "common/likely.h"
 #include "include/Context.h"
 #include "common/Clock.h"
+#include "common/OnFinisher.h"
 
 #include "osdc/Objecter.h"
 
 #include "common/config.h"
 #include "include/ceph_assert.h"
+#include "include/cephfs/encoding.h"
 #include "include/compat.h"
 
 #include "messages/MClientReply.h" // for struct DirStat

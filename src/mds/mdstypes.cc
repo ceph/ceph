@@ -8,6 +8,11 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
+#include "include/ceph_fs_encoder.h"
+#include "include/cephfs/gid.h" // for mds_gid_t
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 
 #include <iomanip>
 #include <iostream>

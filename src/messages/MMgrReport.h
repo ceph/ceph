@@ -24,6 +24,8 @@
 
 #include "common/perf_counters.h"
 #include "include/common_fwd.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_vector.h"
 #include "mgr/DaemonHealthMetric.h"
 
 class PerfCounterType

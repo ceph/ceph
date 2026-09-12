@@ -32,6 +32,7 @@
 #include "common/version.h"
 #include "common/blkdev.h"
 #include "common/cmdparse.h"
+#include "common/OnFinisher.h"
 #include "common/signal.h"
 #include "crush/CrushWrapper.h"
 

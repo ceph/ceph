@@ -30,6 +30,7 @@
 #include "msg/MessageRef.h"
 #include "common/ceph_mutex.h"
 #include "common/config_cacher.h"
+#include "common/hobject.h"
 #include "common/snap_types.h" // for class SnapContext
 
 class OstreamTemp;

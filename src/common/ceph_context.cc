@@ -30,6 +30,7 @@
 
 #include "include/ceph_fs.h" // for CEPH_CRYPTO_NONE
 #include "include/common_fwd.h"
+#include "include/container_ios.h"
 #include "include/mempool.h"
 #include "include/stringify.h"
 #include "common/admin_socket.h"

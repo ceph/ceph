@@ -21,6 +21,9 @@
 #include <variant>
 
 #include "common/hobject.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
+
 #ifndef WITH_CRIMSON
 #include "osd/osd_internal_types.h"
 #else
@@ -500,9 +503,10 @@ public:
     std::string& key_begin,        ///< [in] first key in range
     std::string& key_end           ///< [in] first key past range, range is [first,last)
     ) {
+    using ceph::encode;
     ceph::buffer::list bl;
-    ::encode(key_begin, bl);
-    ::encode(key_end, bl);
+    encode(key_begin, bl);
+    encode(key_end, bl);
     omap_rmkeyrange(hoid, bl);
   }
   void omap_setheader(

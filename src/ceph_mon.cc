@@ -24,6 +24,7 @@
 #include <string>
 
 #include "common/config.h"
+#include "include/byte_u_t.h"
 #include "include/ceph_features.h"
 #include "include/util.h" // for ceph_data_stats_t
 

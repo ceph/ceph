@@ -19,6 +19,7 @@
 
 #include "messages/MOSDPeeringOp.h"
 #include "osd/PGPeeringEvent.h"
+#include "include/encoding_optional.h"
 
 class MOSDPGLog final : public MOSDPeeringOp {
 private:

@@ -46,7 +46,7 @@
 #include "osd/ECCommon.h"
 #include "osd/ECInject.h"
 
-#include "include/types.h"
+#include "include/byte_u_t.h"
 #include "include/compat.h"
 #include "include/random.h"
 #include "include/scope_guard.h"
@@ -59,6 +59,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_releases.h"
 #include "common/ceph_time.h"
+#include "common/Cond.h"
 #include "common/debug.h"
 #include "common/version.h"
 #include "common/async/blocked_completion.h"

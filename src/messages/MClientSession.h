@@ -16,9 +16,20 @@
 #ifndef CEPH_MCLIENTSESSION_H
 #define CEPH_MCLIENTSESSION_H
 
-#include "mds/MDSAuthCaps.h"
+#include <limits.h> // for UINT64_MAX
+
+#include <cstdint>
+#include <iosfwd>
+#include <map>
+#include <string>
+#include <vector>
+
+#include "include/ceph_fs.h" // for ceph_mds_session_head
+#include "include/types.h" // for ceph_tid_t, version_t
+#include "include/utime.h"
+#include "mds/MDSAuthCaps.h" // for MDSCapAuth
 #include "msg/Message.h"
-#include "mds/mdstypes.h"
+#include "mds/mdstypes.h" // for feature_bitset_t, metric_spec_t
 
 class MClientSession final : public SafeMessage {
 private:
@@ -44,74 +55,17 @@ public:
 
 protected:
   MClientSession() : SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} { }
-  MClientSession(int o, version_t s=0, unsigned msg_flags=0) :
-    SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION},
-    flags(msg_flags) {
-    memset(&head, 0, sizeof(head));
-    head.op = o;
-    head.seq = s;
-  }
-  MClientSession(int o, utime_t st) : 
-    SafeMessage{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} {
-    memset(&head, 0, sizeof(head));
-    head.op = o;
-    head.seq = 0;
-    st.encode_timeval(&head.stamp);
-  }
+  MClientSession(int o, version_t s=0, unsigned msg_flags=0);
+  MClientSession(int o, utime_t st);
   ~MClientSession() final {}
 
 public:
   std::string_view get_type_name() const override { return "client_session"; }
-  void print(std::ostream& out) const override {
-    out << "client_session(" << ceph_session_op_name(get_op());
-    if (get_seq())
-      out << " seq " << get_seq();
-    if (get_op() == CEPH_SESSION_RECALL_STATE)
-      out << " max_caps " << head.max_caps << " max_leases " << head.max_leases;
-    if (!cap_auths.empty())
-      out << " cap_auths " << cap_auths;
-    out << ")";
-  }
+  void print(std::ostream& out) const override;
 
-  void decode_payload() override {
-    using ceph::decode;
-    auto p = payload.cbegin();
-    decode(head, p);
-    if (header.version >= 2)
-      decode(metadata, p);
-    if (header.version >= 3)
-      decode(supported_features, p);
-    if (header.version >= 4) {
-      decode(metric_spec, p);
-    }
-    if (header.version >= 5) {
-      decode(flags, p);
-    }
-    if (header.version >= 6) {
-      decode(cap_auths, p);
-    }
-    if (header.version >= 7) {
-      decode(oldest_client_tid, p);
-    }
-  }
-  void encode_payload(uint64_t features) override { 
-    using ceph::encode;
-    encode(head, payload);
-    if (metadata.empty() && supported_features.empty()) {
-      // If we're not trying to send any metadata (always the case if
-      // we are a server) then send older-format message to avoid upsetting
-      // old kernel clients.
-      header.version = 1;
-    } else {
-      header.version = HEAD_VERSION;
-      encode(metadata, payload);
-      encode(supported_features, payload);
-      encode(metric_spec, payload);
-      encode(flags, payload);
-      encode(cap_auths, payload);
-      encode(oldest_client_tid, payload);
-    }
-  }
+  void decode_payload() override;
+  void encode_payload(uint64_t features) override;
+
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);

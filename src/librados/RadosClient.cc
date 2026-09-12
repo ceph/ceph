@@ -24,6 +24,7 @@
 #include <errno.h>
 
 #include "common/ceph_context.h"
+#include "common/Cond.h"
 #include "common/config.h"
 #include "common/common_init.h"
 #include "common/ceph_json.h"
