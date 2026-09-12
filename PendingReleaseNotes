@@ -216,6 +216,20 @@
   ``rgw_default_bucket_bilog_type`` configuration option (default:
   ``fifo``). Existing InIndex buckets are unaffected until their next
   reshard, at which point they are automatically migrated to FIFO.
+* RBD: A cloned image's snapshot no longer uses its object map to short-circuit
+  reads while the snapshot still records a non-zero parent overlap. Such an
+  object map is not immutable -- a copyup anywhere in the parent chain can
+  invalidate it, and a read-only client holds no watch and so never learns of
+  it -- which could make reads return zeroes instead of the parent's data once
+  the parent went away. Reads against these snapshots now always go to the OSDs
+  and fall back to the parent, costing an extra round trip for each object that
+  has not been copied up; sparse clone snapshots are the worst case. The object
+  map is used again once the recorded parent overlap drops to zero, which
+  happens when the clone is flattened with the ``deep-flatten`` feature enabled.
+  A clone flattened without ``deep-flatten`` keeps a non-zero parent overlap on
+  its snapshots indefinitely, so those snapshots do not regain the object map.
+  Consumers that read the on-disk object map directly -- ``rbd du``, ``rbd
+  export-diff --whole-object``, deep copy and mirroring -- are unaffected.
 
 >=21.0.0
 

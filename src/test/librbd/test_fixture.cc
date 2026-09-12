@@ -81,11 +81,18 @@ void TestFixture::TearDown() {
 }
 
 int TestFixture::open_image(const std::string &image_name,
-			    librbd::ImageCtx **ictx) {
-  *ictx = new librbd::ImageCtx(image_name.c_str(), "", nullptr, m_ioctx, false);
+                            const std::string &snap_name,
+                            librbd::ImageCtx **ictx) {
+  *ictx = new librbd::ImageCtx(image_name.c_str(), {}, snap_name.c_str(),
+                               m_ioctx, false);
   m_ictxs.insert(*ictx);
 
   return (*ictx)->state->open(0);
+}
+
+int TestFixture::open_image(const std::string &image_name,
+			    librbd::ImageCtx **ictx) {
+  return open_image(image_name, {}, ictx);
 }
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,
