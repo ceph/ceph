@@ -317,6 +317,13 @@ class RgwClient(RestClient):
             rgw_service_manager.configure_rgw_credentials()
 
         daemon_keys = RgwClient._daemons.keys()
+        default_daemon = Settings.RGW_DEFAULT_DAEMON
+        if not daemon_name and default_daemon:
+            if default_daemon in daemon_keys:
+                daemon_name = default_daemon
+            else:
+                logger.warning('RGW_DEFAULT_DAEMON %s is not a running RGW daemon, '
+                               'falling back to automatic selection', default_daemon)
         if not daemon_name:
             try:
                 if len(daemon_keys) > 1:

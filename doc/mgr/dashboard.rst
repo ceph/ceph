@@ -445,6 +445,24 @@ The setting can be unset using:
 
    ceph dashboard unset-rgw-hostname <gateway_name>
 
+By default the dashboard talks to the first Object Gateway it finds in the
+default zonegroup. If that gateway is not reachable from the dashboard, for
+example because it runs outside the cluster, pin the dashboard to a specific
+gateway instead:
+
+.. prompt:: bash #
+
+   ceph dashboard set-rgw-default-daemon <gateway_name>
+
+The gateway name is the ``id`` shown by ``ceph service dump`` for the rgw
+service. If the configured gateway is not running, the dashboard logs a
+warning and falls back to automatic selection. The setting can be cleared
+using:
+
+.. prompt:: bash #
+
+   ceph dashboard reset-rgw-default-daemon
+
 If the Object Gateway takes too long to process requests and the dashboard runs
 into timeouts, you can set the timeout value to your needs:
 
