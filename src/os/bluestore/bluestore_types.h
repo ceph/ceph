@@ -27,6 +27,7 @@
 #include "include/utime.h"
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
+#include "common/Formatter.h"
 #include "include/ceph_hash.h"
 #include "include/intarith.h" // for round_up_to()
 
