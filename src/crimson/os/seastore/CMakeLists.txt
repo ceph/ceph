@@ -5,6 +5,7 @@ set(crimson_seastore_srcs
   segment_manager.cc
   segment_manager/ephemeral.cc
   segment_manager/block.cc
+  block_io_driver.cc
   transaction_interruptor.cc
   transaction_manager.cc
   cache.cc
@@ -45,6 +46,7 @@ set(crimson_seastore_srcs
   random_block_manager.cc
   random_block_manager/block_rb_manager.cc
   random_block_manager/rbm_device.cc
+  random_block_manager/nvme_io_driver.cc
   random_block_manager/nvme_block_device.cc
   random_block_manager/hdd_device.cc
   random_block_manager/avlallocator.cc
