@@ -464,6 +464,12 @@ Note too that each entry has a ``key: <value>`` entry, and also has one or more
 
 To save the output of ``ceph auth ls`` to a file, use the ``-o {filename}`` option.
 
+A user named ``client.cap-profile-probe-*`` may appear briefly: the manager
+creates and removes it to check that the monitor accepts a new capability
+profile. A leftover one is safe to remove. Once every monitor, manager, and
+active OSD has the profile, the manager records that under ``config-key
+mgr/cap_profiles/<profile>`` and uses the profile from then on.
+
 
 Getting a User
 --------------
