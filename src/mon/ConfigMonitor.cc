@@ -546,6 +546,22 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     cmd_getval(cmdmap, "value", value);
     cmd_getval(cmdmap, "force", force);
     name = ConfFile::normalize_key_name(name);
+
+
+    if (prefix == "config set") {
+      if (name == "bluestore_compression_min_blob_size" ||
+          name == "bluestore_compression_max_blob_size") {
+        std::string cast_err;
+        int64_t n = strict_si_cast<int64_t>(value, &cast_err);
+        if (!cast_err.empty() || n < 0 || (n > 0 && (n & (n - 1)) != 0)) {
+          ss << "invalid value '" << value << "' for " << name 
+             << ": must be 0 or a positive power of 2.";
+          err = -EINVAL;
+          goto reply;
+        }
+      }
+    }
+    
     
     if (prefix == "config set" && !force) {
       const Option *opt = g_conf().find_option(name);
