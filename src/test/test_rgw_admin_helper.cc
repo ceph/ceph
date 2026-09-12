@@ -23,7 +23,7 @@
 #include "common/ceph_json.h"
 #include "common/code_environment.h"
 #include "common/armor.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "test_rgw_admin_helper.h"
 
 using namespace std;
@@ -306,17 +306,15 @@ namespace admin_helper
         if (pid == 0)
         {
             /* child */
-            list<string> l;
-            get_str_list(cmd, " \t", l);
+            const auto args = ceph::split_strings(cmd, " \t");
 	    // One extra for argv[0] and one for the NULL.
-            std::vector<char*> argv(l.size() + 2);
+            std::vector<char*> argv(args.size() + 2);
             unsigned loop = 1;
 
             argv[0] = (char *)"radosgw-admin";
-            for (list<string>::iterator it = l.begin();
-                 it != l.end(); ++it)
+            for (const auto& arg : args)
             {
-                argv[loop++] = (char *)(*it).c_str();
+                argv[loop++] = const_cast<char *>(arg.c_str());
             }
             argv[loop] = NULL;
             if (!freopen(RGW_ADMIN_RESP_PATH, "w+", stdout))

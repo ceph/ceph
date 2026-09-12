@@ -45,7 +45,7 @@ std::vector<uint32_t> CompressorRegistry::_parse_method_list(const std::string& 
 {
   std::vector<uint32_t> methods;
 
-  for_each_substr(s, ";,= \t", [&] (auto method) {
+  for_each_substr(s, [&] (auto method) {
     ldout(cct,20) << "adding algorithm method: " << method << dendl;
 
     auto alg_type = Compressor::get_comp_alg_type(method);

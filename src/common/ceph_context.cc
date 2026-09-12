@@ -49,7 +49,7 @@
 #include "log/Log.h"
 
 #include "auth/Crypto.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "common/config.h"
 #include "common/config_obs.h"
 #include "common/PluginRegistry.h"
@@ -423,7 +423,7 @@ public:
         cct->_experimental_features.emplace(std::string{feature});
       };
       for_each_substr(conf->enable_experimental_unrecoverable_data_corrupting_features,
-          ";,= \t", add_experimental_feature);
+                      add_experimental_feature);
 
       if (getenv("CEPH_DEV") == NULL) {
         if (!cct->_experimental_features.empty()) {
@@ -617,7 +617,7 @@ int CephContext::_do_command(
 	r = -EINVAL;
       } else {
 	// val may be multiple words
-	auto valstr = str_join(val, " ");
+	auto valstr = ceph::str_join(val, " ");
         r = _conf.set_val(var.c_str(), valstr.c_str());
         if (r < 0) {
           ss << "error setting '" << var << "' to '" << valstr << "': "

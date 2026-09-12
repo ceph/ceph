@@ -19,7 +19,7 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/Formatter.h"
 #include "common/containers.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include <common/errno.h>
 #include "include/random.h"
 #include "cls/lock/cls_lock_client.h"
