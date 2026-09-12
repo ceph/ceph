@@ -238,5 +238,15 @@ TEST(MonMapBuildInitial, build_initial_mon_host_from_dns_fail) {
   cct->_conf.set_val("mon_host", "ceph.noname");
   MonMap monmap;
   int r = monmap.build_initial(cct.get(), false, std::cerr);
+#if defined(__FreeBSD__)
+  // On FreeBSD, resolve_addrs() for an unresolvable hostname makes
+  // MonMap::init_with_hosts() take its addrs.empty() branch, which
+  // returns -ENOENT there instead of -EINVAL. This has no functional
+  // effect on mon/osd/mds startup: every caller of build_initial()
+  // and MonClient::build_initial_monmap() only checks (ret < 0),
+  // never the specific errno value.
+  ASSERT_EQ(r, -ENOENT);
+#else
   ASSERT_EQ(r, -EINVAL);
+#endif
 }
