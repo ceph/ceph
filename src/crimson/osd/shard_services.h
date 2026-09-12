@@ -89,6 +89,7 @@ class PerShardState {
   // Op Management
   OSDOperationRegistry registry;
   OperationThrottler throttler;
+  OperationThrottler backfill_throttler;   // ← dedicated for backfill sub-tasks
 
   seastar::future<> dump_ops_in_flight(Formatter *f) const;
 
@@ -122,7 +123,10 @@ class PerShardState {
     // First throttler stop and then call registry stop
     return throttler.stop().then([this, &logger] {
       logger.debug("Throttler stopped for shard {}", seastar::this_shard_id());
-      return registry.stop();
+      return backfill_throttler.stop().then([this, &logger] {
+        logger.debug("Backfill throttler stopped for shard {}", seastar::this_shard_id());
+        return registry.stop();
+      });
     });
   }
 
@@ -225,6 +229,8 @@ public:
   void initialize_scheduler(CephContext* cct, bool is_rotational) {
     throttler.initialize_scheduler(cct, crimson::common::local_conf(), is_rotational, whoami);
     throttler.start();
+    backfill_throttler.initialize_scheduler(cct, crimson::common::local_conf(), is_rotational, whoami);
+    backfill_throttler.start();
  }
 
 };
@@ -711,6 +717,7 @@ public:
 
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD(get_throttle, get_throttle, local_state.throttler)
+  FORWARD(get_backfill_throttle, get_throttle, local_state.backfill_throttler)
 
   FORWARD_TO_OSD_SINGLETON(build_incremental_map_msg)
   FORWARD_TO_OSD_SINGLETON(send_incremental_map)

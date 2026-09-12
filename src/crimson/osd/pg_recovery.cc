@@ -572,8 +572,16 @@ void PGRecovery::request_primary_scan(
 PGRecovery::interruptible_future<OperationThrottler::ThrottleReleaser>
 PGRecovery::get_backfill_throttle()
 {
+  // use dedicated backfill_throttler (separate from main OperationThrottler)
+  // to avoid starvation of backfill sub-tasks when main throttler is saturated
+  // by client (50% reservation) and background_recovery (50% reservation) ops.
+  // backfill sub-tasks use background_best_effort class (5% reservation) which
+  // gets near-zero scheduling time under load if sharing the main throttler.
+  // dedicated pool ensures backfill sub-tasks always get their 5% reservation
+  // without competing with independent network-facing ops.
+  // metrics visible under backfill_osd_mclock_* prefix.
   return interruptor::make_interruptible(
-    pg->get_shard_services().get_throttle(backfill_throttle_params));
+    pg->get_shard_services().get_backfill_throttle(backfill_throttle_params));
 }
 
 PGRecovery::interruptible_future<>
