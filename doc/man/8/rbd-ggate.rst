@@ -18,7 +18,7 @@ Description
 
 **rbd-ggate** is a client for RADOS block device (rbd) images. It will
 map a rbd image to a ggate (FreeBSD GEOM Gate class) device, allowing
-access it as regular local block device.
+access to it as a regular local block device.
 
 Commands
 ========
@@ -75,5 +75,5 @@ https://docs.ceph.com for more information.
 See also
 ========
 
-:doc:`rbd <rbd>`\(8)
+:doc:`rbd <rbd>`\(8),
 :doc:`ceph <ceph>`\(8)
