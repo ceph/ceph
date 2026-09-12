@@ -1,14 +1,18 @@
 import json
+import logging
 from unittest.mock import patch
 
 from ceph.smb.constants import REMOTE_CONTROL
 from cephadm.services.smb import SMBSpec, SMBExternalCephCluster
 from cephadm.module import CephadmOrchestrator
-from cephadm.tests.fixtures import with_host, with_service, async_side_effect
+from cephadm.serve import CephadmServe
+from cephadm.tests.fixtures import with_host, with_service, async_side_effect, wait
 
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from ceph.deployment.service_spec import PlacementSpec
+
+logger = logging.getLogger(__name__)
 
 _SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:devbuilds-centos-any'
 
@@ -203,6 +207,67 @@ class TestSMB:
                 assert files.get('remote_control.ssl.crt') == ceph_generated_cert
                 assert files.get('remote_control.ssl.key') == ceph_generated_key
                 assert files.get('remote_control.ca.crt') == cephadm_root_ca
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_smb_tls_feature_cert_remove_config_blobs(
+        self, _run_cephadm, cephadm_module: CephadmOrchestrator
+    ):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks(
+                'test',
+                {'1.2.3.0/24': {'if0': ['1.2.3.7']}}
+            )
+
+            smb_spec = SMBSpec(
+                cluster_id='foxtrot',
+                service_id='foo',
+                config_uri='rados://.smb/foxtrot/config2.json',
+                placement=PlacementSpec(hosts=['test']),
+                features=[REMOTE_CONTROL],
+                ssl_certificates={
+                    'remote_control': {
+                        'enabled': True,
+                        'ssl_cert': ceph_generated_cert,
+                        'ssl_key': ceph_generated_key,
+                        'ssl_ca_cert': cephadm_root_ca,
+                        'certificate_source': 'inline',
+                    },
+                },
+            )
+            service_name = smb_spec.service_name()
+
+            c = cephadm_module.apply([smb_spec])
+            assert wait(cephadm_module, c) == [f'Scheduled {service_name} update...']
+            CephadmServe(cephadm_module)._apply_all_services()
+
+            smb_conf, _ = service_registry.get_service('smb').generate_config(
+                CephadmDaemonDeploySpec(
+                    host='test',
+                    daemon_id='foo.test.0',
+                    service_name=service_name,
+                )
+            )
+            assert wait(cephadm_module, cephadm_module.remove_service(service_name)) == (
+                f'Removed service {service_name}'
+            )
+            CephadmServe(cephadm_module)._apply_all_services()
+            try:
+                smb_conf, _ = service_registry.get_service('smb.foo').generate_config(
+                    CephadmDaemonDeploySpec(
+                        host='test',
+                        daemon_id='foo.test.0',
+                        service_name=service_name,
+                    )
+                )
+                # If config is generated, verify certificates are removed
+                fs = smb_conf.get('files', {})
+                assert fs.get('remote_control.ssl.crt') is None
+                assert fs.get('remote_control.ssl.key') is None
+                assert fs.get('remote_control.ca.crt') is None
+            except KeyError:
+                pass
 
 
 def test_smb_get_dependencies(cephadm_module):
