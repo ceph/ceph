@@ -356,6 +356,14 @@ class MotrBucket : public StoreBucket {
         keep_index_consistent,
         optional_yield y, const
         DoutPrefixProvider *dpp) override;
+    virtual int remove_all_objects(const DoutPrefixProvider* dpp,
+			     bool delete_children, optional_yield y) override
+      { return -ENOTSUP; }
+    virtual int remove_all_objects_bypass_gc(int concurrent_max,
+				       bool keep_index_consistent,
+				       optional_yield y,
+				       const DoutPrefixProvider* dpp) override
+      { return -ENOTSUP; }
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
     virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y) override;

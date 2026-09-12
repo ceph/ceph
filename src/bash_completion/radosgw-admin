@@ -44,12 +44,16 @@ _radosgw_admin()
                 COMPREPLY=( $(compgen -W "create rm" -- ${cur}) )
                 return 0
                 ;;
+            bucket)
+                COMPREPLY=( $(compgen -W "list limit check link unlink chown stats rm rewrite radoslist reshard sync check" -- ${cur}) )
+                return 0
+                ;;
             buckets)
                 COMPREPLY=( $(compgen -W "list unlink" -- ${cur}) )
                 return 0
                 ;;
             *)
-                COMPREPLY=( $(compgen -W "user subuser key buckets policy log" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "user subuser key bucket buckets policy log" -- ${cur}) )
                 return 0
             ;;
         esac
