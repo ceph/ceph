@@ -62,6 +62,16 @@ If the cluster is degraded (that is, if an OSD has failed and the system hasn't
 healed itself yet), then the balancer will not make any adjustments to the PG
 distribution.
 
+There is one exception: if any PGs are stuck in the ``backfill_toofull`` state,
+the ``upmap`` and ``upmap-read`` balancers will proceed even though PGs are
+degraded or the ``target_max_misplaced_ratio`` threshold is exceeded. This can
+happen after a large number of OSDs fail (for example, when a shared
+``block.db`` device fails): OSDs in the same CRUSH bucket can receive an
+oversubscription of PGs and become stuck ``backfill_toofull`` and degraded,
+with no way to recover on their own. Because the ``upmap`` balancer optimizes
+the ``up`` set (rather than the ``acting`` set), it can move PGs off the
+too-full OSDs and allow recovery to make progress.
+
 When the cluster is healthy, the balancer will remap
 unbalanced PGs in phases to incrementally improve the uniformity
 of PG distribution.  The maximum percentage of PGs to remap (move) in
