@@ -19,6 +19,7 @@
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
 #include "rgw_compression.h"
+#include "rgw_crypt.h"
 
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
@@ -1026,6 +1027,13 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
     chunked_upload = true;
   }
 
+  // Apply bucket-level encryption defaults (same as S3)
+  int ret = rgw_prepare_encryption_defaults(s);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << __func__ << "(): rgw_prepare_encryption_defaults() returned ret=" << ret << dendl;
+    return ret;
+  }
+
   supplied_etag = s->info.env->get("HTTP_ETAG");
   if_match = s->info.env->get("HTTP_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
@@ -1153,6 +1161,20 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+int RGWPutObj_ObjStore_SWIFT::get_encrypt_filter(
+    std::unique_ptr<rgw::sal::DataProcessor> *filter,
+    rgw::sal::DataProcessor *cb)
+{
+  std::unique_ptr<BlockCrypt> block_crypt;
+  std::map<std::string, std::string> dummy_crypt_responses;
+  int res = rgw_s3_prepare_encrypt(s, s->yield, attrs, &block_crypt,
+                                   dummy_crypt_responses);
+  if (res == 0 && block_crypt != nullptr) {
+    *filter = std::make_unique<RGWPutObj_BlockEncrypt>(s, s->cct, cb, std::move(block_crypt), s->yield);
+  }
+  return res;
 }
 
 static int get_swift_account_settings(req_state * const s,
@@ -1577,6 +1599,15 @@ int RGWGetObj_ObjStore_SWIFT::get_params(optional_yield y)
   skip_manifest = (mm.compare("get") == 0);
 
   return RGWGetObj_ObjStore::get_params(y);
+}
+
+int RGWGetObj_ObjStore_SWIFT::get_decrypt_filter(
+    std::unique_ptr<RGWGetObj_Filter>* filter,
+    RGWGetObj_Filter* cb,
+    bufferlist* manifest_bl)
+{
+  static constexpr bool copy_source = false;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source);
 }
 
 int RGWGetObj_ObjStore_SWIFT::send_response_data_error(optional_yield y)
