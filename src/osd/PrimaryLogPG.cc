@@ -2615,16 +2615,15 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     OpRequest* op_raw = op.get();
 
     // Spawn a coroutine to handle the message
-    auto resumer = std::make_unique<resume_token_t>(
+    auto resumer = std::make_shared<resume_token_t>(
       [this, op_raw](yield_token_t& yield) {
-        op_raw->coro_handles.emplace(CoroHandles{ yield, *coro_resumer });
+        op_raw->coro_handles.emplace(CoroHandles{ yield, coro_resumer });
         {
           const OpRequestRef op_ref(op_raw);
           do_op_impl(op_ref);
         }
 
         // Cleanup
-        coro_resumer = nullptr;
         on_coroutine_complete();
       });
 
@@ -2641,6 +2640,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 void PrimaryLogPG::on_coroutine_complete()
 {
   ceph_assert(coro_op_in_flight);
+  coro_resumer = nullptr;
   coro_op_in_flight = false;
   active_coro_op = nullptr;
 
@@ -13348,6 +13348,9 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
 
   if (coro_resumer != nullptr) {
     dout(20) << __func__ << ": Stopping active coroutine" << dendl;
+    coro_resumer = nullptr;
+    coro_op_in_flight = false;
+
     if (active_coro_ctx) {
       dout(20) << __func__ << ": Cleaning up orphaned OpContext from coroutine" << dendl;
       // Remove from in_progress_async_reads if present
@@ -13362,8 +13365,6 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
       close_op_ctx(active_coro_ctx);
       active_coro_ctx = nullptr;
     }
-    coro_resumer = nullptr;
-    coro_op_in_flight = false;
   }
 
   if (hit_set && hit_set->insert_count() == 0) {
