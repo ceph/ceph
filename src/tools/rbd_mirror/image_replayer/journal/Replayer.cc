@@ -25,6 +25,7 @@
 #include "tools/rbd_mirror/image_replayer/journal/ReplayStatusFormatter.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 
+#include <functional> // for std::function
 #include <shared_mutex> // for std::shared_lock
 
 #define dout_context g_ceph_context
@@ -128,16 +129,35 @@ struct Replayer<I>::LocalJournalListener
   LocalJournalListener(Replayer* replayer) : replayer(replayer) {
   }
 
+  // notifications cannot take m_lock (remove_listener() waits for
+  // them) nor capture the listener (deleted right after removal)
+  void schedule_notification(std::function<void(Replayer*)>&& notification) {
+    auto replayer = this->replayer;
+    auto ctx = new C_TrackedOp(
+      replayer->m_in_flight_op_tracker,
+      new LambdaContext(
+        [replayer, notification=std::move(notification)](int r) {
+          notification(replayer);
+        }));
+    replayer->m_threads->work_queue->queue(ctx, 0);
+  }
+
   void handle_close() override {
-    replayer->handle_replay_complete(0, "");
+    schedule_notification([](Replayer* replayer) {
+        replayer->handle_replay_complete(0, "");
+      });
   }
 
   void handle_promoted() override {
-    replayer->handle_replay_complete(0, "force promoted");
+    schedule_notification([](Replayer* replayer) {
+        replayer->handle_replay_complete(0, "force promoted");
+      });
   }
 
   void handle_resync() override {
-    replayer->handle_resync_image();
+    schedule_notification([](Replayer* replayer) {
+        replayer->handle_resync_image();
+      });
   }
 };
 
