@@ -95,6 +95,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   bool inject_fail_reserve_recovery_space = false;
 
   std::function<int(ObjectStore::Transaction&&)> queue_transaction_callback;
+  std::optional<backfill_osd_space_usage_t> local_osd_space_usage;
 
   MockPeeringListener(OSDMapRef osdmap,
                       int64_t pool_id,
@@ -435,12 +436,17 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   bool try_reserve_recovery_space(
     int64_t primary_num_bytes,
-    int64_t local_num_bytes) override {
+    int64_t local_num_bytes,
+    backfill_reservation_space_info_t *space_info = nullptr) override {
     recovery_space_reserved = true;
     if (inject_fail_reserve_recovery_space) {
       return false;
     }
     return true;
+  }
+
+  std::optional<backfill_osd_space_usage_t> get_local_osd_space_usage() override {
+    return local_osd_space_usage;
   }
 
   void unreserve_recovery_space() override {
@@ -578,7 +584,8 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   int events_scheduled = 0;
   int io_reservations_requested = 0;
   int remote_recovery_reservations_requested = 0;
+  std::optional<unsigned> last_io_reservation_priority;
+  std::optional<unsigned> last_remote_recovery_reservation_priority;
   int events_on_commit_scheduled = 0;
   bool first_write_in_interval = false;
 };
-

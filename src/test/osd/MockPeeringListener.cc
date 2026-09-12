@@ -22,6 +22,7 @@ void MockPeeringListener::request_local_background_io_reservation(
   unsigned priority,
   PGPeeringEventURef on_grant,
   PGPeeringEventURef on_preempt) {
+  last_io_reservation_priority = priority;
   // If the test has configured an event loop (i.e. ECPeeringTestFixture),
   // then use the event loop to run this event, rather than putting it on the queue.
   if (event_loop && fixture) {
@@ -48,6 +49,7 @@ void MockPeeringListener::request_remote_recovery_reservation(
   unsigned priority,
   PGPeeringEventURef on_grant,
   PGPeeringEventURef on_preempt) {
+  last_remote_recovery_reservation_priority = priority;
   // If the test has configured an event loop (i.e. ECPeeringTestFixture),
   // then use the event loop to run this event, rather than putting it on the queue.
   if (event_loop && fixture) {
@@ -138,4 +140,3 @@ void MockPeeringListener::on_activate_complete() {
   }
   activate_complete_called = true;
 }
-
