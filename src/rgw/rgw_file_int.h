@@ -481,16 +481,26 @@ namespace rgw {
 	}
       }
 
+#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
+      const struct timespec& atim = st->st_atimespec;
+      const struct timespec& mtim = st->st_mtimespec;
+      const struct timespec& ctim = st->st_ctimespec;
+#else
+      const struct timespec& atim = st->st_atim;
+      const struct timespec& mtim = st->st_mtim;
+      const struct timespec& ctim = st->st_ctim;
+#endif
+
       if (mask & RGW_SETATTR_ATIME)
-	state.atime = st->st_atim;
+	state.atime = atim;
 
       if (mask & RGW_SETATTR_MTIME) {
 	if (fh.fh_type != RGW_FS_TYPE_DIRECTORY)
-	  state.mtime = st->st_mtim;
+	  state.mtime = mtim;
       }
 
       if (mask & RGW_SETATTR_CTIME)
-	state.ctime = st->st_ctim;
+	state.ctime = ctim;
     }
 
     int stat(struct stat* st, uint32_t flags = FLAG_NONE) {

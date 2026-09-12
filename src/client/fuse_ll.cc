@@ -448,7 +448,7 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 			     const char *value, size_t size, 
 			     int flags
-#if defined(__APPLE__)
+#if defined(__APPLE__) && FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
 			     ,uint32_t pos
 #endif
   )
@@ -497,7 +497,7 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 
 static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
 			     size_t size
-#if defined(__APPLE__)
+#if defined(__APPLE__) && FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
 			     ,uint32_t position
 #endif
   )

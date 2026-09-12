@@ -13,6 +13,8 @@
  *
  */
 
+#include "acconfig.h" // for HAVE_TIMER_CREATE
+
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/admin_socket.h"
@@ -460,8 +462,8 @@ TEST_F(AdminSocketRaise, Async)
 {
   using std::chrono::milliseconds;
 
-#ifdef WIN32
-  GTEST_SKIP() << "Windows doesn't support --after behavior";
+#ifndef HAVE_TIMER_CREATE
+  GTEST_SKIP() << "no POSIX per-process timers, so no --after behavior";
 #endif
 
   ASSERT_EQ("", send_raise(fmt::format("{}", sig1.sig)));
@@ -480,8 +482,8 @@ TEST_F(AdminSocketRaise, AsyncReschedule)
 {
   using std::chrono::milliseconds;
 
-#ifdef WIN32
-  GTEST_SKIP() << "Windows doesn't support --after behavior";
+#ifndef HAVE_TIMER_CREATE
+  GTEST_SKIP() << "no POSIX per-process timers, so no --after behavior";
 #endif
 
   ASSERT_EQ("", send_raise(sig1.name, 0.1));
@@ -505,8 +507,8 @@ TEST_F(AdminSocketRaise, AsyncCancel)
 {
   using std::chrono::milliseconds;
 
-#ifdef WIN32
-  GTEST_SKIP() << "Windows doesn't support --after behavior";
+#ifndef HAVE_TIMER_CREATE
+  GTEST_SKIP() << "no POSIX per-process timers, so no --after behavior";
 #endif
 
   ASSERT_EQ("", send_raise(sig1.name, 0.1));
@@ -543,8 +545,8 @@ TEST_F(AdminSocketRaise, StopCont)
   using std::chrono::milliseconds;
   using std::chrono::system_clock;
 
-#ifdef WIN32
-  GTEST_SKIP() << "Windows doesn't support SIGSTOP/SIGCONT and --after";
+#if defined(WIN32) || !defined(HAVE_TIMER_CREATE)
+  GTEST_SKIP() << "needs SIGSTOP/SIGCONT and POSIX per-process timers";
 #endif
 
   auto then = system_clock::now();

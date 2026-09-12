@@ -88,7 +88,7 @@ function(do_build_boost root_dir version)
 
   if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(toolset gcc)
-  elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(toolset clang)
   else()
     message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
@@ -146,7 +146,13 @@ function(do_build_boost root_dir version)
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|ARM")
     list(APPEND b2 abi=aapcs)
     list(APPEND b2 architecture=arm)
-    list(APPEND b2 binary-format=elf)
+    if(APPLE)
+      # Darwin is Mach-O; boost.context picks its arm64 assembly by this, and
+      # would otherwise try to assemble the ELF variant with clang.
+      list(APPEND b2 binary-format=mach-o)
+    else()
+      list(APPEND b2 binary-format=elf)
+    endif()
   endif()
   if(WITH_BOOST_VALGRIND)
     list(APPEND b2 valgrind=on)
@@ -295,10 +301,21 @@ macro(build_boost version)
       foreach(dep ${Boost_${c}_DEPENDENCIES})
         list(APPEND dependencies Boost::${dep})
       endforeach()
+    endif()
+    if(c STREQUAL "locale")
+      # Boost.Locale calls iconv_open() and friends, which glibc provides but
+      # Darwin keeps in a separate libiconv.  Boost's own generated config
+      # records the dependency; the targets assembled here have to state it
+      # themselves, or the link fails wherever libc does not carry iconv.
+      # Iconv::Iconv is an empty interface when it is built in.
+      find_package(Iconv REQUIRED)
+      list(APPEND dependencies Iconv::Iconv)
+    endif()
+    if(dependencies)
       set_target_properties(Boost::${c} PROPERTIES
         INTERFACE_LINK_LIBRARIES "${dependencies}")
-      unset(dependencies)
     endif()
+    unset(dependencies)
     set(Boost_${c}_FOUND "TRUE")
   endforeach()
 

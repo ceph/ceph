@@ -715,7 +715,7 @@ void ECBackend::handle_sub_read(
           bufferlist val_bl;
           val_bl.append(value);
           current_batch.insert(make_pair(key, val_bl));
-          available -= std::min(available, num_new_bytes);
+          available -= std::min<uint64_t>(available, num_new_bytes);
           return ObjectStore::omap_iter_ret_t::NEXT;
         }, switcher->store);
 

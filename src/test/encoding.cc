@@ -65,6 +65,45 @@ TEST(EncodingRoundTrip, StringNewline) {
   test_encode_and_decode < std::string >(my_str);
 }
 
+/*
+ * The integer encoders are defined for the fixed-width types only, so a
+ * container of size_t is encodable on LP64 Linux - where size_t and uint64_t
+ * are both unsigned long - and nowhere else.  On Darwin uint64_t is unsigned
+ * long long, so size_t names a distinct type with no encoder at all.
+ *
+ * Code that used size_t therefore has to be respelled as uint64_t to build
+ * anywhere but Linux, and that respelling has to be format-preserving,
+ * because some of those containers are persisted (the rgw CRYPT_PARTS
+ * attribute, for one).  Pin the bytes so a future change of element type
+ * cannot silently alter them: a u32 element count followed by little-endian
+ * 64-bit elements, which is exactly what the size_t spelling produced.
+ */
+TEST(EncodingGolden, Vector64) {
+  const std::vector<uint64_t> v{0, 1, 0x123456789abcdef0ull};
+  bufferlist bl;
+  encode(v, bl);
+
+  const std::string expected{
+    "\x03\x00\x00\x00"                  // element count, u32 LE
+    "\x00\x00\x00\x00\x00\x00\x00\x00"  // 0
+    "\x01\x00\x00\x00\x00\x00\x00\x00"  // 1
+    "\xf0\xde\xbc\x9a\x78\x56\x34\x12", // 0x123456789abcdef0
+    4 + 3 * 8};
+  ASSERT_EQ(expected.size(), bl.length());
+  ASSERT_EQ(0, memcmp(expected.data(), bl.c_str(), expected.size()));
+
+  std::vector<uint64_t> out;
+  auto p = bl.cbegin();
+  decode(out, p);
+  ASSERT_EQ(v, out);
+
+  // An empty one is the CRYPT_PARTS sentinel: a bare count of zero.
+  bufferlist empty_bl;
+  encode(std::vector<uint64_t>{}, empty_bl);
+  ASSERT_EQ(4u, empty_bl.length());
+  ASSERT_EQ(0, memcmp("\x00\x00\x00\x00", empty_bl.c_str(), 4));
+}
+
 template <typename Size, typename T>
 static void test_encode_and_nohead_nohead(Size len, const T& src)
 {
@@ -87,7 +126,7 @@ TEST(EncodingRoundTrip, StringNoHead) {
   test_encode_and_nohead_nohead(static_cast<unsigned>(size), str);
   test_encode_and_nohead_nohead(static_cast<uint32_t>(size), str);
   test_encode_and_nohead_nohead(static_cast<__u32>(size), str);
-  test_encode_and_nohead_nohead(static_cast<size_t>(size), str);
+  test_encode_and_nohead_nohead(static_cast<uint64_t>(size), str);
 }
 
 TEST(EncodingRoundTrip, BufferListNoHead) {
@@ -98,7 +137,7 @@ TEST(EncodingRoundTrip, BufferListNoHead) {
   test_encode_and_nohead_nohead(static_cast<unsigned>(size), bl);
   test_encode_and_nohead_nohead(static_cast<uint32_t>(size), bl);
   test_encode_and_nohead_nohead(static_cast<__u32>(size), bl);
-  test_encode_and_nohead_nohead(static_cast<size_t>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<uint64_t>(size), bl);
 }
 
 typedef std::multimap < int, std::string > multimap_t;

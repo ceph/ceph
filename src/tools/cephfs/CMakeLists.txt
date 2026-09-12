@@ -52,8 +52,13 @@ set(cephfs_tool_srcs
   cephfs-tool.cc)
 add_executable(cephfs-tool ${cephfs_tool_srcs})
 target_include_directories(cephfs-tool PRIVATE ${PROJECT_SOURCE_DIR}/src/include)
-target_link_libraries(cephfs-tool ceph-common librados cephfs osdc global uring::uring
+target_link_libraries(cephfs-tool ceph-common librados cephfs osdc global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
+# cephfs-tool.cc itself does not use io_uring, but keep the dependency where
+# liburing is built so that the link line is unchanged on Linux.
+if(TARGET uring::uring)
+  target_link_libraries(cephfs-tool uring::uring)
+endif()
 
 install(TARGETS
   cephfs-journal-tool

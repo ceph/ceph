@@ -131,11 +131,11 @@ public:
   using osptr = std::unique_ptr<sss>;
 
   CachedStackStringStream() {
-    if (cache.destructed || cache.c.empty()) {
+    if (cache().destructed || cache().c.empty()) {
       osp = std::make_unique<sss>();
     } else {
-      osp = std::move(cache.c.back());
-      cache.c.pop_back();
+      osp = std::move(cache().c.back());
+      cache().c.pop_back();
       osp->reset();
     }
   }
@@ -144,8 +144,8 @@ public:
   CachedStackStringStream(CachedStackStringStream&&) = delete;
   CachedStackStringStream& operator=(CachedStackStringStream&&) = delete;
   ~CachedStackStringStream() {
-    if (!cache.destructed && cache.c.size() < max_elems) {
-      cache.c.emplace_back(std::move(osp));
+    if (!cache().destructed && cache().c.size() < max_elems) {
+      cache().c.emplace_back(std::move(osp));
     }
   }
 
@@ -187,7 +187,17 @@ private:
     bool destructed = false;
   };
 
-  inline static thread_local Cache cache;
+  /* Apple clang gives the thread-local initialization routine of an inline
+   * static thread_local data member non-weak linkage, so two translation
+   * units that both instantiate it collide at link time.  Holding it as a
+   * function-local thread_local inside an inline function gets the vague
+   * linkage the member is meant to have, on every compiler.
+   */
+  static Cache& cache() {
+    static thread_local Cache c;
+    return c;
+  }
+
   osptr osp;
 };
 

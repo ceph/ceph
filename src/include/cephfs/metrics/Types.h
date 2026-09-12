@@ -754,7 +754,7 @@ struct SubvolumeMetricsPayload : public ClientMetricPayloadBase {
   void encode(bufferlist &bl) const {
     using ceph::encode;
     ENCODE_START(1, 1, bl);
-    encode(subvolume_metrics.size(), bl);
+    encode(static_cast<uint64_t>(subvolume_metrics.size()), bl);
     for(auto const& m : subvolume_metrics) {
       m.encode(bl);
     }
@@ -764,7 +764,7 @@ struct SubvolumeMetricsPayload : public ClientMetricPayloadBase {
   void decode(bufferlist::const_iterator &iter) {
     using ceph::decode;
     DECODE_START(1, iter) ;
-    size_t size = 0;
+    uint64_t size = 0;
     decode(size, iter);
     subvolume_metrics.clear();
     subvolume_metrics.reserve(size);

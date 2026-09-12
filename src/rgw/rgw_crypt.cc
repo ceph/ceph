@@ -1403,7 +1403,7 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                                                CephContext* cct,
                                                RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt,
-                                               std::vector<size_t> parts_len,
+                                               std::vector<uint64_t> parts_len,
                                                std::vector<std::pair<uint32_t, std::string>> part_keys,
                                                off_t encrypted_total_size,
                                                bool has_compression,
@@ -1462,7 +1462,7 @@ RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {
 
 int RGWGetObj_BlockDecrypt::read_manifest_parts(const DoutPrefixProvider *dpp,
                                                 const bufferlist& manifest_bl,
-                                                std::vector<size_t>& parts_len)
+                                                std::vector<uint64_t>& parts_len)
 {
   RGWObjManifest manifest;
   if (manifest_bl.length()) {
@@ -1968,7 +1968,7 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
 
   /* Try CRYPT_PARTS first (more accurate for multipart) */
   if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
-    std::vector<size_t> parts_len;
+    std::vector<uint64_t> parts_len;
     try {
       auto iter = i->second.cbegin();
       using ceph::decode;

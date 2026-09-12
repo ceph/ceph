@@ -3811,7 +3811,7 @@ public:
         // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
         if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
             !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
-          std::vector<size_t> parts_len;
+          std::vector<uint64_t> parts_len;
           int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
                                                               parts_len);
           if (r < 0) {
@@ -5614,7 +5614,7 @@ int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &
   // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
   if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
       !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
-    std::vector<size_t> parts_len;
+    std::vector<uint64_t> parts_len;
     int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
 							parts_len);
     if (r < 0) {
