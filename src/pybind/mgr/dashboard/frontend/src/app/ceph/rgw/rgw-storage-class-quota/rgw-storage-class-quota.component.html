@@ -1,0 +1,95 @@
+<fieldset>
+  <div class="form-item">
+    <legend class="cd-header">{{ title }}</legend>
+    <p class="cds--type-body-compact-01">{{ description }}</p>
+  </div>
+
+  @for (quota of quotas.controls; track quota.get('storage_class')?.value; let i = $index) {
+    <div class="form-item">
+      <legend class="cds--label">{{ quota.get('storage_class')?.value }}</legend>
+      <cds-checkbox
+        [formControl]="$any(quota.get('enabled'))"
+        [id]="idPrefix + '-enabled-' + i"
+        i18n
+      >
+        Enable quota
+      </cds-checkbox>
+    </div>
+    @if (quota.get('enabled')?.value) {
+      <div class="form-item">
+        <cds-checkbox
+          [formControl]="$any(quota.get('max_size_unlimited'))"
+          [id]="idPrefix + '-unlimited-size-' + i"
+          i18n
+        >
+          Unlimited size
+        </cds-checkbox>
+      </div>
+      @if (!quota.get('max_size_unlimited')?.value) {
+        <div class="form-item">
+          <cds-text-label
+            [for]="idPrefix + '-max-size-' + i"
+            i18n
+            cdRequiredField="Maximum size"
+            [invalid]="quota.get('max_size')?.invalid && quota.get('max_size')?.dirty"
+            [invalidText]="maxSizeError"
+            >Maximum size
+            <input
+              cdsText
+              [formControl]="$any(quota.get('max_size'))"
+              [id]="idPrefix + '-max-size-' + i"
+              [name]="idPrefix + '-max-size-' + i"
+              [invalid]="quota.get('max_size')?.invalid && quota.get('max_size')?.dirty"
+              cdDimlessBinary
+            />
+          </cds-text-label>
+          <ng-template #maxSizeError>
+            <span
+              class="invalid-feedback"
+              *ngIf="quota.get('max_size')?.errors?.required"
+              i18n
+              >This field is required.</span
+            >
+            <span
+              class="invalid-feedback"
+              *ngIf="quota.get('max_size')?.errors?.quotaMaxSize"
+              i18n
+              >The value is not valid.</span
+            >
+          </ng-template>
+        </div>
+      }
+      <div class="form-item">
+        <cds-checkbox
+          [formControl]="$any(quota.get('max_objects_unlimited'))"
+          [id]="idPrefix + '-unlimited-objects-' + i"
+          i18n
+        >
+          Unlimited objects
+        </cds-checkbox>
+      </div>
+      @if (!quota.get('max_objects_unlimited')?.value) {
+        <div class="form-item">
+          <cds-number
+            [label]="'Maximum objects'"
+            i18n-label
+            [formControl]="$any(quota.get('max_objects'))"
+            [id]="idPrefix + '-max-objects-' + i"
+            [min]="0"
+            [invalid]="quota.get('max_objects')?.invalid && quota.get('max_objects')?.dirty"
+            [invalidText]="maxObjectsError"
+          >
+          </cds-number>
+          <ng-template #maxObjectsError>
+            <span
+              class="invalid-feedback"
+              *ngIf="quota.get('max_objects')?.errors?.required"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+      }
+    }
+  }
+</fieldset>

@@ -1,3 +1,5 @@
+import { StorageClassQuota } from './rgw-user';
+
 export interface Account {
   id: string;
   tenant: string;
@@ -18,4 +20,5 @@ interface Quota {
   max_size: number;
   max_size_kb: number;
   max_objects: number;
+  storage_class_quotas?: StorageClassQuota[] | Record<string, StorageClassQuota>;
 }

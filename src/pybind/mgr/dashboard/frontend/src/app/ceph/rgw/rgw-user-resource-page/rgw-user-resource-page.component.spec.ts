@@ -151,6 +151,67 @@ describe('RgwUserResourcePageComponent', () => {
     expect(component.bucketQuota['Maximum objects']).toBe('-');
   });
 
+  it('should show dummy storage class quotas when the API does not return them', () => {
+    expect(component.userStorageClassQuotas).toEqual([
+      {
+        storage_class: 'STANDARD',
+        enabled: 'Yes',
+        max_size: '53687091200 B',
+        max_objects: 10000
+      },
+      {
+        storage_class: 'HDD',
+        enabled: 'Yes',
+        max_size: '214748364800 B',
+        max_objects: 50000
+      }
+    ]);
+    expect(component.bucketStorageClassQuotas).toEqual(component.userStorageClassQuotas);
+  });
+
+  it('should show dummy storage class usage from #66501 when the API omits it', () => {
+    expect(component.storageClassUsage).toEqual([
+      {
+        storage_class: 'STANDARD',
+        placement: 'default-placement',
+        size: '21422080 B',
+        num_objects: 1
+      },
+      {
+        storage_class: 'HDD',
+        placement: 'default-placement',
+        size: '42844160 B',
+        num_objects: 2
+      }
+    ]);
+  });
+
+  it('should use API storage class quotas when they are present', () => {
+    component['applyUser']({
+      ...mockUser,
+      user_quota: {
+        ...mockUser.user_quota,
+        storage_class_quotas: [
+          {
+            storage_class: 'STANDARD',
+            enabled: true,
+            max_size: 1024,
+            max_objects: 5
+          }
+        ]
+      }
+    } as any);
+
+    expect(component.userStorageClassQuotas).toEqual([
+      {
+        storage_class: 'STANDARD',
+        enabled: 'Yes',
+        max_size: '1024 B',
+        max_objects: 5
+      }
+    ]);
+  });
+
   it('should process S3 and Swift keys correctly', () => {
     expect(component.keys.length).toBe(2);
 

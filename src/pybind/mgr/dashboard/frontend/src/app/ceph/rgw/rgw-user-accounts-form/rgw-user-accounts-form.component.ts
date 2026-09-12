@@ -1,7 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
+import {
+  RgwAccountQuotaPayload,
+  RgwUserAccountsService
+} from '~/app/shared/api/rgw-user-accounts.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -13,6 +16,8 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { Observable, concat as observableConcat } from 'rxjs';
 import _ from 'lodash';
+import { StorageClassQuota } from '../models/rgw-user';
+import { RgwStorageClassQuotaComponent } from '../rgw-storage-class-quota/rgw-storage-class-quota.component';
 
 @Component({
   selector: 'cd-rgw-user-accounts-form',
@@ -28,6 +33,10 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
   showAdvanced: boolean = false;
   submitObservables: Observable<Object>[] = [];
   originalAccountName: string = '';
+  accountStorageClassQuotas?: StorageClassQuota[] | Record<string, StorageClassQuota>;
+  bucketStorageClassQuotas?: StorageClassQuota[] | Record<string, StorageClassQuota>;
+  @ViewChild('accountScQuota') accountScQuotaComponent?: RgwStorageClassQuotaComponent;
+  @ViewChild('bucketScQuota') bucketScQuotaComponent?: RgwStorageClassQuotaComponent;
 
   constructor(
     private router: Router,
@@ -83,6 +92,11 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
             } else {
               value[type + '_quota_max_objects_unlimited'] = false;
               value[type + '_quota_max_objects'] = quota.max_objects;
+            }
+            if (type === 'bucket') {
+              this.bucketStorageClassQuotas = quota.storage_class_quotas;
+            } else {
+              this.accountStorageClassQuotas = quota.storage_class_quotas;
             }
           });
           // Merge with default values.
@@ -322,8 +336,8 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
    * Helper function to get the arguments for the API request when any
    * quota configuration has been modified.
    */
-  private _getQuotaArgs(quotaType: string) {
-    const result = {
+  private _getQuotaArgs(quotaType: string): RgwAccountQuotaPayload {
+    const result: RgwAccountQuotaPayload = {
       quota_type: quotaType,
       enabled: this.accountForm.getValue(`${quotaType}_quota_enabled`),
       max_size: '-1',
@@ -335,10 +349,15 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
         this.accountForm.getValue(`${quotaType}_quota_max_size`)
       );
       // Finally convert the value to KiB.
-      result['max_size'] = bytes.toFixed(0) as any;
+      result.max_size = bytes.toFixed(0);
     }
     if (!this.accountForm.getValue(`${quotaType}_quota_max_objects_unlimited`)) {
-      result['max_objects'] = `${this.accountForm.getValue(`${quotaType}_quota_max_objects`)}`;
+      result.max_objects = `${this.accountForm.getValue(`${quotaType}_quota_max_objects`)}`;
+    }
+    const scQuotaComponent =
+      quotaType === 'bucket' ? this.bucketScQuotaComponent : this.accountScQuotaComponent;
+    if (scQuotaComponent?.isDirty()) {
+      result.storage_class_quotas = scQuotaComponent.getStorageClassQuotas();
     }
     return result;
   }
@@ -348,15 +367,19 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
    * @return {Boolean} Returns TRUE if the quota has been modified.
    */
   private _isQuotaConfDirty(quotaType: string): boolean {
-    return [
-      `${quotaType}_quota_enabled`,
-      `${quotaType}_quota_max_size_unlimited`,
-      `${quotaType}_quota_max_size`,
-      `${quotaType}_quota_max_objects_unlimited`,
-      `${quotaType}_quota_max_objects`
-    ].some((path) => {
-      return this.accountForm.get(path).dirty;
-    });
+    const scQuotaComponent =
+      quotaType === 'bucket' ? this.bucketScQuotaComponent : this.accountScQuotaComponent;
+    return (
+      [
+        `${quotaType}_quota_enabled`,
+        `${quotaType}_quota_max_size_unlimited`,
+        `${quotaType}_quota_max_size`,
+        `${quotaType}_quota_max_objects_unlimited`,
+        `${quotaType}_quota_max_objects`
+      ].some((path) => {
+        return this.accountForm.get(path).dirty;
+      }) || !!scQuotaComponent?.isDirty()
+    );
   }
 
   onModeChange(mode: string, formControlName: string) {

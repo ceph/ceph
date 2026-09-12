@@ -125,6 +125,7 @@ import { RgwStorageClassResourceSidebarComponent } from './rgw-storage-class-res
 import { RgwStorageClassResourcePageComponent } from './rgw-storage-class-resource-page/rgw-storage-class-resource-page.component';
 import { RgwStorageClassResourceBreadcrumbResolver } from './rgw-storage-class-resource-page/rgw-storage-class-resource-breadcrumb.resolver';
 import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-storage-class-form.component';
+import { RgwStorageClassQuotaComponent } from './rgw-storage-class-quota/rgw-storage-class-quota.component';
 import { RgwBucketTieringFormComponent } from './rgw-bucket-tiering-form/rgw-bucket-tiering-form.component';
 import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw-bucket-lifecycle-list.component';
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
@@ -251,6 +252,7 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     RgwStorageClassResourceSidebarComponent,
     RgwStorageClassResourcePageComponent,
     RgwStorageClassFormComponent,
+    RgwStorageClassQuotaComponent,
     RgwBucketTieringFormComponent,
     RgwBucketLifecycleListComponent,
     RgwRateLimitDetailsComponent,

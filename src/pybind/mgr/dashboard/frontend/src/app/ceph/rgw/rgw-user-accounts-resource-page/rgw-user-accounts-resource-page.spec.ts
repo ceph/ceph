@@ -72,4 +72,12 @@ describe('RgwUserAccountsResourcePageComponent', () => {
     expect(component.overviewField.length).toBeGreaterThan(0);
     expect(component.overviewField.find((field) => field.label === 'Max users')?.value).toBe(1000);
   });
+
+  it('should show dummy storage class quotas when the API does not return them', () => {
+    expect(component.accountStorageClassQuotas.map((row) => row.storage_class)).toEqual([
+      'STANDARD',
+      'HDD'
+    ]);
+    expect(component.bucketStorageClassQuotas).toEqual(component.accountStorageClassQuotas);
+  });
 });

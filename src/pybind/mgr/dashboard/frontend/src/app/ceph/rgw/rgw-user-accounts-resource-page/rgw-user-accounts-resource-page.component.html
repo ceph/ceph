@@ -9,6 +9,14 @@
       >
       </cd-resource-overview-card>
 
+      <cd-rgw-storage-class-quota-monitor
+        title="Account storage class enforcement"
+        description="Each storage class is enforced on its own. If the hot tier is full, further writes to that class would be blocked until objects are moved to a colder tier. Account usage stats are dummy until RGW exposes per-class account stats."
+        [quotaPayload]="selection?.quota?.storage_class_quotas"
+        [usageFallback]="dummyAccountStorageClassStats"
+      >
+      </cd-rgw-storage-class-quota-monitor>
+
       @if (selection?.quota) {
         <section class="cds-mt-6 cds-mb-6">
           <h2
@@ -27,6 +35,32 @@
         </section>
       }
 
+      @if (accountStorageClassQuotas.length) {
+        <section class="cds-mb-6">
+          <h2
+            class="user-account-resource-section__title cds--type-heading-03"
+            i18n
+          >
+            Account storage class quotas
+          </h2>
+          <p
+            class="user-account-resource-section__description cds--type-body-compact-01"
+            i18n
+          >
+            View size and object limits for each storage class on this account.
+          </p>
+          <cd-table
+            [data]="accountStorageClassQuotas"
+            [columns]="storageClassQuotaColumns"
+            columnMode="flex"
+            [toolHeader]="false"
+            [searchField]="false"
+            [footer]="false"
+          >
+          </cd-table>
+        </section>
+      }
+
       @if (selection?.bucket_quota) {
         <section class="cds-mb-6">
           <h2
@@ -42,6 +76,32 @@
             View the bucket quota details, including maximum object and size.
           </p>
           <cd-table-key-value [data]="bucket_quota"></cd-table-key-value>
+        </section>
+      }
+
+      @if (bucketStorageClassQuotas.length) {
+        <section class="cds-mb-6">
+          <h2
+            class="user-account-resource-section__title cds--type-heading-03"
+            i18n
+          >
+            Bucket storage class quotas
+          </h2>
+          <p
+            class="user-account-resource-section__description cds--type-body-compact-01"
+            i18n
+          >
+            View size and object limits for each storage class on this account's buckets.
+          </p>
+          <cd-table
+            [data]="bucketStorageClassQuotas"
+            [columns]="storageClassQuotaColumns"
+            columnMode="flex"
+            [toolHeader]="false"
+            [searchField]="false"
+            [footer]="false"
+          >
+          </cd-table>
         </section>
       }
     }

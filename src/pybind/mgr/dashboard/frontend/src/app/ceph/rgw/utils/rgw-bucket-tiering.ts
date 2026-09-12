@@ -33,6 +33,24 @@ export class BucketTieringUtils {
     }
   }
 
+  static getStorageClassNames(zonegroupData?: ZoneGroupDetails): string[] {
+    const names = new Set<string>(['STANDARD']);
+    zonegroupData?.zonegroups?.forEach((zoneGroup: ZoneGroup) => {
+      zoneGroup.placement_targets?.forEach((target: Target) => {
+        (target.storage_classes || []).forEach((storageClass) => names.add(storageClass));
+        (target.tier_targets || []).forEach((tierTarget: TierTarget) => {
+          if (tierTarget.key) {
+            names.add(tierTarget.key);
+          }
+          if (tierTarget.val?.storage_class) {
+            names.add(tierTarget.val.storage_class);
+          }
+        });
+      });
+    });
+    return Array.from(names);
+  }
+
   static filterAndMapTierTargets(zonegroupData: ZoneGroupDetails): MappedTierTarget[] {
     return zonegroupData.zonegroups.flatMap((zoneGroup: ZoneGroup) =>
       zoneGroup.placement_targets.flatMap((target: Target) => {

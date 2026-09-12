@@ -164,16 +164,21 @@ class RgwUserAccountsController(RgwRESTController):
     @RESTController.Resource(method='PUT', path='/quota')
     @allow_empty_body
     def set_quota(self, quota_type: str, account_id: str, max_size: str, max_objects: str,
-                  enabled: bool):
+                  enabled: bool, storage_class_quotas=None):
         """
         Modifies quota
 
         :param account_id: Account identifier
         :param quota_type: 'account' or 'bucket'
+        :param storage_class_quotas: Optional per-storage-class limits (accepted, not yet applied)
         :return: Returns modified quota.
         :rtype: Dict[str, Any]
         """
-        return RgwAccounts.set_quota(quota_type, account_id, max_size, max_objects, enabled)
+        result = RgwAccounts.set_quota(quota_type, account_id, max_size, max_objects, enabled)
+        # storage_class_quotas is accepted so the dashboard can send per-class
+        # limits; radosgw-admin does not consume them until the RGW quota PR.
+        _ = storage_class_quotas
+        return result
 
     @EndpointDoc("Enable/Disable RGW Account/Bucket quota",
                  parameters={'account_id': (str, 'Account id'),

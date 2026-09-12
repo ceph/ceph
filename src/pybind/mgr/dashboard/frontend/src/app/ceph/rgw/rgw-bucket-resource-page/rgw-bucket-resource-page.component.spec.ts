@@ -6,6 +6,7 @@ import { BehaviorSubject, of } from 'rxjs';
 import { RgwBucketResourcePageComponent } from './rgw-bucket-resource-page.component';
 import { Bucket } from '../models/rgw-bucket';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 
 describe('RgwBucketResourcePageComponent', () => {
   let component: RgwBucketResourcePageComponent;
@@ -41,6 +42,12 @@ describe('RgwBucketResourcePageComponent', () => {
       detectChanges: jest.fn()
     };
 
+    class MockDimlessBinaryPipe {
+      transform(value: any): string {
+        return `${value} B`;
+      }
+    }
+
     await TestBed.configureTestingModule({
       declarations: [RgwBucketResourcePageComponent],
       providers: [
@@ -56,7 +63,8 @@ describe('RgwBucketResourcePageComponent', () => {
           }
         },
         { provide: RgwBucketService, useValue: mockRgwBucketService },
-        { provide: ChangeDetectorRef, useValue: mockChangeDetectorRef }
+        { provide: ChangeDetectorRef, useValue: mockChangeDetectorRef },
+        { provide: DimlessBinaryPipe, useClass: MockDimlessBinaryPipe }
       ],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
@@ -180,6 +188,53 @@ describe('RgwBucketResourcePageComponent', () => {
     component.updateLifecycleFormatFromSwitcher({ name: 'xml' } as any);
 
     expect(component.updateLifecycleFormatTo).toHaveBeenCalledWith('xml');
+  });
+
+  it('should map bucket usage rgw.storage-classes from #66501', () => {
+    component.selection = {
+      bid: 'test-bucket',
+      owner: 'Account1',
+      usage: {
+        'rgw.storage-classes': [
+          { name: 'HDD', size: 42844160, size_actual: 42844160, num_objects: 2 },
+          { name: 'STANDARD', size: 21422080, size_actual: 21422080, num_objects: 1 }
+        ]
+      }
+    } as Bucket;
+    component.extractDetailsFromResponse();
+
+    expect(component.storageClassUsage).toEqual([
+      {
+        storage_class: 'HDD',
+        size: '42844160 B',
+        num_objects: 2
+      },
+      {
+        storage_class: 'STANDARD',
+        size: '21422080 B',
+        num_objects: 1
+      }
+    ]);
+  });
+
+  it('should fall back to dummy storage class usage when the API omits it', () => {
+    expect(component.storageClassUsage).toEqual([
+      {
+        storage_class: 'STANDARD',
+        size: '21422080 B',
+        num_objects: 1
+      },
+      {
+        storage_class: 'HDD',
+        size: '42844160 B',
+        num_objects: 2
+      }
+    ]);
+    expect(component.storageClassQuotas.length).toBeGreaterThan(0);
+    expect(component.storageClassQuotas.map((row) => row.storage_class)).toEqual([
+      'STANDARD',
+      'HDD'
+    ]);
   });
 
   it('should unsubscribe on destroy', () => {

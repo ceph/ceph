@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed, fakeAsync, tick, flush } from '@angular/core/testing';
 
 import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form.component';
+import { RgwStorageClassQuotaComponent } from '../rgw-storage-class-quota/rgw-storage-class-quota.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RouterTestingModule } from '@angular/router/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
@@ -9,6 +10,7 @@ import { of } from 'rxjs';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 import { ModalModule } from 'carbon-components-angular';
 import { ReactiveFormsModule } from '@angular/forms';
+import { SharedModule } from '~/app/shared/shared.module';
 import { RgwUserAccountsComponent } from '../rgw-user-accounts/rgw-user-accounts.component';
 import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
 
@@ -26,7 +28,7 @@ describe('RgwUserAccountsFormComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [RgwUserAccountsFormComponent],
+      declarations: [RgwUserAccountsFormComponent, RgwStorageClassQuotaComponent],
       imports: [
         ComponentsModule,
         HttpClientTestingModule,
@@ -35,7 +37,8 @@ describe('RgwUserAccountsFormComponent', () => {
           { path: 'rgw/accounts', component: RgwUserAccountsComponent }
         ]),
         ModalModule,
-        ReactiveFormsModule
+        ReactiveFormsModule,
+        SharedModule
       ],
       providers: [{ provide: RgwUserAccountsService, useClass: MockRgwUserAccountsService }]
     }).compileComponents();

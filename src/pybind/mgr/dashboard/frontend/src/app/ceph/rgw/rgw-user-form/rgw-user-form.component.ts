@@ -20,11 +20,13 @@ import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserSubuser } from '../models/rgw-user-subuser';
 import { RgwUserSwiftKey } from '../models/rgw-user-swift-key';
+import { StorageClassQuota } from '../models/rgw-user';
 import { RgwUserCapabilityModalComponent } from '../rgw-user-capability-modal/rgw-user-capability-modal.component';
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
 import { RgwUserSubuserModalComponent } from '../rgw-user-subuser-modal/rgw-user-subuser-modal.component';
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
+import { RgwStorageClassQuotaComponent } from '../rgw-storage-class-quota/rgw-storage-class-quota.component';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
@@ -56,7 +58,11 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   usernameExists: boolean;
   showTenant = false;
   previousTenant: string = null;
+  userStorageClassQuotas?: StorageClassQuota[] | Record<string, StorageClassQuota>;
+  bucketStorageClassQuotas?: StorageClassQuota[] | Record<string, StorageClassQuota>;
   @ViewChild(RgwRateLimitComponent, { static: false }) rateLimitComponent!: RgwRateLimitComponent;
+  @ViewChild('userScQuota') userScQuotaComponent?: RgwStorageClassQuotaComponent;
+  @ViewChild('bucketScQuota') bucketScQuotaComponent?: RgwStorageClassQuotaComponent;
   accounts: Account[] = [];
   initialUserPolicies: string[] = [];
   managedPolicies: ComboBoxItem[] = [
@@ -254,6 +260,11 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
               value[type + '_quota_max_objects_unlimited'] = false;
               value[type + '_quota_max_objects'] = quota.max_objects;
             }
+            if (type === USER) {
+              this.userStorageClassQuotas = quota.storage_class_quotas;
+            } else {
+              this.bucketStorageClassQuotas = quota.storage_class_quotas;
+            }
           });
 
           // Merge with default values.
@@ -361,7 +372,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     this.uid = this.getUID();
     let notificationTitle: string;
     // Exit immediately if the form isn't dirty.
-    if (this.userForm.pristine && this.rateLimitComponent.form.pristine) {
+    if (
+      this.userForm.pristine &&
+      this.rateLimitComponent.form.pristine &&
+      !this.userScQuotaComponent?.isDirty() &&
+      !this.bucketScQuotaComponent?.isDirty()
+    ) {
       this.goToListView();
       return;
     }
@@ -705,15 +721,17 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * @return {Boolean} Returns TRUE if the user quota has been modified.
    */
   private _isUserQuotaDirty(): boolean {
-    return [
-      'user_quota_enabled',
-      'user_quota_max_size_unlimited',
-      'user_quota_max_size',
-      'user_quota_max_objects_unlimited',
-      'user_quota_max_objects'
-    ].some((path) => {
-      return this.userForm.get(path).dirty;
-    });
+    return (
+      [
+        'user_quota_enabled',
+        'user_quota_max_size_unlimited',
+        'user_quota_max_size',
+        'user_quota_max_objects_unlimited',
+        'user_quota_max_objects'
+      ].some((path) => {
+        return this.userForm.get(path).dirty;
+      }) || !!this.userScQuotaComponent?.isDirty()
+    );
   }
 
   /**
@@ -721,15 +739,17 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * @return {Boolean} Returns TRUE if the bucket quota has been modified.
    */
   private _isBucketQuotaDirty(): boolean {
-    return [
-      'bucket_quota_enabled',
-      'bucket_quota_max_size_unlimited',
-      'bucket_quota_max_size',
-      'bucket_quota_max_objects_unlimited',
-      'bucket_quota_max_objects'
-    ].some((path) => {
-      return this.userForm.get(path).dirty;
-    });
+    return (
+      [
+        'bucket_quota_enabled',
+        'bucket_quota_max_size_unlimited',
+        'bucket_quota_max_size',
+        'bucket_quota_max_objects_unlimited',
+        'bucket_quota_max_objects'
+      ].some((path) => {
+        return this.userForm.get(path).dirty;
+      }) || !!this.bucketScQuotaComponent?.isDirty()
+    );
   }
 
   /**
@@ -811,7 +831,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * quota configuration has been modified.
    */
   _getUserQuotaArgs(): Record<string, any> {
-    const result = {
+    const result: Record<string, any> = {
       quota_type: USER,
       enabled: this.userForm.getValue('user_quota_enabled'),
       max_size_kb: -1,
@@ -826,6 +846,9 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (!this.userForm.getValue('user_quota_max_objects_unlimited')) {
       result['max_objects'] = this.userForm.getValue('user_quota_max_objects');
     }
+    if (this.userScQuotaComponent?.isDirty()) {
+      result['storage_class_quotas'] = this.userScQuotaComponent.getStorageClassQuotas();
+    }
     return result;
   }
 
@@ -834,7 +857,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * quota configuration has been modified.
    */
   private _getBucketQuotaArgs(): Record<string, any> {
-    const result = {
+    const result: Record<string, any> = {
       quota_type: 'bucket',
       enabled: this.userForm.getValue('bucket_quota_enabled'),
       max_size_kb: -1,
@@ -848,6 +871,9 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     }
     if (!this.userForm.getValue('bucket_quota_max_objects_unlimited')) {
       result['max_objects'] = this.userForm.getValue('bucket_quota_max_objects');
+    }
+    if (this.bucketScQuotaComponent?.isDirty()) {
+      result['storage_class_quotas'] = this.bucketScQuotaComponent.getStorageClassQuotas();
     }
     return result;
   }
