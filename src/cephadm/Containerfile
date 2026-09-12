@@ -1,0 +1,73 @@
+# syntax=docker/dockerfile:1
+ARG RHEL_MAJOR="10"
+ARG CEPH_RELEASE="20.2.2"
+ARG DNF="dnf"
+ARG DNF_OPTS="--setopt=install_weak_deps=False --nodocs"
+
+###
+FROM quay.io/fedora/fedora-minimal:44 AS ceph-cluster
+ARG RHEL_MAJOR
+ARG DNF
+ARG DNF_OPTS
+ARG CEPH_RELEASE
+
+ARG CEPH_REPO_KEY="https://download.ceph.com/keys/release.asc"
+ARG CEPH_REPO_RPM="https://download.ceph.com/rpm-${CEPH_RELEASE}/el${RHEL_MAJOR}/noarch/ceph-release-1-0.el${RHEL_MAJOR}.noarch.rpm"
+ARG BASE_RPMS="chrony curl fuse-overlayfs iproute jq logrotate podman"
+ARG SYSTEMD_UNITS="chronyd.service logrotate.timer"
+
+WORKDIR /root
+
+RUN ${DNF} install -y ${DNF_OPTS} ${BASE_RPMS} \
+ && ${DNF} clean all
+RUN systemctl enable ${SYSTEMD_UNITS}
+
+COPY <<'EOF' /etc/sysconfig/chronyd
+OPTIONS="-F 2 -x"
+EOF
+
+COPY <<'EOF' /etc/containers/containers.conf
+[containers]
+cgroups = "disabled"
+EOF
+
+COPY <<'EOF' /etc/containers/storage.conf
+[storage]
+driver="overlay"
+
+[storage.options.overlay]
+mount_program="/usr/bin/fuse-overlayfs"
+ignore_chown_errors = "true"
+EOF
+
+RUN rpm --import ${CEPH_REPO_KEY}
+RUN ${DNF} install -y ${DNF_OPTS} "${CEPH_REPO_RPM}" \
+ && ${DNF} install -y ${DNF_OPTS} cephadm \
+ && ${DNF} clean all
+
+RUN mkdir -p /run/udev
+
+COPY <<'EOF' /etc/systemd/system/ceph-bootstrap.service
+[Unit]
+Description=Bootstrap Ceph Cluster
+After=network-online.target chronyd.service
+Wants=network-online.target
+
+# Don't rerun if already bootstrapped
+ConditionPathExists=!/etc/ceph/ceph.conf
+
+[Service]
+Type=oneshot
+PassEnvironment=CEPHADM_BOOTSTRAP_OPTIONS
+ExecStart=/usr/sbin/cephadm bootstrap $CEPHADM_BOOTSTRAP_OPTIONS
+RemainAfterExit=yes
+StandardOutput=tty
+StandardError=tty
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+RUN systemctl enable ceph-bootstrap.service
+
+CMD [ "/sbin/init" ]

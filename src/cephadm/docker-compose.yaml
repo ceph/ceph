@@ -1,0 +1,97 @@
+services:
+  ceph-cluster:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: ceph-cluster
+    image: ceph-cluster:latest
+    container_name: ceph-cluster
+    hostname: ceph-cluster
+
+    stop_signal: SIGTERM
+    stop_grace_period: 5s
+
+    tty: true
+    stdin_open: true
+
+    logging:
+      driver: json-file
+    environment:
+      CEPHADM_BOOTSTRAP_OPTIONS: >
+        --initial-dashboard-password admin
+        --dashboard-password-noupdate
+        --allow-fqdn-hostname
+        --single-host-defaults 
+        --no-cleanup-on-failure
+        --mon-ip 192.168.250.2
+
+    healthcheck:
+      test: systemctl is-active --quiet ceph-bootstrap.service
+      interval: 5s
+      timeout: 2s
+      start_period: 10s
+      retries: 60
+
+    cgroup: private
+
+    cap_add:
+      - SYS_ADMIN
+      - CAP_SYS_TIME
+    
+    security_opt:
+      - seccomp:unconfined
+      - label=disable
+
+    ports:
+      - 8443:8443
+      - 3000:3000
+
+    devices:
+      - /dev/fuse
+      - /dev/ublk-control
+
+    volumes:
+      - podman-storage:/var/lib/containers/storage
+
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+
+    networks:
+      ceph-internal:
+        ipv4_address: 192.168.250.2
+
+#    user: ceph
+#    working_dir: /ceph
+
+#    volumes:
+      # Ceph source tree
+#      - ../:/ceph:Z
+
+      # Persist generated configuration
+#      - ceph-data:/var/lib/ceph
+
+#    environment:
+#      CEPHADM_IMAGE: quay.io/ceph/ceph:main
+
+#    security_opt:
+#      - label=disable
+
+#    network_mode: bridge
+
+#    restart: "no"
+
+#volumes:
+#  ceph-data:
+
+volumes:
+  podman-storage:
+
+networks:
+  ceph-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.250.0/24
+          gateway: 192.168.250.1
