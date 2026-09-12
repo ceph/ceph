@@ -1,7 +1,7 @@
 #!/bin/bash -ex
 
 NUM_OSDS=$(ceph osd ls | wc -l)
-if [ $NUM_OSDS -lt ]; then
+if [ $NUM_OSDS -lt 6]; then
     echo "test requires at least 6 OSDs"
     exit 1
 fi
