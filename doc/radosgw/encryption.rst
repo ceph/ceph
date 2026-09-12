@@ -16,6 +16,13 @@ Object Gateway stores that data in the Ceph Storage Cluster in encrypted form.
 
 .. note:: Server-side encryption keys must be 256-bit long and base64 encoded.
 
+.. toctree::
+   :maxdepth: 1
+
+   HashiCorp Vault Integration <vault>
+   KMIP Integration <kmip>
+   OpenStack Barbican Integration <barbican>
+
 Encryption Algorithm
 ====================
 
