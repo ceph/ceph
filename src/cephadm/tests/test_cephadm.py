@@ -1981,6 +1981,27 @@ class TestBootstrap(object):
             retval = _cephadm.command_bootstrap(ctx)
             assert retval == 0
 
+    def test_skip_prepare_host_checks_container_engine(
+        self, cephadm_fs, funkypatch
+    ):
+        # command_bootstrap is excluded from the check_container_engine()
+        # call in main(), so bootstrap must call it itself. With
+        # --skip-prepare-host nothing else fetches the podman version, and
+        # daemon creation later fails with "Please call `get_version` first".
+        funkypatch.patch('cephadmlib.systemd.call')
+        check_container_engine = funkypatch.patch(
+            'cephadm.check_container_engine'
+        )
+
+        cmd = self._get_cmd(
+            '--mon-ip', '192.168.1.1', '--skip-mon-network'
+        )
+        with bootstrap_test_ctx(cmd) as ctx:
+            retval = _cephadm.command_bootstrap(ctx)
+            assert retval == 0
+
+        check_container_engine.assert_called_once_with(ctx)
+
     @pytest.mark.parametrize('mon_ip, list_networks, result',
         [
             # IPv4
