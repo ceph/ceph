@@ -23,6 +23,7 @@
 #include "common/ceph_mutex.h"
 
 #include "rgw_common.h"
+#include "perfglue/heap_profiler.h"
 #include "rgw_sal.h"
 #include "rgw_quota.h"
 #include "rgw_bucket.h"
@@ -397,6 +398,7 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
 	// note: this will likely wait for the intended period of
 	// time, but could wait for less
 	std::unique_lock locker{lock};
+	ceph_heap_mark_thread_temporarily_idle();
 	cond.wait_for(locker, std::chrono::seconds(wait_secs));
       } while (!stats->going_down());
 
@@ -445,6 +447,7 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
           break;
 
 	std::unique_lock l{lock};
+	ceph_heap_mark_thread_temporarily_idle();
         cond.wait_for(l, std::chrono::seconds(cct->_conf->rgw_user_quota_sync_interval));
       } while (!stats->going_down());
       ldout(cct, 20) << "OwnerSyncThread: done" << dendl;
