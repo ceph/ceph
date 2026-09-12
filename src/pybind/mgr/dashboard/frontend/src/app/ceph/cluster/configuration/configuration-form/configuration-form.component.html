@@ -20,6 +20,20 @@
           <h3 i18n>Edit {{ configForm.getValue('name') }}</h3>
         </div>
 
+        @if (forceUpdate) {
+          <div
+            cdsRow
+            class="form-item cds-mb-4"
+          >
+            <cd-alert-panel
+              type="warning"
+              spacingClass="cds-mb-3"
+            >
+              {{ getRestartWarningMessage() }}
+            </cd-alert-panel>
+          </div>
+        }
+
         <!-- Name -->
         <div
           cdsRow
