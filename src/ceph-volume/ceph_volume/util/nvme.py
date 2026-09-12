@@ -78,5 +78,15 @@ def preformat(device: str) -> bool:
     resolved_device = resolve(device)
     if not is_namespace(resolved_device):
         return False
+
+    # Skip formatting if device has holders (LVM, dm-crypt, etc.)
+    # This prevents reformatting when multiple OSDs share the same disk
+    if disk.has_holders(resolved_device):
+        logger.info(
+            'Skipping NVMe format for %s: device already in use',
+            resolved_device
+        )
+        return False
+    
     return format(resolved_device)
 
