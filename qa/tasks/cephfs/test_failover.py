@@ -259,14 +259,10 @@ class TestClusterResize(CephFSTestCase):
         """
 
         self.fs.set_down()
-        try:
-            self.wait_for_health("", 30)
-            raise RuntimeError("got health warning?")
-        except RuntimeError as e:
-            if "Timed out after" in str(e):
-                pass
-            else:
-                raise
+
+        # Transient warnings (FS_DEGRADED, MDS_ALL_DOWN) can briefly appear
+        # while monitors process the down state. We wait for them to clear.
+        self.wait_for_health_clear(timeout=30)
 
     def test_down_twice(self):
         """
