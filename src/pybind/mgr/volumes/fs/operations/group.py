@@ -115,7 +115,17 @@ class Group(GroupTemplate):
                            | cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID | cephfs.CEPH_STATX_MODE
                            | cephfs.CEPH_STATX_ATIME | cephfs.CEPH_STATX_MTIME | cephfs.CEPH_STATX_CTIME,
                            cephfs.AT_SYMLINK_NOFOLLOW)
-        usedbytes = st["size"]
+        # Fetch 'ceph.dir.rbytes' vxattr instead of relying on statx size
+        # (rstat of a dir); the getxattr path forces a getattr with the
+        # rstat mask which is routed to the auth MDS, whereas statx may be
+        # satisfied from stale cache or a replica MDS in multi-active
+        # setups, occasionally reporting 0.
+        try:
+            usedbytes = int(self.fs.getxattr(self.path,
+                                             'ceph.dir.rbytes'
+                                             ).decode('utf-8'))
+        except cephfs.NoData:
+            usedbytes = st["size"]
         try:
             nsize = int(self.fs.getxattr(self.path, 'ceph.quota.max_bytes').decode('utf-8'))
         except cephfs.NoData:
