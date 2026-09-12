@@ -29,10 +29,12 @@ tasks:
 - nvmeof.thrash:
     checker_host: 'client.0'
     switch_thrashers: True
+    switch_thrashers_wait: 1000
 
 - mon_thrash:
     revive_delay: 60
     thrash_delay: 60
     thrash_many: true
     switch_thrashers: True
+    switch_thrashers_wait: 1000
     logger: '[nvmeof.thrasher.mon_thrasher]'
