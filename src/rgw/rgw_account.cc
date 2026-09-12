@@ -423,7 +423,8 @@ int remove(const DoutPrefixProvider* dpp,
   }
 
   for (const auto& oidc : providers) {
-    ret = driver->delete_oidc_provider(dpp, y, info.id, oidc.provider_url);
+    const auto url = url_remove_prefix(oidc.provider_url); // strip scheme://
+    ret = driver->delete_oidc_provider(dpp, y, info.id, url);
     if (ret < 0) {
       err_msg = fmt::format("unable to delete oidc provider {}", oidc.provider_url);
       return ret;
