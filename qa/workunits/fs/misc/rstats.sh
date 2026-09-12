@@ -6,6 +6,14 @@ timeout=30
 old_value=""
 new_value=""
 
+
+getfattr -n ceph.fscrypt.auth . > /dev/null 2>&1
+rval=$?
+is_fscrypt=0
+if [ $rval == "0" ] ; then
+    is_fscrypt=1
+fi
+
 wait_until_changed() {
 	name=$1
 	wait=0
@@ -61,8 +69,11 @@ old_value=`getfattr --only-value -n ceph.dir.rbytes .`
 echo hello > d1/d2/f2
 fsync_path d1/d2/f2
 wait_until_changed rbytes
-[ $new_value == $(($old_value + 6)) ] || false
-
+if [ $is_fscrypt -eq 1 ] ; then
+    [ $new_value == $(($old_value + 4096)) ] || false
+else
+    [ $new_value == $(($old_value + 6)) ] || false
+fi
 #rctime
 old_value=`getfattr --only-value -n ceph.dir.rctime .`
 touch d1/d2/d3 # touch existing file
