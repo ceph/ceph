@@ -102,6 +102,11 @@ void MDSIOContextBase::complete(int r) {
   // already acquired.
   std::lock_guard l(mds->mds_lock);
 
+  /* Journal and object IO completions are the one large consumer of mds_lock
+   * that message dispatch does not account for; without this the phase totals
+   * fall well short of the time the lock is held on a write-heavy rank. */
+  MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_io_completion);
+
   if (mds->is_daemon_stopping()) {
     dout(4) << "MDSIOContextBase::complete: dropping for stopping "
             << typeid(*this).name() << dendl;
