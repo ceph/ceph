@@ -8,4 +8,12 @@ tasks:
     basedir: qa/workunits/rgw
     clients:
       client.0:
+        - keystone-access-rules.sh
+- print: "restarting rgw to clear keystone cache"
+- ceph.restart:
+    daemons: [rgw.*]
+- workunit:
+    basedir: qa/workunits/rgw
+    clients:
+      client.0:
         - keystone-service-token.sh

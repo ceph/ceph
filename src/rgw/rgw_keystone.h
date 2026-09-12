@@ -4,6 +4,7 @@
 #pragma once
 
 #include <atomic>
+#include <span>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -175,10 +176,22 @@ public:
 
   class ApplicationCredential {
   public:
+    // OpenStack application credential access rule.
+    // Reference: https://docs.openstack.org/keystone/latest/admin/application-credentials.html
+    class AccessRule {
+    public:
+      std::string service;  // service type, e.g. "object-store"
+      std::string method;   // HTTP method: GET, HEAD, PUT, POST, DELETE, PATCH
+      std::string path;     // URL path pattern with glob support
+      void decode_json(JSONObj *obj);
+    };
+
     ApplicationCredential() : restricted(false) { }
     std::string id;
     std::string name;
     bool restricted;
+    // std::optional preserves the absent-vs-empty distinction.
+    std::optional<std::vector<AccessRule>> access_rules;
     void decode_json(JSONObj *obj);
   };
 
@@ -203,6 +216,20 @@ public:
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const std::string& r) const;
+  // True iff the access_rules field was present (possibly empty) on the
+  // application credential.
+  bool has_access_rules_field() const {
+    return app_cred && app_cred->access_rules.has_value();
+  }
+  // Access rules from the application credential, empty span if absent or
+  // no app_cred. Callers must check has_access_rules_field() to distinguish
+  // absent (permit) from present-but-empty (deny).
+  std::span<const ApplicationCredential::AccessRule> get_access_rules() const {
+    if (app_cred && app_cred->access_rules) {
+      return *app_cred->access_rules;
+    }
+    return {};
+  }
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
     return std::cmp_greater_equal(now, get_expires());
