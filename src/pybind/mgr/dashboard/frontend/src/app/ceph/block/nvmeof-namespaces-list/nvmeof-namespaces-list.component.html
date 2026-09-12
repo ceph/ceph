@@ -2,6 +2,7 @@
   <div class="nvmeof-content-main">
     <ng-container *ngIf="namespaces$ | async as namespaces">
       <cd-table
+        #table
         [data]="namespaces"
         [compactSearchField]="true"
         columnMode="flex"
@@ -10,6 +11,7 @@
         identifier="unique_id"
         [forceIdentifier]="true"
         selectionType="single"
+        [autoReload]="false"
         (updateSelection)="updateSelection($event)"
         emptyStateTitle="No namespaces created."
         i18n-emptyStateTitle

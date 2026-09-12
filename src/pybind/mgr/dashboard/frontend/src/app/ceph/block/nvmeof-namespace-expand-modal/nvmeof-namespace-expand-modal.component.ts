@@ -13,6 +13,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { FormButtonPanelComponent } from '~/app/shared/components/form-button-panel/form-button-panel.component';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 
 @Component({
   selector: 'cd-nvmeof-namespace-expand-modal',
@@ -47,7 +48,8 @@ export class NvmeofNamespaceExpandModalComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     public taskWrapper: TaskWrapperService,
-    private formatter: FormatterService
+    private formatter: FormatterService,
+    private nvmeofStateService: NvmeofStateService
   ) {}
 
   ngOnInit() {
@@ -135,6 +137,7 @@ export class NvmeofNamespaceExpandModalComponent implements OnInit {
       })
       .subscribe({
         complete: () => {
+          this.nvmeofStateService.requestRefresh();
           this.closeModal();
         }
       });
