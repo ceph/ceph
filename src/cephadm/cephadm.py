@@ -1613,6 +1613,7 @@ class CephadmAgent(DaemonForm):
         self.target_ip = ''
         self.target_port = ''
         self.host = ''
+        self.target_changed = False
         self.daemon_dir = os.path.join(ctx.data_dir, self.fsid, f'{self.daemon_type}.{self.daemon_id}')
         self.config_path = os.path.join(self.daemon_dir, 'agent.json')
         self.keyring_path = os.path.join(self.daemon_dir, 'keyring')
@@ -1725,6 +1726,7 @@ class CephadmAgent(DaemonForm):
         self.event.set()
 
     def pull_conf_settings(self) -> None:
+        previous_target = (self.target_ip, self.target_port)
         try:
             with open(self.config_path, 'r') as f:
                 config = json.load(f)
@@ -1732,11 +1734,24 @@ class CephadmAgent(DaemonForm):
                 self.target_port = config['target_port']
                 self.loop_interval = int(config['refresh_period'])
                 self.starting_port = int(config['listener_port'])
+                self.metadata_compresion_enabled = bool(config.get('metadata_compresion_enabled', False))
+                self.initial_startup_delay_max = int(config.get('initial_startup_delay_max', 0))
+                self.jitter_seconds = int(config.get('jitter_seconds', 0))
                 self.host = config['host']
                 use_lsm = config['device_enhanced_scan']
+                logger.info(f'Agent configuration at startup: {config}')
         except Exception as e:
             self.shutdown()
             raise Error(f'Failed to get agent target ip and port from config: {e}')
+
+        current_target = (self.target_ip, self.target_port)
+        if previous_target[0] and previous_target != current_target:
+            self.target_changed = True
+            logger.info(
+                f'Target mgr changed from '
+                f'{previous_target[0]}:{previous_target[1]} to '
+                f'{self.target_ip}:{self.target_port}'
+            )
 
         try:
             with open(self.keyring_path, 'r') as f:
@@ -1753,8 +1768,15 @@ class CephadmAgent(DaemonForm):
         self.volume_gatherer.update_func(lambda: self._ceph_volume(enhanced=self.device_enhanced_scan))
 
     def run(self) -> None:
+
         self.pull_conf_settings()
         self.ssl_ctx.load_verify_locations(self.ca_path)
+
+        # Introduce the randomness in the initialization (up to initial_startup_delay_max delay)
+        if self.initial_startup_delay_max:
+            delay = random.uniform(0, self.initial_startup_delay_max)
+            logger.debug(f'Delaying startup for {delay} seconds.')
+            time.sleep(delay)
 
         try:
             for _ in range(1001):
@@ -1777,6 +1799,15 @@ class CephadmAgent(DaemonForm):
             self.volume_gatherer.start()
 
         while not self.stop:
+            if self.target_changed:
+                self.target_changed = False
+                delay = random.uniform(0, self.jitter_seconds)
+                logger.info(
+                    f'Target mgr changed, delaying next metadata report '
+                    f'for {delay:.2f} seconds'
+                )
+                time.sleep(delay)
+
             start_time = time.monotonic()
             ack = self.ack
 
@@ -1807,7 +1838,8 @@ class CephadmAgent(DaemonForm):
                                               port=self.target_port,
                                               data=data,
                                               endpoint='/data',
-                                              ssl_ctx=self.ssl_ctx)
+                                              ssl_ctx=self.ssl_ctx,
+                                              compress=self.metadata_compresion_enabled)
                 if status != 200:
                     logger.error(f'HTTP error {status} while querying agent endpoint: {response}')
                     raise RuntimeError(f'non-200 response <{status}> from agent endpoint: {response}')
@@ -1823,7 +1855,10 @@ class CephadmAgent(DaemonForm):
             self.recent_iteration_index = (self.recent_iteration_index + 1) % 3
             run_time_average = sum(self.recent_iteration_run_times, 0.0) / len([t for t in self.recent_iteration_run_times if t])
 
-            self.event.wait(max(self.loop_interval - int(run_time_average), 0))
+            # Add ± jitter_seconds to introduce randomness
+            jitter = random.uniform(-self.jitter_seconds, self.jitter_seconds)
+            delay = max(self.loop_interval - int(run_time_average) + jitter, 0)
+            self.event.wait(delay)
             self.event.clear()
 
     def _ceph_volume(self, enhanced: bool = False) -> Tuple[str, bool]:
