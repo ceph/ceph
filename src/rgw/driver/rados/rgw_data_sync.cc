@@ -2733,25 +2733,28 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj
     if (!ps->identity->is_owner_of(bucket_acl.get_owner().id)) {
       ldpp_dout(dpp, 4) << "cross-account request for bucket owner "
           << bucket_acl.get_owner().id << " != " << ps->identity->get_aclowner().id << dendl;
+      constexpr bool cross_account = true;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       return ::verify_bucket_permission(dpp, &(*ps), arn, account_root, {}, {}, {},
-                                      info->user_policies, {}, op)
+                                      info->user_policies, {}, op, cross_account)
           && ::verify_bucket_permission(dpp, &(*ps), arn, false, info->user_acl,
-                                      bucket_acl, bucket_policy, {}, {}, op);
+                                      bucket_acl, bucket_policy, {}, {}, op, cross_account);
     } else {
+      constexpr bool cross_account = false;
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
       return ::verify_bucket_permission(dpp, &(*ps), arn, account_root, {}, {},
                                       bucket_policy, info->user_policies,
-                                      {}, op);
+                                      {}, op, cross_account);
     }
   }
   constexpr bool account_root = false;
+  constexpr bool cross_account = false;
   return ::verify_bucket_permission(dpp, &(*ps), arn, account_root,
                                   info->user_acl, bucket_acl,
                                   bucket_policy, info->user_policies,
-                                  {}, op);
+                                  {}, op, cross_account);
 }
 
 rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj_key& obj_key, const uint64_t op) const
@@ -2765,6 +2768,7 @@ rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj
   const auto arn = rgw::ARN(obj);
   const bool account_root = (ps->identity->get_identity_type() == TYPE_ROOT);
 
+  constexpr bool cross_account = false;
   return ::evaluate_iam_policies(dpp,
                                  ps->env,
                                  *ps->identity,
@@ -2772,7 +2776,7 @@ rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj
                                  op, arn,
                                  bucket_policy,
                                  info->user_policies,
-                                 {});
+                                 {}, cross_account);
 }
 
 int RGWUserPermHandler::policy_from_attrs(CephContext *cct,
