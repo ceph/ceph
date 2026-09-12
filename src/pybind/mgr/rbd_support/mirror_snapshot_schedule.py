@@ -247,6 +247,10 @@ class CreateSnapshotRequests:
             self.log.error(
                 "error when creating snapshot for {}/{}/{}: {}".format(
                     pool_id, namespace, image_id, comp.get_return_value()))
+        else:
+            self.log.info(
+                "mirror snapshot created for {}/{}/{}: snap_id={}".format(
+                    pool_id, namespace, image_id, snap_id))
 
         self.close_image(image_spec, image)
 
@@ -369,6 +373,10 @@ class MirrorSnapshotScheduleHandler:
                         self.condition.wait(min(wait_time, refresh_delay))
                         continue
                 pool_id, namespace, image_id = image_spec
+                image_name = self.images.get(pool_id, {}).get(namespace, {}).get(image_id, image_id)
+                self.log.info("MirrorSnapshotScheduleHandler: executing mirror snapshot for "
+                              "pool_id={}, namespace={}, image_id={}, image={}".format(
+                                  pool_id, namespace, image_id, image_name))
                 self.create_snapshot_requests.add(pool_id, namespace, image_id)
                 with self.lock:
                     self.enqueue(datetime.now(timezone.utc), pool_id, namespace, image_id)
@@ -390,7 +398,7 @@ class MirrorSnapshotScheduleHandler:
         self.log.debug("MirrorSnapshotScheduleHandler: queue is initialized")
 
     def load_schedules(self) -> None:
-        self.log.info("MirrorSnapshotScheduleHandler: load_schedules")
+        self.log.debug("MirrorSnapshotScheduleHandler: load_schedules")
         self.schedules.load(namespace_validator, image_validator)
 
     def refresh_images(self) -> float:
