@@ -43,6 +43,11 @@ list(APPEND man_srcs
   cephadm.rst
   cephfs-mirror.rst)
 
+if(WITH_EBPF_TRACE)
+  list(APPEND man_srcs
+    radostrace.rst)
+endif()
+
 if(WITH_CEPHFS_SHELL)
   list(APPEND man_srcs
     cephfs-shell.rst)
