@@ -187,6 +187,9 @@ private:
    */
   void update_config(const clog_targets_conf_t& conf_strings);
 
+  /// set log_to_monitors with channel_lock already held
+  void _set_log_to_monitors(bool v);
+
   clog_targets_conf_t parse_log_client_options(CephContext* conf_cct);
 };
 
