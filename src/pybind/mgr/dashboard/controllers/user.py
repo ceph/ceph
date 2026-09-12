@@ -7,10 +7,11 @@ import cherrypy
 from ceph_argparse import CephString
 
 from .. import mgr
-from ..exceptions import DashboardException, PasswordPolicyException, \
-    PwdExpirationDateNotValid, UserAlreadyExists, UserDoesNotExist
+from ..exceptions import DashboardException, LastAdminError, \
+    PasswordPolicyException, PwdExpirationDateNotValid, UserAlreadyExists, \
+    UserDoesNotExist
 from ..security import Scope
-from ..services.access_control import SYSTEM_ROLES, PasswordPolicy
+from ..services.access_control import ADMIN_ROLE, SYSTEM_ROLES, PasswordPolicy
 from ..services.auth import JwtManager
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
     RESTController, allow_empty_body, validate_ceph_type
@@ -122,6 +123,10 @@ class User(RESTController):
             mgr.ACCESS_CTRL_DB.delete_user(username)
         except UserDoesNotExist:
             raise cherrypy.HTTPError(404)
+        except LastAdminError as ex:
+            raise DashboardException(msg=str(ex),
+                                     code='cannot_delete_last_admin',
+                                     component='user')
         mgr.ACCESS_CTRL_DB.save()
 
     def set(self, username, password=None, name=None, email=None, roles=None,
@@ -146,6 +151,21 @@ class User(RESTController):
             raise DashboardException(
                 msg='Password expiration date must not be in the past',
                 code='pwd_past_expiration_date', component='user')
+        if mgr.ACCESS_CTRL_DB._is_last_admin(username):
+            removing_admin = user_roles and ADMIN_ROLE not in user_roles
+            if removing_admin:
+                raise DashboardException(
+                    msg=f"Cannot remove administrator role from user '{username}': "
+                        "last user with administrator role",
+                    code='cannot_remove_admin_from_last_admin',
+                    component='user')
+            if enabled is False:
+                raise DashboardException(
+                    msg=f"Cannot disable user '{username}': "
+                        "last user with administrator role",
+                    code='cannot_disable_last_admin',
+                    component='user')
+
         user.name = name
         user.email = email
         if enabled is not None:
