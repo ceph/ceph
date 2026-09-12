@@ -10,8 +10,8 @@ Recommended Deployment Method: Containers via Cephadm
 The Ceph project strongly prefers and natively supports container-based
 releases deployed via :ref:`cephadm <cephadm>`. While legacy package-based
 installations (via ``.deb`` or ``.rpm``) are still supported, containerized
-deployments are preferred for all new and existing clusters. 
- 
+deployments are preferred for all new and existing clusters.
+
 Container-based deployments offer significant advantages, particularly
 regarding cluster upgrades. Because Ceph and its dependencies are packaged into
 immutable container images, you avoid host-level OS package conflicts,
@@ -45,8 +45,8 @@ Linux Kernel
   Older kernel client versions may not support your :ref:`CRUSH
   tunables <crush-map-tunables>` profile or other newer features of the Ceph
   cluster, requiring the storage cluster to be configured with those features
-  disabled. For RBD, a kernel of version 5.3 or Enterprise Linux (EL) 8.2 is the minimum
-  necessary for reasonable support for RBD image features.
+  disabled. For RBD, a kernel of version 5.3 or Enterprise Linux (EL) 8.2 is
+  the minimum necessary for reasonable support for RBD image features.
 
 - **Ceph MS Windows Client**
 
@@ -60,7 +60,8 @@ Platforms
 =========
 
 The chart below shows the platforms for which Ceph provides packages, and
-the platforms on which Ceph has been tested.
+the platforms on which Ceph package-based installs have been tested.
+Container-based installs are encouraged, see :ref:`start-containers` below.
 
 Ceph does not require a specific Linux distribution. Ceph can run on any
 distribution that includes a supported kernel and ``systemd``. Ceph is
@@ -95,17 +96,30 @@ core Ceph effort.
 
 **Table legend:**
 
-- **A**: Ceph provides packages and has done comprehensive tests on the software in them.
-- **B**: Ceph provides packages and has done basic tests on the software in them.
-- **C**: Ceph provides packages only. No tests have been done on these releases.
-- **D**: Client packages are available from an external site but are not maintained or tested by the core Ceph team.
-- **Ae**: It is expected that CentOS 9.stream will EOL before the Umbrella Ceph release is EOL. This means that CentOS 9.stream RPMs will no longer be generated for new minor releases of Umbrella when that occurs because CentOS deactivates its public repositories. It is strongly recommended to migrate to Rocky 10 or another supported distribution before that occurs.
-  
-.. note:: Dates marked with * are anticipated based on standard 10-year Enterprise Linux lifecycles and 5-year Ubuntu LTS lifecycles.
+- **A**: Ceph provides packages and has done comprehensive tests on the
+  software in them.
+- **B**: Ceph provides packages and has done basic tests on the software
+  in them.
+- **C**: Ceph provides packages only. No tests have been done on
+  these releases.
+- **D**: Client packages are available from an external site but are not
+  maintained or tested by the core Ceph team.
+- **Ae**: It is expected that CentOS 9.stream will EOL before the Umbrella
+  Ceph release is EOL. This means that CentOS 9.stream RPMs will no longer be
+  generated for new minor releases of Umbrella when that occurs because CentOS
+  deactivates its public repositories. It is strongly recommended to migrate to
+  Rocky 10 or another supported distribution before that occurs.
 
-.. note:: Releases in the future are included for anticipated OS support and are not final.
+.. note:: Dates marked with * are anticipated based on standard 10-year
+          Enterprise Linux lifecycles and 5-year Ubuntu LTS lifecycles.
 
-.. warning:: Starting with CentOS 10 Stream and onwards, CentOS will no longer be built for or tested on by the upstream Ceph project.
+.. note:: Releases in the future are included for anticipated OS support and
+          are not final.
+
+.. warning:: Starting with CentOS 10 Stream and onwards, CentOS will no longer
+             be built for or tested on by the upstream Ceph project.
+
+.. _start-containers:
 
 Container Hosts
 ---------------
@@ -136,7 +150,9 @@ container images.
 
 - **H**: Ceph tests this distribution as a container host.
 
-.. warning:: This does not indicate that the container image is built on that distribution. It means the container image is tested to run on that distribution.
+.. warning:: This does not indicate that the container image is built on that
+             distribution. It means the container image is tested to run on
+             that distribution.
 
 
 Umbrella Container Base Image
