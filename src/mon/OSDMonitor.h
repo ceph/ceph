@@ -378,6 +378,22 @@ private:
    */
   bool validate_crush_against_features(const CrushWrapper *newcrush,
 				       std::ostream &ss);
+  /**
+   * make room in the crush map for weight that is about to be added
+   *
+   * Raises the map's weight shift (rescaling every weight, which does not
+   * move any data) if the addition would otherwise overflow a bucket weight.
+   * Callers pass the *increase* in nominal weight, not the new value, so that
+   * re-stating a weight an item already has is a no-op.  Any per-item weight
+   * an operator supplied should be validated before this is called.
+   *
+   * @param newcrush pending crush map to adjust in place
+   * @param additional increase in nominal weight; <= 0 is a no-op
+   * @param ss where to write an explanation on failure
+   * @returns 0 if the weight now fits, negative error code otherwise
+   */
+  int prepare_crush_weight_headroom(CrushWrapper *newcrush, double additional,
+				    std::ostream &ss);
   void check_osdmap_subs();
   void share_map_with_random_osd();
 
