@@ -2533,11 +2533,14 @@ void CrushWrapper::_normalize_weight_map(float sum,
 					 map<int,float> *pmap) const
 {
   for (auto& p : m) {
+    // When the total weight is zero all the weights in m are zero as well, so
+    // don't divide by it - that would yield inf / nan weights.
+    float w = (sum > 0) ? p.second / sum : 0.0f;
     map<int,float>::iterator q = pmap->find(p.first);
     if (q == pmap->end()) {
-      (*pmap)[p.first] = p.second / sum;
+      (*pmap)[p.first] = w;
     } else {
-      q->second += p.second / sum;
+      q->second += w;
     }
   }
 }
