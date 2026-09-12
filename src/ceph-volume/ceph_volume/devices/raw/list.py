@@ -22,8 +22,9 @@ def direct_report(devices: Optional[_List[str]] = None) -> Dict[str, Any]:
     _list = List([])
     return _list.generate(devices)
 
-def _get_bluestore_info(devices: _List[str]) -> Dict[str, Any]:
-    result: Dict[str, Any] = {}
+def _show_label(devices: _List[str]) -> Optional[Dict[str, Any]]:
+    """Run ``ceph-bluestore-tool show-label`` for ``devices`` and return the parsed
+    JSON, or ``None`` if the tool failed (non-zero rc / unparseable output)."""
     command: _List[str] = ['ceph-bluestore-tool',
                            'show-label', '--bdev_aio_poll_ms=1']
     for device in devices:
@@ -31,12 +32,34 @@ def _get_bluestore_info(devices: _List[str]) -> Dict[str, Any]:
     out, err, rc = process.call(command, verbose_on_failure=False)
     if rc:
         logger.debug(f"ceph-bluestore-tool couldn't detect any BlueStore device.\n{out}\n{err}")
-    else:
-        oj = json.loads(''.join(out))
+        return None
+    try:
+        return json.loads(''.join(out))
+    except ValueError as e:
+        logger.debug(f"failed to parse ceph-bluestore-tool show-label output: {e}\n{out}")
+        return None
+
+
+def _get_bluestore_info(devices: _List[str]) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
+    oj = _show_label(devices)
+    if oj is None and len(devices) > 1:
+        # A single batched ``show-label`` invocation aborts entirely (non-zero rc)
+        # if *any* one device makes ceph-bluestore-tool crash -- e.g. a tiny or
+        # zero-length partition trips a ``is_valid_io`` ceph_assert. That would hide
+        # every valid OSD on the node (``raw list`` returns ``{}``). Fall back to
+        # probing each device individually so a single bad device cannot mask the rest.
+        logger.debug('batched show-label failed; falling back to per-device probing')
+        oj = {}
+        for device in devices:
+            single = _show_label([device])
+            if single:
+                oj.update(single)
+    if oj:
         for device in devices:
             if device not in oj:
                 # should be impossible, so warn
-                logger.warning(f'skipping device {device} because it is not reported in ceph-bluestore-tool output: {out}')
+                logger.warning(f'skipping device {device} because it is not reported in ceph-bluestore-tool output: {oj}')
             if oj.get(device):
                 try:
                     osd_uuid = oj[device]['osd_uuid']
@@ -44,9 +67,8 @@ def _get_bluestore_info(devices: _List[str]) -> Dict[str, Any]:
                 except KeyError as e:
                     # this will appear for devices that have a bluestore header but aren't valid OSDs
                     # for example, due to incomplete rollback of OSDs: https://tracker.ceph.com/issues/51869
-                    logger.error(f'device {device} does not have all BlueStore data needed to be a valid OSD: {out}\n{e}')
+                    logger.error(f'device {device} does not have all BlueStore data needed to be a valid OSD: {e}')
     return result
-
 
 class List(object):
 
