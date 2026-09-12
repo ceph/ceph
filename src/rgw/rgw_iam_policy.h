@@ -338,6 +338,16 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutBucketOwnershipControls:
     return RGW_PERM_WRITE_ACP;
 
+  case snsGetTopicAttributes:
+  case snsListTopics:
+    return RGW_PERM_READ;
+
+  case snsCreateTopic:
+  case snsSetTopicAttributes:
+  case snsDeleteTopic:
+  case snsPublish:
+    return RGW_PERM_WRITE;
+
   case s3All:
     return RGW_PERM_FULL_CONTROL;
   }

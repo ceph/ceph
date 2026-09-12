@@ -1869,6 +1869,26 @@ struct perm_state : public perm_state_base {
   }
 };
 
+/* A Keystone identity whose role tier caps its implicit permissions
+ * (a project reader or an implicit-deny role). The identity-type check
+ * matters: Swift read-only subusers of local users also carry a reduced
+ * perm_mask but must not be treated as capped Keystone identities. */
+bool is_capped_keystone_identity(uint32_t perm_mask,
+                                 const rgw::auth::Identity& identity);
+
+/* Can this owner perform this operation?
+ *
+ * Returns true when the identity owns the resource and its permission mask
+ * allows the requested permission. A normal owner has full control, so
+ * anything passes. A capped identity (a Keystone reader or implicit-deny
+ * role) is limited to what its mask allows: reads pass, writes do not.
+ *
+ * This is the one place an owner grant checks the cap. A policy that allows
+ * the user runs earlier and can still grant more. */
+bool verify_owner_permission(const rgw::auth::Identity& identity,
+                             uint32_t perm_mask,
+                             const rgw_owner& owner, uint32_t perm);
+
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action  */
 bool verify_bucket_permission_no_policy(
