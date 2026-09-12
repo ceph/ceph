@@ -246,7 +246,8 @@ private:
     instance_handle_t &ihref,
     Ref<PG> pg,
     crimson::osd::ObjectContextRef obc,
-    unsigned this_instance_id);
+    unsigned this_instance_id,
+    bool &needs_repair);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_pg_op(
     Ref<PG> pg);

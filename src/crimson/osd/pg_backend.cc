@@ -197,7 +197,8 @@ static inline bool _read_verify_data(
     if (auto crc = data.crc32c(-1); crc != oi.data_digest) {
       logger().error("full-object read crc {} != expected {} on {}",
                      crc, oi.data_digest, oi.soid);
-      // todo: mark soid missing, perform recovery, and retry
+      // the caller turns this into object_corrupted, which
+      // ClientRequest::process_op repairs and retries
       return false;
     }
   }
