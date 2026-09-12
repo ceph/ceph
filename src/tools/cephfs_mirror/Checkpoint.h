@@ -82,6 +82,10 @@ int write_checkpoint_metadata(CephContext *cct, MountRef mnt,
                               const std::map<std::string, std::string> &snap_metadata,
                               const CheckpointInfo &info);
 
+// Remove all checkpoint metadata keys from a snapshot
+int remove_checkpoint_metadata(MountRef mnt, const std::string &snap_path,
+                               const std::map<std::string, std::string> &snap_metadata);
+
 // Check if checkpoint key exists in snapshot metadata
 inline bool has_checkpoint(const std::map<std::string, std::string> &snap_metadata) {
   return snap_metadata.find(CHECKPOINT_STATUS_KEY) != snap_metadata.end();
