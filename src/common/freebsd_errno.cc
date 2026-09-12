@@ -68,7 +68,7 @@ static const __s32 ceph_to_hostos_conv[256] = {
        C2H_ERRNO(75,  EOVERFLOW),	
        C2H_ERRNO(76,  EPERM),	 //TODO ENOTUNIQ
        C2H_ERRNO(77,  EPERM),	 //TODO EBADFD
-       C2H_ERRNO(78,  EPERM),	 //TODO EREMCHG
+       C2H_ERRNO(78,  ENOSYS),	 // EREMCHG 	 no FreeBSD equivalent; ENOSYS is 78 so this round-trips
        C2H_ERRNO(79,  EPERM),	 //TODO ELIBACC
        C2H_ERRNO(80,  EPERM),	 //TODO ELIBBAD
        C2H_ERRNO(81,  EPERM),	 //TODO ELIBSCN
@@ -176,7 +176,7 @@ static const __s32 hostos_to_ceph_conv[256] = {
         H2C_ERRNO(EPROGMISMATCH, EPERM),/* Program version wrong */
         H2C_ERRNO(EPROCUNAVAIL,	EPERM),	/* Bad procedure for program */
         H2C_ERRNO(ENOLCK,	EPERM),	/* No locks available */
-        H2C_ERRNO(ENOSYS,	EPERM),	/* Function not implemented */
+        H2C_ERRNO(ENOSYS,	78),	/* Function not implemented => ENOSYS on FreeBSD */
         H2C_ERRNO(EFTYPE,	EPERM),	/* Inappropriate file type or format */
         H2C_ERRNO(EAUTH,	EPERM),	/* Authentication error */
         H2C_ERRNO(ENEEDAUTH,	EPERM),	/* Need authenticator */
