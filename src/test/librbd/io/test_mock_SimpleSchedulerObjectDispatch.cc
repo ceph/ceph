@@ -819,5 +819,115 @@ TEST_F(TestMockIoSimpleSchedulerObjectDispatch, Timer) {
   ASSERT_EQ(0, cond2.wait());
 }
 
+TEST_F(TestMockIoSimpleSchedulerObjectDispatch, ShutDownCancelsTimerTask) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockSimpleSchedulerObjectDispatch
+      mock_simple_scheduler_object_dispatch(&mock_image_ctx);
+
+  expect_get_object_name(mock_image_ctx, 0);
+
+  InSequence seq;
+
+  ceph::bufferlist data;
+  data.append("X");
+  int object_dispatch_flags = 0;
+  C_SaferCond cond1;
+  Context *on_finish1 = &cond1;
+  ASSERT_FALSE(mock_simple_scheduler_object_dispatch.write(
+      0, 0, std::move(data), mock_image_ctx.get_data_io_context(), 0, 0,
+      std::nullopt, {}, &object_dispatch_flags, nullptr, nullptr, &on_finish1,
+      nullptr));
+  ASSERT_NE(on_finish1, &cond1);
+
+  Context *timer_task = nullptr;
+  expect_schedule_dispatch_delayed_requests(nullptr, &timer_task);
+
+  io::DispatchResult dispatch_result;
+  C_SaferCond cond2;
+  Context *on_finish2 = &cond2;
+  C_SaferCond on_dispatched;
+  ASSERT_TRUE(mock_simple_scheduler_object_dispatch.write(
+      0, 0, std::move(data), mock_image_ctx.get_data_io_context(), 0, 0,
+      std::nullopt, {}, &object_dispatch_flags, nullptr, &dispatch_result,
+      &on_finish2, &on_dispatched));
+  ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
+  ASSERT_NE(on_finish2, &cond2);
+  ASSERT_NE(timer_task, nullptr);
+
+  // shut down must dispatch the delayed requests and cancel the scheduled
+  // task -- otherwise it would fire after the dispatcher deleted us
+  expect_dispatch_delayed_requests(mock_image_ctx, 0);
+  expect_cancel_timer_task(timer_task);
+
+  C_SaferCond on_shut_down;
+  mock_simple_scheduler_object_dispatch.shut_down(&on_shut_down);
+  ASSERT_EQ(0, on_shut_down.wait());
+  ASSERT_EQ(0, on_dispatched.wait());
+
+  on_finish1->complete(0);
+  ASSERT_EQ(0, cond1.wait());
+  on_finish2->complete(0);
+  ASSERT_EQ(0, cond2.wait());
+}
+
+TEST_F(TestMockIoSimpleSchedulerObjectDispatch,
+       ShutDownWaitsForExpiredTimerTask) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockSimpleSchedulerObjectDispatch
+      mock_simple_scheduler_object_dispatch(&mock_image_ctx);
+
+  expect_get_object_name(mock_image_ctx, 0);
+
+  InSequence seq;
+
+  ceph::bufferlist data;
+  data.append("X");
+  int object_dispatch_flags = 0;
+  C_SaferCond cond1;
+  Context *on_finish1 = &cond1;
+  ASSERT_FALSE(mock_simple_scheduler_object_dispatch.write(
+      0, 0, std::move(data), mock_image_ctx.get_data_io_context(), 0, 0,
+      std::nullopt, {}, &object_dispatch_flags, nullptr, nullptr, &on_finish1,
+      nullptr));
+  ASSERT_NE(on_finish1, &cond1);
+
+  Context *timer_task = nullptr;
+  expect_schedule_dispatch_delayed_requests(nullptr, &timer_task);
+
+  io::DispatchResult dispatch_result;
+  C_SaferCond cond2;
+  Context *on_finish2 = &cond2;
+  C_SaferCond on_dispatched;
+  ASSERT_TRUE(mock_simple_scheduler_object_dispatch.write(
+      0, 0, std::move(data), mock_image_ctx.get_data_io_context(), 0, 0,
+      std::nullopt, {}, &object_dispatch_flags, nullptr, &dispatch_result,
+      &on_finish2, &on_dispatched));
+  ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
+  ASSERT_NE(on_finish2, &cond2);
+  ASSERT_NE(timer_task, nullptr);
+
+  expect_dispatch_delayed_requests(mock_image_ctx, 0);
+
+  // the expired task posts the dispatch to the asio engine -- shut down must
+  // not complete until that dispatch has run
+  run_timer_task(timer_task);
+
+  C_SaferCond on_shut_down;
+  mock_simple_scheduler_object_dispatch.shut_down(&on_shut_down);
+  ASSERT_EQ(0, on_shut_down.wait());
+  ASSERT_EQ(0, on_dispatched.wait());
+
+  on_finish1->complete(0);
+  ASSERT_EQ(0, cond1.wait());
+  on_finish2->complete(0);
+  ASSERT_EQ(0, cond2.wait());
+}
+
 } // namespace io
 } // namespace librbd
