@@ -2699,3 +2699,50 @@ TEST(chunk_info_test, calc_refs_inc_match) {
  * "
  * End:
  */
+
+TEST(object_info_t, ec_chunk_size_encode_decode) {
+  // Default is zero (unset / use pool default).
+  object_info_t oi_default;
+  EXPECT_EQ(oi_default.ec_chunk_size, 0u);
+
+  object_info_t oi;
+  oi.ec_chunk_size = 65536;
+  bufferlist bl;
+  oi.encode(bl, static_cast<uint64_t>(-1));
+
+  object_info_t decoded;
+  auto p = bl.cbegin();
+  decoded.decode(p);
+  EXPECT_EQ(decoded.ec_chunk_size, 65536u);
+}
+
+TEST(pg_pool_t, dynamic_object_size_flag) {
+  EXPECT_EQ(pg_pool_t::get_flag_by_name("dynamic_object_size"),
+            static_cast<uint64_t>(pg_pool_t::FLAG_DYNAMIC_OBJECT_SIZE));
+  EXPECT_STREQ(pg_pool_t::get_flag_name(pg_pool_t::FLAG_DYNAMIC_OBJECT_SIZE),
+               "dynamic_object_size");
+
+  pg_pool_t p;
+  EXPECT_FALSE(p.allows_dynamic_object_size());
+  p.flags |= pg_pool_t::FLAG_DYNAMIC_OBJECT_SIZE;
+  EXPECT_TRUE(p.allows_dynamic_object_size());
+  EXPECT_NE(p.get_flags_string().find("dynamic_object_size"), std::string::npos);
+}
+
+TEST(pool_opts_t, ec_dynamic_max_chunk_size) {
+  EXPECT_TRUE(pool_opts_t::is_opt_name("ec_dynamic_max_chunk_size"));
+  EXPECT_EQ(pool_opts_t::get_opt_desc("ec_dynamic_max_chunk_size"),
+            pool_opts_t::opt_desc_t(pool_opts_t::EC_DYNAMIC_MAX_CHUNK_SIZE,
+                                    pool_opts_t::INT));
+
+  pool_opts_t opts;
+  int64_t val;
+  EXPECT_FALSE(opts.get(pool_opts_t::EC_DYNAMIC_MAX_CHUNK_SIZE, &val));
+  EXPECT_EQ(opts.value_or(pool_opts_t::EC_DYNAMIC_MAX_CHUNK_SIZE,
+                          static_cast<int64_t>(1 << 20)),
+            static_cast<int64_t>(1 << 20));
+  opts.set(pool_opts_t::EC_DYNAMIC_MAX_CHUNK_SIZE,
+           static_cast<int64_t>(2 << 20));
+  EXPECT_TRUE(opts.get(pool_opts_t::EC_DYNAMIC_MAX_CHUNK_SIZE, &val));
+  EXPECT_EQ(val, 2 << 20);
+}

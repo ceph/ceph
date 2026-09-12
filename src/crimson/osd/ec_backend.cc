@@ -64,7 +64,7 @@ ECBackend::_read(const hobject_t& hoid,
 {
   LOG_PREFIX(ECBackend::_read);
   const auto [aligned_off, aligned_len] =
-    sinfo.ro_offset_len_to_stripe_ro_offset_len(off, len);
+    sinfo.for_default().ro_offset_len_to_stripe_ro_offset_len(off, len);
   std::map<hobject_t, std::list<ec_align_t>> reads;
   reads[hoid].emplace_back(
     ec_align_t{aligned_off, aligned_len, flags});
@@ -74,6 +74,9 @@ ECBackend::_read(const hobject_t& hoid,
     reads,
     fast_read,
     object_size,
+    // TODO(dynamic-object-size): source the per-object chunk size from the OI
+    // in crimson; 0 => pool default (correct for non-dynamic pools).
+    0,
     make_gen_lambda_context<ec_extents_t &&>(
       [hoid, off, len, promise=std::move(promise), FNAME,
        &dpp=this->dpp](auto&& results) mutable {
@@ -521,10 +524,10 @@ ECBackend::maybe_chunked_read(
   } else {
     return seastar::do_with(ceph::bufferlist{}, [=, this] (auto&& result_bl) {
       const int subchunk_size =
-        sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
+        sinfo.get_default_chunk_size() / ec_impl->get_sub_chunk_count();
       return crimson::do_for_each(
         boost::make_counting_iterator(0UL),
-        boost::make_counting_iterator(1 + (size-1) / sinfo.get_chunk_size()),
+        boost::make_counting_iterator(1 + (size-1) / sinfo.get_default_chunk_size()),
         [off, flags, subchunk_size, &obj, &op, &result_bl, this] (const auto m) {
           const auto& sub_spec = op.subchunks.find(obj)->second;
           return crimson::do_for_each(
@@ -536,7 +539,7 @@ ECBackend::maybe_chunked_read(
                 store,
                 coll,
                 ghobject_t{obj, ghobject_t::NO_GEN, get_shard()},
-                off + m*sinfo.get_chunk_size() + sub_off_count*subchunk_size,
+                off + m*sinfo.get_default_chunk_size() + sub_off_count*subchunk_size,
                 sub_size_count * subchunk_size,
                 flags
               ).safe_then([&result_bl] (auto&& sub_bl) {
@@ -558,10 +561,11 @@ void ECBackend::objects_read_and_reconstruct(
   const std::map<hobject_t, std::list<ec_align_t>> &reads,
   bool fast_read,
   uint64_t object_size,
+  uint64_t chunk_size,
   GenContextURef<ec_extents_t &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct(
-    reads, fast_read, object_size, std::move(func));
+    reads, fast_read, object_size, chunk_size, std::move(func));
 }
 
 void ECBackend::objects_read_and_reconstruct_for_rmw(
@@ -670,7 +674,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
       continue;
     }
     if (!rop.complete.contains(obj)) {
-      rop.complete.emplace(obj, &sinfo);
+      rop.complete.emplace(obj, sinfo.for_default());
     }
     auto &buffers_read = rop.complete.at(obj).buffers_read;
     for (auto &&[offset, buffer_list]: offset_buffer_map) {
@@ -679,7 +683,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
   }
   for (auto &&[hoid, req]: rop.to_read) {
     if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
+      rop.complete.emplace(hoid, sinfo.for_default());
     }
     auto &complete = rop.complete.at(hoid);
     for (auto &&[shard, read]: std::as_const(req.shard_reads)) {
@@ -693,7 +697,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
 
         // If we are first here, populate the completion.
         if (!rop.complete.contains(hoid)) {
-          rop.complete.emplace(hoid, read_result_t(&sinfo));
+          rop.complete.emplace(hoid, read_result_t(sinfo.for_default()));
         }
       }
     }
@@ -708,7 +712,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
       continue;
     }
     if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
+      rop.complete.emplace(hoid, sinfo.for_default());
     }
     rop.complete.at(hoid).attrs.emplace();
     (*(rop.complete.at(hoid).attrs)).swap(attr);
@@ -716,7 +720,7 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
   // 3. errors
   for (auto &&[hoid, err]: mop.errors) {
     if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
+      rop.complete.emplace(hoid, sinfo.for_default());
     }
     auto &complete = rop.complete.at(hoid);
     complete.errors.emplace(from, err);

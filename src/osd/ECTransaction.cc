@@ -140,7 +140,8 @@ ECTransaction::WritePlanObj::WritePlanObj(
   hoid(hoid),
   will_write(sinfo.get_k_plus_m()),
   orig_size(orig_size), // On-disk object sizes are rounded up to the next page.
-  projected_size(soi?soi->size:(oi?oi->size:0))
+  projected_size(soi?soi->size:(oi?oi->size:0)),
+  chunk_size(sinfo.get_chunk_size())
 {
   extent_set unaligned_ro_writes;
   hobject_t source;
@@ -696,7 +697,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   : t(t),
     ec_impl(ec_impl),
     pgid(pgid),
-    sinfo(sinfo),
+    sinfo(sinfo.get_base().for_chunk_size(plan.chunk_size)),
     transactions(transactions),
     dpp(dpp),
     osdmap(osdmap),
@@ -704,8 +705,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     oid(oid),
     op(op),
     plan(plan),
-    read_sem(&sinfo),
-    to_write(&sinfo),
+    read_sem(sinfo),
+    to_write(sinfo),
     ec_omap_journal(ec_omap_journal),
     pg_log(pg_log) {
   ldpp_dout(dpp, 20) << __func__ << ": " << oid
@@ -1164,6 +1165,16 @@ void ECTransaction::Generate::written_shards() {
       // then update the OBC cached copy and the encoded OI attr.
       bool update = oi.shard_versions != obc->obs.oi.shard_versions;
       oi.shard_versions = obc->obs.oi.shard_versions;
+
+      // Stash the per-object EC chunk size chosen for this object (for the
+      // dynamic-object-size feature) so it is honoured for the object's life.
+      // Only for dynamic pools, to avoid perturbing the OI on normal pools.
+      if (sinfo.allows_dynamic_object_size() &&
+          oi.ec_chunk_size != plan.chunk_size) {
+        oi.ec_chunk_size = plan.chunk_size;
+        obc->obs.oi.ec_chunk_size = plan.chunk_size;
+        update = true;
+      }
 
       if (entry->written_shards.empty()) {
         if (!oi.shard_versions.empty()) {

@@ -134,6 +134,7 @@ class ECBackend : public ECCommon {
   int objects_read_sync(
     const hobject_t &hoid,
     uint64_t object_size,
+    uint64_t chunk_size,
     const std::list<std::pair<ec_align_t,
     std::pair<ceph::buffer::list*, Context*>>> &to_read,
     CoroHandles coro
@@ -147,12 +148,13 @@ class ECBackend : public ECCommon {
     ceph::buffer::list *bl
   );
 
-  std::pair<uint64_t, uint64_t> extent_to_shard_extent(uint64_t off, uint64_t len);
+  std::pair<uint64_t, uint64_t> extent_to_shard_extent(uint64_t off, uint64_t len, uint64_t chunk_size = 0);
 
   int objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
-     ceph::buffer::list *bl);
+     ceph::buffer::list *bl,
+     uint64_t chunk_size = 0);
 
   /**
    * Async read mechanism
@@ -176,6 +178,7 @@ class ECBackend : public ECCommon {
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
       uint64_t object_size,
+      uint64_t chunk_size,
       GenContextURef<ECCommon::ec_extents_t&&> &&func
     ) override;
 
@@ -194,6 +197,7 @@ class ECBackend : public ECCommon {
   void objects_read_async(
       const hobject_t &hoid,
       uint64_t object_size,
+      uint64_t chunk_size,
       const std::list<std::pair<ec_align_t,
                                 std::pair<ceph::buffer::list*, Context*>>> &
       to_read,
@@ -205,7 +209,7 @@ class ECBackend : public ECCommon {
   shard_id_map<bufferlist> ec_encode_acting_set(const bufferlist &in_bl) const;
   shard_id_map<bufferlist> ec_decode_acting_set(
       const shard_id_map<bufferlist> &shard_map, int chunk_size) const;
-  ECUtil::stripe_info_t ec_get_sinfo() const;
+  const ECUtil::stripe_info_base_t &ec_get_sinfo() const;
 
  private:
   friend struct ECRecoveryHandle;
@@ -225,7 +229,7 @@ public:
     ECRecoveryBackend(CephContext *cct,
                       const coll_t &coll,
                       ceph::ErasureCodeInterfaceRef ec_impl,
-                      const ECUtil::stripe_info_t &sinfo,
+                      const ECUtil::stripe_info_base_t &sinfo,
                       ReadPipeline &read_pipeline,
                       PGBackend::Listener *parent,
                       ECBackend *)
@@ -286,11 +290,11 @@ public:
    */
   class ECRecPred : public IsPGRecoverablePredicate {
     shard_id_set want;
-    const ECUtil::stripe_info_t *sinfo;
+    const ECUtil::stripe_info_base_t *sinfo;
     ceph::ErasureCodeInterfaceRef ec_impl;
 
    public:
-    explicit ECRecPred(const ECUtil::stripe_info_t *sinfo,
+    explicit ECRecPred(const ECUtil::stripe_info_base_t *sinfo,
                        ceph::ErasureCodeInterfaceRef ec_impl) :
       sinfo(sinfo), ec_impl(ec_impl) {
       want.insert_range(shard_id_t(0), sinfo->get_k_plus_m());
@@ -323,16 +327,18 @@ public:
   }
 
   int get_ec_stripe_chunk_size() const {
-    return sinfo.get_chunk_size();
+    return sinfo.get_default_chunk_size();
   }
 
   bool get_ec_supports_crc_encode_decode() const {
     return sinfo.supports_encode_decode_crcs();
   }
 
-  uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard
+  uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard,
+      uint64_t chunk_size = 0
     ) const {
-    return sinfo.object_size_to_shard_size(size, shard);
+    return sinfo.for_object_chunk_size(chunk_size).object_size_to_shard_size(
+        size, shard);
   }
 
   uint64_t get_is_nonprimary_shard(shard_id_t shard) const {
@@ -351,7 +357,7 @@ public:
    public:
     ECReadPred(
         pg_shard_t whoami,
-        const ECUtil::stripe_info_t *sinfo,
+        const ECUtil::stripe_info_base_t *sinfo,
         ceph::ErasureCodeInterfaceRef ec_impl) : whoami(whoami), rec_pred(sinfo, ec_impl) {}
 
     bool operator()(const std::set<pg_shard_t> &_have) const override {
@@ -364,7 +370,7 @@ public:
     return std::make_unique<ECReadPred>(whoami, &sinfo, ec_impl);
   }
 
-  const ECUtil::stripe_info_t sinfo;
+  const ECUtil::stripe_info_base_t sinfo;
 
   std::tuple<
     int,
@@ -399,12 +405,13 @@ public:
     );
 
   uint64_t be_get_ondisk_size(uint64_t logical_size, shard_id_t shard_id,
-      bool object_is_legacy_ec) const {
+      bool object_is_legacy_ec, uint64_t chunk_size = 0) const {
     if (object_is_legacy_ec) {
       // In legacy EC, all shards were padded to the next chunk boundry.
-      return sinfo.ro_offset_to_next_chunk_offset(logical_size);
+      return sinfo.for_object_chunk_size(chunk_size).
+          ro_offset_to_next_chunk_offset(logical_size);
     }
-    return object_size_to_shard_size(logical_size, shard_id);
+    return object_size_to_shard_size(logical_size, shard_id, chunk_size);
   }
 
   bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);

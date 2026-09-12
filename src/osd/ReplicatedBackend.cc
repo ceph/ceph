@@ -283,6 +283,7 @@ int ReplicatedBackend::objects_read_sync(
   uint32_t op_flags,
   bufferlist *bl,
   uint64_t object_size,
+  uint64_t chunk_size,
   std::optional<CoroHandles> coro)
 {
   return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
@@ -302,7 +303,8 @@ int ReplicatedBackend::objects_readv_sync(
   const hobject_t &hoid,
   map<uint64_t, uint64_t>& m,
   uint32_t op_flags,
-  bufferlist *bl)
+  bufferlist *bl,
+  uint64_t chunk_size)
 {
   interval_set<uint64_t> im(std::move(m));
   auto r = store->readv(ch, ghobject_t(hoid), im, *bl, op_flags);
@@ -315,6 +317,7 @@ int ReplicatedBackend::objects_readv_sync(
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
   uint64_t object_size,
+  uint64_t chunk_size,
   const list<pair<ec_align_t,
 		  pair<bufferlist*, Context*> > > &to_read,
   Context *on_complete,
@@ -346,9 +349,8 @@ shard_id_map<bufferlist> ReplicatedBackend::ec_decode_acting_set(
   return {0};
 }
 
-ECUtil::stripe_info_t ReplicatedBackend::ec_get_sinfo() const {
+const ECUtil::stripe_info_base_t &ReplicatedBackend::ec_get_sinfo() const {
   ceph_abort_msg("get_ec_sinfo is not used by replica pool");
-  return {0, 0, 0};
 }
 
 class C_OSD_OnOpCommit : public Context {
