@@ -106,6 +106,10 @@ endif()
 target_compile_definitions(ceph-dencoder PRIVATE
   "CEPH_DENC_MOD_DIR=\"${denc_plugin_dir}\"")
 
+# librados is needed because the cls_*_client static libs reference the
+# librados C++ API. BFD's lazy archive extraction happened to never pull in
+# the referencing members, but mold resolves archives as a single group and
+# does, failing the link with undefined librados symbols.
 target_link_libraries(ceph-dencoder
   StdFilesystem::filesystem
   global
@@ -114,6 +118,7 @@ target_link_libraries(ceph-dencoder
   cls_version_client
   cls_user_client
   cls_cas_client
+  librados
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   ${ALLOC_LIBS})
