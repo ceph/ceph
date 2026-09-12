@@ -124,6 +124,8 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
+KILL_SUPPORTED_SERVICE_TYPES = {'rbd-mirror'}
+
 T = TypeVar('T')
 
 DEFAULT_SSH_CONFIG = """
@@ -3125,6 +3127,13 @@ Then run the following:
         if service_name not in self.spec_store.all_specs.keys():
             raise OrchestratorError(f'Invalid service name "{service_name}".'
                                     + ' View currently running services using "ceph orch ls"')
+        spec = self.spec_store.all_specs[service_name]
+
+        if action == 'kill' and spec.service_type not in KILL_SUPPORTED_SERVICE_TYPES:
+            raise OrchestratorError(
+                f'kill action is not supported for {spec.service_type} services'
+            )
+        
         if action == 'stop' and service_name.split('.')[0].lower() in ['mgr', 'mon', 'osd']:
             return [f'Stopping entire {service_name} service is prohibited.']
 
@@ -3262,6 +3271,7 @@ Then run the following:
             'start': ['reset-failed', 'start'],
             'stop': ['stop'],
             'restart': ['reset-failed', 'restart'],
+            'kill': ['kill'],
         }
         name = daemon_spec.name()
         for a in actions[action]:
@@ -3308,12 +3318,17 @@ Then run the following:
         assert d.daemon_id is not None
         assert d.hostname
 
+        if action == 'kill' and d.daemon_type not in KILL_SUPPORTED_SERVICE_TYPES:
+            raise OrchestratorError(
+                f'kill action is not supported for {d.daemon_type} daemons'
+            )
+
         if (action == 'redeploy' or action == 'restart') and self.daemon_is_self(d.daemon_type, d.daemon_id) \
                 and not self.mgr_service.mgr_map_has_standby():
             raise OrchestratorError(
                 f'Unable to schedule redeploy for {daemon_name}: No standby MGRs')
 
-        if action in ['restart', 'stop'] and not force:
+        if action in ['restart', 'stop', 'kill'] and not force:
             r = service_registry.get_service(daemon_type_to_service(
                 d.daemon_type)).ok_to_stop([d.daemon_id], force=False)
             if r.retval:
@@ -3329,7 +3344,7 @@ Then run the following:
             raise OrchestratorError(f'key rotation by orchestrator not supported in this release (for {d.name()})')
 
         # Track user-initiated stop/start actions
-        if action == 'stop':
+        if action in ['stop', 'kill']:
             d.update_user_stopped_status(True)
             self.cache.save_host(d.hostname)
         elif action in ['start', 'restart']:
