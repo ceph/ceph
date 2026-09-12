@@ -1,0 +1,126 @@
+<cds-modal
+  size="md"
+  [open]="open"
+  [hasScrollingContent]="false"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h4
+      cdsModalHeaderLabel
+      class="cds--type-label-01"
+      i18n
+    >
+      Role Policy
+    </h4>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      {{ action }} permission policy
+    </h3>
+    <p
+      class="cds--modal-header__description cds--type-body-01 cds-mt-3"
+      *ngIf="!isEdit"
+      i18n
+    >
+      Attach an IAM permission policy specifying allowed or denied S3 actions to role "{{
+        roleName
+      }}".
+    </p>
+    <p
+      class="cds--modal-header__description cds--type-body-01 cds-mt-3"
+      *ngIf="isEdit"
+      i18n
+    >
+      Edit permission policy "{{ policyName }}" for role "{{ roleName }}".
+    </p>
+  </cds-modal-header>
+
+  <form
+    class="form"
+    #formDir="ngForm"
+    [formGroup]="form"
+  >
+    <div cdsModalContent>
+      <!-- Policy Name -->
+      <div class="form-item">
+        <cds-text-label
+          label="Policy name"
+          for="policy_name"
+          [invalid]="policyNameRef.isInvalid"
+          [invalidText]="policyNameError"
+          helperText="Unique name to identify this permission policy (e.g. S3FullAccessPolicy)."
+          i18n-helperText
+        >
+          Policy name
+          <input
+            cdsText
+            cdValidate
+            #policyNameRef="cdValidate"
+            id="policy_name"
+            name="policy_name"
+            formControlName="policy_name"
+            placeholder="Enter policy name"
+            [readonly]="isEdit"
+            [autofocus]="!isEdit"
+            modal-primary-focus
+          />
+        </cds-text-label>
+        <ng-template #policyNameError>
+          <span
+            *ngIf="form.showError('policy_name', formDir, 'required')"
+            class="invalid-feedback"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+
+      <!-- Policy Document -->
+      <div class="form-item">
+        <cds-textarea-label
+          for="policy_doc"
+          [invalid]="policyDoc.isInvalid"
+          [invalidText]="policyError"
+          helperText="JSON document defining the permissions policy statement."
+          i18n-helperText
+        >
+          Policy document
+          <textarea
+            cdsTextArea
+            cdValidate
+            #policyDoc="cdValidate"
+            id="policy_doc"
+            name="policy_doc"
+            formControlName="policy_doc"
+            placeholder='{"Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"arn:aws:s3:::*"}]}'
+            rows="8"
+            cols="200"
+            cdRequiredField="Policy Document"
+          ></textarea>
+        </cds-textarea-label>
+        <ng-template #policyError>
+          <span
+            *ngIf="form.showError('policy_doc', formDir, 'required')"
+            class="invalid-feedback"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            *ngIf="form.showError('policy_doc', formDir, 'invalidJson')"
+            class="invalid-feedback"
+            i18n
+            >Please enter a valid JSON policy document.</span
+          >
+        </ng-template>
+      </div>
+    </div>
+
+    <cd-form-button-panel
+      (submitActionEvent)="onSubmit()"
+      [form]="form"
+      [submitText]="action"
+      [modalForm]="true"
+    ></cd-form-button-panel>
+  </form>
+</cds-modal>
