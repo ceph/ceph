@@ -1,0 +1,44 @@
+# The disaster-recovery phase stops gateway daemons on purpose, which makes the
+# mon emit NVMEOF_GATEWAY_DOWN (and, briefly, the availability-check warning).
+# Whitelist them so teuthology's ceph.log scan does not fail the job at teardown.
+overrides:
+  ceph:
+    log-ignorelist:
+      - NVMEOF_GATEWAY_DOWN
+      - gateway(s) are in unavailable state
+      - gateway might be down
+      - NVMeoF Gateway .* is unavailable
+
+tasks:
+- nvmeof:
+    installer: host.a
+    gw_image: quay.io/ceph/nvmeof:devel # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
+    rbd:
+      pool_name: mypool
+      image_name_prefix: myimage
+    gateway_config:
+      subsystems_count: 3
+      namespaces_count: 8
+      cli_image: quay.io/ceph/nvmeof-cli:devel
+
+- cephadm.wait_for_service:
+    service: nvmeof.mypool.mygroup0
+    refresh: True
+
+- workunit:
+    no_coverage_and_limits: true
+    clients:
+      client.0:
+        - nvmeof/setup_subsystem.sh
+    env:
+      RBD_POOL: mypool
+      RBD_IMAGE_PREFIX: myimage
+
+- workunit:
+    no_coverage_and_limits: true
+    timeout: 30m
+    clients:
+      client.0:
+        - nvmeof/stretch_cluster_test.sh
+    env:
+      RBD_POOL: mypool
