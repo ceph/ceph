@@ -233,9 +233,7 @@ configuration. The following configuration options are available:
 - ``container_image_keepalived``
 - ``container_image_snmp_gateway``
 - ``container_image_elasticsearch``
-- ``container_image_jaeger_agent``
-- ``container_image_jaeger_collector``
-- ``container_image_jaeger_query``
+- ``container_image_jaeger``
 
 Custom images can be set with the ``ceph config`` command. To set custom images, run a command of the following form:
  
