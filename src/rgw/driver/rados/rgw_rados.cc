@@ -3165,6 +3165,8 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                false, /* bool high_precision_time */
                NULL, /* const char *if_match */
                NULL, /* const char *if_nomatch */
+               NULL, /* const char *dest_if_match */
+               NULL, /* const char *dest_if_nomatch */
                RGWRados::ATTRSMOD_NONE,
                true, /* bool copy_if_newer */
                state->attrset,
@@ -3266,6 +3268,8 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                        false,         /* bool high_precision_time */
                        nullptr,       /* const char *if_match */
                        nullptr,       /* const char *if_nomatch */
+                       nullptr,       /* const char *dest_if_match */
+                       nullptr,       /* const char *dest_if_nomatch */
                        RGWRados::ATTRSMOD_NONE,
                        true,          /* bool copy_if_newer */
                        no_attrs,
@@ -4037,7 +4041,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   return copy_obj_data(octx, owner, dest_bucket_info,
                        dest_bucket_info.placement_rule,
                        read_op, obj_size - 1, obj, NULL, mtime,
-                       attrset, 0, real_time(), NULL, NULL, dpp, y);
+                       attrset, 0, real_time(), NULL, NULL, NULL, NULL, dpp, y);
 }
 
 
@@ -4592,6 +4596,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                bool high_precision_time,
                const char *if_match,
                const char *if_nomatch,
+               const char *dest_if_match,
+               const char *dest_if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
                rgw::sal::Attrs& attrs,
@@ -4958,7 +4964,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
     ret = processor.complete(accounted_size, etag, mtime, set_mtime,
-                             attrs, rgw::cksum::no_cksum, delete_at, nullptr, nullptr,
+                             attrs, rgw::cksum::no_cksum, delete_at, dest_if_match, dest_if_nomatch,
 			     nullptr, zones_trace, &canceled, rctx,
 			     rgw::sal::FLAG_LOG_OP);
     if (ret < 0) {
@@ -5101,6 +5107,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                bool high_precision_time,
                const char *if_match,
                const char *if_nomatch,
+               const char *dest_if_match,
+               const char *dest_if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
                rgw::sal::Attrs& attrs,
@@ -5141,6 +5149,12 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     return -EINVAL;
   }
 
+  // XXX: destination conditionals are not forwarded to a remote zonegroup yet
+  if (remote_dest && (dest_if_match || dest_if_nomatch)) {
+    ldpp_dout(dpp, 10) << "destination If-Match/If-None-Match not supported when the dest bucket is remote" << dendl;
+    return -ERR_NOT_IMPLEMENTED;
+  }
+
   ldpp_dout(dpp, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_oid() << " => " << dest_obj.bucket << ":" << dest_obj.get_oid() << dendl;
 
   if (remote_src || !source_zone.empty()) {
@@ -5156,7 +5170,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                    dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                    dest_placement, src_mtime, mtime, mod_ptr,
                    unmod_ptr, high_precision_time,
-                   if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
+                   if_match, if_nomatch, dest_if_match, dest_if_nomatch,
+                   attrs_mod, copy_if_newer, attrs, category,
                    olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, rctx,
                    nullptr /* filter */, stat_follow_olh, stat_dest_obj, std::nullopt);
 
@@ -5338,7 +5353,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     attrs.erase(RGW_ATTR_CRYPT_PART_NUMS);
     attrs.erase(RGW_ATTR_CRYPT_PREFETCH_ALIGN);
     return copy_obj_data(dest_obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dp_factory, dpp, y,
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag,
+                         dest_if_match, dest_if_nomatch, dp_factory, dpp, y,
                          astate->accounted_size);
   }
 
@@ -5443,6 +5459,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   write_op.meta.category = category;
   write_op.meta.olh_epoch = olh_epoch;
   write_op.meta.delete_at = delete_at;
+  write_op.meta.if_match = dest_if_match;
+  write_op.meta.if_nomatch = dest_if_nomatch;
   write_op.meta.modify_tail = !copy_itself;
   write_op.meta.keep_tail = copy_itself;
 
@@ -5509,6 +5527,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *petag,
+               const char *dest_if_match,
+               const char *dest_if_nomatch,
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
@@ -5597,7 +5617,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   const req_context rctx{dpp, y, nullptr};
   return aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    rgw::cksum::no_cksum, delete_at,
-                            nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
+                            dest_if_match, dest_if_nomatch, nullptr, nullptr, nullptr, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
@@ -5860,6 +5880,8 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       olh_epoch,
                       real_time(),
                       nullptr /* petag */,
+                      nullptr /* dest_if_match */,
+                      nullptr /* dest_if_nomatch */,
                       dp_factory,
                       dpp,
                       y,
