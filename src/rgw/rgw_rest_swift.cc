@@ -23,6 +23,7 @@
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
 #include "rgw_swift_auth.h"
+#include "rgw_swift_digest_helpers.h"
 
 #include "rgw_request.h"
 #include "rgw_process.h"
@@ -122,6 +123,11 @@ public:
 };
 
 std::unique_ptr<RGWFormPost::SignatureHelper> RGWFormPost::SignatureHelper::get_sig_helper(std::string_view x) {
+  // Get reference to the shared digest helper map
+  const auto& formpost_digest_helpers =
+    rgw::auth::swift::get_digest_helper_map<RGWFormPost::SignatureHelper,
+                                             RGWFormPost::SignatureHelper_x>();
+
   size_t pos = x.find(':');
   if (pos == x.npos || pos <= 0) {
     switch(x.length()) {
@@ -135,15 +141,21 @@ std::unique_ptr<RGWFormPost::SignatureHelper> RGWFormPost::SignatureHelper::get_
     return std::make_unique<BadSignatureHelper>();
   }
   std::string_view type { x.substr(0,pos) };
-  if (type == "sha1") {
-    return std::make_unique<SignatureHelper_x<ceph::crypto::HMACSHA1,rgw::auth::swift::SignatureFlavor::NAMED_BASE64>>();
-  } else if (type == "sha256") {
-    return std::make_unique<SignatureHelper_x<ceph::crypto::HMACSHA256,rgw::auth::swift::SignatureFlavor::NAMED_BASE64>>();
-  } else if (type == "sha512") {
-    return std::make_unique<SignatureHelper_x<ceph::crypto::HMACSHA512,rgw::auth::swift::SignatureFlavor::NAMED_BASE64>>();
+  // Look up the digest algorithm in the map
+  auto it = formpost_digest_helpers.find(type);
+  if (it != formpost_digest_helpers.end()) {
+    return it->second();
   }
   return std::make_unique<BadSignatureHelper>();
 };
+
+std::vector<std::string_view> RGWFormPost::get_supported_digest_algorithms() {
+  // Access the digest helper map through the friend relationship
+  const auto& formpost_digest_helpers =
+    rgw::auth::swift::get_digest_helper_map<RGWFormPost::SignatureHelper,
+                                             RGWFormPost::SignatureHelper_x>();
+  return rgw::auth::swift::get_digest_algorithm_names(formpost_digest_helpers);
+}
 
 int RGWListBuckets_ObjStore_SWIFT::get_params(optional_yield y)
 {
@@ -2044,6 +2056,12 @@ void RGWInfo_ObjStore_SWIFT::list_tempurl_data(Formatter& formatter,
   formatter.dump_string("methodname", "PUT");
   formatter.dump_string("methodname", "POST");
   formatter.dump_string("methodname", "DELETE");
+  formatter.close_section();
+  formatter.open_array_section("allowed_digests");
+  // Get supported digest algorithms from the FormPost implementation
+  for (const auto& digest_name : RGWFormPost::get_supported_digest_algorithms()) {
+    formatter.dump_string("algorithm", digest_name);
+  }
   formatter.close_section();
   formatter.close_section();
 }
