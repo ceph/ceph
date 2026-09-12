@@ -329,7 +329,13 @@ class PgAutoscaler(MgrModule):
         A.K.A. the factor by which the new pg_num must vary
         from the existing pg_num before action is taken
         """
-        return 0, str(self.get_module_option('threshold')), ''
+        threshold = self.get_module_option('threshold')
+
+        return 0, str(threshold), (
+                  "Deprecation warning: 'ceph osd pool get threshold' is deprecated "
+                  "and will be removed in a future release. "
+                  "Use 'ceph config get mgr mgr/pg_autoscaler/threshold' instead."
+        )
 
     def complete_all_progress_events(self) -> None:
         for pool_id in list(self._event):
