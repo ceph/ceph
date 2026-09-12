@@ -64,8 +64,12 @@ namespace crimson::os::seastore::segment_manager::zbd {
     mount_ret mount() override;
     mkfs_ret mkfs(device_config_t meta) override;
 
-    ZBDSegmentManager(const std::string &path, store_index_t store_index = 0)
-    : device_path(path),
+    ZBDSegmentManager(
+      const std::string &path,
+      device_type_t dtype,
+      device_id_t id,
+      store_index_t store_index = 0)
+    : SegmentManager(path, dtype, id),
       store_index(store_index) {}
 
     ~ZBDSegmentManager() override = default;
@@ -88,10 +92,6 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
     read_ertr::future<uint32_t> get_shard_nums() override;
 
-    device_type_t get_device_type() const override {
-      return device_type_t::ZBD;
-    };
-
     size_t get_available_size() const override {
       return shard_info.size;
     };
@@ -108,9 +108,8 @@ namespace crimson::os::seastore::segment_manager::zbd {
       return metadata.config.meta;
     };
 
-    device_id_t get_device_id() const override;
-
-    secondary_device_set_t& get_secondary_devices() override;
+    device_set_t& get_cache_devices() override;
+    device_set_t& get_data_devices() override;
 
     magic_t get_magic() const override;
 
@@ -121,7 +120,6 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
   private:
     friend class ZBDSegment;
-    std::string device_path;
     device_shard_info_t shard_info;
     device_superblock_t metadata;
     seastar::file device;
@@ -175,25 +173,7 @@ namespace crimson::os::seastore::segment_manager::zbd {
     store_index_t store_index = 0;
     bool shard_status = true;
 
-    class MultiShardDevices {
-    public:
-      std::vector<std::unique_ptr<ZBDSegmentManager>> mshard_devices;
-
-    public:
-    MultiShardDevices(size_t count,
-                      const std::string path)
-    : mshard_devices() {
-      mshard_devices.reserve(count);
-      for (size_t store_index = 0; store_index < count; ++store_index) {
-        mshard_devices.emplace_back(std::make_unique<ZBDSegmentManager>(
-          path, store_index));
-      }
-    }
-    ~MultiShardDevices() {
-     mshard_devices.clear();
-    }
-  };
-  seastar::sharded<MultiShardDevices> shard_devices;
+    seastar::sharded<MultiShardDevices<ZBDSegmentManager>> shard_devices;
   };
 
 }

@@ -94,8 +94,13 @@ protected:
     std::vector<bufferptr> ptrs) = 0;
 
 public:
-  RBMDevice(store_index_t store_index = 0)
-  : store_index(store_index) {}
+  RBMDevice(
+    const std::string &path,
+    device_type_t dtype,
+    device_id_t id,
+    store_index_t store_index = 0)
+  : Device(path, dtype,id),
+    store_index(store_index) {}
   virtual ~RBMDevice() = default;
 
   template <typename T>
@@ -103,16 +108,8 @@ public:
     return std::make_unique<T>();
   }
 
-  device_id_t get_device_id() const {
-    return super.config.spec.id;
-  }
-
   magic_t get_magic() const final {
     return super.config.spec.magic;
-  }
-
-  virtual device_type_t get_device_type() const {
-    return device_type_t::RANDOM_BLOCK_SSD;
   }
 
   backend_type_t get_backend_type() const final {
@@ -123,8 +120,11 @@ public:
     return super.config.meta;
   }
 
-  secondary_device_set_t& get_secondary_devices() final {
-    return super.config.secondary_devices;
+  device_set_t& get_cache_devices() final {
+    return super.config.cache_devices;
+  }
+  device_set_t& get_data_devices() final {
+    return super.config.data_devices;
   }
   std::size_t get_available_size() const { return super.total_size; }
   extent_len_t get_block_size() const { return super.block_size; }
@@ -217,9 +217,15 @@ public:
   uint64_t block_size = 0;
   constexpr static uint32_t TEST_BLOCK_SIZE = 4096;
 
-  EphemeralRBMDevice(size_t size, uint64_t block_size) :
-    size(size), block_size(block_size), buf(nullptr) {
-  }
+  EphemeralRBMDevice(
+    const std::string &path,
+    device_id_t id,
+    size_t size,
+    uint64_t block_size)
+    : RBMDevice(path, device_type_t::RANDOM_BLOCK_EPHEMERAL, id),
+      size(size),
+      block_size(block_size),
+      buf(nullptr) {}
   ~EphemeralRBMDevice() {
     if (buf) {
       ::munmap(buf, size);
@@ -275,27 +281,8 @@ public:
 };
 using EphemeralRBMDeviceRef = std::unique_ptr<EphemeralRBMDevice>;
 EphemeralRBMDeviceRef create_test_ephemeral(
+  device_id_t id,
   uint64_t journal_size = DEFAULT_TEST_CBJOURNAL_SIZE,
   uint64_t data_size = DEFAULT_TEST_CBJOURNAL_SIZE);
-
-template <typename T>
-class MultiShardDevices {
-  public:
-    std::vector<std::unique_ptr<T>> mshard_devices;
-
-  public:
-  MultiShardDevices(size_t count,
-                    const std::string path)
-  : mshard_devices() {
-    mshard_devices.reserve(count);
-    for (size_t store_index = 0; store_index < count; ++store_index) {
-      mshard_devices.emplace_back(std::make_unique<T>(
-        path, store_index));
-    }
-  }
-  ~MultiShardDevices() {
-    mshard_devices.clear();
-  }
-};
 
 }

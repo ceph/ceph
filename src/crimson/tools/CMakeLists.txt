@@ -32,6 +32,7 @@ endif()
 add_executable(crimson-objectstore-tool
   objectstore/objectstore_tool.cc
   objectstore/crimson_objectstore_tool.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/main_config_bootstrap_helpers.cc
   ${PROJECT_SOURCE_DIR}/src/crimson/osd/lsan_suppressions.cc)
 target_link_libraries(crimson-objectstore-tool
   legacy-option-headers

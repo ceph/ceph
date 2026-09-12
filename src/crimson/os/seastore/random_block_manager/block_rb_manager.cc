@@ -16,34 +16,29 @@ SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore {
 
-device_config_t get_rbm_ephemeral_device_config(
-    std::size_t index, std::size_t num_devices)
+device_spec_t get_rbm_ephemeral_device_spec(
+  device_id_t id)
 {
-  assert(num_devices > index);
   magic_t magic = 0xfffa;
-  auto type = device_type_t::RANDOM_BLOCK_EPHEMERAL;
-  bool is_major_device;
-  secondary_device_set_t secondary_devices;
-  if (index == 0) {
-    is_major_device = true;
-    for (std::size_t secondary_index = index + 1;
-         secondary_index < num_devices;
-         ++secondary_index) {
-      device_id_t secondary_id = static_cast<device_id_t>(secondary_index);
-      secondary_devices.insert({
-        secondary_index, device_spec_t{magic, type, backend_type_t::RANDOM_BLOCK, secondary_id}
-      });
-    }
-  } else { // index > 0
-    is_major_device = false;
-  }
+  return device_spec_t{
+    magic,
+    device_type_t::RANDOM_BLOCK_EPHEMERAL,
+    backend_type_t::RANDOM_BLOCK,
+    id};
+}
 
-  device_id_t id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN + index);
+device_config_t get_rbm_ephemeral_device_config(
+  device_id_t id,
+  device_set_t cache_devices,
+  device_set_t data_devices,
+  bool is_major_device)
+{
   seastore_meta_t meta = {};
   return {is_major_device,
-          device_spec_t{magic, type, backend_type_t::RANDOM_BLOCK, id},
+          get_rbm_ephemeral_device_spec(id),
           meta,
-          secondary_devices};
+          cache_devices,
+          data_devices};
 }
 
 paddr_t BlockRBManager::alloc_extent(size_t size)

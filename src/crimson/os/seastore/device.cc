@@ -28,8 +28,13 @@ std::ostream& operator<<(std::ostream& out, const device_config_t& conf)
       << "major_dev=" << conf.major_dev
       << ", spec=" << conf.spec
       << ", meta=" << conf.meta
-      << ", secondary(";
-  for (const auto& [k, v] : conf.secondary_devices) {
+      << ", cache(";
+  for (const auto& [k, v] : conf.cache_devices) {
+    out << device_id_printer_t{k}
+        << ": " << v << ", ";
+  }
+  out << "), data(";
+  for (const auto& [k, v] : conf.data_devices) {
     out << device_id_printer_t{k}
         << ": " << v << ", ";
   }
@@ -62,9 +67,9 @@ void device_superblock_t::validate() const
   ceph_assert(config.spec.btype != backend_type_t::NONE);
   ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
   if (!config.major_dev) {
-    ceph_assert(config.secondary_devices.empty());
+    ceph_assert(config.cache_devices.empty());
   }
-  for (const auto& [k, v] : config.secondary_devices) {
+  for (const auto& [k, v] : config.cache_devices) {
     ceph_assert(k != config.spec.id);
     ceph_assert(k <= DEVICE_ID_MAX_VALID);
     ceph_assert(k == v.id);
@@ -120,16 +125,17 @@ seastar::future<DeviceRef>
 Device::make_device(
   const std::string& device,
   device_type_t dtype,
-  backend_type_t btype)
+  backend_type_t btype,
+  device_id_t id)
 {
   if (btype == backend_type_t::SEGMENTED) {
-    return SegmentManager::get_segment_manager(device, dtype
+    return SegmentManager::get_segment_manager(device, dtype, id
     ).then([](DeviceRef ret) {
       return ret;
     });
   } else {
     ceph_assert(btype != backend_type_t::NONE);
-    return get_rb_device(device, dtype
+    return get_rb_device(device, dtype, id
     ).then([](DeviceRef ret) {
       return ret;
     });

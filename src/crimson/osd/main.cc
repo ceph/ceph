@@ -264,15 +264,6 @@ int main(int argc, const char* argv[])
               // use a random osd uuid if not specified
               osd_uuid.generate_random();
             }
-            if (auto c = local_conf().get_val<uint64_t>("seastore_cold_devices_count");
-                c != 0) {
-              auto root = local_conf().get_val<std::string>("osd_data");
-              for (size_t i = 1; i <= c; i++) {
-                auto path = fmt::format("{}/block.{}", root, i);
-                seastar::touch_directory(path).get();
-              }
-              seastar::sync_directory(root).get();
-            }
             osd.mkfs(
 	      *store,
 	      whoami,

@@ -29,8 +29,12 @@ namespace crimson::os::seastore {
 using RBMDevice = random_block_device::RBMDevice;
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
 
+device_spec_t get_rbm_ephemeral_device_spec(device_id_t);
 device_config_t get_rbm_ephemeral_device_config(
-    std::size_t index, std::size_t num_devices);
+  device_id_t id,
+  device_set_t cache_devices,
+  device_set_t data_devices,
+  bool is_major_device);
 
 class BlockRBManager final : public RandomBlockManager {
 public:

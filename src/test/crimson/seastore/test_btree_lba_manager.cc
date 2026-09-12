@@ -131,18 +131,19 @@ struct btree_test_base :
 
   virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;
   seastar::future<> set_up_fut() final {
-    segment_manager = segment_manager::create_test_ephemeral();
+    segment_manager = segment_manager::create_test_ephemeral(0, device_type_t::EPHEMERAL_MAIN);
     return segment_manager->init(
     ).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, 1, 0));
+        segment_manager::get_ephemeral_device_config(
+          0, device_set_t{}, device_set_t{}, true));
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
       journal = journal::make_segmented(0, *this, *this, false);
       rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
-	"seastore_hot_tier_generations");
+	"seastore_cache_device_generations");
       rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
-	"seastore_cold_tier_generations");
+	"seastore_data_device_generations");
       epm.reset(new ExtentPlacementManager(
 	hot_tier_generations, cold_tier_generations, 0));
       cache.reset(new Cache(*epm, 0));

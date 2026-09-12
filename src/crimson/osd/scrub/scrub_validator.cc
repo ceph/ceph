@@ -170,6 +170,7 @@ librados::obj_err_t compare_candidate_to_authoritative(
   const shard_evaluation_t &auth,
   const shard_evaluation_t &cand)
 {
+  LOG_PREFIX(compare_candidate_to_authoritative);
   using namespace librados;
   obj_err_t ret;
 
@@ -195,6 +196,9 @@ librados::obj_err_t compare_candidate_to_authoritative(
     auto citer = cand_si.attrs.find(OI_ATTR);
     if (citer == cand_si.attrs.end() ||
 	!aiter->second.contents_equal(citer->second)) {
+      object_info_t auth_oi(aiter->second);
+      object_info_t cand_oi(citer->second);
+      DEBUG("inconsistent oi, auth: {}, cand: {}", auth_oi, cand_oi);
       ret.errors |= obj_err_t::OBJECT_INFO_INCONSISTENCY;
     }
   }
