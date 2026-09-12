@@ -204,6 +204,12 @@ $CEPHADM shell --fsid $FSID -e FOO=BAR -- printenv | grep FOO=BAR
 # test stdin
 echo foo | $CEPHADM shell -- cat | grep -q foo
 
+# sudo must survive PAM account management without CAP_DAC_OVERRIDE:
+# RHEL-base images ship /etc/shadow as 0000, and on Ubuntu 24.04+ hosts
+# the AppArmor unix-chkpwd profile takes that capability away from the PAM helper.
+CENGINE=$(command -v podman || command -v docker)
+$SUDO $CENGINE run --rm --cap-drop=DAC_OVERRIDE --user=ceph "$IMAGE_DEFAULT" sudo -n -l
+
 # the shell commands a bit above this seems to cause the
 # /var/lib/ceph/<fsid> directory to be made. Since we now
 # check in bootstrap that there are no clusters with the same
