@@ -327,6 +327,9 @@ class Monitoring(ContainerDaemonForm):
                 r += [f'--web.config.file={config["web_config"]}']
             except KeyError:
                 pass
+            ip_to_bind_to = config.get('ip_to_bind_to', '')
+            if ip_to_bind_to:
+                r += [f'--web.listen-address={str(EndPoint(ip_to_bind_to, port))}']
             r += [
                 '--path.procfs=/host/proc',
                 '--path.sysfs=/host/sys',

@@ -517,6 +517,62 @@ def test_deploy_ceph_exporter_container(cephadm_fs, funkypatch):
         assert f.read() == 'YYYYYY'
 
 
+def test_deploy_ceph_exporter_container_binds_to_network(cephadm_fs, funkypatch):
+    _common_patches(funkypatch)
+    _get_ip_addresses = funkypatch.patch('cephadmlib.net_utils.get_ip_addresses')
+    _get_ip_addresses.return_value = (['10.10.10.10'], [])
+    _make_run_dir = funkypatch.patch('cephadmlib.file_utils.make_run_dir')
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'ceph-exporter.zaq'
+        ctx.image = 'quay.io/ceph/ceph:latest'
+        ctx.reconfig = False
+        ctx.allow_ptrace = False
+        ctx.osd_fsid = '00000000-0000-0000-0000-000000000000'
+        ctx.config_blobs = {
+            'config': 'XXXXXXX',
+            'keyring': 'YYYYYY',
+            'addrs': '1.2.3.4',
+        }
+
+        vrc = pathlib.Path('/var/run/ceph')
+        (vrc / fsid).mkdir(parents=True)
+
+        _cephadm._common_deploy(ctx)
+
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/ceph-exporter.zaq')
+    with open(basedir / 'unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    # the configured 'addrs' restricts the ceph-exporter bind address
+    assert '--addrs=1.2.3.4' in runfile_lines[-1]
+    assert '--addrs=0.0.0.0' not in runfile_lines[-1]
+
+
+def test_deploy_node_exporter_container_binds_to_network(cephadm_fs, funkypatch):
+    _common_patches(funkypatch)
+    _get_ip_addresses = funkypatch.patch('cephadmlib.net_utils.get_ip_addresses')
+    _get_ip_addresses.return_value = (['10.10.10.10'], [])
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'node-exporter.fire'
+        ctx.image = 'quay.io/titans/node-exporter:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {
+            'ip_to_bind_to': '1.2.3.4',
+        }
+        _cephadm._common_deploy(ctx)
+
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/node-exporter.fire')
+    with open(basedir / 'unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    # the resolved network IP restricts the node-exporter listen address
+    assert '--web.listen-address=1.2.3.4:9100' in runfile_lines[-1]
+
+
 def test_deploy_and_rm_iscsi(cephadm_fs, funkypatch):
     # Test that the deploy and remove paths for iscsi (which has sidecar container)
     # create and remove the correct unit files.

@@ -184,6 +184,39 @@ example spec file:
       port: 4200
       protocol: http
 
+Restricting the bind address
+............................
+
+For ``prometheus``, ``grafana``, ``alertmanager``, ``node-exporter`` and
+``ceph-exporter`` you can additionally restrict the address the daemon binds to
+so that it only listens on an IP belonging to one of the ``networks`` listed in
+the spec. Set ``only_bind_port_on_networks: true`` in the ``spec`` section.
+cephadm then resolves a per-host IP inside the configured network (via the
+same mechanism used to pick a daemon's address) and binds the daemon's
+listening socket to that IP only, instead of all interfaces.
+
+This is useful when a host has both a non-routable daemon network (for example
+an IPv6 ULA) and a publicly-routable interface, and you do not want the
+exporters reachable on the routable interface.
+
+example spec files:
+
+.. code-block:: yaml
+
+    service_type: node-exporter
+    networks:
+    - fd70:c853:8a8d::/64
+    spec:
+      only_bind_port_on_networks: true
+
+.. code-block:: yaml
+
+    service_type: ceph-exporter
+    networks:
+    - fd70:c853:8a8d::/64
+    spec:
+      only_bind_port_on_networks: true
+
 .. _cephadm_monitoring-images:
 
 .. _cephadm_default_images:

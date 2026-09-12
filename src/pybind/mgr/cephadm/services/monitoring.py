@@ -12,7 +12,7 @@ from cephadm.tlsobject_types import TLSCredentials
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, \
-    SNMPGatewaySpec, PrometheusSpec, MgmtGatewaySpec
+    SNMPGatewaySpec, PrometheusSpec, MgmtGatewaySpec, MonitoringSpec
 from cephadm.services.cephadmservice import (
     CephadmDaemonDeploySpec,
     CephadmService,
@@ -860,6 +860,20 @@ class NodeExporterService(CephadmService):
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('mgmt-gateway')]
         deps += [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
         security_enabled, mgmt_gw_enabled, _ = self.mgr._get_security_config()
+
+        spec = cast(MonitoringSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        port = daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT
+        ip_to_bind_to = ''
+        if spec.only_bind_port_on_networks and spec.networks:
+            assert daemon_spec.host is not None
+            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
+            if ip_to_bind_to:
+                daemon_spec.port_ips = {str(port): ip_to_bind_to}
+            else:
+                logger.warning(
+                    f'Failed to find ip in {spec.networks} for host {daemon_spec.host}. '
+                    f'{daemon_spec.name()} will bind to all IPs')
+
         if security_enabled:
             tls_pair = self.get_certificates(daemon_spec)
             r = {
@@ -874,6 +888,9 @@ class NodeExporterService(CephadmService):
             }
         else:
             r = {}
+
+        if ip_to_bind_to:
+            r['ip_to_bind_to'] = ip_to_bind_to
 
         return r, deps
 
