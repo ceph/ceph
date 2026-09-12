@@ -269,6 +269,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, Flush) {
 }
 
 TEST_F(TestMockCryptoCryptoObjectDispatch, Discard) {
+  expect_get_object_size();
   expect_object_write_same();
   ASSERT_TRUE(mock_crypto_object_dispatch->discard(
           11, 0, 4096, mock_image_ctx->get_data_io_context(), 0, {},
@@ -279,6 +280,17 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, Discard) {
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
   dispatcher_ctx->complete(0);
   ASSERT_EQ(0, dispatched_cond.wait());
+}
+
+TEST_F(TestMockCryptoCryptoObjectDispatch, DiscardFullObject) {
+  expect_get_object_size();
+  ASSERT_FALSE(mock_crypto_object_dispatch->discard(
+          11, 0, mock_image_ctx->layout.object_size,
+          mock_image_ctx->get_data_io_context(), 0, {}, &object_dispatch_flags,
+          nullptr, &dispatch_result, &on_finish, on_dispatched));
+  ASSERT_EQ(on_finish, &finished_cond); // not modified
+  on_finish->complete(0);
+  ASSERT_EQ(0, finished_cond.wait());
 }
 
 TEST_F(TestMockCryptoCryptoObjectDispatch, AlignedReadFail) {
