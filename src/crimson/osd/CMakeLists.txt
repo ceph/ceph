@@ -103,7 +103,8 @@ else()
     dmclock::dmclock)
 endif()
 set_target_properties(crimson-osd PROPERTIES
-  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE}
+  JOB_POOL_LINK heavy_link_job_pool)
 install(TARGETS crimson-osd DESTINATION bin)
 if(WITH_TESTS)
   add_dependencies(tests crimson-osd)

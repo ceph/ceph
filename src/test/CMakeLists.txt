@@ -137,6 +137,8 @@ target_link_libraries(test_build_libcommon ceph-common pthread ${CRYPTO_LIBS} ${
 if(WITH_RADOSGW)
   add_executable(test_build_librgw buildtest_skeleton.cc)
   target_link_libraries(test_build_librgw rgw_a pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+  set_target_properties(test_build_librgw PROPERTIES
+    JOB_POOL_LINK heavy_link_job_pool)
 endif(WITH_RADOSGW)
 
 if(WITH_LIBCEPHFS)
@@ -299,6 +301,9 @@ if(${WITH_RADOSGW})
     ${EXTRALIBS}
     ${CRYPTO_LIBS}
     )
+  set_target_properties(test_cors ceph_test_cls_rgw_admin_account_quota_set
+    ceph_test_cls_rgw_meta ceph_test_cls_rgw_log PROPERTIES
+    JOB_POOL_LINK heavy_link_job_pool)
 
 # ceph_test_librgw_file (nfs-like RGW interface)
 add_executable(ceph_test_librgw_file

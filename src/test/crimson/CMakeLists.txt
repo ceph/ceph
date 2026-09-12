@@ -1,3 +1,5 @@
+set(CMAKE_JOB_POOL_LINK heavy_link_job_pool)
+
 # the crimson's backfill doesn't need nor use seastar
 include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
 add_executable(unittest-crimson-backfill
