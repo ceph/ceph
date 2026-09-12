@@ -75,18 +75,18 @@ void device_superblock_t::validate() const
   if (config.spec.dtype == device_type_t::ZBD) {
     // ZBD: check zone/segment geometry
     ceph_assert(segment_capacity > 0);
-    ceph_assert_always(segment_capacity <= SEGMENT_OFF_MAX);
+    ceph_assert(segment_capacity <= SEGMENT_OFF_MAX);
   }
   auto backend = get_default_backend_of_device(config.spec.dtype);
   if (backend == backend_type_t::SEGMENTED) {
     ceph_assert(segment_size > 0 && segment_size % block_size == 0);
-    ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
+    ceph_assert(segment_size <= SEGMENT_OFF_MAX);
     ceph_assert(shard_infos.size() >= shard_num);
     for (unsigned int i = 0; i < shard_num; i++) {
       ceph_assert(shard_infos[i].size > 0);
-      ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
+      ceph_assert(shard_infos[i].size <= DEVICE_OFF_MAX);
       ceph_assert(shard_infos[i].segments > 0);
-      ceph_assert_always(shard_infos[i].segments <= DEVICE_SEGMENT_ID_MAX);
+      ceph_assert(shard_infos[i].segments <= DEVICE_SEGMENT_ID_MAX);
       if (config.spec.dtype != device_type_t::ZBD) {
         // HDD: check tracker and first-segment offsets
         ceph_assert(shard_infos[i].size > segment_size &&
@@ -107,7 +107,7 @@ void device_superblock_t::validate() const
     for (unsigned int i = 0; i < shard_num; i++) {
       ceph_assert(shard_infos[i].size > block_size &&
                   shard_infos[i].size % block_size == 0);
-      ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
+      ceph_assert(shard_infos[i].size <= DEVICE_OFF_MAX);
       ceph_assert((journal_size > 0 && journal_size % block_size == 0) ||
                    config.spec.dtype == device_type_t::RANDOM_BLOCK_HDD);
       ceph_assert(shard_infos[i].start_offset < total_size &&

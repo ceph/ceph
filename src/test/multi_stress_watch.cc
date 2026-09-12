@@ -73,7 +73,7 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
     bufferlist bl2;
     ret = ioctx.notify(obj_name, 0, bl2);
     ceph_assert(!ret);
-    ceph_assert_always(ctx.wait());
+    ceph_assert(ctx.wait());
     ioctx.unwatch(obj_name, handle);
   }
   ioctx.close();
