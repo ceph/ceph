@@ -51,7 +51,7 @@ export class ServicesPageHelper extends PageHelper {
           cy.get('#service_id').type('foo');
           unmanaged
             ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
-            : cy.get('#count').clear().type(String(count));
+            : cy.get('#count input[type="number"]').clear().type(String(count));
           break;
 
         case 'ingress':
@@ -69,14 +69,14 @@ export class ServicesPageHelper extends PageHelper {
           cy.get('#service_id').type('testnfs');
           unmanaged
             ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
-            : cy.get('#count').clear().type(String(count));
+            : cy.get('#count input[type="number"]').clear().type(String(count));
           break;
 
         case 'smb':
           cy.get('#service_id').type('testsmb');
           unmanaged
             ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
-            : cy.get('#count').clear().type(String(count));
+            : cy.get('#count input[type="number"]').clear().type(String(count));
           cy.get('#cluster_id').type('cluster_foo');
           cy.get('#config_uri').type('rados://.smb/foo/scc.toml');
           break;
@@ -117,7 +117,7 @@ export class ServicesPageHelper extends PageHelper {
           cy.get('#service_id').type('test');
           unmanaged
             ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
-            : cy.get('#count').clear().type(String(count));
+            : cy.get('#count input[type="number"]').clear().type(String(count));
           break;
       }
       cy.wait(1000);
@@ -136,7 +136,9 @@ export class ServicesPageHelper extends PageHelper {
     cy.get(`${this.pages.create.id}`).within(() => {
       cy.get('cds-select#service_type select').should('be.disabled');
       cy.get('#service_id').should('be.disabled');
-      cy.get('#count').clear().type(daemonCount);
+      // cds-number wraps a native <input>; target the inner input to avoid
+      // the "focus() on non-focusable element" error on the host element
+      cy.get('#count input[type="number"]').clear().type(daemonCount);
       cy.get('cd-submit-button').click();
     });
   }

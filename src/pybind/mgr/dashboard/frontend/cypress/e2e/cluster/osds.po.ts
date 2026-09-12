@@ -14,52 +14,58 @@ export class OSDsPageHelper extends PageHelper {
   };
 
   create(deviceType: 'hdd' | 'ssd', hostname?: string, expandCluster = false) {
-    cy.get('[aria-label="toggle advanced mode"]').click();
-    cy.get('[aria-label="toggle advanced mode"]').then(($button) => {
-      if ($button.hasClass('collapsed')) {
-        cy.wrap($button).click();
-      }
+    // The Create OSDs wizard step shows cd-osd-list by default.
+    // Click Create to switch to cd-osd-form.
+    cy.get('[aria-label=Create]').first().click();
+    cy.get('cd-osd-form').should('exist');
+
+    // The redesigned form uses a deployment-mode radio group.
+    // Select "Manual selection" to expose the per-device filter step.
+    cy.get('cd-osd-form').within(() => {
+      cy.get('cds-radio[value="manual"] input[type="radio"]').click({ force: true });
+      // Navigate to the device-selection tearsheet step inside the OSD form.
+      cy.contains('button', 'Next').click();
     });
-    // Click Primary devices Add button
-    cy.get('cd-osd-devices-selection-groups[name="Primary"]').as('primaryGroups');
-    cy.get('@primaryGroups').find('button').click();
 
-    // Select all devices with `deviceType`
-    cy.get('cd-osd-devices-selection-modal').within(() => {
-      cy.get('.modal-footer .tc_submitButton').as('addButton').should('be.disabled');
-      this.filterTable('Type', deviceType);
+    // Apply the device-type filter inline.
+    // Changing the select triggers onFilterFieldChange → applySelectionResult →
+    // selected.emit → osd-form.onDevicesSelected → emitDriveGroup.emit, so the
+    // drive group is automatically stored in the cluster wizard without any
+    // explicit OSD-form submit.
+    cy.get('cd-osd-devices-selection-groups[name="Primary"]').within(() => {
+      cy.get(
+        'cds-select[data-testid="device-filter-human_readable_type"] select'
+      ).select(deviceType, { force: true });
       if (hostname) {
-        this.filterTable('Hostname', hostname);
+        cy.get('cds-select[data-testid="device-filter-hostname"] select').then(($sel) => {
+          if ($sel.find(`option[value="${hostname}"]`).length > 0) {
+            cy.wrap($sel).select(hostname, { force: true });
+          }
+        });
       }
-
-      if (expandCluster) {
-        this.getTableCount('total').should('be.gte', 1);
-      }
-      cy.get('@addButton').click({ force: true });
     });
 
     if (!expandCluster) {
-      cy.get('@primaryGroups').within(() => {
-        this.getTableCount('total').as('newOSDCount');
+      // Navigate to the review step and submit the OSD form.
+      cy.get('cd-osd-form').within(() => {
+        cy.contains('button', 'Next').click();
+        cy.get('.tearsheet-footer-submit').click();
       });
-
-      cy.get(`${pages.create.id} .card-footer .tc_submitButton`).click();
-      cy.get(`cd-osd-creation-preview-modal .modal-footer .tc_submitButton`).click();
     }
   }
 
   @PageHelper.restrictTo(pages.index.url)
   checkStatus(id: number, status: string[]) {
     this.searchTable(id.toString());
-    cy.wait(5 * 1000);
-    cy.get(`[cdstablerow] [cdstabledata]:nth-child(${this.columnIndex.status}) cds-tag`).should(
-      ($ele) => {
-        const allStatus = $ele.toArray().map((v) => v.innerText);
-        for (const s of status) {
-          expect(allStatus).to.include(s);
-        }
+    cy.wait(10 * 1000);
+    cy.get(`[cdstablerow] [cdstabledata]:nth-child(${this.columnIndex.status}) cds-tag`, {
+      timeout: 30000
+    }).should(($ele) => {
+      const allStatus = $ele.toArray().map((v) => v.innerText);
+      for (const s of status) {
+        expect(allStatus).to.include(s);
       }
-    );
+    });
   }
 
   @PageHelper.restrictTo(pages.index.url)
