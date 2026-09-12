@@ -55,4 +55,3 @@ class DBCommand(dict):
         """
         cmd = DBCLICommand(prefix=self.prefix, perm=self['perm'])
         return cmd(self.returns_command_result(instance, self.handler))
-        return None

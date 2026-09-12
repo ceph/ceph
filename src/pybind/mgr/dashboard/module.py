@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import Literal
 
+# pylint: disable=wrong-import-position
 from ceph.cryptotools.select import choose_crypto_caller
 from cherrypy_mgr import CherryPyMgr
 from mgr_module import HandleCommandResult, MgrModule, MgrStandbyModule, \
@@ -55,7 +56,6 @@ except ImportError:
 
 from .services.sso import load_sso_db
 
-# pylint: disable=wrong-import-position
 from .plugins import PLUGIN_MANAGER, debug, feature_toggles, motd  # isort:skip # noqa E501 # pylint: disable=unused-import
 
 PLUGIN_MANAGER.hook.init()
@@ -100,7 +100,8 @@ class CherryPyConfig(object):
             'response.headers.server': 'Ceph-Dashboard',
             'response.headers.content-security-policy': "frame-ancestors 'self';",
             'response.headers.x-content-type-options': 'nosniff',
-            'response.headers.strict-transport-security': 'max-age=63072000; includeSubDomains; preload',  # noqa
+            'response.headers.strict-transport-security':
+                'max-age=63072000; includeSubDomains; preload',
             'engine.autoreload.on': False,
             'tools.request_logging.on': True,
             'tools.gzip.on': True,
@@ -672,7 +673,7 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
         conf_result = self.await_configuration()
         if conf_result is None:
             return
-        uri, bind_addr, ssl_info, config = conf_result
+        _uri, bind_addr, ssl_info, config = conf_result
 
         module = self
 

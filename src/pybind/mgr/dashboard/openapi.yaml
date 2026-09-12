@@ -586,9 +586,12 @@ paths:
       - RbdTrash
   /api/block/image/trash/{image_id_spec}:
     delete:
-      description: "Delete an image from trash.\n        If image deferment time has\
-        \ not expired you can not removed it unless use force.\n        But an actively\
-        \ in-use by clones or has snapshots can not be removed.\n        "
+      description: 'Delete an image from trash.
+
+        If image deferment time has not expired you can not removed it unless use
+        force.
+
+        But an actively in-use by clones or has snapshots can not be removed.'
       parameters:
       - in: path
         name: image_id_spec
@@ -978,9 +981,11 @@ paths:
       - Rbd
   /api/block/image/{image_spec}/move_trash:
     post:
-      description: "Move an image to the trash.\n        Images, even ones actively\
-        \ in-use by clones,\n        can be moved to the trash and deleted at a later\
-        \ time.\n        "
+      description: 'Move an image to the trash.
+
+        Images, even ones actively in-use by clones,
+
+        can be moved to the trash and deleted at a later time.'
       parameters:
       - in: path
         name: image_spec
@@ -1182,7 +1187,7 @@ paths:
       - RbdSnapshot
   /api/block/image/{image_spec}/snap/{snapshot_name}/clone:
     post:
-      description: "\n        Clones a snapshot to an image\n        "
+      description: Clones a snapshot to an image
       parameters:
       - in: path
         name: image_spec
@@ -5808,9 +5813,13 @@ paths:
       - Cephfs
   /api/cephfs/{fs_id}/get_root_directory:
     get:
-      description: "\n        The root directory that can't be fetched using ls_dir\
-        \ (api).\n        :param fs_id: The filesystem identifier.\n        :return:\
-        \ The root directory\n        :rtype: dict\n        "
+      description: 'The root directory that can''t be fetched using ls_dir (api).
+
+        :param fs_id: The filesystem identifier.
+
+        :return: The root directory
+
+        :rtype: dict'
       parameters:
       - in: path
         name: fs_id
@@ -5842,13 +5851,23 @@ paths:
       - Cephfs
   /api/cephfs/{fs_id}/ls_dir:
     get:
-      description: "\n        List directories of specified path.\n        :param\
-        \ fs_id: The filesystem identifier.\n        :param path: The path where to\
-        \ start listing the directory content.\n        Defaults to '/' if not set.\n\
-        \        :type path: str | bytes\n        :param depth: The number of steps\
-        \ to go down the directory tree.\n        :type depth: int | str\n       \
-        \ :return: The names of the directories below the specified path.\n      \
-        \  :rtype: list\n        "
+      description: 'List directories of specified path.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path where to start listing the directory content.
+
+        Defaults to ''/'' if not set.
+
+        :type path: str | bytes
+
+        :param depth: The number of steps to go down the directory tree.
+
+        :type depth: int | str
+
+        :return: The names of the directories below the specified path.
+
+        :rtype: list'
       parameters:
       - in: path
         name: fs_id
@@ -5926,10 +5945,17 @@ paths:
       - Cephfs
   /api/cephfs/{fs_id}/quota:
     get:
-      description: "\n        Get the quotas of the specified path.\n        :param\
-        \ fs_id: The filesystem identifier.\n        :param path: The path of the\
-        \ directory/file.\n        :return: Returns a dictionary containing 'max_bytes'\n\
-        \        and 'max_files'.\n        :rtype: dict\n        "
+      description: 'Get the quotas of the specified path.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path of the directory/file.
+
+        :return: Returns a dictionary containing ''max_bytes''
+
+        and ''max_files''.
+
+        :rtype: dict'
       parameters:
       - description: File System Identifier
         in: path
@@ -5986,10 +6012,15 @@ paths:
       tags:
       - Cephfs
     put:
-      description: "\n        Set the quotas of the specified path.\n        :param\
-        \ fs_id: The filesystem identifier.\n        :param path: The path of the\
-        \ directory/file.\n        :param max_bytes: The byte limit.\n        :param\
-        \ max_files: The file limit.\n        "
+      description: 'Set the quotas of the specified path.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path of the directory/file.
+
+        :param max_bytes: The byte limit.
+
+        :param max_files: The file limit.'
       parameters:
       - in: path
         name: fs_id
@@ -6044,10 +6075,13 @@ paths:
       - Cephfs
   /api/cephfs/{fs_id}/rename-path:
     put:
-      description: "\n        Rename a file or directory.\n        :param fs_id: The\
-        \ filesystem identifier.\n        :param src_path: The path to the existing\
-        \ file or directory.\n        :param dst_path: The new name of the file or\
-        \ directory.\n        "
+      description: 'Rename a file or directory.
+
+        :param fs_id: The filesystem identifier.
+
+        :param src_path: The path to the existing file or directory.
+
+        :param dst_path: The new name of the file or directory.'
       parameters:
       - in: path
         name: fs_id
@@ -6101,9 +6135,13 @@ paths:
       - Cephfs
   /api/cephfs/{fs_id}/snapshot:
     delete:
-      description: "\n        Remove a snapshot.\n        :param fs_id: The filesystem\
-        \ identifier.\n        :param path: The path of the directory.\n        :param\
-        \ name: The name of the snapshot.\n        "
+      description: 'Remove a snapshot.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path of the directory.
+
+        :param name: The name of the snapshot.'
       parameters:
       - in: path
         name: fs_id
@@ -6153,11 +6191,19 @@ paths:
       tags:
       - Cephfs
     post:
-      description: "\n        Create a snapshot.\n        :param fs_id: The filesystem\
-        \ identifier.\n        :param path: The path of the directory.\n        :param\
-        \ name: The name of the snapshot. If not specified, a name using the\n   \
-        \     current time in RFC3339 UTC format will be generated.\n        :return:\
-        \ The name of the snapshot.\n        :rtype: str\n        "
+      description: 'Create a snapshot.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path of the directory.
+
+        :param name: The name of the snapshot. If not specified, a name using the
+
+        current time in RFC3339 UTC format will be generated.
+
+        :return: The name of the snapshot.
+
+        :rtype: str'
       parameters:
       - in: path
         name: fs_id
@@ -6210,10 +6256,17 @@ paths:
       - Cephfs
   /api/cephfs/{fs_id}/statfs:
     get:
-      description: "\n        Get the statfs of the specified path.\n        :param\
-        \ fs_id: The filesystem identifier.\n        :param path: The path of the\
-        \ directory/file.\n        :return: Returns a dictionary containing 'bytes',\n\
-        \        'files' and 'subdirs'.\n        :rtype: dict\n        "
+      description: 'Get the statfs of the specified path.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path of the directory/file.
+
+        :return: Returns a dictionary containing ''bytes'',
+
+        ''files'' and ''subdirs''.
+
+        :rtype: dict'
       parameters:
       - description: File System Identifier
         in: path
@@ -6278,8 +6331,11 @@ paths:
       - Cephfs
   /api/cephfs/{fs_id}/tree:
     delete:
-      description: "\n        Remove a directory.\n        :param fs_id: The filesystem\
-        \ identifier.\n        :param path: The path of the directory.\n        "
+      description: 'Remove a directory.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path of the directory.'
       parameters:
       - in: path
         name: fs_id
@@ -6324,8 +6380,11 @@ paths:
       tags:
       - Cephfs
     post:
-      description: "\n        Create a directory.\n        :param fs_id: The filesystem\
-        \ identifier.\n        :param path: The path of the directory.\n        "
+      description: 'Create a directory.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path of the directory.'
       parameters:
       - in: path
         name: fs_id
@@ -6376,9 +6435,11 @@ paths:
       - Cephfs
   /api/cephfs/{fs_id}/unlink:
     delete:
-      description: "\n        Removes a file, link, or symbolic link.\n        :param\
-        \ fs_id: The filesystem identifier.\n        :param path: The path of the\
-        \ file or link to unlink.\n        "
+      description: 'Removes a file, link, or symbolic link.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path of the file or link to unlink.'
       parameters:
       - in: path
         name: fs_id
@@ -6424,10 +6485,13 @@ paths:
       - Cephfs
   /api/cephfs/{fs_id}/write_to_file:
     post:
-      description: "\n        Write some data to the specified path.\n        :param\
-        \ fs_id: The filesystem identifier.\n        :param path: The path of the\
-        \ file to write.\n        :param buf: The str to write to the buf.\n     \
-        \   "
+      description: 'Write some data to the specified path.
+
+        :param fs_id: The filesystem identifier.
+
+        :param path: The path of the file to write.
+
+        :param buf: The str to write to the buf.'
       parameters:
       - in: path
         name: fs_id
@@ -6788,8 +6852,7 @@ paths:
       - Upgrade
   /api/cluster/user:
     get:
-      description: "\n        Get list of ceph users and its associated data\n   \
-        \     "
+      description: Get list of ceph users and its associated data
       parameters: []
       responses:
         '200':
@@ -6816,8 +6879,7 @@ paths:
       tags:
       - Cluster
     post:
-      description: "\n        Add a Ceph user, with its defined capabilities.\n  \
-        \      "
+      description: Add a Ceph user, with its defined capabilities.
       parameters: []
       requestBody:
         content:
@@ -6881,8 +6943,9 @@ paths:
       tags:
       - Cluster
     put:
-      description: "\n        Change the ceph user capabilities.\n        Setting\
-        \ new capabilities will overwrite current ones.\n        "
+      description: 'Change the ceph user capabilities.
+
+        Setting new capabilities will overwrite current ones.'
       parameters: []
       requestBody:
         content:
@@ -6993,9 +7056,9 @@ paths:
       - Cluster
   /api/cluster/user/{user_entities}:
     delete:
-      description: "\n        Delete one or more ceph users and their defined capabilities.\n\
-        \        user_entities: comma-separated string of users to delete\n      \
-        \  "
+      description: 'Delete one or more ceph users and their defined capabilities.
+
+        user_entities: comma-separated string of users to delete'
       parameters:
       - in: path
         name: user_entities
@@ -7623,10 +7686,15 @@ paths:
       - CrushRule
   /api/daemon:
     get:
-      description: "List all daemons in the cluster. Also filter by the daemon types\
-        \ specified\n\n        :param daemon_types: List of daemon types to filter\
-        \ by.\n        :return: Returns list of daemons.\n        :rtype: list\n \
-        \       "
+      description: 'List all daemons in the cluster. Also filter by the daemon types
+        specified
+
+
+        :param daemon_types: List of daemon types to filter by.
+
+        :return: Returns list of daemons.
+
+        :rtype: list'
       parameters:
       - allowEmptyValue: true
         in: query
@@ -7978,7 +8046,7 @@ paths:
       - FeatureTogglesEndpoint
   /api/feedback:
     get:
-      description: "\n        List all issues details.\n        "
+      description: List all issues details.
       parameters: []
       responses:
         '200':
@@ -8004,10 +8072,17 @@ paths:
       tags:
       - Report
     post:
-      description: "\n        Create an issue.\n        :param project: The affected\
-        \ ceph component.\n        :param tracker: The tracker type.\n        :param\
-        \ subject: The title of the issue.\n        :param description: The description\
-        \ of the issue.\n        :param api_key: Ceph tracker api key.\n        "
+      description: 'Create an issue.
+
+        :param project: The affected ceph component.
+
+        :param tracker: The tracker type.
+
+        :param subject: The title of the issue.
+
+        :param description: The description of the issue.
+
+        :param api_key: Ceph tracker api key.'
       parameters: []
       requestBody:
         content:
@@ -8064,7 +8139,7 @@ paths:
       - Report
   /api/feedback/api_key:
     delete:
-      description: "\n        Deletes Ceph tracker API key.\n        "
+      description: Deletes Ceph tracker API key.
       parameters: []
       responses:
         '202':
@@ -8099,7 +8174,7 @@ paths:
       tags:
       - Report
     get:
-      description: "\n        Returns Ceph tracker API key.\n        "
+      description: Returns Ceph tracker API key.
       parameters: []
       responses:
         '200':
@@ -8125,8 +8200,9 @@ paths:
       tags:
       - Report
     post:
-      description: "\n        Sets Ceph tracker API key.\n        :param api_key:\
-        \ The Ceph tracker API key.\n        "
+      description: 'Sets Ceph tracker API key.
+
+        :param api_key: The Ceph tracker API key.'
       parameters: []
       requestBody:
         content:
@@ -8276,10 +8352,12 @@ paths:
       - Grafana
   /api/hardware/summary:
     get:
-      description: "\n        Get the health status of as many hardware categories,\
-        \ or all of them if none is given\n        :param categories: The hardware\
-        \ type, all of them by default\n        :param hostname: The host to retrieve\
-        \ from, all of them by default\n        "
+      description: 'Get the health status of as many hardware categories, or all of
+        them if none is given
+
+        :param categories: The hardware type, all of them by default
+
+        :param hostname: The host to retrieve from, all of them by default'
       parameters:
       - allowEmptyValue: true
         in: query
@@ -9749,8 +9827,9 @@ paths:
       tags:
       - Host
     get:
-      description: "\n        Get the specified host.\n        :raises: cherrypy.HTTPError:\
-        \ If host not found.\n        "
+      description: 'Get the specified host.
+
+        :raises: cherrypy.HTTPError: If host not found.'
       parameters:
       - in: path
         name: hostname
@@ -9781,12 +9860,21 @@ paths:
       tags:
       - Host
     put:
-      description: "\n        Update the specified host.\n        Note, this is only\
-        \ supported when Ceph Orchestrator is enabled.\n        :param hostname: The\
-        \ name of the host to be processed.\n        :param update_labels: To update\
-        \ the labels.\n        :param labels: List of labels.\n        :param maintenance:\
-        \ Enter/Exit maintenance mode.\n        :param force: Force enter maintenance\
-        \ mode.\n        :param drain: Drain host\n        "
+      description: 'Update the specified host.
+
+        Note, this is only supported when Ceph Orchestrator is enabled.
+
+        :param hostname: The name of the host to be processed.
+
+        :param update_labels: To update the labels.
+
+        :param labels: List of labels.
+
+        :param maintenance: Enter/Exit maintenance mode.
+
+        :param force: Force enter maintenance mode.
+
+        :param drain: Drain host'
       parameters:
       - description: Hostname
         in: path
@@ -9919,11 +10007,15 @@ paths:
       - Host
   /api/host/{hostname}/identify_device:
     post:
-      description: "\n        Identify a device by switching on the device light for\
-        \ N seconds.\n        :param hostname: The hostname of the device to process.\n\
-        \        :param device: The device identifier to process, e.g. ``/dev/dm-0``\
-        \ or\n        ``ABC1234DEF567-1R1234_ABC8DE0Q``.\n        :param duration:\
-        \ The duration in seconds how long the LED should flash.\n        "
+      description: 'Identify a device by switching on the device light for N seconds.
+
+        :param hostname: The hostname of the device to process.
+
+        :param device: The device identifier to process, e.g. ``/dev/dm-0`` or
+
+        ``ABC1234DEF567-1R1234_ABC8DE0Q``.
+
+        :param duration: The duration in seconds how long the LED should flash.'
       parameters:
       - in: path
         name: hostname
@@ -11024,9 +11116,11 @@ paths:
       - Logs
   /api/mgr/module:
     get:
-      description: "\n        Get the list of managed modules.\n        :return: A\
-        \ list of objects with the fields 'enabled', 'name' and 'options'.\n     \
-        \   :rtype: list\n        "
+      description: 'Get the list of managed modules.
+
+        :return: A list of objects with the fields ''enabled'', ''name'' and ''options''.
+
+        :rtype: list'
       parameters: []
       responses:
         '200':
@@ -11201,10 +11295,15 @@ paths:
       - MgrModule
   /api/mgr/module/{module_name}:
     get:
-      description: "\n        Retrieve the values of the persistent configuration\
-        \ settings.\n        :param module_name: The name of the Ceph Mgr module.\n\
-        \        :type module_name: str\n        :return: The values of the module\
-        \ options.\n        :rtype: dict\n        "
+      description: 'Retrieve the values of the persistent configuration settings.
+
+        :param module_name: The name of the Ceph Mgr module.
+
+        :type module_name: str
+
+        :return: The values of the module options.
+
+        :rtype: dict'
       parameters:
       - in: path
         name: module_name
@@ -11235,10 +11334,15 @@ paths:
       tags:
       - MgrModule
     put:
-      description: "\n        Set the values of the persistent configuration settings.\n\
-        \        :param module_name: The name of the Ceph Mgr module.\n        :type\
-        \ module_name: str\n        :param config: The values of the module options\
-        \ to be stored.\n        :type config: dict\n        "
+      description: 'Set the values of the persistent configuration settings.
+
+        :param module_name: The name of the Ceph Mgr module.
+
+        :type module_name: str
+
+        :param config: The values of the module options to be stored.
+
+        :type config: dict'
       parameters:
       - in: path
         name: module_name
@@ -11289,9 +11393,11 @@ paths:
       - MgrModule
   /api/mgr/module/{module_name}/disable:
     post:
-      description: "\n        Disable the specified Ceph Mgr module.\n        :param\
-        \ module_name: The name of the Ceph Mgr module.\n        :type module_name:\
-        \ str\n        "
+      description: 'Disable the specified Ceph Mgr module.
+
+        :param module_name: The name of the Ceph Mgr module.
+
+        :type module_name: str'
       parameters:
       - in: path
         name: module_name
@@ -11332,10 +11438,15 @@ paths:
       - MgrModule
   /api/mgr/module/{module_name}/enable:
     post:
-      description: "\n        Enable the specified Ceph Mgr module.\n        :param\
-        \ module_name: The name of the Ceph Mgr module.\n        :type module_name:\
-        \ str\n        :param force: Force enablement when not all mgr daemons support\
-        \ the module.\n        :type force: bool\n        "
+      description: 'Enable the specified Ceph Mgr module.
+
+        :param module_name: The name of the Ceph Mgr module.
+
+        :type module_name: str
+
+        :param force: Force enablement when not all mgr daemons support the module.
+
+        :type force: bool'
       parameters:
       - in: path
         name: module_name
@@ -11388,10 +11499,15 @@ paths:
       - MgrModule
   /api/mgr/module/{module_name}/options:
     get:
-      description: "\n        Get the module options of the specified Ceph Mgr module.\n\
-        \        :param module_name: The name of the Ceph Mgr module.\n        :type\
-        \ module_name: str\n        :return: The module options as list of dicts.\n\
-        \        :rtype: list\n        "
+      description: 'Get the module options of the specified Ceph Mgr module.
+
+        :param module_name: The name of the Ceph Mgr module.
+
+        :type module_name: str
+
+        :return: The module options as list of dicts.
+
+        :rtype: list'
       parameters:
       - in: path
         name: module_name
@@ -16713,10 +16829,12 @@ paths:
       tags:
       - OSD
     put:
-      description: "\n        The `recovery_deletes`, `sortbitwise` and `pglog_hardlimit`\
-        \ flags cannot be unset.\n        `purged_snapshots` cannot even be set. It\
-        \ is therefore required to at\n        least include those four flags for\
-        \ a successful operation.\n        "
+      description: 'The `recovery_deletes`, `sortbitwise` and `pglog_hardlimit` flags
+        cannot be unset.
+
+        `purged_snapshots` cannot even be set. It is therefore required to at
+
+        least include those four flags for a successful operation.'
       parameters: []
       requestBody:
         content:
@@ -16831,8 +16949,9 @@ paths:
       tags:
       - OSD
     put:
-      description: "\n        Updates flags (`noout`, `noin`, `nodown`, `noup`) for\
-        \ an individual\n        subset of OSDs.\n        "
+      description: 'Updates flags (`noout`, `noin`, `nodown`, `noup`) for an individual
+
+        subset of OSDs.'
       parameters: []
       requestBody:
         content:
@@ -16937,7 +17056,7 @@ paths:
       - OSD
   /api/osd/safe_to_delete:
     get:
-      description: "\n        :type ids: int|[int]\n        "
+      description: ':type ids: int|[int]'
       parameters:
       - in: query
         name: svc_ids
@@ -16969,7 +17088,7 @@ paths:
       - OSD
   /api/osd/safe_to_destroy:
     get:
-      description: "\n        :type ids: int|[int]\n        "
+      description: ':type ids: int|[int]'
       parameters:
       - description: OSD Service Identifier
         in: query
@@ -17133,8 +17252,10 @@ paths:
       tags:
       - OSD
     get:
-      description: "\n        Returns collected data about an OSD.\n\n        :return:\
-        \ Returns the requested data.\n        "
+      description: 'Returns collected data about an OSD.
+
+
+        :return: Returns the requested data.'
       parameters:
       - in: path
         name: svc_id
@@ -17215,10 +17336,15 @@ paths:
       - OSD
   /api/osd/{svc_id}/destroy:
     post:
-      description: "\n        Mark osd as being destroyed. Keeps the ID intact (allowing\
-        \ reuse), but\n        removes cephx keys, config-key data and lockbox keys,\
-        \ rendering data\n        permanently unreadable.\n\n        The osd must\
-        \ be marked down before being destroyed.\n        "
+      description: 'Mark osd as being destroyed. Keeps the ID intact (allowing reuse),
+        but
+
+        removes cephx keys, config-key data and lockbox keys, rendering data
+
+        permanently unreadable.
+
+
+        The osd must be marked down before being destroyed.'
       parameters:
       - in: path
         name: svc_id
@@ -17290,7 +17416,7 @@ paths:
       - OSD
   /api/osd/{svc_id}/histogram:
     get:
-      description: "\n        :return: Returns the histogram data.\n        "
+      description: ':return: Returns the histogram data.'
       parameters:
       - in: path
         name: svc_id
@@ -17322,8 +17448,7 @@ paths:
       - OSD
   /api/osd/{svc_id}/mark:
     put:
-      description: "\n        Note: osd must be marked `down` before marking lost.\n\
-        \        "
+      description: 'Note: osd must be marked `down` before marking lost.'
       parameters:
       - description: SVC ID
         in: path
@@ -17376,8 +17501,7 @@ paths:
       - OSD
   /api/osd/{svc_id}/purge:
     post:
-      description: "\n        Note: osd must be marked `down` before removal.\n  \
-        \      "
+      description: 'Note: osd must be marked `down` before removal.'
       parameters:
       - in: path
         name: svc_id
@@ -17418,14 +17542,12 @@ paths:
       - OSD
   /api/osd/{svc_id}/reweight:
     post:
-      description: "\n        Reweights the OSD temporarily.\n\n        Note that\
-        \ \u2018ceph osd reweight\u2019 is not a persistent setting. When an OSD\n\
-        \        gets marked out, the osd weight will be set to 0. When it gets marked\n\
-        \        in again, the weight will be changed to 1.\n\n        Because of\
-        \ this \u2018ceph osd reweight\u2019 is a temporary solution. You should\n\
-        \        only use it to keep your cluster running while you\u2019re ordering\
-        \ more\n        hardware.\n\n        - Craig Lewis (http://lists.ceph.com/pipermail/ceph-users-ceph.com/2014-June/040967.html)\n\
-        \        "
+      description: "Reweights the OSD temporarily.\n\nNote that \u2018ceph osd reweight\u2019\
+        \ is not a persistent setting. When an OSD\ngets marked out, the osd weight\
+        \ will be set to 0. When it gets marked\nin again, the weight will be changed\
+        \ to 1.\n\nBecause of this \u2018ceph osd reweight\u2019 is a temporary solution.\
+        \ You should\nonly use it to keep your cluster running while you\u2019re ordering\
+        \ more\nhardware.\n\n- Craig Lewis (http://lists.ceph.com/pipermail/ceph-users-ceph.com/2014-June/040967.html)"
       parameters:
       - in: path
         name: svc_id
@@ -18974,10 +19096,13 @@ paths:
       - Prometheus
   /api/rgw/accounts:
     get:
-      description: "\n        List all account ids or all detailed account info based\
-        \ on the 'detailed' query parameter.\n\n        - If detailed=True, returns\
-        \ detailed account info.\n        - If detailed=False, returns only account\
-        \ ids.\n        "
+      description: 'List all account ids or all detailed account info based on the
+        ''detailed'' query parameter.
+
+
+        - If detailed=True, returns detailed account info.
+
+        - If detailed=False, returns only account ids.'
       parameters:
       - allowEmptyValue: true
         in: query
@@ -19013,9 +19138,14 @@ paths:
       tags:
       - RgwUserAccounts
     post:
-      description: "\n        Create an account\n\n        :param account_name: Account\
-        \ name\n        :return: Returns account resource.\n        :rtype: Dict[str,\
-        \ Any]\n        "
+      description: 'Create an account
+
+
+        :param account_name: Account name
+
+        :return: Returns account resource.
+
+        :rtype: Dict[str, Any]'
       parameters: []
       requestBody:
         content:
@@ -19087,8 +19217,9 @@ paths:
       - RgwUserAccounts
   /api/rgw/accounts/exists:
     get:
-      description: "\n        Check if an account with the given name exists\n   \
-        \     Returns True if account exists, False otherwise\n        "
+      description: 'Check if an account with the given name exists
+
+        Returns True if account exists, False otherwise'
       parameters:
       - description: Account name
         in: query
@@ -19128,8 +19259,12 @@ paths:
       - RgwUserAccounts
   /api/rgw/accounts/{account_id}:
     delete:
-      description: "\n        Removes an account\n\n        :param account_id: account\
-        \ identifier\n        :return: None.\n        "
+      description: 'Removes an account
+
+
+        :param account_id: account identifier
+
+        :return: None.'
       parameters:
       - description: Account id
         in: path
@@ -19177,7 +19312,7 @@ paths:
       tags:
       - RgwUserAccounts
     get:
-      description: "\n        Get an account by account id\n        "
+      description: Get an account by account id
       parameters:
       - description: Account id
         in: path
@@ -19216,9 +19351,14 @@ paths:
       tags:
       - RgwUserAccounts
     put:
-      description: "\n        Modifies an account\n\n        :param account_id: Account\
-        \ identifier\n        :return: Returns modified account resource.\n      \
-        \  :rtype: Dict[str, Any]\n        "
+      description: 'Modifies an account
+
+
+        :param account_id: Account identifier
+
+        :return: Returns modified account resource.
+
+        :rtype: Dict[str, Any]'
       parameters:
       - description: Account id
         in: path
@@ -19296,9 +19436,16 @@ paths:
       - RgwUserAccounts
   /api/rgw/accounts/{account_id}/quota:
     put:
-      description: "\n        Modifies quota\n\n        :param account_id: Account\
-        \ identifier\n        :param quota_type: 'account' or 'bucket'\n        :return:\
-        \ Returns modified quota.\n        :rtype: Dict[str, Any]\n        "
+      description: 'Modifies quota
+
+
+        :param account_id: Account identifier
+
+        :param quota_type: ''account'' or ''bucket''
+
+        :return: Returns modified quota.
+
+        :rtype: Dict[str, Any]'
       parameters:
       - description: Account id
         in: path
@@ -19363,10 +19510,18 @@ paths:
       - RgwUserAccounts
   /api/rgw/accounts/{account_id}/quota/status:
     put:
-      description: "\n        Enable/Disable quota\n\n        :param account_id: Account\
-        \ identifier\n        :param quota_type: 'account' or 'bucket'\n        :param\
-        \ quota_status: 'enable' or 'disable'\n        :return: Returns modified quota.\n\
-        \        :rtype: Dict[str, Any]\n        "
+      description: 'Enable/Disable quota
+
+
+        :param account_id: Account identifier
+
+        :param quota_type: ''account'' or ''bucket''
+
+        :param quota_status: ''enable'' or ''disable''
+
+        :return: Returns modified quota.
+
+        :rtype: Dict[str, Any]'
       parameters:
       - description: Account id
         in: path
@@ -22549,9 +22704,8 @@ paths:
       - RgwUser
   /api/rgw/user/{uid}/subuser/{subuser}:
     delete:
-      description: "\n        :param purge_keys: Set to False to do not purge the\
-        \ keys.\n                           Note, this only works for s3 subusers.\n\
-        \        "
+      description: ":param purge_keys: Set to False to do not purge the keys.\n  \
+        \                 Note, this only works for s3 subusers."
       parameters:
       - in: path
         name: uid
@@ -23915,9 +24069,11 @@ paths:
       tags:
       - Service
     post:
-      description: "\n        :param service_spec: The service specification as JSON.\n\
-        \        :param service_name: The service name, e.g. 'alertmanager'.\n   \
-        \     :return: None\n        "
+      description: ':param service_spec: The service specification as JSON.
+
+        :param service_name: The service name, e.g. ''alertmanager''.
+
+        :return: None'
       parameters: []
       requestBody:
         content:
@@ -23966,17 +24122,15 @@ paths:
       - Service
   /api/service/certificate:
     get:
-      description: "\n        List all certificates configured in the cluster.\n\n\
-        \        This endpoint returns a list of all certificates managed by certmgr,\n\
-        \        including both user-provided and cephadm-signed certificates.\n\n\
-        \        :param status: Filter by certificate status. Valid values: 'expired',\n\
-        \            'expiring', 'valid', 'invalid'\n        :param scope: Filter\
-        \ by certificate scope. Valid values: 'SERVICE',\n            'HOST', 'GLOBAL'\n\
-        \        :param service_type: Filter by service type. Supports wildcards\n\
-        \            (e.g., 'rgw*')\n        :param include_cephadm_signed: If True,\
-        \ include cephadm-signed certificates.\n            If False (default), only\
-        \ user-provided certificates are returned.\n        :return: List of certificate\
-        \ objects with their details\n        "
+      description: "List all certificates configured in the cluster.\n\nThis endpoint\
+        \ returns a list of all certificates managed by certmgr,\nincluding both user-provided\
+        \ and cephadm-signed certificates.\n\n:param status: Filter by certificate\
+        \ status. Valid values: 'expired',\n    'expiring', 'valid', 'invalid'\n:param\
+        \ scope: Filter by certificate scope. Valid values: 'SERVICE',\n    'HOST',\
+        \ 'GLOBAL'\n:param service_type: Filter by service type. Supports wildcards\n\
+        \    (e.g., 'rgw*')\n:param include_cephadm_signed: If True, include cephadm-signed\
+        \ certificates.\n    If False (default), only user-provided certificates are\
+        \ returned.\n:return: List of certificate objects with their details"
       parameters:
       - allowEmptyValue: true
         description: Filter by certificate status (e.g., "expired", "expiring", "valid",
@@ -24100,11 +24254,16 @@ paths:
       - Service
   /api/service/certificate/root-ca:
     get:
-      description: "\n        Get the cephadm root CA certificate.\n\n        This\
-        \ endpoint returns the root Certificate Authority (CA) certificate\n     \
-        \   used by cephadm to sign other certificates in the cluster.\n\n       \
-        \ :return: Dictionary with certificate field containing root CA certificate\
-        \ in PEM format\n        "
+      description: 'Get the cephadm root CA certificate.
+
+
+        This endpoint returns the root Certificate Authority (CA) certificate
+
+        used by cephadm to sign other certificates in the cluster.
+
+
+        :return: Dictionary with certificate field containing root CA certificate
+        in PEM format'
       parameters: []
       responses:
         '200':
@@ -24143,10 +24302,12 @@ paths:
       - Service
   /api/service/certificate/{service_name}:
     get:
-      description: "\n        Get detailed certificate information for a service.\n\
-        \n        :param service_name: The service name, e.g. 'rgw.myzone'.\n    \
-        \    :return: Detailed certificate information including full certificate\
-        \ details\n        "
+      description: 'Get detailed certificate information for a service.
+
+
+        :param service_name: The service name, e.g. ''rgw.myzone''.
+
+        :return: Detailed certificate information including full certificate details'
       parameters:
       - in: path
         name: service_name
@@ -24178,8 +24339,9 @@ paths:
       - Service
   /api/service/known_types:
     get:
-      description: "\n        Get a list of known service types, e.g. 'alertmanager',\n\
-        \        'node-exporter', 'osd' or 'rgw'.\n        "
+      description: 'Get a list of known service types, e.g. ''alertmanager'',
+
+        ''node-exporter'', ''osd'' or ''rgw''.'
       parameters: []
       responses:
         '200':
@@ -24206,8 +24368,9 @@ paths:
       - Service
   /api/service/{service_name}:
     delete:
-      description: "\n        :param service_name: The service name, e.g. 'mds' or\
-        \ 'crash.foo'.\n        :return: None\n        "
+      description: ':param service_name: The service name, e.g. ''mds'' or ''crash.foo''.
+
+        :return: None'
       parameters:
       - in: path
         name: service_name
@@ -24277,9 +24440,11 @@ paths:
       tags:
       - Service
     put:
-      description: "\n        :param service_spec: The service specification as JSON.\n\
-        \        :param service_name: The service name, e.g. 'alertmanager'.\n   \
-        \     :return: None\n        "
+      description: ':param service_spec: The service specification as JSON.
+
+        :param service_name: The service name, e.g. ''alertmanager''.
+
+        :return: None'
       parameters:
       - in: path
         name: service_name
@@ -24361,10 +24526,17 @@ paths:
       - Service
   /api/settings:
     get:
-      description: "\n        Get the list of available options.\n        :param names:\
-        \ A comma separated list of option names that should\n        be processed.\
-        \ Defaults to ``None``.\n        :type names: None|str\n        :return: A\
-        \ list of available options.\n        :rtype: list[dict]\n        "
+      description: 'Get the list of available options.
+
+        :param names: A comma separated list of option names that should
+
+        be processed. Defaults to ``None``.
+
+        :type names: None|str
+
+        :return: A list of available options.
+
+        :rtype: list[dict]'
       parameters:
       - allowEmptyValue: true
         description: Name of Settings
@@ -24507,10 +24679,15 @@ paths:
       tags:
       - Settings
     get:
-      description: "\n        Get the given option.\n        :param name: The name\
-        \ of the option.\n        :return: Returns a dict containing the name, type,\n\
-        \        default value and current value of the given option.\n        :rtype:\
-        \ dict\n        "
+      description: 'Get the given option.
+
+        :param name: The name of the option.
+
+        :return: Returns a dict containing the name, type,
+
+        default value and current value of the given option.
+
+        :rtype: dict'
       parameters:
       - in: path
         name: name
@@ -24591,7 +24768,7 @@ paths:
       - Settings
   /api/smb/cluster:
     get:
-      description: "\n        List smb clusters\n        "
+      description: List smb clusters
       parameters: []
       responses:
         '200':
@@ -24798,9 +24975,14 @@ paths:
       tags:
       - SMB
     post:
-      description: "\n        Create an smb cluster\n\n        :param cluster_resource:\
-        \ Dict cluster data\n        :return: Returns cluster resource.\n        :rtype:\
-        \ Dict[str, Any]\n        "
+      description: 'Create an smb cluster
+
+
+        :param cluster_resource: Dict cluster data
+
+        :return: Returns cluster resource.
+
+        :rtype: Dict[str, Any]'
       parameters: []
       requestBody:
         content:
@@ -25077,8 +25259,12 @@ paths:
       - SMB
   /api/smb/cluster/{cluster_id}:
     delete:
-      description: "\n        Remove an smb cluster\n\n        :param cluster_id:\
-        \ Cluster identifier\n        :return: None.\n        "
+      description: 'Remove an smb cluster
+
+
+        :param cluster_id: Cluster identifier
+
+        :return: None.'
       parameters:
       - description: Unique identifier for the cluster
         in: path
@@ -25122,7 +25308,7 @@ paths:
       tags:
       - SMB
     get:
-      description: "\n        Get an smb cluster by cluster id\n        "
+      description: Get an smb cluster by cluster id
       parameters:
       - description: Unique identifier for the cluster
         in: path
@@ -25332,8 +25518,12 @@ paths:
       - SMB
   /api/smb/joinauth:
     get:
-      description: "\n        List all smb join auth resources\n\n        :return:\
-        \ Returns list of join auth.\n        :rtype: List[Dict]\n        "
+      description: 'List all smb join auth resources
+
+
+        :return: Returns list of join auth.
+
+        :rtype: List[Dict]'
       parameters: []
       responses:
         '200':
@@ -25427,8 +25617,12 @@ paths:
       tags:
       - SMB
     post:
-      description: "\n        Create smb join auth resource\n\n        :return: Returns\
-        \ join auth resource.\n        :rtype: Dict\n        "
+      description: 'Create smb join auth resource
+
+
+        :return: Returns join auth resource.
+
+        :rtype: Dict'
       parameters: []
       requestBody:
         content:
@@ -25587,8 +25781,12 @@ paths:
       - SMB
   /api/smb/joinauth/{auth_id}:
     delete:
-      description: "\n        Delete smb join auth resource\n\n        :param auth_id:\
-        \ Join Auth identifier\n        :return: None.\n        "
+      description: 'Delete smb join auth resource
+
+
+        :param auth_id: Join Auth identifier
+
+        :return: None.'
       parameters:
       - description: auth_id
         in: path
@@ -25632,8 +25830,12 @@ paths:
       tags:
       - SMB
     get:
-      description: "\n        Get Join auth resource\n\n        :return: Returns join\
-        \ auth.\n        :rtype: Dict\n        "
+      description: 'Get Join auth resource
+
+
+        :return: Returns join auth.
+
+        :rtype: Dict'
       parameters:
       - in: path
         name: auth_id
@@ -25729,9 +25931,14 @@ paths:
       - SMB
   /api/smb/share:
     get:
-      description: "\n        List all smb shares or all shares for a given cluster\n\
-        \n        :param cluster_id: Dict containing cluster information\n       \
-        \ :return: Returns list of shares.\n        :rtype: List[Dict]\n        "
+      description: 'List all smb shares or all shares for a given cluster
+
+
+        :param cluster_id: Dict containing cluster information
+
+        :return: Returns list of shares.
+
+        :rtype: List[Dict]'
       parameters:
       - default: ''
         description: Unique identifier for the cluster
@@ -25907,9 +26114,14 @@ paths:
       tags:
       - SMB
     post:
-      description: "\n        Create an smb share\n\n        :param share_resource:\
-        \ Dict share data\n        :return: Returns share resource.\n        :rtype:\
-        \ Dict[str, Any]\n        "
+      description: 'Create an smb share
+
+
+        :param share_resource: Dict share data
+
+        :return: Returns share resource.
+
+        :rtype: Dict[str, Any]'
       parameters: []
       requestBody:
         content:
@@ -26151,9 +26363,9 @@ paths:
       - SMB
   /api/smb/share/qos:
     put:
-      description: "\n        Update QoS rate limit parameters for an SMB share.\n\
-        \        Omitted parameters are left unchanged. Use 0 to disable a limit.\n\
-        \        "
+      description: 'Update QoS rate limit parameters for an SMB share.
+
+        Omitted parameters are left unchanged. Use 0 to disable a limit.'
       parameters: []
       requestBody:
         content:
@@ -26223,9 +26435,14 @@ paths:
       - SMB
   /api/smb/share/{cluster_id}/{share_id}:
     delete:
-      description: "\n        Remove an smb share from a given cluster\n\n       \
-        \ :param cluster_id: Cluster identifier\n        :param share_id: Share identifier\n\
-        \        :return: None.\n        "
+      description: 'Remove an smb share from a given cluster
+
+
+        :param cluster_id: Cluster identifier
+
+        :param share_id: Share identifier
+
+        :return: None.'
       parameters:
       - description: Unique identifier for the cluster
         in: path
@@ -26275,7 +26492,7 @@ paths:
       tags:
       - SMB
     get:
-      description: "\n        Get an smb share by cluster and share id\n        "
+      description: Get an smb share by cluster and share id
       parameters:
       - description: Unique identifier for the cluster
         in: path
@@ -26458,8 +26675,12 @@ paths:
       - SMB
   /api/smb/usersgroups:
     get:
-      description: "\n        List all smb usersgroups resources\n\n        :return:\
-        \ Returns list of usersgroups\n        :rtype: List[Dict]\n        "
+      description: 'List all smb usersgroups resources
+
+
+        :return: Returns list of usersgroups
+
+        :rtype: List[Dict]'
       parameters: []
       responses:
         '200':
@@ -26592,8 +26813,12 @@ paths:
       tags:
       - SMB
     post:
-      description: "\n        Create smb usersgroups resource\n\n        :return:\
-        \ Returns usersgroups resource.\n        :rtype: Dict\n        "
+      description: 'Create smb usersgroups resource
+
+
+        :return: Returns usersgroups resource.
+
+        :rtype: Dict'
       parameters: []
       requestBody:
         content:
@@ -26807,8 +27032,12 @@ paths:
       - SMB
   /api/smb/usersgroups/{users_groups_id}:
     delete:
-      description: "\n        Delete smb usersgroups resource\n\n        :param users_group_id:\
-        \ Users  identifier\n        :return: None.\n        "
+      description: 'Delete smb usersgroups resource
+
+
+        :param users_group_id: Users  identifier
+
+        :return: None.'
       parameters:
       - description: users_groups_id
         in: path
@@ -26852,8 +27081,12 @@ paths:
       tags:
       - SMB
     get:
-      description: "\n        Get Users and groups resource\n\n        :return: Returns\
-        \ join auth.\n        :rtype: Dict\n        "
+      description: 'Get Users and groups resource
+
+
+        :return: Returns join auth.
+
+        :rtype: Dict'
       parameters:
       - in: path
         name: users_groups_id
@@ -27312,12 +27545,21 @@ paths:
       - Task
   /api/telemetry:
     put:
-      description: "\n        Enables or disables sending data collected by the Telemetry\n\
-        \        module.\n        :param enable: Enable or disable sending data\n\
-        \        :type enable: bool\n        :param license_name: License string e.g.\
-        \ 'sharing-1-0' to\n        make sure the user is aware of and accepts the\
-        \ license\n        for sharing Telemetry data.\n        :type license_name:\
-        \ string\n        "
+      description: 'Enables or disables sending data collected by the Telemetry
+
+        module.
+
+        :param enable: Enable or disable sending data
+
+        :type enable: bool
+
+        :param license_name: License string e.g. ''sharing-1-0'' to
+
+        make sure the user is aware of and accepts the license
+
+        for sharing Telemetry data.
+
+        :type license_name: string'
       parameters: []
       requestBody:
         content:
@@ -27364,8 +27606,11 @@ paths:
       - Telemetry
   /api/telemetry/report:
     get:
-      description: "\n        Get Ceph and device report data\n        :return: Ceph\
-        \ and device report data\n        :rtype: dict\n        "
+      description: 'Get Ceph and device report data
+
+        :return: Ceph and device report data
+
+        :rtype: dict'
       parameters: []
       responses:
         '200':
@@ -28815,12 +29060,19 @@ paths:
       - User
   /api/user/validate_password:
     post:
-      description: "\n        Check if the password meets the password policy.\n \
-        \       :param password: The password to validate.\n        :param username:\
-        \ The name of the user (optional).\n        :param old_password: The old password\
-        \ (optional).\n        :return: An object with properties valid, credits and\
-        \ valuation.\n        'credits' contains the password complexity credits and\n\
-        \        'valuation' the textual summary of the validation.\n        "
+      description: 'Check if the password meets the password policy.
+
+        :param password: The password to validate.
+
+        :param username: The name of the user (optional).
+
+        :param old_password: The old password (optional).
+
+        :return: An object with properties valid, credits and valuation.
+
+        ''credits'' contains the password complexity credits and
+
+        ''valuation'' the textual summary of the validation.'
       parameters: []
       requestBody:
         content:
