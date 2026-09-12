@@ -25,7 +25,7 @@
 
 class MOSDRepScrub final : public MOSDFastDispatchOp {
 public:
-  static constexpr int HEAD_VERSION = 9;
+  static constexpr int HEAD_VERSION = 10;
   static constexpr int COMPAT_VERSION = 6;
 
   spg_t pgid;             // PG to scrub
@@ -108,6 +108,7 @@ public:
     encode(allow_preemption, payload);
     encode(priority, payload);
     encode(high_priority, payload);
+    encode_otel_trace(payload, features);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -136,6 +137,9 @@ public:
     if (header.version >= 9) {
       decode(priority, p);
       decode(high_priority, p);
+    }
+    if (header.version >= 10) {
+      decode_otel_trace(p);
     }
   }
 };
