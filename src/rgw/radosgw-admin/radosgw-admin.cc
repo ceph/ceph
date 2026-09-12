@@ -595,6 +595,7 @@ void usage()
   cout << "                                 use together with --marker to paginate through versioned buckets\n";
   cout << "                                 example: --marker=obj1 --object-version=abc123def456\n";
   cout << "   --show-restore-stats          if the flag is in present it will show restores stats in the bucket stats command\n";
+  cout << "   --show-storage-classes        show per-storage-class stats; scans entire bucket index (O(objects))\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -4078,6 +4079,7 @@ int main(int argc, const char **argv)
   std::optional<std::string> rgw_obj_fs; // radoslist field separator
   std::optional<std::string> restore_status_filter;
   int show_restore_stats = false;
+  int show_storage_classes = false;
 
   // global CORS settings
   std::optional<std::string> gcors_allow_origins;
@@ -4718,6 +4720,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--restore-status", (char*)NULL)) {
       restore_status_filter = val;
     } else if (ceph_argparse_binary_flag(args, i, &show_restore_stats, NULL, "--show-restore-stats", (char*)NULL)){
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &show_storage_classes, NULL, "--show-storage-classes", (char*)NULL)){
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--allow-origin", (char*)NULL)) {
       gcors_allow_origins = val;
@@ -8235,6 +8239,7 @@ int main(int argc, const char **argv)
     else
       bucket_op.max_entries = 0; /* for backward compatibility */
     bucket_op.set_restore_stats(bool(show_restore_stats));
+    bucket_op.set_show_storage_classes(bool(show_storage_classes));
 
     int r = RGWBucketAdminOp::info(driver, *site, bucket_op, stream_flusher, null_yield, dpp());
     if (r < 0) {

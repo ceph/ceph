@@ -5,6 +5,7 @@
 #include "common/JSONFormatter.h"
 #include "common/errno.h"
 #include "include/function2.hpp"
+#include <limits>
 #include "rgw_acl_s3.h"
 #include "rgw_tag_s3.h"
 
@@ -357,6 +358,19 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
 }
 
 #ifdef WITH_RADOSGW_RADOS
+static void dump_storage_class_usage(
+    const std::map<std::string, RGWStorageClassStats>& sc_stats,
+    Formatter* formatter)
+{
+  formatter->open_object_section("rgw.storage_classes");
+  for (const auto& [name, s] : sc_stats) {
+    formatter->open_object_section(name);
+    s.dump(formatter);
+    formatter->close_section();
+  }
+  formatter->close_section();
+}
+
 static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats,
         map<RGWObjCategory, RGWStorageStats> calculated_stats,
         Formatter *formatter)
@@ -1637,9 +1651,128 @@ static int bucket_restore_stats(rgw::sal::Driver* driver,
   return 0;
 }
 
+#ifdef WITH_RADOSGW_RADOS
+// Scan the bucket index Plain namespace and aggregate sizes by storage class.
+// O(objects); only call when explicitly requested.
+//
+// Index entry semantics:
+// - Unversioned objects are Plain entries with flags == 0. A versioned key also
+//   has a Plain version-marker entry, which must not be counted.
+// - Each versioned object version is stored as an Instance entry. Existing
+//   Instance entries must be counted, including non-current versions.
+// - BIIndexType::OLH entries are version-pointer records with no data size.
+//
+// These inclusion rules intentionally mirror cls_rgw check_index() so the scan
+// accounts the same entries as the bucket index header. Only Main-category
+// entries are included: multipart metadata/parts are reported under different
+// bucket-stats categories and must not silently change the billable total.
+//
+// Resharding: uses the current index generation. Objects being migrated may be
+// temporarily undercounted. Consistent with read_stats() behavior.
+static int read_storage_class_stats(
+    const DoutPrefixProvider* dpp, optional_yield y,
+    rgw::sal::RadosStore* rados_store,
+    rgw::sal::Bucket* bucket,
+    std::map<std::string, RGWStorageClassStats>& sc_stats)
+{
+  RGWRados* store = rados_store->getRados();
+  const RGWBucketInfo& bucket_info = bucket->get_info();
+  const auto& index = bucket_info.get_current_index();
+  const uint32_t num_shards = std::max(1u, rgw::num_shards(index.layout.normal));
+
+  for (uint32_t shard = 0; shard < num_shards; ++shard) {
+    RGWRados::BucketShard bs(store);
+    int ret = bs.init(dpp, bucket_info, index, static_cast<int>(shard), y);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR: bs.init failed for shard=" << shard
+                         << " ret=" << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    std::string marker;
+    bool is_truncated = false;
+    do {
+      std::list<rgw_cls_bi_entry> entries;
+      // UINT32_MAX: cls_rgw caps the page size internally
+      ret = store->bi_list(bs, "", marker, std::numeric_limits<uint32_t>::max(),
+                           &entries, &is_truncated, false, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, -1) << "ERROR: bi_list() failed for shard=" << shard
+                           << " ret=" << cpp_strerror(-ret) << dendl;
+        return ret;
+      }
+      for (const auto& raw_entry : entries) {
+        marker = raw_entry.idx;
+        if (raw_entry.type != BIIndexType::Plain &&
+            raw_entry.type != BIIndexType::Instance) {
+          continue;
+        }
+        rgw_bucket_dir_entry dir_entry;
+        auto iiter = raw_entry.data.cbegin();
+        try {
+          decode(dir_entry, iiter);
+        } catch (const buffer::error& err) {
+          ldpp_dout(dpp, -1) << "ERROR: failed to decode bi entry idx="
+                             << raw_entry.idx << " in shard=" << shard
+                             << ": " << err.what() << dendl;
+          return -EIO;
+        }
+        const bool accounted_entry = dir_entry.exists &&
+            (raw_entry.type == BIIndexType::Instance || dir_entry.flags == 0);
+        if (!accounted_entry ||
+            dir_entry.meta.category != RGWObjCategory::Main) {
+          continue;
+        }
+        const std::string& sc =
+            rgw_placement_rule::get_canonical_storage_class(dir_entry.meta.storage_class);
+        RGWStorageClassStats& s = sc_stats[sc];
+        s.size += dir_entry.meta.accounted_size;
+        s.size_rounded += cls_rgw_get_rounded_size(dir_entry.meta.accounted_size);
+        s.size_utilized += dir_entry.meta.size;
+        s.num_objects++;
+      }
+    } while (is_truncated);
+  }
+  return 0;
+}
+
+static int reconcile_storage_class_stats(
+    const std::map<std::string, RGWStorageClassStats>& sc_stats,
+    const std::map<RGWObjCategory, RGWStorageStats>& stats,
+    const DoutPrefixProvider* dpp, const std::string& bucket_name)
+{
+  RGWStorageClassStats total;
+  for (const auto& entry : sc_stats) {
+    total += entry.second;
+  }
+
+  const auto iter = stats.find(RGWObjCategory::Main);
+  const RGWStorageStats empty;
+  const auto& expected = iter == stats.end() ? empty : iter->second;
+  if (total.size != expected.size ||
+      total.size_rounded != expected.size_rounded ||
+      total.size_utilized != expected.size_utilized ||
+      total.num_objects != expected.num_objects) {
+    ldpp_dout(dpp, -1)
+      << "ERROR: storage class stats reconciliation failed for bucket="
+      << bucket_name << " (class size=" << total.size
+      << ", bucket size=" << expected.size
+      << "; class size_actual=" << total.size_rounded
+      << ", bucket size_actual=" << expected.size_rounded
+      << "; class size_utilized=" << total.size_utilized
+      << ", bucket size_utilized=" << expected.size_utilized
+      << "; class objects=" << total.num_objects
+      << ", bucket objects=" << expected.num_objects << ")" << dendl;
+    return -EUCLEAN;
+  }
+  return 0;
+}
+#endif // WITH_RADOSGW_RADOS
+
 static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
                         const std::string& tenant_name, const std::string& bucket_name,
-                        bool dump_restore_stats, Formatter* formatter,
+                        bool dump_restore_stats, bool show_storage_classes,
+                        Formatter* formatter,
                         const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -1667,6 +1800,29 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
     ret = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
     if (ret < 0) {
       cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
+      return ret;
+    }
+  }
+
+  std::map<std::string, RGWStorageClassStats> sc_stats;
+  if (show_storage_classes) {
+    if (!has_index) {
+      return -EOPNOTSUPP;
+    }
+    auto* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!rados_store) {
+      ldpp_dout(dpp, -1) << "ERROR: storage class stats require the RADOS driver"
+                         << " for bucket=" << bucket->get_name() << dendl;
+      return -EOPNOTSUPP;
+    }
+    ret = read_storage_class_stats(dpp, y, rados_store, bucket.get(), sc_stats);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR: storage class stats scan failed for bucket="
+                         << bucket->get_name() << " ret=" << ret << dendl;
+      return ret;
+    }
+    ret = reconcile_storage_class_stats(sc_stats, stats, dpp, bucket->get_name());
+    if (ret < 0) {
       return ret;
     }
   }
@@ -1702,6 +1858,9 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
     formatter->dump_string("master_ver", master_ver);
     formatter->dump_string("max_marker", max_marker);
     dump_bucket_usage(stats, formatter);
+    if (show_storage_classes) {
+      dump_storage_class_usage(sc_stats, formatter);
+    }
   }
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
@@ -1903,7 +2062,7 @@ static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
 
     for (const auto& ent : listing.buckets) {
       if (show_stats) {
-        bucket_stats(driver, site, tenant, ent.bucket.name, false, formatter, dpp, y);
+        bucket_stats(driver, site, tenant, ent.bucket.name, false, false, formatter, dpp, y);
       } else {
         formatter->dump_string("bucket", ent.bucket.name);
       }
@@ -1959,7 +2118,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
   const bool show_stats = op_state.will_fetch_stats();
   const rgw_user& user_id = op_state.get_user_id();
   if (!bucket_name.empty()) {
-    ret = bucket_stats(driver, site, user_id.tenant, bucket_name, op_state.restore_stats, formatter, dpp, y);
+    ret = bucket_stats(driver, site, user_id.tenant, bucket_name, op_state.restore_stats, op_state.show_storage_classes, formatter, dpp, y);
     if (ret < 0) {
       return ret;
     }
@@ -2023,7 +2182,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       for (const auto& bucket_name : buckets) {
         if (show_stats) {
           bucket_stats(driver, site, user_id.tenant, bucket_name,
-                       op_state.restore_stats, formatter, dpp, y);
+                       op_state.restore_stats, op_state.show_storage_classes, formatter, dpp, y);
 	} else {
           formatter->dump_string("bucket", bucket_name);
 	}
@@ -3891,4 +4050,3 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);
   }
 }
-

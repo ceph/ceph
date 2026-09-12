@@ -240,6 +240,7 @@ struct RGWBucketAdminOpState {
   bool dump_keys;
   bool hide_progress;
   bool restore_stats;
+  bool show_storage_classes{false};
   int max_aio = 0;
   ceph::timespan min_age = std::chrono::hours::zero();
 
@@ -250,6 +251,7 @@ struct RGWBucketAdminOpState {
 
   void set_fetch_stats(bool value) { stat_buckets = value; }
   void set_restore_stats(bool value) { restore_stats = value; }
+  void set_show_storage_classes(bool value) { show_storage_classes = value; }
   void set_check_objects(bool value) { check_objects = value; }
   void set_fix_index(bool value) { fix_index = value; }
   void set_delete_children(bool value) { delete_child_objects = value; }
