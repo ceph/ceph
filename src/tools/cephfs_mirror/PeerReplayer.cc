@@ -2768,8 +2768,8 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
       auto bd_num_blocks = blocks.num_blocks;
       auto bd_cblock = blocks.b;
       r = callback(blocks.num_blocks, blocks.b);
-      ceph_free_file_blockdiff_buffer(&blocks);
       if (r < 0) {
+        ceph_free_file_blockdiff_buffer(&blocks);
         derr << ": blockdiff callback returned error: r=" << r << dendl;
         break;
       }
@@ -2778,6 +2778,7 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
 	    --bd_num_blocks;
 	    bd_cblock++;
       }
+      ceph_free_file_blockdiff_buffer(&blocks);
     }
 
     if (rr == 0) {
