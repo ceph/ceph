@@ -4,7 +4,7 @@
 #pragma once
 
 #include "acconfig.h"
-#include "include/encoding.h"
+#include "include/buffer.h"
 
 #ifdef HAVE_JAEGER
 #include "opentelemetry/trace/provider.h"
@@ -52,41 +52,8 @@ class Tracer {
 
 };
 
-inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
-  ENCODE_START(1, 1, bl);
-  using namespace opentelemetry;
-  using namespace trace;
-  auto is_valid = span_ctx.IsValid();
-  encode(is_valid, bl);
-  if (is_valid) {
-    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.trace_id().Id().data()), TraceIdkSize), bl);
-    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.span_id().Id().data()), SpanIdkSize), bl);
-    encode(span_ctx.trace_flags().flags(), bl);
-  }
-  ENCODE_FINISH(bl);
-}
-
-inline void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
-  using namespace opentelemetry;
-  using namespace trace;
-  DECODE_START(1, bl);
-  bool is_valid;
-  decode(is_valid, bl);
-  if (is_valid) {
-    std::array<uint8_t, TraceIdkSize> trace_id;
-    std::array<uint8_t, SpanIdkSize> span_id;
-    uint8_t flags;
-    decode(trace_id, bl);
-    decode(span_id, bl);
-    decode(flags, bl);
-    span_ctx = SpanContext(
-      TraceId(nostd::span<uint8_t, TraceIdkSize>(trace_id)),
-      SpanId(nostd::span<uint8_t, SpanIdkSize>(span_id)),
-      TraceFlags(flags),
-      true);
-  }
-  DECODE_FINISH(bl);
-}
+void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0);
+void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl);
 
 } // namespace tracing
 
@@ -152,19 +119,8 @@ struct Tracer {
   jspan_ptr add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
 };
 
-inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
-  ENCODE_START(1, 1, bl);
-  // jaeger is missing, set "is_valid" to false.
-  bool is_valid = false;
-  encode(is_valid, bl);
-  ENCODE_FINISH(bl);
-}
-
-inline void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
-  DECODE_START(254, bl);
-  // jaeger is missing, consume the buffer but do not decode it.
-  DECODE_FINISH(bl);
-}
+void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0);
+void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl);
 
 } // namespace tracing
 

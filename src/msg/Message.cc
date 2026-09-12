@@ -11,6 +11,7 @@
 #include <iostream>
 
 #include "include/types.h"
+#include "include/msgr_encoder.h"
 
 #include "global/global_context.h"
 
