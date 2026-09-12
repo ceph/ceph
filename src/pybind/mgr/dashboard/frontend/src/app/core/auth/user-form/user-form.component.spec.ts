@@ -1,6 +1,6 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { Component } from '@angular/core';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -79,6 +79,29 @@ describe('UserFormComponent', () => {
     expect(component).toBeTruthy();
     expect(form).toBeTruthy();
   });
+
+  it('should clear roles search text after a role is selected', fakeAsync(() => {
+    const input = { value: 'sm' };
+    const onSearch = jasmine.createSpy('onSearch');
+    const closeDropdown = jasmine.createSpy('closeDropdown');
+    component.rolesComboBox = {
+      input: { nativeElement: input },
+      showClearButton: true,
+      // Carbon does not copy typed text into selectedValue while searching.
+      selectedValue: '',
+      onSearch,
+      closeDropdown
+    } as any;
+
+    component.onRolesSelected();
+    tick();
+
+    expect(input.value).toBe('');
+    expect(component.rolesComboBox.selectedValue).toBe('');
+    expect(component.rolesComboBox.showClearButton).toBeFalsy();
+    expect(onSearch).toHaveBeenCalledWith('', false);
+    expect(closeDropdown).toHaveBeenCalled();
+  }));
 
   describe('create mode', () => {
     beforeEach(() => {
