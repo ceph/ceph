@@ -188,7 +188,8 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
                                         uint64_t trunc_size,
                                         __u32 trunc_seq, ceph_tid_t journal_tid,
                                         const ZTracer::Trace &parent_trace,
-                                        Context *oncommit)
+                                        Context *oncommit,
+                                        uint64_t change_attr)
 {
   ZTracer::Trace trace;
   if (parent_trace.valid()) {
