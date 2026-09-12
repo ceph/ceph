@@ -244,7 +244,8 @@ RGW_MGR_ROLE = Role(
     'rgw-manager', 'allows full permissions for the rgw scope', {
         Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
-        Scope.PROMETHEUS: [_P.READ]
+        Scope.PROMETHEUS: [_P.READ],
+        Scope.OSD: [_P.READ]
     })
 
 
@@ -291,7 +292,8 @@ GANESHA_MGR_ROLE = Role(
         Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
         Scope.SMB: [_P.READ],
-        Scope.PROMETHEUS: [_P.READ]
+        Scope.PROMETHEUS: [_P.READ],
+        Scope.OSD: [_P.READ]
     })
 
 SMB_MGR_ROLE = Role(
