@@ -305,7 +305,7 @@ class RGWPSCreateTopicOp : public RGWOp {
       if (param.first == "Action" || param.first == "Name" || param.first == "PayloadHash") {
         continue;
       }
-      dest.push_endpoint_args.append(param.first+"="+param.second+"&");
+      dest.push_endpoint_args.append(param.first+"="+url_encode(param.second, true)+"&");
     }
 
     if (!dest.push_endpoint_args.empty()) {
@@ -810,7 +810,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       const auto replace_str = [&](const std::string& param,
                                    const std::string& val) {
         auto& push_endpoint_args = dest.push_endpoint_args;
-        const std::string replaced_str = param + "=" + val;
+        const std::string replaced_str = param + "=" + url_encode(val, true);
         const auto pos = push_endpoint_args.find(param);
         if (pos == std::string::npos) {
           dest.push_endpoint_args.append("&" + replaced_str);
@@ -822,7 +822,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
         push_endpoint_args.replace(pos, end_pos - pos, replaced_str);
       };
       static constexpr std::initializer_list<const char*> args = {
-          "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
+          "verify-ssl",    "use-ssl",         "ca-location", "ca-cert", "amqp-ack-level",
           "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
           "user-name",     "password",
           "ssl-certificate-location", "ssl-key-location", "ssl-key-password",
