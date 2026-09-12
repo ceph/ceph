@@ -27,7 +27,6 @@ set(mgr_modules
   crash
   # dashboard (optional)
   devicehealth
-  diskprediction_local
   # hello is an example for developers, not for user
   nvmeof
   influx
