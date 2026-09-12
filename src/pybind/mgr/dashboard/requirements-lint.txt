@@ -1,12 +1,17 @@
-pylint==2.6.0
-flake8==3.9.0
+pylint==2.6.0; python_version < "3.13"
+pylint>=3.3; python_version >= "3.13"
+flake8==3.9.0; python_version < "3.13"
+flake8>=7.1; python_version >= "3.13"
 flake8-colors==0.1.6
 #TODO: Fix docstring issues: https://tracker.ceph.com/issues/41224
 #flake8-docstrings
 #pep8-naming
 rstcheck==6.2.5
-autopep8==1.5.7
-pyfakefs==4.5.0
-isort==5.5.3
+autopep8==1.5.7; python_version < "3.13"
+autopep8>=2.3; python_version >= "3.13"
+pyfakefs==4.5.0; python_version < "3.13"
+pyfakefs>=5.9.3; python_version >= "3.13"
+isort==5.5.3; python_version < "3.13"
+isort>=5.13; python_version >= "3.13"
 jsonschema~=4.0
 PyJWT~=2.0
