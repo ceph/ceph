@@ -7,6 +7,9 @@ overrides:
         debug rgw: 20
         debug rgw dedup: 20
   rgw:
+    realm: dedup-realm
+    zonegroup: default
+    zone: default
     storage classes:
       LUKEWARM:
       FROZEN:
