@@ -128,10 +128,17 @@ public:
   seastar::future<read_main_t> read_main_preamble();
 
   /// may throw negotiation_failure as fault
+  ///
+  /// A sender may legally abort a frame after it has started to put it
+  /// on the wire (FRAME_LATE_STATUS_ABORTED in the epilogue) -- the kernel
+  /// client does this when it revokes an in-flight message (e.g. resending
+  /// an osd op after an osdmap change).  With allow_aborted=true such a
+  /// frame resolves to nullptr so the caller can drop it and keep reading;
+  /// otherwise it throws negotiation_failure (a connection fault).
   using read_payload_t = ceph::msgr::v2::segment_bls_t;
   // FIXME: read_payload_t cannot be no-throw move constructible
   template <bool may_cross_core = true>
-  seastar::future<read_payload_t*> read_frame_payload();
+  seastar::future<read_payload_t*> read_frame_payload(bool allow_aborted = false);
 
   template <class F>
   ceph::bufferlist get_buffer(F &tx_frame) {
