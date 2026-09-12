@@ -4,4 +4,6 @@
   paths = [
     '''src/cephadm/tests/''',
     '''src/pybind/mgr/cephadm/tests/''',
+    '''src/test/''',
+    '''src/pybind/mgr/dashboard/frontend/src/app/ceph/cephfs/cephfs-setup-mirroring/cephfs-setup-mirroring.component.spec.ts''',
   ]
