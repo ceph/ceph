@@ -689,11 +689,12 @@ void rgw::AppMain::init_kms_cache()
 
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
-  // stop the realm reloader
-  rgw_pauser.reset();
-  fe_pauser.reset();
+  // stop the realm reloader: reset the reloader first
+  // and only then the pausers.
   realm_watcher.reset();
   reloader.reset();
+  fe_pauser.reset();
+  rgw_pauser.reset();
 #ifdef WITH_RADOSGW_RADOS
   pusher.reset();
   if (env.driver->get_name() == "rados") {
