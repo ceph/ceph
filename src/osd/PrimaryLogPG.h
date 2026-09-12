@@ -720,6 +720,12 @@ public:
 
     utime_t mtime;
     SnapContext snapc;           // writer snap context
+    // Highest snap ID that is a *real* named pool snapshot (not a rollback ID).
+    // Rollback IDs advance snap_seq without being inserted into pg_pool_t::snaps,
+    // so snapc.seq may be a rollback ID.  real_snap_seq holds the highest key in
+    // pool.info.snaps (or 0 if none) and must be used for clone naming, the clone
+    // gate condition, and the SnapSet::seq update in make_writeable().
+    snapid_t real_snap_seq{0};
     eversion_t at_version;       // pg's current version pointer
     version_t user_at_version;   // pg's current user version pointer
 
@@ -1225,6 +1231,54 @@ protected:
   void execute_ctx(OpContext *ctx);
   void finish_ctx(OpContext *ctx, int log_op_type, int result=0);
   void reply_ctx(OpContext *ctx, int err);
+  struct pending_op_t {
+    enum Type { SNAP, ROLLBACK } type;
+    snapid_t id;      // snap ID or rollback ID
+    snapid_t source;  // for ROLLBACK: the source snapshot; for SNAP: CEPH_NOSNAP
+  };
+  std::vector<pending_op_t> build_pending_ops(
+    const pg_pool_t& pp,
+    snapid_t obj_seq,
+    snapid_t current_seq) const;
+
+  // execute_clone_plan() walks pending_ops and emits clone operations into t.
+  // Returns the hobject_t that now holds the logical head content after all
+  // rollbacks (may be a source clone, or soid itself if no rollback was last).
+  // ss is the current SnapSet, used to resolve a rollback source_snap to the
+  // clone that actually holds that content.
+  hobject_t execute_clone_plan(
+    const hobject_t& soid,
+    const std::vector<pending_op_t>& ops,
+    const SnapSet& ss,
+    PGTransaction* t);
+
+  // update_snapset_for_rollback() updates SnapSet metadata for newly created
+  // clones in ops, advances seq to snapc.seq, and writes SS_ATTR.
+  void update_snapset_for_rollback(
+    OpContext *ctx,
+    const std::vector<pending_op_t>& ops,
+    const pg_pool_t& pp,
+    PGTransaction* t);
+
+  // emit_rollback_log_entries() appends CLONE entries for each new clone and
+  // a MODIFY entry for the updated head into ctx->log.
+  void emit_rollback_log_entries(
+    OpContext *ctx,
+    const std::vector<pending_op_t>& ops);
+
+  // find_latest_rollback_source() returns the source_snap of the most recent
+  // pending rollback whose rollback_id > obj_seq, or CEPH_NOSNAP if none.
+  static snapid_t find_latest_rollback_source(
+    const OSDMapRef& osdmap,
+    int64_t pool_id,
+    snapid_t obj_seq);
+
+  // find_rollback_for_source() finds the pending rollback in rollback_trimq
+  // whose source_snap == source, if any.
+  static const rollback_snap_info_t* find_rollback_for_source(
+    const std::map<snapid_t, rollback_snap_info_t>& rb_trimq,
+    snapid_t source);
+
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
 
@@ -1588,6 +1642,14 @@ public:
 
   int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
 		  OpContextUPtr *ctxp);
+  void trim_object_snap(OpContext *ctx, const hobject_t &coid, snapid_t snap_to_trim);
+  int rollback_then_trim(
+    bool first,
+    const hobject_t &coid,
+    snapid_t X,
+    const rollback_snap_info_t *rb_info,
+    bool do_trim,
+    OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
@@ -1681,6 +1743,12 @@ private:
 
     std::set<hobject_t> in_flight;
     snapid_t snap_to_trim;
+    snapid_t snap_being_processed;
+    bool is_trim_pass = true;
+    // Cursor for rollback-only passes: the last hobject_t processed in the
+    // current pass.  hobject_t() means "start from the beginning".  Reset to
+    // hobject_t() whenever snap_being_processed changes.
+    hobject_t rollback_scan_cursor;
 
     explicit Trimming(my_context ctx)
       : my_base(ctx),

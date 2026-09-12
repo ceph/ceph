@@ -60,6 +60,8 @@
 #include "messages/MRoute.h"
 #include "messages/MMonGetPurgedSnaps.h"
 #include "messages/MMonGetPurgedSnapsReply.h"
+#include "messages/MMonGetCompletedRollbacks.h"
+#include "messages/MMonGetCompletedRollbacksReply.h"
 
 #include "msg/Messenger.h"
 
@@ -1541,6 +1543,13 @@ void OSDMonitor::prime_pg_temp(
   }
 }
 
+static std::string make_completed_rollback_epoch_key(epoch_t e)
+{
+  char buf[64];
+  snprintf(buf, sizeof(buf), "completed_rollback_epoch_%08x", e);
+  return buf;
+}
+
 /**
  * @note receiving a transaction in this function gives a fair amount of
  * freedom to the service implementation if it does need it. It shouldn't.
@@ -2115,6 +2124,14 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     string k = make_purged_snap_epoch_key(pending_inc.epoch);
     bufferlist v;
     encode(pending_inc.new_purged_snaps, v);
+    t->put(OSD_SNAP_PREFIX, k, v);
+  }
+  // completed_rollbacks -- persist per-epoch for OSD boot replay
+  if (tmp.require_osd_release >= ceph_release_t::umbrella &&
+      !pending_inc.new_completed_rollbacks.empty()) {
+    string k = make_completed_rollback_epoch_key(pending_inc.epoch);
+    bufferlist v;
+    encode(pending_inc.new_completed_rollbacks, v);
     t->put(OSD_SNAP_PREFIX, k, v);
   }
   for (auto& i : pending_inc.new_purged_snaps) {
@@ -2788,6 +2805,9 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
 
   case MSG_MON_GET_PURGED_SNAPS:
     return preprocess_get_purged_snaps(op);
+
+  case MSG_MON_GET_COMPLETED_ROLLBACKS:
+    return preprocess_get_completed_rollbacks(op);
 
   default:
     ceph_abort();
@@ -4529,6 +4549,56 @@ bool OSDMonitor::preprocess_get_purged_snaps(MonOpRequestRef op)
   return true;
 }
 
+bool OSDMonitor::preprocess_get_completed_rollbacks(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = op->get_req<MMonGetCompletedRollbacks>();
+  dout(7) << __func__ << " " << *m << dendl;
+
+  map<epoch_t, map<int64_t, snap_interval_set_t>> r;
+
+  string k = make_completed_rollback_epoch_key(m->start);
+  auto it = mon.store->get_iterator(OSD_SNAP_PREFIX);
+  it->upper_bound(k);
+  unsigned long epoch = m->last;
+  while (it->valid()) {
+    if (it->key().find("completed_rollback_epoch_") != 0) {
+      break;
+    }
+    string ik = it->key();
+    int n = sscanf(ik.c_str(), "completed_rollback_epoch_%lx", &epoch);
+    if (n != 1) {
+      derr << __func__ << " unable to parse key '" << it->key() << "'" << dendl;
+    } else if (epoch > m->last) {
+      break;
+    } else {
+      bufferlist bl = it->value();
+      auto p = bl.cbegin();
+      auto &v = r[epoch];
+      try {
+	ceph::decode(v, p);
+      } catch (ceph::buffer::error& e) {
+	derr << __func__ << " unable to parse value for key '" << it->key()
+	     << "': \n";
+	bl.hexdump(*_dout);
+	*_dout << dendl;
+      }
+      n += 4 + v.size() * 16;
+    }
+    if (n > 1048576) {
+      // impose a semi-arbitrary limit to message size
+      break;
+    }
+    it->next();
+  }
+
+  auto reply = make_message<MMonGetCompletedRollbacksReply>(m->start, epoch);
+  reply->completed_rollbacks.swap(r);
+  mon.send_reply(op, reply.detach());
+
+  return true;
+}
+
 // osd beacon
 bool OSDMonitor::preprocess_beacon(MonOpRequestRef op)
 {
@@ -5416,7 +5486,17 @@ void OSDMonitor::tick()
     }
   }
 
-  if (try_prune_purged_snaps()) {
+  // combined limit for purged_snaps and completed_rollbacks
+  unsigned max_prune = cct->_conf.get_val<uint64_t>(
+    "mon_max_snap_prune_per_epoch");
+  if (!max_prune) {
+    max_prune = 100000;
+  }
+
+  if (try_prune_purged_snaps(max_prune)) {
+    do_propose = true;
+  }
+  if (try_prune_completed_rollbacks(max_prune)) {
     do_propose = true;
   }
 
@@ -7487,7 +7567,7 @@ void OSDMonitor::insert_purged_snap_update(
   }
 }
 
-bool OSDMonitor::try_prune_purged_snaps()
+bool OSDMonitor::try_prune_purged_snaps(unsigned &max_prune)
 {
   if (!mon.mgrstatmon()->is_readable()) {
     return false;
@@ -7496,11 +7576,6 @@ bool OSDMonitor::try_prune_purged_snaps()
     return false;  // we already pruned for this epoch
   }
 
-  unsigned max_prune = cct->_conf.get_val<uint64_t>(
-    "mon_max_snap_prune_per_epoch");
-  if (!max_prune) {
-    max_prune = 100000;
-  }
   dout(10) << __func__ << " max_prune " << max_prune << dendl;
 
   unsigned actually_pruned = 0;
@@ -7563,6 +7638,58 @@ bool OSDMonitor::try_prune_purged_snaps()
     }
   }
   dout(10) << __func__ << " actually pruned " << actually_pruned << dendl;
+  if (max_prune > actually_pruned) {
+    max_prune -= actually_pruned;
+  } else {
+    max_prune = 0;
+  }
+  return !!actually_pruned;
+}
+
+bool OSDMonitor::try_prune_completed_rollbacks(unsigned &max_prune)
+{
+  if (!mon.mgrstatmon()->is_readable()) {
+    return false;
+  }
+  if (!pending_inc.new_completed_rollbacks.empty()) {
+    return false;  // already pruned for this epoch
+  }
+
+  dout(10) << __func__ << " max_prune " << max_prune << dendl;
+
+  unsigned actually_pruned = 0;
+  auto& completed = mon.mgrstatmon()->get_digest().completed_rollbacks;
+
+  for (auto& [pool_id, pool_completed] : completed) {
+    if (actually_pruned >= max_prune) break;
+    auto r = osdmap.rollback_snaps_queue.find(pool_id);
+    if (r == osdmap.rollback_snaps_queue.end()) continue;
+
+    snap_interval_set_t to_prune;
+    unsigned maybe_pruned = actually_pruned;
+
+    for (auto& [rb_id, _rb] : r->second) {
+      if (!pool_completed.contains(rb_id)) continue;
+      to_prune.insert(rb_id);
+      ++maybe_pruned;
+      if (maybe_pruned >= max_prune) break;
+    }
+
+    if (!to_prune.empty()) {
+      pending_inc.new_completed_rollbacks[pool_id].swap(to_prune);
+      actually_pruned += pending_inc.new_completed_rollbacks[pool_id].size();
+      dout(10) << __func__ << " pool " << pool_id
+               << " pruning completed rollbacks "
+               << pending_inc.new_completed_rollbacks[pool_id] << dendl;
+    }
+  }
+
+  dout(10) << __func__ << " actually pruned " << actually_pruned << dendl;
+  if (max_prune > actually_pruned) {
+    max_prune -= actually_pruned;
+  } else {
+    max_prune = 0;
+  }
   return !!actually_pruned;
 }
 
@@ -13918,6 +14045,75 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd pool rollbacksnap") {
+    string poolstr;
+    cmd_getval(cmdmap, "pool", poolstr);
+    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    string snapname;
+    cmd_getval(cmdmap, "snap", snapname);
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+      ss << "pool-level snapshot rollback requires all OSDs to be running "
+            "Umbrella or later";
+      err = -EPERM;
+      goto reply_no_propose;
+    }
+    if (p->is_unmanaged_snaps_mode()) {
+      ss << "pool " << poolstr << " is in unmanaged snaps mode";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    if (!p->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " does not exist";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    {
+      pg_pool_t *pp = nullptr;
+      if (pending_inc.new_pools.count(pool))
+        pp = &pending_inc.new_pools[pool];
+      if (!pp) {
+        pp = &pending_inc.new_pools[pool];
+        *pp = *p;
+      }
+      snapid_t source = pp->snap_exists(snapname.c_str());
+      // Idempotency: if a rollback of this snapshot is already pending,
+      // report success with the existing rollback id.
+      for (auto& [rb_id, rb] : pp->rollback_snaps) {
+        if (rb.source_snap == source) {
+          ss << "initiated rollback of pool " << poolstr
+             << " to snapshot '" << snapname << "'"
+             << " (rollback id " << rb_id << ")";
+          getline(ss, rs);
+          wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+                                                     get_last_committed() + 1));
+          return true;
+        }
+      }
+      rollback_snap_info_t rb;
+      rb.source_snap  = source;
+      rb.rollback_id  = pp->get_snap_seq() + 1;
+
+      pp->snap_seq = rb.rollback_id;
+      pp->set_snap_epoch(pending_inc.epoch);
+      pp->rollback_snaps[rb.rollback_id] = rb;
+
+      pending_inc.new_pools[pool] = *pp;
+      pending_inc.new_rollback_snaps[pool][rb.rollback_id] = rb;
+
+      ss << "initiated rollback of pool " << poolstr
+         << " to snapshot '" << snapname << "'"
+         << " (rollback id " << rb.rollback_id << ")";
+    }
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+                                               get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd pool force-remove-snap") {
     /*
      *  Forces removal of snapshots in the range of
@@ -15164,6 +15360,74 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
       return true;
     }
     return false;
+  case POOL_OP_ROLLBACK_SNAP: {
+    if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+      _pool_op_reply(op, -EPERM, osdmap.get_epoch());
+      return true;
+    }
+    if (p->is_unmanaged_snaps_mode()) {
+      _pool_op_reply(op, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
+    if (!snap_exists) {
+      _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+      return true;
+    }
+    {
+      snapid_t source = p->snap_exists(m->name.c_str());
+      // Idempotency: already have a pending rollback of this snapshot?
+      for (auto& [rb_id, rb] : p->rollback_snaps) {
+        if (rb.source_snap == source) {
+          bufferlist reply_data;
+          encode(rb_id, reply_data);
+          _pool_op_reply(op, 0, osdmap.get_epoch(), &reply_data);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  case POOL_OP_ROLLBACK_UNMANAGED_SNAP: {
+    if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+      _pool_op_reply(op, -EPERM, osdmap.get_epoch());
+      return true;
+    }
+    if (p->is_pool_snaps_mode()) {
+      _pool_op_reply(op, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
+    // snap_seq bound check: snap ID must not exceed current seq
+    if (m->snapid > p->get_snap_seq()) {
+      _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+      return true;
+    }
+    // snap must not already be in removed_snaps
+    if (_is_removed_snap(m->pool, m->snapid)) {
+      _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+      return true;
+    }
+    // Validate client-supplied SnapContext
+    if (!m->snapc.is_valid()) {
+      _pool_op_reply(op, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
+    if (m->snapc.seq < m->snapid ||
+        std::find(m->snapc.snaps.begin(), m->snapc.snaps.end(),
+                  m->snapid) == m->snapc.snaps.end()) {
+      _pool_op_reply(op, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
+    // Idempotency: already have a pending rollback for this snap ID?
+    for (auto& [rb_id, rb] : p->rollback_snaps) {
+      if (rb.source_snap == m->snapid) {
+        bufferlist reply_data;
+        encode(rb_id, reply_data);
+        _pool_op_reply(op, 0, osdmap.get_epoch(), &reply_data);
+        return true;
+      }
+    }
+    return false;
+  }
   case POOL_OP_DELETE:
     if (osdmap.lookup_pg_pool_name(m->name.c_str()) >= 0) {
       _pool_op_reply(op, 0, osdmap.get_epoch());
@@ -15368,6 +15632,46 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
       changed = true;
     }
     break;
+
+  case POOL_OP_ROLLBACK_SNAP: {
+    snapid_t source = pp.snap_exists(m->name.c_str());  // returns snapid or 0
+    if (!source) {
+      _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+      return false;
+    }
+    rollback_snap_info_t rb;
+    rb.source_snap = source;
+    rb.rollback_id = pp.get_snap_seq() + 1;
+
+    pp.snap_seq = rb.rollback_id;
+    pp.set_snap_epoch(pending_inc.epoch);
+    pp.rollback_snaps[rb.rollback_id] = rb;
+
+    pending_inc.new_pools[m->pool] = pp;
+    pending_inc.new_rollback_snaps[m->pool][rb.rollback_id] = rb;
+
+    encode(rb.rollback_id, reply_data);
+    changed = true;
+    break;
+  }
+
+  case POOL_OP_ROLLBACK_UNMANAGED_SNAP: {
+    rollback_snap_info_t rb;
+    rb.source_snap = m->snapid;
+    rb.rollback_id = pp.get_snap_seq() + 1;
+    rb.snapc = m->snapc;
+
+    pp.snap_seq = rb.rollback_id;
+    pp.set_snap_epoch(pending_inc.epoch);
+    pp.rollback_snaps[rb.rollback_id] = rb;
+
+    pending_inc.new_pools[m->pool] = pp;
+    pending_inc.new_rollback_snaps[m->pool][rb.rollback_id] = rb;
+
+    encode(rb.rollback_id, reply_data);
+    changed = true;
+    break;
+  }
 
   case POOL_OP_AUID_CHANGE:
     _pool_op_reply(op, -EOPNOTSUPP, osdmap.get_epoch());

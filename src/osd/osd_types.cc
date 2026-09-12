@@ -1351,6 +1351,47 @@ list<pool_snap_info_t> pool_snap_info_t::generate_test_instances()
   return o;
 }
 
+// -- rollback_snap_info_t --
+void rollback_snap_info_t::encode(ceph::buffer::list& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(rollback_id, bl);
+  encode(source_snap, bl);
+  encode(snapc, bl);
+  ENCODE_FINISH(bl);
+}
+
+void rollback_snap_info_t::decode(ceph::buffer::list::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(rollback_id, p);
+  decode(source_snap, p);
+  decode(snapc, p);
+  DECODE_FINISH(p);
+}
+
+void rollback_snap_info_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("rollback_id", rollback_id);
+  f->dump_unsigned("source_snap", source_snap);
+  f->open_object_section("snapc");
+  snapc.dump(f);
+  f->close_section();
+}
+
+void rollback_snap_info_t::generate_test_instances(
+  list<rollback_snap_info_t*>& o)
+{
+  o.push_back(new rollback_snap_info_t);
+  o.push_back(new rollback_snap_info_t);
+  o.back()->rollback_id = 2;
+  o.back()->source_snap = 1;
+  o.push_back(new rollback_snap_info_t);
+  o.back()->rollback_id = 4;
+  o.back()->source_snap = 3;
+  o.back()->snapc = SnapContext(5, {5, 3});
+}
+
 // -- pool_opts_t --
 
 // The order of items in the list is important, therefore,
@@ -1683,6 +1724,13 @@ void pg_pool_t::dump(Formatter *f, const CrushWrapper *crush,
     f->close_section(); // application
   }
   f->close_section(); // application_metadata
+  f->open_array_section("rollback_snaps");
+  for (auto& [k, v] : rollback_snaps) {
+    f->open_object_section("rollback_snap_info");
+    v.dump(f);
+    f->close_section();
+  }
+  f->close_section(); // rollback_snaps
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1992,9 +2040,13 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 33;
+  uint8_t v = 34;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
+  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_UMBRELLA)) {
+    //FIXME: Need SERVER_VAMPIRE here for rados snapshot rollbcak
+    v = 33;
+  }
   if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_UMBRELLA)) {
     v = 32;
   }
@@ -2127,12 +2179,15 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(ec_data_shard_count, bl);
     encode(ec_coding_shard_count, bl);
   }
+  if (v >= 34) {
+    encode(rollback_snaps, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(33, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(34, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2338,6 +2393,11 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     ec_data_shard_count.reset();
     ec_coding_shard_count.reset();
   }
+  if (struct_v >= 34) {
+    decode(rollback_snaps, bl);
+  } else {
+    rollback_snaps.clear();
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2450,6 +2510,15 @@ list<pg_pool_t> pg_pool_t::generate_test_instances()
   a.peering_crush_bucket_barrier = 11;
   a.peering_crush_mandatory_member = 12;
   a.peering_crush_bucket_target = 13;
+  o.push_back(pg_pool_t(a));
+
+  // test rollback_snaps
+  {
+    rollback_snap_info_t rsi;
+    rsi.rollback_id = 100;
+    rsi.source_snap = 3;
+    a.rollback_snaps[rsi.rollback_id] = rsi;
+  }
   o.push_back(pg_pool_t(a));
 
   return o;
@@ -3038,6 +3107,14 @@ void pg_stat_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_array_section("completed_rollbacks");
+  for (auto i = completed_rollbacks.begin(); i != completed_rollbacks.end(); ++i) {
+    f->open_object_section("interval");
+    f->dump_stream("start") << i.get_start();
+    f->dump_stream("length") << i.get_len();
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void pg_stat_t::dump_brief(Formatter *f) const
@@ -3116,7 +3193,7 @@ bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(31, 22, bl);
+  ENCODE_START(32, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -3180,6 +3257,7 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(scrub_sched_status.m_ordinal_of_requested_replica, bl);
   encode(scrub_sched_status.m_num_to_reserve, bl);
   encode(last_degraded, bl);
+  encode(completed_rollbacks, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -3188,7 +3266,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(31, bl);
+  DECODE_START(32, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3294,6 +3372,9 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(last_degraded, bl);
     } else {
       last_degraded = last_clean;
+    }
+    if (struct_v >= 32) {
+      decode(completed_rollbacks, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -3418,7 +3499,8 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.scrub_duration == r.scrub_duration &&
     l.objects_trimmed == r.objects_trimmed &&
     l.snaptrim_duration == r.snaptrim_duration &&
-    l.last_degraded == r.last_degraded;
+    l.last_degraded == r.last_degraded &&
+    l.completed_rollbacks == r.completed_rollbacks;
 }
 
 // -- store_statfs_t --
@@ -3724,7 +3806,7 @@ list<pg_history_t> pg_history_t::generate_test_instances()
 
 void pg_info_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(34, 26, bl);
+  ENCODE_START(35, 26, bl);
   encode(pgid.pgid, bl);
   encode(last_update, bl);
   encode(last_complete, bl);
@@ -3742,12 +3824,13 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_interval_started, bl);
   encode(partial_writes_last_complete, bl);
   encode(partial_writes_last_complete_epoch, bl);
+  encode(completed_rollbacks, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(34, bl);
+  DECODE_START(35, bl);
   decode(pgid.pgid, bl);
   decode(last_update, bl);
   decode(last_complete, bl);
@@ -3782,6 +3865,9 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   if (struct_v >= 34) {
     decode(partial_writes_last_complete_epoch, bl);
   }
+  if (struct_v >= 35) {
+    decode(completed_rollbacks, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3812,6 +3898,14 @@ void pg_info_t::dump(Formatter *f) const
        i != purged_snaps.end();
        ++i) {
     f->open_object_section("purged_snap_interval");
+    f->dump_stream("start") << i.get_start();
+    f->dump_stream("length") << i.get_len();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("completed_rollbacks");
+  for (auto i = completed_rollbacks.begin(); i != completed_rollbacks.end(); ++i) {
+    f->open_object_section("interval");
     f->dump_stream("start") << i.get_start();
     f->dump_stream("length") << i.get_len();
     f->close_section();
@@ -5981,7 +6075,7 @@ void OSDSuperblock::GuardedMap::decode(ceph::buffer::list::const_iterator &bl)
 
 void OSDSuperblock::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(11, 5, bl);
+  ENCODE_START(12, 5, bl);
   encode(cluster_fsid, bl);
   encode(whoami, bl);
   encode(current_epoch, bl);
@@ -5998,12 +6092,13 @@ void OSDSuperblock::encode(ceph::buffer::list &bl) const
   encode(last_purged_snaps_scrub, bl);
   encode(cluster_osdmap_trim_lower_bound, bl);
   mapc.encode(bl);
+  encode(completed_rollbacks_last, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     decode(magic, bl);
@@ -6048,6 +6143,11 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     insert_osdmap_epochs(oldest_map, newest_map);
   }
+  if (struct_v >= 12) {
+    decode(completed_rollbacks_last, bl);
+  } else {
+    completed_rollbacks_last = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -6065,6 +6165,7 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_int("last_epoch_mounted", mounted);
   f->dump_unsigned("purged_snaps_last", purged_snaps_last);
   f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
+  f->dump_unsigned("completed_rollbacks_last", completed_rollbacks_last);
   f->dump_int("cluster_osdmap_trim_lower_bound",
               cluster_osdmap_trim_lower_bound);
   f->dump_stream("maps") << get_maps();

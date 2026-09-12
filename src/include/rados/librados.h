@@ -1347,6 +1347,27 @@ CEPH_RADOS_API int rados_rollback(rados_ioctx_t io, const char *oid,
   __attribute__((deprecated));
 
 /**
+ * Rollback all objects in a pool to a pool snapshot
+ *
+ * The contents of the pool will be the same as
+ * when the snapshot was taken.
+ *
+ * Completes in O(1) time; background work is performed by OSDs.
+ * The allocated rollback ID is returned in *rollback_id.
+ *
+ * @param io        the pool I/O context
+ * @param snapname  name of the snapshot to restore
+ * @param rollback_id  [out] allocated rollback ID
+ * @returns 0 on success, negative error code on failure
+ *   -EPERM   cluster require_osd_release < umbrella
+ *   -ENOENT  snapshot does not exist
+ *   -EINVAL  pool is in selfmanaged-snap mode
+ */
+CEPH_RADOS_API int rados_ioctx_snap_rollback_all(rados_ioctx_t io,
+                                                  const char *snapname,
+                                                  uint64_t *rollback_id);
+
+/**
  * Set the snapshot from which reads are performed.
  *
  * Subsequent reads will return data as it was at the time of that
@@ -1408,6 +1429,27 @@ rados_aio_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
 CEPH_RADOS_API int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io,
                                                          const char *oid,
                                                          rados_snap_t snapid);
+
+/**
+ * Rollback all objects to a selfmanaged snapshot
+ *
+ * @param io             the pool I/O context
+ * @param snap_id        selfmanaged snap ID to restore from
+ * @param snapc_seq      current SnapContext sequence (highest live snap ID)
+ * @param snapc_snaps    array of live snap IDs in descending order
+ * @param num_snapc_snaps number of entries in snapc_snaps
+ * @param rollback_id    [out] allocated rollback ID
+ * @returns 0 on success, negative error code on failure
+ *   -EPERM   cluster require_osd_release < umbrella
+ *   -ENOENT  snap ID has been deleted
+ *   -EINVAL  pool is in pool-managed-snap mode or SnapContext is invalid
+ */
+CEPH_RADOS_API int rados_ioctx_selfmanaged_snap_rollback_all(rados_ioctx_t io,
+                                                              uint64_t snap_id,
+                                                              rados_snap_t snapc_seq,
+                                                              const rados_snap_t *snapc_snaps,
+                                                              int num_snapc_snaps,
+                                                              uint64_t *rollback_id);
 
 /**
  * Set the snapshot context for use when writing to objects

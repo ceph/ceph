@@ -4537,6 +4537,17 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   psdout(20) << "reporting purged_snaps "
 	     << pre_publish.purged_snaps << dendl;
 
+  // share (some of) our completed_rollbacks via the pg_stats
+  num = 0;
+  auto cr = info.completed_rollbacks.begin();
+  while (num < max && cr != info.completed_rollbacks.end()) {
+    pre_publish.completed_rollbacks.insert(cr.get_start(), cr.get_len());
+    ++num;
+    ++cr;
+  }
+  psdout(20) << "reporting completed_rollbacks "
+	     << pre_publish.completed_rollbacks << dendl;
+
   // when there is no change in osdmap,
   // update info.stats.reported_epoch by the number of time seconds.
   utime_t cutoff_time = now;
@@ -5124,6 +5135,13 @@ void PeeringState::update_backfill_progress(
 void PeeringState::adjust_purged_snaps(
   std::function<void(interval_set<snapid_t> &snaps)> f) {
   f(info.purged_snaps);
+  dirty_info = true;
+  dirty_big_info = true;
+}
+
+void PeeringState::adjust_completed_rollbacks(
+  std::function<void(snap_interval_set_t &crs)> f) {
+  f(info.completed_rollbacks);
   dirty_info = true;
   dirty_big_info = true;
 }

@@ -667,7 +667,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 9; // if bumping this, be aware of allow_crimson 12
+    uint8_t target_v = 9; // if bumping this, be aware of new_rollback_snaps 13
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -682,6 +682,10 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (mutate_allow_crimson != mutate_allow_crimson_t::NONE) {
       target_v = std::max((uint8_t)12, target_v);
+    }
+    if (!new_rollback_snaps.empty() ||
+        !new_completed_rollbacks.empty()) {
+      target_v = std::max((uint8_t)13, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -738,6 +742,10 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (target_v >= 12) {
       encode(mutate_allow_crimson, bl);
+    }
+    if (target_v >= 13) {
+      encode(new_rollback_snaps, bl);
+      encode(new_completed_rollbacks, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -952,7 +960,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -1023,6 +1031,13 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 12) {
       decode(mutate_allow_crimson, bl);
+    }
+    if (struct_v >= 13) {
+      decode(new_rollback_snaps, bl);
+      decode(new_completed_rollbacks, bl);
+    } else {
+      new_rollback_snaps.clear();
+      new_completed_rollbacks.clear();
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -1356,6 +1371,37 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->close_section();
     f->close_section();
   }
+  f->close_section();
+  f->open_array_section("new_rollback_snaps");
+  for (auto& p : new_rollback_snaps) {
+    f->open_object_section("pool");
+    f->dump_int("pool", p.first);
+    f->open_array_section("rollbacks");
+    for (auto& q : p.second) {
+      f->open_object_section("rollback");
+      f->dump_unsigned("snap", q.first);
+      q.second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("new_completed_rollbacks");
+  for (auto& p : new_completed_rollbacks) {
+    f->open_object_section("pool");
+    f->dump_int("pool", p.first);
+    f->open_array_section("snaps");
+    for (auto q = p.second.begin(); q != p.second.end(); ++q) {
+      f->open_object_section("interval");
+      f->dump_unsigned("begin", q.get_start());
+      f->dump_unsigned("length", q.get_len());
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
   f->open_array_section("new_crush_node_flags");
   for (auto& i : new_crush_node_flags) {
     f->open_object_section("node");
@@ -2442,6 +2488,26 @@ int OSDMap::apply_incremental(const Incremental &inc)
     }
   }
 
+  new_completed_rollbacks = inc.new_completed_rollbacks;
+  for (auto& [pool_id, rb_map] : inc.new_rollback_snaps) {
+    for (auto& [rb_id, rb] : rb_map) {
+      rollback_snaps_queue[pool_id][rb_id] = rb;
+    }
+  }
+  for (auto& [pool_id, completed] : inc.new_completed_rollbacks) {
+    auto q = rollback_snaps_queue.find(pool_id);
+    if (q == rollback_snaps_queue.end()) continue;
+    for (auto i = completed.begin(); i != completed.end(); ++i) {
+      snapid_t rb_id = i.get_start();
+      snapid_t rb_end = i.get_start() + i.get_len();
+      while (rb_id < rb_end) {
+        q->second.erase(rb_id);
+        ++rb_id;
+      }
+    }
+    if (q->second.empty()) rollback_snaps_queue.erase(q);
+  }
+
   if (inc.new_last_up_change != utime_t()) {
     last_up_change = inc.new_last_up_change;
   }
@@ -3518,7 +3584,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 9; // when bumping this, be aware of allow_crimson
+    uint8_t target_v = 9; // when bumping this, be aware of new_rollback_snaps 13
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -3534,6 +3600,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (allow_crimson) {
       target_v = std::max((uint8_t)12, target_v);
+    }
+    if (!rollback_snaps_queue.empty() || !new_completed_rollbacks.empty()) {
+      target_v = std::max((uint8_t)13, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -3595,6 +3664,10 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (target_v >= 12) {
       ::encode(allow_crimson, bl);
+    }
+    if (target_v >= 13) {
+      encode(rollback_snaps_queue, bl);
+      encode(new_completed_rollbacks, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3861,7 +3934,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blocklist, bl);
@@ -3949,6 +4022,13 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 12) {
       decode(allow_crimson, bl);
+    }
+    if (struct_v >= 13) {
+      decode(rollback_snaps_queue, bl);
+      decode(new_completed_rollbacks, bl);
+    } else {
+      rollback_snaps_queue.clear();
+      new_completed_rollbacks.clear();
     }
     DECODE_FINISH(bl); // osd-only data
   }

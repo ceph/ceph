@@ -69,7 +69,8 @@ enum TestOpType {
   TEST_OP_TIER_PROMOTE,
   TEST_OP_TIER_FLUSH,
   TEST_OP_SET_CHUNK,
-  TEST_OP_TIER_EVICT
+  TEST_OP_TIER_EVICT,
+  TEST_OP_SNAP_ROLLBACK   // pool-level snap rollback (both snap modes)
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -589,6 +590,24 @@ public:
     contents.dirty = true;
     contents.flushed = false;
     pool_obj_cont.rbegin()->second.insert_or_assign(oid, contents);
+  }
+
+  void roll_back_pool(int snap)
+  {
+    // Collect the set of all object names across all snap levels
+    std::set<std::string> all_oids;
+    for (auto& [level, objs] : pool_obj_cont) {
+      for (auto& [oid, desc] : objs) {
+        all_oids.insert(oid);
+      }
+    }
+
+    // For each object, apply the per-object roll_back() logic at the
+    // current snap level.  Objects that did not exist at 'snap' are
+    // marked as deleted (roll_back() already handles this via find_object).
+    for (auto& oid : all_oids) {
+      roll_back(oid, snap);
+    }
   }
 
   void update_object_tier_flushed(const std::string &oid, int snap)
@@ -2057,6 +2076,86 @@ public:
   {
     return "RollBackOp";
   }
+};
+
+class SnapRollbackOp : public TestOp {
+public:
+  int snap_to_roll_back_to;           // model snap sequence number
+  std::shared_ptr<int> in_use;
+
+  SnapRollbackOp(int n, RadosTestContext *context, TestOpStat *stat = 0)
+    : TestOp(n, context, stat), snap_to_roll_back_to(-1)
+  {}
+
+  void _begin() override
+  {
+    std::lock_guard l{context->state_lock};
+
+    if (context->snaps.empty()) {
+      context->kick();
+      done = true;
+      return;
+    }
+
+    // Must quiesce: model update applies to all objects simultaneously.
+    if (!context->oid_in_use.empty()) {
+      context->kick();
+      done = true;
+      return;
+    }
+
+    snap_to_roll_back_to = rand_choose(context->snaps)->first;
+    in_use = context->snaps_in_use.lookup_or_create(
+      snap_to_roll_back_to, snap_to_roll_back_to);
+
+    context->cout_prefix() << "pool-level snap rollback to snap "
+                           << snap_to_roll_back_to << std::endl;
+
+    // Update model: roll back every known object to this snap
+    context->roll_back_pool(snap_to_roll_back_to);
+
+    uint64_t rollback_id = 0;
+    uint64_t rados_snap  = context->snaps[snap_to_roll_back_to];
+    int r;
+
+    if (context->pool_snaps) {
+      std::string snapname;
+      r = context->io_ctx.snap_get_name(rados_snap, &snapname);
+      if (r < 0) {
+        std::cerr << "SnapRollbackOp: snap_get_name failed: "
+                  << cpp_strerror(r) << std::endl;
+        ceph_abort();
+      }
+      r = context->io_ctx.snap_rollback(snapname, &rollback_id);
+    } else {
+      // Build snapc from all currently live selfmanaged snap IDs, in
+      // descending order (highest snap ID first).
+      std::vector<librados::snap_t> snapc_snaps;
+      snapc_snaps.reserve(context->snaps.size());
+      for (auto& [seq, sid] : context->snaps)
+        snapc_snaps.push_back(static_cast<librados::snap_t>(sid));
+      std::sort(snapc_snaps.begin(), snapc_snaps.end(),
+                std::greater<librados::snap_t>());
+      librados::snap_t snapc_seq =
+        snapc_snaps.empty() ? rados_snap : snapc_snaps.front();
+      r = context->io_ctx.selfmanaged_snap_rollback(rados_snap, snapc_seq,
+                                                    snapc_snaps, &rollback_id);
+    }
+
+    if (r < 0) {
+      std::cerr << "SnapRollbackOp failed: " << cpp_strerror(r) << std::endl;
+      ceph_abort();
+    }
+
+    in_use.reset();
+    done = true;
+    context->kick();
+  }
+
+  bool finished() override { return done; }
+  bool must_quiesce_other_ops() override { return true; }
+
+  std::string getType() override { return "SnapRollbackOp"; }
 };
 
 class CopyFromOp : public TestOp {
