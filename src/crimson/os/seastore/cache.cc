@@ -3,6 +3,7 @@
 
 #include "crimson/os/seastore/cache.h"
 
+#include <cstdint>
 #include <sstream>
 #include <string_view>
 
@@ -255,6 +256,26 @@ void Cache::register_metrics(store_index_t store_index)
       "read_hit_cold",
       stats.read_hit_cold,
       sm::description("the number of the lbc misses of data reads"),
+      {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+    sm::make_counter(
+      "remap_bptr_copy",
+      stats.remap_bptr_copy,
+      sm::description("remap leftover buffer deep-copied to page-aligned ptr"),
+      {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+    sm::make_counter(
+      "remap_bptr_skip",
+      stats.remap_bptr_skip,
+      sm::description("remap leftover buffer already page-aligned, copy skipped"),
+      {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+    sm::make_counter(
+      "exist_mutate_bptr_copy",
+      stats.exist_mutate_bptr_copy,
+      sm::description("EXIST_CLEAN mutate buffer deep-copied to page-aligned ptr"),
+      {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+    sm::make_counter(
+      "exist_mutate_bptr_skip",
+      stats.exist_mutate_bptr_skip,
+      sm::description("EXIST_CLEAN mutate buffer already unique+aligned, copy skipped"),
       {sm::label_instance("shard_store_index", std::to_string(store_index))}),
   });
 
@@ -1352,6 +1373,50 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   }
 }
 
+ceph::bufferptr Cache::maybe_page_aligned_bptr(
+  const ceph::bufferptr &src,
+  extent_len_t offset,
+  extent_len_t length,
+  bool share_ok,
+  uint64_t &copy_counter,
+  uint64_t &skip_counter)
+{
+  LOG_PREFIX(Cache::maybe_page_aligned_bptr);
+  ceph_assert(offset + length <= src.length());
+
+  const auto block_size = get_block_size();
+  const auto page_size = CEPH_PAGE_SIZE;
+  auto *ptr = src.c_str() + offset;
+  const auto ptr_addr = reinterpret_cast<uintptr_t>(ptr);
+
+  ceph::bufferptr slice(src, offset, length);
+  const bool page_aligned =
+    slice.is_page_aligned() && slice.is_n_page_sized();
+  // Check nref on src, not slice: constructing the slice already took a ref.
+  const bool unique = src.raw_nref() == 1;
+  const bool skip = page_aligned && (share_ok || unique);
+
+  DEBUG("block_size=0x{:x} page_size=0x{:x} "
+        "src_ptr=0x{:x} ptr%block=0x{:x} ptr%page=0x{:x} "
+        "offset=0x{:x} len=0x{:x} nref={} share_ok={} "
+        "page_aligned={} skip={}",
+        block_size, page_size,
+        ptr_addr,
+        ptr_addr % block_size,
+        ptr_addr % page_size,
+        offset, length, src.raw_nref(), share_ok,
+        page_aligned, skip);
+
+  if (skip) {
+    ++skip_counter;
+    return slice;
+  }
+  ++copy_counter;
+  auto nbp = ceph::bufferptr(buffer::create_page_aligned(length));
+  src.copy_out(offset, length, nbp.c_str());
+  return nbp;
+}
+
 CachedExtentRef Cache::duplicate_for_write(
   Transaction &t,
   CachedExtentRef i) {
@@ -1377,10 +1442,16 @@ CachedExtentRef Cache::duplicate_for_write(
     i->last_committed_crc = i->calc_crc32c();
     if (needs_deepcopy_on_mutate_exist(i->get_type())) {
       // deepcopy the buffer of exist clean extent beacuse it shares
-      // buffer with original clean extent.
-      auto bp = i->get_bptr();
-      auto nbp = ceph::bufferptr(buffer::create_page_aligned(bp.length()));
-      bp.copy_out(0, bp.length(), nbp.c_str());
+      // buffer with original clean extent. Skip if already unique and
+      // page-aligned.
+      auto &bp = i->get_bptr();
+      auto nbp = maybe_page_aligned_bptr(
+        bp,
+        0,
+        bp.length(),
+        false /* share_ok: must not mutate a shared raw */,
+        stats.exist_mutate_bptr_copy,
+        stats.exist_mutate_bptr_skip);
       i->set_bptr(std::move(nbp));
     }
 
