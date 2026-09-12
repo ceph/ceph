@@ -12,8 +12,10 @@ import { TableActionsComponent } from '~/app/shared/datatable/table-actions/tabl
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { Summary } from '~/app/shared/models/summary.model';
 import { SummaryService } from '~/app/shared/services/summary.service';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
-import { SharedModule } from '~/app/shared/shared.module';
+import { CommonModule } from '@angular/common';
 import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { NfsDetailsComponent } from '../nfs-details/nfs-details.component';
 import { NfsListComponent, RgwExportType } from './nfs-list.component';
@@ -37,10 +39,14 @@ describe('NfsListComponent', () => {
       BrowserAnimationsModule,
       HttpClientTestingModule,
       RouterTestingModule,
-      SharedModule,
+      CommonModule,
       NgbNavModule
     ],
-    providers: [TaskListService]
+    providers: [
+      TaskListService,
+      { provide: ModalCdsService, useValue: { show: jest.fn(), dismissAll: jest.fn() } },
+      { provide: CdDatePipe, useValue: { transform: (d: any) => d } }
+    ]
   });
 
   beforeEach(() => {
@@ -119,7 +125,7 @@ describe('NfsListComponent', () => {
     });
 
     it('should call error function on init when summary service fails', () => {
-      spyOn(component.table, 'reset');
+      component.table = { reset: jest.fn() } as any;
       summaryService['summaryDataSource'].error(undefined);
       expect(component.table.reset).toHaveBeenCalled();
     });
