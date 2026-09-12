@@ -24,6 +24,32 @@ struct RGWObjVersionTracker;
 
 struct obj_version;
 
+/**
+ * Compare an incoming versus on-disk tag/version+mtime combo against
+ * the sync mode to see if the new one should replace the on-disk one.
+ *
+ * @return true if the update should proceed, false otherwise.
+ */
+inline bool check_versions(const obj_version& ondisk,
+                           const ceph::real_time& ondisk_time,
+                           const obj_version& incoming,
+                           const ceph::real_time& incoming_time,
+                           RGWMDLogSyncType sync_type)
+{
+  switch (sync_type) {
+  case APPLY_UPDATES:
+    if (ondisk.tag != incoming.tag) {
+      return true;
+    }
+    return ondisk.ver < incoming.ver;
+  case APPLY_NEWER:
+    return ondisk_time < incoming_time;
+  case APPLY_ALWAYS:
+  default:
+    return true;
+  }
+}
+
 
 class RGWMetadataObject {
 protected:

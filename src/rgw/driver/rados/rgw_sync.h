@@ -504,11 +504,14 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
   RGWSyncTraceNodeRef tn;
 
+  RGWMDLogSyncType sync_type;
+
 public:
   RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
                            const std::string& _raw_key, const std::string& _entry_marker,
                            const RGWMDLogStatus& _op_status,
-                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent);
+                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent,
+                           RGWMDLogSyncType _sync_type = RGWMDLogSyncType::APPLY_ALWAYS);
 
   int operate(const DoutPrefixProvider *dpp) override;
 };

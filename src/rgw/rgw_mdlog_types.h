@@ -20,8 +20,7 @@
 enum RGWMDLogSyncType {
   APPLY_ALWAYS,
   APPLY_UPDATES,
-  APPLY_NEWER,
-  APPLY_EXCLUSIVE
+  APPLY_NEWER
 };
 
 enum RGWMDLogStatus {
