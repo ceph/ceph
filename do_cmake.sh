@@ -15,6 +15,7 @@ fi
 
 PYBUILD="3"
 ARGS="${ARGS} -GNinja"
+ARGS+=" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
