@@ -9,6 +9,16 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 from ceph.deployment.tls_utils import SSLConfigException
 
+# RFC 5280 defines the X.509 Common Name (CN) field as a DirectoryString,
+# whose underlying ASN.1 types (PrintableString, UTF8String, etc.) impose a
+# maximum length of 64 characters. Passing a longer value causes certificate
+# signing to fail with an opaque low-level error (OpenSSL's
+# "asn1 encoding routines: ... string too long"), which gives no indication
+# that the CN length is the actual cause. This is most commonly hit with
+# auto-assigned cloud FQDNs (e.g. Google Cloud Platform embeds the project
+# ID into the hostname, easily producing FQDNs well over 64 characters).
+COMMON_NAME_MAX_LENGTH = 64
+
 
 class SSLCerts:
     def __init__(self, fsid: str, _certificate_duration_days: int = (365 * 10 + 3)) -> None:
@@ -93,7 +103,18 @@ class SSLCerts:
         public_key = private_key.public_key()
 
         builder = x509.CertificateBuilder()
-        builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, addrs[0]), ]))
+        # X.509 Common Name is limited to 64 characters (RFC 5280). Cloud
+        # providers (notably GCP) can assign FQDNs well past that limit, and
+        # exceeding it fails certificate signing with an opaque low-level
+        # error rather than a clear one. TLS hostname verification relies on
+        # the SAN list (populated below from `hosts`), not the CN, so
+        # truncating the CN here does not affect the certificate's actual
+        # validity for the hosts it covers; the full hostname is still
+        # present, unmodified, in the SAN.
+        cn_value = addrs[0]
+        if len(cn_value) > COMMON_NAME_MAX_LENGTH:
+            cn_value = cn_value[:COMMON_NAME_MAX_LENGTH]
+        builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn_value), ]))
         builder = builder.issuer_name(self.get_root_issuer_name())
         builder = builder.not_valid_before(datetime.now())
         builder = builder.not_valid_after(datetime.now() + timedelta(days=cert_duration_in_days))
