@@ -96,4 +96,28 @@ describe('NvmeofGatewayNodeAddModalComponent', () => {
     });
     expect(mockNotificationService.show).toHaveBeenCalled();
   });
+
+  it('should drop placement count so a newly added host is not capped', () => {
+    component.serviceSpec = {
+      placement: {
+        hosts: ['host1'],
+        count: 1
+      }
+    } as any;
+    component.selection.selected = [{ hostname: 'host2' }];
+    component.onSubmit();
+
+    expect(mockCephServiceService.update).toHaveBeenCalledWith({
+      placement: { hosts: ['host1', 'host2'] }
+    });
+  });
+
+  it('should not duplicate a host that is already in the group', () => {
+    component.selection.selected = [{ hostname: 'host1' }];
+    component.onSubmit();
+
+    expect(mockCephServiceService.update).toHaveBeenCalledWith({
+      placement: { hosts: ['host1'] }
+    });
+  });
 });

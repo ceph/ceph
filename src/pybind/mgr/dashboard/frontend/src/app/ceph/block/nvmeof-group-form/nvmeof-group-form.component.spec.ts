@@ -5,7 +5,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
@@ -19,6 +19,9 @@ import { CheckboxModule, GridModule, InputModule, SelectModule } from 'carbon-co
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { FormHelper } from '~/testing/unit-test-helper';
 
 describe('NvmeofGroupFormComponent', () => {
@@ -341,6 +344,7 @@ describe('NvmeofGroupFormComponent', () => {
       expect(nvmeofService.listGatewayGroups).toHaveBeenCalled();
       expect(cephServiceService.list).toHaveBeenCalled();
       expect(component.preSelectedHostnames).toEqual(['ceph-node-01', 'ceph-node-02']);
+      expect(component.selectedHostnames).toEqual(['ceph-node-01', 'ceph-node-02']);
       expect(form.controls.groupName.value).toBe('Test1');
     });
 
@@ -585,6 +589,116 @@ describe('NvmeofGroupFormComponent', () => {
           pool: 'rbd'
         })
       );
+    });
+
+    it('should send all selected hosts including a newly added gateway on edit', () => {
+      spyOn(cephServiceService, 'update').and.returnValue(of({}));
+      spyOn(router, 'navigateByUrl');
+      const notificationService = TestBed.inject(NotificationService);
+      spyOn(notificationService, 'show');
+
+      component.gatewayNodeComponent = {
+        getSelectedHostnames: (): string[] => ['ceph-node-01', 'ceph-node-02', 'ceph-node-03']
+      } as any;
+
+      component.onSubmit();
+
+      expect(cephServiceService.update).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          service_type: 'nvmeof',
+          service_id: 'Test1',
+          group: 'Test1',
+          placement: { hosts: ['ceph-node-01', 'ceph-node-02', 'ceph-node-03'] }
+        })
+      );
+      expect(notificationService.show).toHaveBeenCalledWith(
+        NotificationType.success,
+        jasmine.stringMatching(/updated successfully/)
+      );
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/block/nvmeof/gateways');
+    });
+
+    it('should keep existing gateways when selectionChange reports the added gateway', () => {
+      spyOn(cephServiceService, 'update').and.returnValue(of({}));
+      spyOn(router, 'navigateByUrl');
+
+      component.gatewayNodeComponent = {
+        getSelectedHostnames: (): string[] => []
+      } as any;
+
+      const selection = new CdTableSelection();
+      selection.selected = [
+        { hostname: 'ceph-node-01' },
+        { hostname: 'ceph-node-02' },
+        { hostname: 'ceph-node-03' }
+      ];
+      component.onGatewayNodeSelectionChange(selection);
+      component.onSubmit();
+
+      expect(cephServiceService.update).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          placement: { hosts: ['ceph-node-01', 'ceph-node-02', 'ceph-node-03'] }
+        })
+      );
+    });
+
+    it('should keep existing gateways when the table reports only the newly added host', () => {
+      spyOn(cephServiceService, 'update').and.returnValue(of({}));
+      spyOn(router, 'navigateByUrl');
+
+      component.gatewayNodeComponent = {
+        getSelectedHostnames: (): string[] => ['ceph-node-03']
+      } as any;
+
+      component.onSubmit();
+
+      expect(cephServiceService.update).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          placement: { hosts: ['ceph-node-01', 'ceph-node-02', 'ceph-node-03'] }
+        })
+      );
+    });
+
+    it('should merge a newly added host when selectionChange reports only that host', () => {
+      const selection = new CdTableSelection();
+      selection.selected = [{ hostname: 'ceph-node-03' }];
+      component.onGatewayNodeSelectionChange(selection);
+
+      expect(component.selectedHostnames).toEqual(['ceph-node-01', 'ceph-node-02', 'ceph-node-03']);
+    });
+
+    it('should preserve existing gateways and omit a removed gateway on edit', () => {
+      spyOn(cephServiceService, 'update').and.returnValue(of({}));
+      spyOn(router, 'navigateByUrl');
+
+      component.gatewayNodeComponent = {
+        getSelectedHostnames: (): string[] => ['ceph-node-01']
+      } as any;
+
+      component.onSubmit();
+
+      expect(cephServiceService.update).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          placement: { hosts: ['ceph-node-01'] }
+        })
+      );
+    });
+
+    it('should not show a success notification when the update fails', () => {
+      spyOn(cephServiceService, 'update').and.returnValue(throwError(() => new Error('failed')));
+      const notificationService = TestBed.inject(NotificationService);
+      spyOn(notificationService, 'show');
+      spyOn(router, 'navigateByUrl');
+
+      component.gatewayNodeComponent = {
+        getSelectedHostnames: (): string[] => ['ceph-node-01', 'ceph-node-02', 'ceph-node-03']
+      } as any;
+
+      component.onSubmit();
+
+      expect(notificationService.show).not.toHaveBeenCalled();
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+      expect(component.groupForm.errors).toEqual({ cdSubmitButton: true });
     });
 
     it('should send encryption_key: null when encryption is unchecked on edit', () => {
