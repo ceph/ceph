@@ -3234,6 +3234,26 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
 void MDCache::set_recovery_set(set<mds_rank_t>& s) 
 {
   dout(7) << "set_recovery_set " << s << dendl;
+
+  // A newly created survivor (creating -> active) never observed peer
+  // failures, so handle_mds_failure() did not populate rejoin_gather.
+  // Likewise, a rank already in rejoin may not have a newly active
+  // survivor in gather. Expect a rejoin from any new recovery peer.
+  for (auto rank : s) {
+    if (rank == mds->get_nodeid() || recovery_set.count(rank))
+      continue;
+    auto st = mds->mdsmap->get_state(rank);
+    if (st >= MDSMap::STATE_REPLAY && st <= MDSMap::STATE_REJOIN) {
+      dout(7) << "set_recovery_set expecting rejoin from mds." << rank
+	      << " (" << ceph_mds_state_name(st) << ")" << dendl;
+      rejoin_gather.insert(rank);
+    } else if (mds->is_rejoin() &&
+	       mds->mdsmap->is_clientreplay_or_active_or_stopping(rank)) {
+      dout(7) << "set_recovery_set expecting rejoin from survivor mds."
+	      << rank << dendl;
+      rejoin_gather.insert(rank);
+    }
+  }
   recovery_set = s;
 }
 
@@ -4097,6 +4117,15 @@ void MDCache::rejoin_send_rejoins()
   ceph_assert(!migrator->is_exporting());
 
   if (!mds->is_rejoin()) {
+    // Survivor: expect OP_WEAK from peers that are currently rejoining.
+    // Fresh ranks that skipped handle_mds_failure() otherwise crash on
+    // rejoin_gather.count(from) when the first OP_WEAK arrives.
+    for (const auto& rank : recovery_set) {
+      if (rank == mds->get_nodeid())
+	continue;
+      if (mds->mdsmap->is_rejoin(rank))
+	rejoin_gather.insert(rank);
+    }
     disambiguate_other_imports();
   }
 
@@ -4473,6 +4502,25 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
 {
   mds_rank_t from = mds_rank_t(weak->get_source().num());
 
+  if (!rejoin_gather.count(from)) {
+    auto st = mds->mdsmap->get_state(from);
+    // OP_WEAK is sent by a recovering peer. A newly active survivor may
+    // not have that peer in rejoin_gather yet; add and continue. Anything
+    // else is a duplicate or stray message.
+    if (st >= MDSMap::STATE_REPLAY && st <= MDSMap::STATE_REJOIN) {
+      dout(7) << "handle_cache_rejoin_weak from mds." << from
+	      << " not in rejoin_gather " << rejoin_gather
+	      << ", adding" << dendl;
+      rejoin_gather.insert(from);
+      recovery_set.insert(from);
+    } else {
+      dout(7) << "handle_cache_rejoin_weak ignoring from mds." << from
+	      << " (not in rejoin_gather " << rejoin_gather
+	      << ", state " << ceph_mds_state_name(st) << ")" << dendl;
+      return;
+    }
+  }
+
   // possible response(s)
   ref_t<MMDSCacheRejoin> ack;      // if survivor
   set<vinodeno_t> acked_inodes;  // if survivor
@@ -4788,6 +4836,23 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
       return;
     }
     ceph_abort_msg("got unexpected rejoin message during recovery");
+  }
+
+  if (!rejoin_gather.count(from)) {
+    // A survivor that appeared after rejoin_start() (e.g. max_mds scale-up)
+    // was never inserted into rejoin_gather.
+    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(from) ||
+	mds->mdsmap->is_rejoin(from)) {
+      dout(7) << "handle_cache_rejoin_strong from mds." << from
+	      << " not in rejoin_gather " << rejoin_gather
+	      << ", adding" << dendl;
+      rejoin_gather.insert(from);
+      recovery_set.insert(from);
+    } else {
+      dout(7) << "handle_cache_rejoin_strong ignoring from mds." << from
+	      << " (not in rejoin_gather " << rejoin_gather << ")" << dendl;
+      return;
+    }
   }
 
   // assimilate any potentially dirty scatterlock state
