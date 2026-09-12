@@ -1,10 +1,27 @@
 [DEFAULT]
-port = 8000
+port = 8101
 host = localhost
+#zonegroup = default
+#cluster = noname
+zonegroup = zg1
+zone = zg1-1
+cluster = c1
+# Optional; defaults to {zone}.rgw.buckets.data when omitted
+#data_pool = zg1-1.rgw.buckets.data
 
 [s3 main]
-access_key = 0555b35654ad1656d804
-secret_key = h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==
+# vstart default user:
+#access_key = 0555b35654ad1656d804
+#secret_key = h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==
+
+# test-rgw-multisite.sh system user (zone.user) -- do not use for boto3 S3 ops:
+#access_key = 1234567890
+#secret_key = pencil
+
+# test-rgw-multisite.sh regular user (regular.user):
+access_key = 0987654321
+secret_key = crayon
+
 display_name = M. Tester
 user_id = testid
 email = tester@ceph.com
