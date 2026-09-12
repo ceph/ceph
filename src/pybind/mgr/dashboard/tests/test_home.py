@@ -21,7 +21,7 @@ class HomeTest(ControllerTestCase, FakeFsMixin):
         cls.fs.reset()
         cls.fs.create_dir(frontend_path)
         cls.fs.create_file(
-            os.path.join(frontend_path, '..', 'package.json'),
+            os.path.join(frontend_path, '../..', 'package.json'),
             contents='{"config":{"locale": "en"}}')
         with mock.patch(cls.builtins_open, new=cls.f_open),\
                 mock.patch('os.listdir', new=cls.f_os.listdir):

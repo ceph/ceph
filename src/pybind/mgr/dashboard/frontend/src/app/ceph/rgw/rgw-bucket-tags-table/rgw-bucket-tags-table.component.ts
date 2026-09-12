@@ -10,7 +10,6 @@ import {
   ViewEncapsulation
 } from '@angular/core';
 
-import * as xml2js from 'xml2js';
 import { tap } from 'rxjs/operators';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -19,6 +18,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { XmlService } from '~/app/shared/services/xml.service';
 import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
 import { Bucket } from '../models/rgw-bucket';
 import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
@@ -53,7 +53,8 @@ export class RgwBucketTagsTableComponent implements OnInit, OnChanges {
   constructor(
     private rgwBucketService: RgwBucketService,
     private modalService: ModalCdsService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private xmlService: XmlService
   ) {}
 
   ngOnInit(): void {
@@ -202,36 +203,30 @@ export class RgwBucketTagsTableComponent implements OnInit, OnChanges {
   }
 
   private resolveCannedAcl(): string {
-    const parser = new xml2js.Parser({ explicitArray: false, trim: true });
     let selectedGrantee: string = Grantee.Owner;
     let selectedAclPermission: string = AclPermission.FullControl;
 
-    parser.parseString(this.bucket?.acl, (err, result) => {
-      if (err) {
-        return;
+    const result = this.xmlService.parse(this.bucket?.acl);
+    const xmlGrantees = result?.AccessControlPolicy?.AccessControlList?.Grant;
+    const grants = Array.isArray(xmlGrantees) ? xmlGrantees : [xmlGrantees];
+
+    for (const grant of grants) {
+      if (grant?.Grantee?.ID === this.bucket?.owner) {
+        continue;
       }
 
-      const xmlGrantees = result?.AccessControlPolicy?.AccessControlList?.Grant;
-      const grants = Array.isArray(xmlGrantees) ? xmlGrantees : [xmlGrantees];
-
-      for (const grant of grants) {
-        if (grant?.Grantee?.ID === this.bucket?.owner) {
-          continue;
-        }
-
-        if (grant?.Grantee?.URI?.includes('AllUsers')) {
-          selectedGrantee = Grantee.Everyone;
-          if (grant?.Permission === 'READ') {
-            selectedAclPermission = AclPermission.Read;
-          } else {
-            selectedAclPermission = AclPermission.All;
-          }
-        } else if (grant?.Grantee?.URI?.includes('AuthenticatedUsers')) {
-          selectedGrantee = Grantee.AuthenticatedUsers;
+      if (grant?.Grantee?.URI?.includes('AllUsers')) {
+        selectedGrantee = Grantee.Everyone;
+        if (grant?.Permission === 'READ') {
           selectedAclPermission = AclPermission.Read;
+        } else {
+          selectedAclPermission = AclPermission.All;
         }
+      } else if (grant?.Grantee?.URI?.includes('AuthenticatedUsers')) {
+        selectedGrantee = Grantee.AuthenticatedUsers;
+        selectedAclPermission = AclPermission.Read;
       }
-    });
+    }
 
     switch (selectedGrantee) {
       case Grantee.Everyone:

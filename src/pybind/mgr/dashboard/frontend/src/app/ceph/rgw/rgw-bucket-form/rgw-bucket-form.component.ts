@@ -11,7 +11,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 import { Observable, forkJoin } from 'rxjs';
-import * as xml2js from 'xml2js';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
@@ -43,6 +42,7 @@ import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 import { RgwUser } from '../models/rgw-user';
+import { XmlService } from '~/app/shared/services/xml.service';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -111,7 +111,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     private readonly changeDetectorRef: ChangeDetectorRef,
     private rgwMultisiteService: RgwMultisiteService,
     private rgwDaemonService: RgwDaemonService,
-    private rgwAccountsService: RgwUserAccountsService
+    private rgwAccountsService: RgwUserAccountsService,
+    private xmlService: XmlService
   ) {
     super();
     this.editing = this.router.url.startsWith(`/rgw/bucket/${URLVerbs.EDIT}`);
@@ -632,12 +633,10 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   }
 
   aclXmlToFormValues(xml: any, bucketOwner: string): [Grantee, AclPermissionsType] {
-    const parser = new xml2js.Parser({ explicitArray: false, trim: true });
     let selectedAclPermission: AclPermissionsType = aclPermission.FullControl;
     let selectedGrantee: Grantee = Grantee.Owner;
-    parser.parseString(xml, (err, result) => {
-      if (err) return null;
-
+    const result = this.xmlService.parse(xml);
+    if (result) {
       const xmlGrantees: any = result['AccessControlPolicy']['AccessControlList']['Grant'];
       for (let i = 0; i < xmlGrantees.length; i++) {
         if (xmlGrantees[i]['Grantee']['ID'] === bucketOwner) continue;
@@ -667,7 +666,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           selectedAclPermission = aclPermission.Read;
         }
       }
-    });
+    }
     return [selectedGrantee, selectedAclPermission];
   }
 

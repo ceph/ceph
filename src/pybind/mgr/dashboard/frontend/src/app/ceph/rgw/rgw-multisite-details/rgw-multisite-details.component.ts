@@ -7,7 +7,7 @@ import {
   TemplateRef,
   ViewChild
 } from '@angular/core';
-import { Node } from 'carbon-components-angular/treeview/tree-node.types';
+import { Node } from '~/app/shared/models/carbon-tree-node';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 

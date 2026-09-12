@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 
 import { TreeViewService } from './tree-view.service';
-import { Node } from 'carbon-components-angular/treeview/tree-node.types';
+import { Node } from '~/app/shared/models/carbon-tree-node';
 import _ from 'lodash';
 
 describe('TreeViewService', () => {
