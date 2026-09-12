@@ -1135,7 +1135,8 @@ typedef enum {
   REQUEST_MISSING,
   COMPLETE_ERROR,
   ERROR_CLEAR,
-  COMPLETE
+  COMPLETE,
+  SHARD_UNDERRUN
 } log_event_t;
 
 struct log_entry_t {
