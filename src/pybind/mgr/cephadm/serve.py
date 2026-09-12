@@ -2019,11 +2019,11 @@ class CephadmServe:
             assert False, 'unsupported mode'
 
         if log_output:
-            self.log.debug(f'code: {code}')
+            self.log.debug(f'[{host}] code: {code}')
             if out:
-                self.log.debug(f'out: {out}')
+                self.log.debug(f'[{host}] out: {out}')
             if err:
-                self.log.debug(f'err: {err}')
+                self.log.debug(f'[{host}] err: {err}')
         if code and not error_ok:
             raise OrchestratorError(
                 f'cephadm exited with an error code: {code}, stderr: {err}')
