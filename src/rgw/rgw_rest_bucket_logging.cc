@@ -309,40 +309,68 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       }
     } else if (*old_conf != configuration) {
       // conf changed - do cleanup
-      RGWObjVersionTracker objv_tracker;
-      std::string obj_name;
-      if (int ret = target_bucket->get_logging_object_name(obj_name, old_conf->target_prefix, y, this, nullptr); ret < 0 && ret != -ENOENT) {
-        ldpp_dout(this, 1) << "ERROR: failed to get name of logging object of logging bucket '" <<
-        target_bucket_id << "' and prefix '" << configuration.target_prefix << "', ret = " << ret << dendl;
-        op_ret = ret;
-        return;
-      }
-      const auto region = driver->get_zone()->get_zonegroup().get_api_name();
-      if (const auto ret = rollover_logging_object(*old_conf,
-            target_bucket,
-            obj_name,
-            this,
-            region,
-            src_bucket.get(),
-            y,
-            false, // rollover should happen even if commit failed
-            &objv_tracker,
-            false,
-            &old_obj); ret < 0) {
-        ldpp_dout(this, 1) << "WARNING: failed to flush pending logging object '" << obj_name << "'"
-            << " to target bucket '" << target_bucket_id << "'. "
-            << "' when updating logging configuration of bucket '" << src_bucket->get_key() << ". error: " << ret << dendl;
-      } else {
-        ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
-          << "' to target bucket '" << target_bucket_id << "' when updating logging configuration of bucket '"
-          << src_bucket->get_key() << "'" << dendl;
-      }
-      if (old_conf->target_bucket != configuration.target_bucket) {
-        rgw_bucket old_target_bucket_id;
-        if (const auto ret = rgw::bucketlogging::get_bucket_id(old_conf->target_bucket, s->bucket_tenant, old_target_bucket_id); ret < 0) {
-          ldpp_dout(this, 1) << "ERROR: failed to parse logging bucket '" << old_conf->target_bucket << "', ret = " << ret << dendl;
+      const bool target_changed = old_conf->target_bucket != configuration.target_bucket;
+      rgw_bucket old_target_bucket_id;
+      std::unique_ptr<rgw::sal::Bucket> old_target_bucket;
+      if (target_changed) {
+        if (const auto ret = rgw::bucketlogging::get_bucket_id(
+              old_conf->target_bucket, s->bucket_tenant, old_target_bucket_id);
+            ret < 0) {
+          ldpp_dout(this, 1) << "ERROR: failed to parse logging bucket '"
+            << old_conf->target_bucket << "', ret = " << ret << dendl;
+          op_ret = ret;
           return;
         }
+        if (const auto ret = driver->load_bucket(this, old_target_bucket_id,
+                                                &old_target_bucket, y);
+            ret < 0) {
+          ldpp_dout(this, 1) << "WARNING: failed to flush pending logging object "
+            << "when updating logging configuration of bucket '" << src_bucket_id
+            << "' because original target bucket '" << old_target_bucket_id
+            << "' could not be loaded, ret = " << ret << dendl;
+        }
+      }
+
+      RGWObjVersionTracker objv_tracker;
+      std::string obj_name;
+
+      if (!target_changed || old_target_bucket) {
+        auto& flush_target_bucket = target_changed ? old_target_bucket : target_bucket;
+        const auto& flush_target_bucket_id = flush_target_bucket->get_key();
+        if (int ret = flush_target_bucket->get_logging_object_name(
+              obj_name, old_conf->target_prefix, y, this, nullptr);
+            ret < 0 && ret != -ENOENT) {
+          ldpp_dout(this, 1) << "ERROR: failed to get name of logging object "
+            << "of logging bucket '" << flush_target_bucket_id
+            << "' and prefix '" << old_conf->target_prefix
+            << "', ret = " << ret << dendl;
+          op_ret = ret;
+          return;
+        }
+
+        const auto region = driver->get_zone()->get_zonegroup().get_api_name();
+        if (const auto ret = rollover_logging_object(*old_conf,
+              flush_target_bucket,
+              obj_name,
+              this,
+              region,
+              src_bucket.get(),
+              y,
+              false, // rollover should happen even if commit failed
+              &objv_tracker,
+              false,
+              &old_obj); ret < 0) {
+          ldpp_dout(this, 1) << "WARNING: failed to flush pending logging object '" << obj_name << "'"
+              << " to target bucket '" << flush_target_bucket_id << "'. "
+              << "' when updating logging configuration of bucket '" << src_bucket->get_key() << ". error: " << ret << dendl;
+        } else {
+          ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
+            << "' to target bucket '" << flush_target_bucket_id << "' when updating logging configuration of bucket '"
+            << src_bucket->get_key() << "'" << dendl;
+        }
+      }
+
+      if (target_changed) {
         if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, driver, old_target_bucket_id, src_bucket_id, false, y); ret < 0) {
           ldpp_dout(this, 1) << "WARNING: failed to remove source bucket '" << src_bucket_id << "' from logging sources of original logging bucket '" <<
             old_target_bucket_id << "', ret = " << ret << dendl;
@@ -471,4 +499,3 @@ RGWOp* RGWHandler_REST_BucketLogging_S3::create_put_op() {
 RGWOp* RGWHandler_REST_BucketLogging_S3::create_get_op() {
   return new RGWGetBucketLoggingOp();
 }
-
