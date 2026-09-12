@@ -181,9 +181,9 @@ Replacing an OSD
    :ref:`cephadm-replacing-an-osd`.
 
 Sometimes OSDs need to be replaced: for example, when a disk fails, or when an
-administrator wants to reprovision OSDs with a new back end (perhaps when
-switching from Filestore to BlueStore). Replacing an OSD differs from `Removing
-the OSD`_ in that the replaced OSD's ID and CRUSH map entry must be kept intact
+administrator wants to reprovision an OSD with a different layout (perhaps to
+move its DB to a faster device). Replacing an OSD differs from `Removing the
+OSD`_ in that the replaced OSD's ID and CRUSH map entry must be kept intact
 after the OSD is destroyed for replacement.
 
 
