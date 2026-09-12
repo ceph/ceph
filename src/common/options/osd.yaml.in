@@ -51,12 +51,24 @@ options:
 - name: osd_max_backfills
   type: uint
   level: advanced
-  desc: Maximum number of concurrent backfills to or from a single OSD.
-  long_desc: The maximum number of backfills allowed to or from a single OSD. Note
-    that this is applied separately for read and write operations. This setting is
-    automatically reset when the mClock scheduler is used.
+  desc: Maximum number of PGs concurrently backfilling to or from a single OSD.
+  fmt_desc: The maximum number of PGs that may be backfilling into or out of a
+    single OSD at one time. This is a reservation limit, so it caps backfill
+    concurrency (how many PGs move at once), not the rate at which each one moves;
+    for that, see ``osd_recovery_max_active``. Backfill populates a PG on an OSD
+    by scanning its object set and sending the objects the target is missing (used
+    when the PG log cannot drive recovery, e.g. an OSD new to the PG), as opposed
+    to log-based recovery of individual objects.
+    The limit is counted separately for the source (read) and destination (write)
+    side of a backfill. Because an erasure-coded PG must hold a reservation on all
+    of its shards' OSDs at once, wide EC pools are frequently limited by this even
+    when the disks are near-idle.
+  note: This setting is automatically reset when the mClock scheduler is used.
   default: 1
   see_also:
+  - osd_recovery_max_active
+  - osd_recovery_max_active_hdd
+  - osd_recovery_max_active_ssd
   - osd_mclock_override_recovery_settings
   flags:
   - runtime
@@ -1559,9 +1571,14 @@ options:
   level: advanced
   desc: Number of simultaneous active recovery operations per OSD (overrides _ssd
     and _hdd if non-zero)
-  fmt_desc: The number of active recovery requests per OSD at one time. More
-    requests will accelerate recovery, but the requests places an
-    increased load on the cluster.
+  fmt_desc: The number of recovery operations (individual object pushes and pulls)
+    that may be in flight at once on a single OSD, summed across all of that OSD's
+    actively recovering and backfilling PGs. Despite the name, this also throttles
+    the data-movement rate of backfill, not just log-based recovery; it governs how
+    fast the active work proceeds, whereas ``osd_max_backfills`` governs how many
+    PGs may be backfilling at once. More operations accelerate recovery and
+    backfill at the cost of higher OSD load; when the disks are not saturated, this
+    is the effective throughput lever.
   note: This value is only used if it is non-zero. Normally it
     is ``0``, which means that the ``hdd`` or ``ssd`` values
     (below) are used, depending on the type of the primary
@@ -1569,6 +1586,7 @@ options:
     This setting is automatically reset when the mClock scheduler is used.
   default: 0
   see_also:
+  - osd_max_backfills
   - osd_recovery_max_active_hdd
   - osd_recovery_max_active_ssd
   - osd_mclock_override_recovery_settings
@@ -1580,11 +1598,14 @@ options:
   level: advanced
   desc: Number of simultaneous active recovery operations per OSD (for rotational
     devices)
-  fmt_desc: The number of active recovery requests per OSD at one time, if the
-    primary device is rotational.
+  fmt_desc: As ``osd_recovery_max_active`` (the number of in-flight
+    recovery/backfill object operations per OSD), applied when
+    ``osd_recovery_max_active`` is ``0`` and the OSD's primary device is
+    rotational (an HDD).
   note: This setting is automatically reset when the mClock scheduler is used.
   default: 3
   see_also:
+  - osd_max_backfills
   - osd_recovery_max_active
   - osd_recovery_max_active_ssd
   - osd_mclock_override_recovery_settings
@@ -1596,11 +1617,14 @@ options:
   level: advanced
   desc: Number of simultaneous active recovery operations per OSD (for non-rotational
     solid state devices)
-  fmt_desc: The number of active recovery requests per OSD at one time, if the
-    primary device is non-rotational (i.e., an SSD).
+  fmt_desc: As ``osd_recovery_max_active`` (the number of in-flight
+    recovery/backfill object operations per OSD), applied when
+    ``osd_recovery_max_active`` is ``0`` and the OSD's primary device is
+    non-rotational (an SSD).
   note: This setting is automatically reset when the mClock scheduler is used.
   default: 10
   see_also:
+  - osd_max_backfills
   - osd_recovery_max_active
   - osd_recovery_max_active_hdd
   - osd_mclock_override_recovery_settings
