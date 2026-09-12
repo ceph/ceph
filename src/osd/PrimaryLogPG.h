@@ -2023,6 +2023,7 @@ public:
     ObjectContextRef obc,
     std::map<std::string, ceph::buffer::list, std::less<>> *out);
   int get_internal_versions(const hobject_t& soid,
+                            uint8_t version,
                             std::map<shard_id_t, eversion_t>* out);
 
 public:
