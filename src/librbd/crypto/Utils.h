@@ -22,8 +22,9 @@ void set_crypto(ImageCtxT *image_ctx,
                 decltype(ImageCtxT::encryption_format) encryption_format);
 
 int build_crypto(
-        CephContext* cct, const unsigned char* key, uint32_t key_length,
-        uint64_t block_size, uint64_t data_offset,
+        CephContext* cct, const char* cipher_suite,
+        const unsigned char* key, uint32_t key_length,
+        uint64_t block_size, uint64_t data_offset, uint32_t meta_size,
         std::unique_ptr<CryptoInterface>* result_crypto);
 
 } // namespace util

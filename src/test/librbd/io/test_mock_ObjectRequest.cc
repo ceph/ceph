@@ -8,6 +8,7 @@
 #include "test/librbd/mock/cache/MockImageCache.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
+#include "test/librbd/mock/crypto/MockEncryptionFormat.h"
 #include "include/rbd/librbd.hpp"
 #include "librbd/io/CopyupRequest.h"
 #include "librbd/io/ImageRequest.h"

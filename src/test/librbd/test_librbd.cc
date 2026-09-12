@@ -2465,6 +2465,297 @@ TEST_F(TestLibRBD, TestEncryptionLUKS2)
   rados_ioctx_destroy(ioctx);
 }
 
+#ifdef HAVE_CRYPT_FORMAT_INLINE
+TEST_F(TestLibRBD, TestEncryptionLUKS2_AEAD)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 32 << 20;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+
+  rbd_image_t image;
+  rbd_encryption_luks2_format_options_t luks2_opts = {
+          .alg = RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256,
+          .passphrase = "password",
+          .passphrase_size = 8,
+  };
+  rbd_encryption_luks_format_options_t luks_opts = {
+          .passphrase = "password",
+          .passphrase_size = 8,
+  };
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_EQ(0, rbd_encryption_format(
+          image, RBD_ENCRYPTION_FORMAT_LUKS2, &luks2_opts, sizeof(luks2_opts)));
+  ASSERT_EQ(-EEXIST, rbd_encryption_load(
+          image, RBD_ENCRYPTION_FORMAT_LUKS2, &luks2_opts, sizeof(luks2_opts)));
+
+  ASSERT_PASSED(write_test_data, image, "test", 0, 4, 0);
+  ASSERT_EQ(0, rbd_close(image));
+
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_EQ(0, rbd_encryption_load(
+          image, RBD_ENCRYPTION_FORMAT_LUKS2, &luks2_opts, sizeof(luks2_opts)));
+  ASSERT_PASSED(read_test_data, image, "test", 0, 4, 0);
+  ASSERT_EQ(0, rbd_close(image));
+
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_EQ(0, rbd_encryption_load(
+          image, RBD_ENCRYPTION_FORMAT_LUKS, &luks_opts, sizeof(luks_opts)));
+  ASSERT_PASSED(read_test_data, image, "test", 0, 4, 0);
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestCloneEncryptionAEAD)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  // create base image, write 'a's
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 256 << 20;
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_PASSED(write_test_data, image, "aaaa", 0, 4, 0);
+  ASSERT_EQ(0, rbd_flush(image));
+
+  // clone, encrypt with LUKS2 (xts-plain64), write 'b's
+  ASSERT_EQ(0, rbd_snap_create(image, "snap"));
+  ASSERT_EQ(0, rbd_snap_protect(image, "snap"));
+
+  rbd_image_options_t image_opts;
+  rbd_image_options_create(&image_opts);
+  BOOST_SCOPE_EXIT_ALL( (&image_opts) ) {
+    rbd_image_options_destroy(image_opts);
+  };
+  std::string child1_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd_clone3(ioctx, name.c_str(), "snap", ioctx,
+                          child1_name.c_str(), image_opts));
+
+  rbd_image_t child1;
+  ASSERT_EQ(0, rbd_open(ioctx, child1_name.c_str(), &child1, NULL));
+
+  rbd_encryption_luks2_format_options_t child1_opts = {
+          .alg = RBD_ENCRYPTION_ALGORITHM_AES256,
+          .passphrase = "password",
+          .passphrase_size = 8,
+  };
+  ASSERT_EQ(0, rbd_encryption_format(
+          child1, RBD_ENCRYPTION_FORMAT_LUKS2, &child1_opts,
+          sizeof(child1_opts)));
+  ASSERT_EQ(0, rbd_encryption_load(
+          child1, RBD_ENCRYPTION_FORMAT_LUKS2, &child1_opts,
+          sizeof(child1_opts)));
+  ASSERT_PASSED(write_test_data, child1, "bbbb", 64 << 20, 4, 0);
+  ASSERT_EQ(0, rbd_flush(child1));
+
+  // clone, encrypt with LUKS2 AEAD, write 'c's
+  ASSERT_EQ(0, rbd_snap_create(child1, "snap"));
+  ASSERT_EQ(0, rbd_snap_protect(child1, "snap"));
+
+  std::string child2_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd_clone3(ioctx, child1_name.c_str(), "snap", ioctx,
+                          child2_name.c_str(), image_opts));
+
+  rbd_image_t child2;
+  ASSERT_EQ(0, rbd_open(ioctx, child2_name.c_str(), &child2, NULL));
+
+  rbd_encryption_luks2_format_options_t child2_opts = {
+          .alg = RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256,
+          .passphrase = "password",
+          .passphrase_size = 8,
+  };
+  ASSERT_EQ(0, rbd_encryption_format(
+          child2, RBD_ENCRYPTION_FORMAT_LUKS2, &child2_opts,
+          sizeof(child2_opts)));
+
+  // multi-spec load: child2 (AEAD) + child1 (xts-plain64)
+  rbd_encryption_spec_t specs[] = {
+          { .format = RBD_ENCRYPTION_FORMAT_LUKS2,
+            .opts = &child2_opts,
+            .opts_size = sizeof(child2_opts)},
+          { .format = RBD_ENCRYPTION_FORMAT_LUKS2,
+            .opts = &child1_opts,
+            .opts_size = sizeof(child1_opts)}
+  };
+  ASSERT_EQ(0, rbd_encryption_load2(child2, specs, 2));
+
+  ASSERT_PASSED(write_test_data, child2, "cccc", 128 << 20, 4, 0);
+  ASSERT_EQ(0, rbd_flush(child2));
+
+  // verify all data through the clone chain
+  ASSERT_PASSED(read_test_data, child2, "aaaa", 0, 4, 0);
+  ASSERT_PASSED(read_test_data, child2, "bbbb", 64 << 20, 4, 0);
+  ASSERT_PASSED(read_test_data, child2, "cccc", 128 << 20, 4, 0);
+
+  // flatten child2
+  ASSERT_EQ(0, rbd_flatten(child2));
+
+  // reopen and load with single LUKS spec
+  ASSERT_EQ(0, rbd_close(child2));
+  ASSERT_EQ(0, rbd_open(ioctx, child2_name.c_str(), &child2, NULL));
+  rbd_encryption_luks_format_options_t luks_opts = {
+          .passphrase = "password",
+          .passphrase_size = 8,
+  };
+  ASSERT_EQ(0, rbd_encryption_load(
+          child2, RBD_ENCRYPTION_FORMAT_LUKS, &luks_opts, sizeof(luks_opts)));
+
+  // verify flattened image
+  ASSERT_PASSED(read_test_data, child2, "aaaa", 0, 4, 0);
+  ASSERT_PASSED(read_test_data, child2, "bbbb", 64 << 20, 4, 0);
+  ASSERT_PASSED(read_test_data, child2, "cccc", 128 << 20, 4, 0);
+
+  // cleanup
+  ASSERT_EQ(0, rbd_close(child2));
+  ASSERT_EQ(0, rbd_remove(ioctx, child2_name.c_str()));
+  ASSERT_EQ(0, rbd_snap_unprotect(child1, "snap"));
+  ASSERT_EQ(0, rbd_snap_remove(child1, "snap"));
+  ASSERT_EQ(0, rbd_close(child1));
+  ASSERT_EQ(0, rbd_remove(ioctx, child1_name.c_str()));
+  ASSERT_EQ(0, rbd_snap_unprotect(image, "snap"));
+  ASSERT_EQ(0, rbd_snap_remove(image, "snap"));
+  ASSERT_EQ(0, rbd_close(image));
+  ASSERT_EQ(0, rbd_remove(ioctx, name.c_str()));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestCloneEncryptionAEAD_Reverse)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  // create base image, write 'a's
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 256 << 20;
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_PASSED(write_test_data, image, "aaaa", 0, 4, 0);
+  ASSERT_EQ(0, rbd_flush(image));
+
+  // clone, encrypt with LUKS2 AEAD, write 'b's
+  ASSERT_EQ(0, rbd_snap_create(image, "snap"));
+  ASSERT_EQ(0, rbd_snap_protect(image, "snap"));
+
+  rbd_image_options_t image_opts;
+  rbd_image_options_create(&image_opts);
+  BOOST_SCOPE_EXIT_ALL( (&image_opts) ) {
+    rbd_image_options_destroy(image_opts);
+  };
+  std::string child1_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd_clone3(ioctx, name.c_str(), "snap", ioctx,
+                          child1_name.c_str(), image_opts));
+
+  rbd_image_t child1;
+  ASSERT_EQ(0, rbd_open(ioctx, child1_name.c_str(), &child1, NULL));
+
+  rbd_encryption_luks2_format_options_t child1_opts = {
+          .alg = RBD_ENCRYPTION_ALGORITHM_AES256_HMAC_SHA256,
+          .passphrase = "password",
+          .passphrase_size = 8,
+  };
+  ASSERT_EQ(0, rbd_encryption_format(
+          child1, RBD_ENCRYPTION_FORMAT_LUKS2, &child1_opts,
+          sizeof(child1_opts)));
+  ASSERT_EQ(0, rbd_encryption_load(
+          child1, RBD_ENCRYPTION_FORMAT_LUKS2, &child1_opts,
+          sizeof(child1_opts)));
+  ASSERT_PASSED(write_test_data, child1, "bbbb", 64 << 20, 4, 0);
+  ASSERT_EQ(0, rbd_flush(child1));
+
+  // clone, encrypt with LUKS2 xts-plain64, write 'c's
+  ASSERT_EQ(0, rbd_snap_create(child1, "snap"));
+  ASSERT_EQ(0, rbd_snap_protect(child1, "snap"));
+
+  std::string child2_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd_clone3(ioctx, child1_name.c_str(), "snap", ioctx,
+                          child2_name.c_str(), image_opts));
+
+  rbd_image_t child2;
+  ASSERT_EQ(0, rbd_open(ioctx, child2_name.c_str(), &child2, NULL));
+
+  rbd_encryption_luks2_format_options_t child2_opts = {
+          .alg = RBD_ENCRYPTION_ALGORITHM_AES256,
+          .passphrase = "password",
+          .passphrase_size = 8,
+  };
+  ASSERT_EQ(0, rbd_encryption_format(
+          child2, RBD_ENCRYPTION_FORMAT_LUKS2, &child2_opts,
+          sizeof(child2_opts)));
+
+  // multi-spec load: child2 (xts-plain64) + child1 (AEAD)
+  rbd_encryption_spec_t specs[] = {
+          { .format = RBD_ENCRYPTION_FORMAT_LUKS2,
+            .opts = &child2_opts,
+            .opts_size = sizeof(child2_opts)},
+          { .format = RBD_ENCRYPTION_FORMAT_LUKS2,
+            .opts = &child1_opts,
+            .opts_size = sizeof(child1_opts)}
+  };
+  ASSERT_EQ(0, rbd_encryption_load2(child2, specs, 2));
+
+  ASSERT_PASSED(write_test_data, child2, "cccc", 128 << 20, 4, 0);
+  ASSERT_EQ(0, rbd_flush(child2));
+
+  // verify all data through the clone chain
+  ASSERT_PASSED(read_test_data, child2, "aaaa", 0, 4, 0);
+  ASSERT_PASSED(read_test_data, child2, "bbbb", 64 << 20, 4, 0);
+  ASSERT_PASSED(read_test_data, child2, "cccc", 128 << 20, 4, 0);
+
+  // flatten child2
+  ASSERT_EQ(0, rbd_flatten(child2));
+
+  // reopen and load with single LUKS spec
+  ASSERT_EQ(0, rbd_close(child2));
+  ASSERT_EQ(0, rbd_open(ioctx, child2_name.c_str(), &child2, NULL));
+  rbd_encryption_luks_format_options_t luks_opts = {
+          .passphrase = "password",
+          .passphrase_size = 8,
+  };
+  ASSERT_EQ(0, rbd_encryption_load(
+          child2, RBD_ENCRYPTION_FORMAT_LUKS, &luks_opts, sizeof(luks_opts)));
+
+  // verify flattened image
+  ASSERT_PASSED(read_test_data, child2, "aaaa", 0, 4, 0);
+  ASSERT_PASSED(read_test_data, child2, "bbbb", 64 << 20, 4, 0);
+  ASSERT_PASSED(read_test_data, child2, "cccc", 128 << 20, 4, 0);
+
+  // cleanup
+  ASSERT_EQ(0, rbd_close(child2));
+  ASSERT_EQ(0, rbd_remove(ioctx, child2_name.c_str()));
+  ASSERT_EQ(0, rbd_snap_unprotect(child1, "snap"));
+  ASSERT_EQ(0, rbd_snap_remove(child1, "snap"));
+  ASSERT_EQ(0, rbd_close(child1));
+  ASSERT_EQ(0, rbd_remove(ioctx, child1_name.c_str()));
+  ASSERT_EQ(0, rbd_snap_unprotect(image, "snap"));
+  ASSERT_EQ(0, rbd_snap_remove(image, "snap"));
+  ASSERT_EQ(0, rbd_close(image));
+  ASSERT_EQ(0, rbd_remove(ioctx, name.c_str()));
+  rados_ioctx_destroy(ioctx);
+}
+#endif // HAVE_CRYPT_FORMAT_INLINE
+
 #ifdef HAVE_LIBCRYPTSETUP
 
 TEST_F(TestLibRBD, TestCloneEncryption)

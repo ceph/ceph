@@ -402,6 +402,9 @@
 /* Define if libcryptsetup can be used (linux only) */
 #cmakedefine HAVE_LIBCRYPTSETUP
 
+/* Define if libcryptsetup >= 2.8.0 with inline integrity support */
+#cmakedefine HAVE_CRYPT_FORMAT_INLINE
+
 /* Define if libnbd can be used */
 #cmakedefine HAVE_LIBNBD
 

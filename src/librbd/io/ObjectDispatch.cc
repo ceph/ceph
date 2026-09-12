@@ -81,6 +81,9 @@ bool ObjectDispatch<I>::write(
                  << object_off << "~" << data.length() << dendl;
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
+  if (*object_dispatch_flags & io::OBJECT_DISPATCH_FLAG_IS_AEAD_ENCRYPTED) {
+    write_flags |= io::OBJECT_WRITE_FLAG_ENCRYPTED_AEAD_WRITE; 
+  }
   auto req = new ObjectWriteRequest<I>(m_image_ctx, object_no, object_off,
                                        std::move(data), io_context, op_flags,
                                        write_flags, assert_version,

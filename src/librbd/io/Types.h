@@ -126,13 +126,17 @@ enum ObjectDispatchLayer {
   OBJECT_DISPATCH_LAYER_LAST
 };
 
+// read_op flags
 enum {
   READ_FLAG_DISABLE_READ_FROM_PARENT            = 1UL << 0,
   READ_FLAG_DISABLE_CLIPPING                    = 1UL << 1,
+  READ_FLAG_ENCRYPTED_AEAD_READ               = 1UL << 2,
 };
 
+// write_op flags
 enum {
-  OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE            = 1UL << 0
+  OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE            = 1UL << 0,
+  OBJECT_WRITE_FLAG_ENCRYPTED_AEAD_WRITE        = 1UL << 1,
 };
 
 enum {
@@ -142,7 +146,8 @@ enum {
 
 enum {
   OBJECT_DISPATCH_FLAG_FLUSH                    = 1UL << 0,
-  OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR      = 1UL << 1
+  OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR      = 1UL << 1,
+  OBJECT_DISPATCH_FLAG_IS_AEAD_ENCRYPTED        = 1UL << 2,
 };
 
 enum {
