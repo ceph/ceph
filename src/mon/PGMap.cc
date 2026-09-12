@@ -1762,6 +1762,7 @@ void PGMap::dump_pg_stats_plain(
     tab.define_column("DEEP_SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("SNAPTRIMQ_LEN", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("LAST_SCRUB_DURATION", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("LAST_DEEP_SCRUB_DURATION",TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("SCRUB_SCHEDULING", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("OBJECTS_SCRUBBED", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("OBJECTS_TRIMMED", TextTable::LEFT, TextTable::RIGHT);
@@ -1806,6 +1807,7 @@ void PGMap::dump_pg_stats_plain(
           << st.last_deep_scrub_stamp
           << st.snaptrimq_len
           << st.last_scrub_duration
+	  << st.last_deep_scrub_duration
           << st.dump_scrub_schedule()
           << st.objects_scrubbed
           << st.objects_trimmed
@@ -2355,6 +2357,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
   tab.define_column("SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEEP_SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("LAST_SCRUB_DURATION", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("LAST_DEEP_SCRUB_DURATION", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("SCRUB_SCHEDULING", TextTable::LEFT, TextTable::LEFT);
 
   for (auto i = pgs.begin(); i != pgs.end(); ++i) {
@@ -2385,6 +2388,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
         << st.last_scrub_stamp
         << st.last_deep_scrub_stamp
         << st.last_scrub_duration
+	<< st.last_deep_scrub_duration
         << st.dump_scrub_schedule()
       << TextTable::endrow;
   }
