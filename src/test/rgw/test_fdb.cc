@@ -13,6 +13,8 @@
 
 #include <catch2/catch_config.hpp>
 
+#include <catch2/benchmark/catch_benchmark.hpp>
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 
@@ -31,23 +33,28 @@
 
 #include <boost/container/flat_map.hpp>
 
-#include <algorithm>
+#include <map>
+#include <list>
 #include <array>
+#include <vector>
+#include <unordered_map>
+
+#include <ranges>
+#include <iterator>
+#include <algorithm>
+
 #include <atomic>
 #include <chrono>
+#include <thread>
+
+#include <limits>
+#include <memory>
+#include <cstdint>
+#include <utility>
 #include <compare>
 #include <concepts>
-#include <cstdint>
 #include <exception>
-#include <iterator>
-#include <list>
-#include <map>
-#include <ranges>
 #include <stdexcept>
-#include <thread>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 using Catch::Matchers::AllMatch;
 
@@ -251,12 +258,12 @@ inline void write_raw_fdb_value(lfdb::database_handle dbh,
                                 std::span<const std::uint8_t> value)
 {
  auto txn = lfdb::make_transaction(dbh);
+ const auto key_bytes = lfdb::detail::as_fdb_bytes(key);
+ const auto value_bytes = lfdb::detail::as_fdb_bytes(value);
 
  fdb_transaction_set(txn->raw_handle(),
-                     reinterpret_cast<const std::uint8_t *>(key.data()),
-                     static_cast<int>(std::size(key)),
-                     value.data(),
-                     static_cast<int>(std::size(value)));
+                     key_bytes.data, key_bytes.length,
+                     value_bytes.data, value_bytes.length);
 
  REQUIRE(lfdb::commit(txn));
 }
@@ -1360,7 +1367,7 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
 
  SECTION("spanlike") {
   // span<uint8_t> -> vector<uint8_t> -> vector<uint8_t>
-  const std::span<const std::uint8_t> n((const std::uint8_t *)msg, sizeof(msg));
+  const auto n = lfdb::detail::as_byte_view(std::string_view(msg, sizeof(msg)));
 
   std::vector<std::uint8_t> x;
   x = ceph::libfdb::to::convert(n);
@@ -1373,7 +1380,8 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
 
  SECTION("NULL-as-data") {
   // with NULL data-- const char* -> vector<uint8_t> -> vector<uint8_t>
-  const std::span<const std::uint8_t> n((const std::uint8_t *)msg_with_null, sizeof(msg_with_null));
+  const auto n = lfdb::detail::as_byte_view(
+    std::string_view(msg_with_null, sizeof(msg_with_null)));
 
   std::vector<std::uint8_t> x;
   x = ceph::libfdb::to::convert(n);
@@ -1383,6 +1391,80 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
 
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   REQUIRE_THAT(msg_with_null, Catch::Matchers::RangeEquals(o));
+ }
+
+ SECTION("fixed-size C array") {
+  const std::uint8_t input[] { 1, 2, 3, 4 };
+  std::uint8_t output[std::size(input)] {};
+
+  const auto encoded = lfdb::to::convert(input);
+  lfdb::from::convert(encoded, output);
+
+  CHECK(sizeof input == encoded.size());
+  CHECK_THAT(output, Catch::Matchers::RangeEquals(input));
+ }
+}
+
+TEST_CASE("FoundationDB C API argument conversion", "[fdb][rgw]")
+{
+ SECTION("integer options are little-endian") {
+  constexpr std::int64_t value = 0x0102030405060708;
+  constexpr auto versionstamp_offset =
+    lfdb::detail::little_endian_bytes(std::uint32_t {0x01020304});
+  const lfdb::transaction_options options {
+   { FDB_TR_OPTION_TIMEOUT, value }
+  };
+
+  FDBTransactionOption option = FDB_TR_OPTION_ACCESS_SYSTEM_KEYS;
+  std::vector<std::uint8_t> encoded;
+
+  lfdb::detail::apply_options(
+    options,
+    [&option, &encoded](const auto received_option,
+                        const std::uint8_t *data,
+                        const int size) {
+      option = received_option;
+      encoded.assign(data, data + size);
+
+      return fdb_error_t { 0 };
+    });
+
+  CHECK(FDB_TR_OPTION_TIMEOUT == option);
+  STATIC_REQUIRE(versionstamp_offset ==
+                 std::array<std::uint8_t, 4> { 4, 3, 2, 1 });
+  CHECK_THAT(encoded, Catch::Matchers::RangeEquals(
+    std::array<std::uint8_t, 8> { 8, 7, 6, 5, 4, 3, 2, 1 }));
+ }
+
+ SECTION("sizes outside the C API range are rejected") {
+  constexpr auto too_large = 1ZU + std::numeric_limits<int>::max();
+
+  CHECK_THROWS_WITH(lfdb::detail::checked_fdb_size(too_large),
+                    "value is too large for the FoundationDB C API");
+  CHECK_THROWS_WITH(lfdb::detail::checked_result_size(-1),
+                    "FoundationDB returned a negative result size");
+ }
+
+ SECTION("keys and values use the same checked byte representation") {
+  const std::string key("a\0b", 3);
+  const std::array<std::uint8_t, 3> value { 1, 0, 2 };
+
+  const auto key_bytes = lfdb::detail::as_fdb_bytes(key);
+  const auto value_bytes = lfdb::detail::as_fdb_bytes(lfdb::detail::byte_view(value));
+  const auto key_result = lfdb::detail::result_bytes(key_bytes.data, key_bytes.length);
+  const auto value_result = lfdb::detail::result_bytes(value_bytes.data, value_bytes.length);
+
+  CHECK(3 == key_bytes.length);
+  CHECK(3 == value_bytes.length);
+  CHECK(key == lfdb::detail::as_string_view(key_result));
+  CHECK_THAT(value_result, Catch::Matchers::RangeEquals(value));
+ }
+
+ SECTION("empty result buffers are accepted") {
+  const auto empty = lfdb::detail::result_bytes(nullptr, 0);
+
+  CHECK(empty.empty());
+  CHECK(lfdb::detail::as_string_view(empty).empty());
  }
 }
 
@@ -1427,7 +1509,7 @@ TEST_CASE("fdb conversions (functions)", "[fdb][rgw]")
     // Because we did /conversion/ on the inbound data, we're still obliged to
     // reverse this (otherwise we'll see whatever artefacts the conversion produced)--
     // the complication is a consequence of dealing with the underlying buffer directly:
-    std::span<const std::uint8_t> in_span((const std::uint8_t *)data, sz);
+    const auto in_span = lfdb::detail::as_byte_view(std::string_view(data, sz));
  
     ceph::libfdb::from::convert(in_span, o);
   };
@@ -1851,10 +1933,60 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
  }
 }
 
+TEST_CASE("transactors reject invalid database handles", "[fdb]")
+{
+ lfdb::database_handle dbh;
+
+ SECTION("direct transaction") {
+  CHECK_THROWS_WITH(lfdb::transaction {dbh},
+                    "transaction requires a database handle");
+ }
+
+ SECTION("default options") {
+  auto txr = lfdb::make_transactor(dbh);
+
+  CHECK_THROWS_WITH(txr(lfdb::with_result, [](auto) {}),
+                    "transaction requires a database handle");
+ }
+
+ SECTION("explicit options") {
+  lfdb::transaction_options opts;
+  auto txr = lfdb::make_transactor(dbh, opts);
+
+  CHECK_THROWS_WITH(txr([](auto) {}),
+                    "transaction requires a database handle");
+ }
+
+ SECTION("duplicate staged target") {
+  auto txr = lfdb::make_transactor(dbh);
+  int output = 0;
+
+  CHECK_THROWS_WITH(txr([](auto, auto&, auto&) {},
+                        lfdb::staged(output), lfdb::staged(output)),
+                    "cannot stage one target more than once");
+  CHECK_THROWS_WITH(txr([](auto, auto&, auto&) {},
+                        lfdb::staged(output),
+                        lfdb::staged(output, std::in_place)),
+                    "cannot stage one target more than once");
+ }
+}
+
 SCENARIO("transactor", "[fdb]")
 {
  janitor j;
 
+ static_assert(lfdb::concepts::stageable<std::vector<int>>);
+ static_assert(lfdb::concepts::in_place_stageable<std::unique_ptr<int>>);
+ static_assert(not lfdb::concepts::stageable<std::unique_ptr<int>>);
+ static_assert(not lfdb::concepts::supported_invocation_result<
+   lfdb::staged_proxy<int>>);
+ static_assert(std::same_as<void, decltype(
+   std::declval<lfdb::staged_proxy<std::vector<int>>&>().push_back(1))>);
+ static_assert(std::same_as<void, decltype(
+   std::declval<lfdb::staged_proxy<std::vector<int>>&>().emplace_back(1))>);
+ static_assert(std::same_as<void, decltype(
+   std::declval<lfdb::staged_proxy<std::map<int, int>>&>().insert_or_assign(
+     1, 2))>);
  static_assert(lfdb::detail::result_reporting_transaction_op<decltype([](auto) {})>);
  static_assert(!lfdb::detail::result_reporting_transaction_op<decltype([](auto) {
   return 7;
@@ -2010,6 +2142,162 @@ SCENARIO("transactor", "[fdb]")
   CHECK(value == out);
  }
 
+ SECTION("staged arguments publish one successful attempt") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("staged-conflict-key");
+
+  lfdb::set(j, key, "initial");
+
+  std::vector<std::string> values {"before"};
+  const auto result = txr(lfdb::with_result,
+    [&j, &key](auto txn, auto& staged_values) {
+      std::string value;
+      if (not lfdb::get(txn, key, value)) {
+       throw std::runtime_error("expected key does not exist");
+      }
+
+      staged_values.push_back(value);
+
+      // Force the first attempt to conflict:
+      if ("initial" == value) {
+       lfdb::set(j, key, "conflict");
+      }
+
+      lfdb::set(txn, key, "final");
+    }, lfdb::staged(values));
+
+  CHECK(result.committed);
+  CHECK(2 == result.attempts);
+  CHECK((std::vector<std::string> {"before", "conflict"} == values));
+ }
+
+ SECTION("in-place staged arguments start fresh on every attempt") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("in-place-staged-conflict-key");
+
+  lfdb::set(j, key, "initial");
+
+  std::vector<std::string> values {"before"};
+  const auto result = txr(lfdb::with_result,
+    [&j, &key](auto txn, auto& staged_values) {
+      std::string value;
+      if (not lfdb::get(txn, key, value)) {
+       throw std::runtime_error("expected key does not exist");
+      }
+
+      staged_values.push_back(value);
+
+      // Force the first attempt to conflict:
+      if ("initial" == value) {
+       lfdb::set(j, key, "conflict");
+      }
+
+      lfdb::set(txn, key, "final");
+    }, lfdb::staged(values, std::in_place));
+
+  CHECK(result.committed);
+  CHECK(2 == result.attempts);
+  CHECK((std::vector<std::string> {"conflict"} == values));
+ }
+
+ SECTION("an empty in-place result replaces the target") {
+  auto txr = lfdb::make_transactor(j);
+  std::vector<int> values {1, 2, 3};
+
+  txr([](auto, auto&) {}, lfdb::staged(values, std::in_place));
+
+  CHECK(values.empty());
+ }
+
+ SECTION("in-place staging does not require a copyable target") {
+  auto txr = lfdb::make_transactor(j);
+  auto value = std::make_unique<int>(5);
+
+  txr([](auto, auto& staged_value) {
+    staged_value = std::make_unique<int>(7);
+  }, lfdb::staged(value, std::in_place));
+
+  REQUIRE(value);
+  CHECK(7 == *value);
+ }
+
+ SECTION("in-place staged arguments remain unchanged after a body exception") {
+  auto txr = lfdb::make_transactor(j);
+  std::vector<int> values {1, 2, 3};
+
+  CHECK_THROWS_WITH(txr([](auto, auto& staged_values) {
+    staged_values.push_back(4);
+    throw std::runtime_error("transaction body failed");
+  }, lfdb::staged(values, std::in_place)), "transaction body failed");
+
+  CHECK((std::vector {1, 2, 3} == values));
+ }
+
+ SECTION("staged arguments remain unchanged after retry exhaustion") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("staged-exhaustion-key");
+
+  lfdb::set(j, key, "initial");
+
+  std::vector<std::string> values {"before"};
+  const auto result = txr(lfdb::with_result,
+    [&j, &key](auto txn, auto& staged_values) {
+      std::string value;
+      if (not lfdb::get(txn, key, value)) {
+       throw std::runtime_error("expected key does not exist");
+      }
+
+      staged_values.push_back(value);
+
+      // Force every attempt to conflict:
+      lfdb::set(j, key, "conflict");
+      lfdb::set(txn, key, "final");
+    }, lfdb::staged(values));
+
+  CHECK_FALSE(result.committed);
+  CHECK(std::vector<std::string> {"before"} == values);
+ }
+
+ SECTION("ordinary transactors publish staged arguments") {
+  auto txr = lfdb::make_transactor(j);
+  std::uint64_t total = 5;
+  std::vector<int> values {0};
+  std::map<std::string, int> index;
+
+  const auto answer = txr([](auto,
+                             auto& staged_total,
+                             auto& staged_values,
+                             auto& staged_index) {
+    staged_total = 7;
+    staged_total += 5;
+
+    staged_values.clear();
+    staged_values.emplace_back(1);
+    staged_values.push_back(2);
+
+    staged_index.insert_or_assign("answer", 42);
+
+    return 42;
+  }, lfdb::staged(total), lfdb::staged(values), lfdb::staged(index));
+
+  CHECK(42 == answer);
+  CHECK(12 == total);
+  CHECK((std::vector {1, 2} == values));
+  CHECK(42 == index.at("answer"));
+ }
+
+ SECTION("staged arguments remain unchanged after a body exception") {
+  auto txr = lfdb::make_transactor(j);
+  int value = 5;
+
+  CHECK_THROWS_WITH(txr([](auto, auto& staged_value) {
+    staged_value += 7;
+    throw std::runtime_error("transaction body failed");
+  }, lfdb::staged(value)), "transaction body failed");
+
+  CHECK(5 == value);
+ }
+
  SECTION("result-reporting transactor replays after conflict") {
   auto txr = lfdb::make_transactor(j);
   const auto key = test_key("result-conflict-key");
@@ -2067,14 +2355,6 @@ SCENARIO("transactor", "[fdb]")
   CHECK(0 != result.last_error);
  }
 
- SECTION("result-reporting transactor rejects invalid database handles") {
-  lfdb::database_handle dbh;
-  auto txr = lfdb::make_transactor(dbh);
-
-  CHECK_THROWS_WITH(txr(lfdb::with_result, [](auto) {}),
-                    "make_transaction() requires database handle");
- }
-
  SECTION("transactor propagates transaction body exceptions") {
   auto txr = lfdb::make_transactor(j);
 
@@ -2092,6 +2372,110 @@ SCENARIO("transactor", "[fdb]")
  }
 }
 
+TEST_CASE("staged proxy benchmarks", "[.benchmark][benchmark][fdb][staged]")
+{
+ const std::vector<int> initial_values(64, 7);
+ const std::string large_value(256, 'x');
+ const std::vector<std::string> large_initial_values(256, large_value);
+
+ auto append_values = [](auto& values) {
+  for (const auto value : std::views::iota(0, 64)) {
+   values.push_back(value);
+  }
+ };
+
+ BENCHMARK("direct mutation without replay isolation")
+ {
+  auto values = initial_values;
+  append_values(values);
+
+  return values;
+ };
+
+ BENCHMARK("manual replay-isolated mutation")
+ {
+  auto values = initial_values;
+  auto attempt_values = values;
+
+  append_values(attempt_values);
+  values = std::move(attempt_values);
+
+  return values;
+ };
+
+ BENCHMARK("manual replay-isolated replacement")
+ {
+  auto values = initial_values;
+  std::vector<int> attempt_values;
+
+  append_values(attempt_values);
+  values = std::move(attempt_values);
+
+  return values;
+ };
+
+ BENCHMARK("staged proxy replay-isolated mutation")
+ {
+  auto values = initial_values;
+  auto proxy = lfdb::staged(values);
+
+  lfdb::detail::validate_staged_arguments(proxy);
+  lfdb::detail::staged_access::prepare_attempt(proxy);
+  append_values(proxy);
+  lfdb::detail::staged_access::publish(proxy);
+
+  return values;
+ };
+
+ BENCHMARK("in-place staged proxy replacement")
+ {
+  auto values = initial_values;
+  auto proxy = lfdb::staged(values, std::in_place);
+
+  lfdb::detail::validate_staged_arguments(proxy);
+  lfdb::detail::staged_access::prepare_attempt(proxy);
+  append_values(proxy);
+  lfdb::detail::staged_access::publish(proxy);
+
+  return values;
+ };
+
+ auto rebuild_large_output = [&](auto& values) {
+  values.clear();
+  values.get_target().reserve(large_initial_values.size());
+
+  for (auto remaining = large_initial_values.size(); remaining; --remaining) {
+   values.push_back(large_value);
+  }
+ };
+
+ BENCHMARK("copying staged proxy large replacement")
+ {
+  auto values = large_initial_values;
+  auto proxy = lfdb::staged(values);
+
+  lfdb::detail::validate_staged_arguments(proxy);
+  lfdb::detail::staged_access::prepare_attempt(proxy);
+  rebuild_large_output(proxy);
+  lfdb::detail::staged_access::publish(proxy);
+
+  return values;
+ };
+
+ BENCHMARK("in-place staged proxy large replacement")
+ {
+  auto values = large_initial_values;
+  auto proxy = lfdb::staged(values, std::in_place);
+
+  lfdb::detail::validate_staged_arguments(proxy);
+  lfdb::detail::staged_access::prepare_attempt(proxy);
+  rebuild_large_output(proxy);
+  lfdb::detail::staged_access::publish(proxy);
+
+  return values;
+ };
+}
+
 SCENARIO("options", "[fdb]")
 {
  // For information about options, consult the FoundationDB's source tree's
@@ -2104,9 +2488,7 @@ SCENARIO("options", "[fdb]")
   ov = lfdb::option_flag;                 // flag
   ov = 42;                                // integer
   ov = std::string("hi");                 // string
-  ov = std::vector<std::uint8_t>(         // data
-        (const std::uint8_t *)pearl_msg, 
-        (const std::uint8_t *)(pearl_msg + sizeof(pearl_msg)));
+  ov = std::vector<std::uint8_t> { 1, 2, 3 }; // data
  }
 
   auto dbh0 = lfdb::create_database(

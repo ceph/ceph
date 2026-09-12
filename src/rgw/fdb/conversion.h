@@ -11,10 +11,10 @@
  * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
  *
-*/
+ */
 
 #ifndef CEPH_FDB_CONVERSION_H
- #define CEPH_FDB_CONVERSION_H
+#define CEPH_FDB_CONVERSION_H
 
 #include "base.h"
 
@@ -23,35 +23,28 @@
 #include <span>
 #include <string>
 #include <vector>
+#include <string_view>
+
 #include <cstdint>
 #include <concepts>
 #include <functional>
-#include <string_view>
 #include <type_traits>
 #include <system_error>
 
-/* This module is the conversion boundary between C++ values and the byte buffers used by FoundationDB. Most of
-the serialization work is delegated to zpp_bits, but this layer has two jobs: it gives libfdb's gadgets a place
-to live (abstracting array/span behavior, callback outputs, error translation, etc.), and it provides a clean point
-for future features-- a good example would be caller-owned memory, which we currently don't support but certainly
-could. It also provides a fixed point where another serialization library could be swapped in. */
+/* This is the conversion boundary between C++ values and FoundationDB byte
+ * buffers. Serialization is delegated to zpp_bits; this layer adapts callback
+ * outputs, translates errors, and leaves a clean extension point for future
+ * caller-owned memory or a different serializer. */
 
 namespace ceph::libfdb::to {
 
-inline auto convert(const auto& from, std::vector<std::uint8_t>& out_data) -> std::span<const std::uint8_t>
+inline auto convert(const auto& from,
+                    std::vector<std::uint8_t>& out_data)
+ -> std::span<const std::uint8_t>
 {
  out_data.clear();
- 
+
  zpp::bits::out out(out_data);
-
- // zpp::bits won't write a size if we start with a fixed size array:
- // (see dynamic_extent):
- if constexpr (std::is_array_v<decltype(from)>) {
-     out(std::span(from, std::size(from))).or_throw();
-
-     return out_data;
- }
-
  out(from).or_throw();
 
  return out_data;
@@ -83,10 +76,13 @@ inline void convert(const std::span<const std::uint8_t>& from, auto& to)
  zpp_in(to).or_throw();
 }
 
-template <std::invocable<const char *, size_t> OutputFunction>
-inline void convert(const std::span<const std::uint8_t>& in, OutputFunction& write_output_fn)
+template <std::invocable<const char *, std::size_t> OutputFunction>
+inline void convert(const std::span<const std::uint8_t>& in,
+                    OutputFunction& write_output_fn)
 {
- write_output_fn((const char *)in.data(), in.size());
+ const auto input = detail::as_string_view(in);
+
+ write_output_fn(input.data(), input.size());
 }
 
 } // namespace ceph::libfdb::from
@@ -95,21 +91,19 @@ namespace ceph::libfdb::detail {
 
 template <typename ValueT>
 inline std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv)
+try
 {
  std::pair<std::string, ValueT> r;
 
- r.first.assign((const char *)kv.key, static_cast<std::string::size_type>(kv.key_length));
-
- try 
-  {
-     ceph::libfdb::from::convert(std::span<const std::uint8_t>(kv.value, kv.value_length), r.second);
- }
- catch (const std::system_error& e) {
-     // Decode failures still surface as libfdb operation failures to callers.
-     throw ceph::libfdb::libfdb_exception(e.what());
-  }
+ r.first = key_view(kv);
+ ceph::libfdb::from::convert(value_view(kv), r.second);
 
  return r;
+}
+catch (const std::system_error& e)
+{
+ // Decode failures still surface as libfdb operation failures to callers:
+ throw ceph::libfdb::libfdb_exception(e.what());
 }
 
 } // namespace ceph::libfdb::detail
