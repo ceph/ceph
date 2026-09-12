@@ -161,6 +161,7 @@ RBD
    rbd-diff
    rbd-export
    rbd-layering
+   rbd-orbital-snapshots
 
 Messaging and Networking
 ========================
