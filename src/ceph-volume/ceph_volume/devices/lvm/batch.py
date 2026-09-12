@@ -516,7 +516,8 @@ class Batch(object):
                 if fast_alloc:
                     osd.add_fast_device(*fast_alloc, type_=fast_type)
 
-            if very_fast_devices and self.args.objectstore == 'bluestore':
+        if very_fast_devices and self.args.objectstore == 'bluestore':
+            for osd in plan:
                 osd.add_very_fast_device(*very_fast_allocations.pop())
         return plan
 
