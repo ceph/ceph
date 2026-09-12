@@ -264,7 +264,8 @@ class RGWFSAL(FSAL):
                  name: str,
                  user_id: Optional[str] = None,
                  access_key_id: Optional[str] = None,
-                 secret_access_key: Optional[str] = None
+                 secret_access_key: Optional[str] = None,
+                 rgw_realm: Optional[str] = None
                  ) -> None:
         super().__init__(name)
         assert name == 'RGW'
@@ -273,13 +274,16 @@ class RGWFSAL(FSAL):
         # S3 credentials
         self.access_key_id = access_key_id
         self.secret_access_key = secret_access_key
+        # RGW realm (needed for non-default realm support)
+        self.rgw_realm = rgw_realm
 
     @classmethod
     def from_fsal_block(cls, fsal_block: RawBlock) -> 'RGWFSAL':
         return cls(fsal_block.values['name'],
                    fsal_block.values.get('user_id'),
                    fsal_block.values.get('access_key_id'),
-                   fsal_block.values.get('secret_access_key'))
+                   fsal_block.values.get('secret_access_key'),
+                   fsal_block.values.get('rgw_realm'))
 
     def to_fsal_block(self) -> RawBlock:
         result = RawBlock('FSAL', values={'name': self.name})
@@ -290,6 +294,8 @@ class RGWFSAL(FSAL):
             result.values['access_key_id'] = self.access_key_id
         if self.secret_access_key:
             result.values['secret_access_key'] = self.secret_access_key
+        if self.rgw_realm:
+            result.values['rgw_realm'] = self.rgw_realm
         return result
 
     @classmethod
@@ -297,7 +303,8 @@ class RGWFSAL(FSAL):
         return cls(fsal_dict['name'],
                    fsal_dict.get('user_id'),
                    fsal_dict.get('access_key_id'),
-                   fsal_dict.get('secret_access_key'))
+                   fsal_dict.get('secret_access_key'),
+                   fsal_dict.get('rgw_realm'))
 
     def to_dict(self) -> Dict[str, str]:
         r = {'name': self.name}
@@ -307,6 +314,8 @@ class RGWFSAL(FSAL):
             r['access_key_id'] = self.access_key_id
         if self.secret_access_key:
             r['secret_access_key'] = self.secret_access_key
+        if self.rgw_realm:
+            r['rgw_realm'] = self.rgw_realm
         return r
 
 
