@@ -4,3 +4,4 @@ tasks:
       modules:
         - tasks.cephfs.volumes.test_clone_stats.TestCloneProgressReporter
         - tasks.cephfs.volumes.test_clone_stats.TestOngoingClonesCounter
+        - tasks.cephfs.volumes.test_clone_stats.TestCloneProgressReporterFinish
