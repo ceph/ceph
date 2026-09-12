@@ -276,7 +276,8 @@ def dmcrypt_close(mapping, skip_path_check=False):
     # don't be strict about the remove call, but still warn on the terminal if it fails
     process.run(['cryptsetup', 'remove', mapping], stop_on_error=False)
 
-def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
+def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None, name=None,
+                    call_timeout=None):
     """
     Retrieve the dmcrypt (secret) key stored initially on the monitor. The key
     is sent initially with JSON, and the Monitor then mangles the name to
@@ -285,11 +286,19 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
     The ``lockbox.keyring`` file is required for this operation, and it is
     assumed it will exist on the path for the same OSD that is being activated.
     To support scanning, it is optionally configurable to a custom location
-    (e.g. inside a lockbox partition mounted in a temporary location)
+    (e.g. inside a lockbox partition mounted in a temporary location).
+
+    ``name`` allows overriding the cephx entity used for the call (defaults to
+    the OSD's lockbox entity), e.g. when a more privileged keyring is used for
+    key rotation.
+
+    ``call_timeout`` bounds the whole call (seconds), after which it is
+    killed. Defaults to unbounded to keep activation behavior unchanged.
     """
     if lockbox_keyring is None:
         lockbox_keyring = '/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)
-    name = 'client.osd-lockbox.%s' % osd_fsid
+    if name is None:
+        name = 'client.osd-lockbox.%s' % osd_fsid
     config_key = 'dm-crypt/osd/%s/luks' % osd_fsid
 
     mlogger.debug(f'Running ceph config-key get {config_key}')
@@ -304,14 +313,79 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
             config_key
         ],
         show_command=True,
-        logfile_verbose=False
+        logfile_verbose=False,
+        timeout=call_timeout
     )
     if returncode != 0:
+        if call_timeout is not None and returncode == -9:
+            raise RuntimeError(
+                f'config-key get timed out after {call_timeout}s waiting '
+                'for the monitors; the rotation is crash-safe and can be '
+                're-run')
         raise RuntimeError('Unable to retrieve dmcrypt secret')
     return ' '.join(stdout).strip()
 
 
-def write_lockbox_keyring(osd_id, osd_fsid, secret):
+def set_dmcrypt_key(osd_id: str,
+                    osd_fsid: str,
+                    key: str,
+                    lockbox_keyring: Optional[str] = None,
+                    name: Optional[str] = None,
+                    call_timeout: Optional[int] = None) -> None:
+    """
+    Store a (new) dmcrypt key on the monitor at
+    ``dm-crypt/osd/<fsid>/luks``, overwriting the previous one. Used when
+    rotating the dmcrypt passphrase of an OSD.
+
+    The key is passed via stdin so it never shows up on a command line.
+    ``call_timeout`` bounds the whole call (seconds), after which it is
+    killed.
+
+    Note: the default lockbox entity is created with a get-only cap on this
+    config-key, so this call needs either a lockbox entity whose caps were
+    extended with ``config-key set``, or a more privileged ``name``/``keyring``
+    pair (e.g. client.admin).
+    """
+    if lockbox_keyring is None:
+        lockbox_keyring = '/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)
+    if name is None:
+        name = 'client.osd-lockbox.%s' % osd_fsid
+    config_key = 'dm-crypt/osd/%s/luks' % osd_fsid
+
+    mlogger.info(f'Running ceph config-key set {config_key}')
+    stdout, stderr, returncode = process.call(
+        [
+            'ceph',
+            '--cluster', conf.cluster,
+            '--name', name,
+            '--keyring', lockbox_keyring,
+            'config-key',
+            'set',
+            config_key,
+            '-i', '-'
+        ],
+        stdin=key,
+        show_command=True,
+        logfile_verbose=False,
+        timeout=call_timeout
+    )
+    if returncode != 0:
+        if call_timeout is not None and returncode == -9:
+            raise RuntimeError(
+                f'config-key set timed out after {call_timeout}s waiting '
+                'for the monitors; the rotation is crash-safe and can be '
+                're-run')
+        error = ' '.join(stderr)
+        msg = f'Unable to store dmcrypt secret at {config_key}'
+        if 'access denied' in error.lower() or 'permission denied' in error.lower():
+            msg += (f'. The entity {name} lacks "config-key set" caps on this key. '
+                    'Pass a sufficiently privileged --name/--keyring, or use the '
+                    'two-phase flow (--key-store external) and store the '
+                    'key with a privileged client instead.')
+        raise RuntimeError(msg)
+
+
+def write_lockbox_keyring(osd_id, osd_fsid, secret, force=False):
     """
     Helper to write the lockbox keyring. This is needed because the bluestore OSD will
     not persist the keyring.
@@ -319,9 +393,15 @@ def write_lockbox_keyring(osd_id, osd_fsid, secret):
     For bluestore: A tmpfs filesystem is mounted, so the path can get written
     to, but the files are ephemeral, which requires this file to be created
     every time it is activated.
+
+    ``force`` overwrites an existing keyring file, needed when the lockbox
+    cephx secret was rotated and the on-disk keyring is stale.
     """
-    if os.path.exists('/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)):
-        return
+    keyring_path = '/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)
+    if os.path.exists(keyring_path):
+        if not force:
+            return
+        os.unlink(keyring_path)
 
     name = 'client.osd-lockbox.%s' % osd_fsid
     write_keyring(
@@ -330,6 +410,124 @@ def write_lockbox_keyring(osd_id, osd_fsid, secret):
         keyring_name='lockbox.keyring',
         name=name
     )
+
+
+def luks_add_key(current_key: str,
+                 new_key: str,
+                 device: str,
+                 slot: Optional[int] = None) -> None:
+    """
+    Add ``new_key`` to a LUKS keyslot of ``device``, authenticating with
+    ``current_key``. Both keys travel over stdin as one newline-delimited
+    stream (cryptsetup reads two line-terminated passphrases when neither
+    ``--key-file`` nor a keyfile argument is given), so neither key ever
+    touches a filesystem.
+
+    :param slot: keyslot number for the new key (any free slot if None)
+    """
+    for key in (current_key, new_key):
+        if '\n' in key:
+            raise RuntimeError(
+                'dmcrypt keys must not contain newline characters when '
+                'passed to cryptsetup as line-delimited stdin input')
+    # --force-password: a new passphrase arriving on stdin (rather than in
+    # a keyfile) is treated as a human-chosen password and, on builds with
+    # libpwquality/passwdqc (e.g. RHEL), checked against the host's
+    # password policy. The option exists since cryptsetup 1.6.0
+    # (2012, the same release that introduced the pwquality check).
+    command: List[str] = [
+        'cryptsetup',
+        '--batch-mode',
+        '--force-password',
+    ]
+    if slot is not None:
+        command.extend(['--key-slot', str(slot)])
+    command.extend(['luksAddKey', device])
+    out, err, rc = process.call(command,
+                                stdin=f'{current_key}\n{new_key}\n',
+                                logfile_verbose=False)
+    if rc:
+        raise RuntimeError(f'Unable to add LUKS keyslot on {device}: {" ".join(err)}')
+
+
+def luks_kill_slot(auth_key: str, device: str, slot: int) -> None:
+    """
+    Wipe LUKS keyslot ``slot`` on ``device``. ``auth_key`` (read from stdin)
+    must unlock one of the *other* keyslots; cryptsetup refuses the passphrase
+    of the slot being killed. An already-inactive slot is not an error.
+    """
+    if slot not in get_luks_keyslots(device)['slots']:
+        return
+    command: List[str] = [
+        'cryptsetup',
+        '--batch-mode',
+        '--key-file', '-',
+        'luksKillSlot', device, str(slot),
+    ]
+    out, err, rc = process.call(command, stdin=auth_key, logfile_verbose=False)
+    if rc:
+        error = ' '.join(out + err)
+        raise RuntimeError(f'Unable to kill LUKS keyslot {slot} on {device}: {error}')
+
+
+def luks_test_passphrase(key: str, device: str, slot: Optional[int] = None) -> bool:
+    """
+    Check whether ``key`` unlocks ``device`` (optionally restricted to one
+    keyslot) without creating any device-mapper mapping. Safe to run while the
+    device is in active use.
+    """
+    command: List[str] = [
+        'cryptsetup',
+        '--batch-mode',
+        '--key-file', '-',
+        '--test-passphrase',
+    ]
+    if slot is not None:
+        command.extend(['--key-slot', str(slot)])
+    command.extend(['luksOpen', device])
+    out, err, rc = process.call(command,
+                                stdin=key,
+                                logfile_verbose=False,
+                                verbose_on_failure=False)
+    return rc == 0
+
+
+def get_luks_keyslots(device: str) -> Dict[str, Any]:
+    """
+    Report the LUKS version and the list of active keyslots of ``device`` by
+    parsing ``cryptsetup luksDump`` output (handles LUKS1 and LUKS2 formats).
+
+    :return: e.g. ``{'version': 2, 'slots': [0, 1]}``
+    """
+    out, err, rc = process.call(['cryptsetup', 'luksDump', device],
+                                verbose_on_failure=False)
+    if rc:
+        raise RuntimeError(f'{device} is not a LUKS device: {" ".join(err)}')
+    version = 0
+    slots: List[int] = []
+    in_keyslots_section = False
+    for line in out:
+        version_match = re.match(r'^Version:\s+(\d+)', line)
+        if version_match:
+            version = int(version_match.group(1))
+            continue
+        # LUKS1: "Key Slot 0: ENABLED"
+        luks1_match = re.match(r'^Key Slot (\d+): ENABLED', line)
+        if luks1_match:
+            slots.append(int(luks1_match.group(1)))
+            continue
+        # LUKS2: keyslots are listed indented under a "Keyslots:" section
+        if re.match(r'^Keyslots:', line):
+            in_keyslots_section = True
+            continue
+        if in_keyslots_section:
+            if re.match(r'^\S', line):
+                in_keyslots_section = False
+                continue
+            luks2_match = re.match(r'^\s+(\d+): luks2', line)
+            if luks2_match:
+                slots.append(int(luks2_match.group(1)))
+    return {'version': version, 'slots': sorted(slots)}
 
 
 def status(device):
