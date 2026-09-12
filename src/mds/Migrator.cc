@@ -3129,7 +3129,7 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
     if (mds->is_cluster_degraded() &&
 	!mds->mdsmap->is_clientreplay_or_active_or_stopping(*p)) {
       // this can happen if both exporter and bystander fail in the same mdsmap epoch
-      stat.bystanders.erase(p++);
+      p = stat.bystanders.erase(p);
       continue;
     }
     auto notify = make_message<MExportDirNotify>(dir->dirfrag(), stat.tid, true,

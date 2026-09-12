@@ -736,7 +736,7 @@ void PurgeQueue::_execute_item_complete(
 	  if (*p >= n->first)
 	    break;
 	  pos = *p;
-	  pending_expire.erase(p++);
+	  p = pending_expire.erase(p);
 	} while (p != pending_expire.end());
       }
     }
