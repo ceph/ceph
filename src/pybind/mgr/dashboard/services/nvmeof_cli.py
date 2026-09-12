@@ -114,6 +114,11 @@ def convert_to_bytes(size: Union[int, str], default_unit=None):
     if not unit_str:
         if not default_unit:
             raise ValueError("default unit was not provided")
+        logger.warning(
+            "No unit specified for size '%s', assuming %s. "
+            "Use a unit suffix (e.g. 10GB) to avoid ambiguity.",
+            number, default_unit
+        )
         unit_str = default_unit
 
     if unit_str in UNITS:

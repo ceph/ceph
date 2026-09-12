@@ -1,6 +1,7 @@
 # pylint: disable=too-many-lines
 import errno
 import json
+import logging
 import unittest
 from typing import Annotated, List, NamedTuple, Optional
 from unittest.mock import MagicMock
@@ -1759,6 +1760,20 @@ class TestConvertToBytes:
         with pytest.raises(ValueError):
             assert convert_to_bytes('5') == 5368709120
         assert convert_to_bytes('5', default_unit='GB') == 5368709120
+
+    def test_no_unit_emits_warning(self, caplog):
+        with caplog.at_level(logging.WARNING, logger='dashboard.services.nvmeof_cli'):
+            result = convert_to_bytes('10737418240', default_unit='MB')
+        assert result == 10737418240 * 1024 ** 2
+        assert len(caplog.records) == 1
+        assert 'No unit specified' in caplog.records[0].message
+        assert 'MB' in caplog.records[0].message
+
+    def test_unit_suffix_no_warning(self, caplog):
+        with caplog.at_level(logging.WARNING, logger='dashboard.services.nvmeof_cli'):
+            result = convert_to_bytes('10G', default_unit='MB')
+        assert result == 10 * 1024 ** 3
+        assert not caplog.records
 
 
 class TestFormatHostUpdates:
