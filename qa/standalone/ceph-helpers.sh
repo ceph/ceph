@@ -657,7 +657,7 @@ function run_osd() {
     echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $osd_data/new.json
     ceph osd new $uuid -i $osd_data/new.json
     rm $osd_data/new.json
-    ceph-osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid
+    ceph-osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid || return 1
 
     local key_fn=$osd_data/keyring
     cat > $key_fn<<EOF
