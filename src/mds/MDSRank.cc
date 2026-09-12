@@ -60,6 +60,10 @@
 #include "osdc/Objecter.h"
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
+
+#ifdef CEPH_LOCKSTAT
+#include "common/lockstat.h"
+#endif
 #include "events/ESubtreeMap.h"
 #include "events/ELid.h"
 #include "Mutation.h"
@@ -999,6 +1003,9 @@ void MDSRank::handle_write_error_with_lock(int err)
 
 void *MDSRank::ProgressThread::entry()
 {
+#ifdef CEPH_LOCKSTAT
+  ceph::lockstat_detail::LockStat::set_thread_iopath(true);
+#endif
   std::unique_lock l(mds->mds_lock);
   while (true) {
     cond.wait(l, [this] {
