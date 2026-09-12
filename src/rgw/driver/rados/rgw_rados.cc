@@ -9846,7 +9846,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
                      << (entry.delete_marker ? "(delete)" : "") << dendl;
 
       if (link_epoch == entry.epoch)
-        ldpp_dout(dpp, 1) << "apply_olh_log epoch collision detected for " << entry.key
+        ldpp_dout(dpp, 1) << "apply_olh_log epoch collision detected for " << entry.key << "(" << entry.epoch << ")"
                           << "; incoming op: " << entry.op << "(" << entry.op_tag << ")" << dendl;
 
       switch (entry.op) {

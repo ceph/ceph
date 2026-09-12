@@ -576,6 +576,103 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
 namespace ceph::async { class spawn_throttle; }
 
+/**
+ * Interface for a bucket listing backend.
+ */
+struct ILCBucketLister {
+  virtual ~ILCBucketLister() = default;
+
+  virtual rgw_bucket get_bucket_key () const noexcept = 0;
+  
+  virtual std::string_view get_bucket_name () const noexcept = 0;
+
+  virtual int list(rgw::sal::Bucket::ListParams& params,
+                   int max_entries,
+                   rgw::sal::Bucket::ListResults& results,
+                   optional_yield y) = 0;
+};
+
+/**
+ * @brief Presents a sanitized view of the bucket index for the LC to operate on.
+ *
+ * Lists objects in a bucket for the LC to process.
+ * Relies on a bucket lister backend as the source of objects data.
+ * Accumulates per-object data such as the number of current/non-current
+ * instances per-object (which a specific LC rule might act upon).
+ * It also detects and sanitizes (filters out) any object versions/instances which are inconsistent
+ * with a valid object state to protect from a potential data loss such as:
+ * - multiple-non-current versions newer than the current:
+ *      skip non-current versions which are newer than the current;
+ * - no current version:
+ *      skip (exclude) all non-current versions;
+ * - multiple current versions:
+ *      only let LC process the first current version and skip to the first non-current.
+ */
+class LCObjsLister {
+
+  using obj_iter_type = std::vector<rgw_bucket_dir_entry>::iterator;
+
+  ILCBucketLister* backend;
+  const DoutPrefixProvider *dpp;
+
+  rgw::sal::Bucket::ListParams list_params;
+  rgw::sal::Bucket::ListResults list_results;
+  std::string prefix;
+  obj_iter_type obj_iter;
+  rgw_bucket_dir_entry pre_obj;
+  uint64_t num_noncurrent{0}, num_current{0};
+  int64_t delay_ms;
+  int64_t page_index{-1};
+
+  static const uint PAGE_SIZE = 1000;
+
+ public:
+
+  LCObjsLister(ILCBucketLister *backend,
+               bool list_versions = true,
+               bool allow_unordered = true,
+               int64_t delay = 0,
+               const DoutPrefixProvider *_dpp = nullptr);
+
+  void set_prefix(const std::string &p) {
+    prefix = p;
+    list_params.prefix = prefix;
+  }
+
+  int init(boost::asio::yield_context y);
+
+  int fetch(boost::asio::yield_context y);
+
+  void delay();
+
+  bool get_obj(rgw_bucket_dir_entry *obj) const;
+
+  rgw_bucket_dir_entry get_prev_obj() const noexcept { return pre_obj; }
+
+  bool next(boost::asio::yield_context y);
+
+  boost::optional<std::string> next_key_name() const;
+
+  uint64_t get_num_noncurrent() const noexcept { return num_noncurrent; }
+
+  uint64_t get_num_current() const noexcept { return num_current; }
+
+  uint64_t get_entry_pos() const noexcept {
+    return (page_index * PAGE_SIZE) + (obj_iter - list_results.objs.begin());
+  }
+
+private:
+
+  // assuming obj_iter points to the first instance of an object 'foo' will do either of:
+  // - return the same iter if the first instance is current;
+  // - if the first one is non-current skips to the next object key which has its first instance as current 
+  obj_iter_type skip_to_key_with_first_current(obj_iter_type from, boost::asio::yield_context y);
+  
+  // looks at the object key pointed to by the @from iterator and skips to the first instance of the next object 
+  obj_iter_type skip_to_the_next_key(obj_iter_type from, boost::asio::yield_context y);
+
+}; /* LCObjsLister */
+
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Driver* driver;
@@ -691,7 +788,42 @@ public:
 				  time_t stop_at, bool once);
 };
 
-namespace rgw::lc {
+namespace rgw {
+namespace  sal {
+
+  class BucketLister : public  ILCBucketLister {
+
+    rgw::sal::Bucket *bucket;
+    const DoutPrefixProvider* dpp;
+
+   public:
+
+    BucketLister (rgw::sal::Bucket *_bucket,
+                  const DoutPrefixProvider *_dpp)
+        : bucket{_bucket},
+          dpp{_dpp} {
+      ceph_assert(bucket);
+    }
+
+    rgw_bucket get_bucket_key () const noexcept override {
+      return bucket->get_key();
+    }
+    
+    std::string_view get_bucket_name() const noexcept override {
+      return bucket->get_name();
+    }
+
+    int list(rgw::sal::Bucket::ListParams& params,
+             int max_entries,
+             rgw::sal::Bucket::ListResults& results,
+             optional_yield y) override {
+      return bucket->list(dpp, params, max_entries, results, y);
+    }
+  };
+
+}
+
+namespace lc {
 
 int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
                        rgw::sal::Driver* driver,
@@ -714,3 +846,4 @@ bool s3_multipart_abort_header(
   std::string& rule_id);
 
 } // namespace rgw::lc
+}

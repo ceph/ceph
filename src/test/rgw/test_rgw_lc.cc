@@ -237,7 +237,7 @@ struct LCWorkTimeTests : ::testing::Test
 protected:
 
    void SetUp() override {
-      cct.reset(new CephContext(CEPH_ENTITY_TYPE_ANY), false);
+     cct.reset(new CephContext(CEPH_ENTITY_TYPE_ANY), false);
 
       cct->_conf->set_value("rgw_lc_max_wp_worker", 0, 0); // no need to create a real workpool
       worker = std::make_unique<RGWLC::LCWorker>(nullptr, cct.get(), nullptr, 0);
@@ -422,6 +422,657 @@ TEST_F(LCWorkTimeTests, ScheduleNextStartTime)
 
    run_schedule_next_start_time_test(test_values_to_expectations);
 }
+
+namespace {
+
+  rgw_bucket_dir_entry make_entry(const std::string &name,
+                                  const std::string &instance,
+                                  uint16_t flags) {
+    rgw_bucket_dir_entry e;
+    e.key.name = name;
+    e.key.instance = instance;
+    e.flags = flags;
+    return e;
+  }
+
+  struct Page {
+    std::vector<rgw_bucket_dir_entry> objs;
+    bool truncated{false};
+  };
+
+  struct Call {
+    std::string prefix;
+    rgw_obj_key marker;
+    bool list_versions{false};
+    int max_entries{0};
+  };
+
+  class FakeBucketLister : public ILCBucketLister {
+   public:
+
+    std::vector<Page> pages;
+    std::vector<Call> calls;
+    size_t idx{0};
+
+    rgw_bucket get_bucket_key () const noexcept override {
+      return rgw_bucket("test", "me");
+    }
+    
+    std::string_view get_bucket_name () const noexcept override {
+      return "test";
+    }
+
+    int list(rgw::sal::Bucket::ListParams &params,
+             int max_entries,
+             rgw::sal::Bucket::ListResults &out,
+             optional_yield /*y*/) override {
+      calls.push_back(Call{params.prefix, params.marker, params.list_versions, max_entries});
+      if (idx >= pages.size())
+        return -EINVAL;
+
+      out.objs = pages[idx].objs;
+      out.is_truncated = pages[idx].truncated;
+      ++idx;
+      return 0;
+    }
+  };
+
+  auto non_curr_flags = rgw_bucket_dir_entry::FLAG_VER;
+  auto curr_flags = non_curr_flags | rgw_bucket_dir_entry::FLAG_CURRENT;
+
+
+} // anonymous namespace
+
+TEST(LCObjsLister, BaseCase_2Objs_5Vers) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "cur", curr_flags),   // 1
+                make_entry("objA", "v1", non_curr_flags),    // 2
+                make_entry("objA", "v2", non_curr_flags),    // 3
+                make_entry("objB", "cur", curr_flags),   // 4
+                make_entry("objB", "v1", non_curr_flags),    // 5
+            },
+            .truncated = false
+        }
+    };
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objA");
+    EXPECT_EQ(e.key.instance, "cur");
+    EXPECT_TRUE(e.is_current());
+    EXPECT_EQ(l.get_num_noncurrent(), 0);
+    EXPECT_EQ(l.get_num_current(), 1);
+
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objA");
+    EXPECT_EQ(e.key.instance, "v1");
+    EXPECT_FALSE(e.is_current());
+    EXPECT_EQ(l.get_num_noncurrent(), 1);
+    EXPECT_EQ(l.get_num_current(), 1);
+
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objA");
+    EXPECT_EQ(e.key.instance, "v2");
+    EXPECT_FALSE(e.is_current());
+    EXPECT_EQ(l.get_num_noncurrent(), 2);
+    EXPECT_EQ(l.get_num_current(), 1);
+
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objB");
+    EXPECT_EQ(e.key.instance, "cur");
+    EXPECT_TRUE(e.is_current());
+    EXPECT_EQ(l.get_num_noncurrent(), 0);
+    EXPECT_EQ(l.get_num_current(), 1);
+
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objB");
+    EXPECT_EQ(e.key.instance, "v1");
+    EXPECT_FALSE(e.is_current());
+    EXPECT_EQ(l.get_num_noncurrent(), 1);
+    EXPECT_EQ(l.get_num_current(), 1);
+
+    ASSERT_FALSE(l.next(yield));
+    ASSERT_FALSE(l.get_obj(&e));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, BaseCase_1Obj_3Vers) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "cur", curr_flags),     // 1
+                make_entry("objA", "v1", non_curr_flags),  // 2
+                make_entry("objA", "v2", non_curr_flags),  // 3
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objA");
+    EXPECT_EQ(e.key.instance, "cur");
+    EXPECT_TRUE(e.is_current());
+    EXPECT_EQ(l.get_num_noncurrent(), 0);
+    EXPECT_EQ(l.get_num_current(), 1);
+
+    // doing multiple get_obj() should yield the same object and there should be no changes in the state of the lister;
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objA");
+    EXPECT_EQ(e.key.instance, "cur");
+    EXPECT_TRUE(e.is_current());
+    EXPECT_EQ(l.get_num_noncurrent(), 0);
+    EXPECT_EQ(l.get_num_current(), 1);
+
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objA");
+    EXPECT_EQ(e.key.instance, "v1");
+    EXPECT_FALSE(e.is_current());
+    EXPECT_EQ(l.get_num_noncurrent(), 1);
+    EXPECT_EQ(l.get_num_current(), 1);
+
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objA");
+    EXPECT_EQ(e.key.instance, "v2");
+    EXPECT_FALSE(e.is_current());
+    EXPECT_EQ(l.get_num_noncurrent(), 2);
+    EXPECT_EQ(l.get_num_current(), 1);
+
+    ASSERT_FALSE(l.next(yield));
+    ASSERT_FALSE(l.get_obj(&e));
+  }, boost::asio::detached);
+  io.run();
+}
+
+
+TEST(LCObjsLister, 1NonCur_1Cur_2NonCur) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+              make_entry("objA", "v0", non_curr_flags),  // skip all
+              make_entry("objA", "cur", curr_flags),     // 
+              make_entry("objA", "v1", non_curr_flags),  // 
+              make_entry("objA", "v2", non_curr_flags),  // 
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+    ASSERT_FALSE(l.get_obj(&e));
+    ASSERT_FALSE(l.next(yield));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, 2NonCur_1Cur_1NonCur) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "v0", non_curr_flags), // skip all
+                make_entry("objA", "v1", non_curr_flags), //
+                make_entry("objA", "cur", curr_flags),    //
+                make_entry("objA", "v2", non_curr_flags)  //
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+    ASSERT_FALSE(l.get_obj(&e));
+    ASSERT_FALSE(l.next(yield));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, AllNonCurr) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "v0", non_curr_flags), // skip all
+                make_entry("objA", "v1", non_curr_flags),  // skip 
+                make_entry("objA", "v2", non_curr_flags)  // skip 
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_FALSE(l.get_obj(&e));
+    ASSERT_FALSE(l.next(yield));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, AllNonCurr_1Obj_2Pages) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "v0", non_curr_flags),  // skip all
+                make_entry("objA", "v1", non_curr_flags),   // 
+                make_entry("objA", "v2", non_curr_flags)   // 
+            },
+            .truncated = true
+        },
+        {
+            .objs = {
+                make_entry("objA", "v3", non_curr_flags),  // skip all
+                make_entry("objA", "v4", non_curr_flags),   // skip 
+                make_entry("objA", "v5", non_curr_flags)   // skip 
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_FALSE(l.get_obj(&e));
+    ASSERT_FALSE(l.next(yield));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, AllNonCurr_2Objs_2Pages) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "v0", non_curr_flags),  // skip all
+                make_entry("objA", "v1", non_curr_flags),   // skip 
+                make_entry("objA", "v2", non_curr_flags)   // skip 
+            },
+            .truncated = true
+        },
+        {
+            .objs = {
+                make_entry("objB", "v0", non_curr_flags),  // skip all
+                make_entry("objB", "v1", non_curr_flags),   // skip 
+                make_entry("objB", "v2", non_curr_flags)   // skip 
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_FALSE(l.get_obj(&e));
+    ASSERT_FALSE(l.next(yield));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, AllNonCurrPage1_1Cur_1NonCur_Page2) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {{
+           .objs = {
+               make_entry("objA", "v0", non_curr_flags),   // skip all
+               make_entry("objA", "v1", non_curr_flags),    // skip 
+               make_entry("objA", "v2", non_curr_flags)    // skip 
+           },
+           .truncated = true
+       },
+       {
+           .objs = {
+               make_entry("objA", "cur", curr_flags),      // skip all
+               make_entry("objA", "v4", non_curr_flags),    // skip
+           },
+           .truncated = false
+       }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+      
+    ASSERT_FALSE(l.next(yield));
+    ASSERT_FALSE(l.get_obj(&e));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, AllNonCurr_Page1_AllNonCurr_Page2) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "v0", non_curr_flags),  // skip all (newer than the current)
+                make_entry("objA", "v1", non_curr_flags),  // skip
+                make_entry("objB", "v0", non_curr_flags),  // skip all (newer than the current)
+            },
+            .truncated = true
+        },
+        {
+            .objs = {
+                make_entry("objB", "v1", non_curr_flags),  // skip 
+                make_entry("objB", "v2", non_curr_flags),  // skip 
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_FALSE(l.get_obj(&e));
+    ASSERT_FALSE(l.next(yield));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, 2Curr_1NonCur_Page1_1Curr_1NonCurr_Page2) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "cur0", curr_flags),    // 1
+                make_entry("objA", "cur1", curr_flags),    // skip the rest
+                make_entry("objB", "v0", non_curr_flags),  // skip all (newer than the current)
+            },
+            .truncated = true
+        },
+        {
+            .objs = {
+                make_entry("objB", "cur", curr_flags),     // skip
+                make_entry("objB", "v2", non_curr_flags),  // skip
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_TRUE(l.get_obj(&e));
+    ASSERT_EQ(e.key.name, "objA");
+    ASSERT_EQ(e.key.instance, "cur0");
+    ASSERT_TRUE(e.is_current());
+    ASSERT_EQ(l.get_num_noncurrent(), 0);
+    ASSERT_EQ(l.get_num_current(), 1);
+
+    ASSERT_FALSE(l.next(yield));
+    ASSERT_FALSE(l.get_obj(&e));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, AllCurr_Page1_1NonCurr_Page2) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "cur0", curr_flags),    // 1
+                make_entry("objA", "cur1", curr_flags),    // skip the rest (multiple currents)
+                make_entry("objA", "cur2", curr_flags),    // skip (3-rd current)
+            },
+            .truncated = true
+        },
+        {
+            .objs = {
+                make_entry("objA", "v0", non_curr_flags)    // skip
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister ol(&fbl);
+    ASSERT_EQ(ol.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_TRUE(ol.get_obj(&e));
+    ASSERT_EQ(e.key.name, "objA");
+    ASSERT_EQ(e.key.instance, "cur0");
+    ASSERT_TRUE(e.is_current());
+    ASSERT_EQ(ol.get_num_noncurrent(), 0);
+    ASSERT_EQ(ol.get_num_current(), 1);
+
+    ASSERT_FALSE(ol.next(yield));
+    ASSERT_FALSE(ol.get_obj(&e));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, AllCurr_ObjA_Page1_1NonCurr_1Curr_ObjB_Page2) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+        {
+            .objs = {
+                make_entry("objA", "cur0", curr_flags),    // 1
+                make_entry("objA", "cur1", curr_flags),    // skip the rest (multiple currents)
+                make_entry("objA", "cur2", curr_flags),    // skip (3-rd current)
+            },
+            .truncated = true
+        },
+        {
+            .objs = {
+                // tricky path: the first entry on the next page is a different object - but it is non-current!
+                make_entry("objB", "v0", non_curr_flags),  // skip all objB (newer than the current)
+                make_entry("objB", "cur", curr_flags)      // skip
+            },
+            .truncated = false
+        }
+    };
+
+    LCObjsLister ol(&fbl);
+    ASSERT_EQ(ol.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_TRUE(ol.get_obj(&e));
+    ASSERT_EQ(e.key.name, "objA");
+    ASSERT_EQ(e.key.instance, "cur0");
+    ASSERT_TRUE(e.is_current());
+    ASSERT_EQ(ol.get_num_noncurrent(), 0);
+    ASSERT_EQ(ol.get_num_current(), 1);
+
+    ASSERT_FALSE(ol.next(yield));
+    ASSERT_FALSE(ol.get_obj(&e));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, AllNonCurr_ObjA_Page1_1CurrObjA_1Curr_ObjB_Page2) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+          {
+              .objs = {
+                  make_entry("objA", "v0", non_curr_flags),    // skip all objA (newer than the current)
+                  make_entry("objA", "v1", non_curr_flags),    // skip 
+                  make_entry("objA", "v2", non_curr_flags),    // skip 
+              },
+              .truncated = true
+          },
+          {
+              .objs = {
+                  make_entry("objB", "cur", curr_flags)         // 1
+              },
+              .truncated = false
+          }
+    };
+
+    LCObjsLister ol(&fbl);
+    ASSERT_EQ(ol.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+
+    ASSERT_TRUE(ol.get_obj(&e));
+    ASSERT_EQ(e.key.name, "objB");
+    ASSERT_EQ(e.key.instance, "cur");
+    ASSERT_TRUE(e.is_current());
+    ASSERT_EQ(ol.get_num_noncurrent(), 0);
+    ASSERT_EQ(ol.get_num_current(), 1);
+
+    ASSERT_FALSE(ol.next(yield));
+    ASSERT_FALSE(ol.get_obj(&e));
+  }, boost::asio::detached);
+  io.run();
+}
+
+TEST(LCObjsLister, BasicIteration) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+      {
+          .objs = {
+              make_entry("objA", "cur", curr_flags),      // 1
+              make_entry("objA", "v1", non_curr_flags),   // 2
+              make_entry("objA", "v2", non_curr_flags),   // 3
+              make_entry("objB", "cur", curr_flags),      // 4
+              make_entry("objB", "v1", non_curr_flags),   // 5
+          },
+          .truncated = true,
+      },
+      {
+        .objs = {
+            make_entry("objC", "cur", curr_flags)         // 6
+        },
+        .truncated = true
+      },
+      {
+          .objs = {
+              make_entry("objC", "cur", curr_flags),      //skip (2-nd current)
+              make_entry("objD", "v0", non_curr_flags),   // skip all objD (latest non-current)
+          },
+          .truncated = true
+      },
+      {
+          .objs = {
+              make_entry("objD", "cur", curr_flags),      // 7
+              make_entry("objD", "v1", non_curr_flags),   // 8
+          },
+          .truncated = false
+      }
+    };
+
+    LCObjsLister ol(&fbl);
+    ASSERT_EQ(ol.init(yield), 0);
+
+    cls_rgw_obj_key expected[] = {
+        {"objA", "cur"},
+        {"objA", "v1"},
+        {"objA", "v2"},
+        {"objB", "cur"},
+        {"objB", "v1"},
+        {"objC", "cur"}
+    };
+    rgw_bucket_dir_entry e;
+    auto total=0;
+    for (; ol.get_obj(&e); ++total, ol.next(yield)) {
+      ASSERT_EQ(expected[total].name, e.key.name);
+      ASSERT_EQ(expected[total].instance, e.key.instance);
+    }
+
+    // we must have processed 6 objects in total
+    ASSERT_EQ(total, 6);
+    //we must have visited all 4 pages
+    ASSERT_EQ(fbl.calls.size(), 4);
+  }, boost::asio::detached);
+  io.run();
+}
+
+
+TEST(LCObjsLister, CrashRepro_MultipleCurrents_LastPage_NotTruncated) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+          {
+            .objs = {
+              make_entry("objA", "cur0", curr_flags),
+              make_entry("objA", "cur1", curr_flags),
+              make_entry("objA", "cur2", curr_flags),
+          },
+          .truncated = false
+      }
+    };
+
+    LCObjsLister l(&fbl);
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.name, "objA");
+    EXPECT_EQ(e.key.instance, "cur0");
+
+    // next() reaches end of last page while skipping duplicate currents.
+    // skip_to_the_next_key returns end(); skip_to_key_with_first_current
+    // then dereferences end() -> crash (bad_alloc / segfault).
+    ASSERT_FALSE(l.next(yield));
+    ASSERT_FALSE(l.get_obj(&e));
+  }, boost::asio::detached);
+  io.run();  
+}
+
 
 // Build bucket attrs holding an encoded lifecycle configuration.
 static std::map<std::string, bufferlist>
