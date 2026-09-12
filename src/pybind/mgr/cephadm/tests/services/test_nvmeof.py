@@ -317,6 +317,58 @@ timeout = 1.0\n"""
 
         assert spec.pool == ".nvmeof"
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_nvmeof_reject_ec_pool_without_omap(self, cephadm_module: CephadmOrchestrator):
+        cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+            'pools': [
+                {'pool': 1, 'pool_name': 'ecpool', 'type': 3, 'flags_names': ''},
+            ]
+        })
+        nvmeof_spec = NvmeofServiceSpec(
+            service_id='ecpool.testgroup',
+            group='testgroup',
+            pool='ecpool'
+        )
+        with with_host(cephadm_module, 'test'):
+            with pytest.raises(
+                OrchestratorError,
+                match='Pool "ecpool" does not support OMAP'
+            ):
+                cephadm_module._apply_service_spec(nvmeof_spec)
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_nvmeof_allow_replicated_pool(self, cephadm_module: CephadmOrchestrator):
+        cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+            'pools': [
+                {'pool': 1, 'pool_name': 'reppool', 'type': 1},
+            ]
+        })
+        nvmeof_spec = NvmeofServiceSpec(
+            service_id='reppool.testgroup',
+            group='testgroup',
+            pool='reppool'
+        )
+        with with_host(cephadm_module, 'test'):
+            out = cephadm_module._apply_service_spec(nvmeof_spec)
+            assert 'Scheduled' in out
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_nvmeof_allow_ec_pool_with_omap(self, cephadm_module: CephadmOrchestrator):
+        cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+            'pools': [
+                {'pool': 1, 'pool_name': 'fastec', 'type': 3,
+                 'flags_names': 'ec_optimizations,supports_omap'},
+            ]
+        })
+        nvmeof_spec = NvmeofServiceSpec(
+            service_id='fastec.testgroup',
+            group='testgroup',
+            pool='fastec'
+        )
+        with with_host(cephadm_module, 'test'):
+            out = cephadm_module._apply_service_spec(nvmeof_spec)
+            assert 'Scheduled' in out
+
     @patch("cephadm.inventory.Inventory.get_addr", lambda _, __: '192.168.100.100')
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
