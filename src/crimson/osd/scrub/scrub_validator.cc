@@ -350,6 +350,13 @@ struct object_evaluation_t {
   uint32_t auth_data_digest{0};
   bool auth_omap_digest_present{false};
   uint32_t auth_omap_digest{0};
+
+  // fix_digest path: set when in repair mode, all replicas agree on
+  // the actual data digest, but the OI's recorded data_digest differs.
+  // The OI is fixed in-place via missing_digest (no object push needed),
+  // and the object is not counted as inconsistent.
+  // Matches classic ScrubBackend::m_current_obj.fix_digest.
+  bool fix_digest{false};
 };
 object_evaluation_t evaluate_object(
   const chunk_validation_policy_t &policy,
@@ -486,16 +493,39 @@ object_evaluation_t evaluate_object(
       }
     }
 
-    // Compare all other shards against the authoritative one
+    // Compare all other shards against the authoritative one.
+    // Track digest_match: true iff all shards agree on the actual data digest
+    // (no DATA_DIGEST_MISMATCH in any cross-shard comparison).
+    // Matches classic auth_selection_t::digest_match (scrub_backend.cc).
+    bool digest_match = true;
     std::for_each(
       shards.begin(), shards.end(),
-      [&policy, &hoid, actual_auth, &iow](auto &cand_eval) {
+      [&policy, &hoid, actual_auth, &iow, &digest_match](auto &cand_eval) {
         if (&cand_eval != actual_auth) {
           auto err = compare_candidate_to_authoritative(
             policy, hoid, *actual_auth, cand_eval);
           iow.merge(err);
+          if (err.errors & librados::obj_err_t::DATA_DIGEST_MISMATCH) {
+            digest_match = false;
+          }
         }
       });
+
+    // Classic fix_digest path (scrub_backend.cc lines 1318-1331):
+    // In repair mode, for a replicated pool with >1 shard, when all shards
+    // agree on the actual data (digest_match=true) but the OI's recorded
+    // data_digest differs (DATA_DIGEST_MISMATCH_INFO on auth shard only,
+    // no other errors), fix the OI digest in-place via missing_digest rather
+    // than doing a full object push.  Clear the error from the auth shard so
+    // it is not counted as an inconsistency.
+    if (policy.is_repair &&
+        shards.size() > 1 &&
+        digest_match &&
+        actual_auth->shard_info.only_data_digest_mismatch_info() &&
+        actual_auth->shard_info.data_digest_present) {
+      ret.fix_digest = true;
+      actual_auth->shard_info.clear_data_digest_mismatch_info();
+    }
   } else if (maps.size() == 1) {
     // Comparison is intentionally skipped when auth has blocking shallow errors.
     // For single-copy pools, preserve auth shard metadata so snapshot validation
@@ -1057,6 +1087,24 @@ chunk_result_t validate_chunk(
       if (needs_update) {
         ret.missing_digest.push_back(std::move(du));
       }
+    } else if (eval.fix_digest && eval.auth_data_digest_present) {
+      // fix_digest: all replicas agree on actual data but the OI
+      // data_digest is stale.  Fix the OI in-place via missing_digest even
+      // though the object would otherwise be considered inconsistent.
+      // Matches classic inconsistents() lines 1119-1130 (missing_digest push
+      // before the cur_inconsistent check).
+      digest_update_t du;
+      du.oid = oid;
+      du.data_digest = eval.auth_data_digest;
+      if (eval.auth_omap_digest_present) {
+        du.omap_digest = eval.auth_omap_digest;
+      }
+      ret.missing_digest.push_back(std::move(du));
+      // Matches classic errstream line "repairing object info data_digest"
+      // (scrub_backend.cc line 1328-1330), logged via clog.error().
+      ret.repair_messages.push_back(
+        fmt::format("{} soid {} : repairing object info data_digest",
+                    policy.pgid, oid));
     }
 
     evals.emplace(oid, std::move(eval));
