@@ -1647,6 +1647,13 @@ void PGScrubber::emit_chunk_result(
       }
     }
 
+    // Replay fix_digest repair messages (matches classic errstream
+    // logged via clog.error() in compare_smaps(), scrub_backend.cc line 1328).
+    for (const auto& msg : result.repair_messages) {
+      ERRORDPP("{}", pg, msg);
+      pg.get_clog_error() << msg;
+    }
+
     // Log snapset errors (primary-shard errors, stored + counted)
     for (const auto& snapset_error : result.snapset_errors) {
       log_snapset_errors(snapset_error);
