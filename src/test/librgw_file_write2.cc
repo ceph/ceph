@@ -177,8 +177,8 @@ namespace {
     {
       OpenResult ofr;
       std::get<0>(ofr) = rgw_open2(fs, object_fh,
-                                   &(std::get<1>(ofr)), openflags, flags,
-				   args);
+                                   &(std::get<1>(ofr)), args, openflags,
+				   flags);
       return ofr;
     }
 

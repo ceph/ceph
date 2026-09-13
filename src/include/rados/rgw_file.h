@@ -343,9 +343,9 @@ struct rgw_open_args
 */
 int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
               rgw_open_fd* open_fd /* OUT */,
+              struct rgw_open_args* args,
               uint32_t posix_flags,
-              uint32_t flags,
-              struct rgw_open_args* args);
+              uint32_t flags);
 
 /*
    close file

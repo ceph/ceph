@@ -279,7 +279,7 @@ struct rgw_open_args args = {
 };
 
 rgw_open_fd ofd = NULL;
-rgw_open2(fs, fh, &ofd, O_RDWR, RGW_OPEN_FLAG_NONE, &args);
+rgw_open2(fs, fh, &ofd, &args, O_RDWR, RGW_OPEN_FLAG_NONE);
 rgw_writev(ofd, iov, iov_cnt, offset, &nwritten, RGW_WRITE_FLAG_NONE);
 rgw_close2(ofd, RGW_CLOSE_FLAG_NONE);
 rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
