@@ -93,6 +93,12 @@ struct chunk_result_t {
   // Populated when auth shard has omap/data digest present but oi does not.
   std::vector<digest_update_t> missing_digest;
 
+  // Cluster-log messages emitted by the fix_digest path.
+  // Each entry is the full formatted message (without trailing newline).
+  // Replayed as clog.error() in emit_chunk_result(), matching classic OSD's
+  // errstream output from match_in_shards() lines 1328-1330.
+  std::vector<std::string> repair_messages;
+
   // Snapset errors detected from non-primary shard SnapSet evaluation.
   // These are logged (for visibility/debugging) but NOT stored into
   // m_stored_snapset_errors and NOT counted in num_scrub_errors, because
