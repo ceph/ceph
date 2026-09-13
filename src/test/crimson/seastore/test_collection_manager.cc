@@ -87,10 +87,10 @@ struct collection_manager_test_t :
   void checking_mappings(coll_root_t &coll_root, Transaction &t) {
     auto coll_list = list(coll_root, t);
     EXPECT_EQ(test_coll_mappings.size(), coll_list.size());
-    for (std::pair<coll_t, coll_info_t> p : test_coll_mappings) {
-      EXPECT_NE(
-        std::find(coll_list.begin(), coll_list.end(), p),
-        coll_list.end());
+    for (auto& [coll, coll_info] : coll_list) {
+      auto found = test_coll_mappings.find(coll);
+      ASSERT_TRUE(found != test_coll_mappings.end());
+      EXPECT_EQ(found->second, coll_info);
     }
   }
 
