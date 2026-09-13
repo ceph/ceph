@@ -2260,6 +2260,14 @@ namespace rgw {
       (f->write_opens)++;
     }
 
+    /* The create intent recorded by rgw_lookup(RGW_LOOKUP_FLAG_CREATE) has
+     * now been acted on, whichever API got here.  Cleared in do_open()
+     * rather than at an entry point because rgw_open() and rgw_open2() both
+     * funnel through here, and only the former used to clear it -- so an
+     * open2 consumer left the flag set on the handle for good, and a later
+     * rgw_open() on that handle would infer a create it was not asked for. */
+    clear_creating(FLAG_LOCKED);
+
     flags |= FLAG_OPEN;
     return 0;
   } /* RGWFileHandle::do_open(...) */
@@ -3592,12 +3600,9 @@ int rgw_open(struct rgw_fs *rgw_fs,
     flags |= RGW_OPEN_FLAG_CREATE;
   }
 
-  int rc = rgw_fh->open_global(posix_flags, flags);
-  if (! rc) {
-    /* it exists now;  a later open must not infer again */
-    rgw_fh->clear_creating();
-  }
-  return rc;
+  /* do_open() clears FLAG_CREATING on success, for open2 as well as this
+   * path -- see the note there */
+  return rgw_fh->open_global(posix_flags, flags);
 }
 
 /*

@@ -797,8 +797,11 @@ namespace rgw {
       flags |= FLAG_CREATING;
     }
 
-    void clear_creating() {
-      lock_guard guard(mtx);
+    void clear_creating(uint32_t cflags = FLAG_NONE) {
+      unique_lock guard{mtx, std::defer_lock};
+      if (! (cflags & FLAG_LOCKED)) {
+	guard.lock();
+      }
       flags &= ~FLAG_CREATING;
     }
 
