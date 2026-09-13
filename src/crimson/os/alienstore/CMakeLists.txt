@@ -18,7 +18,6 @@ set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/Timer.cc
   ${PROJECT_SOURCE_DIR}/src/common/TrackedOp.cc
   ${PROJECT_SOURCE_DIR}/src/common/WorkQueue.cc
-  ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/log/Log.cc
