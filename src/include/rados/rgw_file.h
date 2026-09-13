@@ -295,10 +295,57 @@ int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 
 typedef void* rgw_open_fd;
 
+/*
+  create disposition for rgw_open2
+*/
+#define RGW_CREATEMODE_NONE        0 /* do not create */
+#define RGW_CREATEMODE_UNCHECKED   1 /* create, or open and apply attrs */
+#define RGW_CREATEMODE_GUARDED     2 /* create, fail if it exists */
+#define RGW_CREATEMODE_EXCLUSIVE   3 /* guarded, and attrs carry a verifier */
+#define RGW_CREATEMODE_EXCLUSIVE41 4 /* exclusive, verifier separate from attrs */
+
+/*
+  encodings an access-control list may arrive in.  reserved:  none is
+  accepted yet, and a non-empty acl is refused rather than ignored
+*/
+#define RGW_ACL_ENCODING_NONE      0
+#define RGW_ACL_ENCODING_NFS4      1 /* XDR nfsace4 */
+#define RGW_ACL_ENCODING_POSIX     2 /* POSIX.1e */
+#define RGW_ACL_ENCODING_RGW       3 /* RGWAccessControlPolicy */
+
+/*
+  Optional arguments to rgw_open2.
+ 
+  Versioned because ganesha and ceph are built from separate trees:  a
+  consumer compiled against an older header is rejected cleanly rather
+  than having a field read that it never set.  Set version and size, and
+  zero the rest.
+*/
+#define RGW_OPEN_ARGS_V1           1
+
+struct rgw_open_args
+{
+  uint32_t version;      /* RGW_OPEN_ARGS_V1 */
+  uint32_t size;         /* sizeof(struct rgw_open_args) */
+  uint32_t createmode;   /* RGW_CREATEMODE_* */
+  uint32_t attr_mask;    /* RGW_SETATTR_* to apply at create */
+  struct stat* attrs;    /* IN:  initial attributes;  NULL if attr_mask==0 */
+  struct stat* attrs_out; /* OUT: resulting attributes;  NULL if not wanted */
+  void* acl;             /* reserved -- must be NULL */
+  uint32_t acl_len;      /* reserved -- must be 0 */
+  uint32_t acl_encoding; /* reserved -- must be RGW_ACL_ENCODING_NONE */
+};
+
+/*
+  args may be NULL, in which case the create disposition is taken from
+  RGW_OPEN_FLAG_CREATE and O_EXCL as it always was.  When
+  args->createmode is not RGW_CREATEMODE_NONE it governs instead.
+*/
 int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
               rgw_open_fd* open_fd /* OUT */,
               uint32_t posix_flags,
-              uint32_t flags);
+              uint32_t flags,
+              struct rgw_open_args* args);
 
 /*
    close file

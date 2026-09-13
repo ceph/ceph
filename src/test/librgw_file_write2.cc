@@ -172,11 +172,13 @@ namespace {
     }      
     
     using OpenResult = std::tuple<int, rgw_open_fd>;
-    OpenResult open(uint32_t openflags, uint32_t flags)
+    OpenResult open(uint32_t openflags, uint32_t flags,
+		    struct rgw_open_args* args = nullptr)
     {
       OpenResult ofr;
       std::get<0>(ofr) = rgw_open2(fs, object_fh,
-                                   &(std::get<1>(ofr)), openflags, flags);
+                                   &(std::get<1>(ofr)), openflags, flags,
+				   args);
       return ofr;
     }
 
@@ -614,6 +616,583 @@ TEST(OPEN2, CREATE_FLAG)
   ASSERT_EQ(rgw_getattr(fs, rfh, &st, RGW_GETATTR_FLAG_NONE), 0);
   EXPECT_EQ(st.st_size, (off_t) data.length());
   ASSERT_EQ(rgw_fh_rele(fs, rfh, 0), 0);
+}
+
+/* ---- createmode and initial attributes -------------------------------
+ *
+ * rgw_open2 carries a create disposition and the attributes to create with,
+ * so a caller does not have to create and then set attributes as two steps.
+ * That matters for more than tidiness:  setattr on a handle with no live FSIO
+ * handle takes the S3 path, and its -ENOENT case materialises a published
+ * zero-length object -- so create-then-setattr publishes an empty object
+ * before the real content exists.
+ *
+ * The attributes are stamped at create rather than left to publish, because
+ * an exclusive-create replay has to be able to read them back mid-write:
+ * ganesha leaves the verifier in atime/mtime, and compares what getattr
+ * returns.  publish() is last-writer close, which is far too late.
+ */
+
+static struct rgw_open_args cm_args(uint32_t createmode, struct stat* st,
+				    uint32_t mask, struct stat* out = nullptr)
+{
+  struct rgw_open_args a{};
+  a.version = RGW_OPEN_ARGS_V1;
+  a.size = sizeof(a);
+  a.createmode = createmode;
+  a.attrs = st;
+  a.attr_mask = mask;
+  a.attrs_out = out;
+  return a;
+}
+
+TEST(OPEN2, CREATEMODE_REJECTS_BAD_ARGS)
+{
+  const std::string name{"cm-badargs"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  Open2Helper o2h(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+
+  struct stat st{};
+  auto args = cm_args(RGW_CREATEMODE_UNCHECKED, &st, RGW_SETATTR_MODE);
+
+  /* built against a different header:  say so rather than read a field the
+   * caller never set */
+  args.version = RGW_OPEN_ARGS_V1 + 1;
+  EXPECT_EQ(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), -EINVAL);
+  args.version = RGW_OPEN_ARGS_V1;
+  args.size = sizeof(args) - 1;
+  EXPECT_EQ(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), -EINVAL);
+  args.size = sizeof(args);
+
+  /* an ACL is reserved, and must be refused rather than dropped -- a caller
+   * which believes it set one must not be told the open succeeded */
+  char acl[4] = {0};
+  args.acl = acl;
+  args.acl_len = sizeof(acl);
+  args.acl_encoding = RGW_ACL_ENCODING_NFS4;
+  EXPECT_EQ(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), -ENOTSUP);
+
+  /* a mask with no attributes is a caller bug, not a no-op */
+  args.acl = nullptr; args.acl_len = 0;
+  args.acl_encoding = RGW_ACL_ENCODING_NONE;
+  args.attrs = nullptr;
+  EXPECT_EQ(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), -EINVAL);
+}
+
+TEST(OPEN2, CREATEMODE_GUARDED_REFUSES_EXISTING)
+{
+  const std::string name{"cm-guarded"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  struct stat st{};
+  st.st_mode = 0644;
+
+  /* absent:  GUARDED creates */
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    auto args = cm_args(RGW_CREATEMODE_GUARDED, &st, RGW_SETATTR_MODE);
+    auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args);
+    ASSERT_EQ(get<0>(ofw), 0)
+        << "GUARDED did not create an object that was absent";
+    ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+  }
+
+  /* present:  GUARDED refuses.  note no RGW_OPEN_FLAG_CREATE and no O_EXCL
+   * are passed -- the disposition alone has to carry it */
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    auto args = cm_args(RGW_CREATEMODE_GUARDED, &st, RGW_SETATTR_MODE);
+    EXPECT_EQ(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), -EEXIST)
+        << "GUARDED opened an object that already existed";
+  }
+
+  /* present:  UNCHECKED opens it anyway, which is the difference */
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    auto args = cm_args(RGW_CREATEMODE_UNCHECKED, &st, RGW_SETATTR_MODE);
+    auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args);
+    EXPECT_EQ(get<0>(ofw), 0)
+        << "UNCHECKED refused an existing object;  it should overwrite";
+    if (get<0>(ofw) == 0) {
+      ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+    }
+  }
+}
+
+TEST(OPEN2, CREATEMODE_ATTRS_ARE_DURABLE_BEFORE_PUBLISH)
+{
+  const std::string name{"cm-durable"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  struct stat st{};
+  st.st_mode = 0640;
+  st.st_uid = 4242;
+  st.st_gid = 4243;
+  /* what ganesha's set_common_verifier() does:  the two halves of an
+   * exclusive-create verifier, in seconds fields.  check_verifier compares
+   * tv_sec exactly, so these have to survive byte-for-byte */
+  st.st_atim.tv_sec = 0x11223344;
+  st.st_atim.tv_nsec = 0;
+  st.st_mtim.tv_sec = 0x55667788;
+  st.st_mtim.tv_nsec = 0;
+
+  struct stat out{};
+  auto args = cm_args(RGW_CREATEMODE_EXCLUSIVE, &st,
+		      RGW_SETATTR_MODE|RGW_SETATTR_UID|RGW_SETATTR_GID|
+		      RGW_SETATTR_ATIME|RGW_SETATTR_MTIME, &out);
+
+  Open2Helper o2h(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+  auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args);
+  ASSERT_EQ(get<0>(ofw), 0);
+
+  /* attrs_out saves the caller a getattr */
+  EXPECT_EQ(out.st_uid, 4242u);
+  EXPECT_EQ(out.st_gid, 4243u);
+  EXPECT_EQ(out.st_atim.tv_sec, 0x11223344);
+  EXPECT_EQ(out.st_mtim.tv_sec, 0x55667788);
+
+  /* The load-bearing assertion:  the attribute blob is on the shadow now,
+   * while the object is still unpublished and the open still live.  Left to
+   * stamp_unix_attrs() it would not appear until close, and an exclusive
+   * create replay arriving here would read "exists, no verifier". */
+  const auto sp = shadow_path(name);
+  ASSERT_TRUE(sf::exists(sp))
+      << "no shadow -- this test is not measuring what it thinks";
+  char buf[512];
+  /* make_xattr_name() maps RGW_ATTR_PREFIX ("user.rgw.") onto nsfs's own
+   * namespace, so the name on disk is user.nsfs.rgw.unix1 */
+  EXPECT_GT(::getxattr(sp.c_str(), "user.nsfs.rgw.unix1", buf, sizeof(buf)), 0)
+      << "initial attributes were not made durable at create;  they would "
+	 "not be readable until publish";
+
+  const std::string data{"durable"};
+  ASSERT_EQ(get<0>(o2h.write(get<1>(ofw), data, 0, data.length())), 0);
+  ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+
+  /* Read back cold, after the publish renameat.
+   *
+   * The attributes survive, and so does the atime half of the verifier.  The
+   * mtime half does *not*, because the write moved it -- which is correct and
+   * is what any filesystem does:  FSAL_VFS stores the verifier in the file's
+   * own timestamps too, so a write destroys it there as well.  An exclusive
+   * create replay is a retransmission of the create, so it arrives before the
+   * client's writes;  the verifier only has to survive that long.  Asserting
+   * the mtime half survives a write would be asserting a property no backend
+   * provides. */
+  struct rgw_file_handle* rfh = nullptr;
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, name.c_str(), &rfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  struct stat after{};
+  ASSERT_EQ(rgw_getattr(fs, rfh, &after, RGW_GETATTR_FLAG_NONE), 0);
+  EXPECT_EQ(after.st_uid, 4242u);
+  EXPECT_EQ(after.st_gid, 4243u);
+  EXPECT_EQ(after.st_atim.tv_sec, 0x11223344)
+      << "the atime half of the verifier did not survive publish";
+  EXPECT_NE(after.st_mtim.tv_sec, 0x55667788)
+      << "mtime still holds the verifier after a write;  a write must move "
+	 "it, or mtime is not reporting the data";
+  EXPECT_EQ(after.st_size, (off_t) data.length());
+  ASSERT_EQ(rgw_fh_rele(fs, rfh, 0), 0);
+}
+
+TEST(OPEN2, CREATEMODE_INITIAL_SIZE)
+{
+  const std::string name{"cm-size"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  struct stat st{};
+  st.st_size = 4096;
+  auto args = cm_args(RGW_CREATEMODE_UNCHECKED, &st, RGW_SETATTR_SIZE);
+
+  Open2Helper o2h(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+  auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+
+  struct rgw_file_handle* rfh = nullptr;
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, name.c_str(), &rfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  struct stat after{};
+  ASSERT_EQ(rgw_getattr(fs, rfh, &after, RGW_GETATTR_FLAG_NONE), 0);
+  EXPECT_EQ(after.st_size, 4096)
+      << "a size in the initial attributes was not applied";
+  ASSERT_EQ(rgw_fh_rele(fs, rfh, 0), 0);
+}
+
+/* ---- shadow construction ---------------------------------------------
+ *
+ * A shadow is built away from its name and linked into place only once it is
+ * complete, so that nothing can rendezvous onto a half-built view and a
+ * failure leaves nothing behind.  That last part is the load-bearing one:
+ * an attribute-less shadow left at .shadow/<leaf> rejects every later
+ * exclusive create on that name, and nothing reaps it -- close() only
+ * unlinks an unpublished shadow when OPEN_FLAG_EPHEMERAL was passed, the
+ * idle timer is armed on the rgw_open() path rather than this one, and
+ * publish() needs a writer that no longer exists.
+ *
+ * These use inject-fsio-attrs-fail and inject-fsio-link-fail so the cleanup
+ * paths actually run;  without them a test create either succeeds outright
+ * or fails before anything was made.
+ */
+
+static int fsio_inject(const DoutPrefixProvider* dpp, const char* hint,
+		       bool on)
+{
+  auto* driver = rgw::g_rgwlib->get_driver();
+  return driver->driver_hint(dpp, hint,
+			     {{"enable", on ? "true" : "false"}});
+}
+
+/* Remove any temp left in .shadow/ by an earlier run, and return the
+ * directory so a test can assert on what *it* leaves.  Clean at the start,
+ * never at the end:  a failing run leaves its evidence in place, and a test
+ * which scanned a dirty root would report the previous run's leak as its
+ * own -- which it did, the first time this was written. */
+static sf::path clear_stale_temps()
+{
+  std::error_code ec;
+  const auto sdir = nsfs_base() / bucket_name / ".shadow";
+  if (sf::is_directory(sdir, ec)) {
+    for (const auto& de : sf::directory_iterator(sdir, ec)) {
+      if (de.path().filename().string().starts_with(".tmp_link_")) {
+	sf::remove(de.path(), ec);
+      }
+    }
+  }
+  return sdir;
+}
+
+static bool any_temp_in(const sf::path& sdir)
+{
+  std::error_code ec;
+  if (! sf::is_directory(sdir, ec)) {
+    return false;
+  }
+  for (const auto& de : sf::directory_iterator(sdir, ec)) {
+    if (de.path().filename().string().starts_with(".tmp_link_")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Count this process's open descriptors.
+ *
+ * This catches a *leak*.  It does not catch a double close:  closing an
+ * already-closed number returns EBADF and changes no count, so the sentinel
+ * below is opportunistic -- it only fires if the number happened to be
+ * reused in between.  A double close is prevented structurally instead, by
+ * sdir_fd having exactly one owner (see commit_sdir() in the driver). */
+static int fd_count()
+{
+  std::error_code ec;
+  int n = 0;
+  for (const auto& de : sf::directory_iterator("/proc/self/fd", ec)) {
+    (void) de;
+    ++n;
+  }
+  return n;
+}
+
+TEST(OPEN2, SHADOW_BUILD_FAILURE_LEAVES_NOTHING)
+{
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string name{"sb-nothing"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+  const auto sdir = clear_stale_temps();
+
+  int ret = fsio_inject(&dp, "inject-fsio-attrs-fail", true);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement inject-fsio-attrs-fail";
+  }
+  ASSERT_EQ(ret, 0);
+
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    struct stat st{};
+    st.st_mode = 0644;
+    auto args = cm_args(RGW_CREATEMODE_EXCLUSIVE, &st, RGW_SETATTR_MODE);
+    EXPECT_NE(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), 0)
+        << "injected failure did not fail the open";
+  }
+  ASSERT_EQ(fsio_inject(&dp, "inject-fsio-attrs-fail", false), 0);
+
+  /* nothing at the shadow name, and no stray temp beside it */
+  EXPECT_FALSE(sf::exists(shadow_path(name)))
+      << "a failed build left a shadow at its name;  every later exclusive "
+	 "create on this name would be refused, with nothing to reap it";
+  EXPECT_FALSE(any_temp_in(sdir))
+      << "a failed build left a temp behind in " << sdir;
+
+  /* and the name is still usable -- the invariant the rewrite exists for */
+  Open2Helper o2h(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+  struct stat st2{};
+  st2.st_mode = 0644;
+  auto args2 = cm_args(RGW_CREATEMODE_EXCLUSIVE, &st2, RGW_SETATTR_MODE);
+  auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args2);
+  EXPECT_EQ(get<0>(ofw), 0)
+      << "an exclusive create was refused after an earlier build failed";
+  if (get<0>(ofw) == 0) {
+    ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+  }
+}
+
+TEST(OPEN2, SHADOW_LINK_FAILURE_LEAVES_NOTHING)
+{
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string name{"sb-link"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+  const auto sdir = clear_stale_temps();
+
+  int ret = fsio_inject(&dp, "inject-fsio-link-fail", true);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement inject-fsio-link-fail";
+  }
+  ASSERT_EQ(ret, 0);
+
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    EXPECT_NE(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE)), 0);
+  }
+  ASSERT_EQ(fsio_inject(&dp, "inject-fsio-link-fail", false), 0);
+
+  EXPECT_FALSE(sf::exists(shadow_path(name)));
+  EXPECT_FALSE(any_temp_in(sdir))
+      << "a failed link left its temp behind in " << sdir;
+}
+
+/* The COW arm specifically.
+ *
+ * A create over an object which already exists clones it, and clone_file()
+ * works by name -- so that arm builds at a named temp rather than an
+ * O_TMPFILE, and is the only path with a temp to leak.  The two tests above
+ * create objects which do not exist, so they never reach it:  written
+ * without this one, they passed with the temp cleanup deliberately removed. */
+/* Why build-then-link matters, stated as a test rather than a comment.
+ *
+ * A shadow left at .shadow/<leaf> refuses every later exclusive create on
+ * that name -- get_fsio_handle() returns -EEXIST before it reaches the
+ * rendezvous branch -- and nothing reaps it:  close() unlinks an unpublished
+ * shadow only under OPEN_FLAG_EPHEMERAL, the idle timer is armed on the
+ * rgw_open() path rather than this one, and publish() needs a writer which no
+ * longer exists.  That is unbounded, which is why the construction avoids
+ * ever putting an incomplete shadow at its name.
+ *
+ * inject-fork-race leaves one there (it stands in for another instance which
+ * forked first), and inject-fsio-attrs-fail then fails our own build, so the
+ * race's shadow survives with nobody holding it.  This is the pre-rewrite
+ * state, reached deliberately. */
+TEST(OPEN2, LEFTOVER_SHADOW_REFUSES_EXCLUSIVE_CREATE)
+{
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string name{"sb-leftover"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+  (void) clear_stale_temps();
+  std::error_code ec;
+  sf::remove(shadow_path(name), ec);
+
+  int ret = fsio_inject(&dp, "inject-fork-race", true);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement inject-fork-race";
+  }
+  ASSERT_EQ(ret, 0);
+  ret = fsio_inject(&dp, "inject-fsio-attrs-fail", true);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    (void) fsio_inject(&dp, "inject-fork-race", false);
+    GTEST_SKIP() << "driver does not implement inject-fsio-attrs-fail";
+  }
+  ASSERT_EQ(ret, 0);
+
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    struct stat st{};
+    st.st_mode = 0644;
+    auto args = cm_args(RGW_CREATEMODE_UNCHECKED, &st, RGW_SETATTR_MODE);
+    EXPECT_NE(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), 0);
+  }
+  ASSERT_EQ(fsio_inject(&dp, "inject-fork-race", false), 0);
+  ASSERT_EQ(fsio_inject(&dp, "inject-fsio-attrs-fail", false), 0);
+
+  ASSERT_TRUE(sf::exists(shadow_path(name)))
+      << "the race stand-in left no shadow, so this test is not in the state "
+	 "it means to describe";
+
+  /* the harm:  the name is now unusable for an exclusive create */
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    struct stat st{};
+    st.st_mode = 0644;
+    auto args = cm_args(RGW_CREATEMODE_EXCLUSIVE, &st, RGW_SETATTR_MODE);
+    EXPECT_EQ(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), -EEXIST)
+        << "a leftover shadow did not refuse an exclusive create;  if this "
+	   "ever passes, something now reaps them and the construction could "
+	   "be simplified";
+  }
+
+  /* and leave the root usable, since nothing in the driver will */
+  sf::remove(shadow_path(name), ec);
+  EXPECT_FALSE(sf::exists(shadow_path(name)));
+}
+
+TEST(OPEN2, SHADOW_COW_FAILURE_LEAVES_NO_TEMP)
+{
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string name{"sb-cow"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+  const auto sdir = clear_stale_temps();
+
+  /* publish it first, so the next write has something to clone */
+  const std::string data{"original"};
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    ASSERT_EQ(get<0>(o2h.write(get<1>(ofw), data, 0, data.length())), 0);
+    ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+  }
+  ASSERT_TRUE(sf::exists(published_path(name)));
+  ASSERT_FALSE(sf::exists(shadow_path(name)))
+      << "publish left a shadow;  the next open would rendezvous rather than "
+	 "clone, and this test would not reach the COW arm";
+
+  /* Both failure sites, because they clean up in different places:  an attrs
+   * failure returns before the link and unlinks the temp itself, while a link
+   * failure reaches the post-link cleanup.  Exercising only one says nothing
+   * about the other -- which is how this was first written.
+   *
+   * And each is checked in both polarities.  With inject-fsio-skip-cleanup
+   * the temp must be left behind:  that proves this test can see a leak at
+   * all, rather than passing because it is scanning somewhere the code never
+   * writes.  Without it, the temp must be gone. */
+  for (const char* hint : {"inject-fsio-attrs-fail",
+			   "inject-fsio-link-fail"}) {
+    for (bool skip_cleanup : {true, false}) {
+      int ret = fsio_inject(&dp, hint, true);
+      if (ret == -ENOTSUP || ret == -EINVAL) {
+	GTEST_SKIP() << "driver does not implement " << hint;
+      }
+      ASSERT_EQ(ret, 0);
+      ret = fsio_inject(&dp, "inject-fsio-skip-cleanup", skip_cleanup);
+      if (ret == -ENOTSUP || ret == -EINVAL) {
+	(void) fsio_inject(&dp, hint, false);
+	GTEST_SKIP() << "driver does not implement inject-fsio-skip-cleanup";
+      }
+      ASSERT_EQ(ret, 0);
+
+      {
+	/* O_RDWR with no O_TRUNC on an existing object:  the COW clone arm */
+	Open2Helper o2h(fs, bucket_fh);
+	ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+	EXPECT_NE(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE)), 0)
+	    << hint << " did not fail the open";
+      }
+      ASSERT_EQ(fsio_inject(&dp, hint, false), 0);
+      ASSERT_EQ(fsio_inject(&dp, "inject-fsio-skip-cleanup", false), 0);
+
+      if (skip_cleanup) {
+	EXPECT_TRUE(any_temp_in(sdir))
+	    << "with cleanup skipped no temp was found in " << sdir
+	    << " (" << hint << ") -- this test cannot detect a leak, so its "
+	       "negative result below proves nothing";
+	/* leave the root as we found it */
+	(void) clear_stale_temps();
+      } else {
+	EXPECT_FALSE(any_temp_in(sdir))
+	    << "a failed COW build left its temp behind in " << sdir
+	    << " (" << hint << ")";
+      }
+      EXPECT_FALSE(sf::exists(shadow_path(name)))
+	  << "a failed COW build left a shadow at its name (" << hint << ")";
+    }
+  }
+
+  /* and the published object is untouched */
+  struct rgw_file_handle* rfh = nullptr;
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, name.c_str(), &rfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  struct stat st{};
+  ASSERT_EQ(rgw_getattr(fs, rfh, &st, RGW_GETATTR_FLAG_NONE), 0);
+  EXPECT_EQ(st.st_size, (off_t) data.length())
+      << "a failed COW build disturbed the object it was cloning";
+  ASSERT_EQ(rgw_fh_rele(fs, rfh, 0), 0);
+}
+
+TEST(OPEN2, SHADOW_BUILD_FAILURE_LEAKS_NO_DESCRIPTORS)
+{
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string name{"sb-fds"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  /* a sentinel:  a double close would eventually take out an unrelated
+   * descriptor, which is the harm rather than the leak */
+  int sentinel = ::open("/dev/null", O_RDONLY);
+  ASSERT_GE(sentinel, 0);
+
+  int ret = fsio_inject(&dp, "inject-fsio-attrs-fail", true);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    ::close(sentinel);
+    GTEST_SKIP() << "driver does not implement inject-fsio-attrs-fail";
+  }
+  ASSERT_EQ(ret, 0);
+
+  const int before = fd_count();
+  for (int i = 0; i < 16; ++i) {
+    Open2Helper o2h(fs, bucket_fh);
+    if (get<0>(o2h.lookup(name)) != 0) {
+      break;
+    }
+    (void) o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  }
+  const int after = fd_count();
+  ASSERT_EQ(fsio_inject(&dp, "inject-fsio-attrs-fail", false), 0);
+
+  EXPECT_GE(::fcntl(sentinel, F_GETFD), 0)
+      << "an unrelated descriptor was closed;  a path closed one it did not "
+	 "own, or closed one twice";
+  ::close(sentinel);
+
+  EXPECT_LE(after - before, 2)
+      << "descriptor count grew by " << (after - before)
+      << " over 16 failed builds";
+}
+
+TEST(OPEN2, SHADOW_JOIN_DOES_NOT_REMOVE_THE_WINNERS)
+{
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string name{"sb-join"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  /* inject-fork-race stands in for another instance forking first, so our
+   * linkat loses with EEXIST and we join its shadow */
+  int ret = fsio_inject(&dp, "inject-fork-race", true);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement inject-fork-race";
+  }
+  ASSERT_EQ(ret, 0);
+
+  {
+    Open2Helper o2h(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+    auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0) << "joining the winner's shadow should succeed";
+    /* the winner's content is what we joined, not a fresh empty file */
+    EXPECT_TRUE(sf::exists(shadow_path(name)));
+    ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+  }
+  ASSERT_EQ(fsio_inject(&dp, "inject-fork-race", false), 0);
 }
 
 TEST(OPEN2, SETATTR1)

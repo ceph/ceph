@@ -2112,19 +2112,21 @@ namespace rgw {
   } /*  RGWFileHandle::open */
 
   int RGWFileHandle::open2(file::Open** out, uint32_t posix_flags,
-                           uint32_t rgw_openflags)
+                           uint32_t rgw_openflags,
+                           const struct rgw_open_args* args)
   {
     if (!is_file()) {
       return -EINVAL;
     }
 
     lock_guard guard(mtx);
-    return do_open(out, posix_flags, rgw_openflags);
+    return do_open(out, posix_flags, rgw_openflags, args);
   } /* RGWFileHandle::open2(...) */
 
   /* mtx must be held */
   int RGWFileHandle::do_open(file::Open** out, uint32_t posix_flags,
-                             uint32_t rgw_openflags)
+                             uint32_t rgw_openflags,
+                             const struct rgw_open_args* args)
   {
 
     /*
@@ -2159,6 +2161,41 @@ namespace rgw {
       etag.clear();
     }
 
+    /* Optional arguments.  Absent, the create disposition is what it has
+     * always been:  RGW_OPEN_FLAG_CREATE plus O_EXCL. */
+    uint32_t createmode = RGW_CREATEMODE_NONE;
+    if (args) {
+      if ((args->version != RGW_OPEN_ARGS_V1) ||
+	  (args->size < sizeof(struct rgw_open_args))) {
+	/* built against a different header than this librgw:  say so rather
+	 * than read a field the caller never set */
+	lsubdout(fs->get_context(), rgw, 0)
+	  << __func__ << " rejecting rgw_open_args version=" << args->version
+	  << " size=" << args->size << dendl;
+	return -EINVAL;
+      }
+      if (args->acl || args->acl_len ||
+	  (args->acl_encoding != RGW_ACL_ENCODING_NONE)) {
+	/* reserved.  refused rather than dropped:  a caller which believes
+	 * it set an ACL at create must not be told it succeeded */
+	return -ENOTSUP;
+      }
+      if (args->attr_mask && ! args->attrs) {
+	return -EINVAL;
+      }
+      createmode = args->createmode;
+
+      /* Initial attributes go onto the handle *before* the create, because
+       * encode_attrs() serialises handle state and the stamp below is what
+       * makes them durable.  This is also how an exclusive-create verifier
+       * arrives:  ganesha's set_common_verifier() puts it in atime/mtime, so
+       * it needs no special handling here -- but it does mean those two must
+       * survive byte-exact, since check_verifier compares tv_sec. */
+      if (args->attr_mask) {
+	create_stat(args->attrs, args->attr_mask);
+      }
+    }
+
     auto* driver = g_rgwlib->get_driver(); /* XXXX need to link driver to fs */
     if (driver->have_fsio()) {
       /* the permission check needs this object's bucket and its full
@@ -2188,19 +2225,60 @@ namespace rgw {
         }
 
         uint32_t hopen_flags = sal::Object::FSIOObject::OPEN_FLAG_NONE;
-        if (rgw_openflags & RGW_OPEN_FLAG_CREATE) {
+        if ((rgw_openflags & RGW_OPEN_FLAG_CREATE) ||
+	    (createmode >= RGW_CREATEMODE_UNCHECKED)) {
           hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_CREATE;
         }
         if (posix_flags & O_TRUNC) {
+	  /* deliberately not implied by UNCHECKED:  that mode means "create
+	   * if absent, do not fail if present", and a client asking to
+	   * truncate says so with a size in the attributes.  Truncating here
+	   * would silently destroy an existing object on an ordinary
+	   * create-open */
           hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_TRUNC;
         }
-        if (posix_flags & O_EXCL) {
+        if ((posix_flags & O_EXCL) ||
+	    (createmode >= RGW_CREATEMODE_GUARDED)) {
+	  /* GUARDED and both EXCLUSIVE modes all fail on an existing object.
+	   * Distinguishing a replay from a genuine conflict is the caller's
+	   * job:  ganesha compares the verifier it stored in atime/mtime
+	   * against what getattr returns, so all this layer owes it is
+	   * -EEXIST and attributes that come back unchanged */
           hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_EXCL;
         }
         if (write_open) {
           hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_WRITE;
         }
-        auto f_result = req.sal_object->get_fsio_handle(&dp, hopen_flags);
+        /* What a create should apply, handed to the driver rather than
+	 * stamped by us afterwards.  The driver builds the shadow away from
+	 * its name and links it into place only once complete, so there is no
+	 * window in which another opener adopts a half-built view and no
+	 * half-built shadow left behind if it fails.  encode_attrs() reads
+	 * handle state, which create_stat() populated above. */
+        ceph::buffer::list ux_key, ux_attrs;
+        rgw::sal::Attrs iattrs;
+        struct timespec cts[2];
+        sal::Object::FSIOCreateSpec spec;
+        sal::Object::FSIOCreateSpec* specp = nullptr;
+        if (args && args->attr_mask) {
+          encode_attrs(ux_key, ux_attrs);
+          iattrs[RGW_ATTR_UNIX_KEY1] = std::move(ux_key);
+          iattrs[RGW_ATTR_UNIX1] = std::move(ux_attrs);
+          spec.attrs = &iattrs;
+          if (args->attr_mask & RGW_SETATTR_SIZE) {
+            spec.size = args->attrs->st_size;
+          }
+          if (args->attr_mask & (RGW_SETATTR_ATIME|RGW_SETATTR_MTIME)) {
+            cts[0] = (args->attr_mask & RGW_SETATTR_ATIME)
+              ? args->attrs->st_atim : timespec{0, UTIME_OMIT};
+            cts[1] = (args->attr_mask & RGW_SETATTR_MTIME)
+              ? args->attrs->st_mtim : timespec{0, UTIME_OMIT};
+            spec.times = cts;
+          }
+          specp = &spec;
+        }
+        auto f_result = req.sal_object->get_fsio_handle(&dp, hopen_flags,
+							specp);
         if (!get<0>(f_result)) {
           f->sal_bucket = std::move(req.sal_bucket);
           f->sal_object = std::move(req.sal_object);
@@ -2242,6 +2320,7 @@ namespace rgw {
           return rc;
         }
       }
+
     } /* have fsio */
 
     /* save on open list */
@@ -2269,6 +2348,13 @@ namespace rgw {
     clear_creating(FLAG_LOCKED);
 
     flags |= FLAG_OPEN;
+
+    /* ganesha's open2 fills attrs_out;  everything it wants was just
+     * stamped, so returning it here saves the caller a getattr */
+    if (args && args->attrs_out) {
+      (void) stat(args->attrs_out, FLAG_LOCKED);
+    }
+
     return 0;
   } /* RGWFileHandle::do_open(...) */
 
@@ -3610,7 +3696,7 @@ int rgw_open(struct rgw_fs *rgw_fs,
 */
 int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
               rgw_open_fd* open_fd /* OUT */, uint32_t posix_flags,
-              uint32_t flags)
+              uint32_t flags, struct rgw_open_args* args)
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
@@ -3618,7 +3704,7 @@ int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
     return -EISDIR;
 
   RGWFileHandle::file::Open* open{nullptr};
-  auto rc = rgw_fh->open2(&open, posix_flags, flags);
+  auto rc = rgw_fh->open2(&open, posix_flags, flags, args);
   *open_fd = open_to_fd(open);
   return rc;
 }

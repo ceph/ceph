@@ -751,7 +751,8 @@ namespace rgw {
     int write_finish(uint32_t flags = FLAG_NONE);
 
     int open2(file::Open** /* out */, uint32_t posix_flags,
-              uint32_t rgw_openflags);
+              uint32_t rgw_openflags,
+              const struct rgw_open_args* args = nullptr);
 
     /* stateless (NFSv3) open tracking:  at most one Open per file
      * handle, created on demand and reclaimed by close or by the
@@ -772,7 +773,8 @@ namespace rgw {
 
     /* mtx must be held */
     int do_open(file::Open** /* out */, uint32_t posix_flags,
-                uint32_t rgw_openflags);
+                uint32_t rgw_openflags,
+                const struct rgw_open_args* args = nullptr);
     bool resolve_bucket_versioned();
     void arm_stateless_timer();
     /* mtx must be held */
