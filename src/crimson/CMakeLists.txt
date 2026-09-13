@@ -95,10 +95,8 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
   ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
-  ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
-  ${PROJECT_SOURCE_DIR}/src/compressor/Compressor.cc
   ${PROJECT_SOURCE_DIR}/src/crush/builder.c
   ${PROJECT_SOURCE_DIR}/src/crush/mapper.c
   ${PROJECT_SOURCE_DIR}/src/crush/crush.c
@@ -181,8 +179,8 @@ set(crimson_mon_srcs
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
   ${PROJECT_SOURCE_DIR}/src/msg/async/crypto_onwire.cc
-  ${PROJECT_SOURCE_DIR}/src/msg/async/compression_onwire.cc
   ${PROJECT_SOURCE_DIR}/src/msg/async/frames_v2.cc
+  net/compression_onwire_stub.cc
   net/Errors.cc
   net/FrameAssemblerV2.cc
   net/io_handler.cc
