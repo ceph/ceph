@@ -1528,8 +1528,10 @@ void CDir::mark_clean()
 // caller should hold auth pin of this
 void CDir::log_mark_dirty()
 {
-  if (is_dirty() || projected_version > get_version())
-    return; // noop if it is already dirty or will be dirty
+  // An in-flight commit must not mark newly discovered purge work clean.
+  if (projected_version > get_version() ||
+      (is_dirty() && get_version() > committing_version))
+    return;
 
   auto _fnode = allocate_fnode(*get_fnode());
   _fnode->version = pre_dirty();
@@ -2108,6 +2110,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   // purge stale snaps?
   bool force_dirty = false;
+  snapid_t snap_purge_target = 0;
   const set<snapid_t> *snaps = NULL;
   SnapRealm *realm = inode->find_snaprealm();
   if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
@@ -2115,10 +2118,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
-    if (get_num_snap_items() == 0) {
-      const_cast<snapid_t&>(fnode->snap_purged_thru) = realm->get_last_destroyed();
-      force_dirty = true;
-    }
+    if (complete && r == 0 && get_num_snap_items() == 0)
+      snap_purge_target = realm->get_last_destroyed();
   }
 
 
@@ -2215,6 +2216,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       // dirfrag as a whole will continue to look okay (minus the
       // mysteriously-missing dentry)
       go_bad_dentry(key.snapid, key.name);
+      snap_purge_target = 0;
 
       // Anyone who was WAIT_DENTRY for this guy will get kicked
       // to RetryRequest, and hit the DamageTable-interrogating path.
@@ -2294,6 +2296,12 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
     if (!(++count % mdcache->mds->heartbeat_reset_grace()))
       mdcache->mds->heartbeat_reset();
+  }
+
+  if (snap_purge_target > fnode->snap_purged_thru && !mdcache->is_readonly()) {
+    pending_snap_purge_target = std::max(pending_snap_purge_target,
+                                       snap_purge_target);
+    force_dirty = true;
   }
 
   // dirty myself to remove stale snap dentries
@@ -2382,10 +2390,12 @@ void CDir::commit(version_t want, MDSContext *c, bool ignore_authpinnability, in
 
 class C_IO_Dir_Committed : public CDirIOContext {
   version_t version;
+  snapid_t snap_purged_thru;
 public:
-  C_IO_Dir_Committed(CDir *d, version_t v) : CDirIOContext(d), version(v) { }
+  C_IO_Dir_Committed(CDir *d, version_t v, snapid_t purged) :
+    CDirIOContext(d), version(v), snap_purged_thru(purged) { }
   void finish(int r) override {
-    dir->_committed(r, version);
+    dir->_committed(r, version, snap_purged_thru);
   }
   void print(ostream& out) const override {
     out << "dirfrag_committed(" << dir->dirfrag() << ")";
@@ -2394,10 +2404,14 @@ public:
 
 class C_IO_Dir_Commit_Ops : public Context {
 public:
-  C_IO_Dir_Commit_Ops(CDir* d, int pr, auto&& s, auto&& bl, auto&& r, auto&& stales)
+  C_IO_Dir_Commit_Ops(CDir* d, int pr, bufferlist&& h, snapid_t purged,
+                    auto&& s, auto&& bl,
+                    auto&& r, auto&& stales)
   :
     dir(d),
     op_prio(pr),
+    header(std::move(h)),
+    snap_purged_thru(purged),
     to_set(std::forward<decltype(s)>(s)),
     dfts(std::forward<decltype(bl)>(bl)),
     to_remove(std::forward<decltype(r)>(r)),
@@ -2409,7 +2423,8 @@ public:
   }
 
   void finish(int r) override {
-    dir->_omap_commit_ops(r, op_prio, metapool, version, is_new, to_set, dfts,
+    dir->_omap_commit_ops(r, op_prio, metapool, version, is_new, header,
+                         snap_purged_thru, to_set, dfts,
 			  to_remove, stale_items);
   }
 
@@ -2419,6 +2434,8 @@ private:
   int64_t metapool;
   version_t version;
   bool is_new;
+  bufferlist header;
+  snapid_t snap_purged_thru;
   vector<CDir::dentry_commit_item> to_set;
   bufferlist dfts;
   vector<string> to_remove;
@@ -2463,6 +2480,7 @@ void CDir::_encode_primary_inode_base(dentry_commit_item &item, bufferlist &dfts
 
 // This is not locked by mds_lock
 void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t version, bool _new,
+			    bufferlist &header, snapid_t snap_purged_thru,
 			    vector<dentry_commit_item> &to_set, bufferlist &dfts,
                             vector<string>& to_remove,
 			    mempool::mds_co::compact_set<mempool::mds_co::string> &stales)
@@ -2475,7 +2493,8 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   }
 
   C_GatherBuilder gather(g_ceph_context,
-                         new C_OnFinisher(new C_IO_Dir_Committed(this, version),
+                         new C_OnFinisher(new C_IO_Dir_Committed(this, version,
+                                                                 snap_purged_thru),
 			 mdcache->mds->finisher));
 
   SnapContext snapc;
@@ -2488,14 +2507,14 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   unsigned max_write_size = mdcache->max_dir_commit_size;
   unsigned write_size = 0;
 
-  auto commit_one = [&](bool header=false) {
+  auto commit_one = [&](bool with_header=false) {
     ObjectOperation op;
 
     /*
      * Shouldn't submit empty op to Rados, which could cause
      * the cephfs to become readonly.
      */
-    ceph_assert(header || !_set.empty() || !_rm.empty());
+    ceph_assert(with_header || !_set.empty() || !_rm.empty());
 
 
     // don't create new dirfrag blindly
@@ -2511,9 +2530,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
      * the message containing the header off last, we cannot get our header
      * into an incorrect state.
      */
-    if (header) {
-      bufferlist header;
-      encode(*fnode, header);
+    if (with_header) {
       op.omap_set_header(header);
     }
 
@@ -2697,8 +2714,15 @@ void CDir::_omap_commit(int op_prio)
     }
   }
 
-  auto c = new C_IO_Dir_Commit_Ops(this, op_prio, std::move(to_set), std::move(dfts),
-                                   std::move(to_remove), std::move(stale_items));
+  fnode_t committed_fnode = *fnode;
+  committed_fnode.snap_purged_thru = std::max(fnode->snap_purged_thru,
+                                           pending_snap_purge_target);
+  bufferlist header;
+  encode(committed_fnode, header);
+  auto c = new C_IO_Dir_Commit_Ops(this, op_prio, std::move(header),
+                                 committed_fnode.snap_purged_thru,
+                                 std::move(to_set), std::move(dfts),
+                                 std::move(to_remove), std::move(stale_items));
   stale_items.clear(); /* in CDir */
   mdcache->mds->finisher->queue(c);
 }
@@ -2805,7 +2829,7 @@ void CDir::_commit(version_t want, int op_prio)
  *
  * @param v version i just committed
  */
-void CDir::_committed(int r, version_t v)
+void CDir::_committed(int r, version_t v, snapid_t snap_purged_thru)
 {
   if (r < 0) {
     // the directory could be partly purged during MDS failover
@@ -2833,6 +2857,15 @@ void CDir::_committed(int r, version_t v)
   ceph_assert(v > committed_version);
   ceph_assert(v <= committing_version);
   committed_version = v;
+
+  if (fnode->snap_purged_thru < snap_purged_thru) {
+    auto next_fnode = allocate_fnode(*fnode);
+    next_fnode->snap_purged_thru = snap_purged_thru;
+    reset_fnode(std::move(next_fnode));
+  }
+  // Retain the target across projections that could roll the watermark back.
+  if (pending_snap_purge_target <= snap_purged_thru && !is_projected())
+    pending_snap_purge_target = 0;
 
   // _all_ commits done?
   if (committing_version == committed_version) 
