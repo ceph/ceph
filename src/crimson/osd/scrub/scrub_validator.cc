@@ -1016,7 +1016,16 @@ chunk_result_t validate_chunk(
     //     that we do not normalise a corrupted copy into the OI (e.g. when the
     //     primary's omap is corrupted and selected as auth, writing D_bad to
     //     the OI would prevent a subsequent repair from detecting the mismatch).
-    if (eval.object_info) {
+    //
+    // Classic OSD only calls should_fix_digest() when the object has NO
+    // inconsistencies (it is in the "else if (cur_inconsistent.empty() &&
+    // cur_missing.empty())" branch of inconsistents()).  We must do the same:
+    // skip the digest update for objects that are inconsistent so that a
+    // corrupted auth digest is never persisted back to the OI during a
+    // detection scrub, which would make the corruption undetectable on the
+    // next scrub (the auth copy and OI would agree on the bad digest while
+    // all other replicas would appear mismatched).
+    if (eval.object_info && !eval.inconsistency) {
       digest_update_t du;
       du.oid = oid;
       bool needs_update = false;
