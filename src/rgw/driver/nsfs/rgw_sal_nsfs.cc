@@ -5676,8 +5676,57 @@ out:
   return ret;
 }
 
+
+static std::atomic<uint64_t> fsio_build_seq{0};
+
+/* Apply what a create asked for to a shadow which has no name yet.
+ *
+ * Order matters.  Size first, because a truncate moves mtime;  then the
+ * xattrs, which move only ctime;  then the times last, so what the inode
+ * ends up carrying is what the caller asked for.  That ordering is
+ * load-bearing for NFS exclusive create -- ganesha leaves its verifier in
+ * atime and mtime (set_common_verifier()) and compares tv_sec back exactly,
+ * and RGWFileHandle::stat() reports mtime from the inode whenever a handle
+ * is live, so the inode is what has to hold it. */
+static int apply_create_spec(const DoutPrefixProvider* dpp,
+			     NSFSDriver* driver, int fd,
+			     const Object::FSIOCreateSpec* spec)
+{
+  /* checked before the null-spec shortcut, so the hook can fail an
+   * ordinary create too -- the cleanup paths are what it exists to reach */
+  if (unlikely(driver->fsio_attrs_fail_injected())) {
+    return -EIO;
+  }
+  if (! spec) {
+    return 0;
+  }
+  if (spec->size >= 0) {
+    if (::ftruncate(fd, spec->size) < 0) {
+      return -errno;
+    }
+  }
+  if (spec->attrs) {
+    for (auto& [key, bl] : *spec->attrs) {
+      if (! bl.length()) {
+	continue; /* empty value means "leave this attr alone" */
+      }
+      std::string xname = make_xattr_name(key);
+      if (::fsetxattr(fd, xname.c_str(), bl.c_str(), bl.length(), 0) < 0) {
+	return -errno;
+      }
+    }
+  }
+  if (spec->times) {
+    if (::futimens(fd, spec->times) < 0) {
+      return -errno;
+    }
+  }
+  return 0;
+}
+
 Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
-						uint32_t flags)
+						uint32_t flags,
+						const FSIOCreateSpec* spec)
 {
   if (!ent) {
     (void) stat(dpp);
@@ -5713,38 +5762,52 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 
   auto hdl = std::unique_ptr<NSFSFSIOObject>(
     new NSFSFSIOObject(this, driver, ephemeral));
-  hdl->shadow_dir_fd = sdir_fd;
-  hdl->shadow_name = leaf;
   hdl->parent_fd = parent_fd;
   hdl->leaf_name = leaf;
   hdl->dir_chain = std::move(resolved_dirs);
 
-  if (shadow_exists) {
-    if (flags & FSIOObject::OPEN_FLAG_EXCL) {
+  /* sdir_fd stays ours until a success path hands it over.
+   *
+   * It used to be assigned to hdl->shadow_dir_fd here, above every error
+   * path -- and those paths close it and then return, destroying hdl, whose
+   * destructor closes it a second time.  Worse, the destructor's cleanup
+   * runs with the default Binding::SHADOW, so under OPEN_FLAG_EPHEMERAL it
+   * also unlinks .shadow/<leaf> -- which on the rendezvous path is a shadow
+   * this call did not create. */
+  bool sdir_committed = false;
+  auto sdir_guard = make_scope_guard([&sdir_fd, &sdir_committed] {
+    if (! sdir_committed) {
       ::close(sdir_fd);
-      return FSIOResult{-EEXIST, nullptr};
     }
+  });
+  auto commit_sdir = [&]() {
+    hdl->shadow_dir_fd = sdir_fd;
+    hdl->shadow_name = leaf;
+    sdir_committed = true;
+  };
+
+  if (shadow_exists && (flags & FSIOObject::OPEN_FLAG_EXCL)) {
+    return FSIOResult{-EEXIST, nullptr};
   }
 
   if (shadow_exists) {
     /* rendezvous: reuse existing shadow */
     hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
     if (hdl->shadow_fd < 0) {
-      int ret = -errno;
-      ::close(sdir_fd);
-      return FSIOResult{ret, nullptr};
+      return FSIOResult{-errno, nullptr};
     }
+    /* before anything which can fail:  this shadow is not ours to remove,
+     * and the destructor decides that from resumed_existing */
+    hdl->resumed_existing = true;
     if (for_write && (flags & FSIOObject::OPEN_FLAG_TRUNC)) {
       /* truncate the shadow in place;  unlinking it would strand
        * every client already rendezvoused on it */
       if (::ftruncate(hdl->shadow_fd, 0) < 0) {
-	int ret = -errno;
-	::close(sdir_fd);
-	return FSIOResult{ret, nullptr};
+	return FSIOResult{-errno, nullptr};
       }
     }
-    hdl->resumed_existing = true;
     hdl->binding = FSIOObject::Binding::SHADOW;
+    commit_sdir();
     return FSIOResult{0, std::move(hdl)};
   }
 
@@ -5759,7 +5822,6 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   }
 
   if (src_exists && (flags & FSIOObject::OPEN_FLAG_EXCL)) {
-    ::close(sdir_fd);
     return FSIOResult{-EEXIST, nullptr};
   }
 
@@ -5770,11 +5832,10 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
      * reader follows it */
     hdl->shadow_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
     if (hdl->shadow_fd < 0) {
-      int ret = -errno;
-      ::close(sdir_fd);
-      return FSIOResult{ret, nullptr};
+      return FSIOResult{-errno, nullptr};
     }
     hdl->binding = FSIOObject::Binding::PUBLISHED;
+    commit_sdir();
     return FSIOResult{0, std::move(hdl)};
   }
 
@@ -5782,14 +5843,9 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
    * object which does not exist:  there is nothing to bind to, so
    * the shadow is the object's initial content */
 
-  /* another instance may fork the same shadow concurrently;  the fork
-   * is exclusive, and whoever loses joins the winner rather than
-   * clobbering it */
-  bool joined{false};
-
   if (unlikely(driver->fork_race_injected()) && for_write) {
-    /* inject-fork-race: another instance forks first, so the exclusive
-     * clone below loses with EEXIST and joins its shadow */
+    /* inject-fork-race: stand in for another instance which forked first,
+     * so the linkat below loses with EEXIST and joins its shadow */
     int rfd = ::openat(sdir_fd, leaf.c_str(),
 		       O_RDWR | O_CREAT | O_EXCL, 0644);
     if (rfd >= 0) {
@@ -5800,66 +5856,138 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     }
   }
 
+  /* Build the shadow away from its name, then link it into place.
+   *
+   * The name must appear only when the view is complete.  Creating it at
+   * .shadow/<leaf> first and finishing it afterwards leaves a window in
+   * which another opener rendezvouses onto a bare inode -- and if the
+   * finishing step then fails, an attribute-less shadow is left behind
+   * which rejects every later exclusive create on that name, with nothing
+   * to reap it.  linkat(2) fails with EEXIST rather than replacing, so it
+   * supplies the same exclusivity O_CREAT|O_EXCL did, at the point where
+   * the file is ready.  Same shape as POSIXStrategy::link_temp_file(). */
+  int build_fd = -1;
+  std::string tmp_name;  /* empty when the build used O_TMPFILE */
+
   if (src_exists && !(flags & FSIOObject::OPEN_FLAG_TRUNC)) {
-    /* COW clone source → .shadow/leaf */
+    /* COW clone of the published object.  clone_file() works by name, so
+     * this arm needs a named temp rather than O_TMPFILE. */
+    tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
+      "_" + std::to_string(fsio_build_seq.fetch_add(1));
     int ret = driver->get_fs_strategy()->clone_file(
-      dpp, parent_fd, leaf, sdir_fd, leaf, true /* excl */);
-    if (ret == -EEXIST) {
-      joined = true;
-    } else if (ret < 0) {
-      ::close(sdir_fd);
+      dpp, parent_fd, leaf, sdir_fd, tmp_name, true /* excl */);
+    if (ret < 0) {
       return FSIOResult{ret, nullptr};
-    } else {
-      /* copy xattrs from source to shadow */
-      int src_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
-      if (src_fd >= 0) {
-	int shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
-	if (shadow_fd >= 0) {
-	  copy_xattrs_fd(dpp, src_fd, shadow_fd);
-	  hdl->shadow_fd = shadow_fd;
-	}
-	::close(src_fd);
-      }
+    }
+    build_fd = ::openat(sdir_fd, tmp_name.c_str(), O_RDWR);
+    if (build_fd < 0) {
+      int err = -errno;
+      ::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+      return FSIOResult{err, nullptr};
+    }
+    /* carry the source's attributes onto the clone */
+    int src_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+    if (src_fd >= 0) {
+      copy_xattrs_fd(dpp, src_fd, build_fd);
+      ::close(src_fd);
     }
   } else {
-    /* new object: create empty file in .shadow/ */
-    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(),
-			      O_RDWR | O_CREAT | O_EXCL, 0644);
-    if ((hdl->shadow_fd < 0) && (errno == EEXIST)) {
-      joined = true;
+    /* New object.  O_TMPFILE keeps it nameless until the link, so a
+     * failure or a crash leaves nothing at all behind -- the inode is
+     * reclaimed when the descriptor closes. */
+    build_fd = ::openat(sdir_fd, ".", O_TMPFILE | O_RDWR, 0644);
+    if ((build_fd < 0) &&
+	((errno == EOPNOTSUPP) || (errno == EISDIR) || (errno == EINVAL))) {
+      /* filesystem without O_TMPFILE:  fall back to a named temp */
+      tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
+	"_" + std::to_string(fsio_build_seq.fetch_add(1));
+      build_fd = ::openat(sdir_fd, tmp_name.c_str(),
+			  O_RDWR | O_CREAT | O_EXCL, 0644);
     }
-    if (hdl->shadow_fd >= 0) {
-      /* stamp default private ACL (owner with FULL_CONTROL) */
-      RGWAccessControlPolicy policy;
-      ACLOwner acl_owner;
-      acl_owner.id = bucket->get_owner();
-      policy.set_owner(acl_owner);
-      policy.get_acl().create_default(acl_owner.id,
-				      acl_owner.display_name);
-      bufferlist acl_bl;
-      policy.encode(acl_bl);
-      std::string xname = make_xattr_name(RGW_ATTR_ACL);
-      ::fsetxattr(hdl->shadow_fd, xname.c_str(),
-		  acl_bl.c_str(), acl_bl.length(), 0);
+    if (build_fd < 0) {
+      return FSIOResult{-errno, nullptr};
+    }
+    /* stamp default private ACL (owner with FULL_CONTROL) */
+    RGWAccessControlPolicy policy;
+    ACLOwner acl_owner;
+    acl_owner.id = bucket->get_owner();
+    policy.set_owner(acl_owner);
+    policy.get_acl().create_default(acl_owner.id,
+				    acl_owner.display_name);
+    bufferlist acl_bl;
+    policy.encode(acl_bl);
+    std::string xname = make_xattr_name(RGW_ATTR_ACL);
+    if (::fsetxattr(build_fd, xname.c_str(),
+		    acl_bl.c_str(), acl_bl.length(), 0) < 0) {
+      int err = -errno;
+      ::close(build_fd);
+      if ((! tmp_name.empty()) &&
+	  (! driver->fsio_skip_cleanup_injected())) {
+	::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+      }
+      return FSIOResult{err, nullptr};
     }
   }
 
-  if (joined) {
-    /* rendezvous with the shadow the winner created */
+  /* whatever the caller wants set at create, applied before the name
+   * exists rather than by a second call afterwards */
+  {
+    int ret = apply_create_spec(dpp, driver, build_fd, spec);
+    if (ret < 0) {
+      ::close(build_fd);
+      if ((! tmp_name.empty()) &&
+	  (! driver->fsio_skip_cleanup_injected())) {
+	::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+      }
+      return FSIOResult{ret, nullptr};
+    }
+  }
+
+  /* COMMIT:  the name appears, complete, or not at all */
+  int link_rc = 0;
+  if (unlikely(driver->fsio_link_fail_injected())) {
+    link_rc = -EIO;
+  } else if (tmp_name.empty()) {
+    char proc_path[PATH_MAX];
+    snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", build_fd);
+    if (::linkat(AT_FDCWD, proc_path, sdir_fd, leaf.c_str(),
+		 AT_SYMLINK_FOLLOW) < 0) {
+      link_rc = -errno;
+    }
+  } else {
+    if (::linkat(sdir_fd, tmp_name.c_str(), sdir_fd, leaf.c_str(), 0) < 0) {
+      link_rc = -errno;
+    }
+  }
+
+  /* the temp has served its purpose on every outcome -- including an
+   * injected failure, which short-circuits the link above */
+  if ((! tmp_name.empty()) && (! driver->fsio_skip_cleanup_injected())) {
+    ::unlinkat(sdir_fd, tmp_name.c_str(), 0);
+  }
+
+  if (link_rc == -EEXIST) {
+    /* another instance forked the same shadow first.  Join the winner
+     * rather than clobbering it;  ours is discarded unnamed. */
+    ::close(build_fd);
     hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
-    hdl->resumed_existing = true;
-  }
-
-  if (hdl->shadow_fd < 0) {
-    int ret = -errno;
-    if (! joined) {
-      ::unlinkat(sdir_fd, leaf.c_str(), 0);
+    if (hdl->shadow_fd < 0) {
+      return FSIOResult{-errno, nullptr};
     }
-    ::close(sdir_fd);
-    return FSIOResult{ret, nullptr};
+    hdl->resumed_existing = true;
+    hdl->binding = FSIOObject::Binding::SHADOW;
+    commit_sdir();
+    return FSIOResult{0, std::move(hdl)};
   }
 
+  if (link_rc < 0) {
+    ::close(build_fd);
+    return FSIOResult{link_rc, nullptr};
+  }
+
+  hdl->shadow_fd = build_fd;
   hdl->binding = FSIOObject::Binding::SHADOW;
+  commit_sdir();
   return FSIOResult{0, std::move(hdl)};
 } /* get_fsio_handle */
 
@@ -9246,6 +9374,30 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (out) {
       (*out)["count"] = std::to_string(inject_rename_fail_after);
       (*out)["abandon"] = std::to_string(inject_rename_abandon);
+    }
+    return 0;
+  }
+
+  if ((hint == "inject-fsio-attrs-fail") ||
+      (hint == "inject-fsio-link-fail") ||
+      (hint == "inject-fsio-skip-cleanup")) {
+    /* Make a shadow build fail after the inode exists.  Without these the
+     * cleanup paths only ever run in production:  every test create either
+     * succeeds outright or fails before anything was made. */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    const bool on = (it->second == "true");
+    if (hint == "inject-fsio-attrs-fail") {
+      inject_fsio_attrs_fail = on;
+    } else if (hint == "inject-fsio-link-fail") {
+      inject_fsio_link_fail = on;
+    } else {
+      inject_fsio_skip_cleanup = on;
+    }
+    if (out) {
+      (*out)["enabled"] = on ? "true" : "false";
     }
     return 0;
   }
