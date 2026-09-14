@@ -794,6 +794,7 @@ target_link_libraries(rgw_a
     kmip
     legacy-option-headers
     common_utf8 global
+    heap_profiler
     ${CRYPTO_LIBS}
     ${ARROW_LIBRARIES}
     ${ARROW_FLIGHT_LIBRARIES}
