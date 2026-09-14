@@ -444,20 +444,6 @@ static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* o
   }
 }
 
-/**
- * Determines whether to use unordered listing for lifecycle processing.
- *
- * For buckets with low shard counts, ordered listing is preferred due to better
- * performance
- *
- * For buckets with high shard counts, unordered listing is preferred to avoid
- * excess OSD requests
- */
-static bool should_list_unordered(const rgw::bucket_index_layout_generation& current_index, uint64_t threshold) {
-  return current_index.layout.type == rgw::BucketIndexType::Normal
-    && rgw::num_shards(current_index.layout.normal) > threshold;
-}
-
 struct op_env {
 
   using LCWorker = RGWLC::LCWorker;
@@ -730,6 +716,20 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   return ret;
 
 } /* remove_expired_obj */
+
+/**
+ * Determines whether to use unordered listing for lifecycle processing.
+ *
+ * For buckets with low shard counts, ordered listing is preferred due to better
+ * performance
+ *
+ * For buckets with high shard counts, unordered listing is preferred to avoid
+ * excess OSD requests
+ */
+bool should_list_unordered(const rgw::bucket_index_layout_generation& current_index, uint64_t threshold) {
+  return current_index.layout.type == rgw::BucketIndexType::Normal
+    && rgw::num_shards(current_index.layout.normal) > threshold;
+}
 
 class LCOpAction {
 public:
@@ -1816,17 +1816,17 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
   return execute(*action, o, dpp, batch_counters, cached_tags, false, y);
 }
 
-
 LCObjsLister::LCObjsLister(ILCBucketLister *_backend,
-                           bool list_versions,
-                           bool allow_unordered,
-                           int64_t delay,
-                           uint64_t _list_count,
+                           CephContext* cct,
                            const DoutPrefixProvider *_dpp) :
-  backend(_backend), dpp(_dpp), list_count(_list_count) {
-  list_params.list_versions = list_versions;
-  list_params.allow_unordered = allow_unordered;
-  delay_ms = delay;
+  backend(_backend),
+  dpp(_dpp),
+  list_count{cct->_conf.get_val<uint64_t>("rgw_lc_list_cnt")}
+{
+  list_params.list_versions = _backend->bucket_versioned();
+  list_params.allow_unordered = _backend->allow_unordered();
+
+  delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
 }
 
 int LCObjsLister::init(boost::asio::yield_context y) {
@@ -2146,17 +2146,9 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       pre_marker = next_marker;
     }
 
-    rgw::sal::BucketLister bl(bucket.get(), this);
     CephContext* cct = driver->ctx();
-    auto delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
-    uint64_t threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
-    const auto& current_index = bucket->get_info().layout.current_index;
-    LCObjsLister ol(&bl,
-      bucket->versioned(),
-      should_list_unordered(current_index, threshold),
-      delay_ms,
-      cct->_conf.get_val<uint64_t>("rgw_lc_list_cnt"),
-      this);
+    rgw::sal::BucketLister bl(bucket.get(), cct, this);
+    LCObjsLister ol(&bl, cct, this);
     ol.set_prefix(prefix_iter->first);
 
     std::vector<lc_op*> active_ops;

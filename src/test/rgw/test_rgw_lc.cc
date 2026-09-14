@@ -439,6 +439,7 @@ namespace {
   struct Page {
     std::vector<rgw_bucket_dir_entry> objs;
     bool truncated{false};
+    int ret{0};
   };
 
   struct Call {
@@ -463,18 +464,39 @@ namespace {
       return "test";
     }
 
+    bool bucket_versioned() const noexcept override {
+      return true;
+    }
+
+    bool allow_unordered() const noexcept override {
+      return false;
+    }
+
     int list(rgw::sal::Bucket::ListParams &params,
              int max_entries,
              rgw::sal::Bucket::ListResults &out,
              optional_yield /*y*/) override {
       calls.push_back(Call{params.prefix, params.marker, params.list_versions, max_entries});
+      // like RadosBucket::list(), drop the previous results before listing;
+      // free them so a stale iterator into them is caught
+      std::vector<rgw_bucket_dir_entry>().swap(out.objs);
+      out.is_truncated = false;
       if (idx >= pages.size())
         return -EINVAL;
+      if (pages[idx].ret < 0)
+        return pages[idx++].ret;
 
       out.objs = pages[idx].objs;
       out.is_truncated = pages[idx].truncated;
       ++idx;
       return 0;
+    }
+  };
+
+  // fail the test on an exception thrown in the coroutine
+  auto rethrow = [](std::exception_ptr e) {
+    if (e) {
+      std::rethrow_exception(e);
     }
   };
 
@@ -484,7 +506,22 @@ namespace {
 
 } // anonymous namespace
 
-TEST(LCObjsLister, BaseCase_2Objs_5Vers) {
+struct LCObjsListerTests : ::testing::Test {
+
+  boost::intrusive_ptr<CephContext> cct;
+
+protected:
+
+  void SetUp() override {
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_ANY), false);
+  }
+
+  void TearDown() override {
+    cct.reset();
+  }
+};
+
+TEST_F(LCObjsListerTests, BaseCase_2Objs_5Vers) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -500,7 +537,7 @@ TEST(LCObjsLister, BaseCase_2Objs_5Vers) {
             .truncated = false
         }
     };
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
@@ -546,11 +583,11 @@ TEST(LCObjsLister, BaseCase_2Objs_5Vers) {
 
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, BaseCase_1Obj_3Vers) {
+TEST_F(LCObjsListerTests, BaseCase_1Obj_3Vers) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -565,7 +602,7 @@ TEST(LCObjsLister, BaseCase_1Obj_3Vers) {
         }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
@@ -603,12 +640,12 @@ TEST(LCObjsLister, BaseCase_1Obj_3Vers) {
 
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
 
-TEST(LCObjsLister, 1NonCur_1Cur_2NonCur) {
+TEST_F(LCObjsListerTests, 1NonCur_1Cur_2NonCur) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -624,17 +661,17 @@ TEST(LCObjsLister, 1NonCur_1Cur_2NonCur) {
         }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
     ASSERT_FALSE(l.get_obj(&e));
     ASSERT_FALSE(l.next(yield));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, 2NonCur_1Cur_1NonCur) {
+TEST_F(LCObjsListerTests, 2NonCur_1Cur_1NonCur) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -650,17 +687,17 @@ TEST(LCObjsLister, 2NonCur_1Cur_1NonCur) {
         }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
     ASSERT_FALSE(l.get_obj(&e));
     ASSERT_FALSE(l.next(yield));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, AllNonCurr) {
+TEST_F(LCObjsListerTests, AllNonCurr) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -675,18 +712,18 @@ TEST(LCObjsLister, AllNonCurr) {
         }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
 
     ASSERT_FALSE(l.get_obj(&e));
     ASSERT_FALSE(l.next(yield));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, AllNonCurr_1Obj_2Pages) {
+TEST_F(LCObjsListerTests, AllNonCurr_1Obj_2Pages) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -709,18 +746,18 @@ TEST(LCObjsLister, AllNonCurr_1Obj_2Pages) {
         }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
 
     ASSERT_FALSE(l.get_obj(&e));
     ASSERT_FALSE(l.next(yield));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, AllNonCurr_2Objs_2Pages) {
+TEST_F(LCObjsListerTests, AllNonCurr_2Objs_2Pages) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -743,18 +780,18 @@ TEST(LCObjsLister, AllNonCurr_2Objs_2Pages) {
         }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
 
     ASSERT_FALSE(l.get_obj(&e));
     ASSERT_FALSE(l.next(yield));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, AllNonCurrPage1_1Cur_1NonCur_Page2) {
+TEST_F(LCObjsListerTests, AllNonCurrPage1_1Cur_1NonCur_Page2) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -775,18 +812,18 @@ TEST(LCObjsLister, AllNonCurrPage1_1Cur_1NonCur_Page2) {
        }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
 
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, AllNonCurr_Page1_AllNonCurr_Page2) {
+TEST_F(LCObjsListerTests, AllNonCurr_Page1_AllNonCurr_Page2) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -808,18 +845,18 @@ TEST(LCObjsLister, AllNonCurr_Page1_AllNonCurr_Page2) {
         }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
 
     ASSERT_FALSE(l.get_obj(&e));
     ASSERT_FALSE(l.next(yield));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, 2Curr_1NonCur_Page1_1Curr_1NonCurr_Page2) {
+TEST_F(LCObjsListerTests, 2Curr_1NonCur_Page1_1Curr_1NonCurr_Page2) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -841,7 +878,7 @@ TEST(LCObjsLister, 2Curr_1NonCur_Page1_1Curr_1NonCurr_Page2) {
         }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
@@ -855,11 +892,11 @@ TEST(LCObjsLister, 2Curr_1NonCur_Page1_1Curr_1NonCurr_Page2) {
 
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, AllCurr_Page1_1NonCurr_Page2) {
+TEST_F(LCObjsListerTests, AllCurr_Page1_1NonCurr_Page2) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -880,7 +917,7 @@ TEST(LCObjsLister, AllCurr_Page1_1NonCurr_Page2) {
         }
     };
 
-    LCObjsLister ol(&fbl);
+    LCObjsLister ol(&fbl, cct.get());
     ASSERT_EQ(ol.init(yield), 0);
 
     rgw_bucket_dir_entry e;
@@ -894,11 +931,11 @@ TEST(LCObjsLister, AllCurr_Page1_1NonCurr_Page2) {
 
     ASSERT_FALSE(ol.next(yield));
     ASSERT_FALSE(ol.get_obj(&e));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, AllCurr_ObjA_Page1_1NonCurr_1Curr_ObjB_Page2) {
+TEST_F(LCObjsListerTests, AllCurr_ObjA_Page1_1NonCurr_1Curr_ObjB_Page2) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -921,7 +958,7 @@ TEST(LCObjsLister, AllCurr_ObjA_Page1_1NonCurr_1Curr_ObjB_Page2) {
         }
     };
 
-    LCObjsLister ol(&fbl);
+    LCObjsLister ol(&fbl, cct.get());
     ASSERT_EQ(ol.init(yield), 0);
 
     rgw_bucket_dir_entry e;
@@ -935,11 +972,11 @@ TEST(LCObjsLister, AllCurr_ObjA_Page1_1NonCurr_1Curr_ObjB_Page2) {
 
     ASSERT_FALSE(ol.next(yield));
     ASSERT_FALSE(ol.get_obj(&e));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, AllNonCurr_ObjA_Page1_1CurrObjA_1Curr_ObjB_Page2) {
+TEST_F(LCObjsListerTests, AllNonCurr_ObjA_Page1_1CurrObjA_1Curr_ObjB_Page2) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -960,7 +997,7 @@ TEST(LCObjsLister, AllNonCurr_ObjA_Page1_1CurrObjA_1Curr_ObjB_Page2) {
           }
     };
 
-    LCObjsLister ol(&fbl);
+    LCObjsLister ol(&fbl, cct.get());
     ASSERT_EQ(ol.init(yield), 0);
 
     rgw_bucket_dir_entry e;
@@ -974,11 +1011,11 @@ TEST(LCObjsLister, AllNonCurr_ObjA_Page1_1CurrObjA_1Curr_ObjB_Page2) {
 
     ASSERT_FALSE(ol.next(yield));
     ASSERT_FALSE(ol.get_obj(&e));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
-TEST(LCObjsLister, BasicIteration) {
+TEST_F(LCObjsListerTests, BasicIteration) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -1015,7 +1052,7 @@ TEST(LCObjsLister, BasicIteration) {
       }
     };
 
-    LCObjsLister ol(&fbl);
+    LCObjsLister ol(&fbl, cct.get());
     ASSERT_EQ(ol.init(yield), 0);
 
     cls_rgw_obj_key expected[] = {
@@ -1037,12 +1074,12 @@ TEST(LCObjsLister, BasicIteration) {
     ASSERT_EQ(total, 6);
     //we must have visited all 4 pages
     ASSERT_EQ(fbl.calls.size(), 4);
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
 
-TEST(LCObjsLister, CrashRepro_MultipleCurrents_LastPage_NotTruncated) {
+TEST_F(LCObjsListerTests, CrashRepro_MultipleCurrents_LastPage_NotTruncated) {
   boost::asio::io_context io;
   boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
     FakeBucketLister fbl;
@@ -1057,7 +1094,7 @@ TEST(LCObjsLister, CrashRepro_MultipleCurrents_LastPage_NotTruncated) {
       }
     };
 
-    LCObjsLister l(&fbl);
+    LCObjsLister l(&fbl, cct.get());
     ASSERT_EQ(l.init(yield), 0);
 
     rgw_bucket_dir_entry e;
@@ -1065,15 +1102,122 @@ TEST(LCObjsLister, CrashRepro_MultipleCurrents_LastPage_NotTruncated) {
     EXPECT_EQ(e.key.name, "objA");
     EXPECT_EQ(e.key.instance, "cur0");
 
-    // next() reaches end of last page while skipping duplicate currents.
-    // skip_to_the_next_key returns end(); skip_to_key_with_first_current
-    // then dereferences end() -> crash (bad_alloc / segfault).
     ASSERT_FALSE(l.next(yield));
     ASSERT_FALSE(l.get_obj(&e));
-  }, boost::asio::detached);
+  }, rethrow);
   io.run();
 }
 
+
+TEST_F(LCObjsListerTests, ListingErrorOnNextPage) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+      {
+        .objs = {
+          make_entry("objA", "cur", curr_flags),
+          make_entry("objA", "v1", non_curr_flags),
+        },
+        .truncated = true
+      },
+      { .ret = -ETIMEDOUT }
+    };
+    LCObjsLister l(&fbl, cct.get());
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.instance, "v1");
+
+    ASSERT_FALSE(l.next(yield));
+    ASSERT_FALSE(l.get_obj(&e));
+  }, rethrow);
+  io.run();
+}
+
+TEST_F(LCObjsListerTests, ListingErrorWhileSkipping) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+      {
+        .objs = {
+          make_entry("objA", "cur0", curr_flags),
+          make_entry("objA", "cur1", curr_flags),
+        },
+        .truncated = true
+      },
+      { .ret = -ETIMEDOUT }
+    };
+    LCObjsLister l(&fbl, cct.get());
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+    ASSERT_FALSE(l.next(yield));
+    ASSERT_FALSE(l.get_obj(&e));
+  }, rethrow);
+  io.run();
+}
+
+TEST_F(LCObjsListerTests, EmptyPageAfterTruncatedPage) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+      {
+        .objs = {
+          make_entry("objA", "cur", curr_flags),
+        },
+        .truncated = true
+      },
+      { .objs = {}, .truncated = true }
+    };
+    LCObjsLister l(&fbl, cct.get());
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+    ASSERT_FALSE(l.next(yield));
+    ASSERT_FALSE(l.get_obj(&e));
+  }, rethrow);
+  io.run();
+}
+
+// a page that ends on a null version resumes after it, not before all
+// versions of its name (tracker #82181)
+TEST_F(LCObjsListerTests, ResumeAfterNullVersion) {
+  boost::asio::io_context io;
+  boost::asio::spawn(io, [&](boost::asio::yield_context yield) {
+    FakeBucketLister fbl;
+    fbl.pages = {
+      {
+        .objs = {
+          make_entry("objA", "", curr_flags),
+        },
+        .truncated = true
+      },
+      {
+        .objs = {
+          make_entry("objA", "v1", non_curr_flags),
+        },
+        .truncated = false
+      }
+    };
+    LCObjsLister l(&fbl, cct.get());
+    ASSERT_EQ(l.init(yield), 0);
+
+    rgw_bucket_dir_entry e;
+    ASSERT_TRUE(l.next(yield));
+    ASSERT_TRUE(l.get_obj(&e));
+    EXPECT_EQ(e.key.instance, "v1");
+    EXPECT_EQ(l.get_num_noncurrent(), 1);
+
+    ASSERT_EQ(fbl.calls.size(), 2u);
+    EXPECT_EQ(fbl.calls[1].marker, rgw_obj_key("objA", "null"));
+  }, rethrow);
+  io.run();
+}
 
 // Build bucket attrs holding an encoded lifecycle configuration.
 static std::map<std::string, bufferlist>
