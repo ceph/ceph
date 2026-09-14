@@ -94,6 +94,9 @@ void PoolTypeTestFixture::SetUp() {
 }
 
 void PoolTypeTestFixture::TearDown() {
+  if (!ioctx.is_valid()) {
+    return;
+  }
   cleanup_namespace(rados, ioctx, "");
   cleanup_namespace(rados, ioctx, nspace);
   ioctx.close();
