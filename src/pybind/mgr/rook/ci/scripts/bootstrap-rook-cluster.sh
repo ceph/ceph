@@ -43,10 +43,10 @@ setup_minikube_env() {
     rm -rf ~/.minikube
 
     if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
-        sg libvirt -c "minikube start --memory=6144 --disk-size=20g --extra-disks=4 --driver=kvm2 --container-runtime=cri-o"
+        sg libvirt -c "minikube start --memory=6144 --disk-size=40g --extra-disks=4 --driver=kvm2 --container-runtime=cri-o"
         sg libvirt -c "minikube podman-env -p minikube" > /tmp/minikube-env.sh
     else
-        sg libvirt -c "minikube start --memory=6144 --disk-size=20g --extra-disks=4 --driver=kvm2"
+        sg libvirt -c "minikube start --memory=6144 --disk-size=40g --extra-disks=4 --driver=kvm2"
         sg libvirt -c "minikube docker-env -p minikube" > /tmp/minikube-env.sh
     fi
 
@@ -136,10 +136,14 @@ wait_for_ceph_cluster() {
     $KUBECTL rollout status deployment rook-ceph-tools -n rook-ceph --timeout=90s
     while ! $KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.ceph.health}' | grep -q "HEALTH_OK"; do
 	echo "Waiting for Ceph cluster to enter HEALTH_OK" state
+	# log the actual health state so failures are debuggable from the console
+	$KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.ceph}' ; echo
+	$KUBECTL -n rook-ceph exec deploy/rook-ceph-tools -- ceph health detail || true
 	sleep $sleep_interval
 	attempts=$((attempts+1))
         if [ $attempts -ge $max_attempts ]; then
             echo "Maximum number of attempts ($max_attempts) reached. Exiting..."
+            $KUBECTL -n rook-ceph exec deploy/rook-ceph-tools -- ceph -s || true
             return 1
         fi
     done
