@@ -10,7 +10,6 @@ from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource
 from orchestrator import (
     OrchestratorError,
     DaemonDescription,
-    DaemonDescriptionStatus,
     HostSpec,
 )
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
@@ -257,29 +256,98 @@ class NvmeofService(CephService):
             get_set_cmd_dicts=get_set_cmd_dicts
         )
 
-    def ok_to_stop(self,
-                   daemon_ids: List[str],
-                   force: bool = False,
-                   known: Optional[List[str]] = None) -> HandleCommandResult:
-        # if only 1 nvmeof, alert user (this is not passable with --force)
-        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Nvmeof', 1, True)
-        if warn:
-            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+    def ok_to_stop(
+        self,
+        daemon_ids: List[str],
+        force: bool = False,
+        known: Optional[List[str]] = None
+    ) -> HandleCommandResult:
 
-        # if reached here, there is > 1 nvmeof daemon. make sure none are down
-        if not force:
-            warn_message = ('WARNING: Only one nvmeof daemon is running. Please bring another nvmeof daemon up before stopping the current one.')
-            unreachable_hosts = [h.hostname for h in self.mgr.cache.get_unreachable_hosts()]
-            running_nvmeof_daemons = [
-                d for d in self.mgr.cache.get_daemons_by_type(self.TYPE)
-                if d.status == DaemonDescriptionStatus.running and d.hostname not in unreachable_hosts
-            ]
-            if len(running_nvmeof_daemons) < 2:
-                return HandleCommandResult(-errno.EBUSY, '', warn_message)
+        daemon_ids_set = set(daemon_ids)
 
-        names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
-        warn_message = f'It is presumed safe to stop {names}'
-        return HandleCommandResult(0, warn_message, '')
+        daemons = [
+            d for d in self.mgr.cache.get_daemons_by_type(self.TYPE)
+            if d.daemon_id in daemon_ids_set
+        ]
+
+        if len(daemons) != len(daemon_ids_set):
+            found = {d.daemon_id for d in daemons}
+            missing = daemon_ids_set - found
+            return HandleCommandResult(
+                -errno.EINVAL,
+                '',
+                f'Unable to find nvmeof daemon(s): {sorted(missing)}'
+            )
+
+        # The MON API grants permission to stop one gateway within a
+        # (pool, group). Track how many requested daemons belong to each group.
+        groups: dict[tuple[str, str], int] = {}
+
+        for daemon in daemons:
+            spec = cast(
+                NvmeofServiceSpec,
+                self.mgr.spec_store.all_specs.get(daemon.service_name())
+            )
+
+            if not spec:
+                return HandleCommandResult(
+                    -errno.EINVAL,
+                    '',
+                    f'Unable to find service spec for {daemon.service_name()}'
+                )
+
+            key = (spec.pool, spec.group)
+            groups[key] = groups.get(key, 0) + 1
+
+        for (pool, group), count in groups.items():
+            # nvme-gw ok-to-stop only says whether ONE gateway may be stopped.
+            if count > 1:
+                return HandleCommandResult(
+                    -errno.EBUSY,
+                    '',
+                    f'It is not safe to stop more than one nvmeof gateway '
+                    f'from pool {pool}, group {group} at the same time'
+                )
+
+            ret, out, err = self.mgr.mon_command({
+                'prefix': 'nvme-gw ok-to-stop',
+                'pool': pool,
+                'group': group,
+                'format': 'json',
+            })
+
+            if ret:
+                return HandleCommandResult(ret, '', err)
+
+            try:
+                result = json.loads(out)
+                ok_to_stop = result.get('result')
+            except (json.JSONDecodeError, KeyError, TypeError):
+                logger.error(
+                    'Unexpected response from nvme-gw ok-to-stop: %s',
+                    out
+                )
+                return HandleCommandResult(
+                    -errno.EIO,
+                    '',
+                    'Unable to determine whether nvmeof gateway is safe to stop'
+                )
+
+            if not ok_to_stop:
+                return HandleCommandResult(
+                    -errno.EBUSY,
+                    '',
+                    f'It is not safe to stop an nvmeof gateway from '
+                    f'pool {pool}, group {group}'
+                )
+
+        names = [f'{self.TYPE}.{daemon_id}' for daemon_id in daemon_ids]
+
+        return HandleCommandResult(
+            0,
+            f'It is safe to stop {names}',
+            ''
+        )
 
     def ignore_possible_stray(
         self, service_type: str, daemon_id: str, name: str

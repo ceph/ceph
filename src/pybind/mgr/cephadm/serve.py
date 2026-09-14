@@ -1207,6 +1207,7 @@ class CephadmServe:
         self.log.debug('_check_daemons')
         daemons = self.mgr.cache.get_daemons()
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
+        nvmeof_redeploy_done = False
         for dd in daemons:
             # orphan?
             spec = self.mgr.spec_store.active_specs.get(dd.service_name(), None)
@@ -1345,6 +1346,30 @@ class CephadmServe:
             if action:
                 if scheduled_action == 'redeploy' and action == 'reconfig':
                     action = 'redeploy'
+
+                if (
+                    dd.daemon_type == 'nvmeof'
+                    and scheduled_action == 'redeploy'
+                    and action == 'redeploy'
+                ):
+                    if nvmeof_redeploy_done:
+                        self.log.info(
+                            'Delaying redeploy of %s until the next serve iteration',
+                            dd.name(),
+                        )
+                        continue
+                    r = svc_obj.ok_to_stop(
+                        [dd.daemon_id],
+                        force=True,
+                    )
+                    if r.retval:
+                        self.log.info(
+                            'Delaying redeploy of %s: %s',
+                            dd.name(),
+                            r.stderr,
+                        )
+                        continue
+
                 try:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
                     reconfig_extras: dict[str, Any] = {}
@@ -1353,6 +1378,12 @@ class CephadmServe:
                     if send_signal_to_daemon:
                         reconfig_extras['send_signal_to_daemon'] = send_signal_to_daemon
                     self.mgr._daemon_action(daemon_spec, action=action, **reconfig_extras)
+                    if (
+                        dd.daemon_type == 'nvmeof'
+                        and scheduled_action == 'redeploy'
+                        and action == 'redeploy'
+                    ):
+                        nvmeof_redeploy_done = True
 
                     if self.mgr.cache.rm_scheduled_daemon_action(dd.hostname, dd.name()):
                         self.mgr.cache.save_host(dd.hostname)
