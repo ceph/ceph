@@ -6117,6 +6117,7 @@ def test_persistent_topic_dump_pagination():
     # with max-entries the dump is paginated, following the marker each time
     max_entries = 5
     event_ids = []
+    markers = []
     marker = None
     while True:
         args = ['topic', 'dump', '--topic', topic_name, '--max-entries', str(max_entries)]
@@ -6132,10 +6133,59 @@ def test_persistent_topic_dump_pagination():
             break
         marker = parsed_result['marker']
         assert marker != ''
+        markers.append(marker)
 
     # the pages hold all of the events, and none of them twice
     assert len(event_ids) == number_of_objects
     assert len(set(event_ids)) == number_of_objects
+
+    # the queue is sharded, and the walk moved forward through the shards
+    assert len(markers) > 1
+    marker_shards = [int(m.split('#')[0]) for m in markers]
+    assert marker_shards == sorted(marker_shards)
+    assert marker_shards[-1] > marker_shards[0]
+
+    # a marker of "<shard>#" has no position inside the shard, and reads it
+    # from its beginning
+    num_shards = get_topic(topic_name)['dest']['num_shards']
+    remaining = []
+    for shard in range(num_shards):
+        result = admin(['topic', 'dump', '--topic', topic_name,
+                        '--marker', str(shard) + '#'], get_config_cluster())
+        assert result[1] == 0
+        parsed_result = json.loads(result[0])
+        assert parsed_result['truncated'] == False
+        assert parsed_result['marker'] == ''
+        remaining.append([entry['entry']['event']['eventId']
+                          for entry in parsed_result['eventEntries']])
+
+    # "0#" is the beginning of the queue, so it holds all of the events
+    assert set(remaining[0]) == set(event_ids)
+    # every shard drops its own events and leaves the following ones alone, so
+    # the difference between two consecutive dumps is what that shard holds
+    entries_per_shard = []
+    for shard in range(num_shards):
+        rest = remaining[shard + 1] if shard + 1 < num_shards else []
+        assert set(rest).issubset(set(remaining[shard]))
+        entries_per_shard.append(len(remaining[shard]) - len(rest))
+    assert sum(entries_per_shard) == number_of_objects
+    # the events did land on more than one shard, so the pages above really
+    # did cross shards
+    assert len([count for count in entries_per_shard if count > 0]) > 1
+
+    # a marker that is not "<shard>#<queue marker>", a shard that does not
+    # exist, a position that is not a queue marker, and a position that the
+    # shard does not hold, are all rejected
+    for bad_marker in ['0',
+                       'not-a-marker',
+                       str(num_shards) + '#',
+                       '-1#',
+                       'shard#',
+                       '0#not-a-queue-marker',
+                       '0#0/99999999']:
+        result = admin(['topic', 'dump', '--topic', topic_name,
+                        '--marker', bad_marker], get_config_cluster())
+        assert result[1] != 0, 'marker "' + bad_marker + '" was not rejected'
 
     # cleanup
     s3_notification_conf.del_config()

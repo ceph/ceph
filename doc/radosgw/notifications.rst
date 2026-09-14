@@ -139,8 +139,9 @@ by running the following command:
 
 At most ``max-entries`` notifications are returned. If more are pending, the
 result has ``truncated`` set to ``true`` and holds the ``marker`` from which the
-next command should continue. If ``max-entries`` is not given, all pending
-notifications are dumped.
+next command should continue. The ``marker`` is the one reported by the previous
+dump, and is rejected if it does not refer to a position in the queue. If
+``max-entries`` is not given, all pending notifications are dumped.
 
 
 Notification Performance Statistics

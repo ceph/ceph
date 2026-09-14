@@ -12563,13 +12563,18 @@ next:
         return EINVAL;
       }
       start_queue_marker = marker.substr(pos + 1);
+      // the position inside the shard, when there is one, is a queue marker
+      cls_queue_marker queue_pos;
+      if (!start_queue_marker.empty() &&
+          queue_pos.from_str(start_queue_marker.c_str()) != 0) {
+        cerr << "ERROR: invalid marker: " << marker << std::endl;
+        return EINVAL;
+      }
     }
 
-    // number of entries returned to the caller. zero means no limit
-    uint32_t max_returned = 0;
-    if (max_entries_specified) {
-      max_returned = std::max(1, max_entries); // sanity, as in "bi list"
-    }
+    // total number of entries returned to the caller. zero means no limit.
+    // clamped to at least one, as in "bi list"
+    const uint32_t max_to_return = max_entries_specified ? std::max(1, max_entries) : 0;
     // number of entries fetched from the queue in a single call
     constexpr uint32_t max_fetched = 1000;
     uint32_t returned = 0;
@@ -12589,8 +12594,8 @@ next:
       std::string queue_marker = (shard_index == start_shard) ? start_queue_marker : "";
       bool truncated = true;
       while (truncated && !page_full) {
-        const auto to_fetch = (max_returned == 0) ?
-          max_fetched : std::min(max_fetched, max_returned - returned);
+        const auto to_fetch = (max_to_return == 0) ?
+          max_fetched : std::min(max_fetched, max_to_return - returned);
         librados::ObjectReadOperation rop;
         std::vector<cls_queue_entry> queue_entries;
         std::string end_marker;
@@ -12622,7 +12627,7 @@ next:
         formatter->flush(cout);
         returned += queue_entries.size();
         queue_marker = end_marker;
-        page_full = (max_returned > 0 && returned >= max_returned);
+        page_full = (max_to_return > 0 && returned >= max_to_return);
       }
       if (page_full) {
         // resume from where this shard stopped, or from the next shard if it
