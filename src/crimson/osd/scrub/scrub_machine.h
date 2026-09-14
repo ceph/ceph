@@ -439,6 +439,35 @@ struct Inactive : ScrubState<Inactive, ScrubMachine> {
     sc::custom_reaction<events::reset_t>,
     sc::custom_reaction<events::start_scrub_t>,
     sc::custom_reaction<events::op_stats_t>,
+    // Discard stale async completions and network messages that arrive after a
+    // reset (e.g. when on_interval_change() resets the machine to Inactive
+    // while any of the following are still in flight):
+    //   - ScrubSleep          -> internal_sched_scrub_t
+    //   - ScrubFindRange      -> request_range_complete_t
+    //   - ScrubReserveRange   -> reserve_range_complete_t
+    //   - await_update        -> await_update_complete_t
+    //   - ScrubScan (local)   -> scan_range_complete_t
+    //   - ScrubDigestUpdate   -> digest_updates_complete_t
+    //   - replica ScrubScan   -> generate_and_submit_chunk_result_complete_t
+    //   - async reserver      -> reserver_granted_t
+    //   - MSG_OSD_REP_SCRUB   -> replica_scan_t
+    //   - reserve messages    -> replica_reserve_request_t / replica_release_t
+    //                           / replica_grant_t / replica_reject_t
+    // Without these handlers the event_base catch-all below would fire,
+    // transitioning to Crash and aborting the OSD.
+    sc::custom_reaction<events::internal_sched_scrub_t>,
+    sc::custom_reaction<events::replica_release_t>,
+    sc::custom_reaction<events::replica_scan_t>,
+    sc::custom_reaction<events::replica_reserve_request_t>,
+    sc::custom_reaction<events::replica_grant_t>,
+    sc::custom_reaction<events::replica_reject_t>,
+    sc::custom_reaction<events::reserver_granted_t>,
+    sc::custom_reaction<ScrubContext::request_range_complete_t>,
+    sc::custom_reaction<ScrubContext::reserve_range_complete_t>,
+    sc::custom_reaction<ScrubContext::await_update_complete_t>,
+    sc::custom_reaction<ScrubContext::scan_range_complete_t>,
+    sc::custom_reaction<ScrubContext::digest_updates_complete_t>,
+    sc::custom_reaction<ScrubContext::generate_and_submit_chunk_result_complete_t>,
     sc::transition< boost::statechart::event_base, Crash >
     >;
 
@@ -449,6 +478,45 @@ struct Inactive : ScrubState<Inactive, ScrubMachine> {
     return discard_event();
   }
   sc::result react(const events::op_stats_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::internal_sched_scrub_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_release_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_scan_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_reserve_request_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_grant_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_reject_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::reserver_granted_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::request_range_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::reserve_range_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::await_update_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::scan_range_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::digest_updates_complete_t &) {
+    return discard_event();
+  }
+  sc::result react(const ScrubContext::generate_and_submit_chunk_result_complete_t &) {
     return discard_event();
   }
 };
@@ -503,10 +571,34 @@ public:
     sc::transition<events::reset_t, Inactive>,
     sc::transition<events::abort_t, AwaitScrub>,
     sc::custom_reaction<events::op_stats_t>,
+    // Discard stale replica messages that arrive while in any PrimaryActive
+    // substate that doesn't handle them (e.g. AwaitScrub, WaitUpdate,
+    // WaitDigestUpdate).  Without these handlers the event_base catch-all
+    // below would fire, transitioning to Crash and aborting the OSD.
+    sc::custom_reaction<events::replica_grant_t>,
+    sc::custom_reaction<events::replica_reject_t>,
+    sc::custom_reaction<events::replica_release_t>,
+    sc::custom_reaction<events::replica_reserve_request_t>,
+    sc::custom_reaction<events::replica_scan_t>,
     sc::transition< boost::statechart::event_base, Crash >
     >;
 
   sc::result react(const events::op_stats_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_grant_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_reject_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_release_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_reserve_request_t &) {
+    return discard_event();
+  }
+  sc::result react(const events::replica_scan_t &) {
     return discard_event();
   }
 };
