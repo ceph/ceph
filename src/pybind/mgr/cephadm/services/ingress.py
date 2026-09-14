@@ -38,6 +38,17 @@ class IngressService(CephService):
         return 'haproxy_monitor_ssl_key'
 
     @classmethod
+    def _include_tls_dependencies(
+        cls,
+        spec: Optional[ServiceSpec],
+        daemon_type: Optional[str] = None,
+    ) -> bool:
+        return (
+            daemon_type == 'haproxy'
+            and super()._include_tls_dependencies(spec, daemon_type)
+        )
+
+    @classmethod
     def _get_dependencies(cls, mgr: "CephadmOrchestrator",
                           spec: Optional[ServiceSpec] = None,
                           daemon_type: Optional[str] = None) -> List[str]:

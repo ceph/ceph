@@ -334,6 +334,14 @@ class CephadmService(metaclass=ABCMeta):
         pass
 
     @classmethod
+    def _include_tls_dependencies(
+        cls,
+        spec: Optional[ServiceSpec],
+        daemon_type: Optional[str] = None,
+    ) -> bool:
+        return bool(spec and getattr(spec, 'ssl', False))
+
+    @classmethod
     def get_dependencies(
         cls,
         mgr: "CephadmOrchestrator",
@@ -343,8 +351,10 @@ class CephadmService(metaclass=ABCMeta):
         """Return the complete dependency set for this service."""
         deps = cls._get_dependencies(mgr, spec, daemon_type)
 
-        ssl_enabled = getattr(spec, 'ssl', False)
-        if not spec or not ssl_enabled:
+        if spec is None:
+            return sorted(deps)
+
+        if not cls._include_tls_dependencies(spec, daemon_type):
             return sorted(deps)
 
         cert_source = getattr(spec, 'certificate_source', None)
