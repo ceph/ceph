@@ -1812,6 +1812,11 @@ int PGScrubber::scrub_process_inconsistent(
     const librados::shard_info_t* auth_shard_info = nullptr;
     std::set<pg_shard_t> bad_shards;
 
+    // Also track clean shards (no errors) to use as fallback repair source
+    // when the selected auth shard itself has errors.
+    pg_shard_t clean_shard;
+    const librados::shard_info_t* clean_shard_info = nullptr;
+
     // Iterate through all shards to find auth and bad ones
     for (const auto& [shard_id, shard_info] : obj_error.shards) {
       pg_shard_t pg_shard(shard_id.osd, shard_id_t(shard_id.shard));
@@ -1820,6 +1825,12 @@ int PGScrubber::scrub_process_inconsistent(
         // This is the authoritative shard
         auth_shard = pg_shard;
         auth_shard_info = &shard_info;
+      }
+
+      if (!shard_info.has_errors() && !clean_shard_info) {
+        // Track the first clean shard as a potential fallback repair source
+        clean_shard = pg_shard;
+        clean_shard_info = &shard_info;
       }
 
       if (shard_info.has_errors()) {
@@ -1837,8 +1848,18 @@ int PGScrubber::scrub_process_inconsistent(
     }
 
     if (auth_shard_info) {
-      // Never mark the selected authoritative shard as missing.
-      // Classic scrub repair always repairs from the chosen auth copy.
+      if (auth_shard_info->has_errors() && clean_shard_info) {
+        // The selected auth shard itself has errors (e.g. OMAP_DIGEST_MISMATCH_INFO
+        // set after auth selection because the primary's omap differs from its OI).
+        // It cannot repair itself by copying from itself — use a clean shard as the
+        // actual repair source, and also mark the auth shard as bad so recovery
+        // overwrites it from the clean copy.
+        DEBUGDPP("Auth shard {} has errors, switching repair source to clean shard {}",
+                 pg, auth_shard, clean_shard);
+        auth_shard = clean_shard;
+        auth_shard_info = clean_shard_info;
+      }
+      // Never mark the repair source shard as missing.
       bad_shards.erase(auth_shard);
     }
 
@@ -2120,6 +2141,15 @@ void PGScrubber::emit_scrub_result(
 
     update_scrub_job();
     m_active_target.reset();
+
+    // Share updated pg_info (including cleared num_scrub_errors) with replicas.
+    // Matches classic OSD scrub_finish() which calls share_pg_info() after
+    // emit_scrub_result() so that replicas have the latest scrub stats before
+    // any failover. Without this, a new primary that was a replica would still
+    // see num_scrub_errors > 0 and keep the +inconsistent PG state flag.
+    if (pg.is_active() && pg.is_primary()) {
+      pg.peering_state.share_pg_info();
+    }
 
     // Handle repair completion based on whether recovery is needed
     // This matches classic OSD behavior in scrub_finish()
