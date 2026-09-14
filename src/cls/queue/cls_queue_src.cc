@@ -271,7 +271,10 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   }
 
   cls_queue_marker start_marker;
-  start_marker.from_str(op.start_marker.c_str());
+  if (!op.start_marker.empty() && start_marker.from_str(op.start_marker.c_str()) != 0) {
+    CLS_LOG(5, "ERROR: queue_list_entries: invalid start marker: %s", op.start_marker.c_str());
+    return -EINVAL;
+  }
   cls_queue_marker next_marker = {0, 0};
 
   uint64_t start_offset = 0, gen = 0;
@@ -288,14 +291,29 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   bool wrap_around = false;
 
   //Calculate length of contiguous data to be read depending on front, tail and start offset
+  //a start offset outside of the data held by the queue would make the size
+  //below underflow, and the loop read past the end of the queue forever
   if (head.tail.offset > head.front.offset) {
+    if (start_offset < head.front.offset || start_offset > head.tail.offset) {
+      CLS_LOG(5, "ERROR: queue_list_entries: start offset %lu is not between the front %lu and the tail %lu",
+              start_offset, head.front.offset, head.tail.offset);
+      return -EINVAL;
+    }
     contiguous_data_size = head.tail.offset - start_offset;
   } else if (head.front.offset >= head.tail.offset) {
-    if (start_offset >= head.front.offset) {
+    if (start_offset > head.queue_size) {
+      CLS_LOG(5, "ERROR: queue_list_entries: start offset %lu is past the end of the queue %lu",
+              start_offset, head.queue_size);
+      return -EINVAL;
+    } else if (start_offset >= head.front.offset) {
       contiguous_data_size = head.queue_size - start_offset;
       wrap_around = true;
     } else if (start_offset <= head.tail.offset) {
       contiguous_data_size = head.tail.offset - start_offset;
+    } else {
+      CLS_LOG(5, "ERROR: queue_list_entries: start offset %lu is between the tail %lu and the front %lu",
+              start_offset, head.tail.offset, head.front.offset);
+      return -EINVAL;
     }
   }
 
