@@ -1598,6 +1598,10 @@ class CephadmUpgrade:
                         and not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
 
+            if d.daemon_type == 'nvmeof':
+                if not self._wait_for_ok_to_stop(d):
+                    return False, to_upgrade
+
             if (
                 d.daemon_type == 'osd'
                 and self._upgrade_uses_ok_to_upgrade_for_osds()
@@ -1613,7 +1617,7 @@ class CephadmUpgrade:
             # 1. Limit how many core daemons get queued in a single pass without
             #    a mon-supplied peer batch in known_ok_to_stop.
             # 2. Yield between batches of core daemons to allow the mon to catch up.
-            if d.daemon_type in ['osd', 'mds', 'mon'] and not known_ok_to_stop:
+            if d.daemon_type in ['osd', 'mds', 'mon', 'nvmeof'] and not known_ok_to_stop:
                 # osd ok-to-upgrade batch is not empty, so keep looping to
                 # add more OSDs to the batch
                 if d.daemon_type == 'osd' and self._upgrade_uses_ok_to_upgrade_for_osds() and (len(known_ok_to_upgrade) > 0):
