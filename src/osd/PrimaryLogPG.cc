@@ -9704,6 +9704,7 @@ struct C_CopyFrom_AsyncReadCb : public Context {
   uint64_t features;
   size_t len;
   uint64_t data_offset_start = 0; // cursor.data_offset before the read advance
+  uint64_t data_offset_end = 0;   // cursor.data_offset after the read advance
   // Populated by the sparse-read path (Fast EC); empty for the legacy path.
   std::map<uint64_t, uint64_t> ext_map;
   ceph::buffer::list data_bl;
@@ -9719,7 +9720,8 @@ struct C_CopyFrom_AsyncReadCb : public Context {
         // the object-space extent map.
         reply_obj.data.swap(data_bl);
         reply_obj.extent_map = std::move(ext_map);
-        reply_obj.cursor.data_offset = data_offset_start + reply_obj.data.length();
+        reply_obj.flags |= object_copy_data_t::FLAG_SPARSE_READ;
+        reply_obj.cursor.data_offset = data_offset_end;
       } else {
         // Legacy path: reply_obj.data was written directly; truncate to len.
         ceph_assert(len > 0);
@@ -9847,6 +9849,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
           // Sparse read accepted: completion will fire cb->finish().
           cb->sparse_read = true;
           cb->data_offset_start = cursor.data_offset;
+          cb->data_offset_end = cursor.data_offset + max_read;
           ctx->op_finishers[ctx->current_osd_subop_num].reset(
             new ReadFinisher(osd_op));
           ctx->inflightreads = 1;
@@ -10279,6 +10282,8 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   ceph_assert(cop->rval >= 0);
 
+  cop->is_sparse_read = cop->results.flags & object_copy_data_t::FLAG_SPARSE_READ;
+
   if (!cop->temp_cursor.data_complete) {
     cop->results.data_digest = cop->data.crc32c(cop->results.data_digest);
   }
@@ -10570,10 +10575,15 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
     t->create(cop->results.temp_oid);
   }
   if (!cop->temp_cursor.data_complete) {
-    ceph_assert(cop->data.length() + cop->temp_cursor.data_offset ==
-	   cop->cursor.data_offset);
+    ceph_assert(cop->is_sparse_read ||
+    cop->data.length() + cop->temp_cursor.data_offset ==
+    cop->cursor.data_offset);
+    ceph_assert(!cop->is_sparse_read ||
+    cop->data.length() + cop->temp_cursor.data_offset <=
+    cop->cursor.data_offset);
     if (pool.info.required_alignment() &&
-	!cop->cursor.data_complete) {
+        !cop->cursor.data_complete &&
+        !cop->is_sparse_read) {
       /**
        * Trim off the unaligned bit at the end, we'll adjust cursor.data_offset
        * to pick it up on the next pass.
@@ -10595,15 +10605,23 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
     const bool track_fae = pool.info.is_erasure() &&
                            pool.info.allows_ecoptimizations() &&
                            get_osdmap()->require_osd_release >= ceph_release_t::umbrella;
-    if (!cop->extent_map.empty()) {
+    if (cop->is_sparse_read) {
       // Sparse path: write only the extents that have data, leaving holes.
-      // cop->data holds the non-hole bytes packed sequentially
+      // cop->data holds the non-hole bytes for this chunk packed sequentially.
       const uint64_t chunk_start = cop->temp_cursor.data_offset;
       uint64_t bl_pos = 0;
       for (auto& [ext_off, ext_len] : cop->extent_map) {
-        if (ext_off + ext_len <= chunk_start) {
-          bl_pos += ext_len;
-          continue;
+        ceph_assert(ext_off >= chunk_start);
+        if (bl_pos + ext_len > cop->data.length()) {
+          derr << __func__ << " extent overflows data buffer:"
+               << " ext_off=" << ext_off
+               << " ext_len=" << ext_len
+               << " bl_pos=" << bl_pos
+               << " data_length=" << cop->data.length()
+               << " extent_map=" << cop->extent_map
+               << " chunk_start=" << chunk_start
+               << dendl;
+          ceph_abort_msg("bl_pos + ext_len > cop->data.length()");
         }
         bufferlist slice;
         slice.substr_of(cop->data, bl_pos, ext_len);
@@ -10615,7 +10633,8 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
         }
         bl_pos += ext_len;
       }
-    } else if (cop->data.length()) {
+      cop->extent_map.clear();
+    } else if (!cop->is_sparse_read && cop->data.length()) {
       // Non-sparse path (Classic EC or old peer): single contiguous write.
       t->write(
         cop->results.temp_oid,

@@ -5882,6 +5882,7 @@ struct object_copy_data_t {
   enum {
     FLAG_DATA_DIGEST = 1<<0,
     FLAG_OMAP_DIGEST = 1<<1,
+    FLAG_SPARSE_READ = 1<<2,
   };
   object_copy_cursor_t cursor;
   uint64_t size;

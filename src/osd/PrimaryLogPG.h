@@ -148,7 +148,7 @@ public:
     ceph::buffer::list omap_data;
     int rval;
     std::map<uint64_t, uint64_t> extent_map;
-
+    bool is_sparse_read = false;
     object_copy_cursor_t temp_cursor;
 
     /*
