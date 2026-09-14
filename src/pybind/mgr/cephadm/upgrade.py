@@ -27,7 +27,7 @@ from cephadm.utils import (
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 from ceph.cephadm.version_entry import UpgradeStatus
-
+from ceph.deployment.service_spec import NvmeofServiceSpec
 from mgr_module import MonCommandFailed
 
 if TYPE_CHECKING:
@@ -1496,6 +1496,8 @@ class CephadmUpgrade:
         to_upgrade: List[Tuple[DaemonDescription, bool]] = []
         known_ok_to_stop: List[str] = []
         known_ok_to_upgrade: List[str] = []
+        nvmeof_upgrade_groups: Set[Tuple[str, str]] = set()
+        nvmeof_seen = False
         self._ok_to_upgrade_all_osds_upgraded = False
         for d_entry in need_upgrade:
             d = d_entry[0]
@@ -1584,6 +1586,43 @@ class CephadmUpgrade:
                         and not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
 
+            if d.daemon_type == 'nvmeof':
+                nvmeof_seen = True
+
+                nvme_spec = self.mgr.spec_store.active_specs.get(d.service_name())
+                if not nvme_spec:
+                    logger.error(
+                        'Upgrade: unable to find NVMe-oF service spec for %s',
+                        d.name(),
+                    )
+                    continue
+
+                nvme_spec = cast(NvmeofServiceSpec, nvme_spec)
+
+                group_key = (
+                    nvme_spec.pool,
+                    nvme_spec.group,
+                )
+
+                # Only one gateway from a given (pool,group) should be considered
+                # in a single upgrade batch.
+                if group_key in nvmeof_upgrade_groups:
+                    continue
+
+                # Mark the group as considered even if MON currently says unsafe.
+                # ok-to-stop is group scoped, so checking another gateway from the
+                # same group in this pass would give us no additional value.
+                nvmeof_upgrade_groups.add(group_key)
+
+                if not self._wait_for_ok_to_stop(d):
+                    logger.info(
+                        'Upgrade: %s from pool %s, group %s is not safe to stop',
+                        d.name(),
+                        nvme_spec.pool,
+                        nvme_spec.group,
+                    )
+                    continue
+
             if (
                 d.daemon_type == 'osd'
                 and self._upgrade_uses_ok_to_upgrade_for_osds()
@@ -1611,6 +1650,9 @@ class CephadmUpgrade:
                         and self.upgrade_state.fail_fs):
                     continue  # do not break
                 break
+
+        if nvmeof_seen and not to_upgrade:
+            return False, to_upgrade
 
         return True, to_upgrade
 
