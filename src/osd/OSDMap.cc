@@ -5527,15 +5527,24 @@ int OSDMap::calc_desired_primary_distribution_simple(
     }
 
     // Then, stretch the value (necessary when primary affinity is smaller than 1)
-    float factor = (float)pool->get_pg_num() / (float)distribution_sum;
-    float distribution_sum_desired = 0.0;
+    double factor = (double)pool->get_pg_num() / distribution_sum;
+    double distribution_sum_desired = 0.0;
 
-    ceph_assert(factor >= 1.0);
-    for (const auto & [osd, osd_primary_count] : desired_primary_distribution) {
-      desired_primary_distribution[osd] *= factor;
-      distribution_sum_desired += desired_primary_distribution[osd];
+    // factor is mathematically >= 1.0 (distribution_sum <= pg_num), but
+    // float rounding of the per-OSD terms can push distribution_sum a
+    // fraction above pg_num; clamp instead of asserting on rounding noise
+    ceph_assert(factor >= 1.0 - 1e-6);
+    factor = std::max(factor, 1.0);
+    for (auto & [osd, osd_primary_count] : desired_primary_distribution) {
+      double scaled = (double)osd_primary_count * factor;
+      osd_primary_count = (float)scaled;
+      distribution_sum_desired += scaled;
     }
-    ceph_assert(fabs(distribution_sum_desired - pool->get_pg_num()) < 0.01);
+    // the stretched distribution sums back to pg_num by construction; verify
+    // with a double accumulator and a tolerance that scales with pg_num, so
+    // per-element float rounding cannot trip the assert on large pools
+    ceph_assert(fabs(distribution_sum_desired - pool->get_pg_num()) <
+                std::max(0.01, (double)pool->get_pg_num() * 1e-4));
   } else {
     ldout(cct, 10) << __func__ <<" skipping erasure pool "
                    << get_pool_name(pid) << dendl;
