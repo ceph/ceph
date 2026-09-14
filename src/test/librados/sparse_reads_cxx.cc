@@ -1432,6 +1432,45 @@ TEST_F(ECSparseReadTest, CopyFromPreservesDataHoles) {
   verify_mapext(dst, 0, 12288, expected_extents);
 }
 
+// copy_from across multiple copy chunks with sparse extents and holes
+TEST_F(ECSparseReadTest, CopyFromMultiChunkSparseObject) {
+  const std::string src = "copy_from_multichunk_src";
+  const std::string dst = "copy_from_multichunk_dst";
+
+  // Use a fixed chunk size that is large enough to contain multiple 4096-byte
+  // extents with holes between them, and matches the default
+  // osd_copyfrom_max_chunk (8 MiB).  Hardcoded to avoid accessing g_conf()
+  // which is not initialised in this test binary.
+  static constexpr uint64_t chunk_size = 8 * 1024 * 1024;  // 8 MiB
+
+  // Chunk 1: data at [0, 4096), hole at [4096, chunk_size - 4096), data at [chunk_size - 4096, chunk_size)
+  // Chunk 2: data at [chunk_size, chunk_size + 4096), hole at [chunk_size + 4096, 2 * chunk_size)
+  bufferlist bl_1a = create_pattern_buffer(4096, 'A');
+  bufferlist bl_1b = create_pattern_buffer(4096, 'B');
+  bufferlist bl_2a = create_pattern_buffer(4096, 'C');
+
+  ASSERT_EQ(0, ioctx.write(src, bl_1a, bl_1a.length(), 0));
+  ASSERT_EQ(0, ioctx.write(src, bl_1b, bl_1b.length(), chunk_size - 4096));
+  ASSERT_EQ(0, ioctx.write(src, bl_2a, bl_2a.length(), chunk_size));
+  ASSERT_EQ(0, ioctx.trunc(src, 2 * chunk_size));
+
+  ObjectWriteOperation op;
+  op.copy_from(src, ioctx, 0, 0);
+  ASSERT_EQ(0, ioctx.operate(dst, &op));
+
+  bufferlist expected_data;
+  expected_data.append(bl_1a);
+  expected_data.append(bl_1b);
+  expected_data.append(bl_2a);
+  std::map<uint64_t, uint64_t> expected_extents = {
+    {0, 4096},
+    {chunk_size - 4096, 8192}
+  };
+
+  verify_sparse_read(dst, 0, 2 * chunk_size, expected_extents, expected_data);
+  verify_mapext(dst, 0, 2 * chunk_size, expected_extents);
+}
+
 // copy_from recalculates FAE via zero detection
 TEST_F(ECSparseReadTest, CopyFromPreservesFAEForZeroBlocks) {
   const std::string src = "copy_from_src_fae";
