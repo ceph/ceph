@@ -182,6 +182,38 @@ TEST_F(TestClsQueue, ListByEndMarker)
   ASSERT_EQ(total_elements, number_of_ops*number_of_elements);
 }
 
+TEST_F(TestClsQueue, ListInvalidMarker)
+{
+  const std::string queue_name = "my-queue";
+  const uint64_t queue_size = 1024*1024;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_queue_init(op, queue_name, queue_size);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+  const auto number_of_ops = 2;
+  const auto number_of_elements = 10;
+
+  test_enqueue(queue_name, number_of_ops, number_of_elements, 0);
+
+  const auto max_elements = 100;
+  bool truncated = false;
+  std::string next_marker;
+  std::vector<cls_queue_entry> entries;
+  // the marker of an entry is a position that the queue holds
+  ASSERT_EQ(0, cls_queue_list_entries(ioctx, queue_name, "", max_elements, entries, &truncated, next_marker));
+  ASSERT_EQ(entries.size(), number_of_ops*number_of_elements);
+  const auto first_marker = entries.front().marker;
+  ASSERT_EQ(0, cls_queue_list_entries(ioctx, queue_name, first_marker, max_elements, entries, &truncated, next_marker));
+  ASSERT_EQ(entries.size(), number_of_ops*number_of_elements);
+
+  // a marker that is not "<gen>/<offset>" is rejected, instead of being taken
+  // for the front of the queue
+  ASSERT_EQ(-EINVAL, cls_queue_list_entries(ioctx, queue_name, "not-a-marker", max_elements, entries, &truncated, next_marker));
+  // and so is a position that the queue does not hold, which would otherwise
+  // be read past the end of the queue forever
+  ASSERT_EQ(-EINVAL, cls_queue_list_entries(ioctx, queue_name, "0/" + to_string(queue_size), max_elements, entries, &truncated, next_marker));
+}
+
 TEST_F(TestClsQueue, Dequeue)
 {
   const std::string queue_name = "my-queue";
