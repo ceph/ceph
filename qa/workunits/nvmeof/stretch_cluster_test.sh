@@ -184,6 +184,7 @@ show_ns_full () {
 
 # Change one namespace's location, emitting a single concise status line.
 # The CLI's verbose JSON response is captured and only shown on failure.
+# Returns 1 on failure, which aborts the test (the script runs with -e).
 ns_change_location () {
     local nqn="$1" nsid="$2" loc="$3" out
     # Echo the exact command being run (like the reference test), then execute.
@@ -193,6 +194,7 @@ ns_change_location () {
     else
         echo "    [FAIL] $nqn nsid=$nsid -> ${loc:-<none>} FAILED:" >&2
         echo "$out" | sed 's/^/       /' >&2
+        return 1
     fi
     return 0
 }
