@@ -4514,7 +4514,92 @@ def test_account_metadata_sync():
             check_groups_eq(source_conn, target_conn)
             check_oidc_providers_eq(source_conn, target_conn)
 
-   
+def get_bucket_read_tracker(zone_conn, bucket_name):
+    """ radosgw-admin runs as its own process"""
+    cmd = ['bucket', 'stats', '--bucket', bucket_name] + zone_conn.zone.zone_args()
+    stats_json, retcode = zone_conn.zone.cluster.admin(cmd, read_only=True)
+    assert(retcode == 0)
+    return json.loads(stats_json)['read_tracker']
+
+def test_secondary_local_write_races_meta_sync():
+    """
+    https://tracker.ceph.com/issues/80389
+
+    In a multisite setup, when user updates metadata in secondary cluster:
+       1. forwards the metadata to master
+       2. increase the version number and applies on its cluster
+       3. receive the master's version from sync and apply the change and set
+          master's versions as its version.(It does not increase)
+
+    When multiple metadata happens in secondary cluster, a race condition between
+    local PUT and sync PUT cause the metadata version to move backward instead of
+    forward.
+
+    The test delays the sync stores using
+    rgw_inject_delay_pattern=delay_meta_sync_bucket_instance_store
+    to deterministically reproduce the race and verify that the fix prevents
+    ver from moving backward.
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    delay_sec = 20
+
+    def set_meta_sync_delay(enabled):
+        cluster = secondary.zone.cluster
+        if enabled:
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_sec', str(delay_sec)])
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_pattern', 'delay_meta_sync_bucket_instance_store'])
+        else:
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_sec'])
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_pattern'])
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    zonegroup_meta_checkpoint(zonegroup)
+
+    ver_0 = get_bucket_read_tracker(secondary, bucket.name)
+
+    set_meta_sync_delay(True)
+    try:
+        # local write #1 on the secondary, forwarded to master, then applies
+        # locally. metadata sync will fetch this change and hold its store
+        # for delay_sec.
+        secondary.s3_client.put_bucket_versioning(
+            Bucket=bucket.name,
+            VersioningConfiguration={'Status': 'Enabled'})
+
+        ver_1 = get_bucket_read_tracker(secondary, bucket.name)
+        assert ver_1 > ver_0, 'local write #1 should advance ver'
+
+        # give the secondary's sync worker time to fetch entry #1 and enter
+        # the injected delay before its store.
+        time.sleep(delay_sec / 2)
+
+        # local write #2 on the secondary, still inside the delay window
+        # Advances the secondary's version beyond the version carried
+        # by entry #1's fetch.
+        secondary.s3_client.put_bucket_versioning(
+            Bucket=bucket.name,
+            VersioningConfiguration={'Status': 'Suspended'})
+
+        ver_2 = get_bucket_read_tracker(secondary, bucket.name)
+        assert ver_2 > ver_1, 'local write #2 should advance ver further'
+    finally:
+        set_meta_sync_delay(False)
+
+    # wait for entry #1's and entry #2's delayed store to land.
+    time.sleep(delay_sec)
+
+    ver_3 = get_bucket_read_tracker(secondary, bucket.name)
+    assert ver_3 >= ver_2, \
+        'ver moved backward (%d -> %d): metadata sync applied an older ' \
+        'version on top of a newer local write' % (ver_2, ver_3)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
 @attr('copy_object')
 def test_copy_object_same_bucket():
     zonegroup = realm.master_zonegroup()
