@@ -526,7 +526,6 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
 
   try {
     JSONDecoder::decode_json("key", metadata_key, &parser);
-    JSONDecoder::decode_json("ver", *objv, &parser);
     JSONDecoder::decode_json("mtime", mtime, &parser);
   } catch (JSONDecoder::err& e) {
     return -EINVAL;
