@@ -13,6 +13,7 @@ name = "lancedb_rgw_store"
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
 # Both crates are in a Cargo workspace (src/rgw/Cargo.toml) sharing one
 # Cargo.lock — versions are unified automatically.  No pins needed.
 lance-io = { version = "=9.0.0", default-features = false }
