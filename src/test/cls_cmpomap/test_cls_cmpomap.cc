@@ -13,6 +13,7 @@
  */
 
 #include "cls/cmpomap/client.h"
+#include "test/librados/crimson_utils.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/test_pool_types.h"
 #include "gtest/gtest.h"
@@ -29,6 +30,15 @@ namespace cls::cmpomap {
 class TestClsCmpOmap : public ceph::test::ClsTestFixture {
   // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
  protected:
+  void SetUp() override {
+    // Crimson's FastEC pools do not set FLAG_OMAP, so omap writes crash the OSD.
+    // Skip FastEC tests entirely on Crimson until EC omap support is added.
+    if (is_crimson_cluster() && GetParam() == ceph::test::PoolType::FAST_EC) {
+      GTEST_SKIP() << "FastEC omap not supported by crimson yet. Skipped";
+    }
+    ceph::test::ClsTestFixture::SetUp();
+  }
+
   int do_cmp_vals(const std::string& oid, Mode mode,
                   Op comparison, ComparisonMap values,
                   std::optional<bufferlist> def = std::nullopt)
