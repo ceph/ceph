@@ -96,6 +96,23 @@ target_link_libraries(unittest_mgr_mgroprequest
   Python3::Python
 )
 
+# unittest_mgr_mgrclient
+# MgrClient.cc is already built into libcommon (see src/CMakeLists.txt
+# libcommon_files) and reaches the test through ceph-common, so it must not be
+# compiled a second time here.  ClusterState.cc/DaemonKey.cc live in the mgr
+# library, which this test does not link, so they are compiled in directly.
+add_executable(unittest_mgr_mgrclient
+  test_mgrclient.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ClusterState.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonKey.cc
+)
+add_ceph_unittest(unittest_mgr_mgrclient)
+target_link_libraries(unittest_mgr_mgrclient
+  ceph-common
+  global
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")

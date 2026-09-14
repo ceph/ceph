@@ -13,6 +13,7 @@
 #include "messages/MPGStats.h"
 #include "mgr/ClusterState.h"
 #include "mgr/DaemonState.h"
+#include "mgr/MgrClient.h"
 #include "mon/MgrMap.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
@@ -54,6 +55,112 @@ public:
   test_get_objecter() const
   {
     return objecter;
+  }
+};
+
+// A Connection test double that records every message MgrClient emits instead
+// of putting it on the wire.  Connection::send_message()/send_message2() all
+// funnel through the protected send_msg(), so this single override captures
+// every send path MgrClient can take.
+class RecordingConnection : public Connection {
+public:
+  std::vector<MessageRef> sent;
+
+  explicit RecordingConnection(CephContext* cct_)
+    : Connection(cct_, nullptr)
+  {
+    set_features(CEPH_FEATURES_ALL);
+  }
+
+  bool is_connected() override { return true; }
+  void send_keepalive() override {}
+  void mark_down() override {}
+  void mark_disposable() override {}
+  void shutdown() override {}
+  entity_addr_t get_peer_socket_addr() const override { return entity_addr_t(); }
+
+protected:
+  int send_msg(MessageRef&& m) override {
+    sent.push_back(std::move(m));
+    return 0;
+  }
+};
+
+// Exposes MgrClient's protected session/map internals so tests can drive the
+// live-session code paths without a running mgr daemon.  Mirrors the
+// ClusterStateTestHelper pattern above.
+class MgrClientTestHelper : public MgrClient {
+public:
+  MgrClientTestHelper(CephContext* cct_, Messenger* msgr_, MonMap* monmap_)
+    : MgrClient(cct_, msgr_, monmap_)
+  {}
+
+  // Establish a live session backed by a recording connection, bypassing the
+  // messenger / MgrMap-availability path that reconnect() needs in production.
+  RecordingConnection*
+  inject_session()
+  {
+    std::lock_guard l(lock);
+    session.reset(new MgrSessionState());
+    session->con = ceph::make_ref<RecordingConnection>(cct);
+    return static_cast<RecordingConnection*>(session->con.get());
+  }
+
+  void
+  test_set_map(const MgrMap& m)
+  {
+    std::lock_guard l(lock);
+    map = m;
+  }
+
+  bool
+  test_has_session()
+  {
+    std::lock_guard l(lock);
+    return static_cast<bool>(session);
+  }
+
+  RecordingConnection*
+  test_recording_con()
+  {
+    std::lock_guard l(lock);
+    return session ? static_cast<RecordingConnection*>(session->con.get())
+                   : nullptr;
+  }
+
+  uint32_t
+  test_stats_period()
+  {
+    std::lock_guard l(lock);
+    return stats_period;
+  }
+
+  uint32_t
+  test_stats_threshold()
+  {
+    std::lock_guard l(lock);
+    return stats_threshold;
+  }
+
+  size_t
+  test_command_table_size()
+  {
+    std::lock_guard l(lock);
+    return command_table.get_commands().size();
+  }
+
+  Context*
+  test_report_callback()
+  {
+    std::lock_guard l(lock);
+    return report_callback;
+  }
+
+  bool
+  test_timer_cancel_event(Context* c)
+  {
+    std::lock_guard l(lock);
+    return timer.cancel_event(c);
   }
 };
 
@@ -99,6 +206,29 @@ public:
   void
   TearDown() override
   {
+    // Shut down every test-owned client before the messengers they ride on.
+    // Clients are owned by the fixture rather than the test body so that a fatal
+    // gtest assertion -- which returns from the test body before its explicit
+    // shutdown() -- cannot leave a client initialized; ~SafeTimer and
+    // ~CommandTable both assert, and an uncaught abort there takes down the whole
+    // test executable instead of failing a single test.  shutdown() is
+    // idempotent and safe on an un-initialized client, so a second call after a
+    // test's own shutdown() is harmless.
+    for (auto& c : clients) {
+      c->shutdown();
+    }
+    clients.clear();
+
+    // Restore any suite-shared config values a test overrode.  cct is shared
+    // across the whole suite, so a leaked override would bleed into later tests.
+    for (auto it = conf_restores.rbegin(); it != conf_restores.rend(); ++it) {
+      cct->_conf.set_val(it->first, it->second);
+    }
+    if (!conf_restores.empty()) {
+      cct->_conf.apply_changes(nullptr);
+      conf_restores.clear();
+    }
+
     ceph_assert(objecter != nullptr);
     ceph_assert(mc != nullptr);
     objecter->shutdown();
@@ -106,11 +236,69 @@ public:
     messenger->shutdown();
     messenger->wait();
 
+    // Secondary messengers a test created through make_messenger().
+    for (auto& m : extra_messengers) {
+      m->shutdown();
+      m->wait();
+    }
+    extra_messengers.clear();
+
     cs.reset();
     objecter.reset();
     mc.reset();
     messenger.reset();
     icp.reset();
+  }
+
+  // Construct a fixture-owned MgrClient (or a secondary-messenger variant) whose
+  // shutdown is guaranteed by TearDown().  Does not init(); the caller drives the
+  // init()/shutdown() lifecycle, and TearDown() backstops cleanup on every exit
+  // path.
+  MgrClient&
+  make_client(Messenger* msgr_ = nullptr)
+  {
+    auto c = std::make_unique<MgrClient>(
+        cct.get(), msgr_ ? msgr_ : messenger.get(), &monmap);
+    MgrClient& ref = *c;
+    clients.push_back(std::move(c));
+    return ref;
+  }
+
+  // Same, but returns the MgrClientTestHelper subclass so tests can reach the
+  // protected session/map internals.
+  MgrClientTestHelper&
+  make_helper_client(Messenger* msgr_ = nullptr)
+  {
+    auto c = std::make_unique<MgrClientTestHelper>(
+        cct.get(), msgr_ ? msgr_ : messenger.get(), &monmap);
+    MgrClientTestHelper& ref = *c;
+    clients.push_back(std::move(c));
+    return ref;
+  }
+
+  // A started secondary messenger owned by the fixture; shut down and waited on
+  // in TearDown() so it is cleaned up even when a test exits early.
+  Messenger&
+  make_messenger(const char* name)
+  {
+    std::unique_ptr<Messenger> m(
+        Messenger::create_client_messenger(cct.get(), name));
+    m->start();
+    Messenger& ref = *m;
+    extra_messengers.push_back(std::move(m));
+    return ref;
+  }
+
+  // Override a suite-shared config value for the duration of the test; the
+  // original is captured and restored by TearDown() even on an early exit.
+  void
+  override_conf(const std::string& key, const std::string& val)
+  {
+    std::string orig;
+    cct->_conf.get_val(key, &orig);
+    conf_restores.emplace_back(key, orig);
+    cct->_conf.set_val(key, val);
+    cct->_conf.apply_changes(nullptr);
   }
 
 protected:
@@ -122,6 +310,10 @@ protected:
   std::unique_ptr<MonClient> mc;
   MgrMap mgr_map;
   OSDMap osd_map;
+  MonMap monmap;
+  std::vector<std::unique_ptr<MgrClient>> clients;
+  std::vector<std::unique_ptr<Messenger>> extra_messengers;
+  std::vector<std::pair<std::string, std::string>> conf_restores;
 };
 
 class ClusterStateTest : public TestMgr {
