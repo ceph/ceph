@@ -1157,7 +1157,8 @@ COMMAND("osd pool force-remove-snap "
 	"osd", "rw")
 COMMAND("osd pool ls "
 	"name=detail,type=CephChoices,strings=detail,req=false "
-	"name=show_rule_names,type=CephBool,req=false",
+	"name=show_rule_names,type=CephBool,req=false "
+	"name=show_all,type=CephBool,req=false",
 	"list pools (with `detail` and --show-rule-names, render the "
 	"CRUSH rule by name in the text output, and add a "
 	"`crush_rule_name` field to the JSON output)", "osd", "r")

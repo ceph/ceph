@@ -1266,7 +1266,9 @@ Subcommand ``ls`` list pools
 
 Usage::
 
-    ceph osd pool ls {detail} {--show-rule-names}
+    ceph osd pool ls {detail} {--show-rule-names} {--show-all}
+
+Display a list of pools. Pass ``--show-all`` to show hidden pools.
 
 With ``detail``, ``--show-rule-names`` renders each pool's CRUSH rule by name
 instead of by numeric id in the text output. In the JSON output the numeric

@@ -6429,52 +6429,84 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     cmd_getval(cmdmap, "detail", detail);
     bool show_rule_names = false;
     cmd_getval(cmdmap, "show_rule_names", show_rule_names);
+    bool show_all = false;
+    cmd_getval(cmdmap, "show_all", show_all);
     if (!f && detail == "detail") {
       ostringstream ss;
-      osdmap.print_pools(cct, ss, show_rule_names);
+      osdmap.print_pools(cct, ss, show_rule_names, show_all);
       rdata.append(ss.str());
     } else {
       if (f)
  f->open_array_section("pools");
+      std::vector<int64_t> displayed_pools;
       for (auto &[pid, pdata] : osdmap.get_pools()) {
-	// For plain and JSON listing, only show the tip of each migration
-	// chain (the latest target pool, which has no migration_target set)
-	// and non-migrating pools. All intermediate/source pools in a chain
-	// are suppressed — the tip represents the whole chain.
-	if (pdata.is_migration_src()) {
-	  continue;
-	}
-	if (f) {
-	  if (detail == "detail") {
-	    // For detail, show tip name/stats but use the root pool's ID
-	    // so operators see the original pool ID that clients reference.
-	    // The root is the pool with the lowest ID that has migration_target
-	    // pointing at this tip (completed stubs have migration_src cleared
-	    // so we cannot walk backwards — scan forward instead).
-	    // Find the root pool ID: scan for the lowest-ID pool whose
-	    // migration_target points at this tip. We cannot rely on
-	    // migration_src being set on the tip — it is cleared when
-	    // each segment completes. Any pool pointing here is a chain member.
-	    int64_t root_pid = pid;
-	    for (auto &[scan_pid, scan_pool] : osdmap.get_pools()) {
-	      if (scan_pool.migration_target.has_value() &&
-		  *scan_pool.migration_target == pid &&
-		  scan_pid < root_pid) {
-		root_pid = scan_pid;
-	      }
-	    }
-	    f->open_object_section("pool");
-	    f->dump_int("pool_id", root_pid);
-	    f->dump_string("pool_name", osdmap.get_pool_name(pid));
-	    pdata.dump(f.get(), osdmap.crush.get(), show_rule_names);
-	    osdmap.dump_read_balance_score(cct, pid, pdata, f.get());
-	    f->close_section();
-	  } else {
-	    f->dump_string("pool_name", osdmap.get_pool_name(pid));
-	  }
-	} else {
-	  rdata.append(osdmap.get_pool_name(pid) + "\n");
-	}
+ // Without --show-all, suppress source/intermediate pools and only
+ // show the tip of each migration chain (the target pool).
+ // With --show-all, show every pool in the chain.
+ if (!show_all && pdata.is_migration_src()) {
+   continue;
+ }
+ if (f) {
+   if (detail == "detail") {
+       // Without --show-all, show the root pool's ID for the migration
+       // target so operators see the original pool ID that clients still
+       // reference.  With --show-all, every pool uses its own real ID.
+       int64_t display_pid = pid;
+       if (!show_all && osdmap.is_pool_migration_target(pid)) {
+         for (auto &[scan_pid, scan_pool] : osdmap.get_pools()) {
+  if (scan_pool.migration_target.has_value() &&
+      *scan_pool.migration_target == pid &&
+      scan_pid < display_pid) {
+    display_pid = scan_pid;
+  }
+         }
+       }
+     f->open_object_section("pool");
+     f->dump_int("pool_id", display_pid);
+     f->dump_string("pool_name", osdmap.get_pool_name(pid));
+     pdata.dump(f.get(), osdmap.crush.get(), show_rule_names);
+     osdmap.dump_read_balance_score(cct, pid, pdata, f.get());
+     f->close_section();
+   } else {
+     f->dump_string("pool_name", osdmap.get_pool_name(pid));
+   }
+ } else {
+    if (show_all) {
+      auto found = std::find(displayed_pools.begin(), displayed_pools.end(), pid);
+      if (found != displayed_pools.end()) {
+        continue; // This pool has alreay been displayed as part of a migration cascade
+      }
+      auto check_id = pdata.migration_target.value_or(pid);
+      std::vector<int64_t> cascade;
+
+      for (auto &[pool_id, pool_data] : osdmap.get_pools()) { // Loop through all the pools to get the migration cascade 
+        if (pool_data.migration_target == check_id) {
+          cascade.push_back(pool_id);
+        }
+      }
+      if (cascade.empty()) { //if there is no cascade then this pool is not in a migration cascade so output it normally
+        rdata.append(osdmap.get_pool_name(pid) + "\n"); // since this is a standalone pool there is also no need to add it to the outputted pools list as it will only ever occur once
+      } else { // there is a migration cascade so now output them together 
+        rdata.append(osdmap.get_pool_name(cascade.front()) + "\n"); // Print the root pool unindented
+        displayed_pools.push_back(cascade.front()); //Add this pool to the list of pools that has been outputted already
+        for (size_t i = 1; i < cascade.size(); i++) {
+          rdata.append("    " + osdmap.get_pool_name(cascade[i]) + "\n"); // Print the other pools in the cascade indented
+          displayed_pools.push_back(cascade[i]);
+        }
+        rdata.append("    " + osdmap.get_pool_name(check_id) + "\n"); //finally print the current target pool also indented
+        displayed_pools.push_back(check_id);
+      }
+    } else {
+      rdata.append(osdmap.get_pool_name(pid) + "\n");
+    }
+
+
+
+
+
+
+
+}
       }
       if (f) {
  f->close_section();
