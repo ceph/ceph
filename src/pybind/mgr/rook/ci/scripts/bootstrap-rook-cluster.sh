@@ -90,7 +90,12 @@ create_rook_cluster() {
     $KUBECTL create -f ${base}/csi-operator.yaml
     $KUBECTL create -f ${base}/operator.yaml
     $KUBECTL create -f $CLUSTER_SPEC
-    $KUBECTL create -f ${base}/toolbox.yaml
+    # Run the toolbox from the image we just built and loaded into the
+    # minikube docker cache: it always matches the cluster's ceph version
+    # and avoids a runtime pull from quay.io, which is flaky on the builders
+    curl -fsSL ${base}/toolbox.yaml | \
+        sed "s|image: .*|image: ${CURR_CEPH_IMG}|" | \
+        $KUBECTL create -f -
 }
 
 is_operator_ready() {
