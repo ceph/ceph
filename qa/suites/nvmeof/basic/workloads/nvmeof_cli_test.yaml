@@ -14,6 +14,24 @@ tasks:
     service: nvmeof.mypool.mygroup0
     refresh: True
 
+# cross_namespace_copy_test.sh needs the SPDK cross namespace copy (CNC) feature,
+# which is off by default. 'cnc_enable' is a boolean defaulting to false, so
+# updating 'cnc_enable: true' is necessary to test the feature.
+- exec:
+    host.a:
+      - ceph orch ls nvmeof --export > /tmp/nvmeof-orig.yaml
+      - cp /tmp/nvmeof-orig.yaml /tmp/nvmeof-cnc.yaml
+      - "sed -i -e '/^  cnc_enable:/d' -e '/^  cnc_rate_limiter_bytes:/a\\  cnc_enable: true' /tmp/nvmeof-cnc.yaml"
+      - "grep -q '^  cnc_enable: true' /tmp/nvmeof-cnc.yaml"
+      - cat /tmp/nvmeof-cnc.yaml
+      - ceph orch ls
+      - ceph orch apply -i /tmp/nvmeof-cnc.yaml
+      - ceph orch redeploy nvmeof.mypool.mygroup0
+
+- cephadm.wait_for_service:
+    service: nvmeof.mypool.mygroup0
+    refresh: True
+
 - workunit:
     no_coverage_and_limits: true
     clients:
