@@ -1250,8 +1250,7 @@ struct ObjectOperation {
         if (out_watchers)
           *out_watchers = copy_reply.watchers;
 	if (out_extent_map)
-	  out_extent_map->insert(copy_reply.extent_map.begin(),
-				 copy_reply.extent_map.end());
+	  *out_extent_map = std::move(copy_reply.extent_map);
 	*cursor = copy_reply.cursor;
       } catch (const ceph::buffer::error& e) {
 	if (prval)

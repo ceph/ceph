@@ -152,6 +152,7 @@ public:
     ceph::buffer::list omap_data;
     int rval;
     std::map<uint64_t, uint64_t> extent_map;
+    bool is_sparse_read = false;
     // Whether to track force_allocated_extents on the destination. Decided
     // once in start_copy() so that every chunk and finish_copyfrom() agree
     // even if the pool flags change part way through the copy.
