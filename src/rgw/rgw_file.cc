@@ -2603,8 +2603,6 @@ namespace rgw {
       return -EISDIR;
     }
 
-    bool write_open = ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR));
-
     if (f->global_open) {
       int rc = change_open_mode(f->global_open, posix_flags);
       if (! rc) {
