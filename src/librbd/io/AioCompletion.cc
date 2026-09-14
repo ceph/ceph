@@ -109,6 +109,11 @@ void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
     ictx = i;
     aio_type = t;
     start_time = coarse_mono_clock::now();
+    // capture the submit thread's channel
+    if (ictx->asio_engine != nullptr) {
+      completion_channel =
+        ictx->asio_engine->get_work_queue()->current_channel();
+    }
   }
 }
 
@@ -131,8 +136,13 @@ void AioCompletion::queue_complete() {
 
   add_request();
 
-  // ensure completion fires in clean lock context
-  ictx->asio_engine->post_serial([this]() { complete_request(0); });
+  // prefer the submit channel when pinned
+  if (completion_channel != nullptr) {
+    ictx->asio_engine->post_channel(
+      completion_channel, [this]() { complete_request(0); });
+  } else {
+    ictx->asio_engine->post_serial([this]() { complete_request(0); });
+  }
 }
 
 void AioCompletion::block(CephContext* cct) {
@@ -245,7 +255,7 @@ void AioCompletion::complete_external_callback() {
 
   // ensure librbd external users never experience concurrent callbacks
   // from multiple librbd-internal threads.
-  ictx->asio_engine->dispatch_serial([this]() {
+  ictx->asio_engine->dispatch_serial_channel(completion_channel, [this]() {
       complete_cb(rbd_comp, complete_arg);
       mark_complete_and_notify();
       put();

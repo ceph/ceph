@@ -89,6 +89,15 @@ public:
   virtual void dispatch_serial(Work fn) = 0;
 
   /**
+   * Like dispatch_serial(), but when the caller is off-channel, deliver to
+   * @p channel instead of the default serial target. Implementations that do
+   * not distinguish channels fall back to dispatch_serial().
+   */
+  virtual void dispatch_serial_channel(Channel channel, Work fn) {
+    dispatch_serial(std::move(fn));
+  }
+
+  /**
    * Legacy Context completion
    */
   virtual void queue(Context* ctx, int r = 0);

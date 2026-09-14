@@ -72,8 +72,18 @@ public:
   }
 
   template <typename T>
+  void post_channel(asio::ContextWQ::Channel channel, T&& t) {
+    m_context_wq->post_channel(channel, std::forward<T>(t));
+  }
+
+  template <typename T>
   void dispatch_serial(T&& t) {
     m_context_wq->dispatch_serial(std::forward<T>(t));
+  }
+
+  template <typename T>
+  void dispatch_serial_channel(asio::ContextWQ::Channel channel, T&& t) {
+    m_context_wq->dispatch_serial_channel(channel, std::forward<T>(t));
   }
 
 private:
