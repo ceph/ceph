@@ -146,6 +146,9 @@ if 'UNITTEST' in os.environ:
             elif hasattr(self, '_mon_command_mock_' + cmd['prefix'].replace(' ', '_')):
                 a = getattr(self, '_mon_command_mock_' + cmd['prefix'].replace(' ', '_'))
                 outb = a(cmd)
+                if isinstance(outb, tuple):
+                    res.complete(*outb)
+                    return
 
             res.complete(0, outb, '')
 
