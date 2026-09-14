@@ -121,6 +121,16 @@ pub struct CRgwObjectMeta {
     pub last_modified: i64,
     /// Nanoseconds part of the last modified timestamp
     pub last_modified_ns: i32,
+    /// Content encoding (e.g., "gzip"), null-terminated string
+    pub content_encoding: *mut c_char,
+    /// Content disposition (e.g., "attachment; filename=..."), null-terminated string
+    pub content_disposition: *mut c_char,
+    /// Content language (e.g., "en-US"), null-terminated string
+    pub content_language: *mut c_char,
+    /// Cache control (e.g., "max-age=604800"), null-terminated string
+    pub cache_control: *mut c_char,
+    /// Custom metadata as JSON string (e.g., {"key1":"value1","key2":"value2"}), null-terminated
+    pub metadata: *mut c_char,
 }
 
 impl Default for CRgwObjectMeta {
@@ -131,6 +141,11 @@ impl Default for CRgwObjectMeta {
             content_type: std::ptr::null_mut(),
             last_modified: 0,
             last_modified_ns: 0,
+            content_encoding: std::ptr::null_mut(),
+            content_disposition: std::ptr::null_mut(),
+            content_language: std::ptr::null_mut(),
+            cache_control: std::ptr::null_mut(),
+            metadata: std::ptr::null_mut(),
         }
     }
 }
@@ -190,6 +205,7 @@ extern "C" {
         bucket: *const CRgwBucket,
         obj: *const CRgwObject,
         buffer: *const CRgwBuffer,
+        attrs: *const CRgwObjectMeta,
         etag_out: *mut *mut c_char,
     ) -> c_int;
 
@@ -204,6 +220,7 @@ extern "C" {
         if_match: *const c_char,
         if_nomatch: *const c_char,
         canceled: *mut c_int,
+        attrs: *const CRgwObjectMeta,
         etag_out: *mut *mut c_char,
     ) -> c_int;
 
@@ -298,12 +315,13 @@ extern "C" {
     //=========================================================================
 
     /// Initialize a multipart upload
-    pub fn rgw_init_multipart(
+    pub fn rgw_multipart_init(
         driver: *mut CRgwDriver,
         dpp: *const CRgwDoutPrefix,
         yield_ctx: *mut CRgwYieldContext,
         bucket: *const CRgwBucket,
         obj: *const CRgwObject,
+        attrs: *const CRgwObjectMeta,
         upload_id: *mut *mut c_char,
     ) -> c_int;
 
@@ -355,6 +373,11 @@ extern "C" {
 
     /// Free list result allocated by rgw_list_objects
     pub fn rgw_free_list_result(result: *mut CRgwListResult);
+
+    /// Free a NUL-terminated string returned by the wrapper (etag, upload_id).
+    /// Frees in the same allocator context that allocated it (strdup/strndup),
+    /// so callers must not use libc::free across the FFI boundary.
+    pub fn rgw_free_string(s: *mut c_char);
 
     //=========================================================================
     // Configuration
@@ -416,6 +439,41 @@ impl Drop for OwnedRGWListResult {
     fn drop(&mut self) {
         unsafe {
             rgw_free_list_result(&mut self.0);
+        }
+    }
+}
+
+/// RAII wrapper for a NUL-terminated string returned by the wrapper
+/// (e.g. the etag from `rgw_put_object` or the upload id from
+/// `rgw_multipart_init`).
+///
+/// The string is allocated on the C++ side with `strdup`/`strndup`, so it must
+/// be freed there too, via `rgw_free_string`, rather than with `libc::free`
+/// across the FFI boundary (the two sides may use different allocators, e.g.
+/// tcmalloc vs glibc).
+pub struct OwnedRGWString(pub *mut c_char);
+
+impl OwnedRGWString {
+    /// Copy the C string into an owned Rust `String`, or `None` if the pointer
+    /// is null. The underlying C allocation is freed when this wrapper drops.
+    pub fn as_string(&self) -> Option<String> {
+        if self.0.is_null() {
+            return None;
+        }
+        Some(
+            unsafe { std::ffi::CStr::from_ptr(self.0) }
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+}
+
+impl Drop for OwnedRGWString {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe {
+                rgw_free_string(self.0);
+            }
         }
     }
 }

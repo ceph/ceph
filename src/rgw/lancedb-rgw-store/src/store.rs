@@ -13,7 +13,7 @@
 
 use crate::ffi::{
     self, CRgwBucket, CRgwDoutPrefix, CRgwDriver, CRgwObject, OwnedRGWBuffer, OwnedRGWListResult,
-    OwnedRGWObjectMeta,
+    OwnedRGWObjectMeta, OwnedRGWString,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -69,19 +69,6 @@ impl SendConstPtr {
 
 const DEFAULT_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
 
-/// Extract etag string from a C pointer returned by rgw_put_object, then free it.
-///
-/// # Safety
-/// `ptr` must be null or a valid pointer from `strdup()` (freeable with `libc::free`).
-unsafe fn etag_from_ptr(ptr: *mut c_char) -> Option<String> {
-    if ptr.is_null() {
-        return None;
-    }
-    let s = CStr::from_ptr(ptr).to_string_lossy().into_owned();
-    libc::free(ptr as *mut std::ffi::c_void);
-    Some(s)
-}
-
 /// Convert a string to CString, returning an ObjectStore error on failure.
 fn str_to_cstring(s: &str) -> ObjectStoreResult<CString> {
     CString::new(s).map_err(|e| object_store::Error::Generic {
@@ -110,6 +97,19 @@ pub struct RGWObjectStore {
 // provides atomic readers/writers for concurrent object access.
 unsafe impl Send for RGWObjectStore {}
 unsafe impl Sync for RGWObjectStore {}
+
+/// Helper struct to hold CStrings for attributes (ensures they live long enough for FFI call)
+/// Holds CStrings alive during FFI calls to prevent dangling pointers.
+/// Fields are not directly read but must remain in scope while their
+/// raw pointers are passed to C code.
+struct AttributesCStrings {
+    _content_type: Option<CString>,
+    _content_encoding: Option<CString>,
+    _content_disposition: Option<CString>,
+    _content_language: Option<CString>,
+    _cache_control: Option<CString>,
+    _metadata_json: Option<CString>,
+}
 
 impl RGWObjectStore {
     /// Create a new RGWObjectStore
@@ -160,6 +160,99 @@ impl RGWObjectStore {
             tenant_c.as_ptr()
         };
         CRgwBucket::new(bucket_c.as_ptr(), tenant_ptr)
+    }
+
+
+    /// Convert object_store Attributes to C-compatible format
+    /// Returns (CStrings holder, CRgwObjectMeta with pointers into the CStrings)
+    fn attributes_to_c_meta(
+        attributes: &object_store::Attributes,
+    ) -> ObjectStoreResult<(AttributesCStrings, ffi::CRgwObjectMeta)> {
+        use std::collections::HashMap;
+
+        let mut content_type: Option<CString> = None;
+        let mut content_encoding: Option<CString> = None;
+        let mut content_disposition: Option<CString> = None;
+        let mut content_language: Option<CString> = None;
+        let mut cache_control: Option<CString> = None;
+        let mut custom_metadata: HashMap<String, String> = HashMap::new();
+
+        for (attr, value) in attributes.iter() {
+            let value_str = value.as_ref();
+            match attr {
+                object_store::Attribute::ContentType => {
+                    content_type = Some(str_to_cstring(value_str)?);
+                }
+                object_store::Attribute::ContentEncoding => {
+                    content_encoding = Some(str_to_cstring(value_str)?);
+                }
+                object_store::Attribute::ContentDisposition => {
+                    content_disposition = Some(str_to_cstring(value_str)?);
+                }
+                object_store::Attribute::ContentLanguage => {
+                    content_language = Some(str_to_cstring(value_str)?);
+                }
+                object_store::Attribute::CacheControl => {
+                    cache_control = Some(str_to_cstring(value_str)?);
+                }
+                object_store::Attribute::Metadata(key) => {
+                    custom_metadata.insert(key.to_string(), value_str.to_string());
+                }
+                _ => {
+                    // Ignore unknown attributes (Attribute is non-exhaustive)
+                }
+            }
+        }
+
+        // Serialize custom metadata to JSON
+        let metadata_json = if !custom_metadata.is_empty() {
+            Some(str_to_cstring(
+                &serde_json::to_string(&custom_metadata).map_err(|e| {
+                    ObjectStoreError::Generic {
+                        store: "RGW",
+                        source: Box::new(e),
+                    }
+                })?,
+            )?)
+        } else {
+            None
+        };
+
+        let meta = ffi::CRgwObjectMeta {
+            size: 0,
+            etag: std::ptr::null_mut(),
+            content_type: content_type
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |s| s.as_ptr() as *mut _),
+            last_modified: 0,
+            last_modified_ns: 0,
+            content_encoding: content_encoding
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |s| s.as_ptr() as *mut _),
+            content_disposition: content_disposition
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |s| s.as_ptr() as *mut _),
+            content_language: content_language
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |s| s.as_ptr() as *mut _),
+            cache_control: cache_control
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |s| s.as_ptr() as *mut _),
+            metadata: metadata_json
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |s| s.as_ptr() as *mut _),
+        };
+
+        let cstrings = AttributesCStrings {
+            _content_type: content_type,
+            _content_encoding: content_encoding,
+            _content_disposition: content_disposition,
+            _content_language: content_language,
+            _cache_control: cache_control,
+            _metadata_json: metadata_json,
+        };
+
+        Ok((cstrings, meta))
     }
 
     /// Convert path to C string key
@@ -323,6 +416,14 @@ impl ObjectStore for RGWObjectStore {
         let obj = Self::make_obj(&key);
         let bytes: Bytes = payload.into();
 
+        // Convert attributes to C strings (must live for duration of FFI call)
+        let (attrs_cstrings, attrs_meta) = Self::attributes_to_c_meta(&opts.attributes)?;
+        let attrs_ptr = if opts.attributes.is_empty() {
+            std::ptr::null()
+        } else {
+            &attrs_meta as *const ffi::CRgwObjectMeta
+        };
+
         match opts.mode {
             PutMode::Overwrite => {
                 let buf = ffi::CRgwBuffer {
@@ -338,14 +439,18 @@ impl ObjectStore for RGWObjectStore {
                         &rgw_bucket,
                         &obj,
                         &buf,
+                        attrs_ptr,
                         &mut etag_ptr,
                     )
                 };
 
+                // Keep attrs_cstrings alive until after FFI call
+                drop(attrs_cstrings);
+
                 if result != 0 {
                     return Err(Self::errno_to_error(result, location, "put"));
                 }
-                let e_tag = unsafe { etag_from_ptr(etag_ptr) };
+                let e_tag = OwnedRGWString(etag_ptr).as_string();
                 Ok(PutResult {
                     e_tag,
                     version: None,
@@ -371,9 +476,13 @@ impl ObjectStore for RGWObjectStore {
                         std::ptr::null(),
                         if_nomatch.as_ptr(),
                         &mut canceled,
+                        attrs_ptr,
                         &mut etag_ptr,
                     )
                 };
+
+                // Keep attrs_cstrings alive until after FFI call
+                drop(attrs_cstrings);
 
                 if result != 0 {
                     return Err(Self::errno_to_error(result, location, "put (create)"));
@@ -384,7 +493,7 @@ impl ObjectStore for RGWObjectStore {
                         source: "object already exists (conditional create failed)".into(),
                     });
                 }
-                let e_tag = unsafe { etag_from_ptr(etag_ptr) };
+                let e_tag = OwnedRGWString(etag_ptr).as_string();
                 Ok(PutResult {
                     e_tag,
                     version: None,
@@ -418,9 +527,13 @@ impl ObjectStore for RGWObjectStore {
                         if_match.as_ptr(),
                         std::ptr::null(),
                         &mut canceled,
+                        attrs_ptr,
                         &mut etag_ptr,
                     )
                 };
+
+                // Keep attrs_cstrings alive until after FFI call
+                drop(attrs_cstrings);
 
                 if result != 0 {
                     return Err(Self::errno_to_error(result, location, "put (update)"));
@@ -432,7 +545,7 @@ impl ObjectStore for RGWObjectStore {
                             .into(),
                     });
                 }
-                let e_tag = unsafe { etag_from_ptr(etag_ptr) };
+                let e_tag = OwnedRGWString(etag_ptr).as_string();
                 Ok(PutResult {
                     e_tag,
                     version: None,
@@ -450,7 +563,7 @@ impl ObjectStore for RGWObjectStore {
     ///   reads one chunk per `rgw_get_object` call.  Uses `SendPtr`/`SendConstPtr`
     ///   because the returned stream is `'static` and cannot borrow `&self`.
     async fn get_opts(&self, location: &Path, opts: GetOptions) -> ObjectStoreResult<GetResult> {
-        let meta = self.head_opts(location).await?;
+        let (meta, attributes) = self.head_opts(location).await?;
 
         // HEAD request
         if opts.head {
@@ -458,7 +571,7 @@ impl ObjectStore for RGWObjectStore {
                 payload: GetResultPayload::Stream(stream::once(async { Ok(Bytes::new()) }).boxed()),
                 range: 0..0,
                 meta,
-                attributes: Attributes::new(),
+                attributes,
             });
         }
 
@@ -520,7 +633,7 @@ impl ObjectStore for RGWObjectStore {
                 payload: GetResultPayload::Stream(stream::once(async { Ok(Bytes::new()) }).boxed()),
                 meta,
                 range: range_start..range_end,
-                attributes: Attributes::new(),
+                attributes,
             });
         }
 
@@ -581,7 +694,7 @@ impl ObjectStore for RGWObjectStore {
                 payload: GetResultPayload::Stream(stream::once(async move { Ok(bytes) }).boxed()),
                 meta,
                 range: range_start..range_end,
-                attributes: Attributes::new(),
+                attributes,
             });
         }
 
@@ -697,7 +810,7 @@ impl ObjectStore for RGWObjectStore {
             payload: GetResultPayload::Stream(chunk_stream.boxed()),
             meta,
             range: range_start..range_end,
-            attributes: Attributes::new(),
+            attributes,
         })
     }
 
@@ -1052,7 +1165,7 @@ impl ObjectStore for RGWObjectStore {
     async fn put_multipart_opts(
         &self,
         location: &Path,
-        _opts: PutMultipartOptions,
+        opts: PutMultipartOptions,
     ) -> ObjectStoreResult<Box<dyn MultipartUpload>> {
         let bucket = self.bucket_cstr()?;
         let tenant = self.tenant_cstr()?;
@@ -1060,28 +1173,36 @@ impl ObjectStore for RGWObjectStore {
         let key = self.path_to_cstr(location)?;
         let obj = Self::make_obj(&key);
 
+        // Convert attributes to C strings (must live for duration of FFI call)
+        let (attrs_cstrings, attrs_meta) = Self::attributes_to_c_meta(&opts.attributes)?;
+        let attrs_ptr = if opts.attributes.is_empty() {
+            std::ptr::null()
+        } else {
+            &attrs_meta as *const ffi::CRgwObjectMeta
+        };
+
         let mut upload_id_ptr: *mut c_char = std::ptr::null_mut();
 
         let result = unsafe {
-            ffi::rgw_init_multipart(
+            ffi::rgw_multipart_init(
                 self.driver,
                 self.dpp,
                 std::ptr::null_mut(),
                 &rgw_bucket,
                 &obj,
+                attrs_ptr,
                 &mut upload_id_ptr,
             )
         };
+
+        // Keep attrs_cstrings alive until after FFI call
+        drop(attrs_cstrings);
 
         if result != 0 {
             return Err(Self::errno_to_error(result, location, "init_multipart"));
         }
 
-        let upload_id_str = unsafe { CStr::from_ptr(upload_id_ptr) }
-            .to_str()
-            .unwrap_or("")
-            .to_string();
-        unsafe { libc::free(upload_id_ptr as *mut std::ffi::c_void) };
+        let upload_id_str = OwnedRGWString(upload_id_ptr).as_string().unwrap_or_default();
 
         Ok(Box::new(RGWMultipartUpload {
             driver: self.driver,
@@ -1097,11 +1218,79 @@ impl ObjectStore for RGWObjectStore {
 
 /// Internal helpers
 impl RGWObjectStore {
+    /// Convert C metadata structure to Rust Attributes
+    ///
+    /// Extracts standard HTTP headers and custom metadata from CRgwObjectMeta
+    fn c_meta_to_attributes(c_meta: &ffi::CRgwObjectMeta) -> Attributes {
+        let mut attributes = Attributes::new();
+
+        if !c_meta.content_type.is_null() {
+            let content_type = unsafe {
+                CStr::from_ptr(c_meta.content_type)
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            attributes.insert(object_store::Attribute::ContentType, content_type.into());
+        }
+
+        if !c_meta.content_encoding.is_null() {
+            let content_encoding = unsafe {
+                CStr::from_ptr(c_meta.content_encoding)
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            attributes.insert(object_store::Attribute::ContentEncoding, content_encoding.into());
+        }
+
+        if !c_meta.content_disposition.is_null() {
+            let content_disposition = unsafe {
+                CStr::from_ptr(c_meta.content_disposition)
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            attributes.insert(object_store::Attribute::ContentDisposition, content_disposition.into());
+        }
+
+        if !c_meta.content_language.is_null() {
+            let content_language = unsafe {
+                CStr::from_ptr(c_meta.content_language)
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            attributes.insert(object_store::Attribute::ContentLanguage, content_language.into());
+        }
+
+        if !c_meta.cache_control.is_null() {
+            let cache_control = unsafe {
+                CStr::from_ptr(c_meta.cache_control)
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            attributes.insert(object_store::Attribute::CacheControl, cache_control.into());
+        }
+
+        // Parse custom metadata from JSON
+        if !c_meta.metadata.is_null() {
+            let metadata_json = unsafe {
+                CStr::from_ptr(c_meta.metadata)
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            if let Ok(metadata_map) = serde_json::from_str::<std::collections::HashMap<String, String>>(&metadata_json) {
+                for (key, value) in metadata_map {
+                    attributes.insert(object_store::Attribute::Metadata(key.into()), value.into());
+                }
+            }
+        }
+
+        attributes
+    }
+
     /// Get object metadata (size, etag, mtime) without reading content.
     ///
     /// Called by `get_opts` and by the default `head` trait method.
     /// Uses `rgw_head_object` -> `load_obj_state`.
-    async fn head_opts(&self, location: &Path) -> ObjectStoreResult<ObjectMeta> {
+    async fn head_opts(&self, location: &Path) -> ObjectStoreResult<(ObjectMeta, Attributes)> {
         let bucket = self.bucket_cstr()?;
         let tenant = self.tenant_cstr()?;
         let rgw_bucket = Self::make_bucket(&bucket, &tenant);
@@ -1137,7 +1326,10 @@ impl RGWObjectStore {
             None
         };
 
-        Ok(ObjectMeta {
+        // Extract attributes using helper function
+        let attributes = Self::c_meta_to_attributes(&owned_meta.0);
+
+        let meta = ObjectMeta {
             location: location.clone(),
             last_modified: Self::timestamp(
                 owned_meta.0.last_modified,
@@ -1146,7 +1338,9 @@ impl RGWObjectStore {
             size: owned_meta.0.size,
             e_tag: etag,
             version: None,
-        })
+        };
+        
+        Ok((meta, attributes))
     }
 }
 
@@ -1231,11 +1425,7 @@ impl MultipartUpload for RGWMultipartUpload {
                 });
             }
 
-            let etag_str = unsafe { CStr::from_ptr(etag_ptr) }
-                .to_str()
-                .unwrap_or("")
-                .to_string();
-            unsafe { libc::free(etag_ptr as *mut std::ffi::c_void) };
+            let etag_str = OwnedRGWString(etag_ptr).as_string().unwrap_or_default();
 
             {
                 let mut parts_guard = parts.lock().unwrap();

@@ -67,6 +67,11 @@ typedef struct CRgwObjectMeta {
   char* content_type;        /* Content type, null-terminated */
   int64_t last_modified;     /* Last modified timestamp, in seconds */
   int32_t last_modified_ns;  /* Nanoseconds part of the last modified timestamp */
+  char* content_encoding;    /* Content-Encoding header, null-terminated (NULL if not set) */
+  char* content_disposition; /* Content-Disposition header, null-terminated (NULL if not set) */
+  char* content_language;    /* Content-Language header, null-terminated (NULL if not set) */
+  char* cache_control;       /* Cache-Control header, null-terminated (NULL if not set) */
+  char* metadata;            /* Custom metadata as JSON string, null-terminated (NULL if none) */
 } CRgwObjectMeta;
 
 /**
@@ -105,8 +110,8 @@ typedef struct CRgwListResult {
  *     rgw_free_object_meta() (frees etag and content_type strings).
  *   - CRgwListResult: Allocated by rgw_list_objects, caller must free with
  *     rgw_free_list_result() (frees all entry keys and next_marker).
- *   - upload_id/etag strings: Allocated by rgw_init_multipart / rgw_multipart_put_part,
- *     caller must free with free().
+ *   - upload_id/etag strings: Allocated by rgw_multipart_init / rgw_multipart_put_part /
+ *     rgw_put_object, caller must free with rgw_free_string().
  *=========================================================================*/
 
 /*==========================================================================
@@ -126,13 +131,14 @@ typedef struct CRgwListResult {
  *
  * Creates the object if it doesn't exist, or replaces it if it does.
  *
- * @param etag_out  [out] If non-NULL, receives the computed ETag (caller must free())
+ * @param attrs     [in] Optional attributes (content-type, encoding, etc). Pass NULL to skip. Only non-NULL fields are set.
+ * @param etag_out  [out] If non-NULL, receives the computed ETag (caller must free with rgw_free_string())
  *
  * @return 0 on success, negative errno on failure
  */
 int rgw_put_object( CRgwDriver* driver, const CRgwDoutPrefix* dpp, CRgwYieldContext* yield_ctx,
   const CRgwBucket* bucket, const CRgwObject* obj, const CRgwBuffer* buffer,
-  char** etag_out);
+  const CRgwObjectMeta* attrs, char** etag_out);
 
 /**
  * Write an object with conditional preconditions.
@@ -140,13 +146,14 @@ int rgw_put_object( CRgwDriver* driver, const CRgwDoutPrefix* dpp, CRgwYieldCont
  * Atomically writes data only if the specified precondition is met.
  * Exactly one of if_match/if_nomatch should be non-NULL.
  *
- * @param etag_out  [out] If non-NULL, receives the computed ETag (caller must free())
+ * @param attrs     [in] Optional attributes (content-type, encoding, etc). Pass NULL to skip. Only non-NULL fields are set.
+ * @param etag_out  [out] If non-NULL, receives the computed ETag (caller must free with rgw_free_string())
  *
  * @return 0 on success (check *canceled for precondition result), negative errno on failure
  */
 int rgw_put_object_conditional( CRgwDriver* driver, const CRgwDoutPrefix* dpp, CRgwYieldContext* yield_ctx,
   const CRgwBucket* bucket, const CRgwObject* obj, const CRgwBuffer* buffer,
-  const char* if_match, const char* if_nomatch, int* canceled, char** etag_out);
+  const char* if_match, const char* if_nomatch, int* canceled, const CRgwObjectMeta* attrs, char** etag_out);
 
 /**
  * Read an object (or a byte range) from storage.
@@ -242,7 +249,7 @@ int rgw_delete_objects( CRgwDriver* driver, const CRgwDoutPrefix* dpp, CRgwYield
  * Multipart Upload Operations
  *
  * Multipart uploads allow writing large objects in parts. The workflow is:
- *   1. rgw_init_multipart()       - start upload, get upload_id
+ *   1. rgw_multipart_init()       - start upload, get upload_id
  *   2. rgw_multipart_put_part()   - upload each part (1-indexed), get part ETags
  *   3. rgw_multipart_complete()   - finalize with ordered ETags, assembles the object
  *   On failure at any step, call rgw_multipart_abort() to clean up.
@@ -251,17 +258,18 @@ int rgw_delete_objects( CRgwDriver* driver, const CRgwDoutPrefix* dpp, CRgwYield
 /**
  * Start a multipart upload and obtain an upload ID.
  *
- * @param upload_id  [out] Populated on success; caller must free with free()
+ * @param attrs      [in] Optional object metadata/attributes to set on the final object (NULL if none)
+ * @param upload_id  [out] Populated on success; caller must free with rgw_free_string()
  *
  * @return 0 on success, negative errno on failure
  */
-int rgw_init_multipart( CRgwDriver* driver, const CRgwDoutPrefix* dpp, CRgwYieldContext* yield_ctx,
-  const CRgwBucket* bucket, const CRgwObject* obj, char** upload_id);
+int rgw_multipart_init( CRgwDriver* driver, const CRgwDoutPrefix* dpp, CRgwYieldContext* yield_ctx,
+  const CRgwBucket* bucket, const CRgwObject* obj, const CRgwObjectMeta* attrs, char** upload_id);
 
 /**
  * Upload one part of a multipart upload.
  *
- * @param etag  [out] Populated on success; caller must free with free()
+ * @param etag  [out] Populated on success; caller must free with rgw_free_string()
  *
  * @return 0 on success, negative errno on failure
  */
@@ -300,6 +308,14 @@ void rgw_free_object_meta(CRgwObjectMeta* meta);
  * Free list result allocated by rgw_list_objects
  */
 void rgw_free_list_result(CRgwListResult* result);
+
+/**
+ * Free a NUL-terminated string returned through a char** out-param
+ * (e.g. the etag from rgw_put_object or the upload id from rgw_multipart_init).
+ * Frees in the allocator that allocated it (strdup/strndup); passing NULL is a
+ * no-op.
+ */
+void rgw_free_string(char* s);
 
 /**
  * Get the configured rgw_max_chunk_size (in bytes)
