@@ -96,6 +96,20 @@ target_link_libraries(unittest_mgr_mgroprequest
   Python3::Python
 )
 
+# unittest_mgr_mgrclient
+add_executable(unittest_mgr_mgrclient
+  test_mgrclient.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrClient.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ClusterState.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonKey.cc
+)
+add_ceph_unittest(unittest_mgr_mgrclient)
+target_link_libraries(unittest_mgr_mgrclient
+  ceph-common
+  global
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
