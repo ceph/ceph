@@ -637,8 +637,6 @@ static struct rgw_open_args cm_args(uint32_t createmode, struct stat* st,
 				    uint32_t mask, struct stat* out = nullptr)
 {
   struct rgw_open_args a{};
-  a.version = RGW_OPEN_ARGS_V1;
-  a.size = sizeof(a);
   a.createmode = createmode;
   a.attrs = st;
   a.attr_mask = mask;
@@ -656,15 +654,6 @@ TEST(OPEN2, CREATEMODE_REJECTS_BAD_ARGS)
 
   struct stat st{};
   auto args = cm_args(RGW_CREATEMODE_UNCHECKED, &st, RGW_SETATTR_MODE);
-
-  /* built against a different header:  say so rather than read a field the
-   * caller never set */
-  args.version = RGW_OPEN_ARGS_V1 + 1;
-  EXPECT_EQ(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), -EINVAL);
-  args.version = RGW_OPEN_ARGS_V1;
-  args.size = sizeof(args) - 1;
-  EXPECT_EQ(get<0>(o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE, &args)), -EINVAL);
-  args.size = sizeof(args);
 
   /* an ACL is reserved, and must be refused rather than dropped -- a caller
    * which believes it set one must not be told the open succeeded */

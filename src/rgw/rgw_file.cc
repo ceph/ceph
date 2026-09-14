@@ -2165,15 +2165,6 @@ namespace rgw {
      * always been:  RGW_OPEN_FLAG_CREATE plus O_EXCL. */
     uint32_t createmode = RGW_CREATEMODE_NONE;
     if (args) {
-      if ((args->version != RGW_OPEN_ARGS_V1) ||
-	  (args->size < sizeof(struct rgw_open_args))) {
-	/* built against a different header than this librgw:  say so rather
-	 * than read a field the caller never set */
-	lsubdout(fs->get_context(), rgw, 0)
-	  << __func__ << " rejecting rgw_open_args version=" << args->version
-	  << " size=" << args->size << dendl;
-	return -EINVAL;
-      }
       if (args->acl || args->acl_len ||
 	  (args->acl_encoding != RGW_ACL_ENCODING_NONE)) {
 	/* reserved.  refused rather than dropped:  a caller which believes

@@ -315,18 +315,18 @@ typedef void* rgw_open_fd;
 
 /*
   Optional arguments to rgw_open2.
- 
-  Versioned because ganesha and ceph are built from separate trees:  a
-  consumer compiled against an older header is rejected cleanly rather
-  than having a field read that it never set.  Set version and size, and
-  zero the rest.
-*/
-#define RGW_OPEN_ARGS_V1           1
 
+  Carries no version of its own.  This interface is versioned as a whole --
+  LIBRGW_FILE_VER_MAJOR/MINOR/EXTRA at compile time, rgwfile_version() at
+  run time -- and a consumer is expected to build against the header
+  belonging to the library it links, as it already must for every other
+  structure here.  Adding a field to this one is an interface change like
+  any other, not something to be negotiated per call.
+
+  Zero the structure and set what you need.
+*/
 struct rgw_open_args
 {
-  uint32_t version;      /* RGW_OPEN_ARGS_V1 */
-  uint32_t size;         /* sizeof(struct rgw_open_args) */
   uint32_t createmode;   /* RGW_CREATEMODE_* */
   uint32_t attr_mask;    /* RGW_SETATTR_* to apply at create */
   struct stat* attrs;    /* IN:  initial attributes;  NULL if attr_mask==0 */

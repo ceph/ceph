@@ -270,8 +270,6 @@ rgw_lookup(fs, parent_fh, name, &fh, NULL, 0, RGW_LOOKUP_FLAG_CREATE);
 struct stat st = { .st_mode = 0644, .st_uid = uid, .st_gid = gid };
 struct stat out;
 struct rgw_open_args args = {
-    .version    = RGW_OPEN_ARGS_V1,
-    .size       = sizeof(args),
     .createmode = RGW_CREATEMODE_GUARDED,
     .attr_mask  = RGW_SETATTR_MODE|RGW_SETATTR_UID|RGW_SETATTR_GID,
     .attrs      = &st,
@@ -673,18 +671,24 @@ Stated plainly so nobody looks for it:
 
 ## 13. How this interface is versioned
 
-`LIBRGW_FILE_VER_MINOR` tracks additions and is currently 4.  It is *not*
-bumped on every change: this interface has one active consumer, developed in
-step with it, so the existing symbol evolves rather than a parallel one being
-added.  The minor is bumped when something outside that work needs to
-distinguish.
+**The interface is versioned as a whole, and nowhere else.**
+`LIBRGW_FILE_VER_MAJOR`/`MINOR`/`EXTRA` describe it at compile time, and
+`rgwfile_version()` reports the same at run time.  No structure here carries a
+version or a size field, and `rgw_open_args` deliberately does not either —
+a per-call scheme would duplicate the one that already exists and give a
+consumer two answers to the same question.
 
-`struct rgw_open_args` is versioned in its own right — `version` and `size`,
-checked on every call, with a mismatch returning `-EINVAL`.  That is not for
-third-party compatibility;  it is because the consumer and librgw are built
-from separate trees at different times, and a clean rejection beats reading a
-field the caller never set.  Zero the structure, set `version` and `size`,
-fill in what you need.
+What follows for a consumer is the ordinary C rule: **build against the header
+belonging to the library you link.**  That is already required by every other
+structure in this file — `rgw_fh_hk`, `rgw_statvfs`, `rgw_xattrlist` — none of
+which is self-describing.  Zero `rgw_open_args` and set what you need.
+
+`LIBRGW_FILE_VER_MINOR` is currently 4, and is *not* bumped on every change:
+this interface has one active consumer developed in step with it, so the
+existing symbol evolves rather than a parallel one being added.  The minor is
+bumped when something outside that work needs to distinguish.  Adding a field
+to `rgw_open_args` is an interface change of exactly that kind, handled the
+same way as any other.
 
 ---
 
