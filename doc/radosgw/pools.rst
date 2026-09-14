@@ -10,6 +10,11 @@ single zone named ``default`` is created automatically with pool names
 starting with ``default.rgw.``, but a :ref:`Multisite Configuration <multisite>`
 will have multiple zones.
 
+.. toctree::
+   :maxdepth: 1
+
+   Pool Placement and Storage Classes <placement>
+
 Tuning
 ======
 
