@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 #define LIBRGW_FILE_VER_MAJOR 1
-#define LIBRGW_FILE_VER_MINOR 4 /* adding rgw_reopen2 */
+#define LIBRGW_FILE_VER_MINOR 4
 #define LIBRGW_FILE_VER_EXTRA 1
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
