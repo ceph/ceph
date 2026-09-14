@@ -42,6 +42,9 @@ typedef enum {
   lc_complete,
 } LC_BUCKET_STATUS;
 
+
+bool should_list_unordered(const rgw::bucket_index_layout_generation& current_index, uint64_t threshold);
+
 class LCExpiration
 {
 protected:
@@ -585,6 +588,10 @@ struct ILCBucketLister {
   virtual rgw_bucket get_bucket_key () const noexcept = 0;
   
   virtual std::string_view get_bucket_name () const noexcept = 0;
+  
+  virtual bool bucket_versioned() const noexcept = 0;
+  
+  virtual bool allow_unordered() const noexcept = 0;
 
   virtual int list(rgw::sal::Bucket::ListParams& params,
                    int max_entries,
@@ -599,14 +606,11 @@ struct ILCBucketLister {
  * Relies on a bucket lister backend as the source of objects data.
  * Accumulates per-object data such as the number of current/non-current
  * instances per-object (which a specific LC rule might act upon).
- * It also detects and sanitizes (filters out) any object versions/instances which are inconsistent
+ * It also detects and skips any objects (all versions) which are inconsistent
  * with a valid object state to protect from a potential data loss such as:
- * - multiple-non-current versions newer than the current:
- *      skip non-current versions which are newer than the current;
- * - no current version:
- *      skip (exclude) all non-current versions;
- * - multiple current versions:
- *      only let LC process the first current version and skip to the first non-current.
+ * - multiple-non-current versions newer than the current;
+ * - no current version;
+ * - multiple current versions.
  */
 class LCObjsLister {
 
@@ -624,14 +628,12 @@ class LCObjsLister {
   int64_t delay_ms;
   int64_t page_index{-1};
 
-  const uint PAGE_SIZE = 1000;
+  const uint64_t list_count;
 
  public:
 
   LCObjsLister(ILCBucketLister *backend,
-               bool list_versions = true,
-               bool allow_unordered = true,
-               int64_t delay = 0,
+               CephContext *cct,
                const DoutPrefixProvider *_dpp = nullptr);
 
   void set_prefix(const std::string &p) {
@@ -658,7 +660,7 @@ class LCObjsLister {
   uint64_t get_num_current() const noexcept { return num_current; }
 
   uint64_t get_entry_pos() const noexcept {
-    return (page_index * PAGE_SIZE) + (obj_iter - list_results.objs.begin());
+    return (page_index * list_count) + (obj_iter - list_results.objs.begin());
   }
 
 private:
@@ -794,15 +796,20 @@ namespace  sal {
   class BucketLister : public  ILCBucketLister {
 
     rgw::sal::Bucket *bucket;
+    CephContext *cct;  
     const DoutPrefixProvider* dpp;
 
    public:
 
     BucketLister (rgw::sal::Bucket *_bucket,
+                  CephContext *_cct,
                   const DoutPrefixProvider *_dpp)
         : bucket{_bucket},
-          dpp{_dpp} {
+          cct{_cct},
+          dpp{_dpp} 
+    {
       ceph_assert(bucket);
+      ceph_assert(_cct);
     }
 
     rgw_bucket get_bucket_key () const noexcept override {
@@ -811,6 +818,16 @@ namespace  sal {
     
     std::string_view get_bucket_name() const noexcept override {
       return bucket->get_name();
+    }
+    
+    bool bucket_versioned() const noexcept override {
+      return bucket->versioned();
+    }
+  
+    bool allow_unordered() const noexcept override {
+      auto threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
+      const auto& current_index = bucket->get_info().layout.current_index;
+      return should_list_unordered(current_index, threshold);
     }
 
     int list(rgw::sal::Bucket::ListParams& params,
