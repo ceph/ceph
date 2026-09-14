@@ -299,6 +299,48 @@ TEST_F(TestCls2PCQueue, UpgradeFromReef)
   ASSERT_EQ(entries_number, 0);
 }
 
+TEST_F(TestCls2PCQueue, ListInvalidMarker)
+{
+  const std::string queue_name = __PRETTY_FUNCTION__;
+  const auto max_size = 1024U*1024U;
+  const auto number_of_elements = 10U;
+  const auto max_elements = 100U;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_2pc_queue_init(op, queue_name, max_size);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+  auto total_size = 0UL;
+  std::vector<bufferlist> data(number_of_elements);
+  std::generate(data.begin(), data.end(), [j = 0, &total_size] () mutable {
+        bufferlist bl;
+        bl.append("element-" + to_string(j++));
+        total_size += bl.length();
+        return bl;
+      });
+  cls_2pc_reservation::id_t res_id;
+  ASSERT_EQ(cls_2pc_queue_reserve(ioctx, queue_name, total_size, number_of_elements, res_id), 0);
+  ASSERT_NE(res_id, cls_2pc_reservation::NO_ID);
+  cls_2pc_queue_commit(op, data, res_id);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+  bool truncated;
+  std::string end_marker;
+  std::vector<cls_queue_entry> entries;
+  // the marker of the first entry is a valid position in the queue
+  ASSERT_EQ(cls_2pc_queue_list_entries(ioctx, queue_name, "", max_elements, entries, &truncated, end_marker), 0);
+  ASSERT_EQ(entries.size(), number_of_elements);
+  const auto first_marker = entries.front().marker;
+  ASSERT_EQ(cls_2pc_queue_list_entries(ioctx, queue_name, first_marker, max_elements, entries, &truncated, end_marker), 0);
+  ASSERT_EQ(entries.size(), number_of_elements);
+
+  // a marker that is not "<gen>/<offset>" is rejected
+  ASSERT_EQ(cls_2pc_queue_list_entries(ioctx, queue_name, "not-a-marker", max_elements, entries, &truncated, end_marker), -EINVAL);
+  // and so is a position that the queue does not hold, which would otherwise
+  // be read past the end of the queue
+  ASSERT_EQ(cls_2pc_queue_list_entries(ioctx, queue_name, "0/" + to_string(max_size), max_elements, entries, &truncated, end_marker), -EINVAL);
+}
+
 TEST_F(TestCls2PCQueue, Abort)
 {
   const std::string queue_name = __PRETTY_FUNCTION__;
