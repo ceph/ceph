@@ -17,7 +17,9 @@ using ceph::bufferlist;
 using ceph::Formatter;
 using ceph::common::cmd_getval;
 
-static void dump_avg_latency(Formatter *f, const char *name, uint64_t sum_ns, uint64_t count) {
+static void dump_avg_latency(Formatter *f, const char *name, const BlueStore::CacheStatsSnapshot::tavg_t& tavg) {
+  uint64_t sum_ns = std::get<0>(tavg);
+  uint64_t count = std::get<1>(tavg);
   f->open_object_section(name);
   f->dump_unsigned("avgcount", count);
   f->dump_float("sum", sum_ns / 1000000000.0);
@@ -31,11 +33,11 @@ static void dump_avg_latency(Formatter *f, const char *name, uint64_t sum_ns, ui
 
 static void dump_cache_section(Formatter *f, const char *name,
                                uint64_t hits, uint64_t misses,
-                               uint64_t lat_sum, uint64_t lat_count,
+                               const BlueStore::CacheStatsSnapshot::tavg_t& tavg,
                                bool is_byte_cache,
                                std::optional<double> duration = std::nullopt) {
   f->open_object_section(name);
-  dump_avg_latency(f, is_byte_cache ? "buffer_miss_latency" : "miss_latency", lat_sum, lat_count);
+  dump_avg_latency(f, is_byte_cache ? "buffer_miss_latency" : "miss_latency", tavg);
 
   f->dump_unsigned(is_byte_cache ? "hit_bytes" : "hits", hits);
   f->dump_unsigned(is_byte_cache ? "miss_bytes" : "misses", misses);
@@ -62,48 +64,45 @@ static void dump_snapshot_section(Formatter *f, const char *name,
     f->dump_float("seconds elapsed", *duration);
   }
   dump_cache_section(f, "onode_cache", snap.onode_hits, snap.onode_misses,
-                     snap.onode_miss_latency_sum, snap.onode_misses,
+                     snap.onode_miss_latency,
                      false, duration);
   dump_cache_section(f, "onode_shard", snap.onode_shard_hits, snap.onode_shard_misses,
-                     snap.onode_shard_miss_latency_sum, snap.onode_shard_misses,
+                     snap.onode_shard_miss_latency,
                      false, duration);
   dump_cache_section(f, "object_data_cache", snap.buffer_hit_bytes, snap.buffer_miss_bytes,
-                     snap.buffer_miss_latency_sum, snap.buffer_miss_lat_count,
+                     snap.buffer_miss_latency,
                      true, duration);
   f->close_section();
 }
 
-static void get_snapshot_windows(BlueStore& store,
-                                 BlueStore::CacheStatsSnapshot& current,
-                                 BlueStore::CacheStatsSnapshot& most_recent,
-                                 BlueStore::CacheStatsSnapshot& oldest) {
-  std::lock_guard l(store.cache_stats_lock);
+void BlueStore::get_snapshot_windows(BlueStore::CacheStatsSnapshot& current,
+                                     BlueStore::CacheStatsSnapshot& most_recent,
+                                     BlueStore::CacheStatsSnapshot& oldest) {
+  std::lock_guard l(cache_stats_lock);
 
   // Get current values
   current.timestamp = ceph::mono_clock::now();
-  current.onode_hits = store.logger->get(l_bluestore_onode_hits);
-  current.onode_misses = store.logger->get(l_bluestore_onode_misses);
-  current.onode_miss_latency_sum = store.logger->get_tavg_ns(l_bluestore_onode_miss_lat).first;
-  current.onode_shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
-  current.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
-  current.onode_shard_miss_latency_sum = store.logger->get_tavg_ns(l_bluestore_onode_shard_miss_lat).first;
-  current.buffer_hit_bytes = store.logger->get(l_bluestore_buffer_hit_bytes);
-  current.buffer_miss_bytes = store.logger->get(l_bluestore_buffer_miss_bytes);
-  auto buffer_miss_tavg = store.logger->get_tavg_ns(l_bluestore_buffer_miss_lat);
-  current.buffer_miss_latency_sum = buffer_miss_tavg.first;
-  current.buffer_miss_lat_count = buffer_miss_tavg.second;
+  current.onode_hits = logger->get(l_bluestore_onode_hits);
+  current.onode_misses = logger->get(l_bluestore_onode_misses);
+  current.onode_miss_latency = logger->get_tavg_ns(l_bluestore_onode_miss_lat);
+  current.onode_shard_hits = logger->get(l_bluestore_onode_shard_hits);
+  current.onode_shard_misses = logger->get(l_bluestore_onode_shard_misses);
+  current.onode_shard_miss_latency = logger->get_tavg_ns(l_bluestore_onode_shard_miss_lat);
+  current.buffer_hit_bytes = logger->get(l_bluestore_buffer_hit_bytes);
+  current.buffer_miss_bytes = logger->get(l_bluestore_buffer_miss_bytes);
+  current.buffer_miss_latency = logger->get_tavg_ns(l_bluestore_buffer_miss_lat);
 
-  store.cache_stats_snapshots.push_back(current);
-  while (store.cache_stats_snapshots.size() > BlueStore::MAX_CACHE_SNAPSHOTS) {
-    store.cache_stats_snapshots.pop_front();
+  cache_stats_snapshots.push_back(current);
+  while (cache_stats_snapshots.size() > MAX_CACHE_SNAPSHOTS) {
+    cache_stats_snapshots.pop_front();
   }
 
-  if (store.cache_stats_snapshots.size() >= 2) {
-    most_recent = store.cache_stats_snapshots[store.cache_stats_snapshots.size() - 2];
+  if (cache_stats_snapshots.size() >= 2) {
+    most_recent = cache_stats_snapshots[cache_stats_snapshots.size() - 2];
   } else {
-    most_recent = store.cache_stats_snapshots.back();
+    most_recent = cache_stats_snapshots.back();
   }
-  oldest = store.cache_stats_snapshots.front();
+  oldest = cache_stats_snapshots.front();
 }
 
 
@@ -374,7 +373,7 @@ int BlueStore::SocketHook::call(
     f->open_object_section("cache_stats");
 
     BlueStore::CacheStatsSnapshot current, most_recent, oldest;
-    get_snapshot_windows(store, current, most_recent, oldest);
+    store.get_snapshot_windows(current, most_recent, oldest);
     dump_snapshot_section(f, "since_startup", current);
 
     double recent_duration = std::chrono::duration<double>(

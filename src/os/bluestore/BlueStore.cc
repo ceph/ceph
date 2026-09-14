@@ -2091,7 +2091,6 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
     auto p = onode_map.find(oid);
     if (p == onode_map.end()) {
       ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
-      cache->logger->inc(l_bluestore_onode_misses);
     } else {
       ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
                             << " " << p->second->nref
@@ -2100,8 +2099,6 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
       // This will pin onode and implicitly touch the cache when Onode
       // eventually will become unpinned
       o = p->second;
-
-      cache->logger->inc(l_bluestore_onode_hits);
     }
   }
 
@@ -5400,9 +5397,11 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 
   OnodeRef o = onode_space.lookup(oid);
   if (o) {
+    store->logger->inc(l_bluestore_onode_hits);
     return o;
   }
-  auto start = mono_clock::now(); //miss 
+  store->logger->inc(l_bluestore_onode_misses);
+  auto start = mono_clock::now(); //miss
   BLUE_SCOPE(get_onode);
   string key;
   get_object_key(store->cct, oid, &key);
@@ -5419,8 +5418,10 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
   if (v.length() == 0) {
     ceph_assert(r == -ENOENT);
-    if (!create)
+    if (!create) {
+      store->logger->tinc(l_bluestore_onode_miss_lat, mono_clock::now() - start);
       return OnodeRef();
+    }
   } else {
     ceph_assert(r >= 0);
   }
@@ -6525,7 +6526,7 @@ void BlueStore::_init_logger()
 
   
 
-  b.add_time_avg(l_bluestore_onode_miss_lat, "cacheonode_lat",
+  b.add_time_avg(l_bluestore_onode_miss_lat, "onode_miss_lat",
       "Average onode miss latency",
       "ro_l");
 
