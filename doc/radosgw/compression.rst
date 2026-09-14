@@ -26,6 +26,13 @@ Supported compression plugins include the following:
    than once since it is post-replication, but in a cluster with far more OSDs 
    than RGWs this strategy may result in better performance.
 
+.. toctree::
+   :maxdepth: 1
+
+   QAT Acceleration for Encryption and Compression <qat-accel>
+   UADK Acceleration for Compression <uadk-accel>
+
+
 Configuration
 =============
 
