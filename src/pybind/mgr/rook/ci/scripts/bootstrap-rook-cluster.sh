@@ -134,6 +134,16 @@ wait_for_ceph_cluster() {
     local sleep_interval=20
     local attempts=0
     $KUBECTL rollout status deployment rook-ceph-tools -n rook-ceph --timeout=90s
+
+    # Rook bootstraps a monmap that still allows legacy cephx key types, so
+    # ceph main warns AUTH_INSECURE_KEYS_* and the cluster never reaches
+    # HEALTH_OK. Mute the checks like teuthology does
+    # (qa/overrides/upgrade_ignorelist_health.yaml); sticky mutes apply even
+    # before the check is raised.
+    for check in AUTH_INSECURE_KEYS_ALLOWED AUTH_INSECURE_KEYS_CREATABLE; do
+        $KUBECTL -n rook-ceph exec deploy/rook-ceph-tools -- ceph health mute $check --sticky || true
+    done
+
     while ! $KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.ceph.health}' | grep -q "HEALTH_OK"; do
 	echo "Waiting for Ceph cluster to enter HEALTH_OK" state
 	# log the actual health state so failures are debuggable from the console
