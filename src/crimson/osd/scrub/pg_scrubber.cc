@@ -1037,12 +1037,6 @@ void PGScrubber::request_range(const hobject_t &start)
     >(start, &pg);
 }
 
-/* TODO: This isn't actually enough.  Here, classic would
- * hold the pg lock from the wait_scrub through to IO submission.
- * ClientRequest, however, isn't in the processing ExclusivePhase
- * bit yet, and so this check may miss ops between the wait_scrub
- * check and adding the IO to the log. */
-
 void PGScrubber::reserve_range(const hobject_t &start, const hobject_t &end)
 {
   LOG_PREFIX(PGScrubber::reserve_range);
