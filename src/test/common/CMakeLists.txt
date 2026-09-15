@@ -68,6 +68,27 @@ add_executable(unittest_histogram
 add_ceph_unittest(unittest_histogram)
 target_link_libraries(unittest_histogram ceph-common)
 
+if(WITH_CEPH_LOCKSTAT)
+# unittest_bin_histogram
+add_executable(unittest_bin_histogram
+  test_bin_histogram.cc
+  )
+add_ceph_unittest(unittest_bin_histogram)
+target_link_libraries(unittest_bin_histogram ceph-common)
+
+# unittest_lockstat
+add_executable(unittest_lockstat
+  test_lockstat.cc
+  )
+add_ceph_unittest(unittest_lockstat)
+target_link_libraries(unittest_lockstat ceph-common)
+
+add_executable(unittest_mutex_lockstat
+        test_mutex_lockstat.cc)
+add_ceph_unittest(unittest_mutex_lockstat)
+target_link_libraries(unittest_mutex_lockstat ceph-common)
+endif()
+
 # unittest_prioritized_queue
 add_executable(unittest_prioritized_queue
   test_prioritized_queue.cc
