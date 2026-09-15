@@ -681,13 +681,21 @@ struct Scrubbing : ScrubState<Scrubbing, PrimaryActive, ReservingReplicas> {
     if (m_reservations) {
       m_reservations.reset();
     }
-    get_scrub_context().clear_pgscrub_state();
+    // Use the cached reference rather than context<ScrubMachine>(), because
+    // in the destructor the state machine vtable is already rewound to the
+    // base class, causing polymorphic_downcast to fail.
+    m_scrub_context.clear_pgscrub_state();
   }
 
   using reactions = boost::mpl::list<
     sc::custom_reaction<internal_events::set_deep_t>,
     sc::custom_reaction<events::op_stats_t>
     >;
+
+  /// Cached at construction to avoid calling context<ScrubMachine>() from
+  /// the destructor (where the state machine vtable is already rewound to
+  /// the base class, causing polymorphic_downcast to fail).
+  ScrubContext &m_scrub_context;
 
   chunk_validation_policy_t policy;
   std::optional<ReplicaReservations> m_reservations{std::nullopt};
@@ -846,10 +854,10 @@ struct ReplicaIdle;
 struct ReplicaActive :
     ScrubState<ReplicaActive, ScrubMachine, ReplicaIdle> {
   static constexpr std::string_view state_name = "ReplicaActive";
-  explicit ReplicaActive(my_context ctx) : ScrubState(ctx) {}
+  explicit ReplicaActive(my_context ctx);
   ~ReplicaActive();
 
-  void clear_remote_reservation(bool warn_if_no_reservation);
+  seastar::future<> clear_remote_reservation(bool warn_if_no_reservation);
   using reactions = boost::mpl::list<
     sc::transition<events::reset_t, Inactive>,
     sc::custom_reaction<events::start_scrub_t>,
@@ -872,19 +880,58 @@ struct ReplicaActive :
   sc::result react(const events::replica_release_t &);
 
   MOSDScrubReserve::reservation_nonce_t pending_reservation_nonce{0};
-  private:
-    bool reservation_granted{false};
 
+  /// Discard any pending re-request parameters stored for the in-flight
+  /// cancel-and-rerequest chain, preventing a spurious request_reservation
+  /// once the chain completes.  Must be called before clear_remote_reservation
+  /// whenever we do not want a subsequent request_reservation.
+  void discard_pending_rerequest() { m_pending_rerequest_params.reset(); }
+
+  private:
+    /// Cached at construction to avoid calling context<ScrubMachine>() from
+    /// the destructor (where the state machine vtable is already rewound to
+    /// the base class, causing polymorphic_downcast to fail).
+    crimson::osd::PG &m_pg;
+    spg_t m_pg_id;
+    bool reservation_granted{false};
     reservation_status_t m_reservation_status{reservation_status_t::unreserved};
-    void handle_reservation_request(const events::replica_reserve_request_t& event);
+    /// true while a cancel-and-rerequest future chain is already in flight;
+    /// additional requests arriving during that window update the stored
+    /// parameters instead of spawning a second chain (which would cause a
+    /// double-registration assert in AsyncReserver).
+    bool m_pending_rerequest{false};
+    /// Shared alive-flag: set to false by the destructor so that any
+    /// in-flight cancel-and-rerequest future chain can detect that
+    /// ReplicaActive has been destroyed and skip accessing *this.
+    std::shared_ptr<bool> m_alive{std::make_shared<bool>(true)};
+    struct PendingRerequestParams {
+      pg_shard_t from;
+      epoch_t map_epoch{0};
+      MOSDScrubReserve::reservation_nonce_t reservation_nonce{0};
+      bool wait_for_resources{false};
+    };
+    std::optional<PendingRerequestParams> m_pending_rerequest_params;
+    void handle_reservation_request(
+      pg_shard_t from,
+      epoch_t map_epoch,
+      MOSDScrubReserve::reservation_nonce_t reservation_nonce,
+      bool wait_for_resources);
 
     struct RtReservationCB : public Context {
     crimson::osd::PG &pg;
     AsyncScrubResData res_data;
+    /// Shared alive-flag from the owning ReplicaActive.  If false when the
+    /// reserver fires the callback, the ReplicaActive has been destroyed and
+    /// the just-granted reservation must be cancelled immediately to avoid
+    /// leaking an entry in AsyncReserver.
+    std::shared_ptr<bool> alive;
 
-    explicit RtReservationCB(crimson::osd::PG& pg, AsyncScrubResData request_details)
+    explicit RtReservationCB(crimson::osd::PG& pg,
+                             AsyncScrubResData request_details,
+                             std::shared_ptr<bool> alive)
  : pg{pg}
  , res_data{request_details}
+ , alive{std::move(alive)}
     {}
 
     void finish(int) override;

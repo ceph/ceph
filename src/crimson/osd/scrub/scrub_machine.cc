@@ -10,6 +10,20 @@ namespace crimson::osd::scrub {
 
 void ReplicaActive::RtReservationCB::finish(int)
 {
+  if (!*alive) {
+    // The ReplicaActive that submitted this reservation request has been
+    // destroyed (e.g. due to an interval change) before the reserver granted
+    // the slot.  AsyncReserver::do_queues() inserts the item into in_progress
+    // before invoking this callback, so cancel_reservation() here correctly
+    // finds and removes it, preventing a leaked entry that would later trigger
+    // the ceph_assert(!in_progress.count(item)) in request_reservation().
+    //
+    // Note: AsyncReserver uses ceph::dummy_mutex in crimson, so this re-entrant
+    // call from within do_queues() is safe (no real locking).
+    std::ignore = pg.get_shard_services().scrub_local_cancel_reservation(
+      res_data.pgid);
+    return;
+  }
   pg.scrubber.send_granted_by_reserver(res_data);
 }
 
@@ -154,7 +168,9 @@ sc::result WaitDigestUpdate::react(
 }
 
 Scrubbing::Scrubbing(my_context ctx)
-  : ScrubState(ctx), policy(get_scrub_context().get_policy())
+  : ScrubState(ctx),
+    m_scrub_context(get_scrub_context()),
+    policy(m_scrub_context.get_policy())
 {
   DECLARE_LOCALS;
 
@@ -273,19 +289,35 @@ sc::result ReservingReplicas::react(const events::remotes_reserved_t &)
 
 // ----------------------- ReplicaActive --------------------------------
 
+ReplicaActive::ReplicaActive(my_context ctx)
+  : ScrubState(ctx)
+  , m_pg(context<ScrubMachine>().m_scrbr->get_pg())
+  , m_pg_id(context<ScrubMachine>().m_scrbr->get_pg_id())
+{}
+
 ReplicaActive::~ReplicaActive()
 {
+  // Mark this object as destroyed so any in-flight cancel-and-rerequest
+  // future chain (which captures m_alive) will not access *this after it
+  // has been freed.
+  *m_alive = false;
+  discard_pending_rerequest();
+  std::ignore = clear_remote_reservation(false);
 }
 sc::result ReplicaActive::react(const events::replica_reserve_request_t &event)
 {
   LOG_PREFIX(ReplicaActive::react(replica_reserve_request_t));
   SUBDEBUGDPP(osd, "received reservation request from {}", dpp, event.m_from);
   DECLARE_LOCALS;
-  auto &m = *const_cast<MOSDScrubReserve*>(static_cast<const MOSDScrubReserve*>(&event.m));
+  const auto &m = static_cast<const MOSDScrubReserve&>(event.m);
+  const auto from = event.m_from;
+  const auto map_epoch = m.map_epoch;
+  const auto reservation_nonce = m.reservation_nonce;
+  const auto wait_for_resources = m.wait_for_resources;
 
   if (m_reservation_status != reservation_status_t::unreserved) {
-    // we are not expected to be in this state when a new request arrives.
-    // Clear the existing reservation - be it granted or pending.
+    // We must wait until cancellation removes the PG from AsyncReserver
+    // before submitting the replacement request.
     SUBDEBUGDPP(
       osd,
       "unexpected request. discarding existing reservation "
@@ -294,40 +326,81 @@ sc::result ReplicaActive::react(const events::replica_reserve_request_t &event)
       reservation_granted,
       m);
 
-    clear_remote_reservation(true);
-  }
+    // Always update with the latest request parameters so the in-flight
+    // chain uses the most recent values.
+    m_pending_rerequest_params = PendingRerequestParams{
+      from, map_epoch, reservation_nonce, wait_for_resources};
 
-  handle_reservation_request(event);
+    if (!m_pending_rerequest) {
+      // No cancel-and-rerequest chain is in flight yet; start one.
+      // If additional requests arrive before this chain completes they
+      // will only update m_pending_rerequest_params (above) and skip
+      // this branch, preventing a double-registration in AsyncReserver.
+      m_pending_rerequest = true;
+      std::ignore = clear_remote_reservation(true).then(
+        [this, alive = m_alive] {
+          // ReplicaActive may have been destroyed (e.g. via reset_t) while
+          // this future was in flight.  Skip accessing *this if so.
+          if (!*alive) {
+            return;
+          }
+          ceph_assert(m_pending_rerequest);
+          m_pending_rerequest = false;
+          // Use the latest stored parameters (may have been updated by
+          // subsequent requests that arrived while we were cancelling).
+          // react(replica_release_t) resets m_pending_rerequest_params
+          // before calling clear_remote_reservation(), so p may be empty
+          // if the reservation was released during the async cancel.
+          auto p = std::move(m_pending_rerequest_params);
+          m_pending_rerequest_params.reset();
+          // Guard: if m_reservation_status is already requested_or_granted
+          // a fresh request arrived and registered the pg_id while we were
+          // in the async cancel; do not register a second time.
+          if (p && m_reservation_status == reservation_status_t::unreserved) {
+            handle_reservation_request(
+              p->from, p->map_epoch, p->reservation_nonce,
+              p->wait_for_resources);
+          }
+        });
+    }
+  } else {
+    handle_reservation_request(
+      from, map_epoch, reservation_nonce, wait_for_resources);
+  }
   return discard_event();
 }
 
-void ReplicaActive::handle_reservation_request(const events::replica_reserve_request_t& event)
+void ReplicaActive::handle_reservation_request(
+  pg_shard_t from,
+  epoch_t map_epoch,
+  MOSDScrubReserve::reservation_nonce_t reservation_nonce,
+  bool wait_for_resources)
 {
   LOG_PREFIX(ReplicaActive::handle_reservation_request);
   DECLARE_LOCALS;
-  auto &m = *const_cast<MOSDScrubReserve*>(static_cast<const MOSDScrubReserve*>(&event.m));
 
   const auto async_disabled = crimson::common::local_conf().get_val<bool>(
     "osd_scrub_disable_reservation_queuing");
-  const bool async_request = !async_disabled && m.wait_for_resources;
+  const bool async_request = !async_disabled && wait_for_resources;
 
   SUBDEBUGDPP(
     osd,
     "handling reservation request. async_request: {}, async_disabled: {}, "
     "m.wait_for_resources: {}",
-    dpp, async_request, async_disabled, m.wait_for_resources);
+    dpp, async_request, async_disabled, wait_for_resources);
 
+  m_reservation_status = reservation_status_t::requested_or_granted;
   if (async_request) {
     AsyncScrubResData request_details(
-      pg_id, event.m_from, m.map_epoch, m.reservation_nonce);
+      pg_id, from, map_epoch, reservation_nonce);
 
     SUBDEBUGDPP(
       osd,
-      "queuing async reservation request:{} with details: {}",
-      dpp, event, request_details);
+      "queuing async reservation request with details: {}",
+      dpp, request_details);
 
-    pending_reservation_nonce = m.reservation_nonce;
-    auto *reservation_cb = new RtReservationCB(pg, request_details);
+    pending_reservation_nonce = reservation_nonce;
+    auto *reservation_cb = new RtReservationCB(pg, request_details, m_alive);
 
     std::ignore = pg.get_shard_services().scrub_local_request_reservation(
       pg_id,
@@ -335,19 +408,21 @@ void ReplicaActive::handle_reservation_request(const events::replica_reserve_req
       /*prio=*/0,
       nullptr);
 
-    m_reservation_status = reservation_status_t::requested_or_granted;
     return;
   }
 
-  auto map_epoch = m.map_epoch;
-  auto reservation_nonce = m.reservation_nonce;
   auto pg_whoami = pg.get_pg_whoami();
   auto primary_shard = pg.get_primary().shard;
   std::ignore = pg.get_shard_services().scrub_local_request_reservation_or_fail(
     pg_id
-  ).then([this, &pg, pg_id, pg_whoami, primary_shard, from=event.m_from, map_epoch,
-          reservation_nonce](bool granted) {
+  ).then([this, alive = m_alive, &pg, pg_id, pg_whoami, primary_shard, from,
+          map_epoch, reservation_nonce](bool granted) {
     LOG_PREFIX(ReplicaActive::handle_reservation_request);
+    // Guard: ReplicaActive may have been destroyed (e.g. via reset_t) while
+    // the singleton-crossing future was in flight.
+    if (!*alive) {
+      return;
+    }
     reservation_granted = granted;
 
     MessageURef reply;
@@ -357,7 +432,6 @@ void ReplicaActive::handle_reservation_request(const events::replica_reserve_req
         "immediately granting reservation request from {}",
         dpp,
         from);
-      m_reservation_status = reservation_status_t::requested_or_granted;
       reply = make_message<MOSDScrubReserve>(
         spg_t(pg_id.pgid, primary_shard),
         map_epoch,
@@ -413,9 +487,8 @@ sc::result ReplicaActive::react(const events::reserver_granted_t &event)
   return discard_event();
 }
 
-void ReplicaActive::clear_remote_reservation(bool warn_if_no_reservation)
+seastar::future<> ReplicaActive::clear_remote_reservation(bool warn_if_no_reservation)
 {
-  DECLARE_LOCALS;
   LOG_PREFIX(ReplicaActive::clear_remote_reservation);
   SUBDEBUGDPP(
     osd,
@@ -424,25 +497,36 @@ void ReplicaActive::clear_remote_reservation(bool warn_if_no_reservation)
     pending_reservation_nonce,
     reservation_granted);
 
-  if (reservation_granted || pending_reservation_nonce) {
-    std::ignore = pg.get_shard_services().scrub_local_cancel_reservation(
-      pg_id
-    ).then([this] {
+  if (m_reservation_status != reservation_status_t::unreserved) {
+    return m_pg.get_shard_services().scrub_local_cancel_reservation(
+      m_pg_id
+    ).then([this, alive = m_alive] {
+      // Guard against the case where ReplicaActive was destroyed (e.g. via
+      // reset_t / destructor) while this cancel future was in flight.
+      if (!*alive) {
+        return;
+      }
       reservation_granted = false;
       pending_reservation_nonce = 0;
       ceph_assert(m_reservation_status != reservation_status_t::unreserved);
       m_reservation_status = reservation_status_t::unreserved;
     });
-  } else if (warn_if_no_reservation) {
+  }
+  if (warn_if_no_reservation) {
     SUBDEBUGDPP(osd, "not reserved!", dpp);
   }
+  return seastar::now();
 }
 
 sc::result ReplicaActive::react(const events::replica_release_t &event)
 {
   LOG_PREFIX(ReplicaActive::react(replica_release_t));
   SUBDEBUGDPP(osd, "received release from {}", dpp, event.m_from);
-  clear_remote_reservation(true);
+  // Discard any pending re-request parameters so that an in-flight
+  // cancel-and-rerequest chain (from react(replica_reserve_request_t))
+  // does not issue a spurious request_reservation after the release.
+  discard_pending_rerequest();
+  std::ignore = clear_remote_reservation(true);
   return discard_event();
 }
 
@@ -458,7 +542,10 @@ sc::result ReplicaIdle::react(const events::replica_scan_t &event)
     SUBDEBUGDPP(osd, "osd.{} pg[{}]: new chunk request while still waiting for reservation",
       dpp, pg.get_pg_whoami(), pg.get_pgid());
 
-    context<ReplicaActive>().clear_remote_reservation(true);
+    // Also discard any queued re-request so the in-flight chain does not
+    // issue a spurious request_reservation once it fires.
+    context<ReplicaActive>().discard_pending_rerequest();
+    std::ignore = context<ReplicaActive>().clear_remote_reservation(true);
   }
   post_event(event);
   return transit<ReplicaChunkState>();
