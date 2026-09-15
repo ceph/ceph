@@ -30,6 +30,12 @@
   a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
   limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
+* RGW: Added support for Keystone application credential access rules for
+  Swift, letting RGW enforce the method/path restrictions defined on
+  restricted OpenStack application credential tokens. New config options
+  ``rgw_keystone_verify_access_rules`` (default: true) and
+  ``rgw_keystone_accepted_service_types`` (default: object-store, swift)
+  control enforcement behavior.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
