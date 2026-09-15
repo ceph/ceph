@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
 /*
@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#include <array>
 #include <map>
 #include <set>
 
@@ -20,6 +21,30 @@
 #include "osd/ECUtil.h"
 
 using namespace std;
+
+// ---------------------------------------------------------------------------
+// Minimal self-contained GF(2^8) multiply used by GFLinearHashSupport.
+//
+// Uses the same field as ISA-L / Intel's ec_init_tables: GF(2^8) with the
+// primitive polynomial x^8 + x^4 + x^3 + x^2 + 1  (0x1d in Koopman
+// notation, i.e. the "ISA-L field").  This matches the field used by the
+// ISA reed_sol_van and cauchy plugins, and the Jerasure plugins that share
+// the same w=8 field.  It does NOT need to match for the PoC to be
+// structurally valid — the sketch linearity property holds over any
+// consistent GF(2^8); what matters is that the same multiply is used when
+// hashing data shards and when verifying parity shards.
+// ---------------------------------------------------------------------------
+static uint8_t gf8_mul_poc(uint8_t a, uint8_t b)
+{
+  uint8_t result = 0;
+  while (b) {
+    if (b & 1) result ^= a;
+    // multiply a by x in GF(2^8); reduce modulo x^8+x^4+x^3+x^2+1 (0x1d)
+    a = (a << 1) ^ (a & 0x80 ? 0x1d : 0);
+    b >>= 1;
+  }
+  return result;
+}
 class PluginTest: public ::testing::TestWithParam<const char *> {
 public:
   ErasureCodeProfile profile;
@@ -119,6 +144,53 @@ public:
 
     return crc;
   }
+
+  // -------------------------------------------------------------------------
+  // GF(2^8) linear sketch helpers
+  //
+  // The sketch of a shard is four independent GF(2^8) inner products, packed
+  // into a uint32_t (one byte per lane).  Each lane l uses a deterministic
+  // random vector r_l[i] derived by hashing the byte index and lane:
+  //   r_l[i] = ((i * 6364136223846793005ULL + lane * 2891336453ULL) >> 33) & 0xFF
+  // This is cheap, reproducible across all OSDs without coordination, and
+  // gives four statistically independent lanes so that the combined false-
+  // positive probability is 1/2^32 — matching CRC32c's collision resistance.
+  //
+  // Linearity: for any GF(2^8) scalar α and shard X,
+  //   gf_hash(α·X) = α · gf_hash(X)   (lane-wise in GF(2^8))
+  // This makes the sketch compatible with all EC generator matrix rows, not
+  // just the XOR row (parity 0).
+  // -------------------------------------------------------------------------
+  static uint8_t gf_rand_coeff(int byte_index, int lane)
+  {
+    // Cheap deterministic hash; result is nonzero with overwhelming probability.
+    uint64_t v = static_cast<uint64_t>(byte_index) * 6364136223846793005ULL
+                 + static_cast<uint64_t>(lane) * 2891336453ULL
+                 + 1442695040888963407ULL;
+    uint8_t r = static_cast<uint8_t>((v >> 33) & 0xFF);
+    return r ? r : 0x01; // avoid zero coefficient (degenerate sketch)
+  }
+
+  // Compute the 4-lane GF(2^8) inner-product sketch of a shard.
+  // Returns a uint32_t with lane l in byte l (little-endian).
+  uint32_t calculate_gf_hash(bufferlist bl) {
+    std::array<uint8_t, 4> lanes = {0, 0, 0, 0};
+    const char* data = bl.c_str();
+    for (int i = 0; i < chunk_size; ++i) {
+      uint8_t byte = static_cast<uint8_t>(data[i]);
+      for (int lane = 0; lane < 4; ++lane) {
+        lanes[lane] ^= gf8_mul_poc(gf_rand_coeff(i, lane), byte);
+      }
+    }
+    uint32_t result = 0;
+    for (int lane = 0; lane < 4; ++lane) {
+      result |= (static_cast<uint32_t>(lanes[lane]) << (8 * lane));
+    }
+    return result;
+  }
+
+  // Pack a 4-byte GF hash into the first 4 bytes of a chunk-sized buffer
+  // (identical layout to create_buffer_from_crc — reuses that helper directly).
 };
 TEST_P(PluginTest,Initialize)
 {
@@ -617,6 +689,189 @@ TEST_P(PluginTest, CRCEncodeDecodeSupport) {
     // Plugin should not have FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT enabled,
     // this failure proves that it can cause a data integrity issue
     EXPECT_EQ(different, false);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GFLinearHashSupport
+//
+// This is a proof-of-concept test for the GF(2^8) inner-product sketch
+// described in the EC scrub analysis.  It mirrors CRCEncodeDecodeSupport
+// exactly in structure, but swaps calculate_crc for calculate_gf_hash.
+//
+// Key differences from the CRC test:
+//
+//  1. ALL parity shards are checked (not just parity 0).  CRC32c only works
+//     for parity 0 because that row's GF coefficients are all 0x01 (XOR).
+//     The GF sketch satisfies H(α·X) = α·H(X) so it is correct for every
+//     parity row regardless of its generator matrix coefficients.
+//
+//  2. There is no "unseeding" step.  CRC32c requires XOR-ing out the effect
+//     of the initial seed; GF inner products start at 0 and need no
+//     correction.
+//
+//  3. The test asserts EXPECT_EQ(different, false) unconditionally for all
+//     plugins that have m > 1, confirming the sketch works where CRC cannot.
+//     For plugins with m == 1 the result is identical to what CRC achieves.
+//
+//  4. A companion negative check confirms CRC32c *does* fail for parity
+//     shards beyond the first (different_crc == true) when m > 1, making
+//     it explicit that the two mechanisms diverge exactly there.
+// ---------------------------------------------------------------------------
+TEST_P(PluginTest, GFLinearHashSupport) {
+  initialize();
+
+  // Skip plugins that do not operate as pure GF(2^8)-per-byte linear codes.
+  // The PoC hardcodes the ISA-L GF(2^8) field (primitive poly 0x1d).  Any
+  // plugin that uses:
+  //   - a different word size (w != 8): GF(2^16) or GF(2^32) encoding
+  //   - packet/bit-matrix encoding (packetsize key present): liberation,
+  //     blaum_roth, liber8tion, cauchy_orig, cauchy_good with m>1 — these
+  //     codes operate over GF(2) bit-matrices at packet granularity, so
+  //     byte-level GF(2^8) inner products are not the right abstraction
+  //   - sub-chunks (clay): different encode input layout
+  // will not satisfy the byte-level GF(2^8) linearity property that this
+  // test verifies.  The correct production solution would have each plugin
+  // expose its own scalar multiply, but for this PoC we skip non-GF(2^8)
+  // byte-per-byte codecs.
+  if (erasure_code->get_supported_optimizations() &
+      ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) {
+    GTEST_SKIP() << "Sub-chunk plugin; skipping GF hash PoC";
+  }
+  if (profile.count("packetsize")) {
+    GTEST_SKIP() << "Packet/bit-matrix codec (packetsize="
+                 << profile.at("packetsize")
+                 << "); GF(2^8) byte-level sketch not applicable";
+  }
+  if (profile.count("w") && profile.at("w") != "8") {
+    GTEST_SKIP() << "Non-byte-aligned word size w=" << profile.at("w")
+                 << "; GF(2^8) byte-level sketch not applicable";
+  }
+  if (get_plugin() == "lrc") {
+    GTEST_SKIP() << "LRC is a composite multi-layer code whose parity "
+                    "structure depends on layout; skipping GF hash PoC";
+  }
+
+  shard_id_set want_to_encode;
+  for (shard_id_t i = shard_id_t(0); i < get_k_plus_m(); ++i) {
+    want_to_encode.insert(i);
+  }
+
+  // ---- Step 1: generate random data and encode it fully ------------------
+  bufferlist data_bl;
+  for (unsigned int i = 0; i < get_k(); ++i) {
+    generate_chunk(data_bl);
+  }
+  shard_id_map<bufferlist> encoded_data(get_k_plus_m());
+  erasure_code->encode(want_to_encode, data_bl, &encoded_data);
+
+  // ---- Step 2: compute GF hash for each data shard -----------------------
+  // Pack each 4-byte hash into a chunk-sized buffer (first 4 bytes used,
+  // remainder zero) — same layout as create_buffer_from_crc.
+  bufferlist gf_hashes_bl;
+  for (unsigned int i = 0; i < get_k(); ++i) {
+    bufferlist shard_bl;
+    shard_bl.substr_of(data_bl, i * chunk_size, chunk_size);
+    uint32_t h = calculate_gf_hash(shard_bl);
+    gf_hashes_bl.append(create_buffer_from_crc(h));
+  }
+
+  // ---- Step 3: encode the GF hashes through the EC plugin ----------------
+  // Because the sketch is GF(2^8)-linear, encoding the hash values produces
+  // the predicted hash for each parity shard.
+  shard_id_map<bufferlist> encoded_gf_hashes(get_k_plus_m());
+  erasure_code->encode(want_to_encode, gf_hashes_bl, &encoded_gf_hashes);
+
+  // ---- Step 4: check every parity shard ----------------------------------
+  // For each parity shard j:
+  //   predicted hash  = first 4 bytes of encoded_gf_hashes[j]
+  //   actual hash     = calculate_gf_hash(encoded_data[j])
+  // They must be equal for the sketch to be usable in EC scrub.
+  bool different_gf = false;
+  // Track whether CRC fails for shards beyond parity 0 (negative control).
+  bool crc_fails_higher_parity = false;
+  int crc_seed = -1;
+  uint32_t zero_data_crc = calculate_zero_buffer_crc(crc_seed);
+
+  for (shard_id_t shard_id(get_k()); shard_id < get_k_plus_m(); ++shard_id) {
+    // --- GF hash check ---
+    uint32_t predicted_gf = read_crc_from_bufferlist(encoded_gf_hashes.at(shard_id));
+    uint32_t actual_gf    = calculate_gf_hash(encoded_data.at(shard_id));
+    if (predicted_gf != actual_gf) {
+      different_gf = true;
+      ADD_FAILURE() << "GF hash mismatch on parity shard " << shard_id
+                    << ": predicted 0x" << std::hex << predicted_gf
+                    << " actual 0x"     << actual_gf << std::dec;
+    }
+
+    // --- CRC negative control: show CRC fails for parity shards beyond 0 ---
+    if (shard_id > shard_id_t(get_k())) {
+      // For parity 1 and above, CRC encode of data CRCs will not match the
+      // CRC of the actual encoded data (because GF coefficients != 0x01).
+      // Verify that this mismatch exists so the test documents the contrast.
+      bufferlist crc_hashes_bl;
+      for (unsigned int i = 0; i < get_k(); ++i) {
+        bufferlist shard_bl;
+        shard_bl.substr_of(data_bl, i * chunk_size, chunk_size);
+        uint32_t crc        = calculate_crc(shard_bl, crc_seed);
+        uint32_t unseeded   = crc ^ zero_data_crc;
+        crc_hashes_bl.append(create_buffer_from_crc(unseeded));
+      }
+      shard_id_map<bufferlist> encoded_crc_hashes(get_k_plus_m());
+      erasure_code->encode(want_to_encode, crc_hashes_bl, &encoded_crc_hashes);
+
+      uint32_t crc_predicted_unseeded =
+          read_crc_from_bufferlist(encoded_crc_hashes.at(shard_id));
+      uint32_t crc_actual_unseeded =
+          calculate_crc(encoded_data.at(shard_id), crc_seed) ^ zero_data_crc;
+
+      if (crc_predicted_unseeded != crc_actual_unseeded) {
+        crc_fails_higher_parity = true;
+      }
+    }
+  }
+
+  // GF sketch must be correct for every parity shard.
+  EXPECT_EQ(different_gf, false);
+
+  // For configurations with more than one parity shard, CRC encode must fail
+  // on at least one higher parity (this is the whole motivation for the GF
+  // approach).  If this assertion fires it means CRC accidentally worked,
+  // which would be a remarkable (and suspicious) result worth investigating.
+  if (get_m() > 1) {
+    EXPECT_EQ(crc_fails_higher_parity, true)
+        << "CRC unexpectedly matched all higher parity shards for this "
+           "configuration — verify the test data was not all-zero";
+  }
+
+  // ---- Step 5: GF hash decode round-trip for all data shards -------------
+  // Mirror the CRC decode sub-check: remove one data shard's GF hash and
+  // verify the plugin can reconstruct it from the remaining shards + parity.
+  ECUtil::stripe_info_t sinfo{get_k(), get_m(), get_k() * chunk_size,
+                               erasure_code->get_chunk_mapping()};
+  for (raw_shard_id_t missing_raw{0}; missing_raw < get_k(); ++missing_raw) {
+    shard_id_t missing_shard = sinfo.get_shard(missing_raw);
+
+    shard_id_set need;
+    need.insert(missing_shard);
+    shard_id_map<bufferlist> chunks(get_k_plus_m());
+    for (raw_shard_id_t raw{0}; raw < get_k_plus_m(); ++raw) {
+      shard_id_t sid = sinfo.get_shard(raw);
+      if (sid != missing_shard) {
+        chunks.insert(sid, encoded_gf_hashes[sid]);
+      }
+    }
+
+    shard_id_map<bufferlist> out_bls(get_k_plus_m());
+    int r = erasure_code->decode(need, chunks, &out_bls, chunk_size);
+    EXPECT_EQ(r, 0);
+
+    uint32_t decoded_hash  = read_crc_from_bufferlist(out_bls[missing_shard]);
+    uint32_t original_hash = read_crc_from_bufferlist(
+        gf_hashes_bl, missing_raw.id * chunk_size);
+
+    EXPECT_EQ(decoded_hash, original_hash)
+        << "GF hash decode round-trip failed for data shard " << missing_shard;
   }
 }
 
