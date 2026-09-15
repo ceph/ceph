@@ -848,6 +848,7 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_command(make_asok_hook<pg::ScheduleScrubCommand<true>>(*this,
                                                                           std::string_view{"schedule-deep-scrub"}));
     asok->register_command(make_asok_hook<pg::ScrubMetricsCommand>(*this));
+    asok->register_command(make_asok_hook<pg::ScrubDebugCommand>(*this));
     // ops commands
     asok->register_command(
       make_asok_hook<DumpInFlightOpsHook>(
