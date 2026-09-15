@@ -1401,12 +1401,39 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
   return verify_user_permission_no_policy(dpp, s, user_acl, perm);
 }
 
+bool is_capped_keystone_identity(uint32_t perm_mask,
+                                 const rgw::auth::Identity& identity)
+{
+  return perm_mask != RGW_PERM_FULL_CONTROL &&
+         identity.get_identity_type() == TYPE_KEYSTONE;
+}
+
+bool verify_owner_permission(const rgw::auth::Identity& identity,
+                             uint32_t perm_mask,
+                             const rgw_owner& owner, uint32_t perm)
+{
+  if (!identity.is_owner_of(owner))
+    return false;
+  if (is_capped_keystone_identity(perm_mask, identity))
+    return (perm & perm_mask) == perm;
+  return true;
+}
+
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       struct perm_state_base * const s,
                                       const RGWAccessControlPolicy& user_acl,
                                       const int perm)
 {
   if (s->identity->get_identity_type() == TYPE_ROLE)
+    return false;
+
+  /* A capped Keystone identity must not pass the account-scoped
+   * default-allows below (CreateBucket, Swift account metadata,
+   * bulk-upload container creation). Enforce the mask before the empty-ACL
+   * shortcut. A bucket policy naming the user is evaluated earlier in
+   * verify_user_permission() and is unaffected. */
+  if (is_capped_keystone_identity(s->perm_mask, *s->identity) &&
+      (perm & (int)s->perm_mask) != perm)
     return false;
 
   /* S3 doesn't support account ACLs, so user_acl will be uninitialized. */

@@ -8741,7 +8741,8 @@ void RGWGetObjLayout::execute(optional_yield y)
 
 int RGWConfigBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
+  if (!verify_owner_permission(*s->auth.identity, s->perm_mask,
+                               s->bucket_owner.id, RGW_PERM_WRITE)) {
     return -EACCES;
   }
 
@@ -8770,7 +8771,8 @@ void RGWConfigBucketMetaSearch::execute(optional_yield y)
 
 int RGWGetBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
+  if (!verify_owner_permission(*s->auth.identity, s->perm_mask,
+                               s->bucket_owner.id, RGW_PERM_READ)) {
     return -EACCES;
   }
 
@@ -8780,7 +8782,8 @@ int RGWGetBucketMetaSearch::verify_permission(optional_yield y)
 
 int RGWDelBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
+  if (!verify_owner_permission(*s->auth.identity, s->perm_mask,
+                               s->bucket_owner.id, RGW_PERM_WRITE)) {
     return -EACCES;
   }
 

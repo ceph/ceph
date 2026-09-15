@@ -205,6 +205,14 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
     return true;
   }
 
+  // A capped identity (e.g. a project reader) may reach a topic only within
+  // its perm_mask (reads) or via an explicit policy Allow (handled above):
+  // the ownership and publish/legacy default-allows below never lift the cap.
+  if (is_capped_keystone_identity(s->perm_mask, *s->auth.identity)) {
+    return verify_owner_permission(*s->auth.identity, s->perm_mask, owner,
+                                   rgw::IAM::op_to_perm(op));
+  }
+
   if (s->auth.identity->is_owner_of(owner)) {
     ldpp_dout(dpp, 10) << __func__ << ": granted to resource owner" << dendl;
     return true;
