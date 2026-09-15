@@ -1,15 +1,15 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NfsClusterDetailsComponent } from './nfs-cluster-details.component';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { CommonModule } from '@angular/common';
 describe('NfsClusterDetailsComponent', () => {
   let component: NfsClusterDetailsComponent;
   let fixture: ComponentFixture<NfsClusterDetailsComponent>;
 
   configureTestBed({
     declarations: [NfsClusterDetailsComponent],
-    imports: [HttpClientTestingModule, SharedModule]
+    imports: [HttpClientTestingModule, CommonModule]
   });
 
   beforeEach(() => {
