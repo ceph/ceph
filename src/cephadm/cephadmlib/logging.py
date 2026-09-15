@@ -5,6 +5,7 @@ import logging
 import logging.config
 import logging.handlers
 import os
+import socket
 import sys
 
 from typing import List, Any, Dict, Optional, cast
@@ -21,6 +22,24 @@ class _ExcludeErrorsFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         """Only lets through log messages with log level below WARNING ."""
         return record.levelno < logging.WARNING
+
+
+class _HostnameFilter(logging.Filter):
+    """Stamp every LogRecord with the local hostname.
+
+    Enables ``%(hostname)s`` in the format string so that every log line –
+    and every traceback – clearly identifies which host cephadm is running on.
+    This is especially valuable when backtraces from many nodes are all
+    forwarded to the same MON cluster log.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._hostname: str = socket.gethostname()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.hostname = self._hostname  # type: ignore[attr-defined]
+        return True
 
 
 class _termcolors(str, enum.Enum):
@@ -65,18 +84,21 @@ class _Colorizer(logging.Formatter):
 
 _common_formatters = {
     'cephadm': {
-        'format': '%(asctime)s %(thread)x %(levelname)s %(message)s',
+        'format': '%(asctime)s %(thread)x %(hostname)s %(levelname)s %(message)s',
     },
     'colorized': {
         '()': _Colorizer,
     },
 }
 
+# Shared filter entry reused by both logging config dicts.
+_hostname_filter_entry: Dict[str, Any] = {'()': _HostnameFilter}
 
 _log_file_handler = {
     'level': 'DEBUG',
     'class': 'logging.handlers.WatchedFileHandler',
     'formatter': 'cephadm',
+    'filters': ['hostname'],
     'filename': '%s/cephadm.log' % LOG_DIR,
 }
 
@@ -84,6 +106,7 @@ _syslog_handler = {
     'level': 'DEBUG',
     'class': 'logging.handlers.SysLogHandler',
     'formatter': 'cephadm',
+    'filters': ['hostname'],
     'address': '/dev/log',
 }
 
@@ -94,11 +117,15 @@ _syslog_handler = {
 _logging_config = {
     'version': 1,
     'disable_existing_loggers': True,
+    'filters': {
+        'hostname': _hostname_filter_entry,
+    },
     'formatters': _common_formatters,
     'handlers': {
         'console': {
             'level': 'INFO',
             'class': 'logging.StreamHandler',
+            'filters': ['hostname'],
         },
         'log_file': _log_file_handler,
         'syslog': _syslog_handler,
@@ -120,7 +147,8 @@ _interactive_logging_config = {
     'filters': {
         'exclude_errors': {
             '()': _ExcludeErrorsFilter,
-        }
+        },
+        'hostname': _hostname_filter_entry,
     },
     'disable_existing_loggers': True,
     'formatters': _common_formatters,
@@ -128,7 +156,7 @@ _interactive_logging_config = {
         'console_stdout': {
             'level': 'INFO',
             'class': 'logging.StreamHandler',
-            'filters': ['exclude_errors'],
+            'filters': ['exclude_errors', 'hostname'],
             'stream': sys.stdout,
         },
         'console_stderr': {
@@ -136,6 +164,7 @@ _interactive_logging_config = {
             'class': 'logging.StreamHandler',
             'stream': sys.stderr,
             'formatter': 'colorized',
+            'filters': ['hostname'],
         },
         'log_file': _log_file_handler,
         'syslog': _syslog_handler,
