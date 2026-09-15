@@ -140,6 +140,9 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RgwAccountRolesListComponent } from './rgw-account-roles-list/rgw-account-roles-list.component';
 import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account-role-form.component';
+import { RgwAccountPoliciesListComponent } from './rgw-account-policies-list/rgw-account-policies-list.component';
+import { RgwAccountPolicyFormComponent } from './rgw-account-policy-form/rgw-account-policy-form.component';
+import { RgwAccountPolicyDetailModalComponent } from './rgw-account-policy-detail-modal/rgw-account-policy-detail-modal.component';
 import { RgwBucketResourceSidebarComponent } from './rgw-bucket-resource-sidebar/rgw-bucket-resource-sidebar.component';
 import { RgwBucketResourcePageComponent } from './rgw-bucket-resource-page/rgw-bucket-resource-page.component';
 import { RgwBucketResourceBreadcrumbResolver } from './rgw-bucket-resource-page/rgw-bucket-resource-breadcrumb.resolver';
@@ -247,6 +250,9 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     RgwUserAccountsFormComponent,
     RgwUserAccountsResourceSidebarComponent,
     RgwUserAccountsResourcePageComponent,
+    RgwAccountPoliciesListComponent,
+    RgwAccountPolicyFormComponent,
+    RgwAccountPolicyDetailModalComponent,
     RgwStorageClassListComponent,
     RgwStorageClassResourceSidebarComponent,
     RgwStorageClassResourcePageComponent,
@@ -388,6 +394,11 @@ const routes: Routes = [
             path: 'roles',
             component: RgwUserAccountsResourcePageComponent,
             data: { breadcrumbs: 'Roles', section: 'roles' }
+          },
+          {
+            path: 'policies',
+            component: RgwUserAccountsResourcePageComponent,
+            data: { breadcrumbs: 'Policies', section: 'policies' }
           }
         ]
       }
