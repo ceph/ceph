@@ -17,6 +17,7 @@
       <cd-alert-panel
         *ngIf="infoMessage"
         type="info"
+        [showTitle]="showInfoTitle"
         spacingClass="cds-mb-3"
         i18n
       >
@@ -58,7 +59,10 @@
         <ng-container
           *ngTemplateOutlet="childFormGroupTemplate; context: { form: deletionForm }"
         ></ng-container>
-        <div class="form-item">
+        <div
+          class="form-item"
+          *ngIf="!hideConfirmationCheckbox"
+        >
           <ng-container *ngIf="impact == impactEnum.medium; else highImpactDeletion">
             <cds-checkbox
               id="confirmation"
@@ -69,6 +73,14 @@
               ariaLabel="confirmation"
               i18n
               >Yes, I am sure.</cds-checkbox
+            >
+            <cds-checkbox
+              *ngIf="extraCheckboxText"
+              id="extraCheckbox"
+              formControlName="extraCheckbox"
+              ariaLabel="extraCheckbox"
+              class="cds-mt-2"
+              >{{ extraCheckboxText }}</cds-checkbox
             >
           </ng-container>
           <ng-template #highImpactDeletion>
