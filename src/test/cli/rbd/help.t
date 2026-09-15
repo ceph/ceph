@@ -714,7 +714,7 @@
   rbd help diff
   usage: rbd diff [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                   [--snap <snap>] [--from-snap <from-snap>] [--whole-object] 
-                  [--format <format>] [--pretty-format] 
+                  [--all-snapshots] [--format <format>] [--pretty-format] 
                   <image-or-snap-spec> 
   
   Print extents that differ since a previous snap, or image creation.
@@ -731,6 +731,8 @@
     --snap arg            snapshot name
     --from-snap arg       snapshot starting point
     --whole-object        compare whole object
+    --all-snapshots       allow calculating diffs between all kinds of snapshots,
+                          including group/trash/mirror snapshots
     --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
   
@@ -782,8 +784,8 @@
   
   rbd help export
   usage: rbd export [--pool <pool>] [--namespace <namespace>] [--image <image>] 
-                    [--snap <snap>] [--path <path>] [--no-progress] 
-                    [--export-format <export-format>] 
+                    [--snap <snap>] [--path <path>] [--all-snapshots] 
+                    [--no-progress] [--export-format <export-format>] 
                     <source-image-or-snap-spec> <path-name> 
   
   Export image to file.
@@ -801,6 +803,8 @@
     --image arg                  source image name
     --snap arg                   source snapshot name
     --path arg                   export file (or '-' for stdout)
+    --all-snapshots              allow calculating diffs between all kinds of
+                                 snapshots, including group/trash/mirror snapshots
     --no-progress                disable progress output
     --export-format arg          format of image file
   
@@ -808,7 +812,7 @@
   usage: rbd export-diff [--pool <pool>] [--namespace <namespace>] 
                          [--image <image>] [--snap <snap>] [--path <path>] 
                          [--from-snap <from-snap>] [--whole-object] 
-                         [--no-progress] 
+                         [--all-snapshots] [--no-progress] 
                          <source-image-or-snap-spec> <path-name> 
   
   Export incremental diff to file.
@@ -828,6 +832,8 @@
     --path arg                   export file (or '-' for stdout)
     --from-snap arg              snapshot starting point
     --whole-object               compare whole object
+    --all-snapshots              allow calculating diffs between all kinds of
+                                 snapshots, including group/trash/mirror snapshots
     --no-progress                disable progress output
   
   rbd help feature disable
