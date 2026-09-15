@@ -37,6 +37,8 @@ start_ceph() {
     ceph mgr module enable test_orchestrator
     ceph orch set backend test_orchestrator
 
+    ceph_all mgr module enable mirroring
+
     CYPRESS_BASE_URL=""
     retry=0
     while [[ -z "${CYPRESS_BASE_URL}" || "${CYPRESS_BASE_URL}" == "null" ]]; do
@@ -50,10 +52,12 @@ start_ceph() {
     done
     CYPRESS_CEPH2_URL=$(ceph2 mgr services | jq -r .dashboard)
 
-    # start rbd-mirror daemon in the cluster
+    # start rbd-mirror and cephfs-mirror daemons on the source cluster
     KEY=$(ceph auth get client.admin --format=json | jq -r .[0].key)
     MON_CLUSTER_1=$(grep "mon host" ${FULL_PATH_BUILD_DIR}/run/1/ceph.conf | awk '{print $4}')
-    ${FULL_PATH_BUILD_DIR}/bin/rbd-mirror --mon_host $MON_CLUSTER_1 --key $KEY -c ${FULL_PATH_BUILD_DIR}/run/1/ceph.conf
+    CONF_CLUSTER_1=${FULL_PATH_BUILD_DIR}/run/1/ceph.conf
+    ${FULL_PATH_BUILD_DIR}/bin/rbd-mirror --mon_host $MON_CLUSTER_1 --key $KEY -c ${CONF_CLUSTER_1}
+    ${FULL_PATH_BUILD_DIR}/bin/cephfs-mirror --id admin --mon_host $MON_CLUSTER_1 --key $KEY -c ${CONF_CLUSTER_1}
 
     set +x
 }
@@ -64,11 +68,13 @@ stop() {
         for cluster in ${CLUSTERS[@]}; do
             ../src/mstop.sh $cluster
         done
-        pids=$(pgrep rbd-mirror)
-        if [ -n "$pids" ]; then
-            echo Killing rbd-mirror processes: $pids
-            kill -9 $pids
-        fi
+        for daemon in rbd-mirror cephfs-mirror; do
+            pids=$(pgrep $daemon)
+            if [ -n "$pids" ]; then
+                echo Killing $daemon processes: $pids
+                kill -9 $pids
+            fi
+        done
     fi
     exit $1
 }
