@@ -18,6 +18,7 @@
 #include "test/librados/test_pool_types.h"
 
 #include <errno.h>
+#include <iomanip> // for std::setw(), std::setfill()
 #include <string>
 #include <vector>
 using ceph::test::PoolType;
