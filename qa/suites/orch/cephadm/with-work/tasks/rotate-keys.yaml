@@ -8,9 +8,16 @@ tasks:
           echo "rotating key for $f"
           K=$(ceph auth get-key $f)
           NK="$K"
-          ceph orch daemon rotate-key $f
+          ceph auth rotate --entity=$f --key-type=aes256k
+          ceph orch daemon redeploy $f
           while [ "$K" == "$NK" ]; do
               sleep 5
               NK=$(ceph auth get-key $f)
           done
+          
+          if [[ "$f" == mgr* ]]; then
+              # Waiting for active/standby MGR ($f) redeploy to fully complete
+              ceph orch ps --refresh
+              sleep 60
+          fi
       done
