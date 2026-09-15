@@ -67,6 +67,7 @@ class TestSMB:
                     'remote-control': 54445,
                 },
             },
+            "skip_port_check": False,
         }
         with with_host(cephadm_module, 'hostx'):
             with with_service(cephadm_module, spec):
@@ -148,6 +149,7 @@ class TestSMB:
                     'remote-control': 54445,
                 },
             },
+            "skip_port_check": False,
         }
         with with_host(cephadm_module, 'hostx'):
             with with_service(cephadm_module, spec):
