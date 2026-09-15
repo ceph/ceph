@@ -30,6 +30,9 @@ Critical Upgrade Steps
 * Please review the :ref:`CVE-2026-54330-upgrade-steps` on the :ref:`CVE-2026-54330` documentation.
 * Please review the :ref:`CVE-2026-50152-recommendations` on the :ref:`CVE-2026-50152` documentation.
 
+Note that upgrades from Squid 19.2.6 to Tentacle releases earlier than 20.2.4 may fail: the Managers will upgrade
+but the rest may fail, and the only way out is to redeploy the Managers with the previous image and start
+over.
 
 Changelog
 ---------
@@ -52,6 +55,10 @@ August 5, 2026
 
 Notable Changes
 ---------------
+
+Note that upgrades from Squid 19.2.6 to Tentacle releases earlier than 20.2.4 may fail: the Managers will upgrade
+but the rest may fail, and the only way out is to redeploy the Managers with the previous image and start
+over.
 
 MDS (Metadata Server)
 ----------------------
@@ -279,6 +286,10 @@ Notable Changes
 ---------------
 
 * Rocky 10 package-based installs are now supported starting with v20.2.2. Please see the `supported platforms <https://docs.ceph.com/en/latest/start/os-recommendations/#platforms>`_ for current and planned support in Ceph.
+
+Note that upgrades from Squid 19.2.6 to Tentacle releases earlier than 20.2.4 may fail: the Managers will upgrade
+but the rest may fail, and the only way out is to redeploy the Managers with the previous image and start
+over.
 
 MDS (Metadata Server)
 ---------------------
@@ -525,6 +536,10 @@ April 06, 2026
 
 Notable Changes
 ---------------
+
+Note that upgrades from Squid 19.2.6 to Tentacle releases earlier than 20.2.4 may fail: the Managers will upgrade
+but the rest may fail, and the only way out is to redeploy the Managers with the previous image and start
+over.
 
 OSD / BlueStore
 ---------------
@@ -1303,6 +1318,12 @@ noautoscale`` after upgrade success is confirmed.
 .. note::
 
    You can monitor the progress of your upgrade at each stage with the ``ceph versions`` command, which will tell you what Ceph version(s) are running for each type of daemon.
+
+.. note::
+
+   Upgrades from Squid 19.2.6 to Tentacle releases earlier than 20.2.4 may fail: the Managers will upgrade
+   but the rest may fail, and the only way out is to redeploy the Managers with the previous image and start
+   over.
 
 Upgrading Cephadm Clusters
 --------------------------
