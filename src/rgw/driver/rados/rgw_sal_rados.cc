@@ -2489,11 +2489,12 @@ void RadosStore::get_quota(RGWQuota& quota)
     quota.user_quota = svc()->quota->get_user_quota();
 }
 
-void RadosStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit)
+void RadosStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& account_ratelimit, RGWRateLimitInfo& anon_ratelimit)
 {
   bucket_ratelimit = svc()->zone->get_current_period().get_config().bucket_ratelimit;
   user_ratelimit = svc()->zone->get_current_period().get_config().user_ratelimit;
   anon_ratelimit = svc()->zone->get_current_period().get_config().anon_ratelimit;
+  account_ratelimit = svc()->zone->get_current_period().get_config().account_ratelimit;
 }
 
 int RadosStore::set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled, optional_yield y)

@@ -2378,6 +2378,7 @@ void DaosStore::get_quota(RGWQuota& quota) {
 
 void DaosStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
                               RGWRateLimitInfo& user_ratelimit,
+                              RGWRateLimitInfo& account_ratelimit,
                               RGWRateLimitInfo& anon_ratelimit) {
   return;
 }

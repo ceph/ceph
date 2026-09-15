@@ -552,6 +552,7 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
        * in the authorization phase (RGWOp::verify_permissions). */
       s->user = applier->load_acct_info(dpp);
       s->perm_mask = applier->get_perm_mask();
+      s->account = applier->get_account();
 
       /* This is the single place where we pass req_state as a pointer
        * to non-const and thus its modification is allowed. In the time

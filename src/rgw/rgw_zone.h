@@ -431,25 +431,30 @@ struct RGWPeriodConfig
   RGWRateLimitInfo bucket_ratelimit;
   // rate limit unauthenticated user
   RGWRateLimitInfo anon_ratelimit;
+  RGWRateLimitInfo account_ratelimit;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(quota.bucket_quota, bl);
     encode(quota.user_quota, bl);
     encode(bucket_ratelimit, bl);
     encode(user_ratelimit, bl);
     encode(anon_ratelimit, bl);
+    encode(account_ratelimit, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(quota.bucket_quota, bl);
     decode(quota.user_quota, bl);
     if (struct_v >= 2) {
       decode(bucket_ratelimit, bl);
       decode(user_ratelimit, bl);
       decode(anon_ratelimit, bl);
+    }
+    if (struct_v >= 3) {
+      decode(account_ratelimit, bl);
     }
     DECODE_FINISH(bl);
   }

@@ -6,9 +6,9 @@
  */
 
 #include <cerrno>
+#include <optional>
 #include <string>
 #include <sstream>
-#include <optional>
 #include <iostream>
 
 #include <boost/asio/co_spawn.hpp>
@@ -1768,6 +1768,57 @@ int set_user_ratelimit(OPT opt_cmd, std::unique_ptr<rgw::sal::User>& user,
   return 0;
 }
 
+int set_account_ratelimit(OPT opt_cmd, rgw_account_id& account_id,
+                     int64_t max_read_ops, int64_t max_write_ops, int64_t max_list_ops,
+                     int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
+                     bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
+                     bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
+{
+  RGWAccountInfo account_info;
+  rgw::sal::Attrs account_attrs;
+  RGWObjVersionTracker tracker;
+  int r = driver->load_account_by_id(dpp(), null_yield, account_id, account_info,
+                              account_attrs, tracker);
+  if (r < 0) {
+    cerr << "could not get account info for account=" << account_id << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  RGWRateLimitInfo account_ratelimit_info;
+  auto iter = account_attrs.find(RGW_ATTR_RATELIMIT);
+  if (iter != account_attrs.end()) {
+    try {
+      bufferlist& bl = iter->second;
+      auto biter = bl.cbegin();
+      decode(account_ratelimit_info, biter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
+      return -EIO;
+    }
+  }
+
+  bool ratelimit_configured = set_ratelimit_info(account_ratelimit_info, opt_cmd, max_read_ops, max_write_ops, max_list_ops,
+                         max_delete_ops, max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
+  if (!ratelimit_configured) {
+    ldpp_dout(dpp(), 0) << "ERROR: no rate limit values have been specified" << dendl;
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  account_ratelimit_info.encode(bl);
+  account_attrs[RGW_ATTR_RATELIMIT] = bl;
+  constexpr bool exclusive = false;
+  r = driver->store_account(dpp(), null_yield, exclusive, account_info, &account_info,
+                              account_attrs, tracker);
+  if (r < 0) {
+    cerr << "could not store account info for account=" << account_id << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+
+  return 0;
+}
+
 int show_user_ratelimit(std::unique_ptr<rgw::sal::User>& user, Formatter *formatter)
 {
   RGWRateLimitInfo ratelimit_info;
@@ -1818,6 +1869,38 @@ int show_bucket_ratelimit(rgw::sal::Driver* driver, const string& tenant_name,
   }
   formatter->open_object_section("bucket_ratelimit");
   encode_json("bucket_ratelimit", ratelimit_info, formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+  return 0;
+}
+
+int show_account_ratelimit(rgw::sal::Driver* driver, const rgw_account_id& account_id,
+                          Formatter *formatter)
+{
+  RGWAccountInfo account_info;
+  rgw::sal::Attrs account_attrs;
+  RGWObjVersionTracker tracker;
+  int r = driver->load_account_by_id(dpp(), null_yield, account_id, account_info,
+                              account_attrs, tracker);
+  if (r < 0) {
+    cerr << "could not get account info for account=" << account_id << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  RGWRateLimitInfo account_ratelimit_info;
+  auto iter = account_attrs.find(RGW_ATTR_RATELIMIT);
+  if (iter != account_attrs.end()) {
+    try {
+      bufferlist& bl = iter->second;
+      auto biter = bl.cbegin();
+      decode(account_ratelimit_info, biter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
+      return -EIO;
+    }
+  }
+  formatter->open_object_section("account_ratelimit");
+  encode_json("account_ratelimit", account_ratelimit_info, formatter);
   formatter->close_section();
   formatter->flush(cout);
   cout << std::endl;
@@ -5345,6 +5428,13 @@ int main(int argc, const char **argv)
                          have_max_read_ops, have_max_write_ops, have_max_list_ops,
                          have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
           encode_json("user_ratelimit", period_config.user_ratelimit, formatter.get());
+        } else if (ratelimit_scope == "account") {
+          ratelimit_configured = set_ratelimit_info(period_config.account_ratelimit, opt_cmd,
+                         max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
+                         max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
+          encode_json("account_ratelimit", period_config.account_ratelimit, formatter.get());
         } else if (ratelimit_scope == "anonymous") {
           ratelimit_configured = set_ratelimit_info(period_config.anon_ratelimit, opt_cmd,
                          max_read_ops, max_write_ops, max_list_ops,max_delete_ops,
@@ -5357,6 +5447,7 @@ int main(int argc, const char **argv)
           encode_json("bucket_ratelimit", period_config.bucket_ratelimit, formatter.get());
           encode_json("user_ratelimit", period_config.user_ratelimit, formatter.get());
           encode_json("anonymous_ratelimit", period_config.anon_ratelimit, formatter.get());
+          encode_json("account_ratelimit", period_config.account_ratelimit, formatter.get());
         } else {
           cerr << "ERROR: invalid rate limit scope specification. Please specify "
               "either --ratelimit-scope=bucket, or --ratelimit-scope=user or --ratelimit-scope=anonymous" << std::endl;
@@ -12107,8 +12198,8 @@ next:
   bool ratelimit_op_set = (opt_cmd == OPT::RATELIMIT_SET || opt_cmd == OPT::RATELIMIT_ENABLE || opt_cmd == OPT::RATELIMIT_DISABLE);
   bool ratelimit_op_get = opt_cmd == OPT::RATELIMIT_GET;
   if (ratelimit_op_set) {
-    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
-      cerr << "ERROR: bucket name or uid is required for ratelimit operation" << std::endl;
+    if (bucket_name.empty() && rgw::sal::User::empty(user) && account_id.empty()) {
+      cerr << "ERROR: bucket name or uid or account id is required for ratelimit operation" << std::endl;
       return EINVAL;
     }
 
@@ -12132,12 +12223,22 @@ next:
         cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
         return EINVAL;
       }
+    } else if (!account_id.empty()) {
+      if (ratelimit_scope == "account") {
+        return set_account_ratelimit(opt_cmd, account_id, max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
+                         max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops, have_max_list_ops, have_max_delete_ops,
+                         have_max_read_bytes, have_max_write_bytes);
+      } else {
+        cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
+        return EINVAL;
+      }
     }
   }
 
   if (ratelimit_op_get) {
-    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
-      cerr << "ERROR: bucket name or uid is required for ratelimit operation" << std::endl;
+    if (bucket_name.empty() && rgw::sal::User::empty(user) && account_id.empty()) {
+      cerr << "ERROR: bucket name or uid or account id is required for ratelimit operation" << std::endl;
       return EINVAL;
     }
 
@@ -12158,6 +12259,15 @@ next:
         cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
         return EINVAL;
       }
+    } else if (!account_id.empty()) {
+      if (ratelimit_scope == "account") {
+        int ret = show_account_ratelimit(driver, account_id, formatter.get());
+        if (ret < 0) {
+          std::cerr << "ERROR: failed to get a ratelimit for user id: '" << user->get_id() << "', errno: " << cpp_strerror(-ret) << std::endl;
+        }
+        return ret;
+      }
+      
     }
   }
 

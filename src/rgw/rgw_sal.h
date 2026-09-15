@@ -622,7 +622,8 @@ class Driver {
     /** Get default quota info.  Used as fallback if a user or bucket has no quota set*/
     virtual void get_quota(RGWQuota& quota) = 0;
     /** Get global rate limit configuration*/
-    virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) = 0;
+    virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit,
+      RGWRateLimitInfo& account_ratelimit, RGWRateLimitInfo& anon_ratelimit) = 0;
     /** Enable or disable a set of bucket.  e.g. if a User is suspended */
     virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled, optional_yield y) = 0;
     /** Get a new request ID */

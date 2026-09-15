@@ -99,18 +99,46 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   std::string userfind;
   RGWRateLimitInfo global_user;
   RGWRateLimitInfo global_bucket;
+  RGWRateLimitInfo global_account;
   RGWRateLimitInfo global_anon;
   RGWRateLimitInfo* bucket_ratelimit;
   RGWRateLimitInfo* user_ratelimit;
-  driver->get_ratelimit(global_bucket, global_user, global_anon);
+  RGWRateLimitInfo* account_ratelimit;
+  driver->get_ratelimit(global_bucket, global_user, global_account, global_anon);
   bucket_ratelimit = &global_bucket;
   user_ratelimit = &global_user;
+  account_ratelimit = &global_account;
   s->user->get_id().to_str(userfind);
   userfind = "u" + userfind;
   s->ratelimit_user_name = userfind;
   std::string bucketfind = !rgw::sal::Bucket::empty(s->bucket.get()) ? "b" + s->bucket->get_marker() : "";
   s->ratelimit_bucket_marker = bucketfind;
   const char *method = s->info.method;
+
+  if (s->account) {
+    RGWAccountInfo account_info;
+    rgw::sal::Attrs account_attrs;
+    RGWObjVersionTracker tracker;
+    int r = driver->load_account_by_id(s, null_yield, s->account->id, account_info,
+                                account_attrs, tracker);
+    if (r < 0) {
+      ldpp_dout(s, 0) << "could not get account info for account=" << s->account->id << ": " << cpp_strerror(-r) << dendl;
+      return -r;
+    }
+    RGWRateLimitInfo account_ratelimit_info;
+    auto iter = account_attrs.find(RGW_ATTR_RATELIMIT);
+    if (iter != account_attrs.end()) {
+      try {
+        bufferlist& bl = iter->second;
+        auto biter = bl.cbegin();
+        decode(account_ratelimit_info, biter);
+      } catch (buffer::error& err) {
+        ldpp_dout(s, 0) << "ERROR: failed to decode rate limit" << dendl;
+        return -EIO;
+      }
+    }
+    account_ratelimit = &account_ratelimit_info;
+  }
 
   bool is_sts_user = (s->auth.identity && s->auth.identity->get_identity_type() == TYPE_ROLE);
   if (is_sts_user) {
@@ -140,8 +168,18 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
   if (s->user->get_id().id == RGW_USER_ANON_ID && global_anon.enabled) {
     *user_ratelimit = global_anon;
   }
+
+  // Check account-level rate limiting
+  int64_t limit_account = 0;
   int64_t limit_bucket = 0;
-  int64_t limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit, s->info.request_params);
+  int64_t limit_user = 0;
+  
+  limit_account = s->ratelimit_data->should_rate_limit(method, s->account->id, s->time, account_ratelimit, s->info.request_params);
+
+  // Only check user/bucket limits if account limit allows
+  if (!limit_account) {
+    limit_user = s->ratelimit_data->should_rate_limit(method, s->ratelimit_user_name, s->time, user_ratelimit, s->info.request_params);
+  }
 
   if(!rgw::sal::Bucket::empty(s->bucket.get()))
   {
@@ -160,20 +198,37 @@ bool rate_limit(rgw::sal::Driver* driver, req_state* s) {
         return -EIO;
       }
     }
-    if (!limit_user) {
+    if (!limit_user && !limit_account) {
       limit_bucket = s->ratelimit_data->should_rate_limit(method, s->ratelimit_bucket_marker, s->time, bucket_ratelimit, s->info.request_params);
     }
   }
-  if(limit_bucket && !limit_user) {
+
+  // Token giveback logic: if a lower-level limit blocks, give back tokens to higher levels
+  if (!limit_account && (limit_bucket || limit_user)) {
+    // Give back account tokens
+    std::string account_key = s->account->id;
+    s->ratelimit_data->giveback_tokens(method, account_key, s->info.request_params, account_ratelimit);
+  }
+  if (!limit_account && !limit_user && limit_bucket) {
+    // Give back user tokens
     s->ratelimit_data->giveback_tokens(method, s->ratelimit_user_name, s->info.request_params, user_ratelimit);
   }
+
+  s->account_ratelimit = *account_ratelimit;
   s->user_ratelimit = *user_ratelimit;
   s->bucket_ratelimit = *bucket_ratelimit;
-  int64_t delay = limit_user ? limit_user : limit_bucket;
+
+  int64_t delay = limit_bucket;
+  if (limit_account) {
+    delay = limit_account;
+  } else if (limit_user) {
+    delay = limit_user;
+  }
+
   if (delay > 0) {
     s->ratelimit_retry_after = delay;
   }
-  return (limit_user || limit_bucket);
+  return (limit_account || limit_user || limit_bucket);
 }
 
 int rgw_process_authenticated(RGWHandler_REST * const handler,

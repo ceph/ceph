@@ -456,6 +456,7 @@ void RGWPeriodConfig::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("user_ratelimit", user_ratelimit, obj);
   JSONDecoder::decode_json("bucket_ratelimit", bucket_ratelimit, obj);
   JSONDecoder::decode_json("anonymous_ratelimit", anon_ratelimit, obj);
+  JSONDecoder::decode_json("account_ratelimit", account_ratelimit, obj);
 }
 
 void RGWPeriodConfig::dump(Formatter *f) const
@@ -465,6 +466,7 @@ void RGWPeriodConfig::dump(Formatter *f) const
   encode_json("user_ratelimit", user_ratelimit, f);
   encode_json("bucket_ratelimit", bucket_ratelimit, f);
   encode_json("anonymous_ratelimit", anon_ratelimit, f);
+  encode_json("account_ratelimit", account_ratelimit, f);
 }
 
 void RGWZoneGroup::dump(Formatter *f) const

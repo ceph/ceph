@@ -2020,7 +2020,11 @@ namespace rgw::sal {
     return 0;
   }
 
-  void DBStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit)
+  void DBStore::get_ratelimit(
+      RGWRateLimitInfo& bucket_ratelimit,
+      RGWRateLimitInfo& user_ratelimit,
+      RGWRateLimitInfo& account_ratelimit,
+      RGWRateLimitInfo& anon_ratelimit)
   {
     return;
   }
