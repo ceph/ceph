@@ -505,7 +505,6 @@ else
               --install --remove \
               --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
         ci_debug "Removing ceph-build-deps"
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
         if [ "$control" != "debian/control" ] ; then rm $control; fi
         ;;
     almalinux|rocky|centos|fedora|rhel|ol|virtuozzo|openruyi)
