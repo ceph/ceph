@@ -398,16 +398,21 @@ class IngressService(CephService):
         return False
 
     @staticmethod
-    def get_keepalived_dependencies(mgr: "CephadmOrchestrator", spec: Optional[ServiceSpec]) -> List[str]:
+    def get_keepalived_dependencies(
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec],
+    ) -> List[str]:
         # because cephadm creates new daemon instances whenever
         # port or ip changes, identifying daemons by name is
         # sufficient to detect changes.
         if not spec:
             return []
+
         daemons = mgr.cache.get_daemons_by_service(spec.service_name())
-        deps = sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
-        parent_deps = CephadmService.get_dependencies(mgr, spec)
-        return parent_deps + deps
+        return sorted([
+            d.name() for d in daemons
+            if d.daemon_type == 'haproxy'
+        ])
 
     def keepalived_generate_config(
             self,

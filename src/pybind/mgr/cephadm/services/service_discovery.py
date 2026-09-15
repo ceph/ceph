@@ -75,9 +75,16 @@ class ServiceDiscovery:
         return d
 
     def enable_auth(self) -> None:
+        from ceph_secrets_types import SecretScope
         legacy_user_key = 'service_discovery/root/username'
         legacy_pass_key = 'service_discovery/root/password'
-        creds = self.mgr.cephadm_secrets._load_basic_auth_secret(self.SD_AUTH_SECRET_NAME)
+        # Service-discovery credentials are not tied to a specific service
+        # instance, so they live in global scope with no target.
+        creds = self.mgr.cephadm_secrets._load_basic_auth_secret(
+            self.SD_AUTH_SECRET_NAME,
+            scope=SecretScope.GLOBAL,
+            target='',
+        )
         if creds is None:
             creds = self.mgr.cephadm_secrets._load_basic_auth_legacy(legacy_user_key, legacy_pass_key)
             if creds is None:
@@ -89,7 +96,8 @@ class ServiceDiscovery:
             self.mgr.cephadm_secrets.set(
                 name=self.SD_AUTH_SECRET_NAME,
                 data=creds,
-                secret_type='basic-auth',
+                scope=SecretScope.GLOBAL,
+                target='',
                 user_made=False,
                 editable=False,
             )
