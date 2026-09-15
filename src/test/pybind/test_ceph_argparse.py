@@ -18,7 +18,7 @@
 
 from ceph_argparse import validate_command, parse_json_funcsigs, validate, \
     parse_funcsig, ArgumentError, ArgumentTooFew, ArgumentMissing, \
-    ArgumentNumber, ArgumentValid
+    ArgumentNumber, ArgumentValid, CephString, ArgumentFormat
 
 import os
 import random
@@ -1370,6 +1370,34 @@ class TestValidate(unittest.TestCase):
         result = validate(['nqn1', '--force'], sig)
         self.assertEqual(result.get('force'), '--force')
 
+    def test_ceph_string_empty_rejection(self):
+        """
+        Verify that CephString.valid() inherently rejects an empty string
+        whenever a strict formatting pattern constraint (goodchars) is active.
+        """
+        arg_parser = CephString(goodchars='[a-z]')
+        with self.assertRaises(ArgumentFormat) as context:
+            arg_parser.valid("")
+        self.assertEqual(str(context.exception), "argument can't be an empty string")
+
+    def test_ceph_string_error_formatting(self):
+        """
+        Verify that CephString.valid() outputs a deterministic, cleanly delimited
+        error message when encountering whitelisted character violations.
+        """
+        # Initialize with a strict whitelist class [a-z]
+        arg_parser = CephString(goodchars='[a-z]')
+
+        # Pass input string containing multiple scrambled, violating whitespace/symbol characters
+        bad_input = "abc$% #"
+
+        with self.assertRaises(ArgumentFormat) as context:
+            arg_parser.valid(bad_input)
+
+        # Assert the output string is cleanly wrapped in single quotes AND strictly sorted alphabetically
+        # " ", "$", "%" sort to ' $% ' in ASCII order
+        expected_error = "invalid chars ' #$%' in input string 'abc$% #'"
+        self.assertEqual(str(context.exception), expected_error)
 
 if __name__ == '__main__':
     unittest.main()
