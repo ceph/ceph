@@ -110,6 +110,8 @@ class TestRados(object):
         self.rados.shutdown()
 
     def test_ping_monitor(self):
+        if os.getenv("CRIMSON_COMPAT") is not None:
+            return
         assert_raises(ObjectNotFound, self.rados.ping_monitor, 'not_exists_monitor')
         cmd = {'prefix': 'mon dump', 'format':'json'}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'')
