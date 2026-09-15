@@ -22,7 +22,7 @@ public:
   int init(string _opt) override {
     return 0;
   }
-  int open(std::ostream &out, const std::string& cfs="") override {
+  int open(std::ostream &out) override {
     return 0;
   }
   int create_and_open(std::ostream &out, const std::string& cfs="") override {
