@@ -472,13 +472,13 @@ namespace rgw {
     this->fe = fe;
   }
 
-  int RGWLib::init()
+  int RGWLib::init(rgw::ProtocolType protocol_type)
   {
     vector<const char*> args;
-    return init(args);
+    return init(args, protocol_type);
   }
 
-  int RGWLib::init(vector<const char*>& args)
+  int RGWLib::init(vector<const char*>& args, rgw::ProtocolType protocol_type)
   {
     int r{0};
     /* alternative default for module */
@@ -505,7 +505,7 @@ namespace rgw {
     mutex.unlock();
 
     /* stage all front-ends (before common-init-finish) */
-    main.init_frontends1(true /* nfs */);
+    main.init_frontends1(InstanceType::Library, protocol_type);
 
     common_init_finish(g_ceph_context);
 

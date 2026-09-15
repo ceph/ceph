@@ -108,4 +108,5 @@ Other
    Data Caching and CDN <rgw-cache>
    D3N Data Cache <d3n_datacache>
    Export over NFS <nfs>
+   Share over SMB <smb>
    Full Object Deduplication <s3_objects_dedup>
