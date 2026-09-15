@@ -16,11 +16,13 @@ class BlockCrypto : public CryptoInterface {
 
 public:
     static BlockCrypto* create(CephContext* cct, DataCryptor<T>* data_cryptor,
-                               uint32_t block_size, uint64_t data_offset) {
-      return new BlockCrypto(cct, data_cryptor, block_size, data_offset);
+                               uint32_t block_size, uint64_t data_offset, uint32_t meta_size) {
+      return new BlockCrypto(cct, data_cryptor, block_size, data_offset, meta_size);
     }
+    
     BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
-                uint64_t block_size, uint64_t data_offset);
+                uint64_t block_size, uint64_t data_offset, uint32_t meta_size = 0);
+  
     ~BlockCrypto();
 
     int encrypt(ceph::bufferlist* data, uint64_t image_offset) override;
@@ -28,6 +30,10 @@ public:
 
     uint64_t get_block_size() const override {
       return m_block_size;
+    }
+
+    uint32_t get_meta_size() const override {
+      return m_meta_size;
     }
 
     uint64_t get_data_offset() const override {
@@ -47,6 +53,7 @@ private:
     DataCryptor<T>* m_data_cryptor;
     uint64_t m_block_size;
     uint64_t m_data_offset;
+    uint32_t m_meta_size;
     uint32_t m_iv_size;
 
     int crypt(ceph::bufferlist* data, uint64_t image_offset, CipherMode mode);
