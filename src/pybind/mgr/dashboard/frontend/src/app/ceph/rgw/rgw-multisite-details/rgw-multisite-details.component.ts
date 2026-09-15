@@ -497,8 +497,12 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     node.expanded = true;
   }
 
-  getDisable() {
+  getDisable(nodeType?: string) {
     let isMasterZone = true;
+    // Standalone zonegroup/zone without a realm can always be edited
+    if (this.defaultRealmId === '' && nodeType !== 'realm') {
+      return false;
+    }
     if (this.defaultRealmId === '') {
       return this.messages.noDefaultRealm;
     } else {
@@ -541,7 +545,7 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     let isDisabled: boolean = false;
     let deleteTitle: string = this.deleteTitle;
     let masterZonegroupCount: number = 0;
-    if (node?.value?.type === 'realm' && node?.data?.is_default && this.realms.length < 2) {
+    if (node?.data?.type === 'realm' && node?.data?.is_default && this.realms.length < 2) {
       isDisabled = true;
     }
 
