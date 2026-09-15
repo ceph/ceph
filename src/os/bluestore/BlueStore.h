@@ -186,6 +186,8 @@ enum {
   l_bluestore_extents,
   l_bluestore_blobs,
   l_bluestore_spanning_blobs,
+  l_bluestore_onode_miss_lat,  
+  l_bluestore_onode_shard_miss_lat,           
   //****************************************
 
   // buffer cache stats
@@ -194,6 +196,7 @@ enum {
   l_bluestore_buffer_bytes,
   l_bluestore_buffer_hit_bytes,
   l_bluestore_buffer_miss_bytes,
+  l_bluestore_buffer_miss_lat, ////cost per miss
   //****************************************
 
   // internal stats
@@ -2455,6 +2458,57 @@ private:
 
   mempool::bluestore_cache_buffer::vector<BufferCacheShard*> buffer_cache_shards;
   mempool::bluestore_cache_onode::vector<OnodeCacheShard*> onode_cache_shards;
+
+public:
+  struct CacheStatsSnapshot {
+    using tavg_t = std::pair<uint64_t, uint64_t>; // that's in fact a result of PerfCounters::get_tavg_ns
+
+    ceph::mono_time timestamp;
+    uint64_t onode_hits;
+    uint64_t onode_misses;
+    tavg_t onode_miss_latency;
+    uint64_t onode_shard_hits;
+    uint64_t onode_shard_misses;
+    tavg_t onode_shard_miss_latency;
+    uint64_t buffer_hit_bytes;
+    uint64_t buffer_miss_bytes;
+    tavg_t buffer_miss_latency;
+
+    CacheStatsSnapshot()
+      : timestamp(ceph::mono_clock::zero()),
+        onode_hits(0), onode_misses(0), onode_miss_latency({0,0}),
+        onode_shard_hits(0), onode_shard_misses(0), onode_shard_miss_latency({0,0}),
+        buffer_hit_bytes(0), buffer_miss_bytes(0), buffer_miss_latency({0,0}) {}
+
+    CacheStatsSnapshot delta(const CacheStatsSnapshot& older) const {
+      auto sub = [](uint64_t a, uint64_t b) { return a >= b ? a - b : 0; };
+      auto sub_tavg = [&](const tavg_t& a, const tavg_t& b) { return tavg_t(sub(a.first, b.first), sub(a.second, b.second)); };
+      CacheStatsSnapshot d;
+      d.timestamp = timestamp;
+      d.onode_hits = sub(onode_hits, older.onode_hits);
+      d.onode_misses = sub(onode_misses, older.onode_misses);
+      d.onode_miss_latency = sub_tavg(onode_miss_latency, older.onode_miss_latency);
+      d.onode_shard_hits = sub(onode_shard_hits, older.onode_shard_hits);
+      d.onode_shard_misses = sub(onode_shard_misses, older.onode_shard_misses);
+      d.onode_shard_miss_latency = sub_tavg(onode_shard_miss_latency, older.onode_shard_miss_latency);
+      d.buffer_hit_bytes = sub(buffer_hit_bytes, older.buffer_hit_bytes);
+      d.buffer_miss_bytes = sub(buffer_miss_bytes, older.buffer_miss_bytes);
+      d.buffer_miss_latency = sub_tavg(buffer_miss_latency, older.buffer_miss_latency);
+      return d;
+    }
+  };
+
+private:
+  ceph::mutex cache_stats_lock = ceph::make_mutex("BlueStore::cache_stats_lock");
+  std::deque<CacheStatsSnapshot> cache_stats_snapshots;
+  static constexpr size_t MAX_CACHE_SNAPSHOTS = 5;
+
+  /// take a fresh cache-stats snapshot and return it alongside the
+  /// most-recent and oldest snapshots retained for short/long term tracking
+  void get_snapshot_windows(CacheStatsSnapshot& current,
+                            CacheStatsSnapshot& most_recent,
+                            CacheStatsSnapshot& oldest);
+
 
   /// protect zombie_osr_set
   ceph::mutex zombie_osr_lock = ceph::make_mutex("BlueStore::zombie_osr_lock");
