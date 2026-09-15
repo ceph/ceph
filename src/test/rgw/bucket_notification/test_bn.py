@@ -3419,6 +3419,79 @@ def test_persistent_topic_stats_http():
     persistent_topic_stats(conn, 'http')
 
 
+def wait_for_shard_owner(topic_name, retries=30):
+    """ wait for at least one queue shard to be owned by a gateway """
+    for _ in range(retries):
+        stats = get_stats_persistent_topic(topic_name)
+        shards = stats['Topic Stats']['Shards']
+        if any('Owner Address' in shard for shard in shards):
+            return shards
+        time.sleep(1)
+    return get_stats_persistent_topic(topic_name)['Topic Stats']['Shards']
+
+
+@pytest.mark.http_test
+def test_persistent_topic_stats_shard_owner():
+    """ test that topic stats report which gateway owns each queue shard """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    receiver = HTTPServerWithEvents((host, port))
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+
+    # create topic and notification
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert status/100 == 2
+
+    try:
+        # write an object so that the queue is processed and its shards locked
+        key = bucket.new_key('foo')
+        key.set_contents_from_string('bar')
+        wait_for_queue_to_drain(topic_name, http_port=port)
+
+        shards = wait_for_shard_owner(topic_name)
+        # every shard of the queue is reported, owned or not
+        assert len(shards) > 0
+        for shard in shards:
+            assert 'Name' in shard
+            # ownership is reported as a whole: a shard that has an owner has
+            # all of the lock's details, one without an owner has none of them
+            owner_keys = {'Owner', 'Owner Address', 'Ownership Expiration'}
+            present = owner_keys.intersection(shard.keys())
+            assert present == owner_keys or not present, \
+                'partial ownership reported for shard: %s' % shard
+
+        owned = [shard for shard in shards if 'Owner Address' in shard]
+        assert len(owned) > 0, 'no shard is owned while the queue is processed'
+        # all gateways here are new enough to record their name in the lock
+        for shard in owned:
+            assert shard['Owner'] != ''
+            assert shard['Owner Address'] != ''
+    finally:
+        s3_notification_conf.del_config()
+        topic_conf.del_config()
+        for key in bucket.list():
+            key.delete()
+        conn.delete_bucket(bucket_name)
+        receiver.close()
+
+
 @pytest.mark.kafka_test
 def test_persistent_topic_stats_kafka():
     """ test persistent topic stats, kafka endpoint """
