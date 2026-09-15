@@ -1,3 +1,5 @@
+set(CMAKE_JOB_POOL_LINK heavy_link_job_pool)
+
 find_program(GPERF gperf
   REQUIRED)
 
