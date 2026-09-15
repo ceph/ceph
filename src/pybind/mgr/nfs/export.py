@@ -13,7 +13,7 @@ from typing import (
     Set,
     cast)
 from os.path import normpath
-from ceph.fs.earmarking import EarmarkTopScope
+from ceph.fs.earmarking import NFSEarmark, EarmarkConflictError
 import cephfs
 
 from mgr_util import CephFSEarmarkResolver
@@ -611,27 +611,13 @@ class ExportMgr:
         log.info(f"Export user created is {json_res[0]['entity']}")
         return json_res[0]['key']
 
-    def _check_earmark(self, earmark_resolver: CephFSEarmarkResolver, path: str,
+    def _apply_earmark(self, earmark_resolver: CephFSEarmarkResolver, path: str,
                        fs_name: str) -> None:
-        earmark = earmark_resolver.get_earmark(
-            path,
-            fs_name,
-        )
-        if not earmark:
-            earmark_resolver.set_earmark(
-                path,
-                fs_name,
-                EarmarkTopScope.NFS.value,
-            )
-        else:
-            if not earmark_resolver.check_earmark(
-                earmark, EarmarkTopScope.NFS
-            ):
-                raise NFSException(
-                    'earmark has already been set by ' + earmark.split('.')[0],
-                    -errno.EAGAIN
-                )
-        return None
+        wanted = NFSEarmark.default()
+        try:
+            earmark_resolver.test_and_set_earmark(path, fs_name, wanted)
+        except EarmarkConflictError as err:
+            raise NFSException(str(err), -errno.EAGAIN) from err
 
     def create_export_from_dict(self,
                                 cluster_id: str,
@@ -664,7 +650,7 @@ class ExportMgr:
 
             # Check if earmark is set for the path, given path is of subvolume
             if earmark_resolver:
-                self._check_earmark(earmark_resolver, path, fs_name)
+                self._apply_earmark(earmark_resolver, path, fs_name)
 
             if fsal["cmount_path"] != "/":
                 _validate_cmount_path(fsal["cmount_path"], path)  # type: ignore
