@@ -289,16 +289,26 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   smsgr->set_auth_client(pinger);
   smsgr->start();
 
-  ConnectionRef con = smsgr->connect_to_mon(monmap.get_addrs(new_mon_id));
-  ldout(cct, 10) << __func__ << " ping mon." << new_mon_id
-                 << " " << con->get_peer_addr() << dendl;
+  ConnectionRef con;
+  {
+    // The pinger runs without monc_lock on purpose (see above), so its
+    // MonConnection is guarded by the pinger's own lock, which the AuthClient
+    // callbacks take before reaching into it.
+    //
+    // Take that lock before connecting rather than just around the assignment
+    // below: the messenger already has the pinger as its auth client, so as
+    // soon as the connection starts a msgr worker can call into those
+    // callbacks, and they dereference mc.  Holding it from here makes the
+    // worker wait for mc instead of racing with it or finding it null.
+    std::lock_guard l(pinger->lock);
+    con = smsgr->connect_to_mon(monmap.get_addrs(new_mon_id));
+    ldout(cct, 10) << __func__ << " ping mon." << new_mon_id
+                   << " " << con->get_peer_addr() << dendl;
 
-  // the pinger runs without monc_lock on purpose (see above), so its
-  // MonConnection is guarded by the pinger's own lock, which the AuthClient
-  // callbacks take before reaching into it
-  pinger->mc.reset(new MonConnection(cct, con, 0, &auth_registry,
-				     pinger->lock));
-  pinger->mc->start(monmap.get_epoch(), entity_name);
+    pinger->mc.reset(new MonConnection(cct, con, 0, &auth_registry,
+				       pinger->lock));
+    pinger->mc->start(monmap.get_epoch(), entity_name);
+  }
   con->send_message(new MPing);
 
   int ret = pinger->wait_for_reply(cct->_conf->mon_client_ping_timeout);
