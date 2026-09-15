@@ -1057,11 +1057,15 @@ void Client::update_inode_file_time(Inode *in, int issued, uint64_t time_warp_se
       in->atime = atime;
       in->time_warp_seq = time_warp_seq;
     } else if (time_warp_seq == in->time_warp_seq) {
-      //take max times
-      if (mtime > in->mtime)
-	in->mtime = mtime;
-      if (atime > in->atime)
-	in->atime = atime;
+      // Do not overwrite local write timestamps if caps are dirty or actively flushing
+      bool local_time_dirty = (in->dirty_caps | in->flushing_caps) &
+                              (CEPH_CAP_FILE_WR | CEPH_CAP_FILE_EXCL);
+      if (!local_time_dirty) {
+        if (mtime > in->mtime)
+          in->mtime = mtime;
+        if (atime > in->atime)
+          in->atime = atime;
+      }
     } else if (issued & CEPH_CAP_FILE_EXCL) {
       //ignore mds values as we have a higher seq
     } else warn = true;
