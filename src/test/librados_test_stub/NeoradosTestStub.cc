@@ -466,6 +466,26 @@ ReadOp& ReadOp::sparse_read(uint64_t off, uint64_t len,
   return *this;
 }
 
+ReadOp& ReadOp::mapext(uint64_t off, uint64_t len,
+		       std::map<std::uint64_t, std::uint64_t>* extents,
+		       boost::system::error_code* ec) & {
+  auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
+  librados::ObjectOperationTestImpl op =
+    [off, len, extents]
+    (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist*,
+     uint64_t snap_id, const SnapContext&, uint64_t*) mutable -> int {
+      bufferlist data_bl;
+      int r = io_ctx->sparse_read(oid, off, len, extents, &data_bl, snap_id);
+      return r < 0 ? r : 0;
+    };
+  if (ec != nullptr) {
+    op = std::bind(save_operation_ec,
+                   std::bind(op, _1, _2, _3, _4, _5, _6), ec);
+  }
+  o->ops.push_back(op);
+  return *this;
+}
+
 ReadOp& ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op =

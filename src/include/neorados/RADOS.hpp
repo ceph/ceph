@@ -19,6 +19,7 @@
 
 #include <concepts>
 #include <cstddef>
+#include <map>
 #include <memory>
 #include <optional>
 #include <tuple>
@@ -481,6 +482,15 @@ public:
 		                             std::uint64_t>>* extents,
 		       boost::system::error_code* ec = nullptr) && {
     return std::move(sparse_read(off, len, out, extents, ec));
+  }
+
+  ReadOp& mapext(uint64_t off, uint64_t len,
+		 std::map<std::uint64_t, std::uint64_t>* extents,
+		 boost::system::error_code* ec = nullptr) &;
+  ReadOp&& mapext(uint64_t off, uint64_t len,
+		  std::map<std::uint64_t, std::uint64_t>* extents,
+		  boost::system::error_code* ec = nullptr) && {
+    return std::move(mapext(off, len, extents, ec));
   }
 
   ReadOp& stat(std::uint64_t* size, ceph::real_time* mtime,
