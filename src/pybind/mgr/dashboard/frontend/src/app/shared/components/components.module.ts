@@ -44,7 +44,6 @@ import {
   LinkModule,
   LayerModule,
   ThemeModule,
-  MenuButtonModule,
   ContextMenuModule,
   BreadcrumbModule,
   SkeletonModule
@@ -197,7 +196,6 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     LayerModule,
     ThemeModule,
     ProductiveCardComponent,
-    MenuButtonModule,
     ContextMenuModule,
     BreadcrumbModule,
     SkeletonModule

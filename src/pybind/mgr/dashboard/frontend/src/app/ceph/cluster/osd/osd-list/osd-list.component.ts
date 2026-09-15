@@ -33,7 +33,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { OsdSettings } from '~/app/shared/models/osd-settings';
-import { Permissions } from '~/app/shared/models/permissions';
+import { Permission, Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -83,6 +83,12 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   bsModalRef: NgbModalRef;
   columns: CdTableColumn[];
   clusterWideActions: CdTableAction[];
+  readonly clusterWidePermission: Permission = new Permission([
+    'read',
+    'update',
+    'create',
+    'delete'
+  ]);
   icons = Icons;
   osdSettings = new OsdSettings();
   count = 0;
@@ -273,7 +279,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         name: $localize`Flags`,
         icon: Icons.flag,
         click: () => this.configureFlagsAction(),
-        permission: 'read',
+        permission: 'update',
         visible: () => this.permissions.osd.read
       },
       {

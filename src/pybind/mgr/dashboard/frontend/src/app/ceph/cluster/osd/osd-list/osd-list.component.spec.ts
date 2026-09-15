@@ -295,7 +295,7 @@ describe('OsdListComponent', () => {
   describe('show osd actions as defined', () => {
     const getOsdActions = () => {
       fixture.detectChanges();
-      return fixture.debugElement.query(By.css('#cluster-wide-actions')).componentInstance
+      return fixture.debugElement.query(By.css('#cluster-wide-actions'))?.componentInstance
         .dropDownActions;
     };
 
@@ -330,8 +330,8 @@ describe('OsdListComponent', () => {
     it('shows no osd actions', () => {
       component.permissions.configOpt.read = false;
       component.permissions.osd.read = false;
-      const osdActions = getOsdActions();
-      expect(osdActions).toEqual([]);
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('#cluster-wide-actions'))).toBeNull();
     });
   });
 
