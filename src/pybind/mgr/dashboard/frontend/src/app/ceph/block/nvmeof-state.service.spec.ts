@@ -131,6 +131,22 @@ describe('NvmeofStateService', () => {
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('should emit refresh$ when a nvmeof/namespace/edit task appears', () => {
+    const refreshSpy = jest.fn();
+    service.refresh$.subscribe(refreshSpy);
+
+    emitSummary([]); // init
+    emitSummary([
+      {
+        name: 'nvmeof/namespace/edit',
+        begin_time: '2026-01-01T00:00:00Z',
+        metadata: { nsid: 1, nqn: 'sub1' }
+      }
+    ]);
+
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('should not emit refresh$ for non-NVMe tasks', () => {
     const refreshSpy = jest.fn();
     service.refresh$.subscribe(refreshSpy);

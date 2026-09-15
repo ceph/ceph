@@ -19,6 +19,7 @@ import { from, Observable, of } from 'rxjs';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { catchError, concatMap, map, tap } from 'rxjs/operators';
+import { NvmeofStateService } from '../nvmeof-state.service';
 
 export type SubsystemPayload = {
   nqn: string;
@@ -91,7 +92,8 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     private destroyRef: DestroyRef,
     private nvmeofService: NvmeofService,
     private notificationService: NotificationService,
-    private router: Router
+    private router: Router,
+    private nvmeofStateService: NvmeofStateService
   ) {}
 
   ngOnInit() {
@@ -276,6 +278,9 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     );
 
     this.notificationService.show(type, title, messageLines.join('<br>'));
+    if (stepResults[0]?.success) {
+      this.nvmeofStateService.requestRefresh();
+    }
     this.router.navigate(['block/nvmeof/subsystems'], {
       queryParams: {
         group: this.group,

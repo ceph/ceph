@@ -13,12 +13,13 @@ import { FormHelper, Mocks } from '~/testing/unit-test-helper';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
-import { of, Observable } from 'rxjs';
+import { of, Observable, throwError } from 'rxjs';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NumberModule, RadioModule, ComboBoxModule, SelectModule } from 'carbon-components-angular';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RadosNamespace } from '~/app/shared/models/nvmeof';
+import { NvmeofStateService } from '../nvmeof-state.service';
 
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
 
@@ -107,12 +108,14 @@ describe('NvmeofNamespacesFormComponent', () => {
   let form: CdFormGroup;
   let formHelper: FormHelper;
   let activatedRouteStub: ActivatedRouteStub;
+  let nvmeofStateService: { requestRefresh: jest.Mock };
   const MOCK_RANDOM_STRING = 1720693470789;
   const MOCK_SUBSYSTEM = 'nqn.2021-11.com.example:subsystem';
   const MOCK_GROUP = 'default';
   const MOCK_NSID = String(MOCK_NS_RESPONSE['nsid']);
 
   beforeEach(async () => {
+    nvmeofStateService = { requestRefresh: jest.fn() };
     activatedRouteStub = new ActivatedRouteStub(
       { subsystem_nqn: MOCK_SUBSYSTEM, nsid: MOCK_NSID },
       { group: MOCK_GROUP }
@@ -123,7 +126,8 @@ describe('NvmeofNamespacesFormComponent', () => {
         NgbActiveModal,
         { provide: PoolService, useClass: MockPoolsService },
         { provide: ActivatedRoute, useValue: activatedRouteStub },
-        { provide: TaskWrapperService, useClass: MockTaskWrapperService }
+        { provide: TaskWrapperService, useClass: MockTaskWrapperService },
+        { provide: NvmeofStateService, useValue: nvmeofStateService }
       ],
       imports: [
         HttpClientTestingModule,
@@ -181,6 +185,30 @@ describe('NvmeofNamespacesFormComponent', () => {
       formHelper.setValue('initiators', ['host1']);
       component.onSubmit();
       expect(nvmeofService.createNamespace).toHaveBeenCalled();
+    });
+
+    it('should request list refresh after successful create', () => {
+      spyOn(router, 'navigate').and.returnValue(Promise.resolve(true));
+      formHelper.setValue('pool', 'rbd');
+      formHelper.setValue('image_size', new FormatterService().toBytes('1GiB'));
+      formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
+
+      component.onSubmit();
+
+      expect(nvmeofStateService.requestRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not request list refresh after failed create', () => {
+      (nvmeofService.createNamespace as jasmine.Spy).and.returnValue(
+        throwError(() => ({ message: 'failed' }))
+      );
+      formHelper.setValue('pool', 'rbd');
+      formHelper.setValue('image_size', new FormatterService().toBytes('1GiB'));
+      formHelper.setValue('subsystem', MOCK_SUBSYSTEM);
+
+      component.onSubmit();
+
+      expect(nvmeofStateService.requestRefresh).not.toHaveBeenCalled();
     });
 
     it('should send block_size from namespace_size UI field', () => {
