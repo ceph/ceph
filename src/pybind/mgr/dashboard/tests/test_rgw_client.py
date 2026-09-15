@@ -17,6 +17,7 @@ from ..tests import CLICommandTestMixin, RgwStub
     return_value='dummy_admin'))
 @patch('dashboard.services.ceph_service.CephService.send_command', Mock(
     return_value=''))
+@patch('dashboard.services.rgw_client._is_reachable', Mock(return_value=True))
 class RgwClientTest(TestCase, CLICommandTestMixin):
     _dashboard_user_realm1_access_key = 'VUOFXZFK24H81ISTVBTR'
     _dashboard_user_realm1_secret_key = '0PGsCvXPGWS3AGgibUZEcd9efLrbbshlUkY3jruR'
@@ -54,6 +55,7 @@ class RgwClientTest(TestCase, CLICommandTestMixin):
 
     def setUp(self):
         RgwStub.get_daemons()
+        RgwClient.drop_instance()
         self.mock_kv_store()
         self.CONFIG_KEY_DICT.update({
             'RGW_API_ACCESS_KEY': 'klausmustermann',
@@ -325,23 +327,52 @@ class RgwClientTest(TestCase, CLICommandTestMixin):
         result = _determine_rgw_addr(daemon_info)
         self.assertEqual(result.host, "192.168.178.3")
 
-    def test_set_rgw_default_daemon_command(self):
-        self.exec_cmd('set-rgw-default-daemon', value='daemon2')
-        self.assertEqual(Settings.RGW_DEFAULT_DAEMON, 'daemon2')
+    def test_unreachable_daemon_is_skipped(self):
+        with patch('dashboard.services.rgw_client._is_reachable',
+                   side_effect=lambda daemon: daemon.name != 'daemon1'):
+            instance = RgwClient.admin_instance()
+        self.assertEqual(instance.daemon.name, 'daemon2')
 
-    def test_default_daemon_setting_selects_daemon(self):
-        self.CONFIG_KEY_DICT.update({'RGW_DEFAULT_DAEMON': 'daemon2'})
+    def test_no_reachable_daemon_raises(self):
+        with patch('dashboard.services.rgw_client._is_reachable', return_value=False), \
+                self.assertRaises(DashboardException) as cm:
+            RgwClient.admin_instance()
+        self.assertEqual(cm.exception.status, 503)
+
+    def test_vanished_daemon_is_not_reused(self):
+        RgwClient.admin_instance()
+        del mgr.get('service_map')['services']['rgw']['daemons']['5297']
         instance = RgwClient.admin_instance()
         self.assertEqual(instance.daemon.name, 'daemon2')
 
     @patch.object(RgwMultisite, 'get_all_zonegroups_info',
                   Mock(return_value={'default_zonegroup': 'zonegroup2-id'}))
-    def test_default_daemon_setting_unknown_falls_back(self):
-        self.CONFIG_KEY_DICT.update({'RGW_DEFAULT_DAEMON': 'missing'})
-        with self.assertLogs(level='WARNING') as cm:
+    def test_default_zonegroup_preferred_over_other_zonegroups(self):
+        daemons = mgr.get('service_map')['services']['rgw']['daemons']
+        daemons['5499'] = {'addr': '192.168.178.4:49774/1534999298',
+                           'metadata': dict(daemons['5398']['metadata'], id='daemon3')}
+        with patch('dashboard.services.rgw_client._is_reachable',
+                   side_effect=lambda daemon: daemon.name != 'daemon2'):
             instance = RgwClient.admin_instance()
-        self.assertEqual(instance.daemon.name, 'daemon2')
-        self.assertIn('missing', cm.output[0])
+        self.assertEqual(instance.daemon.name, 'daemon3')
+
+    def test_explicitly_selected_unreachable_daemon_raises(self):
+        with patch('dashboard.services.rgw_client._is_reachable', return_value=False), \
+                self.assertRaises(DashboardException) as cm:
+            RgwClient.admin_instance(daemon_name='daemon2')
+        self.assertEqual(cm.exception.status, 503)
+
+    def test_explicitly_selected_daemon_does_not_become_default(self):
+        RgwClient.admin_instance(daemon_name='daemon2')
+        instance = RgwClient.admin_instance()
+        self.assertEqual(instance.daemon.name, 'daemon1')
+
+    def test_cached_daemon_is_not_probed(self):
+        RgwClient.admin_instance()
+        with patch('dashboard.services.rgw_client._is_reachable') as is_reachable:
+            instance = RgwClient.admin_instance()
+        is_reachable.assert_not_called()
+        self.assertEqual(instance.daemon.name, 'daemon1')
 
 
 class RgwClientHelperTest(TestCase):
