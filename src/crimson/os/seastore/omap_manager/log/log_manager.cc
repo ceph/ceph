@@ -189,18 +189,41 @@ LogManager::omap_set_keys(
     }
   }
 
+  /*
+   * A non-log key must not be left duplicated in the chain, so the previous
+   * instance of every such key has to be removed before the new one is
+   * appended. Do all of them up front in a single backward traversal:
+   * removing them one at a time rescans the chain per key - and a key that is
+   * not there at all always walks it to the end - which is O(keys * chain
+   * length). A pgmeta transaction setting thousands of missing/... keys pays
+   * that cost in full.
+   */
+  std::vector<std::string_view> dup_keys;
+  for (const auto &p : kvs) {
+    if (!is_log_key(p.first)) {
+      // kvs was moved into this coroutine's frame and std::map keys are
+      // stable, so a view into one stays valid for the traversal.
+      dup_keys.emplace_back(p.first);
+    }
+  }
+  if (!dup_keys.empty()) {
+    pending_keys_t pending(std::move(dup_keys));
+    std::vector<std::string> multi_block_keys;
+    co_await remove_kv_set(t, log_root.addr, pending, multi_block_keys, nullptr);
+    for (const auto &key : multi_block_keys) {
+      co_await remove_kv(t, log_root.addr, key, nullptr);
+    }
+    // reload ext, it may have been mutated by the removals above
+    CachedExtentRef node = co_await resync_log_node(ext);
+    ext = node->template cast<LogNode>();
+  }
+
   std::map<std::string, ceph::bufferlist> dup_kvs;
   if (kvs.size() > BATCH_CREATE_SIZE) {
     LogNodeRef e = ext;
     LogNodeRef dup_e;
     laddr_t dup_tail = co_await get_dup_addr_from_root(t, ext->get_laddr());
     for (auto &p : kvs) {
-      if (!is_log_key(p.first)) {
-	co_await remove_kv(t, log_root.addr, p.first, nullptr);
-	// reload latest log list e because e was updated if the key is in e
-	CachedExtentRef node = co_await resync_log_node(e);
-	e = node->template cast<LogNode>();
-      }
       LogNodeRef cur = e;
       if (is_dup_log_key(p.first)) {
 	if (!dup_e) {
@@ -254,10 +277,6 @@ LogManager::omap_set_keys(
     if (is_dup_log_key(p.first)) {
       dup_kvs[p.first] = p.second;
       continue;
-    }
-    if (!is_log_key(p.first)) {
-      // remove duplicate keys first
-      co_await remove_kv(t, log_root.addr, p.first, nullptr);
     }
     laddr_t last_addr = log_root.addr;
     co_await set_log_node_entry(p.first, p.second);
@@ -646,7 +665,79 @@ LogManager::remove_kv(Transaction &t, laddr_t dst, const std::string &key, LogNo
 }
 
 LogManager::omap_rm_key_ret
-LogManager::remove_kvs(Transaction &t, laddr_t dst, 
+LogManager::remove_kv_set(
+  Transaction &t,
+  laddr_t dst,
+  pending_keys_t &keys,
+  std::vector<std::string> &multi_block_keys,
+  LogNodeRef prev)
+{
+  LOG_PREFIX(LogManager::remove_kv_set);
+  DEBUGT("key size={}, dst={}", t, keys.size(), dst);
+
+  // Iterative rather than recursive: the chain can hold a hundred nodes or
+  // more, and there is nothing to do on the way back up.
+  std::vector<std::string_view> found;
+  while (dst != L_ADDR_NULL && !keys.empty()) {
+    auto extent = co_await log_load_extent<LogNode>(
+      t, dst, BEGIN_KEY, END_KEY);
+    if (extent == nullptr) {
+      co_return;
+    }
+    laddr_t prev_addr = extent->get_prev_addr();
+
+    if (extent->has_multi_block_kv()) {
+      // The value spans a run of LogNodes; hand the whole key over to
+      // remove_kv() instead of unlinking the chunks here.
+      auto key = extent->get_first_key();
+      if (keys.take(key)) {
+	multi_block_keys.emplace_back(key);
+      }
+      prev = extent;
+      dst = prev_addr;
+      continue;
+    }
+
+    // One pass over the node answers the lookup for every key still pending.
+    // found holds views into the node's buffer, which extent keeps alive;
+    // removing an entry only flips bits in the deletion bitmap, so they stay
+    // valid while we act on them below.
+    found.clear();
+    extent->for_each_live_entry([&](const auto &ent, uint32_t index) -> bool {
+      auto key = ent.get_key_view();
+      if (keys.take(key)) {
+	found.push_back(key);
+      }
+      return keys.empty();
+    });
+    LogNodeRef p = extent;
+    if (!found.empty()) {
+      auto mut = tm.get_mutable_extent(t, extent)->template cast<LogNode>();
+      for (const auto &key : found) {
+	// Non-log keys are never duplicated across the chain, so the entry
+	// removed here is the only one - which is why take() above could
+	// strike the key off before we got here.
+	mut->remove_entry(key);
+      }
+      DEBUGT("removed {} keys from {}, {} remaining",
+	t, found.size(), *mut, keys.size());
+      p = mut;
+      if (mut->is_removable()) {
+	co_await remove_node(t, mut, prev);
+	if (prev != nullptr) {
+	  p = co_await log_load_extent<LogNode>(
+	    t, prev->get_laddr(), BEGIN_KEY, END_KEY);
+	}
+      }
+    }
+    prev = p;
+    dst = prev_addr;
+  }
+  co_return;
+}
+
+LogManager::omap_rm_key_ret
+LogManager::remove_kvs(Transaction &t, laddr_t dst,
   std::optional<std::string> first, 
   std::optional<std::string> last,
   LogNodeRef prev)
@@ -801,8 +892,14 @@ LogManager::omap_rm_keys(
 	*key_set.rbegin(),
 	nullptr);
     } else {
-      for (auto& p : key_set) {
-	co_await remove_kv(t, log_root.addr, p, nullptr);
+      // Not a range, but still only one traversal: remove_kv_set() matches
+      // the whole set as it walks the chain.
+      pending_keys_t pending(
+	std::vector<std::string_view>(key_set.begin(), key_set.end()));
+      std::vector<std::string> multi_block_keys;
+      co_await remove_kv_set(t, addr, pending, multi_block_keys, nullptr);
+      for (auto& p : multi_block_keys) {
+	co_await remove_kv(t, addr, p, nullptr);
       }
     }
   };
