@@ -163,6 +163,9 @@ class Config:
         self.cli_args = cli_args
         self._maj_min = sys.version_info[0:2]
         self.install_dependencies = True
+        self.main_script = "cephadm.py"
+        if cli_args.main_script:
+            self.main_script = cli_args.main_script
         self.deps_mode = DependencyMode[cli_args.bundled_dependencies]
         if self.deps_mode == DependencyMode.none:
             self.install_dependencies = False
@@ -270,7 +273,8 @@ def _build(dest, src, config):
         )
         # cephadm.py is cephadm's main script for the "binary"
         # this must be renamed to __main__.py for the zipapp
-        shutil.copy("cephadm.py", appdir / "__main__.py")
+        main_script = getattr(config, "main_script", "") or "cephadm.py"
+        shutil.copy(main_script, appdir / "__main__.py")
         mdir = appdir / "_cephadmmeta"
         mdir.mkdir(parents=True, exist_ok=True)
         (mdir / "__init__.py").touch(exist_ok=True)
@@ -318,7 +322,7 @@ def _compile(dest, tempdir):
         log.error("compileall.compile_dir failed (see output for details)")
         raise ValueError("byte-compile failed")
     # TODO we could explicitly pass a python version here
-    log.info("Constructing the zipapp file")
+    log.info("Constructing the zipapp file: %s", dest)
     try:
         zipapp.create_archive(
             source=tempdir,
@@ -708,6 +712,10 @@ def main():
         choices=[e.name for e in DependencyMode],
         default=DependencyMode.pip.name,
         help="Source for bundled dependencies",
+    )
+    parser.add_argument(
+        '--main-script',
+        help='Use custom main script',
     )
     args = parser.parse_args()
 
