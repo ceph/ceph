@@ -1747,6 +1747,20 @@ void PGScrubber::emit_chunk_result(
     DEBUGDPP("Chunk complete. range: {}", pg, range);
   }
 
+  // Emit cluster-log WARN for large-omap objects, matching classic OSD's
+  // ScrubBackend::collect_omap_stats() which calls clog.do_log(CLOG_WARN, ...).
+  // Classic gates on m_large_omap_warning_issued so only the first large-omap
+  // object per chunk is logged; we collected one entry per large object, so emit
+  // them all (in practice the list is almost always length 0 or 1).
+  for (const auto &lo : result.large_omap_warnings) {
+    auto warn_msg = fmt::format(
+      "Large omap object found. Object: {} PG: {} Key count: {} Size "
+      "(bytes): {}\n",
+      lo.hoid, pg.get_pgid(), lo.key_count, lo.value_size);
+    WARNDPP("{}", pg, warn_msg);
+    pg.get_clog_warn() << warn_msg;
+  }
+
   // For deep scrubs, write back any newly-computed digests to the objects'
   // object_info_t attrs.  This mirrors classic OSD's submit_digest_fixes /
   // PrimaryLogScrub path: after deep scan the authoritative digest is stored

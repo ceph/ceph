@@ -5,6 +5,7 @@
 
 #include <string>
 #include <map>
+#include <vector>
 
 #include "common/config_proxy.h"
 #include "common/scrub_types.h"
@@ -110,6 +111,19 @@ struct chunk_result_t {
   // Using the full hobject_t as key avoids collisions when multiple clones of the
   // same base object each have errors (e.g. obj5:1 and obj5:2 both missing).
   std::map<hobject_t, hobject_t> object_hoids;
+
+  // Large-omap objects detected during deep scrub.
+  // Each entry carries enough information to reproduce the classic cluster-log
+  // WARN line "Large omap object found. Object: ... PG: ... Key count: ...
+  // Size (bytes): ..." emitted by ScrubBackend::collect_omap_stats().
+  // Populated by add_object_to_stats() in scrub_validator.cc; replayed as
+  // clog.warn() in PGScrubber::emit_chunk_result().
+  struct large_omap_entry_t {
+    hobject_t hoid;
+    uint64_t key_count{0};
+    uint64_t value_size{0};
+  };
+  std::vector<large_omap_entry_t> large_omap_warnings;
 
   bool has_errors() const {
     return !snapset_errors.empty() || !object_errors.empty() ||
