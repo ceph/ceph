@@ -6,6 +6,8 @@
     "plugins/index.js"
   ],
   "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
     "typeRoots": [
       "../node_modules",
       "../node_modules/@types"

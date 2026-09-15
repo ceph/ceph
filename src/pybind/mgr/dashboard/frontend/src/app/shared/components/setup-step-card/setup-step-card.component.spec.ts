@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
 import { SetupStepCardComponent } from './setup-step-card.component';
 
@@ -97,8 +98,8 @@ describe('SetupStepCardComponent', () => {
       component.successMessage = SUCCESS_MESSAGE;
       fixture.detectChanges();
 
-      const icon = fixture.nativeElement.querySelector('cd-icon');
-      expect(icon.getAttribute('ng-reflect-type')).toBe('success');
+      const icon = fixture.debugElement.query(By.css('cd-icon'));
+      expect(icon.componentInstance.type).toBe('success');
     });
 
     it('should render an info icon when not configured', () => {
@@ -106,8 +107,8 @@ describe('SetupStepCardComponent', () => {
       component.infoMessage = INFO_MESSAGE;
       fixture.detectChanges();
 
-      const icon = fixture.nativeElement.querySelector('cd-icon');
-      expect(icon.getAttribute('ng-reflect-type')).toBe('infoCircle');
+      const icon = fixture.debugElement.query(By.css('cd-icon'));
+      expect(icon.componentInstance.type).toBe('infoCircle');
     });
 
     it('should render loading panel when isLoading is true', () => {
