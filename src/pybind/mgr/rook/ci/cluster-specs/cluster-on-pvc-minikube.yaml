@@ -142,7 +142,7 @@ spec:
   crashCollector:
     disable: false
   cephVersion:
-    image: quay.io/ceph/daemon-base:latest-main
+    image: quay.ceph.io/ceph-ci/ceph:main
     allowUnsupported: true
   skipUpgradeChecks: false
   continueUpgradeAfterChecksEvenIfNotHealthy: false
