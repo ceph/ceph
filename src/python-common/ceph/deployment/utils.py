@@ -137,7 +137,7 @@ def verify_size_with_units(field: Any, field_name: str) -> Optional[int]:
         return None
     try:
         size = with_units_to_int(str(field))
-    except (ValueError, TypeError, IndexError, UnboundLocalError):
+    except (ValueError, TypeError):
         raise SpecValidationError(f'{field_name}: invalid size {field!r}')
     if size < 0:
         raise SpecValidationError(f"{field_name} can't be negative")
