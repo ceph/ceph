@@ -27,6 +27,23 @@ wait_for_service() {
     exit 1
 }
 
+retry() {
+    local max_retries=5
+    local delay=10
+    local attempt
+    local rc=0
+    for ((attempt=1; attempt<=max_retries; attempt++)); do
+        "$@" && return 0
+        rc=$?
+        if [ "$attempt" -lt "$max_retries" ]; then
+            echo "[nvmeof.mtls] '$*' failed (rc=$rc, attempt $attempt/$max_retries), retrying in ${delay}s..."
+            sleep $delay
+        fi
+    done
+    echo "[nvmeof.mtls] '$*' still failing after $max_retries attempts (rc=$rc)"
+    return $rc
+}
+
 # CASE 1: certs in spec file (server/client + root CA)
 echo "[nvmeof.mtls] Starting test with certs in spec file (server/client + root CA)"
 
@@ -78,7 +95,7 @@ IFS=',' read -ra gateway_ips <<< "$NVMEOF_GATEWAY_IP_ADDRESSES"
 for i in "${!gateway_ips[@]}"
 do
     ip="${gateway_ips[i]}"
-    ceph nvmeof subsystem list --server-address $ip
+    retry ceph nvmeof subsystem list --server-address $ip
     sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $ip --server-port $NVMEOF_SRPORT \
         --format json subsystem list
 done
@@ -119,7 +136,7 @@ do
     ceph orch certmgr cert get $NVMEOF_CLIENT_CERT_NAME --hostname $HOST > /tmp/cephadm_client.crt
     ceph orch certmgr key get $NVMEOF_CLIENT_KEY_NAME --service-name $SERVICE_NAME --hostname $HOST > /tmp/cephadm_client.key
 
-    ceph nvmeof subsystem list --server-address $ip
+    retry ceph nvmeof subsystem list --server-address $ip
     sudo podman run -v /tmp/cephadm_server.crt:/server.crt:z -v /tmp/cephadm_client.crt:/client.crt:z \
         -v /tmp/cephadm_client.key:/client.key:z  \
         -it $NVMEOF_CLI_IMAGE --server-address $ip --server-port $NVMEOF_SRPORT \
@@ -148,7 +165,7 @@ IFS=',' read -ra gateway_ips <<< "$NVMEOF_GATEWAY_IP_ADDRESSES"
 for i in "${!gateway_ips[@]}"
 do
     ip="${gateway_ips[i]}"
-    ceph nvmeof subsystem list --server-address $ip
+    retry ceph nvmeof subsystem list --server-address $ip
     sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $ip --server-port $NVMEOF_SRPORT \
         --format json subsystem list
 done

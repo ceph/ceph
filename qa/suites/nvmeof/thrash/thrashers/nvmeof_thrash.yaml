@@ -7,6 +7,7 @@ overrides:
       - OSD_HOST_DOWN
       - OSD_ROOT_DOWN
       - PG_DEGRADED
+      - Degraded data redundancy
       # nvmeof daemon thrashing
       - CEPHADM_FAILED_DAEMON
       - NVMEOF_SINGLE_GATEWAY
@@ -18,7 +19,14 @@ overrides:
       - is in error state
       - failed cephadm daemon
       - CEPHADM_STRAY_DAEMON
+      - stray daemon.* not managed by cephadm
       - CEPHADM_DAEMON_PLACE_FAIL
+      - Failed to place .* daemon
+      - CEPHADM_APPLY_SPEC_FAIL
+      - Failed to apply .* service
+      - Cannot place .* Unknown hosts
+      - CEPHADM_REFRESH_FAILED
+      - failed to probe daemons or devices
 
 tasks:
 - nvmeof.thrash:
