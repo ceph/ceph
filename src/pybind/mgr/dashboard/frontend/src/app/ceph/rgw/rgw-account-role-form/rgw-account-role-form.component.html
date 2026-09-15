@@ -36,7 +36,7 @@
           <cds-text-label
             label="Role name"
             labelInputID="role_name"
-            [invalid]="roleName.isInvalid"
+            [invalid]="isFieldInvalid('role_name')"
             [invalidText]="roleNameError"
             helperText="Unique name used to identify this role within the account."
             i18n-helperText
@@ -44,19 +44,18 @@
             Role name
             <input
               cdsText
-              cdValidate
-              #roleName="cdValidate"
               type="text"
               id="role_name"
               name="role_name"
               formControlName="role_name"
               placeholder="Enter a role name (e.g. BackupServiceRole)"
+              [invalid]="isFieldInvalid('role_name')"
               [autofocus]="true"
               modal-primary-focus
             />
           </cds-text-label>
           <ng-template #roleNameError>
-            @if (form.showError('role_name', formDir, 'required')) {
+            @if (showFieldError('role_name', 'required')) {
               <span
                 class="invalid-feedback"
                 i18n
@@ -103,7 +102,7 @@
           <cds-text-label
             label="Path"
             labelInputID="role_path"
-            [invalid]="rolePath.isInvalid"
+            [invalid]="isFieldInvalid('role_path')"
             [invalidText]="pathError"
             helperText='Organize roles into logical hierarchies. Use "/" for the root path.'
             i18n-helperText
@@ -111,17 +110,16 @@
             Path
             <input
               cdsText
-              cdValidate
-              #rolePath="cdValidate"
               type="text"
               id="role_path"
               name="role_path"
               formControlName="role_path"
               placeholder="Enter path (/applications/)"
+              [invalid]="isFieldInvalid('role_path')"
             />
           </cds-text-label>
           <ng-template #pathError>
-            @if (form.showError('role_path', formDir, 'required')) {
+            @if (showFieldError('role_path', 'required')) {
               <span
                 class="invalid-feedback"
                 i18n
@@ -135,7 +133,7 @@
         <div class="form-item">
           <cds-textarea-label
             labelInputID="role_assume_policy_doc"
-            [invalid]="policyDoc.isInvalid"
+            [invalid]="isFieldInvalid('role_assume_policy_doc')"
             [invalidText]="policyError"
             helperText="Defines who can assume this role."
             i18n-helperText
@@ -143,8 +141,6 @@
             Trust policy
             <textarea
               cdsTextArea
-              cdValidate
-              #policyDoc="cdValidate"
               id="role_assume_policy_doc"
               name="role_assume_policy_doc"
               formControlName="role_assume_policy_doc"
@@ -152,17 +148,18 @@
               rows="6"
               cols="200"
               cdRequiredField="Trust Policy"
+              [invalid]="isFieldInvalid('role_assume_policy_doc')"
             ></textarea>
           </cds-textarea-label>
           <ng-template #policyError>
-            @if (form.showError('role_assume_policy_doc', formDir, 'required')) {
+            @if (showFieldError('role_assume_policy_doc', 'required')) {
               <span
                 class="invalid-feedback"
                 i18n
                 >This field is required.</span
               >
             }
-            @if (form.showError('role_assume_policy_doc', formDir, 'json')) {
+            @if (showFieldError('role_assume_policy_doc', 'json')) {
               <span
                 class="invalid-feedback"
                 i18n
@@ -178,29 +175,26 @@
             class="cds--type-heading-compact-01 cds-mb-2"
             i18n
           >
-            Permission policy
+            Permission policy (optional)
           </div>
           <p
             class="cds--form__helper-text cds-mb-4"
             i18n
           >
             Attach an IAM-compatible JSON policy to specify the S3 resources this role can access
-            and the actions it can take. At least one permission policy is required, as roles
-            without one will block all S3 actions.
+            and the actions it can take. Roles without permission policies will block all S3
+            actions until a policy is attached.
           </p>
 
           <div formArrayName="permission_policies">
-            @for (policy of permissionPolicies.controls; track $index; let i = $index) {
-              <div [formGroupName]="i">
+            @for (policy of permissionPolicies.controls; track policy; let i = $index) {
+              <div [formGroup]="$any(policy)">
                 <!-- Policy name -->
                 <div class="form-item">
                   <cds-text-label
                     label="Policy name"
                     [labelInputID]="'policy_name_' + i"
-                    [invalid]="
-                      policy.get('policy_name').invalid &&
-                      (policy.get('policy_name').touched || formDir.submitted)
-                    "
+                    [invalid]="isPolicyFieldInvalid(policy, 'policy_name')"
                     [invalidText]="policyNameError"
                   >
                     Policy name
@@ -211,10 +205,11 @@
                       name="policy_name"
                       formControlName="policy_name"
                       placeholder="S3ReadWritePolicy"
+                      [invalid]="isPolicyFieldInvalid(policy, 'policy_name')"
                     />
                   </cds-text-label>
                   <ng-template #policyNameError>
-                    @if (policy.get('policy_name').hasError('required')) {
+                    @if (showPolicyFieldError(policy, 'policy_name', 'required')) {
                       <span
                         class="invalid-feedback"
                         i18n
@@ -228,10 +223,7 @@
                 <div class="form-item">
                   <cds-textarea-label
                     [labelInputID]="'policy_doc_' + i"
-                    [invalid]="
-                      policy.get('policy_doc').invalid &&
-                      (policy.get('policy_doc').touched || formDir.submitted)
-                    "
+                    [invalid]="isPolicyFieldInvalid(policy, 'policy_doc')"
                     [invalidText]="policyDocError"
                   >
                     JSON
@@ -243,17 +235,18 @@
                       [placeholder]="policyDocPlaceholder"
                       rows="8"
                       cols="200"
+                      [invalid]="isPolicyFieldInvalid(policy, 'policy_doc')"
                     ></textarea>
                   </cds-textarea-label>
                   <ng-template #policyDocError>
-                    @if (policy.get('policy_doc').hasError('required')) {
+                    @if (showPolicyFieldError(policy, 'policy_doc', 'required')) {
                       <span
                         class="invalid-feedback"
                         i18n
                         >This field is required.</span
                       >
                     }
-                    @if (policy.get('policy_doc').hasError('json')) {
+                    @if (showPolicyFieldError(policy, 'policy_doc', 'json')) {
                       <span
                         class="invalid-feedback"
                         i18n
@@ -284,15 +277,6 @@
             }
           </div>
 
-          @if (permissionPolicies.length === 0) {
-            <p
-              class="invalid-feedback cds-mb-3"
-              i18n
-            >
-              At least one permission policy is required.
-            </p>
-          }
-
           <!-- Add policy button -->
           <div class="form-item cds-mt-3">
             <button
@@ -313,9 +297,7 @@
         <div class="form-item">
           <cds-number
             label="Maximum session duration (hours)"
-            cdValidate
-            #maxSessionDuration="cdValidate"
-            [invalid]="maxSessionDuration.isInvalid"
+            [invalid]="isFieldInvalid('max_session_duration')"
             [invalidText]="durationError"
             formControlName="max_session_duration"
             min="1"
@@ -324,21 +306,21 @@
           >
           </cds-number>
           <ng-template #durationError>
-            @if (form.showError('max_session_duration', formDir, 'required')) {
+            @if (showFieldError('max_session_duration', 'required')) {
               <span
                 class="invalid-feedback"
                 i18n
                 >This field is required.</span
               >
             }
-            @if (form.showError('max_session_duration', formDir, 'min')) {
+            @if (showFieldError('max_session_duration', 'min')) {
               <span
                 class="invalid-feedback"
                 i18n
                 >Minimum value is 1 hour.</span
               >
             }
-            @if (form.showError('max_session_duration', formDir, 'max')) {
+            @if (showFieldError('max_session_duration', 'max')) {
               <span
                 class="invalid-feedback"
                 i18n
