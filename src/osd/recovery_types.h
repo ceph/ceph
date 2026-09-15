@@ -4,8 +4,12 @@
 #pragma once
 
 #include <map>
+#include <ostream>
+#include <utility>
 
 #include "osd_types.h"
+
+#include "common/Formatter.h"
 
 /**
  * BackfillInterval

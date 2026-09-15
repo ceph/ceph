@@ -23,12 +23,11 @@
 #include <condition_variable>
 #include <list>
 #include <mutex>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/common_fwd.h"
 #include "common/admin_finisher.h"
 #include "common/ref.h"
@@ -103,13 +102,7 @@ public:
     const cmdmap_t& cmdmap,
     ceph::Formatter *f,
     const ceph::buffer::list& inbl,
-    asok_finisher on_finish) {
-    // by default, call the synchronous handler and then finish
-    ceph::buffer::list out;
-    std::ostringstream errss;
-    int r = call(command, cmdmap, inbl, f, errss, out);
-    on_finish(r, errss.str(), out);
-  }
+    asok_finisher on_finish);
   virtual ~AdminSocketHook() {}
 };
 

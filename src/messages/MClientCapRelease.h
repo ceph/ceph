@@ -16,6 +16,7 @@
 #ifndef CEPH_MCLIENTCAPRELEASE_H
 #define CEPH_MCLIENTCAPRELEASE_H
 
+#include "include/ceph_fs_encoder.h"
 #include "msg/Message.h"
 
 

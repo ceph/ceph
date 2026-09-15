@@ -9,6 +9,7 @@
 
 #include "common/JSONFormatter.h"
 #include "common/safe_io.h"
+#include "include/uuid_fmt.h"
 #include "os/Transaction.h"
 
 #include "crimson/common/buffer_io.h"

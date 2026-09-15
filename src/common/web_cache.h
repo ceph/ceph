@@ -32,6 +32,7 @@
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+#include "common/ceph_time_fmt.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #include "common/perf_counters_collection.h"
