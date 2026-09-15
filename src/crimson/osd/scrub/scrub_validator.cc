@@ -1410,7 +1410,18 @@ chunk_result_t validate_chunk(
         head_snapset = head_it->second.snapset;
       }
     }
-    add_object_to_stats(policy, oid, evals.at(oid), head_snapset, &ret.stats);
+    const auto &eval = evals.at(oid);
+    add_object_to_stats(policy, oid, eval, head_snapset, &ret.stats);
+
+    // Collect large-omap warnings for cluster-log emission in emit_chunk_result(),
+    // matching classic ScrubBackend::collect_omap_stats() behavior.
+    if (eval.omap_keys > policy.omap_key_limit ||
+        eval.omap_bytes > policy.omap_bytes_limit) {
+      ret.large_omap_warnings.push_back(
+        {oid,
+         static_cast<uint64_t>(eval.omap_keys),
+         static_cast<uint64_t>(eval.omap_bytes)});
+    }
   }
 
   // Count errors matching classic OSD's scrub_backend.cc:
