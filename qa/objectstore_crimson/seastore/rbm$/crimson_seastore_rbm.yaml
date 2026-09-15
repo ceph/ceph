@@ -8,6 +8,7 @@ overrides:
         seastore hot backend type: RANDOM_BLOCK
         seastore cold device type: RANDOM_BLOCK_HDD
         seastore cold backend type: RANDOM_BLOCK
+        seastore_full_integrity_check: false
         debug seastore: 20
         debug seastore onode: 20
         debug seastore odata: 20
