@@ -84,9 +84,17 @@
 
 #include "compressor/Compressor.h"
 
+#if defined(WITH_RADOSGW_D4N) && !defined(WITH_RADOSGW_STANDALONE)
+ #define RGW_HAVE_D4N_FILTER
+#endif
+
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight.h"
 #include "rgw_flight_frontend.h"
+#endif
+
+#ifdef RGW_HAVE_D4N_FILTER
+ #include "driver/d4n/rgw_sal_d4n.h"
 #endif
 
 #ifdef WITH_LTTNG
@@ -257,10 +265,22 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 				    RGWAccessControlPolicy& policy,
                                     string *storage_class,
 				    rgw::sal::Object* obj,
+                                    const RGWEnv& env,
                                     optional_yield y)
 {
   bufferlist bl;
 
+#ifdef RGW_HAVE_D4N_FILTER
+  if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+    if (env.get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+      rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(obj);
+      d4n_obj->set_remote_cache_request();
+      if (auto object_version = env.get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION"); object_version) {
+        d4n_obj->set_object_version(object_version.get());
+      }
+    }
+  }
+#endif
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
   if (const int ret = rop->prepare(y, dpp); ret < 0) {
@@ -409,7 +429,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
 
   int ret = get_obj_policy_from_attr(dpp, s->cct, driver, s->bucket_owner,
-				     acl, storage_class, object, s->yield);
+				     acl, storage_class, object, *s->info.env, s->yield);
   if (ret == -ENOENT) {
     // the object doesn't exist, but we can't expose that information to clients
     // that don't have permission to list the bucket and learn that for
@@ -2734,6 +2754,31 @@ void RGWGetObj::execute(optional_yield y)
   }
   if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
     s->object->set_cache_request();
+#ifdef RGW_HAVE_D4N_FILTER
+  if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+    if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+      rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
+      d4n_obj->set_remote_cache_request();
+      auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION");
+      if (object_version) {
+        d4n_obj->set_object_version(object_version.get());
+      }
+    }
+  }
+#endif
+
+#ifdef RGW_HAVE_D4N_FILTER
+  if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+    if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+      ldpp_dout(this, 20) << "This is a remote cache GET request !!!" << dendl;
+      rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
+      d4n_obj->set_remote_cache_request();
+      if (auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION"); object_version) {
+        d4n_obj->set_object_version(object_version.get());
+      }
+    }
+  }
+#endif
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
@@ -4785,6 +4830,37 @@ void RGWPutObj::execute(optional_yield y)
   }
   if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
     s->object->set_cache_request();
+#ifdef RGW_HAVE_D4N_FILTER
+  if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+    if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+      dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_remote_cache_request();
+      rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
+      if (auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION"); object_version) {
+        d4n_obj->set_object_version(object_version.get());
+      }
+      if (auto old_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OLD_VERSION"); old_version) {
+        d4n_obj->set_old_version(old_version.get());
+      }
+      if (auto object_dirty = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_DIRTY"); object_dirty) {
+        d4n_obj->set_remote_dirty_flag(object_dirty.get() == "true" || object_dirty.get() == "1" );
+      }
+      if (auto blk_offset = s->info.env->get_optional("HTTP_X_RGW_CACHE_BLK_OFFSET"); blk_offset) {
+        d4n_obj->set_block_offset(std::stoull(blk_offset.get()));
+      }
+      if (auto blk_len = s->info.env->get_optional("HTTP_X_RGW_CACHE_BLK_LEN"); blk_len) {
+        d4n_obj->set_block_len(std::stoull(blk_len.get()));
+      }
+      if (auto obj_size = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJ_SIZE"); obj_size) {
+        d4n_obj->set_remote_obj_size(std::stoull(obj_size.get()));
+      }
+      if (auto block_only = s->info.env->get_optional("HTTP_X_RGW_CACHE_BLOCK_ONLY"); block_only) {
+        if (block_only.get() == "true") {
+          d4n_obj->set_remote_block_only(true);
+        }
+      }
+    }
+  }
+#endif
 
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
@@ -5808,6 +5884,25 @@ void RGWDeleteObj::execute(optional_yield y)
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
       null_verid = (s->object->get_instance() == "null");
 
+#ifdef RGW_HAVE_D4N_FILTER
+      if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+        if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+          rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
+          d4n_obj->set_remote_cache_request();
+          if (auto object_dirty = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_DIRTY"); object_dirty) {
+            d4n_obj->set_remote_dirty_flag(object_dirty.get() == "true" || object_dirty.get() == "1" );
+          }
+          // object version, used to look up the version-specific head (like the GET path)
+          if (auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION"); object_version) {
+            d4n_obj->set_object_version(object_version.get());
+          }
+          // non-empty only when the local RGW's delete created a delete marker to replicate
+          if (auto dm_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_DELETE_MARKER_VERSION"); dm_version) {
+            d4n_obj->set_delete_marker_version(dm_version.get());
+          }
+        }
+      }
+#endif
       op_ret = state_loaded = s->object->load_obj_state(this, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
@@ -5911,6 +6006,7 @@ void RGWDeleteObj::execute(optional_yield y)
 
       if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
         s->object->set_cache_request();
+
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
