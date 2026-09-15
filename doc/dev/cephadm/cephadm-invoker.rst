@@ -10,7 +10,7 @@ Overview
 
 The cephadm invoker validates the cephadm binary hash before execution and
 provides a secure way to run cephadm commands and deploy binaries. It is installed as
-part of the cephadm RPM at ``/usr/libexec/cephadm_invoker.py``.
+part of the cephadm package (RPM or DEB) at ``/usr/libexec/cephadm_invoker.py``.
 
 Commands
 --------

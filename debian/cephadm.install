@@ -1,2 +1,3 @@
 usr/sbin/cephadm
+usr/libexec/cephadm_invoker.py
 usr/share/man/man8/cephadm.8
