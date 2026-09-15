@@ -4845,21 +4845,31 @@ options:
     clients hint that data is compressible. aggressive means use compression unless
     clients hint that data is not compressible. force means use compression under all
     circumstances even if the clients hint that the data is not compressible.
+    *_lazy counterparts instruct to apply compression as per above during deep-scrubbing
+    only. Which has to be additionally enabled at per-pool level using ''deep_scrub_reformat''
+    pool setting.
   fmt_desc: The default policy for using compression if the per-pool property ``compression_mode``
     is not set. ``none`` means never use compression. ``passive`` means use compression
     when :c:func:`clients hint <rados_set_alloc_hint>` that data is compressible.  ``aggressive``
     means use compression unless clients hint that data is not compressible.  ``force``
     means use compression under all circumstances even if the clients hint that the
-    data is not compressible.
+    data is not compressible. ``*_lazy`` modes are similar to their counterpart ones
+    but compression to be performed during deep scrubbing only. Which has to be additionally
+    enabled on per-pool basis using ''deep_scrub_reformat'' pool setting.
   default: none
   enum_values:
   - none
   - passive
   - aggressive
   - force
+  - passive_lazy
+  - aggressive_lazy
+  - force_lazy
   flags:
   - runtime
   with_legacy: true
+  see_also:
+  - bluestore_prefer_deferred_size
 - name: bluestore_compression_algorithm
   type: str
   level: advanced
