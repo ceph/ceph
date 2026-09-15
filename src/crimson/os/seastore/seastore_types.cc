@@ -1490,4 +1490,24 @@ std::ostream& operator<<(std::ostream& out, const omap_type_t& t)
   }
 }
 
+std::optional<device_id_t> parse_device_id(
+  const seastar::sstring &name,
+  device_id_t base)
+{
+  if (name == "block") {
+    return base;
+  }
+  auto prefix_len = sizeof("block.") - 1;
+  if (name.starts_with("block.") && name.length() > prefix_len) {
+    int id = 0;
+    std::string id_str = name.substr(prefix_len);
+    std::istringstream iss(id_str);
+    iss >> id;
+    assert(id < std::numeric_limits<uint8_t>::max());
+    ceph_assert(id > 0);
+    return std::make_optional<device_id_t>(base + id);
+  }
+  return std::nullopt;
+}
+
 } // namespace crimson::os::seastore

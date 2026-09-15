@@ -209,8 +209,8 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'set', 'nodown')
 
     if CRIMSON:
-        CRIMSON_DEVICE_TYPE = manager.get_config('osd', 0, 'seastore_hot_device_type')
-        log.info('seastore_hot_device_type is {}...'.format(CRIMSON_DEVICE_TYPE))
+        CRIMSON_DEVICE_TYPE = manager.get_config('osd', 0, 'seastore_data_device_type')
+        log.info('seastore_data_device_type is {}...'.format(CRIMSON_DEVICE_TYPE))
 
     PGNUM = config.get('pgnum', 12)
     log.info("pgnum: {num}".format(num=PGNUM))

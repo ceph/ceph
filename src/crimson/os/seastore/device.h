@@ -16,6 +16,8 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/common/smp_helpers.h"
 
+struct rbm_test_t;
+
 namespace crimson::os::seastore {
 
 using magic_t = uint64_t;
@@ -37,39 +39,44 @@ struct device_spec_t {
 
 std::ostream& operator<<(std::ostream&, const device_spec_t&);
 
-using secondary_device_set_t =
+using device_set_t =
   std::map<device_id_t, device_spec_t>;
 
 struct device_config_t {
   bool major_dev = false;
   device_spec_t spec;
   seastore_meta_t meta;
-  secondary_device_set_t secondary_devices;
+  device_set_t cache_devices;
+  device_set_t data_devices;
   DENC(device_config_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.major_dev, p);
     denc(v.spec, p);
     denc(v.meta, p);
-    denc(v.secondary_devices, p);
+    denc(v.cache_devices, p);
+    denc(v.data_devices, p);
     DENC_FINISH(p);
   }
-  static device_config_t create_primary(
+  static device_config_t create_data(
     uuid_d new_osd_fsid,
     device_id_t id,
     device_type_t d_type,
     backend_type_t b_type,
-    secondary_device_set_t sds) {
+    device_set_t sds,
+    device_set_t dds,
+    magic_t magic) {
     return device_config_t{
              true,
              device_spec_t{
-               (magic_t)std::rand(),
-		d_type,
-                b_type,
-		id},
+               magic,
+               d_type,
+               b_type,
+               id},
              seastore_meta_t{new_osd_fsid},
-             sds};
+             sds,
+             dds};
    }
-  static device_config_t create_secondary(
+  static device_config_t create_cache(
     uuid_d new_osd_fsid,
     device_id_t id,
     device_type_t d_type,
@@ -83,7 +90,7 @@ struct device_config_t {
                b_type,
                id},
              seastore_meta_t{new_osd_fsid},
-             secondary_device_set_t()};
+             device_set_t()};
   }
 };
 
@@ -305,6 +312,8 @@ using DeviceRef = std::unique_ptr<Device>;
 class Device {
 // interfaces used by device
 public:
+  Device(const std::string &path, device_type_t dtype, device_id_t id)
+    : device_path(path), dtype(dtype), device_id(id) {}
   virtual ~Device() {}
 
   virtual seastar::future<> start(uint32_t shard_nums) {
@@ -336,15 +345,25 @@ public:
   static seastar::future<DeviceRef> make_device(
     const std::string &device,
     device_type_t dtype,
-    backend_type_t btype);
+    backend_type_t btype,
+    device_id_t id);
 
 // interfaces used by each device shard
 public:
-  virtual device_id_t get_device_id() const = 0;
+  const std::string &get_device_path() const {
+    return device_path;
+  }
+
+  device_id_t get_device_id() const {
+    assert(device_id <= DEVICE_ID_MAX_VALID);
+    return device_id;
+  }
 
   virtual magic_t get_magic() const = 0;
 
-  virtual device_type_t get_device_type() const = 0;
+  device_type_t get_device_type() const {
+    return dtype;
+  }
 
   virtual backend_type_t get_backend_type() const = 0;
 
@@ -354,7 +373,9 @@ public:
 
   virtual std::size_t get_available_size() const = 0;
 
-  virtual secondary_device_set_t& get_secondary_devices() = 0;
+  virtual device_set_t& get_cache_devices() = 0;
+
+  virtual device_set_t& get_data_devices() = 0;
 
   virtual bool is_end_to_end_data_protection() const {
     return false;
@@ -390,6 +411,15 @@ public:
   virtual read_ertr::future<uint32_t> get_shard_nums() {
     return read_ertr::make_ready_future<uint32_t>(seastar::this_smp_shard_count());
   }
+protected:
+  const std::string device_path;
+  const device_type_t dtype = device_type_t::NONE;
+  const device_id_t device_id = DEVICE_ID_NULL;
+private:
+  void set_device_id(device_id_t id) {
+    const_cast<device_id_t&>(device_id) = id;
+  }
+  friend struct ::rbm_test_t;
 };
 
 using check_create_device_ertr = Device::access_ertr;
@@ -397,6 +427,29 @@ using check_create_device_ret = check_create_device_ertr::future<>;
 check_create_device_ret check_create_device(
   const std::string path,
   size_t size);
+
+template <typename T>
+class MultiShardDevices {
+  public:
+    std::vector<std::unique_ptr<T>> mshard_devices;
+
+  public:
+  MultiShardDevices(size_t count,
+                    const std::string path,
+                    device_type_t dtype,
+                    device_id_t id)
+  : mshard_devices() {
+    mshard_devices.reserve(count);
+    for (size_t store_index = 0; store_index < count; ++store_index) {
+      mshard_devices.emplace_back(std::make_unique<T>(
+        path, dtype, id, store_index));
+    }
+  }
+  ~MultiShardDevices() {
+    mshard_devices.clear();
+  }
+};
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::device_spec_t)
