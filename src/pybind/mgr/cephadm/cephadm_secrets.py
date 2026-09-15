@@ -186,15 +186,12 @@ class CephadmSecrets:
             # Fall back to per-secret calls keyed by the same URI strings.
             out: Dict[str, Optional[int]] = {}
             for r in refs:
-                try:
-                    out[r.to_uri()] = self.client.secret_get_version(
-                        namespace=r.namespace,
-                        scope=r.scope,
-                        target=r.target,
-                        name=r.name,
-                    )
-                except Exception:
-                    out[r.to_uri()] = None
+                out[r.to_uri()] = self.client.secret_get_version(
+                    namespace=r.namespace,
+                    scope=r.scope,
+                    target=r.target,
+                    name=r.name,
+                )
             return out
 
     def deps_for_spec(self, spec: Any) -> List[str]:
@@ -236,7 +233,17 @@ class CephadmSecrets:
         else:
             refs = self._scan_refs(spec_json)
 
-        deps = self._build_deps(refs)
+        try:
+            deps = self._build_deps(refs)
+        except Exception as e:
+            if cached and cached.get('spec_hash') == spec_hash:
+                logger.warning(
+                    'Cannot get secret versions for %s; reusing cached dependencies: %s',
+                    cache_key, e,
+                )
+                return list(cached.get('deps') or [])
+            raise
+
         self._deps_cache[cache_key] = {
             'spec_hash': spec_hash,
             'epoch': epoch,
