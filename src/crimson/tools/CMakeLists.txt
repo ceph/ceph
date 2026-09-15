@@ -1,3 +1,5 @@
+set(CMAKE_JOB_POOL_LINK heavy_link_job_pool)
+
 add_executable(crimson-store-nbd
 	store_nbd/store-nbd.cc
 	store_nbd/tm_driver.cc
