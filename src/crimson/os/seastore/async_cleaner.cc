@@ -2010,10 +2010,37 @@ void RBMCleaner::mark_space_free(
 	ceph_assert(stats.used_bytes >= len);
 	stats.used_bytes -= len;
 	rbm->mark_space_free(addr, len);
+	background_callback->maybe_wake_blocked_io();
       }
       return;
     }
   }
+}
+
+void RBMCleaner::account_conflict_pending_free(std::size_t bytes)
+{
+  conflict_pending_free_bytes += bytes;
+}
+
+void RBMCleaner::deaccount_conflict_pending_free(std::size_t bytes)
+{
+  ceph_assert(conflict_pending_free_bytes >= bytes);
+  conflict_pending_free_bytes -= bytes;
+  conflict_drained.broadcast();
+  // Draining frees are a release source for try_reserve_projected_usage.
+  background_callback->maybe_wake_blocked_io();
+}
+
+seastar::future<> RBMCleaner::wait_for_conflict_drain()
+{
+  auto data_capacity = get_total_bytes() - get_journal_bytes();
+  if (data_capacity == 0) {
+    return seastar::now();
+  }
+  auto threshold = data_capacity / 20; // 5% of data capacity
+  return conflict_drained.wait([this, threshold] {
+    return conflict_pending_free_bytes <= threshold;
+  });
 }
 
 void RBMCleaner::commit_space_used(paddr_t addr, extent_len_t len) 
@@ -2033,25 +2060,25 @@ bool RBMCleaner::try_reserve_projected_usage(std::size_t projected_usage)
 {
   assert(background_callback->is_ready());
 
-  // Capacity check. Without this, concurrent transactions over-commit the
-  // RBM device: each reserves but the cleaner has no clean_space() yet, so
-  // a write that physically can't be served reaches the allocator and
-  // surfaces as `unexpected enospc` asserts in the data path (object_data
-  // _handler.cc et al.). Return false so the EPM BackgroundProcess blocks
-  // the IO until committed transactions release space.
-  //
-  // Headroom carves out room for metadata writes (LBA btree, backref) and
-  // for fragmentation slack the allocator can't pack into. 5% is a starting
-  // point; until RBMCleaner::clean_space() exists we cannot reclaim from
-  // fragmented free space, so headroom doubles as a fragmentation guard.
+  // Allocator view, not stats.used_bytes (which drifts on unmetered paths).
+  // 1% headroom covers the in-flight surge before alloc_paddr commits; the
+  // allocator already accounts for metadata extents.
   assert(get_total_bytes() > get_journal_bytes());
   auto data_capacity = get_total_bytes() - get_journal_bytes();
-  auto headroom = data_capacity / 20;
-  auto committed_and_projected = stats.used_bytes
+  auto headroom = data_capacity / 100;
+  auto committed_and_projected = get_allocator_used_bytes()
                                + stats.projected_used_bytes
                                + projected_usage;
   if (committed_and_projected + headroom > data_capacity) {
-    return false;
+    // Block only while something can release space: RBM has no cleaner, so
+    // with no in-flight usage a blocked IO would never wake. Otherwise admit
+    // and let the allocator fail a genuinely full device with ENOSPC.
+    // Zero-usage reservations cannot overcommit (deletes are metadata-only).
+    bool has_release_source = stats.projected_used_bytes > 0 ||
+                              conflict_pending_free_bytes > 0;
+    if (projected_usage != 0 && has_release_source) {
+      return false;
+    }
   }
   stats.projected_used_bytes += projected_usage;
   return true;
@@ -2207,10 +2234,11 @@ void RBMCleaner::register_metrics()
 		     sm::description("the size of the space"),
          {sm::label_instance("shard_store_index", std::to_string(store_index))}),
     sm::make_counter("available_bytes",
-		     [this] { return get_total_bytes() - get_journal_bytes() - stats.used_bytes; },
+		     [this] { return get_total_bytes() - get_journal_bytes() - get_used_bytes(); },
 		     sm::description("the size of the space is available"),
          {sm::label_instance("shard_store_index", std::to_string(store_index))}),
-    sm::make_counter("used_bytes", stats.used_bytes,
+    sm::make_counter("used_bytes",
+		     [this] { return get_used_bytes(); },
 		     sm::description("the size of the space occupied by live extents"),
          {sm::label_instance("shard_store_index", std::to_string(store_index))})
   });
