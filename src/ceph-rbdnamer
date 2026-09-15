@@ -2,6 +2,9 @@
 
 DEV=$1
 NUM=`echo $DEV | sed 's#p.*##g; s#[a-z]##g'`
+if [ ! -d /sys/devices/rbd/$NUM ]; then
+    exit 1
+fi
 POOL=`cat /sys/devices/rbd/$NUM/pool`
 if [ -f /sys/devices/rbd/$NUM/pool_ns ]; then
     NAMESPACE=`cat /sys/devices/rbd/$NUM/pool_ns`
