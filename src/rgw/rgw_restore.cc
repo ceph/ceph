@@ -16,6 +16,7 @@
 
 #include "include/scope_guard.h"
 #include "include/function2.hpp"
+#include "perfglue/heap_profiler.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/Formatter.h"
 #include "common/containers.h"
@@ -287,6 +288,7 @@ void *Restore::RestoreWorker::entry() {
       continue; // next round
 
     std::unique_lock locker{lock};
+    ceph_heap_mark_thread_temporarily_idle();
     cond.wait_for(locker, std::chrono::seconds(secs));
   } while (!restore->going_down());
 

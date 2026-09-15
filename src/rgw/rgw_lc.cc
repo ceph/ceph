@@ -27,6 +27,7 @@
 #include "cls/lock/cls_lock_client.h"
 #include "rgw_perf_counters.h"
 #include "rgw_asio_thread.h"
+#include "perfglue/heap_profiler.h"
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_bucket_layout.h"
@@ -320,6 +321,7 @@ void *RGWLC::LCWorker::entry() {
 		      << rgw_to_asctime(next) << " worker=" << ix << dendl;
 
     std::unique_lock l{lock};
+    ceph_heap_mark_thread_temporarily_idle();
     cond.wait_for(l, std::chrono::seconds(secs));
   } while (!lc->going_down());
 
