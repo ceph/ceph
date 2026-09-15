@@ -166,7 +166,8 @@ add_executable(unittest_throttle
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_throttle PARALLEL)
-target_link_libraries(unittest_throttle global) 
+set_property(TEST unittest_throttle PROPERTY RUN_SERIAL TRUE)
+target_link_libraries(unittest_throttle global)
 
 # unittest_lru
 add_executable(unittest_lru
