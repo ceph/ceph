@@ -854,9 +854,10 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_identity)
 
     auto aes(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
     ASSERT_NE(aes.get(), nullptr);
+    aes->set_chunk_size(AEAD_CHUNK_SIZE);
 
     size_t block_size = aes->get_block_size();
-    ASSERT_EQ(block_size, 4096u);
+    ASSERT_EQ(block_size, AEAD_CHUNK_SIZE);
 
     for (size_t r = 97; r < 123 ; r++)
     {
@@ -875,7 +876,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_identity)
       bufferlist encrypted;
       ASSERT_TRUE(aes->encrypt(input, begin, end - begin, encrypted, offset, null_yield));
 
-      size_t expected_encrypted_size = aead_plaintext_to_encrypted_size(end - begin);
+      size_t expected_encrypted_size = aead_plaintext_to_encrypted_size(end - begin, AEAD_CHUNK_SIZE);
       ASSERT_EQ(encrypted.length(), expected_encrypted_size);
 
       bufferlist decrypted;
@@ -898,6 +899,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_chunk_sizes)
 
   auto aes(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
   ASSERT_NE(aes.get(), nullptr);
+  aes->set_chunk_size(AEAD_CHUNK_SIZE);
 
   // Test various sizes to verify chunk + tag handling
   for (size_t size : {0, 1, 16, 4095, 4096, 4097, 8192, 10000})
@@ -913,7 +915,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_chunk_sizes)
     bufferlist encrypted;
     ASSERT_TRUE(aes->encrypt(input, 0, size, encrypted, 0, null_yield));
 
-    size_t expected_size = aead_plaintext_to_encrypted_size(size);
+    size_t expected_size = aead_plaintext_to_encrypted_size(size, AEAD_CHUNK_SIZE);
     ASSERT_EQ(encrypted.length(), expected_size);
 
     bufferlist decrypted;
@@ -951,28 +953,28 @@ TEST(TestRGWCrypto, verify_AEAD_size_conversion)
   ASSERT_FALSE(is_cbc_mode("invalid"));
 
   // Test aead_plaintext_to_encrypted_size()
-  ASSERT_EQ(aead_plaintext_to_encrypted_size(0), 0UL);       // Zero bytes
-  ASSERT_EQ(aead_plaintext_to_encrypted_size(1), 17UL);      // 1 + 16 tag
-  ASSERT_EQ(aead_plaintext_to_encrypted_size(100), 116UL);   // 100 + 16 tag
-  ASSERT_EQ(aead_plaintext_to_encrypted_size(4095), 4111UL); // 4095 + 16 tag
-  ASSERT_EQ(aead_plaintext_to_encrypted_size(4096), 4112UL); // Full chunk
-  ASSERT_EQ(aead_plaintext_to_encrypted_size(4097), 4129UL); // 4097 + 32 tags (2 chunks)
-  ASSERT_EQ(aead_plaintext_to_encrypted_size(8192), 8224UL); // Two full chunks
+  ASSERT_EQ(aead_plaintext_to_encrypted_size(0, AEAD_CHUNK_SIZE), 0UL);       // Zero bytes
+  ASSERT_EQ(aead_plaintext_to_encrypted_size(1, AEAD_CHUNK_SIZE), 17UL);      // 1 + 16 tag
+  ASSERT_EQ(aead_plaintext_to_encrypted_size(100, AEAD_CHUNK_SIZE), 116UL);   // 100 + 16 tag
+  ASSERT_EQ(aead_plaintext_to_encrypted_size(4095, AEAD_CHUNK_SIZE), 4111UL); // 4095 + 16 tag
+  ASSERT_EQ(aead_plaintext_to_encrypted_size(4096, AEAD_CHUNK_SIZE), 4112UL); // Full chunk
+  ASSERT_EQ(aead_plaintext_to_encrypted_size(4097, AEAD_CHUNK_SIZE), 4129UL); // 4097 + 32 tags (2 chunks)
+  ASSERT_EQ(aead_plaintext_to_encrypted_size(8192, AEAD_CHUNK_SIZE), 8224UL); // Two full chunks
 
   // Test aead_encrypted_to_plaintext_size()
-  ASSERT_EQ(aead_encrypted_to_plaintext_size(0), 0UL);       // Zero bytes
-  ASSERT_EQ(aead_encrypted_to_plaintext_size(16), 0UL);      // Tag only -> 0 plaintext
-  ASSERT_EQ(aead_encrypted_to_plaintext_size(17), 1UL);      // 1 byte + tag
-  ASSERT_EQ(aead_encrypted_to_plaintext_size(100), 84UL);    // 100 - 16 tag
-  ASSERT_EQ(aead_encrypted_to_plaintext_size(4112), 4096UL); // Full chunk
-  ASSERT_EQ(aead_encrypted_to_plaintext_size(4212), 4180UL); // 4096 + 84 (one chunk + partial)
-  ASSERT_EQ(aead_encrypted_to_plaintext_size(8224), 8192UL); // Two full chunks
+  ASSERT_EQ(aead_encrypted_to_plaintext_size(0, AEAD_CHUNK_SIZE), 0UL);       // Zero bytes
+  ASSERT_EQ(aead_encrypted_to_plaintext_size(16, AEAD_CHUNK_SIZE), 0UL);      // Tag only -> 0 plaintext
+  ASSERT_EQ(aead_encrypted_to_plaintext_size(17, AEAD_CHUNK_SIZE), 1UL);      // 1 byte + tag
+  ASSERT_EQ(aead_encrypted_to_plaintext_size(100, AEAD_CHUNK_SIZE), 84UL);    // 100 - 16 tag
+  ASSERT_EQ(aead_encrypted_to_plaintext_size(4112, AEAD_CHUNK_SIZE), 4096UL); // Full chunk
+  ASSERT_EQ(aead_encrypted_to_plaintext_size(4212, AEAD_CHUNK_SIZE), 4180UL); // 4096 + 84 (one chunk + partial)
+  ASSERT_EQ(aead_encrypted_to_plaintext_size(8224, AEAD_CHUNK_SIZE), 8192UL); // Two full chunks
 
   // Test roundtrip: plaintext -> encrypted -> plaintext
   for (uint64_t plain : {0UL, 1UL, 16UL, 100UL, 4095UL, 4096UL, 4097UL,
                          8192UL, 10000UL, 1000000UL}) {
-    uint64_t enc = aead_plaintext_to_encrypted_size(plain);
-    uint64_t recovered = aead_encrypted_to_plaintext_size(enc);
+    uint64_t enc = aead_plaintext_to_encrypted_size(plain, AEAD_CHUNK_SIZE);
+    uint64_t recovered = aead_encrypted_to_plaintext_size(enc, AEAD_CHUNK_SIZE);
     ASSERT_EQ(plain, recovered)
       << "Roundtrip failed for plaintext=" << plain
       << " encrypted=" << enc << " recovered=" << recovered;
@@ -1014,6 +1016,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_tag_verification)
 
   auto aes(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
   ASSERT_NE(aes.get(), nullptr);
+  aes->set_chunk_size(AEAD_CHUNK_SIZE);
 
   const size_t size = 8192;  // 2 chunks
   buffer::ptr buf(size);
@@ -1295,6 +1298,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_chunk_reorder_detection)
 
   auto aes(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
   ASSERT_NE(aes.get(), nullptr);
+  aes->set_chunk_size(AEAD_CHUNK_SIZE);
 
   // Create 2 chunks of data (8192 bytes = 2 x 4096)
   const size_t size = 8192;
@@ -1341,6 +1345,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_aad_roundtrip)
   for (size_t size : {4096u, 8192u, 12288u, 10000u}) {
     auto aes(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
     ASSERT_NE(aes.get(), nullptr);
+    aes->set_chunk_size(AEAD_CHUNK_SIZE);
 
     buffer::ptr buf(size);
     char* p = buf.c_str();
@@ -1370,6 +1375,7 @@ TEST(TestRGWCrypto, verify_AES_256_GCM_aad_offset_mismatch)
 
   auto aes(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
   ASSERT_NE(aes.get(), nullptr);
+  aes->set_chunk_size(AEAD_CHUNK_SIZE);
 
   const size_t size = 4096;
   buffer::ptr buf(size);
@@ -1451,7 +1457,7 @@ TEST(TestRGWCrypto, verify_PartLocation_multipart_cbc)
 TEST(TestRGWCrypto, verify_PartLocation_multipart_aead)
 {
   const size_t pp = 1024 * AEAD_CHUNK_SIZE;  // 4MB plaintext per part
-  const size_t ep = aead_plaintext_to_encrypted_size(pp);
+  const size_t ep = aead_plaintext_to_encrypted_size(pp, AEAD_CHUNK_SIZE);
   std::vector<size_t> parts = {ep, ep, ep};
   size_t idx; off_t ofs_in_part, cumulative;
 
@@ -1583,6 +1589,85 @@ TEST(TestRGWCrypto, verify_transition_encrypt_decrypt_roundtrip)
   }
 }
 
+// Helper to build a PREFETCH_ALIGN xattr value for a given (plain, enc) pair.
+static ceph::bufferlist make_prefetch_align(uint32_t plain_bs, uint32_t enc_bs)
+{
+  ceph::bufferlist bl;
+  ceph::encode(plain_bs, bl);
+  ceph::encode(enc_bs, bl);
+  return bl;
+}
+
+TEST(TestRGWCrypto, verify_AES_256_GCM_configurable_chunk_size)
+{
+  const NoDoutPrefix no_dpp(g_ceph_context, dout_subsys);
+  uint8_t key[32];
+  for (size_t i = 0; i < sizeof(key); i++) key[i] = i;
+
+  for (size_t bs : {4096u, 65536u}) {
+    auto enc(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
+    ASSERT_NE(enc.get(), nullptr);
+    enc->set_chunk_size(bs);
+    ASSERT_EQ(enc->get_block_size(), bs);
+    ASSERT_EQ(enc->get_encrypted_block_size(), bs + 16);
+
+    const size_t plain_len = 5 * bs + 333;
+    ceph::bufferlist input;
+    input.append(std::string(plain_len, 'x'));
+    ceph::bufferlist encrypted;
+    ASSERT_TRUE(enc->encrypt(input, 0, plain_len, encrypted, 0, null_yield));
+
+    auto dec(AES_256_GCM_create(&no_dpp, g_ceph_context, &key[0], 32));
+    ASSERT_NE(dec.get(), nullptr);
+    dec->set_chunk_size(bs);
+    ceph::bufferlist decrypted;
+    ASSERT_TRUE(dec->decrypt(encrypted, 0, encrypted.length(), decrypted, 0, null_yield));
+    ASSERT_EQ(decrypted.length(), plain_len);
+    ASSERT_TRUE(memcmp(input.c_str(), decrypted.c_str(), plain_len) == 0);
+  }
+}
+
+TEST(TestRGWCrypto, aead_chunk_size_from_attrs_rejects_bad_input)
+{
+  std::map<std::string, ceph::bufferlist> attrs;
+  size_t out = 0;
+
+  // Absent xattr
+  EXPECT_EQ(aead_chunk_size_from_attrs(attrs, &out), -EIO);
+
+  // Truncated: only plain_bs encoded
+  {
+    ceph::bufferlist bl;
+    ceph::encode(uint32_t{4096}, bl);
+    attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(bl);
+    EXPECT_EQ(aead_chunk_size_from_attrs(attrs, &out), -EIO);
+  }
+
+  // Empty bufferlist
+  attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = ceph::bufferlist{};
+  EXPECT_EQ(aead_chunk_size_from_attrs(attrs, &out), -EIO);
+
+  // Each remaining case re-encodes a distinct invalid (plain, enc) pair.
+  struct bad { uint32_t plain; uint32_t enc; };
+  const bad cases[] = {
+    {2048, 2064},          // below MIN
+    {1u << 21, (1u << 21) + 16}, // above MAX
+    {5000, 5016},          // not power of two
+    {4096, 4096},          // enc_bs != plain + tag
+    {0, 16},               // zero plain
+  };
+  for (const auto& c : cases) {
+    attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = make_prefetch_align(c.plain, c.enc);
+    EXPECT_EQ(aead_chunk_size_from_attrs(attrs, &out), -EIO)
+        << "plain=" << c.plain << " enc=" << c.enc;
+  }
+
+  // Positive control
+  attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = make_prefetch_align(4096, 4112);
+  EXPECT_EQ(aead_chunk_size_from_attrs(attrs, &out), 0);
+  EXPECT_EQ(out, 4096u);
+}
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
@@ -1593,4 +1678,3 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-
