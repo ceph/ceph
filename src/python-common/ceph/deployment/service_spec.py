@@ -1430,6 +1430,7 @@ class NFSServiceSpec(ServiceSpec):
                  enable_client_object_cache: bool = False,
                  client_object_cache_size: Optional[Union[str, int]] = None,
                  client_object_cache_max_dirty: Optional[Union[str, int]] = None,
+                 clients_per_pool: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1466,6 +1467,10 @@ class NFSServiceSpec(ServiceSpec):
         self.enable_client_object_cache = enable_client_object_cache
         self.client_object_cache_size = client_object_cache_size
         self.client_object_cache_max_dirty = client_object_cache_max_dirty
+
+        # Max independent CephFS client handles Ganesha may use per filesystem.
+        # Immutable after cluster creation. None disables pool mode (default).
+        self.clients_per_pool = clients_per_pool
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
@@ -1558,6 +1563,13 @@ class NFSServiceSpec(ServiceSpec):
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
 
         verify_boolean(self.enable_client_object_cache, "enable_client_object_cache")
+        if self.clients_per_pool is not None:
+            verify_int(self.clients_per_pool, "clients_per_pool")
+            if self.clients_per_pool < 2:
+                raise SpecValidationError(
+                    "Invalid NFS spec: clients_per_pool must be an integer >= 2. "
+                    "This field can only be set at NFS cluster creation time."
+                )
         cache_size = verify_size_with_units(
             self.client_object_cache_size, "client_object_cache_size"
         )

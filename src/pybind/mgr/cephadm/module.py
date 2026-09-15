@@ -50,6 +50,7 @@ from ceph.deployment.service_spec import (
     TunedProfileSpec,
     MgmtGatewaySpec,
     NvmeofServiceSpec,
+    NFSServiceSpec,
     CertificateSource
 )
 from ceph.deployment.drive_group import DeviceSelection
@@ -4777,6 +4778,9 @@ Then run the following:
             raise OrchestratorError('cannot scale %s service below 1' % (
                 spec.service_type))
 
+        if spec.service_type == 'nfs':
+            self._check_nfs_clients_per_pool(cast(NFSServiceSpec, spec))
+
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
 
@@ -4899,6 +4903,24 @@ Then run the following:
     @handle_orch_error
     def apply_rbd_mirror(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
+
+    def _check_nfs_clients_per_pool(self, spec: NFSServiceSpec) -> None:
+        """clients_per_pool is immutable after NFS cluster creation."""
+        name = spec.service_name()
+        if name not in self.spec_store:
+            return
+        existing = self.spec_store[name].spec
+        old_n = getattr(existing, 'clients_per_pool', None)
+        new_n = getattr(spec, 'clients_per_pool', None)
+        if new_n is None:
+            spec.clients_per_pool = old_n
+            return
+        if old_n != new_n:
+            raise OrchestratorError(
+                "clients_per_pool can only be set when creating an NFS cluster "
+                "and cannot be changed. Delete the cluster and create a new one "
+                "to use a different value."
+            )
 
     @handle_orch_error
     def apply_nfs(self, spec: ServiceSpec) -> str:

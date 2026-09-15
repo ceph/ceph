@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch, ANY
 import pytest
 
 from ceph.utils import datetime_now
-from orchestrator import DaemonDescriptionStatus
+from orchestrator import DaemonDescriptionStatus, OrchestratorError
 
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
@@ -749,6 +749,67 @@ class TestNFS:
                 assert "client_oc = true;" in ganesha_conf
                 assert "client_oc_size = 1048576;" in ganesha_conf
                 assert "client_oc_max_dirty = 0;" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_clients_per_pool_in_ganesha_conf(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """clients_per_pool is written into a CEPH block."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                clients_per_pool=3,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                            service_name=nfs_spec.service_name(),
+                                            rank=0))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert ganesha_conf.count('CEPH {') == 1
+                assert "clients_per_pool = 3;" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_clients_per_pool_immutable(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """clients_per_pool cannot be set or changed on an existing cluster."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+            )
+            with with_service(cephadm_module, nfs_spec):
+                changed = NFSServiceSpec(
+                    service_id="foo",
+                    placement=PlacementSpec(hosts=['test']),
+                    clients_per_pool=3,
+                )
+                with pytest.raises(OrchestratorError, match="clients_per_pool"):
+                    cephadm_module.apply_nfs(changed)
+
+            pool_spec = NFSServiceSpec(
+                service_id="bar",
+                placement=PlacementSpec(hosts=['test']),
+                clients_per_pool=3,
+            )
+            with with_service(cephadm_module, pool_spec):
+                resized = NFSServiceSpec(
+                    service_id="bar",
+                    placement=PlacementSpec(hosts=['test']),
+                    clients_per_pool=4,
+                )
+                with pytest.raises(OrchestratorError, match="clients_per_pool"):
+                    cephadm_module.apply_nfs(resized)
 
 
 def test_nfs_placement_count_per_host_rejected():
