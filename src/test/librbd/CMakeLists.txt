@@ -12,6 +12,8 @@ set(librbd_test
   test_internal.cc
   test_mirroring.cc
   test_DeepCopy.cc
+  test_DiffIterate.cc
+  test_Encryption.cc
   test_Groups.cc
   test_Migration.cc
   test_MirroringWatcher.cc

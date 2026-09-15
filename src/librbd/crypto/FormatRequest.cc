@@ -27,9 +27,10 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 FormatRequest<I>::FormatRequest(
-        I* image_ctx, EncryptionFormat format,
+        I* image_ctx, EncryptionFormat format, bool insecure_fast_mode,
         Context* on_finish) : m_image_ctx(image_ctx),
                               m_format(std::move(format)),
+                              m_insecure_fast_mode(insecure_fast_mode),
                               m_on_finish(on_finish) {
 }
 
@@ -76,7 +77,7 @@ template <typename I>
 void FormatRequest<I>::format() {
   auto ctx = create_context_callback<
           FormatRequest<I>, &FormatRequest<I>::handle_format>(this);
-  m_format->format(m_image_ctx, ctx);
+  m_format->format(m_image_ctx, m_insecure_fast_mode, ctx);
 }
 
 template <typename I>
