@@ -1,13 +1,9 @@
-import functools
 import logging
-import stat
 from typing import List, Optional, Tuple, Any, TYPE_CHECKING
 
 from object_format import ErrorResponseBase
 import orchestrator
 from orchestrator import NoOrchestrator
-import cephfs
-from mgr_util import CephfsClient, open_filesystem
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
 from rados import Rados, LIBRADOS_ALL_NSPACES, ObjectNotFound
@@ -136,18 +132,3 @@ def check_fs(mgr: 'Module', fs_name: str) -> bool:
     '''
     fs_map = mgr.get('fs_map')
     return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
-
-
-@functools.lru_cache(maxsize=1)
-def cephfs_client_for_mgr(mgr: 'Module') -> CephfsClient:
-    return CephfsClient(mgr)
-
-
-def cephfs_path_is_dir(mgr: 'Module', fs: str, path: str) -> None:
-    cephfs_client = cephfs_client_for_mgr(mgr)
-
-    with open_filesystem(cephfs_client, fs) as fs_handle:
-        stx = fs_handle.statx(path.encode('utf-8'), cephfs.CEPH_STATX_MODE,
-                              cephfs.AT_SYMLINK_NOFOLLOW)
-        if not stat.S_ISDIR(stx.get('mode')):
-            raise NotADirectoryError()

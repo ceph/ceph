@@ -2,6 +2,7 @@ import errno
 import hashlib
 import json
 import logging
+import stat
 from typing import (
     List,
     Any,
@@ -12,11 +13,12 @@ from typing import (
     Callable,
     Set,
     cast)
+from threading import Lock
 from os.path import normpath
 from ceph.fs.earmarking import EarmarkTopScope
 import cephfs
 
-from mgr_util import CephFSEarmarkResolver
+from mgr_util import CephFSEarmarkResolver, CephfsClient, open_filesystem
 from rados import TimedOut, ObjectNotFound
 
 from object_format import ErrorResponse
@@ -43,8 +45,7 @@ from .utils import (
     available_clusters,
     check_fs,
     get_nfs_spec_for_cluster,
-    restart_nfs_service,
-    cephfs_path_is_dir)
+    restart_nfs_service)
 from .rados_utils import NFSRados
 
 if TYPE_CHECKING:
@@ -73,17 +74,6 @@ def normalize_path(path: str) -> str:
         if path[:2] == "//":
             path = path[1:]
     return path
-
-
-def validate_cephfs_path(mgr: 'Module', fs_name: str, path: str) -> None:
-    try:
-        cephfs_path_is_dir(mgr, fs_name, path)
-    except NotADirectoryError:
-        raise NFSException(f"path {path} is not a dir", -errno.ENOTDIR)
-    except cephfs.ObjectNotFound:
-        raise NFSObjectNotFound(f"path {path} does not exist")
-    except cephfs.Error as e:
-        raise NFSException(e.args[1], -e.args[0])
 
 
 def _validate_cmount_path(cmount_path: str, path: str) -> None:
@@ -161,6 +151,8 @@ class ExportMgr:
         self.rados_pool = POOL_NAME
         self._exports: Optional[Dict[str, List[Export]]] = export_ls
         self.skip_notify_nfs_server = False
+        self._cephfs_client_lock = Lock()
+        self._cephfs_client: Optional[CephfsClient] = None
 
     def _get_cluster_protocols(self, cluster_id: str) -> List[int]:
         """Get the list of supported NFS protocols for a cluster.
@@ -374,6 +366,25 @@ class ExportMgr:
             raise ErrorResponse(f"Cluster {cluster_id!r} does not exist",
                                 return_value=-errno.ENOENT)
 
+    def _get_cephfs_client(self) -> CephfsClient:
+        with self._cephfs_client_lock:
+            if self._cephfs_client is None:
+                self._cephfs_client = CephfsClient(self.mgr)
+        return self._cephfs_client
+
+    def validate_cephfs_path(self, fs_name: str, path: str) -> None:
+        try:
+            cephfs_client = self._get_cephfs_client()
+            with open_filesystem(cephfs_client, fs_name) as fs_handle:
+                stx = fs_handle.statx(path.encode('utf-8'), cephfs.CEPH_STATX_MODE,
+                                      cephfs.AT_SYMLINK_NOFOLLOW)
+                if not stat.S_ISDIR(stx.get('mode')):
+                    raise NotADirectoryError(f"path {path} is not a dir")
+        except cephfs.ObjectNotFound:
+            raise NFSObjectNotFound(f"path {path} does not exist")
+        except cephfs.Error as e:
+            raise NFSException(e.args[1], -e.args[0])
+
     def create_export(self, addr: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Any]:
         self._validate_cluster_id(kwargs['cluster_id'])
         # if addr(s) are provided, construct client list and adjust outer block
@@ -493,8 +504,7 @@ class ExportMgr:
 
     # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
     # Do not change interface without updating the Dashboard code
-    def apply_export(self, cluster_id: str, export_config: str,
-                     earmark_resolver: Optional[CephFSEarmarkResolver] = None) -> AppliedExportResults:
+    def apply_export(self, cluster_id: str, export_config: str) -> AppliedExportResults:
         try:
             exports = self._read_export_config(cluster_id, export_config)
         except Exception as e:
@@ -503,7 +513,7 @@ class ExportMgr:
 
         aeresults = AppliedExportResults()
         for export in exports:
-            changed_export = self._change_export(cluster_id, export, earmark_resolver)
+            changed_export = self._change_export(cluster_id, export)
             # This will help figure out which export blocks in conf/json file
             # are problematic.
             if changed_export.get("state", "") == "error":
@@ -532,10 +542,9 @@ class ExportMgr:
             return j  # j is already a list object
         return [j]  # return a single object list, with j as the only item
 
-    def _change_export(self, cluster_id: str, export: Dict,
-                       earmark_resolver: Optional[CephFSEarmarkResolver] = None) -> Dict[str, Any]:
+    def _change_export(self, cluster_id: str, export: Dict) -> Dict[str, Any]:
         try:
-            return self._apply_export(cluster_id, export, earmark_resolver)
+            return self._apply_export(cluster_id, export)
         except NotImplementedError:
             # in theory, the NotImplementedError here may be raised by a hook back to
             # an orchestration module. If the orchestration module supports it the NFS
@@ -611,8 +620,10 @@ class ExportMgr:
         log.info(f"Export user created is {json_res[0]['entity']}")
         return json_res[0]['key']
 
-    def _check_earmark(self, earmark_resolver: CephFSEarmarkResolver, path: str,
-                       fs_name: str) -> None:
+    def _check_earmark(self, path: str, fs_name: str) -> None:
+        """Apply NFS earmark for a CephFS path. Not used for RGW exports."""
+        earmark_resolver = CephFSEarmarkResolver(
+            self.mgr, client=self._get_cephfs_client())
         earmark = earmark_resolver.get_earmark(
             path,
             fs_name,
@@ -636,8 +647,7 @@ class ExportMgr:
     def create_export_from_dict(self,
                                 cluster_id: str,
                                 ex_id: int,
-                                ex_dict: Dict[str, Any],
-                                earmark_resolver: Optional[CephFSEarmarkResolver] = None
+                                ex_dict: Dict[str, Any]
                                 ) -> Export:
         pseudo_path = ex_dict.get("pseudo")
         if not pseudo_path:
@@ -660,11 +670,10 @@ class ExportMgr:
             if not check_fs(self.mgr, fs_name):
                 raise FSNotFound(fs_name)
 
-            validate_cephfs_path(self.mgr, fs_name, path)
+            self.validate_cephfs_path(fs_name, path)
 
             # Check if earmark is set for the path, given path is of subvolume
-            if earmark_resolver:
-                self._check_earmark(earmark_resolver, path, fs_name)
+            self._check_earmark(path, fs_name)
 
             if fsal["cmount_path"] != "/":
                 _validate_cmount_path(fsal["cmount_path"], path)  # type: ignore
@@ -706,11 +715,10 @@ class ExportMgr:
                              sectype: Optional[List[str]] = None,
                              xprtsec: Optional[str] = None,
                              cmount_path: Optional[str] = "/",
-                             transports: Optional[List[str]] = None,
-                             earmark_resolver: Optional[CephFSEarmarkResolver] = None
+                             transports: Optional[List[str]] = None
                              ) -> Dict[str, Any]:
 
-        validate_cephfs_path(self.mgr, fs_name, path)
+        self.validate_cephfs_path(fs_name, path)
         if cmount_path != "/":
             _validate_cmount_path(cmount_path, path)  # type: ignore
 
@@ -739,8 +747,7 @@ class ExportMgr:
             export = self.create_export_from_dict(
                 cluster_id,
                 self._gen_export_id(cluster_id),
-                export_dict,
-                earmark_resolver
+                export_dict
             )
             log.debug("creating cephfs export %s", export)
             self._ensure_cephfs_export_user(export)
@@ -813,8 +820,7 @@ class ExportMgr:
     def _apply_export(
             self,
             cluster_id: str,
-            new_export_dict: Dict,
-            earmark_resolver: Optional[CephFSEarmarkResolver] = None
+            new_export_dict: Dict
     ) -> Dict[str, str]:
         for k in ['path', 'pseudo']:
             if k not in new_export_dict:
@@ -858,8 +864,7 @@ class ExportMgr:
         new_export = self.create_export_from_dict(
             cluster_id,
             new_export_dict.get('export_id', self._gen_export_id(cluster_id)),
-            new_export_dict,
-            earmark_resolver
+            new_export_dict
         )
 
         if not old_export:
