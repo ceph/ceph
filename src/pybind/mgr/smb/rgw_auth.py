@@ -42,6 +42,7 @@ class RGWAuthorizer:
             'prefix': 'auth get-or-create',
             'entity': entity,
             'caps': caps,
+            'key_type': 'aes256k',
         }
         log.info('Requesting RGW authorization: %r', cmd)
         ret, _, status = self._mc.mon_command(cmd)
