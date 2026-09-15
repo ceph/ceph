@@ -254,6 +254,8 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("osd_min_split_replica_read_size")) {
     min_split_replica_read_size
       = conf.get_val<uint64_t>("osd_min_split_replica_read_size");
+    ceph_assert(min_split_replica_read_size >= SplitOp::REPLICA_MIN_SPLIT_SIZE ||
+                min_split_replica_read_size == 0);
   }
   if (changed.count("rados_replica_read_policy")) {
     auto read_policy = conf.get_val<std::string>("rados_replica_read_policy");
@@ -5484,6 +5486,8 @@ Objecter::Objecter(CephContext *cct,
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
   min_split_replica_read_size
     = cct->_conf.get_val<uint64_t>("osd_min_split_replica_read_size");
+  ceph_assert(min_split_replica_read_size >= SplitOp::REPLICA_MIN_SPLIT_SIZE ||
+              min_split_replica_read_size == 0);
 
   auto read_policy = cct->_conf.get_val<std::string>("rados_replica_read_policy");
   if (read_policy == "localize") {
