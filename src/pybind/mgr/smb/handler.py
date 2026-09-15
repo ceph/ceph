@@ -985,7 +985,8 @@ def _generate_rgw_share(
         # smb.conf options
         'options': {
             'path': '/',
-            'vfs objects': 'ceph_rgw',
+            'vfs objects': 'acl_xattr ceph_rgw',
+            'acl_xattr:security_acl_name': 'user.NTACL',
             'ceph_rgw:bucket': rgw.bucket,
             'ceph_rgw:user_id': user_id,
             # Credential values are left empty here; they are injected at
@@ -1588,7 +1589,9 @@ def _save_pending_rgw_config(
     """
     cluster_id = cluster_conf.resource.cluster_id
     rgw_shares = [s for s in cluster_conf.shares if s.resource.rgw]
-    if not rgw_shares:
+    centry = store[external.rgw_config_key(cluster_id)]
+    if not rgw_shares and not centry.exists():
+        # cluster never had RGW shares, so no stub needed
         return
     cred_map = {
         c.rgw_credential_id: c
@@ -1619,7 +1622,6 @@ def _save_pending_rgw_config(
         'samba-container-config': 'v0',
         'config:merge': {'shares': merge_shares},
     }
-    centry = store[external.rgw_config_key(cluster_id)]
     centry.set(stub)
     cluster_conf.change_group.cache_updated_entry(centry)
 

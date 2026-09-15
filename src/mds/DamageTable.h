@@ -17,8 +17,6 @@
 #ifndef DAMAGE_TABLE_H_
 #define DAMAGE_TABLE_H_
 
-#include "mdstypes.h"
-
 #include <map>
 #include <memory>
 #include <string>

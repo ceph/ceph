@@ -609,6 +609,28 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
     "handling op {} on object {}",
     ceph_osd_op_name(osd_op.op.op),
     get_target());
+  // Best-effort capacity gate (failsafe): drop data-allocating ops before a
+  // transaction is created if the local store is full. This is Crimson's
+  // analog to classic's osd_failsafe_full_ratio check (PrimaryLogPG.cc:2162),
+  // preventing allocator exhaustion assert aborts when the local store fills
+  // before the monitor's pool FLAG_FULL has propagated. We reply -EAGAIN so
+  // the client resends, matching both classic's silent drop and Crimson's own
+  // mon-driven full path (PG::run_executer_fut, pg.cc), rather than returning
+  // a result that depends on whether full flags have reached the client yet.
+  switch (osd_op.op.op) {
+  case CEPH_OSD_OP_CREATE:
+  case CEPH_OSD_OP_WRITE:
+  case CEPH_OSD_OP_WRITEFULL:
+  case CEPH_OSD_OP_WRITESAME:
+  case CEPH_OSD_OP_APPEND:
+  case CEPH_OSD_OP_COPY_FROM2:
+    if (pg->is_local_store_full() && !get_message().has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+      return crimson::ct_error::eagain::make();
+    }
+    break;
+  default:
+    break;
+  }
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_SYNC_READ:
     [[fallthrough]];

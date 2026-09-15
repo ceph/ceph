@@ -44,6 +44,7 @@ import { RedirectLinkResolverPipe } from './redirect-link-resolver.pipe';
 import { CephVersionPipe } from './ceph-version.pipe';
 import { OverviewStatusPipe } from './overview-status.pipe';
 import { OverviewGridColumnNumbersPipe } from './overview-grid-column-numbers.pipe';
+import { ServiceCertificateStatusPipe } from './service-certificate-status.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -90,7 +91,8 @@ import { OverviewGridColumnNumbersPipe } from './overview-grid-column-numbers.pi
     RedirectLinkResolverPipe,
     CephVersionPipe,
     OverviewStatusPipe,
-    OverviewGridColumnNumbersPipe
+    OverviewGridColumnNumbersPipe,
+    ServiceCertificateStatusPipe
   ],
   exports: [
     ArrayPipe,
@@ -135,7 +137,8 @@ import { OverviewGridColumnNumbersPipe } from './overview-grid-column-numbers.pi
     RedirectLinkResolverPipe,
     CephVersionPipe,
     OverviewStatusPipe,
-    OverviewGridColumnNumbersPipe
+    OverviewGridColumnNumbersPipe,
+    ServiceCertificateStatusPipe
   ],
   providers: [
     ArrayPipe,

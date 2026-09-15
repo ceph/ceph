@@ -248,4 +248,6 @@ public:
   GetSessionTokenResponse getSessionToken(const DoutPrefixProvider *dpp, GetSessionTokenRequest& req);
   AssumeRoleWithWebIdentityResponse assumeRoleWithWebIdentity(const DoutPrefixProvider *dpp, AssumeRoleWithWebIdentityRequest& req);
 };
+
+std::shared_ptr<CryptoKeyHandler> secret_to_handler(CephContext* cct, const std::string &secret, std::string &error);
 }

@@ -1751,9 +1751,9 @@ private:
     int64_t pool_id,
     float total_w_pa,
     float pa_sum,
-    int num_osds,
     int osd_pa_count,
     float total_osd_weight,
+    uint num_pgs,
     uint max_prims_per_osd,
     uint max_acting_prims_per_osd,
     float avg_prims_per_osd,
@@ -1832,7 +1832,8 @@ public:
   void print(CephContext *cct, std::ostream& out) const;
   void print_osd(int id, std::ostream& out) const;
   void print_osds(std::ostream& out) const;
-  void print_pools(CephContext *cct, std::ostream& out) const;
+  void print_pools(CephContext *cct, std::ostream& out,
+                   bool show_rule_names = false) const;
   void print_summary(ceph::Formatter *f, std::ostream& out,
 		     const std::string& prefix, bool extra=false) const;
   void print_oneline_summary(std::ostream& out) const;

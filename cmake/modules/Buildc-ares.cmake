@@ -5,11 +5,13 @@ function(build_c_ares)
   ExternalProject_Add(c-ares_ext
     SOURCE_DIR "${C-ARES_SOURCE_DIR}"
     CMAKE_ARGS
-     -DCARES_STATIC=ON
-     -DCARES_SHARED=OFF
-     -DCARES_INSTALL=OFF
+      ${CEPH_EXTERNAL_PROJECT_CMAKE_ARGS}
+      -DCARES_STATIC=ON
+      -DCARES_SHARED=OFF
+      -DCARES_INSTALL=OFF
     BINARY_DIR "${C-ARES_BINARY_DIR}"
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
+    LIST_SEPARATOR !
     INSTALL_COMMAND "")
   add_library(c-ares::cares STATIC IMPORTED)
   add_dependencies(c-ares::cares c-ares_ext)

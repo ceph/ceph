@@ -291,14 +291,14 @@ export class RgwModule {
 const routes: Routes = [
   {
     path: '',
-    redirectTo: 'rbd',
+    redirectTo: 'overview',
     pathMatch: 'full' // Required for a clean reload on daemon selection.
   },
   { path: 'daemon', component: RgwDaemonListComponent, data: { breadcrumbs: 'Gateways' } },
   {
     path: 'daemon/:daemonId',
     component: RgwDaemonResourceSidebarComponent,
-    data: { breadcrumbs: RgwDaemonResourceBreadcrumbResolver },
+    data: { breadcrumbs: RgwDaemonResourceBreadcrumbResolver, showBreadcrumbsLayout: false },
     resolve: {
       daemon: RgwDaemonResourceResolver
     },

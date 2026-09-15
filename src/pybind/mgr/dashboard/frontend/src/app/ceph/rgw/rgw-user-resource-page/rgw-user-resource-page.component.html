@@ -1,15 +1,16 @@
-@if (user) {
+@if (user || isOverviewLoading) {
   @switch (section) {
     @case ('overview') {
       <cd-resource-overview-card
         title="User details"
         [columns]="4"
         [fields]="overviewFields"
+        [loading]="isOverviewLoading"
         i18n-title
       >
       </cd-resource-overview-card>
 
-      @if (keys.length) {
+      @if (user && keys.length) {
         <div class="cds-mt-6 cds-mb-6">
           <h2
             class="cds--type-heading-03"
@@ -33,7 +34,7 @@
         </div>
       }
 
-      @if (user.user_quota) {
+      @if (user?.user_quota) {
         <section class="cds-mt-6 cds-mb-6">
           <h2
             class="cds--type-heading-03"
@@ -51,7 +52,7 @@
         </section>
       }
 
-      @if (user.bucket_quota) {
+      @if (user?.bucket_quota) {
         <section class="cds-mb-6">
           <h2
             class="cds--type-heading-03"
@@ -69,7 +70,7 @@
         </section>
       }
 
-      @if (user.user_ratelimit) {
+      @if (user?.user_ratelimit) {
         <h2
           class="user-resource-section__title cds--type-heading-03"
           i18n

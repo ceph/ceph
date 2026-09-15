@@ -961,7 +961,12 @@ void PeerReplayer::remove_persisted_dir_sync_stat(const std::string &dir_root) {
 
   Context *ctx = new C_RemovePersistedSyncStatAio(dir_root);
   librados::AioCompletion *aio_comp = create_rados_callback(ctx);
-  int r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+
+  int r;
+  {
+    std::lock_guard<ceph::mutex> lock(m_mirror_obj_write_l);
+    r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+  }
   if (r < 0) {
     delete ctx;
     derr << ": failed to submit aio remove persisted sync stats for dir_root="
@@ -1142,7 +1147,12 @@ void PeerReplayer::persist_dir_sync_stat(const std::string &dir_root) {
 
   Context *ctx = new C_PersistSyncStatAio(dir_root);
   librados::AioCompletion *aio_comp = create_rados_callback(ctx);
-  int r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+
+  int r;
+  {
+    std::lock_guard<ceph::mutex> lock(m_mirror_obj_write_l);
+    r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+  }
   if (r < 0) {
     delete ctx;
     derr << ": failed to submit aio persist sync stats for dir_root=" << dir_root
@@ -1262,20 +1272,21 @@ int PeerReplayer::try_lock_directory(const std::string &dir_root,
   int fd = r;
   r = ceph_flock(m_remote_mount, fd, LOCK_EX | LOCK_NB, (uint64_t)replayer->get_thread_id());
   if (r != 0) {
-    if (r == -EWOULDBLOCK) {
+    int flock_err = r;
+    if (flock_err == -EWOULDBLOCK) {
       dout(5) << ": dir_root=" << dir_root << " is locked by cephfs-mirror, "
               << "will retry again" << dendl;
     } else {
-      derr << ": failed to lock dir_root=" << dir_root << ": " << cpp_strerror(r)
+      derr << ": failed to lock dir_root=" << dir_root << ": " << cpp_strerror(flock_err)
            << dendl;
     }
 
-    r = ceph_close(m_remote_mount, fd);
-    if (r < 0) {
+    int close_err = ceph_close(m_remote_mount, fd);
+    if (close_err < 0) {
       derr << ": failed to close (cleanup) remote dir_root=" << dir_root << ": "
-           << cpp_strerror(r) << dendl;
+           << cpp_strerror(close_err) << dendl;
     }
-    return r;
+    return flock_err;
   }
 
   dout(10) << ": dir_root=" << dir_root << " locked" << dendl;
@@ -2280,13 +2291,13 @@ int PeerReplayer::sync_perms(const std::string& path) {
   r = ceph_statx(m_local_mount, path.c_str(), &tstx, CEPH_STATX_MODE,
 		 AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
-    derr << ": failed to fetch stat for local path: "
+    derr << ": failed to fetch stat for local path=" << path << ": "
 	 << cpp_strerror(r) << dendl;
     return r;
   }
   r = ceph_chmod(m_remote_mount, path.c_str(), tstx.stx_mode);
   if (r < 0) {
-    derr << ": failed to set mode for remote path: "
+    derr << ": failed to set mode for remote path=" << path << ": "
 	 << cpp_strerror(r) << dendl;
     return r;
   }
@@ -2487,7 +2498,7 @@ int PeerReplayer::SnapDiffSync::init_sync() {
 
   ceph_snapdiff_info info;
   r = ceph_open_snapdiff(m_local, m_dir_root.c_str(), ".",
-                         stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), 0, &info);
+                         stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), &info);
   if (r != 0) {
     derr << ": failed to open snapdiff for " << m_dir_root << ": r=" << r << dendl;
     return r;
@@ -2519,7 +2530,7 @@ int PeerReplayer::SnapDiffSync::init_directory(const std::string &epath,
 
     ceph_snapdiff_info info;
     r = ceph_open_snapdiff(m_local, m_dir_root.c_str(), epath.c_str(),
-                           stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), 0, &info);
+                           stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), &info);
     if (r != 0) {
       derr << ": failed to open snapdiff for " << m_dir_root << ", r=" << r << dendl;
       return r;

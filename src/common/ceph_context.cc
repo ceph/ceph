@@ -743,8 +743,6 @@ CephContext::CephContext(uint32_t module_type_,
     _perf_counters_collection(NULL),
     _perf_counters_conf_obs(NULL),
     _heartbeat_map(NULL),
-    _crypto_none(NULL),
-    _crypto_aes(NULL),
     _plugin_registry(NULL),
 #ifdef CEPH_DEBUG_MUTEX
     _lockdep_obs(NULL),
@@ -811,9 +809,9 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("cputrace reset", _admin_hook, "reset cpu profiling");
   _admin_socket->register_command("cputrace dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump cpu profiling results");
 #endif
-  _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
-  _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
+
   _crypto_random.reset(new CryptoRandom());
+  _crypto_mgr.reset(new CryptoManager(this));
 
   lookup_or_create_singleton_object<MempoolObs>("mempool_obs", false, this);
 }
@@ -873,8 +871,7 @@ CephContext::~CephContext()
   delete _log;
   _log = NULL;
 
-  delete _crypto_none;
-  delete _crypto_aes;
+  _crypto_mgr.reset();
   if (_crypto_inited > 0) {
     ceph_assert(_crypto_inited == 1);  // or else someone explicitly did
 				  // init but not shutdown
@@ -1071,18 +1068,6 @@ void CephContext::_refresh_perf_values()
 AdminSocket *CephContext::get_admin_socket()
 {
   return _admin_socket;
-}
-
-CryptoHandler *CephContext::get_crypto_handler(int type)
-{
-  switch (type) {
-  case CEPH_CRYPTO_NONE:
-    return _crypto_none;
-  case CEPH_CRYPTO_AES:
-    return _crypto_aes;
-  default:
-    return NULL;
-  }
 }
 
 void CephContext::drop_temp_messenger_obj()

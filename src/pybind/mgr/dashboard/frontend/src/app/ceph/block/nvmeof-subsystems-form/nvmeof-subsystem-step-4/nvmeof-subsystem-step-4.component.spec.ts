@@ -46,9 +46,16 @@ describe('NvmeofSubsystemsStepFourComponent', () => {
     expect(component.hostAccessLabel).toContain('All');
   });
 
-  it('should return correct host access label for SPECIFIC hosts', () => {
+  it('should return correct host access label for SPECIFIC hosts with hosts added', () => {
     component.hostType = HOST_TYPE.SPECIFIC;
+    component.addedHosts = ['nqn.2014-08.org.nvmexpress:uuid:host-1'];
     expect(component.hostAccessLabel).toContain('Restricted');
+  });
+
+  it('should return N/A for host access label when SPECIFIC hosts list is empty', () => {
+    component.hostType = HOST_TYPE.SPECIFIC;
+    component.addedHosts = [];
+    expect(component.hostAccessLabel).toBe('N/A');
   });
 
   it('should return correct auth type label', () => {

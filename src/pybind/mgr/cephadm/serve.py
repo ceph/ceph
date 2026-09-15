@@ -1575,6 +1575,15 @@ class CephadmServe:
                     if not osd_uuid:
                         raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
                     daemon_params['osd_fsid'] = osd_uuid
+                    # we may need a dm-crypt key to rotate this OSD's keyring
+                    # if it is encrypted. If it is not encrypted, no such
+                    # key will exist
+                    rc, ckg_out, ckg_err = self.mgr.mon_command({
+                        'prefix': 'config-key get',
+                        'key': f'dm-crypt/osd/{osd_uuid}/luks',
+                    })
+                    if not rc and ckg_out:
+                        daemon_params['osd_dm_crypt_key'] = ckg_out
 
                 if reconfig:
                     daemon_params['reconfig'] = True
@@ -1584,6 +1593,8 @@ class CephadmServe:
                     daemon_params['send_signal_to_daemon'] = send_signal_to_daemon
                 if self.mgr.allow_ptrace:
                     daemon_params['allow_ptrace'] = True
+                if self.mgr.log_deploy_configuration:
+                    daemon_params['log_deploy_configuration'] = True
 
                 daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
                 init_containers = self._setup_init_containers(daemon_spec, daemon_params)
@@ -1937,7 +1948,8 @@ class CephadmServe:
                 if isinstance(stdin, bytes):
                     self.log.debug('stdin: <binary len %d>', len(stdin))
                 else:
-                    self.log.debug('stdin: %s', stdin)
+                    if self.mgr.log_deploy_configuration:
+                        self.log.debug('stdin: %s', stdin)
 
             # If SSH hardening is enabled, call invoker directly without which python
             if self.mgr.sudo_hardening and self.mgr.invoker_path:
@@ -2143,8 +2155,12 @@ def _ceph_service_next_action(
         return action
 
     if mgr.last_monmap and mgr.last_monmap > last_config:
-        logger.info('Reconfiguring %s (monmap changed)...', name)
-        return 'reconfig'
+        if mgr.upgrade.upgrade_state is not None and not mgr.upgrade.upgrade_state.paused:
+            logger.debug('Skipping reconfig of %s for monmap change (upgrade in progress)' % name)
+        else:
+            logger.info('Reconfiguring %s (monmap changed)...' % name)
+            return 'reconfig'
+
     if mgr.extra_ceph_conf_is_newer(last_config):
         logger.info('Reconfiguring %s (extra config changed)...', name)
         return 'reconfig'

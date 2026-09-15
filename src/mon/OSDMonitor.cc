@@ -751,7 +751,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mapping_job.reset();
   }
 
-  load_health();
 
   /*
    * We will possibly have a stashed latest that *we* wrote, and we will
@@ -2129,9 +2128,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 
   // health
-  health_check_map_t next;
+  auto& next = get_health_checks_pending_writeable();
   tmp.check_health(cct, &next);
-  encode_health(next, t);
 }
 
 int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
@@ -6164,20 +6162,24 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     rdata.append(ds);
   } else if (prefix == "osd blocklist ls" ||
-	     prefix == "osd blacklist ls") {
-    if (f)
+             prefix == "osd blacklist ls") {
+    bool new_format = op->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_UMBRELLA);
+    if (f) {
+      if (new_format) {
+        f->open_object_section("blocklist_info");
+      }
       f->open_array_section("blocklist");
-
-    for (auto p = osdmap.blocklist.begin(); p != osdmap.blocklist.end(); ++p) {
+    }
+    for (auto & p : osdmap.blocklist) {
       if (f) {
 	f->open_object_section("entry");
-	f->dump_string("addr", p->first.get_legacy_str());
-	f->dump_stream("until") << p->second;
+	f->dump_string("addr", p.first.get_legacy_str());
+	f->dump_stream("until") << p.second;
 	f->close_section();
       } else {
 	stringstream ss;
 	string s;
-	ss << p->first << " " << p->second;
+	ss << p.first << " " << p.second;
 	getline(ss, s);
 	s += "\n";
 	rdata.append(s);
@@ -6185,40 +6187,49 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     if (f) {
       f->close_section();
-      f->flush(rdata);
+      if (!new_format) {
+        f->flush(rdata);
+      }
     }
     if (f)
       f->open_array_section("range_blocklist");
 
-    for (auto p = osdmap.range_blocklist.begin();
-	 p != osdmap.range_blocklist.end();
-	 ++p) {
+    for (auto & p : osdmap.range_blocklist) {
       if (f) {
-	f->open_object_section("entry");
-	f->dump_string("range", p->first.get_legacy_str());
-	f->dump_stream("until") << p->second;
-	f->close_section();
+        f->open_object_section("entry");
+        f->dump_string("range", p.first.get_legacy_str());
+        f->dump_stream("until") << p.second;
+        f->close_section();
       } else {
-	stringstream ss;
-	string s;
-	ss << p->first << " " << p->second;
-	getline(ss, s);
-	s += "\n";
-	rdata.append(s);
+        stringstream ss;
+        string s;
+        ss << p.first << " " << p.second;
+        getline(ss, s);
+        s += "\n";
+        rdata.append(s);
       }
     }
     if (f) {
       f->close_section();
-      f->flush(rdata);
+      if (new_format) {
+        f->close_section();
+        f->flush(ds);
+        rdata.append(ds);
+      } else {
+        f->flush(rdata);
+      }
     }
-    ss << "listed " << osdmap.blocklist.size() + osdmap.range_blocklist.size() << " entries";
-
+    if (!new_format || !f) {
+      ss << "listed " << osdmap.blocklist.size() + osdmap.range_blocklist.size() << " entries";
+    }
   } else if (prefix == "osd pool ls") {
     string detail;
     cmd_getval(cmdmap, "detail", detail);
+    bool show_rule_names = false;
+    cmd_getval(cmdmap, "show_rule_names", show_rule_names);
     if (!f && detail == "detail") {
       ostringstream ss;
-      osdmap.print_pools(cct, ss);
+      osdmap.print_pools(cct, ss, show_rule_names);
       rdata.append(ss.str());
     } else {
       if (f)
@@ -6229,7 +6240,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    f->open_object_section("pool");
 	    f->dump_int("pool_id", pid);
 	    f->dump_string("pool_name", osdmap.get_pool_name(pid));
-	    pdata.dump(f.get());
+	    pdata.dump(f.get(), osdmap.crush.get(), show_rule_names);
 	    osdmap.dump_read_balance_score(cct, pid, pdata, f.get());
 	    f->close_section();
 	  } else {
@@ -15048,7 +15059,7 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
         pool_name = &osdmap.get_pool_name(m->pool);
       }
 
-      if (!is_unmanaged_snap_op_permitted(cct, mon.key_server,
+      if (!is_unmanaged_snap_op_permitted(cct, mon,
                                           session->entity_name, session->caps,
 					  session->get_peer_socket_addr(),
                                           pool_name)) {
@@ -15061,12 +15072,19 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
     }
     break;
   default:
-    if (!session->is_capable("osd", MON_CAP_W)) {
-      dout(0) << "got pool op from entity with insufficient privileges. "
-              << "message: " << *m  << std::endl
-              << "caps: " << session->caps << dendl;
-      _pool_op_reply(op, -EPERM, osdmap.get_epoch());
-      return true;
+    {
+      // pool create can also be authorized by an 'osd pool create' command
+      // grant; MPoolOp carries no command name, so supply one here
+      const char *cmd = (m->op == POOL_OP_CREATE) ? "osd pool create" : "";
+      if (!session->caps.is_capable(
+            cct, session->entity_name, "osd", cmd, {},
+            false, true, false, session->get_peer_socket_addr())) {
+        dout(0) << "got pool op from entity with insufficient privileges. "
+                << "message: " << *m  << std::endl
+                << "caps: " << session->caps << dendl;
+        _pool_op_reply(op, -EPERM, osdmap.get_epoch());
+        return true;
+      }
     }
     break;
   }

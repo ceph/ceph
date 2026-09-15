@@ -1002,23 +1002,23 @@ public:
   }
 
   void reset_complete_to(pg_info_t *info, bool ec_optimizations_enabled) {
-    if (log.log.empty()) // caller is split_into()
-      return;
     log.complete_to = log.log.begin();
-    ceph_assert(log.complete_to != log.log.end());
     auto oldest_need = missing.get_oldest_need();
-    if (oldest_need != eversion_t()) {
-      while (log.complete_to->version < oldest_need) {
-        ++log.complete_to;
-	// partial writes allow a shard which did not participate in a write to
-	// have a missing version that is newer that the most recent log entry
-	if (log.complete_to == log.log.end()) {
-	  // keep complete_to one entry behind the end of the log to stop
-	  // code incorrectly using it to deduce that recovery has completed
-	  --log.complete_to;
-	  break;
-	}
-        ceph_assert(log.complete_to != log.log.end());
+    if (log.complete_to != log.log.end())
+    {
+      if (oldest_need != eversion_t()) {
+        while (log.complete_to->version < oldest_need) {
+          ++log.complete_to;
+          // partial writes allow a shard which did not participate in a write to
+          // have a missing version that is newer that the most recent log entry
+          if (log.complete_to == log.log.end()) {
+            // keep complete_to one entry behind the end of the log to stop
+            // code incorrectly using it to deduce that recovery has completed
+            --log.complete_to;
+            break;
+          }
+          ceph_assert(log.complete_to != log.log.end());
+        }
       }
     }
     if (!info)

@@ -30,6 +30,7 @@ overrides:
       - pool full
       - pool\(s\) full
       - telemetry module includes new collections
+      - but it is still running
 tasks:
 - install:
     branch: squid
@@ -65,6 +66,7 @@ tasks:
 - print: "**** done start upgrade sequence..."
 - sequential:
     - print: "**** done start upgrade..."
+    - sequential: [ignore-auth-warn-cephadm]
     - cephadm.shell:
         env: [sha1]
         mon.a:

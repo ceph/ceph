@@ -3132,6 +3132,22 @@ TEST(BufferHash, all) {
   }
 }
 
+TEST(BufferList, ZeroSizedPtrRebuild) {
+  bufferlist bl;
+  bl.reserve(1024);
+  bufferlist bl2;
+  bl2.reserve(1024);
+  bl.append(bl2);
+  bl.append("x", 1);
+  // The following assert is not policing required behaviour. It is policing
+  // that the buffer contains zero-length buffers at the start or end, which
+  // is the edge case we are testing in rebuild_aligned_size_and_memory.
+  ASSERT_EQ(3, bl.get_num_buffers());
+  ASSERT_EQ(1, bl.length());
+  bl.rebuild_aligned_size_and_memory(4096, 4096, 1);
+  EXPECT_TRUE(bl.is_contiguous());
+}
+
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_bufferlist && 

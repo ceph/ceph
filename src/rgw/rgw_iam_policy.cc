@@ -19,6 +19,7 @@
 
 #include "rgw_auth.h"
 #include "rgw_iam_policy.h"
+#include "rgw_oidc_provider.h"
 
 
 inline constexpr int dout_subsys = ceph_subsys_rgw;
@@ -381,16 +382,23 @@ parse_principal_(const struct Keyword* w, std::string&& s,
 	}
 
         if (match[1] == "oidc-provider") {
-                return Principal::oidc_provider(std::move(match[2]));
+                return Principal::oidc_provider(std::move(a->account), std::move(match[2]));
         }
 	if (match[1] == "assumed-role") {
 	  return Principal::assumed_role(std::move(a->account), match[2]);
 	}
       }
+    } else if (w->id == TokenID::Federated &&
+               (s.find('/') != string::npos || s.find('.') != string::npos)) {
+      // bare URL like "example.com" or "localhost:8080/auth/realms/myrealm"
+      // used for global OIDC providers in trust policies. Restricted to
+      // Principal.Federated so bare account/tenant names under Principal.AWS
+      // (which may contain a '.') keep matching as accounts.
+      return Principal::oidc_provider(std::string{global_oidc_id}, std::string{s});
     } else if (std::none_of(s.begin(), s.end(),
-		       [](const char& c) {
-			 return (c == ':') || (c == '/');
-		       })) {
+           [](const char& c) {
+       return (c == ':') || (c == '/');
+           })) {
       // Since tenants are simply prefixes, there's no really good
       // way to see if one exists or not. So we return the thing and
       // let them try to match against it.

@@ -40,7 +40,7 @@ def _get_bluestore_info(devices: _List[str]) -> Dict[str, Any]:
             if oj.get(device):
                 try:
                     osd_uuid = oj[device]['osd_uuid']
-                    result[osd_uuid] = disk.bluestore_info(device, oj)
+                    result.setdefault(osd_uuid, {}).update(disk.bluestore_info(device, oj))
                 except KeyError as e:
                     # this will appear for devices that have a bluestore header but aren't valid OSDs
                     # for example, due to incomplete rollback of OSDs: https://tracker.ceph.com/issues/51869

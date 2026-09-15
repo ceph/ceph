@@ -230,9 +230,13 @@ command ``ceph orch upgrade status`` if the orchestrator has crashed:
 
    Error ENOENT: Module not found
 
-This is possibly caused by invalid JSON in a mgr config-key.
-See `Redmine tracker Issue #67329 <https://tracker.ceph.com/issues/67329>`_
-and `this discussion on the ceph-users mailing list <https://www.spinics.net/lists/ceph-users/msg83667.html>`_.
+This is possibly caused by invalid JSON in a mgr config-key. One known
+cause on releases before the fix: the OSD removal queue stored under
+the ``mgr/cephadm/osd_remove_queue`` config-key could contain a field
+(``original_weight``) that the cephadm module was unable to load back,
+which crashed the module whenever the Manager restarted. The
+workaround was to edit the stored JSON to remove the offending field
+and then restart ``ceph-mgr``.
 
 
 ``UPGRADE_NO_STANDBY_MGR``

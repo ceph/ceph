@@ -1,3 +1,5 @@
+set(CMAKE_JOB_POOL_LINK heavy_link_job_pool)
+
 #
 # Helper for adding RGW tests built with Catch2:
 # Note: to define a test that does not use Catch2::main(), use:
@@ -128,6 +130,22 @@ add_executable(unittest_rgw_cors
 add_ceph_unittest(unittest_rgw_cors)
 target_link_libraries(unittest_rgw_cors ${rgw_libs})
 
+# unittest_rgw_rest
+add_executable(unittest_rgw_rest
+  test_rgw_rest.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_rest)
+target_include_directories(unittest_rgw_rest
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_rest ${rgw_libs})
+
+# unittest_rgw_frontend_type
+add_executable(unittest_rgw_frontend_type
+  test_rgw_frontend_type.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_frontend_type)
+target_link_libraries(unittest_rgw_frontend_type ${rgw_libs} heap_profiler)
+
 
 # unittest_rgw_bucket_sync_cache
 add_executable(unittest_rgw_bucket_sync_cache test_rgw_bucket_sync_cache.cc)
@@ -138,6 +156,11 @@ target_link_libraries(unittest_rgw_bucket_sync_cache ${rgw_libs})
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
 target_link_libraries(unittest_rgw_period_history ${rgw_libs})
+
+# unittest_rgw_zone
+add_executable(unittest_rgw_zone test_rgw_zone.cc)
+add_ceph_unittest(unittest_rgw_zone)
+target_link_libraries(unittest_rgw_zone ${rgw_libs})
 
 # unittest_rgw_compression
 add_executable(unittest_rgw_compression
@@ -315,6 +338,7 @@ add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)
 target_include_directories(unittest_rgw_string
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_string ${rgw_libs})
 
 add_executable(unittest_rgw_http_errors test_rgw_http_errors.cc)
 add_ceph_unittest(unittest_rgw_http_errors)
@@ -495,6 +519,20 @@ target_link_libraries(ceph_test_datalog
 install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+if(WITH_RADOSGW_RADOS)
+# ceph_test_bilog
+add_executable(ceph_test_bilog test_bilog.cc)
+target_include_directories(ceph_test_bilog
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/services")
+target_link_libraries(ceph_test_bilog
+  libneorados
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  ${rgw_libs})
+install(TARGETS ceph_test_bilog DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 add_executable(unittest_rgw_async_utils test_rgw_async_utils.cc)
 add_ceph_unittest(unittest_rgw_async_utils)
 target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})
@@ -507,10 +545,21 @@ add_executable(unittest_rgw_tag test_rgw_tag.cc)
 add_ceph_unittest(unittest_rgw_tag)
 target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})
 
+# unittest_rgw_auth_sigv4
+add_executable(unittest_rgw_auth_sigv4 test_rgw_auth_sigv4.cc)
+add_ceph_unittest(unittest_rgw_auth_sigv4)
+target_link_libraries(unittest_rgw_auth_sigv4 ${rgw_libs} ${UNITTEST_LIBS})
+
 # unittest_rgw_http_client
 add_executable(unittest_rgw_http_client test_rgw_http_client.cc)
 add_ceph_unittest(unittest_rgw_http_client)
 target_link_libraries(unittest_rgw_http_client
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
+# unittest_rgw_rest_conn
+add_executable(unittest_rgw_rest_conn test_rgw_rest_conn.cc)
+add_ceph_unittest(unittest_rgw_rest_conn)
+target_link_libraries(unittest_rgw_rest_conn
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
 if(WITH_RADOSGW_FDB)

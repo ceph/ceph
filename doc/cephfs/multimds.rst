@@ -42,12 +42,19 @@ result of commands.
 
 ::
 
-    # fsmap e5: 1/1/1 up {0=a=up:active}, 2 up:standby
-
-    ceph fs set <fs_name> max_mds 2
-
-    # fsmap e8: 2/2/2 up {0=a=up:active,1=c=up:creating}, 1 up:standby
-    # fsmap e9: 2/2/2 up {0=a=up:active,1=c=up:active}, 1 up:standby
+  <fsname> - 0 clients
+  ====
+  RANK  STATE          MDS            ACTIVITY     DNS    INOS   DIRS   CAPS
+   0    active      <mds1>          Reqs:    0 /s  5398   5399     92      0
+    
+  
+  ceph fs set <fs_name> max_mds 2
+  
+  <fsname> - 0 clients
+  ====
+  RANK  STATE          MDS            ACTIVITY     DNS    INOS   DIRS   CAPS
+   0    active      <mds1>          Reqs:    0 /s  5398   5399     92      0
+   1    active      <mds2>          Reqs:    0 /s    10     13     11      0
 
 The newly created rank (1) will pass through the 'creating' state
 and then enter this 'active state'.
@@ -73,12 +80,19 @@ Reducing the number of ranks is as simple as reducing ``max_mds``:
 
 ::
     
-    # fsmap e9: 2/2/2 up {0=a=up:active,1=c=up:active}, 1 up:standby
-    ceph fs set <fs_name> max_mds 1
-    # fsmap e10: 2/2/1 up {0=a=up:active,1=c=up:stopping}, 1 up:standby
-    # fsmap e10: 2/2/1 up {0=a=up:active,1=c=up:stopping}, 1 up:standby
-    ...
-    # fsmap e10: 1/1/1 up {0=a=up:active}, 2 up:standby
+  <fsname> - 0 clients
+  ====
+  RANK  STATE          MDS            ACTIVITY     DNS    INOS   DIRS   CAPS
+   0    active      <mds1>          Reqs:    0 /s  5398   5399     92      0
+   1    active      <mds2>          Reqs:    0 /s    10     13     11      0
+  
+  ceph fs set <fs_name> max_mds 1
+  
+  
+  <fsname> - 0 clients
+  ====
+  RANK  STATE          MDS            ACTIVITY     DNS    INOS   DIRS   CAPS
+   0    active      <mds1>          Reqs:    0 /s  5398   5399     92      0
 
 The cluster will automatically stop extra ranks incrementally until ``max_mds``
 is reached.

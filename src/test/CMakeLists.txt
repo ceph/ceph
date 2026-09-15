@@ -137,6 +137,8 @@ target_link_libraries(test_build_libcommon ceph-common pthread ${CRYPTO_LIBS} ${
 if(WITH_RADOSGW)
   add_executable(test_build_librgw buildtest_skeleton.cc)
   target_link_libraries(test_build_librgw rgw_a pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+  set_target_properties(test_build_librgw PROPERTIES
+    JOB_POOL_LINK heavy_link_job_pool)
 endif(WITH_RADOSGW)
 
 if(WITH_LIBCEPHFS)
@@ -299,6 +301,9 @@ if(${WITH_RADOSGW})
     ${EXTRALIBS}
     ${CRYPTO_LIBS}
     )
+  set_target_properties(test_cors ceph_test_cls_rgw_admin_account_quota_set
+    ceph_test_cls_rgw_meta ceph_test_cls_rgw_log PROPERTIES
+    JOB_POOL_LINK heavy_link_job_pool)
 
 # ceph_test_librgw_file (nfs-like RGW interface)
 add_executable(ceph_test_librgw_file
@@ -321,7 +326,8 @@ add_dependencies(ceph_test_librgw_file
   ceph_test_librgw_file_rename
   ceph_test_librgw_file_nfsns
   ceph_test_librgw_file_aw
-  ceph_test_librgw_file_marker)
+  ceph_test_librgw_file_marker
+  ceph_test_librgw_file_create)
 
 # ceph_test_librgw_file_cd (just the rgw_file create-delete bucket ops)
 add_executable(ceph_test_librgw_file_cd
@@ -450,6 +456,20 @@ target_link_libraries(ceph_test_librgw_file_rename
   ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file_rename DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# ceph_test_librgw_file_create (librgw_create() single-call semantics test)
+add_executable(ceph_test_librgw_file_create
+  librgw_file_create.cc
+  )
+target_link_libraries(ceph_test_librgw_file_create
+  rgw
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  )
+install(TARGETS ceph_test_librgw_file_create DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_rgw_token
 add_executable(ceph_test_rgw_token

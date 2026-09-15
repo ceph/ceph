@@ -33,7 +33,8 @@
 
 #include "Capability.h"
 #include "LogSegmentRef.h"
-#include "mdstypes.h" // for dirfrag_t, metareqid_t
+#include "mdstypes.h" // for dirfrag_t
+#include "metareqid_t.h"
 
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"

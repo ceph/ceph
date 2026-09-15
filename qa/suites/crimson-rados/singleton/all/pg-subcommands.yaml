@@ -26,6 +26,7 @@ tasks:
         crimson cpu num: 2
       global:
 - workunit:
+    watchdog: true
     clients:
       client.0:
         - crimson/test_pg_subcommands.sh

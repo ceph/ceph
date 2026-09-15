@@ -551,7 +551,7 @@ performing the migration. For details, see the `Architecture`_ section.
 .. _placement group: ../placement-groups
 .. _mClock: ../../configuration/mclock-config-ref
 .. _mClock backfill: ../../configuration/mclock-config-ref#recovery-backfill-options
-.. _Architecture: ../../../architecture
+.. _Architecture: ../../../architecture/
 .. _OSD Not Running: ../../troubleshooting/troubleshooting-osd#osd-not-running
 .. _CRUSH map: ../crush-map
 .. _Configuring Monitor/OSD Interaction: ../../configuration/mon-osd-interaction/

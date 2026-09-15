@@ -623,6 +623,9 @@ else:
 
         @Endpoint('PUT', '{nqn}/change_key')
         @UpdatePermission
+        @empty_response
+        @NvmeofCLICommand("nvmeof subsystem change_key", model.RequestStatus,
+                          success_message_template="Changing key for subsystem {nqn}: Successful")
         @EndpointDoc(
             "Change subsystem inband authentication key",
             parameters={
@@ -633,9 +636,6 @@ else:
                 "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
             },
         )
-        @empty_response
-        @NvmeofCLICommand("nvmeof subsystem change_key", model.RequestStatus,
-                          success_message_template="Changing key for subsystem {nqn}: Successful")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def change_key(self, nqn: str, dhchap_key: str, gw_group: Optional[str] = None,
@@ -655,6 +655,9 @@ else:
                 )
             )
 
+        @empty_response
+        @NvmeofCLICommand("nvmeof subsystem del_key", model.RequestStatus,
+                          success_message_template="Deleting key for subsystem {nqn}: Successful")
         @EndpointDoc(
             "Delete subsystem inband authentication key",
             parameters={
@@ -664,9 +667,6 @@ else:
                 "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
             },
         )
-        @empty_response
-        @NvmeofCLICommand("nvmeof subsystem del_key", model.RequestStatus,
-                          success_message_template="Deleting key for subsystem {nqn}: Successful")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def del_key(self, nqn: str, gw_group: Optional[str] = None,
@@ -810,6 +810,13 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
                 "server_address": Param(str, "NVMeoF gateway address", True, None),
                 "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
+                "force": Param(
+                    bool,
+                    "Allow deleting the KMIP server's endpoint even if encrypted "
+                    "(or degraded) namespaces still use it",
+                    True,
+                    False
+                ),
             },
         )
         @convert_to_model(model.RequestStatus)
@@ -818,7 +825,8 @@ else:
                                      address: Optional[str] = None,
                                      port: Optional[int] = 5696, gw_group: Optional[str] = None,
                                      server_address: Optional[str] = None,
-                                     traddr: Optional[str] = None):
+                                     traddr: Optional[str] = None,
+                                     force: Optional[bool] = False):
             server_address = resolve_nvmeof_server_address(
                 server_address=server_address,
                 traddr=traddr
@@ -830,7 +838,8 @@ else:
             ).stub.del_kmip_server_endpoints(
                 NVMeoFClient.pb2.del_kmip_server_endpoints_req(
                     subsystem_nqn=nqn, server_name=server_name,
-                    endpoints=[ep]
+                    endpoints=[ep],
+                    force=str_to_bool(force)
                 )
             )
 

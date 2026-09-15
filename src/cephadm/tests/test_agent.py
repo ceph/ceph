@@ -212,11 +212,25 @@ def test_agent_shutdown(_is_alive):
         assert agent.mgr_listener.stop == False
         assert agent.ls_gatherer.stop == False
         assert agent.volume_gatherer.stop == False
+        assert agent.event.is_set() == False
         agent.shutdown()
         assert agent.stop == True
         assert agent.mgr_listener.stop == True
         assert agent.ls_gatherer.stop == True
         assert agent.volume_gatherer.stop == True
+        assert agent.event.is_set() == True
+
+
+def test_agent_unit_is_type_simple():
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        unit = agent.unit_file()
+        assert 'Type=simple' in unit
+        assert 'Type=forking' not in unit
+        assert 'KillMode=control-group' in unit
+        unit_run = agent.unit_run()
+        assert 'exec ' in unit_run
+        assert not unit_run.rstrip().endswith('&')
 
 
 def test_agent_wakeup():
@@ -727,6 +741,9 @@ def test_mgr_listener_run(_load_cert_chain, _load_verify_locations, _handle_json
                 self.family = family
                 self.type = type
 
+            def setsockopt(*args, **kwargs):
+                return
+
             def bind(*args, **kwargs):
                 return
 
@@ -734,6 +751,9 @@ def test_mgr_listener_run(_load_cert_chain, _load_verify_locations, _handle_json
                 return
 
             def listen(*args, **kwargs):
+                return
+
+            def close(*args, **kwargs):
                 return
 
         class FakeSecureSocket:

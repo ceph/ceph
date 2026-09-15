@@ -44,6 +44,7 @@
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "common/pick_address.h"
@@ -139,9 +140,22 @@ DaemonServer::DaemonServer(MonClient *monc_,
                                                     cct->_conf->mgr_op_history_slow_op_threshold);
 }
 
-DaemonServer::~DaemonServer() {
+void DaemonServer::shutdown()
+{
+  bool expected = false;
+  if (!shutting_down.compare_exchange_strong(expected, true)) {
+    return;
+  }
+
+  op_tracker.on_shutdown();
+
   delete msgr;
+  msgr = nullptr;
   g_conf().remove_observer(this);
+}
+
+DaemonServer::~DaemonServer() {
+  shutdown();
 }
 
 class DaemonServerHook : public AdminSocketHook {
@@ -290,7 +304,7 @@ bool DaemonServer::ms_handle_fast_authentication(Connection *con)
 	   << " addr " << con->get_peer_addrs()
 	   << dendl;
 
-  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  auto& caps_info = con->get_peer_caps_info();
   if (caps_info.allow_all) {
     dout(10) << " session " << s << " " << s->entity_name
 	     << " allow_all" << dendl;
@@ -2645,6 +2659,18 @@ bool DaemonServer::_handle_command(
 	auto q = defaults.find(name);
 	if (q != defaults.end()) {
 	  cmdctx->odata.append(q->second + "\n");
+	} else if (key.type == "mgr") {
+	  // check mgr module options (key format: "mgr/<module>/<option>")
+	  // name may already carry the "mgr/" prefix (e.g. "mgr/telemetry/contact")
+	  // or may omit it (e.g. "telemetry/contact"); normalise to the stored form.
+	  std::string lookup_key =
+	    name.starts_with("mgr/") ? name : ("mgr/" + name);
+	  std::string value;
+	  if (py_modules.get_module_option(lookup_key, &value)) {
+	    cmdctx->odata.append(value + "\n");
+	  } else {
+	    r = -ENOENT;
+	  }
 	} else {
 	  r = -ENOENT;
 	}
@@ -2714,6 +2740,22 @@ bool DaemonServer::_handle_command(
 	    tbl << TextTable::endrow;
 	  }
 	}
+	// also show mgr module options that were explicitly set
+	if (key.type == "mgr") {
+	  for (auto& [k, v] : py_modules.get_module_config_snapshot()) {
+	    // keys are "mgr/<module>/<option>"; strip the leading "mgr/"
+	    std::string_view opt = std::string_view(k).substr(4);
+	    if (f) {
+	      f->open_object_section("value");
+	      f->dump_string("name", opt);
+	      f->dump_string("value", v);
+	      f->dump_string("source", "mgr_module");
+	      f->close_section();
+	    } else {
+	      tbl << opt << v << "mgr_module" << "" << "" << TextTable::endrow;
+	    }
+	  }
+	}
       } else {
 	// show-with-defaults
 	auto& defaults = daemon->_get_config_defaults();
@@ -2781,6 +2823,40 @@ bool DaemonServer::_handle_command(
 	      tbl << "";
 	      tbl << "";
 	      tbl << TextTable::endrow;
+	    }
+	  }
+	}
+	// also show mgr module options (set values and defaults) for mgr daemons
+	if (key.type == "mgr") {
+	  auto mod_config_snapshot = py_modules.get_module_config_snapshot();
+	  for (auto& module : py_modules.get_modules()) {
+	    if (!module->is_enabled()) {
+	      continue;
+	    }
+	    const std::string& mod_name = module->get_name();
+	    for (auto& [opt_name, opt] : module->get_options()) {
+	      std::string display_name = mod_name + "/" + opt_name;
+	      std::string config_key = "mgr/" + display_name;
+	      std::string value;
+	      std::string source;
+	      auto it = mod_config_snapshot.find(config_key);
+	      if (it != mod_config_snapshot.end()) {
+		value = it->second;
+		source = "mgr_module";
+	      } else {
+		value = opt.default_value;
+		source = "default";
+	      }
+	      if (f) {
+		f->open_object_section("value");
+		f->dump_string("name", display_name);
+		f->dump_string("value", value);
+		f->dump_string("source", source);
+		f->close_section();
+	      } else {
+		tbl << display_name << value << source << "" << ""
+		    << TextTable::endrow;
+	      }
 	    }
 	  }
 	}

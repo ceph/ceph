@@ -15,7 +15,9 @@
 #include <Python.h>
 
 #include "osdc/Objecter.h"
+#include "common/debug.h"
 #include "common/errno.h"
+#include "crush/CrushWrapper.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
@@ -81,6 +83,19 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
 
 Mgr::~Mgr()
 {
+}
+
+void Mgr::shutdown()
+{
+  if (initialized) {
+    AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+    admin_socket->unregister_commands(this);
+  }
+
+  finisher.wait_for_empty();
+  finisher.stop();
+
+  server.shutdown();
 }
 
 static std::string crush_hostname_for_osd(ClusterState& cluster_state, int osd_id)

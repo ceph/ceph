@@ -19,7 +19,6 @@
 
 #include <iosfwd>
 
-#include "mdstypes.h"
 #include "common/ref.h"
 #include "include/cephfs/types.h" // for mds_rank_t
 

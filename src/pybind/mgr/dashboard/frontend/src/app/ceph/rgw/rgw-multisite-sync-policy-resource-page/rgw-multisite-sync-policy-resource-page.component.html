@@ -1,4 +1,4 @@
-@if (hasPolicyGroup) {
+@if (hasPolicyGroup || isOverviewLoading) {
   @switch (section) {
     @case ('overview') {
       <cd-resource-overview-card
@@ -6,6 +6,7 @@
         title="Sync policy details"
         [columns]="4"
         [fields]="overviewFields"
+        [loading]="isOverviewLoading"
       >
       </cd-resource-overview-card>
     }

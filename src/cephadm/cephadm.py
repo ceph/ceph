@@ -10,6 +10,7 @@ import os
 import random
 import shlex
 import shutil
+import signal
 import socket
 import string
 import subprocess
@@ -202,7 +203,7 @@ from cephadmlib.cluster_ops import (
 )
 from cephadmlib.firewalld import Firewalld, update_firewalld
 from cephadmlib import templating
-from cephadmlib.daemons.ceph import get_ceph_mounts_for_type, ceph_daemons
+from cephadmlib.daemons.ceph import get_ceph_mounts_for_type, ceph_daemons, update_osd_bluestore_affinity
 from cephadmlib.daemons import (
     Ceph,
     CephExporter,
@@ -213,6 +214,7 @@ from cephadmlib.daemons import (
     Keepalived,
     Monitoring,
     NFSGanesha,
+    OSD,
     SMB,
     SNMPGateway,
     MgmtGateway,
@@ -659,8 +661,28 @@ def create_daemon_dirs(
 
     if keyring:
         keyring_path = os.path.join(data_dir, 'keyring')
+        config_json = fetch_configs(ctx)
+        key_path_exists = False
+        key_path_content = 'N/A'
+        try:
+            key_path_exists = os.path.exists(keyring_path)
+            key_path_content = open(keyring_path, 'r').read()
+        except Exception:
+            pass
+        update_bluestore_label_osd_keyring = False
+        if (
+            ident.daemon_type == 'osd'
+            and key_path_exists
+            and key_path_content != keyring
+        ):
+            # need to update keyring with ceph-bluestore-tool
+            update_bluestore_label_osd_keyring = True
         with write_new(keyring_path, owner=(uid, gid)) as f:
             f.write(keyring)
+        if update_bluestore_label_osd_keyring:
+            osd_daemon_form = OSD.create(ctx, ident)
+            # osd_daemon_form = OSD.init(ctx, ctx.fsid, ident.daemon_id)
+            osd_daemon_form.rotate_osd_lv_keyring(ctx, keyring_path)
 
     if daemon_type in Monitoring.components.keys():
         config_json = fetch_configs(ctx)
@@ -1475,10 +1497,14 @@ class MgrListener(Thread):
     def __init__(self, agent: 'CephadmAgent') -> None:
         self.agent = agent
         self.stop = False
+        self._listen_socket: Optional[ssl.SSLSocket] = None
         super(MgrListener, self).__init__(target=self.run)
 
     def run(self) -> None:
         listenSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Allow rebinding after restart while the prior socket is in TIME_WAIT.
+        # Does not allow stealing a port from a live LISTEN socket.
+        listenSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listenSocket.bind(('0.0.0.0', int(self.agent.listener_port)))
         listenSocket.settimeout(60)
         listenSocket.listen(1)
@@ -1487,12 +1513,18 @@ class MgrListener(Thread):
         ssl_ctx.load_cert_chain(self.agent.listener_cert_path, self.agent.listener_key_path)
         ssl_ctx.load_verify_locations(self.agent.ca_path)
         secureListenSocket = ssl_ctx.wrap_socket(listenSocket, server_side=True)
+        self._listen_socket = secureListenSocket
         while not self.stop:
             try:
                 try:
                     conn, _ = secureListenSocket.accept()
                 except socket.timeout:
                     continue
+                except OSError:
+                    # Expected when shutdown() closes the listen socket.
+                    if self.stop:
+                        break
+                    raise
                 try:
                     length: int = int(conn.recv(10).decode())
                 except Exception as e:
@@ -1520,10 +1552,18 @@ class MgrListener(Thread):
                             self.agent.volume_gatherer.wakeup()
                             logger.debug(f'Got mgr message {data}')
             except Exception as e:
+                if self.stop:
+                    break
                 logger.error(f'Mgr Listener encountered exception: {e}')
 
     def shutdown(self) -> None:
         self.stop = True
+        if self._listen_socket is not None:
+            try:
+                self._listen_socket.close()
+            except Exception:
+                pass
+            self._listen_socket = None
 
     def handle_json_payload(self, data: Dict[Any, Any]) -> None:
         if 'counter' in data:
@@ -1648,7 +1688,18 @@ class CephadmAgent(DaemonForm):
     def unit_run(self) -> str:
         py3 = shutil.which('python3')
         binary_path = os.path.realpath(sys.argv[0])
-        return ('set -e\n' + f'{py3} {binary_path} agent --fsid {self.fsid} --daemon-id {self.daemon_id} &\n')
+        # Run the agent in the foreground under Type=simple with no trailing '&'
+        # so systemd's MainPID is the agent itself and stop/restart wait for it
+        # to exit
+        # - exec ensures that the agent is PID 1 of the service and receives
+        #   SIGTERM directly
+        # - TimeoutStopSec=30 in agent.service.j2 ensures that a SIGKILL is sent
+        #   if the agent does not exit within 30 seconds. This is a safegaurd
+        #   to ensure that the agent is stopped if it gets stuck.
+        return (
+            'set -e\n'
+            f'exec {py3} {binary_path} agent --fsid {self.fsid} --daemon-id {self.daemon_id}\n'
+        )
 
     def unit_file(self) -> str:
         return templating.render(
@@ -1663,6 +1714,12 @@ class CephadmAgent(DaemonForm):
             self.ls_gatherer.shutdown()
         if self.volume_gatherer.is_alive():
             self.volume_gatherer.shutdown()
+        self.wakeup()
+
+    def join_threads(self, timeout: float = 2.0) -> None:
+        for t in (self.mgr_listener, self.ls_gatherer, self.volume_gatherer):
+            if t.is_alive():
+                t.join(timeout=timeout)
 
     def wakeup(self) -> None:
         self.event.set()
@@ -1955,6 +2012,7 @@ class AgentGatherer(Thread):
 
     def shutdown(self) -> None:
         self.stop = True
+        self.wakeup()
 
     def wakeup(self) -> None:
         self.event.set()
@@ -1969,7 +2027,16 @@ def command_agent(ctx: CephadmContext) -> None:
     if not os.path.isdir(agent.daemon_dir):
         raise Error(f'Agent daemon directory {agent.daemon_dir} does not exist. Perhaps agent was never deployed?')
 
-    agent.run()
+    def _handle_sigterm(signum: int, frame: object) -> None:
+        logger.info('Agent received SIGTERM, shutting down gracefully')
+        agent.shutdown()
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+    try:
+        agent.run()
+    finally:
+        agent.shutdown()
+        agent.join_threads()
 
 
 ##################################
@@ -2135,6 +2202,18 @@ def get_image_info_from_inspect(out, image):
 ##################################
 
 
+def _check_mon_ip_vs_public_network(mon_ip: str, public_network: str) -> None:
+    if not ip_in_subnets(mon_ip, public_network):
+        raise Error(f'The provided --mon-ip {mon_ip} does not belong to any public_network(s) {public_network}')
+
+
+def _check_mon_addrv_vs_public_network(mon_addrv: str, public_network: str) -> None:
+    addrv_args = parse_mon_addrv(mon_addrv)
+    for addrv in addrv_args:
+        if not ip_in_subnets(addrv.ip, public_network):
+            raise Error(f'The provided --mon-addrv {addrv.ip} ip does not belong to any public_network(s) {public_network}')
+
+
 def get_public_net_from_cfg(ctx: CephadmContext) -> Optional[str]:
     """Get mon public network from configuration file."""
     cp = read_config(ctx.config)
@@ -2163,18 +2242,91 @@ def get_public_net_from_cfg(ctx: CephadmContext) -> Optional[str]:
     if not valid_public_net:
         raise Error(f'None of the public CIDR network(s) {configured_subnets} (from -c conf file) is configured locally.')
 
-    # Ensure public_network is compatible with the provided mon-ip (or mon-addrv)
+    # Ensure public_network is compatible with the provided mon address (--mon-ip, --mon-addrv, or --mon-net)
     if ctx.mon_ip:
-        if not ip_in_subnets(ctx.mon_ip, public_network):
-            raise Error(f'The provided --mon-ip {ctx.mon_ip} does not belong to any public_network(s) {public_network}')
+        _check_mon_ip_vs_public_network(ctx.mon_ip, public_network)
     elif ctx.mon_addrv:
-        addrv_args = parse_mon_addrv(ctx.mon_addrv)
-        for addrv in addrv_args:
-            if not ip_in_subnets(addrv.ip, public_network):
-                raise Error(f'The provided --mon-addrv {addrv.ip} ip does not belong to any public_network(s) {public_network}')
+        _check_mon_addrv_vs_public_network(ctx.mon_addrv, public_network)
 
     logger.debug(f'Using mon public network from configuration file {public_network}')
     return public_network
+
+
+def _parse_network(
+    net_str: str
+) -> Optional[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]:
+    """
+    Parse a CIDR string into a network object.
+
+    :param net_str: CIDR network string (e.g., '192.168.1.0/24' or 'fd00::/64')
+    :return: IPv4Network or IPv6Network on success, None if the string is not a valid CIDR
+    """
+    try:
+        return ipaddress.ip_network(net_str)
+    except ValueError:
+        return None
+
+
+def _parse_ip(
+    ip_str: str
+) -> Optional[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]:
+    """
+    Parse an IP address string into an address object.
+
+    :param ip_str: IP address string (e.g., '192.168.1.1' or 'fd00::1')
+    :return: IPv4Address or IPv6Address on success, None if the string is not a valid IP address
+    """
+    try:
+        return ipaddress.ip_address(ip_str)
+    except ValueError:
+        return None
+
+
+def select_ip_from_network(ctx: CephadmContext, network: str) -> str:
+    """
+    Given a CIDR network, select an appropriate IP from local interfaces
+    in that network. Supports both IPv4 and IPv6 networks.
+
+    :param ctx: CephadmContext
+    :param network: CIDR network string (e.g., '192.168.1.0/24' for IPv4 or 'fd00::/64' for IPv6)
+    :return: Selected IP address string (IPv4 unchanged, IPv6 wrapped in brackets)
+    :raises Error: if no suitable IP found in the network or invalid CIDR format
+    """
+    net = _parse_network(network)
+    if net is None:
+        raise Error(f'Invalid network CIDR {network}')
+
+    # local_networks = {'192.168.100.0/24': {'ens3': {'192.168.100.100'}}, 'fe80::/64': {'ens3': {'fe80::5054:ff:fe83:9e8f'}}}
+    local_networks = list_networks(ctx)
+    candidates = []
+    for local_net, ifaces in local_networks.items():
+        local_net_obj = _parse_network(local_net)
+        if local_net_obj is None:
+            logger.debug(f'Skipping invalid local network {local_net}')
+            continue
+        if local_net_obj.version != net.version:
+            logger.debug(f'Skipping local network {local_net} due to IP version mismatch with requested network {network}')
+            continue
+        if not local_net_obj.overlaps(net):
+            logger.debug(f'Skipping local network {local_net} as it does not overlap with requested network {network}')
+            continue
+        for _, ips in ifaces.items():
+            for ip in ips:
+                ip_obj = _parse_ip(ip)
+                if ip_obj is None:
+                    logger.debug(f'Skipping invalid IP address {ip} on local network {local_net}')
+                    continue
+                if ip_obj in net:
+                    candidates.append(ip)
+
+    if not candidates:
+        raise Error(f'No local IP found in network {network}. Local networks: {list(local_networks.keys())}')
+
+    candidates = sorted(set(candidates), key=ipaddress.ip_address)
+    selected_ip = wrap_ipv6(candidates[0]) if is_ipv6(candidates[0]) else candidates[0]
+
+    logger.info(f'Selected IP {selected_ip} from network {network}')
+    return selected_ip
 
 
 def infer_mon_network(ctx: CephadmContext, mon_eps: List[EndPoint]) -> Optional[str]:
@@ -2221,8 +2373,12 @@ def prepare_mon_addresses(ctx: CephadmContext) -> Tuple[str, bool, Optional[str]
         ipv6 = ctx.mon_addrv.count('[') > 1
         addrv_args = parse_mon_addrv(ctx.mon_addrv)
         mon_addrv = ctx.mon_addrv
-    else:
-        raise Error('must specify --mon-ip or --mon-addrv')
+    elif ctx.mon_net:
+        selected_ip = select_ip_from_network(ctx, ctx.mon_net)
+        ctx.mon_ip = selected_ip
+        ipv6 = is_ipv6(selected_ip)
+        addrv_args = parse_mon_ip(selected_ip)
+        mon_addrv = build_addrv_params(addrv_args)
 
     if addrv_args:
         for end_point in addrv_args:
@@ -3291,8 +3447,9 @@ def command_deploy_from(ctx: CephadmContext) -> None:
     configuration parameters from an input JSON configuration file.
     """
     config_data = read_configuration_source(ctx)
-    logger.debug('Loaded deploy configuration: %r', config_data)
     apply_deploy_config_to_ctx(config_data, ctx)
+    if 'log_deploy_configuration' in ctx and ctx.log_deploy_configuration:
+        logger.debug('Loaded deploy configuration: %r', config_data)
     try:
         _common_deploy(ctx)
     except DaemonStartException:
@@ -4304,6 +4461,30 @@ def _zap_osds(ctx: CephadmContext) -> None:
             # id isn't part of the output here!)
             logger.warning(f'Not zapping LVs (not implemented): {lv_names}')
 
+    c = get_ceph_volume_container(ctx,
+                                  args=['raw', 'list', '--format', 'json'],
+                                  volume_mounts=mounts,
+                                  envs=ctx.env)
+    out, err, code = call_throws(ctx, c.run_cmd())
+    if code:
+        raise Error('failed to list raw osds')
+    try:
+        raw_ls = json.loads(out)
+    except ValueError as e:
+        raise Error(f'Invalid JSON in ceph-volume raw list: {e}')
+    if not isinstance(raw_ls, dict):
+        raise Error('Invalid JSON in ceph-volume raw list: expected object')
+
+    seen = set()
+    for details in raw_ls.values():
+        if not isinstance(details, dict) or details.get('ceph_fsid') != ctx.fsid:
+            continue
+        for key in ('device', 'device_db', 'device_wal'):
+            path = details.get(key)
+            if path and path not in seen:
+                seen.add(path)
+                _zap(ctx, path)
+
 
 def command_zap_osds(ctx: CephadmContext) -> None:
     if not ctx.force:
@@ -4675,13 +4856,21 @@ def update_service_for_daemon(ctx: CephadmContext,
     # check if all the daemon names are valid
     if not set(update_daemons).issubset(set(available_daemons)):
         raise Error(f'Error EINVAL: one or more daemons of {update_daemons} does not exist on this host')
+    # osdspec_affinity stores the bare service id (e.g. "foobar"), not the
+    # full service name (e.g. "osd.foobar"), consistent with how ceph-volume
+    # writes it at OSD creation time via CEPH_VOLUME_OSDSPEC_AFFINITY.
+    _, _, service_id = ctx.service_name.partition('.')
+    if not service_id:
+        service_id = ctx.service_name
     for name in update_daemons:
         path = os.path.join(ctx.data_dir, ctx.fsid, name, 'unit.meta')
         update_meta_file(path, data)
+        update_osd_bluestore_affinity(ctx, name, service_id)
         print(f'Successfully updated daemon {name} with service {ctx.service_name}')
 
 
 @infer_fsid
+@infer_image
 def command_update_osd_service(ctx: CephadmContext) -> int:
     """update service for provided daemon"""
     update_daemons = [f'osd.{osd_id}' for osd_id in ctx.osd_ids.split(',')]
@@ -5120,6 +5309,20 @@ def _add_deploy_parser_args(
         default=None,
         help='Send signal to daemon'
     )
+    parser_deploy.add_argument(
+        '--log-deploy-configuration',
+        action='store_true',
+        default=False,
+        help=(
+            'Whether to log deploy config to cephadm.log. Could contain sensitive info '
+            'such as cephx keys. Only relevant at debug level logging.'
+        )
+    )
+    parser_deploy.add_argument(
+        '--osd-dm-crypt-key',
+        default=None,
+        help="dm-crypt key for OSD, needed for deployment if OSD's cephx keyring has been rotated"
+    )
 
 
 def _name_opts(parser: argparse.ArgumentParser) -> None:
@@ -5535,13 +5738,16 @@ def _get_parser():
         '--mon-id',
         required=False,
         help='mon id (default: local hostname)')
-    group = parser_bootstrap.add_mutually_exclusive_group()
+    group = parser_bootstrap.add_mutually_exclusive_group(required=True)
     group.add_argument(
         '--mon-addrv',
         help='mon IPs (e.g., [v2:localipaddr:3300,v1:localipaddr:6789])')
     group.add_argument(
         '--mon-ip',
         help='mon IP')
+    group.add_argument(
+        '--mon-net',
+        help='mon network CIDR (e.g., 192.168.1.0/24) - will select first available IP from network')
     parser_bootstrap.add_argument(
         '--mgr-id',
         required=False,

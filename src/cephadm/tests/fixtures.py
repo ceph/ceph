@@ -22,6 +22,7 @@ def mock_docker():
 
     docker = mock.Mock(Docker)
     docker.path = '/usr/bin/docker'
+    type(docker).service_args = Docker.service_args
     type(docker).unlimited_pids_option = Docker.unlimited_pids_option
     return docker
 

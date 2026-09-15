@@ -401,6 +401,7 @@ SnapTrimObjSubEvent::remove_or_update(
 SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t
 SnapTrimObjSubEvent::start()
 {
+  using crimson::common::local_conf;
   obc_orderer = pg->obc_loader.get_obc_orderer(
     coid);
 
@@ -412,6 +413,16 @@ SnapTrimObjSubEvent::start()
   });
 
   logger().debug("{}: entering obc pipeline process", *this);
+  // acquire throttle BEFORE entering exclusive obc_pp.process stage
+  // consistent with ClientRequest pattern -- orderer preserves ordering
+  auto throttle = co_await interruptor::make_interruptible(
+    pg->get_shard_services().get_throttle(
+      scheduler::params_t{
+        std::max<int>(pg->get_average_object_size(), 1),
+        static_cast<unsigned>(local_conf()->osd_snap_trim_priority),
+        0,
+        SchedulerClass::background_best_effort}));
+
   co_await enter_stage<interruptor>(
     obc_orderer->obc_pp().process);
 
@@ -470,6 +481,7 @@ SnapTrimObjSubEvent::start()
   co_await std::move(all_completed);
 
   logger().debug("{}: completed", *this);
+  // throttle destructs here after all_completed resolves
 }
 
 void SnapTrimObjSubEvent::print(std::ostream &lhs) const

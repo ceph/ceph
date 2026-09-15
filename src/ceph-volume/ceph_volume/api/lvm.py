@@ -745,7 +745,7 @@ class VolumeGroup(Lvm):
             return b_to_ext
         elif b_to_ext / int(self.vg_free_count) - 1 < 0.01:
             # return vg_fre_count if its less then 1% off
-            logger.info(
+            logger.debug(
                 'bytes_to_extents results in {} but only {} '
                 'are available, adjusting the latter'.format(b_to_ext,
                                                              self.vg_free_count))

@@ -40,7 +40,9 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   }
 
   get hostAccessLabel(): string {
-    return this.hostType === HOST_TYPE.ALL ? $localize`All hosts` : $localize`Restricted`;
+    if (this.hostType === HOST_TYPE.ALL) return $localize`All hosts`;
+    if (!this.addedHosts?.length) return $localize`N/A`;
+    return $localize`Restricted`;
   }
 
   get hostCount(): number {

@@ -7,7 +7,6 @@
 #include <atomic>
 #include <mutex>
 #include <limits>
-#include <uuid/uuid.h>
 
 #include "bluefs_types.h"
 #include "blk/BlockDevice.h"
@@ -713,6 +712,11 @@ private:
   uint64_t _flush_data(FileWriter *h, uint64_t end, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
   int _flush_envelope_F(FileWriter *h);
+  // Truncates file to 'offset', which must be expressed in on-disk units
+  // (that is, envelopes included for envelope mode files) and must not be
+  // larger than the amount of data already flushed. Releases the allocations
+  // that fall past the new end of file.
+  int _truncate_LDF(FileWriter *h, uint64_t offset);
   int _fsync(FileWriter *h, bool force_dirty);
   uint64_t _flush_special(FileWriter *h);
 
@@ -721,14 +725,14 @@ private:
   void _wait_for_aio(FileWriter *h);  // safe to call without a lock
 #endif
 
-  int64_t _maybe_extend_log();
-  void _extend_log(uint64_t amount);
-  uint64_t _log_advance_seq();
+  uint64_t _need_extend_log();
+  void _extend_log(uint64_t seq, uint64_t amount);
+  void _log_advance_seq_live();
   void _consume_dirty(uint64_t seq);
   void _clear_dirty_set_stable_D(uint64_t seq_stable);
   void _release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
 
-  void _flush_and_sync_log_core();
+  void _flush_and_sync_log_core(uint64_t seq);
   int _flush_and_sync_log_jump_D(uint64_t jump_to);
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
 
@@ -746,8 +750,7 @@ private:
     RENAME_SLOW2DB = 4,
     RENAME_DB2SLOW = 8,
   };
-  void _compact_log_dump_metadata_NF(uint64_t start_seq,
-                                     bluefs_transaction_t *t,
+  void _compact_log_dump_metadata_NF(bluefs_transaction_t *t,
 				     int flags,
 				     uint64_t capture_before_seq);
 
@@ -975,6 +978,9 @@ public:
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len);
   int preallocate(FileRef f, uint64_t offset, uint64_t len);
   int truncate(FileWriter *h, uint64_t offset);
+  // Releases the space that preallocate() has reserved for the file but that
+  // has not been written to. To be called when the file is done growing.
+  int truncate_unused(FileWriter *h);
 
   size_t probe_alloc_avail(int dev, uint64_t alloc_size);
 

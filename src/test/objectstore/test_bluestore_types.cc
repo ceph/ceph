@@ -60,6 +60,40 @@ TEST(bluestore, sizeof) {
   cout << "map<char,char>\t" << sizeof(map<char, char>) << std::endl;
 }
 
+// Note: Reusable for future bit-flip fuzzing.
+static void expect_decode_tolerated(std::function<void()> decode,
+                                    bool expect_thrown = false) {
+  bool threw_buffer_error = false, escaped_std = false;
+  try {
+    bluestore_decode::throwing_guard g;
+    decode();
+  } catch (const ceph::buffer::error&) { threw_buffer_error = true; }
+    catch (const std::bad_alloc&)      { escaped_std = true; }
+    catch (const std::length_error&)   { escaped_std = true; }
+    EXPECT_FALSE(escaped_std)
+      << "corrupt decode escaped as a std:: allocation exception (uncaught OOM)";
+  if (expect_thrown) {
+    EXPECT_TRUE(threw_buffer_error) << "expected the guard to reject this input";
+  }
+}
+
+TEST(bluestore_blob_use_tracker_t, decode_bogus_au_count_throws_buffer_error) {
+  bufferlist bl;
+  { auto app = bl.get_contiguous_appender(16);
+    denc_varint((uint32_t)0x1000, app);        // au_size != 0 -> array branch
+    denc_varint((uint32_t)0xffffffff, app); }  // num_au straight from disk
+  bluestore_blob_use_tracker_t t;
+  expect_decode_tolerated([&]{ auto p = bl.front().begin_deep(); t.decode(p); }, true);
+}
+
+TEST(PExtentVector, decode_bogus_extent_count_throws_buffer_error) {
+  bufferlist bl;
+  { auto app = bl.get_contiguous_appender(8);
+    denc_varint((uint32_t)0xffffffff, app); }  // no payload
+  PExtentVector v;
+  expect_decode_tolerated([&]{ auto p = bl.front().begin_deep(); denc(v, p); }, true);
+}
+
 void dump_mempools() {
   ostringstream ostr;
   auto f =

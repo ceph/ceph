@@ -1,0 +1,34 @@
+meta:
+- desc: |
+   install ceph/tentacle v20.2.0
+tasks:
+- install:
+    tag: v20.2.0
+    exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-rook
+      - ceph-mgr-cephadm
+      - ceph-osd-classic
+      - cephadm
+      - ceph-volume
+    extra_packages: ['librados2']
+- print: "**** done installing v20.2.0"
+- ceph:
+    log-ignorelist:
+      - AUTH_INSECURE_KEYS_ALLOWED
+      - AUTH_INSECURE_KEYS_CREATABLE
+      - AUTH_INSECURE_SERVICE_TICKETS
+      - AUTH_INSECURE_CLIENT_KEY_TYPE
+      - AUTH_INSECURE_SERVICE_KEY_TYPE
+      - AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
+    conf:
+      mon:
+        mon_health_to_clog: false
+      global:
+        mon warn on pool no app: false
+- exec:
+    osd.0:
+      - ceph osd set-require-min-compat-client tentacle
+- print: "**** done ceph"

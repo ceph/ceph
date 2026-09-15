@@ -489,16 +489,6 @@ class static_interval_set final
 
 namespace detail {
 
-template <typename T>
-concept has_explicit_empty =
- requires(const std::remove_cvref_t<T>& x) {
-  { x.explicitly_empty() } -> std::same_as<bool>;
- };
-
-template <typename BoundT, typename DomainT>
-concept interval_boundary_for =
- ::ceph::libfdb::interval::boundary_view_for<BoundT, DomainT>;
-
 template <typename BoundT>
 using boundary_storage =
  std::conditional_t<std::is_lvalue_reference_v<BoundT>,
@@ -508,7 +498,7 @@ using boundary_storage =
 template <typename T>
 constexpr bool explicitly_empty(const T& x)
 {
- if constexpr (has_explicit_empty<T>) {
+ if constexpr (requires { { x.explicitly_empty() } -> std::same_as<bool>; }) {
   return x.explicitly_empty();
  }
 
@@ -556,9 +546,9 @@ concept interval_view =
   typename std::remove_cvref_t<T>::domain_type;
   requires ordered_domain<typename std::remove_cvref_t<T>::domain_type>;
   { x.lower() } ->
-   detail::interval_boundary_for<typename std::remove_cvref_t<T>::domain_type>;
+   boundary_view_for<typename std::remove_cvref_t<T>::domain_type>;
   { x.upper() } ->
-   detail::interval_boundary_for<typename std::remove_cvref_t<T>::domain_type>;
+   boundary_view_for<typename std::remove_cvref_t<T>::domain_type>;
  };
 
 template <typename T>
@@ -569,19 +559,17 @@ concept canonical_interval =
 
 template <typename T>
 concept expression =
- std::derived_from<std::remove_cvref_t<T>, detail::expression_tag> ||
- interval_view<T>;
-
-template <typename T>
-concept domain_expression =
- expression<T> && requires {
+ requires {
   typename std::remove_cvref_t<T>::domain_type;
- };
+  requires ordered_domain<typename std::remove_cvref_t<T>::domain_type>;
+ } &&
+ (std::derived_from<std::remove_cvref_t<T>, detail::expression_tag> ||
+  interval_view<T>);
 
 template <typename LhsT, typename RhsT>
 concept same_expression_domain =
- domain_expression<LhsT> &&
- domain_expression<RhsT> &&
+ expression<LhsT> &&
+ expression<RhsT> &&
  std::same_as<typename std::remove_cvref_t<LhsT>::domain_type,
               typename std::remove_cvref_t<RhsT>::domain_type>;
 
@@ -1316,7 +1304,6 @@ constexpr bool includes_endpoint(const endpoint_inclusion inclusion) noexcept
 
 template <typename DomainT, typename ValueT>
 concept domain_value_source =
- ordered_domain<DomainT> &&
  std::constructible_from<typename DomainT::value_type, ValueT>;
 
 template <ordered_domain DomainT, typename ValueT>
@@ -1338,12 +1325,6 @@ constexpr auto boundary_for(const typename DomainT::value_type& value,
 
  return boundary_type::open(value);
 }
-
-template <typename T>
-concept detects_empty_prefix =
- requires(const typename T::value_type& value) {
-  { T::empty_prefix(value) } -> std::same_as<bool>;
- };
 
 template <typename EndpointT, ordered_domain DomainT, typename ValueT>
 requires domain_value_source<DomainT, ValueT>
@@ -1514,7 +1495,9 @@ constexpr auto prefix(ValueT&& value)
 {
  auto prefix_value = detail::value_for<DomainT>(std::forward<ValueT>(value));
 
- if constexpr (detail::detects_empty_prefix<DomainT>) {
+ if constexpr (requires {
+                { DomainT::empty_prefix(prefix_value) } -> std::same_as<bool>;
+               }) {
   if (DomainT::empty_prefix(prefix_value)) {
    return query<DomainT>::universal();
   }

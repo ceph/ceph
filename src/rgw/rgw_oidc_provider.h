@@ -5,9 +5,11 @@
 
 #include <list>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "common/ceph_json.h"
+#include "common/ceph_time.h"
 
 struct RGWOIDCProviderInfo
 {
@@ -48,3 +50,15 @@ struct RGWOIDCProviderInfo
   static std::list<RGWOIDCProviderInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWOIDCProviderInfo)
+
+// Reserved identifier for global OIDC providers (not tied to any account).
+// Uses '.' prefix which is invalid in account names and does not conflict with
+// metadata separators ('$' for key, ':' for section).
+static constexpr std::string_view global_oidc_id = ".global";
+
+inline bool is_global_oidc_provider(const RGWOIDCProviderInfo& info) {
+  return info.tenant == global_oidc_id;
+}
+
+// Format a timestamp as ISO 8601 for OIDC provider creation_date field.
+std::string format_creation_date(ceph::real_time now);

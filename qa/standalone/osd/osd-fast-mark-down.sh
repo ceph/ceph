@@ -25,7 +25,7 @@ function run() {
     rm -f $dir/*.pid
     export CEPH_MON="127.0.0.1:7126" # git grep '\<7126\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
 
     OLD_ARGS=$CEPH_ARGS
     CEPH_ARGS+="--osd-fast-fail-on-connection-refused=false "

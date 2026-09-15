@@ -35,10 +35,9 @@ class QuiesceAgentTest : public testing::Test {
       std::promise<void> done;
       auto future = done.get_future();
 
-      auto job = std::bind(f, args...);
-
-      auto tt = std::thread([job=std::move(job)](std::promise<void> done) {
-        job();
+      auto tt = std::thread([f=std::forward<Function>(f),
+                             ... args=std::forward<Args>(args)](std::promise<void> done) mutable {
+        std::invoke(std::move(f), std::move(args)...);
         done.set_value();
       }, std::move(done));
 
@@ -488,8 +487,8 @@ TEST_F(QuiesceAgentTest, DuplicateQuiesceRequest) {
 
   // since we have those pinned, they should still be live
 
-  EXPECT_TRUE(pinned1.unique());
-  EXPECT_TRUE(pinned2.unique());
+  EXPECT_TRUE(pinned1.use_count() == 1);
+  EXPECT_TRUE(pinned2.use_count() == 1);
 
   EXPECT_EQ(QS_QUIESCED, pinned1->get_actual_state());
   EXPECT_EQ(QS_QUIESCING, pinned2->get_actual_state());

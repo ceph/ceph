@@ -9,12 +9,17 @@
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
 
 #include <errno.h>
 #include <string>
 #include <vector>
 
 using namespace std;
+using ceph::test::PoolType;
+using ceph::test::pool_type_name;
+using ceph::test::create_pool_by_type;
+using ceph::test::destroy_pool_by_type;
 
 static librados::ObjectWriteOperation *new_op() {
   return new librados::ObjectWriteOperation();
@@ -24,15 +29,12 @@ static librados::ObjectReadOperation *new_rop() {
   return new librados::ObjectReadOperation();
 }
 
-TEST(cls_rgw, test_version_inc_read)
-{
-  librados::Rados rados;
-  librados::IoCtx ioctx;
-  string pool_name = get_temp_pool_name();
+class TestClsVersion : public ceph::test::ClsTestFixture {
+  // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
+};
 
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+TEST_P(TestClsVersion, test_version_inc_read)
+{
 
   /* add chains */
   string oid = "obj";
@@ -85,15 +87,9 @@ TEST(cls_rgw, test_version_inc_read)
 }
 
 
-TEST(cls_rgw, test_version_set)
+TEST_P(TestClsVersion, test_version_set)
 {
-  librados::Rados rados;
-  librados::IoCtx ioctx;
-  string pool_name = get_temp_pool_name();
 
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
 
   /* add chains */
   string oid = "obj";
@@ -128,15 +124,9 @@ TEST(cls_rgw, test_version_set)
   delete op;
 }
 
-TEST(cls_rgw, test_version_inc_cond)
+TEST_P(TestClsVersion, test_version_inc_cond)
 {
-  librados::Rados rados;
-  librados::IoCtx ioctx;
-  string pool_name = get_temp_pool_name();
 
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
 
   /* add chains */
   string oid = "obj";
@@ -233,15 +223,9 @@ TEST(cls_rgw, test_version_inc_cond)
   delete op;
 }
 
-TEST(cls_rgw, test_version_inc_check)
+TEST_P(TestClsVersion, test_version_inc_check)
 {
-  librados::Rados rados;
-  librados::IoCtx ioctx;
-  string pool_name = get_temp_pool_name();
 
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
 
   /* add chains */
   string oid = "obj";
@@ -320,3 +304,11 @@ TEST(cls_rgw, test_version_inc_check)
 
   delete rop;
 }
+
+
+INSTANTIATE_TEST_SUITE_P(, TestClsVersion,
+  ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+  [](const ::testing::TestParamInfo<PoolType>& info) {
+  return pool_type_name(info.param);
+  }
+);

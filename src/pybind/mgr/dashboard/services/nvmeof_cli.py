@@ -556,4 +556,4 @@ class NvmeofCLICommand(DBCLICommand):
 
         # pylint: disable=broad-except
         except Exception as e:
-            return HandleCommandResult(-errno.EINVAL, '', str(e) + deprecated_warnings)
+            return HandleCommandResult(-errno.EINVAL, '', str(e))

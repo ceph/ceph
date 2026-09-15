@@ -20,6 +20,12 @@
 #include "rgw_dedup_store.h"
 namespace rgw::dedup {
 
+  enum compression_match_level_t : uint8_t {
+    COMPRESSION_MATCH_NONE    = 0,
+    COMPRESSION_MATCH_PARTIAL = 1,  // both compressed, different algo
+    COMPRESSION_MATCH_EXACT   = 2,  // object type == placement type
+  };
+
   // 24 Bytes key
   struct key_t {
     key_t() { ;}
@@ -65,9 +71,11 @@ namespace rgw::dedup {
   class dedup_table_t {
     struct __attribute__ ((packed)) table_flags_t {
     private:
-      static constexpr uint8_t RGW_TABLE_FLAG_HAS_VALID_HASH  = 0x01;
-      static constexpr uint8_t RGW_TABLE_FLAG_SHARED_MANIFEST = 0x02;
-      static constexpr uint8_t RGW_TABLE_FLAG_OCCUPIED        = 0x04;
+      static constexpr uint8_t RGW_TABLE_FLAG_HAS_VALID_HASH            = 0x01;
+      static constexpr uint8_t RGW_TABLE_FLAG_SHARED_MANIFEST           = 0x02;
+      static constexpr uint8_t RGW_TABLE_FLAG_OCCUPIED                  = 0x04;
+      static constexpr uint8_t RGW_TABLE_FLAG_COMPRESSION_EXACT_MATCH   = 0x08;
+      static constexpr uint8_t RGW_TABLE_FLAG_COMPRESSION_PARTIAL_MATCH = 0x10;
     public:
       table_flags_t() : flags(0) {}
       table_flags_t(uint8_t _flags) : flags(_flags) {}
@@ -79,6 +87,10 @@ namespace rgw::dedup {
       inline bool is_occupied() const {return ((this->flags & RGW_TABLE_FLAG_OCCUPIED) != 0); }
       inline void set_occupied() {this->flags |= RGW_TABLE_FLAG_OCCUPIED; }
       inline void clear_occupied() { this->flags &= ~RGW_TABLE_FLAG_OCCUPIED; }
+      inline bool has_compression_exact_match() const { return ((flags & RGW_TABLE_FLAG_COMPRESSION_EXACT_MATCH) != 0); }
+      inline void set_compression_exact_match() { flags |= RGW_TABLE_FLAG_COMPRESSION_EXACT_MATCH; }
+      inline bool has_compression_partial_match() const { return ((flags & RGW_TABLE_FLAG_COMPRESSION_PARTIAL_MATCH) != 0); }
+      inline void set_compression_partial_match() { flags |= RGW_TABLE_FLAG_COMPRESSION_PARTIAL_MATCH; }
     private:
       uint8_t flags;
     };
@@ -94,7 +106,9 @@ namespace rgw::dedup {
         this->flags.clear();
       }
 
-      value_t(disk_block_id_t block_id, record_id_t rec_id, bool shared_manifest) {
+      value_t(disk_block_id_t block_id, record_id_t rec_id,
+              bool shared_manifest,
+              compression_match_level_t comp_match = COMPRESSION_MATCH_NONE) {
         this->block_idx = block_id;
         this->count  = 1;
         this->rec_id = rec_id;
@@ -103,12 +117,22 @@ namespace rgw::dedup {
         if (shared_manifest) {
           flags.set_shared_manifest();
         }
+        if (comp_match == COMPRESSION_MATCH_EXACT) {
+          flags.set_compression_exact_match();
+        } else if (comp_match == COMPRESSION_MATCH_PARTIAL) {
+          flags.set_compression_partial_match();
+        }
       }
       inline bool has_shared_manifest() const {return flags.has_shared_manifest(); }
       inline uint16_t        get_count() { return this->count; }
       inline disk_block_id_t get_src_block_id() { return this->block_idx; }
       inline record_id_t     get_src_rec_id() { return this->rec_id; }
       inline bool has_valid_hash() const {return flags.has_valid_hash(); }
+      inline compression_match_level_t compression_rank() const {
+        if (flags.has_compression_exact_match()) return COMPRESSION_MATCH_EXACT;
+        if (flags.has_compression_partial_match()) return COMPRESSION_MATCH_PARTIAL;
+        return COMPRESSION_MATCH_NONE;
+      }
     private:
       inline void set_shared_manifest_src() { this->flags.set_shared_manifest(); }
       inline void inc_count() { count ++; }
@@ -138,10 +162,14 @@ namespace rgw::dedup {
                   disk_block_id_t block_id,
                   record_id_t rec_id,
                   bool shared_manifest,
+                  compression_match_level_t comp_match,
                   dedup_stats_t *p_dedup_stats);
 
-    void update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
-                      bool shared_manifest);
+    void update_entry(key_t *p_key,
+                      disk_block_id_t block_id,
+                      record_id_t rec_id,
+                      bool shared_manifest,
+                      compression_match_level_t comp_match);
 
     int  get_val(const key_t *p_key, struct value_t *p_val /*OUT*/);
 

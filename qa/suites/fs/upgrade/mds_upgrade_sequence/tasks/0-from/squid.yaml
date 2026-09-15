@@ -13,7 +13,6 @@ tasks:
 - cephadm:
     image: quay.ceph.io/ceph-ci/ceph:squid
     skip_dashboard: true
-    roleless: true
     compiled_cephadm_branch: squid
     conf:
       osd:
@@ -22,11 +21,11 @@ tasks:
         osd_class_default_list: "*"
 - print: "**** done end installing squid cephadm ..."
 - cephadm.shell:
-    host.a:
+    mon.a:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
 - print: "**** done cephadm.shell ceph config set mgr..."
 - cephadm.shell:
-    host.a:
+    mon.a:
       - ceph orch status
       - ceph orch ps
       - ceph orch ls

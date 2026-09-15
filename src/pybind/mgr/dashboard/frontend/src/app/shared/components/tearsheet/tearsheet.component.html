@@ -90,7 +90,7 @@
                 (click)="onPrevious()"
                 i18n
               >
-                Previous
+                {{ previousButtonLabel }}
               </button>
             }
             @if (currentStep === lastStep) {
@@ -140,6 +140,11 @@
   >
     <!-- Tearsheet Header -->
     <header class="tearsheet-header border-subtle-block-end">
+      @if (modalHeaderLabel) {
+        <p class="cds--type-label-01 tearsheet-header-label">
+          {{ modalHeaderLabel }}
+        </p>
+      }
       <h4
         cdsModalHeaderHeading
         class="cds--type-heading-04 tearsheet-header-title"
@@ -153,10 +158,28 @@
         }
         {{ title }}
       </h4>
-      <p class="cds--type-body-02 tearsheet-header-description">
-        {{ description }}
-      </p>
+      @if (descriptionTemplate) {
+        <p class="cds--type-body-02 tearsheet-header-description">
+          <ng-container *ngTemplateOutlet="descriptionTemplate"></ng-container>
+        </p>
+      } @else {
+        <p class="cds--type-body-02 tearsheet-header-description">
+          {{ description }}
+        </p>
+      }
     </header>
+    <!-- Top progress indicator -->
+    @if (steps.length > 1 && progressPosition === 'top') {
+      <div class="tearsheet-top-progress">
+        <cds-progress-indicator
+          [steps]="steps"
+          [current]="currentStep"
+          spacing="equal"
+          (stepSelected)="onStepSelect($event)"
+        >
+        </cds-progress-indicator>
+      </div>
+    }
     <section
       cdsGrid
       class="tearsheet-body"
@@ -165,7 +188,7 @@
       [fullWidth]="true"
     >
       <!-- Tearsheet Left Influencer-->
-      @if (steps.length > 1 && !hideInfluencer) {
+      @if (steps.length > 1 && !hideInfluencer && progressPosition === 'left') {
         <div
           cdsCol
           [columnNumbers]="{ lg: 3, md: 3, sm: 3 }"
@@ -184,7 +207,7 @@
       <div
         cdsCol
         [columnNumbers]="
-          steps.length > 1 && !hideInfluencer
+          steps.length > 1 && !hideInfluencer && progressPosition === 'left'
             ? { lg: 13, md: 13, sm: 13 }
             : { lg: 16, md: 16, sm: 16 }
         "
@@ -246,7 +269,7 @@
               (click)="onPrevious()"
               i18n
             >
-              Previous
+              {{ previousButtonLabel }}
             </button>
           }
           @if (currentStep === lastStep) {

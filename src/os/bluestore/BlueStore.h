@@ -1083,6 +1083,9 @@ public:
     class ExtentDecoderFull : public ExtentDecoder {
       ExtentMap& extent_map;
       std::vector<BlobRef> blobs;
+      // owns the Extent from get_next_extent() until add_extent() inserts it,
+      // so a throw during decode_extent() can't leak it
+      std::unique_ptr<Extent> pending_extent;
     protected:
       BlobRef decode_create_blob(
         bptr_c_it_t& p,
@@ -1110,7 +1113,7 @@ public:
     void encode_spanning_blobs(ceph::buffer::list::contiguous_appender& p);
     BlobRef& get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
-      ceph_assert(p != spanning_blob_map.end());
+      ceph_assert_decode(p != spanning_blob_map.end());
       return p->second;
     }
 
@@ -2430,9 +2433,19 @@ private:
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
   bool mounted = false;
 
+  // Whether a caller may tolerate undecodable onodes during allocation recovery
+  enum class alloc_recovery_policy_t {
+    strict,
+    tolerate_corrupt_onodes,
+  };
+
   // store open_db options:
   bool db_was_opened_read_only = true;
   bool need_to_destage_allocation_file = false;
+
+  alloc_recovery_policy_t alloc_recovery_policy = alloc_recovery_policy_t::strict;
+  std::atomic<uint64_t> alloc_recovery_skipped_onodes = {0};
+  bool _alloc_recovery_tolerates_corruption() const;
 
   ///< rwlock to protect coll_map/new_coll_map
   ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");
@@ -2869,7 +2882,8 @@ private:
   * opens both DB and dependant super_meta, FreelistManager and allocator
   * in the proper order
   */
-  int _open_db_and_around(bool read_only, bool to_repair = false);
+  int _open_db_and_around(bool read_only, bool to_repair = false,
+            alloc_recovery_policy_t policy = alloc_recovery_policy_t::strict);
   void _close_db_and_around();
   void _close_around_db();
 
@@ -3716,6 +3730,7 @@ private:
   std::string no_per_pg_omap_alert;
   std::string disk_size_mismatch_alert;
   std::string spurious_read_errors_alert;
+  std::string no_db_sharding_alert;
   std::queue <std::pair<ceph::mono_clock::time_point, bool>> slow_op_event_queue;
   size_t slow_op_event_count = 0;
   size_t slow_scrub_op_event_count = 0;
@@ -3741,6 +3756,7 @@ private:
 
   void _check_legacy_statfs_alert();
   void _check_no_per_pg_or_pool_omap_alert();
+  void _check_no_db_sharding_alert();
   void _set_disk_size_mismatch_alert(const std::string& s) {
     std::lock_guard l(qlock);
     disk_size_mismatch_alert = s;
@@ -3777,6 +3793,8 @@ private:
 
     old_extent_map_t old_extents;   ///< must deref these blobs
     interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
+
+    bool full_write = false;        /// < whether full object is overwritten
 
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
@@ -3869,6 +3887,20 @@ private:
     uint64_t offset, uint64_t length,
     ceph::buffer::list::iterator& blp,
     WriteContext *wctx);
+
+  /// Determines if small write can reuse existing blob
+  /// and hence omit blob relocation.
+  /// Returns the amount of remaining bytes which need relocation,
+  /// effectively the possibe return values are for now:
+  /// * 0 - blob has been reused and writing has been staged
+  /// * min_alloc_size - no writing staged, blob to be relocated.
+  uint32_t _do_write_small_with_maybe_blob_reuse(
+    TransContext* txc,
+    CollectionRef& c,
+    OnodeRef& o,
+    uint64_t offset, uint64_t length,
+    bufferlist& bl,
+    WriteContext* wctx);
   void _do_write_big_apply_deferred(
     TransContext* txc,
     CollectionRef& c,

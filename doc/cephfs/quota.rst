@@ -132,7 +132,14 @@ Limitations
 
      $ ceph auth get-or-create client.guest mds 'allow r path=/home/volumes, allow rw path=/home/volumes/group' mgr 'allow rw' osd 'allow rw tag cephfs metadata=*' mon 'allow r'
 
-   See also: https://tracker.ceph.com/issues/55090
+   A related known issue: when the kernel client mounts a subdirectory
+   below the directory on which the quota is set, tools such as ``df``
+   may report the size and usage of the entire file system rather than
+   of the quota, because the client cannot see the quota-bearing
+   ancestor directory. ``ceph-fuse`` is not affected.
 
 #. *Snapshot file data which has since been deleted or changed does not count
-   towards the quota.* See also: https://tracker.ceph.com/issues/24284
+   towards the quota.* As a consequence, snapshots can retain space beyond
+   the configured quota. If this is a concern, the creation of new
+   snapshots can be disabled with ``ceph fs set <fs_name> allow_new_snaps
+   false``.

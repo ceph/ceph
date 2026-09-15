@@ -17,6 +17,7 @@ export class RgwUserAccountsResourcePageComponent implements OnInit, OnDestroy {
   section = '';
   selection?: Account;
   notFound = false;
+  isOverviewLoading = true;
   overviewField: OverviewField[] = [];
   quota: Record<string, string | number> = {};
   bucket_quota: Record<string, string | number> = {};
@@ -31,6 +32,7 @@ export class RgwUserAccountsResourcePageComponent implements OnInit, OnDestroy {
 
     this.sub.add(
       this.route.parent?.data.subscribe((data) => {
+        this.isOverviewLoading = false;
         const account = (data?.account ?? null) as Account | null;
         this.applyAccount(account);
       })

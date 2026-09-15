@@ -84,8 +84,10 @@ function prepare() {
     if command -v apt-get > /dev/null 2>&1 ; then
         which_pkg="debianutils"
 
-        get_llvm
-        sts=$?
+        # get_llvm's nonzero "use distro clang" return (10) must not trip
+        # errexit before we can inspect it
+        sts=0
+        get_llvm || sts=$?
         if [ $sts -eq 10 ]; then
             distro_llvm=clang
         elif [ $sts -ne 0 ]; then

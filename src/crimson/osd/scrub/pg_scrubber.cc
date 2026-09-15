@@ -35,6 +35,13 @@ void PGScrubber::on_replica_activate()
   handle_event(events::replica_activate_t{});
 }
 
+void PGScrubber::stop()
+{
+  LOG_PREFIX(PGScrubber::stop);
+  DEBUGDPP("", pg);
+  on_interval_change();
+}
+
 void PGScrubber::on_interval_change()
 {
   LOG_PREFIX(PGScrubber::on_interval_change);

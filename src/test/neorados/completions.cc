@@ -9,7 +9,8 @@ TEST(NeoRadosCompletion, CrossExecutor)
   std::optional<neorados::RADOS> rados;
   std::optional<neorados::IOContext> pool;
 
-  neorados::RADOS::Builder{}.build(rados_context,
+  auto b = create_test_builder();
+  b.build(rados_context,
       [&rados, &pool] (boost::system::error_code ec, neorados::RADOS r) {
         if (ec) {
           throw boost::system::system_error(ec);

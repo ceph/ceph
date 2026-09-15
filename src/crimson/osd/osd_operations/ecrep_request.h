@@ -8,6 +8,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/ec_backend.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
@@ -116,6 +117,10 @@ private:
     Ref<MOSDECSubOpRead>,
     Ref<MOSDECSubOpReadReply>
   > req;
+  interruptible_future<> with_pg_interruptible(
+    ShardServices &shard_services,
+    Ref<PG> pg,
+    ECBackend *ec_backend);
 };
 
 }

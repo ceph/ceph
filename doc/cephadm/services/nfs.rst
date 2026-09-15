@@ -151,6 +151,8 @@ These values are converted to bytes when written into a ``CEPH`` block in
 ``ganesha.conf`` (as ``client_oc``, ``client_oc_size``, and
 ``client_oc_max_dirty``) when object caching is enabled.
 
+.. _cephadm-nfs-colocation:
+
 NFS Daemon Colocation
 ----------------------
 

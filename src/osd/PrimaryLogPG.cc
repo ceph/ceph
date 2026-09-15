@@ -105,7 +105,6 @@ using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
 using ceph::decode;
-using ceph::decode_noclear;
 using ceph::encode;
 using ceph::encode_destructively;
 
@@ -4665,8 +4664,7 @@ void PrimaryLogPG::do_scan(
       auto p = m->get_data().cbegin();
 
       // take care to preserve ordering!
-      bi.clear_objects();
-      decode_noclear(bi.objects, p);
+      decode(bi.objects, p);
       dout(10) << __func__ << " bi.begin=" << bi.begin << " bi.end=" << bi.end
                << " bi.objects.size()=" << bi.objects.size() << dendl;
 
@@ -9209,7 +9207,12 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
     make_writeable(ctx);
 
   int log_op_type;
-  if (ctx->use_replace_op) {
+  // REPLACE (op 11) was added in umbrella. Tentacle is_update() does not
+  // include it, so a mixed-version peer that later becomes primary will
+  // assert in recover_primary. Only use REPLACE once require_osd_release
+  // says every OSD understands it; until then keep the old MODIFY/DELETE.
+  if (ctx->use_replace_op &&
+      get_osdmap()->require_osd_release >= ceph_release_t::umbrella) {
     log_op_type = pg_log_entry_t::REPLACE;
   } else {
     log_op_type = ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
@@ -16064,6 +16067,10 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
   if (!pg->is_clean() ||
       pg->snap_trimq.empty()) {
     ldout(pg->cct, 10) << "NotTrimming not clean or nothing to trim" << dendl;
+    return discard_event();
+  }
+  if (pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM)) {
+    ldout(pg->cct, 10) << "NotTrimming as the nosnaptrim flag is set" << dendl;
     return discard_event();
   }
   if (pg->is_scrub_queued_or_active()) {

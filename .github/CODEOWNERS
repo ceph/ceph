@@ -1,3 +1,12 @@
+# doc-writers: general rules first, so the more specific rules below
+# (which also list @ceph/doc-writers) take precedence and request both teams
+AUTHORS                                         @ceph/doc-writers
+CodingStyle                                     @ceph/doc-writers
+COPYING*                                        @ceph/doc-writers
+/doc/                                           @ceph/doc-writers
+README*                                         @ceph/doc-writers
+*.rst                                           @ceph/doc-writers
+
 # Dashboard team to review dashboard related code
 /src/pybind/mgr/dashboard                       @ceph/dashboard
 /qa/suites/rados/dashboard                      @ceph/dashboard
@@ -5,7 +14,7 @@
 /qa/tasks/mgr/test_module_selftest.py           @ceph/dashboard
 /qa/tasks/mgr/dashboard                         @ceph/dashboard
 /monitoring                                     @ceph/dashboard
-/doc/mgr/dashboard.rst                          @ceph/dashboard
+/doc/mgr/dashboard.rst                          @ceph/dashboard @ceph/doc-writers
 
 # For Orchestrator related PRs
 /src/cephadm                                    @ceph/orchestrators
@@ -24,31 +33,26 @@
 /qa/tasks/mgr/test_orchestrator_cli.py          @ceph/orchestrators
 /qa/tasks/mgr/test_cephadm_orchestrator.py      @ceph/orchestrators
 /qa/suites/orch                                 @ceph/orchestrators
-/doc/mgr/orchestrator.rst                       @ceph/orchestrators
-/doc/mgr/orchestrator_modules.rst               @ceph/orchestrators
-/doc/cephadm                                    @ceph/orchestrators
-/doc/dev/cephadm                                @ceph/orchestrators
-/doc/man/8/cephadm.rst                          @ceph/orchestrators
+/doc/mgr/orchestrator.rst                       @ceph/orchestrators @ceph/doc-writers
+/doc/mgr/orchestrator_modules.rst               @ceph/orchestrators @ceph/doc-writers
+/doc/cephadm                                    @ceph/orchestrators @ceph/doc-writers
+/doc/dev/cephadm                                @ceph/orchestrators @ceph/doc-writers
+/doc/man/8/cephadm.rst                          @ceph/orchestrators @ceph/doc-writers
 
 /qa/suites/orch/rook                            @ceph/rook
 /src/pybind/mgr/rook                            @ceph/rook
-/doc/mgr/rook.rst                               @ceph/rook
+/doc/mgr/rook.rst                               @ceph/rook @ceph/doc-writers
 
 #ceph-volume
 /src/ceph-volume                                @ceph/ceph-volume
-/doc/ceph-volume                                @ceph/ceph-volume
+/doc/ceph-volume                                @ceph/ceph-volume @ceph/doc-writers
 
 # crimson
 /src/crimson                                    @ceph/crimson
 /src/test/crimson                               @ceph/crimson
 
-# doc-writers
-AUTHORS                                         @ceph/doc-writers
-CodingStyle                                     @ceph/doc-writers
-COPYING*                                        @ceph/doc-writers
-/doc/                                           @ceph/doc-writers
-README*                                         @ceph/doc-writers
-*.rst                                           @ceph/doc-writers
+# csi
+/doc/csi/                                       @ceph/doc-writers @ceph/ceph-csi-maintainers
 
 # core
 /doc/man/8/ceph-authtool.rst                    @ceph/core @ceph/doc-writers

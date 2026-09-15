@@ -18,6 +18,7 @@ export class SmbClusterResourcePageComponent implements OnInit, OnDestroy {
   clusterId = '';
   selection: SMBCluster | undefined;
   loadError = false;
+  isOverviewLoading = false;
   overviewFields: OverviewField[] = [];
 
   constructor(
@@ -35,6 +36,8 @@ export class SmbClusterResourcePageComponent implements OnInit, OnDestroy {
     this.sub.add(
       this.route.parent?.paramMap.subscribe((pm: ParamMap) => {
         this.clusterId = pm.get('cluster_id') ?? '';
+        this.isOverviewLoading = !!this.clusterId;
+        this.loadError = false;
       })
     );
 
@@ -50,6 +53,7 @@ export class SmbClusterResourcePageComponent implements OnInit, OnDestroy {
   }
 
   private applyCluster(cluster: SMBCluster | null): void {
+    this.isOverviewLoading = false;
     if (!this.clusterId) {
       this.selection = undefined;
       this.loadError = false;

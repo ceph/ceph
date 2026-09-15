@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { finalize } from 'rxjs/operators';
 
 import {
   ACL,
@@ -17,6 +18,8 @@ import {
   StorageClassDetails,
   TARGET_ACCESS_KEY_TEXT,
   TARGET_PATH_TEXT,
+  LOCATION_CONSTRAINT_TEXT,
+  TARGET_STORAGE_CLASS_TEXT,
   TIER_TYPE,
   TIER_TYPE_DISPLAY,
   ZoneGroupDetails
@@ -57,6 +60,7 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
   placementTarget = '';
   details?: StorageClassDetails;
   aclLoading = false;
+  overviewLoading = false;
   overviewFields: OverviewField[] = [];
   aclKeyValueData: [string, string][] = [];
 
@@ -93,6 +97,7 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
     if (!this.zonegroupName || !this.placementTarget || !this.storageClassName) {
       this.details = undefined;
       this.aclLoading = false;
+      this.overviewLoading = false;
       this.overviewFields = this.buildOverviewFields();
       this.aclKeyValueData = this.buildAclKeyValueData();
       return;
@@ -102,6 +107,7 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
     const cachedDetails = this.detailsCache.get(cacheKey);
     if (cachedDetails) {
       this.aclLoading = false;
+      this.overviewLoading = false;
       this.details = {
         ...cachedDetails,
         acl_mappings: cachedDetails.acl_mappings || cachedDetails.acls || []
@@ -116,47 +122,51 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
     }
 
     this.aclLoading = true;
+    this.overviewLoading = true;
 
     this.sub.add(
-      this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
-        (data: ZoneGroupDetails) => {
-          const tierConfig = BucketTieringUtils.filterAndMapTierTargets(data).map((tier) => ({
-            ...tier,
-            tier_type: BucketTieringUtils.mapTierTypeDisplay(tier.tier_type)
-          })) as StorageClassSectionDetails[];
+      this.rgwZonegroupService
+        .getAllZonegroupsInfo()
+        .pipe(finalize(() => (this.overviewLoading = false)))
+        .subscribe(
+          (data: ZoneGroupDetails) => {
+            const tierConfig = BucketTieringUtils.filterAndMapTierTargets(data).map((tier) => ({
+              ...tier,
+              tier_type: BucketTieringUtils.mapTierTypeDisplay(tier.tier_type)
+            })) as StorageClassSectionDetails[];
 
-          const selected = tierConfig.find(
-            (tier) =>
-              tier.zonegroup_name === this.zonegroupName &&
-              tier.placement_target === this.placementTarget &&
-              tier.storage_class === this.storageClassName
-          );
+            const selected = tierConfig.find(
+              (tier) =>
+                tier.zonegroup_name === this.zonegroupName &&
+                tier.placement_target === this.placementTarget &&
+                tier.storage_class === this.storageClassName
+            );
 
-          this.aclLoading = false;
-          if (selected) {
-            this.detailsCache.set(cacheKey, selected);
+            this.aclLoading = false;
+            if (selected) {
+              this.detailsCache.set(cacheKey, selected);
+            }
+
+            this.details = selected
+              ? ({
+                  ...selected,
+                  acl_mappings: selected.acl_mappings || selected.acls || []
+                } as StorageClassDetails)
+              : undefined;
+            this.overviewFields = this.buildOverviewFields(this.details);
+            this.aclKeyValueData = this.buildAclKeyValueData(this.details?.acl_mappings || []);
+
+            if (this.details?.tier_type?.toLowerCase() === TIER_TYPE.LOCAL) {
+              this.loadLocalZoneDetails(this.details);
+            }
+          },
+          () => {
+            this.aclLoading = false;
+            this.details = undefined;
+            this.overviewFields = this.buildOverviewFields();
+            this.aclKeyValueData = this.buildAclKeyValueData();
           }
-
-          this.details = selected
-            ? ({
-                ...selected,
-                acl_mappings: selected.acl_mappings || selected.acls || []
-              } as StorageClassDetails)
-            : undefined;
-          this.overviewFields = this.buildOverviewFields(this.details);
-          this.aclKeyValueData = this.buildAclKeyValueData(this.details?.acl_mappings || []);
-
-          if (this.details?.tier_type?.toLowerCase() === TIER_TYPE.LOCAL) {
-            this.loadLocalZoneDetails(this.details);
-          }
-        },
-        () => {
-          this.aclLoading = false;
-          this.details = undefined;
-          this.overviewFields = this.buildOverviewFields();
-          this.aclKeyValueData = this.buildAclKeyValueData();
-        }
-      )
+        )
     );
   }
 
@@ -212,6 +222,12 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
           helperText: TARGET_PATH_TEXT
         },
         {
+          label: $localize`Target storage class`,
+          value: details?.target_storage_class,
+          helperText: TARGET_STORAGE_CLASS_TEXT,
+          emptyText: '-'
+        },
+        {
           label: $localize`Access key`,
           value: details?.access_key,
           type: 'password',
@@ -261,6 +277,11 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
         {
           label: $localize`Target Region`,
           value: details?.region
+        },
+        {
+          label: $localize`Location constraint`,
+          value: details?.location_constraint,
+          helperText: LOCATION_CONSTRAINT_TEXT
         },
         {
           label: $localize`Target Endpoint`,

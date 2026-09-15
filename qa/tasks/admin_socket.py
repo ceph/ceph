@@ -11,7 +11,6 @@ from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
-from teuthology.config import config as teuth_config
 
 log = logging.getLogger(__name__)
 
@@ -158,34 +157,19 @@ def _run_tests(ctx, client, tests):
 
             test_path = None
             if 'test' in config:
-                # hack: the git_url is always ceph-ci or ceph
-                git_url = teuth_config.get_ceph_git_url()
-                repo_name = 'ceph'
-                branch_name = config.get('branch', 'main')
-                # use ceph-ci only if branch is not 'main'
-                # instead use ceph main branch
-                if git_url.count('ceph-ci') and branch_name != 'main':
-                    repo_name = 'ceph-ci'
-                url = config['test'].format(
-                    branch=branch_name,
-                    repo=repo_name,
-                    )
+                suite_path = ctx.config.get('suite_path')
+                repo_root = os.path.dirname(suite_path)
+                local_test_path = os.path.join(repo_root, config['test'])
                 test_path = os.path.join(tmp_dir, command)
+                remote.put_file(local_test_path, test_path)
                 remote.run(
                     args=[
-                        'wget',
-                        '-q',
-                        '-O',
-                        test_path,
-                        '--',
-                        url,
-                        run.Raw('&&'),
                         'chmod',
                         'u=rx',
                         '--',
                         test_path,
-                        ],
-                    )
+                    ],
+                )
 
             args = config.get('args', [])
             assert isinstance(args, list), \

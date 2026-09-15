@@ -131,6 +131,7 @@ class TestClusterAffinity(CephFSTestCase):
         log.info(f'assigning affinity to cephfs2 for active mds (mds.{active2})')
         self.config_set(f'mds.{active2}', 'mds_join_fs', 'cephfs2')
         self._change_target_state(target, active2, {'join_fscid': fs2.id})
+        self._reach_target(target)
         self.fs.rank_fail()
         self._change_target_state(target, victim, {'state': 'up:active'})
         self._reach_target(target)

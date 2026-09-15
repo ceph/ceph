@@ -89,23 +89,44 @@ public:
   }
 
   void enqueue(item_t &&item) final {
-    if (use_strict(item.params.klass))
+     // immediate ops bypass class-based priority -- use message priority directly
+    // matching classic WPQ which uses numeric priority, not SchedulerClass
+    if (item.params.klass == SchedulerClass::immediate) {
+      queue.enqueue_strict(
+        item.params.owner,
+        item.params.priority,  // use message priority directly
+        std::move(item));
+      return;
+    }
+
+    if (use_strict(item.params.klass)) {
       queue.enqueue_strict(
 	item.params.owner, get_priority(item.params.klass), std::move(item));
-    else
+    } else {
       queue.enqueue(
 	item.params.owner, get_priority(item.params.klass),
 	item.params.cost, std::move(item));
+    }
   }
 
   void enqueue_front(item_t &&item) final {
-    if (use_strict(item.params.klass))
+    if (item.params.klass == SchedulerClass::immediate) {
+      // same for enqueue_front
+      queue.enqueue_strict_front(
+        item.params.owner,
+        item.params.priority,
+        std::move(item));
+      return;
+    }
+
+    if (use_strict(item.params.klass)) {
       queue.enqueue_strict_front(
 	item.params.owner, get_priority(item.params.klass), std::move(item));
-    else
+    } else {
       queue.enqueue_front(
 	item.params.owner, get_priority(item.params.klass),
 	item.params.cost, std::move(item));
+    }
   }
 
   bool empty() const final {

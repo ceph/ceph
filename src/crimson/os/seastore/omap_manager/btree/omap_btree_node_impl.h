@@ -167,7 +167,7 @@ struct OMapInnerNode
 
   delta_inner_buffer_t delta_buffer;
   delta_inner_buffer_t *maybe_get_delta_buffer() {
-    return is_mutation_pending() ? &delta_buffer : nullptr;
+    return has_mutation() ? &delta_buffer : nullptr;
   }
 
   get_value_ret get_value(omap_context_t oc, std::string key) final;
@@ -430,7 +430,7 @@ struct OMapLeafNode
 
   delta_leaf_buffer_t delta_buffer;
   delta_leaf_buffer_t *maybe_get_delta_buffer() {
-    return is_mutation_pending() ? &delta_buffer : nullptr;
+    return has_mutation() ? &delta_buffer : nullptr;
   }
 
   get_value_ret get_value(

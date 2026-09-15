@@ -4,6 +4,7 @@
 #include "MonMap.h"
 
 #include <algorithm>
+#include <limits>
 #include <sstream>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -18,8 +19,10 @@
 
 #include "common/Formatter.h"
 
+#include "include/ceph_fs.h"
 #include "include/ceph_features.h"
 #include "include/addr_parsing.h"
+#include "auth/Crypto.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
 #include "common/dns_resolve.h"
@@ -250,7 +253,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(9, 6, blist);
+  ENCODE_START(10, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -267,13 +270,29 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(stretch_mode_enabled, blist);
   encode(tiebreaker_mon, blist);
   encode(stretch_marked_down_mons, blist);
+
+  /*
+   * We do not check quorum features here before encoding v10 fields. Older
+   * monitors will safely skip these with compat_v < 10. Furthermore, if the
+   * AES256K feature is actively configured, the INCOMPAT flag is set, strictly
+   * preventing older monitors from joining the quorum and potentially dropping
+   * these fields if they were to become leader.
+   */
+  encode(auth_epoch, blist);
+  encode(auth_service_cipher, blist);
+  {
+    auto v = auth_allowed_ciphers;
+    std::sort(v.begin(), v.end());
+    encode(v, blist);
+  }
+  encode(auth_preferred_cipher, blist);
   ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(ceph::buffer::list::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
-  DECODE_START_LEGACY_COMPAT_LEN_16(9, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(10, 3, 3, p);
   ceph::decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
@@ -330,6 +349,20 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
     stretch_mode_enabled = false;
     tiebreaker_mon = "";
     stretch_marked_down_mons.clear();
+  }
+  if (struct_v >= 10) {
+    decode(auth_epoch, p);
+    decode(auth_service_cipher, p);
+    decode(auth_allowed_ciphers, p);
+    decode(auth_preferred_cipher, p);
+  } else {
+    /* When decoding an old MonMap, choose defaults reasonable for an existing
+     * cluster:
+     */
+    auth_epoch = 0;
+    auth_service_cipher = CEPH_CRYPTO_AES;
+    auth_allowed_ciphers = {CEPH_CRYPTO_AES, CEPH_CRYPTO_AES256KRB5};
+    auth_preferred_cipher = CEPH_CRYPTO_AES;
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -474,11 +507,45 @@ void MonMap::print(ostream& out) const
     }
     out << "\n";
   }
+  out << "auth_epoch " << auth_epoch << "\n";
+  out << "auth_service_cipher " << CryptoManager::get_key_type_name(auth_service_cipher) << "\n";
+  {
+    out << "auth_allowed_ciphers ";
+    bool first = true;
+    for (auto& c : auth_allowed_ciphers) {
+      if (!first) out << ", ";
+      out << CryptoManager::get_key_type_name(c);
+      first = false;
+    }
+    out << "\n";
+  }
+  out << "auth_preferred_cipher " << CryptoManager::get_key_type_name(auth_preferred_cipher) << "\n";
 }
 
 void MonMap::dump(Formatter *f) const
 {
   f->dump_unsigned("epoch", epoch);
+  f->dump_unsigned("auth_epoch", auth_epoch);
+
+  f->open_object_section("auth_service_cipher");
+  f->dump_string("name", CryptoManager::get_key_type_name(auth_service_cipher));
+  f->dump_int("value", auth_service_cipher);
+  f->close_section();
+
+  f->open_array_section("auth_allowed_ciphers");
+  for (auto const& k : auth_allowed_ciphers) {
+    f->open_object_section("key_type");
+    f->dump_string("name", CryptoManager::get_key_type_name(k));
+    f->dump_int("value", k);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_object_section("auth_preferred_cipher");
+  f->dump_string("name", CryptoManager::get_key_type_name(auth_preferred_cipher));
+  f->dump_int("value", auth_preferred_cipher);
+  f->close_section();
+
   f->dump_stream("fsid") <<  fsid;
   last_changed.gmtime(f->dump_stream("modified"));
   created.gmtime(f->dump_stream("created"));
@@ -918,8 +985,29 @@ seastar::future<> MonMap::build_monmap(const crimson::common::ConfigProxy& conf,
   });
 }
 
+MonMap::MonMap()
+  : auth_service_cipher(CEPH_CRYPTO_NONE)
+  , auth_allowed_ciphers{CEPH_CRYPTO_NONE}
+  , auth_preferred_cipher(CEPH_CRYPTO_NONE)
+{
+}
+
 seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf, bool for_mkfs)
 {
+  if (for_mkfs) {
+    auth_epoch = 0;
+    auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
+    auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
+    auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
+  } else {
+    /* an invalid epoch so the real monmap doesn't trigger rotation */
+    auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
+    /* wait for real monmap */
+    auth_service_cipher = CEPH_CRYPTO_NONE;
+    auth_allowed_ciphers = {CEPH_CRYPTO_NONE};
+    auth_preferred_cipher = CEPH_CRYPTO_NONE;
+  }
+
   // mon_host_override?
   if (maybe_init_with_mon_host(conf.get_val<std::string>("mon_host_override"),
                                for_mkfs)) {
@@ -945,6 +1033,13 @@ seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf
 }
 
 #else  // WITH_CRIMSON
+
+MonMap::MonMap()
+  : auth_service_cipher(CEPH_CRYPTO_NONE)
+  , auth_allowed_ciphers{CEPH_CRYPTO_NONE}
+  , auth_preferred_cipher(CEPH_CRYPTO_NONE)
+{
+}
 
 int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
 {
@@ -1000,6 +1095,20 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
 {
   lgeneric_dout(cct, 1) << __func__ << " for_mkfs: " << for_mkfs << dendl;
   const auto& conf = cct->_conf;
+
+  if (for_mkfs) {
+    auth_epoch = 0;
+    auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
+    auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
+    auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
+  } else {
+    /* an invalid epoch so the real monmap doesn't trigger rotation */
+    auth_epoch = std::numeric_limits<decltype(auth_epoch)>::max();
+    /* wait for real monmap */
+    auth_service_cipher = CEPH_CRYPTO_NONE;
+    auth_allowed_ciphers = {CEPH_CRYPTO_NONE};
+    auth_preferred_cipher = CEPH_CRYPTO_NONE;
+  }
 
   // mon_host_override?
   auto mon_host_override = conf.get_val<std::string>("mon_host_override");

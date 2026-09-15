@@ -100,12 +100,12 @@ class SMBTestConf:
 
 
 @contextlib.contextmanager
-def connection(conf, share):
+def connection(conf, share, username=None, password=None):
     """Return a PathWrapper connecting to the given share."""
     server = conf.server.ip_address
     port = conf.server.port
-    username = conf.username
-    password = conf.password
+    username = conf.username if username is None else username
+    password = conf.password if password is None else password
 
     smbclient.register_session(
         server=server,
@@ -176,59 +176,91 @@ class PathWrapper:
         smbclient.remove(str(self.share_path))
 
 
-def get_shares(smb_cfg):
-    """Get all SMB shares.
-
-    ``ceph smb show`` defaults to --results=collapsed: with exactly one
-    matching share it returns the share object itself; otherwise it returns
-    {"resources": [...]}. Normalize both shapes to a list.
-    """
+def _get_resources(smb_cfg, rtype):
     jres = cephutil.cephadm_shell_cmd(
         smb_cfg,
-        ["ceph", "smb", "show", "ceph.smb.share"],
+        ["ceph", "smb", "show", "--results=full", rtype],
         load_json=True,
     )
     assert jres.obj
     obj = jres.obj
-    if 'resources' in obj:
-        resources = obj['resources']
-    elif obj.get('resource_type') == 'ceph.smb.share':
-        resources = [obj]
-    else:
-        raise AssertionError(f'unexpected smb show output: {obj!r}')
+    assert 'resources' in obj
+    resources = obj['resources']
     assert len(resources) > 0
+    return resources
+
+
+def get_shares(smb_cfg):
+    """Get all SMB shares."""
+    resources = _get_resources(smb_cfg, "ceph.smb.share")
     assert all(r['resource_type'] == 'ceph.smb.share' for r in resources)
+    return resources
+
+
+def get_ug(smb_cfg):
+    """Get all users and groups resources."""
+    resources = _get_resources(smb_cfg, "ceph.smb.usersgroups")
+    assert all(r['resource_type'] == 'ceph.smb.usersgroups' for r in resources)
     return resources
 
 
 def get_share_by_id(smb_cfg, cluster_id, share_id):
     """Get a specific share by cluster_id and share_id."""
-    shares = get_shares(smb_cfg)
-    for share in shares:
-        if share['cluster_id'] == cluster_id and share['share_id'] == share_id:
-            return share
-    return None
+    shares = _get_resources(smb_cfg, f"ceph.smb.share.{cluster_id}.{share_id}")
+    assert len(shares) == 1
+    share = shares[0]
+    assert share['cluster_id'] == cluster_id and share['share_id'] == share_id
+    return share
 
 
-def apply_share_config(smb_cfg, share, immediate=False):
-    """Apply share configuration via the apply command."""
+def _apply(smb_cfg, resources, immediate=False, check=None):
     jres = cephutil.cephadm_shell_cmd(
         smb_cfg,
         ['ceph', 'smb', 'apply', '-i-'],
-        input_json={'resources': [share]},
+        input_json={'resources': resources},
         load_json=True,
     )
     assert jres.returncode == 0
     assert jres.obj and jres.obj.get('success')
+    if check:
+        ret = check(jres)
+    else:
+        ret = jres
+    # sleep to ensure the settings got applied in smbd
+    # TODO: make this more dynamic somehow
+    if not immediate:
+        time.sleep(60)
+    return ret
+
+
+def _res_check(jres):
     assert 'results' in jres.obj
     _results = jres.obj['results']
     assert len(_results) == 1, "more than one result found"
     _result = _results[0]
     assert 'resource' in _result
     resources_ret = _result['resource']
-    assert resources_ret['resource_type'] == 'ceph.smb.share'
-    # sleep to ensure the settings got applied in smbd
-    # TODO: make this more dynamic somehow
-    if not immediate:
-        time.sleep(60)
     return resources_ret
+
+
+def apply_share_config(smb_cfg, share, immediate=False):
+    """Apply share configuration via the apply command."""
+
+    def _check(jres):
+        resources_ret = _res_check(jres)
+        assert resources_ret['resource_type'] == 'ceph.smb.share'
+        return resources_ret
+
+    rr = _apply(smb_cfg, [share], immediate=immediate, check=_check)
+    return rr
+
+
+def apply_resource(
+    smb_cfg,
+    resource,
+    immediate=False,
+):
+    """Apply a single generic resource via the apply command."""
+
+    rr = _apply(smb_cfg, [resource], immediate=immediate, check=_res_check)
+    return rr

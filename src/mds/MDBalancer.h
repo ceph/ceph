@@ -21,13 +21,14 @@
 #include <string>
 #include <vector>
 
-#include "mdstypes.h" // for dirfrag_t, mds_load_t
 #include "include/types.h"
 #include "common/ceph_time.h" // for coarse_mono_time()
 #include "include/cephfs/types.h" // for mds_rank_t
 #include "common/Clock.h"
 #include "common/ref.h"
 
+struct dirfrag_t;
+struct mds_load_t;
 class MDSMap;
 class MDSRank;
 class MHeartbeat;
@@ -44,6 +45,7 @@ public:
   friend class C_Bal_SendHeartbeat;
 
   MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc);
+  ~MDBalancer() noexcept;
 
   void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
 
@@ -67,9 +69,7 @@ public:
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
-  bool is_fragment_pending(dirfrag_t df) {
-    return split_pending.count(df) || merge_pending.count(df);
-  }
+  bool is_fragment_pending(dirfrag_t df);
 
   /**
    * Based on size and configuration, decide whether to issue a queue_split

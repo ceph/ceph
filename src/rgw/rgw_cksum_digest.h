@@ -58,21 +58,27 @@ namespace rgw { namespace cksum {
   typedef TDigest<rgw::digest::Blake3> Blake3;
   typedef TDigest<rgw::digest::Crc32> Crc32;
   typedef TDigest<rgw::digest::Crc32c> Crc32c;
-  typedef TDigest<rgw::digest::XXH3> XXH3;
+  typedef TDigest<rgw::digest::XXHash3> XXHash3;
   typedef TDigest<ceph::crypto::SHA1> SHA1;
   typedef TDigest<ceph::crypto::SHA256> SHA256;
   typedef TDigest<ceph::crypto::SHA512> SHA512;
   typedef TDigest<rgw::digest::Crc64Nvme> Crc64Nvme;
+  typedef TDigest<ceph::crypto::MD5> MD5;
+  typedef TDigest<rgw::digest::XXHash64> XXHash64;
+  typedef TDigest<rgw::digest::XXHash128> XXHash128;
 
   typedef std::variant<std::monostate,
 		       Blake3,
 		       Crc32,
 		       Crc32c,
-		       XXH3,
+		       XXHash3,
 		       SHA1,
 		       SHA256,
 		       SHA512,
-		       Crc64Nvme> DigestVariant;
+		       Crc64Nvme,
+		       MD5,
+		       XXHash64,
+		       XXHash128> DigestVariant;
 
   struct get_digest_ptr
   {
@@ -81,11 +87,14 @@ namespace rgw { namespace cksum {
     Digest* operator()(Blake3& digest) const { return &digest; }
     Digest* operator()(Crc32& digest) const { return &digest; }
     Digest* operator()(Crc32c& digest) const { return &digest; }
-    Digest* operator()(XXH3& digest) const { return &digest; }
+    Digest* operator()(XXHash3& digest) const { return &digest; }
     Digest* operator()(SHA1& digest) const { return &digest; }
     Digest* operator()(SHA256& digest) const { return &digest; }
     Digest* operator()(SHA512& digest) const { return &digest; }
     Digest* operator()(Crc64Nvme& digest) const { return &digest; }
+    Digest* operator()(MD5& digest) const { return &digest; }
+    Digest* operator()(XXHash64& digest) const { return &digest; }
+    Digest* operator()(XXHash128& digest) const { return &digest; }
   };
 
   static inline Digest* get_digest(DigestVariant& ev)
@@ -111,8 +120,8 @@ namespace rgw { namespace cksum {
     case Type::crc64nvme:
       return Crc64Nvme();
       break;
-    case Type::xxh3:
-      return XXH3();
+    case Type::xxhash3:
+      return XXHash3();
       break;
     case Type::sha512:
       return SHA512();
@@ -120,7 +129,17 @@ namespace rgw { namespace cksum {
     case Type::sha1:
       return SHA1();
       break;
+    case Type::md5:
+      return MD5();
+      break;
+    case Type::xxhash64:
+      return XXHash64();
+      break;
+    case Type::xxhash128:
+      return XXHash128();
+      break;
     case Type::none:
+    case Type::COUNT:
       break;
     };
     return std::monostate();

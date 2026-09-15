@@ -694,3 +694,185 @@ TEST(ECExtentCache, test_invalidate_lru)
     op5.reset();
   }
 }
+
+struct MultiClient : public ECExtentCache::BackendReadListener
+{
+  hobject_t oid_x = hobject_t().make_temp_hobject("Object X");
+  hobject_t oid_y = hobject_t().make_temp_hobject("Object Y");
+  stripe_info_t sinfo;
+  ECExtentCache::LRU lru;
+  ECExtentCache cache;
+
+  map<hobject_t, optional<shard_extent_set_t>> active_reads;
+  map<hobject_t, uint64_t> last_read_object_size;
+  list<shard_extent_map_t> results;
+
+  MultiClient(uint64_t chunk_size, int k, int m, uint64_t cache_size) :
+    sinfo(k, m, k*chunk_size, vector<shard_id_t>(0)),
+    lru(cache_size), cache(*this, lru, sinfo, g_ceph_context) {};
+
+  void backend_read(hobject_t _oid, const shard_extent_set_t& request,
+    uint64_t object_size) override  {
+    active_reads[_oid].emplace(request);
+    last_read_object_size[_oid] = object_size;
+  }
+
+  void cache_ready(const hobject_t& _oid, const shard_extent_map_t& _result)
+  {
+    results.emplace_back(_result);
+  }
+
+  void complete_read(const hobject_t &oid)
+  {
+    auto it = active_reads.find(oid);
+    ceph_assert(it != active_reads.end() && it->second);
+    auto reads_done = imap_from_iset(*it->second, &sinfo);
+    it->second.reset();
+    cache.read_done(oid, std::move(reads_done));
+  }
+
+  void complete_write(ECExtentCache::OpRef &op)
+  {
+    shard_extent_map_t emap = imap_from_iset(op->get_writes(), &sinfo);
+    emap.insert_parity_buffers();
+    results.clear();
+    cache.write_done(op, std::move(emap));
+  }
+
+  void cache_execute(ECExtentCache::OpRef &op)
+  {
+    list<ECExtentCache::OpRef> l;
+    l.emplace_back(op);
+    cache.execute(l);
+  }
+
+  const stripe_info_t *get_stripe_info() const { return &sinfo; }
+};
+
+// Reproduces the production crash: ceph_assert(reads_sent) in do_read_op.
+//
+// The crash path goes through submit_transaction → execute → request →
+// send_reads and involves a clone (snap write) creating TWO cache ops in
+// one execute() call:
+//
+//  (a) Clone target (snap oid): invalidates_cache=true, current_size=0,
+//      no reads, no writes.  Simulates a clone of HEAD → snap.
+//  (b) HEAD: a write needing RMW reads, which keeps pending_cache_ops > 0
+//      so write_done never fires for the clone target.
+//
+// cache_maybe_ready pops the clone target (read_done=true, invalidation
+// fires).  invalidate() clears do_not_read and pre-sets projected_size =
+// op->projected_size BEFORE replaying — so the growth hole from 0 →
+// projected_size is never re-added.  The clone target Object now has
+// current_size=0 and empty do_not_read.
+//
+// A new op on the clone oid (via submit_transaction → execute) computes
+// reads with orig_size = projected_size (large), which survive the empty
+// do_not_read.  send_reads fires with current_size=0.  In production,
+// get_min_avail_to_read_shards returns 0 without populating shard_reads,
+// and do_read_op hits ceph_assert(reads_sent).
+TEST(ECExtentCache, CloneInvalidateStaleSize)
+{
+  MultiClient cl(4096, 2, 1, 1024*1024);
+  const auto *si = cl.get_stripe_info();
+  uint64_t head_size = 8192;
+
+  // Step 1: Object X blocks the front of waiting_ops with reads.
+  auto x_read = iset_from_vector({{{0, 4096}}, {{0, 4096}}}, si);
+  auto x_write = iset_from_vector({{{0, 4096}}, {{0, 4096}}}, si);
+
+  optional op_x = cl.cache.prepare(cl.oid_x, x_read, x_write, 4096, 4096,
+    false,
+    [&cl](ECExtentCache::OpRef &op) {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    });
+  cl.cache_execute(*op_x);
+  ASSERT_TRUE(cl.active_reads[cl.oid_x].has_value());
+
+  // Step 2: Simulate a clone+write in a single execute() call, exactly as
+  // start_rmw would do.  Two ops: clone target Y (invalidates, no reads/
+  // writes, current_size=0) and HEAD X2 (needs reads, keeps things pending).
+  //
+  // Clone target: orig_size=0 (snap doesn't exist), projected_size=head_size,
+  // invalidates_cache=true.  No reads, no writes.
+  optional op_clone = cl.cache.prepare(cl.oid_y, nullopt,
+    iset_from_vector({{}, {}}, si),
+    0, head_size, true,
+    [&cl](ECExtentCache::OpRef &op) {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    });
+
+  // HEAD write: needs reads (keeps pending_cache_ops > 0 for the RMW Op
+  // so write_done never fires for the clone target).
+  // We use a SECOND op on X to simulate the HEAD write in the same
+  // transaction.  The reads keep this op pending.
+  auto x2_read = iset_from_vector({{{0, 4096}}, {}}, si);
+  auto x2_write = iset_from_vector({{{0, 4096}}, {}}, si);
+  optional op_x2 = cl.cache.prepare(cl.oid_x, x2_read, x2_write,
+    4096, 4096, false,
+    [&cl](ECExtentCache::OpRef &op) {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    });
+
+  // Execute both together, as start_rmw does.
+  {
+    list<ECExtentCache::OpRef> l;
+    l.emplace_back(*op_clone);
+    l.emplace_back(*op_x2);
+    cl.cache.execute(l);
+  }
+
+  // cache_maybe_ready processes:
+  //  - X is at front, reads outstanding → stops (from step 1)
+  // But the clone target was added AFTER X in waiting_ops, so X blocks
+  // everything.  The clone target's invalidation has NOT fired yet.
+  //
+  // Complete X's reads so cache_maybe_ready can advance.
+  cl.complete_read(cl.oid_x);
+
+  // Now cache_maybe_ready:
+  //  - X completes → write_done, popped
+  //  - Clone target: invalidates_cache=true, reading=false → invalidate()!
+  //    invalidate clears do_not_read, sets projected_size=head_size,
+  //    replays clone target (no reads/writes, growth hole NOT re-added
+  //    because projected_size already == op->projected_size)
+  //  - Clone target: complete_if_reads_cached → callback fires
+  //  - X2: reads outstanding (from execute) → cache_maybe_ready stops
+  //
+  // Clone target Object now has:
+  //   current_size = 0  (write_done never called — pending_cache_ops > 0)
+  //   projected_size = head_size
+  //   do_not_read = EMPTY (invalidation cleared it, growth hole not re-added)
+
+  // Step 3: A new op on the clone oid arrives (e.g. snap trim or CLS op).
+  // submit_transaction → execute → request → send_reads.
+  auto y_read = iset_from_vector({{{0, 4096}}, {}}, si);
+  auto y_write = iset_from_vector({{{0, 4096}}, {}}, si);
+
+  optional op_y = cl.cache.prepare(cl.oid_y, y_read, y_write,
+    head_size, head_size, false,
+    [&cl](ECExtentCache::OpRef &op) {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    });
+  cl.cache_execute(*op_y);
+
+  // With the fix, invalidate() sets projected_size = current_size (0
+  // for a clone target).  During replay, the growth hole from 0 ->
+  // projected_size is re-added to do_not_read, so the reads are subtracted
+  // and no backend_read is issued.
+  //
+  // Without the fix, the growth hole is NOT re-added, reads survive
+  // do_not_read, and send_reads fires with current_size=0 — which in
+  // production causes ceph_assert(reads_sent).
+  ASSERT_FALSE(cl.active_reads[cl.oid_y].has_value());
+
+  // Clean up: op_x2's reads may have been covered by op_x's do_not_read,
+  // so only complete the read if it was actually issued.
+  if (cl.active_reads[cl.oid_x].has_value()) {
+    cl.complete_read(cl.oid_x);
+  }
+  cl.complete_write(*op_x);
+  cl.complete_write(*op_clone);
+  cl.complete_write(*op_x2);
+  cl.complete_write(*op_y);
+}

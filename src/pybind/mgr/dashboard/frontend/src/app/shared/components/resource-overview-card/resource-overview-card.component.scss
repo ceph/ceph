@@ -19,6 +19,14 @@
   min-width: 0;
 }
 
+.cd-overview-skeleton-label {
+  margin-bottom: layout.$spacing-03;
+}
+
+.cd-overview-skeleton-value {
+  max-width: 100%;
+}
+
 .cd-overview-label {
   display: block;
   color: var(--cds-text-secondary);

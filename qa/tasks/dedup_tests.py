@@ -225,6 +225,7 @@ def task(ctx,config):
         endpoint = ctx.rgw.role_endpoints.get(client)
         assert endpoint, 'deduptests: no rgw endpoint for {}'.format(client)
 
+        cluster_name, _, _ = teuthology.split_role(client)
         deduptests_conf[client] = ConfigObj(
             indent_type='',
             infile={
@@ -232,6 +233,9 @@ def task(ctx,config):
                     {
                     'port':endpoint.port,
                     'host':endpoint.dns_name,
+                    'zonegroup':ctx.rgw.zonegroup,
+                    'zone':ctx.rgw.zone,
+                    'cluster':cluster_name,
                     },
                 's3 main':{}
             }

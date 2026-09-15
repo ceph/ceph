@@ -8,7 +8,7 @@ function run() {
 
     export CEPH_MON="127.0.0.1:7143" # git grep '\<714\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none --mon-pg-warn-min-per-osd 0 --mon-max-pg-per-osd 1000 "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none --mon-pg-warn-min-per-osd 0 --mon-max-pg-per-osd 1000 "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}

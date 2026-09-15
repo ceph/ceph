@@ -1,4 +1,5 @@
 # type: ignore
+import json
 import pytest
 from .data_list import ceph_bluestore_tool_show_label_output
 from unittest.mock import patch, Mock
@@ -222,3 +223,35 @@ class TestList(object):
             list_command.List([]).generate()
             mock.assert_called_once()
 
+    @patch('ceph_volume.devices.raw.list.process.call')
+    def test_merges_db_and_wal_with_same_osd_uuid(self, patched_call):
+        labels = {
+            '/dev/vdb': {
+                'osd_uuid': 'same-uuid',
+                'description': 'main',
+                'ceph_fsid': 'cluster-fsid',
+                'whoami': '0',
+                'type': 'bluestore',
+            },
+            '/dev/vdc': {
+                'osd_uuid': 'same-uuid',
+                'description': 'bluefs db',
+            },
+            '/dev/vdd': {
+                'osd_uuid': 'same-uuid',
+                'description': 'bluefs wal',
+            },
+        }
+        patched_call.return_value = (json.dumps(labels), '', 0)
+
+        for order in (
+            ['/dev/vdb', '/dev/vdc', '/dev/vdd'],
+            ['/dev/vdc', '/dev/vdd', '/dev/vdb'],
+        ):
+            result = list_command._get_bluestore_info(order)
+            info = result['same-uuid']
+            assert info['device'] == '/dev/vdb'
+            assert info['device_db'] == '/dev/vdc'
+            assert info['device_wal'] == '/dev/vdd'
+            assert info['ceph_fsid'] == 'cluster-fsid'
+            assert info['osd_id'] == 0

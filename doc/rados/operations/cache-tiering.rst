@@ -591,24 +591,16 @@ Here is an example of unfound objects appearing during an upgrade from Ceph
        ],
        "more": false
 
-Some tests in the field indicate that the unfound objects can be deleted with
-no adverse effects (see `Tracker Issue #44286, Note 3
-<https://tracker.ceph.com/issues/44286#note-3>`_). Pawel Stefanski suggests
-that deleting missing or unfound objects is safe as long as the objects are a
-part of ``.ceph-internal::hit_set_PGID_archive``.
+Field reports indicate that the unfound objects can be deleted with no
+adverse effects, provided that the objects belong to the
+``.ceph-internal`` namespace and have names of the form
+``hit_set_<PGID>_archive``. These are hit set archives maintained
+internally by cache tiering, not user data. Pawel Stefanski reported
+that deleting missing or unfound objects is safe as long as the objects
+are a part of ``.ceph-internal::hit_set_PGID_archive``.
 
-Various members of the upstream Ceph community have reported in `Tracker Issue
-#44286 <https://tracker.ceph.com/issues/44286>`_ that the following versions of
-Ceph have been affected by this issue:
-
-* 14.2.8
-* 14.2.16
-* 15.2.15
-* 16.2.5
-* 17.2.7
-
-See `Tracker Issue #44286 <https://tracker.ceph.com/issues/44286>`_ for the
-history of this issue.
+Members of the upstream Ceph community have reported this issue on
+releases ranging from 14.2.8 through 17.2.7.
 
 
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter

@@ -13,6 +13,11 @@
 #include "include/random.h" // for ceph::util::generate_random_number()
 #include "global/global_context.h"
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
+using ceph::test::PoolType;
+using ceph::test::pool_type_name;
+using ceph::test::create_pool_by_type;
+using ceph::test::destroy_pool_by_type;
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -31,34 +36,6 @@ constexpr size_t max_pending = 16;
 constexpr size_t max_object_size = 4*1024*1024;
 // multipart upload threshold
 constexpr size_t max_part_size = 1024*1024;
-
-
-// create/destroy a pool that's shared by all tests in the process
-struct RadosEnv : public ::testing::Environment {
-  static std::optional<std::string> pool_name;
- public:
-  static librados::Rados rados;
-  static librados::IoCtx ioctx;
-
-  void SetUp() override {
-    // create pool
-    std::string name = get_temp_pool_name();
-    ASSERT_EQ("", create_one_pool_pp(name, rados));
-    pool_name = name;
-    ASSERT_EQ(rados.ioctx_create(name.c_str(), ioctx), 0);
-  }
-  void TearDown() override {
-    ioctx.close();
-    if (pool_name) {
-      ASSERT_EQ(destroy_one_pool_pp(*pool_name, rados), 0);
-    }
-  }
-};
-std::optional<std::string> RadosEnv::pool_name;
-librados::Rados RadosEnv::rados;
-librados::IoCtx RadosEnv::ioctx;
-
-auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
 
 
 std::ostream& operator<<(std::ostream& out, const rgw_bucket_category_stats& c) {
@@ -641,9 +618,20 @@ void simulator::complete_multipart(const operation& op)
   }
 }
 
-TEST(cls_rgw_stats, simulate)
+class cls_rgw_stats : public ceph::test::ClsTestFixture {
+  // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
+};
+
+TEST_P(cls_rgw_stats, simulate)
 {
   const char* bucket_oid = __func__;
-  auto sim = simulator{RadosEnv::ioctx, bucket_oid};
+  auto sim = simulator{ioctx, bucket_oid};
   sim.run();
 }
+
+INSTANTIATE_TEST_SUITE_P(PoolTypes, cls_rgw_stats,
+  ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+  [](const ::testing::TestParamInfo<PoolType>& info) {
+  return pool_type_name(info.param);
+  }
+);

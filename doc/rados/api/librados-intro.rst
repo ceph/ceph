@@ -27,7 +27,7 @@ the Ceph Storage Cluster:
             +---------------+ +---------------+
 
 This guide provides a high-level introduction to using ``librados``. 
-Refer to :doc:`../../architecture` for additional details of the Ceph
+Refer to :doc:`../../architecture/index` for additional details of the Ceph
 Storage Cluster. To use the API, you need a running Ceph Storage Cluster. 
 See `Installation (Quick)`_ for details.
 
@@ -1046,7 +1046,7 @@ PHP Example
 .. _user ID: ../../operations/user-management#command-line-usage
 .. _CAPS: ../../operations/user-management#authorization-capabilities
 .. _Installation (Quick): ../../../start
-.. _Smart Daemons Enable Hyperscale: ../../../architecture#smart-daemons-enable-hyperscale
-.. _Calculating PG IDs: ../../../architecture#calculating-pg-ids
-.. _computes: ../../../architecture#calculating-pg-ids
-.. _OSD: ../../../architecture#mapping-pgs-to-osds
+.. _Smart Daemons Enable Hyperscale: ../../../architecture/scalability-high-availability#smart-daemons-enable-hyperscale
+.. _Calculating PG IDs: ../../../architecture/dynamic-cluster-management#calculating-pg-ids
+.. _computes: ../../../architecture/dynamic-cluster-management#calculating-pg-ids
+.. _OSD: ../../../architecture/dynamic-cluster-management#mapping-pgs-to-osds

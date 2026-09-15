@@ -84,6 +84,56 @@ struct pair_identity final
  }
 };
 
+struct rvalue_string_view_only final
+{
+ operator std::string_view() && { return {}; }
+};
+
+struct move_only_invocation_result final
+{
+ move_only_invocation_result() = default;
+ move_only_invocation_result(move_only_invocation_result&&) = default;
+ move_only_invocation_result(const move_only_invocation_result&) = delete;
+};
+
+struct immovable_invocation_result final
+{
+ immovable_invocation_result() = default;
+ immovable_invocation_result(immovable_invocation_result&&) = delete;
+ immovable_invocation_result(const immovable_invocation_result&) = delete;
+};
+
+struct move_only_transaction_argument final
+{
+ move_only_transaction_argument() = default;
+ move_only_transaction_argument(move_only_transaction_argument&&) = default;
+ move_only_transaction_argument(const move_only_transaction_argument&) = delete;
+};
+
+struct transaction_with_move_only_argument final
+{
+ void operator()(lfdb::transaction_handle&, move_only_transaction_argument&) const {}
+};
+
+struct reference_returning_transaction final
+{
+ int& operator()(lfdb::transaction_handle&) const;
+};
+
+struct immovable_string_pair_output final
+{
+ std::vector<string_pair> values;
+
+ immovable_string_pair_output() = default;
+ immovable_string_pair_output(immovable_string_pair_output&&) = delete;
+ immovable_string_pair_output(const immovable_string_pair_output&) = delete;
+
+ auto begin() { return std::begin(values); }
+ auto end() { return std::end(values); }
+
+ void push_back(string_pair value) { values.push_back(std::move(value)); }
+};
+
 TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
 {
  using string_pair_vector = std::vector<string_pair>;
@@ -99,11 +149,44 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
 
  STATIC_REQUIRE(lfdb::concepts::string_pair_output_range<string_pair_vector>);
  STATIC_REQUIRE(lfdb::concepts::string_pair_output_range<std::map<std::string, std::string>>);
+ STATIC_REQUIRE(lfdb::concepts::string_pair_output_range<immovable_string_pair_output>);
+ STATIC_REQUIRE_FALSE(
+  lfdb::concepts::materializable_string_pair_output_range<immovable_string_pair_output>);
+
+ STATIC_REQUIRE(lfdb::concepts::stringview_convertible<std::string>);
+ STATIC_REQUIRE(lfdb::concepts::stringview_convertible<const char[4]>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::stringview_convertible<rvalue_string_view_only>);
 
  STATIC_REQUIRE(lfdb::concepts::decoded_value_sink<std::string&>);
  STATIC_REQUIRE(lfdb::concepts::decoded_value_sink<char(&)[9]>);
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<const std::string&>);
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<std::string>);
+ STATIC_REQUIRE(lfdb::concepts::value_callback<decltype([](std::span<const std::uint8_t>) {})>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::value_callback<decltype([](std::span<const std::uint8_t>) {
+  return true;
+ })>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<decltype([](std::span<const std::uint8_t>) {
+  return true;
+ })&>);
+
+ using void_transaction = decltype([](lfdb::transaction_handle&) {});
+ using value_transaction = decltype([](lfdb::transaction_handle&) {
+  return move_only_invocation_result {};
+ });
+ using immovable_transaction = decltype([](lfdb::transaction_handle&) {
+  return immovable_invocation_result {};
+ });
+
+ STATIC_REQUIRE(lfdb::detail::transaction_op<void_transaction>);
+ STATIC_REQUIRE(lfdb::detail::transaction_op<value_transaction>);
+ STATIC_REQUIRE_FALSE(lfdb::detail::transaction_op<immovable_transaction>);
+ STATIC_REQUIRE_FALSE(lfdb::detail::transaction_op<reference_returning_transaction>);
+ STATIC_REQUIRE((lfdb::detail::bound_transaction_op<
+                 transaction_with_move_only_argument,
+                 move_only_transaction_argument>));
+ STATIC_REQUIRE_FALSE((lfdb::detail::bound_transaction_op<
+                       transaction_with_move_only_argument,
+                       move_only_transaction_argument&>));
 }
 
 TEST_CASE("query prefix handles byte-string keyspace edges", "[fdb][query]")
@@ -551,6 +634,11 @@ bool trigger_watch_until(lfdb::database_handle dbh,
 
 TEST_CASE("transaction watches", "[rgw][fdb]") {
  janitor dbh;
+
+ static_assert(lfdb::watch_callback<decltype([](std::string_view) {})>);
+ static_assert(!lfdb::watch_callback<decltype([](std::string_view) {
+  return true;
+ })>);
 
  SECTION("watch fires after committed key change") {
   auto txn = lfdb::make_transaction(dbh);
@@ -1767,6 +1855,11 @@ SCENARIO("transactor", "[fdb]")
 {
  janitor j;
 
+ static_assert(lfdb::detail::result_reporting_transaction_op<decltype([](auto) {})>);
+ static_assert(!lfdb::detail::result_reporting_transaction_op<decltype([](auto) {
+  return 7;
+ })>);
+
  SECTION("transaction function returns nothing") {
   auto txr = lfdb::make_transactor(j);
   const auto key = test_key("key");
@@ -1839,12 +1932,163 @@ SCENARIO("transactor", "[fdb]")
   CHECK("final" == out);
  }
 
+ SECTION("direct commit can report success") {
+  const auto key = test_key("direct-result-key");
+
+  auto txn = lfdb::make_transaction(j);
+  lfdb::set(txn, key, "value");
+
+  const auto result = lfdb::commit(lfdb::with_result, txn);
+  CHECK(result.committed);
+  CHECK(0 == result.replay_error);
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK("value" == out);
+ }
+
+ SECTION("direct commit can report replay") {
+  const auto key = test_key("direct-result-conflict-key");
+
+  lfdb::set(j, key, "initial");
+
+  auto txn = lfdb::make_transaction(j);
+
+  std::string out;
+  REQUIRE(lfdb::get(txn, key, out));
+  CHECK("initial" == out);
+
+  lfdb::set(j, key, "conflict");
+  lfdb::set(txn, key, "final");
+
+  auto result = lfdb::commit(lfdb::with_result, txn);
+  CHECK_FALSE(result.committed);
+  CHECK(0 != result.replay_error);
+
+  REQUIRE(lfdb::get(txn, key, out));
+  CHECK("conflict" == out);
+
+  lfdb::set(txn, key, "final");
+
+  result = lfdb::commit(lfdb::with_result, txn);
+  CHECK(result.committed);
+  CHECK(0 == result.replay_error);
+
+  CHECK(lfdb::get(j, key, out));
+  CHECK("final" == out);
+ }
+
+ SECTION("transactor can report transaction results") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("result-key");
+
+  auto result = txr(lfdb::with_result, [&key](auto txn) {
+    lfdb::set(txn, key, "value");
+  });
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK("value" == out);
+
+  CHECK(result.committed);
+  CHECK(result.attempts == 1);
+  CHECK(result.replay_count == 0);
+  CHECK(0 == result.last_error);
+ }
+
+ SECTION("transactor accepts stable invocation arguments") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("argument-key");
+  const std::string value = "argument-value";
+
+  txr([](auto txn, const std::string& key, const std::string& value) {
+    lfdb::set(txn, key, value);
+  }, key, value);
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK(value == out);
+ }
+
+ SECTION("result-reporting transactor replays after conflict") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("result-conflict-key");
+
+  lfdb::set(j, key, "initial");
+
+  auto result = txr(lfdb::with_result, [&j, &key](auto txn) {
+    std::string out;
+    if (not lfdb::get(txn, key, out)) {
+     throw std::runtime_error("expected key does not exist");
+    }
+
+    // Force a conflict, making the transactor replay the body:
+    if ("initial" == out) {
+     lfdb::set(j, key, "conflict");
+    }
+
+    lfdb::set(txn, key, "final");
+  });
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK("final" == out);
+
+  CHECK(result.committed);
+  CHECK(result.attempts == 2);
+  CHECK(result.replay_count == 1);
+  CHECK(0 != result.last_error);
+ }
+
+ SECTION("result-reporting transactor reports retry exhaustion") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("result-retry-limit-key");
+
+  lfdb::set(j, key, "initial");
+
+  auto result = txr(lfdb::with_result, [&j, &key](auto txn) {
+    std::string out;
+    if (not lfdb::get(txn, key, out)) {
+     throw std::runtime_error("expected key does not exist");
+    }
+
+    // Force every commit attempt to conflict:
+    lfdb::set(j, key, "conflict");
+    lfdb::set(txn, key, "final");
+  });
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK("conflict" == out);
+
+  CHECK_FALSE(result.committed);
+  CHECK(result.attempts == 10);
+  CHECK(result.replay_count == 9);
+  CHECK(0 != result.last_error);
+ }
+
+ SECTION("result-reporting transactor rejects invalid database handles") {
+  lfdb::database_handle dbh;
+  auto txr = lfdb::make_transactor(dbh);
+
+  CHECK_THROWS_WITH(txr(lfdb::with_result, [](auto) {}),
+                    "make_transaction() requires database handle");
+ }
+
  SECTION("transactor propagates transaction body exceptions") {
   auto txr = lfdb::make_transactor(j);
 
   CHECK_THROWS_WITH(txr([](auto) {
     throw std::runtime_error("transaction body failed");
   }), "transaction body failed");
+ }
+
+ SECTION("result-reporting transactor propagates transaction body exceptions") {
+  auto txr = lfdb::make_transactor(j);
+
+  CHECK_THROWS_AS(txr(lfdb::with_result, [](auto) {
+    throw std::runtime_error("transaction body failed");
+  }), std::runtime_error);
  }
 }
 

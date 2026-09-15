@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { AuthService } from '~/app/shared/api/auth.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -60,5 +60,33 @@ describe('LoginComponent', () => {
     expect(routerNavigateSpy).toHaveBeenCalledWith(['/add-storage'], {
       queryParams: { welcome: true }
     });
+  });
+
+  it('should show inline error on failed login', () => {
+    const err = {
+      error: { detail: 'Invalid credentials', code: 'invalid_credentials', component: 'auth' },
+      status: 400,
+      statusText: 'Bad Request',
+      url: 'api/auth',
+      preventDefault: jasmine.createSpy('preventDefault')
+    };
+    authServiceLoginSpy.and.returnValue(throwError(err));
+    component.model.password = 'secret';
+
+    component.login();
+
+    expect(component.errorMessage).toBe('Invalid credentials');
+    expect(component.model.password).toBe('secret');
+    expect(err.preventDefault).toHaveBeenCalled();
+    expect(routerNavigateSpy).not.toHaveBeenCalled();
+  });
+
+  it('should clear error on retry', () => {
+    component.errorMessage = 'Previous error';
+    authServiceLoginSpy.and.returnValue(of(null));
+
+    component.login();
+
+    expect(component.errorMessage).toBe('');
   });
 });

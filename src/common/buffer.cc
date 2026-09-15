@@ -1223,7 +1223,9 @@ static ceph::spinlock debug_lock;
     auto p_prev = _buffers.before_begin();
     while (p != std::end(_buffers)) {
       // keep anything that's already align and sized aligned
-      if (p->is_aligned(align_memory) && p->is_n_align_sized(align_size)) {
+      if (p->is_aligned(align_memory) && 
+          p->is_n_align_sized(align_size) && 
+          p->length()) {
         /*cout << " segment " << (void*)p->c_str()
   	     << " offset " << ((unsigned long)p->c_str() & (align - 1))
   	     << " length " << p->length()
@@ -1254,7 +1256,8 @@ static ceph::spinlock debug_lock;
       } while (p != std::end(_buffers) &&
   	     (!p->is_aligned(align_memory) ||
   	      !p->is_n_align_sized(align_size) ||
-  	      (offset % align_size)));
+  	      (offset % align_size) ||
+  	      !p->length()));
       if (!(unaligned.is_contiguous() && unaligned._buffers.front().is_aligned(align_memory))) {
         unaligned.rebuild(
           ptr_node::create(
@@ -1725,7 +1728,13 @@ void buffer::list::decode_base64(buffer::list& e)
 
 ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
+  int fd;
+  if (strcmp(fn, "-") == 0) {
+    /* FIXME dup3 for O_CLOEXEC */
+    fd = TEMP_FAILURE_RETRY(::dup(STDIN_FILENO));
+  } else {
+    fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
+  }
   if (fd < 0) {
     int err = errno;
     std::ostringstream oss;
@@ -1785,7 +1794,13 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
 
 int buffer::list::read_file(const char *fn, std::string *error)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
+  int fd;
+  if (strcmp(fn, "-") == 0) {
+    /* FIXME dup3 for O_CLOEXEC */
+    fd = TEMP_FAILURE_RETRY(::dup(STDIN_FILENO));
+  } else {
+    fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
+  }
   if (fd < 0) {
     int err = errno;
     std::ostringstream oss;

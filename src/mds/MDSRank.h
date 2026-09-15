@@ -26,6 +26,8 @@
 
 #include "include/common_fwd.h"
 
+#include "msg/Connection.h" // for ConnectionRef
+
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
@@ -56,6 +58,7 @@ enum {
   l_mds_forward,
   l_mds_dir_fetch_complete,
   l_mds_dir_fetch_keys,
+  l_mds_dir_fetch_background,
   l_mds_dir_commit,
   l_mds_dir_split,
   l_mds_dir_merge,

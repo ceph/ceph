@@ -121,6 +121,8 @@ using int_predicate = bool (*)(int);
 using int_deque = std::deque<int>;
 using int_forward_list = std::forward_list<int>;
 using int_list = std::list<int>;
+using int_map = std::map<int, int>;
+using int_multimap = std::multimap<int, int>;
 using int_set = std::set<int>;
 using int_vector = std::vector<int>;
 using small_array = std::array<int, 3>;
@@ -531,6 +533,10 @@ TEST_CASE("optional sizing helpers call supported operations only",
     (ceph::concepts::has_emplace_append<int_set, int>))                         \
   X(insert_append, (ceph::concepts::has_insert_append<int_vector, int>),        \
     (ceph::concepts::has_insert_append<int_forward_list, int>))                 \
+  X(subscript_operator, (ceph::concepts::has_subscript_operator<int_map>),      \
+    (ceph::concepts::has_subscript_operator<int_set>))                          \
+  X(try_emplace_key, (ceph::concepts::has_try_emplace_key<int_map>),            \
+    (ceph::concepts::has_try_emplace_key<int_multimap>))                        \
   X(emplace_after, (ceph::concepts::has_emplace_after<int_forward_list, int_forward_list::iterator, int>), \
     (ceph::concepts::has_emplace_after<int_vector, int_vector::iterator, int>)) \
   X(insert_after, (ceph::concepts::has_insert_after<int_forward_list, int_forward_list::iterator, int>), \

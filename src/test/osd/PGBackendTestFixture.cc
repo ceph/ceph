@@ -159,6 +159,7 @@ void PGBackendTestFixture::setup_ec_pool()
 
     shard_listener->set_store(store.get(), chs[i]);
     shard_listener->set_event_loop(event_loop.get());
+    shard_listener->set_osd(this);
 
     auto shard_lru = std::make_unique<ECExtentCache::LRU>(1024 * 1024 * 100);
     auto shard_ec_switch = std::make_unique<ECSwitch>(
@@ -294,6 +295,7 @@ void PGBackendTestFixture::setup_replicated_pool()
 
     replica_listener->set_store(store.get(), chs[i]);
     replica_listener->set_event_loop(event_loop.get());
+    replica_listener->set_osd(this);
 
     auto replica_backend = std::make_unique<ReplicatedBackend>(
       replica_listener.get(), colls[i], chs[i], store.get(), cct);
@@ -350,7 +352,8 @@ int PGBackendTestFixture::do_transaction_and_complete(
   const object_stat_sum_t& delta_stats,
   const eversion_t& at_version,
   std::vector<pg_log_entry_t> log_entries,
-  std::function<void(int)> on_write_complete)
+  std::function<void(int)> on_write_complete,
+  bool run)
 {
   eversion_t trim_to(0, 0);
   eversion_t pg_committed_to(0, 0);
@@ -367,7 +370,7 @@ int PGBackendTestFixture::do_transaction_and_complete(
     }
   });
 
-  ceph_tid_t tid = next_tid++;
+  ceph_tid_t tid = get_tid();
   osd_reqid_t reqid(entity_name_t::OSD(0), 0, tid);
 
   PGBackend* primary_backend = get_primary_backend();
@@ -387,7 +390,9 @@ int PGBackendTestFixture::do_transaction_and_complete(
     OpRequestRef()
   );
 
-  event_loop->run_until_idle();
+  if (run) {
+    event_loop->run_until_idle();
+  }
 
   if (!completed) {
     completion_result = -EINPROGRESS;
@@ -615,7 +620,8 @@ int PGBackendTestFixture::do_write_impl(
   const std::string& obj_name,
   uint64_t offset,
   const std::string& data,
-  uint64_t object_size)
+  uint64_t object_size,
+  bool run)
 {
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
@@ -691,7 +697,7 @@ int PGBackendTestFixture::do_write_impl(
   };
 
   int result = do_transaction_and_complete(
-    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
+    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete, run);
 
   return result;
 }
@@ -701,26 +707,31 @@ int PGBackendTestFixture::write(
   const std::string& obj_name,
   uint64_t offset,
   const std::string& data,
-  uint64_t object_size)
+  uint64_t object_size,
+  bool run)
 {
   // Get the primary OSD from the OSDMap
   int primary_osd = osdmap->get_pg_acting_primary(pgid);
   ceph_assert(primary_osd >= 0);
-  
-  int result = -1;
-  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, offset, data, object_size]() {
-    result = do_write_impl(obj_name, offset, data, object_size);
+
+  auto result = std::make_shared<int>(-EINPROGRESS);
+  event_loop->schedule_transaction(primary_osd, [this, result, obj_name, offset, data, object_size]() {
+    // run=false: the outer write() handles draining after this lambda returns
+    *result = do_write_impl(obj_name, offset, data, object_size);
   });
-  event_loop->run_until_idle();
-  
-  return result;
+  if (run) {
+    event_loop->run_until_idle();
+  }
+
+  return *result;
 }
 
-int PGBackendTestFixture::do_write_impl(
+int PGBackendTestFixture::do_truncate_and_write_impl(
   const std::string& obj_name,
   uint64_t object_size,
   std::optional<uint64_t> truncate_size,
-  const std::vector<std::pair<uint64_t, std::string>>& writes)
+  const std::vector<std::pair<uint64_t, std::string>>& writes,
+  bool run)
 {
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
@@ -806,25 +817,171 @@ int PGBackendTestFixture::do_write_impl(
   };
 
   return do_transaction_and_complete(
-    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
+    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete, run);
 }
 
-int PGBackendTestFixture::write(
+int PGBackendTestFixture::truncate_and_write(
   const std::string& obj_name,
   uint64_t object_size,
   std::optional<uint64_t> truncate_size,
-  const std::vector<std::pair<uint64_t, std::string>>& writes)
+  const std::vector<std::pair<uint64_t, std::string>>& writes,
+  bool run)
 {
   int primary_osd = osdmap->get_pg_acting_primary(pgid);
   ceph_assert(primary_osd >= 0);
 
-  int result = -1;
-  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, object_size, truncate_size, &writes]() {
-    result = do_write_impl(obj_name, object_size, truncate_size, writes);
+  auto result = std::make_shared<int>(-EINPROGRESS);
+  event_loop->schedule_transaction(primary_osd, [this, result, obj_name, object_size, truncate_size, writes]() {
+    // run=false: the outer write() handles draining after this lambda returns
+    *result = do_truncate_and_write_impl(obj_name, object_size, truncate_size, writes);
   });
-  event_loop->run_until_idle();
+  if (run) {
+    event_loop->run_until_idle();
+  }
 
+  return *result;
+}
+
+int PGBackendTestFixture::create_snapshot(
+  const std::string& obj_name,
+  uint64_t snap_size,
+  bool run)
+{
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+
+  // Run synchronously — the snap must exist in the store before rollback().
+  int result = -EINPROGRESS;
+  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, snap_size]() {
+    hobject_t hoid = make_test_object(obj_name);
+    hobject_t snap_hoid(hoid);
+    snap_hoid.snap = 1;
+
+    PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+
+    ObjectContextRef obc = get_object_context(hoid, true);
+    if (obc && !obc->obs.exists) {
+      obc->obs.exists = true;
+      obc->obs.oi.size = snap_size;
+    }
+    pg_t->obc_map[hoid] = obc;
+
+    ObjectContextRef snap_obc = get_object_context(snap_hoid, true);
+    if (snap_obc && !snap_obc->obs.exists) {
+      snap_obc->obs.exists = true;
+      snap_obc->obs.oi.size = snap_size;
+    }
+    pg_t->obc_map[snap_hoid] = snap_obc;
+
+    pg_t->clone(snap_hoid, hoid);
+
+    eversion_t at_version = get_next_version();
+
+    object_stat_sum_t delta_stats;
+    delta_stats.num_object_clones = 1;
+
+    std::vector<pg_log_entry_t> log_entries;
+    pg_log_entry_t entry;
+    entry.op = pg_log_entry_t::CLONE;
+    entry.soid = snap_hoid;
+    entry.version = at_version;
+    entry.prior_version = obc->obs.oi.version;
+    log_entries.push_back(entry);
+
+    result = do_transaction_and_complete(
+      snap_hoid, std::move(pg_t), delta_stats, at_version,
+      std::move(log_entries), nullptr);
+  });
+  if (run) {
+    event_loop->run_until_idle();
+  }
   return result;
+}
+
+int PGBackendTestFixture::rollback(
+  const std::string& obj_name,
+  uint64_t snap_size,
+  bool run)
+{
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+
+  auto result = std::make_shared<int>(-EINPROGRESS);
+  event_loop->schedule_transaction(primary_osd, [this, result, obj_name, snap_size]() {
+    hobject_t hoid = make_test_object(obj_name);
+    hobject_t snap_hoid(hoid);
+    snap_hoid.snap = 1;
+
+    PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+
+    ObjectContextRef obc = get_object_context(hoid, true);
+    if (obc && !obc->obs.exists) {
+      obc->obs.exists = true;
+      obc->obs.oi.size = snap_size;
+    }
+    pg_t->obc_map[hoid] = obc;
+
+    ObjectContextRef snap_obc = get_object_context(snap_hoid, true);
+    if (snap_obc && !snap_obc->obs.exists) {
+      snap_obc->obs.exists = true;
+      snap_obc->obs.oi.size = snap_size;
+    }
+    pg_t->obc_map[snap_hoid] = snap_obc;
+
+    outstanding_writes[hoid]++;
+
+    pg_t->remove(hoid);
+    pg_t->clone(hoid, snap_hoid);
+
+    eversion_t prior_version = obc->obs.oi.version;
+    eversion_t at_version = get_next_version();
+
+    object_info_t new_oi = obc->obs.oi;
+    new_oi.version = at_version;
+    new_oi.prior_version = prior_version;
+    new_oi.size = snap_size;
+
+    {
+      bufferlist oi_bl;
+      new_oi.encode(oi_bl,
+        osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+      pg_t->setattr(hoid, OI_ATTR, oi_bl);
+    }
+
+    obc->obs.oi = new_oi;
+
+    object_stat_sum_t delta_stats;
+    std::vector<pg_log_entry_t> log_entries;
+    pg_log_entry_t entry;
+    entry.op = pg_log_entry_t::MODIFY;
+    entry.soid = hoid;
+    entry.version = at_version;
+    entry.prior_version = prior_version;
+    log_entries.push_back(entry);
+
+    auto complete = [this, hoid, obc, prior_version, snap_size](int r) {
+      if (outstanding_writes[hoid] > 0) {
+        outstanding_writes[hoid]--;
+        if (outstanding_writes[hoid] == 0) {
+          outstanding_writes.erase(hoid);
+        }
+      }
+      if (r != 0 && r != -EINPROGRESS) {
+        obc->obs.oi.version = prior_version;
+        obc->obs.oi.size = snap_size;
+        obc->attr_cache.clear();
+        outstanding_writes.erase(hoid);
+      }
+    };
+
+    *result = do_transaction_and_complete(
+      hoid, std::move(pg_t), delta_stats, at_version,
+      std::move(log_entries), complete);
+  });
+  if (run) {
+    event_loop->run_until_idle();
+  }
+  return *result;
 }
 
 int PGBackendTestFixture::read_object(

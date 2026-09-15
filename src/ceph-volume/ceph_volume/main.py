@@ -142,9 +142,9 @@ Ceph Conf: {ceph_path}
         )
         parser.add_argument(
             '--log-level',
-            default='debug',
+            default='info',
             choices=['debug', 'info', 'warning', 'error', 'critical'],
-            help='Change the file log level (defaults to debug)',
+            help='Change the file log level (defaults to info)',
         )
         parser.add_argument(
             '--log-path',

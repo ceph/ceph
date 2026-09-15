@@ -20,6 +20,7 @@
 #include "include/scope_guard.h"
 #include "common/errno.h"
 
+#include "libaio_probe.h"
 #include "os/bluestore/Allocator.h"
 #include "os/bluestore/bluefs_types.h"
 #include "os/bluestore/bluestore_common.h"
@@ -106,6 +107,7 @@ public:
 };
 
 TEST(BlueFS, mkfs) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   uuid_d fsid;
@@ -115,6 +117,7 @@ TEST(BlueFS, mkfs) {
 }
 
 TEST(BlueFS, mkfs_mount) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
@@ -129,6 +132,7 @@ TEST(BlueFS, mkfs_mount) {
 }
 
 TEST(BlueFS, write_read) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
@@ -159,6 +163,7 @@ TEST(BlueFS, write_read) {
 }
 
 TEST(BlueFS, small_appends) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
@@ -190,6 +195,7 @@ TEST(BlueFS, small_appends) {
 }
 
 TEST(BlueFS, very_large_write) {
+  SKIP_IF_NO_LIBAIO();
   SKIP_JENKINS();
   // we'll write a ~5G file, so allocate more than that for the whole fs
   uint64_t size = 1048576 * 1024 * 6ull;
@@ -265,6 +271,7 @@ TEST(BlueFS, very_large_write) {
 }
 
 TEST(BlueFS, very_large_write2) {
+  SKIP_IF_NO_LIBAIO();
   SKIP_JENKINS();
   // we'll write a ~5G file, so allocate more than that for the whole fs
   uint64_t size_full = 1048576 * 1024 * 6ull;
@@ -431,6 +438,7 @@ void join_all(std::vector<std::thread>& v)
 #define NUM_MULTIPLE_FILE_WRITERS 2
 
 TEST(BlueFS, test_flush_1) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -465,6 +473,7 @@ TEST(BlueFS, test_flush_1) {
 }
 
 TEST(BlueFS, test_flush_2) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 256;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -492,6 +501,7 @@ TEST(BlueFS, test_flush_2) {
 }
 
 TEST(BlueFS, test_flush_3) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 256;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -526,6 +536,7 @@ TEST(BlueFS, test_flush_3) {
 }
 
 TEST(BlueFS, test_simple_compaction_sync) {
+  SKIP_IF_NO_LIBAIO();
   g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "true");
@@ -578,6 +589,7 @@ TEST(BlueFS, test_simple_compaction_sync) {
 }
 
 TEST(BlueFS, test_simple_compaction_async) {
+  SKIP_IF_NO_LIBAIO();
   g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "false");
@@ -630,6 +642,7 @@ TEST(BlueFS, test_simple_compaction_async) {
 }
 
 TEST(BlueFS, test_compaction_sync) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -694,6 +707,7 @@ TEST(BlueFS, test_compaction_sync) {
 }
 
 TEST(BlueFS, test_compaction_async) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -758,6 +772,7 @@ TEST(BlueFS, test_compaction_async) {
 }
 
 TEST(BlueFS, test_replay) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   g_ceph_context->_conf.set_val(
@@ -799,6 +814,7 @@ TEST(BlueFS, test_replay) {
 }
 
 TEST(BlueFS, test_replay_growth) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576LL * (2 * 1024 + 128);
   TempBdev bdev{size};
 
@@ -837,6 +853,7 @@ TEST(BlueFS, test_replay_growth) {
 }
 
 TEST(BlueFS, test_tracker_50965) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size_wal = 1048576 * 64;
   TempBdev bdev_wal{size_wal};
   uint64_t size_db = 1048576 * 128;
@@ -932,6 +949,7 @@ static bool bl_eq(bufferlist& expected, bufferlist& actual) {
 }
 
 TEST(BlueFS, test_wal_write) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size_wal = 1048576 * 64;
   TempBdev bdev_wal{size_wal};
   uint64_t size_db = 1048576 * 128;
@@ -1100,6 +1118,7 @@ public:
 };
 
 TEST(BlueFS, test_wal_migrate) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size_wal = 1048576 * 64;
   TempBdev bdev_wal{size_wal};
   uint64_t size_db = 1048576 * 128;
@@ -1158,6 +1177,7 @@ TEST(BlueFS, test_wal_migrate) {
 
 TEST_F(BlueFS_wal, wal_v2_check)
 {
+  SKIP_IF_NO_LIBAIO();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
   conf.SetVal("bluefs_wal_envelope_mode", "true");
@@ -1178,6 +1198,7 @@ TEST_F(BlueFS_wal, wal_v2_check)
 
 TEST_F(BlueFS_wal, wal_v2_check_split_header)
 {
+  SKIP_IF_NO_LIBAIO();
   // Check if wal v2 envelope header is properly located
   // when FileWrite'r buffer is exhausted.
   //
@@ -1202,6 +1223,7 @@ TEST_F(BlueFS_wal, wal_v2_check_split_header)
 
 TEST_F(BlueFS_wal, wal_v2_check_split_header_small_alloc)
 {
+  SKIP_IF_NO_LIBAIO();
   // Check if wal v2 envelope header is properly located
   // when FileWrite'r buffer is exhausted.
   // Case for single 4K page buffer.
@@ -1227,6 +1249,7 @@ TEST_F(BlueFS_wal, wal_v2_check_split_header_small_alloc)
 
 TEST_F(BlueFS_wal, wal_v2_check_feature)
 {
+  SKIP_IF_NO_LIBAIO();
   SKIP_JENKINS();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
@@ -1266,6 +1289,7 @@ TEST_F(BlueFS_wal, wal_v2_check_feature)
 
 TEST_F(BlueFS_wal, wal_v2_truncate)
 {
+  SKIP_IF_NO_LIBAIO();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
   conf.SetVal("bluefs_wal_envelope_mode", "true");
@@ -1299,6 +1323,7 @@ TEST_F(BlueFS_wal, wal_v2_truncate)
 
 TEST_F(BlueFS_wal, wal_v2_simulate_crash)
 {
+  SKIP_IF_NO_LIBAIO();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
   conf.SetVal("bluefs_wal_envelope_mode", "true");
@@ -1353,6 +1378,7 @@ TEST_F(BlueFS_wal, wal_v2_simulate_crash)
 
 TEST_F(BlueFS_wal, wal_v2_repro_74765)
 {
+  SKIP_IF_NO_LIBAIO();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
   conf.SetVal("bluefs_wal_envelope_mode", "true");
@@ -1426,6 +1452,7 @@ TEST_F(BlueFS_wal, wal_v2_repro_74765)
 
 TEST_F(BlueFS_wal, wal_v2_recovery_from_dirty_allocated)
 {
+  SKIP_IF_NO_LIBAIO();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_alloc_size", "4096");
   conf.SetVal("bluefs_shared_alloc_size", "4096");
@@ -1469,6 +1496,7 @@ TEST_F(BlueFS_wal, wal_v2_recovery_from_dirty_allocated)
 
 TEST_F(BlueFS_wal, support_wal_v2_and_v1)
 {
+  SKIP_IF_NO_LIBAIO();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
   conf.SetVal("bluefs_wal_envelope_mode", "true");
@@ -1515,6 +1543,7 @@ TEST_F(BlueFS_wal, support_wal_v2_and_v1)
 
 TEST_F(BlueFS_wal, wal_v2_read_after_write)
 {
+  SKIP_IF_NO_LIBAIO();
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
   conf.SetVal("bluefs_wal_envelope_mode", "true");
@@ -1544,6 +1573,7 @@ TEST_F(BlueFS_wal, wal_v2_read_after_write)
 }
 
 TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
+  SKIP_IF_NO_LIBAIO();
   // test whether we still read with v2 version even though new files will be v1
   uint64_t size_wal = 1048576 * 64;
   TempBdev bdev_wal{size_wal};
@@ -1611,6 +1641,7 @@ TEST(BlueFS, test_wal_read_after_rollback_to_v1) {
 
 
 TEST(BlueFS, test_truncate_stable_53129) {
+  SKIP_IF_NO_LIBAIO();
 
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_min_flush_size", "65536");
@@ -1696,6 +1727,7 @@ TEST(BlueFS, test_truncate_stable_53129) {
 }
 
 TEST(BlueFS, test_update_ino1_delta_after_replay) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576LL * (2 * 1024 + 128);
   TempBdev bdev{size};
 
@@ -1742,6 +1774,7 @@ TEST(BlueFS, test_update_ino1_delta_after_replay) {
 }
 
 TEST(BlueFS, broken_unlink_fsync_seq) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
@@ -1781,6 +1814,7 @@ TEST(BlueFS, broken_unlink_fsync_seq) {
 }
 
 TEST(BlueFS, truncate_fsync) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t bdev_size = 128 * 1048576;
   uint64_t block_size = 4096;
   TempBdev bdev{bdev_size};
@@ -1840,6 +1874,7 @@ TEST(BlueFS, truncate_fsync) {
 }
 
 TEST(BlueFS, test_shared_alloc) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev_slow{size};
   uint64_t size_db = 1048576 * 8;
@@ -1917,6 +1952,7 @@ TEST(BlueFS, test_shared_alloc) {
 }
 
 TEST(BlueFS, test_shared_alloc_sparse) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128 * 2;
   uint64_t main_unit = 4096;
   uint64_t bluefs_alloc_unit = 1048576;
@@ -2001,6 +2037,7 @@ TEST(BlueFS, test_shared_alloc_sparse) {
 }
 
 TEST(BlueFS, test_4k_shared_alloc) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128 * 2;
   uint64_t main_unit = 4096;
   uint64_t bluefs_alloc_unit = main_unit;
@@ -2104,6 +2141,7 @@ void create_files(BlueFS &fs,
 
 
 TEST(BlueFS, test_concurrent_dir_link_and_compact_log_56210) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   ConfSaver conf(g_ceph_context->_conf);
@@ -2149,6 +2187,7 @@ TEST(BlueFS, test_concurrent_dir_link_and_compact_log_56210) {
 }
 
 TEST(BlueFS, truncate_drops_allocations) {
+  SKIP_IF_NO_LIBAIO();
   constexpr uint64_t K = 1024;
   constexpr uint64_t M = 1024 * K;
   uuid_d fsid;
@@ -2240,7 +2279,73 @@ TEST(BlueFS, truncate_drops_allocations) {
 
 
 
+// Space reserved by preallocate() but never written to has to be given back
+// when truncate_unused_allocations() is called.
+TEST(BlueFS, truncate_unused_allocations) {
+  constexpr uint64_t K = 1024;
+  constexpr uint64_t M = 1024 * K;
+  uuid_d fsid;
+  const char* DIR_NAME = "dir";
+  const char* FILE_NAME = "file1";
+  constexpr uint64_t alloc_unit = 64 * K;
+  constexpr uint64_t db_size = 128 * M;
+  struct {
+    uint64_t preallocated_size;
+    uint64_t write_size;
+    uint64_t allocated_after_drop;
+  } scenarios [] = {
+    // preallocate 8M, write a single byte, a single AU is to remain
+    { 8*M, 1, 64*K },
+    // preallocate 8M, write 1M + 1, 1M + one AU is to remain
+    { 8*M, 1*M + 1, 1*M + 64*K },
+    // preallocated space fully used, nothing to give back
+    { 1*M, 1*M, 1*M },
+    // nothing preallocated, nothing to give back either
+    { 0, 123*K, 128*K },
+  };
+  for (auto& s : scenarios) {
+    ConfSaver conf(g_ceph_context->_conf);
+    conf.SetVal("bluefs_shared_alloc_size", stringify(alloc_unit).c_str());
+    conf.SetVal("bluefs_alloc_size", stringify(1*M).c_str());
+
+    TempBdev bdev_db{db_size};
+
+    bluefs_shared_alloc_context_t shared_alloc;
+    shared_alloc.set(
+      Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
+                        db_size, alloc_unit, "test shared allocator"),
+      alloc_unit);
+    shared_alloc.a->init_add_free(0, db_size);
+
+    BlueFS fs(g_ceph_context);
+    ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false,
+                                     &shared_alloc));
+    ASSERT_EQ(0, fs.mkfs(fsid, {BlueFS::BDEV_DB, false, false}));
+    ASSERT_EQ(0, fs.mount());
+    ASSERT_EQ(0, fs.maybe_verify_layout({BlueFS::BDEV_DB, false, false}));
+    BlueFS::FileWriter *h;
+    ASSERT_EQ(0, fs.mkdir(DIR_NAME));
+    ASSERT_EQ(0, fs.open_for_write(DIR_NAME, FILE_NAME, &h, false));
+    uint64_t pre = fs.get_used();
+    ASSERT_EQ(0, fs.preallocate(h->file, 0, s.preallocated_size));
+    const std::string content(s.write_size, 'x');
+    h->append(content.c_str(), content.length());
+    fs.fsync(h);
+    ASSERT_EQ(0, fs.truncate_unused(h));
+    fs.fsync(h);
+    uint64_t post = fs.get_used();
+    // no data may be lost by giving the unused tail back
+    EXPECT_EQ(s.write_size, h->file->fnode.size);
+    fs.close_writer(h);
+    EXPECT_EQ(pre, post - s.allocated_after_drop);
+
+    fs.umount();
+    delete shared_alloc.a;
+  }
+}
+
 TEST(BlueFS, test_log_runway) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t max_log_runway = 65536;
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_compact_log_sync", "false");
@@ -2283,6 +2388,7 @@ TEST(BlueFS, test_log_runway) {
 }
 
 TEST(BlueFS, test_log_runway_2) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t max_log_runway = 65536;
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_compact_log_sync", "false");
@@ -2341,6 +2447,7 @@ TEST(BlueFS, test_log_runway_2) {
 }
 
 TEST(BlueFS, test_log_runway_3) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t max_log_runway = 65536;
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_alloc_size", "4096");
@@ -2402,6 +2509,7 @@ TEST(BlueFS, test_log_runway_3) {
 }
 
 TEST(BlueFS, test_log_runway_advance_seq) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t max_log_runway = 65536;
   ConfSaver conf(g_ceph_context->_conf);
   conf.SetVal("bluefs_alloc_size", "4096");
@@ -2427,6 +2535,7 @@ TEST(BlueFS, test_log_runway_advance_seq) {
 }
 
 TEST(BlueFS, test_69481_truncate_corrupts_log) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);
@@ -2471,6 +2580,7 @@ TEST(BlueFS, test_69481_truncate_corrupts_log) {
 }
 
 TEST(BlueFS, test_69481_truncate_asserts) {
+  SKIP_IF_NO_LIBAIO();
   uint64_t size = 1048576 * 128;
   TempBdev bdev{size};
   BlueFS fs(g_ceph_context);

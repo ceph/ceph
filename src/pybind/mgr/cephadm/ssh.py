@@ -11,6 +11,7 @@ from shlex import quote
 from typing import TYPE_CHECKING, Optional, List, Tuple, Dict, Iterator, TypeVar, Awaitable, Union, Any
 from ceph.deployment.hostspec import normalize_hostname
 from orchestrator import OrchestratorError
+from .utils import is_fips_enabled, get_default_ssh_config
 
 try:
     import asyncssh
@@ -35,15 +36,6 @@ class HostConnectionError(OrchestratorError):
         super().__init__(message)
         self.hostname = hostname
         self.addr = addr
-
-
-DEFAULT_SSH_CONFIG = """
-Host *
-  User root
-  StrictHostKeyChecking no
-  UserKnownHostsFile /dev/null
-  ConnectTimeout=30
-"""
 
 
 class RemoteExecutable(str):
@@ -191,6 +183,27 @@ class SSHManager:
             addr = self.mgr.inventory.get_addr(host)
         if not addr:
             raise OrchestratorError("host address is empty")
+
+        local_fips = is_fips_enabled()
+        target_fips = self.mgr.cache.get_host_fips_enabled(host)
+        logger.debug(
+            'FIPS state for SSH connection to %s: local=%s, target=%s',
+            host,
+            local_fips,
+            target_fips,
+        )
+
+        if local_fips and self.mgr.ssh_pub:
+            key_parts = self.mgr.ssh_pub.strip().split(maxsplit=1)
+
+            if key_parts and key_parts[0] == 'ssh-ed25519':
+                raise HostConnectionError(
+                    'The configured cephadm SSH identity uses ED25519, '
+                    'which is not supported when FIPS mode is enabled. '
+                    'Replace the cephadm SSH identity with an RSA key.',
+                    host,
+                    addr,
+                )
 
         assert self.mgr.ssh_user
         n = self.mgr.ssh_user + '@' + addr
@@ -559,7 +572,7 @@ class SSHManager:
         ssh_config = self.mgr.get_store("ssh_config")
         if ssh_config is not None or self.mgr.ssh_config_fname is None:
             if not ssh_config:
-                ssh_config = DEFAULT_SSH_CONFIG
+                ssh_config = get_default_ssh_config()
             f = NamedTemporaryFile(prefix='cephadm-conf-')
             os.fchmod(f.fileno(), 0o600)
             f.write(ssh_config.encode('utf-8'))

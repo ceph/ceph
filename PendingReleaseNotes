@@ -1,3 +1,36 @@
+>=22.0.0
+
+* RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
+  from ``false`` to ``true``.
+* RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
+  from ``2`` to ``30`` seconds.
+
+* ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
+  re-execs under GNU bash >= 4 when the system bash is too old, and honors a
+  ``$GETOPT`` environment override so GNU getopt can be selected
+  (``brew install bash gnu-getopt``).
+* CephFS: Added a multi-tiered scoring matrix to the MDS Monitor to dynamically
+  prioritize standby promotion during failover events. The `mds_join_fs` configuration
+  variable is now checked in combination with infrastructure topology rules to enforce
+  node anti-affinity constraints. An isolated, generic standby daemon (Score 5) will
+  now be chosen over a preferred standby daemon targeting that file system if the
+  preferred standby resides on the same physical host as the failed active rank (Score 3).
+  This safely mitigates localized hardware failure boundaries during rapid automatic
+  recovery cycles. This behavior can be disabled per file system using the command
+  `ceph fs set <fs_name> standby_enable_host_anti_affinity false` (default: true)
+  to restore legacy strict 'mds_join_fs' prioritization.
+
+* CephFS: New MDS configuration options for non-blocking dirfrag prefetch have
+  been added. ``mds_dir_prefetch_backend``, when enabled with
+  ``mds_dir_prefetch=false``, serves dentry requests via a fast targeted keyed
+  OSD fetch while lazily launching a full dirfrag prefetch in the background.
+  The background prefetch is triggered only after
+  ``mds_dir_prefetch_backend_hit_threshold`` (default 16) accesses to the same
+  dirfrag, avoiding wasted full-omap reads for directories that are only hit
+  a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
+  limits the number of concurrent background fetches.  This reduces latency in
+  large directories while retaining cache warmth for hot directories.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
@@ -84,7 +117,18 @@
   Benchmarks showed that the lower thread count improves throughput and reduces latency
   on NVMe and HDD based environments. Users with specific workload requirements can
   tune this value; see also ``rgw_max_concurrent_requests``.
+* RGW: This release contains a fix for CVE-2026-54330. We now reject
+  Sigv4 requests with `host` and `x-amz-` headers not included in the
+  signed subset. Unfortunately, the REST client used in multisite was
+  generating such improperly signed requests.
+* RGW: New CephX profile ``profile rgw`` grants a Ceph Object Gateway the
+  permissions it needs. Create keys with
+  ``mon 'profile rgw' osd 'profile rgw'``.
 
+  If you are running multisite, you must set the
+  ``rgw_sigv4_insecure`` option to true before you begin to
+  upgrade. After all clusters are upgraded, set the option to
+  ``false`` again.
 
 * DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
   with health status, capacity, performance metrics, and quick-access links. All the
@@ -167,6 +211,24 @@
   This restriction does not apply to operator-initiated scrubs, nor to repair scrubs.
   It can be disabled by setting ``osd_scrub_queued_snaptrims_limit`` to 0.
 * RGW: Add SSE-KMS secrets cache
+* RGW: New buckets now default to the FIFO bilog backend instead of the
+  older InIndex (omap-based) backend, controlled by the new
+  ``rgw_default_bucket_bilog_type`` configuration option (default:
+  ``fifo``). Existing InIndex buckets are unaffected until their next
+  reshard, at which point they are automatically migrated to FIFO.
+
+>=21.0.0
+
+* CephX: a new key type ``aes256k`` has been introduced to address
+  vulnerabilities in the existing encryption schemes. It is necessary to
+  perform an upgrade of all CephX keys used by daemons or clients. Please see
+  :ref:`cephx-upgrade` for more information.
+* The ``auth_supported`` config has been removed.
+* The monitor map includes new settings relating to CephX: auth_service_cipher,
+  auth_allowed_ciphers, and auth_preferred_cipher. These are used to control
+  which CephX key types may be used in the cluster.
+* A new --key-type argument has been introduced for all commands which produce CephX keys. This includes monitor commands as well as Ceph cluster bootstrap commands like ceph-authtool and monmaptool.
+* The ``mon.`` credential is now authoritatively stored in the Monitor "auth" database. The monitor keyring file is only used as a fallback. The ``ceph-mon`` command now includes a --use-mon-keyring switch for recovery if the ``mon.`` key in the auth database is lost.
 
 * RADOS: Stretch mode can now be entered even if the two dividing buckets differ
   in weight by a small fraction (default 0.1). This is tunable via
@@ -295,6 +357,11 @@
   on a devdax namespace (a character device such as ``/dev/dax0.0``) will no
   longer start, because no remaining backend can open one; reconfigure the
   namespace to fsdax with ``ndctl`` or re-provision them before upgrading.
+* BlueStore: fsck no longer aborts on an undecodable onode; it reports the object
+  and continues. Post-crash allocation recovery tolerates corruption only during
+  read-only fsck, gated by the new ``bluestore_accept_corrupted_onode_recovery``
+  option (``never`` or ``read-only``, default ``read-only``); mount, repair, and
+  ``ceph-bluestore-tool trim`` still abort.
 
 >=20.0.0
 
@@ -1118,3 +1185,8 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   seconds, which matches the previously hardcoded behaviour.
 
   Relevant tracker: https://tracker.ceph.com/issues/78727
+* RADOS: A new ``BLUESTORE_NO_DB_SHARDING`` health warning reports OSDs whose
+  RocksDB database does not use column family sharding, i.e. OSDs created
+  prior to Pacific that have not been resharded yet with
+  ``ceph-bluestore-tool reshard``. This warning can be disabled with the new
+  ``bluestore_warn_on_no_db_sharding`` option.

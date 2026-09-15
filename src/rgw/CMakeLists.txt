@@ -1,3 +1,5 @@
+set(CMAKE_JOB_POOL_LINK heavy_link_job_pool)
+
 find_program(GPERF gperf
   REQUIRED)
 
@@ -91,6 +93,10 @@ set(librgw_common_srcs
   rgw_pubsub.cc
   rgw_cr_rest.cc
   rgw_op.cc
+  rgw_op_acl.cc
+  rgw_op_forward.cc
+  rgw_op_obj_lock.cc
+  rgw_op_obj_attrs.cc
   rgw_policy_s3.cc
   rgw_public_access.cc
   rgw_putobj.cc
@@ -203,6 +209,7 @@ list(APPEND librgw_rados_srcs
   driver/rados/rgw_bl_rados.cc
   driver/rados/rgw_cr_rados.cc
   driver/rados/rgw_cr_tools.cc
+  driver/rados/rgw_bilog.cc
   driver/rados/rgw_d3n_datacache.cc
   driver/rados/rgw_datalog.cc
   driver/rados/rgw_datalog_notify.cc

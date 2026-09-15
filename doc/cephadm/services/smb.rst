@@ -12,6 +12,10 @@ SMB Service
     has been determined to be unsuitable for your needs we recommend using that
     module over directly using the smb service spec.
 
+.. important::
+
+    If using Podman, the SMB service requires Podman release 4.1.0 or later.
+
 
 Deploying Samba Containers
 ==========================
@@ -347,6 +351,16 @@ exercise for the reader.
 .. note:: All URI schemes are supported by parameters that accept URIs. Each
    scheme has different performance and security characteristics.
 
+
+The CephFS Proxy Sidecar
+========================
+
+When at least one CephFS-backed share uses a proxied provider, the
+smb manager module includes the ``cephfs-proxy`` feature in the
+``features`` parameter of the smb service specification, and cephadm
+deploys a ``cephfs-proxy`` sidecar container alongside each Samba
+instance. See :ref:`smb-cephfs-proxy` for a description of the
+sidecar and troubleshooting pointers.
 
 Limitations
 ===========

@@ -3,7 +3,7 @@ install_rocky_packages:
     - print: "Install additional rocky10 dependencies"
     # postmerge appends to this
 os_type: rocky
-os_version: "10.1"
+os_version: "10"
 overrides:
   selinux:
     allowlist:

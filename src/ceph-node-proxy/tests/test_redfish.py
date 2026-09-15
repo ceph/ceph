@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from ceph_node_proxy.redfish import build_data
+from ceph_node_proxy.redfish import build_data, get_component_data
 
 
 def test_build_data_thermal_fans_and_temperatures() -> None:
@@ -61,3 +61,47 @@ def test_build_data_skips_absent_members() -> None:
     temps = build_data(thermal, fields, log, attribute="Temperatures")
     assert list(temps.keys()) == ["0"]
     assert temps["0"]["name"] == "C1_DCSCM_TEMP"
+
+
+def test_get_component_data_refetches_attribute_endpoint() -> None:
+    """Fans/temps use attribute=Fans on Thermal; must not reuse cached Endpoint.data."""
+    log = MagicMock()
+    fields = ["Name", "PhysicalContext", "Reading", "ReadingUnits", "Status"]
+    thermal_ep = MagicMock()
+    thermal_ep.data = {
+        "Fans": [
+            {
+                "MemberId": "0",
+                "Name": "FAN1_TACH_IN",
+                "PhysicalContext": "Fan",
+                "Reading": 18480,
+                "ReadingUnits": "RPM",
+                "Status": {"Health": "OK", "State": "Enabled"},
+            }
+        ]
+    }
+    thermal_ep.get_data.return_value = {
+        "Fans": [
+            {
+                "MemberId": "0",
+                "Name": "FAN1_TACH_IN",
+                "PhysicalContext": "Fan",
+                "Status": {"State": "Absent"},
+            }
+        ]
+    }
+
+    member_ep = MagicMock()
+    member_ep.__getitem__.return_value = thermal_ep
+    collection_ep = MagicMock()
+    collection_ep.get_members_names.return_value = ["Self"]
+    collection_ep.__getitem__.return_value = member_ep
+    endpoints = MagicMock()
+    endpoints.__getitem__.return_value = collection_ep
+
+    result = get_component_data(
+        endpoints, "chassis", "Thermal", fields, log, attribute="Fans"
+    )
+
+    thermal_ep.get_data.assert_called_once()
+    assert result["Self"] == {}

@@ -170,7 +170,7 @@ asio::awaitable<void> log_remove(
   neorados::RADOS rados,
   const neorados::IOContext& loc,
   int shards,
-  const fu2::unique_function<std::string(int) const>& get_oid,
+  fu2::unique_function<std::string(int) const> get_oid,
   bool leave_zero)
 {
   sys::error_code ec;

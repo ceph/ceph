@@ -619,7 +619,7 @@ public:
     std::map<ExtentOolWriter*, std::list<CachedExtentRef>>;
   struct dispatch_result_t {
     extents_by_writer_t alloc_map;
-    std::list<CachedExtentRef> delayed_extents;
+    std::vector<CachedExtentRef> delayed_extents;
     io_usage_t usage;
   };
 
@@ -648,7 +648,7 @@ public:
    */
   alloc_paddr_iertr::future<> write_preallocated_ool_extents(
     Transaction &t,
-    std::list<CachedExtentRef> &extents);
+    std::vector<CachedExtentRef>& extents);
 
   seastar::future<> stop_background() {
     return background_process.stop_background();
@@ -692,6 +692,11 @@ public:
 
   void release_projected_usage(const io_usage_t &usage) {
     background_process.release_projected_usage(usage);
+  }
+
+  bool is_storage_full() const {
+    auto *cleaner = background_process.get_main_cleaner();
+    return cleaner ? cleaner->is_storage_full() : false;
   }
 
   backend_type_t get_main_backend_type() const {
@@ -1110,6 +1115,10 @@ private:
         return cold_cleaner->get_alive_ratio() >= 0.99;
       }
       return main_cleaner->get_alive_ratio() >= 0.99;
+    }
+
+    const AsyncCleaner* get_main_cleaner() const {
+      return main_cleaner.get();
     }
 
     void maybe_wake_background() final {

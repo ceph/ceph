@@ -1,0 +1,14 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health unmute AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+- ceph.healthy:
+    expected_checks: [AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE]
+- exec:
+    mon.a:
+      - ceph auth wipe-rotating-service-keys
+      - ceph auth --format=json-pretty dump-keys
+      - ceph auth --format=json dump-keys | jq '.data.rotating_secrets | all(  if .entity.type == 32 then  (.secrets.keys | all(.expiring_key.key.type == 1)) else (.secrets.keys | all(.expiring_key.key.type == 2))  end  )'
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health unmute AUTH_INSECURE_SERVICE_TICKETS
+- ceph.healthy:

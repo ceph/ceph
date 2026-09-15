@@ -8,9 +8,8 @@
 #include <tuple>
 #include <vector>
 #include "include/buffer_fwd.h"
+#include "include/common_fwd.h"
 #include "crimson/net/Fwd.h"
-
-class CryptoKey;
 
 namespace crimson::auth {
 

@@ -23,7 +23,6 @@ import {
   LinkModule
 } from 'carbon-components-angular';
 
-import { AppRoutingModule } from '~/app/app-routing.module';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
@@ -83,7 +82,6 @@ import { NotificationItemComponent } from './notification-panel/notification-ite
     AuthModule,
     NgbCollapseModule,
     NgbDropdownModule,
-    AppRoutingModule,
     SharedModule,
     SimplebarAngularModule,
     RouterModule,

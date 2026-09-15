@@ -122,6 +122,7 @@ target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLK
 # pg_backend_test_fixture: object library for PGBackendTestFixture implementation
 add_library(pg_backend_test_fixture OBJECT
   PGBackendTestFixture.cc
+  MockPGBackendListener.cc
 )
 target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 

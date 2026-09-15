@@ -6056,9 +6056,12 @@ bool MDCache::open_undef_inodes_dirfrags()
 
   // dirfrag -> (fetch_complete, keys_to_fetch)
   map<CDir*, pair<bool, std::vector<dentry_key_t> > > fetch_queue;
+  int count = 0;
   for (auto& dir : rejoin_undef_dirfrags) {
     ceph_assert(dir->get_version() == 0);
     fetch_queue.emplace(std::piecewise_construct, std::make_tuple(dir), std::make_tuple());
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
   }
 
   if (g_conf().get_val<bool>("mds_dir_prefetch")) {
@@ -6066,6 +6069,8 @@ bool MDCache::open_undef_inodes_dirfrags()
       ceph_assert(!in->is_base());
       ceph_assert(in->get_parent_dir());
       fetch_queue.emplace(std::piecewise_construct, std::make_tuple(in->get_parent_dir()), std::make_tuple());
+      if (!(++count % mds->heartbeat_reset_grace()))
+        mds->heartbeat_reset();
     }
   } else {
     for (auto& in : rejoin_undef_inodes) {
@@ -6079,6 +6084,8 @@ bool MDCache::open_undef_inodes_dirfrags()
       } else if (!p.first) {
         p.second.push_back(dn->key());
       }
+      if (!(++count % mds->heartbeat_reset_grace()))
+        mds->heartbeat_reset();
     }
   }
 
@@ -6106,6 +6113,8 @@ bool MDCache::open_undef_inodes_dirfrags()
     } else {
       dir->fetch_keys(p.second.second, gather.new_sub());
     }
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
   }
   ceph_assert(gather.has_subs());
   gather.activate();
@@ -10001,12 +10010,15 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
     //the new "head of the batch ops" and go on processing the new one.
     int mask = mdr->client_request->head.args.getattr.mask;
     auto it = mdr->batch_op_map->find(mask);
+    ceph_assert(it != mdr->batch_op_map->end());
     auto new_batch_head = it->second->find_new_head();
     if (!new_batch_head) {
       mdr->batch_op_map->erase(it);
     } else {
       mds->queue_waiter(new C_MDS_RetryRequest(this, new_batch_head));
     }
+    /* this request is dead and owns no entry in that map anymore */
+    mdr->batch_op_map = nullptr;
   }
 
   if (mdr->has_more()) {
@@ -14692,7 +14704,11 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
   }
 
   C_ListSnapsAggregator *on_finish = new C_ListSnapsAggregator(mds, in1, in2, block_diff, ctx);
-  MDSGatherBuilder gather_ctx(g_ceph_context, on_finish);
+  // Defer the MDSIOContext finisher to mds->finisher so gather activate() does
+  // not call MDSIOContext::complete() inline while mds_lock is held.
+  // See https://tracker.ceph.com/issues/75676
+  C_GatherBuilder gather_ctx(g_ceph_context,
+			     new C_OnFinisher(on_finish, mds->finisher));
 
   while (scans > 0) {
     ObjectOperation op;

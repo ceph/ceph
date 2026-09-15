@@ -16,6 +16,7 @@ import {
   combineLatest,
   forkJoin as observableForkJoin
 } from 'rxjs';
+import { finalize } from 'rxjs/operators';
 import { FlowType } from '~/app/ceph/rgw/models/rgw-multisite';
 import { RgwMultisiteSyncFlowModalComponent } from '~/app/ceph/rgw/rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { RgwMultisiteSyncPipeModalComponent } from '~/app/ceph/rgw/rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
@@ -66,6 +67,7 @@ export class RgwMultisiteSyncPolicyResourcePageComponent implements OnInit, OnDe
   bucketName = '';
   notFound = false;
   hasPolicyGroup = false;
+  isOverviewLoading = false;
   overviewFields: OverviewField[] = [];
 
   symmetricalFlowData: any[] = [];
@@ -286,6 +288,7 @@ export class RgwMultisiteSyncPolicyResourcePageComponent implements OnInit, OnDe
 
   loadData(context?: CdTableFetchDataContext): void {
     if (!this.groupName) {
+      this.isOverviewLoading = false;
       this.hasPolicyGroup = false;
       this.notFound = true;
       this.overviewFields = [];
@@ -295,24 +298,28 @@ export class RgwMultisiteSyncPolicyResourcePageComponent implements OnInit, OnDe
       return;
     }
 
-    this.rgwMultisiteService.getSyncPolicyGroup(this.groupName, this.bucketName).subscribe({
-      next: (policy: any) => {
-        this.notFound = false;
-        this.hasPolicyGroup = true;
-        this.symmetricalFlowData = policy?.data_flow?.[FlowType.symmetrical] || [];
-        this.directionalFlowData = policy?.data_flow?.[FlowType.directional] || [];
-        this.pipeData = policy?.pipes || [];
-        this.overviewFields = this.buildOverviewFields(policy || {});
-      },
-      error: () => {
-        this.hasPolicyGroup = false;
-        this.notFound = true;
-        this.overviewFields = [];
-        if (context) {
-          context.error();
+    this.isOverviewLoading = true;
+    this.rgwMultisiteService
+      .getSyncPolicyGroup(this.groupName, this.bucketName)
+      .pipe(finalize(() => (this.isOverviewLoading = false)))
+      .subscribe({
+        next: (policy: any) => {
+          this.notFound = false;
+          this.hasPolicyGroup = true;
+          this.symmetricalFlowData = policy?.data_flow?.[FlowType.symmetrical] || [];
+          this.directionalFlowData = policy?.data_flow?.[FlowType.directional] || [];
+          this.pipeData = policy?.pipes || [];
+          this.overviewFields = this.buildOverviewFields(policy || {});
+        },
+        error: () => {
+          this.hasPolicyGroup = false;
+          this.notFound = true;
+          this.overviewFields = [];
+          if (context) {
+            context.error();
+          }
         }
-      }
-    });
+      });
   }
 
   updateSelection(selection: CdTableSelection, type: FlowType): void {

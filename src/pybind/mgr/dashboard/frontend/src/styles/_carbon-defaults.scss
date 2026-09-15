@@ -1,5 +1,5 @@
 @use '@carbon/styles/scss/config' with (
-  $font-path: '~@ibm/plex',
+  $font-path: '@ibm/plex',
   $flex-grid-columns: 16,
   $use-flexbox-grid: true
 );
@@ -171,6 +171,14 @@ Forms
 
 .padding-inline-0 {
   padding-inline: 0;
+}
+
+/******************************************
+CSS Grid
+******************************************/
+.cds--css-grid.padding-inline-0 > .cds--css-grid-column.padding-inline-0 {
+  margin-left: 0;
+  padding-left: 0;
 }
 
 /******************************************

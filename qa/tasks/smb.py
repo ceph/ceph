@@ -8,6 +8,7 @@ import json
 import logging
 import shlex
 import time
+import threading
 
 from teuthology.exceptions import ConfigError, CommandFailedError
 from teuthology.task import ssh_keys
@@ -555,10 +556,40 @@ def workunit(ctx, config):
     _config['params'] = config.get('params', {})  # freeform test parameters
     log.info('Passing workunit config: %r', _config)
     with contextlib.ExitStack() as estack:
+        estack.enter_context(_workunit_background_keepalive(ctx))
         if _config['enable_ssh_keys']:
             estack.enter_context(ssh_keys.task(ctx, _ssh_keys_config))
         estack.enter_context(write_metadata_file(ctx, _config))
         return workunit.task(ctx, _config)
+
+
+@contextlib.contextmanager
+def _workunit_background_keepalive(ctx):
+    ctx._smb_workunit_done = False
+    try:
+        t = threading.Thread(target=_workunit_keepalive, args=(ctx,))
+        t.start()
+        try:
+            yield
+        finally:
+            ctx._smb_workunit_done = True
+            t.join()
+    finally:
+        delattr(ctx, '_smb_workunit_done')
+
+
+def _workunit_keepalive(ctx, echo_sec=5 * 60):
+    t = 0
+    while not ctx._smb_workunit_done:
+        time.sleep(1)
+        t += 1
+        if t < echo_sec:
+            continue
+        t = 0
+        for remote in ctx.cluster.remotes:
+            remote.run(
+                args=['echo', '(ping) waiting for workunit to complete'],
+            )
 
 
 def _node_info(ctx, role_name, **kwargs):

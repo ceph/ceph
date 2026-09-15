@@ -230,6 +230,30 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     // alow getpoolstats for mgr modules
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
+  if (profile == "rgw") {
+    // maps
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
+    // cluster log warnings, sent as the 'log' command
+    profile_grants.push_back(MonCapGrant("log"));
+    // statfs and pool stats
+    profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
+    // pool creation on first write; this command grant is checked
+    // explicitly in enforce_pool_op_caps, since MPoolOp carries no
+    // command name
+    profile_grants.push_back(MonCapGrant("osd pool create"));
+    // pool tuning on creation
+    profile_grants.push_back(MonCapGrant("osd pool application enable"));
+    profile_grants.back().command_args["app"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_EQUAL, "rgw");
+    StringConstraint constraint(StringConstraint::MATCH_TYPE_REGEX,
+        string("pg_autoscale_bias|recovery_priority|bulk"));
+    profile_grants.push_back(MonCapGrant("osd pool set", "var", constraint));
+    // ssl certs under the rgw config-key prefix
+    constraint = StringConstraint(StringConstraint::MATCH_TYPE_PREFIX,
+                                  string("rgw/"));
+    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
+  }
   if (profile == "osd" || profile == "mds" || profile == "mon" ||
       profile == "mgr") {
     StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
@@ -281,9 +305,9 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     profile_grants.back().command_args["entity"] = StringConstraint(
       StringConstraint::MATCH_TYPE_PREFIX, "client.rgw.");
     profile_grants.back().command_args["caps_mon"] = StringConstraint(
-      StringConstraint::MATCH_TYPE_EQUAL, "allow rw");
+      StringConstraint::MATCH_TYPE_EQUAL, "profile rgw");
     profile_grants.back().command_args["caps_osd"] = StringConstraint(
-      StringConstraint::MATCH_TYPE_EQUAL, "allow rwx");
+      StringConstraint::MATCH_TYPE_EQUAL, "profile rgw");
   }
   if (profile == "bootstrap-rbd" || profile == "bootstrap-rbd-mirror") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap

@@ -14,44 +14,21 @@
 
 #include "cls/user/cls_user_client.h"
 #include "test/librados/test_cxx.h"
+#include "test/librados/test_pool_types.h"
 #include "gtest/gtest.h"
 
 #include <optional>
 #include <system_error>
 #include "include/expected.hpp"
-
-// create/destroy a pool that's shared by all tests in the process
-struct RadosEnv : public ::testing::Environment {
-  static std::optional<std::string> pool_name;
- public:
-  static librados::Rados rados;
-  static librados::IoCtx ioctx;
-
-  void SetUp() override {
-    // create pool
-    std::string name = get_temp_pool_name();
-    ASSERT_EQ("", create_one_pool_pp(name, rados));
-    pool_name = name;
-    ASSERT_EQ(rados.ioctx_create(name.c_str(), ioctx), 0);
-  }
-  void TearDown() override {
-    ioctx.close();
-    if (pool_name) {
-      ASSERT_EQ(destroy_one_pool_pp(*pool_name, rados), 0);
-    }
-  }
-};
-std::optional<std::string> RadosEnv::pool_name;
-librados::Rados RadosEnv::rados;
-librados::IoCtx RadosEnv::ioctx;
-
-auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
+using ceph::test::PoolType;
+using ceph::test::pool_type_name;
+using ceph::test::create_pool_by_type;
+using ceph::test::destroy_pool_by_type;
 
 // test fixture with helper functions
-class ClsAccount : public ::testing::Test {
+class TestClsAccount : public ceph::test::ClsTestFixture {
+  // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
  protected:
-  librados::IoCtx& ioctx = RadosEnv::ioctx;
-
   int add(const std::string& oid, const cls_user_account_resource& entry,
           bool exclusive, uint32_t limit)
   {
@@ -137,7 +114,7 @@ std::ostream& operator<<(std::ostream& out, const cls_user_account_resource& r)
   return out << r.path << r.name;
 }
 
-TEST_F(ClsAccount, add)
+TEST_P(TestClsAccount, add)
 {
   const std::string oid = __PRETTY_FUNCTION__;
   const auto u1 = cls_user_account_resource{.name = "user1"};
@@ -152,7 +129,7 @@ TEST_F(ClsAccount, add)
   EXPECT_EQ(-EEXIST, add(oid, u3, true, 2)); // case-insensitive match
 }
 
-TEST_F(ClsAccount, get)
+TEST_P(TestClsAccount, get)
 {
   const std::string oid = __PRETTY_FUNCTION__;
   const auto u1 = cls_user_account_resource{.name = "user1", .path = "A"};
@@ -166,7 +143,7 @@ TEST_F(ClsAccount, get)
   EXPECT_EQ(u2, get(oid, u1.name)); // accessible by the original name
 }
 
-TEST_F(ClsAccount, rm)
+TEST_P(TestClsAccount, rm)
 {
   const std::string oid = __PRETTY_FUNCTION__;
   const auto u1 = cls_user_account_resource{.name = "user1"};
@@ -179,7 +156,7 @@ TEST_F(ClsAccount, rm)
   ASSERT_EQ(0, rm(oid, u2.name)); // case-insensitive match
 }
 
-TEST_F(ClsAccount, list)
+TEST_P(TestClsAccount, list)
 {
   const std::string oid = __PRETTY_FUNCTION__;
   const auto u1 = cls_user_account_resource{.name = "user1", .path = ""};
@@ -209,3 +186,11 @@ TEST_F(ClsAccount, list)
   ASSERT_EQ(0, add(oid, u5, false, max_users)); // overwrite u1
   EXPECT_EQ(make_list(u5, u3, u4), list_all(oid, ""));
 }
+
+
+INSTANTIATE_TEST_SUITE_P(, TestClsAccount,
+  ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+  [](const ::testing::TestParamInfo<PoolType>& info) {
+  return pool_type_name(info.param);
+  }
+);

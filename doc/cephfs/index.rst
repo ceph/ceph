@@ -84,6 +84,7 @@ Administration
     MDS failover and standby configuration <standby>
     MDS Cache Configuration <cache-configuration>
     MDS Configuration Settings <mds-config-ref>
+    MDS Quality of Service <mds-qos>
     Manual: ceph-mds <../../man/8/ceph-mds>
     Export over NFS <nfs>
     Application best practices <app-best-practices>

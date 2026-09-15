@@ -44,7 +44,8 @@ public:
                          bool config_show_response);
   std::map<std::string, AdminSocketClient> clients;
   std::string metrics;
-  std::pair<labels_t, std::string> add_fixed_name_metrics(std::string metric_name);
+  std::pair<labels_t, std::string> add_fixed_name_metrics(
+      const std::string &perf_group, const std::string &counter_name);
   void update_sockets();
   void shutdown();
 

@@ -4,8 +4,6 @@
   [columns]="columns"
   [extraFilterableColumns]="filters"
   selectionType="single"
-  [hasDetails]="true"
-  (setExpandedRow)="setExpandedRow($event)"
   (updateSelection)="updateSelection($event)"
 >
   <cd-table-actions
@@ -15,11 +13,6 @@
     [tableActions]="tableActions"
   >
   </cd-table-actions>
-  <cd-configuration-details
-    *cdTableDetail
-    [selection]="expandedRow"
-  >
-  </cd-configuration-details>
 </cd-table>
 
 <ng-template

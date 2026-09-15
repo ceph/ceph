@@ -406,12 +406,10 @@ options:
 - name: fuse_max_write
   type: size
   level: advanced
-  desc: Set the maximum number of bytes in a single write operation
-  long_desc: Set the maximum number of bytes in a single write operation that may
-    pass atomically through FUSE. The FUSE default is 128kB and may be indicated by
-    setting this option to 0.
-  fmt_desc: Set the maximum number of bytes in a single write operation. A value of
-    0 indicates no change; the FUSE default of 128 kbytes remains in force.
+  desc: Maximum bytes in a single FUSE write operation.
+  long_desc: The maximum number of bytes in a single write operation that may pass
+    atomically through FUSE. A value of 0 makes no change, leaving the FUSE default
+    of 128 KiB in force.
   default: 0
   services:
   - mds_client

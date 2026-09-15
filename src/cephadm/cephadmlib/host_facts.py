@@ -793,6 +793,11 @@ class HostFacts:
 
         return k_param
 
+    @property
+    def fips_enabled(self) -> bool:
+        """Return whether FIPS mode is enabled on this host."""
+        return is_fips_enabled()
+
     @staticmethod
     def _process_net_data(tcp_file: str, protocol: str = 'tcp') -> List[int]:
         listening_ports = []
@@ -844,6 +849,19 @@ class HostFacts:
             )
         }
         return json.dumps(data, indent=2, sort_keys=True)
+
+
+def is_fips_enabled() -> bool:
+    """Return whether FIPS mode is enabled on the local host."""
+    try:
+        with open('/proc/sys/crypto/fips_enabled', 'r') as f:
+            return f.read().strip() == '1'
+    except OSError as error:
+        logger.debug(
+            'Unable to read /proc/sys/crypto/fips_enabled: %s',
+            error,
+        )
+    return False
 
 
 def list_networks(ctx):

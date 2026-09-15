@@ -62,6 +62,13 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_rest_conn_ip_fail_timeout_secs
 .. confval:: rgw_max_chunk_size
 .. confval:: rgw_multi_obj_del_max_aio
+.. confval:: rgw_smb_frontends
+.. confval:: rgw_smb_run_dedup_threads
+.. confval:: rgw_smb_run_quota_threads
+.. confval:: rgw_smb_run_restore_threads
+.. confval:: rgw_smb_run_gc_threads
+.. confval:: rgw_smb_run_lc_threads
+.. confval:: rgw_smb_run_sync_thread
 
 Lifecycle Settings
 ==================
@@ -322,7 +329,7 @@ implementation of the *dmclock_client* op queue divides RGW ops into admin, auth
 .. confval:: rgw_dmclock_metadata_wgt
 .. confval:: rgw_dmclock_metadata_lim
 
-.. _Architecture: ../../architecture#data-striping
+.. _Architecture: ../../architecture/ceph-protocol#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Cluster Pools: ../../rados/operations/pools
 .. _Rados cluster handles: ../../rados/api/librados-intro/#step-2-configuring-a-cluster-handle

@@ -1069,6 +1069,7 @@ public:
       boost::statechart::custom_reaction< RemoteBackfillPreempted >,
       boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
       boost::statechart::custom_reaction< RecoveryDone >,
+      boost::statechart::custom_reaction< BackfillTooFull >,
       boost::statechart::transition<DeleteStart, ToDelete>,
       boost::statechart::custom_reaction< MLease >
       > reactions;
@@ -1103,6 +1104,9 @@ public:
     boost::statechart::result react(const RemoteRecoveryPreempted& evt) {
       return discard_event();
     }
+    boost::statechart::result react(const BackfillTooFull& evt) {
+      return discard_event();
+    }
   };
 
   struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
@@ -1124,6 +1128,7 @@ public:
 
   struct RepWaitBackfillReserved : boost::statechart::state< RepWaitBackfillReserved, ReplicaActive >, NamedState {
     typedef boost::mpl::list<
+      boost::statechart::custom_reaction< BackfillTooFull >,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
       boost::statechart::custom_reaction< RejectTooFullRemoteReservation >,
       boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
@@ -1131,6 +1136,7 @@ public:
       > reactions;
     explicit RepWaitBackfillReserved(my_context ctx);
     void exit();
+    boost::statechart::result react(const BackfillTooFull &evt);
     boost::statechart::result react(const RemoteBackfillReserved &evt);
     boost::statechart::result react(const RejectTooFullRemoteReservation &evt);
     boost::statechart::result react(const RemoteReservationRejectedTooFull &evt);
@@ -1650,6 +1656,17 @@ public:
   void on_new_interval();
   void clear_recovery_state();
   void clear_primary_state();
+  /**
+   * This is used by:
+   * a) start_peering_interval(): If this OSD is losing the primary role
+   *    while rebuild_start_time is still armed -- close out and record this
+   *    OSD's own segment of the vulnerability window instead of discarding it.
+   * b) prepare_stats_for_publish(): The case where this OSD is the primary
+   *   and completes a rebuild and records the OSD's vulnerability window.
+   *
+   * So both paths use identical filter/record/log logic.
+   */
+  void try_record_rebuild_segment(utime_t end_time, std::string_view reason);
   void check_past_interval_bounds() const;
   bool set_force_recovery(bool b);
   bool set_force_backfill(bool b);

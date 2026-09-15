@@ -794,6 +794,30 @@ def test_bucket_remove():
                 log.error("Zone %s still has buckets", zone.name)
             assert result
 
+def test_bucket_remove_via_admin():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    # bucket removal via radosgw-admin from a secondary zone
+    empty_bucket = gen_bucket_name()
+    primary.create_bucket(empty_bucket)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in zonegroup_conns.zones:
+        assert check_all_buckets_exist(zone, [empty_bucket])
+
+    secondary.zone.cluster.admin(
+        ['bucket', 'rm', '--bucket', empty_bucket] + secondary.zone.zone_args())
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in zonegroup_conns.zones:
+        assert check_all_buckets_dont_exist(zone, [empty_bucket])
+
+
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
     if zone_conn2.zone.has_buckets():
         zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
@@ -2075,19 +2099,13 @@ def test_bucket_reshard_index_log_trim():
 
     zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
 
-    bilog_autotrim(zone.zone)
-
-    # checking bucket layout after 1st bilog autotrim
-    json_obj_4 = bucket_layout(zone.zone, test_bucket.name)
-    assert(len(json_obj_4['layout']['logs']) == 2)
-
-    bilog_autotrim(zone.zone)
-
-    # checking bucket layout after 2nd bilog autotrim
-    json_obj_5 = bucket_layout(zone.zone, test_bucket.name)
-    assert(len(json_obj_5['layout']['logs']) == 1)
-
-    bilog_autotrim(zone.zone)
+    # trim until only the active generation remains
+    for _ in range(6):
+        bilog_autotrim(zone.zone)
+        time.sleep(config.checkpoint_delay)
+        if len(bucket_layout(zone.zone, test_bucket.name)['layout']['logs']) == 1:
+            break
+    assert len(bucket_layout(zone.zone, test_bucket.name)['layout']['logs']) == 1
 
     # upload more objects
     for objname in ('i', 'j', 'k', 'l'):
@@ -6933,10 +6951,10 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
         primary_zone_cluster_conn.cluster.admin(["bilog", "trim", "--bucket", bucket.name])
         log.info("set rgw_inject_delay_sec and rgw_inject_delay_pattern to slow down bucket full sync")
         secondary_zone_cluster_conn.cluster.ceph_admin(
-            ["config", "set", "client.rgw", "rgw_inject_delay_sec", str(bucket_full_sync_listing_inject_delay_sec)]
+            ["config", "set", "client", "rgw_inject_delay_sec", str(bucket_full_sync_listing_inject_delay_sec)]
         )
         secondary_zone_cluster_conn.cluster.ceph_admin(
-            ["config", "set", "client.rgw", "rgw_inject_delay_pattern", bucket_full_sync_listing_inject_delay_pattern]
+            ["config", "set", "client", "rgw_inject_delay_pattern", bucket_full_sync_listing_inject_delay_pattern]
         )
         log.info("enable bucket sync to initiate full sync")
         enable_bucket_sync(realm.meta_master_zone(), bucket.name)
@@ -6982,10 +7000,10 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
             "removing rgw_inject_delay_sec and rgw_inject_delay_pattern to allow bucket full sync to run normally to the completion"
         )
         secondary_zone_cluster_conn.cluster.ceph_admin(
-            ["config", "rm", "client.rgw", "rgw_inject_delay_sec"]
+            ["config", "rm", "client", "rgw_inject_delay_sec"]
         )
         secondary_zone_cluster_conn.cluster.ceph_admin(
-            ["config", "rm", "client.rgw", "rgw_inject_delay_pattern"]
+            ["config", "rm", "client", "rgw_inject_delay_pattern"]
         )
         time.sleep(
             bucket_full_sync_listing_inject_delay_sec
@@ -7014,10 +7032,10 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
         )
         try:
             secondary_zone_cluster_conn.cluster.ceph_admin(
-                ["config", "rm", "client.rgw", "rgw_inject_delay_sec"]
+                ["config", "rm", "client", "rgw_inject_delay_sec"]
             )
             secondary_zone_cluster_conn.cluster.ceph_admin(
-                ["config", "rm", "client.rgw", "rgw_inject_delay_pattern"]
+                ["config", "rm", "client", "rgw_inject_delay_pattern"]
             )
         except:
             pass

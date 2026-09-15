@@ -1,4 +1,4 @@
-@if (selection) {
+@if (selection || (section === 'configuration' && isOverviewLoading)) {
   @switch (section) {
     @case ('configuration') {
       <section>
@@ -6,6 +6,7 @@
           title="Bucket details"
           [columns]="4"
           [fields]="overviewFields"
+          [loading]="isOverviewLoading"
           i18n-title
         >
         </cd-resource-overview-card>
@@ -17,17 +18,20 @@
           i18n-title
           [columns]="4"
           [fields]="configurationSummaryFields"
+          [loading]="isOverviewLoading"
         >
         </cd-resource-overview-card>
       </section>
 
-      <cd-rgw-bucket-tags-table
-        [bucket]="selection"
-        [owner]="owner"
-        (tagsUpdated)="updateBucketDetails(extractDetailsFromResponse.bind(this))"
-      ></cd-rgw-bucket-tags-table>
+      @if (selection) {
+        <cd-rgw-bucket-tags-table
+          [bucket]="selection"
+          [owner]="owner"
+          (tagsUpdated)="updateBucketDetails(extractDetailsFromResponse.bind(this))"
+        ></cd-rgw-bucket-tags-table>
+      }
 
-      @if (!!bucketRateLimit) {
+      @if (!!bucketRateLimit && selection) {
         <section class="cds-mt-6">
           <cds-tile>
             <div class="cds-pr-6">

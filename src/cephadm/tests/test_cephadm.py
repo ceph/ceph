@@ -1962,10 +1962,10 @@ class TestBootstrap(object):
         funkypatch.patch('cephadmlib.systemd.call')
 
         cmd = self._get_cmd()
-        with bootstrap_test_ctx(cmd) as ctx:
-            msg = r'must specify --mon-ip or --mon-addrv'
-            with pytest.raises(_cephadm.Error, match=msg):
-                _cephadm.command_bootstrap(ctx)
+        with pytest.raises(SystemExit) as exc_info:
+            with bootstrap_test_ctx(cmd):
+                pass
+        assert exc_info.value.code == 2
 
     def test_skip_mon_network(self, cephadm_fs, funkypatch):
         funkypatch.patch('cephadmlib.systemd.call')
@@ -2146,6 +2146,248 @@ class TestBootstrap(object):
         with bootstrap_test_ctx(cmd, hostname=hostname) as ctx:
             retval = _cephadm.command_bootstrap(ctx)
             assert retval == 0
+
+    @pytest.mark.parametrize('mon_net, list_networks, result',
+        [
+            # IPv4 - valid CIDR networks
+            (
+                '192.168.1.0/24',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            (
+                '192.168.1.0/25',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            (
+                '192.168.0.0/16',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                True,
+            ),
+            # IPv4 - invalid or no-match cases
+            (
+                '10.0.0.0/8',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            (
+                '192.168.2.0/24',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+            # IPv6 - valid CIDR networks
+            (
+                'fd00::/64',
+                {'fd00::/64': {'eth0': ['fd00::1']}},
+                True,
+            ),
+            (
+                'fd00::/63',
+                {'fd00::/64': {'eth0': ['fd00::1']}},
+                True,
+            ),
+            (
+                'fd00::/48',
+                {'fd00::/64': {'eth0': ['fd00::1']}},
+                True,
+            ),
+            (
+                'fe80::/10',
+                {'fe80::/10': {'eth0': ['fe80::1']}},
+                True,
+            ),
+            # IPv6 - invalid or no-match cases
+            (
+                'fd01::/64',
+                {'fd00::/64': {'eth0': ['fd00::1']}},
+                False,
+            ),
+            (
+                '::ffff:0:0/96',
+                {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
+                False,
+            ),
+        ])
+    def test_mon_net(self, mon_net, list_networks, result, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        cmd = self._get_cmd('--mon-net', mon_net)
+        if not result:
+            with bootstrap_test_ctx(cmd, list_networks=list_networks) as ctx:
+                msg = r'No local IP found in network'
+                with pytest.raises(_cephadm.Error, match=msg):
+                    _cephadm.command_bootstrap(ctx)
+        else:
+            with bootstrap_test_ctx(cmd, list_networks=list_networks) as ctx:
+                retval = _cephadm.command_bootstrap(ctx)
+                assert retval == 0
+
+    @pytest.mark.parametrize('invalid_cidr',
+        [
+            'invalid-cidr',           # No slashes, random text
+            '192.168.1.0/33',         # Invalid prefix length (> 32 for IPv4)
+            '192.168.1.0/256',        # Completely invalid prefix
+            '192.168.1.0/-1',         # Negative prefix
+            '256.256.256.256/24',     # Invalid IPv4 octets
+            '192.168.1/24',           # Incomplete IPv4
+            'fd00::/129',             # Invalid prefix length (> 128 for IPv6)
+            'gggg::/64',              # Invalid hex in IPv6
+            '192.168.1.0/',           # Missing prefix length
+            '/24',                    # Missing IP address
+            'not.a.network/24',       # Invalid format entirely
+            '192.168.1.0/24/32',      # Too many slashes
+        ])
+    def test_mon_net_invalid_cidr(self, invalid_cidr, cephadm_fs, funkypatch):
+        """Test --mon-net with various invalid CIDR formats"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        cmd = self._get_cmd('--mon-net', invalid_cidr)
+        with bootstrap_test_ctx(cmd) as ctx:
+            msg = r'Invalid network CIDR'
+            with pytest.raises(_cephadm.Error, match=msg):
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_mutually_exclusive_with_mon_ip(self, cephadm_fs, funkypatch):
+        """Test that --mon-net and --mon-ip are mutually exclusive"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        cmd = self._get_cmd('--mon-net', '192.168.1.0/24', '--mon-ip', '192.168.1.1')
+        with pytest.raises(SystemExit):
+            with bootstrap_test_ctx(cmd) as ctx:
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_mutually_exclusive_with_mon_addrv(self, cephadm_fs, funkypatch):
+        """Test that --mon-net and --mon-addrv are mutually exclusive"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        cmd = self._get_cmd('--mon-net', '192.168.1.0/24', '--mon-addrv', '[192.168.1.1:1234]')
+        with pytest.raises(SystemExit):
+            with bootstrap_test_ctx(cmd) as ctx:
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_with_public_network_overlap(self, cephadm_fs, funkypatch):
+        """Test --mon-net validation with overlapping public_network config"""
+        funkypatch.patch('cephadmlib.systemd.call')
+        
+        # Create a config file with public_network
+        conf_content = """[global]
+public_network = 192.168.1.0/24
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+        
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/24',
+            '--config', 'ceph.conf'
+        )
+        # Should succeed because --mon-net overlaps with public_network
+        with bootstrap_test_ctx(cmd, list_networks={'192.168.1.0/24': {'eth0': ['192.168.1.1']}}) as ctx:
+            retval = _cephadm.command_bootstrap(ctx)
+            assert retval == 0
+
+    def test_mon_net_with_public_network_no_overlap(self, cephadm_fs, funkypatch):
+        """Test --mon-net validation fails when not overlapping with public_network"""
+        funkypatch.patch('cephadmlib.systemd.call')
+        
+        # Create a config file with public_network in different subnet
+        conf_content = """[global]
+public_network = 10.0.0.0/24
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+        
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/24',
+            '--config', 'ceph.conf'
+        )
+        # Should fail because the IP selected from --mon-net does not belong to public_network
+        # Note: list_networks must include the public_network from config, or validation fails earlier
+        with bootstrap_test_ctx(cmd, list_networks={'10.0.0.0/24': {'eth1': ['10.0.0.1']}, '192.168.1.0/24': {'eth0': ['192.168.1.1']}}) as ctx:
+            msg = r'does not belong to any public_network'
+            with pytest.raises(_cephadm.Error, match=msg):
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_with_public_network_partial_overlap(self, cephadm_fs, funkypatch):
+        """Test --mon-net validation succeeds with partial overlap of public_network"""
+        funkypatch.patch('cephadmlib.systemd.call')
+        
+        # Create a config with public_network, user uses --mon-net that overlaps part of it
+        conf_content = """[global]
+public_network = 192.168.0.0/16
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+        
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/24',
+            '--config', 'ceph.conf'
+        )
+        # Should succeed because 192.168.1.0/24 overlaps with 192.168.0.0/16
+        # Note: list_networks must include the public_network from config for local validation
+        with bootstrap_test_ctx(cmd, list_networks={'192.168.0.0/16': {'eth0': ['192.168.1.1']}, '192.168.1.0/24': {'eth0': ['192.168.1.1']}}) as ctx:
+            retval = _cephadm.command_bootstrap(ctx)
+            assert retval == 0
+
+    def test_mon_net_with_multiple_public_networks(self, cephadm_fs, funkypatch):
+        """Test --mon-net with multiple public_network entries"""
+        funkypatch.patch('cephadmlib.systemd.call')
+        
+        # Create config with multiple public networks
+        conf_content = """[global]
+public_network = 10.0.0.0/24, 192.168.1.0/24, 172.16.0.0/16
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+        
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/25',
+            '--config', 'ceph.conf'
+        )
+        # Should succeed because --mon-net overlaps with one of the public networks
+        with bootstrap_test_ctx(cmd, list_networks={'192.168.1.0/24': {'eth0': ['192.168.1.1']}}) as ctx:
+            retval = _cephadm.command_bootstrap(ctx)
+            assert retval == 0
+
+    def test_mon_net_ipv6_with_ipv4_public_network(self, cephadm_fs, funkypatch):
+        """Test --mon-net with IPv6 CIDR fails when public_network is IPv4 only"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        conf_content = """[global]
+public_network = 192.168.1.0/24
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+
+        cmd = self._get_cmd(
+            '--mon-net', 'fd00::/64',
+            '--config', 'ceph.conf'
+        )
+        # IPv6 and IPv4 networks never overlap; the selected IP won't belong to the IPv4 public_network
+        local_networks = {
+            'fd00::/64': {'eth0': ['fd00::1']},
+            '192.168.1.0/24': {'eth1': ['192.168.1.1']},
+        }
+        with bootstrap_test_ctx(cmd, list_networks=local_networks) as ctx:
+            with pytest.raises(_cephadm.Error, match=r'does not belong to any public_network'):
+                _cephadm.command_bootstrap(ctx)
+
+    def test_mon_net_ipv4_with_ipv6_public_network(self, cephadm_fs, funkypatch):
+        """Test --mon-net with IPv4 CIDR fails when public_network is IPv6 only"""
+        funkypatch.patch('cephadmlib.systemd.call')
+
+        conf_content = """[global]
+public_network = fd00::/64
+"""
+        cephadm_fs.create_file('ceph.conf', contents=conf_content)
+
+        cmd = self._get_cmd(
+            '--mon-net', '192.168.1.0/24',
+            '--config', 'ceph.conf'
+        )
+        # IPv4 and IPv6 networks never overlap; the selected IP won't belong to the IPv6 public_network
+        local_networks = {
+            '192.168.1.0/24': {'eth0': ['192.168.1.1']},
+            'fd00::/64': {'eth1': ['fd00::1']},
+        }
+        with bootstrap_test_ctx(cmd, list_networks=local_networks) as ctx:
+            with pytest.raises(_cephadm.Error, match=r'does not belong to any public_network'):
+                _cephadm.command_bootstrap(ctx)
 
     @pytest.mark.parametrize('fsid, err',
         [
@@ -2427,7 +2669,10 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
 # iscsi.daemon_id
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id 2> /dev/null
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id 2> /dev/null
-/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/bin/rbd-target-api --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/tcmu-runner-entrypoint.sh:/usr/local/scripts/tcmu-runner-entrypoint.sh -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
+/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/bin/rbd-target-api --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id --pids-limit=0 -d -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/tcmu-runner-entrypoint.sh:/usr/local/scripts/tcmu-runner-entrypoint.sh -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
+if [[ $1 ]] ; then
+  ps -o ppid= -p $(/usr/bin/docker inspect --format '{{ .State.Pid }}' ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id)> $1
+fi
 """
             with open('/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/sidecar-tcmu.run') as f:
                 contents = f.read()
@@ -2443,7 +2688,7 @@ fi
 
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu 2> /dev/null
 
-exec /usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/local/scripts/tcmu-runner-entrypoint.sh --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/tcmu-runner-entrypoint.sh:/usr/local/scripts/tcmu-runner-entrypoint.sh -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
+exec /usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/local/scripts/tcmu-runner-entrypoint.sh --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu --pids-limit=0 -d -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/tcmu-runner-entrypoint.sh:/usr/local/scripts/tcmu-runner-entrypoint.sh -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
 """
 
     def test_get_container(self):
@@ -3463,3 +3708,128 @@ class TestRmClusterConfigCleanup(fake_filesystem_unittest.TestCase):
 
         assert os.path.exists('/etc/ceph/ceph.conf')
         assert os.path.isdir('/etc/ceph/ceph.conf')
+
+
+class TestZapOsds(object):
+    FSID = '50e242f4-59a8-11f1-b582-fa163efd19cc'
+    OTHER_FSID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+
+    def _ctx(self):
+        ctx = _cephadm.CephadmContext()
+        ctx.fsid = self.FSID
+        ctx.image = 'quay.io/ceph/ceph:test'
+        return ctx
+
+    def _run(self, inventory, raw_list):
+        zapped = []
+
+        def fake_container(ctx, args=None, **kwargs):
+            m = mock.Mock()
+            m.run_cmd.return_value = list(args or [])
+            return m
+
+        def fake_call_throws(ctx, cmd, **kwargs):
+            if cmd and cmd[0] == 'raw':
+                return json.dumps(raw_list), '', 0
+            return json.dumps(inventory), '', 0
+
+        with mock.patch('cephadm.get_container_mounts_for_type', return_value={}), \
+                mock.patch('cephadm.get_ceph_volume_container', side_effect=fake_container), \
+                mock.patch('cephadm.call_throws', side_effect=fake_call_throws), \
+                mock.patch('cephadm._zap', side_effect=lambda ctx, path: zapped.append(path)):
+            _cephadm._zap_osds(self._ctx())
+        return zapped
+
+    def test_zaps_raw_devices_matching_fsid(self):
+        zapped = self._run(
+            inventory=[],
+            raw_list={
+                'osd-1': {
+                    'ceph_fsid': self.FSID,
+                    'device': '/dev/vdb',
+                    'osd_id': 0,
+                },
+                'osd-2': {
+                    'ceph_fsid': self.FSID,
+                    'device': '/dev/vdc',
+                    'osd_id': 1,
+                },
+                'osd-other': {
+                    'ceph_fsid': self.OTHER_FSID,
+                    'device': '/dev/vdd',
+                    'osd_id': 2,
+                },
+            },
+        )
+        assert zapped == ['/dev/vdb', '/dev/vdc']
+
+    def test_zaps_raw_db_and_wal_devices(self):
+        zapped = self._run(
+            inventory=[],
+            raw_list={
+                'osd-1': {
+                    'ceph_fsid': self.FSID,
+                    'device': '/dev/sda',
+                    'device_db': '/dev/nvme0n1',
+                    'device_wal': '/dev/nvme1n1',
+                    'osd_id': 0,
+                },
+            },
+        )
+        assert zapped == ['/dev/sda', '/dev/nvme0n1', '/dev/nvme1n1']
+
+    def test_zaps_lvm_and_raw_devices(self):
+        zapped = self._run(
+            inventory=[
+                {
+                    'path': '/dev/vdb',
+                    'ceph_device_lvm': True,
+                    'lvs': [{'name': 'osd-block-1', 'cluster_fsid': self.FSID}],
+                },
+                {
+                    'path': '/dev/vdc',
+                    'ceph_device_lvm': False,
+                    'lvs': [],
+                },
+            ],
+            raw_list={
+                'osd-raw': {
+                    'ceph_fsid': self.FSID,
+                    'device': '/dev/vdc',
+                    'osd_id': 1,
+                },
+            },
+        )
+        assert zapped == ['/dev/vdb', '/dev/vdc']
+
+    def test_skips_lvm_only_when_no_raw_osds(self):
+        zapped = self._run(
+            inventory=[
+                {
+                    'path': '/dev/vdb',
+                    'ceph_device_lvm': True,
+                    'lvs': [{'name': 'osd-block-1', 'cluster_fsid': self.FSID}],
+                },
+            ],
+            raw_list={},
+        )
+        assert zapped == ['/dev/vdb']
+
+    def test_does_not_zap_when_no_matching_osds(self):
+        zapped = self._run(
+            inventory=[
+                {
+                    'path': '/dev/vdb',
+                    'ceph_device_lvm': False,
+                    'lvs': [],
+                },
+            ],
+            raw_list={
+                'osd-other': {
+                    'ceph_fsid': self.OTHER_FSID,
+                    'device': '/dev/vdb',
+                    'osd_id': 0,
+                },
+            },
+        )
+        assert zapped == []

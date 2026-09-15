@@ -107,6 +107,19 @@ Options
 
    set the min_mon_release.
 
+.. option:: --auth-service-cipher=<cipher>
+
+   set the cipher type for rotating service keys. The default is "aes256k".
+
+.. option:: --auth-allowed-ciphers=<cipher1,cipher2,...>
+
+   set the cipher types permitted for authentication by daemons (including Monitors) or clients. The default is "aes256k".
+
+.. option:: --auth-preferred-cipher=<cipher>
+
+   set the preferred cipher key type for new credentials or for key rotations. The default is "aes256k".
+
+
 Example
 =======
 

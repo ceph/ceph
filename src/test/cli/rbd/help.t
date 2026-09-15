@@ -2165,6 +2165,10 @@
                                plain]
     --pretty-format            pretty formatting (json and xml)
   
+  The pool/pool-spec refers to the pool where image data is stored (the data
+  pool for images created with --data-pool, otherwise the pool where the
+  image is defined).
+  
   rbd help perf image iotop
   usage: rbd perf image iotop [--pool <pool>] [--namespace <namespace>] 
                               <pool-spec> 
@@ -2178,6 +2182,10 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --namespace arg      namespace name
+  
+  The pool/pool-spec refers to the pool where image data is stored (the data
+  pool for images created with --data-pool, otherwise the pool where the
+  image is defined).
   
   rbd help persistent-cache flush
   usage: rbd persistent-cache flush [--pool <pool>] [--namespace <namespace>] 

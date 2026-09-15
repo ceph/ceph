@@ -2929,7 +2929,7 @@ permission. ::
 
 	POST /{admin}/ratelimit?ratelimit-scope=anon&global=<True|False><[&max-read-bytes=<bytes>][&max-write-bytes=<bytes>][&max-read-ops=<ops>][&max-write-ops=<ops>][&max-list-ops=<ops>][&max-delete-ops=<ops>][&enabled=<True|False>]>
 
-
+.. _radosgw-adminops-dedup:
 
 Dedup
 =====

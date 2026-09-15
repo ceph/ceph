@@ -18,6 +18,7 @@
 #include <boost/scope_exit.hpp>
 
 #include "include/stringify.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/split.h"
 

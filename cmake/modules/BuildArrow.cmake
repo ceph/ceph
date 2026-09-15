@@ -3,6 +3,7 @@
 function(build_arrow)
   # only enable the parquet component
   set(arrow_CMAKE_ARGS -DARROW_PARQUET=ON)
+  list(APPEND arrow_CMAKE_ARGS ${CEPH_EXTERNAL_PROJECT_CMAKE_ARGS})
 
   # only use preinstalled dependencies for arrow, don't fetch/build any
   list(APPEND arrow_CMAKE_ARGS -DARROW_DEPENDENCY_SOURCE=SYSTEM)

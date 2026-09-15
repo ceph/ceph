@@ -1021,10 +1021,13 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
     return 0; // no bilog
   }
   const auto& bilog = info.layout.logs.back();
-  if (bilog.layout.type != rgw::BucketLogType::InIndex) {
+  if (bilog.layout.type != rgw::BucketLogType::InIndex &&
+      bilog.layout.type != rgw::BucketLogType::FIFO) {
     return -ENOTSUP;
   }
-  const int shards_num = rgw::num_shards(bilog.layout.in_index);
+  const int shards_num = (bilog.layout.type == rgw::BucketLogType::FIFO)
+      ? rgw::num_shards(bilog.layout.fifo)
+      : rgw::num_shards(bilog.layout.in_index);
 
   int ret;
   if (!new_sync_enabled) {

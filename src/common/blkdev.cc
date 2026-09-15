@@ -545,20 +545,26 @@ static std::string get_device_vendor(const std::string& devname)
   return {};
 }
 
+// Privileged helper that runs the smartctl/nvme health queries for us; it
+// is the only command sudoers.d/ceph-smartctl grants the ceph user, so the
+// path here and there must match.
+#define BLOCK_DEVICE_HEALTH_HELPER "/usr/libexec/ceph/block-device-health"
+
 static int block_device_run_vendor_nvme(
   const string& devname, const string& vendor, int timeout,
   std::string *result)
 {
   string device = "/dev/" + devname;
 
+  // sudoers.d/ceph-smartctl only lets the ceph user run the helper, which
+  // validates its arguments and execs the fixed nvme command line
   SubProcessTimed nvmecli(
     "sudo", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::CLOSE,
     timeout);
   nvmecli.add_cmd_args(
+    BLOCK_DEVICE_HEALTH_HELPER,
     "nvme",
     vendor.c_str(),
-    "smart-log-add",
-    "--json",
     device.c_str(),
     NULL);
   int ret = nvmecli.spawn();
@@ -620,14 +626,14 @@ static int block_device_run_smartctl(const string& devname, int timeout,
   string device = "/dev/" + devname;
 
   // when using --json, smartctl will report its errors in JSON format to stdout 
+  // sudoers.d/ceph-smartctl only lets the ceph user run the helper, which
+  // validates the device path and execs `smartctl -x --json=o <dev>`
   SubProcessTimed smartctl(
     "sudo", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::CLOSE,
     timeout);
   smartctl.add_cmd_args(
+    BLOCK_DEVICE_HEALTH_HELPER,
     "smartctl",
-    //"-a",    // all SMART info
-    "-x",    // all SMART and non-SMART info
-    "--json=o",
     device.c_str(),
     NULL);
 

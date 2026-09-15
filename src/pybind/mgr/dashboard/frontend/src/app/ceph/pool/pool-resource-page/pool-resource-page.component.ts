@@ -3,7 +3,7 @@ import { ActivatedRoute, ParamMap } from '@angular/router';
 
 import _ from 'lodash';
 import { forkJoin, of, Subscription } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { finalize, switchMap } from 'rxjs/operators';
 
 import { PoolService } from '~/app/shared/api/pool.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
@@ -37,6 +37,7 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
   private sub = new Subscription();
   poolName = '';
   section = '';
+  isOverviewLoading = false;
   poolOverviewFields: OverviewField[] = [];
   cacheTierColumns: Array<CdTableColumn> = [];
   poolDetails!: object;
@@ -102,10 +103,13 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
             this.poolName = pm.get('name') ?? '';
 
             if (!this.poolName) {
+              this.isOverviewLoading = false;
               this.poolOverviewFields = [];
               return of(null);
             }
 
+            this.isOverviewLoading = true;
+            this.poolOverviewFields = [];
             return forkJoin([
               this.poolService.get(this.poolName, true),
               this.poolService.getConfiguration(this.poolName),
@@ -120,7 +124,7 @@ export class PoolResourcePageComponent implements OnInit, OnDestroy {
                 'target_max_bytes',
                 'target_max_objects'
               ])
-            ]);
+            ]).pipe(finalize(() => (this.isOverviewLoading = false)));
           })
         )
         .subscribe((result: PoolResourceResult | null) => {

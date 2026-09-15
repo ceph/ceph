@@ -1153,7 +1153,7 @@ class TestNvmeofCLICommandDeprecatedParams:  # pylint: disable=too-many-public-m
         finally:
             self._cleanup(test_cmd, test_alias)
 
-    def test_warning_emitted_on_failure_when_deprecated_param_supplied(self):
+    def test_no_warning_on_failure_when_deprecated_param_supplied(self):
         test_cmd = "test deprecated warn on failure"
 
         class Model(NamedTuple):
@@ -1176,7 +1176,7 @@ class TestNvmeofCLICommandDeprecatedParams:  # pylint: disable=too-many-public-m
             )
             assert result.retval == -errno.EINVAL
             assert result.stdout == ''
-            assert "\nWarning: --old-param is deprecated, please use --new-param" in result.stderr
+            assert "Warning" not in result.stderr
         finally:
             self._cleanup(test_cmd)
 
@@ -1247,8 +1247,7 @@ class TestNvmeofCLICommandDeprecatedParams:  # pylint: disable=too-many-public-m
             )
             assert fail_result.retval == -errno.EINVAL
             assert fail_result.stdout == ''
-            assert "\nWarning: --old-param is deprecated, please use --new-param" \
-                in fail_result.stderr
+            assert "Warning" not in fail_result.stderr
         finally:
             self._cleanup(test_cmd_ok, test_cmd_fail)
 

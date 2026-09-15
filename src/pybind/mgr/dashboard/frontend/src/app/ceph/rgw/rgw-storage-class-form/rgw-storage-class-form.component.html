@@ -253,6 +253,23 @@
               </ng-template>
             </div>
           </div>
+          <div class="form-item">
+            <cds-text-label
+              labelInputID="location_constraint"
+              i18n
+              [helperText]="helpTextLabels.locationConstraintText"
+              cdOptionalField="Location constraint"
+              >Location constraint
+              <input
+                cdsText
+                type="text"
+                id="location_constraint"
+                formControlName="location_constraint"
+                placeholder="e.g, eu-north-1"
+                i18n-placeholder
+              />
+            </cds-text-label>
+          </div>
           <!-- Access Key  -->
           <div class="form-item">
             <div
@@ -352,6 +369,23 @@
             </ng-template>
           </div>
           <div class="form-item">
+            <cds-text-label
+              labelInputID="target_storage_class"
+              i18n
+              [helperText]="helpTextLabels.targetStorageClassText"
+              cdOptionalField="Target storage class"
+              >Target storage class
+              <input
+                cdsText
+                type="text"
+                id="target_storage_class"
+                formControlName="target_storage_class"
+                placeholder="STANDARD, STANDARD_IA, GLACIER..."
+                i18n-placeholder
+              />
+            </cds-text-label>
+          </div>
+          <div class="form-item">
             <cds-checkbox
               id="allow_read_through"
               formControlName="allow_read_through"
@@ -435,7 +469,7 @@
             class="cd-header"
             i18n
           >
-            Glacier Configuration
+            Cloud S3 - Glacier restore configuration
           </legend>
           <div
             class="form-item form-item-append"

@@ -33,9 +33,9 @@ class RGWAuthorizer:
         if not caps:
             caps = [
                 'mon',
-                'allow *',  # Required for pool creation on first write to empty RGW buckets
+                'profile rgw',  # covers pool creation on first write to empty RGW buckets
                 'osd',
-                'allow rwx tag rgw *=*',
+                'profile rgw',
             ]
 
         cmd = {
@@ -46,5 +46,9 @@ class RGWAuthorizer:
         log.info('Requesting RGW authorization: %r', cmd)
         ret, _, status = self._mc.mon_command(cmd)
         if ret != 0:
-            raise RGWAuthorizationGrantError(status)
+            ret, _, status = self._mc.mon_command(
+                {'prefix': 'auth caps', 'entity': entity, 'caps': caps}
+            )
+            if ret != 0:
+                raise RGWAuthorizationGrantError(status)
         log.info('RGW authorization request success: %r', status)

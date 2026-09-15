@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, ParamMap } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
@@ -23,6 +23,7 @@ export class RbdImageResourcePageComponent implements OnInit, OnDestroy {
   section = '';
   selection: RbdFormModel;
   notFound = false;
+  isOverviewLoading = true;
   overviewFields: OverviewField[] = [];
   rbdDashboardUrl = '';
 
@@ -39,7 +40,23 @@ export class RbdImageResourcePageComponent implements OnInit, OnDestroy {
     this.section = this.route.snapshot.data['section'] ?? 'overview';
 
     this.sub.add(
+      this.route.parent?.paramMap.subscribe((pm: ParamMap) => {
+        if (!pm.get('image_spec')) {
+          this.isOverviewLoading = false;
+          return;
+        }
+
+        this.isOverviewLoading = true;
+        this.notFound = false;
+        this.selection = undefined;
+        this.overviewFields = [];
+        this.rbdDashboardUrl = '';
+      })
+    );
+
+    this.sub.add(
       this.rbdImageResourceStateService.image$.subscribe((image: RbdFormModel | null) => {
+        this.isOverviewLoading = false;
         this.applyImage(image);
       })
     );

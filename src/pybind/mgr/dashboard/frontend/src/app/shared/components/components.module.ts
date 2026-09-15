@@ -46,7 +46,8 @@ import {
   ThemeModule,
   MenuButtonModule,
   ContextMenuModule,
-  BreadcrumbModule
+  BreadcrumbModule,
+  SkeletonModule
 } from 'carbon-components-angular';
 import { ProductiveCardComponent } from './productive-card/productive-card.component';
 import EditIcon from '@carbon/icons/es/edit/16';
@@ -98,6 +99,7 @@ import { IconComponent } from './icon/icon.component';
 import { DetailsCardComponent } from './details-card/details-card.component';
 import { ToastComponent } from './notification-toast/notification-toast.component';
 import { TearsheetComponent } from './tearsheet/tearsheet.component';
+import { ClickableTileComponent } from './clickable-tile/clickable-tile.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
@@ -197,7 +199,8 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     ProductiveCardComponent,
     MenuButtonModule,
     ContextMenuModule,
-    BreadcrumbModule
+    BreadcrumbModule,
+    SkeletonModule
   ],
   declarations: [
     SparklineComponent,
@@ -245,6 +248,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
+    ClickableTileComponent,
     PageHeaderComponent,
     PageHeaderResourceComponent,
     SidebarLayoutComponent,
@@ -293,6 +297,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
+    ClickableTileComponent,
     PageHeaderComponent,
     PageHeaderResourceComponent,
     SidebarLayoutComponent,

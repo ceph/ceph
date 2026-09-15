@@ -212,10 +212,17 @@ describe('NvmeofSubsystemOverviewComponent', () => {
       allow_any_host: false
     });
     // Both modes are valid configuration — neither should map to a health status icon.
-    expect(f.componentInstance.getHostAccessLabel(false)).toBe('Restrict to specific hosts');
-    expect(f.componentInstance.getHostAccessLabel(true)).toBe('Allow all hosts');
+    expect(f.componentInstance.getHostAccessLabel(false, 1)).toBe('Restrict to specific hosts');
+    expect(f.componentInstance.getHostAccessLabel(true, 0)).toBe('Allow all hosts');
     expect((f.componentInstance as any).getStatusIcon).toBeUndefined();
     expect(f.nativeElement.textContent).toContain('Restrict to specific hosts');
+  }));
+
+  it('should show N/A for host access when not allow-all and initiator list is empty', fakeAsync(async () => {
+    TestBed.resetTestingModule();
+    const f = await createTestBed([], { ...mockSubsystem, allow_any_host: false });
+    expect(f.nativeElement.textContent).toContain('N/A');
+    expect(f.nativeElement.textContent).not.toContain('Restrict to specific hosts');
   }));
 
   it('should show Allow all hosts when synthetic Any initiator is present', fakeAsync(async () => {

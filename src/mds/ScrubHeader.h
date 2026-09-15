@@ -17,6 +17,7 @@
 #ifndef SCRUB_HEADER_H_
 #define SCRUB_HEADER_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -24,6 +25,7 @@
 #include <vector>
 
 #include "include/ceph_assert.h"
+#include "include/fs_types.h" // for inodeno_t
 
 namespace ceph {
 class Formatter;

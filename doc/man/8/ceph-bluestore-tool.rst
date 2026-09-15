@@ -23,6 +23,8 @@ Synopsis
 | **ceph-bluestore-tool** recovery-compare --path *osd path*
 | **ceph-bluestore-tool** show-label --dev *device* ...
 | **ceph-bluestore-tool** show-label-at --dev *device* --offset *lba* ...
+| **ceph-bluestore-tool** set-label-key --dev *device* -k *key* -v *value*
+| **ceph-bluestore-tool** rm-label-key --dev *device* -k *key*
 | **ceph-bluestore-tool** prime-osd-dir --dev *device* --path *osd path*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
 | **ceph-bluestore-tool** bluefs-bdev-new-wal --path *osd path* --dev-target *new-device*
@@ -45,6 +47,11 @@ Description
 
 **ceph-bluestore-tool** is a utility to perform low-level administrative
 operations on a BlueStore instance.
+
+On an encrypted OSD, the LUKS mapping must be open before this tool can
+use the BlueStore device. Stopping an OSD with cephadm closes that
+mapping. See
+https://docs.ceph.com/en/latest/cephadm/troubleshooting/#cephadm-encrypted-osd-store-tools
 
 Commands
 ========
@@ -128,6 +135,21 @@ Commands
    Main device could have valid labels at multiple locations: 0/1GiB/10GiB/100GiB/1000GiB.
    The labels at some locations might not exist though. 
    The label may be printed while an OSD is running.
+
+:command:`set-label-key` --dev *device* -k *key* -v *value*
+
+   Set a label field or metadata key to *value*. The *size*, *osd_uuid*,
+   *btime* and *description* fields of the label are set directly; any other
+   *key* is stored as a free-form metadata entry. The value is written to every
+   valid label location on the device.
+   The OSD must be stopped before modifying its label.
+
+:command:`rm-label-key` --dev *device* -k *key*
+
+   Remove the metadata key *key* from the label, and fail if it is not present.
+   Only the free-form metadata entries can be removed this way; the fields
+   listed under *set-label-key* are always present.
+   The OSD must be stopped before modifying its label.
 
 :command:`free-dump` --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
 
@@ -226,6 +248,16 @@ Options
 
    deep scrub/repair (read and validate object data, not just metadata)
 
+.. option:: -k, --key *key*
+
+   Label field or metadata key name. Useful for *set-label-key* and
+   *rm-label-key* actions.
+
+.. option:: -v, --value *value*
+
+   Value to store for the key named by --key. Useful for the *set-label-key*
+   action.
+
 .. option:: --allocator *name*
 
    Useful for *free-dump* and *free-score* actions. Selects allocator(s).
@@ -261,6 +293,11 @@ The main device contains additional label copies at offsets: 1GiB, 10GiB, 100GiB
 Corrupted labels are fixed as part of repair::
 
   ceph-bluestore-tool repair --dev *device*
+
+Individual label entries can be changed or removed while the OSD is stopped::
+
+  ceph-bluestore-tool set-label-key --dev *device* -k *key* -v *value*
+  ceph-bluestore-tool rm-label-key --dev *device* -k *key*
 
 OSD directory priming
 =====================

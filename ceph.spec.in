@@ -2020,6 +2020,7 @@ rm -rf %{_vpath_builddir}
 %{_sbindir}/ceph-create-keys
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
+%{_libexecdir}/ceph/block-device-health
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/*
 %dir %{_libdir}/ceph

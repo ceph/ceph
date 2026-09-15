@@ -362,7 +362,9 @@ public:
    */
   std::map<mds_gid_t, mds_info_t> get_mds_info() const;
 
-  const mds_info_t* get_available_standby(const Filesystem& fs) const;
+  const mds_info_t* get_available_standby(
+      const Filesystem& fs,
+      boost::optional<const entity_addrvec_t&> avoid_addrs = boost::none) const;
 
   /**
    * Resolve daemon name to GID
@@ -686,6 +688,21 @@ protected:
   iterator end() {
     return filesystems.end();
   }
+
+  // Scoring hierarchy for standby daemon anti-affinity selection
+  enum StandbyScore {
+    SCORE_NONE              = -1,
+
+    // Tier 2: Same-host fallbacks
+    SCORE_FALLBACK_OTHER_FS = 1,
+    SCORE_FALLBACK_VANILLA  = 2,
+    SCORE_FALLBACK_MATCH    = 3,
+
+    // Tier 1: Different-host preferred
+    SCORE_PREF_OTHER_FS     = 4,
+    SCORE_PREF_VANILLA      = 5,
+    SCORE_PREF_MATCH        = 6
+  };
 
   epoch_t epoch = 0;
   ceph::real_time btime = real_clock::zero();

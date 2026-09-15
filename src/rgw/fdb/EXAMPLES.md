@@ -61,6 +61,20 @@ if (!lfdb::commit(txn)) {
 }
 ```
 
+```cpp
+// Ask commit() to report whether the transaction should be replayed:
+auto txn = lfdb::make_transaction(dbh);
+
+lfdb::set(txn, "person/frances-allen/name", "Frances Allen");
+
+const auto result = lfdb::commit(lfdb::with_result, txn);
+
+if (not result.committed and 0 != result.replay_error) {
+  // A non-zero replay_error means FoundationDB prepared txn for replay.
+  retry_transaction_body(txn, result.replay_error);
+}
+```
+
 ## Version Stamps
 
 ```cpp
@@ -164,7 +178,7 @@ if (lfdb::get(dbh, "person/konrad-zuse/name", name)) {
 ```
 
 ```cpp
-// Use a callback when the raw serialized bytes must be copied or decoded
+// Use a void callback when the raw serialized bytes must be copied or decoded
 // immediately. The span is only valid during the callback.
 lfdb::get(dbh, "person/konrad-zuse/name",
           [](std::span<const std::uint8_t> bytes) {
@@ -943,6 +957,27 @@ txr([](auto& txn) {
 });
 ```
 
+### Reporting replay results
+
+Use `with_result` when application code needs to stop, resume, or report retry
+progress instead of treating retry exhaustion as an exception. The returned
+`transaction_result` describes the transaction machinery, not the user
+operation's value. `last_error == 0` means there was no FoundationDB replay
+error to report. Use an ordinary transactor when the transaction body should
+return an application value.
+
+```cpp
+auto txr = lfdb::make_transactor(dbh);
+
+auto result = txr(lfdb::with_result, [](auto& txn, std::string_view key, std::string_view title) {
+  lfdb::set(txn, key, title);
+}, "person/murasaki-shikibu/title", "Novelist");
+
+if (!result.committed) {
+  record_retry_exhaustion(result.attempts, result.replay_count, result.last_error);
+}
+```
+
 ### Transactor options
 
 ```cpp
@@ -1202,8 +1237,9 @@ watch_thread.request_stop();
 ```
 
 `watched_loop()` is a gadget for repeated watch handling. Its callback takes
-the watched key as a `std::string_view`. The helper blocks; applications should
-own any thread, executor, shutdown, or callback error policy around it:
+the watched key as a `std::string_view` and returns `void`. The helper blocks;
+applications should own any thread, executor, shutdown, or callback error
+policy around it:
 
 ```cpp
 std::jthread watch_thread {

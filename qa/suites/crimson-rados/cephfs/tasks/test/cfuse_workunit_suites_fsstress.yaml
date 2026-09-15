@@ -5,6 +5,7 @@ overrides:
         - \(POOL_APP_NOT_ENABLED\)
   - ceph-fuse:
   - workunit:
+      watchdog: true
       clients:
         all:
           - suites/fsstress.sh

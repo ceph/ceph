@@ -80,7 +80,6 @@ void RGWZone::dump(Formatter *f) const
   encode_json("id", id, f);
   encode_json("name", name, f);
   encode_json("endpoints", endpoints, f);
-  encode_json("log_meta", log_meta, f);
   encode_json("log_data", log_data, f);
   encode_json("bucket_index_max_shards", bucket_index_max_shards, f);
   encode_json("read_only", read_only, f);
@@ -99,7 +98,6 @@ void RGWZone::decode_json(JSONObj *obj)
     id = name;
   }
   JSONDecoder::decode_json("endpoints", endpoints, obj);
-  JSONDecoder::decode_json("log_meta", log_meta, obj);
   JSONDecoder::decode_json("log_data", log_data, obj);
   JSONDecoder::decode_json("bucket_index_max_shards", bucket_index_max_shards, obj);
   JSONDecoder::decode_json("read_only", read_only, obj);
@@ -943,6 +941,24 @@ std::string get_zonegroup_endpoint(const RGWZoneGroup& info)
   return "";
 }
 
+const RGWZoneGroup* find_zonegroup_by_id(const RGWZoneGroup& local_zonegroup,
+                                         const std::optional<RGWPeriod>& period,
+                                         const std::string& zonegroup_id)
+{
+  if (local_zonegroup.equals(zonegroup_id)) {
+    return &local_zonegroup;
+  }
+  if (!period) {
+    return nullptr;
+  }
+  const auto& zonegroups = period->period_map.zonegroups;
+  auto z = zonegroups.find(zonegroup_id);
+  if (z == zonegroups.end()) {
+    return nullptr;
+  }
+  return &z->second;
+}
+
 int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
                       const RGWZoneParams& zone_params,
                       const bool *pis_master, const bool *pread_only,
@@ -1112,9 +1128,33 @@ int create_realm(const DoutPrefixProvider* dpp, optional_yield y,
 
   // create the realm
   std::unique_ptr<sal::RealmWriter> writer;
-  int r = cfgstore->create_realm(dpp, y, exclusive, info, &writer);
-  if (r < 0) {
-    return r;
+  int r = 0;
+
+  // read the existing realm to detect renames
+  RGWRealm existing_realm;
+  std::unique_ptr<sal::RealmWriter> existing_writer;
+  if (!exclusive &&
+      cfgstore->read_realm_by_id(dpp, y, info.id, existing_realm,
+                                 &existing_writer) == 0 &&
+      existing_realm.name != info.name) {
+    // if the name changed, call rename() instead of create so that the old
+    // name is unlinked
+    RGWRealm new_realm = info;
+    std::string new_name = std::move(new_realm.name);
+    new_realm.name = existing_realm.name; // rename() expects current name in info
+    r = existing_writer->rename(dpp, y, new_realm, new_name);
+    if (r < 0) {
+      ldpp_dout(dpp, -1) << __func__ << " failed to rename realm from "
+          << existing_realm.name << " to " << new_name
+          << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    writer = std::move(existing_writer);
+  } else {
+    r = cfgstore->create_realm(dpp, y, exclusive, info, &writer);
+    if (r < 0) {
+      return r;
+    }
   }
 
   if (!period) {

@@ -1,28 +1,33 @@
-@if (hasTopic) {
+@if (hasTopic || (section === 'overview' && loading)) {
   @switch (section) {
     @case ('overview') {
       <cd-resource-overview-card
         title="Notification destination details"
         [columns]="4"
         [fields]="topicOverviewFields"
+        [loading]="loading"
       >
       </cd-resource-overview-card>
     }
     @case ('policies') {
-      <cd-table-key-value
-        [data]="[{ key: 'Policy', value: (policy | json) }]"
-        [autoReload]="false"
-        [showMultiLineText]="true"
-        [multilineTextKeys]="['Policy']"
-      ></cd-table-key-value>
+      @if (hasTopic) {
+        <cd-table-key-value
+          [data]="[{ key: 'Policy', value: (policy | json) }]"
+          [autoReload]="false"
+          [showMultiLineText]="true"
+          [multilineTextKeys]="['Policy']"
+        ></cd-table-key-value>
+      }
     }
     @case ('subscribed-buckets') {
-      <cd-table-key-value
-        [data]="[{ key: 'Subscribed buckets', value: (topic.subscribed_buckets | json) }]"
-        [autoReload]="false"
-        [showMultiLineText]="true"
-        [multilineTextKeys]="['Subscribed buckets']"
-      ></cd-table-key-value>
+      @if (hasTopic) {
+        <cd-table-key-value
+          [data]="[{ key: 'Subscribed buckets', value: (topic.subscribed_buckets | json) }]"
+          [autoReload]="false"
+          [showMultiLineText]="true"
+          [multilineTextKeys]="['Subscribed buckets']"
+        ></cd-table-key-value>
+      }
     }
   }
 }

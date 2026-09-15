@@ -1206,3 +1206,100 @@ TEST(TestSnapSet, Stats) {
 
   EXPECT_EQ(ret.stats, expected_stats);
 }
+
+namespace {
+
+class FakeScrubContext : public crimson::osd::scrub::ScrubContext {
+  DoutPrefix dpp{nullptr, ceph_subsys_test, "test_crimson_scrub"};
+  std::set<pg_shard_t> ids{pg_shard_t{0, shard_id_t::NO_SHARD}};
+
+public:
+  bool stopping = false;
+  bool snaptrim_started = false;
+  int notify_end = 0;
+
+  const std::set<pg_shard_t> &get_ids_to_scrub() const final {
+    return ids;
+  }
+  crimson::osd::scrub::chunk_validation_policy_t get_policy() const final {
+    return {
+      *ids.begin(),
+      TEST_MAX_OBJECT_SIZE,
+      std::string{TEST_INTERNAL_NAMESPACE},
+      TEST_OMAP_KEY_LIMIT,
+      TEST_OMAP_BYTES_LIMIT
+    };
+  }
+  void notify_scrub_start(bool) final {}
+  void notify_scrub_end(bool) final {
+    ++notify_end;
+    // same rule as PG::kick_snap_trim(): no new op while stopping
+    if (!stopping) {
+      snaptrim_started = true;
+    }
+  }
+  void request_range(const hobject_t &) final {}
+  void reserve_range(const hobject_t &, const hobject_t &) final {}
+  void release_range() final {}
+  void scan_range(
+    pg_shard_t, eversion_t, bool,
+    const hobject_t &, const hobject_t &) final {}
+  bool await_update(const eversion_t &) final { return true; }
+  void generate_and_submit_chunk_result(
+    const hobject_t &, const hobject_t &, bool) final {}
+  void emit_chunk_result(
+    const request_range_result_t &,
+    crimson::osd::scrub::chunk_result_t &&) final {}
+  void emit_scrub_result(bool, object_stat_sum_t) final {}
+  DoutPrefixProvider &get_dpp() final { return dpp; }
+};
+
+using crimson::osd::scrub::Inactive;
+using crimson::osd::scrub::PrimaryActive;
+using crimson::osd::scrub::ScrubMachine;
+using crimson::osd::scrub::Scrubbing;
+namespace events = crimson::osd::scrub::events;
+
+} // namespace
+
+TEST(TestScrubMachine, StopFromAwaitScrub) {
+  FakeScrubContext ctx;
+  ScrubMachine machine(ctx);
+  machine.initiate();
+  machine.process_event(events::primary_activate_t{});
+  ASSERT_TRUE(machine.state_downcast<const PrimaryActive *>());
+
+  machine.process_event(events::reset_t{});
+  EXPECT_TRUE(machine.state_downcast<const Inactive *>());
+  EXPECT_EQ(ctx.notify_end, 0);
+  EXPECT_FALSE(ctx.snaptrim_started);
+}
+
+TEST(TestScrubMachine, StopDuringScrubDoesNotStartSnapTrim) {
+  FakeScrubContext ctx;
+  ScrubMachine machine(ctx);
+  machine.initiate();
+  machine.process_event(events::primary_activate_t{});
+  machine.process_event(events::start_scrub_t{false});
+  ASSERT_TRUE(machine.state_downcast<const Scrubbing *>());
+
+  ctx.stopping = true;
+  machine.process_event(events::reset_t{});
+  EXPECT_TRUE(machine.state_downcast<const Inactive *>());
+  EXPECT_EQ(ctx.notify_end, 1);
+  EXPECT_FALSE(ctx.snaptrim_started);
+}
+
+TEST(TestScrubMachine, ScrubEndStartsSnapTrimWhenNotStopping) {
+  FakeScrubContext ctx;
+  ScrubMachine machine(ctx);
+  machine.initiate();
+  machine.process_event(events::primary_activate_t{});
+  machine.process_event(events::start_scrub_t{false});
+  ASSERT_TRUE(machine.state_downcast<const Scrubbing *>());
+
+  machine.process_event(events::reset_t{});
+  EXPECT_TRUE(machine.state_downcast<const Inactive *>());
+  EXPECT_EQ(ctx.notify_end, 1);
+  EXPECT_TRUE(ctx.snaptrim_started);
+}

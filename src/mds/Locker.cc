@@ -14,6 +14,7 @@
  */
 
 #include "Locker.h"
+#include "cephfs_features.h" // for CEPHFS_FEATURE_*
 #include "MDCache.h"
 #include "CDir.h"
 #include "CDentry.h"
@@ -35,6 +36,7 @@
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientReply.h"
+#include "messages/MClientRequest.h"
 #include "messages/MLock.h"
 #include "messages/MInodeFileCaps.h"
 #include "messages/MMDSPeerRequest.h"

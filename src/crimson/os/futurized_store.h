@@ -11,6 +11,7 @@
 #include <seastar/core/future.hh>
 
 #include "os/Transaction.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/osd/exceptions.h"
@@ -24,7 +25,6 @@ class Transaction;
 }
 
 namespace crimson::os {
-class FuturizedCollection;
 class FuturizedStore;
 struct BackendStore {
   FuturizedStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
@@ -51,6 +51,11 @@ public:
       }
       return true;
     }
+
+    // Returns true when the local store is full (failsafe limit); checked at
+    // OSDOp boundary, where data-allocating ops are dropped with -EAGAIN so
+    // the client resends. Default false.
+    virtual bool is_storage_full() const { return false; }
 
     using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
     using base_errorator = crimson::errorator<crimson::ct_error::input_output_error>;

@@ -325,11 +325,10 @@ options:
 - name: mon_pg_stuck_threshold
   type: int
   level: advanced
-  desc: number of seconds after which PGs can be considered stuck inactive, unclean,
-    etc.
-  long_desc: see doc/control.rst under dump_stuck for more info
-  fmt_desc: Number of seconds after which PGs can be considered as
-    being stuck.
+  desc: Seconds after which a PG is considered stuck (inactive, unclean, etc.).
+  long_desc: The number of seconds after which a PG can be considered stuck (for example
+    inactive, unclean, undersized, or stale). See doc/rados/operations/control.rst
+    under dump_stuck for more information.
   default: 1_min
   services:
   - mgr

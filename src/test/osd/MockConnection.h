@@ -24,6 +24,11 @@ class MockConnection : public Connection {
  private:
   int peer_osd;
   
+ protected:
+  int send_msg(MessageRef&& m) override {
+    return 0;
+  }
+
  public:
   MockConnection(int peer = -1) : Connection(g_ceph_context, nullptr), peer_osd(peer) {
     set_features(CEPH_FEATURES_ALL);
@@ -37,9 +42,7 @@ class MockConnection : public Connection {
     return true;
   }
 
-  int send_message(Message *m) override {
-    m->put();
-    return 0;
+  void shutdown() override {
   }
 
   void send_keepalive() override {

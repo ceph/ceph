@@ -45,7 +45,7 @@ function run() {
     export MONB_BIND=7136   # git grep '\<7136\>' ; there must be only one
     export MONC_BIND=7137   # git grep '\<7137\>' ; there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do

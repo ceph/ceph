@@ -221,7 +221,7 @@ See the `Network Configuration Reference`_ for details.
 
 Once you deploy a Ceph cluster, you **SHOULD NOT** change the IP addresses of
 Monitors. However, if you decide to change the Monitor's IP address, you
-must follow a specific procedure. See :ref:`Changing a Monitor's IP address` for
+must follow a specific procedure. See :ref:`change-monitor-address` for
 details.
 
 Monitors can also be found by clients by using DNS SRV records. See :ref:`mon-dns-lookup` for details.

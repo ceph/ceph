@@ -23,7 +23,7 @@ function run() {
     export CEPH_MON_A="127.0.0.1:7165" # git grep '\<7165\>' : there must be only one
     export CEPH_MON_B="127.0.0.1:7166" # git grep '\<7166\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--mon_health_to_clog_tick_interval=1.0 "
     export ORIG_CEPH_ARGS="$CEPH_ARGS"

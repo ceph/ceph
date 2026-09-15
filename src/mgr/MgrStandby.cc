@@ -15,6 +15,7 @@
 #include <Python.h>
 #include <boost/algorithm/string/replace.hpp>
 
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/signal.h"
 #include "common/cmdparse.h"
@@ -23,6 +24,7 @@
 #include "perfglue/heap_profiler.h"
 
 #include "include/stringify.h"
+#include "include/util.h" // for collect_sys_info()
 #include "global/global_context.h"
 #include "global/signal_handler.h"
 
@@ -94,6 +96,10 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 }
 
 MgrStandby::~MgrStandby() {
+  if (active_mgr) {
+    active_mgr->shutdown();
+    active_mgr.reset();
+  }
   if (asok_hook) {
     g_ceph_context->get_admin_socket()->unregister_commands(asok_hook.get());
     asok_hook.reset();

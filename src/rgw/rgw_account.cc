@@ -422,13 +422,13 @@ int remove(const DoutPrefixProvider* dpp,
     return -ENOTEMPTY;
   }
 
-  for (const auto& info : providers) {
-    ret = driver->delete_oidc_provider(dpp, y, info.tenant, info.provider_url);
+  for (const auto& oidc : providers) {
+    ret = driver->delete_oidc_provider(dpp, y, info.id, oidc.provider_url);
     if (ret < 0) {
-      err_msg = fmt::format("unable to delete oidc provider {}", info.provider_url);
+      err_msg = fmt::format("unable to delete oidc provider {}", oidc.provider_url);
       return ret;
     }
-    ldpp_dout_fmt(dpp, 1, "Deleted account oidc provider {}", info.provider_url);
+    ldpp_dout_fmt(dpp, 1, "Deleted account oidc provider {}", oidc.provider_url);
   }
 
   rgw::sal::TopicList topics;

@@ -1,5 +1,6 @@
 tasks:
 - workunit:
+    watchdog: true
     clients:
       client.0:
         - rbd/test_lock_fence.sh

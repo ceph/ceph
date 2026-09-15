@@ -2,7 +2,7 @@ import { ChangeDetectorRef, Component, OnDestroy, OnInit, ViewEncapsulation } fr
 import { ActivatedRoute, ParamMap } from '@angular/router';
 
 import { Subscription } from 'rxjs';
-import * as xml2js from 'xml2js';
+import { finalize } from 'rxjs/operators';
 import { ContentSwitcherOption } from 'carbon-components-angular';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -11,6 +11,7 @@ import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { RgwBucketReplication } from '../models/rgw-bucket-replication';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
+import { XmlService } from '~/app/shared/services/xml.service';
 
 @Component({
   selector: 'cd-rgw-bucket-resource-page',
@@ -27,6 +28,7 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
   owner = '';
   section = '';
   selection: Bucket | undefined;
+  isOverviewLoading = false;
 
   lifecycleProgress: { bucket: string; status: string; started: string } = {
     bucket: '',
@@ -66,7 +68,8 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private rgwBucketService: RgwBucketService,
     private cd: ChangeDetectorRef,
-    private cdDatePipe: CdDatePipe
+    private cdDatePipe: CdDatePipe,
+    private xmlService: XmlService
   ) {}
 
   ngOnInit(): void {
@@ -87,21 +90,29 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
 
   updateBucketDetails() {
     if (!this.bid) {
+      this.isOverviewLoading = false;
       this.selection = undefined;
       this.overviewFields = [];
       this.configurationSummaryFields = [];
       return;
     }
 
+    this.isOverviewLoading = true;
+
     this.sub.add(
-      this.rgwBucketService.get(this.bid).subscribe((bucket: Bucket) => {
-        const bucketDetails = {
-          ...bucket,
-          lock_retention_period_days: this.rgwBucketService.getLockDays(bucket)
-        };
-        this.selection = bucketDetails;
-        this.extractDetailsFromResponse();
-      })
+      this.rgwBucketService
+        .get(this.bid)
+        .pipe(finalize(() => (this.isOverviewLoading = false)))
+        .subscribe({
+          next: (bucket: Bucket) => {
+            const bucketDetails = {
+              ...bucket,
+              lock_retention_period_days: this.rgwBucketService.getLockDays(bucket)
+            };
+            this.selection = bucketDetails;
+            this.extractDetailsFromResponse();
+          }
+        })
     );
   }
 
@@ -157,25 +168,21 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
   }
 
   parseXmlAcl(xml: any, bucketOwner: string): Record<string, string[]> {
-    const parser = new xml2js.Parser({ explicitArray: false, trim: true });
     const data: Record<string, string[]> = {
       Owner: ['-'],
       AllUsers: ['-'],
       AuthenticatedUsers: ['-']
     };
 
-    parser.parseString(xml, (err, result) => {
-      if (err) return;
-
-      const xmlGrantees = result?.['AccessControlPolicy']?.['AccessControlList']?.['Grant'];
-      if (!xmlGrantees) return;
-
+    const result = this.xmlService.parse(xml);
+    const xmlGrantees = result?.['AccessControlPolicy']?.['AccessControlList']?.['Grant'];
+    if (xmlGrantees) {
       if (Array.isArray(xmlGrantees)) {
         xmlGrantees.forEach((grantee) => this.processGrantee(grantee, bucketOwner, data));
       } else {
         this.processGrantee(xmlGrantees, bucketOwner, data);
       }
-    });
+    }
 
     return data;
   }

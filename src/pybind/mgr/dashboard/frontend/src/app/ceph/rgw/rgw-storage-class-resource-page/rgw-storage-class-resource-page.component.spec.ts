@@ -94,6 +94,49 @@ describe('RgwStorageClassResourcePageComponent', () => {
     expect(component.details?.data_pool).toBe('my-local-pool');
   });
 
+  it('should include target_storage_class and location_constraint in cloud-s3 overview fields', () => {
+    jest.spyOn(BucketTieringUtils, 'filterAndMapTierTargets').mockReturnValue([
+      {
+        zonegroup_name: 'zg-1',
+        placement_target: 'pt-1',
+        storage_class: 'sc-cloud',
+        tier_type: TIER_TYPE_DISPLAY.CLOUD_TIER,
+        target_path: '/path',
+        target_storage_class: '',
+        region: 'default',
+        endpoint: 'http://s3.example.com',
+        location_constraint: 'eu-north-1'
+      }
+    ]);
+
+    component.ngOnInit();
+
+    pushRouteParams({
+      zonegroup_name: 'zg-1',
+      placement_target: 'pt-1',
+      storage_class: 'sc-cloud'
+    });
+
+    const targetStorageClassField = component.overviewFields.find(
+      (field) => field.label === 'Target storage class'
+    );
+    expect(targetStorageClassField).toEqual(
+      expect.objectContaining({
+        value: '',
+        emptyText: '-'
+      })
+    );
+
+    const locationConstraintField = component.overviewFields.find(
+      (field) => field.label === 'Location constraint'
+    );
+    expect(locationConstraintField).toEqual(
+      expect.objectContaining({
+        value: 'eu-north-1'
+      })
+    );
+  });
+
   it('should handle API errors gracefully', () => {
     zonegroupService.getAllZonegroupsInfo.mockReturnValue(throwError(() => new Error('API Error')));
 

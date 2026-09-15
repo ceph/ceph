@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
+
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/semaphore.hh>
@@ -240,6 +241,10 @@ public:
     return false;
   }
 
+  bool is_local_store_full() const {
+    return shard_services.is_local_storage_full(get_store_index());
+  }
+
   epoch_t get_last_peering_reset_epoch() const final {
     return get_last_peering_reset();
   }
@@ -269,7 +274,7 @@ public:
     return pgid;
   }
 
-  const unsigned int get_store_index() {
+  unsigned get_store_index() const {
     return store_index;
   }
   PGBackend& get_backend() {
@@ -1380,5 +1385,16 @@ struct PG::do_osd_ops_params_t {
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);
+
+inline void intrusive_ptr_add_ref(const PG* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_add_ref(
+    static_cast<const boost::intrusive_ref_counter<
+      PG, boost::thread_unsafe_counter>*>(p));
+}
+inline void intrusive_ptr_release(const PG* p) noexcept {
+  boost::sp_adl_block::intrusive_ptr_release(
+    static_cast<const boost::intrusive_ref_counter<
+      PG, boost::thread_unsafe_counter>*>(p));
+}
 
 }

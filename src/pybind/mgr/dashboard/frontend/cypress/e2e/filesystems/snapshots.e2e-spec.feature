@@ -23,7 +23,7 @@ Feature: CephFS Snapshot Management
     And I go to the "Subvolumes" tab
     And I click on "Create" button from the expanded row
     And enter "subvolumeName" "test_subvolume" in the carbon modal
-    And I click on "Create Subvolume" button
+    And I submit the carbon modal with "Create Subvolume"
     Then I should see a row with "test_subvolume" in the expanded row
 
   Scenario: Show the CephFS Snapshots view
@@ -39,7 +39,7 @@ Feature: CephFS Snapshot Management
     And the table in the expanded row is ready
     And I click on "Create" button from the expanded row
     And enter "snapshotName" "test_snapshot" in the carbon modal
-    And I click on "Create Snapshot" button
+    And I submit the carbon modal with "Create Snapshot"
     Then I should see a row with "test_snapshot" in the expanded row
 
   Scenario: Create a CephFS Subvolume Snapshot Clone
@@ -51,7 +51,7 @@ Feature: CephFS Snapshot Management
     When I select a row "test_snapshot" in the expanded row
     And I click on "Clone" button from the table actions in the expanded row
     And enter "cloneName" "test_clone" in the carbon modal
-    And I click on "Create Clone" button
+    And I submit the carbon modal with "Create Clone"
     Then I wait for "5" seconds
     And I go to the "Subvolumes" tab
     Then I should see a row with "test_clone" in the expanded row
@@ -64,7 +64,7 @@ Feature: CephFS Snapshot Management
     And I select a row "test_clone" in the expanded row
     And I click on "Remove" button from the table actions in the expanded row
     And I confirm the resource "test_clone"
-    And I click on "Remove Subvolume" button
+    And I submit the carbon modal with "Remove Subvolume"
     Then I wait for "5" seconds
     And I should not see a row with "test_clone" in the expanded row
 
@@ -76,7 +76,7 @@ Feature: CephFS Snapshot Management
     When I select a row "test_snapshot" in the expanded row
     And I click on "Remove" button from the table actions in the expanded row
     And I confirm the resource "test_snapshot"
-    And I click on "Remove Snapshot" button
+    And I submit the carbon modal with "Remove Snapshot"
     Then I should not see a row with "test_snapshot" in the expanded row
 
   Scenario: Remove a CephFS Subvolume
@@ -86,7 +86,7 @@ Feature: CephFS Snapshot Management
     When I select a row "test_subvolume" in the expanded row
     And I click on "Remove" button from the table actions in the expanded row
     And I confirm the resource "test_subvolume"
-    And I click on "Remove Subvolume" button
+    And I submit the carbon modal with "Remove Subvolume"
     Then I should not see a row with "test_subvolume" in the expanded row
 
   Scenario: Remove CephFS Volume
@@ -95,5 +95,5 @@ Feature: CephFS Snapshot Management
     And I click on "Remove" button from the table actions
     Then I should see the carbon modal
     And I confirm the resource "test_cephfs"
-    And I click on "Remove File System" button
+    And I submit the carbon modal with "Remove File System"
     Then I should not see a row with "test_cephfs"

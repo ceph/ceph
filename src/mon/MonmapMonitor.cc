@@ -128,6 +128,12 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   mon.notify_new_monmap(true);
 }
 
+void MonmapMonitor::init()
+{
+  /* init relevant Monitor state */
+  mon.notify_new_monmap(false, false);
+}
+
 void MonmapMonitor::create_pending()
 {
   pending_map = *mon.monmap;
@@ -154,9 +160,8 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 
   //health
-  health_check_map_t next;
+  auto& next = get_health_checks_pending_writeable();
   pending_map.check_health(&next);
-  encode_health(next, t);
 }
 
 class C_ApplyFeatures : public Context {
@@ -1252,6 +1257,79 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     pending_map.stretch_marked_down_mons.clear();
     pending_map.last_changed = ceph_clock_now();
     request_proposal(mon.osdmon());
+  } else if (prefix == "mon set") {
+    std::string name;
+    cmd_getval(cmdmap, "name", name);
+    std::string value;
+    cmd_getval(cmdmap, "value", value);
+    if (name == "auth_service_cipher") {
+      int c = CryptoManager::get_key_type(value);
+      if (c < 0) {
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+      if (c == pending_map.auth_service_cipher) {
+        err = 0;
+        ss << "already set";
+        goto reply_no_propose;
+      }
+      if (c == CEPH_CRYPTO_AES256KRB5) {
+        if (!mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K)) {
+          ss << "all monitors must support FEATURE_CEPHX_AUTH_AES256K to use AES256KRB5";
+          err = -ENOTSUP;
+          goto reply_no_propose;
+        }
+      }
+      pending_map.auth_service_cipher = c;
+    } else if (name == "auth_allowed_ciphers") {
+      std::vector<std::string> v;
+      std::vector<int> ciphers;
+      get_str_vec(value, ", ", v);
+      for (auto& cipher : v) {
+        int c = CryptoManager::get_key_type(cipher);
+        if (c < 0) {
+          err = -EINVAL;
+          goto reply_no_propose;
+        }
+        if (c == CEPH_CRYPTO_AES256KRB5) {
+          if (!mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K)) {
+            ss << "all monitors must support FEATURE_CEPHX_AUTH_AES256K to use AES256KRB5";
+            err = -ENOTSUP;
+            goto reply_no_propose;
+          }
+        }
+        ciphers.push_back(c);
+      }
+      std::sort(ciphers.begin(), ciphers.end());
+      if (ciphers == pending_map.auth_allowed_ciphers) {
+        err = 0;
+        ss << "already set";
+        goto reply_no_propose;
+      }
+      pending_map.auth_allowed_ciphers = std::move(ciphers);
+    } else if (name == "auth_preferred_cipher") {
+      int c = CryptoManager::get_key_type(value);
+      if (c < 0) {
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+      if (c == pending_map.auth_preferred_cipher) {
+        err = 0;
+        ss << "already set";
+        goto reply_no_propose;
+      }
+      if (c == CEPH_CRYPTO_AES256KRB5) {
+        if (!mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K)) {
+          ss << "all monitors must support FEATURE_CEPHX_AUTH_AES256K to use AES256KRB5";
+          err = -ENOTSUP;
+          goto reply_no_propose;
+        }
+      }
+      pending_map.auth_preferred_cipher = c;
+    } else {
+      ss << "unknown name " << name;
+      err = -EINVAL;
+    }
   } else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
@@ -1648,4 +1726,16 @@ void MonmapMonitor::tick()
     pending_map.created = ctime;
     propose_pending();
   }
+}
+
+epoch_t MonmapMonitor::bump_auth_epoch(epoch_t e)
+{
+  ceph_assert(is_writeable());
+  if (unlikely(pending_map.auth_epoch == std::numeric_limits<epoch_t>::max())) {
+    dout(10) << __func__ << " repairing invalid auth_epoch " << pending_map.auth_epoch << " -> 0" << dendl;
+    pending_map.auth_epoch = 0;
+  }
+  ceph_assert(e >= pending_map.auth_epoch);
+  pending_map.auth_epoch = e;
+  return e;
 }

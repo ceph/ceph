@@ -21,6 +21,7 @@ export class MgrModuleResourcePageComponent implements OnInit, OnDestroy {
   section = 'overview';
   moduleNameRoute = '';
   notFound = false;
+  isOverviewLoading = true;
   overviewFields: OverviewField[] = [];
 
   constructor(
@@ -45,6 +46,7 @@ export class MgrModuleResourcePageComponent implements OnInit, OnDestroy {
   }
 
   private applyState(state: MgrModuleResourceState | null): void {
+    this.isOverviewLoading = false;
     if (!state) {
       this.moduleNameRoute = '';
       this.notFound = true;

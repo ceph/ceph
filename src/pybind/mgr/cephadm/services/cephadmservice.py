@@ -43,7 +43,13 @@ from ceph.cephadm.d3n_types import (
 from cephadm.services.rgw_d3n import D3NDevicePlanner
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
-from cephadm.ssl_cert_utils import extract_ips_and_fqdns_from_cert
+from ceph.deployment.tls_utils import (
+    extract_ips_and_fqdns_from_cert,
+    parse_tls_pem_bundle,
+    contains_private_key,
+    contains_multiple_pem_blocks,
+    SSLConfigException,
+)
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -53,6 +59,9 @@ logger = logging.getLogger(__name__)
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
 
+# the release that added 'profile rgw'
+RGW_PROFILE_RELEASE = utils.ceph_release_to_major('umbrella')
+
 
 def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEntity:
     """
@@ -60,7 +69,7 @@ def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEnt
     """
     # despite this mapping entity names to daemons, self.TYPE within
     # the CephService class refers to service types, not daemon types
-    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'nvmeof', 'ingress', 'ceph-exporter']:
+    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', "iscsi", 'nvmeof', 'ingress', 'ceph-exporter']:
         return AuthEntity(f'client.{daemon_type}.{daemon_id}')
     elif daemon_type in ['crash', 'agent', 'node-proxy']:
         if host == "":
@@ -459,6 +468,14 @@ class CephadmService(metaclass=ABCMeta):
     ) -> TLSCredentials:
         """
         Fetch and persist the TLS certificate and key for a service spec.
+
+        Supports fullchain PEM input: when the ``cert_attr`` field on the spec
+        contains a combined PEM blob (private key + one or more certificate
+        blocks), the key is automatically extracted and stored separately so
+        that downstream consumers always receive clean cert-only and key-only
+        values.  The ``key_attr`` field must be empty when a fullchain PEM is
+        used; an error is raised if both are provided simultaneously.
+
         Returns:
             A TLSCredentials if both are available; otherwise EMPTY_TLS_CREDENTIALS.
         """
@@ -472,6 +489,38 @@ class CephadmService(metaclass=ABCMeta):
 
         service_name = svc_spec.service_name()
         host = daemon_spec.host
+
+        # --- Fullchain PEM auto-detection ------------------------------------
+        # Enterprise CAs often output key + chain as a single blob.  When
+        # the cert field embeds a private key we split it here so the rest of
+        # the stack remains unaware of multi-block PEM input. A cert blob with
+        # multiple CERTIFICATE blocks but no embedded key (e.g. leaf +
+        # intermediates) is also normalised here, even if a separate key
+        # field is set.
+        if cert and contains_private_key(cert) and key:
+            logger.error(
+                f"Service '{service_name}': '{cert_attr}' is a fullchain PEM "
+                f"(contains an embedded private key) but '{key_attr}' is also "
+                f"set. Please supply a fullchain PEM without a separate key, "
+                f"or a plain certificate PEM with the key field."
+            )
+            return EMPTY_TLS_CREDENTIALS
+        if cert and (contains_private_key(cert) or contains_multiple_pem_blocks(cert)):
+            try:
+                cert, split_key = parse_tls_pem_bundle(cert)
+                logger.debug(
+                    "certmgr: split fullchain PEM from spec for service '%s' "
+                    "(cert_attr=%s)", service_name, cert_attr
+                )
+            except SSLConfigException as exc:
+                logger.error(
+                    f"Service '{service_name}': failed to parse fullchain PEM "
+                    f"from '{cert_attr}': {exc}"
+                )
+                return EMPTY_TLS_CREDENTIALS
+            if split_key:
+                key = split_key
+        # ---------------------------------------------------------------------
 
         missing = []
         if not cert:
@@ -675,11 +724,20 @@ class CephadmService(metaclass=ABCMeta):
         return DaemonDescription()
 
     def get_keyring_with_caps(self, entity: AuthEntity, caps: List[str]) -> str:
+        # try with newer cipher first, it's possible this isn't supported
+        # early in an upgrade
         ret, keyring, err = self.mgr.mon_command({
             'prefix': 'auth get-or-create',
             'entity': entity,
             'caps': caps,
+            'key_type': utils.ROTATION_CIPHER
         })
+        if err:
+            ret, keyring, err = self.mgr.mon_command({
+                'prefix': 'auth get-or-create',
+                'entity': entity,
+                'caps': caps,
+            })
         if err:
             ret, out, err = self.mgr.mon_command({
                 'prefix': 'auth caps',
@@ -1006,9 +1064,10 @@ class CephService(CephadmService):
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
-        self.remove_keyring(daemon)
+        if daemon.daemon_type != 'nfs':
+            self.remove_keyring(daemon)
 
-    def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
+    def get_auth_entity(self, daemon_id: str, host: str = "", rados_user: str = '') -> AuthEntity:
         return get_auth_entity(self.TYPE, daemon_id, host=host)
 
     def get_config_and_keyring(self,
@@ -1566,10 +1625,19 @@ class RgwService(CephService):
                 port = ports[0]
 
         if spec.ssl:
-            san_list = spec.zonegroup_hostnames or []
-            custom_sans = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
-            tls_creds = self.get_certificates(daemon_spec, custom_sans=custom_sans)
-            pem = f'{tls_creds.key.rstrip()}\n{tls_creds.cert.lstrip()}'
+
+            legacy_pem = spec.rgw_frontend_ssl_certificate
+            if legacy_pem and not spec.ssl_cert:
+                if isinstance(legacy_pem, list):
+                    pem = '\n'.join(legacy_pem)
+                else:
+                    pem = legacy_pem
+            else:
+                san_list = spec.zonegroup_hostnames or []
+                custom_sans = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
+                tls_creds = self.get_certificates(daemon_spec, custom_sans=custom_sans)
+                pem = f'{tls_creds.key.rstrip()}\n{tls_creds.cert.lstrip()}'
+
             rgw_cert_name = daemon_spec.name() if spec.generate_cert else spec.service_name()
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
@@ -1597,7 +1665,11 @@ class RgwService(CephService):
             assert daemon_spec.host is not None
             ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
             if ip_to_bind_to:
-                daemon_spec.port_ips = {str(port): ip_to_bind_to}
+                # Tell the host-side port-in-use precheck (fetch_endpoints /
+                # port_in_use) to probe this IP. Without port_ips it falls
+                # back to 0.0.0.0 and can false-conflict with listeners on
+                # other addresses.
+                daemon_spec.port_ips.update({str(port): ip_to_bind_to})
             else:
                 logger.warning(
                     f'Failed to find ip in {spec.networks} for host {daemon_spec.host}. '
@@ -1605,6 +1677,9 @@ class RgwService(CephService):
                 )
         elif daemon_spec.ip:
             ip_to_bind_to = daemon_spec.ip
+            # Same as only_bind_port_on_networks: keep precheck in sync with
+            # the narrow endpoint=<ip>:<port> / port=<ip>:<port> bind below.
+            daemon_spec.port_ips.update({str(port): ip_to_bind_to})
 
         if ftype == 'beast':
             if spec.ssl:
@@ -1743,11 +1818,19 @@ class RgwService(CephService):
         updated, verify whether the same changes are required for these
         services as well.
         """
-        keyring = self.get_keyring_with_caps(self.get_auth_entity(rgw_id),
-                                             ['mon', 'allow *',
-                                              'mgr', 'allow rw',
-                                              'osd', 'allow rwx tag rgw *=*'])
-        return keyring
+        # a mon or osd from before the profile reads it as granting nothing.
+        # require_osd_release only moves up once all of them are upgraded
+        osdmap = self.mgr.get('osd_map')
+        release = osdmap.get('require_osd_release', 'argonaut')
+        if utils.ceph_release_to_major(release) >= RGW_PROFILE_RELEASE:
+            caps = ['mon', 'profile rgw',
+                    'mgr', 'profile rgw',
+                    'osd', 'profile rgw']
+        else:
+            caps = ['mon', 'allow *',
+                    'mgr', 'allow rw',
+                    'osd', 'allow rwx tag rgw *=*']
+        return self.get_keyring_with_caps(self.get_auth_entity(rgw_id), caps)
 
     def purge(self, service_name: str) -> None:
         self.mgr.check_mon_command({

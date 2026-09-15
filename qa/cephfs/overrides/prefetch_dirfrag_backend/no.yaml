@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    cluster-conf:
+      mds:
+        mds_dir_prefetch_backend: false
+        mds_dir_prefetch_backend_max: 1

@@ -12,8 +12,21 @@
  */
 
 #pragma once
+
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <set>
+#include <string>
+#include <vector>
+
 #include <unistd.h>
+
 #include "PyModule.h"
+#include "common/ceph_time.h" // for ceph::mono_clock
+#include "common/config_obs.h" // for md_config_obs_t
 #include "common/debug.h"
 
 class ThreadMonitor : public md_config_obs_t {
