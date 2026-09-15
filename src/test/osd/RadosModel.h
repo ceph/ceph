@@ -821,12 +821,12 @@ public:
     return (outbl.to_str().contains("Pool migration"));
   }
 
-  void start_pool_migration(const std::string &source_name, const std::string &target_name,
-                            const int pg_num, bool enable_ec_optimizations) {
+  void start_pool_migration(const std::string &source_name, const int pg_num,
+                            bool enable_ec_optimizations) {
     auto const formatter = std::make_shared<JSONFormatter>(false);
     std::ostringstream oss;
-    messaging::osd::OSDPoolMigrateRequest pool_mig_request{target_name, source_name,
-      pg_num, enable_ec_optimizations, true};
+    messaging::osd::OSDPoolMigrateRequest pool_mig_request{source_name, pg_num,
+      enable_ec_optimizations, true};
     encode_json("OSDPoolMigrateRequest", pool_mig_request, formatter.get());
     formatter.get()->flush(oss);
 
@@ -838,10 +838,8 @@ public:
   }
 
   void manage_pool_migrations() {
-    const std::string original_pool_name = pool_name;
-    std::string target_pool_name;
     int migration_counter = 0;
-    int initial_pg_num = get_pool_pg_num(original_pool_name);
+    int initial_pg_num = get_pool_pg_num(pool_name);
     int pg_num = initial_pg_num;
     bool needs_wait = false;
 
@@ -856,15 +854,13 @@ public:
       if (is_pool_migration_in_progress()) {
         cout_prefix() << __func__ << " migration in progress" << std::endl;
       } else if (!needs_wait) {
-        target_pool_name = original_pool_name + "_mig" + std::to_string(migration_counter);
         pg_num = migration_pg_num.has_value() && pg_num != migration_pg_num.value() ?
           migration_pg_num.value() : initial_pg_num;
-        cout_prefix() << __func__ << " starting new pool migration from "
-                      << pool_name << " to " << target_pool_name << std::endl;
-        start_pool_migration(pool_name, target_pool_name, pg_num, migration_ec_opts);
+        cout_prefix() << __func__ << " starting new pool migration on "
+                      << pool_name << std::endl;
+        start_pool_migration(pool_name, pg_num, migration_ec_opts);
         needs_wait = true;
       } else {
-        pool_name = target_pool_name;
         sleep_duration = migration_interval;
         migration_counter++;
         needs_wait = false;

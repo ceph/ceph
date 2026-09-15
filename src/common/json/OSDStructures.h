@@ -130,7 +130,6 @@ struct OSDECPoolCreateRequest {
 
 struct OSDPoolMigrateRequest {
     std::string pool;
-    std::string migrate_from_pool;
     std::optional<int> pg_num;
     std::optional<bool> enable_ec_optimizations = std::nullopt;
     std::optional<bool> yes_i_really_mean_it = std::nullopt;

@@ -1226,7 +1226,15 @@ Usage::
 
 	ceph osd pool create <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
 	{<erasure_code_profile>} {<rule>} {<int>} {--autoscale-mode=<on,off,warn>}
-	{--enable-ec-optimisations} {--migrate_from_pool=<srcname>}
+	{--enable-ec-optimisations}
+
+Subcommand ``migrate`` migrates a pool to a new pool while keeping the same name.
+
+Usage::
+
+	ceph osd pool migrate <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
+	{<erasure_code_profile>} {<rule>} {<int>} {--autoscale-mode=<on,off,warn>}
+	{--enable-ec-optimisations}
 
 Subcommand ``delete`` deletes pool.
 
