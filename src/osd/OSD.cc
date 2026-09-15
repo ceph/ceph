@@ -6490,6 +6490,7 @@ void OSD::tick_without_osd_lock()
     maybe_send_beacon();
   }
 
+  cct->check_debug_level_guard();
   mgrc.update_daemon_health(get_health_metrics());
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(get_tick_interval(),
@@ -8076,6 +8077,12 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
       }
     }
     metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries);
+  }
+  {
+    auto threshold = cct->_conf.get_val<int64_t>("high_debug_level_threshold");
+    auto [count, max_level] = DebugLevelGuard::count_elevated(
+      cct->_conf->subsys, threshold);
+    metrics.emplace_back(daemon_metric::HIGH_DEBUG_LEVEL, count, max_level);
   }
   return metrics;
 }
