@@ -384,6 +384,130 @@ TEST(TestRGWManifest, old_obj_manifest) {
 
 }
 
+/* Verify that obj_end() and its stripe offset stay within a non-multipart
+ * object. */
+static void check_end_iter(RGWObjManifest& manifest, uint64_t obj_size)
+{
+  auto end = manifest.obj_end(&dp);
+  ASSERT_EQ(end.get_ofs(), obj_size);
+  ASSERT_LE(end.get_stripe_ofs(), obj_size);
+}
+
+/* An empty object has identical begin and end iterators. */
+TEST(TestRGWManifest, end_iter_empty_obj) {
+  test_rgw_env env;
+  RGWObjManifest manifest;
+  rgw_bucket bucket;
+
+  test_rgw_init_bucket(&bucket, "buck");
+  rgw_obj head(bucket, "oid");
+
+  manifest.set_trivial_rule(512 * 1024, 4 * 1024 * 1024);
+  manifest.set_head(env.zonegroup.default_placement, head, 0);
+  manifest.set_obj_size(0);
+
+  check_end_iter(manifest, 0);
+  ASSERT_TRUE(manifest.obj_begin(&dp) == manifest.obj_end(&dp));
+}
+
+/* Test obj_end() for:
+ * - a tiny head-only object
+ * - an object smaller than the head limit
+ * - an object that exactly fills the head 
+ * - an object with tail stripes.
+ */
+struct end_iter_param {
+  const char *name;
+  uint64_t obj_size;
+  uint64_t head_max_size;
+  uint64_t stripe_size;
+  int expected_cur_stripe;
+};
+
+class EndIterTest : public ::testing::TestWithParam<end_iter_param> {};
+
+TEST_P(EndIterTest, obj_end_stays_in_object) {
+  const end_iter_param& p = GetParam();
+
+  test_rgw_env env;
+  RGWObjManifest manifest;
+  rgw_bucket bucket;
+  rgw_obj head;
+  RGWObjManifest::generator gen;
+  list<rgw_obj> objs;
+
+  ASSERT_NO_FATAL_FAILURE(gen_obj(env, p.obj_size, p.head_max_size, p.stripe_size, &manifest, env.zonegroup.default_placement, &bucket, &head, &gen, &objs));
+
+  ASSERT_NO_FATAL_FAILURE(check_end_iter(manifest, p.obj_size));
+  ASSERT_EQ(manifest.obj_end(&dp).get_cur_stripe(), p.expected_cur_stripe);
+
+  if (manifest.has_tail()) {
+    auto iter = manifest.obj_find(&dp, manifest.get_head_size());
+    ASSERT_FALSE(env.get_raw(iter.get_location()) == env.get_raw(head));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TestRGWManifest, EndIterTest,
+    ::testing::Values(
+        /*             name           obj_size    head_max_size stripe_size  cur_stripe */
+        end_iter_param{"tiny",                7,    512 * 1024, 4 * 1024 * 1024, 0},
+        end_iter_param{"under_head",  256 * 1024,   512 * 1024, 4 * 1024 * 1024, 0},
+        end_iter_param{"fills_head",  512 * 1024,   512 * 1024, 4 * 1024 * 1024, 1},
+        end_iter_param{"with_tail",  10 * 1024 * 1024, 512 * 1024, 4 * 1024 * 1024, 3}),
+    [](const testing::TestParamInfo<end_iter_param>& i) { return i.param.name; });
+
+/*  For a 16-part manifest, obj_end() must return part ID 17. Position 
+ * immediately after the final part. A part ID 0 would make obj_find_part()
+ * treat manifest as non-multipart
+ */
+TEST(TestRGWManifest, end_iter_multipart_part_id) {
+  test_rgw_env env;
+  const int num_parts = 16;
+  vector <RGWObjManifest> pm(num_parts);
+  rgw_bucket bucket;
+  uint64_t part_size = 10 * 1024 * 1024;
+  uint64_t stripe_size = 4 * 1024 * 1024;
+
+  for (int i = 0; i < num_parts; ++i) {
+    RGWObjManifest& manifest = pm[i];
+    RGWObjManifest::generator gen;
+    manifest.set_prefix("abc123");
+
+    manifest.set_multipart_part_rule(stripe_size, i + 1);
+
+    uint64_t ofs;
+    rgw_obj head;
+    for (ofs = 0; ofs < part_size; ofs += stripe_size) {
+      if (ofs == 0) {
+        rgw_placement_rule rule(env.zonegroup.default_placement.name, RGW_STORAGE_CLASS_STANDARD);
+        int r = gen.create_begin(g_ceph_context, &manifest, rule, nullptr, bucket, head);
+        ASSERT_EQ(r, 0);
+        continue;
+      }
+      gen.create_next(ofs);
+    }
+    if (ofs > part_size) {
+      gen.create_next(part_size);
+    }
+  }
+
+  RGWObjManifest m;
+
+  for (int i = 0; i < num_parts; i++) {
+    m.append(&dp, pm[i], env.zonegroup, env.zone_params);
+  }
+
+  auto end = m.obj_end(&dp);
+  ASSERT_EQ(end.get_ofs(), m.get_obj_size());
+  ASSERT_EQ(end.get_cur_part_id(), num_parts + 1);
+
+  /* A zero part ID marks a non-multipart manifest. Verify that the end
+   * iterator allows obj_find_part() to locate an existing multipart part. */
+  auto part = m.obj_find_part(&dp, 3);
+  ASSERT_NE(part, end);
+  ASSERT_EQ(part.get_cur_part_id(), 3);
+}
 
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
