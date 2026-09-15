@@ -35,6 +35,9 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
 #if defined(HAVE_LIBAIO)
     while (cur != end && pulled < max_iodepth) {
       cur->priv = priv;
+      if (notify_eventfd >= 0) {
+	io_set_eventfd(&cur->iocb, notify_eventfd);
+      }
       piocb[pulled] = &(*cur);
       ++pulled;
       ++cur;
