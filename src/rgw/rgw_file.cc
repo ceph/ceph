@@ -1006,7 +1006,7 @@ namespace rgw {
 
     rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
-    rc3 = ((rc == 0) && (rc2 == 0)) ? 0 : -EIO;
+    rc3 = rc | rc2;
 
     /* call back w/xattr data */
     if (rc3 == 0) {
@@ -1065,7 +1065,7 @@ namespace rgw {
 
     rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
-    rc3 = ((rc == 0) && (rc2 == 0)) ? 0 : -EIO;
+    rc3 = rc | rc2;
 
     /* call back w/xattr data--check for eof */
     if (rc3 == 0) {
@@ -1136,8 +1136,7 @@ namespace rgw {
     rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
 
-    return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
-
+    return (rc | rc2);
   } /* RGWLibFS::setxattrs */
 
   int RGWLibFS::rmxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs,
@@ -1172,7 +1171,7 @@ namespace rgw {
     rc = g_rgwlib->get_fe()->execute_req(&req);
     rc2 = req.get_ret();
 
-    return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
+    return (rc | rc2);
 
   } /* RGWLibFS::rmxattrs */
 
