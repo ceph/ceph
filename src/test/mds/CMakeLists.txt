@@ -39,3 +39,11 @@ add_executable(unittest_mds_standby_affinity
 )
 add_ceph_unittest(unittest_mds_standby_affinity)
 target_link_libraries(unittest_mds_standby_affinity mds ceph-common global ${BLKID_LIBRARIES})
+
+# unittest_mds_group_commit
+add_executable(unittest_mds_group_commit
+  TestGroupCommit.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_mds_group_commit)
+target_link_libraries(unittest_mds_group_commit ceph-common global)
