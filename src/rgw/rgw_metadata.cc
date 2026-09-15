@@ -323,7 +323,10 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
 
   try {
     JSONDecoder::decode_json("key", metadata_key, &parser);
-    JSONDecoder::decode_json("ver", *objv, &parser);
+    /* Do not decode "ver" into *objv on metadata sync PUT. A PUT received
+     * from a remote zone should use write_version=0, rather than the
+     * remote zone's write_version. prepare_op_for_write() therefore can
+     * fallback to cls_version_inc(), keeping the local version monotonic. */
     JSONDecoder::decode_json("mtime", mtime, &parser);
   } catch (JSONDecoder::err& e) {
     return -EINVAL;
