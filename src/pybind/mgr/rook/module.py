@@ -149,7 +149,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return False, "ceph-mgr not running in Rook cluster", {}
 
         try:
-            self.k8s.list_namespaced_pod(self._rook_env.namespace)
+            # reachability probe only; the result is discarded, so don't
+            # fetch (and let the k8s client debug-log) the whole pod list
+            self.k8s.list_namespaced_pod(self._rook_env.namespace, limit=1)
         except ApiException as e:
             return False, "Cannot reach Kubernetes API: {}".format(e), {}
         else:
