@@ -353,13 +353,54 @@ typedef void* rgw_open_fd;
   structure here.  Adding a field to this one is an interface change like
   any other, not something to be negotiated per call.
 
-  Zero the structure and set what you need.
+  Zero the structure and set what you need.  Every member is independent:
+  none of them is selected by createmode, which is why this is a flat
+  structure rather than a tagged union.  When to set each:
+
+  createmode
+      The create disposition.  Leave it zero (RGW_CREATEMODE_NONE) to open
+      without creating, in which case RGW_OPEN_FLAG_CREATE and O_EXCL decide
+      as they always did.  Set it to make the disposition explicit, and it
+      governs instead.  Note UNCHECKED does not truncate:  ask for that with
+      RGW_SETATTR_SIZE below, or with O_TRUNC in posix_flags.
+
+  attr_mask, attrs
+      Set together or not at all -- a mask with no attrs is -EINVAL.  These
+      are the attributes the object should have, applied while a created
+      object is still invisible under its name, so a second caller never
+      observes it without them.  Meaningful for *any* createmode, not only a
+      creating one:  UNCHECKED applies them to an object that already
+      existed.
+
+      RGW_SETATTR_SIZE here is a data operation, applied after any O_TRUNC,
+      so an explicit size wins over the flag.
+
+      For an exclusive create this is also how the verifier arrives:  the
+      caller folds it into atime and mtime (as ganesha's
+      set_common_verifier() does) and sets RGW_SETATTR_ATIME|RGW_SETATTR_MTIME.
+      Those two are stored and returned byte-exact, so do not expect server
+      time to be substituted for them.  They survive until the first write,
+      which moves mtime as it would on any filesystem -- long enough for a
+      retransmitted create, which arrives before the client's writes.
+
+  attrs_out
+      Set it to receive the resulting attributes, NULL if you do not want
+      them.  Independent of everything above:  useful on a plain open as well
+      as a create, and it saves a following rgw_getattr() since these were
+      just written.
+
+  acl, acl_len, acl_encoding
+      Reserved.  A non-empty ACL is refused with -ENOTSUP rather than
+      ignored, because a caller which believes it set one must not be told
+      the open succeeded.  Leave all three zero.  The encoding enum records
+      the intended alternatives (NFSv4 XDR, POSIX.1e, RGW's own policy);
+      which are accepted, and what RGW stores natively, is unsettled.
 */
 struct rgw_open_args
 {
-  uint32_t createmode;   /* RGW_CREATEMODE_* */
-  uint32_t attr_mask;    /* RGW_SETATTR_* to apply at create */
-  struct stat* attrs;    /* IN:  initial attributes;  NULL if attr_mask==0 */
+  uint32_t createmode;   /* RGW_CREATEMODE_*;  zero means "do not create" */
+  uint32_t attr_mask;    /* RGW_SETATTR_* describing which of *attrs to use */
+  struct stat* attrs;    /* IN:  attributes to apply;  NULL if attr_mask==0 */
   struct stat* attrs_out; /* OUT: resulting attributes;  NULL if not wanted */
   void* acl;             /* reserved -- must be NULL */
   uint32_t acl_len;      /* reserved -- must be 0 */
