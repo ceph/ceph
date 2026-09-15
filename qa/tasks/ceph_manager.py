@@ -3519,9 +3519,59 @@ class CephManager:
             self.log("is_degraded_stretch_mode: {0}".format(degraded_stretch_mode))
             return degraded_stretch_mode == 1
         except (TypeError, AttributeError) as e:
-            # Log the error or handle it as needed
             self.log("Error accessing degraded_stretch_mode: {0}".format(e))
             return False
+
+    def is_recovering_stretch_mode(self):
+        """
+        Return whether the cluster is in the transient recovering stretch mode
+        (degraded_stretch_mode cleared but PGs still recovering).
+        """
+        try:
+            osdmap = self.get_osd_dump_json()
+            stretch_mode = osdmap.get('stretch_mode', {})
+            recovering = stretch_mode.get('recovering_stretch_mode', 0)
+            self.log("is_recovering_stretch_mode: {0}".format(recovering))
+            return recovering == 1
+        except (TypeError, AttributeError) as e:
+            self.log("Error accessing recovering_stretch_mode: {0}".format(e))
+            return False
+
+    def wait_for_degraded_stretch_mode(self, timeout=300):
+        """
+        Block until the cluster reports degraded stretch mode.
+        Raises AssertionError if the timeout expires first.
+        """
+        self.log("waiting for degraded stretch mode")
+        start = time.time()
+        while not self.is_degraded_stretch_mode():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired waiting for degraded stretch mode'
+            time.sleep(5)
+        self.log("cluster is in degraded stretch mode")
+
+    def wait_for_healthy_stretch_mode(self, timeout=600):
+        """
+        Block until degraded_stretch_mode == 0 AND recovering_stretch_mode == 0.
+
+        The monitor sets degraded_stretch_mode=0 / recovering_stretch_mode=1 as
+        soon as the second site rejoins, then waits for PGs to finish recovering
+        before clearing recovering_stretch_mode.  Checking only
+        is_degraded_stretch_mode() would exit too early, leaving PGs inactive.
+        Raises AssertionError if the timeout expires first.
+        """
+        self.log("waiting for healthy stretch mode")
+        start = time.time()
+        while True:
+            if not self.is_degraded_stretch_mode() and \
+                    not self.is_recovering_stretch_mode():
+                break
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired waiting for healthy stretch mode'
+            time.sleep(10)
+        self.log("cluster has returned to healthy stretch mode")
 
 
 def utility_task(name):
