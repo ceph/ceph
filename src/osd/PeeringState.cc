@@ -3477,23 +3477,26 @@ void PeeringState::proc_master_log(
       // partially written entries
       auto op = olog.log.end();
       if (op == olog.log.begin()) {
-	// Other log is emtpy
+	// Other log is empty
 	if (p->version <= olog.head) {
 	  consider_adjusting_pwlc(p->version);
 	  ++p;
 	} else {
 	  consider_adjusting_pwlc(pg_log.get_tail());
 	}
-      } else if (op->version == p->version) {
-	// Normal case - both logs have this entry
-	consider_adjusting_pwlc(p->version);
-	++p;
-      } else if (op->version < p->version) {
-	// Last entry in other log is before this entry
-	consider_adjusting_pwlc(pg_log.get_tail());
       } else {
-	// Other log is ahead of the primary log - give up
-	p = pg_log.get_log().log.end();
+        --op;
+        if (op->version == p->version) {
+          // Normal case - both logs have this entry
+          consider_adjusting_pwlc(p->version);
+          ++p;
+        } else if (op->version < p->version) {
+          // Last entry in other log is before this entry
+          consider_adjusting_pwlc(pg_log.get_tail());
+        } else {
+          // Other log is ahead of the primary log - give up
+          p = pg_log.get_log().log.end();
+        }
       }
     }
     // See if we can wind forward partially written entries
