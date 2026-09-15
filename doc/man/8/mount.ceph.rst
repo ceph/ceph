@@ -144,6 +144,28 @@ Advanced
 :command:`ip`
     my ip
 
+:command:`lazyio`
+    Enable LazyIO globally for all regular file opens on this mount. When
+    set, the client requests ``CEPH_CAP_FILE_LAZYIO`` from the MDS, which
+    allows buffered reads and writes via the page cache even when multiple
+    clients hold the file open for write — at the expense of cache
+    coherency. This is the kclient equivalent of the
+    ``client_force_lazyio`` option in ceph-fuse.
+
+    **WARNING:** Do not use this option unless you fully understand its
+    consequences and are handling your own data consistency. LazyIO
+    relaxes the usual CephFS cache coherency guarantees. Applications may
+    read stale data, and overlapping writes from different clients may
+    result in undefined behavior. Improper use can lead to silent data
+    corruption. This option is intended only for HPC and similar
+    specialized workloads that can tolerate relaxed consistency and where
+    the application coordinates I/O externally.
+
+    Default: off (since 6.22).
+
+:command:`nolazyio`
+    Disable LazyIO (the default).
+
 :command:`noasyncreaddir`
     no dcache readdir
 
@@ -303,6 +325,7 @@ Feature Availability
 
 The ``recover_session=`` option was added to mainline Linux kernels in v5.4.
 ``wsync`` and ``nowsync`` were added in v5.7.
+``lazyio`` and ``nolazyio`` were added in v6.22.
 
 See also
 ========
