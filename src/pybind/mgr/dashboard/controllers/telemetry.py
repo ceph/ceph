@@ -3,7 +3,8 @@
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
-from . import APIDoc, APIRouter, EndpointDoc, RESTController
+from ..services.telemetry import AdoptionMetrics, DashboardTelemetryService, TelemetryMetrics
+from . import APIDoc, APIRouter, Endpoint, EndpointDoc, RESTController
 
 REPORT_SCHEMA = {
     "report": ({
@@ -237,3 +238,13 @@ class Telemetry(RESTController):
             mgr.remote('telemetry', 'on', license_name)
         else:
             mgr.remote('telemetry', 'off')
+
+    @Endpoint('GET', path='metrics')
+    @EndpointDoc('Get all Dashboard telemetry metrics (anonymous, aggregated)')
+    def metrics(self) -> TelemetryMetrics:
+        return DashboardTelemetryService.get_metrics()
+
+    @Endpoint('GET', path='metrics/adoption')
+    @EndpointDoc('Get monitoring stack adoption metrics')
+    def metrics_adoption(self) -> AdoptionMetrics:
+        return DashboardTelemetryService.get_adoption_metrics()
