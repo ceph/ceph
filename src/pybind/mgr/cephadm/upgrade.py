@@ -1437,6 +1437,14 @@ class CephadmUpgrade:
 
         return True  # if mds has no fs it should pass ok-to-stop
 
+    def _enough_smb_for_ok_to_stop(self, smb_daemon: DaemonDescription) -> bool:
+        # type (DaemonDescription) -> bool
+        running = [
+            daemon for daemon in self.mgr.cache.get_daemons_by_service(smb_daemon.service_name())
+            if daemon.status == DaemonDescriptionStatus.running
+        ]
+        return len(running) > 1
+
     def _detect_need_upgrade(self, daemons: List[DaemonDescription], target_digests: Optional[List[str]] = None, target_name: Optional[str] = None) -> Tuple[bool, List[Tuple[DaemonDescription, bool]], List[Tuple[DaemonDescription, bool]], int]:
         # this function takes a list of daemons and container digests. The purpose
         # is to go through each daemon and check if the current container digests
@@ -1598,6 +1606,13 @@ class CephadmUpgrade:
                         and not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
 
+            if d.daemon_type == 'smb' and self._enough_smb_for_ok_to_stop(d):
+                # gate SMB daemons one at a time so cephadm doesn't redeploy
+                # an entire SMB/CTDB cluster in one pass. Only gate when this
+                # SMB service has a peer daemon to fall back on.
+                if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
+                    return False, to_upgrade
+
             if (
                 d.daemon_type == 'osd'
                 and self._upgrade_uses_ok_to_upgrade_for_osds()
@@ -1613,7 +1628,7 @@ class CephadmUpgrade:
             # 1. Limit how many core daemons get queued in a single pass without
             #    a mon-supplied peer batch in known_ok_to_stop.
             # 2. Yield between batches of core daemons to allow the mon to catch up.
-            if d.daemon_type in ['osd', 'mds', 'mon'] and not known_ok_to_stop:
+            if d.daemon_type in ['osd', 'mds', 'mon', 'smb'] and not known_ok_to_stop:
                 # osd ok-to-upgrade batch is not empty, so keep looping to
                 # add more OSDs to the batch
                 if d.daemon_type == 'osd' and self._upgrade_uses_ok_to_upgrade_for_osds() and (len(known_ok_to_upgrade) > 0):
