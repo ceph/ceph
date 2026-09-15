@@ -5568,7 +5568,7 @@ written." % (self.name, ret, length))
                 else:
                     raise make_ex(
                         -errno.ENOTSUP,
-                        'specs[%d][1]: Unsupported encryption format' % i)
+                        'specs[%d][0]: Unsupported encryption format' % i)
             with nogil:
                 ret = rbd_encryption_load2(self.image, _specs, spec_count)
             if ret != 0:
