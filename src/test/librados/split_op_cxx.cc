@@ -22,7 +22,45 @@ public:
     ASSERT_EQ("", create_pool_pp(pool_name_default, s_cluster, 3));
     s_cluster.wait_for_latest_osdmap();
   }
+
+protected:
+  // Writes bl to oid and forces the log commit the split op path needs, by
+  // writing a second object that hashes to the same PG. Same dance as BigRead.
+  void write_and_commit(const std::string &oid, bufferlist &bl) {
+    ObjectWriteOperation write1;
+    write1.write(0, bl);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &write1));
+
+    uint32_t hash_position;
+    ASSERT_EQ(0, ioctx.get_object_pg_hash_position2(oid, &hash_position));
+    std::string other_object = "other";
+    while (true) {
+      uint32_t hash_position2;
+      ASSERT_EQ(0, ioctx.get_object_pg_hash_position2(other_object, &hash_position2));
+      if (hash_position == hash_position2) {
+        break;
+      }
+      other_object += ".";
+    }
+    ObjectWriteOperation write2;
+    write2.write(0, bl);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, other_object, &write2));
+  }
 };
+
+// Byte pattern with a period of 251, which divides neither the page size nor
+// any chunk size derived from it. A reply built from the right chunks in the
+// wrong order therefore fails to compare equal. The zero fill the older tests
+// use cannot distinguish those two cases.
+static bufferlist patterned_bl(uint64_t length) {
+  bufferlist bl;
+  ceph::buffer::ptr p((unsigned)length);
+  for (uint64_t i = 0; i < length; i++) {
+    p[i] = (char)(i % 251);
+  }
+  bl.append(p);
+  return bl;
+}
 
 typedef RadosTestECPP LibRadosSplitOpECPP;
 
@@ -139,6 +177,183 @@ TEST_P(LibRadosSplitOpPP, ReadTwoShards) {
     bufferlist read_bl;
     read.read(0, min_split_size * 3, NULL, NULL);
     ASSERT_TRUE(AssertOperateWithSplitOp(0, 3, "foo", &read, &read_bl, balanced_read_flags));
+  }
+}
+
+TEST_P(LibRadosSplitOpPP, ReadChunkOrder) {
+  SKIP_IF_CRIMSON();
+  if (!split_ops) {
+    GTEST_SKIP() << "Chunk ordering only applies to split reads";
+  }
+  std::string min_split_size_str;
+  ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
+  uint64_t min_split_size = std::stoull(min_split_size_str);
+
+  uint64_t length = min_split_size * 3;
+  bufferlist bl = patterned_bl(length);
+  write_and_commit("order", bl);
+
+  {
+    ObjectReadOperation read;
+    bufferlist read_bl;
+    read.read(0, length, NULL, NULL);
+    ASSERT_TRUE(AssertOperateWithSplitOp(0, 3, "order", &read, &read_bl, balanced_read_flags));
+    ASSERT_EQ(length, (uint64_t)read_bl.length());
+    ASSERT_TRUE(read_bl.contents_equal(bl));
+  }
+
+  // The replica handed the first chunk is drawn afresh for every operation, so
+  // one read has only a 2 in 3 chance of starting anywhere but replica 0. These
+  // repeats go straight through operate() rather than the assertion helper: the
+  // helper also demands an exact objecter.op_reply delta, and there is no
+  // reason to take that bet ten more times over just to vary the start replica.
+  for (int i = 0; i < 10; i++) {
+    ObjectReadOperation read;
+    bufferlist read_bl;
+    read.read(0, length, NULL, NULL);
+    ASSERT_EQ(0, ioctx.operate("order", &read, &read_bl, balanced_read_flags));
+    ASSERT_TRUE(read_bl.contents_equal(bl));
+  }
+}
+
+TEST_P(LibRadosSplitOpPP, ReadWithChunkRemainder) {
+  SKIP_IF_CRIMSON();
+  if (!split_ops) {
+    GTEST_SKIP() << "Chunk distribution only applies to split reads";
+  }
+  std::string min_split_size_str;
+  ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
+  uint64_t min_split_size = std::stoull(min_split_size_str);
+
+  // min_split_size is page aligned, so length / slice_count is too and the
+  // chunk size is not rounded up any further. The trailing byte then gets no
+  // chunk of its own, and must not be handed to a replica that already holds
+  // one for this read.
+  uint64_t length = min_split_size * 3 + 1;
+  bufferlist bl = patterned_bl(length);
+  write_and_commit("remainder", bl);
+
+  {
+    ObjectReadOperation read;
+    bufferlist read_bl;
+    read.read(0, length, NULL, NULL);
+    ASSERT_TRUE(AssertOperateWithSplitOp(0, 3, "remainder", &read, &read_bl, balanced_read_flags));
+    ASSERT_EQ(length, (uint64_t)read_bl.length());
+    ASSERT_TRUE(read_bl.contents_equal(bl));
+  }
+
+  for (int i = 0; i < 10; i++) {
+    ObjectReadOperation read;
+    bufferlist read_bl;
+    read.read(0, length, NULL, NULL);
+    ASSERT_EQ(0, ioctx.operate("remainder", &read, &read_bl, balanced_read_flags));
+    ASSERT_TRUE(read_bl.contents_equal(bl));
+  }
+}
+
+TEST_P(LibRadosSplitOpPP, ShortReadAlongsideSplitRead) {
+  SKIP_IF_CRIMSON();
+  if (!split_ops) {
+    GTEST_SKIP() << "Requires split_ops";
+  }
+  std::string min_split_size_str;
+  ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
+  uint64_t min_split_size = std::stoull(min_split_size_str);
+
+  uint64_t length = min_split_size * 3;
+  bufferlist bl = patterned_bl(length);
+  write_and_commit("sibling", bl);
+
+  // The first read is long enough for the operation to be split. The second is
+  // below osd_min_split_replica_read_size, so it is served whole by a single
+  // replica rather than being spread.
+  uint64_t big_len = min_split_size * 2;
+  uint64_t small_len = min_split_size / 2;
+  // Per-op return codes are deliberately not asserted: complete() leaves
+  // out_osd_op.rval untouched on the READ path, so they read back as 0
+  // whatever the replicas returned. The contents are the real check.
+  ObjectReadOperation read;
+  bufferlist big_bl, small_bl, read_bl;
+  read.read(0, big_len, &big_bl, NULL);
+  read.read(big_len, small_len, &small_bl, NULL);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, 2, "sibling", &read, &read_bl, balanced_read_flags));
+
+  bufferlist expect_big, expect_small;
+  expect_big.substr_of(bl, 0, big_len);
+  expect_small.substr_of(bl, big_len, small_len);
+  ASSERT_TRUE(big_bl.contents_equal(expect_big));
+  ASSERT_TRUE(small_bl.contents_equal(expect_small));
+}
+
+TEST_P(LibRadosSplitOpPP, TwoSplitReadsOfDifferentWidth) {
+  SKIP_IF_CRIMSON();
+  if (!split_ops) {
+    GTEST_SKIP() << "Requires split_ops";
+  }
+  std::string min_split_size_str;
+  ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
+  uint64_t min_split_size = std::stoull(min_split_size_str);
+
+  uint64_t length = min_split_size * 3;
+  bufferlist bl = patterned_bl(length);
+  write_and_commit("widths", bl);
+
+  // Two reads that spread over a different number of replicas: the first takes
+  // three, the second two. The replica used only by the first read then holds
+  // no result for the second, which the reassembly must not trip over. Before
+  // the reassembly followed the recorded order it looked that replica up
+  // regardless, and the resulting out_of_range escaped ~ReplicaSplitOp().
+  uint64_t wide_len = min_split_size * 3;
+  uint64_t narrow_len = min_split_size * 2;
+  ObjectReadOperation read;
+  bufferlist wide_bl, narrow_bl, read_bl;
+  read.read(0, wide_len, &wide_bl, NULL);
+  read.read(0, narrow_len, &narrow_bl, NULL);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, 3, "widths", &read, &read_bl, balanced_read_flags));
+
+  bufferlist expect_narrow;
+  expect_narrow.substr_of(bl, 0, narrow_len);
+  ASSERT_TRUE(wide_bl.contents_equal(bl));
+  ASSERT_TRUE(narrow_bl.contents_equal(expect_narrow));
+}
+
+TEST_P(LibRadosSplitOpPP, SparseReadChunkOrder) {
+  SKIP_IF_CRIMSON();
+  if (!split_ops) {
+    GTEST_SKIP() << "Chunk ordering only applies to split reads";
+  }
+  std::string min_split_size_str;
+  ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
+  uint64_t min_split_size = std::stoull(min_split_size_str);
+
+  uint64_t length = min_split_size * 3;
+  bufferlist bl = patterned_bl(length);
+  write_and_commit("sparse", bl);
+
+  // The sparse path assembles extents and buffers through the same recorded
+  // order as the dense one, and additionally dereferences the per-chunk extent
+  // map, so it is worth exercising separately. The first read goes through the
+  // assertion helper so that the test fails, rather than quietly passing, if
+  // sparse reads ever stop being split at all.
+  for (int i = 0; i < 10; i++) {
+    ObjectReadOperation read;
+    bufferlist read_bl, data_bl;
+    std::map<uint64_t, uint64_t> extents;
+    read.sparse_read(0, length, &extents, &data_bl, NULL);
+    if (i == 0) {
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, 3, "sparse", &read, &read_bl, balanced_read_flags));
+    } else {
+      ASSERT_EQ(0, ioctx.operate("sparse", &read, &read_bl, balanced_read_flags));
+    }
+    ASSERT_TRUE(data_bl.contents_equal(bl));
+    // The object is written end to end, so however the store chooses to break
+    // the range up, the extents must come back contiguous and cover all of it.
+    uint64_t at = 0;
+    for (auto [off, len] : extents) {
+      ASSERT_EQ(at, off);
+      at += len;
+    }
+    ASSERT_EQ(length, at);
   }
 }
 
