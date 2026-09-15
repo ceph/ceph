@@ -13,7 +13,6 @@ import { Router } from '@angular/router';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
-import { take } from 'rxjs/operators';
 
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -32,7 +31,6 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
-import { OsdSettings } from '~/app/shared/models/osd-settings';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -63,8 +61,6 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   @Input() inlineCreate = false;
   @Output() createAction = new EventEmitter<void>();
 
-  @ViewChild('osdUsageTpl', { static: true })
-  osdUsageTpl: TemplateRef<any>;
   @ViewChild('markOsdConfirmationTpl', { static: true })
   markOsdConfirmationTpl: TemplateRef<any>;
   @ViewChild('criticalConfirmationTpl', { static: true })
@@ -84,7 +80,6 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[];
   clusterWideActions: CdTableAction[];
   icons = Icons;
-  osdSettings = new OsdSettings();
   count = 0;
 
   selection = new CdTableSelection();
@@ -296,10 +291,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         prop: 'id',
         name: $localize`ID`,
         flexGrow: 1,
-        cellTransformation: CellTemplate.executing,
-        customTemplateConfig: {
-          valueClass: 'bold'
-        }
+        cellTransformation: CellTemplate.routerLink
       },
       { prop: 'host.name', name: $localize`Host` },
       {
@@ -344,38 +336,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         prop: 'state',
         name: $localize`Flags`,
         cellTemplate: this.flagsTpl
-      },
-      { prop: 'stats.usage', name: $localize`Usage`, cellTemplate: this.osdUsageTpl },
-      {
-        prop: 'stats_history.out_bytes',
-        name: $localize`Read bytes`,
-        cellTransformation: CellTemplate.sparkline
-      },
-      {
-        prop: 'stats_history.in_bytes',
-        name: $localize`Write bytes`,
-        cellTransformation: CellTemplate.sparkline
-      },
-      {
-        prop: 'stats.op_r',
-        name: $localize`Read ops`,
-        cellTransformation: CellTemplate.perSecond
-      },
-      {
-        prop: 'stats.op_w',
-        name: $localize`Write ops`,
-        cellTransformation: CellTemplate.perSecond
       }
     ];
 
     this.orchService.status().subscribe((status: OrchestratorStatus) => (this.orchStatus = status));
-
-    this.osdService
-      .getOsdSettings()
-      .pipe(take(1))
-      .subscribe((data: any) => {
-        this.osdSettings = data;
-      });
   }
 
   getDisable(action: 'create' | 'delete', selection: CdTableSelection): boolean | string {
@@ -453,10 +417,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     observableForkJoin(observables).subscribe((resp: any) => {
       this.osds = resp[0].map((osd: Osd) => {
         this.count = pagination_obs.count;
+        (osd as any).cdLink = `/osd/view/${osd.id}/overview`;
         osd.collectedStates = OsdListComponent.collectStates(osd);
-        osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i: string) => i[1]);
-        osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i: string) => i[1]);
-        osd.stats.usage = osd.stats.stat_bytes_used / osd.stats.stat_bytes;
         osd.cdIsBinary = true;
         osd.cdIndivFlags = osd.state.filter((f: string) => this.indivFlagNames.includes(f));
         osd.cdClusterFlags = resp[1].filter((f: string) => !this.disabledFlags.includes(f));

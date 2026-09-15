@@ -50,6 +50,7 @@ import {
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { SharedModule } from '~/app/shared/shared.module';
+import { AreaChartComponent } from '~/app/shared/components/area-chart/area-chart.component';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { ConfigurationResourcePageComponent } from './configuration/configuration-resource-page/configuration-resource-page.component';
@@ -72,8 +73,11 @@ import { InventoryComponent } from './inventory/inventory.component';
 import { LogsComponent } from './logs/logs.component';
 import { MgrModulesModule } from './mgr-modules/mgr-modules.module';
 import { MonitorComponent } from './monitor/monitor.component';
+import { OsdCapacityCardComponent } from './osd/osd-capacity-card/osd-capacity-card.component';
 import { OsdCreationPreviewModalComponent } from './osd/osd-creation-preview-modal/osd-creation-preview-modal.component';
-import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
+import { OsdIoCardComponent } from './osd/osd-io-card/osd-io-card.component';
+import { OsdResourcePageComponent } from './osd/osd-resource-page/osd-resource-page.component';
+import { OsdResourceSidebarComponent } from './osd/osd-resource-sidebar/osd-resource-sidebar.component';
 import { OsdDevicesSelectionGroupsComponent } from './osd/osd-devices-selection-groups/osd-devices-selection-groups.component';
 import { OsdDevicesSelectionModalComponent } from './osd/osd-devices-selection-modal/osd-devices-selection-modal.component';
 import { OsdFlagsIndivModalComponent } from './osd/osd-flags-indiv-modal/osd-flags-indiv-modal.component';
@@ -156,13 +160,17 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     LayerModule,
     AccordionModule,
     MenuButtonModule,
-    ContextMenuModule
+    ContextMenuModule,
+    AreaChartComponent
   ],
   declarations: [
     MonitorComponent,
     ConfigurationComponent,
     OsdListComponent,
-    OsdDetailsComponent,
+    OsdResourcePageComponent,
+    OsdResourceSidebarComponent,
+    OsdCapacityCardComponent,
+    OsdIoCardComponent,
     OsdScrubModalComponent,
     OsdFlagsModalComponent,
     HostSidebarComponent,

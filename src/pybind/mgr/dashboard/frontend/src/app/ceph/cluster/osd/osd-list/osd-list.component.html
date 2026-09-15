@@ -4,8 +4,6 @@
     (fetchData)="getOsdList($event)"
     [columns]="columns"
     selectionType="multiClick"
-    [hasDetails]="true"
-    (setExpandedRow)="setExpandedRow($event)"
     (updateSelection)="updateSelection($event)"
     [updateSelectionOnRefresh]="'never'"
     [serverSide]="true"
@@ -32,12 +30,6 @@
       >
       </cd-table-actions>
     </div>
-
-    <cd-osd-details
-      *cdTableDetail
-      [selection]="expandedRow"
-    >
-    </cd-osd-details>
   </cd-table>
 </ng-template>
 
@@ -178,20 +170,6 @@
   >
     {{ flag }}
   </cds-tag>
-</ng-template>
-
-<ng-template
-  #osdUsageTpl
-  let-row="data.row"
->
-  <cd-usage-bar
-    [title]="'osd ' + row.osd"
-    [total]="row.stats.stat_bytes"
-    [used]="row.stats.stat_bytes_used"
-    [warningThreshold]="osdSettings.nearfull_ratio"
-    [errorThreshold]="osdSettings.full_ratio"
-  >
-  </cd-usage-bar>
 </ng-template>
 
 <ng-template
