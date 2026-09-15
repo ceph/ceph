@@ -1,6 +1,6 @@
 tasks:
 - install:
-    branch: squid
+    branch: umbrella
     exclude_packages:
       - ceph-osd-classic
       - ceph-osd-crimson
