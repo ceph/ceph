@@ -2082,6 +2082,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   bufferlist bl;
   encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
+  dout(1) << "encode_pending e" << pending_inc.epoch
+          << " inc " << bl.length() << " bytes" << dendl;
+
   dout(20) << __func__ << " mon is running version: "
     << ceph_version_to_str() << dendl;
   dout(20) << " full_crc " << tmp.get_crc()

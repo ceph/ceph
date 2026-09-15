@@ -518,7 +518,12 @@ void PaxosService::_create_pending() {
 void PaxosService::_encode_pending(MonitorDBStore::TransactionRef t) {
   dout(10) << __func__ << dendl;
   using ceph::encode;
+
+  auto start = ceph::coarse_mono_clock::now();
   encode_pending(t);
+  auto duration = ceph::coarse_mono_clock::now() - start;
+  dout(1) << "encode_pending took " << duration << dendl;
+
   dout(30) << __func__ << ": health_checks encoding: " << health_checks << dendl;
   auto const& pending = health_checks.get_pending_map();
   ceph::buffer::list bl;
