@@ -872,9 +872,9 @@ class NodeAssignmentTest(NamedTuple):
             {},
             {0: {0: None}, 1: {0: None}, 2: {0: None}, 3: {0: None}},
             ['nfs:host2(rank=0.0 *:2049,9587,31311)', 'nfs:host1(rank=1.0 *:2049,9587,31311)',
-             'nfs:host2(rank=2.0 *:3049,9588,31315)', 'nfs:host1(rank=3.0 *:3049,9588,31315)'],
+             'nfs:host2(rank=2.0 *:3049,9588)', 'nfs:host1(rank=3.0 *:3049,9588)'],
             ['nfs:host2(rank=0.0 *:2049,9587,31311)', 'nfs:host1(rank=1.0 *:2049,9587,31311)',
-             'nfs:host2(rank=2.0 *:3049,9588,31315)', 'nfs:host1(rank=3.0 *:3049,9588,31315)'],
+             'nfs:host2(rank=2.0 *:3049,9588)', 'nfs:host1(rank=3.0 *:3049,9588)'],
             []
         ),
     ])
@@ -895,7 +895,7 @@ def test_node_assignment(service_type, placement, hosts, daemons, rank_map, post
         # Check if this is the custom ports test by looking at expected ports
         if expected and any('3049' in str(e) for e in expected):
             # Custom colocation ports test case
-            # First daemon uses base ports (port, monitoring_port, cluster_qos_port)
+            # First daemon uses base ports (port, monitoring_port)
             # colocation_ports defines ADDITIONAL daemons only
             spec = NFSServiceSpec(service_type=service_type,
                                   service_id=service_id,
@@ -903,10 +903,10 @@ def test_node_assignment(service_type, placement, hosts, daemons, rank_map, post
                                   port=2049,
                                   monitoring_port=9587,
                                   colocation_ports=[
-                                      {'data_port': 3049, 'monitoring_port': 9588, 'cluster_qos_port': 31315},
-                                      {'data_port': 3050, 'monitoring_port': 9589, 'cluster_qos_port': 31316},
-                                      {'data_port': 3051, 'monitoring_port': 9590, 'cluster_qos_port': 31317},
-                                      {'data_port': 3052, 'monitoring_port': 9591, 'cluster_qos_port': 31318}
+                                      {'data_port': 3049, 'monitoring_port': 9588},
+                                      {'data_port': 3050, 'monitoring_port': 9589},
+                                      {'data_port': 3051, 'monitoring_port': 9590},
+                                      {'data_port': 3052, 'monitoring_port': 9591}
                                   ])
         else:
             spec = ServiceSpec(service_type=service_type,
