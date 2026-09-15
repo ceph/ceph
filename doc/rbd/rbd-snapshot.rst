@@ -68,6 +68,9 @@ Snapshot Basics
 The following procedures demonstrate how to create, list, and remove
 snapshots using the ``rbd`` command.
 
+.. note:: Each RBD image may hold a maximum of 16383 snapshots due to
+   internal limitations.
+
 Create Snapshot
 ---------------
 
