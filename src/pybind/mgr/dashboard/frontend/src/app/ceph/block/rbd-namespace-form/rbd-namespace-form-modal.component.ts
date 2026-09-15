@@ -101,10 +101,10 @@ export class RbdNamespaceFormModalComponent extends BaseModal implements OnInit 
 
   ngOnInit() {
     if (this.poolPermission.read) {
-      this.poolService.list(['pool_name', 'type', 'application_metadata']).then((resp) => {
+      this.poolService.list(['pool_name', 'type', 'flags_names', 'application_metadata']).then((resp) => {
         const pools: Pool[] = [];
         for (const pool of resp) {
-          if (this.rbdService.isRBDPool(pool) && pool.type === 'replicated') {
+          if (this.rbdService.isRBDPool(pool) && this.rbdService.isRBDCapablePool(pool)) {
             pools.push(pool);
           }
         }

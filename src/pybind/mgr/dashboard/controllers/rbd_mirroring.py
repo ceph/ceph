@@ -135,9 +135,15 @@ def get_daemon_health(daemon):
     return health
 
 
+def _is_rbd_capable_pool(pool):
+    if pool.get('type', 1) == 1:
+        return True
+    return 'supports_omap' in pool.get('flags_names', '')
+
+
 def get_pools(daemons):  # pylint: disable=R0912, R0915
     pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')
-                  if pool.get('type', 1) == 1]
+                  if _is_rbd_capable_pool(pool)]
     pool_stats = _get_pool_stats(pool_names)
     _update_pool_stats(daemons, pool_stats)
     return pool_stats
@@ -403,7 +409,7 @@ def _update_syncing_image_data(mirror_image, image):
 @ViewCache()
 def _get_content_data():  # pylint: disable=R0914
     pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')
-                  if pool.get('type', 1) == 1]
+                  if _is_rbd_capable_pool(pool)]
     _, data = get_daemons_and_pools()
     daemons = data.get('daemons', [])
     pool_stats = data.get('pools', {})
