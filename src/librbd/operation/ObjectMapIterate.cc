@@ -32,11 +32,12 @@ template <typename I>
 class C_VerifyObjectCallback : public C_AsyncObjectThrottle<I> {
 public:
   C_VerifyObjectCallback(AsyncObjectThrottle<I> &throttle, I *image_ctx,
-			 uint64_t snap_id, uint64_t object_no,
+			 ObjectMap<I> *object_map, uint64_t snap_id,
+			 uint64_t object_no,
 			 ObjectIterateWork<I> handle_mismatch,
 			 std::atomic_flag *invalidate)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx),
-    m_snap_id(snap_id), m_object_no(object_no),
+    m_object_map(*object_map), m_snap_id(snap_id), m_object_no(object_no),
     m_oid(image_ctx->get_object_name(m_object_no)),
     m_handle_mismatch(handle_mismatch),
     m_invalidate(invalidate)
@@ -64,6 +65,7 @@ public:
 
 private:
   librados::IoCtx m_io_ctx;
+  ObjectMap<I> &m_object_map;
   uint64_t m_snap_id;
   uint64_t m_object_no;
   std::string m_oid;
@@ -159,9 +161,8 @@ private:
                 image_ctx.exclusive_lock->is_lock_owner());
 
     std::shared_lock image_locker{image_ctx.image_lock};
-    ceph_assert(image_ctx.object_map != nullptr);
 
-    uint8_t state = (*image_ctx.object_map)[m_object_no];
+    uint8_t state = m_object_map[m_object_no];
     ldout(cct, 10) << "C_VerifyObjectCallback::object_map_action"
 		   << " object " << image_ctx.get_object_name(m_object_no)
 		   << " state " << (int)state
@@ -171,7 +172,8 @@ private:
       int r = 0;
 
       ceph_assert(m_handle_mismatch);
-      r = m_handle_mismatch(image_ctx, m_object_no, state, new_state);
+      r = m_handle_mismatch(image_ctx, m_object_map, m_object_no, state,
+			    new_state);
       if (r) {
 	lderr(cct) << "object map error: object "
 		   << image_ctx.get_object_name(m_object_no)
@@ -265,7 +267,7 @@ void ObjectMapIterateRequest<I>::send_verify_objects() {
 
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_VerifyObjectCallback<I> >(),
-			boost::lambda::_1, &m_image_ctx, snap_id,
+			boost::lambda::_1, &m_image_ctx, &m_object_map, snap_id,
 			boost::lambda::_2, m_handle_mismatch, &m_invalidate));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, m_image_ctx, context_factory, this->create_callback_context(),
