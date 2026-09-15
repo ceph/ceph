@@ -1,5 +1,5 @@
-import { Component, Inject, OnInit, Optional } from '@angular/core';
-import { FormArray, Validators } from '@angular/forms';
+import { Component, ChangeDetectorRef, Inject, OnInit, Optional } from '@angular/core';
+import { AbstractControl, FormArray, FormGroup, Validators } from '@angular/forms';
 import { BaseModal } from 'carbon-components-angular';
 import { forkJoin } from 'rxjs';
 import { finalize } from 'rxjs/operators';
@@ -23,6 +23,7 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
   form: CdFormGroup;
   mode: string;
   isSubmitLoading = false;
+  formSubmitted = false;
   icons = Icons;
 
   readonly steps = [{ label: $localize`Role details`, invalid: false }];
@@ -54,7 +55,8 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     private formBuilder: CdFormBuilder,
     public actionLabels: ActionLabelsI18n,
     private rgwRoleService: RgwRoleService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private cdr: ChangeDetectorRef
   ) {
     super();
   }
@@ -94,6 +96,18 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     this.permissionPolicies.removeAt(index);
   }
 
+  /** Drop policy rows with no name and no document so optional policies stay optional. */
+  private removeEmptyPermissionPolicies(): void {
+    for (let i = this.permissionPolicies.length - 1; i >= 0; i--) {
+      const group = this.permissionPolicies.at(i);
+      const name = (group.get('policy_name')?.value ?? '').trim();
+      const doc = (group.get('policy_doc')?.value ?? '').trim();
+      if (!name && !doc) {
+        this.permissionPolicies.removeAt(i);
+      }
+    }
+  }
+
   private createForm() {
     this.form = this.formBuilder.group({
       role_name: [{ value: '', disabled: this.isEdit }, [Validators.required]],
@@ -113,19 +127,68 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
       Validators.min(1),
       Validators.max(12)
     ]);
+  }
 
-    if (!this.isEdit) {
-      this.addPermissionPolicy();
+  isFieldInvalid(controlName: string): boolean {
+    const control = this.form.get(controlName);
+    return (
+      !!control &&
+      control.invalid &&
+      (control.dirty || control.touched || this.formSubmitted)
+    );
+  }
+
+  showFieldError(controlName: string, errorName?: string): boolean {
+    const control = this.form.get(controlName);
+    if (!control || !(control.dirty || control.touched || this.formSubmitted)) {
+      return false;
     }
+    return errorName ? control.hasError(errorName) : control.invalid;
+  }
+
+  isPolicyFieldInvalid(policy: AbstractControl, fieldName: string): boolean {
+    const control = policy.get(fieldName);
+    // Optional policies: only show errors after the user interacts with a row,
+    // or after submit when showValidationErrors() marks that row dirty.
+    return !!control && control.invalid && (control.dirty || control.touched);
+  }
+
+  showPolicyFieldError(policy: AbstractControl, fieldName: string, errorName?: string): boolean {
+    const control = policy.get(fieldName);
+    if (!control || !(control.dirty || control.touched)) {
+      return false;
+    }
+    return errorName ? control.hasError(errorName) : control.invalid;
+  }
+
+  /** Surface field errors when Create is clicked on an invalid tearsheet form. */
+  private showValidationErrors(): void {
+    this.formSubmitted = true;
+    this.form.markAllAsTouched();
+    Object.values(this.form.controls).forEach((control) => {
+      if (control instanceof FormArray) {
+        control.controls.forEach((group) => {
+          if (group instanceof FormGroup) {
+            Object.values(group.controls).forEach((child) => {
+              child.markAsTouched();
+              child.markAsDirty();
+            });
+          }
+        });
+      } else {
+        control.markAsDirty();
+      }
+    });
+    this.cdr.markForCheck();
   }
 
   onSubmit() {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
+    if (!this.isEdit) {
+      this.removeEmptyPermissionPolicies();
     }
 
-    if (!this.isEdit && this.permissionPolicies.length === 0) {
+    if (this.form.invalid) {
+      this.showValidationErrors();
       return;
     }
 
