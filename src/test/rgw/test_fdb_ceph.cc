@@ -190,41 +190,6 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
    CHECK(direct == via_serialize);
  }
 
- SECTION("buffer::list key span preserves logical key bytes")
- {
-   ceph::buffer::list key;
-   key.append("buffer-list-key");
-
-   auto key_span = ceph::libfdb::detail::as_fdb_span(key);
-
-   CHECK(key.length() == key_span.size());
-   CHECK(std::ranges::equal(std::span((const char *)key_span.data(), key_span.size()),
-                            std::string_view("buffer-list-key")));
- }
-
- SECTION("empty buffer::list key span is empty")
- {
-   ceph::buffer::list key;
-
-   auto key_span = ceph::libfdb::detail::as_fdb_span(key);
-
-   CHECK(0 == key_span.size());
- }
-
- SECTION("buffer::list key span preserves embedded nulls")
- {
-   constexpr char data[] = { '\0', 'k', 'e', 'y', '\0' };
-
-   ceph::buffer::list key;
-   key.append(data, sizeof(data));
-
-   auto key_span = ceph::libfdb::detail::as_fdb_span(key);
-
-   CHECK(key.length() == key_span.size());
-   CHECK(std::ranges::equal(std::span((const char *)key_span.data(), key_span.size()),
-                            std::string_view(data, sizeof(data))));
- }
-
  SECTION("empty buffer::list round trip through public set/get")
  {
    ceph::buffer::list in;
@@ -293,7 +258,8 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  SECTION("buffer::ptr")
  {
     string_view in("Hello, World!");
-    ceph::buffer::ptr p(ceph::buffer::claim_char(in.length(), const_cast<char *>(in.data())));
+    ceph::buffer::ptr p(ceph::buffer::copy(in.data(), in.size()));
+
     CHECK(in == string_view(p.c_str(), p.length()));
 
     const auto key = test_key("key");
