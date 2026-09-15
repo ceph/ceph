@@ -5,7 +5,7 @@ from typing import List, cast, Optional, NamedTuple
 from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource
+from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource, ServiceSpec
 
 from orchestrator import (
     OrchestratorError,
@@ -116,7 +116,11 @@ class NvmeofService(CephService):
             'root_ca_cert': tls_creds.ca_cert,
         })
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
@@ -181,7 +185,7 @@ class NvmeofService(CephService):
         if spec.encryption_key:
             daemon_spec.extra_files['encryption_key'] = spec.encryption_key
 
-        daemon_spec.final_config, _ = self.generate_config(daemon_spec)
+        daemon_spec.final_config, _ = self.generate_config(daemon_spec, spec)
         daemon_spec.deps = self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 

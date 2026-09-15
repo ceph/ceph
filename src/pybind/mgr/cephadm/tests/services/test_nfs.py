@@ -1072,3 +1072,26 @@ def test_nfs_get_dependencies_client_object_cache(cephadm_module: CephadmOrchest
         last_deps=[],
     )
     assert step.action is utils.Action.REDEPLOY
+
+
+def test_nfs_get_dependencies_rdma_and_tls_options(cephadm_module: CephadmOrchestrator):
+    spec = NFSServiceSpec(
+        service_id='foo',
+        enable_rdma=True,
+        rdma_port=20049,
+        tls_ktls=True,
+        tls_debug=True,
+        tls_min_version='1.3',
+        tls_ciphers='TLS_AES_256_GCM_SHA384',
+    )
+
+    assert service_registry.get_service('nfs').get_dependencies(
+        cephadm_module, spec, 'nfs'
+    ) == sorted([
+        'enable_rdma: True',
+        'rdma_port: 20049',
+        'tls_ktls: True',
+        'tls_debug: True',
+        'tls_min_version: 1.3',
+        'tls_ciphers: TLS_AES_256_GCM_SHA384',
+    ])
