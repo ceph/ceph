@@ -5,6 +5,15 @@ describe('Physical Disks page', () => {
 
   beforeEach(() => {
     cy.login();
+    cy.intercept('GET', '**/ui-api/orchestrator/status', {
+      body: {
+        available: true,
+        message: null,
+        features: {
+          blink_device_light: { available: true }
+        }
+      }
+    });
     inventory.navigateTo();
   });
 

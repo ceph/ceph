@@ -6,6 +6,16 @@ import { ServicesPageHelper } from './services.po';
 export class OnboardingHelper extends PageHelper {
   pages = { index: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' } };
 
+  navigateTo(name: string = null) {
+    name = name || 'index';
+    const page = this.pages[name];
+
+    this.stubOrchestratorEndpoints();
+    cy.visit(page.url);
+    cy.wait(['@orchStatus', '@orchConfig']);
+    cy.get(page.id);
+  }
+
   onboarding() {
     cy.get('cd-create-cluster').should('contain.text', 'Welcome to Ceph Dashboard');
     cy.get('[aria-label="Add Storage"]').first().click({ force: true });

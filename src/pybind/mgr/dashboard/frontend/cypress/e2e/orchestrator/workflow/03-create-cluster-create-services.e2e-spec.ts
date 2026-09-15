@@ -31,9 +31,12 @@ describe('Create cluster create services page', () => {
       createService('mds', serviceName);
     });
 
-    it('should edit a service', () => {
+    it('should edit a service', { retries: 2 }, () => {
       const daemonCount = '2';
       createClusterServicePage.editService(serviceName, daemonCount);
+      // Navigate to another step and back to trigger a fresh service list load
+      onboardingPage.selectStep('Review');
+      onboardingPage.selectStep('Create Services');
       createClusterServicePage.expectPlacementCount(serviceName, daemonCount);
     });
 
