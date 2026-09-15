@@ -2,6 +2,41 @@
 source $(dirname $0)/../detect-build-env-vars.sh
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
+# BlueStore requires libaio with a working io_getevents(2).  On some
+# systems (e.g. Ubuntu 24.04 with kernel 6.8+ inside a restricted
+# AppArmor/Landlock environment) io_getevents with a non-zero timeout
+# returns -EPERM.  Detect this before starting the cluster and skip the
+# test (CTest exit code 77 == SKIP) rather than crashing ceph-osd.
+if ! python3 - <<'EOF'
+import ctypes, sys
+from ctypes import Structure, c_long
+
+class io_event(Structure):
+    _fields_ = [('data', c_long), ('obj', c_long), ('res', c_long), ('res2', c_long)]
+
+class timespec(Structure):
+    _fields_ = [('tv_sec', c_long), ('tv_nsec', c_long)]
+
+try:
+    libaio = ctypes.CDLL('libaio.so.1', use_errno=True)
+except OSError:
+    sys.exit(0)  # libaio not present; let the test fail with a clear message
+
+ctx = c_long(0)
+if libaio.io_setup(128, ctypes.byref(ctx)) < 0:
+    sys.exit(0)  # io_setup failed; not an AppArmor issue
+
+dummy = io_event()
+ts = timespec(0, 1 * 1000 * 1000)  # 1 ms – same blocking path as bluestore AIO poll
+r = libaio.io_getevents(ctx, 1, 1, ctypes.byref(dummy), ctypes.byref(ts))
+libaio.io_destroy(ctx)
+sys.exit(0 if r >= 0 else 1)
+EOF
+then
+    echo "SKIP: libaio io_getevents is not permitted on this system (AppArmor/Landlock restriction)"
+    exit 77
+fi
+
 set -e
 
 function run() {

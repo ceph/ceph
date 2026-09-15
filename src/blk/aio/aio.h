@@ -127,13 +127,30 @@ struct aio_queue_t final : public io_queue_t {
     ceph_assert(ctx == 0);
 #if defined(HAVE_LIBAIO)
     int r = io_setup(max_iodepth, &ctx);
-    if (r < 0) {
+    if (r < 0) { 
       if (ctx) {
 	io_destroy(ctx);
 	ctx = 0;
       }
+      return r;
     }
-    return r;
+    // Fix tracker: https://tracker.ceph.com/issues/78148
+    // Probe io_getevents with a non-zero timeout to exercise the same blocking
+    // kernel path used by the real polling loop.  On Ubuntu 24.04+ with a
+    // restricted AppArmor profile io_setup(2) succeeds but io_getevents(2)
+    // returns -EPERM; catch it here so the caller gets an error instead of
+    // ceph_abort inside the AIO thread
+    {
+      io_event dummy;
+      struct timespec ts = {0, 1 * 1000 * 1000};  // 1ms
+      r = io_getevents(ctx, 1, 1, &dummy, &ts);
+      if (r < 0) {
+        io_destroy(ctx);
+        ctx = 0;
+        return r;
+      }
+    }
+    return 0;
 #elif defined(HAVE_POSIXAIO)
     ctx = kqueue();
     if (ctx < 0)
