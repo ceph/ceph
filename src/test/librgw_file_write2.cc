@@ -1184,6 +1184,105 @@ TEST(OPEN2, SHADOW_JOIN_DOES_NOT_REMOVE_THE_WINNERS)
   ASSERT_EQ(fsio_inject(&dp, "inject-fork-race", false), 0);
 }
 
+/* ---- flag namespaces -------------------------------------------------
+ *
+ * Each call has its own namespace of flag values and they reuse the same low
+ * bits, so a word from the wrong namespace is not detectable by value --
+ * RGW_LOOKUP_FLAG_DIR would read as RGW_OPEN_FLAG_V3.  Each call that
+ * interprets its flags therefore rejects bits outside its own mask, rather
+ * than letting one reach the shared internals and change behaviour there.
+ *
+ * Nothing in these suites passed an out-of-namespace flag, so without this
+ * the checks would be dead code. */
+TEST(OPEN2, FLAGS_OUT_OF_NAMESPACE_REFUSED)
+{
+  const std::string name{"fl-ns"};
+
+  /* rgw_lookup:  mask is CREATE|RCB|DIR|FILE */
+  struct rgw_file_handle* fh = nullptr;
+  EXPECT_EQ(rgw_lookup(fs, bucket_fh, name.c_str(), &fh, nullptr, 0, 0x0010),
+	    -EINVAL);
+
+  /* a real handle for the rest */
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, name.c_str(), &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_CREATE), 0);
+
+  /* rgw_open / rgw_open2:  mask is CREATE|V3 */
+  EXPECT_EQ(rgw_open(fs, fh, O_RDWR, 0x0004), -EINVAL);
+  rgw_open_fd ofd = nullptr;
+  EXPECT_EQ(rgw_open2(fs, fh, &ofd, nullptr, O_RDWR, 0x0004), -EINVAL);
+
+  /* now open it for real, so close2 and reopen2 have something to refuse on */
+  ASSERT_EQ(rgw_open2(fs, fh, &ofd, nullptr, O_RDWR,
+		      RGW_OPEN_FLAG_CREATE), 0);
+
+  /* rgw_reopen2:  flags is reserved, so anything but NONE is refused */
+  EXPECT_EQ(rgw_reopen2(ofd, O_RDONLY, RGW_OPEN_FLAG_CREATE), -EINVAL);
+
+  /* rgw_close2:  mask is RELE|DETACH.  A refused close must not have closed
+   * anything, so the real close below has to succeed */
+  EXPECT_EQ(rgw_close2(ofd, 0x0004), -EINVAL);
+  ASSERT_EQ(rgw_close2(ofd, RGW_CLOSE_FLAG_NONE), 0)
+      << "a refused close2 closed the open anyway";
+
+  /* rgw_close:  same mask, v1 form */
+  EXPECT_EQ(rgw_close(fs, fh, 0x0004), -EINVAL);
+
+  /* rgw_readdir / rgw_readdir2:  mask is DOTDOT */
+  bool eof = false;
+  uint64_t off = 0;
+  EXPECT_EQ(rgw_readdir(fs, bucket_fh, &off, nullptr, nullptr, &eof, 0x0002),
+	    -EINVAL);
+  EXPECT_EQ(rgw_readdir2(fs, bucket_fh, nullptr, nullptr, nullptr, &eof,
+			 0x0002), -EINVAL);
+
+  /* rgw_rename:  mask is SLICE_VERSIONS */
+  EXPECT_EQ(rgw_rename(fs, bucket_fh, name.c_str(), bucket_fh, "fl-ns2",
+		       0x0002), -EINVAL);
+
+  ASSERT_EQ(rgw_fh_rele(fs, fh, 0), 0);
+}
+
+/* A symlink handle must not be born open, and must not be born with a create
+ * intent recorded.
+ *
+ * RGWFileHandle::FLAG_SYMBOLIC_LINK was 0x0009 -- FLAG_OPEN|FLAG_CREATING
+ * rather than a bit of its own -- so it was both.  Nothing in any librgw suite
+ * exercised rgw_symlink(), which is how that survived being marked
+ * "XXXX bug?" in the header. */
+TEST(OPEN2, SYMLINK_IS_NOT_BORN_OPEN)
+{
+  const std::string name{"fl-link"};
+  const std::string target{"fl-ns"};
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  struct stat st{};
+  st.st_mode = 0777;
+  struct rgw_file_handle* lfh = nullptr;
+  int ret = rgw_symlink(fs, bucket_fh, name.c_str(), target.c_str(), &st,
+			RGW_SETATTR_MODE, &lfh, 0 /* posix flags */,
+			RGW_CREATELINK_FLAG_NONE);
+  if ((ret == -ENOTSUP) || (ret == -EPERM) || (ret == -EINVAL)) {
+    GTEST_SKIP() << "driver does not implement symlinks (rc=" << ret << ")";
+  }
+  ASSERT_EQ(ret, 0);
+  ASSERT_NE(lfh, nullptr);
+
+  auto* rgw_fh = rgw::get_rgwfh(lfh);
+  ASSERT_NE(rgw_fh, nullptr);
+  EXPECT_EQ(lfh->fh_type, RGW_FS_TYPE_SYMBOLIC_LINK)
+      << "a symlink was not typed as one";
+  EXPECT_FALSE(rgw_fh->is_open())
+      << "a freshly created symlink reports is_open();  the symlink marker is "
+	 "sharing a bit with FLAG_OPEN";
+  EXPECT_FALSE(rgw_fh->creating())
+      << "a freshly created symlink reports creating();  the symlink marker "
+	 "is sharing a bit with FLAG_CREATING, and rgw_open() would infer a "
+	 "create for it";
+
+  ASSERT_EQ(rgw_fh_rele(fs, lfh, 0), 0);
+}
+
 TEST(OPEN2, SETATTR1)
 {
   /* set attrs during open session, verify, close, reopen, verify */

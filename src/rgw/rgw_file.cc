@@ -3450,6 +3450,9 @@ int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *dst, const char* dst_name,
 	       uint32_t flags)
 {
+  if (flags & ~RGW_RENAME_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
   RGWFileHandle* src_fh = get_rgwfh(src);
@@ -3478,6 +3481,9 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle **fh,
 	      struct stat *st, uint32_t mask, uint32_t flags)
 {
+  if (flags & ~RGW_LOOKUP_FLAG_MASK) {
+    return -EINVAL;
+  }
   //CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
@@ -3645,6 +3651,9 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
 int rgw_open(struct rgw_fs *rgw_fs,
 	     struct rgw_file_handle *fh, uint32_t posix_flags, uint32_t flags)
 {
+  if (flags & ~RGW_OPEN_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   /* the stateless (NFSv3) open:  no open token is returned to the
@@ -3687,6 +3696,9 @@ int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
               rgw_open_fd* open_fd /* OUT */, struct rgw_open_args* args,
               uint32_t posix_flags, uint32_t flags)
 {
+  if (flags & ~RGW_OPEN_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   if (!rgw_fh->is_file())
@@ -3704,6 +3716,9 @@ int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
 int rgw_close(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint32_t flags)
 {
+  if (flags & ~RGW_CLOSE_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
   int rc;
 
@@ -3727,6 +3742,12 @@ int rgw_close(struct rgw_fs *rgw_fs,
 */
 int rgw_reopen2(rgw_open_fd open_fd, uint32_t posix_flags, uint32_t flags)
 {
+  /* reserved:  the access mode comes from posix_flags alone.  Refused
+   * rather than ignored, so a caller which believed a flag meant
+   * something is told otherwise */
+  if (flags != RGW_OPEN_FLAG_NONE) {
+    return -EINVAL;
+  }
   auto open = fd_to_open(open_fd);
   if (! open) {
     return -EBADF;
@@ -3737,6 +3758,9 @@ int rgw_reopen2(rgw_open_fd open_fd, uint32_t posix_flags, uint32_t flags)
 
 int rgw_close2(rgw_open_fd open_fd, uint32_t flags)
 {
+  if (flags & ~RGW_CLOSE_FLAG_MASK) {
+    return -EINVAL;
+  }
   auto open = fd_to_open(open_fd);
 
   auto& rgw_fh = open->fh;
@@ -3755,6 +3779,9 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof,
 		uint32_t flags)
 {
+  if (flags & ~RGW_READDIR_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
     /* bad parent */
@@ -3783,6 +3810,9 @@ int rgw_readdir2(struct rgw_fs *rgw_fs,
 		 rgw_readdir_cb rcb, void *cb_arg, bool *eof,
 		 uint32_t flags)
 {
+  if (flags & ~RGW_READDIR_FLAG_MASK) {
+    return -EINVAL;
+  }
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
     /* bad parent */

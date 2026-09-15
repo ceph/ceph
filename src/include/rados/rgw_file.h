@@ -34,6 +34,26 @@ extern "C" {
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
 
 /*
+ * Flags
+ *
+ * Every call takes a uint32_t flags as its last argument, and each call has
+ * its *own* namespace of flag values -- RGW_LOOKUP_FLAG_* for rgw_lookup(),
+ * RGW_OPEN_FLAG_* for the open calls, and so on.  The values are small and
+ * deliberately reused across namespaces, so a word from the wrong namespace
+ * is not detectable by value:  passing RGW_LOOKUP_FLAG_DIR to rgw_open()
+ * would read as RGW_OPEN_FLAG_V3.  Pass the namespace belonging to the call.
+ *
+ * Where a call defines only RGW_..._FLAG_NONE it takes no flags;  pass NONE.
+ * Where a call defines real values, a _FLAG_MASK is given beside them and the
+ * call rejects any bit outside it with -EINVAL, rather than letting an
+ * unexpected bit reach the shared internals and change behaviour there.
+ *
+ * Two calls share a namespace by intent, because they share an
+ * implementation:  rgw_open() and rgw_open2() both take RGW_OPEN_FLAG_*, and
+ * rgw_close() and rgw_close2() both take RGW_CLOSE_FLAG_*.
+ */
+
+/*
  * object types
  */
 enum rgw_fh_type {
@@ -97,6 +117,10 @@ void rgwfile_version(int *major, int *minor, int *extra);
 #define RGW_LOOKUP_FLAG_RCB     0x0002 /* readdir callback hint */
 #define RGW_LOOKUP_FLAG_DIR     0x0004
 #define RGW_LOOKUP_FLAG_FILE    0x0008
+
+#define RGW_LOOKUP_FLAG_MASK \
+  (RGW_LOOKUP_FLAG_CREATE|RGW_LOOKUP_FLAG_RCB|RGW_LOOKUP_FLAG_DIR| \
+   RGW_LOOKUP_FLAG_FILE)
 
 #define RGW_LOOKUP_TYPE_FLAGS \
   (RGW_LOOKUP_FLAG_DIR|RGW_LOOKUP_FLAG_FILE)
@@ -211,6 +235,8 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
  * rename(2) has no way to ask for it, so no filesystem client can. */
 #define RGW_RENAME_FLAG_SLICE_VERSIONS 0x0001
 
+#define RGW_RENAME_FLAG_MASK (RGW_RENAME_FLAG_SLICE_VERSIONS)
+
 int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *olddir, const char* old_name,
 	       struct rgw_file_handle *newdir, const char* new_name,
@@ -234,6 +260,8 @@ typedef int (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
 
 #define RGW_READDIR_FLAG_NONE      0x0000
 #define RGW_READDIR_FLAG_DOTDOT    0x0001 /* send dot names */
+
+#define RGW_READDIR_FLAG_MASK (RGW_READDIR_FLAG_DOTDOT)
 
 int rgw_readdir(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *parent_fh, uint64_t *offset,
@@ -288,6 +316,8 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
 #define RGW_OPEN_FLAG_CREATE       0x0001
 #define RGW_OPEN_FLAG_V3           0x0002 /* ops have v3 semantics */
 #define RGW_OPEN_FLAG_STATELESS    0x0002 /* alias it */
+
+#define RGW_OPEN_FLAG_MASK (RGW_OPEN_FLAG_CREATE|RGW_OPEN_FLAG_V3)
 
 int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 	     uint32_t posix_flags, uint32_t flags);
@@ -355,6 +385,8 @@ int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
 #define RGW_CLOSE_FLAG_RELE        0x0001
 #define RGW_CLOSE_FLAG_DETACH      0x0002
 
+#define RGW_CLOSE_FLAG_MASK (RGW_CLOSE_FLAG_RELE|RGW_CLOSE_FLAG_DETACH)
+
 /*
   RGW_CLOSE_FLAG_DETACH declines to finalize on this close's account:
   the close does not publish, even when it returns the last write open.
@@ -398,6 +430,9 @@ int rgw_close2(rgw_open_fd open_fd, uint32_t flags);
   returns the last write open publishes, exactly as closing it would:
   giving up write intent and closing both return it.
 */
+/* flags is reserved and must be RGW_OPEN_FLAG_NONE:  the access mode comes
+   entirely from posix_flags, and nothing in the open namespace applies to a
+   mode change */
 int rgw_reopen2(rgw_open_fd open_fd, uint32_t posix_flags, uint32_t flags);
 
 /*
@@ -487,6 +522,8 @@ int rgw_getxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 		  uint32_t flags);
 
 #define RGW_LSXATTR_FLAG_NONE       0x0000
+/* returned by the caller's rgw_xattrlist_cb to stop enumeration;  it is not
+ * an input to rgw_lsxattrs(), which takes no flags */
 #define RGW_LSXATTR_FLAG_STOP       0x0001
 
 int rgw_lsxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
