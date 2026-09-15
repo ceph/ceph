@@ -523,7 +523,9 @@ void MgrMap::print_summary(ceph::Formatter *f, std::ostream *ss) const
     f->dump_int("num_standbys", standbys.size());
     f->open_array_section("standbys");
     for (const auto &i : standbys) {
-     f->dump_string("name", i.second.name);
+      f->open_object_section("standby");
+      f->dump_string("name", i.second.name);
+      f->close_section();
     }
     f->close_section();
     f->open_array_section("modules");
