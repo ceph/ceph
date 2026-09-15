@@ -160,7 +160,6 @@
             </div>
             <div
               class="btn-group align-inline-btns"
-              [ngStyle]="{ visibility: activeNodeId === node?.data?.id ? 'visible' : 'hidden' }"
               role="group"
             >
               <div
@@ -169,9 +168,9 @@
               >
                 <button
                   type="button"
-                  class="btn btn-light dropdown-toggle-split ms-1"
+                  class="btn btn-light ms-1"
                   (click)="openModal(node, true)"
-                  [disabled]="getDisable() || node?.data?.secondary_zone"
+                  [disabled]="getDisable(node?.data?.type) || node?.data?.secondary_zone"
                 >
                   <svg
                     [cdsIcon]="icons.edit"

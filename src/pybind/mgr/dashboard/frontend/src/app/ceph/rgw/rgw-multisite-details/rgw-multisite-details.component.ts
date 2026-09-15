@@ -5,7 +5,8 @@ import {
   OnDestroy,
   OnInit,
   TemplateRef,
-  ViewChild
+  ViewChild,
+  ViewEncapsulation
 } from '@angular/core';
 import { Node } from 'carbon-components-angular/treeview/tree-node.types';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
@@ -51,6 +52,7 @@ const BASE_URL = 'rgw/multisite/configuration';
   templateUrl: './rgw-multisite-details.component.html',
   styleUrls: ['./rgw-multisite-details.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None,
   standalone: false
 })
 export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, OnInit {
@@ -497,8 +499,12 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     node.expanded = true;
   }
 
-  getDisable() {
+  getDisable(nodeType?: string) {
     let isMasterZone = true;
+    // Standalone zonegroup/zone without a realm can always be edited
+    if (this.defaultRealmId === '' && nodeType !== 'realm') {
+      return false;
+    }
     if (this.defaultRealmId === '') {
       return this.messages.noDefaultRealm;
     } else {
@@ -541,7 +547,7 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     let isDisabled: boolean = false;
     let deleteTitle: string = this.deleteTitle;
     let masterZonegroupCount: number = 0;
-    if (node?.value?.type === 'realm' && node?.data?.is_default && this.realms.length < 2) {
+    if (node?.data?.type === 'realm' && node?.data?.is_default && this.realms.length < 2) {
       isDisabled = true;
     }
 
