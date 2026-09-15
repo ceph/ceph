@@ -1061,8 +1061,13 @@ class RgwUser(RgwRESTController):
     def set(self, uid, display_name=None, email=None, max_buckets=None,
             system=None, suspended=None, daemon_name=None, account_id: Optional[str] = None,
             account_root_user: Optional[bool] = False,
-            account_policies: Optional[str] = None):
+            account_policies: Optional[str] = None,
+            new_uid: Optional[str] = None):
         """Update an existing RGW user."""
+
+        if new_uid and new_uid != uid:
+            RgwClient.rename_user(uid, new_uid, daemon_name)
+            uid = new_uid
 
         params = {'uid': uid}
 

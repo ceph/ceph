@@ -189,6 +189,23 @@ describe('RgwUserFormComponent', () => {
       tick(DUE_TIMER);
       formHelper.expectError('user_id', 'notUnique');
     }));
+
+    it('should validate that username is valid when editing with its original username', fakeAsync(() => {
+      component.editing = true;
+      component.originalUid = 'original_user';
+      formHelper.setValue('user_id', 'original_user', true);
+      tick(DUE_TIMER);
+      formHelper.expectValid('user_id');
+    }));
+
+    it('should validate that username is invalid when editing to an existing username', fakeAsync(() => {
+      component.editing = true;
+      component.originalUid = 'original_user';
+      spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
+      formHelper.setValue('user_id', 'existing_user', true);
+      tick(DUE_TIMER);
+      formHelper.expectError('user_id', 'notUnique');
+    }));
   });
 
   describe('tenant validation', () => {
@@ -374,6 +391,19 @@ describe('RgwUserFormComponent', () => {
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
         `Updated Object Gateway user 'null'`
+      );
+    });
+
+    it('tests rename success notification', () => {
+      spyOn(rgwUserService, 'update').and.returnValue(observableOf([]));
+      component.editing = true;
+      component.originalUid = 'old_user';
+      formHelper.setValue('user_id', 'new_user', true);
+      formHelper.setValue('suspended', true, true);
+      component.onSubmit();
+      expect(notificationService.show).toHaveBeenCalledWith(
+        NotificationType.success,
+        `Renamed Object Gateway user to 'new_user'`
       );
     });
   });
