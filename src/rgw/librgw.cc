@@ -66,7 +66,12 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
   for (const auto& elt : spl_args) {
     args.push_back(elt.c_str());
   }
-  int rc = rgwlib.init(args);
+  int rc = 0;
+  if (strcmp(argv[0], "vfs_ceph_rgw") == 0) {
+      rc = rgwlib.init(args, ProtocolType::SMB);
+  } else {
+      rc = rgwlib.init(args, ProtocolType::NFS);
+  }
 
   *rgw = g_ceph_context->get();
 
