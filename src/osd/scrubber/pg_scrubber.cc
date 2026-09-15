@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=2 sw=2 sts=2 expandtab
 
-#include "./pg_scrubber.h"  // '.' notation used to affect clang-format order
+#include "./pg_scrubber.h" // '.' notation used to affect clang-format order
 
 #include <fmt/ranges.h>
 
@@ -11,23 +11,24 @@
 #include <sstream>
 #include <vector>
 
+#include "common/debug.h"
 #include "debug.h"
 
 #include "common/ceph_time.h"
-#include "common/debug.h"
 #include "common/errno.h"
+#include "include/utime_fmt.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
 #include "messages/MOSDScrubReserve.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
-#include "include/utime_fmt.h"
 #include "osd/osd_types_fmt.h"
 
 #include "ScrubStore.h"
 #include "scrub_backend.h"
 #include "scrub_machine.h"
+#include "scrubber_tracer.h"
 
 using std::list;
 using std::pair;
@@ -1171,7 +1172,10 @@ eversion_t PgScrubber::search_log_for_updates() const
     return p->version;
 }
 
-void PgScrubber::get_replicas_maps(bool replica_can_preempt)
+void
+PgScrubber::get_replicas_maps(
+    bool replica_can_preempt,
+    const jspan_context& parent_ctx)
 {
   dout(10) << __func__ << " started in epoch/interval: " << m_epoch_start << "/"
 	   << m_interval_start << " pg same_interval_since: "
@@ -1186,12 +1190,9 @@ void PgScrubber::get_replicas_maps(bool replica_can_preempt)
       continue;
 
     m_maps_status.mark_replica_map_request(i);
-    _request_scrub_map(i,
-		       m_subset_last_update,
-		       m_start,
-		       m_end,
-		       m_is_deep,
-		       replica_can_preempt);
+    _request_scrub_map(
+        i, m_subset_last_update, m_start, m_end, m_is_deep, replica_can_preempt,
+        parent_ctx);
   }
 
   dout(10) << __func__ << " awaiting" << m_maps_status << dendl;
@@ -1238,12 +1239,15 @@ std::string_view PgScrubber::get_op_mode_text() const
   return m_mode_desc;
 }
 
-void PgScrubber::_request_scrub_map(pg_shard_t replica,
-				    eversion_t version,
-				    hobject_t start,
-				    hobject_t end,
-				    bool deep,
-				    bool allow_preemption)
+void
+PgScrubber::_request_scrub_map(
+    pg_shard_t replica,
+    eversion_t version,
+    hobject_t start,
+    hobject_t end,
+    bool deep,
+    bool allow_preemption,
+    const jspan_context& parent_ctx)
 {
   ceph_assert(replica != m_pg_whoami);
   dout(10) << __func__ << " scrubmap from osd." << replica
@@ -1259,6 +1263,7 @@ void PgScrubber::_request_scrub_map(pg_shard_t replica,
 				     allow_preemption,
 				     m_flags.priority,
 				     m_pg->ops_blocked_by_scrub());
+  repscrubop->otel_trace = parent_ctx;
 
   // default priority. We want the replica-scrub processed prior to any recovery
   // or client io messages (we are holding a lock!)
@@ -1654,6 +1659,7 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   replica_scrubmap = ScrubMap{};
   replica_scrubmap_pos = ScrubMapBuilder{};
 
+  m_fsm->set_replica_parent_ctx(msg->otel_trace);
   m_replica_min_epoch = msg->min_epoch;
   m_start = msg->start;
   m_end = msg->end;
@@ -2675,7 +2681,10 @@ PgScrubber::PgScrubber(PG* pg)
 	m_osds->cct->_conf, "osd_stats_update_period_not_scrubbing"}
     , preemption_data{pg}
 {
-  m_fsm = std::make_unique<ScrubMachine>(m_pg, this);
+  tracing::scrubber::tracer.init(m_osds->cct, "pg_scrubber");
+  auto scrubber_parent_span =
+      tracing::scrubber::tracer.start_trace("pg-scrubber-initialized");
+  m_fsm = std::make_unique<ScrubMachine>(m_pg, this, scrubber_parent_span);
   m_fsm->initiate();
   m_scrub_job.emplace(m_osds->cct, m_pg->pg_id, m_osds->get_nodeid());
 }
