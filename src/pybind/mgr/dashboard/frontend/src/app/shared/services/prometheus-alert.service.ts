@@ -117,13 +117,13 @@ export class PrometheusAlertService {
       0
     );
 
-    this.totalSubject.next(this.activeAlerts);
-    this.criticalSubject.next(this.activeCriticalAlerts);
-    this.warningSubject.next(this.activeWarningAlerts);
-
     this.alerts = alerts
       .reverse()
       .sort((a, b) => a.labels.severity.localeCompare(b.labels.severity));
+
+    this.totalSubject.next(this.activeAlerts);
+    this.criticalSubject.next(this.activeCriticalAlerts);
+    this.warningSubject.next(this.activeWarningAlerts);
 
     this.canAlertsBeNotified = true;
   }
