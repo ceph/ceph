@@ -637,8 +637,16 @@ Commands
   Delete an rbd image (including all data blocks). If the image has
   snapshots, this fails and nothing is deleted.
 
+.. The rbd-snap-create-begin and rbd-snap-create-end markers delimit text
+   that doc/rbd/rbd-snapshot.rst includes at build time. Keep them around
+   this entry.
+
+.. rbd-snap-create-begin
+
 :command:`snap create` *snap-spec*
   Create a new snapshot. Requires the snapshot name parameter to be specified.
+
+.. rbd-snap-create-end
 
 :command:`snap limit clear` *image-spec*
   Remove any previously set limit on the number of snapshots allowed on
