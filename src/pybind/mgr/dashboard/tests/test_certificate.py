@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from unittest import mock
 from unittest.mock import patch
 
-from orchestrator import DaemonDescription
+from orchestrator import DaemonDescription, OrchestratorError
 
 from ..controllers._version import APIVersion
 from ..controllers.certificate import Certificate
@@ -535,6 +535,161 @@ class CertificateGetControllerTest(CertificateTestBase):
         result = self.json_body()
         self.assertEqual(result['scope'], 'HOST')
         self.assertEqual(result['target'], 'node0')
+
+
+class CertificateDeleteControllerTest(CertificateTestBase):
+    """Tests for the certificate delete() endpoint."""
+
+    @mock.patch('dashboard.controllers.certificate.OrchClient.instance')
+    def test_delete_certificate_success(self, instance):
+        """Test deleting certificate for a service successfully."""
+        fake_client = self._setup_fake_client(mock.Mock())
+        service = mock.Mock()
+        service.spec = mock.Mock()
+        service.spec.service_type = 'rgw'
+        service.spec.service_name = mock.Mock(return_value='rgw.test')
+        fake_client.services.get.return_value = [service]
+
+        cert_details = self._create_mock_cert_details()
+        cert_ls_data = self._create_mock_cert_ls_data(
+            cert_name='rgw_ssl_cert',
+            scope='SERVICE',
+            service_name='rgw.test',
+            cert_details=cert_details
+        )
+        fake_client.cert_store.cert_ls.return_value = cert_ls_data
+        fake_client.services.list_daemons.return_value = []
+        fake_client.cert_store.rm_cert.return_value = 'Certificate removed'
+        fake_client.cert_store.rm_key.return_value = 'Key removed'
+        instance.return_value = fake_client
+
+        self._delete('{}/rgw.test'.format(self.URL_CERTIFICATE))
+        self.assertStatus(204)
+
+    @mock.patch('dashboard.controllers.certificate.OrchClient.instance')
+    def test_delete_certificate_orphaned_service_with_cert(self, instance):
+        """Test deleting orphaned certificate when service no longer exists."""
+        fake_client = self._setup_fake_client(mock.Mock())
+        fake_client.services.get.return_value = []  # Service doesn't exist
+
+        cert_details = self._create_mock_cert_details()
+        cert_ls_data = self._create_mock_cert_ls_data(
+            cert_name='rgw_ssl_cert',
+            scope='SERVICE',
+            service_name='rgw.orphaned',
+            cert_details=cert_details
+        )
+        fake_client.cert_store.cert_ls.return_value = cert_ls_data
+        fake_client.cert_store.rm_cert.return_value = 'Certificate removed'
+        fake_client.cert_store.rm_key.return_value = 'Key removed'
+        instance.return_value = fake_client
+
+        self._delete('{}/rgw.orphaned'.format(self.URL_CERTIFICATE))
+        self.assertStatus(204)
+
+    @mock.patch('dashboard.controllers.certificate.OrchClient.instance')
+    def test_delete_certificate_not_found(self, instance):
+        """Test deleting certificate when no certificate exists."""
+        fake_client = self._setup_fake_client(mock.Mock())
+        service = mock.Mock()
+        service.spec = mock.Mock()
+        service.spec.service_type = 'rgw'
+        service.spec.service_name = mock.Mock(return_value='rgw.test')
+        fake_client.services.get.return_value = [service]
+        fake_client.cert_store.cert_ls.return_value = {}
+        fake_client.services.list_daemons.return_value = []
+        instance.return_value = fake_client
+
+        self._delete('{}/rgw.test'.format(self.URL_CERTIFICATE))
+        self.assertStatus(404)
+
+    @mock.patch('dashboard.controllers.certificate.OrchClient.instance')
+    def test_delete_certificate_host_scope(self, instance):
+        """Test deleting certificate with HOST scope removes from all hosts."""
+        fake_client = self._setup_fake_client(mock.Mock())
+        service = mock.Mock()
+        service.spec = mock.Mock()
+        service.spec.service_type = 'grafana'
+        service.spec.service_name = mock.Mock(return_value='grafana.test')
+        fake_client.services.get.return_value = [service]
+
+        cert_details = self._create_mock_cert_details()
+        cert_ls_data = {
+            'grafana_ssl_cert': {
+                'scope': 'HOST',
+                'certificates': {
+                    'node0': cert_details,
+                    'node1': cert_details
+                }
+            }
+        }
+        fake_client.cert_store.cert_ls.return_value = cert_ls_data
+        fake_client.services.list_daemons.return_value = [
+            DaemonDescription(daemon_type='grafana', daemon_id='test1', hostname='node0'),
+            DaemonDescription(daemon_type='grafana', daemon_id='test2', hostname='node1')
+        ]
+        fake_client.cert_store.rm_cert.return_value = 'Certificate removed'
+        fake_client.cert_store.rm_key.return_value = 'Key removed'
+        instance.return_value = fake_client
+
+        self._delete('{}/grafana.test'.format(self.URL_CERTIFICATE))
+        self.assertStatus(204)
+
+    @mock.patch('dashboard.controllers.certificate.OrchClient.instance')
+    def test_delete_certificate_cephadm_signed(self, instance):
+        """Test deleting cephadm-signed certificate."""
+        fake_client = self._setup_fake_client(mock.Mock())
+        service = mock.Mock()
+        service.spec = mock.Mock()
+        service.spec.service_type = 'rgw'
+        service.spec.service_name = mock.Mock(return_value='rgw.test')
+        fake_client.services.get.return_value = [service]
+
+        cert_details = self._create_mock_cert_details()
+        cert_ls_data = {
+            'cephadm-signed_rgw_cert': {
+                'scope': 'HOST',
+                'certificates': {
+                    'node0': cert_details
+                }
+            }
+        }
+        fake_client.cert_store.cert_ls.return_value = cert_ls_data
+        fake_client.services.list_daemons.return_value = [
+            DaemonDescription(daemon_type='rgw', daemon_id='test', hostname='node0')
+        ]
+        fake_client.cert_store.rm_cert.return_value = 'Certificate removed'
+        fake_client.cert_store.rm_key.return_value = 'Key removed'
+        instance.return_value = fake_client
+
+        self._delete('{}/rgw.test'.format(self.URL_CERTIFICATE))
+        self.assertStatus(204)
+
+    @mock.patch('dashboard.controllers.certificate.OrchClient.instance')
+    def test_delete_certificate_with_errors(self, instance):
+        """Test deleting certificate when removal fails."""
+        fake_client = self._setup_fake_client(mock.Mock())
+        service = mock.Mock()
+        service.spec = mock.Mock()
+        service.spec.service_type = 'rgw'
+        service.spec.service_name = mock.Mock(return_value='rgw.test')
+        fake_client.services.get.return_value = [service]
+
+        cert_details = self._create_mock_cert_details()
+        cert_ls_data = self._create_mock_cert_ls_data(
+            cert_name='rgw_ssl_cert',
+            scope='SERVICE',
+            service_name='rgw.test',
+            cert_details=cert_details
+        )
+        fake_client.cert_store.cert_ls.return_value = cert_ls_data
+        fake_client.services.list_daemons.return_value = []
+        fake_client.cert_store.rm_cert.side_effect = OrchestratorError('Permission denied')
+        fake_client.cert_store.rm_key.side_effect = OrchestratorError('Permission denied')
+        instance.return_value = fake_client
+
+        self._delete('{}/rgw.test'.format(self.URL_CERTIFICATE))
+        self.assertStatus(400)
 
 
 class CertificateRootCAControllerTest(CertificateTestBase):
