@@ -340,7 +340,8 @@ class BackingDeviceRotation(object):
 
 def lsblk_all(device: str = '',
               columns: Optional[List[str]] = None,
-              abspath: bool = False) -> List[Dict[str, str]]:
+              abspath: bool = False,
+              exclude_names: Optional[List[str]] = None) -> List[Dict[str, str]]:
     """
     Create a dictionary of identifying values for a device using ``lsblk``.
     Each supported column is a key, in its *raw* format (all uppercase
@@ -403,6 +404,9 @@ def lsblk_all(device: str = '',
     :param columns: A list of columns to report as keys in its original form.
     :param abspath: Set the flag for absolute paths on the report
     """
+    # Filter out devices whose name has an excluded prefix. Used by
+    # ceph-volume raw activate to avoid opening rbd/nbd/drbd/zram devices,
+    # which can wedge (D-state) when their backing storage is unavailable.
     default_columns = [
         'NAME', 'KNAME', 'PKNAME', 'MAJ:MIN', 'FSTYPE', 'MOUNTPOINT', 'LABEL',
         'UUID', 'RO', 'RM', 'MODEL', 'SIZE', 'STATE', 'OWNER', 'GROUP', 'MODE',
@@ -429,7 +433,15 @@ def lsblk_all(device: str = '',
     result = []
 
     for line in out:
-        result.append(_lsblk_parser(line))
+        parsed = _lsblk_parser(line)
+        if exclude_names:
+            name = parsed.get('NAME', '')
+            # lsblk -p prepends /dev/ to NAME; strip it before prefix check so
+            # 'rbd' matches '/dev/rbd0' (abspath) and 'rbd0' (non-abspath).
+            name_basename = name.rsplit('/', 1)[-1]
+            if any(name_basename.startswith(n) for n in exclude_names):
+                continue
+        result.append(parsed)
 
     return result
 
