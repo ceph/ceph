@@ -31,7 +31,6 @@ overrides:
       - \(PG_AVAILABILITY\)
       - \(SLOW_OPS\)
       - \[WRN\]
-      - \(MON_NETSPLIT\)
 tasks:
 - install:
 - ceph:
