@@ -167,13 +167,15 @@ void OperationThrottler::start()
   return;
 }
 
-void OperationThrottler::register_metrics(const std::string &sched_type) {
+void OperationThrottler::register_metrics(const std::string &sched_type,
+		                          const std::string &prefix) {
   namespace sm = seastar::metrics;
 
   LOG_PREFIX(OperationThrottler::register_metrics);
-  INFO("registering metrics for scheduler {}", sched_type);
-  const std::string group_name =
-    (sched_type == "mclock_scheduler") ? "osd_mclock" : "osd_wpq";
+  INFO("registering metrics for scheduler {} prefix{}", sched_type, prefix);
+
+  std::string base = (sched_type == "mclock_scheduler") ? "osd_mclock" : "osd_wpq";
+  const std::string group_name = prefix.empty() ? base : prefix + "_" + base;
 
   for (auto& [op_class, name] : {
     std::pair{SchedulerClass::background_recovery,    "background_recovery"},
@@ -222,6 +224,28 @@ OperationThrottler::OperationThrottler(ConfigProxy &conf)
   }
   register_metrics(conf.get_val<std::string>("osd_op_queue"));
 
+}
+
+OperationThrottler::OperationThrottler(ConfigProxy &conf,
+                                       const std::string &prefix)
+{
+  conf.add_observer(this);
+  for (auto op_class : {SchedulerClass::background_recovery,
+                        SchedulerClass::background_best_effort,
+                        SchedulerClass::client,
+                        SchedulerClass::repop,
+                        SchedulerClass::immediate}) {
+    wait_hist[op_class].buckets = {
+      {0, 1},
+      {0, 5},
+      {0, 10},
+      {0, 50},
+      {0, 100},
+      {0, 500},
+      {0, 1000},
+    };
+  }
+  register_metrics(conf.get_val<std::string>("osd_op_queue"), prefix);
 }
 
 void OperationThrottler::initialize_scheduler(CephContext *cct, ConfigProxy &conf, bool is_rotational, int whoami)
