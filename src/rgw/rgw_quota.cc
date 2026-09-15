@@ -17,10 +17,11 @@
 #include "include/function2.hpp"
 #include "include/utime.h"
 #include "common/Clock.h" // for ceph_clock_now()
-#include "common/lru_map.h"
+#include "common/intrusive_lru.h"
 #include "common/RefCountedObj.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
+#include "common/async/blocked_completion.h"
 
 #include "rgw_common.h"
 #include "rgw_sal.h"
@@ -37,215 +38,363 @@
 
 using namespace std;
 
-struct RGWQuotaCacheStats {
+// RQCS: abbreviation of RGWQuotaCacheStats
+template <typename RQCS, typename Key>
+struct rqcs_to_key {
+  using type = Key;
+  const Key &operator()(const RQCS &rqcs) {
+    return rqcs.key;
+  }
+};
+
+using WaitHandler = boost::asio::any_completion_handler<void()>;
+template <typename Key>
+struct RGWQuotaCacheStats
+  : public ceph::common::intrusive_lru_base<
+      ceph::common::intrusive_lru_config<
+        Key,
+        RGWQuotaCacheStats<Key>,
+        rqcs_to_key<RGWQuotaCacheStats<Key>, Key>>> {
+  Key key;
   RGWStorageStats stats;
   utime_t expiration;
   utime_t async_refresh_time;
+  ceph::mutex lock;
+  std::vector<WaitHandler> wakeups;
+  explicit RGWQuotaCacheStats(const Key &key)
+    : key(key), lock(ceph::make_mutex("RGWQuotaCacheStats")) {}
+
+  template <typename CompletionToken>
+  auto wait(CompletionToken &&token) {
+    return boost::asio::async_initiate<CompletionToken, void()>(
+      [this](auto handler) {
+        bool no_wait = false;
+        {
+          std::lock_guard l(lock);
+          if (async_refresh_time.sec() == 0) {
+            wakeups.emplace_back(std::move(handler));
+          } else {
+            no_wait = true;
+          }
+        }
+
+        if (no_wait) {
+          auto ex = boost::asio::get_associated_executor(handler);
+          boost::asio::dispatch(ex, std::move(handler));
+        }
+      },
+      token
+    );
+  }
+
+  void notify() {
+    std::vector<WaitHandler> w;
+    {
+      std::lock_guard l(lock);
+      for (auto &wakeup : wakeups) {
+        w.emplace_back(std::move(wakeup));
+      }
+      wakeups.clear();
+    }
+    for (auto &wakeup : w) {
+      auto ex = boost::asio::get_associated_executor(wakeup);
+      boost::asio::dispatch(
+        ex,
+        [h=std::move(wakeup)]() mutable {
+          std::move(h)();
+        });
+    }
+  }
 };
+template <typename Key>
+using RGWQuotaCacheStatsRef = RGWQuotaCacheStats<Key>::Ref;
+
+template <typename Key>
+using RGWQuotaCacheStatsConfig =
+  ceph::common::intrusive_lru_config<
+    Key,
+    RGWQuotaCacheStats<Key>,
+    rqcs_to_key<RGWQuotaCacheStats<Key>, Key>>;
 
 template<class T>
 class RGWQuotaCache {
 protected:
   rgw::sal::Driver* driver;
-  lru_map<T, RGWQuotaCacheStats> stats_map;
+  ceph::mutex stats_lock;
+  ceph::common::intrusive_lru<RGWQuotaCacheStatsConfig<T>> stats_set;
   RefCountedWaitObject *async_refcount;
 
-  class StatsAsyncTestSet : public lru_map<T, RGWQuotaCacheStats>::UpdateContext {
-    int objs_delta;
-    uint64_t added_bytes;
-    uint64_t removed_bytes;
-  public:
-    StatsAsyncTestSet() : objs_delta(0), added_bytes(0), removed_bytes(0) {}
-    bool update(RGWQuotaCacheStats *entry) override {
-      if (entry->async_refresh_time.sec() == 0)
-        return false;
+  using stats_update_func_t = std::function<bool (RGWQuotaCacheStats<T>&)>;
+  virtual int fetch_stats_from_storage(
+    const T& key,
+    RGWStorageStats& stats,
+    optional_yield y,
+    const DoutPrefixProvider *dpp) = 0;
+  std::pair<RGWQuotaCacheStatsRef<T>, bool>
+  get_or_create_stats(const T& key) {
+    std::lock_guard l(stats_lock);
+  }
+  virtual void data_modified(const rgw_owner& owner, const rgw_bucket &bucket) {}
+  bool update(
+    RGWQuotaCacheStats<T> &entry,
+    int objs_delta,
+    uint64_t added_bytes,
+    uint64_t removed_bytes);
 
-      entry->async_refresh_time = utime_t(0, 0);
-
-      return true;
-    }
-  };
-
-  virtual int fetch_stats_from_storage(const rgw_owner& owner, const rgw_bucket& bucket, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp) = 0;
-
-  virtual bool map_find(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs) = 0;
-
-  virtual bool map_find_and_update(const rgw_owner& owner, const rgw_bucket& bucket, typename lru_map<T, RGWQuotaCacheStats>::UpdateContext *ctx) = 0;
-  virtual void map_add(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs) = 0;
-
-  virtual void data_modified(const rgw_owner& owner, const rgw_bucket& bucket) {}
 public:
-  RGWQuotaCache(rgw::sal::Driver* _driver, int size) : driver(_driver), stats_map(size) {
+  RGWQuotaCache(rgw::sal::Driver* _driver, int size)
+    : driver(_driver),
+      stats_lock(ceph::make_mutex("RGWQuotaCache::stats_lock"))
+  {
+    stats_set.set_target_size(size);
     async_refcount = new RefCountedWaitObject;
   }
   virtual ~RGWQuotaCache() {
     async_refcount->put_wait(); /* wait for all pending async requests to complete */
   }
 
-  int get_stats(const rgw_owner& owner, const rgw_bucket& bucket, RGWStorageStats& stats, optional_yield y,
-                const DoutPrefixProvider* dpp);
-  void adjust_stats(const rgw_owner& owner, rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
-
-  void set_stats(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, const RGWStorageStats& stats);
-  int async_refresh(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs);
-  void async_refresh_response(const rgw_owner& owner, rgw_bucket& bucket, const RGWStorageStats& stats);
-  void async_refresh_fail(const rgw_owner& owner, rgw_bucket& bucket);
+  int get_stats(
+    const T& key,
+    RGWStorageStats& stats,
+    optional_yield y,
+    const DoutPrefixProvider* dpp);
+  void adjust_stats(
+    const rgw_owner &owner,
+    const rgw_bucket &bucket,
+    int objs_delta,
+    uint64_t added_bytes,
+    uint64_t removed_bytes);
+  void set_stats(
+    const T& key,
+    RGWQuotaCacheStats<T>& qs,
+    const RGWStorageStats& stats);
+  void async_refresh_response(
+    const T& key,
+    const RGWStorageStats& stats,
+    RGWQuotaCacheStats<T> &qs);
+  void async_refresh_fail(const T& key);
 
   /// start an async refresh that will eventually call async_refresh_response or
   /// async_refresh_fail. hold a reference to the waiter until completion
-  virtual int init_refresh(const rgw_owner& owner, const rgw_bucket& bucket,
-                           boost::intrusive_ptr<RefCountedWaitObject> waiter) = 0;
+  virtual int init_refresh(
+    const T& key,
+    boost::intrusive_ptr<RefCountedWaitObject> waiter,
+    RGWQuotaCacheStats<T> &) = 0;
 };
 
 template<class T>
-int RGWQuotaCache<T>::async_refresh(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs)
+void RGWQuotaCache<T>::async_refresh_fail(const T& key)
 {
-  /* protect against multiple updates */
-  StatsAsyncTestSet test_update;
-  if (!map_find_and_update(owner, bucket, &test_update)) {
-    /* most likely we just raced with another update */
-    return 0;
+  ldout(driver->ctx(), 20) << "async stats refresh response for bucket=" << key << dendl;
+}
+
+template<class T>
+void RGWQuotaCache<T>::async_refresh_response(
+  const T& key,
+  const RGWStorageStats& stats,
+  RGWQuotaCacheStats<T> &qs)
+{
+  ldout(driver->ctx(), 20) << "async stats refresh response for bucket="
+    << key << dendl;
+  {
+    std::lock_guard l(stats_lock);
+    set_stats(key, qs, stats);
   }
-
-  return init_refresh(owner, bucket, async_refcount);
+  qs.notify();
 }
 
 template<class T>
-void RGWQuotaCache<T>::async_refresh_fail(const rgw_owner& owner, rgw_bucket& bucket)
-{
-  ldout(driver->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
-}
-
-template<class T>
-void RGWQuotaCache<T>::async_refresh_response(const rgw_owner& owner, rgw_bucket& bucket, const RGWStorageStats& stats)
-{
-  ldout(driver->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
-
-  RGWQuotaCacheStats qs;
-
-  map_find(owner, bucket, qs);
-
-  set_stats(owner, bucket, qs, stats);
-}
-
-template<class T>
-void RGWQuotaCache<T>::set_stats(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, const RGWStorageStats& stats)
+void RGWQuotaCache<T>::set_stats(
+  const T& key,
+  RGWQuotaCacheStats<T>& qs,
+  const RGWStorageStats& stats)
 {
   qs.stats = stats;
   qs.expiration = ceph_clock_now();
   qs.async_refresh_time = qs.expiration;
   qs.expiration += driver->ctx()->_conf->rgw_bucket_quota_ttl;
   qs.async_refresh_time += driver->ctx()->_conf->rgw_bucket_quota_ttl / 2;
-
-  map_add(owner, bucket, qs);
 }
 
 template<class T>
-int RGWQuotaCache<T>::get_stats(const rgw_owner& owner, const rgw_bucket& bucket, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider* dpp) {
-  RGWQuotaCacheStats qs;
-  utime_t now = ceph_clock_now();
-  if (map_find(owner, bucket, qs)) {
-    if (qs.async_refresh_time.sec() > 0 && now >= qs.async_refresh_time) {
-      int r = async_refresh(owner, bucket, qs);
-      if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: quota async refresh returned ret=" << r << dendl;
-
-        /* continue processing, might be a transient error, async refresh is just optimization */
-      }
-    }
-
-    if (qs.expiration > ceph_clock_now()) {
-      stats = qs.stats;
-      return 0;
+int RGWQuotaCache<T>::get_stats(
+  const T& key,
+  RGWStorageStats& stats,
+  optional_yield y,
+  const DoutPrefixProvider* dpp)
+{
+  bool do_async_refresh = false;
+  bool do_fetch_stats = false;
+  bool do_wait_refresh = false;
+  RGWQuotaCacheStatsRef<T> rqcs_ref;
+  {
+    std::lock_guard l(stats_lock);
+    auto [qs_ref, found] = stats_set.get_or_create(key);
+    auto now = ceph_clock_now();
+    rqcs_ref = qs_ref;
+    auto &qs = *qs_ref;
+    do_fetch_stats = !found;
+    do_async_refresh =
+      (found) &&
+      qs.async_refresh_time.sec() > 0 &&
+      now >= qs.async_refresh_time;
+    do_wait_refresh =
+      (found) &&
+      qs.async_refresh_time.sec() == 0 &&
+      qs.expiration <= now;
+    if (do_async_refresh) {
+      qs.async_refresh_time = utime_t{0, 0};
     }
   }
 
-  int ret = fetch_stats_from_storage(owner, bucket, stats, y, dpp);
-  if (ret < 0 && ret != -ENOENT)
-    return ret;
+  if (do_wait_refresh) {
+    ceph_assert(!do_async_refresh && !do_fetch_stats);
+    ldout(driver->ctx(), 20)
+      << "waiting for existing stats fetching/refreshing for "
+      << rqcs_ref->key << dendl;
 
-  set_stats(owner, bucket, qs, stats);
+    boost::system::error_code ec;
+    if (y) {
+      ldout(driver->ctx(), 20) << "asio coroutine wait" << dendl;
+      auto yield = y.get_yield_context();
+      rqcs_ref->wait(yield[ec]);
+    } else {
+      rqcs_ref->wait(ceph::async::use_blocked[ec]);
+    }
+    if (ec) {
+      return ceph::from_error_code(ec);
+    }
+    ldout(driver->ctx(), 20)
+      << "done waiting for " << rqcs_ref->key << dendl;
+    {
+      std::lock_guard l(stats_lock);
+      stats = rqcs_ref->stats;
+    }
+    return 0;
+  }
 
+  if (do_async_refresh) {
+    ldout(driver->ctx(), 20) << "refreshing stats for "
+      << rqcs_ref->key << dendl;
+    ceph_assert(!do_wait_refresh && !do_fetch_stats);
+    int r = init_refresh(key, async_refcount, *rqcs_ref);
+    if (r < 0) {
+      ldpp_dout(dpp, 0)
+        << "ERROR: quota async refresh returned ret="
+        << r << dendl;
+      /* continue processing, might be a transient error,
+       * async refresh is just optimization */
+    }
+  }
+
+  if (do_fetch_stats) {
+    ldout(driver->ctx(), 20) << "fetching stats for " << rqcs_ref->key << dendl;
+    ceph_assert(!do_wait_refresh && !do_async_refresh);
+    int ret = fetch_stats_from_storage(key, stats, y, dpp);
+    if (ret < 0 && ret != -ENOENT)
+      return ret;
+
+    {
+      std::lock_guard l(stats_lock);
+      set_stats(key, *rqcs_ref, stats);
+    }
+    rqcs_ref->notify();
+    ldout(driver->ctx(), 20) << "fetched stats for " << rqcs_ref->key << dendl;
+    return 0;
+  }
+
+  ldout(driver->ctx(), 20) << "cached stats for "
+    << rqcs_ref->key << " still valid" << dendl;
+  {
+    std::lock_guard l(stats_lock);
+    stats = rqcs_ref->stats;
+  }
   return 0;
 }
 
-
-template<class T>
-class RGWQuotaStatsUpdate : public lru_map<T, RGWQuotaCacheStats>::UpdateContext {
-  const int objs_delta;
-  const uint64_t added_bytes;
-  const uint64_t removed_bytes;
-public:
-  RGWQuotaStatsUpdate(const int objs_delta,
-                      const uint64_t added_bytes,
-                      const uint64_t removed_bytes)
-    : objs_delta(objs_delta),
-      added_bytes(added_bytes),
-      removed_bytes(removed_bytes) {
-  }
-
-  bool update(RGWQuotaCacheStats * const entry) override {
-    const uint64_t rounded_added = rgw_rounded_objsize(added_bytes);
-    const uint64_t rounded_removed = rgw_rounded_objsize(removed_bytes);
-
-    if (((int64_t)(entry->stats.size + added_bytes - removed_bytes)) >= 0) {
-      entry->stats.size += added_bytes - removed_bytes;
-    } else {
-      entry->stats.size = 0;
-    }
-
-    if (((int64_t)(entry->stats.size_rounded + rounded_added - rounded_removed)) >= 0) {
-      entry->stats.size_rounded += rounded_added - rounded_removed;
-    } else {
-      entry->stats.size_rounded = 0;
-    }
-
-    if (((int64_t)(entry->stats.num_objects + objs_delta)) >= 0) {
-      entry->stats.num_objects += objs_delta;
-    } else {
-      entry->stats.num_objects = 0;
-    }
-
-    return true;
-  }
-};
-
-
-template<class T>
-void RGWQuotaCache<T>::adjust_stats(const rgw_owner& owner, rgw_bucket& bucket, int objs_delta,
-                                 uint64_t added_bytes, uint64_t removed_bytes)
+template <typename T>
+bool RGWQuotaCache<T>::update(
+  RGWQuotaCacheStats<T> &entry,
+  int objs_delta,
+  uint64_t added_bytes,
+  uint64_t removed_bytes)
 {
-  RGWQuotaStatsUpdate<T> update(objs_delta, added_bytes, removed_bytes);
-  map_find_and_update(owner, bucket, &update);
+  const uint64_t rounded_added = rgw_rounded_objsize(added_bytes);
+  const uint64_t rounded_removed = rgw_rounded_objsize(removed_bytes);
 
+  if (auto s = ((int64_t)(entry.stats.size + added_bytes - removed_bytes));
+      s >= 0) {
+    entry.stats.size += added_bytes - removed_bytes;
+  } else {
+    entry.stats.size = 0;
+  }
+
+  if (auto s =((int64_t)(entry.stats.size_rounded + rounded_added - rounded_removed));
+      s >= 0) {
+    entry.stats.size_rounded += rounded_added - rounded_removed;
+  } else {
+    entry.stats.size_rounded = 0;
+  }
+
+  if (((int64_t)(entry.stats.num_objects + objs_delta)) >= 0) {
+    entry.stats.num_objects += objs_delta;
+  } else {
+    entry.stats.num_objects = 0;
+  }
+
+  return true;
+}
+
+template<class T>
+void RGWQuotaCache<T>::adjust_stats(
+  const rgw_owner &owner,
+  const rgw_bucket &bucket,
+  int objs_delta,
+  uint64_t added_bytes,
+  uint64_t removed_bytes)
+{
+  {
+    std::lock_guard l(stats_lock);
+    RGWQuotaCacheStatsRef<T> rqcs_ref;
+    if constexpr (std::is_same_v<T, rgw_bucket>) {
+      rqcs_ref = stats_set.get(bucket);
+    } else {
+      static_assert(std::is_same_v<T, rgw_owner>);
+      rqcs_ref = stats_set.get(owner);
+    }
+
+    if (rqcs_ref) {
+      update(*rqcs_ref, objs_delta, added_bytes, removed_bytes);
+    }
+  }
   data_modified(owner, bucket);
 }
 
 class RGWBucketStatsCache : public RGWQuotaCache<rgw_bucket> {
 protected:
-  bool map_find(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs) override {
-    return stats_map.find(bucket, qs);
-  }
-
-  bool map_find_and_update(const rgw_owner& owner, const rgw_bucket& bucket, lru_map<rgw_bucket, RGWQuotaCacheStats>::UpdateContext *ctx) override {
-    return stats_map.find_and_update(bucket, NULL, ctx);
-  }
-
-  void map_add(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs) override {
-    stats_map.add(bucket, qs);
-  }
-
-  int fetch_stats_from_storage(const rgw_owner& owner, const rgw_bucket& bucket, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp) override;
+  int fetch_stats_from_storage(
+    const rgw_bucket& bucket,
+    RGWStorageStats& stats,
+    optional_yield y,
+    const DoutPrefixProvider *dpp) override;
 
 public:
-  explicit RGWBucketStatsCache(rgw::sal::Driver* _driver) : RGWQuotaCache<rgw_bucket>(_driver, _driver->ctx()->_conf->rgw_bucket_quota_cache_size) {
-  }
+  explicit RGWBucketStatsCache(rgw::sal::Driver* _driver)
+    : RGWQuotaCache<rgw_bucket>(
+        _driver,
+        _driver->ctx()->_conf->rgw_bucket_quota_cache_size) {}
 
-  int init_refresh(const rgw_owner& owner, const rgw_bucket& bucket,
-                   boost::intrusive_ptr<RefCountedWaitObject> waiter) override;
+  int init_refresh(
+    const rgw_bucket& bucket,
+    boost::intrusive_ptr<RefCountedWaitObject> waiter,
+    RGWQuotaCacheStats<rgw_bucket> &qs) override;
 };
 
-int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_owner& owner, const rgw_bucket& _b, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWBucketStatsCache::fetch_stats_from_storage(
+  const rgw_bucket& _b,
+  RGWStorageStats& stats,
+  optional_yield y,
+  const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
@@ -288,27 +437,33 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_owner& owner, const 
 class BucketAsyncRefreshHandler : public rgw::sal::ReadStatsCB {
   RGWBucketStatsCache* cache;
   boost::intrusive_ptr<RefCountedWaitObject> waiter;
-  rgw_owner owner;
   rgw_bucket bucket;
+  RGWQuotaCacheStats<rgw_bucket> &qs;
 public:
   BucketAsyncRefreshHandler(RGWBucketStatsCache* cache,
                             boost::intrusive_ptr<RefCountedWaitObject> waiter,
-                            const rgw_owner& owner, const rgw_bucket& bucket)
-    : cache(cache), waiter(std::move(waiter)), owner(owner), bucket(bucket) {}
+                            const rgw_bucket& bucket,
+                            RGWQuotaCacheStats<rgw_bucket> &qs)
+    : cache(cache),
+      waiter(std::move(waiter)),
+      bucket(bucket),
+      qs(qs) {}
 
   void handle_response(int r, const RGWStorageStats& stats) override {
     if (r < 0) {
-      cache->async_refresh_fail(owner, bucket);
+      cache->async_refresh_fail(bucket);
       return;
     }
 
-    cache->async_refresh_response(owner, bucket, stats);
+    cache->async_refresh_response(bucket, stats, qs);
   }
 };
 
 
-int RGWBucketStatsCache::init_refresh(const rgw_owner& owner, const rgw_bucket& bucket,
-                                     boost::intrusive_ptr<RefCountedWaitObject> waiter)
+int RGWBucketStatsCache::init_refresh(
+  const rgw_bucket& bucket,
+  boost::intrusive_ptr<RefCountedWaitObject> waiter,
+  RGWQuotaCacheStats<rgw_bucket> &qs)
 {
   std::unique_ptr<rgw::sal::Bucket> rbucket;
 
@@ -327,7 +482,7 @@ int RGWBucketStatsCache::init_refresh(const rgw_owner& owner, const rgw_bucket& 
   }
 
   boost::intrusive_ptr handler = new BucketAsyncRefreshHandler(
-      this, std::move(waiter), owner, bucket);
+      this, std::move(waiter), bucket, qs);
 
   r = rbucket->read_stats_async(&dp, index, RGW_NO_SHARD, std::move(handler));
   if (r < 0) {
@@ -464,25 +619,24 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
   OwnerSyncThread* user_sync_thread = nullptr;
   OwnerSyncThread* account_sync_thread = nullptr;
 protected:
-  bool map_find(const rgw_owner& owner,const rgw_bucket& bucket, RGWQuotaCacheStats& qs) override {
-    return stats_map.find(owner, qs);
-  }
-
-  bool map_find_and_update(const rgw_owner& owner, const rgw_bucket& bucket, lru_map<rgw_owner, RGWQuotaCacheStats>::UpdateContext *ctx) override {
-    return stats_map.find_and_update(owner, NULL, ctx);
-  }
-
-  void map_add(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs) override {
-    stats_map.add(owner, qs);
-  }
-
-  int fetch_stats_from_storage(const rgw_owner& owner, const rgw_bucket& bucket, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp) override;
-  int sync_bucket(const rgw_owner& owner, const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp);
-  int sync_owner(const DoutPrefixProvider *dpp, const rgw_owner& owner, optional_yield y);
+  int fetch_stats_from_storage(
+    const rgw_owner& owner,
+    RGWStorageStats& stats,
+    optional_yield y,
+    const DoutPrefixProvider *dpp) override;
+  int sync_bucket(
+    const rgw_owner& owner,
+    const rgw_bucket& bucket,
+    optional_yield y,
+    const DoutPrefixProvider *dpp);
+  int sync_owner(
+    const DoutPrefixProvider *dpp,
+    const rgw_owner& owner,
+    optional_yield y);
   int sync_all_owners(const DoutPrefixProvider *dpp,
                       const std::string& metadata_section);
 
-  void data_modified(const rgw_owner& owner, const rgw_bucket& bucket) override;
+  void data_modified(const rgw_owner& owner, const rgw_bucket &bucket) override;
 
   void swap_modified_buckets(map<rgw_bucket, rgw_owner>& out) {
     std::unique_lock lock{mutex};
@@ -518,8 +672,10 @@ public:
     stop();
   }
 
-  int init_refresh(const rgw_owner& owner, const rgw_bucket& bucket,
-                   boost::intrusive_ptr<RefCountedWaitObject> waiter) override;
+  int init_refresh(
+    const rgw_owner& owner,
+    boost::intrusive_ptr<RefCountedWaitObject> waiter,
+    RGWQuotaCacheStats<rgw_owner> &qs) override;
 
   bool going_down() {
     return down_flag;
@@ -539,23 +695,26 @@ public:
 class OwnerAsyncRefreshHandler : public rgw::sal::ReadStatsCB {
   RGWOwnerStatsCache* cache;
   boost::intrusive_ptr<RefCountedWaitObject> waiter;
-  rgw_bucket bucket;
   rgw_owner owner;
+  RGWQuotaCacheStats<rgw_owner> &qs;
  public:
   OwnerAsyncRefreshHandler(RGWOwnerStatsCache* cache,
                            boost::intrusive_ptr<RefCountedWaitObject> waiter,
-                           const rgw_owner& owner, const rgw_bucket& bucket)
-      : cache(cache), waiter(std::move(waiter)), bucket(bucket), owner(owner)
+                           const rgw_owner& owner,
+                          RGWQuotaCacheStats<rgw_owner> &qs)
+      : cache(cache), waiter(std::move(waiter)), owner(owner), qs(qs)
   {}
 
   void handle_response(int r, const RGWStorageStats& stats) override;
 };
 
-int RGWOwnerStatsCache::init_refresh(const rgw_owner& owner, const rgw_bucket& bucket,
-                                     boost::intrusive_ptr<RefCountedWaitObject> waiter)
+int RGWOwnerStatsCache::init_refresh(
+  const rgw_owner& owner,
+  boost::intrusive_ptr<RefCountedWaitObject> waiter,
+  RGWQuotaCacheStats<rgw_owner> &qs)
 {
   boost::intrusive_ptr cb = new OwnerAsyncRefreshHandler(
-      this, std::move(waiter), owner, bucket);
+      this, std::move(waiter), owner, qs);
 
   ldpp_dout(dpp, 20) << "initiating async quota refresh for owner=" << owner << dendl;
 
@@ -571,18 +730,18 @@ int RGWOwnerStatsCache::init_refresh(const rgw_owner& owner, const rgw_bucket& b
 void OwnerAsyncRefreshHandler::handle_response(int r, const RGWStorageStats& stats)
 {
   if (r < 0) {
-    cache->async_refresh_fail(owner, bucket);
+    cache->async_refresh_fail(owner);
     return;
   }
 
-  cache->async_refresh_response(owner, bucket, stats);
+  cache->async_refresh_response(owner, stats, qs);
 }
 
-int RGWOwnerStatsCache::fetch_stats_from_storage(const rgw_owner& owner,
-                                                 const rgw_bucket& bucket,
-                                                 RGWStorageStats& stats,
-                                                 optional_yield y,
-                                                 const DoutPrefixProvider *dpp)
+int RGWOwnerStatsCache::fetch_stats_from_storage(
+  const rgw_owner& owner,
+  RGWStorageStats& stats,
+  optional_yield y,
+  const DoutPrefixProvider *dpp)
 {
   ceph::real_time synced; // ignored
   ceph::real_time updated; // ignored
@@ -950,7 +1109,7 @@ public:
     const DoutPrefix dp(driver->ctx(), dout_subsys, "rgw quota handler: ");
     if (quota.bucket_quota.enabled) {
       RGWStorageStats bucket_stats;
-      int ret = bucket_stats_cache.get_stats(owner, bucket, bucket_stats, y, &dp);
+      int ret = bucket_stats_cache.get_stats(bucket, bucket_stats, y, &dp);
       if (ret < 0) {
         return ret;
       }
@@ -962,7 +1121,7 @@ public:
 
     if (quota.user_quota.enabled) {
       RGWStorageStats owner_stats;
-      int ret = owner_stats_cache.get_stats(owner, bucket, owner_stats, y, &dp);
+      int ret = owner_stats_cache.get_stats(owner, owner_stats, y, &dp);
       if (ret < 0) {
         return ret;
       }
