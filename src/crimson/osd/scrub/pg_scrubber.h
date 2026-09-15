@@ -87,6 +87,15 @@ class PGScrubber : public crimson::BlockerT<PGScrubber>, ScrubContext {
 
   std::optional<eversion_t> waiting_for_update;
 
+  /* The highest version known to be durably applied to the local object
+   * store, as reported by on_log_update() (which is only invoked once the
+   * corresponding ObjectStore transaction has committed).  await_update()
+   * must check against this instead of the in-memory pg log tail, since
+   * log entries are appended to the pg log before the transaction commits
+   * -- using the log tail there would let the scrub chunk scan race ahead
+   * of an in-flight write. */
+  eversion_t last_applied_durable;
+
   /// the sub-object that manages this PG's scheduling parameters.
   /// An Optional instead of a regular member, as we wish to directly
   /// control the order of construction/destruction.

@@ -164,6 +164,9 @@ void PGScrubber::flag_reservations_failure()
 void PGScrubber::on_log_update(eversion_t v)
 {
   LOG_PREFIX(PGScrubber::on_log_update);
+  if (v > last_applied_durable) {
+    last_applied_durable = v;
+  }
   if (waiting_for_update && v >= *waiting_for_update) {
     DEBUGDPP("waiting_for_update: {}, v: {}", pg, *waiting_for_update, v);
     handle_event(await_update_complete_t{});
@@ -1037,12 +1040,6 @@ void PGScrubber::request_range(const hobject_t &start)
     >(start, &pg);
 }
 
-/* TODO: This isn't actually enough.  Here, classic would
- * hold the pg lock from the wait_scrub through to IO submission.
- * ClientRequest, however, isn't in the processing ExclusivePhase
- * bit yet, and so this check may miss ops between the wait_scrub
- * check and adding the IO to the log. */
-
 void PGScrubber::reserve_range(const hobject_t &start, const hobject_t &end)
 {
   LOG_PREFIX(PGScrubber::reserve_range);
@@ -1103,9 +1100,10 @@ bool PGScrubber::await_update(const eversion_t &version)
   LOG_PREFIX(PGScrubber::await_update);
   DEBUGDPP("version: {}", pg, version);
   ceph_assert(!waiting_for_update);
-  auto& log = pg.peering_state.get_pg_log().get_log().log;
-  eversion_t current = log.empty() ? eversion_t() : log.rbegin()->version;
-  if (version <= current) {
+  // Use last_applied_durable rather than the pg log tail: log entries are
+  // appended to the in-memory pg log before their transaction commits, so
+  // the log tail can appear up to date while the write is still in flight.
+  if (version <= last_applied_durable) {
     return true;
   } else {
     waiting_for_update = version;
