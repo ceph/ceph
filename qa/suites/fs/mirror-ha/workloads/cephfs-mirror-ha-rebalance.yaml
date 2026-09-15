@@ -1,0 +1,14 @@
+meta:
+- desc: test cephfs-mirror directory rebalance across HA daemons after restart
+
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug client: 10
+
+tasks:
+  - ceph-fuse: [client.0, client.1]
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_mirroring_rebalance.TestMirroringRebalance
