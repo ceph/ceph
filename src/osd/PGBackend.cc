@@ -779,7 +779,8 @@ void PGBackend::rollback_setattrs(
     shard_id_t my_shard = get_parent()->whoami_shard().shard;
     if (oi.shard_versions.contains(my_shard) && oi.shard_versions.at(my_shard) != oi.version) {
       oi.version = oi.shard_versions.at(my_shard);
-      oi.shard_versions.clear();
+      std::erase_if(oi.shard_versions,
+        [&oi](const auto& kv) { return kv.second >= oi.version; });
       
       bufferlist bl;
       encode(oi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));

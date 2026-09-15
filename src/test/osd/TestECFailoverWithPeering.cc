@@ -1018,6 +1018,449 @@ TEST_P(TestECFailoverWithPeering, ScrubPartialWrite) {
   std::cout << "=== ScrubPartialWrite test completed ===" << std::endl;
 }
 
+/**
+ * TEST: ECRollbackShardVersions
+ *
+ * Verifies that shard_versions is handled correctly through a partial-write
+ * rollback and a subsequent partial-write recovery push.
+ *
+ * Write history (stripe_unit = S, k >= 3):
+ *
+ *   vA: full write  -- shard_versions = {}
+ *   vB: partial, skip shard 1 (offset (2%k)*S, len (k-1)*S)
+ *           primary OI: OI = {vB, sv={1=vA}}
+ *           shard 1 OI: OI = {vA, sv={}}
+ *           shard 2 OI: OI = {vB, sv={1=vA}}
+ *   vC: partial, skip shard 2 (offset (3%k)*S, len (k-1)*S)
+ *           primary OI: OI = {vC, sv={2=vB}}
+ *           shard 1 OI: OI = {vC, sv={2=vB}} (caught up)
+ *           shard 2 OI: OI = {vB, sv={1=vA}} (now behind)
+ *
+ * Step 4: attempt full write vD with the parity shard (shard k+m-1) blocked.
+ * Then drop shard k to open a new peering interval.
+ * vD is rolled back on every shard that received it.
+ * The new interval recovers shard 2 (which the primary knows is at vB) via the
+ * partial-write recovery push in ECCommon.cc:
+ *
+ *   recovery push to shard 2: oi = {vC, sv={2=vB}}
+ *                              set oi.version = vB
+ *                              erase_if(sv[x] >= vB) => removes {2=vB}
+ *                   result: shard 2 OI = {vB, sv={}}
+ *
+ * Note on technical inaccuracy: the recovery push gives shard 2
+ * shard_versions={} rather than what was truly on-disk before vC ({1=vA})
+ * as it has to build using the knowledge from the primary rather than what
+ * would have existed on shard 2 at the time.
+ *
+ * Step 5: restore shard 1, then drop/recover shard 2 again to confirm
+ * the recovery push produces the same clean state a second time.
+ *
+ * Requires k >= 3 so shards 0, 1, and 2 are distinct data shards.
+ */
+TEST_P(TestECFailoverWithPeering, ECRollbackShardVersions) {
+  if (!(pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "ECRollbackShardVersions requires optimized EC";
+  }
+  if (k < 3) {
+    GTEST_SKIP() << "ECRollbackShardVersions requires k >= 3";
+  }
+  if (m < 2) {
+    GTEST_SKIP() << "ECRollbackShardVersions requires m >= 2";
+  }
+
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const std::string obj_name = "test_rollback_shard_versions";
+  const size_t object_size = stripe_unit * k * 2;
+
+  // Helper: print version and shard_versions for every live shard.
+  auto print_shard_versions = [&](const std::string& label) {
+    std::cout << label << std::endl;
+    for (auto& [shard_id, backend] : backends) {
+      if (backend == nullptr) continue;
+      object_info_t oi = read_shard_object_info(obj_name, shard_id);
+      std::cout << "  shard " << shard_id << ": v=" << oi.version;
+      if (oi.shard_versions.empty()) {
+        std::cout << " sv={}";
+      } else {
+        std::cout << " sv={";
+        bool first = true;
+        for (auto& [sid, sv] : oi.shard_versions) {
+          if (!first) std::cout << ", ";
+          std::cout << sid << "=" << sv;
+          first = false;
+        }
+        std::cout << "}";
+      }
+      std::cout << std::endl;
+    }
+  };
+
+  create_and_write_verify(obj_name, std::string(object_size, 'A'));
+  print_shard_versions("After write A (all shards):");
+
+  // Write B: partial, skips shard 1.
+  int result = write(obj_name,
+                     (2 % k) * stripe_unit,
+                     std::string((k - 1) * stripe_unit, 'B'),
+                     object_size);
+  ASSERT_EQ(0, result);
+  eversion_t vB = read_shard_object_info(obj_name, 0).version;
+  print_shard_versions("After write B (excl shard 1):");
+
+  // Write C: partial, skips shard 2.  After this the primary OI must
+  // record shard 2 as stale at vB.
+  result = write(obj_name,
+                 (3 % k) * stripe_unit,
+                 std::string((k - 1) * stripe_unit, 'C'),
+                 object_size);
+  ASSERT_EQ(0, result);
+  eversion_t vC = read_shard_object_info(obj_name, 0).version;
+  print_shard_versions("After write C (excl shard 2):");
+
+  // Verify the accumulated shard_versions on the primary after writes B and C.
+  {
+    object_info_t oi = read_shard_object_info(obj_name, 0);
+    ASSERT_EQ(oi.version, vC);
+    ASSERT_EQ(oi.shard_versions,
+              (std::map<shard_id_t, eversion_t>{{shard_id_t(2), vB}}))
+      << "After writes B and C the primary must record shard 2 as stale at vB";
+  }
+
+  // Drop a separate coding shard (interval_trigger_shard=k) to open a new
+  // peering interval, blocking the last coding shard (blocked_shard=k+m-1)
+  // so write D cannot commit before the interval changes.
+  const int interval_trigger_shard = k;
+  const int blocked_shard = k + m - 1;
+  suspend_primary_to_osd(blocked_shard);
+  result = write(obj_name, 0, std::string(object_size, 'D'), object_size);
+  ASSERT_EQ(-EINPROGRESS, result);
+  mark_osd_down(interval_trigger_shard);
+  unsuspend_primary_to_osd(blocked_shard);
+  event_loop->run_until_idle();
+  ASSERT_TRUE(all_shards_active());
+  print_shard_versions("After write D + rollback on shard 2:");
+
+  // After the new interval has started and vD is rolled back, shard 2 is
+  // recovered via the partial-write recovery push.
+  // The recovery push sets oi.version = vB and runs erase_if, yielding
+  // shard_versions={}. This is an accepted difference to what was on disk
+  // as we are recovering based on the primary's shard versions at the point
+  // before the rollback.
+  for (auto& [shard_id, backend] : backends) {
+    if (backend == nullptr) continue;
+    if (shard_id == interval_trigger_shard) continue;
+    object_info_t oi = read_shard_object_info(obj_name, shard_id);
+    if (shard_id == 2) {
+      EXPECT_EQ(oi.version, vB);
+      EXPECT_TRUE(oi.shard_versions.empty())
+        << "shard 2 recovered to vB; shard_versions={}";
+    } else {
+      EXPECT_EQ(oi.version, vC);
+      EXPECT_EQ(oi.shard_versions,
+                (std::map<shard_id_t, eversion_t>{{shard_id_t(2), vB}}));
+    }
+  }
+
+  mark_osd_up(interval_trigger_shard);
+  event_loop->run_until_idle();
+  print_shard_versions("After recovery of interval_trigger_shard:");
+
+  // Drop and recover shard 2 again: the recovery push must produce the
+  // same clean result.
+  mark_osd_down(2);
+  event_loop->run_until_idle();
+  mark_osd_up(2);
+  event_loop->run_until_idle();
+  ASSERT_TRUE(all_shards_active());
+  print_shard_versions("After recovery of shard 2 (step 5):");
+
+  for (auto& [shard_id, backend] : backends) {
+    if (backend == nullptr) continue;
+    object_info_t oi = read_shard_object_info(obj_name, shard_id);
+    if (shard_id == 2) {
+      EXPECT_EQ(oi.version, vB);
+      EXPECT_TRUE(oi.shard_versions.empty())
+        << "shard 2 recovered to vB; shard_versions={}";
+    } else {
+      EXPECT_EQ(oi.version, vC);
+      EXPECT_EQ(oi.shard_versions,
+                (std::map<shard_id_t, eversion_t>{{shard_id_t(2), vB}}));
+    }
+  }
+
+  std::cout << "=== ECRollbackShardVersions completed successfully ===" << std::endl;
+}
+
+/**
+ * TEST: ECRollbackPreservesOlderShardVersions
+ *
+ * Specifically verifies that the erase_if in ECCommon.cc (partial-write
+ * recovery push) preserves shard_versions entries that are OLDER than the
+ * shard being recovered, i.e. that the condition is ">=" not "always clear".
+ *
+ * This test is the minimal case that distinguishes erase_if(kv.second >= v)
+ * from a simple shard_versions.clear(): with clear() the older entry for
+ * shard 2 would be wrongly discarded; with erase_if it is kept.
+ *
+ * Write history (stripe_unit = S, k >= 4, m >= 2):
+ *
+ *   vA: full write  -- shard_versions = {}
+ *
+ *   vB: single-chunk partial at offset 3*S (raw shard 3 only)
+ *       written shards: {0(primary), 3, parities}
+ *       non-written non-primaries: {1, 2, ..., k-1} except {3}
+ *       (OI examples below shown for k=4)
+ *           primary OI: OI = {vB, sv={1=vA, 2=vA}}
+ *           shard 1 OI: OI = {vA, sv={}}
+ *           shard 2 OI: OI = {vA, sv={}}
+ *           shard 3 OI: OI = {vB, sv={1=vA, 2=vA}}
+ *
+ *   vC: single-chunk partial at offset 1*S (raw shard 1 only)
+ *       written shards: {0(primary), 1, parities}
+ *       shard 1 entry erased; shard 2 still stale (already-out-of-date path);
+ *       shard 3 is now newly stale: shard_versions[3] = prior_version = vB
+ *           primary OI: OI = {vC, sv={2=vA, 3=vB}}
+ *           shard 1 OI: OI = {vC, sv={2=vA, 3=vB}}
+ *           shard 2 OI: OI = {vA, sv={}}
+ *           shard 3 OI: OI = {vB, sv={1=vA, 2=vA}}
+ *
+ *   attempt full write vD with the parity shard (shard k+m-1) blocked.
+ *       Then drop shard k to open a new peering interval.
+ *       vD is rolled back on every shard that received it.
+ *       The new interval recovers shard 3 (which the primary knows is at vB)
+ *       via the partial-write recovery push in ECCommon.cc:
+ *
+ *   recovery push to shard 3: oi = {vC, sv={2=vA, 3=vB}}
+ *                              set oi.version = vB
+ *                              erase_if(sv[x] >= vB):
+ *                                removes {3=vB} because (vB >= vB)
+ *                                keeps {2=vA} because (vA < vB)
+ *                   result: shard 3 OI = {vB, sv={2=vA}}
+ *
+ *
+ *
+ * Requires k >= 4 (so single-chunk writes skip exactly the intended two
+ * non-primaries) and m >= 2 (for the two distinct coding shards needed for
+ * the blocked-write/interval-trigger trick).
+ */
+TEST_P(TestECFailoverWithPeering, ECRollbackPreservesOlderShardVersions) {
+  if (!(pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "ECRollbackPreservesOlderShardVersions requires optimized EC";
+  }
+  if (k < 4) {
+    GTEST_SKIP() << "ECRollbackPreservesOlderShardVersions requires k >= 4";
+  }
+  if (m < 2) {
+    GTEST_SKIP() << "ECRollbackPreservesOlderShardVersions requires m >= 2";
+  }
+
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const std::string obj_name = "test_rollback_preserves_older";
+  const size_t object_size = stripe_unit * k * 2;
+
+  // Helper: print version and shard_versions for every live shard.
+  auto print_shard_versions = [&](const std::string& label) {
+    std::cout << label << std::endl;
+    for (auto& [shard_id, backend] : backends) {
+      if (backend == nullptr) continue;
+      object_info_t oi = read_shard_object_info(obj_name, shard_id);
+      std::cout << "  shard " << shard_id << ": v=" << oi.version;
+      if (oi.shard_versions.empty()) {
+        std::cout << " sv={}";
+      } else {
+        std::cout << " sv={";
+        bool first = true;
+        for (auto& [sid, sv] : oi.shard_versions) {
+          if (!first) std::cout << ", ";
+          std::cout << sid << "=" << sv;
+          first = false;
+        }
+        std::cout << "}";
+      }
+      std::cout << std::endl;
+    }
+  };
+
+  create_and_write_verify(obj_name, std::string(object_size, 'A'));
+  eversion_t vA = read_shard_object_info(obj_name, 0).version;
+  print_shard_versions("After write A (full, all shards):");
+
+  // Write B: single-chunk write touching only raw shard 3 (offset 3*S).
+  // Non-written non-primaries are all data shards except 0 and 3,
+  // i.e. shards 1, 2, and (for k>4) 4..k-1.
+  int result = write(obj_name,
+                     3 * stripe_unit,
+                     std::string(stripe_unit, 'B'),
+                     object_size);
+  ASSERT_EQ(0, result);
+  eversion_t vB = read_shard_object_info(obj_name, 0).version;
+  print_shard_versions("After write B (shard 3 only):");
+
+  for (auto& [shard_id, backend] : backends) {
+    if (backend == nullptr) continue;
+    object_info_t oi = read_shard_object_info(obj_name, shard_id);
+    if (shard_id == 0 || shard_id == 3 || shard_id >= k) {
+      // Build expected shard_versions: every data shard except primary (0)
+      // and shard 3 was skipped by write B and is stale at vA.
+      std::map<shard_id_t, eversion_t> expected_shard_versions;
+      for (int s = 1; s < k; ++s) {
+        if (s != 3) {
+          expected_shard_versions[shard_id_t(s)] = vA;
+        }
+      }
+      EXPECT_EQ(oi.version, vB);
+      EXPECT_EQ(oi.shard_versions, expected_shard_versions)
+        << "After write B: all non-primary data shards except 3 should be stale at vA";
+    } else {
+      EXPECT_EQ(oi.version, vA);
+      EXPECT_TRUE(oi.shard_versions.empty())
+        << "shard " << shard_id << ": shard_versions={}";
+    }
+  }
+
+  // Write C: single-chunk write touching only raw shard 1 (offset 1*S).
+  // Shard 1's entry is erased (caught up); shard 3 is newly stale at vB;
+  // all other previously-skipped shards (2, 4..k-1) carry forward at vA.
+  result = write(obj_name,
+                 1 * stripe_unit,
+                 std::string(stripe_unit, 'C'),
+                 object_size);
+  ASSERT_EQ(0, result);
+  eversion_t vC = read_shard_object_info(obj_name, 0).version;
+  print_shard_versions("After write C (shard 1 only):");
+
+  for (auto& [shard_id, backend] : backends) {
+    if (backend == nullptr) continue;
+    object_info_t oi = read_shard_object_info(obj_name, shard_id);
+    if (shard_id == 0 || shard_id == 1 || shard_id >= k) {
+      // skipped_by_B minus shard 1 (caught up), plus shard 3 (newly stale at vB)
+      std::map<shard_id_t, eversion_t> expected_shard_versions;
+      for (int s = 1; s < k; ++s) {
+        if (s != 1 && s != 3) {
+          expected_shard_versions[shard_id_t(s)] = vA;
+        }
+      }
+      expected_shard_versions[shard_id_t(3)] = vB;
+      EXPECT_EQ(oi.version, vC);
+      EXPECT_EQ(oi.shard_versions, expected_shard_versions)
+        << "After write C: shard 3 should be stale at vB, remaining skipped shards at vA";
+    } else if (shard_id == 3) {
+      // shard 3 was not written in C; it still holds its write-B OI
+      std::map<shard_id_t, eversion_t> expected_shard_versions;
+      for (int s = 1; s < k; ++s) {
+        if (s != 3) {
+          expected_shard_versions[shard_id_t(s)] = vA;
+        }
+      }
+      EXPECT_EQ(oi.version, vB);
+      EXPECT_EQ(oi.shard_versions, expected_shard_versions)
+        << "After write C: shard 3 should still hold its write-B OI";
+    } else {
+      EXPECT_EQ(oi.version, vA);
+      EXPECT_TRUE(oi.shard_versions.empty())
+        << "shard " << shard_id << ": shard_versions={}";
+    }
+  }
+
+  // Attempt write D (full), blocked so it cannot commit.  Drop a separate
+  // coding shard (interval_trigger_shard=k) to open a new peering interval,
+  // forcing vD to be rolled back on shard 3 (and all others that received it).
+  // The new interval immediately recovers shard 3 via the ECCommon.cc
+  // partial-write push path (same mechanism as ECRollbackShardVersions).
+  const int interval_trigger_shard = k;      // first coding shard -- gets dropped
+  const int blocked_shard = k + m - 1;       // last coding shard -- ack is blocked
+  suspend_primary_to_osd(blocked_shard);
+  result = write(obj_name, 0, std::string(object_size, 'D'), object_size);
+  ASSERT_EQ(-EINPROGRESS, result);
+  mark_osd_down(interval_trigger_shard);
+  unsuspend_primary_to_osd(blocked_shard);
+  event_loop->run_until_idle();
+  ASSERT_TRUE(all_shards_active());
+  print_shard_versions("After write D + rollback + recovery of shard 3:");
+
+  // Key assertion: shard 3 is recovered to vB via the partial-write push
+  // path, and the entry for shard 2 (at vA < vB) must be PRESERVED by
+  // erase_if.  With a naive clear() the result would be {vB, sv={}}.
+  for (auto& [shard_id, backend] : backends) {
+    if (backend == nullptr) continue;
+    if (shard_id == interval_trigger_shard) continue;
+    object_info_t oi = read_shard_object_info(obj_name, shard_id);
+    if (shard_id == 0 || shard_id == 1 || shard_id >= k) {
+      // Same sv as written shards after write C: skipped-by-B minus shard 1, plus {3=vB}
+      std::map<shard_id_t, eversion_t> expected_shard_versions;
+      for (int s = 1; s < k; ++s) {
+        if (s != 1 && s != 3) {
+          expected_shard_versions[shard_id_t(s)] = vA;
+        }
+      }
+      expected_shard_versions[shard_id_t(3)] = vB;
+      EXPECT_EQ(oi.version, vC);
+      EXPECT_EQ(oi.shard_versions, expected_shard_versions)
+        << "After recovery: shard should be at vC";
+    } else if (shard_id == 3) {
+      // erase_if removes {3=vB} (vB >= vB), keeps remaining skipped-by-B entries (< vB)
+      std::map<shard_id_t, eversion_t> expected_shard_versions;
+      for (int s = 1; s < k; ++s) {
+        if (s != 1 && s != 3) {
+          expected_shard_versions[shard_id_t(s)] = vA;
+        }
+      }
+      EXPECT_EQ(oi.version, vB)
+        << "Shard 3 should be recovered to vB (its version per shard_versions)";
+      EXPECT_EQ(oi.shard_versions, expected_shard_versions)
+        << "erase_if must keep skipped-by-B entries (vA < vB); clear() would wrongly drop them";
+    } else {
+      EXPECT_EQ(oi.version, vA);
+      EXPECT_TRUE(oi.shard_versions.empty())
+        << "shard " << shard_id << ": shard_versions={}";
+    }
+  }
+
+  // Restore interval_trigger_shard; all shards should now be at vC.
+  mark_osd_up(interval_trigger_shard);
+  event_loop->run_until_idle();
+  ASSERT_TRUE(all_shards_active());
+  print_shard_versions("After restoring interval_trigger_shard:");
+
+  for (auto& [shard_id, backend] : backends) {
+    if (backend == nullptr) continue;
+    object_info_t oi = read_shard_object_info(obj_name, shard_id);
+    if (shard_id == 0 || shard_id == 1 || shard_id >= k) {
+      // Same sv as written shards after write C: skipped-by-B minus shard 1, plus {3=vB}
+      std::map<shard_id_t, eversion_t> expected_shard_versions;
+      for (int s = 1; s < k; ++s) {
+        if (s != 1 && s != 3) {
+          expected_shard_versions[shard_id_t(s)] = vA;
+        }
+      }
+      expected_shard_versions[shard_id_t(3)] = vB;
+      EXPECT_EQ(oi.version, vC);
+      EXPECT_EQ(oi.shard_versions, expected_shard_versions)
+        << "After restoring interval_trigger_shard: shard should be at vC";
+    } else if (shard_id == 3) {
+      // erase_if removes {3=vB} (vB >= vB), keeps remaining entries which are < vB
+      std::map<shard_id_t, eversion_t> expected_shard_versions;
+      for (int s = 1; s < k; ++s) {
+        if (s != 1 && s != 3) {
+          expected_shard_versions[shard_id_t(s)] = vA;
+        }
+      }
+      EXPECT_EQ(oi.version, vB)
+        << "Shard 3 should be recovered to vB (its version per shard_versions)";
+      EXPECT_EQ(oi.shard_versions, expected_shard_versions)
+        << "erase_if must keep skipped-by-B entries (vA < vB); clear() would wrongly drop them";
+    } else {
+      EXPECT_EQ(oi.version, vA);
+      EXPECT_TRUE(oi.shard_versions.empty())
+        << "shard " << shard_id << ": shard_versions={}";
+    }
+  }
+
+  std::cout << "=== ECRollbackPreservesOlderShardVersions completed successfully ===" << std::endl;
+}
+
 // ---------------------------------------------------------------------------
 // Instantiate TestECFailoverWithPeering with EC configurations
 // ---------------------------------------------------------------------------
