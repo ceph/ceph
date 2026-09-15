@@ -2992,4 +2992,3 @@ void rgw_user::dump(Formatter *f) const
 {
   ::encode_json("user", *this, f);
 }
-

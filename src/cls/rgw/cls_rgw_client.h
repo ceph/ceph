@@ -5,7 +5,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/rados/librados.hpp"
 #include "cls_rgw_ops.h"
 #include "cls_rgw_const.h"
@@ -86,31 +86,30 @@ public:
    */
   int from_string(std::string_view composed_marker, int shard_id) {
     value_by_shards.clear();
-    std::vector<std::string> shards;
-    get_str_vec(composed_marker, SHARDS_SEPARATOR.c_str(), shards);
-    if (shards.size() > 1 && shard_id >= 0) {
+    const auto shards = ceph::split(composed_marker, SHARDS_SEPARATOR);
+    if (std::ranges::distance(shards) > 1 && shard_id >= 0) {
       return -EINVAL;
     }
-    for (auto iter = shards.begin(); iter != shards.end(); ++iter) {
-      size_t pos = iter->find(KEY_VALUE_SEPARATOR);
+    for (const auto shard_value : shards) {
+      size_t pos = shard_value.find(KEY_VALUE_SEPARATOR);
       if (pos == std::string::npos) {
         if (!value_by_shards.empty()) {
           return -EINVAL;
         }
         if (shard_id < 0) {
-          add(0, *iter);
+          add(0, std::string { shard_value });
         } else {
-          add(shard_id, *iter);
+          add(shard_id, std::string { shard_value });
         }
         return 0;
       }
-      std::string shard_str = iter->substr(0, pos);
+      std::string shard_str { shard_value.substr(0, pos) };
       std::string err;
       int shard = (int)strict_strtol(shard_str.c_str(), 10, &err);
       if (!err.empty()) {
         return -EINVAL;
       }
-      add(shard, iter->substr(pos + 1));
+      add(shard, std::string { shard_value.substr(pos + 1) });
     }
     return 0;
   }
