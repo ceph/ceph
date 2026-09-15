@@ -6,6 +6,7 @@
 #include "common/Formatter.h"
 #include "common/options/build_options.h"
 #include "common/strtol.h" // for strict_si_cast()
+#include "include/container_ios.h"
 
 // Helpers for validators
 #include "include/stringify.h"

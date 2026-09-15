@@ -17,6 +17,7 @@
 #define CEPH_MEXPORTDIRNOTIFY_H
 
 #include "messages/MMDSOp.h"
+#include "include/encoding_list.h"
 
 class MExportDirNotify final : public MMDSOp {
 private:

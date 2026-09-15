@@ -29,6 +29,7 @@
 #include "common/ceph_mutex.h"
 #include "common/Timer.h"
 #include "common/errno.h"
+#include "log/Log.h"
 #include "mon/MonClient.h"
 #include "msg/Dispatcher.h"
 #include "include/err.h"

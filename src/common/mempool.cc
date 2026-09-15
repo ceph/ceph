@@ -16,6 +16,7 @@
 #include <thread>
 #include "include/mempool.h"
 #include "include/demangle.h"
+#include "common/Formatter.h"
 
 // default to debug_mode off
 bool mempool::debug_mode = false;
@@ -28,6 +29,12 @@ static size_t num_shard_bits;
 static size_t num_shards;
 
 std::unique_ptr<shard_t[]> shards = std::make_unique<shard_t[]>(get_num_shards());
+
+void stats_t::dump(ceph::Formatter *f) const {
+  f->dump_int("items", items);
+  f->dump_int("bytes", bytes);
+}
+
 }
 
 size_t mempool::get_num_shards(void) {

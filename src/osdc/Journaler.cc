@@ -16,12 +16,14 @@
 #include "osdc/Journaler.h"
 #include "osdc/Objecter.h"
 #include "common/perf_counters.h"
+#include "common/Cond.h" // for C_SaferCond
 #include "common/dout.h"
 #include "include/Context.h"
 #include "msg/Messenger.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "common/Finisher.h"
+#include "common/OnFinisher.h"
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix

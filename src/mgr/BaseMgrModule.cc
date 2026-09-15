@@ -27,6 +27,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
+#include "common/OnFinisher.h"
 #include "common/version.h"
 #include "mgr/Types.h"
 

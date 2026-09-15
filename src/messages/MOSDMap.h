@@ -21,6 +21,7 @@
 #include "osd/OSDMap.h"
 #include "crush/CrushWrapper.h"
 #include "include/ceph_features.h"
+#include "include/encoding_flat_map.h" // for encoding snap_interval_set_t
 
 class MOSDMap final : public Message {
 private:

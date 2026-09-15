@@ -8,6 +8,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "msg/MessageFmt.h"
 #include "crimson/auth/DummyAuth.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"

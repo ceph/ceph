@@ -11,6 +11,7 @@
 #include "common/ceph_context.h"
 #include "common/StackStringStream.h"
 #include "common/debug.h"
+#include "include/container_ios.h"
 #include "auth/KeyRing.h"
 
 #define dout_subsys ceph_subsys_auth

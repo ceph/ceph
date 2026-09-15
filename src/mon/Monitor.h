@@ -49,8 +49,10 @@
 #include "include/common_fwd.h"
 #include "include/CompatSet.h"
 #include "mon/MonitorDBStore.h"
-#include "mon/mon_types.h" // for Metadata, PAXOS_*, ScrubResult
+#include "mon/mon_types.h" // for PAXOS_*
+#include "mon/Metadata.h"
 #include "mon/MonitorBackup.h"
+#include "mon/ScrubResult.h"
 #include "mgr/MgrClient.h"
 #include <boost/smart_ptr/atomic_shared_ptr.hpp>
 #include <boost/smart_ptr/shared_ptr.hpp>

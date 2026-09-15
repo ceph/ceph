@@ -15,6 +15,7 @@
 
 #include "object.h"
 #include "common/Formatter.h"
+#include "include/encoding_string.h"
 
 #include <cstdio>
 
@@ -47,29 +48,4 @@ const char *file_object_t::c_str() const {
   if (!buf[0])
     snprintf(buf, sizeof(buf), "%llx.%08llx", (long long unsigned)ino, (long long unsigned)bno);
   return buf;
-}
-
-std::ostream& operator<<(std::ostream& out, const snapid_t& s) {
-  if (s == CEPH_NOSNAP)
-    return out << "head";
-  else if (s == CEPH_SNAPDIR)
-    return out << "snapdir";
-  else
-    return out << std::hex << s.val << std::dec;
-}
-
-void sobject_t::dump(ceph::Formatter *f) const {
-  f->dump_stream("oid") << oid;
-  f->dump_stream("snap") << snap;
-}
-
-std::list<sobject_t> sobject_t::generate_test_instances() {
-  std::list<sobject_t> o;
-  o.emplace_back();
-  o.push_back(sobject_t{object_t("myobject"), 123});
-  return o;
-}
-
-std::ostream& operator<<(std::ostream& out, const sobject_t &o) {
-  return out << o.oid << "/" << o.snap;
 }

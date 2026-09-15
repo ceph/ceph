@@ -24,4 +24,4 @@ endif()
 
 add_library(common-auth-objs OBJECT ${auth_srcs})
 target_include_directories(common-auth-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(common-auth-objs legacy-option-headers)
+target_link_libraries(common-auth-objs legacy-option-headers ${FMT_LIB})

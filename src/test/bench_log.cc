@@ -3,6 +3,7 @@
 
 #include <iostream> // for std::cout
 
+#include "include/container_ios.h"
 #include "include/types.h"
 #include "common/Thread.h"
 #include "common/debug.h"

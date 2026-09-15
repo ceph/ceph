@@ -214,12 +214,7 @@ inline std::ostream& operator<<(std::ostream& out, const clog_type t)
   }
 }
 
-inline std::ostream& operator<<(std::ostream& out, const LogEntry& e)
-{
-  return out << e.stamp << " " << e.name << " (" << e.rank << ") "
-	     << e.seq << " : "
-             << e.channel << " " << e.prio << " " << e.msg;
-}
+std::ostream& operator<<(std::ostream& out, const LogEntry& e);
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<clog_type> : fmt::ostream_formatter {};
@@ -233,12 +228,7 @@ template <> struct fmt::formatter<EntityName> : fmt::formatter<std::string_view>
 };
 
 template <> struct fmt::formatter<LogEntry> : fmt::formatter<std::string_view> {
-  template <typename FormatContext>
-  auto format(const LogEntry& e, FormatContext& ctx) const {
-    return fmt::format_to(ctx.out(), "{} {} ({}) {} : {} [{}] {}",
-                          e.stamp, e.name, e.rank, e.seq, e.channel,
-                          LogEntry::level_to_str(e.prio), e.msg);
-  }
+  auto format(const LogEntry& e, format_context& ctx) const -> format_context::iterator;
 };
 
 #endif
