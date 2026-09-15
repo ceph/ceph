@@ -53,6 +53,7 @@
 #endif
 
 #include <fstream>
+#include <atomic>
 #include <locale>
 #include <map>
 #include <memory>
@@ -103,6 +104,74 @@ enum {
   l_c_wr_avg,
   l_c_wr_sqsum,
   l_c_wr_ops,
+  l_c_rd_sz_avg,
+  l_c_rd_sz_sqsum,
+  l_c_wr_sz_avg,
+  l_c_wr_sz_sqsum,
+  l_c_aio_ops,
+  l_c_aio_completions,
+  l_c_aio_in_flight,
+  l_c_aio_in_flight_peak,
+  l_c_sync_in_flight,
+  l_c_sync_in_flight_peak,
+  l_c_osdc_hit,
+  l_c_osdc_miss,
+  l_c_osdc_dirty,
+  l_c_mds_req,
+  l_c_mds_req_lookup,
+  l_c_mds_req_getattr,
+  l_c_mds_req_lookuphash,
+  l_c_mds_req_lookupparent,
+  l_c_mds_req_lookupino,
+  l_c_mds_req_lookupname,
+  l_c_mds_req_getvxattr,
+  l_c_mds_req_dummy,
+  l_c_mds_req_setxattr,
+  l_c_mds_req_rmxattr,
+  l_c_mds_req_setlayout,
+  l_c_mds_req_setattr,
+  l_c_mds_req_setfilelock,
+  l_c_mds_req_getfilelock,
+  l_c_mds_req_setdirlayout,
+  l_c_mds_req_mknod,
+  l_c_mds_req_link,
+  l_c_mds_req_unlink,
+  l_c_mds_req_rename,
+  l_c_mds_req_mkdir,
+  l_c_mds_req_rmdir,
+  l_c_mds_req_symlink,
+  l_c_mds_req_create,
+  l_c_mds_req_open,
+  l_c_mds_req_readdir,
+  l_c_mds_req_lookupsnap,
+  l_c_mds_req_mksnap,
+  l_c_mds_req_rmsnap,
+  l_c_mds_req_lssnap,
+  l_c_mds_req_renamesnap,
+  l_c_mds_req_readdir_snapdiff,
+  l_c_mds_req_file_blockdiff,
+  l_c_mds_req_fragmentdir,
+  l_c_mds_req_exportdir,
+  l_c_mds_req_flush,
+  l_c_mds_req_enqueue_scrub,
+  l_c_mds_req_repair_fragstats,
+  l_c_mds_req_repair_inodestats,
+  l_c_mds_req_rdlock_fragsstats,
+  l_c_mds_req_quiesce_path,
+  l_c_mds_req_quiesce_inode,
+  l_c_mds_req_lock_path,
+  l_c_mds_req_uninline_data,
+  l_c_caps,
+  l_c_caps_dirty,
+  l_c_caps_grant,
+  l_c_caps_revoke,
+  l_c_caps_release,
+  l_c_fscrypt_wr_amp,
+  l_c_fscrypt_rd_amp,
+  l_c_fscrypt_enc_lat,
+  l_c_fscrypt_dec_lat,
+  l_c_fscrypt_rd_lat,
+  l_c_fscrypt_wr_lat,
   l_c_last,
 };
 
@@ -955,15 +1024,8 @@ public:
   void tick();
   void start_tick_thread();
 
-  void update_read_io_size(size_t size) {
-    total_read_ops++;
-    total_read_size += size;
-  }
-
-  void update_write_io_size(size_t size) {
-    total_write_ops++;
-    total_write_size += size;
-  }
+  void update_read_io_size(size_t size);
+  void update_write_io_size(size_t size);
 
   void inc_dentry_nr() {
     ++dentry_nr;
@@ -989,6 +1051,59 @@ public:
   }
   std::pair<uint64_t, uint64_t> get_cap_hit_rates() {
     return std::make_pair(cap_hits, cap_misses);
+  }
+
+  void inc_caps() {
+    if (logger)
+      logger->inc(l_c_caps);
+  }
+  void dec_caps() {
+    if (logger)
+      logger->dec(l_c_caps);
+  }
+  void inc_caps_grant() {
+    if (logger)
+      logger->inc(l_c_caps_grant);
+  }
+  void inc_caps_revoke() {
+    if (logger)
+      logger->inc(l_c_caps_revoke);
+  }
+  void inc_caps_release() {
+    if (logger)
+      logger->inc(l_c_caps_release);
+  }
+  void inc_aio_in_flight() {
+    if (!logger) {
+      return;
+    }
+    auto cur = aio_in_flight.fetch_add(1, std::memory_order_relaxed) + 1;
+    logger->inc(l_c_aio_in_flight);
+    update_in_flight_peak(cur, aio_in_flight_peak, l_c_aio_in_flight_peak);
+  }
+  void dec_aio_in_flight() {
+    if (!logger) {
+      return;
+    }
+    auto prev = aio_in_flight.fetch_sub(1, std::memory_order_relaxed);
+    ceph_assert(prev > 0);
+    logger->dec(l_c_aio_in_flight);
+  }
+  void inc_sync_in_flight() {
+    if (!logger) {
+      return;
+    }
+    auto cur = sync_in_flight.fetch_add(1, std::memory_order_relaxed) + 1;
+    logger->inc(l_c_sync_in_flight);
+    update_in_flight_peak(cur, sync_in_flight_peak, l_c_sync_in_flight_peak);
+  }
+  void dec_sync_in_flight() {
+    if (!logger) {
+      return;
+    }
+    auto prev = sync_in_flight.fetch_sub(1, std::memory_order_relaxed);
+    ceph_assert(prev > 0);
+    logger->dec(l_c_sync_in_flight);
   }
 
   void inc_opened_files() {
@@ -1042,6 +1157,10 @@ public:
   bool tick_thread_stopped = false;
 
   std::unique_ptr<PerfCounters> logger;
+  std::atomic<uint64_t> aio_in_flight{0};
+  std::atomic<uint64_t> aio_in_flight_peak{0};
+  std::atomic<uint64_t> sync_in_flight{0};
+  std::atomic<uint64_t> sync_in_flight_peak{0};
   std::unique_ptr<MDSMap> mdsmap;
 #if defined(__linux__)
   std::unique_ptr<FSCrypt> fscrypt;
@@ -1050,6 +1169,18 @@ public:
 
 
 protected:
+  void update_in_flight_peak(uint64_t cur,
+                             std::atomic<uint64_t>& peak,
+                             int peak_counter_key) {
+    auto old_peak = peak.load(std::memory_order_relaxed);
+    while (cur > old_peak) {
+      if (peak.compare_exchange_weak(old_peak, cur, std::memory_order_relaxed)) {
+        logger->set(peak_counter_key, cur);
+        break;
+      }
+    }
+  }
+
   struct FSCrypt_Options {
     std::vector<uint8_t> fscrypt_auth;
     std::vector<uint8_t> fscrypt_file;
@@ -1841,6 +1972,7 @@ private:
 
     int64_t get_ofs() { return offset; }
     uint64_t get_size() { return size; }
+    utime_t start;
   };
 
   class WriteEncMgr_Buffered : public WriteEncMgr {
