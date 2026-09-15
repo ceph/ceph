@@ -1397,16 +1397,33 @@ Request Parameters
 
 ``default-placement``
 
-:Description: default placement for the user.
+:Description: default placement for the user. An explicitly empty value clears
+              it, together with the default storage class, so that the user
+              falls back to the placement of its zonegroup. Omitting the
+              parameter leaves it unchanged.
 :Type: string
 :Example: default-placement
 :Required: No
 
 ``default-storage-class``
 
-:Description: default storage class for the user, default-placement must be defined when setting this option.
+:Description: default storage class for the user, default-placement must be
+              given together with this option. A storage class cannot be
+              cleared on its own: send default-placement again without a
+              storage class to reset it to the default of that placement, or
+              send an empty default-placement to clear both.
 :Type: string
 :Example: STANDARD-1A
+:Required: No
+
+``placement-tags``
+
+:Description: comma-separated list of placement tags for the user. An
+              explicitly empty value clears the list, so that the user is no
+              longer restricted to tagged placement targets. Omitting the
+              parameter leaves it unchanged.
+:Type: string
+:Example: tag1,tag2
 :Required: No
 
 .. versionadded:: Squid

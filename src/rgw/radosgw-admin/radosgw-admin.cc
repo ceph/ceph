@@ -463,9 +463,13 @@ void usage()
   cout << "   --default                         set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only                       set zone as read-only (when adding to zonegroup)\n";
   cout << "   --redirect-zone                   specify zone id to redirect when response is 404 (not found)\n";
-  cout << "   --placement-id                    placement id for zonegroup placement commands\n";
+  cout << "   --placement-id                    placement id for zonegroup placement commands, and the\n";
+  cout << "                                     default placement of a user for the user commands. on\n";
+  cout << "                                     user modify an empty value clears it\n";
   cout << "   --storage-class                   storage class for zonegroup placement commands\n";
-  cout << "   --tags=<list>                     list of tags for zonegroup placement add and modify commands\n";
+  cout << "   --tags=<list>                     list of tags for zonegroup placement add and modify commands,\n";
+  cout << "                                     and the placement tags of a user for the user commands. on\n";
+  cout << "                                     user modify an empty value clears them\n";
   cout << "   --tags-add=<list>                 list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>                  list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>                zone endpoints\n";
@@ -3907,8 +3911,10 @@ int main(int argc, const char **argv)
   std::string objects_file;
   string object_version;
   string placement_id;
+  bool placement_id_specified = false;
   std::optional<string> opt_storage_class;
   list<string> tags;
+  bool tags_specified = false;
   list<string> tags_add;
   list<string> tags_rm;
 #ifdef WITH_RADOSGW_RADOS
@@ -4516,10 +4522,12 @@ int main(int argc, const char **argv)
       zonegroup_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
       placement_id = val;
+      placement_id_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
       opt_storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
       get_str_list(val, ",", tags);
+      tags_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
       get_str_list(val, ",", tags_add);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*)NULL)) {
@@ -7226,10 +7234,22 @@ int main(int argc, const char **argv)
       return EINVAL;
     }
     user_op.set_default_placement(target_rule);
+  } else if (opt_cmd == OPT::USER_MODIFY && opt_storage_class &&
+             !opt_storage_class->empty()) {
+    // a storage class is validated against its placement target, so it cannot
+    // be given on its own
+    cerr << "ERROR: --storage-class requires --placement-id" << std::endl;
+    return EINVAL;
+  } else if (opt_cmd == OPT::USER_MODIFY && placement_id_specified) {
+    // explicitly empty: clear the rule, storage class included
+    user_op.set_default_placement(rgw_placement_rule());
   }
 
   if (!tags.empty()) {
     user_op.set_placement_tags(tags);
+  } else if (opt_cmd == OPT::USER_MODIFY && tags_specified) {
+    // explicitly empty: clear the tag list
+    user_op.set_placement_tags(list<string>());
   }
   user_op.path = path;
 

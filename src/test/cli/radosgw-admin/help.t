@@ -307,9 +307,13 @@
      --default                         set entity (realm, zonegroup, zone) as default
      --read-only                       set zone as read-only (when adding to zonegroup)
      --redirect-zone                   specify zone id to redirect when response is 404 (not found)
-     --placement-id                    placement id for zonegroup placement commands
+     --placement-id                    placement id for zonegroup placement commands, and the
+                                       default placement of a user for the user commands. on
+                                       user modify an empty value clears it
      --storage-class                   storage class for zonegroup placement commands
-     --tags=<list>                     list of tags for zonegroup placement add and modify commands
+     --tags=<list>                     list of tags for zonegroup placement add and modify commands,
+                                       and the placement tags of a user for the user commands. on
+                                       user modify an empty value clears them
      --tags-add=<list>                 list of tags to add for zonegroup placement modify command
      --tags-rm=<list>                  list of tags to remove for zonegroup placement modify command
      --endpoints=<list>                zone endpoints

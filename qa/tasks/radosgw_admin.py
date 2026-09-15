@@ -411,6 +411,57 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user1], check_status=True)
     assert not out['suspended']
 
+    # TESTCASE 'set-placement','user','modify','default placement and tags','succeeds'
+    # the storage class is not asserted here: a STANDARD one is dropped when
+    # the placement rule is persisted, and 'user info' renders an empty
+    # storage class back as STANDARD, so the two states are indistinguishable
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'modify', '--uid', user1,
+            '--placement-id', 'default-placement',
+            '--tags', 'tag1,tag2',
+            ], check_status=True)
+
+    (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user1], check_status=True)
+    assert out['default_placement'] == 'default-placement'
+    assert out['placement_tags'] == ['tag1', 'tag2']
+
+    # TESTCASE 'keep-placement','user','modify','placement options omitted','left unchanged'
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'modify', '--uid', user1,
+            '--display-name', display_name1,
+            ], check_status=True)
+
+    (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user1], check_status=True)
+    assert out['default_placement'] == 'default-placement'
+    assert out['placement_tags'] == ['tag1', 'tag2']
+
+    # TESTCASE 'storage-class-without-placement','user','modify','storage class alone','fails'
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'modify', '--uid', user1,
+            '--storage-class', 'STANDARD',
+            ])
+    assert err
+
+    # TESTCASE 'clear-placement','user','modify','empty placement id','clears rule'
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'modify', '--uid', user1,
+            '--placement-id', '',
+            ], check_status=True)
+
+    (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user1], check_status=True)
+    assert out['default_placement'] == ''
+    assert out['placement_tags'] == ['tag1', 'tag2']
+
+    # TESTCASE 'clear-placement-tags','user','modify','empty tags','clears list'
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'modify', '--uid', user1,
+            '--tags', '',
+            ], check_status=True)
+
+    (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user1], check_status=True)
+    assert out['default_placement'] == ''
+    assert out['placement_tags'] == []
+
     # TESTCASE 'add-keys','key','create','w/valid info','succeeds'
     (err, out) = rgwadmin(ctx, client, [
             'key', 'create', '--uid', user1,
