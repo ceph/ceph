@@ -1190,6 +1190,8 @@ std::string pg_state_string(uint64_t state)
     *css << "repair+";
   if (state & PG_STATE_BACKFILL_WAIT)
     *css << "backfill_wait+";
+  if (state & PG_STATE_BACKFILL_PAUSED)
+    *css << "backfill_paused";
   if (state & PG_STATE_BACKFILLING)
     *css << "backfilling+";
   if (state & PG_STATE_FORCED_BACKFILL)
@@ -1251,6 +1253,8 @@ std::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_FORCED_RECOVERY;
   else if (state == "backfill_wait")
     type = PG_STATE_BACKFILL_WAIT;
+  else if (state == "backfill_paused")
+    type = PG_STATE_BACKFILL_PAUSED;
   else if (state == "incomplete")
     type = PG_STATE_INCOMPLETE;
   else if (state == "stale")
