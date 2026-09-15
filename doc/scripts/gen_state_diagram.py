@@ -180,9 +180,40 @@ class StateMachineRenderer(object):
         print('\tcompound=true;', file=output)
         for i in self.emit_state(top_level[0]):
             print('\t' + i, file=output)
+        events = []
         for i in self.edges.keys():
             for j in self.emit_event(i):
-                print(j, file=output)
+                events.append(j)
+
+        def sort_event(e):
+            return "%s -> %s [%s,%s]" % (e[0], e[1], e[2], e[3])
+
+        events.sort(key=sort_event)
+        last = None
+        lastevent = None
+        labels = ""
+        for i in events:
+            cur = "%s -> %s [%s,%s]" % (i[0], i[1], i[2], i[3])
+            if last:
+                if (last == cur):
+                    labels = "%s\\n%s" % (labels, i[4])
+                else:
+                    print('%s -> %s [label="%s",color="%s",fontcolor="%s"%s%s];' %
+                          (lastevent[0], lastevent[1], labels, lastevent[5],
+                           lastevent[5], lastevent[2], lastevent[3]), file=output)
+                    last = cur;
+                    lastevent = i
+                    labels = i[4]
+            else:
+                last = cur;
+                lastevent = i
+                labels = i[4]
+
+        if last:
+            print('%s -> %s [label="%s",color="%s",fontcolor="%s"%s%s];' %
+                  (lastevent[0], lastevent[1], labels, lastevent[5],
+                   lastevent[5], lastevent[2], lastevent[3]), file=output)
+
         print('}', file=output)
 
     def emit_state(self, state):
@@ -212,28 +243,19 @@ class StateMachineRenderer(object):
                 yield state+";"
 
     def emit_event(self, event):
-        def append(app):
-            retval = "["
-            for i in app:
-                retval += (i + ",")
-            retval += "]"
-            return retval
-
         for (fro, to) in self.edges[event]:
             color = next(self.color_palette)
-            appendix = ['label="%s"' % (event,),
-                        'color="%s"' % (color,),
-                        'fontcolor="%s"' % (color,)]
+            ltail = ""
+            lhead = ""
             if fro in self.machines.keys():
-                appendix.append("ltail=%s" % (self.clusterlabel[fro],))
+                ltail = ",ltail=%s" % (self.clusterlabel[fro],)
                 while fro in self.machines.keys():
                     fro = self.machines[fro]
             if to in self.machines.keys():
-                appendix.append("lhead=%s" % (self.clusterlabel[to],))
+                lhead = ",lhead=%s" % (self.clusterlabel[to],)
                 while to in self.machines.keys():
                     to = self.machines[to]
-            yield("%s -> %s %s;" % (fro, to, append(appendix)))
-
+            yield((fro, to, ltail, lhead, event, color))
 
 if __name__ == '__main__':
     INPUT_GENERATOR = do_filter(line for line in sys.stdin)

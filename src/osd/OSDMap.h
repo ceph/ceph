@@ -1441,6 +1441,15 @@ public:
   bool have_pg_pool(int64_t p) const {
     return pools.count(p);
   }
+  /// Returns true if any pool has migration_target pointing at \p pid,
+  /// covering both in-progress and completed migrations.
+  bool is_pool_migration_target(int64_t pid) const {
+    for (const auto &[id, pdata] : pools) {
+      if (pdata.migration_target.has_value() && *pdata.migration_target == pid)
+        return true;
+    }
+    return false;
+  }
   const pg_pool_t* get_pg_pool(int64_t p) const {
     auto i = pools.find(p);
     if (i != pools.end())
@@ -1833,7 +1842,7 @@ public:
   void print_osd(int id, std::ostream& out) const;
   void print_osds(std::ostream& out) const;
   void print_pools(CephContext *cct, std::ostream& out,
-                   bool show_rule_names = false) const;
+                   bool show_rule_names = false, bool show_all = false) const;
   void print_summary(ceph::Formatter *f, std::ostream& out,
 		     const std::string& prefix, bool extra=false) const;
   void print_oneline_summary(std::ostream& out) const;

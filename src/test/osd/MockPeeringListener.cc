@@ -91,7 +91,8 @@ void MockPeeringListener::schedule_event_on_commit(
 
 // Implementation of MockPeeringListener::on_activate_complete
 // This must be defined after ECPeeringTestFixture is fully defined to avoid incomplete type errors
-void MockPeeringListener::on_activate_complete() {
+void MockPeeringListener::on_activate_complete(HBHandle *handle) {
+
   dout(0) << __func__ << dendl;
   
   // Helper lambda to schedule an event
@@ -121,14 +122,12 @@ void MockPeeringListener::on_activate_complete() {
       get_osdmap_epoch(),
       get_osdmap_epoch(),
       PeeringState::RequestBackfill()));
-#if POOL_MIGRATION
   } else if (ps->needs_pool_migration()) {
     dout(10) << "activate queueing pool migration" << dendl;
     schedule_event(std::make_shared<PGPeeringEvent>(
       get_osdmap_epoch(),
       get_osdmap_epoch(),
       PeeringState::DoPoolMigration()));
-#endif
   } else {
     dout(10) << "activate all replicas clean, no recovery" << dendl;
     schedule_event(std::make_shared<PGPeeringEvent>(
