@@ -60,7 +60,9 @@
         *ngIf="searchField"
         [expandable]="false"
         [(ngModel)]="search"
-        aria-label="search"
+        [placeholder]="searchPlaceholder"
+        [label]="searchLabel"
+        [ariaLabel]="searchAriaLabel"
         (valueChange)="updateFilter($event)"
         (clear)="onClearSearch()"
       >
@@ -501,9 +503,9 @@
               />
             </div>
             <legend class="cds--type-body-compact-02">
-              <ng-container>{{ emptyStateTitle }}</ng-container>
+              <ng-container>{{ displayedEmptyStateTitle }}</ng-container>
               <cd-help-text class="cds--type-label-01">
-                {{ emptyStateMessage }}
+                {{ displayedEmptyStateMessage }}
               </cd-help-text>
             </legend>
           </div>
