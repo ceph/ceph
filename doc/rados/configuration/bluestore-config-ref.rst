@@ -379,6 +379,18 @@ Throttling
 .. confval:: bluestore_throttle_cost_per_io_hdd
 .. confval:: bluestore_throttle_cost_per_io_ssd
 
+Onode Prefetch
+==============
+
+BlueStore can speculatively load an object's onode into its cache as soon as the
+corresponding OSD operation is queued, hiding the onode-lookup latency behind the
+operation's queuing time. This can reduce write latency for workloads that
+overwrite objects whose onodes have fallen out of the cache. The feature is
+disabled by default.
+
+.. confval:: bluestore_onode_prefetch
+.. confval:: bluestore_onode_prefetch_max_queue_depth
+
 SPDK Usage
 ==========
 

@@ -624,6 +624,13 @@ public:
 		       std::map<std::string,ceph::buffer::ptr, std::less<>>& aset) = 0;
 
   /**
+   * prefetch_onode -- advisory hint to warm the onode cache for an object.
+   */
+  virtual void prefetch_onode(CollectionHandle& c, const ghobject_t& oid) {}
+  virtual bool prefetch_onode_enabled() const { return false; }
+
+
+  /**
    * getattrs -- get all of the xattrs of an object
    *
    * @param cid collection for object
