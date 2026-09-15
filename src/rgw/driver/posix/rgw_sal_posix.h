@@ -909,6 +909,14 @@ public:
 			       bool keep_index_consistent,
 			       optional_yield y,
 			       const DoutPrefixProvider *dpp) override;
+  virtual int remove_all_objects(const DoutPrefixProvider* dpp,
+		    bool delete_children, optional_yield y) override
+    { return -ENOTSUP; }
+  virtual int remove_all_objects_bypass_gc(int concurrent_max,
+			      bool keep_index_consistent,
+			      optional_yield y,
+			      const DoutPrefixProvider* dpp) override
+    { return -ENOTSUP; }
   virtual int create(const DoutPrefixProvider* dpp,
 		     const CreateParams& params,
 		     optional_yield y) override;
