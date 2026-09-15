@@ -2181,7 +2181,10 @@ else:
                     contains_failure = True
 
             if load_balancing_group:
-                resp = NVMeoFClient().stub.namespace_change_load_balancing_group(
+                resp = NVMeoFClient(
+                    gw_group=gw_group,
+                    server_address=server_address
+                ).stub.namespace_change_load_balancing_group(
                     NVMeoFClient.pb2.namespace_change_load_balancing_group_req(
                         subsystem_nqn=nqn, nsid=int(nsid), anagrpid=load_balancing_group
                     )
@@ -2191,7 +2194,10 @@ else:
 
             if rw_ios_per_second or rw_mbytes_per_second or r_mbytes_per_second \
                or w_mbytes_per_second:
-                resp = NVMeoFClient().stub.namespace_set_qos_limits(
+                resp = NVMeoFClient(
+                    gw_group=gw_group,
+                    server_address=server_address
+                ).stub.namespace_set_qos_limits(
                     NVMeoFClient.pb2.namespace_set_qos_req(
                         subsystem_nqn=nqn,
                         nsid=int(nsid),
@@ -2205,7 +2211,10 @@ else:
                     contains_failure = True
 
             if trash_image is not None:
-                resp = NVMeoFClient().stub.namespace_set_rbd_trash_image(
+                resp = NVMeoFClient(
+                    gw_group=gw_group,
+                    server_address=server_address
+                ).stub.namespace_set_rbd_trash_image(
                     NVMeoFClient.pb2.namespace_set_rbd_trash_image_req(
                         subsystem_nqn=nqn,
                         nsid=int(nsid),
