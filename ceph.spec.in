@@ -2684,8 +2684,9 @@ fi
 %files rgw-standalone
 %dir %{_docdir}/ceph
 %doc %{_docdir}/ceph/sample.ceph.conf
+%license %{_docdir}/ceph/COPYING-APACHE2
 %dir %{_libdir}/ceph
-%{_libdir}/ceph/libceph-common.so.*
+%{_libdir}/ceph/libceph*.so.*
 %{_bindir}/rgw-standalone
 %{_bindir}/rgw-standalone-admin
 %dir %{_localstatedir}/lib/ceph/radosgw
@@ -2824,9 +2825,10 @@ fi
 %endif
 
 %files -n librados2
+%license %{_docdir}/ceph/COPYING-APACHE2
 %{_libdir}/librados.so.*
 %dir %{_libdir}/ceph
-%{_libdir}/ceph/libceph-common.so.*
+%{_libdir}/ceph/libceph*.so.*
 %if %{with lttng}
 %{_libdir}/librados_tp.so.*
 %endif

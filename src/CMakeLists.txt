@@ -684,6 +684,9 @@ else()
 endif()
 
 target_link_libraries(ceph-common ${ceph_common_deps})
+if(GOOGLE_TCMALLOC)
+  target_link_libraries(ceph-common google_tcmalloc)
+endif()
 if(ENABLE_COVERAGE)
   target_link_libraries(ceph-common gcov)
 endif(ENABLE_COVERAGE)
@@ -848,7 +851,7 @@ if(WITH_FUSE)
 endif()
 set_target_properties(ceph-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE}
-  INSTALL_RPATH "")
+  INSTALL_RPATH "$<$<BOOL:${GOOGLE_TCMALLOC}>:${CEPH_INSTALL_FULL_PKGLIBDIR}>")
 install(TARGETS ceph-osd DESTINATION bin)
 
 endif(NOT WIN32)
@@ -1197,6 +1200,7 @@ endif(WITH_RADOSGW)
 
 install(FILES
   sample.ceph.conf
+  ${CMAKE_SOURCE_DIR}/cmake/modules/GoogleTCMalloc/COPYING-APACHE2
   DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
 # Now create a usable config.h
