@@ -106,6 +106,7 @@ class Action(str, Enum):
     ROTATE_KEY = 'rotate-key'
     START = 'start'
     STOP = 'stop'
+    KILL = 'kill'
 
     @classmethod
     def create(cls, action: Union[str, 'Action', None]) -> 'Action':

@@ -1033,6 +1033,8 @@ class CephadmService(metaclass=ABCMeta):
         current and previous dependency lists return the next action that
         this service would prefer cephadm take.
         """
+        if scheduled_action == utils.Action.KILL:
+            return utils.NextDaemonStep(scheduled_action)
         if curr_deps == last_deps:
             return utils.NextDaemonStep(scheduled_action)
         sym_diff = set(curr_deps).symmetric_difference(last_deps)

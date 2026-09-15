@@ -1430,6 +1430,7 @@ class NFSServiceSpec(ServiceSpec):
                  enable_client_object_cache: bool = False,
                  client_object_cache_size: Optional[Union[str, int]] = None,
                  client_object_cache_max_dirty: Optional[Union[str, int]] = None,
+                 termination_grace_period_seconds: Optional[int] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1438,7 +1439,8 @@ class NFSServiceSpec(ServiceSpec):
             config=config, networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args, custom_configs=custom_configs,
             ip_addrs=ip_addrs, ssl=ssl, ssl_cert=ssl_cert, ssl_key=ssl_key, ssl_ca_cert=ssl_ca_cert,
-            certificate_source=certificate_source, custom_sans=custom_sans)
+            certificate_source=certificate_source, custom_sans=custom_sans,
+            termination_grace_period_seconds=termination_grace_period_seconds)
 
         self.port = port
 
@@ -1704,6 +1706,7 @@ class RGWSpec(ServiceSpec):
                  rgw_user_counters_cache_size: Optional[int] = None,
                  rgw_bucket_counters_cache: Optional[bool] = False,
                  rgw_bucket_counters_cache_size: Optional[int] = None,
+                 termination_grace_period_seconds: Optional[int] = None,
                  generate_cert: bool = False,
                  disable_multisite_sync_traffic: Optional[bool] = None,
                  wildcard_enabled: Optional[bool] = False,
@@ -1727,7 +1730,8 @@ class RGWSpec(ServiceSpec):
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config, networks=networks,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
-            custom_configs=custom_configs)
+            custom_configs=custom_configs,
+            termination_grace_period_seconds=termination_grace_period_seconds)
 
         #: The RGW realm associated with this service. Needs to be manually created
         #: if the spec is being applied directly to cephdam. In case of rgw module
@@ -2011,6 +2015,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 termination_grace_period_seconds: Optional[int] = None,
                  ):
         assert service_type == 'nvmeof'
         super(NvmeofServiceSpec, self).__init__('nvmeof', service_id=service_id,
@@ -2024,7 +2029,10 @@ class NvmeofServiceSpec(ServiceSpec):
                                                 config=config, networks=networks,
                                                 extra_container_args=extra_container_args,
                                                 extra_entrypoint_args=extra_entrypoint_args,
-                                                custom_configs=custom_configs)
+                                                custom_configs=custom_configs,
+                                                termination_grace_period_seconds=(
+                                                    termination_grace_period_seconds
+                                                ))
 
         #: RADOS pool where ceph-nvmeof config data is stored (use '.nvmeof' as default).
         self.pool = pool or '.nvmeof'
@@ -2541,6 +2549,7 @@ class IngressSpec(ServiceSpec):
                  monitor_ip_addrs: Optional[Dict[str, str]] = None,
                  use_tcp_mode_over_rgw: bool = False,
                  haproxy_peer_communication_port: Optional[int] = None,
+                 termination_grace_period_seconds: Optional[int] = None,
                  ):
         assert service_type == 'ingress'
 
@@ -2555,7 +2564,8 @@ class IngressSpec(ServiceSpec):
             custom_sans=custom_sans,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
-            custom_configs=custom_configs
+            custom_configs=custom_configs,
+            termination_grace_period_seconds=termination_grace_period_seconds
         )
         self.backend_service = backend_service
         self.frontend_port = frontend_port
