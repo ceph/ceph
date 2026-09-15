@@ -534,14 +534,15 @@ void ECBackend::handle_sub_read(
           ghobject_t(hoid, ghobject_t::NO_GEN, shard),
           offset, len, bl, flags); // Allow EIO return
       } else {
+        // TODO(dynamic-object-size): use the per-object chunk size here.
         int subchunk_size =
-          sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
+          sinfo.get_default_chunk_size() / ec_impl->get_sub_chunk_count();
         dout(20) << __func__ << " case2: going to do fragmented read;"
 		 << " subchunk_size=" << subchunk_size
-		 << " chunk_size=" << sinfo.get_chunk_size() << dendl;
+		 << " chunk_size=" << sinfo.get_default_chunk_size() << dendl;
         bool error = false;
         for (int m = 0; m < (int)len && !error;
-             m += sinfo.get_chunk_size()) {
+             m += sinfo.get_default_chunk_size()) {
           for (auto &&k: subchunks) {
             bufferlist bl0;
             r = switcher->store->read(
@@ -791,6 +792,13 @@ void ECBackend::handle_sub_read_reply(
     return;
   }
   ReadOp &rop = iter->second;
+  // Build the object-scoped geometry view for a completed read, using the
+  // per-object chunk size recorded on the read request (0 => pool default).
+  auto sinfo_for = [&](const hobject_t &hoid) {
+    uint64_t cs = rop.to_read.contains(hoid) ? rop.to_read.at(hoid).chunk_size
+                                             : 0;
+    return sinfo.for_object_chunk_size(cs);
+  };
   if (cct->_conf->bluestore_debug_inject_read_err) {
     for (auto i = op.buffers_read.begin();
          i != op.buffers_read.end();
@@ -818,7 +826,7 @@ void ECBackend::handle_sub_read_reply(
     }
 
     if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
+      rop.complete.emplace(hoid, sinfo_for(hoid));
     }
 
     auto &buffers_read = rop.complete.at(hoid).buffers_read;
@@ -834,7 +842,7 @@ void ECBackend::handle_sub_read_reply(
   }
   for (auto &&[hoid, req]: rop.to_read) {
     if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
+      rop.complete.emplace(hoid, sinfo_for(hoid));
     }
     auto &complete = rop.complete.at(hoid);
     if (!req.shard_reads.contains(from.shard)) {
@@ -855,7 +863,7 @@ void ECBackend::handle_sub_read_reply(
       continue;
     }
     if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
+      rop.complete.emplace(hoid, sinfo_for(hoid));
     }
     rop.complete.at(hoid).attrs.emplace();
     (*(rop.complete.at(hoid).attrs)).swap(attr);
@@ -870,7 +878,7 @@ void ECBackend::handle_sub_read_reply(
         continue;
       }
       if (!rop.complete.contains(hoid)) {
-        rop.complete.emplace(hoid, &sinfo);
+        rop.complete.emplace(hoid, sinfo_for(hoid));
       }
       rop.complete.at(hoid).omap_header.emplace();
       (*(rop.complete.at(hoid).omap_header)).swap(header);
@@ -884,7 +892,7 @@ void ECBackend::handle_sub_read_reply(
         continue;
       }
       if (!rop.complete.contains(hoid)) {
-        rop.complete.emplace(hoid, &sinfo);
+        rop.complete.emplace(hoid, sinfo_for(hoid));
       }
       rop.complete.at(hoid).omap_entries.emplace();
       (*(rop.complete.at(hoid).omap_entries)).swap(entries);
@@ -898,14 +906,14 @@ void ECBackend::handle_sub_read_reply(
         continue;
       }
       if (!rop.complete.contains(hoid)) {
-        rop.complete.emplace(hoid, &sinfo);
+        rop.complete.emplace(hoid, sinfo_for(hoid));
       }
       rop.complete.at(hoid).omap_complete = omap_complete;
     }
   }
   for (auto &&[hoid, err]: op.errors) {
     if (!rop.complete.contains(hoid)) {
-      rop.complete.emplace(hoid, &sinfo);
+      rop.complete.emplace(hoid, sinfo_for(hoid));
     }
     auto &complete = rop.complete.at(hoid);
     complete.errors.emplace(from, err);
@@ -1232,6 +1240,7 @@ void ECBackend::submit_transaction(
 int ECBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t object_size,
+  uint64_t chunk_size,
   const std::list<std::pair<ec_align_t,
   std::pair<ceph::buffer::list*, Context*>>> &to_read,
   CoroHandles coro)
@@ -1250,7 +1259,7 @@ int ECBackend::objects_read_sync(
     }
   });
 
-  objects_read_async(hoid, object_size, to_read, on_finish, true);
+  objects_read_async(hoid, object_size, chunk_size, to_read, on_finish, true);
 
   // If the async read is not yet complete, yield and wait for it to complete
   if (!done) {
@@ -1292,10 +1301,12 @@ int ECBackend::objects_read_local(
           shard_len, *bl, op_flags);
 }
 
-std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, uint64_t len) {
+std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, uint64_t len, uint64_t chunk_size) {
   // sync reads are supported for sub-chunk reads where no reconstruct is
   // required.
-  uint64_t chunk_size = sinfo.get_chunk_size();
+  const ECUtil::stripe_info_t sinfo = this->sinfo.for_object_chunk_size(chunk_size);
+  // Resolve the effective chunk size (param may be 0 => pool default).
+  chunk_size = sinfo.get_chunk_size();
   uint64_t start_chunk = off / chunk_size;
   // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
   uint64_t end_chunk = (off + len - 1) / chunk_size;
@@ -1319,7 +1330,8 @@ std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, ui
 int ECBackend::objects_readv_sync(const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
-     ceph::buffer::list *bl) {
+     ceph::buffer::list *bl,
+     uint64_t chunk_size) {
 
   // Cannot return EAGAIN here: the op would get dropped.  This check must have
   // been done earlier.
@@ -1331,6 +1343,9 @@ int ECBackend::objects_readv_sync(const hobject_t &hoid,
   m.clear(); // Make m safe to write to again.
   auto r = switcher->store->readv(switcher->ch, ghobject_t(hoid, ghobject_t::NO_GEN, shard), im, *bl, op_flags);
   if (r >= 0) {
+    const ECUtil::stripe_info_t sinfo =
+        this->sinfo.for_object_chunk_size(chunk_size);
+    // Effective chunk size (shadows the param, which may be 0 => default).
     uint64_t chunk_size = sinfo.get_chunk_size();
     for (auto [off, len] : im) {
       uint64_t ro_offset = sinfo.shard_offset_to_ro_offset(shard, off);
@@ -1354,10 +1369,13 @@ int ECBackend::objects_readv_sync(const hobject_t &hoid,
 void ECBackend::objects_read_async(
     const hobject_t &hoid,
     uint64_t object_size,
+    uint64_t chunk_size,
     const list<pair<ec_align_t,
                     pair<bufferlist*, Context*>>> &to_read,
     Context *on_complete,
     bool fast_read) {
+  // Per-object EC chunk size (0 => pool default), from the object_info.
+  const ECUtil::stripe_info_t sinfo = this->sinfo.for_object_chunk_size(chunk_size);
   map<hobject_t, std::list<ec_align_t>> reads;
 
   uint32_t flags = 0;
@@ -1465,6 +1483,7 @@ void ECBackend::objects_read_async(
     reads,
     fast_read,
     object_size,
+    chunk_size,
     make_gen_lambda_context<
       ECCommon::ec_extents_t&&, cb>(
       cb(this,
@@ -1523,15 +1542,16 @@ shard_id_map<bufferlist> ECBackend::ec_decode_acting_set(
   return decoded_buffer_map;
 }
 
-ECUtil::stripe_info_t ECBackend::ec_get_sinfo() const { return sinfo; }
+const ECUtil::stripe_info_base_t &ECBackend::ec_get_sinfo() const { return sinfo; }
 
 void ECBackend::objects_read_and_reconstruct(
   const map<hobject_t, std::list<ec_align_t>> &reads,
   bool fast_read,
   uint64_t object_size,
+  uint64_t chunk_size,
   GenContextURef<ECCommon::ec_extents_t&&> &&func) {
   return read_pipeline.objects_read_and_reconstruct(
-    reads, fast_read, object_size, std::move(func));
+    reads, fast_read, object_size, chunk_size, std::move(func));
 }
 
 void ECBackend::objects_read_and_reconstruct_for_rmw(
@@ -1590,8 +1610,10 @@ int ECBackend::be_deep_scrub(
   }
 
   uint64_t stride = cct->_conf->osd_deep_scrub_stride;
-  if (stride % sinfo.get_chunk_size())
-    stride += sinfo.get_chunk_size() - (stride % sinfo.get_chunk_size());
+  // TODO(dynamic-object-size): use the per-object chunk size here (scrub).
+  if (stride % sinfo.get_default_chunk_size())
+    stride += sinfo.get_default_chunk_size() -
+        (stride % sinfo.get_default_chunk_size());
 
   auto& perf_logger = *(get_parent()->get_logger());
   perf_logger.inc(io_counters.read_cnt);

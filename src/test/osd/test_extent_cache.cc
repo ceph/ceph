@@ -22,7 +22,7 @@ using namespace ECUtil;
 
 shard_extent_map_t imap_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&in, stripe_info_t const *sinfo)
 {
-  shard_extent_map_t out(sinfo);
+  shard_extent_map_t out(*sinfo);
   for (int shard = 0; shard < (int)in.size(); shard++) {
     for (auto &&tup: in[shard]) {
       bufferlist bl;
@@ -35,7 +35,7 @@ shard_extent_map_t imap_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&i
 
 shard_extent_map_t imap_from_iset(const shard_extent_set_t &sset, stripe_info_t *sinfo)
 {
-  shard_extent_map_t out(sinfo);
+  shard_extent_map_t out(*sinfo);
 
   for (auto &&[shard, set]: sset) {
     for (auto &&iter: set) {
@@ -61,6 +61,7 @@ shard_extent_set_t iset_from_vector(vector<vector<pair<uint64_t, uint64_t>>> &&i
 struct Client : public ECExtentCache::BackendReadListener
 {
   hobject_t oid = hobject_t().make_temp_hobject("My first object");
+  stripe_info_base_t sinfo_base;
   stripe_info_t sinfo;
   ECExtentCache::LRU lru;
   ECExtentCache cache;
@@ -68,13 +69,16 @@ struct Client : public ECExtentCache::BackendReadListener
   list<shard_extent_map_t> results;
 
   Client(uint64_t chunk_size, int k, int m, uint64_t cache_size) :
-    sinfo(k, m, k*chunk_size, vector<shard_id_t>(0)),
-    lru(cache_size), cache(*this, lru, sinfo, g_ceph_context) {};
+    sinfo_base(k, m, k*chunk_size, vector<shard_id_t>(0)),
+    sinfo(sinfo_base.for_default()),
+    lru(cache_size), cache(*this, lru, sinfo_base, g_ceph_context) {};
 
+  uint64_t last_read_chunk_size = 0;
   void backend_read(hobject_t _oid, const shard_extent_set_t& request,
-    uint64_t object_size) override  {
+    uint64_t object_size, uint64_t chunk_size) override  {
     ceph_assert(oid == _oid);
     active_reads = request;
+    last_read_chunk_size = chunk_size;
   }
 
   void cache_ready(const hobject_t& _oid, const shard_extent_map_t& _result)
@@ -699,6 +703,7 @@ struct MultiClient : public ECExtentCache::BackendReadListener
 {
   hobject_t oid_x = hobject_t().make_temp_hobject("Object X");
   hobject_t oid_y = hobject_t().make_temp_hobject("Object Y");
+  stripe_info_base_t sinfo_base;
   stripe_info_t sinfo;
   ECExtentCache::LRU lru;
   ECExtentCache cache;
@@ -708,11 +713,12 @@ struct MultiClient : public ECExtentCache::BackendReadListener
   list<shard_extent_map_t> results;
 
   MultiClient(uint64_t chunk_size, int k, int m, uint64_t cache_size) :
-    sinfo(k, m, k*chunk_size, vector<shard_id_t>(0)),
-    lru(cache_size), cache(*this, lru, sinfo, g_ceph_context) {};
+    sinfo_base(k, m, k*chunk_size, vector<shard_id_t>(0)),
+    sinfo(sinfo_base.for_default()),
+    lru(cache_size), cache(*this, lru, sinfo_base, g_ceph_context) {};
 
   void backend_read(hobject_t _oid, const shard_extent_set_t& request,
-    uint64_t object_size) override  {
+    uint64_t object_size, uint64_t chunk_size) override  {
     active_reads[_oid].emplace(request);
     last_read_object_size[_oid] = object_size;
   }
@@ -875,4 +881,29 @@ TEST(ECExtentCache, CloneInvalidateStaleSize)
   cl.complete_write(*op_clone);
   cl.complete_write(*op_x2);
   cl.complete_write(*op_y);
+}
+TEST(ECExtentCache, dynamic_object_chunk_size)
+{
+  // Client default chunk size is 32 (k=2). Use a larger per-object chunk size
+  // and confirm it flows through the extent cache to the backend read and is
+  // used for the cache geometry.
+  Client cl(32, 2, 1, 64);
+  const uint64_t obj_chunk_size = 128;
+
+  auto to_read = iset_from_vector({{{0, 2}}, {{0, 2}}}, cl.get_stripe_info());
+  auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}}, cl.get_stripe_info());
+
+  optional op = cl.cache.prepare(cl.oid, to_read, to_write, 10, 10, false,
+    [&cl](ECExtentCache::OpRef &op)
+    {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    },
+    obj_chunk_size);
+  cl.cache_execute(*op);
+
+  // The backend read must be told the object's chunk size.
+  ASSERT_EQ(cl.last_read_chunk_size, obj_chunk_size);
+
+  cl.complete_read();
+  cl.complete_write(*op);
 }

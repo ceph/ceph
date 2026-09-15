@@ -214,6 +214,8 @@ void PGBackend::rollback(
     void append(uint64_t old_size) override {
       ObjectStore::Transaction temp;
       auto dpp = pg->get_parent()->get_dpp();
+      // TODO(dynamic-object-size): rollback uses the pool-default chunk size;
+      // the object's stashed chunk size is not available in this visitor.
       const uint64_t shard_size = pg->object_size_to_shard_size(old_size,
 		       pg->get_parent()->whoami_shard().shard);
       ldpp_dout(dpp, 20) << " entry " << entry.version
@@ -297,6 +299,8 @@ void PGBackend::rollback(
 	    shards[i].empty() ||
 	    shards[i].contains(pg->get_parent()->whoami_shard().shard)) {
 	  // Written shard - rollback extents
+	  // TODO(dynamic-object-size): rollback uses the pool-default chunk size;
+	  // the object's stashed chunk size is not available in this visitor.
 	  const uint64_t shard_size = pg->object_size_to_shard_size(
 					object_size,
 					pg->get_parent()->whoami_shard().shard);

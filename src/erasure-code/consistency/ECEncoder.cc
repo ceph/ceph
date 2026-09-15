@@ -5,7 +5,7 @@
 #include "osd/ECUtilL.h"
 
 using stripe_info_l_t = ECLegacy::ECUtilL::stripe_info_t;
-using stripe_info_o_t = ECUtil::stripe_info_t;
+using stripe_info_o_t = ECUtil::stripe_info_base_t;
 
 namespace ceph {
 namespace consistency {
@@ -96,15 +96,15 @@ template <>
 std::optional<ceph::bufferlist> ECEncoder<stripe_info_o_t>::do_encode(ceph::bufferlist inbl,
                                                                       stripe_info_o_t &sinfo)
 {
-  ECUtil::shard_extent_map_t encoded_data(&sinfo);
+  ECUtil::shard_extent_map_t encoded_data(sinfo.for_default());
 
-  uint64_t stripe_width = sinfo.get_stripe_width();
+  uint64_t stripe_width = sinfo.get_default_stripe_width();
   if (inbl.length() % stripe_width != 0) {
     uint64_t pad = stripe_width - inbl.length() % stripe_width;
     inbl.append_zero(pad);
   }
 
-  sinfo.ro_range_to_shard_extent_map(0, inbl.length(), inbl, encoded_data);
+  sinfo.for_default().ro_range_to_shard_extent_map(0, inbl.length(), inbl, encoded_data);
   encoded_data.insert_parity_buffers();
   int r = encoded_data.encode(ec_impl);
   if (r < 0) {
@@ -208,6 +208,12 @@ template <typename SInfo>
 int ECEncoder<SInfo>::get_chunk_size()
 {
   return stripe_info->get_chunk_size();
+}
+
+template <>
+int ECEncoder<stripe_info_o_t>::get_chunk_size()
+{
+  return stripe_info->get_default_chunk_size();
 }
 }
 }

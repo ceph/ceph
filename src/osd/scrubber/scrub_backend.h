@@ -561,7 +561,8 @@ class ScrubBackend {
   uint64_t logical_to_ondisk_size(uint64_t logical_size,
                                  shard_id_t shard_id,
                                  bool object_is_legacy_ec = false,
-                                 uint64_t expected_size = 0) const;
+                                 uint64_t expected_size = 0,
+                                 uint64_t chunk_size = 0) const;
   std::string extract_crcs_from_map(const shard_id_map<bufferlist>& map);
   std::string extract_crc_from_bufferlist(const bufferlist& crc_buffer);
   char retrieve_byte(uint32_t value, uint32_t index) {

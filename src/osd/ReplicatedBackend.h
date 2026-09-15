@@ -183,6 +183,7 @@ public:
     uint32_t op_flags,
     ceph::buffer::list *bl,
     uint64_t object_size,
+    uint64_t chunk_size,
     std::optional<CoroHandles> coro
   ) override;
 
@@ -197,17 +198,19 @@ public:
     const hobject_t &hoid,
     std::map<uint64_t, uint64_t>& m,
     uint32_t op_flags,
-    ceph::buffer::list *bl) override;
+    ceph::buffer::list *bl,
+    uint64_t chunk_size = 0) override;
 
   void objects_read_async(
     const hobject_t &hoid,
     uint64_t object_size,
+    uint64_t chunk_size,
     const std::list<std::pair<ec_align_t,
 	       std::pair<ceph::buffer::list*, Context*> > > &to_read,
                Context *on_complete,
                bool fast_read = false) override;
   bool get_ec_supports_crc_encode_decode() const override;
-  ECUtil::stripe_info_t ec_get_sinfo() const override;
+  const ECUtil::stripe_info_base_t &ec_get_sinfo() const override;
   bool ec_can_decode(const shard_id_set &available_shards) const override;
   shard_id_map<bufferlist> ec_encode_acting_set(
       const bufferlist &in_bl) const override;
@@ -544,7 +547,8 @@ private:
 
   uint64_t be_get_ondisk_size(uint64_t logical_size,
                               shard_id_t unused,
-                              bool unused2) const final {
+                              bool unused2,
+                              uint64_t unused3 = 0) const final {
     return logical_size;
   }
 };

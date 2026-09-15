@@ -5584,7 +5584,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP };
+    SUPPORTS_OMAP, DYNAMIC_OBJECT_SIZE, EC_DYNAMIC_MAX_CHUNK_SIZE };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6407,6 +6407,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
       {"supports_omap", SUPPORTS_OMAP},
+      {"dynamic_object_size", DYNAMIC_OBJECT_SIZE},
+      {"ec_dynamic_max_chunk_size", EC_DYNAMIC_MAX_CHUNK_SIZE},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6422,7 +6424,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
       EC_OVERWRITES, ERASURE_CODE_PROFILE, EC_OPTIMIZATIONS,
-      EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT
+      EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT, DYNAMIC_OBJECT_SIZE
     };
     const choices_set_t ONLY_REPLICA_CHOICES = {
       READ_RATIO
@@ -6654,6 +6656,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case EC_DYNAMIC_MAX_CHUNK_SIZE:
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
@@ -6682,6 +6685,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case SUPPORTS_OMAP:
             f->dump_bool("supports_omap", p->supports_omap());
             break;
+	  case DYNAMIC_OBJECT_SIZE:
+	    f->dump_bool("dynamic_object_size",
+			 p->has_flag(pg_pool_t::FLAG_DYNAMIC_OBJECT_SIZE));
+	    break;
 	}
       }
       f->close_section();
@@ -6835,6 +6842,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+	  case EC_DYNAMIC_MAX_CHUNK_SIZE:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -6872,6 +6880,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
             ss << "supports_omap: " <<
               (p->supports_omap() ? "true" : "false") << "\n";
             break;
+	  case DYNAMIC_OBJECT_SIZE:
+	    ss << "dynamic_object_size: " <<
+	      (p->has_flag(pg_pool_t::FLAG_DYNAMIC_OBJECT_SIZE) ? "true" : "false")
+	       << "\n";
+	    break;
 	}
 	rdata.append(ss.str());
 	ss.str("");
@@ -9275,6 +9288,27 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
           pending_inc.new_pg_temp[pg_temp->first] = mempool::osdmap::vector<int>(new_pg_temp.begin(), new_pg_temp.end());
         }
       }
+    }
+  } else if (var == "dynamic_object_size") {
+    if (!p.is_erasure()) {
+      ss << "dynamic_object_size can only be enabled for an erasure coded pool";
+      return -EINVAL;
+    }
+    if (!p.allows_ecoptimizations()) {
+      ss << "allow_ec_optimizations must be enabled before setting "
+	    "dynamic_object_size";
+      return -EINVAL;
+    }
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.flags |= pg_pool_t::FLAG_DYNAMIC_OBJECT_SIZE;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      if ((p.flags & pg_pool_t::FLAG_DYNAMIC_OBJECT_SIZE) != 0) {
+	ss << "dynamic_object_size cannot be disabled once enabled";
+	return -EINVAL;
+      }
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
     }
   } else if (var == "set_pool_flags" || var == "unset_pool_flags") {
     bool force;
