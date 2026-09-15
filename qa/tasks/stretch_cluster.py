@@ -633,7 +633,7 @@ class TestStretchCluster(MgrTestCase):
         # Fail over osds in DC2 expects PGs to be partially active
         self._fail_over_all_osds_in_dc('dc2')
         self.wait_until_true_and_hold(
-            lambda: self._pg_partial_active,
+            lambda: self._pg_partial_active(),
             timeout=self.RECOVERY_PERIOD,
             success_hold_time=self.SUCCESS_HOLD_TIME
         )
