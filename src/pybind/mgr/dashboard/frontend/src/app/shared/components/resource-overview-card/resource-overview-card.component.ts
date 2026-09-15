@@ -19,6 +19,7 @@ export interface OverviewField {
   emptyText?: string;
 }
 
+/* This component doesn't add its own outer spacing; apply spacing utility classes (e.g. `cds-mb-5`) where it's used. */
 @Component({
   selector: 'cd-resource-overview-card',
   templateUrl: './resource-overview-card.component.html',
