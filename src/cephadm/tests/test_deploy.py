@@ -73,6 +73,33 @@ def test_deploy_nfs_container(cephadm_fs, funkypatch):
         assert f.read() == 'FAKE'
 
 
+def test_deploy_nfs_container_cephfs_client_log(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'nfs.fun'
+        ctx.image = 'quay.io/ceph/ceph:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {
+            'pool': 'foo',
+            'files': {
+                'ganesha.conf': 'FAKE',
+                'idmap.conf': 'FAKE',
+            },
+            'config': 'BALONEY',
+            'keyring': 'BUNKUS',
+            'enable_cephfs_client_log': True,
+        }
+        _cephadm._common_deploy(ctx)
+
+    with open(f'/var/lib/ceph/{fsid}/nfs.fun/unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    assert f'-v /var/log/ceph/{fsid}:/var/log/ceph:z' in runfile_lines[-1]
+    assert pathlib.Path(f'/var/log/ceph/{fsid}').is_dir()
+
+
 def test_deploy_snmp_container(cephadm_fs, funkypatch):
     mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
