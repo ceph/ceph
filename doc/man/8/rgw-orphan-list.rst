@@ -15,13 +15,13 @@ Description
 ===========
 
 :program:`rgw-orphan-list` is an *EXPERIMENTAL* RADOS gateway user
-administration utility. It produces a listing of rados objects that
+administration utility. It produces a listing of RADOS objects that
 are not directly or indirectly referenced through the bucket indexes
 on a pool. It places the results and intermediate files on the local
-filesystem rather than on the ceph cluster itself, and therefore will
+filesystem rather than on the Ceph cluster itself, and therefore will
 not itself consume additional cluster storage.
 
-In theory orphans should not exist. However because ceph evolves
+In theory orphans should not exist. However because Ceph evolves
 rapidly, bugs do crop up, and they may result in orphans that are left
 behind.
 
@@ -58,12 +58,12 @@ Launch the tool::
 Availability
 ============
 
-:program:`radosgw-admin` is part of Ceph, a massively scalable, open-source,
+:program:`rgw-orphan-list` is part of Ceph, a massively scalable, open-source,
 distributed storage system.  Please refer to the Ceph documentation at
 https://docs.ceph.com for more information.
 
 See also
 ========
 
-:doc:`radosgw-admin <radosgw-admin>`\(8)
+:doc:`radosgw-admin <radosgw-admin>`\(8),
 :doc:`ceph-diff-sorted <ceph-diff-sorted>`\(8)
