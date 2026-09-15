@@ -335,19 +335,22 @@ class CephadmSecrets:
         cephadm KV key 'registry_credentials'.  If the legacy key holds a valid
         payload it is opportunistically migrated forward (without deleting it).
         """
-        try:
-            raw = self.client.secret_get_value(
-                namespace=CEPHADM_NAMESPACE,
-                scope=SecretScope.GLOBAL,
-                target='',
-                name='registry_credentials',
-            )
-            if raw is not None:
+        raw = self.client.secret_get_value(
+            namespace=CEPHADM_NAMESPACE,
+            scope=SecretScope.GLOBAL,
+            target='',
+            name='registry_credentials',
+        )
+        if raw is not None:
+            try:
                 payload = json.loads(raw)
-                if isinstance(payload, dict):
-                    return payload
-        except Exception:
-            pass
+            except Exception as e:
+                raise ValueError(
+                    f"Secret 'registry_credentials' contains invalid JSON: {e}"
+                ) from e
+            if not isinstance(payload, dict):
+                raise ValueError("Secret 'registry_credentials' is not a JSON object")
+            return payload
 
         raw_kv = self.mgr.get_store('registry_credentials')
         if raw_kv is None:
