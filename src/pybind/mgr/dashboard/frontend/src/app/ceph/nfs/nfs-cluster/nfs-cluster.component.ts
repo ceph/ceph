@@ -54,7 +54,7 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
       this.orchStatus = status;
     });
     this.permission = this.authStorageService.getPermissions().nfs;
-    this.clusters$ = this.subject.pipe(switchMap(() => this.nfsService.nfsClusterList()));
+    this.clusters$ = this.subject.pipe(switchMap(() => this.nfsService.listClusters()));
     this.columns = [
       {
         name: $localize`Name`,
