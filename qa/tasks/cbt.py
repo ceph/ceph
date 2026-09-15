@@ -144,7 +144,7 @@ class CBT(Task):
     def checkout_cbt(self):
         testdir = misc.get_testdir(self.ctx)
         repo = self.config.get('repo', 'https://github.com/ceph/cbt.git')
-        branch = self.config.get('branch', 'master')
+        branch = self.config.get('branch', 'main') # master
         branch = self.config.get('force-branch', branch)
         sha1 = self.config.get('sha1')
         if sha1 is None:
