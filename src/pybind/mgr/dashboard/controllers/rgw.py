@@ -419,6 +419,31 @@ class RgwSite(RgwRESTController):
         raise DashboardException(http_status_code=501, component='rgw', msg='Not Implemented')
 
 
+def _attach_storage_class_stats(result: Any) -> Any:
+    """Copy RGW per-class usage (ceph/ceph#66501) onto a stable Dashboard key.
+
+    Bucket stats expose ``usage["rgw.storage-classes"]`` as an array of
+    ``{name, size, num_objects, ...}``. User stats expose
+    ``stats.storage-classes`` as a map keyed by ``placement::CLASS``.
+    Legacy buckets/users omit the section until they are migrated.
+    """
+    if not isinstance(result, dict) or result.get('storage_class_stats') is not None:
+        return result
+    if 'stats.storage-classes' in result:
+        result['storage_class_stats'] = result['stats.storage-classes']
+        return result
+    stats = result.get('stats')
+    if isinstance(stats, dict):
+        nested = stats.get('storage-classes', stats.get('storage_class_stats'))
+        if nested is not None:
+            result['storage_class_stats'] = nested
+            return result
+    usage = result.get('usage')
+    if isinstance(usage, dict) and usage.get('rgw.storage-classes') is not None:
+        result['storage_class_stats'] = usage['rgw.storage-classes']
+    return result
+
+
 @APIRouter('/rgw/bucket', Scope.RGW)
 @APIDoc("RGW Bucket Management API", "RgwBucket")
 class RgwBucket(RgwRESTController):
@@ -638,7 +663,7 @@ class RgwBucket(RgwRESTController):
             query_params = f'{query_params}&uid={uid.strip()}'
         result = self.proxy(daemon_name, 'GET', 'bucket{}'.format(query_params))
         if str_to_bool(stats):
-            result = [self._append_bid(bucket) for bucket in result]
+            result = [_attach_storage_class_stats(self._append_bid(bucket)) for bucket in result]
             result = self.map_bucket_owners(result, daemon_name)
 
         return result
@@ -665,7 +690,7 @@ class RgwBucket(RgwRESTController):
         locking = self._get_locking(owner, daemon_name, bucket_name)
         result.update(locking)
 
-        return self._append_bid(result)
+        return _attach_storage_class_stats(self._append_bid(result))
 
     @allow_empty_body
     def create(self, bucket, uid, zonegroup=None, placement_target=None,
@@ -877,6 +902,41 @@ class RgwBucket(RgwRESTController):
         s3_bucket_name = RgwBucket.get_s3_bucket_name(bucket_name)
         return self._delete_notification(s3_bucket_name, notification_id, daemon_name, owner)
 
+    @RESTController.Resource(method='PUT', path='/quota')
+    @allow_empty_body
+    @EndpointDoc("Set per-storage-class quotas for a bucket")
+    def set_quota(self, bucket, storage_class_quotas=None, daemon_name=None):
+        _ = daemon_name
+        quotas = storage_class_quotas
+        if isinstance(quotas, str):
+            try:
+                quotas = json.loads(quotas)
+            except (TypeError, ValueError):
+                quotas = []
+        if not quotas:
+            return {'bucket': bucket, 'storage_class_quotas': [], 'applied': False}
+
+        applied = True
+        for quota in quotas:
+            cmd = [
+                'quota', 'set', '--quota-scope', 'bucket', '--bucket', bucket,
+                '--storage-class', str(quota.get('storage_class', 'STANDARD')),
+                '--placement-target', str(quota.get('placement') or 'default-placement'),
+                '--max-size', str(quota.get('max_size', -1)),
+                '--max-objects', str(quota.get('max_objects', -1))
+            ]
+            try:
+                RgwAccounts.send_rgw_cmd(cmd)
+            except DashboardException:
+                # radosgw-admin rejects --storage-class until the quota PR lands.
+                logger.warning(
+                    'Per-storage-class quota set is not available on this RGW; '
+                    'keeping dashboard payload only'
+                )
+                applied = False
+                break
+        return {'bucket': bucket, 'storage_class_quotas': quotas, 'applied': applied}
+
     @Endpoint(method='GET', path='/ratelimit')
     @EndpointDoc("Get the bucket global rate limit")
     @ReadPermission
@@ -988,7 +1048,7 @@ class RgwUser(RgwRESTController):
             rgwAccounts = RgwAccounts()
             result['managed_user_policies'] = rgwAccounts.list_managed_policy(uid)
         result['uid'] = result['full_user_id']
-        return result
+        return _attach_storage_class_stats(result)
 
     @Endpoint()
     @ReadPermission
@@ -1160,14 +1220,18 @@ class RgwUser(RgwRESTController):
 
     @RESTController.Resource(method='PUT', path='/quota')
     @allow_empty_body
-    def set_quota(self, uid, quota_type, enabled, max_size_kb, max_objects, daemon_name=None):
-        return self.proxy(daemon_name, 'PUT', 'user?quota', {
+    def set_quota(self, uid, quota_type, enabled, max_size_kb, max_objects,
+                  storage_class_quotas=None, daemon_name=None):
+        params = {
             'uid': uid,
             'quota-type': quota_type,
             'enabled': enabled,
             'max-size-kb': max_size_kb,
             'max-objects': max_objects
-        }, json_response=False)
+        }
+        if storage_class_quotas:
+            params['storage-class-quotas'] = storage_class_quotas
+        return self.proxy(daemon_name, 'PUT', 'user?quota', params, json_response=False)
 
     @RESTController.Resource(method='POST', path='/subuser', status=201)
     @allow_empty_body

@@ -3,6 +3,15 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { RgwDaemonService } from './rgw-daemon.service';
 import { Account } from '~/app/ceph/rgw/models/rgw-user-accounts';
+import { StorageClassQuota } from '~/app/ceph/rgw/models/rgw-user';
+
+export interface RgwAccountQuotaPayload {
+  quota_type: string;
+  max_size: string;
+  max_objects: string;
+  enabled: boolean;
+  storage_class_quotas?: StorageClassQuota[];
+}
 
 @Injectable({
   providedIn: 'root'
@@ -51,10 +60,7 @@ export class RgwUserAccountsService {
     });
   }
 
-  setQuota(
-    account_id: string,
-    payload: { quota_type: string; max_size: string; max_objects: string; enabled: boolean }
-  ) {
+  setQuota(account_id: string, payload: RgwAccountQuotaPayload) {
     return this.http.put(`${this.url}/${account_id}/quota`, payload);
   }
 

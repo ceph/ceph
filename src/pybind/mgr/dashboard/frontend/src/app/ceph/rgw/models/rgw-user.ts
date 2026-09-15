@@ -21,12 +21,21 @@ interface Subuser {
   permissions: string;
 }
 
+export interface StorageClassQuota {
+  storage_class: string;
+  enabled: boolean;
+  max_objects: number;
+  max_size: number;
+  max_size_kb?: number;
+}
+
 export interface BucketQuota {
   check_on_raw: boolean;
   enabled: boolean;
   max_objects: number;
   max_size: number;
   max_size_kb: number;
+  storage_class_quotas?: StorageClassQuota[] | Record<string, StorageClassQuota>;
 }
 
 export interface UserQuota {
@@ -35,6 +44,7 @@ export interface UserQuota {
   max_objects: number;
   max_size: number;
   max_size_kb: number;
+  storage_class_quotas?: StorageClassQuota[] | Record<string, StorageClassQuota>;
 }
 
 interface Stats {
@@ -45,6 +55,7 @@ interface Stats {
   size_kb: number;
   size_kb_actual: number;
   size_kb_utilized: number;
+  'storage-classes'?: Array<Record<string, any>> | Record<string, any>;
 }
 
 export interface RgwUser {
@@ -66,6 +77,8 @@ export interface RgwUser {
   path: string;
   placement_tags: any[];
   stats: Stats;
+  'stats.storage-classes'?: Array<Record<string, any>> | Record<string, any>;
+  storage_class_stats?: Array<Record<string, any>> | Record<string, any>;
   subusers: Subuser[];
   suspended: number;
   swift_keys: SwiftKey[];

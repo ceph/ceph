@@ -21,6 +21,7 @@ import { RgwUserFormComponent } from './rgw-user-form.component';
 import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
+import { RgwStorageClassQuotaComponent } from '../rgw-storage-class-quota/rgw-storage-class-quota.component';
 import { By } from '@angular/platform-browser';
 import { CheckboxModule, NumberModule, SelectModule } from 'carbon-components-angular';
 import { LoadingStatus } from '~/app/shared/forms/cd-form';
@@ -34,7 +35,7 @@ describe('RgwUserFormComponent', () => {
   let modalRef: any;
   let childComponent: any;
   configureTestBed({
-    declarations: [RgwUserFormComponent, RgwRateLimitComponent],
+    declarations: [RgwUserFormComponent, RgwRateLimitComponent, RgwStorageClassQuotaComponent],
     imports: [
       HttpClientTestingModule,
       ReactiveFormsModule,
@@ -630,6 +631,34 @@ describe('RgwUserFormComponent', () => {
         enabled: true,
         max_size_kb: -1,
         max_objects: 1000
+      });
+    });
+
+    it('should include storage class quotas when the storage class form is dirty', () => {
+      const quotas = [
+        {
+          storage_class: 'STANDARD',
+          enabled: true,
+          max_size: 1073741824,
+          max_objects: 10
+        }
+      ];
+      component.userScQuotaComponent = {
+        isDirty: () => true,
+        getStorageClassQuotas: () => quotas
+      } as RgwStorageClassQuotaComponent;
+      component.userForm.patchValue({
+        user_quota_enabled: true,
+        user_quota_max_size_unlimited: true,
+        user_quota_max_objects_unlimited: true
+      });
+
+      expect(component._getUserQuotaArgs()).toEqual({
+        quota_type: USER,
+        enabled: true,
+        max_size_kb: -1,
+        max_objects: -1,
+        storage_class_quotas: quotas
       });
     });
   });

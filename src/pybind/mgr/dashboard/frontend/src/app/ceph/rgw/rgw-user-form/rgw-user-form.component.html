@@ -933,6 +933,17 @@
       </div>
     </fieldset>
 
+    <cd-rgw-storage-class-quota
+      #userScQuota
+      idPrefix="user-sc-quota"
+      title="User storage class quotas"
+      i18n-title
+      description="Limits this user's total usage per storage class across all buckets. Cap hot and cold tiers separately."
+      i18n-description
+      [savedQuotas]="userStorageClassQuotas"
+    >
+    </cd-rgw-storage-class-quota>
+
     <!-- Bucket quota -->
     <fieldset>
       <div class="form-item">
@@ -1067,6 +1078,17 @@
         </ng-template>
       </div>
     </fieldset>
+
+    <cd-rgw-storage-class-quota
+      #bucketScQuota
+      idPrefix="bucket-sc-quota"
+      title="Default bucket storage class quotas"
+      i18n-title
+      description="Limits applied to each of this user's buckets, per storage class. Cap hot and cold tiers separately."
+      i18n-description
+      [savedQuotas]="bucketStorageClassQuotas"
+    >
+    </cd-rgw-storage-class-quota>
 
     <!-- Advanced Section -->
     <cd-form-advanced-fieldset>

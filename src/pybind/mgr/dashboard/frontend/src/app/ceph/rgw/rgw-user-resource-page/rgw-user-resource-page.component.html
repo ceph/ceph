@@ -34,6 +34,41 @@
         </div>
       }
 
+      @if (user && storageClassUsage.length) {
+        <section class="cds-mt-6 cds-mb-6">
+          <h2
+            class="cds--type-heading-03"
+            i18n
+          >
+            Storage class usage
+          </h2>
+          <p
+            class="cds--type-body-compact-01"
+            i18n
+          >
+            Used size and objects for each storage class on this user.
+          </p>
+          <cd-table
+            [data]="storageClassUsage"
+            [columns]="storageClassUsageColumns"
+            columnMode="flex"
+            [toolHeader]="false"
+            [searchField]="false"
+            [footer]="false"
+          >
+          </cd-table>
+        </section>
+      }
+
+      <cd-rgw-storage-class-quota-monitor
+        title="User storage class enforcement"
+        description="Each storage class is enforced on its own. If the hot tier is full, further writes to that class would be blocked until data is moved to a colder tier."
+        [usagePayload]="userStorageClassStats"
+        [quotaPayload]="user?.user_quota?.storage_class_quotas"
+        [usageFallback]="dummyUserStorageClassStats"
+      >
+      </cd-rgw-storage-class-quota-monitor>
+
       @if (user?.user_quota) {
         <section class="cds-mt-6 cds-mb-6">
           <h2
@@ -52,6 +87,32 @@
         </section>
       }
 
+      @if (user && userStorageClassQuotas.length) {
+        <section class="cds-mb-6">
+          <h2
+            class="cds--type-heading-03"
+            i18n
+          >
+            User storage class quotas
+          </h2>
+          <p
+            class="cds--type-body-compact-01"
+            i18n
+          >
+            View size and object limits for each storage class on this user.
+          </p>
+          <cd-table
+            [data]="userStorageClassQuotas"
+            [columns]="storageClassQuotaColumns"
+            columnMode="flex"
+            [toolHeader]="false"
+            [searchField]="false"
+            [footer]="false"
+          >
+          </cd-table>
+        </section>
+      }
+
       @if (user?.bucket_quota) {
         <section class="cds-mb-6">
           <h2
@@ -67,6 +128,32 @@
             View the bucket quota details, including maximum object and size.
           </p>
           <cd-table-key-value [data]="bucketQuota"></cd-table-key-value>
+        </section>
+      }
+
+      @if (user && bucketStorageClassQuotas.length) {
+        <section class="cds-mb-6">
+          <h2
+            class="cds--type-heading-03"
+            i18n
+          >
+            Bucket storage class quotas
+          </h2>
+          <p
+            class="cds--type-body-compact-01"
+            i18n
+          >
+            View size and object limits for each storage class on this user's buckets.
+          </p>
+          <cd-table
+            [data]="bucketStorageClassQuotas"
+            [columns]="storageClassQuotaColumns"
+            columnMode="flex"
+            [toolHeader]="false"
+            [searchField]="false"
+            [footer]="false"
+          >
+          </cd-table>
         </section>
       }
 
