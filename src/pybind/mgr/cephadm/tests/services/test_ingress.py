@@ -1689,3 +1689,75 @@ def test_keepalived_should_auto_start_keepalive_only_backend():
 
     mgr.cache.get_daemons_by_service.side_effect = _with_nfs
     assert IngressService.keepalived_should_auto_start(mgr, k, spec)
+
+
+def test_tls_dependencies_apply_only_to_haproxy():
+    mgr = MagicMock()
+    backend_spec = RGWSpec(service_id='foo')
+    mgr.spec_store.__getitem__.return_value.spec = backend_spec
+
+    backend_daemons = [
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id='foo.host1',
+            hostname='host1',
+            service_name='rgw.foo',
+        )
+    ]
+    haproxy_daemons = [
+        DaemonDescription(
+            daemon_type='haproxy',
+            daemon_id='test.host1',
+            hostname='host1',
+            service_name='ingress.test',
+        )
+    ]
+
+    def _get_daemons_by_service(service_name: str):
+        if service_name == 'rgw.foo':
+            return backend_daemons
+        if service_name == 'ingress.test':
+            return haproxy_daemons
+        return []
+
+    mgr.cache.get_daemons_by_service.side_effect = _get_daemons_by_service
+
+    old_spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='inline',
+        ssl_cert='old-cert',
+        ssl_key='old-key',
+    )
+    new_spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='inline',
+        ssl_cert='new-cert',
+        ssl_key='new-key',
+    )
+
+    old_haproxy_deps = IngressService.get_dependencies(mgr, old_spec, 'haproxy')
+    new_haproxy_deps = IngressService.get_dependencies(mgr, new_spec, 'haproxy')
+    old_keepalived_deps = IngressService.get_dependencies(mgr, old_spec, 'keepalived')
+    new_keepalived_deps = IngressService.get_dependencies(mgr, new_spec, 'keepalived')
+
+    assert old_haproxy_deps != new_haproxy_deps
+    assert 'rgw.foo.host1' in new_haproxy_deps
+    assert 'certificate_source: inline' in new_haproxy_deps
+    assert f'ssl_cert: {utils.config_hash(new_spec.ssl_cert)}' in new_haproxy_deps
+    assert f'ssl_key: {utils.config_hash(new_spec.ssl_key)}' in new_haproxy_deps
+
+    assert old_keepalived_deps == new_keepalived_deps
+    assert new_keepalived_deps == ['haproxy.test.host1']
+    assert 'certificate_source: inline' not in new_keepalived_deps
+    assert not any(dep.startswith('ssl_cert:') for dep in new_keepalived_deps)
+    assert not any(dep.startswith('ssl_key:') for dep in new_keepalived_deps)

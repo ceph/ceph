@@ -742,3 +742,19 @@ class TestRGWService:
                         assert kwargs == {
                             'custom_sans': ['s3.example.com', '*.s3.example.com'],
                         }
+
+
+def test_rgw_dependencies_include_legacy_frontend_certificate_hash():
+    from cephadm import utils
+    from cephadm.services.cephadmservice import RgwService
+
+    spec = RGWSpec(
+        service_id='foo',
+        rgw_frontend_ssl_certificate=['CERT', 'CHAIN'],
+    )
+
+    cert = "CERT\nCHAIN"
+
+    assert RgwService.get_dependencies(MagicMock(), spec, 'rgw') == [
+        f'ssl-cert:{utils.config_hash(cert)}'
+    ]
