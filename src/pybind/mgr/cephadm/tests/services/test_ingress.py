@@ -1751,11 +1751,13 @@ def test_tls_dependencies_apply_only_to_haproxy():
     new_keepalived_deps = IngressService.get_dependencies(mgr, new_spec, 'keepalived')
 
     assert old_haproxy_deps != new_haproxy_deps
+    assert 'rgw.foo.host1' in new_haproxy_deps
     assert 'certificate_source: inline' in new_haproxy_deps
     assert f'ssl_cert: {utils.config_hash(new_spec.ssl_cert)}' in new_haproxy_deps
     assert f'ssl_key: {utils.config_hash(new_spec.ssl_key)}' in new_haproxy_deps
 
     assert old_keepalived_deps == new_keepalived_deps
+    assert new_keepalived_deps == ['haproxy.test.host1']
     assert 'certificate_source: inline' not in new_keepalived_deps
     assert not any(dep.startswith('ssl_cert:') for dep in new_keepalived_deps)
     assert not any(dep.startswith('ssl_key:') for dep in new_keepalived_deps)

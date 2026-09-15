@@ -320,3 +320,18 @@ log_to_file = False"""
                     [expected_cert_call, expected_key_call],
                     any_order=True
                 )
+
+
+def test_iscsi_get_dependencies():
+    mgr = MagicMock()
+    mgr.get_mgr_ip.return_value = '10.0.0.1'
+    spec = IscsiServiceSpec(
+        service_id='foo',
+        pool='rbd',
+        trusted_ip_list='10.0.0.20,10.0.0.30',
+    )
+
+    assert IscsiService.get_dependencies(mgr, spec, 'iscsi') == [
+        '10.0.0.20,10.0.0.30,10.0.0.1'
+    ]
+    assert IscsiService.get_dependencies(mgr, None, 'iscsi') == ['10.0.0.1']
