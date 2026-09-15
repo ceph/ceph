@@ -109,3 +109,4 @@ Other
    D3N Data Cache <d3n_datacache>
    Export over NFS <nfs>
    Full Object Deduplication <s3_objects_dedup>
+   S3 Vectors <s3vectors>

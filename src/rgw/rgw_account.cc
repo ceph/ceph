@@ -305,6 +305,40 @@ int remove(const DoutPrefixProvider* dpp,
   constexpr std::string_view path_prefix; // empty
   constexpr uint32_t max_items = 100;
 
+  rgw::sal::BucketList vector_buckets;
+  do {
+    ret = driver->list_vector_buckets(dpp, info.id, info.tenant,
+                                      vector_buckets.next_marker, "",
+                                      max_items, vector_buckets, y);
+    if (ret < 0) {
+      err_msg = "Unable to list account vector buckets";
+      return ret;
+    }
+
+    if (!vector_buckets.buckets.empty() && !op_state.purge_data) {
+      err_msg = "The account cannot be deleted until all vector buckets are removed.";
+      return -EEXIST; // change to code that maps to 409: conflict
+    }
+
+    for (const auto& ent : vector_buckets.buckets) {
+      std::unique_ptr<rgw::sal::VectorBucket> vector_bucket;
+      ret = driver->load_vector_bucket(dpp, ent.bucket, &vector_bucket, y);
+      if (ret < 0) {
+        err_msg = fmt::format("unable to load vector bucket {}", ent.bucket.name);
+        return ret;
+      }
+
+      // the indexes hold the data of the vector bucket, and are purged with it
+      constexpr bool delete_indexes = true;
+      ret = vector_bucket->remove(dpp, delete_indexes, y);
+      if (ret < 0) {
+        err_msg = fmt::format("unable to delete vector bucket {}", ent.bucket.name);
+        return ret;
+      }
+      ldpp_dout_fmt(dpp, 1, "Deleted account vector bucket {}", ent.bucket.name);
+    }
+  } while (!vector_buckets.next_marker.empty());
+
   rgw::sal::UserList users;
   do {
     ret = driver->list_account_users(dpp, y, info.id, info.tenant, path_prefix,
