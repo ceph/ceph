@@ -204,6 +204,13 @@ COMMAND("auth get-or-create-pending "
 	"name=entity,type=CephString",
 	"generate and/or retrieve existing pending key (rotated into place on first use)",
 	"auth", "rwx")
+COMMAND("auth rotate-pending"
+	" name=entity,type=CephString"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
+	"generate and/or retrieve existing pending key for entity",
+	"auth", "rwx")
 COMMAND("auth clear-pending "
 	"name=entity,type=CephString",
 	"clear pending key",
