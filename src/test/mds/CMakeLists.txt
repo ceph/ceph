@@ -6,6 +6,14 @@ add_executable(unittest_mds_authcap
 add_ceph_unittest(unittest_mds_authcap)
 target_link_libraries(unittest_mds_authcap mds global ${BLKID_LIBRARIES})
 
+# unittest_mds_map
+add_executable(unittest_mds_map
+  TestMDSMap.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_mds_map)
+target_link_libraries(unittest_mds_map mds global)
+
 # unittest_mds_sessionfilter
 add_executable(unittest_mds_sessionfilter
   TestSessionFilter.cc
