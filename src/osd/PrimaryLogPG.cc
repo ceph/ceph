@@ -2502,6 +2502,48 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
   dout(25) << __func__ << " oi " << obc->obs.oi << dendl;
 
+  // Rollback read redirect: if a rollback is pending and this is a pure read
+  // of the head object, redirect to the source clone so the client sees the
+  // rolled-back state without waiting for background work to complete.
+  if (op->may_read() && !op->may_write() && !op->may_cache() &&
+      m->get_snapid() == CEPH_NOSNAP &&
+      obc->ssc) {
+    snapid_t obj_seq = obc->ssc->snapset.seq;
+    snapid_t rb_source = find_latest_rollback_source(
+      get_osdmap(), info.pgid.pgid.pool(), obj_seq);
+
+    if (rb_source != CEPH_NOSNAP) {
+      // rb_source is the snap ID the user wants to roll back to.  The clone
+      // that holds that content is not necessarily named rb_source — it is
+      // the first clone in the snapset whose ID is >= rb_source (the same
+      // logic used by find_object_context for snap reads).
+      const auto& clones = obc->ssc->snapset.clones; // ascending
+      auto cit = std::lower_bound(clones.begin(), clones.end(), rb_source);
+
+      hobject_t redirect_oid = obc->obs.oi.soid;
+      if (cit == clones.end()) {
+        // No clone covers rb_source: object did not exist at that snap.
+        dout(10) << __func__ << " rollback redirect: no clone >= " << rb_source
+                 << " in " << clones << ", returning ENOENT" << dendl;
+        osd->reply_op_error(op, -ENOENT);
+        return;
+      }
+      redirect_oid.snap = *cit;
+
+      ObjectContextRef redirect_obc = get_object_context(redirect_oid, false);
+      if (!redirect_obc || !redirect_obc->obs.exists) {
+        // Object did not exist at the rollback snapshot: treat as ENOENT
+        dout(10) << __func__ << " rollback redirect " << redirect_oid
+                 << " does not exist, returning ENOENT" << dendl;
+        osd->reply_op_error(op, -ENOENT);
+        return;
+      }
+      dout(10) << __func__ << " rollback redirect " << obc->obs.oi.soid
+               << " -> " << redirect_oid << dendl;
+      obc = redirect_obc;
+    }
+  }
+
   OpContext *ctx = new OpContext(op, m->get_reqid(), &m->ops, obc, this);
 
   if (coro_op_in_flight && op == active_coro_op) {
@@ -4319,9 +4361,16 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   if (op->may_write() || op->may_cache()) {
     // snap
     if (!(m->has_flag(CEPH_OSD_FLAG_ENFORCE_SNAPC)) &&
-	pool.info.is_pool_snaps_mode()) {
+ pool.info.is_pool_snaps_mode()) {
       // use pool's snapc
       ctx->snapc = pool.snapc;
+      // Compute real_snap_seq: the highest key in pool.info.snaps.
+      // snapc.seq (== pool.snap_seq) may be a rollback ID, which advances
+      // snap_seq without inserting into pg_pool_t::snaps.  Use the highest
+      // real named snapshot ID (or 0 if none) for clone naming / gate / seq.
+      ctx->real_snap_seq = pool.info.snaps.empty()
+                             ? snapid_t(0)
+                             : pool.info.snaps.rbegin()->first;
     } else {
       // client specified snapc
       ctx->snapc.seq = m->get_snap_seq();
@@ -4814,7 +4863,6 @@ int PrimaryLogPG::trim_object(
 
   SnapSet& snapset = obc->ssc->snapset;
 
-  object_info_t &coi = obc->obs.oi;
   auto citer = snapset.clone_snaps.find(coid.snap);
   if (citer == snapset.clone_snaps.end()) {
     osd->clog->error() << "No clone_snaps in snapset " << snapset
@@ -4878,9 +4926,56 @@ int PrimaryLogPG::trim_object(
 
   ctx->at_version = get_next_version();
 
-  PGTransaction *t = ctx->op_t.get();
+  trim_object_snap(ctx.get(), coid, snap_to_trim);
 
+  *ctxp = std::move(ctx);
+  return 0;
+}
+
+void PrimaryLogPG::trim_object_snap(
+  OpContext *ctx,
+  const hobject_t &coid,
+  snapid_t snap_to_trim)
+{
+  ObjectContextRef obc = ctx->obc;
+  ObjectContextRef head_obc = ctx->head_obc;
+  hobject_t head_oid = coid.get_head();
+
+  SnapSet& snapset = obc->ssc->snapset;
+  object_info_t &coi = obc->obs.oi;
+  auto citer = snapset.clone_snaps.find(coid.snap);
+  if (citer == snapset.clone_snaps.end()) {
+    osd->clog->error() << "No clone_snaps in snapset " << snapset
+         << " for object " << coid << "\n";
+    return;
+  }
+  set<snapid_t> old_snaps(citer->second.begin(), citer->second.end());
+  if (old_snaps.empty()) {
+    osd->clog->error() << "No object info snaps for object " << coid;
+    return;
+  }
+
+  set<snapid_t> new_snaps;
+  const OSDMapRef& osdmap = get_osdmap();
+  for (auto i = old_snaps.begin(); i != old_snaps.end(); ++i) {
+    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i) &&
+	*i != snap_to_trim) {
+      new_snaps.insert(*i);
+    }
+  }
+
+  vector<snapid_t>::iterator p = snapset.clones.end();
+  if (new_snaps.empty()) {
+    p = std::find(snapset.clones.begin(), snapset.clones.end(), coid.snap);
+    if (p == snapset.clones.end()) {
+      osd->clog->error() << "Snap " << coid.snap << " not in clones";
+      return;
+    }
+  }
+
+  PGTransaction *t = ctx->op_t.get();
   int64_t num_objects_before_trim = ctx->delta_stats.num_objects;
+  bufferlist bl;
 
   if (new_snaps.empty()) {
     // remove clone
@@ -4907,7 +5002,7 @@ int PrimaryLogPG::trim_object(
 	snapset.clone_overlap[*p]);
 
       if (adjust_prev_bytes)
-	ctx->delta_stats.num_bytes += snapset.get_clone_bytes(*n);
+	ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(*n);
     }
     ctx->delta_stats.num_objects--;
     if (coi.is_dirty())
@@ -4922,7 +5017,7 @@ int PrimaryLogPG::trim_object(
     if (coi.is_cache_pinned())
       ctx->delta_stats.num_objects_pinned--;
     if (coi.has_manifest()) {
-      dec_all_refcount_manifest(coi, ctx.get());
+      dec_all_refcount_manifest(coi, ctx);
       ctx->delta_stats.num_objects_manifest--;
     }
     obc->obs.exists = false;
@@ -5025,7 +5120,7 @@ int PrimaryLogPG::trim_object(
     }
     if (oi.has_manifest()) {
       ctx->delta_stats.num_objects_manifest--;
-      dec_all_refcount_manifest(oi, ctx.get());
+      dec_all_refcount_manifest(oi, ctx);
     }
     head_obc->obs.exists = false;
     head_obc->obs.oi = object_info_t(head_oid);
@@ -5066,6 +5161,140 @@ int PrimaryLogPG::trim_object(
       num_objects_before_trim - ctx->delta_stats.num_objects;
     add_objects_trimmed_count(num_objects_trimmed);
   }
+}
+
+int PrimaryLogPG::rollback_then_trim(
+  bool first,
+  const hobject_t &coid,
+  snapid_t X,
+  const rollback_snap_info_t *rb_info,
+  bool do_trim,
+  PrimaryLogPG::OpContextUPtr *ctxp)
+{
+  *ctxp = NULL;
+
+  ObjectContextRef obc = get_object_context(coid, false, NULL);
+  if (!obc || !obc->ssc || !obc->ssc->exists) {
+    osd->clog->error() << __func__ << ": Can not process " << coid
+      << " repair needed " << (obc ? "(no obc->ssc or !exists)" : "(no obc)");
+    return -ENOENT;
+  }
+
+  hobject_t head_oid = coid.get_head();
+  ObjectContextRef head_obc = get_object_context(head_oid, false);
+  if (!head_obc) {
+    osd->clog->error() << __func__ << ": Can not process " << coid
+      << " repair needed, no snapset obc for " << head_oid;
+    return -ENOENT;
+  }
+
+  SnapSet& snapset = obc->ssc->snapset;
+  if (snapset.seq == 0) {
+    osd->clog->error() << "No snapset.seq for object " << coid;
+    return -ENOENT;
+  }
+
+  if (do_trim) {
+    auto citer = snapset.clone_snaps.find(coid.snap);
+    if (citer == snapset.clone_snaps.end()) {
+      osd->clog->error() << "No clone_snaps in snapset " << snapset
+    << " for object " << coid << "\n";
+      return -ENOENT;
+    }
+    if (citer->second.empty()) {
+      osd->clog->error() << "No object info snaps for object " << coid;
+      return -ENOENT;
+    }
+  }
+
+  OpContextUPtr ctx = simple_opc_create(obc);
+  ctx->head_obc = head_obc;
+
+  if (!ctx->lock_manager.get_snaptrimmer_write(
+ coid,
+ obc,
+ first)) {
+    close_op_ctx(ctx.release());
+    dout(10) << __func__ << ": Unable to get a wlock on " << coid << dendl;
+    return -ENOLCK;
+  }
+
+  if (!ctx->lock_manager.get_snaptrimmer_write(
+ head_oid,
+ head_obc,
+ first)) {
+    close_op_ctx(ctx.release());
+    dout(10) << __func__ << ": Unable to get a wlock on " << head_oid << dendl;
+    return -ENOLCK;
+  }
+
+  ctx->at_version = get_next_version();
+  ctx->new_snapset = snapset;
+  ctx->new_obs = head_obc->obs;
+
+  // Step 1: Apply rollback work for this object (if pending)
+  if (rb_info && snapset.seq < rb_info->rollback_id) {
+    ctx->snapc.seq = rb_info->rollback_id;
+    auto ops = build_pending_ops(pool.info, snapset.seq, rb_info->rollback_id);
+    if (!ops.empty()) {
+      hobject_t rolled_back_from = execute_clone_plan(head_oid, ops, ctx->new_snapset, ctx->op_t.get());
+      if (rolled_back_from != head_oid) {
+        ObjectContextRef src_obc = get_object_context(rolled_back_from, false);
+        ceph_assert(src_obc);
+        if (head_obc->obs.oi.is_whiteout()) {
+          dout(10) << __func__ << " clearing whiteout on head " << head_oid
+                   << " due to rollback" << dendl;
+          --ctx->delta_stats.num_whiteouts;
+        }
+        if (!head_obc->obs.exists) {
+          dout(10) << __func__ << " recreating head " << head_oid
+                   << " due to rollback" << dendl;
+          ++ctx->delta_stats.num_objects;
+        }
+        eversion_t head_version = head_obc->obs.oi.version;
+        eversion_t head_prior_version = head_obc->obs.oi.prior_version;
+        head_obc->obs.oi = src_obc->obs.oi;
+        head_obc->obs.oi.soid = head_oid;
+        head_obc->obs.oi.version = head_version;
+        head_obc->obs.oi.prior_version = head_prior_version;
+        ctx->new_obs.oi = head_obc->obs.oi;
+        head_obc->obs.exists = true;
+        ctx->new_obs.exists = true;
+      }
+
+      // Register OBCs for rollback source clones
+      for (auto& op : ops) {
+        if (op.type == pending_op_t::ROLLBACK) {
+          const auto& clones = ctx->new_snapset.clones;
+          auto cit = std::lower_bound(clones.begin(), clones.end(), op.source);
+          if (cit == clones.end()) {
+            continue;
+          }
+          hobject_t src_clone = head_oid;
+          src_clone.snap = *cit;
+          ObjectContextRef src_obc = get_object_context(src_clone, false);
+          if (src_obc) {
+            ctx->op_t->add_obc(src_obc);
+          }
+        }
+      }
+
+      update_snapset_for_rollback(ctx.get(), ops, pool.info, ctx->op_t.get());
+      emit_rollback_log_entries(ctx.get(), ops);
+
+      // Sync the updated snapset (with advanced seq) back into the in-memory
+      // OBC cache.  update_snapset_for_rollback() only writes ctx->new_snapset;
+      // without this the guard `snapset.seq < rb_info->rollback_id` fires
+      // again on the next trimmer cycle and re-applies the rollback.
+      // The clone OBC and head OBC share the same SnapSetContext.
+      obc->ssc->snapset = ctx->new_snapset;
+    }
+  }
+
+  // Step 2: Trim clone X from this object (if trim pass)
+  if (do_trim) {
+    trim_object_snap(ctx.get(), coid, X);
+  }
 
   *ctxp = std::move(ctx);
   return 0;
@@ -5077,7 +5306,7 @@ void PrimaryLogPG::kick_snap_trim()
   ceph_assert(is_primary());
   if (is_clean() &&
       !state_test(PG_STATE_PREMERGE) &&
-      !snap_trimq.empty()) {
+      (!snap_trimq.empty() || !rollback_trimq.empty())) {
     if (get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM)) {
       dout(10) << __func__ << ": nosnaptrim set, not kicking" << dendl;
     } else {
@@ -5091,7 +5320,8 @@ void PrimaryLogPG::kick_snap_trim()
 
 void PrimaryLogPG::snap_trimmer_scrub_complete()
 {
-  if (is_primary() && is_active() && is_clean() && !snap_trimq.empty()) {
+  if (is_primary() && is_active() && is_clean() &&
+      (!snap_trimq.empty() || !rollback_trimq.empty())) {
     dout(10) << "scrub finished - requeuing snap_trimmer" << dendl;
     snap_trimmer_machine.process_event(ScrubComplete());
   }
@@ -8810,6 +9040,274 @@ void PrimaryLogPG::_make_clone(
   rmattr_maybe_cache(clone_obc, t, SS_ATTR);
 }
 
+// Helper: build a set of snap IDs from a SnapContext.
+// Used for unmanaged-snap pools where pg_pool_t::snaps is empty.
+static std::set<snapid_t>
+snap_id_set_from_snapc(const SnapContext& sc)
+{
+  return std::set<snapid_t>(sc.snaps.begin(), sc.snaps.end());
+}
+
+std::vector<PrimaryLogPG::pending_op_t>
+PrimaryLogPG::build_pending_ops(
+  const pg_pool_t& pp,
+  snapid_t obj_seq,
+  snapid_t current_seq) const
+{
+  std::vector<pending_op_t> ops;
+
+  if (!pp.snaps.empty()) {
+    // Pool-managed snaps: use pg_pool_t::snaps for SNAP entries.
+    for (auto& [snap_id, snap_info] : pp.snaps) {
+      if (snap_id > obj_seq && snap_id <= current_seq) {
+        ops.push_back({pending_op_t::SNAP, snap_id, CEPH_NOSNAP});
+      }
+    }
+  } else {
+    // Unmanaged-snap pool: pg_pool_t::snaps is empty.  For each rollback in
+    // the range, use the SnapContext stored in that rollback_snap_info_t to
+    // discover snap IDs that were live at the time the rollback was requested.
+    // This prevents missing clone(head → T) steps when a later snapshot T
+    // exists at rollback time.
+    std::set<snapid_t> emitted_snaps;
+    for (auto& [rb_id, rb_info] : pp.rollback_snaps) {
+      if (rb_id > obj_seq && rb_id <= current_seq) {
+        auto snap_ids = snap_id_set_from_snapc(rb_info.snapc);
+        for (snapid_t sid : snap_ids) {
+          if (sid > obj_seq && sid <= current_seq &&
+              sid > rb_info.source_snap &&
+              emitted_snaps.find(sid) == emitted_snaps.end()) {
+            ops.push_back({pending_op_t::SNAP, sid, CEPH_NOSNAP});
+            emitted_snaps.insert(sid);
+          }
+        }
+      }
+    }
+  }
+
+  // Add ROLLBACK entries: rollback_snaps with rollback_id in (obj_seq, current_seq]
+  for (auto& [rb_id, rb_info] : pp.rollback_snaps) {
+    if (rb_id > obj_seq && rb_id <= current_seq) {
+      ops.push_back({pending_op_t::ROLLBACK, rb_id, rb_info.source_snap});
+    }
+  }
+
+  // Sort by id ascending to maintain historical order
+  std::sort(ops.begin(), ops.end(),
+    [](const pending_op_t& a, const pending_op_t& b) {
+      return a.id < b.id;
+    });
+
+  return ops;
+}
+
+hobject_t PrimaryLogPG::execute_clone_plan(
+  const hobject_t& soid,
+  const std::vector<pending_op_t>& ops,
+  const SnapSet& ss,
+  PGTransaction* t)
+{
+  // head_source tracks which object currently holds the logical head content.
+  // Initially it is the actual head object.
+  hobject_t head_source = soid;
+
+  for (int i = 0; i < (int)ops.size(); ++i) {
+    const auto& op = ops[i];
+
+    if (op.type == pending_op_t::SNAP) {
+      // Clone head_source -> soid@op.id to preserve the logical head content
+      hobject_t dst = soid;
+      dst.snap = op.id;
+      t->clone(dst, head_source);
+      // head_source unchanged: we cloned FROM it, not to it
+
+    } else {
+      // ROLLBACK: clone source snapshot content to head.
+      // op.source is the snap ID the user requested; the actual clone holding
+      // that content is the first clone with ID >= op.source (same lookup
+      // used by find_object_context).  If no such clone exists the object
+      // predates the rollback snapshot and the rollback is a no-op.
+      const auto& clones = ss.clones;  // ascending
+      auto cit = std::lower_bound(clones.begin(), clones.end(), op.source);
+
+      hobject_t src_clone = soid;
+      if (cit != clones.end()) {
+        src_clone.snap = *cit;
+      }
+
+      ObjectContextRef src_obc = (cit != clones.end())
+        ? get_object_context(src_clone, false)
+        : nullptr;
+      if (!src_obc) {
+        // Source clone does not exist: object predates the pool rollback snap,
+        // so there is nothing to restore.  Skip both the clone and any
+        // immediately-following SNAP ops that would have cloned from src_clone.
+        while (i + 1 < (int)ops.size() && ops[i + 1].type == pending_op_t::SNAP)
+          ++i;
+        continue;
+      }
+
+      t->clone(soid, src_clone);      // head now holds source content
+      head_source = src_clone;        // future SNAPs clone from here
+
+      // Optimisation: consume any immediately following SNAPs, cloning
+      // directly from the source rather than via the head
+      for (int j = i + 1; j < (int)ops.size() && ops[j].type == pending_op_t::SNAP; ++j) {
+        hobject_t dst = soid;
+        dst.snap = ops[j].id;
+        t->clone(dst, src_clone);
+        ++i;  // consumed
+      }
+    }
+  }
+
+  return head_source;
+}
+
+void PrimaryLogPG::update_snapset_for_rollback(
+  OpContext *ctx,
+  const std::vector<pending_op_t>& ops,
+  const pg_pool_t& pp,
+  PGTransaction* t)
+{
+  const hobject_t& soid = ctx->obs->oi.soid;
+  SnapSet& ss = ctx->new_snapset;
+
+  // For each SNAP op, register the new clone in the SnapSet.
+  // clone_snaps covers all pool snap IDs in (prev_seq, op.id].
+  for (auto& op : ops) {
+    if (op.type != pending_op_t::SNAP) {
+      continue;
+    }
+    snapid_t clone_id = op.id;
+
+    // Compute the snap IDs covered by this clone: all snaps in pp.snaps
+    // in the range (ss.seq, clone_id], descending.
+    std::vector<snapid_t> clone_snaps_vec;
+    for (auto& [snap_id, snap_info] : pp.snaps) {
+      if (snap_id > ss.seq && snap_id <= clone_id) {
+        clone_snaps_vec.push_back(snap_id);
+      }
+    }
+    // Descending order (pp.snaps is ascending; reverse)
+    std::sort(clone_snaps_vec.rbegin(), clone_snaps_vec.rend());
+
+    ss.clones.push_back(clone_id);
+    ss.clone_size[clone_id] = ctx->obs->oi.size;
+    ss.clone_snaps[clone_id] = clone_snaps_vec;
+    ss.clone_overlap[clone_id];
+    if (ctx->obs->oi.size) {
+      ss.clone_overlap[clone_id].insert(0, ctx->obs->oi.size);
+    }
+
+    ctx->delta_stats.num_objects++;
+    ctx->delta_stats.num_object_clones++;
+
+    dout(10) << __func__ << " clone " << clone_id
+             << " snaps=" << clone_snaps_vec << dendl;
+
+    // Advance ss.seq past this clone so next clone's snaps don't overlap
+    ss.seq = clone_id;
+  }
+
+  // Advance seq to the full snapc.seq
+  if (ctx->snapc.seq > ss.seq) {
+    ss.seq = ctx->snapc.seq;
+  }
+
+  // Write SS_ATTR for the head object.  In the snap-trim path ctx->obc is the
+  // clone being trimmed while ctx->head_obc is the actual head; use head_obc
+  // when available so the setattr lands on the head's op_map entry.  In the
+  // JIT write path head_obc is not set and ctx->obc is already the head.
+  ObjectContextRef ss_obc = ctx->head_obc ? ctx->head_obc : ctx->obc;
+  bufferlist bss;
+  encode(ss, bss);
+  setattr_maybe_cache(ss_obc, t, SS_ATTR, bss);
+
+  dout(20) << __func__ << " " << soid << " done, snapset=" << ss << dendl;
+}
+
+void PrimaryLogPG::emit_rollback_log_entries(
+  OpContext *ctx,
+  const std::vector<pending_op_t>& ops)
+{
+  // Use new_obs (the head object) rather than obs, because in the trimmer
+  // path ctx->obc is the clone being trimmed while ctx->new_obs is always
+  // initialised to the head object.  In the write I/O path both point to
+  // the head, so this change is a no-op there.
+  const hobject_t& soid = ctx->new_obs.oi.soid;
+  SnapSet& ss = ctx->new_snapset;
+
+  // Emit CLONE entries for each new clone (SNAP ops only)
+  for (auto& op : ops) {
+    if (op.type != pending_op_t::SNAP) {
+      continue;
+    }
+    hobject_t coid = soid;
+    coid.snap = op.id;
+
+    // Look up the snap vector we stored in update_snapset_for_rollback()
+    auto it = ss.clone_snaps.find(op.id);
+    ceph_assert(it != ss.clone_snaps.end());
+
+    ctx->log.push_back(pg_log_entry_t(
+      pg_log_entry_t::CLONE, coid, ctx->at_version,
+      ctx->new_obs.oi.version,
+      ctx->new_obs.oi.user_version,
+      osd_reqid_t(), ctx->new_obs.oi.mtime, 0));
+    encode(it->second, ctx->log.back().snaps);
+    ctx->at_version.version++;
+
+    dout(10) << __func__ << " CLONE " << coid
+             << " snaps=" << it->second << dendl;
+  }
+
+  // Emit MODIFY entry for the head (SnapSet + OI updated to snapc.seq)
+  ctx->log.push_back(pg_log_entry_t(
+    pg_log_entry_t::MODIFY, soid, ctx->at_version,
+    ctx->new_obs.oi.version,
+    ctx->new_obs.oi.user_version,
+    ctx->reqid, ctx->mtime, 0));
+
+  dout(10) << __func__ << " MODIFY head " << soid
+           << " snapset.seq=" << ss.seq << dendl;
+}
+
+snapid_t PrimaryLogPG::find_latest_rollback_source(
+  const OSDMapRef& osdmap,
+  int64_t pool_id,
+  snapid_t obj_seq)
+{
+  auto& rb_queue = osdmap->get_rollback_snaps_queue();
+  auto it = rb_queue.find(pool_id);
+  if (it == rb_queue.end()) {
+    return CEPH_NOSNAP;
+  }
+
+  // Walk the rollback_snaps map in ascending rollback_id order.
+  // The last entry with rollback_id > obj_seq is the most recent pending
+  // rollback and defines the authoritative state of the object.
+  snapid_t latest_source = CEPH_NOSNAP;
+  for (auto& [rb_id, rb_info] : it->second) {
+    if (rb_id > obj_seq) {
+      latest_source = rb_info.source_snap;
+    }
+  }
+  return latest_source;
+}
+
+const rollback_snap_info_t* PrimaryLogPG::find_rollback_for_source(
+  const std::map<snapid_t, rollback_snap_info_t>& rb_trimq,
+  snapid_t source)
+{
+  for (auto& [rb_id, rb_info] : rb_trimq) {
+    if (rb_info.source_snap == source) {
+      return &rb_info;
+    }
+  }
+  return nullptr;
+}
+
 void PrimaryLogPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
@@ -8860,13 +9358,56 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     dout(10) << " op snapset is old" << dendl;
   }
 
+  // Detect whether there are any pending rollback ops for this object.  When
+  // there are, ALL clone operations (including any regular snapshot clone) must
+  // be issued in a separate transaction (T1) submitted via simple_opc_submit
+  // before the client write transaction (T2).  EC does not permit a
+  // clone(dst, src) and a write(dst) in the same transaction.  When there are
+  // only snapshot clones and no rollbacks, the single-transaction path is used.
+  const snapid_t obj_seq = ctx->new_snapset.seq;
+  const auto jit_ops = [&]() -> std::vector<pending_op_t> {
+    auto& rb_queue = get_osdmap()->get_rollback_snaps_queue();
+    auto pool_it = rb_queue.find(info.pgid.pgid.pool());
+    if (pool_it == rb_queue.end())
+      return {};
+    return build_pending_ops(pool.info, obj_seq, snapc.seq);
+  }();
+
+  const bool has_rollback = std::any_of(
+    jit_ops.begin(), jit_ops.end(),
+    [](const pending_op_t& op) { return op.type == pending_op_t::ROLLBACK; });
+
+  // When a rollback is needed we build a separate jit_ctx to hold T1 (all
+  // clones + SnapSet update).  Otherwise clone_t/clone_log/clone_version point
+  // into the main ctx so the single-transaction path is unchanged.
+  OpContextUPtr jit_ctx;
+  if (has_rollback) {
+    jit_ctx = simple_opc_create(ctx->obc);
+    jit_ctx->at_version = ctx->at_version;
+    jit_ctx->snapc    = ctx->snapc;
+    jit_ctx->mtime    = ctx->mtime;
+    jit_ctx->new_obs  = ctx->new_obs;
+    jit_ctx->new_snapset = ctx->new_snapset;
+  }
+
+  // Convenience aliases: when has_rollback, clone ops go into jit_ctx;
+  // otherwise they go directly into the main ctx.
+  PGTransaction* clone_t   = has_rollback ? jit_ctx->op_t.get() : ctx->op_t.get();
+  std::vector<pg_log_entry_t>& clone_log = has_rollback ? jit_ctx->log : ctx->log;
+  eversion_t& clone_version = has_rollback ? jit_ctx->at_version : ctx->at_version;
+
+  // Clone gate: a clone is needed when the head object is older than the most
+  // recent real snapshot.  Compare snapc.snaps[0] against new_snapset.seq,
+  // which is guaranteed by WI-18-e never to hold a rollback ID -- it always
+  // reflects the highest *real* named snapshot at the time of the last write.
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
       !ctx->cache_operation &&
       snapc.snaps[0] > ctx->new_snapset.seq) {  // existing object is old
-    // clone
+    // clone -- name after the highest *real* snapshot ID, not snapc.seq which
+    // may be a rollback ID that was never inserted into pg_pool_t::snaps.
     hobject_t coid = soid;
-    coid.snap = snapc.seq;
+    coid.snap = ctx->real_snap_seq ? ctx->real_snap_seq : snapc.seq;
 
     const auto snaps = [&] {
       auto last = find_if_not(
@@ -8912,11 +9453,11 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     } else {
       snap_oi = &static_snap_oi;
     }
-    snap_oi->version = ctx->at_version;
+    snap_oi->version = clone_version;
     snap_oi->prior_version = ctx->obs->oi.version;
     snap_oi->copy_user_bits(ctx->obs->oi);
 
-    _make_clone(ctx, ctx->op_t.get(), ctx->clone_obc, soid, coid, snap_oi);
+    _make_clone(ctx, clone_t, ctx->clone_obc, soid, coid, snap_oi);
 
     ctx->delta_stats.num_objects++;
     if (snap_oi->is_dirty()) {
@@ -8943,17 +9484,134 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 
     // log clone
     dout(10) << " cloning v " << ctx->obs->oi.version
-	     << " to " << coid << " v " << ctx->at_version
+	     << " to " << coid << " v " << clone_version
 	     << " snaps=" << snaps
 	     << " snapset=" << ctx->new_snapset << dendl;
-    ctx->log.push_back(pg_log_entry_t(
-			 pg_log_entry_t::CLONE, coid, ctx->at_version,
+    clone_log.push_back(pg_log_entry_t(
+			 pg_log_entry_t::CLONE, coid, clone_version,
 			 ctx->obs->oi.version,
 			 ctx->obs->oi.user_version,
 			 osd_reqid_t(), ctx->new_obs.oi.mtime, 0));
-    encode(snaps, ctx->log.back().snaps);
+    encode(snaps, clone_log.back().snaps);
 
-    ctx->at_version.version++;
+    clone_version.version++;
+  }
+
+  // JIT rollback: when there are pending rollback ops, execute them now.
+  // The clone operations (including any regular snapshot clone above) have
+  // already been directed into jit_ctx (T1).  Here we add the rollback-driven
+  // clones and SnapSet update to jit_ctx, then submit T1 via simple_opc_submit.
+  // T2 (the client write) proceeds in ctx->op_t as normal.
+  if (has_rollback) {
+    dout(10) << "make_writeable " << soid
+             << " JIT rollback: " << jit_ops.size() << " pending ops" << dendl;
+
+    // Sync new_snapset into jit_ctx so update_snapset_for_rollback sees the
+    // snapshot clones we may have just added above.
+    jit_ctx->new_snapset = ctx->new_snapset;
+
+    // Emit clone operations for the rollback ops into jit_ctx->op_t (T1).
+    hobject_t rolled_back_from = execute_clone_plan(soid, jit_ops, jit_ctx->new_snapset, jit_ctx->op_t.get());
+    if (rolled_back_from != soid) {
+      ObjectContextRef src_obc = get_object_context(rolled_back_from, false);
+      ceph_assert(src_obc);
+      if (jit_ctx->new_obs.oi.is_whiteout()) {
+        --jit_ctx->delta_stats.num_whiteouts;
+      }
+      if (!jit_ctx->new_obs.exists) {
+        ++jit_ctx->delta_stats.num_objects;
+      }
+      eversion_t head_version = jit_ctx->new_obs.oi.version;
+      eversion_t head_prior_version = jit_ctx->new_obs.oi.prior_version;
+      jit_ctx->new_obs.oi = src_obc->obs.oi;
+      jit_ctx->new_obs.oi.soid = soid;
+      jit_ctx->new_obs.oi.version = head_version;
+      jit_ctx->new_obs.oi.prior_version = head_prior_version;
+      jit_ctx->new_obs.exists = true;
+
+      if (ctx->new_obs.oi.is_whiteout()) {
+        --ctx->delta_stats.num_whiteouts;
+      }
+      if (!ctx->new_obs.exists) {
+        ++ctx->delta_stats.num_objects;
+      }
+      ctx->new_obs.oi = jit_ctx->new_obs.oi;
+      ctx->new_obs.exists = true;
+    }
+
+    // Register OBCs for rollback source clones so EC's get_write_plan can
+    // look them up from the transaction's obc_map.
+    for (auto& op : jit_ops) {
+      if (op.type == pending_op_t::ROLLBACK) {
+        // Resolve op.source to the clone that actually holds that content.
+        const auto& clones = jit_ctx->new_snapset.clones;
+        auto cit = std::lower_bound(clones.begin(), clones.end(), op.source);
+        if (cit == clones.end()) {
+          continue;
+        }
+        hobject_t src_clone = soid;
+        src_clone.snap = *cit;
+        ObjectContextRef src_obc = get_object_context(src_clone, false);
+        if (src_obc) {
+          jit_ctx->op_t->add_obc(src_obc);
+        }
+      }
+    }
+
+    // If execute_clone_plan emitted no operations (all ROLLBACKs were NOPs
+    // because the object did not exist at the time of the rollback snap, and
+    // there are no regular snapshot clones either), T1 would contain only a
+    // setattr(SS_ATTR) on the head object.  The head object does not exist yet
+    // -- it will be created by T2 -- so submitting T1 would hit ENOENT and
+    // crash.  The correct behaviour is to skip T1 entirely: T2's finish_ctx()
+    // will write the correct SS_ATTR on the newly-created head, and
+    // ctx->new_snapset.seq is advanced by the code below (lines ~9334-9337)
+    // independently of T1.
+    if (jit_ctx->op_t->op_map.empty()) {
+      dout(10) << "make_writeable " << soid
+               << " JIT rollback all NOPs, skipping T1" << dendl;
+      jit_ctx->op_t.reset();
+    } else {
+      // Update SnapSet metadata for the rollback clones and write SS_ATTR in T1.
+      update_snapset_for_rollback(jit_ctx.get(), jit_ops, pool.info,
+                                  jit_ctx->op_t.get());
+
+      // Propagate the updated new_snapset (with rollback clones + advanced seq)
+      // back to ctx so that finish_ctx writes the correct final SS_ATTR in T2.
+      ctx->new_snapset = jit_ctx->new_snapset;
+
+      // Emit CLONE + MODIFY(head) log entries into jit_ctx->log (T1).
+      emit_rollback_log_entries(jit_ctx.get(), jit_ops);
+
+      // Advance ctx->at_version past all the versions consumed by T1 so that
+      // T2 log entries start at the correct version.
+      ctx->at_version = jit_ctx->at_version;
+      ctx->at_version.version++;
+
+      // Track in-flight JIT rollbacks so the background trimmer waits for JIT
+      // work to complete before marking a rollback done.
+      for (auto& op : jit_ops) {
+        if (op.type == pending_op_t::ROLLBACK) {
+          jit_rollback_inflight[op.id]++;
+          snapid_t rb_id = op.id;
+          jit_ctx->on_success.push_back([this, rb_id]() {
+            auto it = jit_rollback_inflight.find(rb_id);
+            if (it != jit_rollback_inflight.end()) {
+              if (--(it->second) == 0) {
+                jit_rollback_inflight.erase(it);
+                kick_snap_trim();
+              }
+            }
+          });
+        }
+      }
+
+      // Submit T1 (clones + SnapSet update) as a separate, independent
+      // transaction.  T2 (client write) is submitted by the caller via the
+      // normal issue_repop path.  Both transactions are submitted in parallel;
+      // ordering is guaranteed by the object pipeline in the backend.
+      simple_opc_submit(std::move(jit_ctx));
+    }
   }
 
   // update most recent clone_overlap and usage stats
@@ -8975,9 +9633,17 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     newest_overlap.subtract(ctx->modified_ranges);
   }
 
-  if (snapc.seq > ctx->new_snapset.seq) {
-    // update snapset with latest snap context
-    ctx->new_snapset.seq = snapc.seq;
+  // Advance SnapSet::seq to the highest *real* snapshot ID.  Using snapc.seq
+  // here would store a rollback ID into the object's persistent metadata,
+  // because rollback IDs advance pool.snap_seq without being inserted into
+  // pg_pool_t::snaps.  real_snap_seq is 0 for client-snapc writes, where
+  // snapc.seq already contains only real snap IDs, so fall back to snapc.seq
+  // in that case via the two-step comparison below.
+  {
+    snapid_t effective_seq = ctx->real_snap_seq ? ctx->real_snap_seq : snapc.seq;
+    if (effective_seq > ctx->new_snapset.seq) {
+      ctx->new_snapset.seq = effective_seq;
+    }
   }
   dout(20) << "make_writeable " << soid
 	   << " done, snapset=" << ctx->new_snapset << dendl;
@@ -16034,7 +16700,7 @@ bool PrimaryLogPG::SnapTrimmer::permit_trim() {
   return
     pg->is_clean() &&
     !pg->is_scrub_queued_or_active() &&
-    !pg->snap_trimq.empty();
+    (!pg->snap_trimq.empty() || !pg->rollback_trimq.empty());
 }
 
 /*---SnapTrimmer states---*/
@@ -16065,7 +16731,7 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
     return discard_event();
   }
   if (!pg->is_clean() ||
-      pg->snap_trimq.empty()) {
+      (pg->snap_trimq.empty() && pg->rollback_trimq.empty())) {
     ldout(pg->cct, 10) << "NotTrimming not clean or nothing to trim" << dendl;
     return discard_event();
   }
@@ -16092,10 +16758,6 @@ boost::statechart::result PrimaryLogPG::WaitReservation::react(const SnapTrimRes
     return transit< NotTrimming >();
   }
 
-  context<Trimming>().snap_to_trim = pg->snap_trimq.range_start();
-  ldout(pg->cct, 10) << "NotTrimming: trimming "
-		     << pg->snap_trimq.range_start()
-		     << dendl;
   return transit< AwaitAsyncWork >();
 }
 
@@ -16117,7 +16779,6 @@ PrimaryLogPG::AwaitAsyncWork::AwaitAsyncWork(my_context ctx)
 boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 {
   PrimaryLogPGRef pg = context< SnapTrimmer >().pg;
-  snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
   auto &in_flight = context<Trimming>().in_flight;
   ceph_assert(in_flight.empty());
 
@@ -16128,55 +16789,152 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     return transit< NotTrimming >();
   }
 
-  ldout(pg->cct, 10) << "AwaitAsyncWork: trimming snap " << snap_to_trim << dendl;
+  // Pass-selection fairness (section 7.2.2):
+  // Collect candidates from snap_trimq and rollback_trimq.
+  // candidate map: snap ID -> is_trim_pass
+  std::map<snapid_t, bool> candidates;
+  if (!pg->snap_trimq.empty()) {
+    candidates[pg->snap_trimq.range_start()] = true;
+  }
+  for (auto& [rb_id, rb_info] : pg->rollback_trimq) {
+    if (candidates.find(rb_info.source_snap) == candidates.end()) {
+      candidates[rb_info.source_snap] = false; // ROLLBACK_ONLY
+    }
+  }
+
+  if (candidates.empty()) {
+    ldout(pg->cct, 10) << "AwaitAsyncWork: no trim or rollback candidates" << dendl;
+    post_event(KickTrim());
+    return transit< NotTrimming >();
+  }
+
+  auto [selected_snap, is_trim] = *candidates.begin(); // lowest snap ID
+
+  // Reset the rollback cursor whenever we switch to a new snap.
+  if (context<Trimming>().snap_being_processed != selected_snap) {
+    context<Trimming>().rollback_scan_cursor = hobject_t{};
+  }
+  context<Trimming>().snap_being_processed = selected_snap;
+  context<Trimming>().is_trim_pass = is_trim;
+  context<Trimming>().snap_to_trim = selected_snap;
+  snapid_t snap_to_trim = selected_snap;
+
+  ldout(pg->cct, 10) << "AwaitAsyncWork: selected snap " << selected_snap
+       << " is_trim_pass=" << is_trim << dendl;
 
   unsigned max = pg->cct->_conf->osd_pg_max_concurrent_snap_trims;
-  // we need to look for at least 1 snaptrim, otherwise we'll misinterpret
-  // the ENOENT below and erase snap_to_trim.
   ceph_assert(max > 0);
 
-  auto to_trim =
-      pg->snap_mapper.get_next_objects_to_trim(snap_to_trim, max);
-  if (!to_trim.has_value()) {
-    // Done!
-    ldout(pg->cct, 10) << "no more entries to trim" << dendl;
+  // For TRIM passes use the existing delete-driven iterator (objects
+  // disappear from the snap mapper as they are deleted, so the scan
+  // drains naturally).  For ROLLBACK_ONLY nothing is ever removed from
+  // the snap mapper, so the delete-driven iterator can never advance
+  // past the first batch.  Use a cursor-based scan instead.
+  std::vector<hobject_t> to_process_vec;
+  bool scan_done = false;
 
-    pg->snap_trimq.erase(snap_to_trim);
-
-    if (auto it = pg->snap_trimq_repeat.find(snap_to_trim);
-        it != pg->snap_trimq_repeat.end()) {
-      ldout(pg->cct, 10) << " removing from snap_trimq_repeat" << dendl;
-      pg->snap_trimq_repeat.erase(it);
+  if (is_trim) {
+    auto to_trim = pg->snap_mapper.get_next_objects_to_trim(snap_to_trim, max);
+    if (!to_trim.has_value()) {
+      scan_done = true;
     } else {
-      ldout(pg->cct, 10) << "adding snap " << snap_to_trim
-			 << " to purged_snaps"
-			 << dendl;
-      ObjectStore::Transaction t;
-      pg->recovery_state.adjust_purged_snaps(
-	[snap_to_trim](auto &purged_snaps) {
-	  purged_snaps.insert(snap_to_trim);
-	});
-      pg->write_if_dirty(t);
-
-      ldout(pg->cct, 10) << "purged_snaps now "
-			 << pg->info.purged_snaps << ", snap_trimq now "
-			 << pg->snap_trimq << dendl;
-
-      int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
-      ceph_assert(tr == 0);
-
-      pg->recovery_state.share_pg_info();
+      to_process_vec = std::move(*to_trim);
     }
+  } else {
+    // ROLLBACK_ONLY: cursor-based scan, advances regardless of deletions.
+    to_process_vec = pg->snap_mapper.get_next_rollback_objects(
+      snap_to_trim,
+      context<Trimming>().rollback_scan_cursor,
+      max);
+    if (to_process_vec.empty()) {
+      scan_done = true;
+    }
+  }
+
+  if (scan_done) {
+    // Done with scan for snap_to_trim!
+    ldout(pg->cct, 10) << "no more entries for snap " << snap_to_trim << dendl;
+
+    const rollback_snap_info_t* rb_info =
+      find_rollback_for_source(pg->rollback_trimq, snap_to_trim);
+
+    bool deferred_jit = false;
+    if (rb_info) {
+      snapid_t rb_id = rb_info->rollback_id;
+      if (pg->jit_rollback_inflight.count(rb_id) &&
+          pg->jit_rollback_inflight[rb_id] > 0) {
+        // JIT work still in flight -- defer completion; requeue a check
+        ldout(pg->cct, 10) << "JIT rollback " << rb_id
+                           << " still in flight (" << pg->jit_rollback_inflight[rb_id]
+                           << "), deferring completion" << dendl;
+        pg->rollback_trimq_repeat.insert(rb_id);
+        deferred_jit = true;
+      } else {
+        ldout(pg->cct, 10) << "marking rollback " << rb_id << " complete" << dendl;
+        pg->rollback_trimq.erase(rb_id);
+        pg->jit_rollback_inflight.erase(rb_id);
+        if (auto it = pg->rollback_trimq_repeat.find(rb_id);
+            it != pg->rollback_trimq_repeat.end()) {
+          pg->rollback_trimq_repeat.erase(it);
+        }
+        ObjectStore::Transaction t;
+        pg->recovery_state.adjust_completed_rollbacks(
+          [rb_id](auto& cr) { cr.insert(rb_id); });
+        pg->write_if_dirty(t);
+        int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
+        ceph_assert(tr == 0);
+        pg->recovery_state.share_pg_info();
+      }
+    }
+
+    if (deferred_jit) {
+      // Transition back to WaitTrimTimer instead of marking complete
+      return transit< WaitTrimTimer >();
+    }
+
+    if (is_trim) {
+      pg->snap_trimq.erase(snap_to_trim);
+
+      if (auto it = pg->snap_trimq_repeat.find(snap_to_trim);
+          it != pg->snap_trimq_repeat.end()) {
+        ldout(pg->cct, 10) << " removing from snap_trimq_repeat" << dendl;
+        pg->snap_trimq_repeat.erase(it);
+      } else {
+        ldout(pg->cct, 10) << "adding snap " << snap_to_trim
+				 << " to purged_snaps"
+				 << dendl;
+        ObjectStore::Transaction t;
+        pg->recovery_state.adjust_purged_snaps(
+		[snap_to_trim](auto &purged_snaps) {
+		  purged_snaps.insert(snap_to_trim);
+		});
+        pg->write_if_dirty(t);
+
+        ldout(pg->cct, 10) << "purged_snaps now "
+				 << pg->info.purged_snaps << ", snap_trimq now "
+				 << pg->snap_trimq << dendl;
+
+        int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
+        ceph_assert(tr == 0);
+
+        pg->recovery_state.share_pg_info();
+      }
+    }
+
     post_event(KickTrim());
     pg->set_snaptrim_duration();
     return transit< NotTrimming >();
   }
 
-  for (auto &&object: *to_trim) {
+  const rollback_snap_info_t* rb_info =
+    find_rollback_for_source(pg->rollback_trimq, snap_to_trim);
+
+  for (auto &&object: to_process_vec) {
     // Get next
-    ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;
+    ldout(pg->cct, 10) << "AwaitAsyncWork react processing " << object << dendl;
     OpContextUPtr ctx;
-    int error = pg->trim_object(in_flight.empty(), object, snap_to_trim, &ctx);
+    int error = pg->rollback_then_trim(
+      in_flight.empty(), object, snap_to_trim, rb_info, is_trim, &ctx);
     if (error) {
       if (error == -ENOLCK) {
 	ldout(pg->cct, 10) << "could not get write lock on obj "
@@ -16212,6 +16970,14 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
       });
 
     pg->simple_opc_submit(std::move(ctx));
+
+    // For ROLLBACK_ONLY passes, advance the cursor past this object so the
+    // next call to get_next_rollback_objects() starts after it.  The snap
+    // mapper is never modified in this pass, so without this the cursor-based
+    // scan would re-return the same batch every cycle.
+    if (!is_trim) {
+      context<Trimming>().rollback_scan_cursor = object;
+    }
   }
 
   return transit< WaitRepops >();

@@ -1796,6 +1796,24 @@ int librados::IoCtx::selfmanaged_snap_rollback(const std::string& oid, uint64_t 
 						       snapid);
 }
 
+int librados::IoCtx::snap_rollback(const std::string& snapname, uint64_t *rollback_id)
+{
+  return io_ctx_impl->snap_rollback(snapname.c_str(), rollback_id);
+}
+
+int librados::IoCtx::selfmanaged_snap_rollback(uint64_t snap_id,
+                                               snap_t snapc_seq,
+                                               const std::vector<snap_t>& snapc_snaps,
+                                               uint64_t *rollback_id)
+{
+  std::vector<snapid_t> snv;
+  snv.reserve(snapc_snaps.size());
+  for (auto s : snapc_snaps)
+    snv.push_back(snapid_t(s));
+  ::SnapContext snapc(snapc_seq, snv);
+  return io_ctx_impl->selfmanaged_snap_rollback(snap_id, snapc, rollback_id);
+}
+
 int librados::IoCtx::lock_exclusive(const std::string &oid, const std::string &name,
 				    const std::string &cookie,
 				    const std::string &description,

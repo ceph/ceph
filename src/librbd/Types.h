@@ -42,6 +42,7 @@ enum {
   l_librbd_snap_create,
   l_librbd_snap_remove,
   l_librbd_snap_rollback,
+  l_librbd_snap_rollback_pool_op_fallback,  // WI-14-b: fast-path fell back
   l_librbd_snap_rename,
 
   l_librbd_notify,

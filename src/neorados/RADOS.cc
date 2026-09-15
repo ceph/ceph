@@ -1136,6 +1136,54 @@ void RADOS::delete_selfmanaged_snap_(std::int64_t pool,
       }));
 }
 
+void RADOS::rollback_pool_snap_(std::int64_t pool,
+				std::string snap_name,
+				SMSnapComp c)
+{
+  auto e = asio::prefer(get_executor(),
+			asio::execution::outstanding_work.tracked);
+  impl->objecter->rollback_pool_snap(
+    pool, snap_name,
+    asio::bind_executor(
+      std::move(e),
+      [c = std::move(c)](bs::error_code ec, bufferlist bl) mutable {
+	std::uint64_t rollback_id = 0;
+	if (!ec && bl.length()) {
+	  auto iter = bl.cbegin();
+	  decode(rollback_id, iter);
+	}
+	asio::dispatch(asio::append(std::move(c), ec, rollback_id));
+      }));
+}
+
+void RADOS::rollback_selfmanaged_snap_(std::int64_t pool,
+				       std::uint64_t snap,
+				       std::uint64_t snapc_seq,
+				       std::vector<std::uint64_t> snapc_snaps,
+				       SMSnapComp c)
+{
+  std::vector<snapid_t> snv;
+  snv.reserve(snapc_snaps.size());
+  for (auto s : snapc_snaps)
+    snv.push_back(snapid_t(s));
+  SnapContext snapc(snapc_seq, snv);
+
+  auto e = asio::prefer(get_executor(),
+			asio::execution::outstanding_work.tracked);
+  impl->objecter->rollback_selfmanaged_snap(
+    pool, snapid_t(snap), snapc,
+    asio::bind_executor(
+      std::move(e),
+      [c = std::move(c)](bs::error_code ec, bufferlist bl) mutable {
+	std::uint64_t rollback_id = 0;
+	if (!ec && bl.length()) {
+	  auto iter = bl.cbegin();
+	  decode(rollback_id, iter);
+	}
+	asio::dispatch(asio::append(std::move(c), ec, rollback_id));
+      }));
+}
+
 bool RADOS::get_self_managed_snaps_mode(std::int64_t pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);

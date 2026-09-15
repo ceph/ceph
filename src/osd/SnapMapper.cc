@@ -772,6 +772,60 @@ std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
 }
 
 
+std::vector<hobject_t> SnapMapper::get_next_rollback_objects(
+  snapid_t snap,
+  const hobject_t &after,
+  unsigned max)
+{
+  ceph_assert(max > 0);
+
+  // Build a start key that is strictly after to_raw_key(snap, after).
+  // to_raw_key() produces  "SNA_<pool>_<snap_hex>_<shard><obj_str>".
+  // Appending '\x01' to that key gives us a value that sorts immediately
+  // after any key equal to to_raw_key(snap, after) in the RocksDB ordering.
+  std::string start_key;
+  if (after == hobject_t{}) {
+    // Start from the first prefix of this PG to avoid reading other PGs' keys.
+    ceph_assert(!prefixes.empty());
+    start_key = get_prefix(pool, snap) + *prefixes.begin();
+  } else {
+    start_key = to_raw_key(snap, after) + '\x01';
+  }
+
+  const std::string snap_prefix = get_prefix(pool, snap);
+  std::vector<hobject_t> out;
+  out.reserve(max);
+
+  std::string pos = start_key;
+  while (out.size() < max) {
+    pair<string, ceph::buffer::list> next;
+    int r = backend.get_next(pos, &next);
+    if (r != 0) {
+      break;  // end of DB
+    }
+    // Stop as soon as we leave the snap's key range.
+    if (next.first.compare(0, snap_prefix.size(), snap_prefix) != 0) {
+      break;
+    }
+    if (!is_mapping(next.first)) {
+      break;
+    }
+    pair<snapid_t, hobject_t> decoded(from_raw(next));
+    ceph_assert(decoded.first == snap);
+    if (!check(decoded.second)) {
+      pos = next.first;
+      continue;
+    }
+    out.emplace_back(std::move(decoded.second));
+    pos = next.first;
+  }
+
+  dout(20) << *this << __func__ << " snap=" << snap
+           << " after=" << after << " returning " << out.size()
+           << " objects" << dendl;
+  return out;
+}
+
 int SnapMapper::remove_oid(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
@@ -978,6 +1032,85 @@ void SnapMapper::record_purged_snaps(
   txn.set_keys(m);
   dout(10) << __func__ << " rm " << rm.size() << " keys, set " << m.size()
 	   << " keys" << dendl;
+}
+
+
+// WI-17-b: completed-rollback key helpers and recording
+
+string SnapMapper::make_completed_rollback_key(int64_t pool_id, snapid_t rb_id)
+{
+  return fmt::format("completed_rb_{:016x}_{:016x}",
+                     static_cast<uint64_t>(pool_id),
+                     static_cast<uint64_t>(rb_id));
+}
+
+void SnapMapper::set_completed_rollback(
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
+  MapCacher::Transaction<string, ceph::buffer::list>& txn,
+  int64_t pool_id,
+  snapid_t rb_id)
+{
+  string key = make_completed_rollback_key(pool_id, rb_id);
+  ceph::buffer::list val;
+  // value is a simple marker; we only need key presence
+  ceph::encode(pool_id, val);
+  ceph::encode(rb_id, val);
+  map<string, ceph::buffer::list> m;
+  m[key] = val;
+  txn.set_keys(m);
+}
+
+bool SnapMapper::is_completed_rollback(
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
+  int64_t pool_id,
+  snapid_t rb_id)
+{
+  string key = make_completed_rollback_key(pool_id, rb_id);
+  pair<string, ceph::buffer::list> kv;
+  // get_next_or_current returns the key >= the search key
+  if (backend.get_next_or_current(key, &kv) != 0)
+    return false;
+  return kv.first == key;
+}
+
+template <class PoolMap, class TxnT>
+static void _do_record_completed_rollbacks(
+  CephContext *cct,
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
+  TxnT& txn,
+  const map<epoch_t, PoolMap>& completed_rollbacks)
+{
+  dout(10) << __func__ << " completed_rollbacks " << completed_rollbacks << dendl;
+  for (auto& [epoch, pool_map] : completed_rollbacks) {
+    for (auto& [pool_id, rb_ids] : pool_map) {
+      for (auto i = rb_ids.begin(); i != rb_ids.end(); ++i) {
+        snapid_t rb_id = i.get_start();
+        snapid_t rb_end = i.get_start() + i.get_len();
+        while (rb_id < rb_end) {
+          SnapMapper::set_completed_rollback(backend, txn, pool_id, rb_id);
+          ++rb_id;
+        }
+      }
+    }
+  }
+}
+
+void SnapMapper::record_completed_rollbacks(
+  CephContext *cct,
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
+  MapCacher::Transaction<string, ceph::buffer::list>&& txn,
+  const map<epoch_t, mempool::osdmap::map<int64_t, snap_interval_set_t>>& completed_rollbacks)
+{
+  _do_record_completed_rollbacks(cct, backend, txn, completed_rollbacks);
+}
+
+void SnapMapper::record_completed_rollbacks(
+  CephContext *cct,
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
+  MapCacher::Transaction<string, ceph::buffer::list>&& txn,
+  const map<epoch_t, map<int64_t, snap_interval_set_t>>& completed_rollbacks)
+{
+  _do_record_completed_rollbacks(cct, backend, txn, completed_rollbacks);
 }
 
 

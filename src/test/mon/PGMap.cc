@@ -166,3 +166,103 @@ TEST(pgmap, dump_object_stat_sum_2)
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
 }
+
+// Helper: build a pg_stat_t with the given state and completed_rollbacks
+static pg_stat_t make_pg_stat(uint64_t state,
+                               std::initializer_list<snapid_t> snaps)
+{
+  pg_stat_t s;
+  s.state = state;
+  for (auto snap : snaps) {
+    s.completed_rollbacks.insert(snap);
+  }
+  return s;
+}
+
+// 1. Basic intersection: two PGs in the same pool
+TEST(pgmap, calc_completed_rollbacks_intersection)
+{
+  PGMap pgmap;
+  // pool 1, pg 0: {1,2}
+  pgmap.pg_stat[pg_t(0, 1)] = make_pg_stat(1, {1, 2});
+  // pool 1, pg 1: {2,3}
+  pgmap.pg_stat[pg_t(1, 1)] = make_pg_stat(1, {2, 3});
+
+  mempool::pgmap::map<int64_t, snap_interval_set_t> result;
+  pgmap.calc_completed_rollbacks(result);
+
+  ASSERT_EQ(1u, result.size());
+  ASSERT_TRUE(result.count(1));
+  snap_interval_set_t expected;
+  expected.insert(2);
+  ASSERT_EQ(expected, result[1]);
+}
+
+// 2. Single PG (seed): result equals that PG's set
+TEST(pgmap, calc_completed_rollbacks_single_pg)
+{
+  PGMap pgmap;
+  pgmap.pg_stat[pg_t(0, 2)] = make_pg_stat(1, {1, 2, 3});
+
+  mempool::pgmap::map<int64_t, snap_interval_set_t> result;
+  pgmap.calc_completed_rollbacks(result);
+
+  ASSERT_EQ(1u, result.size());
+  ASSERT_TRUE(result.count(2));
+  snap_interval_set_t expected;
+  expected.insert(1, 3); // snapids 1,2,3
+  ASSERT_EQ(expected, result[2]);
+}
+
+// 3. Unknown state PG exclusion: a PG with state==0 causes the pool to be excluded
+TEST(pgmap, calc_completed_rollbacks_unknown_state)
+{
+  PGMap pgmap;
+  // pool 3 has one good PG and one unknown PG
+  pgmap.pg_stat[pg_t(0, 3)] = make_pg_stat(1, {1, 2});
+  pgmap.pg_stat[pg_t(1, 3)] = make_pg_stat(0, {1, 2}); // unknown
+
+  mempool::pgmap::map<int64_t, snap_interval_set_t> result;
+  pgmap.calc_completed_rollbacks(result);
+
+  // pool 3 should be absent from result
+  ASSERT_EQ(0u, result.count(3));
+}
+
+// 4. Empty sets: all PGs report empty completed_rollbacks
+TEST(pgmap, calc_completed_rollbacks_empty_sets)
+{
+  PGMap pgmap;
+  pgmap.pg_stat[pg_t(0, 4)] = make_pg_stat(1, {});
+  pgmap.pg_stat[pg_t(1, 4)] = make_pg_stat(1, {});
+
+  mempool::pgmap::map<int64_t, snap_interval_set_t> result;
+  pgmap.calc_completed_rollbacks(result);
+
+  // pool 4 is present but its set is empty
+  ASSERT_TRUE(result.count(4));
+  ASSERT_TRUE(result[4].empty());
+}
+
+// 5. Multiple pools: per-pool intersections are independent
+TEST(pgmap, calc_completed_rollbacks_multiple_pools)
+{
+  PGMap pgmap;
+  // pool 5: {1,2} ∩ {2,3} = {2}
+  pgmap.pg_stat[pg_t(0, 5)] = make_pg_stat(1, {1, 2});
+  pgmap.pg_stat[pg_t(1, 5)] = make_pg_stat(1, {2, 3});
+  // pool 6: {4,5} ∩ {5,6} = {5}
+  pgmap.pg_stat[pg_t(0, 6)] = make_pg_stat(1, {4, 5});
+  pgmap.pg_stat[pg_t(1, 6)] = make_pg_stat(1, {5, 6});
+
+  mempool::pgmap::map<int64_t, snap_interval_set_t> result;
+  pgmap.calc_completed_rollbacks(result);
+
+  ASSERT_EQ(2u, result.size());
+
+  snap_interval_set_t exp5, exp6;
+  exp5.insert(2);
+  exp6.insert(5);
+  ASSERT_EQ(exp5, result[5]);
+  ASSERT_EQ(exp6, result[6]);
+}

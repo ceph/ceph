@@ -3532,6 +3532,181 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst) {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// WI-9-b: OSDMap::apply_incremental() rollback queue tests.
+//
+// Verifies that:
+//   (a) new_rollback_snaps entries are merged into rollback_snaps_queue.
+//   (b) Multiple increments accumulate entries correctly.
+//   (c) new_completed_rollbacks removes the corresponding entries.
+//   (d) Completing all rollbacks for a pool removes the pool entry entirely.
+//   (e) new_completed_rollbacks for a pool not in rollback_snaps_queue
+//       does not crash (no-op).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Initialize a minimal OSDMap with one replicated pool.
+static void init_minimal_osdmap(OSDMap& m, int64_t pool_id = 1)
+{
+  OSDMap::Incremental inc(1);
+  inc.fsid.generate_random();
+
+  pg_pool_t pool;
+  pool.type     = pg_pool_t::TYPE_REPLICATED;
+  pool.size     = 1;
+  pool.min_size = 1;
+  pool.flags    = pg_pool_t::FLAG_POOL_SNAPS;
+  inc.new_pools[pool_id]      = pool;
+  inc.new_pool_names[pool_id] = "testpool";
+
+  m.apply_incremental(inc);
+}
+
+/// Return a rollback_snap_info_t with the given IDs.
+static rollback_snap_info_t make_rb_info(snapid_t rb_id, snapid_t src_id)
+{
+  rollback_snap_info_t rb;
+  rb.rollback_id = rb_id;
+  rb.source_snap = src_id;
+  return rb;
+}
+
+} // anonymous namespace
+
+// (a) new_rollback_snaps merged into rollback_snaps_queue
+TEST(OSDMapRollbackQueue, NewRollbackSnapsMerged)
+{
+  const int64_t pool_id = 1;
+  OSDMap m;
+  init_minimal_osdmap(m, pool_id);
+
+  OSDMap::Incremental inc(m.get_epoch() + 1);
+  inc.fsid = m.get_fsid();
+  inc.new_rollback_snaps[pool_id][snapid_t(20)] = make_rb_info(snapid_t(20), snapid_t(10));
+
+  m.apply_incremental(inc);
+
+  auto& q = m.get_rollback_snaps_queue();
+  ASSERT_TRUE(q.count(pool_id))
+      << "rollback_snaps_queue must have entry for pool " << pool_id;
+  ASSERT_EQ(1u, q.at(pool_id).size());
+  EXPECT_EQ(snapid_t(10), q.at(pool_id).at(snapid_t(20)).source_snap);
+}
+
+// (b) Multiple increments accumulate
+TEST(OSDMapRollbackQueue, MultipleIncrementsAccumulate)
+{
+  const int64_t pool_id = 1;
+  OSDMap m;
+  init_minimal_osdmap(m, pool_id);
+
+  // First increment: rb_id=20, src=10
+  {
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_rollback_snaps[pool_id][snapid_t(20)] = make_rb_info(snapid_t(20), snapid_t(10));
+    m.apply_incremental(inc);
+  }
+  // Second increment: rb_id=40, src=30
+  {
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_rollback_snaps[pool_id][snapid_t(40)] = make_rb_info(snapid_t(40), snapid_t(30));
+    m.apply_incremental(inc);
+  }
+
+  auto& q = m.get_rollback_snaps_queue();
+  ASSERT_TRUE(q.count(pool_id));
+  EXPECT_EQ(2u, q.at(pool_id).size());
+  EXPECT_TRUE(q.at(pool_id).count(snapid_t(20)));
+  EXPECT_TRUE(q.at(pool_id).count(snapid_t(40)));
+}
+
+// (c) new_completed_rollbacks removes entries
+TEST(OSDMapRollbackQueue, CompletedRollbacksRemovesEntry)
+{
+  const int64_t pool_id = 1;
+  OSDMap m;
+  init_minimal_osdmap(m, pool_id);
+
+  // Add two rollbacks
+  {
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_rollback_snaps[pool_id][snapid_t(20)] = make_rb_info(snapid_t(20), snapid_t(10));
+    inc.new_rollback_snaps[pool_id][snapid_t(40)] = make_rb_info(snapid_t(40), snapid_t(30));
+    m.apply_incremental(inc);
+  }
+
+  // Complete rb_id=20
+  {
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_completed_rollbacks[pool_id].insert(snapid_t(20), 1);
+    m.apply_incremental(inc);
+  }
+
+  auto& q = m.get_rollback_snaps_queue();
+  ASSERT_TRUE(q.count(pool_id));
+  EXPECT_EQ(1u, q.at(pool_id).size())
+      << "rb_id=20 should have been removed after completion";
+  EXPECT_FALSE(q.at(pool_id).count(snapid_t(20)))
+      << "completed rb_id=20 must not remain in queue";
+  EXPECT_TRUE(q.at(pool_id).count(snapid_t(40)))
+      << "pending rb_id=40 must still be in queue";
+}
+
+// (d) Completing all rollbacks for a pool removes the pool entry
+TEST(OSDMapRollbackQueue, AllCompletedRemovesPool)
+{
+  const int64_t pool_id = 1;
+  OSDMap m;
+  init_minimal_osdmap(m, pool_id);
+
+  // Add one rollback
+  {
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_rollback_snaps[pool_id][snapid_t(20)] = make_rb_info(snapid_t(20), snapid_t(10));
+    m.apply_incremental(inc);
+  }
+
+  // Complete rb_id=20 (all rollbacks for pool)
+  {
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_completed_rollbacks[pool_id].insert(snapid_t(20), 1);
+    m.apply_incremental(inc);
+  }
+
+  auto& q = m.get_rollback_snaps_queue();
+  EXPECT_FALSE(q.count(pool_id))
+      << "pool entry must be removed from rollback_snaps_queue when all "
+         "rollbacks are complete";
+}
+
+// (e) Completing for a pool not in rollback_snaps_queue is a no-op
+TEST(OSDMapRollbackQueue, CompletedForUnknownPoolIsNoop)
+{
+  const int64_t pool_id = 1;
+  OSDMap m;
+  init_minimal_osdmap(m, pool_id);
+
+  // Apply completed for a pool that never had any rollbacks
+  OSDMap::Incremental inc(m.get_epoch() + 1);
+  inc.fsid = m.get_fsid();
+  inc.new_completed_rollbacks[pool_id].insert(snapid_t(99), 1);
+  EXPECT_NO_THROW(m.apply_incremental(inc))
+      << "Completing rollback for unknown pool must not throw";
+
+  auto& q = m.get_rollback_snaps_queue();
+  EXPECT_FALSE(q.count(pool_id))
+      << "Unknown pool must not appear in rollback_snaps_queue";
+}
+
+
 INSTANTIATE_TEST_SUITE_P(
   OSDMap,
   OSDMapTest,

@@ -357,7 +357,9 @@ void PG::clear_primary_state()
   projected_log = PGLog::IndexedLog();
 
   snap_trimq.clear();
+  rollback_trimq.clear();
   snap_trimq_repeat.clear();
+  rollback_trimq_repeat.clear();
   finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
   release_pg_backoffs();
 
@@ -524,6 +526,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   child->snap_trimq = snap_trimq;
   child->snap_trimq_repeat = snap_trimq_repeat;
+  child->rollback_trimq_repeat = rollback_trimq_repeat;
 
   _split_into(child_pgid, child, split_bits);
 
@@ -1430,6 +1433,19 @@ void PG::on_activate(interval_set<snapid_t> snaps)
   snap_trimq = snaps;
   release_pg_backoffs();
   projected_last_update = info.last_update;
+
+  // initialize rollback_trimq from OSDMap rollback_snaps_queue
+  rollback_trimq.clear();
+  auto& rb_queue = get_osdmap()->get_rollback_snaps_queue();
+  auto pool_it = rb_queue.find(get_pgid().pgid.pool());
+  if (pool_it != rb_queue.end()) {
+    for (auto& [rb_id, rb_info] : pool_it->second) {
+      if (!info.completed_rollbacks.contains(rb_id)) {
+        rollback_trimq[rb_id] = rb_info;
+      }
+    }
+  }
+  dout(10) << __func__ << " rollback_trimq size " << rollback_trimq.size() << dendl;
 }
 
 void PG::on_replica_activate()
@@ -1514,6 +1530,51 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
     dout(10) << __func__ << " new purged_snaps " << j->second
 	     << ", now " << recovery_state.get_info().purged_snaps << dendl;
     ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
+  }
+
+  // Handle new rollback snaps: add to rollback_trimq if not already completed
+  {
+    auto& rb_queue = osdmap->get_rollback_snaps_queue();
+    auto rb_new = rb_queue.find(get_pgid().pgid.pool());
+    if (rb_new != rb_queue.end()) {
+      for (auto& [rb_id, rb_info] : rb_new->second) {
+        if (!recovery_state.get_info().completed_rollbacks.contains(rb_id)) {
+          rollback_trimq[rb_id] = rb_info;
+          dout(10) << __func__ << " added rollback " << rb_id
+                   << " (source " << rb_info.source_snap << ") to rollback_trimq"
+                   << dendl;
+        }
+      }
+    }
+  }
+
+  // Handle completed rollbacks: remove from rollback_trimq and erase from
+  // pg_info_t::completed_rollbacks (feedback loop, mirrors new_purged_snaps
+  // block above).  Without the erase the PG keeps re-reporting already-pruned
+  // IDs in every pg_stat_t and a future re-rollback of the same snap ID would
+  // be silently skipped by the on_activate() guard.
+  {
+    auto& new_completed_rollbacks = osdmap->get_new_completed_rollbacks();
+    auto rb_done = new_completed_rollbacks.find(get_pgid().pgid.pool());
+    if (rb_done != new_completed_rollbacks.end()) {
+      for (auto k : rb_done->second) {
+        rollback_trimq.erase(rollback_trimq.lower_bound(k.first),
+                             rollback_trimq.lower_bound(k.first + k.second));
+        dout(10) << __func__ << " completed rollbacks " << k.first
+                 << "+" << k.second << " drained from rollback_trimq" << dendl;
+      }
+      // Erase from pg_info_t so we stop reporting these IDs to the MON.
+      // adjust_completed_rollbacks() sets dirty_big_info, which causes
+      // Active::react(AdvMap) to call share_pg_info() immediately.
+      recovery_state.adjust_completed_rollbacks(
+        [&rb_done](auto &cr) {
+          for (auto k : rb_done->second) {
+            cr.erase(k.first, k.second);
+          }
+        });
+      dout(10) << __func__ << " completed_rollbacks now "
+               << recovery_state.get_info().completed_rollbacks << dendl;
+    }
   }
 }
 

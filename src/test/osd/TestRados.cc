@@ -315,11 +315,16 @@ private:
 
     case TEST_OP_ROLLBACK:
       {
-	string oid = *(rand_choose(context.oid_not_in_use));
-	context.cout_prefix() << m_op << ": " << "rollback oid " << oid << " current snap is "
-	     << context.current_snap << std::endl;
-	return new RollbackOp(m_op, &context, oid);
+ string oid = *(rand_choose(context.oid_not_in_use));
+ context.cout_prefix() << m_op << ": " << "rollback oid " << oid << " current snap is "
+      << context.current_snap << std::endl;
+ return new RollbackOp(m_op, &context, oid);
       }
+
+    case TEST_OP_SNAP_ROLLBACK:
+      context.cout_prefix() << m_op << ": " << "snap_rollback current snap is "
+           << context.current_snap << std::endl;
+      return new SnapRollbackOp(m_op, &context, m_stats);
 
     case TEST_OP_SETATTR:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -468,7 +473,7 @@ void usage(const char *prog)
 {
   cout << "Usage: " << prog << std::endl;
   cout << "        --op <read|write|write_excl|writesame|delete|snap_create|snap_remove|" << std::endl;
-  cout << "              rollback|setattr|rmattr|watch|copy_from|hit_set_list|is_dirty|" << std::endl;
+  cout << "              rollback|snap_rollback|setattr|rmattr|watch|copy_from|hit_set_list|is_dirty|" << std::endl;
   cout << "              undirty|cache_flush|cache_try_flush|cache_evict|append|append_excl|" << std::endl;
   cout << "              set_redirect|unset_redirect|chunk_read|tier_promote|tier_flush|" << std::endl;
   cout << "              set_chunk|tier_evict> <weight>" << std::endl;
@@ -529,6 +534,7 @@ int main(int argc, char **argv)
     { TEST_OP_SNAP_CREATE, "snap_create", true },
     { TEST_OP_SNAP_REMOVE, "snap_remove", true },
     { TEST_OP_ROLLBACK, "rollback", true },
+    { TEST_OP_SNAP_ROLLBACK, "snap_rollback", true },
     { TEST_OP_SETATTR, "setattr", true },
     { TEST_OP_RMATTR, "rmattr", true },
     { TEST_OP_WATCH, "watch", true },

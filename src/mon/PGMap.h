@@ -98,6 +98,7 @@ public:
   mempool::pgmap::unordered_map<int32_t,pg_count> num_pg_by_osd;
 
   mempool::pgmap::map<int64_t,interval_set<snapid_t>> purged_snaps;
+  mempool::pgmap::map<int64_t, snap_interval_set_t> completed_rollbacks;
 
   bool use_per_pool_stats() const {
     return osd_sum.num_osds == osd_sum.num_per_pool_osds;
@@ -464,6 +465,7 @@ public:
   bool stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
   void calc_purged_snaps();
+  void calc_completed_rollbacks(mempool::pgmap::map<int64_t, snap_interval_set_t>& ret) const;
   void calc_osd_sum_by_class(const OSDMap& osdmap);
   void stat_osd_add(int osd, const osd_stat_t &s);
   void stat_osd_sub(int osd, const osd_stat_t &s);

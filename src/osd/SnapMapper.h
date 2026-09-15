@@ -223,7 +223,37 @@ public:
     OSDriver::OSTransaction&& txn,
     std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps);
 
+  // WI-17-b: completed-rollback recording and lookup
+  // Overload for mempool-allocated maps (from OSDMap incremental in handle_osd_map())
+  static void record_completed_rollbacks(
+    CephContext *cct,
+    MapCacher::StoreDriver<std::string, ceph::buffer::list>& backend,
+    MapCacher::Transaction<std::string, ceph::buffer::list>&& txn,
+    const std::map<epoch_t,
+      mempool::osdmap::map<int64_t, snap_interval_set_t>>& completed_rollbacks);
+
+  // Overload for plain std::map (from MMonGetCompletedRollbacksReply or tests)
+  static void record_completed_rollbacks(
+    CephContext *cct,
+    MapCacher::StoreDriver<std::string, ceph::buffer::list>& backend,
+    MapCacher::Transaction<std::string, ceph::buffer::list>&& txn,
+    const std::map<epoch_t,
+      std::map<int64_t, snap_interval_set_t>>& completed_rollbacks);
+
+  static void set_completed_rollback(
+    MapCacher::StoreDriver<std::string, ceph::buffer::list>& backend,
+    MapCacher::Transaction<std::string, ceph::buffer::list>& txn,
+    int64_t pool_id,
+    snapid_t rb_id);
+
+  static bool is_completed_rollback(
+    MapCacher::StoreDriver<std::string, ceph::buffer::list>& backend,
+    int64_t pool_id,
+    snapid_t rb_id);
+
 private:
+  static std::string make_completed_rollback_key(int64_t pool_id, snapid_t rb_id);
+
   static int _lookup_purged_snap(
     CephContext *cct,
     OSDriver& backend,
@@ -360,6 +390,29 @@ private:
     snapid_t snap,              ///< [in] snap to check
     unsigned max                ///< [in] max to get
     );  ///< @return nullopt if no more objects
+
+  /**
+   * get_next_rollback_objects
+   *
+   * Cursor-based scan for rollback-only passes.  Unlike
+   * get_next_objects_to_trim(), which advances by watching objects disappear
+   * from the snap mapper as they are deleted, this method accepts an explicit
+   * start-after cursor and returns up to @max objects whose snap-mapper key is
+   * strictly greater than to_raw_key(snap, after).  When the result is empty
+   * the caller has walked all objects for this snap in this PG.
+   *
+   * The caller stores the last returned hobject_t as the new cursor and passes
+   * it on the next call.  Pass hobject_t() (the minimum hobject_t) to start
+   * from the beginning.
+   *
+   * @return empty vector when there are no more objects (not nullopt, to
+   *         distinguish "done" from the trim-path sentinel).
+   */
+  std::vector<hobject_t> get_next_rollback_objects(
+    snapid_t snap,              ///< [in] snap to scan under
+    const hobject_t &after,     ///< [in] start-after cursor (exclusive lower bound)
+    unsigned max                ///< [in] max objects to return
+    );
 
   /// Remove mapping for oid
   int remove_oid(

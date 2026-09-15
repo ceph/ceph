@@ -1494,11 +1494,43 @@ public:
 
   template<boost::asio::completion_token_for<SimpleOpSig> CompletionToken>
   auto delete_selfmanaged_snap(int64_t pool, std::uint64_t snap,
-			       CompletionToken&& token) {
+  	       CompletionToken&& token) {
     auto consigned = consign(std::forward<CompletionToken>(token));
     return boost::asio::async_initiate<decltype(consigned), SimpleOpSig>(
       [pool, snap, this](auto&& handler) {
-	delete_selfmanaged_snap_(pool, snap, std::move(handler));
+ delete_selfmanaged_snap_(pool, snap, std::move(handler));
+      }, consigned);
+  }
+
+  /// Initiate a pool-level snapshot rollback (pool-managed snaps).
+  /// The completion handler receives (error_code, rollback_id).
+  template<boost::asio::completion_token_for<SMSnapSig> CompletionToken>
+  auto rollback_pool_snap(int64_t pool, std::string snap_name,
+  	  CompletionToken&& token) {
+    auto consigned = consign(std::forward<CompletionToken>(token));
+    return boost::asio::async_initiate<decltype(consigned), SMSnapSig>(
+      [pool, this](auto&& handler, std::string snap_name) {
+ rollback_pool_snap_(pool, std::move(snap_name), std::move(handler));
+      }, consigned, std::move(snap_name));
+  }
+
+  /// Initiate a pool-level snapshot rollback (selfmanaged snaps).
+  /// @param pool      pool ID
+  /// @param snap      selfmanaged snap ID to restore from
+  /// @param snapc_seq  current SnapContext sequence number (highest live snap ID)
+  /// @param snapc_snaps  ordered list of all live snap IDs (descending)
+  /// The completion handler receives (error_code, rollback_id).
+  template<boost::asio::completion_token_for<SMSnapSig> CompletionToken>
+  auto rollback_selfmanaged_snap(int64_t pool, std::uint64_t snap,
+  		 std::uint64_t snapc_seq,
+  		 std::vector<std::uint64_t> snapc_snaps,
+  		 CompletionToken&& token) {
+    auto consigned = consign(std::forward<CompletionToken>(token));
+    return boost::asio::async_initiate<decltype(consigned), SMSnapSig>(
+      [pool, snap, snapc_seq,
+       snapc_snaps = std::move(snapc_snaps), this](auto&& handler) mutable {
+ rollback_selfmanaged_snap_(pool, snap, snapc_seq,
+  			   std::move(snapc_snaps), std::move(handler));
       }, consigned);
   }
 
@@ -1830,6 +1862,12 @@ private:
 			 SimpleOpComp c);
   void delete_selfmanaged_snap_(int64_t pool, std::uint64_t snap,
 				SimpleOpComp c);
+  void rollback_pool_snap_(int64_t pool, std::string snap_name,
+			   SMSnapComp c);
+  void rollback_selfmanaged_snap_(int64_t pool, std::uint64_t snap,
+  		  std::uint64_t snapc_seq,
+  		  std::vector<std::uint64_t> snapc_snaps,
+  		  SMSnapComp c);
   void create_pool_(std::string name, std::optional<int> crush_rule,
 		    SimpleOpComp c);
   void delete_pool_(std::string name,
