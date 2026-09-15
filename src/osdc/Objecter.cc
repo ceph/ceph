@@ -2413,6 +2413,11 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
     unique_lock sl(op->session->lock);
 
     if (rc != -EAGAIN) {
+      // Release rwlock before firing the user callback, matching the
+      // sul.unlock() in handle_osd_op_reply (line ~3941).  sl (the session
+      // lock) is already held so the session pointer remains valid; rl is no
+      // longer needed on this path.
+      rl.unlock();
       op->trace.event("post op complete");
       // This removes from session and unlocks sl.
       complete_op_reply(op, ec, op->session, sl, rc);
