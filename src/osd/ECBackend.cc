@@ -1236,29 +1236,34 @@ int ECBackend::objects_read_sync(
   std::pair<ceph::buffer::list*, Context*>>> &to_read,
   CoroHandles coro)
 {
-  int result = 0;
-  bool done = false;
-  bool waiting = false;
+  struct ReadState {
+    int result = 0;
+    bool done = false;
+    bool waiting = false;
+  };
+  auto state = std::make_shared<ReadState>();
 
-  // Callback for the async read
-  Context *on_finish = new LambdaContext([&, coro](int r) {
-    result = r;
-    done = true;
+  std::weak_ptr<resume_token_t> weak_resume = coro.resume;
+  Context *on_finish = new LambdaContext([state, weak_resume](int r) {
+    state->result = r;
+    state->done = true;
 
-    if (waiting) {
-      coro.resume();
+    if (state->waiting) {
+      if (auto locked = weak_resume.lock(); locked) {
+        (*locked)();
+      }
     }
   });
 
   objects_read_async(hoid, object_size, to_read, on_finish, true);
 
   // If the async read is not yet complete, yield and wait for it to complete
-  if (!done) {
-    waiting = true;
+  if (!state->done) {
+    state->waiting = true;
     coro.yield();
   }
 
-  return result;
+  return state->result;
 }
 
 int ECBackend::objects_read_local(
