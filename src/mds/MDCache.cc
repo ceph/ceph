@@ -26,6 +26,7 @@
 #include <string_view>
 #include <map>
 #include <memory>
+#include <optional>
 #include <queue>
 
 #include "MDSRank.h"
@@ -14620,18 +14621,74 @@ void MDCache::upkeep_main(void)
   }
 }
 
+// Own the metadata used by blockdiff so that asynchronous object scans do not
+// depend on the lifetime or subsequent changes of a cached CInode.
+struct MDCache::FileBlockDiffSnapshot {
+  struct VersionKey {
+    inodeno_t ino;
+    snapid_t first;
+    snapid_t last;
+
+    bool operator==(const VersionKey& other) const {
+      return ino == other.ino && first == other.first && last == other.last;
+    }
+  } version;
+  snapid_t snapid;
+  CInode::mempool_inode inode;
+
+  inodeno_t ino() const { return version.ino; }
+  const CInode::mempool_inode* get_inode() const { return &inode; }
+};
+
+namespace {
+
+std::optional<MDCache::FileBlockDiffSnapshot>
+inode_snapshot_view(CInode *in, snapid_t snapid)
+{
+  if (in->first <= snapid && snapid <= in->last) {
+    return MDCache::FileBlockDiffSnapshot{
+      {in->ino(), in->first, in->last}, snapid, *in->get_inode()};
+  }
+
+  // Multiversion hardlinks keep historical metadata in the head inode.
+  if (!in->is_head() || !in->is_auth()) {
+    return std::nullopt;
+  }
+
+  snapid_t old_last = in->pick_old_inode(snapid);
+  if (!old_last) {
+    return std::nullopt;
+  }
+
+  const auto& old_inodes = in->get_old_inodes();
+  if (!old_inodes) {
+    return std::nullopt;
+  }
+  auto it = old_inodes->find(old_last);
+  if (it == old_inodes->end()) {
+    return std::nullopt;
+  }
+
+  return MDCache::FileBlockDiffSnapshot{
+    {in->ino(), it->second.first, it->first}, snapid, it->second.inode};
+}
+
+} // anonymous namespace
+
 struct C_ListSnapsAggregator : public MDSIOContext {
-  C_ListSnapsAggregator(MDSRank *mds, CInode *in1, CInode *in2, BlockDiff *block_diff,
-			Context *on_finish)
+  C_ListSnapsAggregator(MDSRank *mds,
+                        const MDCache::FileBlockDiffSnapshot *in1,
+                        const MDCache::FileBlockDiffSnapshot *in2,
+                        BlockDiff *block_diff, Context *on_finish)
     : MDSIOContext(mds),
-      in1(in1),
-      in2(in2),
+      in1(*in1),
+      in2(*in2),
       block_diff(block_diff),
       on_finish(on_finish) {
   }
 
   void finish(int r) override {
-    mds->mdcache->aggregate_snap_sets(snap_set_context, in1, in2,
+    mds->mdcache->aggregate_snap_sets(snap_set_context, &in1, &in2,
                                       block_diff, on_finish);
   }
 
@@ -14643,16 +14700,49 @@ struct C_ListSnapsAggregator : public MDSIOContext {
     snap_set_context.push_back(std::move(ssc));
   }
 
-  CInode *in1;
-  CInode *in2;
+  const MDCache::FileBlockDiffSnapshot in1;
+  const MDCache::FileBlockDiffSnapshot in2;
   BlockDiff *block_diff;
   Context *on_finish;
   std::vector<std::unique_ptr<MDCache::SnapSetContext>> snap_set_context;
 };
 
-void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, uint64_t max_objects,
-			     MDSContext *ctx) {
-  ceph_assert(in1->last <= in2->last);
+void MDCache::file_blockdiff(CInode *in1, snapid_t snapid1,
+                            CInode *in2, snapid_t snapid2,
+                            BlockDiff *block_diff, uint64_t max_objects,
+                            MDSContext *ctx) {
+  ceph_assert(snapid1 <= snapid2);
+
+  auto view1 = inode_snapshot_view(in1, snapid1);
+  auto view2 = inode_snapshot_view(in2, snapid2);
+  if (!view1 || !view2) {
+    dout(1) << __func__ << ": failed to select inode versions: snapid1="
+            << snapid1 << " inode1=" << *in1 << " snapid2=" << snapid2
+            << " inode2=" << *in2 << dendl;
+    ctx->complete(-ESTALE);
+    return;
+  }
+
+  dout(20) << __func__ << ": snapid1=" << snapid1 << " version1=["
+           << view1->version.first << "," << view1->version.last
+           << "] snapid2=" << snapid2 << " version2=["
+           << view2->version.first << "," << view2->version.last << "]"
+           << dendl;
+
+  if (view1->version == view2->version) {
+    dout(20) << __func__ << ": snaps have same inode version" << dendl;
+    ctx->complete(0);
+    return;
+  }
+
+  file_blockdiff(&*view1, &*view2, block_diff, max_objects, ctx);
+}
+
+void MDCache::file_blockdiff(const FileBlockDiffSnapshot *in1,
+                            const FileBlockDiffSnapshot *in2,
+                            BlockDiff *block_diff, uint64_t max_objects,
+                            MDSContext *ctx) {
+  ceph_assert(in1->snapid <= in2->snapid);
 
   // I think this is not required since the MDS disallows setting
   // layout when truncate_seq > 1.
@@ -14728,14 +14818,16 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
 }
 
 void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetContext>> &snap_set_ctx,
-                                  CInode *in1, CInode *in2, BlockDiff *block_diff, Context *on_finish) {
+                                  const FileBlockDiffSnapshot *in1,
+                                  const FileBlockDiffSnapshot *in2,
+                                  BlockDiff *block_diff, Context *on_finish) {
   dout(20) << __func__ << dendl;
 
   // always signal to the client to request again since request
   // completion is signalled in file_blockdiff().
   int r = 1;
-  snapid_t snapid1 = in1->last;
-  snapid_t snapid2 = in2->last;
+  snapid_t snapid1 = in1->snapid;
+  snapid_t snapid2 = in2->snapid;
   uint64_t scans = snap_set_ctx.size();
 
   interval_set<uint64_t> extents;
