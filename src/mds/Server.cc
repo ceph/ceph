@@ -2795,6 +2795,14 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
     respond_to_request(mdr, -EROFS);
     return;
   }
+
+  if (req->may_write() && mdlog->is_hard_limit_reached()) {
+    dout(1) << __func__ << ": journal size exceeds hard limit (" << mdlog->get_num_segments()
+            << " segments), freezing non-read-only operations" << dendl;
+    respond_to_request(mdr, -ENOSPC);
+    return;
+  }
+
   if (mdr->has_more() && mdr->more()->peer_error) {
     dout(10) << " got error from peers" << dendl;
     respond_to_request(mdr, mdr->more()->peer_error);
