@@ -64,7 +64,6 @@ tasks:
       - \(PG_AVAILABILITY\)
       - \(SLOW_OPS\)
       - \[WRN\]
-      - \(MON_NETSPLIT\)
 - workunit:
     clients:
       client.0:

@@ -12,4 +12,3 @@ overrides:
         debug monc: 10
     log-ignorelist:
       - \(OSD_SLOW_PING_TIME
-      - \(MON_NETSPLIT)

@@ -1,6 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      mon:
-        debug ms: 20
-
