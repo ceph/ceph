@@ -223,6 +223,8 @@ class Raw(BaseObjectStore):
         filter_osd_fsid = self.osd_fsid
 
         for osd_uuid, meta in found.items():
+            if meta.get('type') == 'seastore':
+                continue
             realpath_device = os.path.realpath(meta['device'])
             if lvm_api.is_ceph_volume_lvm_prepared(realpath_device,
                                                    lvm_prepare_lv_paths):
@@ -270,15 +272,182 @@ class Raw(BaseObjectStore):
                 self.temp_mapper,
                 self.with_tpm
             )
-            bluestore_header: Dict[str, Any] = disk.get_bluestore_header(self.temp_mapper_path)
-            if not bluestore_header:
-                raise RuntimeError(f"{device} doesn't have BlueStore signature.")
+            try:
+                bluestore_header: Dict[str, Any] = disk.get_bluestore_header(self.temp_mapper_path)
+                if not bluestore_header:
+                    raise RuntimeError(f"{device} doesn't have BlueStore signature.")
 
-            kname: str = disk.get_parent_device_from_mapper(self.temp_mapper_path, abspath=False)
-            device_type = bs_mapping_type[bluestore_header[self.temp_mapper_path]['description']]
-            new_mapper: str = f'ceph-{self.osd_fsid}-{kname}-{device_type}-dmcrypt'
+                kname: str = disk.get_parent_device_from_mapper(self.temp_mapper_path, abspath=False)
+                device_type = bs_mapping_type[bluestore_header[self.temp_mapper_path]['description']]
+                new_mapper: str = f'ceph-{self.osd_fsid}-{kname}-{device_type}-dmcrypt'
+                self.block_device_path = f'/dev/mapper/{new_mapper}'
+                self.devices.append(self.block_device_path)
+            finally:
+                # Always close the temporary mapper. On success we reopen under
+                # the canonical name below. On failure we must not leave it
+                # behind for the SeaStore fallback path.
+                encryption_utils.luks_close(self.temp_mapper)
+            # An option could be to simply rename the mapper but the uuid remains unchanged in sysfs
+            encryption_utils.luks_open('', device, new_mapper, self.with_tpm)
+
+
+class RawSeastore(Raw):
+
+    def prepare(self) -> None:
+        block_db = getattr(self.args, 'block_db', None) or ''
+        block_wal = getattr(self.args, 'block_wal', None) or ''
+        if block_db or block_wal:
+            raise RuntimeError(
+                'SeaStore raw OSDs do not support --block.db or --block.wal in ceph-volume.'
+            )
+        super().prepare()
+
+    def pre_activate_tpm2(self, device: str) -> None:
+        """Pre-activate a TPM2-encrypted SeaStore device.
+
+        SeaStore raw OSDs have a single data device whose role is always
+        'block', so we can build the canonical mapper name directly without
+        reading a BlueStore header.
+        """
+        self.with_tpm = 1
+        temp_mapper: str = f'activating-{os.path.basename(device)}'
+        temp_mapper_path: str = f'/dev/mapper/{temp_mapper}'
+        if not disk.BlockSysFs(device).has_active_dmcrypt_mapper:
+            encryption_utils.luks_open('', device, temp_mapper, self.with_tpm)
+            kname: str = disk.get_parent_device_from_mapper(temp_mapper_path,
+                                                             abspath=False)
+            new_mapper: str = f'ceph-{self.osd_fsid}-{kname}-block-dmcrypt'
             self.block_device_path = f'/dev/mapper/{new_mapper}'
             self.devices.append(self.block_device_path)
-            # An option could be to simply rename the mapper but the uuid remains unchanged in sysfs
-            encryption_utils.luks_close(self.temp_mapper)
+            encryption_utils.luks_close(temp_mapper)
             encryption_utils.luks_open('', device, new_mapper, self.with_tpm)
+
+    def _activate(self) -> None:
+        mappers: Optional[RawOsdCryptMappers] = None
+        if RawOsdCryptMappers.backing_device_path(self.block_device_path):
+            mappers = RawOsdCryptMappers(
+                self.osd_id,
+                self.osd_fsid,
+                self.block_device_path,
+                cluster_name=conf.cluster,
+                dmcrypt_secret=os.getenv('CEPH_VOLUME_DMCRYPT_SECRET') or None,
+                with_tpm=bool(self.with_tpm),
+            )
+        if mappers is not None and mappers.applies():
+            try:
+                mappers.refresh()
+            except RuntimeError as e:
+                mlogger.info(
+                    'Failed to refresh dmcrypt mappers for osd.%s uuid %s: %s'
+                    ' (is the OSD already running?)',
+                    self.osd_id,
+                    self.osd_fsid,
+                    e,
+                )
+            (self.block_device_path, _, _) = mappers.mapper_paths()
+
+        self.osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, self.osd_id)
+        if not system.path_is_mounted(self.osd_path):
+            prepare_utils.create_osd_path(self.osd_id, tmpfs=not self.args.no_tmpfs)
+
+        self.unlink_bs_symlinks()
+        system.chown(self.osd_path)
+        prepare_utils.link_block(self.block_device_path, self.osd_id)
+        system.chown(self.osd_path)
+        terminal.success("ceph-volume raw activate "
+                         "successful for osd ID: %s" % self.osd_id)
+
+    def _find_seastore_candidates(self, devices: List[str]) -> List[str]:
+        """Return block devices from *devices* that carry a SeaStore signature."""
+        candidates = []
+        for dev in devices:
+            if not dev:
+                continue
+            try:
+                if disk.has_seastore_label(dev):
+                    candidates.append(dev)
+            except OSError as exc:
+                logger.warning('could not read SeaStore label from %s: %s', dev, exc)
+        return candidates
+
+    @decorators.needs_root
+    def activate(self) -> None:
+        if not (self.devices or self.osd_id or self.osd_fsid):
+            raise RuntimeError(
+                'SeaStore activation requires at least --osd-id, --osd-uuid, '
+                'or an explicit device.'
+            )
+        if not self.osd_id or not self.osd_fsid:
+            raise RuntimeError(
+                'SeaStore activation requires both --osd-id and --osd-uuid.'
+            )
+
+        osd_id = self.osd_id
+        osd_fsid = self.osd_fsid
+
+        # Pre activation for encrypted devices: open any matching Ceph LUKS
+        # device before scanning for the SeaStore signature, because a closed
+        # LUKS mapper hides the on-disk magic entirely.
+        # lsblk_all() is called once here and reused for the candidate scan
+        # when no explicit devices are given, avoiding a second lsblk call.
+        # LVM prepared devices are excluded from both scans so that LVM backed
+        # OSDs are not claimed by the raw path and can fall through to LVMActivate.
+        lvm_prepare_lv_paths = lvm_api.ceph_volume_lvm_prepare_lv_paths()
+        all_devices = disk.lsblk_all(abspath=True)
+        for d in all_devices:
+            device: str = d.get('NAME', '')
+            if lvm_api.is_ceph_volume_lvm_prepared(device, lvm_prepare_lv_paths):
+                continue
+            luks2 = encryption_utils.CephLuks2(device)
+            if not luks2.is_ceph_encrypted or luks2.osd_fsid != osd_fsid:
+                continue
+            if luks2.is_tpm2_enrolled:
+                self.pre_activate_tpm2(device)
+            else:
+                # Key-based dmcrypt: open the mapper so the seastore magic
+                # is readable by _find_seastore_candidates().
+                kname = os.path.basename(os.path.realpath(device))
+                mapper = f'ceph-{osd_fsid}-{kname}-block-dmcrypt'
+                if not disk.BlockSysFs(device).has_active_dmcrypt_mapper:
+                    encryption_utils.luks_open(
+                        os.getenv('CEPH_VOLUME_DMCRYPT_SECRET', ''),
+                        device,
+                        mapper,
+                        0,
+                    )
+                self.block_device_path = f'/dev/mapper/{mapper}'
+                self.devices = [self.block_device_path]
+
+        # Build the candidate device list: either the explicitly provided
+        # devices, or all block devices discovered above (cephadm path).
+        # LVM prepared devices are filtered out so an LVM OSD carrying the
+        # Crimson signature is not claimed here.
+        # NOTE: SeaStore does not expose the OSD fsid in a format readable
+        # without a DENC parser, so we cannot filter by osd_fsid here.
+        # If multiple SeaStore OSDs are present on the host, an explicit
+        # --device must be passed.
+        if self.devices:
+            scan_devices = list(self.devices)
+        else:
+            scan_devices = [
+                d.get('NAME', '') for d in all_devices
+                if not lvm_api.is_ceph_volume_lvm_prepared(
+                    d.get('NAME', ''), lvm_prepare_lv_paths)
+            ]
+
+        candidates = self._find_seastore_candidates(scan_devices)
+
+        if not candidates:
+            raise RuntimeError('did not find any SeaStore device to activate')
+        if len(candidates) > 1:
+            raise RuntimeError(
+                'multiple SeaStore devices found; cannot determine which '
+                'belongs to osd.%s — pass an explicit --device.' % osd_id
+            )
+
+        self.block_device_path = candidates[0]
+        self.db_device_path = ''
+        self.wal_device_path = ''
+        self.osd_id = str(osd_id)
+        self.osd_fsid = str(osd_fsid)
+        self._activate()

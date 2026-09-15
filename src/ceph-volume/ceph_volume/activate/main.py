@@ -5,6 +5,7 @@ import argparse
 from ceph_volume import terminal
 from ceph_volume.objectstore.lvm import Lvm as LVMActivate
 from ceph_volume.objectstore.raw import Raw as RAWActivate
+from ceph_volume.objectstore.raw import RawSeastore as RAWSeastoreActivate
 from ceph_volume.devices.simple.activate import Activate as SimpleActivate
 from ceph_volume.util.lvm_osd_mappers import OsdLvmMappers
 
@@ -50,13 +51,21 @@ class Activate(object):
         if self.args.osd_id is not None and self.args.osd_fsid is not None:
             OsdLvmMappers(self.args.osd_id, self.args.osd_fsid).close()
 
-        # first try raw
+        # first try raw bluestore
         try:
             raw_activate = RAWActivate(self.args)
             raw_activate.activate()
             return
         except Exception as e:
-            terminal.info(f'Failed to activate via raw: {e}')
+            terminal.info(f'Failed to activate via raw bluestore: {e}')
+
+        # then try raw seastore
+        try:
+            raw_seastore_activate = RAWSeastoreActivate(self.args)
+            raw_seastore_activate.activate()
+            return
+        except Exception as e:
+            terminal.info(f'Failed to activate via raw seastore: {e}')
 
         # then try lvm
         try:
