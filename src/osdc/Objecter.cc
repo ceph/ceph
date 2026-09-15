@@ -3148,6 +3148,13 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     }
   }
 
+  // Strip balanced and localized read flags if the target pool does not support non-primary reads.
+  // This ensures that even when flags are added via global configuration (e.g. rados_replica_read_policy),
+  // ops targeting a tiered or deduped pool will not attempt replica/balanced reads.
+  if (!pi->allows_nonprimary_reads()) {
+    t->flags &= ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
+  }
+
   pg_t pgid;
   if (t->precalc_pgid) {
     ceph_assert(t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY);
