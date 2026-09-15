@@ -83,7 +83,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             sectype: Optional[List[str]] = None,
             xprtsec: Optional[str] = None,
             transports: Optional[List[str]] = None,
-            skip_notify_nfs_server: bool = False
+            skip_notify_nfs_server: bool = False,
+            realm: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create an RGW export"""
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
@@ -99,6 +100,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             sectype=sectype,
             xprtsec=xprtsec,
             transports=transports,
+            rgw_realm=realm,
         )
 
     @NFSCLICommand('nfs export rm', perm='rw')

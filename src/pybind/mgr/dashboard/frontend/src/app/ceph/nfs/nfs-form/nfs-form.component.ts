@@ -492,27 +492,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
   }
 
-  resolveRealms(realms: string[]) {
-    if (realms.length !== 0) {
-      this.rgwSiteService
-        .isDefaultRealm()
-        .pipe(
-          mergeMap((isDefaultRealm) => {
-            if (!isDefaultRealm) {
-              throw new Error('Selected realm is not the default.');
-            }
-            return of(true);
-          })
-        )
-        .subscribe({
-          error: (error) => {
-            const fsalDescr = this.nfsService.nfsFsal.find(
-              (f) => f.value === this.storageBackend
-            ).descr;
-            this.storageBackendError = $localize`${fsalDescr} backend is not available. ${error}`;
-          }
-        });
-    }
+  resolveRealms(_realms: string[]) {
+    // Non-default realms are supported via --rgw-realm in the backend.
   }
 
   setUsers() {
