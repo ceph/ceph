@@ -248,6 +248,8 @@ struct Inode : RefCountedObject {
   int snap_caps = 0;
   int snap_cap_refs = 0;
   xlist<Inode*>::item delay_cap_item, dirty_cap_item, flushing_cap_item;
+  bool dirty_setattr = false;
+  ceph_tid_t unflushed_setattr_tid = 0;
 
   SnapRealm *snaprealm = 0;
   xlist<Inode*>::item snaprealm_item;
