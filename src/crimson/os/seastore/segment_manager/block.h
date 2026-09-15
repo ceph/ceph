@@ -12,6 +12,7 @@
 
 #include "crimson/common/layout.h"
 
+#include "crimson/os/seastore/block_io_driver.h"
 #include "crimson/os/seastore/segment_manager.h"
 
 namespace crimson::os::seastore::segment_manager::block {
@@ -74,12 +75,12 @@ public:
 
   write_ertr::future<> write_out(
     device_id_t device_id,
-    seastar::file &device,
+    BlockIODriver &driver,
     uint64_t offset);
 
   read_ertr::future<> read_in(
     device_id_t device_id,
-    seastar::file &device,
+    BlockIODriver &driver,
     uint64_t offset);
 };
 
@@ -222,7 +223,7 @@ private:
   std::unique_ptr<SegmentStateTracker> tracker;
   device_shard_info_t shard_info;
   device_superblock_t superblock;
-  seastar::file device;
+  BlockIODriverRef driver;
 
   void set_device_id(device_id_t id) {
     assert(id <= DEVICE_ID_MAX_VALID);
@@ -251,6 +252,10 @@ private:
       segment_id_t id, segment_off_t write_pointer);
 
 private:
+  // create the I/O driver for this shard and open the underlying device,
+  // returning its detected {size, block_size}. Stores the driver in `driver`.
+  access_ertr::future<seastar::stat_data> open_driver();
+
   // shard 0 mkfs
   mkfs_ret primary_mkfs(device_config_t);
   // all shards mkfs
