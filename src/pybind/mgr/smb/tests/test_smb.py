@@ -1374,7 +1374,7 @@ def test_cluster_update_client_compat(tmodule):
     # Update to MACOS compatibility mode
     result = tmodule.cluster_update_client_compat(
         smb.enums.ClientSupportMode.MACOS, 'foo'
-    )
+    ).to_simplified()
     assert isinstance(result, dict)
     assert result['cluster_id'] == 'foo'
     assert result['client_compat'] == 'macos'
@@ -1399,7 +1399,7 @@ def test_cluster_update_client_compat(tmodule):
     # Update back to DEFAULT
     result = tmodule.cluster_update_client_compat(
         smb.enums.ClientSupportMode.DEFAULT, 'foo'
-    )
+    ).to_simplified()
     assert isinstance(result, dict)
     assert result['cluster_id'] == 'foo'
     assert result['client_compat'] == 'default'
