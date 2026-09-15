@@ -760,7 +760,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
           fs.get_mds_map().clear_standby_replay_allowed();
         }
       };
-      fsmap.modify_filesystem(fsp->get_fscid(), std::move(f));
+      modify_filesystem(fsmap, fsv, std::move(f));
     } else if (var == "balance_automate") {
       bool allow = false;
       int r = parse_bool(val, &allow, ss);
@@ -775,7 +775,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
           fs.get_mds_map().clear_balance_automate();
         }
       };
-      fsmap.modify_filesystem(fsp->get_fscid(), std::move(f));
+      modify_filesystem(fsmap, fsv, std::move(f));
     } else if (var == "min_compat_client") {
       auto vno = ceph_release_from_name(val.c_str());
       if (!vno) {
@@ -829,8 +829,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
 
       if (refuse_standby_for_another_fs) {
         if (!(fsp->get_mds_map().test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS))) {
-          fsmap.modify_filesystem(
-            fsp->get_fscid(),
+          modify_filesystem(fsmap, fsv,
             [](auto&& fs)
           {
             fs.get_mds_map().set_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
@@ -841,8 +840,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
         }
       } else {
           if (fsp->get_mds_map().test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS)) {
-            fsmap.modify_filesystem(
-              fsp->get_fscid(),
+            modify_filesystem(fsmap, fsv,
               [](auto&& fs)
             {
               fs.get_mds_map().clear_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
