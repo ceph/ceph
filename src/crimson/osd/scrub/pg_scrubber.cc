@@ -726,6 +726,8 @@ void PGScrubber::handle_scrub_requested(bool deep)
     return;
   }
 
+  ++m_sessions_counter;
+
   // We should directly start the scrub by sending the event to the state machine.
   handle_event(events::start_scrub_t{deep});
 }
@@ -2307,6 +2309,10 @@ void PGScrubber::dump_scrub_metrics(ceph::Formatter* f)
   f->dump_bool("is_reserving_replicas", is_reserving_replicas());
   f->dump_string("mode", m_mode_desc);
 
+  if (m_publish_sessions) {
+    f->dump_int("test_sequence", m_sessions_counter);
+  }
+
   // Dump repair statistics (matches classic OSD)
   if (m_is_repair) {
     f->dump_int("fixed", m_fixed_count);
@@ -2320,6 +2326,23 @@ void PGScrubber::dump_scrub_metrics(ceph::Formatter* f)
   }
 
   f->close_section();
+}
+
+int PGScrubber::asok_debug(std::string_view cmd,
+                           std::string param,
+                           ceph::Formatter* f,
+                           std::stringstream& ss)
+{
+  LOG_PREFIX(PGScrubber::asok_debug);
+  DEBUGDPP("cmd: {}, param: {}", pg, cmd, param);
+
+  if (cmd == "set" || cmd == "unset") {
+    if (param == "sessions") {
+      m_publish_sessions = (cmd == "set");
+    }
+  }
+
+  return 0;
 }
 
 void PGScrubber::update_op_mode_text()
