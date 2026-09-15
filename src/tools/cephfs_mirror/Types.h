@@ -87,6 +87,9 @@ typedef ceph_mount_info *MountRef;
 
 using clock = ceph::coarse_mono_clock;
 using monotime = ceph::coarse_mono_time;
+
+using SnapMetadata = std::map<std::string, std::string>;
+using SnapMetadataMap = std::map<uint64_t, SnapMetadata>;
 } // namespace mirror
 } // namespace cephfs
 
