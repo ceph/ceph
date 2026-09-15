@@ -4269,6 +4269,10 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   Bucket bkt(this, bucket_info);
   RGWRados::Bucket::UpdateIndex update_idx(&bkt, head_obj);
 
+  // Preserve the object category
+  const RGWObjCategory category = (head_manifest && head_manifest->is_tier_type_s3()) ?
+				  RGWObjCategory::CloudTiered : RGWObjCategory::Main;
+
   // note: we can skip calling prepare() since there's no transaction
   // and we don't specify a write tag (i.e., transaction tag)
   ret = update_idx.complete(dpp,
@@ -4281,7 +4285,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 			    content_type,
 			    storage_class,
 			    owner,
-			    RGWObjCategory::Main, // RGWObjCategory category,
+			    category, // RGWObjCategory category,
 			    nullptr, // remove_objs list
 			    y,
 			    nullptr, // user data string
@@ -4303,7 +4307,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 
     // write OLH and instance entries
     rgw_bucket_dir_entry_meta meta;
-    meta.category = RGWObjCategory::Main;
+    meta.category = category;
     meta.mtime = head_state->mtime;
     meta.size = head_state->size;
     meta.accounted_size = head_state->accounted_size;
@@ -12155,7 +12159,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   list_state.meta.size = object.meta.size;
   list_state.meta.accounted_size = object.meta.accounted_size;
   list_state.meta.mtime = object.meta.mtime;
-  list_state.meta.category = main_category;
+  // Preserve the cloud-tiered category when reconciling the index entry from
+  // the head object.
+  list_state.meta.category = (manifest && manifest->is_tier_type_s3()) ?
+			     RGWObjCategory::CloudTiered : main_category;
   list_state.meta.etag = etag;
   list_state.meta.appendable = appendable;
   list_state.meta.content_type = content_type;
