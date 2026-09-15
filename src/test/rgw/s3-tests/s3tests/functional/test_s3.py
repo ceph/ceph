@@ -20506,6 +20506,57 @@ def test_put_object_current_if_match():
 
     client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
 
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_put_object_suspended_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    check_configure_versioning_retry(bucket, "Suspended", "Suspended")
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='*')['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.put_object(Bucket=bucket, Key=key, IfMatch=etag)
+
+    response = client.delete_object(Bucket=bucket, Key=key)
+    assert response['DeleteMarker']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_multipart_put_object_suspended_if_none_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    check_configure_versioning_retry(bucket, "Suspended", "Suspended")
+    key = 'obj'
+
+    successful_conditional_multipart_upload(client, bucket, key, IfNoneMatch='*')
+
+    failing_conditional_multipart_upload((412, 'PreconditionFailed'), client, bucket, key, IfNoneMatch='*')
+
+    response = client.delete_object(Bucket=bucket, Key=key)
+    assert response['DeleteMarker']
+
+    response = successful_conditional_multipart_upload(client, bucket, key, IfNoneMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
 @pytest.mark.fails_on_dbstore
