@@ -555,8 +555,8 @@ Factors Relevant To Specifying pg_num
 Performance and even data distribution across
 OSDs weigh in favor of a higher number of PGs. Conserving CPU resources and
 minimizing memory usage weigh in favor of a lower number of PGs.
-The latter was more of a concern before Filestore OSDs were deprecated, so
-most modern clusters with BlueStore OSDs can favor the former by
+The latter was more of a concern with the Filestore back end, which has since
+been removed, so modern clusters with BlueStore OSDs can favor the former by
 configuring a value of 200-250 for ``mon_target_pg_per_osd`` and
 500 for ``mon_max_pg_per_osd``.  Note that the latter is only a failsafe
 and does not itself influence ``pg_num`` calculations.

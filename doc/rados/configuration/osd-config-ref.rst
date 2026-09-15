@@ -26,7 +26,7 @@ file. For example:
 .. code-block:: ini
 
 	[osd]
-		osd_journal_size = 5120
+		osd_max_backfills = 1
 
 	[osd.0]
 		host = osd-host-a
@@ -40,19 +40,11 @@ file. For example:
 General Settings
 ================
 
-The following settings provide a Ceph OSD Daemon's ID, and determine paths to
-data and journals. Ceph deployment scripts typically generate the UUID
-automatically.
+The following settings provide a Ceph OSD Daemon's ID and determine the path
+to its data. Ceph deployment tools typically generate the UUID automatically.
 
-.. warning:: **DO NOT** change the default paths for data or journals, as it
-             makes it more problematic to troubleshoot Ceph later.
-
-When using Filestore, the journal size should be at least twice the product of the expected drive
-speed multiplied by ``filestore_max_sync_interval``. However, the most common
-practice is to partition the journal drive (often an SSD), and mount it such
-that Ceph uses the entire partition for the journal. Note that Filestore has been
-deprecated for several releases and any legacy Filestore OSDs should be migrated
-to BlueStore.
+.. warning:: **DO NOT** change the default data path, as it makes it more
+             problematic to troubleshoot Ceph later.
 
 .. confval:: osd_uuid
 .. confval:: osd_data
@@ -61,69 +53,6 @@ to BlueStore.
 .. confval:: osd_client_message_size_cap
 .. confval:: osd_class_dir
    :default: $libdir/rados-classes
-
-.. index:: OSD; file system
-
-File System Settings
-====================
-Ceph builds and mounts file systems which are used for Ceph OSDs.
-
-``osd_mkfs_options {fs-type}``
-
-:Description: Options used when creating a new Ceph Filestore OSD of type {fs-type}.
-
-:Type: String
-:Default for xfs: ``-f -i 2048``
-:Default for other file systems: {empty string}
-
-For example::
-  ``osd_mkfs_options_xfs = -f -d agcount=24``
-
-``osd_mount_options {fs-type}``
-
-:Description: Options used when mounting a Ceph Filestore OSD of type {fs-type}.
-
-:Type: String
-:Default for xfs: ``rw,noatime,inode64``
-:Default for other file systems: ``rw, noatime``
-
-For example::
-  ``osd_mount_options_xfs = rw, noatime, inode64, logbufs=8``
-
-
-.. index:: OSD; journal settings
-
-Journal Settings
-================
-
-This section applies only to the older Filestore OSD back end.  Since Luminous
-BlueStore has been the default and preferred.
-
-By default, Ceph expects that you will provision a Ceph OSD Daemon's journal at
-the following path, which is usually a symlink to a device or partition::
-
-	/var/lib/ceph/osd/$cluster-$id/journal
-
-When using a single device type (for example, spinning drives), the journals
-should be *colocated*: the logical volume (or partition) should be in the same
-device as the ``data`` logical volume.
-
-When using a mix of fast (SSDs, NVMe) devices with slower ones (like spinning
-drives) it makes sense to place the journal on the faster device, while
-``data`` occupies the slower device fully.
-
-The default ``osd_journal_size`` value is 5120 (5 gigabytes), but it can be
-larger, in which case it will need to be set in the ``ceph.conf`` file.
-A value of 10 gigabytes is common in practice::
-
-	osd_journal_size = 10240
-
-
-.. confval:: osd_journal
-.. confval:: osd_journal_size
-
-See `Journal Config Reference`_ for additional details.
-
 
 Monitor OSD Interaction
 =======================
@@ -466,6 +395,5 @@ Miscellaneous
 .. _mClock: ../mclock-config-ref
 .. _mClock backfill: ../mclock-config-ref#recovery-backfill-options
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
-.. _Journal Config Reference: ../journal-ref
 .. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio
 .. _mClock Config Reference: ../mclock-config-ref

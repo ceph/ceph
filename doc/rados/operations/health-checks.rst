@@ -937,37 +937,6 @@ or newer to start. To safely set the flag, run the following command:
 
    ceph osd set sortbitwise
 
-OSD_FILESTORE
-_____________
-
-OSDs are running the old Filestore back end. The Filestore OSD back end
-is deprecated and the BlueStore back end has been the default object store since
-the Ceph Luminous release.
-
-The mClock scheduler is not supported for Filestore OSDs. For this reason,
-the default ``osd_op_queue`` is set to ``wpq`` for Filestore OSDs and is enforced
-even if the user attempts to change it.
-
-.. prompt:: bash #
-
-   ceph report | jq -c '."osd_metadata" | .[] | select(.osd_objectstore | contains("filestore")) | {id, osd_objectstore}'
-
-.. important:: In order to upgrade to Reef or a later release, you must first migrate any
-   Filestore OSDs to BlueStore.
-
-If you are upgrading a pre-Reef release to Reef or later, but it is not
-feasible to :ref:`migrate Filestore OSDs to BlueStore <rados_operations_bluestore_migration>` immediately, you can
-temporarily :ref:`silence <rados-monitoring-muting-health-checks>` this alert
-by running the following command:
-
-.. prompt:: bash #
-
-   ceph health mute OSD_FILESTORE
-
-Since migration of Filestore OSDs to BlueStore can take a considerable amount
-of time to complete, we recommend that you begin the process well in advance
-of any update to Reef or to later releases.
-
 OSD_UPGRADE_FINISHED
 ____________________
 

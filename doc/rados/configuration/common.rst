@@ -125,28 +125,14 @@ corresponding directory. With metavariables fully expressed and a cluster named
     /var/lib/ceph/osd/ceph-0
 
 You can override this path using the ``osd_data`` setting. We recommend that
-you do not change the default location. To create the default directory on your
-OSD host, run the following commands:
+you do not change the default location.
 
-.. prompt:: bash $
-
-    ssh {osd-host}
-    sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
-
-The ``osd_data`` path must lead to a device that is not shared with the
-operating system. To use a device other than the device that contains the
-operating system and the daemons, prepare it for use with Ceph and mount it on
-the directory you just created by running commands of the following form:
-
-.. prompt:: bash $
-
-    ssh {new-osd-host}
-    sudo mkfs -t {fstype} /dev/{disk}
-    sudo mount -o user_xattr /dev/{disk} /var/lib/ceph/osd/ceph-{osd-number}
-
-We recommend using the ``xfs`` file system when running :command:`mkfs`. (The
-``btrfs`` and ``ext4`` file systems are not recommended and are no longer
-tested.)
+The ``osd_data`` directory holds only a small amount of OSD metadata. The
+object data itself lives on a block device or logical volume that BlueStore
+manages directly, so there is no file system to create or mount. Do not format
+the device yourself: use ``ceph-volume`` or ``cephadm`` to prepare it. Those
+tools create the ``osd_data`` directory, populate it, and register the OSD with
+the cluster. See :ref:`ceph-volume` and :ref:`cephadm-deploy-osds`.
 
 For additional configuration details, see `OSD Config Reference`_.
 
