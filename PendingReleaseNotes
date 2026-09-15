@@ -68,6 +68,11 @@
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
+* RGW: PutBucketEncryption and GetBucketEncryption now support the
+  ``BlockedEncryptionTypes`` element. Blocking ``SSE-C`` on a bucket rejects new
+  SSE-C uploads with ``403 AccessDenied`` while leaving existing SSE-C objects
+  readable. The new ``rgw_s3_block_sse_c_by_default`` option applies this
+  block to all newly created buckets.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
