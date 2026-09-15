@@ -888,3 +888,122 @@ class TestClientOnLaggyOSD(CephFSTestCase):
             self.mount_a.mount_wait()
             self.mount_a.create_destroy()
             self.clear_laggy_params(osd)
+
+
+class TestMixedClientReconnect(CephFSTestCase):
+    """
+    Verify that MDS does not crash when a kernel client and a FUSE client,
+    both holding open file descriptors (and therefore caps) on the same file,
+    are killed simultaneously and then reconnect: first the kernel client
+    after a 60-second delay, and then both clients together.
+
+    Reproduces the scenario:
+
+        ClientA (kernel):  bash -c "exec 3>/mnt/cephfs_test/reconnect_test;
+                           sleep 300"
+        ClientB (fuse):    bash -c "exec 3>/mnt/cephfs_test/reconnect_test;
+                           sleep 300"
+        # kill both, wait 60s, reconnect A, then reconnect both
+        # assert no MDS crash
+    """
+
+    CLIENTS_REQUIRED = 2
+    MDSS_REQUIRED = 1
+
+    # Name of the shared test file inside the CephFS root.
+    TEST_FILE = "reconnect_test"
+
+    def test_mixed_client_reconnect_no_mds_crash(self):
+        """
+        Hold caps on the same file from a kernel client (mount_a) and a FUSE
+        client (mount_b), kill both, wait 60s, reconnect mount_a, then
+        reconnect mount_b, and confirm that the MDS is still up:active with
+        no crash.
+        """
+        from tasks.cephfs.kernel_mount import KernelMountBase
+
+        if not isinstance(self.mount_a, KernelMountBase):
+            self.skipTest("mount_a must be a kernel client for this test")
+        if not isinstance(self.mount_b, FuseMount):
+            self.skipTest("mount_b must be a FUSE client for this test")
+
+        # ------------------------------------------------------------------ #
+        # Step 1: Both clients open the file and hold an fd / caps.
+        # open_background() opens the file for writing and keeps it open
+        # until its stdin is closed, which is exactly what we need.
+        # ------------------------------------------------------------------ #
+        log.info("Step 1: open background file on both clients")
+        cap_holder_a = self.mount_a.open_background(
+            basename=self.TEST_FILE, write=True, content="client_a"
+        )
+        # Wait until mount_b can see the file (confirms mount_a has flushed
+        # the create to the MDS before we open from mount_b).
+        self.mount_b.wait_for_visible(self.TEST_FILE)
+
+        cap_holder_b = self.mount_b.open_background(
+            basename=self.TEST_FILE, write=False
+        )
+
+        # Both sessions must be active before we proceed.
+        self.assert_session_count(2)
+        mount_a_gid = self.mount_a.get_global_id()
+        mount_b_gid = self.mount_b.get_global_id()
+        log.info("mount_a gid=%s  mount_b gid=%s", mount_a_gid, mount_b_gid)
+
+        # ------------------------------------------------------------------ #
+        # Step 2: Kill both client processes (simulate abrupt disconnect).
+        # suspend_netns() drops network access without touching the process,
+        # which is the cleanest way to simulate a dead-network client while
+        # keeping the background process alive so we can resume it later.
+        # ------------------------------------------------------------------ #
+        log.info("Step 2: suspend network for both clients")
+        self.mount_a.suspend_netns()
+        self.mount_b.suspend_netns()
+
+        # Give the MDS time to notice the clients are gone (session_timeout).
+        session_timeout = self.fs.get_var("session_timeout")
+        log.info("Waiting %ss for sessions to go stale", session_timeout * 1.5)
+        time.sleep(session_timeout * 1.5)
+
+        # ------------------------------------------------------------------ #
+        # Step 3: Reconnect only mount_a (kernel client) after ~60s.
+        # ------------------------------------------------------------------ #
+        RECONNECT_DELAY = 60
+        log.info("Step 3: reconnect mount_a after %ss delay", RECONNECT_DELAY)
+        time.sleep(RECONNECT_DELAY)
+        self.mount_a.resume_netns()
+
+        # Allow mount_a time to complete its reconnect handshake with the MDS.
+        time.sleep(10)
+        self.assert_session_state(mount_a_gid, "open")
+        log.info("mount_a session is open after reconnect")
+
+        # ------------------------------------------------------------------ #
+        # Step 4: Reconnect mount_b (FUSE client).
+        # ------------------------------------------------------------------ #
+        log.info("Step 4: reconnect mount_b")
+        self.mount_b.resume_netns()
+        time.sleep(10)
+
+        # ------------------------------------------------------------------ #
+        # Step 5: Verify MDS is still up:active — no crash occurred.
+        # ------------------------------------------------------------------ #
+        log.info("Step 5: verify MDS state and session counts")
+        self.fs.wait_for_state('up:active', timeout=MDS_RESTART_GRACE)
+
+        # Both clients should now have active sessions again.
+        self.assert_session_count(2)
+        self.assert_session_state(mount_a_gid, "open")
+        self.assert_session_state(mount_b_gid, "open")
+
+        log.info("MDS is up:active and both sessions are open — no crash")
+
+        # ------------------------------------------------------------------ #
+        # Cleanup: close the background file holders.
+        # ------------------------------------------------------------------ #
+        self.mount_a._kill_background(cap_holder_a)
+        self.mount_b._kill_background(cap_holder_b)
+
+        # Confirm I/O still works on both mounts after reconnect.
+        self.mount_a.create_destroy()
+        self.mount_b.create_destroy()

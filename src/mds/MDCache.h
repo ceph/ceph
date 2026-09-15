@@ -737,9 +737,20 @@ private:
     return NULL;
   }
   void remove_replay_cap_reconnect(inodeno_t ino, client_t client) {
-    ceph_assert(cap_imports[ino].size() == 1);
-    ceph_assert(cap_imports[ino][client].size() == 1);
-    cap_imports.erase(ino);
+    auto outer_it = cap_imports.find(ino);
+    ceph_assert(outer_it != cap_imports.end());
+
+    auto &inner = outer_it->second;
+    auto inner_it = inner.find(client);
+    ceph_assert(inner_it != inner.end());
+
+    // remove only this client
+    inner.erase(inner_it);
+
+    // clean up inode key only when all clients done
+    if (inner.empty()) {
+      cap_imports.erase(outer_it);
+    }
   }
   void wait_replay_cap_reconnect(inodeno_t ino, MDSContext *c) {
     cap_reconnect_waiters[ino].push_back(c);
