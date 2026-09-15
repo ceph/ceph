@@ -5524,11 +5524,16 @@ written." % (self.name, ret, length))
         if _specs == NULL:
             raise MemoryError("malloc failed")
 
+        passphrases = []
         memset(<void *>_specs, 0, len(specs) * sizeof(rbd_encryption_spec_t))
         try:
             for i in range(len(specs)):
                 format, passphrase = specs[i]
                 passphrase = cstr(passphrase, "specs[%d][1]" % i)
+                # if the passphrase is specified as a string, cstr() converts
+                # it to a bytes object which needs to stay alive for the entire
+                # duration of the call, not just the current loop iteration
+                passphrases.append(passphrase)
                 _specs[i].format = format
                 if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
                     _luks1_opts = <rbd_encryption_luks1_format_options_t *>malloc(
