@@ -566,6 +566,7 @@ int main(int argc, char **argv)
   bool no_sparse = false;
   bool balance_reads = false;
   bool localize_reads = false;
+  uint64_t min_split_size = 0;
   uint8_t offlen_randomization_ratio = 50;
   bool set_redirect = false;
   bool set_chunk = false;
@@ -602,6 +603,8 @@ int main(int argc, char **argv)
       no_sparse = true;
     else if (strcmp(argv[i], "--balance-reads") == 0)
       balance_reads = true;
+    else if (strcmp(argv[i], "--min-split-size") == 0)
+      min_split_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--localize-reads") == 0)
       localize_reads = true;
     else if (strcmp(argv[i], "--offlen_randomization_ratio") == 0)
@@ -763,6 +766,7 @@ int main(int argc, char **argv)
     chunk_algo,
     chunk_size,
     max_attr_len,
+    min_split_size,
     id);
 
   TestOpStat stats;
