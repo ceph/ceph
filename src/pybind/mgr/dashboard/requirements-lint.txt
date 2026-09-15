@@ -1,12 +1,12 @@
-pylint==2.6.0
-flake8==3.9.0
-flake8-colors==0.1.6
+pylint~=3.3.9
+flake8~=7.3
+flake8-colors~=0.1.9
 #TODO: Fix docstring issues: https://tracker.ceph.com/issues/41224
 #flake8-docstrings
 #pep8-naming
 rstcheck==6.2.5
-autopep8==1.5.7
-pyfakefs==4.5.0
-isort==5.5.3
+autopep8~=2.3
+pyfakefs~=5.10
+isort~=6.1
 jsonschema~=4.0
 PyJWT~=2.0

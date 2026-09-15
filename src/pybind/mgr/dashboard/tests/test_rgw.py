@@ -557,7 +557,8 @@ class TestRgwTopicController(ControllerTestCase):
         ]
         mock_list_topics.return_value = mock_return_value
         controller = RgwTopic()
-        result = controller.list(True, None)
+        # RgwTopic.list() takes no arguments; the call reaches the patch
+        result = controller.list(True, None)  # pylint: disable=too-many-function-args
         mock_list_topics.assert_called_with(True, None)
         self.assertEqual(result, mock_return_value)
 
@@ -588,7 +589,8 @@ class TestRgwTopicController(ControllerTestCase):
         mock_get_topic.return_value = mock_return_value
 
         controller = RgwTopic()
-        result = controller.get('HttpTest', None)
+        # RgwTopic.get() takes one argument; the call reaches the patch
+        result = controller.get('HttpTest', None)  # pylint: disable=too-many-function-args
         mock_get_topic.assert_called_with('HttpTest', None)
         self.assertEqual(result, mock_return_value)
 

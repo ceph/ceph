@@ -371,7 +371,6 @@ class TestConvertToModel:
         result = get()
         assert result == {'a': 'bla', 'b': "iamdefault"}
 
-        # pylint: disable=unused-argument
         @convert_to_model(ModelWithDefaultParam)
         def get2() -> dict:
             return {"a": "bla", "b": 'notdefault'}
