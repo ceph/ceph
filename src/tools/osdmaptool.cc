@@ -71,6 +71,7 @@ void usage()
   cout << "   --tree                  displays a tree of the map" << std::endl;
   cout << "   --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds" << std::endl;
   cout << "   --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight> (but do not persist)" << std::endl;
+  cout << "   --create-osds <count>   add <count> osds to the map, marked up and in, with ids starting at max_osd (but do not persist)" << std::endl;
   cout << "   --save                  write modified osdmap with upmap or crush-adjust changes" << std::endl;
   cout << "   --read <file>           calculate pg upmap entries to balance pg primaries" << std::endl;
   cout << "   --read-pool <poolname>  specify which pool the read balancer should adjust" << std::endl;
@@ -167,6 +168,7 @@ int main(int argc, const char **argv)
   int range_last = -1;
   int pool = -1;
   bool mark_up_in = false;
+  int create_osds = 0;
   int marked_out = -1;
   int marked_up = -1;
   int marked_in = -1;
@@ -247,9 +249,9 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--mark-out", (char*)NULL)) {
       marked_out = std::stoi(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--mark-up", (char*)NULL)) {
-      marked_up  = std::stod(val);
+      marked_up  = std::stoi(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--mark-in", (char*)NULL)) {
-      marked_in  = std::stod(val);
+      marked_in  = std::stoi(val);
     } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
       clear_temp = true;
     } else if (ceph_argparse_flag(args, i, "--clean-temps", (char*)NULL)) {
@@ -300,6 +302,15 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, err, "--adjust-crush-weight", (char*)NULL)) {
       adjust_crush_weight = val;
+    } else if (ceph_argparse_witharg(args, i, &create_osds, err, "--create-osds", (char*)NULL)) {
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      if (create_osds < 1) {
+        cerr << me << ": --create-osds requires a count greater than 0" << std::endl;
+        exit(EXIT_FAILURE);
+      }
     } else if (ceph_argparse_flag(args, i, "--save", (char*)NULL)) {
       save = true;
     } else if (ceph_argparse_flag(args, i, "--vstart", (char*)NULL)) {
@@ -426,9 +437,29 @@ int main(int argc, const char **argv)
   }
 
   if (marked_in >=0 && marked_in < osdmap.get_max_osd()) {
-    cout << "marking OSD@" << marked_up << " as up" << std::endl;
-    int id = marked_up;
+    cout << "marking OSD@" << marked_in << " as in" << std::endl;
+    int id = marked_in;
     osdmap.set_weight(id, CEPH_OSD_IN);
+  }
+
+  if (create_osds > 0) {
+    int first = osdmap.get_max_osd();
+    int64_t want = (int64_t)first + create_osds;
+    if (want > cct->_conf->mon_max_osd) {
+      cerr << me << ": cannot create " << create_osds << " osd(s): max_osd would become "
+	   << want << ", which is > mon_max_osd (" << cct->_conf->mon_max_osd << ")"
+	   << std::endl;
+      exit(1);
+    }
+    osdmap.set_max_osd((int)want);
+    for (int id = first; id < (int)want; id++) {
+      osdmap.set_weight(id, CEPH_OSD_IN);
+      osdmap.set_state(id, osdmap.get_state(id) | CEPH_OSD_UP);
+    }
+    cout << "created osd." << first << " through osd." << (want - 1)
+	 << ", max_osd is now " << want << std::endl;
+    if (save)
+      modified = true;
   }
 
   for_each_substr(adjust_crush_weight, ",", [&](auto osd_to_adjust) {
@@ -927,7 +958,8 @@ skip_upmap:
       export_crush.empty() && import_crush.empty() && 
       test_map_pg.empty() && test_map_object.empty() &&
       !test_map_pgs && !test_map_pgs_dump && !test_map_pgs_dump_all &&
-      adjust_crush_weight.empty() && !upmap && !upmap_cleanup && !read) {
+      adjust_crush_weight.empty() && create_osds <= 0 &&
+      !upmap && !upmap_cleanup && !read) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
   }
