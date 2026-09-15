@@ -515,22 +515,6 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
 }
 
 multimap<uint64_t, ceph_filelock>::iterator
-ceph_lock_state_t::get_lower_bound(uint64_t start,
-                                   multimap<uint64_t, ceph_filelock>& lock_map)
-{
-   multimap<uint64_t, ceph_filelock>::iterator lower_bound =
-     lock_map.lower_bound(start);
-   if ((lower_bound->first != start)
-       && (start != 0)
-       && (lower_bound != lock_map.begin())) --lower_bound;
-   if (lock_map.end() == lower_bound)
-     ldout(cct,15) << "get_lower_dout(15)eturning end()" << dendl;
-   else ldout(cct,15) << "get_lower_bound returning iterator pointing to "
-                << lower_bound->second << dendl;
-   return lower_bound;
- }
-
-multimap<uint64_t, ceph_filelock>::iterator
 ceph_lock_state_t::get_last_before(uint64_t end,
                                    multimap<uint64_t, ceph_filelock>& lock_map)
 {
@@ -598,23 +582,6 @@ bool ceph_lock_state_t::get_overlapping_locks(const ceph_filelock& lock,
       cont = false;
     } else if (held_locks.begin() == iter) cont = false;
     else --iter;
-  }
-  return !overlaps.empty();
-}
-
-bool ceph_lock_state_t::get_waiting_overlaps(const ceph_filelock& lock,
-                                             list<multimap<uint64_t,
-                                               ceph_filelock>::iterator>&
-                                               overlaps)
-{
-  ldout(cct,15) << "get_waiting_overlaps" << dendl;
-  multimap<uint64_t, ceph_filelock>::iterator iter =
-    get_last_before(lock.start + lock.length - 1, waiting_locks);
-  bool cont = iter != waiting_locks.end();
-  while(cont) {
-    if (share_space(iter, lock)) overlaps.push_front(iter);
-    if (waiting_locks.begin() == iter) cont = false;
-    --iter;
   }
   return !overlaps.empty();
 }
