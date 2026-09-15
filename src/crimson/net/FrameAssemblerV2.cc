@@ -125,7 +125,7 @@ FrameAssemblerV2::record_bufs_t
 FrameAssemblerV2::stop_recording()
 {
   assert(seastar::this_shard_id() == sid);
-  ceph_assert_always(record_io == true);
+  ceph_assert(record_io == true);
   record_io = false;
   return record_bufs_t{std::move(rxbuf), std::move(txbuf)};
 }

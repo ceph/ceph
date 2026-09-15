@@ -107,7 +107,7 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
       } else { // find_iter == primary_mapping.pg_to_core.end()
         // this pgid isn't mapped within primary_mapping,
         // add the mapping and ajust core_to_num_pgs
-        ceph_assert_always(primary_mapping.core_to_num_pgs.size() > 0);
+        ceph_assert(primary_mapping.core_to_num_pgs.size() > 0);
         std::map<core_id_t, unsigned>::iterator count_iter;
         std::map<core_id_t, std::map<unsigned, unsigned>>::iterator core_shard_iter;
         std::map<unsigned, unsigned>::iterator shard_iter;
@@ -124,7 +124,7 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
         } else { // core_expected != NULL_CORE
           count_iter = primary_mapping.core_to_num_pgs.find(core_to_update);
         }
-        ceph_assert_always(primary_mapping.core_to_num_pgs.end() != count_iter);
+        ceph_assert(primary_mapping.core_to_num_pgs.end() != count_iter);
         ++(count_iter->second);
 
         if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
@@ -146,7 +146,7 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
             shard_index_update = 0; // use the first store shard index on this core
           } else {
             core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(core_to_update);
-            ceph_assert_always(core_shard_iter != primary_mapping.core_shard_to_num_pgs.end());
+            ceph_assert(core_shard_iter != primary_mapping.core_shard_to_num_pgs.end());
             if (shard_index_update == NULL_STORE_INDEX) {
               // find the store shard index with the least number of pgs
               // on this core
