@@ -126,9 +126,9 @@ public:
   explicit PGOldFormCommand(crimson::osd::OSD&) :
     AdminSocketHook{"pg",
                     "name=pgid,type=CephPgid "
-                    "name=cmd,type=CephChoices,strings=query|log|scrub|deep-scrub|schedule-scrub|schedule-deep-scrub|list_unfound|mark_unfound_lost|scrub_metrics "
+                    "name=cmd,type=CephChoices,strings=query|log|scrub|deep-scrub|schedule-scrub|schedule-deep-scrub|list_unfound|mark_unfound_lost|scrub_metrics|scrubdebug "
                     "name=arg,type=CephString,req=false",
-                    "old-form wrapper for pg subcommands (query, log, scrub, deep-scrub, schedule-scrub, schedule-deep-scrub, list_unfound, mark_unfound_lost, scrub_metrics)"}
+                    "old-form wrapper for pg subcommands (query, log, scrub, deep-scrub, schedule-scrub, schedule-deep-scrub, list_unfound, mark_unfound_lost, scrub_metrics, scrubdebug)"}
   {}
 
   seastar::future<tell_result_t> call(const cmdmap_t&,
@@ -413,6 +413,48 @@ private:
   }
 };
 
+class ScrubDebugCommand final : public PGCommand {
+public:
+  explicit ScrubDebugCommand(crimson::osd::OSD& osd) :
+    PGCommand{osd,
+              "scrubdebug",
+              "name=pgid,type=CephPgid "
+              "name=cmd,type=CephChoices,strings=block|unblock|set|unset "
+              "name=value,type=CephString,req=false",
+              "debug the scrubber"}
+  {}
+private:
+  seastar::future<tell_result_t>
+  do_command(Ref<PG> pg,
+             const cmdmap_t& cmdmap,
+             std::string_view format,
+             ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(ScrubDebugCommand::do_command);
+    std::string cmd;
+    cmd_getval(cmdmap, "cmd", cmd);
+    std::string value;
+    cmd_getval(cmdmap, "value", value);
+
+    DEBUGDPP("scrubdebug pg {}: cmd={}, value={}", *pg, pg->get_pgid(), cmd, value);
+
+    std::stringstream ss;
+    std::unique_ptr<Formatter> f{Formatter::create(format,
+                                                   "json-pretty",
+                                                   "json-pretty")};
+    int ret = pg->scrubber.asok_debug(cmd, value, f.get(), ss);
+    if (ret < 0) {
+      return seastar::make_ready_future<tell_result_t>(
+        tell_result_t{ret, ss.str()});
+    }
+
+    f->open_object_section("result");
+    f->dump_bool("success", true);
+    f->close_section();
+    return seastar::make_ready_future<tell_result_t>(std::move(f));
+  }
+};
+
 } // namespace crimson::admin::pg
 
 namespace crimson::admin {
@@ -458,5 +500,8 @@ make_asok_hook<crimson::admin::pg::ScheduleScrubCommand<false>,
 
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<crimson::admin::pg::ScrubMetricsCommand>(crimson::osd::OSD& osd);
+
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<crimson::admin::pg::ScrubDebugCommand>(crimson::osd::OSD& osd);
 
 } // namespace crimson::admin
