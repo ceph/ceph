@@ -1,9 +1,11 @@
 if(WITH_LIBCEPHSQLITE)
   add_executable(ceph_test_libcephsqlite
     main.cc
+    ${CMAKE_SOURCE_DIR}/src/SimpleRADOSStriper.cc
   )
   target_link_libraries(ceph_test_libcephsqlite
     cephsqlite
+    cls_lock_client
     librados
     ceph-common
     SQLite3::SQLite3
