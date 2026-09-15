@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { BehaviorSubject, of } from 'rxjs';
 
@@ -41,6 +41,10 @@ describe('SmbClusterResourcePageComponent', () => {
               paramMap: of(convertToParamMap({ cluster_id: 'test-cluster' }))
             }
           }
+        },
+        {
+          provide: Router,
+          useValue: { url: '/cephfs/smb/cluster/test-cluster/overview' }
         }
       ],
       // Ignores unknown child components in the template
@@ -61,6 +65,7 @@ describe('SmbClusterResourcePageComponent', () => {
   });
 
   it('should build overviewFields with correct labels and values after init', () => {
+    expect(component.showShareList).toBe(true);
     expect(component.overviewFields.length).toBe(2);
     expect(component.overviewFields[0]).toEqual({
       label: 'Name', // Matches $localize`Name`
@@ -80,5 +85,38 @@ describe('SmbClusterResourcePageComponent', () => {
     expect(component.selection).toBeUndefined();
     expect(component.loadError).toBe(true);
     expect(component.overviewFields.length).toBe(0);
+  });
+
+  it('should hide share list on RGW SMB routes', async () => {
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      declarations: [SmbClusterResourcePageComponent],
+      providers: [
+        {
+          provide: SmbClusterResourceStateService,
+          useValue: mockSmbClusterResourceStateService
+        },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            data: of({ section: 'overview' }),
+            parent: {
+              paramMap: of(convertToParamMap({ cluster_id: 'test-cluster' }))
+            }
+          }
+        },
+        {
+          provide: Router,
+          useValue: { url: '/rgw/smb/cluster/test-cluster/overview' }
+        }
+      ],
+      schemas: [NO_ERRORS_SCHEMA]
+    }).compileComponents();
+
+    const rgwFixture = TestBed.createComponent(SmbClusterResourcePageComponent);
+    const rgwComponent = rgwFixture.componentInstance;
+    rgwFixture.detectChanges();
+
+    expect(rgwComponent.showShareList).toBe(false);
   });
 });
