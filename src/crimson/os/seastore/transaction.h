@@ -7,6 +7,7 @@
 #include <iostream>
 #include <memory_resource>
 
+#include <boost/container/flat_set.hpp>
 #include <boost/intrusive/list.hpp>
 
 #include "crimson/common/log.h"
@@ -998,6 +999,38 @@ private:
   retired_extent_set_t retired_set;
 
   std::unordered_set<laddr_t> touched_prefix;
+
+  /// notebook: original leaf -> keys we touched in it, plus keys every other
+  /// transaction with its own pending edit on that same leaf had touched,
+  /// snapshotted at retire time, before either side's delta_buffer can
+  /// be unlinked by conflict handling.
+  struct retired_leaf_notebook_t {
+    struct other_edit_t {
+      boost::container::flat_set<laddr_t> keys;
+      transaction_type_t src;
+    };
+    boost::container::flat_set<laddr_t> committer_keys;
+    std::map<transaction_id_t, other_edit_t> other_keys;
+  };
+  std::map<CachedExtent*, retired_leaf_notebook_t> keys_touched_in_retired_leaf;
+
+  /// A map of lba node and the set of keys a particluar transaction routed
+  // through in that node, we keep these keys so that we can compare if any of these keys
+  //conflict with teh other txn's insert.A transaction can route through
+  // the same internal node more than once (e.g. a multi-extent write),
+  /// each time with a different addr, hence the set rather than a number.
+  std::map<CachedExtent*, std::set<laddr_t>> lba_internal_routing_addrs;
+
+  /// same idea as lba_internal_routing_addrs, but for the terminal leaf of
+  /// a lookup: addrs this transaction looked up in a leaf without editing
+  /// it (e.g. resolving an onode-tree block's laddr to a paddr).
+  std::map<CachedExtent*, std::set<laddr_t>> lba_leaf_lookup_addrs;
+
+  /// sticky, unlike `conflicted`: true if this transaction was ever marked
+  /// conflicted by an LBA node (LADDR_LEAF/LADDR_INTERNAL) on any attempt,
+  /// even after a later retry succeeds. Deliberately not cleared by
+  /// reset_preserve_handle, so it survives across retries of the same IO.
+  bool ever_lba_conflicted = false;
 
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;

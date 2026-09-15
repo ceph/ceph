@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <boost/container/flat_set.hpp>
+
 #include "seastar/core/shared_future.hh"
 
 #include "include/buffer.h"
@@ -149,7 +151,28 @@ public:
   void retire_extent(Transaction &t, CachedExtentRef ref) {
     LOG_PREFIX(Cache::retire_extent);
     SUBDEBUGT(seastore_cache, "retire extent -- {}", t, *ref);
+    if (measure_lba_conflict_mergeability) {
+      capture_retired_leaf_keys(t, *ref);
+    }
     t.add_present_to_retired_set(ref);
+  }
+
+  /// Record that `t` resolved `addr` while routing through `node`, an LBA
+  /// internal node, without making its own edit to it.
+  void capture_lba_routing_addr(Transaction &t, CachedExtent &node, laddr_t addr) {
+    if (measure_lba_conflict_mergeability &&
+        node.get_type() == extent_types_t::LADDR_INTERNAL) {
+      t.lba_internal_routing_addrs[&node].insert(addr);
+    }
+  }
+
+  /// Record that `t` looked up `addr` in `node`, the terminal LBA leaf of
+  /// that lookup, without making its own edit to it.
+  void capture_lba_leaf_lookup_addr(Transaction &t, CachedExtent &node, laddr_t addr) {
+    if (measure_lba_conflict_mergeability &&
+        node.get_type() == extent_types_t::LADDR_LEAF) {
+      t.lba_leaf_lookup_addrs[&node].insert(addr);
+    }
   }
 
   template <typename T, typename Func>
@@ -1821,6 +1844,7 @@ private:
   friend class crimson::os::seastore::BackrefManager;
 
   ExtentPinboardRef pinboard;
+  bool measure_lba_conflict_mergeability = false;
 
   btree_cursor_stats_t cursor_stats;
   struct invalid_trans_efforts_t {
@@ -1831,6 +1855,29 @@ private:
     io_stat_t fresh;
     io_stat_t fresh_ool_written;
     counter_by_extent_t<uint64_t> num_trans_invalidated;
+    // subset of the above that are LBA-node mutate-vs-mutate conflicts on a
+    // non-split edit (leaf or internal), split by whether the two
+    // transactions touched disjoint (mergeable) or overlapping key sets.
+    // Excludes read-only conflicts (out of scope).
+    counter_by_extent_t<uint64_t> num_lba_conflicts_mergeable;
+    counter_by_extent_t<uint64_t> num_lba_conflicts_overlapping;
+    // same measurement as the two counters above, but for the retire path:
+    // a leaf retired due to this transaction's own edit to it (e.g. a
+    // split), checked against another transaction's own edit on the same
+    // original leaf. "mergeable" here only means the two edits touched
+    // disjoint keys -- it does not mean the merge is trivial. after a
+    // split, the other transaction's edit would still need to be
+    // redirected to whichever new child node now owns its key range,
+    // which this measurement does not attempt.
+    counter_by_extent_t<uint64_t> num_lba_retire_conflicts_mergeable;
+    counter_by_extent_t<uint64_t> num_lba_retire_conflicts_overlapping;
+    // Case 1: the conflicting transaction never edited this LBA internal
+    // node, it only traversed through it.In this case,we say meregable txn if
+    // none of the committer's edited keys fell in [original_lower_range, addr]
+    // for any addr the conflicting txn routed through this node
+
+    counter_by_extent_t<uint64_t> num_lba_traversal_conflicts_mergeable;
+    counter_by_extent_t<uint64_t> num_lba_traversal_conflicts_overlapping;
     uint64_t total_trans_invalidated = 0;
     uint64_t num_ool_records = 0;
     uint64_t ool_record_bytes = 0;
@@ -2043,7 +2090,66 @@ void stage_visibility_handoff(Transaction& t,
                               CachedExtentRef prev);
 
   /// Invalidate extent and mark affected transactions
-  void invalidate_extent(Transaction& t, CachedExtent& extent);
+  ///
+  /// `committer_node_own_copy`, when set, is the committer's own edited
+  /// copy of `extent` (i.e. `next` in a commit_replace_extent replace).
+  /// Used to measure LBA conflict mergeability against each conflicted
+  /// reader. Left null for retires, which have no replacement copy.
+  void invalidate_extent(
+    Transaction& t,
+    CachedExtent& extent,
+    CachedExtent* committer_node_own_copy = nullptr);
+
+  /// simple check: are the two sets disjoint or not. used by both replace
+  /// and retire paths.
+  static bool are_keys_disjoint(
+    const boost::container::flat_set<laddr_t> &a,
+    const boost::container::flat_set<laddr_t> &b);
+
+  /// only used by the replace path, since this does a live lookup of
+  /// original_node: does `txn` currently have its own pending edited copy
+  /// of it, and if so what keys did it touch. if no copy was ever created,
+  /// we mark it as a read-only conflict (nullopt).
+  std::optional<boost::container::flat_set<laddr_t>> find_own_edit_keys(
+    CachedExtent &original_node,
+    Transaction &txn);
+
+  /// for the replace (no split) path: get committer_node_own_copy's keys,
+  /// find conflicting_txn's copy node, get its keys, and call the helper
+  /// function to check if the sets are disjoint. Returns false if
+  /// conflicting_txn never edited this node (Case 1, not handled here).
+  bool count_lba_conflict_mergeability(
+    CachedExtent &committer_node_own_copy,
+    Transaction &conflicting_txn);
+
+  /// Case 1: conflicting_txn only traversed/looked up in original_node,
+  /// never edited it. Handles both LADDR_INTERNAL (routing decision) and
+  /// LADDR_LEAF (exact-key lookup). Returns false if we have no
+  /// routing/lookup data for conflicting_txn on this node either (still
+  /// unclassified). Takes committer_keys directly (rather than the
+  /// committer's node object) so this also works on the retire path, where
+  /// the committer's edited copy no longer exists by the time this runs --
+  /// only its already-extracted keys survive, in keys_touched_in_retired_leaf.
+  bool count_lba_traversal_conflict_mergeability(
+    CachedExtent &original_node,
+    const boost::container::flat_set<laddr_t> &committer_keys,
+    Transaction &conflicting_txn);
+
+  /// we already have both sets of keys from capture_retired_leaf_keys.
+  /// call the helper function and increment the matching retire-path
+  /// counter.
+  void count_lba_retire_conflict_mergeability(
+    extent_types_t ext_type,
+    const boost::container::flat_set<laddr_t> &committer_keys,
+    const boost::container::flat_set<laddr_t> &other_keys,
+    Transaction::src_t conflicting_txn_src);
+
+  /// for the retire path (split case): if `ref` is an LBA leaf about to be
+  /// retired as a result of this transaction's own edit to it (e.g. a
+  /// split), capture both our own touched keys and every other current
+  /// occupant's touched keys into t.keys_touched_in_retired_leaf, before
+  /// any of it can be discarded or unlinked by conflict handling.
+  void capture_retired_leaf_keys(Transaction &t, CachedExtent &ref);
 
   /// Mark a valid transaction as conflicted
   void mark_transaction_conflicted(
