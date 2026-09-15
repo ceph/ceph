@@ -77,7 +77,7 @@ int DNSResolver::get_state(CephContext *cct, res_state *ps)
     return 0;
   }
   lock.unlock();
-  struct __res_state *s = new struct __res_state;
+  struct __res_state *s = new struct __res_state();
   s->options = 0;
   if (res_ninit(s) < 0) {
     delete s;
