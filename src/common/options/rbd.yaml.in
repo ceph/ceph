@@ -832,7 +832,6 @@ options:
   - rbd
   enum_values:
   - disabled
-  - rwl
   - ssd
 - name: rbd_persistent_cache_size
   type: uint
@@ -845,8 +844,7 @@ options:
 - name: rbd_persistent_cache_path
   type: str
   level: advanced
-  desc: location of the persistent write back cache in a DAX-enabled filesystem on
-    persistent memory
+  desc: location of the persistent write back cache
   default: /tmp
   services:
   - rbd

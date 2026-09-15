@@ -133,17 +133,10 @@ set(unittest_librbd_srcs
   watcher/test_mock_RewatchRequest.cc
   )
 
-if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
+if(WITH_RBD_SSD_CACHE)
    list(APPEND unittest_librbd_srcs
-     cache/pwl/test_WriteLogMap.cc)
-   if(WITH_RBD_RWL)
-     list(APPEND unittest_librbd_srcs
-       cache/pwl/test_mock_ReplicatedWriteLog.cc)
-   endif()
-   if(WITH_RBD_SSD_CACHE)
-     list(APPEND unittest_librbd_srcs
-       cache/pwl/test_mock_SSDWriteLog.cc)
-   endif()
+     cache/pwl/test_WriteLogMap.cc
+     cache/pwl/test_mock_SSDWriteLog.cc)
 endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
@@ -194,7 +187,7 @@ target_link_libraries(unittest_librbd
   OpenSSL::SSL
   ${UNITTEST_LIBS})
 
-if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
+if(WITH_RBD_SSD_CACHE)
   target_link_libraries(unittest_librbd
     librbd_plugin_pwl_cache)
 endif()

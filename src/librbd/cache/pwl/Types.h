@@ -6,10 +6,6 @@
 
 #include "acconfig.h"
 
-#ifdef WITH_RBD_RWL
-#include "libpmemobj.h"
-#endif
-
 #include <vector>
 #include "librbd/BlockGuard.h"
 #include "librbd/io/Types.h"
@@ -29,7 +25,7 @@ enum {
   l_librbd_pwl_rd_bytes,         // bytes read
   l_librbd_pwl_rd_latency,       // average req completion latency
 
-  // Read requests completed from RWL (no misses)
+  // Read requests completed from PWL (no misses)
   l_librbd_pwl_rd_hit_req,       // read requests
   l_librbd_pwl_rd_hit_bytes,     // bytes read
   l_librbd_pwl_rd_hit_latency,   // average req completion latency
@@ -44,15 +40,11 @@ enum {
   l_librbd_pwl_wr_req,             // write requests
   l_librbd_pwl_wr_bytes,           // bytes written
   l_librbd_pwl_wr_req_def,         // write requests deferred for resources
-  l_librbd_pwl_wr_req_def_lanes,   // write requests deferred for lanes
-  l_librbd_pwl_wr_req_def_log,     // write requests deferred for log entries
-  l_librbd_pwl_wr_req_def_buf,     // write requests deferred for buffer space
   l_librbd_pwl_wr_req_overlap,     // write requests detained for overlap
   l_librbd_pwl_wr_req_queued,      // write requests queued for prior barrier
 
   // Write log operations (1 .. n per request that appends to the log)
   l_librbd_pwl_log_ops,            // log append ops
-  l_librbd_pwl_log_op_bytes,       // average bytes written per log op
 
   /*
 
@@ -61,7 +53,7 @@ enum {
    +------------------------------+------+-------------------------------+
    | Phase                        | Name | Description                   |
    +------------------------------+------+-------------------------------+
-   | Arrive at RWL                | arr  |Arrives as a request           |
+   | Arrive at PWL                | arr  |Arrives as a request           |
    +------------------------------+------+-------------------------------+
    | Allocate resources           | all  |time spent in block guard for  |
    |                              |      |overlap sequencing occurs      |
@@ -72,8 +64,8 @@ enum {
    |                              |      |resources occurs before this   |
    |                              |      |point                          |
    +------------------------------+------+-------------------------------+
-   | Payload buffer persist and   | buf  |time spent queued for          |
-   |replicate                     |      |replication occurs before here |
+   | Payload buffer persist       | buf  |time spent queued for the      |
+   |                              |      |persist occurs before here     |
    +------------------------------+------+-------------------------------+
    | Payload buffer persist       | bufc |bufc - buf is just the persist |
    |complete                      |      |time                           |
@@ -84,8 +76,8 @@ enum {
    | Append complete              | appc |appc - app is just the time    |
    |                              |      |spent in the append operation  |
    +------------------------------+------+-------------------------------+
-   | Complete                     | cmp  |write persisted, replicated,   |
-   |                              |      |and globally visible           |
+   | Complete                     | cmp  |write persisted and globally   |
+   |                              |      |visible                        |
    +------------------------------+------+-------------------------------+
 
   */
@@ -107,8 +99,8 @@ enum {
   l_librbd_pwl_nowait_wr_caller_latency,  // average req completion (to caller) latency
 
   /* Log operation times */
-  l_librbd_pwl_log_op_alloc_t,      // elapsed time of pmemobj_reserve()
-  l_librbd_pwl_log_op_alloc_t_hist, // Histogram of elapsed time of pmemobj_reserve()
+  l_librbd_pwl_log_op_alloc_t,      // elapsed time of buffer allocation
+  l_librbd_pwl_log_op_alloc_t_hist, // Histogram of elapsed time of buffer allocation
 
   l_librbd_pwl_log_op_dis_to_buf_t, // dispatch to buffer persist elapsed time
   l_librbd_pwl_log_op_dis_to_app_t, // dispatch to log append elapsed time
@@ -116,10 +108,10 @@ enum {
   l_librbd_pwl_log_op_dis_to_cmp_t_hist, // Histogram of dispatch to persist completion elapsed time
 
   l_librbd_pwl_log_op_buf_to_app_t, // data buf persist + append wait time
-  l_librbd_pwl_log_op_buf_to_bufc_t,// data buf persist / replicate elapsed time
+  l_librbd_pwl_log_op_buf_to_bufc_t,// data buf persist elapsed time
   l_librbd_pwl_log_op_buf_to_bufc_t_hist,// data buf persist time vs bytes histogram
   l_librbd_pwl_log_op_app_to_cmp_t, // log entry append + completion wait time
-  l_librbd_pwl_log_op_app_to_appc_t, // log entry append / replicate elapsed time
+  l_librbd_pwl_log_op_app_to_appc_t, // log entry append elapsed time
   l_librbd_pwl_log_op_app_to_appc_t_hist, // log entry append time (vs. op bytes) histogram
 
   l_librbd_pwl_discard,
@@ -143,11 +135,6 @@ enum {
   l_librbd_pwl_invalidate_cache,
   l_librbd_pwl_invalidate_discard_cache,
 
-  l_librbd_pwl_append_tx_t,
-  l_librbd_pwl_retire_tx_t,
-  l_librbd_pwl_append_tx_t_hist,
-  l_librbd_pwl_retire_tx_t_hist,
-
   l_librbd_pwl_last,
 };
 
@@ -156,7 +143,7 @@ enum {
   WRITE_LOG_CACHE_ENTRY_SYNC_POINT = 1U << 1, /* No data. No write sequence number.
                                                  Marks sync point for this sync gen number */
   WRITE_LOG_CACHE_ENTRY_SEQUENCED = 1U << 2,  /* write sequence number is valid */
-  WRITE_LOG_CACHE_ENTRY_HAS_DATA = 1U << 3,   /* write_data field is valid (else ignore) */
+  WRITE_LOG_CACHE_ENTRY_HAS_DATA = 1U << 3,   /* entry has data (else ignore) */
   WRITE_LOG_CACHE_ENTRY_DISCARD = 1U << 4,    /* has_data will be 0 if this is a discard */
   WRITE_LOG_CACHE_ENTRY_WRITESAME = 1U << 5,  /* ws_datalen indicates length of data at write_bytes */
 };
@@ -174,27 +161,19 @@ const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
 const uint64_t MAX_WRITES_PER_SYNC_POINT = 256;
 const uint64_t MAX_BYTES_PER_SYNC_POINT = (1024 * 1024 * 8);
 
-const uint32_t MIN_WRITE_ALLOC_SIZE = 512;
 const uint32_t MIN_WRITE_ALLOC_SSD_SIZE = 4096;
 const uint32_t LOG_STATS_INTERVAL_SECONDS = 5;
 
 /**** Write log entries ****/
 const unsigned long int MAX_ALLOC_PER_TRANSACTION = 8;
 const unsigned long int MAX_FREE_PER_TRANSACTION = 1;
-const unsigned int MAX_CONCURRENT_WRITES = (1024 * 1024);
 
 const uint64_t DEFAULT_POOL_SIZE = 1u<<30;
 const uint64_t MIN_POOL_SIZE = DEFAULT_POOL_SIZE;
 const uint64_t POOL_SIZE_ALIGN = 1 << 20;
-constexpr double USABLE_SIZE = (7.0 / 10);
-const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
-const uint8_t RWL_LAYOUT_VERSION = 1;
 const uint8_t SSD_LAYOUT_VERSION = 1;
-const uint64_t MAX_LOG_ENTRIES = (1024 * 1024);
 const double AGGRESSIVE_RETIRE_HIGH_WATER = 0.75;
 const double RETIRE_HIGH_WATER = 0.50;
-const double RETIRE_LOW_WATER = 0.40;
-const int RETIRE_BATCH_TIME_LIMIT_MS = 250;
 const uint64_t CONTROL_BLOCK_MAX_LOG_ENTRIES = 32;
 const uint64_t SPAN_MAX_DATA_LEN = (16 * 1024 * 1024);
 
@@ -211,23 +190,11 @@ public:
   void add(Context* ctx);
 };
 
-/* Pmem structures */
-#ifdef WITH_RBD_RWL
-POBJ_LAYOUT_BEGIN(rbd_pwl);
-POBJ_LAYOUT_ROOT(rbd_pwl, struct WriteLogPoolRoot);
-POBJ_LAYOUT_TOID(rbd_pwl, uint8_t);
-POBJ_LAYOUT_TOID(rbd_pwl, struct WriteLogCacheEntry);
-POBJ_LAYOUT_END(rbd_pwl);
-#endif
-
 struct WriteLogCacheEntry {
   uint64_t sync_gen_number = 0;
   uint64_t write_sequence_number = 0;
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
-  #ifdef WITH_RBD_RWL
-  TOID(uint8_t) write_data;
-  #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t write_data_pos = 0; /* SSD data offset */
   #endif
@@ -329,15 +296,6 @@ struct WriteLogCacheEntry {
 };
 
 struct WriteLogPoolRoot {
-  #ifdef WITH_RBD_RWL
-  union {
-    struct {
-      uint8_t layout_version;
-    };
-    uint64_t _u64;
-  } header;
-  TOID(struct WriteLogCacheEntry) log_entries;   /* contiguous array of log entries */
-  #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t layout_version = 0;
   uint64_t cur_sync_gen = 0;    /* TODO: remove it when changing disk format */
@@ -368,16 +326,6 @@ struct WriteLogPoolRoot {
 
   void dump(ceph::Formatter *f) const;
   static std::list<WriteLogPoolRoot> generate_test_instances();
-};
-
-struct WriteBufferAllocation {
-  unsigned int allocation_size = 0;
-  #ifdef WITH_RBD_RWL
-  pobj_action buffer_alloc_action;
-  TOID(uint8_t) buffer_oid = OID_NULL;
-  #endif
-  bool allocated = false;
-  utime_t allocation_lat;
 };
 
 static inline io::Extent image_extent(const BlockExtent& block_extent) {
