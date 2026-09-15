@@ -380,7 +380,7 @@ template seastar::future<FrameAssemblerV2::read_main_t> FrameAssemblerV2::read_m
 
 template <bool may_cross_core>
 seastar::future<FrameAssemblerV2::read_payload_t*>
-FrameAssemblerV2::read_frame_payload()
+FrameAssemblerV2::read_frame_payload(bool allow_aborted)
 {
   assert(seastar::this_shard_id() == sid);
   rx_segments_data.clear();
@@ -409,7 +409,7 @@ FrameAssemblerV2::read_frame_payload()
     }
   ).then([this] {
     return read_exactly<may_cross_core>(rx_frame_asm.get_epilogue_onwire_len());
-  }).then([this](auto bptr) {
+  }).then([this, allow_aborted](auto bptr) -> read_payload_t* {
     logger().trace("{} RECV({}) frame epilogue", conn, bptr.length());
     bool ok = false;
     try {
@@ -427,13 +427,26 @@ FrameAssemblerV2::read_frame_payload()
     // and abort after putting entire data field on wire. This will be used by
     // the kernel client to avoid unnecessary buffering.
     if (!ok) {
-      ceph_abort_msg("TODO");
+      // The sender aborted the frame late (FRAME_LATE_STATUS_ABORTED).
+      // The full frame including the epilogue has already been read off
+      // the wire (the sender zero-pads the remainder), so the stream is
+      // positioned at the next frame and the aborted frame can simply be
+      // dropped -- see ProtocolV2::_handle_read_frame_epilogue_main() for
+      // the classic messenger equivalent.
+      if (allow_aborted) {
+        logger().info("{} read_frame_payload: late frame abort from the"
+                      " sender, dropping the frame", conn);
+        return nullptr;
+      }
+      logger().warn("{} read_frame_payload: unexpected late frame abort",
+                    conn);
+      throw std::system_error(make_error_code(crimson::net::error::negotiation_failure));
     }
     return &rx_segments_data;
   });
 }
-template seastar::future<FrameAssemblerV2::read_payload_t*> FrameAssemblerV2::read_frame_payload<true>();
-template seastar::future<FrameAssemblerV2::read_payload_t*> FrameAssemblerV2::read_frame_payload<false>();
+template seastar::future<FrameAssemblerV2::read_payload_t*> FrameAssemblerV2::read_frame_payload<true>(bool);
+template seastar::future<FrameAssemblerV2::read_payload_t*> FrameAssemblerV2::read_frame_payload<false>(bool);
 
 void FrameAssemblerV2::log_main_preamble(const ceph::bufferlist &bl)
 {
