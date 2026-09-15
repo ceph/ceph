@@ -151,11 +151,7 @@ class CephadmSecrets:
         return ''
 
     def _get_secrets_epoch(self) -> int:
-        try:
-            return int(self.client.secret_get_epoch(namespace=CEPHADM_NAMESPACE))
-        except Exception:
-            # If the secrets module is unavailable, force a full refresh on each call.
-            return -1
+        return int(self.client.secret_get_epoch(namespace=CEPHADM_NAMESPACE))
 
     def _scan_refs(self, obj: Any) -> List[SecretRef]:
         """Return resolved SecretRef objects for all whole-value secret URIs in *obj*.
@@ -219,9 +215,18 @@ class CephadmSecrets:
         ).hexdigest()
 
         cache_key = self._spec_cache_key(spec_json) or spec_hash
-        epoch = self._get_secrets_epoch()
-
         cached = self._deps_cache.get(cache_key)
+        try:
+            epoch = self._get_secrets_epoch()
+        except Exception as e:
+            if cached and cached.get('spec_hash') == spec_hash:
+                logger.warning(
+                    'Cannot get secrets epoch for %s; reusing cached dependencies: %s',
+                    cache_key, e,
+                )
+                return list(cached.get('deps') or [])
+            raise
+
         if cached and cached.get('spec_hash') == spec_hash and cached.get('epoch') == epoch:
             return list(cached.get('deps') or [])
 
