@@ -9,6 +9,7 @@ import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NvmeofGatewayNodeComponent } from '../nvmeof-gateway-node/nvmeof-gateway-node.component';
@@ -47,6 +48,7 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   gatewayGroupName = '';
   existingServiceData: CephServiceSpec | null = null;
   preSelectedHostnames: string[] = [];
+  selectedHostnames: string[] = [];
   currentCertificate: CephServiceCertificate = null;
   currentSpecCertificateSource = '';
   showCertSourceChangeWarning = false;
@@ -221,7 +223,8 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
     const encryptionKey = spec.encryption_key || '';
     const enableMtls = spec.enable_auth === true;
 
-    this.preSelectedHostnames = group.placement?.hosts || [];
+    this.preSelectedHostnames = this.toHostnames(group.placement?.hosts);
+    this.selectedHostnames = [...this.preSelectedHostnames];
 
     if (group.certificate) {
       this.currentCertificate = group.certificate;
@@ -268,6 +271,14 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
     this.hasAvailableNodes = count > 0;
   }
 
+  onGatewayNodeSelectionChange(selection: CdTableSelection): void {
+    const hostnames = this.toHostnames(selection?.selected);
+    if (hostnames.length === 0) {
+      return;
+    }
+    this.selectedHostnames = this.mergeGatewayHostnames(this.selectedHostnames, hostnames);
+  }
+
   get isCreateDisabled(): boolean {
     if (!this.hasAvailableNodes && !(this.editing && this.preSelectedHostnames.length > 0)) {
       return true;
@@ -293,12 +304,46 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   }
 
   private getSelectedOrPreselectedHosts(): string[] {
-    const selected = this.gatewayNodeComponent?.getSelectedHostnames?.() || [];
+    const fromTable = this.gatewayNodeComponent?.getSelectedHostnames?.() || [];
+    const tracked = this.selectedHostnames || [];
+    const selected = this.mergeGatewayHostnames(tracked, fromTable);
     if (selected.length > 0) {
       return selected;
     }
     // Edit: fall back to loaded placement while table selection syncs
-    return this.editing ? this.preSelectedHostnames : [];
+    return this.editing ? [...this.preSelectedHostnames] : [];
+  }
+
+  /**
+   * Carbon table selection can emit only the newly clicked host when preselection
+   * was applied on the child selection object. Merge that host into the current
+   * membership instead of replacing it.
+   */
+  private mergeGatewayHostnames(current: string[], incoming: string[]): string[] {
+    if (!incoming.length) {
+      return [...current];
+    }
+    if (!current.length) {
+      return [...new Set(incoming)];
+    }
+    const currentSet = new Set(current);
+    const added = incoming.filter((hostname) => !currentSet.has(hostname));
+    const overlap = incoming.filter((hostname) => currentSet.has(hostname));
+    if (added.length > 0 && overlap.length === 0) {
+      return [...new Set([...current, ...added])];
+    }
+    return [...new Set(incoming)];
+  }
+
+  private toHostnames(hosts: unknown): string[] {
+    if (!Array.isArray(hosts)) {
+      return [];
+    }
+    return hosts
+      .map((host: string | { hostname?: string }) =>
+        typeof host === 'string' ? host : host?.hostname
+      )
+      .filter((hostname): hostname is string => !!hostname);
   }
 
   onSubmit() {

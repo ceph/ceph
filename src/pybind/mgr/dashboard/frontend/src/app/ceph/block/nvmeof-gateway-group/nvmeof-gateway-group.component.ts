@@ -173,17 +173,24 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
                   : of([]);
 
                 return subsystemsObservable.pipe(
-                  map((subs) => ({
-                    ...group,
-                    name: group.spec?.group,
-                    statusCount: {
-                      running: group.status?.running ?? 0,
-                      error: (group.status?.size ?? 0) - (group.status?.running ?? 0)
-                    },
-                    subSystemCount: Array.isArray(subs) ? subs.length : 0,
-                    gateWayNode: group.placement?.hosts?.length ?? 0,
-                    created: group.status?.created ? new Date(group.status.created) : null
-                  }))
+                  map((subs) => {
+                    const running = group.status?.running ?? 0;
+                    const placementHostCount = group.placement?.hosts?.length ?? 0;
+                    // Prefer placement membership when daemon status.size has not
+                    // caught up after a scale-up, so the list shows the new gateway.
+                    const size = Math.max(group.status?.size ?? 0, placementHostCount);
+                    return {
+                      ...group,
+                      name: group.spec?.group,
+                      statusCount: {
+                        running,
+                        error: size - running
+                      },
+                      subSystemCount: Array.isArray(subs) ? subs.length : 0,
+                      gateWayNode: placementHostCount,
+                      created: group.status?.created ? new Date(group.status.created) : null
+                    };
+                  })
                 );
               })
             );
