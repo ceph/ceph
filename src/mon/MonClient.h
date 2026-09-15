@@ -148,7 +148,9 @@ private:
   MessageRef pending_tell_command;
 
   AuthRegistry *auth_registry;
-  ceph::mutex& monc_lock;
+  // not necessarily MonClient's monc_lock: the pinger owns a MonConnection
+  // and guards it with its own lock
+  ceph::mutex& auth_lock;
 };
 
 
