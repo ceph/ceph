@@ -95,6 +95,21 @@ class TestFunctionalCall(object):
     def test_unicode_encoding_stdin(self):
         process.call(['echo'], stdin=u'\xd0'.encode('utf-8'))
 
+    def test_timeout_kills_the_command(self):
+        stdout, stderr, returncode = process.call(['sleep', '5'], timeout=0.5)
+        assert returncode == -9
+
+    def test_timeout_kills_the_command_with_stdin(self):
+        stdout, stderr, returncode = process.call(['sleep', '5'],
+                                                  stdin='ignored',
+                                                  timeout=0.5)
+        assert returncode == -9
+
+    def test_timeout_not_reached(self):
+        stdout, stderr, returncode = process.call(['echo', 'fast'],
+                                                  timeout=10)
+        assert returncode == 0
+
 
 class TestFunctionalRun(object):
 
