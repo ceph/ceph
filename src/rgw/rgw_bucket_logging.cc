@@ -568,12 +568,13 @@ int log_record(rgw::sal::Driver* driver,
     return ret;
   }
 
-  // make sure that the logging source attribute is up-to-date
-  if (ret = update_bucket_logging_sources(dpp, target_bucket, input.bucket->get_key(), true, y); ret < 0) {
-    ldpp_dout(dpp, 5) << "WARNING: could not update bucket logging source '" <<
-      input.bucket->get_key() << "' in logging bucket '" << target_bucket_id << "' attribute, during record logging. ret = " << ret << dendl;
+  if (op_name != "REST.DELETE.BUCKET") {
+    // make sure that the logging source attribute is up-to-date if the src bucket is not being deleted
+    if (ret = update_bucket_logging_sources(dpp, target_bucket, input.bucket->get_key(), true, y); ret < 0) {
+      ldpp_dout(dpp, 5) << "WARNING: could not update bucket logging source '" <<
+        input.bucket->get_key() << "' in logging bucket '" << target_bucket_id << "' attribute, during record logging. ret = " << ret << dendl;
+    }
   }
-
   const auto region = driver->get_zone()->get_zonegroup().get_api_name();
   std::string obj_name;
   RGWObjVersionTracker objv_tracker;
@@ -741,6 +742,15 @@ int log_record(rgw::sal::Driver* driver,
     }
   }
 
+  if (op_name == "REST.DELETE.BUCKET") {
+    // Commit the last log record in case the src bucket is being deleted or it will never be accessible
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region,
+                                      input.bucket, y, true, &objv_tracker, true, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
+      ldpp_dout(dpp, 5) << "WARNING: could not commit pending logging object of bucket '" <<
+        input.src_bucket_name << ", ret = " << ret << dendl;
+      return ret;
+    }
+  }
   ldpp_dout(dpp, 20) << "INFO: wrote logging record: '" << record
     << "' to '" << obj_name << "'" << dendl;
   return 0;
