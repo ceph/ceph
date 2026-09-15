@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import socket
 import tempfile
 import time
 import uuid
@@ -136,6 +137,16 @@ def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     return daemon
 
 
+def _is_reachable(daemon: RgwDaemon) -> bool:
+    try:
+        with socket.create_connection((daemon.host, daemon.port), timeout=2):
+            return True
+    except OSError as e:
+        logger.warning('RGW daemon %s at %s:%d is unreachable: %s',
+                       daemon.name, daemon.host, daemon.port, e)
+        return False
+
+
 def _parse_addr(value) -> str:
     """
     Get the IP address the RGW is running on.
@@ -250,6 +261,7 @@ class RgwClient(RestClient):
     _config_instances = {}  # type: Dict[str, RgwClient]
     _rgw_settings_snapshot = None
     _daemons: Dict[str, RgwDaemon] = {}
+    _default_daemon: Optional[str] = None
     _ssl_ca_bundle_written: bool = False
     daemon: RgwDaemon
     got_keys_from_config: bool
@@ -316,30 +328,42 @@ class RgwClient(RestClient):
             rgw_service_manager = RgwServiceManager()
             rgw_service_manager.configure_rgw_credentials()
 
+        # Discard all cached instances if any rgw setting has changed
+        if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
+            RgwClient._rgw_settings_snapshot = RgwClient._rgw_settings()
+            RgwClient.drop_instance()
+
         daemon_keys = RgwClient._daemons.keys()
-        if not daemon_name:
+        # Keep the daemon picked last time while it is running and its client is cached.
+        if not daemon_name and RgwClient._default_daemon in daemon_keys \
+                and RgwClient._default_daemon in RgwClient._config_instances:
+            daemon_name = RgwClient._default_daemon
+        if daemon_name:
+            # An unknown name is left for the constructor to reject.
+            candidates = [daemon_name] if daemon_name in daemon_keys \
+                and daemon_name not in RgwClient._config_instances else []
+        else:
+            candidates = list(daemon_keys)
             try:
-                if len(daemon_keys) > 1:
+                if len(candidates) > 1:
                     default_zonegroup = (
                         RgwMultisite()
                         .get_all_zonegroups_info()['default_zonegroup']
                     )
                     if default_zonegroup:
-                        daemon_name = next(
-                            (daemon.name
-                             for daemon in RgwClient._daemons.values()
-                             if daemon.zonegroup_id == default_zonegroup),
-                            None
-                        )
-                daemon_name = daemon_name or next(iter(daemon_keys))
+                        candidates.sort(key=lambda name: RgwClient._daemons[name].zonegroup_id
+                                        != default_zonegroup)
             except Exception as e:  # pylint: disable=broad-except
                 logger.exception('Failed to determine default RGW daemon: %s', str(e))
-                daemon_name = next(iter(daemon_keys))
-
-        # Discard all cached instances if any rgw setting has changed
-        if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
-            RgwClient._rgw_settings_snapshot = RgwClient._rgw_settings()
-            RgwClient.drop_instance()
+        if candidates:
+            reachable = next((name for name in candidates
+                              if _is_reachable(RgwClient._daemons[name])), None)
+            if not reachable:
+                raise DashboardException(msg='No RGW daemon is reachable: {}'.format(
+                    ', '.join(candidates)), http_status_code=503, component='rgw')
+            if not daemon_name:
+                RgwClient._default_daemon = reachable
+            daemon_name = reachable
 
         if daemon_name not in RgwClient._config_instances:
             connection_info = RgwClient._get_daemon_connection_info(daemon_name)  # type: ignore
@@ -397,6 +421,7 @@ class RgwClient(RestClient):
         else:
             RgwClient._config_instances.clear()
             RgwClient._user_instances.clear()
+            RgwClient._default_daemon = None
 
     def _reset_login(self):
         if self.got_keys_from_config:
