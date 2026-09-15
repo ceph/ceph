@@ -28,6 +28,7 @@
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 
+#include "msg/Messenger.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetMap.h"
@@ -780,6 +781,10 @@ void MonClient::_finish_auth(int auth_err)
 }
 
 // ---------
+
+entity_addrvec_t MonClient::get_myaddrs() const {
+  return messenger->get_myaddrs();
+}
 
 void MonClient::send_mon_message(MessageRef m)
 {

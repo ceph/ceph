@@ -27,6 +27,7 @@
 #include "include/buffer.h"
 #include "include/ceph_assert.h"
 #include "include/Context.h"
+#include "include/encoding.h"
 #include "include/types.h" // for version_t
 #include "common/JSONFormatter.h"
 #include "common/Finisher.h"
@@ -38,6 +39,7 @@
 #include "common/blkdev.h"
 #include "common/PriorityCache.h"
 #include "common/version.h"
+#include "global/global_context.h" // for g_conf()
 
 #define dout_context g_ceph_context
 
