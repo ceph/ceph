@@ -112,6 +112,7 @@ target_link_libraries(ceph-dencoder
   StdFilesystem::filesystem
   global
   ${DENCODER_EXTRALIBS}
+  librados
   cls_log_client
   cls_version_client
   cls_user_client
