@@ -13,26 +13,23 @@
  */
 
 #include "test/osd/MockPeeringListener.h"
-#include "test/osd/ECPeeringTestFixture.h"
 #include "test/osd/EventLoop.h"
 
-// Implementation of MockPeeringListener::request_local_background_io_reservation
-// This must be defined after ECPeeringTestFixture is fully defined to avoid incomplete type errors
 void MockPeeringListener::request_local_background_io_reservation(
   unsigned priority,
   PGPeeringEventURef on_grant,
   PGPeeringEventURef on_preempt) {
-  // If the test has configured an event loop (i.e. ECPeeringTestFixture),
-  // then use the event loop to run this event, rather than putting it on the queue.
-  if (event_loop && fixture) {
-    // Schedule the event through the event loop for deterministic execution
+  // Check inject_event_stall first: a grant delivered across a later interval
+  // change would hit a PeeringState in Reset and abort.
+  if (inject_event_stall) {
+    stalled_events.push_back(std::move(on_grant));
+  } else if (event_loop) {
     PGPeeringEventRef evt_ref = std::move(on_grant);
     int shard = pg_whoami.osd;
-    event_loop->schedule_peering_event(shard, [this, evt_ref, shard]() {
-      fixture->get_peering_state(shard)->handle_event(evt_ref, fixture->get_peering_ctx(shard));
+    event_loop->schedule_peering_event(shard, [this, evt_ref]() {
+      if (!ps || !ctx) return;
+      ps->handle_event(evt_ref, ctx);
     });
-  } else if (inject_event_stall) {
-    stalled_events.push_back(std::move(on_grant));
   } else {
     events.push_back(std::move(on_grant));
   }
@@ -42,23 +39,19 @@ void MockPeeringListener::request_local_background_io_reservation(
   io_reservations_requested++;
 }
 
-// Implementation of MockPeeringListener::request_remote_recovery_reservation
-// This must be defined after ECPeeringTestFixture is fully defined to avoid incomplete type errors
 void MockPeeringListener::request_remote_recovery_reservation(
   unsigned priority,
   PGPeeringEventURef on_grant,
   PGPeeringEventURef on_preempt) {
-  // If the test has configured an event loop (i.e. ECPeeringTestFixture),
-  // then use the event loop to run this event, rather than putting it on the queue.
-  if (event_loop && fixture) {
-    // Schedule the event through the event loop for deterministic execution
+  if (inject_event_stall) {
+    stalled_events.push_back(std::move(on_grant));
+  } else if (event_loop) {
     PGPeeringEventRef evt_ref = std::move(on_grant);
     int shard = pg_whoami.osd;
-    event_loop->schedule_peering_event(shard, [this, evt_ref, shard]() {
-      fixture->get_peering_state(shard)->handle_event(evt_ref, fixture->get_peering_ctx(shard));
+    event_loop->schedule_peering_event(shard, [this, evt_ref]() {
+      if (!ps || !ctx) return;
+      ps->handle_event(evt_ref, ctx);
     });
-  } else if (inject_event_stall) {
-    stalled_events.push_back(std::move(on_grant));
   } else {
     events.push_back(std::move(on_grant));
   }
@@ -68,18 +61,19 @@ void MockPeeringListener::request_remote_recovery_reservation(
   remote_recovery_reservations_requested++;
 }
 
-// Implementation of MockPeeringListener::schedule_event_on_commit
-// This must be defined after ECPeeringTestFixture is fully defined to avoid incomplete type errors
 void MockPeeringListener::schedule_event_on_commit(
   ObjectStore::Transaction &t,
   PGPeeringEventRef on_commit) {
-  // If the test has configured an event loop (i.e. ECPeeringTestFixture),
-  // then use the event loop to run this event, rather than putting it on the queue.
-  if (event_loop && fixture) {
-    // Schedule the event through the event loop for deterministic execution
+  if (event_loop) {
+    // Gate on pg_has_reset_since for both epoch fields, mirroring
+    // PG::old_peering_evt -> old_peering_msg which discards an event when
+    // last_peering_reset > epoch_sent OR last_peering_reset > epoch_requested.
     int shard = pg_whoami.osd;
-    event_loop->schedule_peering_event(shard, [this, on_commit, shard]() {
-      fixture->get_peering_state(shard)->handle_event(on_commit, fixture->get_peering_ctx(shard));
+    event_loop->schedule_peering_event(shard, [this, on_commit]() {
+      if (!ps || !ctx) return;
+      if (ps->pg_has_reset_since(on_commit->get_epoch_sent()) ||
+          ps->pg_has_reset_since(on_commit->get_epoch_requested())) return;
+      ps->handle_event(on_commit, ctx);
     });
   } else if (inject_event_stall) {
     stalled_events.push_back(std::move(on_commit));
@@ -89,18 +83,18 @@ void MockPeeringListener::schedule_event_on_commit(
   events_on_commit_scheduled++;
 }
 
-// Implementation of MockPeeringListener::on_activate_complete
-// This must be defined after ECPeeringTestFixture is fully defined to avoid incomplete type errors
 void MockPeeringListener::on_activate_complete() {
   dout(0) << __func__ << dendl;
-  
-  // Helper lambda to schedule an event
+
   auto schedule_event = [this](PGPeeringEventRef evt) {
-    if (event_loop && fixture) {
-      // Use event loop for deterministic execution
+    if (event_loop) {
       int shard = pg_whoami.osd;
-      event_loop->schedule_peering_event(shard, [this, evt, shard]() {
-        fixture->get_peering_state(shard)->handle_event(evt, fixture->get_peering_ctx(shard));
+      // Gate on both epoch fields — mirrors PG::old_peering_evt -> old_peering_msg.
+      event_loop->schedule_peering_event(shard, [this, evt]() {
+        if (!ps || !ctx) return;
+        if (ps->pg_has_reset_since(evt->get_epoch_sent()) ||
+            ps->pg_has_reset_since(evt->get_epoch_requested())) return;
+        ps->handle_event(evt, ctx);
       });
     } else if (inject_event_stall) {
       stalled_events.push_back(evt);
