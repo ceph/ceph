@@ -471,3 +471,72 @@ class HardwareMetricsTest(TestCase):
         self.module._process_processors(self.status, self.hostname)
         for labels in self.module.metrics['hardware_cpu_cores'].value:
             self.assertEqual(len(labels), 5)
+
+
+class PoolRepairedObjectsTest(TestCase):
+    """Tests for how get_pool_repaired_objects() sources its data.
+
+    Every self.get() miss costs a full C++ dump of the requested structure
+    into Python objects with the GIL held, so which key is asked for matters
+    as much as how the result is used.
+    """
+
+    def setUp(self):
+        from prometheus.module import Module
+        self.module = mock.MagicMock(spec=Module)
+        self.module.log = mock.MagicMock()
+        self.module.get_pool_repaired_objects = \
+            Module.get_pool_repaired_objects.__get__(self.module)
+        self.module.metrics = {
+            'pool_objects_repaired': Metric(
+                'counter', 'pool_objects_repaired', '', ('pool_id',)),
+        }
+
+    def test_uses_pool_stats_not_pg_dump(self):
+        """'pg_dump' embeds every PG in the cluster; 'pool_stats' does not."""
+        self.module.get.return_value = {'pool_stats': []}
+        self.module.get_pool_repaired_objects()
+        self.module.get.assert_called_once_with('pool_stats')
+
+    def test_reads_counter_per_pool(self):
+        self.module.get.return_value = {
+            'pool_stats': [
+                {'poolid': 1, 'stat_sum': {'num_objects_repaired': 7}},
+                {'poolid': 2, 'stat_sum': {'num_objects_repaired': 0}},
+            ],
+        }
+        self.module.get_pool_repaired_objects()
+        self.assertEqual(
+            self.module.metrics['pool_objects_repaired'].value,
+            {(1,): 7, (2,): 0},
+        )
+
+
+class GetOnceTest(TestCase):
+    """Tests for the per-collection memo in front of self.get()."""
+
+    def setUp(self):
+        from prometheus.module import Module
+        self.module = mock.MagicMock(spec=Module)
+        self.module._get_cache = {}
+        self.module.get_once = Module.get_once.__get__(self.module)
+
+    def test_fetches_once_per_key(self):
+        self.module.get.return_value = {'epoch': 1}
+        first = self.module.get_once('osd_map')
+        second = self.module.get_once('osd_map')
+        self.module.get.assert_called_once_with('osd_map')
+        self.assertIs(first, second)
+
+    def test_distinguishes_keys(self):
+        self.module.get.side_effect = lambda what: {'key': what}
+        self.assertEqual(self.module.get_once('osd_map'), {'key': 'osd_map'})
+        self.assertEqual(self.module.get_once('pg_summary'), {'key': 'pg_summary'})
+        self.assertEqual(self.module.get.call_count, 2)
+
+    def test_caches_falsy_result(self):
+        """An empty dump must not be re-fetched on every call."""
+        self.module.get.return_value = {}
+        self.module.get_once('pg_summary')
+        self.module.get_once('pg_summary')
+        self.module.get.assert_called_once_with('pg_summary')
