@@ -952,6 +952,17 @@ int CrushWrapper::verify_upmap(CephContext *cct,
   int root_bucket = 0;
   int cursor = 0;
   std::map<int, int> type_stack;
+  // A rule may have multiple take..emit scopes (e.g. hybrid device-class
+  // rules), each mapping its own segment of `up`.  Checking a scope's
+  // choose/chooseleaf constraints against the whole vector miscounts other
+  // scopes' OSDs and per-class shadow buckets, so record the constraints
+  // and check them at EMIT, where the segment boundaries are known.
+  struct scope_check {
+    bool leaf;   // chooseleaf vs choose
+    int type;
+    int numrep;
+  };
+  std::vector<scope_check> scope_checks;
   for (unsigned step = 0; step < rule->len; ++step) {
     auto curstep = &rule->steps[step];
     ldout(cct, 10) << __func__ << " step " << step << dendl;
@@ -963,36 +974,6 @@ int CrushWrapper::verify_upmap(CephContext *cct,
       break;
     case CRUSH_RULE_CHOOSELEAF_FIRSTN:
     case CRUSH_RULE_CHOOSELEAF_INDEP:
-      {
-        int numrep = curstep->arg1;
-        int type = curstep->arg2;
-        if (numrep <= 0)
-          numrep += pool_size;
-        type_stack.emplace(type, numrep);
-        if (type == 0) // osd
-          break;
-        map<int, set<int>> osds_by_parent; // parent_of_desired_type -> osds
-        for (auto osd : up) {
-          auto parent = get_parent_of_type(osd, type, rule_id);
-          if (parent < 0) {
-            osds_by_parent[parent].insert(osd);
-          } else {
-            ldout(cct, 1) << __func__ << " unable to get parent of osd." << osd
-                          << ", skipping for now"
-                          << dendl;
-          }
-        }
-        for (auto i : osds_by_parent) {
-          if (i.second.size() > 1) {
-            lderr(cct) << __func__ << " multiple osds " << i.second
-                       << " come from same failure domain " << i.first
-                       << dendl;
-            return -EINVAL;
-          }
-        }
-      }
-      break;
-
     case CRUSH_RULE_CHOOSE_FIRSTN:
     case CRUSH_RULE_CHOOSE_INDEP:
       {
@@ -1003,23 +984,9 @@ int CrushWrapper::verify_upmap(CephContext *cct,
         type_stack.emplace(type, numrep);
         if (type == 0) // osd
           break;
-        set<int> parents_of_type;
-        for (auto osd : up) {
-          auto parent = get_parent_of_type(osd, type, rule_id);
-          if (parent < 0) {
-            parents_of_type.insert(parent);
-          } else {
-            ldout(cct, 1) << __func__ << " unable to get parent of osd." << osd
-                          << ", skipping for now"
-                          << dendl;
-          }
-        }
-        if ((int)parents_of_type.size() > numrep) {
-          lderr(cct) << __func__ << " number of buckets "
-                     << parents_of_type.size() << " exceeds desired " << numrep
-                     << dendl;
-          return -EINVAL;
-        }
+        bool leaf = curstep->op == CRUSH_RULE_CHOOSELEAF_FIRSTN ||
+                    curstep->op == CRUSH_RULE_CHOOSELEAF_INDEP;
+        scope_checks.push_back({leaf, type, numrep});
       }
       break;
 
@@ -1030,6 +997,7 @@ int CrushWrapper::verify_upmap(CephContext *cct,
           for (auto &item : type_stack) {
             num_osds *= item.second;
           }
+          int seg_begin = cursor;
           // validate the osd's in subtree
           for (int c = 0; cursor < (int)up.size() && c < num_osds; ++cursor, ++c) {
             int osd = up[cursor];
@@ -1038,8 +1006,51 @@ int CrushWrapper::verify_upmap(CephContext *cct,
               return -EINVAL;
             }
           }
+          // check the choose/chooseleaf constraints of this scope
+          // against this scope's segment of `up` only
+          for (auto& check : scope_checks) {
+            // parents of `check.type` within this scope's take subtree only
+            vector<int> candidates;
+            get_children_of_type(root_bucket, check.type, &candidates, false);
+            map<int, set<int>> osds_by_parent; // parent_of_desired_type -> osds
+            for (int c = seg_begin; c < cursor; ++c) {
+              int osd = up[c];
+              int parent = 0;
+              for (auto candidate : candidates) {
+                if (subtree_contains(candidate, osd)) {
+                  parent = candidate;
+                  break;
+                }
+              }
+              if (parent < 0) {
+                osds_by_parent[parent].insert(osd);
+              } else {
+                ldout(cct, 1) << __func__ << " unable to get parent of osd." << osd
+                              << ", skipping for now"
+                              << dendl;
+              }
+            }
+            if (check.leaf) {
+              for (auto& i : osds_by_parent) {
+                if (i.second.size() > 1) {
+                  lderr(cct) << __func__ << " multiple osds " << i.second
+                             << " come from same failure domain " << i.first
+                             << dendl;
+                  return -EINVAL;
+                }
+              }
+            } else {
+              if ((int)osds_by_parent.size() > check.numrep) {
+                lderr(cct) << __func__ << " number of buckets "
+                           << osds_by_parent.size() << " exceeds desired "
+                           << check.numrep << dendl;
+                return -EINVAL;
+              }
+            }
+          }
         }
         type_stack.clear();
+        scope_checks.clear();
         root_bucket = 0;
       }
       break;
