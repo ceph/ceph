@@ -84,26 +84,46 @@ private:
   /**
    * @verbatim
    *
-   * <start>
-   *    |
-   *    v                           (error)
-   * PREPARE_LOCAL_GROUP  * * * * * * * * * * *
-   *    |                                     *
-   *    v                            (error)  *
-   * PREPARE_REMOTE_GROUP_NAME  * * * * * * * *
-   *    |                                     *
-   *    | (remote dne)                        *
-   *    \------------> REMOVE_LOCAL_GROUP * * *
-   *    |             (if local non-primary)  *
-   *    |                                     *
-   *    | (local dne)                         *
-   *    \------------> CREATE_LOCAL_GROUP * * *
-   *    |              (if remote primary)    *
-   *    v                       |             *
-   * CREATE_IMAGE_REPLAYERS <---/             *
-   *    |                                     *
-   *    v                                     *
-   * <finish> < * * * * * * * * * * * * * * * *
+   *                                                       <start>
+   *                                                          |
+   *                                                          v
+   *                                                  GET_LOCAL_GROUP_ID
+   *                                                          | local group exists?
+   *                                            no            v            yes
+   *                          + <---------------------------- + ------------------------------> +
+   *                          |                                                                 |
+   *                          |                                                                 v
+   *                          |                                                       CHECK_RESYNC_REQUESTED
+   *                          |                                                                 |
+   *                          v                                                                 v
+   *                          + ------------------------> PREPARE_REMOTE_GROUP <--------------- +
+   *                                                           | choose next step
+   *                                                           v
+   *                          + <----------------------------- + -----------------------------> +
+   *                          | no local group                 | otherwise                      | resync and remote primary
+   *                          |                                v                                v
+   *                          |                       PREPARE_LOCAL_GROUP             GET_LOCAL_MIRROR_GROUP
+   *                          |                                |                                |
+   *                          v                                v                                v
+   *                          + -----------------------------> + <----------------------------- +
+   *                                                           |
+   *                                                           v
+   *                                                   CONTINUE_BOOTSTRAP
+   *                                                           | choose next step
+   *                                                           v
+   *                          + <----------------------------- + -----------------------------> +
+   *                          |                                |                                |
+   *                          v                                v                                v
+   *                 REMOVE_LOCAL_GROUP                CREATE_LOCAL_GROUP             CREATE_IMAGE_REPLAYERS
+   *                          |                                |                                |
+   *                          |                                v                                |
+   *                          |                       CREATE_IMAGE_REPLAYERS                    |
+   *                          |                                |                                |
+   *                          v                                v                                v
+   *                          + -----------------------------> + <----------------------------- +
+   *                                                           |
+   *                                                           v
+   *                                                        <finish>
    *
    * @endverbatim
    */
@@ -127,12 +147,23 @@ private:
   mutable ceph::mutex m_lock;
   std::atomic<bool> m_canceled = false;
 
-  std::string m_local_group_name;
+  std::string m_local_group_id;
+  cls::rbd::MirrorGroup m_mirror_group;
   std::string m_prepare_local_group_name;
   std::string m_prepare_remote_group_name;
   bool m_local_group_removed = false;
+  int m_remote_group_prepare_result = 0;
 
   bufferlist m_out_bl;
+
+  void get_local_group_id();
+  void handle_get_local_group_id(int r);
+
+  void get_local_mirror_group();
+  void handle_get_local_mirror_group(int r);
+
+  void check_resync_requested();
+  void handle_check_resync_requested(int r);
 
   void prepare_local_group();
   void handle_prepare_local_group(int r);
@@ -140,8 +171,7 @@ private:
   void prepare_remote_group();
   void handle_prepare_remote_group(int r);
 
-  void get_local_group_meta();
-  void handle_get_local_group_meta(int r);
+  void continue_bootstrap(int r);
 
   void create_local_group();
   void handle_create_local_group(int r);

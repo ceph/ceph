@@ -35,43 +35,6 @@ template <typename I>
 void PrepareLocalGroupRequest<I>::send() {
   dout(10) << "global_group_id: " << m_global_group_id << dendl;
 
-  get_local_group_id();
-}
-
-template <typename I>
-void PrepareLocalGroupRequest<I>::get_local_group_id() {
-  dout(10) << dendl;
-
-  librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_group_get_group_id_start(&op, m_global_group_id);
-  m_out_bl.clear();
-  auto comp = create_rados_callback<
-      PrepareLocalGroupRequest<I>,
-      &PrepareLocalGroupRequest<I>::handle_get_local_group_id>(this);
-
-  int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void PrepareLocalGroupRequest<I>::handle_get_local_group_id(int r) {
-  dout(10) << "r=" << r << ", global_group_id: " << m_global_group_id << dendl;
-
-  if (r == 0) {
-    auto iter = m_out_bl.cbegin();
-    r = librbd::cls_client::mirror_group_get_group_id_finish(
-        &iter, &m_local_group_id);
-  }
-
-  if (r < 0) {
-    if (r != -ENOENT) {
-      derr << "error getting local group id: " << cpp_strerror(r) << dendl;
-    }
-    finish(r);
-    return;
-  }
-
   get_local_group_name();
 }
 
@@ -126,7 +89,7 @@ void PrepareLocalGroupRequest<I>::get_mirror_info() {
     &PrepareLocalGroupRequest<I>::handle_get_mirror_info>(this);
 
   auto req = librbd::mirror::GroupGetInfoRequest<I>::create(
-    m_io_ctx, "", m_local_group_id, &m_mirror_group,
+    m_io_ctx, "", m_local_group_id, m_mirror_group,
     &m_promotion_state, ctx);
   req->send();
 }
@@ -138,27 +101,30 @@ void PrepareLocalGroupRequest<I>::handle_get_mirror_info(int r) {
   if (r < 0) {
     derr << "failed to retrieve local mirror group info: " << cpp_strerror(r)
          << dendl;
-    finish(r);
+    finish(m_promotion_state == librbd::mirror::PROMOTION_STATE_ERROR ?
+             -ESTALE : r);
     return;
   }
 
   // If the mirror group state is set to CREATING, it means that the group
   // creation was interrupted.
-  if (m_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_CREATING) {
+  if (m_mirror_group->state == cls::rbd::MIRROR_GROUP_STATE_CREATING) {
     dout(10) << "local group is still in creating state, issuing a removal"
             << dendl;
     remove_local_group();
     return;
-  } else if (m_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
+  } else if (m_mirror_group->state ==
+             cls::rbd::MIRROR_GROUP_STATE_DISABLING) {
     dout(10) << "local group mirroring is in disabling state" << dendl;
 
     finish(-ERESTART);
     return;
   }
 
-  if (m_mirror_group.mirror_image_mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+  if (m_mirror_group->mirror_image_mode !=
+      cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
     derr << "unsupported mirror mode "
-         << m_mirror_group.mirror_image_mode << " "
+         << m_mirror_group->mirror_image_mode << " "
          << "for group " << m_global_group_id << dendl;
     finish(-EOPNOTSUPP);
     return;
@@ -288,6 +254,8 @@ void PrepareLocalGroupRequest<I>::remove_local_group() {
     &PrepareLocalGroupRequest<I>::handle_remove_local_group>(this);
 
   auto req = RemoveLocalGroupRequest<I>::create(m_io_ctx, m_global_group_id,
+                                                m_local_group_id,
+                                                *m_mirror_group,
                                                 false, m_work_queue, ctx);
   req->send();
 }
