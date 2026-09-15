@@ -27,6 +27,7 @@ import traceback
 
 from datetime import datetime, timedelta, timezone
 from getpass import getuser
+from graphlib import TopologicalSorter
 from os.path import expanduser
 
 import git # https://github.com/gitpython-developers/gitpython
@@ -486,10 +487,11 @@ class RedmineUpkeep:
         def requires_github_api():
             raise NotImplementedError("NI")
 
-    def transformation(priority):
-        """A decorator to assign a priority to a transformation method."""
+    def transformation(priority=0, depends_on=None):
+        """A decorator to assign a priority and dependencies to a transformation method."""
         def decorator(func):
             func._priority = priority
+            func._depends_on = depends_on or []
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
@@ -523,15 +525,34 @@ class RedmineUpkeep:
             sys.exit(1)
 
         # Discover transformation methods based on prefix
-        self.transform_methods = []
+        transforms_by_name = {}
         for name in dir(self):
             if name.startswith('_transform_') and callable(getattr(self, name)):
-                self.transform_methods.append(getattr(self, name))
-        log.debug(f"Discovered transformation methods: {[m.__name__ for m in self.transform_methods]}")
+                transforms_by_name[name] = getattr(self, name)
+        log.debug(f"Discovered transformation methods: {list(transforms_by_name.keys())}")
 
-        # Sort transformations for consistent order if needed, e.g., by name
-        self.transform_methods.sort(key=lambda f: f._priority, reverse=True)
-        log.debug(f"Sorted transformation methods: {[m.__name__ for m in self.transform_methods]}")
+        # Build DAG using TopologicalSorter and resolve dependencies with priority tie-breaking
+        ts = TopologicalSorter()
+        for name, func in transforms_by_name.items():
+            deps = getattr(func, '_depends_on', [])
+            resolved_deps = [d if d.startswith('_transform_') else f'_transform_{d}' for d in deps]
+            ts.add(name, *resolved_deps)
+
+        ts.prepare()
+        ordered_names = []
+        while ts.is_active():
+            ready = ts.get_ready()
+            ready_sorted = sorted(
+                ready,
+                key=lambda n: (getattr(transforms_by_name[n], '_priority', 0), n),
+                reverse=True
+            )
+            for name in ready_sorted:
+                ordered_names.append(name)
+                ts.done(name)
+
+        self.transform_methods = [transforms_by_name[name] for name in ordered_names]
+        log.debug(f"Sorted transformation methods via DAG: {[m.__name__ for m in self.transform_methods]}")
 
         # Discover filters based on prefix
         self.filters = []
@@ -903,7 +924,7 @@ class RedmineUpkeep:
         return None
 
 
-    @transformation(1000)
+    @transformation(depends_on=['clear_stale_merge_commit'])
     def _transform_merged(self, issue_update):
         """
         Transformation: Checks if a PR associated with an issue has been merged
@@ -948,7 +969,7 @@ class RedmineUpkeep:
             issue_update.logger.warning(f"Could not get git describe for commit {commit}: {e}")
         return False
 
-    @transformation(100)
+    @transformation(depends_on=['merged'])
     def _transform_backport_resolved(self, issue_update):
         """
         Transformation: Changes backport trackers to "Resolved" if the associated PR is merged.
@@ -999,7 +1020,7 @@ class RedmineUpkeep:
         def requires_github_api():
             return False
 
-    @transformation(10)
+    @transformation(depends_on=['merged'])
     def _transform_released(self, issue_update):
         """
         Transformation: Checks if a merged issue has been released and updates
@@ -1074,7 +1095,7 @@ class RedmineUpkeep:
             return False
 
 
-    @transformation(100)
+    @transformation(depends_on=['set_status_on_merge'])
     def _transform_create_backports(self, issue_update):
         """
         Transformation: Creates missing backport issues when the main issue is in
@@ -1163,7 +1184,7 @@ class RedmineUpkeep:
         return issue_update.change_field('status_id', REDMINE_STATUS_ID_BACKPORTING)
 
 
-    @transformation(10)
+    @transformation(depends_on=['create_backports'])
     def _transform_resolve_main_issue_from_backports(self, issue_update):
         """
         Transformation: Resolves a main issue if all its "Copied to" backport
@@ -1295,7 +1316,7 @@ class RedmineUpkeep:
         def requires_github_api():
             return False
 
-    @transformation(100)
+    @transformation(depends_on=['merged'])
     def _transform_set_status_on_merge(self, issue_update):
         """
         Transformation: Updates the status of an issue after its associated PR is merged.
