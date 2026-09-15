@@ -1261,38 +1261,30 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
     }
     *_dout << "}" << dendl;
 
-    dout(30) << "mon_loc_map: { ";
-    bool outer_first = true;
+    dout(30) << "mon_loc_map: " << dendl;
     for (const auto& mon_pair : mon_loc_map) {
-      if (!outer_first) *_dout << ", ";
-      outer_first = false;
-      *_dout << mon_pair.first << ": {";
-      bool inner_first = true;
+      dout(30) << mon_pair.first << ": {";
+      bool first = true;
       for (const auto& loc_pair : mon_pair.second) {
-        if (!inner_first) *_dout << ", ";
-        inner_first = false;
+        if (!first) *_dout << ", ";
+        first = false;
         *_dout << loc_pair.first << ": " << loc_pair.second;
       }
-      *_dout << "}";
+      *_dout << "}" << dendl;
     }
-    *_dout << " }" << dendl;
 
 
-    dout(30) << "location_to_mons: {";
-    bool outer_first = true;
+    dout(30) << "location_to_mons: " << dendl;
     for (const auto& loc_pair : location_to_mons) {
-      if (!outer_first) *_dout << ", ";
-      outer_first = false;
-      *_dout << loc_pair.first << ": {";
-      bool inner_first = true;
+      dout(30) << loc_pair.first << ": {";
+      bool first = true;
       for (const auto& monitor : loc_pair.second) {
-        if (!inner_first) *_dout << ", ";
-        inner_first = false;
+        if (!first) *_dout << ", ";
+        first = false;
         *_dout << monitor;
       }
-      *_dout << "}";
+      *_dout << "}" << dendl;
     }
-    *_dout << " }" << dendl;
 
     dout(30) << "detected_location_netsplits: {";
     bool first = true;
