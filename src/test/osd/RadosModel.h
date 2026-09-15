@@ -203,23 +203,25 @@ public:
   std::string chunk_algo;
   std::string chunk_size;
   bool timestamp;
+  uint64_t min_split_size;
 
   RadosTestContext(const std::string &pool_name,
-		   int max_in_flight,
-		   uint64_t max_size,
-		   uint64_t min_stride_size,
-		   uint64_t max_stride_size,
-		   bool no_omap,
-		   bool no_sparse,
-		   bool pool_snaps,
-		   bool write_fadvise_dontneed,
-		   const std::string &low_tier_pool_name,
-		   bool enable_dedup,
-		   bool timestamp,
-		   std::string chunk_algo,
-		   std::string chunk_size,
-		   size_t max_attr_len,
-		   const char *id = 0) :
+     int max_in_flight,
+     uint64_t max_size,
+     uint64_t min_stride_size,
+     uint64_t max_stride_size,
+     bool no_omap,
+     bool no_sparse,
+     bool pool_snaps,
+     bool write_fadvise_dontneed,
+     const std::string &low_tier_pool_name,
+     bool enable_dedup,
+     bool timestamp,
+     std::string chunk_algo,
+     std::string chunk_size,
+     size_t max_attr_len,
+     uint64_t min_split_size = 0,
+     const char *id = 0) :
     pool_obj_cont(),
     current_snap(0),
     pool_name(pool_name),
@@ -228,7 +230,7 @@ public:
     max_in_flight(max_in_flight),
     seq_num(0), seq(0),
     rados_id(id), initialized(false),
-    max_size(max_size), 
+    max_size(max_size),
     min_stride_size(min_stride_size), max_stride_size(max_stride_size),
     attr_gen(2000, max_attr_len),
     no_omap(no_omap),
@@ -240,7 +242,8 @@ public:
     enable_dedup(enable_dedup),
     chunk_algo(chunk_algo),
     chunk_size(chunk_size),
-    timestamp(timestamp)
+    timestamp(timestamp),
+    min_split_size(min_split_size)
   {
   }
 
@@ -255,6 +258,12 @@ public:
     r = rados.conf_parse_env(NULL);
     if (r < 0)
       return r;
+    if (min_split_size > 0) {
+      r = rados.conf_set("osd_min_split_replica_read_size",
+  	 std::to_string(min_split_size).c_str());
+      if (r < 0)
+ return r;
+    }
     r = rados.connect();
     if (r < 0)
       return r;
