@@ -471,8 +471,10 @@ void ProtocolV2::send_message(MessageRef&& m) {
     ldout(cct, 5) << __func__ << " enqueueing message m=" << *m << dendl;
     m->queue_start = ceph::mono_clock::now();
     m->trace.event("async enqueueing message");
+
     auto& oq = out_queue[m->get_priority()];
     oq.emplace_back(out_queue_entry_t{is_prepared, std::move(m)});
+    ldout(cct, 15) << __func__ << " message queued for async transmission m=" << m
     if (((!replacing && can_write) || state == STANDBY) && !write_in_progress) {
       write_in_progress = true;
       connection->center->dispatch_event_external(connection->write_handler);
@@ -2977,11 +2979,11 @@ CtPtr ProtocolV2::send_server_ident() {
     flags = flags | CEPH_MSG_CONNECT_LOSSY;
   }
 
-  global_seq = messenger->get_global_seq();
+  uint64_t gs = messenger->get_global_seq();
   auto server_ident = ServerIdentFrame::Encode(
           messenger->get_myaddrs(),
           messenger->get_myname().num(),
-          global_seq,
+          gs,
           connection->policy.features_supported,
           connection->policy.features_required | msgr2_required,
           flags,
@@ -2990,7 +2992,7 @@ CtPtr ProtocolV2::send_server_ident() {
   ldout(cct, 5) << __func__ << " sending identification:"
                 << " addrs=" << messenger->get_myaddrs()
                 << " gid=" << messenger->get_myname().num()
-                << " global_seq=" << global_seq << " features_supported=" << std::hex
+                << " global_seq=" << gs << " features_supported=" << std::hex
                 << connection->policy.features_supported
                 << " features_required="
 		            << (connection->policy.features_required | msgr2_required)
