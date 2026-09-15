@@ -1,17 +1,19 @@
 add_library(neorados_objs OBJECT
   RADOSImpl.cc)
-target_compile_definitions(neorados_objs PRIVATE
-  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
-target_link_libraries(neorados_objs legacy-option-headers)
+target_link_libraries(neorados_objs
+  PUBLIC legacy-option-headers
+  PRIVATE ceph-json-headers)
 add_library(neorados_api_obj OBJECT
   RADOS.cc)
-target_compile_definitions(neorados_api_obj PRIVATE
-  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
-target_link_libraries(neorados_api_obj legacy-option-headers)
+target_link_libraries(neorados_api_obj
+  PUBLIC legacy-option-headers
+  PRIVATE ceph-json-headers)
 
 add_library(libneorados STATIC
   $<TARGET_OBJECTS:neorados_api_obj>
   $<TARGET_OBJECTS:neorados_objs>)
-target_link_libraries(libneorados PRIVATE
-  osdc ceph-common cls_lock_client ${FMT_LIB}
-  ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
+target_link_libraries(libneorados
+  PUBLIC ceph-json-headers
+  PRIVATE
+    osdc ceph-common cls_lock_client
+    ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})

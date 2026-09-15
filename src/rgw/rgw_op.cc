@@ -121,6 +121,124 @@ static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
 static constexpr auto S3_RESOURCE_TAG = "s3:ResourceTag";
 static constexpr auto S3_RUNTIME_RESOURCE_VAL = "${s3:ResourceTag";
 
+// try to parse the xml <Error> response body
+bool parse_aws_s3_error(const std::string& input, rgw_err& err)
+{
+  RGWXMLParser parser;
+  if (!parser.init()) {
+    return false;
+  }
+  if (!parser.parse(input.c_str(), input.length(), 1)) {
+    return false;
+  }
+  auto error = parser.find_first("Error");
+  if (!error) {
+    return false;
+  }
+  if (auto code = error->find_first("Code"); code) {
+    err.err_code = code->get_data();
+  }
+  if (auto message = error->find_first("Message"); message) {
+    err.message = message->get_data();
+  }
+  return true;
+}
+
+// try to parse the json error response body.
+static bool parse_json_error(const std::string& input, rgw_err& err)
+{
+  JSONParser parser;
+  if (!parser.parse(input.c_str(), input.length())) {
+    return false;
+  }
+  JSONObj* error = parser.find_obj("Error");
+  if (!error) {
+    error = &parser;
+  }
+  if (auto code = error->find_obj("Code"); code) {
+    err.err_code = code->get_data();
+  }
+  if (auto message = error->find_obj("Message"); message) {
+    err.message = message->get_data();
+  }
+  return true;
+}
+
+// parse the error response body. s3/iam/sts use xml, but the admin api
+// uses json
+static bool parse_error_response(const std::string& input, rgw_err& err)
+{
+  const auto pos = input.find_first_not_of(" \t\r\n");
+  if (pos == std::string::npos) {
+    return false;
+  }
+  switch (input[pos]) {
+    case '<':
+      return parse_aws_s3_error(input, err);
+    case '{':
+    case '[':
+      return parse_json_error(input, err);
+    default:
+      return false;
+  }
+}
+
+int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
+                                  const rgw::SiteConfig& site,
+                                  const rgw_owner& effective_owner,
+                                  bufferlist* indata, JSONParser* jp,
+                                  const req_info& req, rgw_err& err,
+                                  optional_yield y)
+{
+  const auto& period = site.get_period();
+  if (!period) {
+    return 0; // not multisite
+  }
+  if (site.is_meta_master()) {
+    return 0; // don't need to forward metadata requests
+  }
+  const auto& pmap = period->period_map;
+  auto zg = pmap.zonegroups.find(pmap.master_zonegroup);
+  if (zg == pmap.zonegroups.end()) {
+    return -EINVAL;
+  }
+  auto z = zg->second.zones.find(zg->second.master_zone);
+  if (z == zg->second.zones.end()) {
+    return -EINVAL;
+  }
+  const RGWAccessKey& creds = site.get_zone_params().system_key;
+
+  bufferlist data;
+  if (indata == nullptr) {
+    // forward() needs an input bufferlist to set the content-length
+    indata = &data;
+  }
+
+  // use the master zone's endpoints
+  auto conn = RGWRESTConn{dpp->get_cct(), z->second.id, z->second.endpoints,
+                          creds, site.get_zonegroup().id, zg->second.api_name};
+  bufferlist outdata;
+  constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
+  auto result = conn.forward(dpp, effective_owner, req,
+                             max_response_size, indata, &outdata, y);
+  if (!result) {
+    return result.error();
+  }
+  err.http_ret = *result;
+  if (err.is_err() && outdata.length()) { // 4xx or 5xx
+    std::ignore = parse_error_response(rgw_bl_str(outdata), err);
+  }
+  int ret = rgw_http_error_to_errno(err.http_ret);
+  if (ret < 0) {
+    return ret;
+  }
+  if (jp && !jp->parse(outdata)) {
+    ldpp_dout(dpp, 0) << "failed parsing response from master zonegroup" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int RGWGetObj::parse_range(void)
 {
   int r = -ERANGE;

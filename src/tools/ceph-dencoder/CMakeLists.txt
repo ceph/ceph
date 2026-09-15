@@ -100,7 +100,8 @@ if(WITH_CEPHFS)
   add_denc_mod(denc-mod-cephfs
     mds_types.cc)
   target_link_libraries(denc-mod-cephfs
-    mds)
+    mds
+    ceph-json-headers)
 endif()
 
 target_compile_definitions(ceph-dencoder PRIVATE

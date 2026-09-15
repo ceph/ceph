@@ -286,7 +286,7 @@ int create_account_policy(const DoutPrefixProvider* dpp,
   auto& acl = policy.get_acl();
 
   JSONParser parser;
-  if (!parser.parse(acl_str.c_str(), acl_str.length())) {
+  if (!parser.parse(acl_str)) {
     ldpp_dout(dpp, 0) << "ERROR: JSONParser::parse returned error=" << dendl;
     return -EINVAL;
   }
