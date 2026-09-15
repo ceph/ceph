@@ -5770,18 +5770,18 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
 
 void MDCache::send_snaps(map<client_t,ref_t<MClientSnap>>& splits)
 {
-  dout(10) << "send_snaps" << dendl;
+  dout(10) << __func__ << dendl;
   
   for (auto &p : splits) {
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p.first.v));
     if (session) {
-      dout(10) << " client." << p.first
+      dout(10) << __func__ << " client." << p.first
 	       << " split " << p.second->head.split
 	       << " inos " << p.second->split_inos
 	       << dendl;
       mds->send_message_client_counted(p.second, session);
     } else {
-      dout(10) << " no session for client." << p.first << dendl;
+      dout(10) << __func__ << " no session for client." << p.first << dendl;
     }
   }
   splits.clear();
