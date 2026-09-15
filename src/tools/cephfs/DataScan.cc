@@ -1271,6 +1271,13 @@ int DataScan::scan_links()
 
   map<dirfrag_t, set<string>> to_remove;
 
+  // Track inodes that are in stray directories with nlink == 0.
+  // Remote dentries pointing to these inodes are stale leftover
+  // hardlinks that were not cleaned up before an MDS crash; they
+  // must be removed so the MDS can start without hitting the
+  // _eval_stray_remote nlink >= 1 assertion.
+  std::set<inodeno_t> stale_stray_inodes;
+
   enum {
     SCAN_INOS = 1,
     CHECK_LINK,
@@ -1346,6 +1353,11 @@ int DataScan::scan_links()
             inodeno_t ino = inode.inode->ino;
 
 	    if (step == SCAN_INOS) {
+	      // Record inodes that are in stray dirs with nlink <= 0.
+	      // Remote dentries pointing to these inodes are stale and
+	      // will be cleaned up during the CHECK_LINK step.
+	      if (MDS_INO_IS_STRAY(dir_ino) && inode.inode->nlink <= 0)
+		stale_stray_inodes.insert(ino);
 	      if (used_inos.contains(ino, 1)) {
 		dup_primaries.emplace(
                   std::piecewise_construct, std::forward_as_tuple(ino),
@@ -1474,6 +1486,14 @@ int DataScan::scan_links()
                 dentry_key_t dn_key(CEPH_NOSNAP, dname.c_str());
                 dn_key.encode(key);
                 to_remove[dirfrag_t(dir_ino, frag_id)].insert(key);
+              } else if (stale_stray_inodes.count(ino)) {
+                derr << "Stale remote dentry 0x" << std::hex << dir_ino
+                     << std::dec << "/" << dname << ", ino " << ino
+                     << " is in stray dir with nlink 0" << dendl;
+                std::string key;
+                dentry_key_t dn_key(CEPH_NOSNAP, dname.c_str());
+                dn_key.encode(key);
+                to_remove[dirfrag_t(dir_ino, frag_id)].insert(key);
               }
             }
           } else {
@@ -1516,7 +1536,9 @@ int DataScan::scan_links()
   used_inos.clear();
 
   dout(10) << "processing " << dup_primaries.size() << " dup_primaries, "
-           << remote_links.size() << " remote_links" << dendl;
+           << remote_links.size() << " remote_links, "
+           << stale_stray_inodes.size() << " stale stray inodes (nlink 0)"
+           << dendl;
 
   for (auto& p : dup_primaries) {
 
