@@ -209,6 +209,12 @@ public:
   /// Check if scrub is currently reserving replicas
   bool is_reserving_replicas() const;
 
+  /// Debug / test control: enable/disable session publishing and test counters
+  int asok_debug(std::string_view cmd,
+                 std::string param,
+                 ceph::Formatter* f,
+                 std::stringstream& ss);
+
   /// Dump scrub metrics (if scrubbing is active)
   void dump_scrub_metrics(ceph::Formatter* f);
 
@@ -267,6 +273,10 @@ public:
   int m_total_missing_count{0};
   int m_total_inconsistent_count{0};
   int m_total_error_count{0};
+
+  /// Test / debug sequence counter and publishing flag
+  int32_t m_sessions_counter{0};
+  bool m_publish_sessions{false};
 
   /// Store scrub results for retrieval by rados list-inconsistent-obj
   epoch_t m_scrub_epoch{0};
