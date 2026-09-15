@@ -80,14 +80,21 @@ class TestCephadmService:
         mgr = FakeMgr()
         spec = MagicMock()
         spec.ssl = True
-        spec.certificate_source = 'cephadm-signed'
-        spec.ssl_cert = None
-        spec.ssl_key = None
-        spec.ssl_ca_cert = None
+        spec.certificate_source = 'inline'
+        spec.ssl_cert = 'CERT'
+        spec.ssl_key = 'KEY'
+        spec.ssl_ca_cert = 'CA'
 
         deps = ServiceWithDependencies.get_dependencies(mgr, spec)
 
-        assert deps == ['certificate_source: cephadm-signed', 'service-specific']
+        from cephadm import utils
+        assert deps == sorted([
+            'certificate_source: inline',
+            'service-specific',
+            f'ssl_cert: {utils.config_hash("CERT")}',
+            f'ssl_key: {utils.config_hash("KEY")}',
+            f'ssl_ca_cert: {utils.config_hash("CA")}',
+        ])
 
     def test_registered_services_use_common_dependency_handler(self):
         mgr = FakeMgr()
