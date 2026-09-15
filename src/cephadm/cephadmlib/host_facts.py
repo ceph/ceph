@@ -732,9 +732,12 @@ class HostFacts:
                             if mode in summary:
                                 summary[mode] += 1
                             else:
-                                summary[mode] = 0
+                                summary[mode] = 1
+                        mode_order = ('enforce', 'complain', 'prompt', 'kill', 'unconfined')
                         summary_str = ','.join(
-                            ['{} {}'.format(v, k) for k, v in summary.items()]
+                             '{} {}'.format(summary[mode], mode)
+                              for mode in mode_order
+                              if mode in summary
                         )
                         security = {**security, **summary}  # type: ignore
                         security['description'] += '({})'.format(summary_str)
