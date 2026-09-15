@@ -1451,23 +1451,20 @@ CachedExtentRef Cache::duplicate_for_write(
     i->version++;
     i->state = CachedExtent::extent_state_t::EXIST_MUTATION_PENDING;
     i->last_committed_crc = i->calc_crc32c();
-    if (needs_deepcopy_on_mutate_exist(i->get_type())) {
-      // deepcopy the buffer of exist clean extent beacuse it shares
-      // buffer with original clean extent. Skip if already unique and
-      // page-aligned.
-      auto &bp = i->get_bptr();
-      auto nbp = maybe_page_aligned_bptr(
-        bp,
-        0,
-        bp.length(),
-        false /* share_ok: must not mutate a shared raw */
+    // EXIST_CLEAN extents may share a parent raw (e.g. remapped leftovers).
+    // Copy before mutating unless this ptr is already unique and page-aligned.
+    auto &bp = i->get_bptr();
+    auto nbp = maybe_page_aligned_bptr(
+      bp,
+      0,
+      bp.length(),
+      false /* share_ok: must not mutate a shared raw */
 #ifdef CRIMSON_DETAILED_SAMPLING
-        , stats.exist_mutate_bptr_copy
-        , stats.exist_mutate_bptr_skip
+      , stats.exist_mutate_bptr_copy
+      , stats.exist_mutate_bptr_skip
 #endif
-        );
-      i->set_bptr(std::move(nbp));
-    }
+      );
+    i->set_bptr(std::move(nbp));
 
     t.add_mutated_extent(i);
     DEBUGT("duplicate existing extent {}", t, *i);
