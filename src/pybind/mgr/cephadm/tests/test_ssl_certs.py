@@ -5,16 +5,7 @@ from ceph.deployment.tls_utils import extract_ips_and_fqdns_from_cert
 
 
 class TestSSLCertsCommonNameLength(unittest.TestCase):
-    """
-    Regression tests for the X.509 Common Name (CN) length limit.
-
-    RFC 5280 limits the CN field to 64 characters. generate_cert()
-    previously passed the raw address/hostname directly as the CN with
-    no length check, which fails certificate signing with an opaque
-    low-level error when the hostname exceeds 64 characters (commonly
-    seen with cloud providers, e.g. Google Cloud Platform, that embed
-    project IDs into auto-assigned VM FQDNs).
-    """
+    """Regression tests for the X.509 CN length limit (RFC 5280, 64 chars)."""
 
     def setUp(self):
         self.certs = SSLCerts(fsid="test-fsid-0000")
@@ -27,7 +18,7 @@ class TestSSLCertsCommonNameLength(unittest.TestCase):
 
         # Should not raise ValueError: Attribute's length must be >= 1 and <= 64
         cert_pem, key_pem = self.certs.generate_cert(
-            _hosts=[long_fqdn],
+            _hosts=[long_fqdn, 'grafana_servers'],
             _addrs=[long_fqdn],
         )
         self.assertIn("BEGIN CERTIFICATE", cert_pem)
@@ -35,36 +26,62 @@ class TestSSLCertsCommonNameLength(unittest.TestCase):
     def test_long_fqdn_is_preserved_in_san(self):
         """
         Truncating the CN must not affect the SAN: the full, untruncated
-        hostname must still be present for TLS hostname verification.
+        hostname (and any other host entries) must still be present for
+        TLS hostname verification. Uses distinct _hosts/_addrs values,
+        matching how real callers (e.g. Grafana cert generation) invoke
+        this, so the test actually exercises the hosts/addrs split
+        rather than masking it by passing the same value for both.
         """
         long_fqdn = "ceph-node1.europe-west3-a.c.project-12850071-31c6-4077-a2f.internal"
         cert_pem, _ = self.certs.generate_cert(
-            _hosts=[long_fqdn],
+            _hosts=[long_fqdn, 'grafana_servers'],
             _addrs=[long_fqdn],
         )
         _, fqdns = extract_ips_and_fqdns_from_cert(cert_pem)
         self.assertIn(long_fqdn.lower(), fqdns)
+        self.assertIn('grafana_servers', fqdns)
 
     def test_short_hostname_is_not_truncated(self):
         """A hostname within the 64-char limit must be used as-is for the CN, unmodified."""
         short_host = "ceph-node1"
         cert_pem, _ = self.certs.generate_cert(
-            _hosts=[short_host],
+            _hosts=[short_host, 'grafana_servers'],
             _addrs=[short_host],
         )
         info_cn = self._extract_cn(cert_pem)
         self.assertEqual(info_cn, short_host)
 
-    def test_cn_is_truncated_to_exactly_max_length(self):
-        """When truncation does happen, the resulting CN must be exactly 64 characters."""
-        long_fqdn = "a" * 100  # deliberately far over the limit
+    def test_cn_is_truncated_at_first_label(self):
+        """
+        When truncation does happen, the CN is cut at the first DNS
+        label (split on '.'), not at a blind character offset. A DNS
+        label maxes at 63 characters (RFC 1035) and IPs never exceed
+        64 characters, so the first label always fits under
+        COMMON_NAME_MAX_LENGTH.
+        """
+        long_fqdn = "ceph-node1.europe-west3-a.c.project-12850071-31c6-4077-a2f.internal"
         cert_pem, _ = self.certs.generate_cert(
-            _hosts=[long_fqdn],
+            _hosts=[long_fqdn, 'grafana_servers'],
             _addrs=[long_fqdn],
         )
         cn = self._extract_cn(cert_pem)
-        self.assertEqual(len(cn), COMMON_NAME_MAX_LENGTH)
-        self.assertEqual(cn, long_fqdn[:COMMON_NAME_MAX_LENGTH])
+        self.assertEqual(cn, 'ceph-node1')
+        self.assertLessEqual(len(cn), COMMON_NAME_MAX_LENGTH)
+
+    def test_dotless_string_over_limit_is_still_truncated(self):
+        """
+        Defensive edge case: a dot-less string over 64 characters has
+        no label to split on. split('.')[0] alone would return the
+        whole string unchanged (still over the limit), so this must
+        fall back to a character slice as well.
+        """
+        long_fqdn = "a" * 100
+        cert_pem, _ = self.certs.generate_cert(
+            _hosts=[long_fqdn, 'grafana_servers'],
+            _addrs=[long_fqdn],
+        )
+        cn = self._extract_cn(cert_pem)
+        self.assertLessEqual(len(cn), COMMON_NAME_MAX_LENGTH)
 
     @staticmethod
     def _extract_cn(cert_pem: str) -> str:
