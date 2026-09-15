@@ -20,8 +20,9 @@ SECRET_KEY = 'mpartcat1testsecretkey000000001'
 PART_SIZE = 5 * 1024 * 1024  # 5 MiB (S3 minimum part size)
 
 
-def get_bucket_stats(bucket_name):
-    out = exec_cmd(f'radosgw-admin bucket stats --bucket {bucket_name}')
+def get_bucket_stats(bucket_name, show_storage_classes=False):
+    flag = ' --show-storage-classes' if show_storage_classes else ''
+    out = exec_cmd(f'radosgw-admin bucket stats --bucket {bucket_name}{flag}')
     return json.loads(out)
 
 
@@ -79,6 +80,16 @@ def test_category_tracking(connection):
     assert_category(stats, 'rgw.multipart', 2, 'after upload parts')
     assert_category(stats, 'rgw.multimeta', 1, 'after upload parts')
 
+    # The billable per-class view must reconcile with rgw.main and must not
+    # silently include incomplete multipart parts.
+    stats_with_classes = get_bucket_stats(bucket_name, show_storage_classes=True)
+    class_stats = stats_with_classes['rgw.storage_classes']
+    assert sum(v['num_objects'] for v in class_stats.values()) == 0, \
+        'incomplete multipart parts must not be reported as billable objects'
+    assert sum(v['size'] for v in class_stats.values()) == \
+        get_category(stats_with_classes, 'rgw.main').get('size', 0), \
+        'per-class size must reconcile with rgw.main.size'
+
     response = s3client.list_objects_v2(Bucket=bucket_name)
     assert response['KeyCount'] == 0, f'expected 0 listed objects, got {response["KeyCount"]}'
 
@@ -98,6 +109,14 @@ def test_category_tracking(connection):
     assert_category(stats, 'rgw.main', 1, 'after complete')
     assert_category(stats, 'rgw.multipart', 0, 'after complete')
     assert_category(stats, 'rgw.multimeta', 0, 'after complete')
+
+    stats_with_classes = get_bucket_stats(bucket_name, show_storage_classes=True)
+    class_stats = stats_with_classes['rgw.storage_classes']
+    assert sum(v['num_objects'] for v in class_stats.values()) == 1, \
+        'completed multipart object must be reported once'
+    assert sum(v['size'] for v in class_stats.values()) == \
+        get_category(stats_with_classes, 'rgw.main').get('size', 0), \
+        'completed multipart size must reconcile with rgw.main.size'
 
     # TESTCASE 'abort multipart cleans up rgw.multipart entries'
     log.debug('TEST: abort multipart cleans up rgw.multipart entries\n')

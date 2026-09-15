@@ -451,6 +451,7 @@
                                    use together with --marker to paginate through versioned buckets
                                    example: --marker=obj1 --object-version=abc123def456
      --show-restore-stats          if the flag is in present it will show restores stats in the bucket stats command
+     --show-storage-classes        show per-storage-class stats; scans entire bucket index (O(objects))
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name
