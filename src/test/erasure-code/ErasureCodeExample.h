@@ -47,6 +47,7 @@ class ErasureCodeExample final : public ErasureCode {
 public:
   ~ErasureCodeExample() override {}
 
+  using ErasureCode::create_rule;
   int create_rule(const std::string &name,
 			     CrushWrapper &crush,
 		             std::ostream *ss) const override {

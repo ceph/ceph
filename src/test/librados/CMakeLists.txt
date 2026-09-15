@@ -98,6 +98,11 @@ add_executable(ceph_test_rados_api_cls
 target_link_libraries(ceph_test_rados_api_cls
   librados ${UNITTEST_LIBS} radostest-cxx)
 
+add_executable(ceph_test_rados_api_ec_pool_create_pp
+  ec_pool_create_cxx.cc)
+target_link_libraries(ceph_test_rados_api_ec_pool_create_pp
+  librados ${UNITTEST_LIBS} radostest-cxx)
+
 add_executable(ceph_test_rados_api_misc
   misc.cc
   $<TARGET_OBJECTS:unit-main>)
@@ -148,6 +153,14 @@ add_executable(ceph_test_rados_api_split_op_pp
         split_op_cxx.cc)
 target_link_libraries(ceph_test_rados_api_split_op_pp
         librados ${UNITTEST_LIBS} radostest-cxx)
+
+# EC stretch split-op integration tests.  The wrapper script sets up a 2-zone
+# CRUSH topology, runs all split-op suites, and restores the CRUSH map on exit.
+# Pass --gtest_filter to restrict to a specific suite (e.g. LibRadosSplitOpZone).
+add_ceph_test(run-ec-stretch-split-op-tests.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}/run-ec-stretch-split-op-tests.sh)
+set_tests_properties(run-ec-stretch-split-op-tests.sh PROPERTIES
+        DEPENDS ceph_test_rados_api_split_op_pp)
 
 add_executable(ceph_test_rados_api_omap_pp
         omap_cxx.cc)

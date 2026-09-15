@@ -28,6 +28,9 @@
 #include "os/ObjectStore.h"
 #include "common/dout.h"
 
+// Forward declaration to avoid circular dependency
+class TestPG;
+
 /**
  * EventLoop - Unified single-threaded event loop for OSD tests.
  *
@@ -77,16 +80,19 @@ public:
   }
   
 private:
-  // Static storage for the currently executing OSD
+  // Static storage for the currently executing OSD and TestPG context
   static int current_executing_osd;
+  static TestPG* current_test_pg;
+  
   struct Event {
     EventType type;
     int from_osd;  // -1 for generic events or when not applicable
     int to_osd;    // -1 for generic events or when not applicable
+    TestPG* test_pg;  // TestPG context for this event (nullptr if not applicable)
     GenericEvent callback;
     
-    Event(EventType t, int from, int to, GenericEvent cb)
-      : type(t), from_osd(from), to_osd(to), callback(std::move(cb)) {}
+    Event(EventType t, int from, int to, GenericEvent cb, TestPG* pg = nullptr)
+      : type(t), from_osd(from), to_osd(to), test_pg(pg), callback(std::move(cb)) {}
   };
   
   std::deque<Event> events;
@@ -133,7 +139,10 @@ public:
   
   void schedule_transaction(int osd, GenericEvent callback) {
     ceph_assert(osd >= 0);
-    events.emplace_back(EventType::TRANSACTION, -1, osd, std::move(callback));
+    // Capture the current TestPG context so transaction callbacks execute with proper context
+    TestPG* test_pg = current_test_pg;
+    ceph_assert(test_pg != nullptr);  // Transactions must be scheduled within a PG context
+    events.emplace_back(EventType::TRANSACTION, -1, osd, std::move(callback), test_pg);
   }
   
   void schedule_peering_message(int from_osd, int to_osd, GenericEvent callback) {
@@ -152,9 +161,9 @@ public:
     events.emplace_back(EventType::CLUSTER_MESSAGE, from_osd, to_osd, std::move(callback));
   }
   
-  void schedule_peering_event(int osd, GenericEvent callback) {
+  void schedule_peering_event(int osd, TestPG* test_pg, GenericEvent callback) {
     ceph_assert(osd >= 0);
-    events.emplace_back(EventType::PEERING_EVENT, -1, osd, std::move(callback));
+    events.emplace_back(EventType::PEERING_EVENT, -1, osd, std::move(callback), test_pg);
   }
   
   bool has_events() const {
@@ -214,8 +223,16 @@ public:
     
     // Track which OSD we're currently processing
     int active_osd = (event.to_osd >= 0) ? event.to_osd : event.from_osd;
-    if (active_osd >= 0 && active_osd != current_osd) {
+    
+    // Clear TestPG context when changing OSDs (including to -1)
+    if (active_osd != current_osd) {
+      current_test_pg = nullptr;
       current_osd = active_osd;
+    }
+    
+    // Set TestPG context if provided by the event
+    if (event.test_pg != nullptr) {
+      current_test_pg = event.test_pg;
     }
     
     current_executing_osd = active_osd;
@@ -381,9 +398,64 @@ public:
     }
     std::cout << "  TOTAL: " << events_executed << std::endl;
   }
+  
+  /**
+   * Set the current TestPG context.
+   * This is typically called by MockMessenger when routing messages.
+   * The TestPG context persists across events on the same OSD but is
+   * cleared when switching to a different OSD (including -1).
+   */
+  static void set_current_test_pg(TestPG* test_pg) {
+    current_test_pg = test_pg;
+  }
+  
+  /**
+   * Get the current TestPG context.
+   * Returns nullptr if no TestPG context is set.
+   */
+  static TestPG* get_current_test_pg() {
+    return current_test_pg;
+  }
+  
+  /**
+   * Clear the current TestPG context.
+   * This is automatically done when switching OSDs.
+   */
+  static void clear_current_test_pg() {
+    current_test_pg = nullptr;
+  }
+  
+  /**
+   * Run a lambda with a specific OSD and TestPG context.
+   * This sets up the context, runs the lambda, and restores the previous context.
+   * This is useful for test code that needs to execute operations in a specific
+   * PG context outside of the normal message routing flow.
+   *
+   * @param osd The OSD number to set as current
+   * @param test_pg The TestPG to set as current context
+   * @param callback The lambda to execute with the context set
+   */
+  template<typename Func>
+  void run_in_pg(int osd, TestPG* test_pg, Func&& callback) {
+    // Save previous context
+    int prev_osd = current_executing_osd;
+    TestPG* prev_test_pg = current_test_pg;
+    
+    // Set new context
+    current_executing_osd = osd;
+    current_test_pg = test_pg;
+    
+    // Execute callback
+    callback();
+    
+    // Restore previous context
+    current_executing_osd = prev_osd;
+    current_test_pg = prev_test_pg;
+  }
 };
-
-// Define the static variable
-// Initialized to -1 (no OSD currently executing)
+// Define the static variables
+// Initialized to -1 (no OSD currently executing) and nullptr (no TestPG context)
 inline int EventLoop::current_executing_osd = -1;
+inline TestPG* EventLoop::current_test_pg = nullptr;
+
 
