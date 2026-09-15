@@ -35,11 +35,12 @@ evaluate(CephContext* cct, const std::string* tenant,
 {
   buffer::list bl;
   bl.append(in);
+  boost::optional<rgw::auth::Principal> ignored;
   try {
     auto p = rgw::IAM::Policy(
       cct, tenant, bl.to_str(),
       cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
-    auto effect = p.eval(std::cout, environment, ida, action, resource);
+    auto effect = p.eval(std::cout, environment, ida, action, resource, ignored);
     std::cout << effect << std::endl;
   } catch (const rgw::IAM::PolicyParseException& e) {
     std::cerr << fname << ": " << e.what() << std::endl;
