@@ -61,14 +61,14 @@ ceph-diff-sorted $long $long >"${out1}"
 $assert $? -eq 0
 $assert $(cat $out1 | wc -l) -eq 0
 
-# test non-match; use /bin/diff to verify
-/bin/diff $short $long >"${out2}"
+# test non-match; use diff to verify
+diff $short $long >"${out2}"
 ceph-diff-sorted $short $long >"${out1}"
 $assert $? -eq 1
 $assert $(cat $out1 | grep '^<' | wc -l) -eq $(cat $out2 | grep '^<' | wc -l)
 $assert $(cat $out1 | grep '^>' | wc -l) -eq $(cat $out2 | grep '^>' | wc -l)
 
-/bin/diff $long $short >"${out2}"
+diff $long $short >"${out2}"
 ceph-diff-sorted $long $short >"${out1}"
 $assert $? -eq 1
 $assert $(cat $out1 | grep '^<' | wc -l) -eq $(cat $out2 | grep '^<' | wc -l)
@@ -105,4 +105,4 @@ $assert $? -eq 3
 
 #### clean-up ####
 
-/bin/rm -f $short $short_w_blank $long $unsorted $empty $out1 $out2
+rm -f $short $short_w_blank $long $unsorted $empty $out1 $out2
