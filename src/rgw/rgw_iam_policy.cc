@@ -214,6 +214,19 @@ static const actpair actpairs[] =
  { "iam:GenerateServiceLastAccessedDetails", iamGenerateServiceLastAccessedDetails},
  { "iam:SimulateCustomPolicy", iamSimulateCustomPolicy},
  { "iam:SimulatePrincipalPolicy", iamSimulatePrincipalPolicy},
+ { "iam:CreatePolicy", iamCreatePolicy},
+{ "iam:GetPolicy", iamGetPolicy},
+ { "iam:DeletePolicy", iamDeletePolicy},
+ { "iam:ListPolicies", iamListPolicies},
+ { "iam:CreatePolicyVersion", iamCreatePolicyVersion},
+ { "iam:DeletePolicyVersion", iamDeletePolicyVersion},
+ { "iam:GetPolicyVersion", iamGetPolicyVersion},
+ { "iam:SetDefaultPolicyVersion", iamSetDefaultPolicyVersion},
+ { "iam:ListPolicyVersions", iamListPolicyVersions},
+ { "iam:TagPolicy", iamTagPolicy},
+ { "iam:UntagPolicy", iamUntagPolicy},
+ { "iam:ListPolicyTags", iamListPolicyTags},
+ { "iam:ListEntitiesForPolicy", iamListEntitiesForPolicy},
  { "iam:GetAccountSummary", iamGetAccountSummary},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
@@ -1841,6 +1854,44 @@ std::string_view action_bit_string(action_t action) {
 
   case iamSimulatePrincipalPolicy:
     return "iam:SimulatePrincipalPolicy";
+
+  case iamCreatePolicy:
+    return "iam:CreatePolicy";
+
+  case iamGetPolicy:
+    return "iam:GetPolicy";
+
+  case iamDeletePolicy:
+    return "iam:DeletePolicy";
+
+  case iamListPolicies:
+    return "iam:ListPolicies";
+
+  case iamCreatePolicyVersion:
+    return "iam:CreatePolicyVersion";
+
+  case iamDeletePolicyVersion:
+    return "iam:DeletePolicyVersion";
+
+  case iamGetPolicyVersion:
+    return "iam:GetPolicyVersion";
+
+  case iamSetDefaultPolicyVersion:
+    return "iam:SetDefaultPolicyVersion";
+
+  case iamListPolicyVersions:
+    return "iam:ListPolicyVersions";
+
+  case iamTagPolicy:
+    return "iam:TagPolicy";
+
+  case iamUntagPolicy:
+    return "iam:UntagPolicy";
+
+  case iamListPolicyTags:
+    return "iam:ListPolicyTags";
+  case iamListEntitiesForPolicy:
+    return "iam:ListEntitiesForPolicy";
 
   case iamGetAccountSummary:
     return "iam:GetAccountSummary";
