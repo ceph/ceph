@@ -469,7 +469,7 @@ as follows:
 :command:`role list`
   List the roles with specified path prefix.
 
-:command:`role modify`
+:command:`role-trust-policy modify`
   Modify the assume role policy of an existing role.
 
 :command:`role-policy put`
