@@ -99,6 +99,7 @@ from cephadmlib.container_engines import (
 )
 from cephadmlib.data_utils import (
     dict_get_join,
+    parse_ini_section,
     get_legacy_daemon_fsid,
     is_fsid,
     normalize_image_digest,
@@ -675,8 +676,21 @@ def create_daemon_dirs(
             and key_path_exists
             and key_path_content != keyring
         ):
-            # need to update keyring with ceph-bluestore-tool
-            update_bluestore_label_osd_keyring = True
+            # The raw keyring strings differ, but the difference may only be
+            # caps (e.g. existing keyring has no caps while the new one does).
+            # Extract just the bare key value from both sides and only trigger
+            # the bluestore-label update when the key itself has changed.
+            existing_key = parse_ini_section(key_path_content, ident.daemon_name, 'key')
+            new_key = parse_ini_section(keyring, ident.daemon_name, 'key')
+            if existing_key and new_key and existing_key != new_key:
+                # need to update keyring with ceph-bluestore-tool
+                update_bluestore_label_osd_keyring = True
+            else:
+                logger.debug(
+                    'OSD keyring key value unchanged (only caps differ); '
+                    'skipping bluestore-label keyring update for %s',
+                    ident.daemon_id,
+                )
         with write_new(keyring_path, owner=(uid, gid)) as f:
             f.write(keyring)
         if update_bluestore_label_osd_keyring:
