@@ -918,7 +918,7 @@ function test_tell_output_file()
 
 function test_mds_tell()
 {
-  local FS_NAME=cephfs
+  local FS_NAME=testcephfs1
   if ! mds_exists ; then
       echo "Skipping test, no MDS found"
       return
@@ -966,7 +966,7 @@ function test_mds_tell()
 
 function test_mon_mds()
 {
-  local FS_NAME=cephfs
+  local FS_NAME=testcephfs1
   remove_all_fs
 
   ceph osd pool create fs_data 16
@@ -1008,48 +1008,48 @@ function test_mon_mds()
   ceph osd pool create data3 16
   data2_pool=$(ceph osd dump | grep "pool.*'data2'" | awk '{print $2;}')
   data3_pool=$(ceph osd dump | grep "pool.*'data3'" | awk '{print $2;}')
-  ceph fs add_data_pool cephfs $data2_pool
-  ceph fs add_data_pool cephfs $data3_pool
-  ceph fs add_data_pool cephfs 100 >& $TMPFILE || true
+  ceph fs add_data_pool testcephfs1 $data2_pool
+  ceph fs add_data_pool testcephfs1 $data3_pool
+  ceph fs add_data_pool testcephfs1 100 >& $TMPFILE || true
   check_response "Error ENOENT"
-  ceph fs add_data_pool cephfs foobarbaz >& $TMPFILE || true
+  ceph fs add_data_pool testcephfs1 foobarbaz >& $TMPFILE || true
   check_response "Error ENOENT"
-  ceph fs rm_data_pool cephfs $data2_pool
-  ceph fs rm_data_pool cephfs $data3_pool
+  ceph fs rm_data_pool testcephfs1 $data2_pool
+  ceph fs rm_data_pool testcephfs1 $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
   ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
-  ceph fs set cephfs max_mds 4
-  ceph fs set cephfs max_mds 3
-  ceph fs set cephfs max_mds 256
-  expect_false ceph fs set cephfs max_mds 257
-  ceph fs set cephfs max_mds 4
-  ceph fs set cephfs max_mds 256
-  expect_false ceph fs set cephfs max_mds 257
-  expect_false ceph fs set cephfs max_mds asdf
-  expect_false ceph fs set cephfs inline_data true
-  ceph fs set cephfs inline_data true --yes-i-really-really-mean-it
-  ceph fs set cephfs inline_data yes --yes-i-really-really-mean-it
-  ceph fs set cephfs inline_data 1 --yes-i-really-really-mean-it
-  expect_false ceph fs set cephfs inline_data --yes-i-really-really-mean-it
-  ceph fs set cephfs inline_data false
-  ceph fs set cephfs inline_data no
-  ceph fs set cephfs inline_data 0
-  expect_false ceph fs set cephfs inline_data asdf
-  ceph fs set cephfs max_file_size 1048576
-  expect_false ceph fs set cephfs max_file_size 123asdf
+  ceph fs set testcephfs1 max_mds 4
+  ceph fs set testcephfs1 max_mds 3
+  ceph fs set testcephfs1 max_mds 256
+  expect_false ceph fs set testcephfs1 max_mds 257
+  ceph fs set testcephfs1 max_mds 4
+  ceph fs set testcephfs1 max_mds 256
+  expect_false ceph fs set testcephfs1 max_mds 257
+  expect_false ceph fs set testcephfs1 max_mds asdf
+  expect_false ceph fs set testcephfs1 inline_data true
+  ceph fs set testcephfs1 inline_data true --yes-i-really-really-mean-it
+  ceph fs set testcephfs1 inline_data yes --yes-i-really-really-mean-it
+  ceph fs set testcephfs1 inline_data 1 --yes-i-really-really-mean-it
+  expect_false ceph fs set testcephfs1 inline_data --yes-i-really-really-mean-it
+  ceph fs set testcephfs1 inline_data false
+  ceph fs set testcephfs1 inline_data no
+  ceph fs set testcephfs1 inline_data 0
+  expect_false ceph fs set testcephfs1 inline_data asdf
+  ceph fs set testcephfs1 max_file_size 1048576
+  expect_false ceph fs set testcephfs1 max_file_size 123asdf
 
-  expect_false ceph fs set cephfs allow_new_snaps
-  ceph fs set cephfs allow_new_snaps true
-  ceph fs set cephfs allow_new_snaps 0
-  ceph fs set cephfs allow_new_snaps false
-  ceph fs set cephfs allow_new_snaps no
-  expect_false ceph fs set cephfs allow_new_snaps taco
+  expect_false ceph fs set testcephfs1 allow_new_snaps
+  ceph fs set testcephfs1 allow_new_snaps true
+  ceph fs set testcephfs1 allow_new_snaps 0
+  ceph fs set testcephfs1 allow_new_snaps false
+  ceph fs set testcephfs1 allow_new_snaps no
+  expect_false ceph fs set testcephfs1 allow_new_snaps taco
 
   # we should never be able to add EC pools as data or metadata pools
   # create an ec-pool...
   ceph osd pool create mds-ec-pool 16 16 erasure
   set +e
-  ceph fs add_data_pool cephfs mds-ec-pool 2>$TMPFILE
+  ceph fs add_data_pool testcephfs1 mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
   set -e
   ec_poolnum=$(ceph osd dump | grep "pool.* 'mds-ec-pool" | awk '{print $2;}')
@@ -1065,7 +1065,7 @@ function test_mon_mds()
   set -e
 
   # Check that `fs new` is no longer permitted
-  expect_false ceph fs new cephfs $metadata_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  expect_false ceph fs new testcephfs1 $metadata_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
 
   # Check that 'fs reset' runs
   ceph fs reset $FS_NAME --yes-i-really-mean-it
@@ -1074,16 +1074,16 @@ function test_mon_mds()
   ceph osd pool create fs_metadata2 16
   ceph osd pool create fs_data2 16
   set +e
-  expect_false ceph fs new cephfs2 fs_metadata2 fs_data2
+  expect_false ceph fs new testcephfs2 fs_metadata2 fs_data2
   set -e
 
   # Check that setting enable_multiple enables creation of second fs
   ceph fs flag set enable_multiple true --yes-i-really-mean-it
-  ceph fs new cephfs2 fs_metadata2 fs_data2
+  ceph fs new testcephfs2 fs_metadata2 fs_data2
 
   # Clean up multi-fs stuff
-  fail_all_mds cephfs2
-  ceph fs rm cephfs2 --yes-i-really-mean-it
+  fail_all_mds testcephfs2
+  ceph fs rm testcephfs2 --yes-i-really-mean-it
   ceph osd pool delete fs_metadata2 fs_metadata2 --yes-i-really-really-mean-it
   ceph osd pool delete fs_data2 fs_data2 --yes-i-really-really-mean-it
 
@@ -2826,7 +2826,7 @@ function test_osd_compact()
 
 function test_mds_tell_help_command()
 {
-  local FS_NAME=cephfs
+  local FS_NAME=testcephfs1
   if ! mds_exists ; then
       echo "Skipping test, no MDS found"
       return
