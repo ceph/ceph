@@ -185,6 +185,13 @@ public:
   void mark_osds_down(const std::vector<int>& osd_ids);
 
   /**
+   * Set the pool min_size.
+   * Creates a new OSDMap epoch and triggers peering.
+   *
+   * @param new_min_size The new min_size value
+   */
+  void set_pool_min_size(unsigned new_min_size);
+  /**
    * Advance to a new epoch without changing OSD states.
    * Useful for testing re-peering scenarios.
    */
