@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import json
 from typing import Optional
 
 import requests
@@ -7,6 +6,7 @@ import requests
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..settings import Settings
+from ..tools import json_str_to_object
 from . import APIDoc, APIRouter, RESTController
 
 
@@ -53,11 +53,9 @@ class LokiRESTController(RESTController):
                 component='loki')
         try:
             if response.content:
-                content = json.loads(response.content, strict=False)
-        except json.JSONDecodeError as e:
-            raise DashboardException(
-                "Error parsing Loki response: {}".format(e.msg),
-                component='loki')
+                content = json_str_to_object(response.content, component='loki')
+        except DashboardException as e:
+            raise e
         if not isinstance(content, dict) or 'status' not in content:
             raise DashboardException(
                 'Invalid Loki response',
