@@ -13,12 +13,14 @@
 #include "global/global_context.h"
 #include "os/bluestore/AvlAllocator.h"
 #include "os/bluestore/BtreeAllocator.h"
+#include "os/bluestore/Btree2Allocator.h"
 
 namespace {
 
 constexpr uint64_t _64k = 64 * 1024;   // per-run granularity used below
 constexpr uint64_t block_size = 0x1000; // 4 KiB
 constexpr uint64_t device_size = 1ull << 30; // 1 GiB
+constexpr uint64_t max_mem = 64ull << 20; // 64 MiB
 
 // Print [offset, offset + length) in _64k units, e.g. "[5,10)", to match the
 // comments in the tests.  Falls back to hex if not aligned to _64k.
@@ -69,14 +71,36 @@ public:
   using BtreeAllocator::_try_remove_from_tree;
 };
 
+// Btree2Allocator::_try_remove_from_tree is protected - re-expose it.
+class TestBtree2Allocator : public Btree2Allocator {
+public:
+  using Btree2Allocator::Btree2Allocator;
+  using Btree2Allocator::_try_remove_from_tree;
+};
+
+// Thrown from the callback to abort _try_remove_from_tree().
+struct bad_callback_t {};
+
+// Run _try_remove_from_tree() and record every callback.  A callback that is
+// empty or lies outside the query means the walk has gone wrong - and a buggy
+// walk may never terminate - so stop at the first such record and fail.
 template <class Alloc>
 std::vector<cb_rec_t> collect(Alloc& a, uint64_t start, uint64_t size)
 {
+  const uint64_t end = start + size;
   std::vector<cb_rec_t> recs;
   auto cb = [&](uint64_t o, uint64_t l, bool found) {
     recs.push_back({o, l, found});
+    if (l == 0 || o < start || o + l < o || o + l > end) {
+      throw bad_callback_t{};
+    }
   };
-  a._try_remove_from_tree(start, size, cb);
+  try {
+    a._try_remove_from_tree(start, size, cb);
+  } catch (const bad_callback_t&) {
+    ADD_FAILURE() << "callback " << recs.back() << " is outside query "
+                  << extent_t{start, size};
+  }
   return recs;
 }
 
@@ -221,5 +245,70 @@ TEST(BtreeAllocator, try_remove_entirely_past_free_runs)
   EXPECT_EQ((std::vector<cb_rec_t>{{30 * _64k, 10 * _64k, false}}), recs);
   EXPECT_EQ((std::vector<extent_t>{
     {0, 10 * _64k}, {20 * _64k, 10 * _64k},
+  }), extents(a));
+}
+
+/*
+ * Btree2 bug 1: lower_bound(start) can land just past the run that straddles
+ * 'start'; the code stepped back one node whenever that predecessor started
+ * before 'start', without checking it also *ends* after 'start'.  A
+ * non-overlapping predecessor was then fed to _remove_from_tree() with
+ * end < start.
+ */
+TEST(Btree2Allocator, try_remove_predecessor_not_overlapping)
+{
+  TestBtree2Allocator a(g_ceph_context, device_size, block_size, max_mem,
+                        1.0, /*with_cache=*/false, "btree2");
+  a.init_add_free(0, 10 * _64k);
+  a.init_add_free(40 * _64k, 10 * _64k);
+
+  const uint64_t start = 20 * _64k;
+  const uint64_t size = 10 * _64k;          // [20, 30)
+  const uint64_t before = a.get_free();
+
+  auto recs = collect(a, start, size);
+  const uint64_t freed = before - a.get_free();
+
+  EXPECT_EQ((std::vector<cb_rec_t>{
+    {20 * _64k, 10 * _64k, false},  // gap [20, 30)
+  }), recs);
+  EXPECT_EQ(0u, freed);
+  EXPECT_EQ((std::vector<extent_t>{
+    {0, 10 * _64k}, {40 * _64k, 10 * _64k},
+  }), extents(a));
+}
+
+/*
+ * Btree2 bug 2: when a run reaches below 'start', _remove_from_tree()
+ * re-inserts the left-over remainder and returns an iterator to it.  The loop
+ * never skipped that remainder, so it re-processed a segment ending at or
+ * below 'start' - another malformed [end < start] removal and no forward
+ * progress.
+ *
+ * Run [0,100) straddles start=50; query [50,200) with another run [150,160).
+ */
+TEST(Btree2Allocator, try_remove_leftover_split_makes_progress)
+{
+  TestBtree2Allocator a(g_ceph_context, device_size, block_size, max_mem,
+                        1.0, /*with_cache=*/false, "btree2");
+  a.init_add_free(0, 100 * _64k);
+  a.init_add_free(150 * _64k, 10 * _64k);
+
+  const uint64_t start = 50 * _64k;
+  const uint64_t size = 150 * _64k;         // [50, 200)
+  const uint64_t before = a.get_free();
+
+  auto recs = collect(a, start, size);
+  const uint64_t freed = before - a.get_free();
+
+  EXPECT_EQ((std::vector<cb_rec_t>{
+    {50 * _64k, 50 * _64k, true},    // [50, 100)
+    {100 * _64k, 50 * _64k, false},  // gap [100, 150)
+    {150 * _64k, 10 * _64k, true},   // [150, 160)
+    {160 * _64k, 40 * _64k, false},  // gap [160, 200)
+  }), recs);
+  EXPECT_EQ(60u * _64k, freed);
+  EXPECT_EQ((std::vector<extent_t>{
+    {0, 50 * _64k},
   }), extents(a));
 }
