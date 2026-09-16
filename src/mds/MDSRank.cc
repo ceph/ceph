@@ -499,6 +499,8 @@ MDSRank::MDSRank(
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
     inject_journal_corrupt_dentry_first(g_conf().get_val<double>("mds_inject_journal_corrupt_dentry_first")),
+    inject_dir_fetch_delay_ms(g_conf().get_val<std::chrono::milliseconds>("mds_inject_dir_fetch_delay").count()),
+    dir_fetch_pipelined(g_conf().get_val<bool>("mds_dir_fetch_pipelined")),
     starttime(mono_clock::now()),
     ioc(ioc)
 {
@@ -4155,6 +4157,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_cap_acquisition_throttle_retry_request_time",
     "mds_cap_revoke_eviction_timeout",
     "mds_debug_subtrees",
+    "mds_dir_fetch_pipelined",
     "mds_dir_max_entries",
     "mds_dir_prefetch",
     "mds_dir_prefetch_backend",
@@ -4175,6 +4178,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_health_cache_threshold",
     "mds_heartbeat_grace",
     "mds_heartbeat_reset_grace",
+    "mds_inject_dir_fetch_delay",
     "mds_inject_journal_corrupt_dentry_first",
     "mds_inject_migrator_session_race",
     "mds_inject_rename_corrupt_dentry_first",
@@ -4222,6 +4226,16 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
 {
   // XXX with or without mds_lock!
   dout(2) << __func__ << ": " << changed << dendl;
+
+  if (changed.count("mds_inject_dir_fetch_delay")) {
+    inject_dir_fetch_delay_ms.store(
+      conf.get_val<std::chrono::milliseconds>("mds_inject_dir_fetch_delay").count(),
+      std::memory_order_relaxed);
+  }
+  if (changed.count("mds_dir_fetch_pipelined")) {
+    dir_fetch_pipelined.store(conf.get_val<bool>("mds_dir_fetch_pipelined"),
+                             std::memory_order_relaxed);
+  }
 
   if (changed.count("mds_heartbeat_reset_grace")) {
     _heartbeat_reset_grace = conf.get_val<uint64_t>("mds_heartbeat_reset_grace");

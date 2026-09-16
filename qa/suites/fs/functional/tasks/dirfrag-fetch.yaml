@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      # Injected fetch delays can exceed the MDS slow request threshold.
+      - slow request
+      - MDS_SLOW_REQUEST
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_dirfrag_fetch
+        - tasks.cephfs.test_dirfrag_fetch_trim

@@ -15,6 +15,7 @@
 
 #include <string_view>
 #include <algorithm>
+#include <thread>
 
 #include "include/types.h"
 
@@ -1717,48 +1718,51 @@ void CDir::fetch_keys(const std::vector<dentry_key_t>& keys, MDSContext *c)
   mdcache->mds->balancer->hit_dir(this, META_POP_FETCH);
 }
 
-class C_IO_Dir_OMAP_FetchedMore : public CDirIOContext {
-  MDSContext *fin;
-public:
-  const version_t omap_version;
-  bufferlist hdrbl;
-  bool more = false;
-  map<string, bufferlist> omap;      ///< carry-over from before
-  map<string, bufferlist> omap_more; ///< new batch
-  int ret;
-  C_IO_Dir_OMAP_FetchedMore(CDir *d, version_t v, MDSContext *f) :
-    CDirIOContext(d), fin(f), omap_version(v), ret(0) { }
-  void finish(int r) {
-    if (omap_version < dir->get_committed_version()) {
-      omap.clear();
-      dir->_omap_fetch(nullptr, fin);
-      return;
-    }
+class CDirFetchIOContext : public CDirIOContext {
+  // Capture the delay at submission; complete() runs without mds_lock.
+  const std::chrono::milliseconds inject_delay;
 
-    // merge results
-    if (omap.empty()) {
-      omap.swap(omap_more);
-    } else {
-      omap.insert(omap_more.begin(), omap_more.end());
+public:
+  explicit CDirFetchIOContext(CDir *d) :
+    CDirIOContext(d),
+    inject_delay(d->mdcache->mds->get_inject_dir_fetch_delay()) { }
+
+  void complete(int r) override {
+    // Delay outside mds_lock to allow concurrent trims and commits.
+    // Skip during shutdown to avoid blocking the shared finisher.
+    if (inject_delay > std::chrono::milliseconds::zero() &&
+        !dir->mdcache->mds->is_daemon_stopping()) {
+      lgeneric_subdout(g_ceph_context, mds, 1)
+        << "CDirFetchIOContext injecting delay " << inject_delay.count()
+        << "ms" << dendl;
+      std::this_thread::sleep_for(inject_delay);
     }
-    if (more) {
-      dir->_omap_fetch_more(omap_version, hdrbl, omap, fin);
-    } else {
-      dir->_omap_fetched(hdrbl, omap, true, {}, r);
-      if (fin)
-	fin->complete(r);
-    }
+    CDirIOContext::complete(r);
+  }
+};
+
+class C_IO_Dir_OMAP_FetchedMore : public CDirFetchIOContext {
+public:
+  bool more = false;
+  map<string, bufferlist> omap;      ///< this batch only
+  int ret;
+  explicit C_IO_Dir_OMAP_FetchedMore(CDir *d) :
+    CDirFetchIOContext(d), ret(0) { }
+  void finish(int r) override {
+    dir->_omap_fetch_batch(omap, more, r);
   }
   void print(ostream& out) const override {
     out << "dirfrag_fetch_more(" << dir->dirfrag() << ")";
   }
 };
 
-class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
+class C_IO_Dir_OMAP_Fetched : public CDirFetchIOContext {
   MDSContext *fin;
 public:
   const version_t omap_version;
-  bool complete = true;
+  // An empty key set is valid for a keyed read.
+  const bool full_fetch;
+  const bool pipelined;		///< latched at submission, full fetch only
   std::set<string> keys;
   bufferlist hdrbl;
   bool more = false;
@@ -1766,10 +1770,14 @@ public:
   bufferlist btbl;
   int ret1, ret2, ret3;
 
-  C_IO_Dir_OMAP_Fetched(CDir *d, MDSContext *f) :
-    CDirIOContext(d), fin(f),
+  C_IO_Dir_OMAP_Fetched(CDir *d, MDSContext *f, bool full, bool pipeline) :
+    CDirFetchIOContext(d), fin(f),
     omap_version(d->get_committing_version()),
-    ret1(0), ret2(0), ret3(0) { }
+    full_fetch(full), pipelined(pipeline),
+    ret1(0), ret2(0), ret3(0) {
+    // Full fetches complete through the dirfrag waiter lists.
+    ceph_assert(!full_fetch || !fin);
+  }
   void finish(int r) override {
     // check the correctness of backtrace
     if (r >= 0 && ret3 != -ECANCELED)
@@ -1777,16 +1785,12 @@ public:
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;
 
-    if (more) {
-      if (omap_version < dir->get_committed_version()) {
-	dir->_omap_fetch(nullptr, fin);
-      } else {
-	dir->_omap_fetch_more(omap_version, hdrbl, omap, fin);
-      }
+    if (full_fetch) {
+      dir->_omap_fetch_start(omap_version, hdrbl, omap, more, r, pipelined);
       return;
     }
 
-    dir->_omap_fetched(hdrbl, omap, complete, keys, r);
+    dir->_omap_fetched(hdrbl, omap, keys, r);
     if (fin)
       fin->complete(r);
   }
@@ -1795,19 +1799,22 @@ public:
   }
 };
 
-void CDir::_omap_fetch(std::set<string> *keys, MDSContext *c)
+void CDir::_omap_fetch(std::set<string> *keys, MDSContext *c,
+                       std::optional<bool> pipelined)
 {
-  C_IO_Dir_OMAP_Fetched *fin = new C_IO_Dir_OMAP_Fetched(this, c);
+  const bool full_fetch = !keys;
+  auto fin = new C_IO_Dir_OMAP_Fetched(
+      this, c, full_fetch,
+      full_fetch && (pipelined ? *pipelined :
+                     mdcache->mds->get_dir_fetch_pipelined()));
   object_t oid = get_ondisk_object();
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
-  if (keys) {
-    fin->complete = false;
+  if (!full_fetch) {
     fin->keys.swap(*keys);
     rd.omap_get_vals_by_keys(fin->keys, &fin->omap, &fin->ret2);
   } else {
-    ceph_assert(!c);
     rd.omap_get_vals("", "", g_conf()->mds_dir_keys_per_op,
 		     &fin->omap, &fin->more, &fin->ret2);
   }
@@ -1823,24 +1830,127 @@ void CDir::_omap_fetch(std::set<string> *keys, MDSContext *c)
 			     new C_OnFinisher(fin, mdcache->mds->finisher));
 }
 
-void CDir::_omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
-			    map<string, bufferlist>& omap, MDSContext *c)
+void CDir::_omap_fetch_more(std::string_view start_after)
 {
   // we have more omap keys to fetch!
   object_t oid = get_ondisk_object();
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
-  auto fin = new C_IO_Dir_OMAP_FetchedMore(this, omap_version, c);
-  fin->hdrbl = std::move(hdrbl);
-  fin->omap.swap(omap);
+  auto fin = new C_IO_Dir_OMAP_FetchedMore(this);
   ObjectOperation rd;
-  rd.omap_get_vals(fin->omap.rbegin()->first,
+  rd.omap_get_vals(std::string(start_after),
 		   "", /* filter prefix */
 		   g_conf()->mds_dir_keys_per_op,
-		   &fin->omap_more,
+		   &fin->omap,
 		   &fin->more,
 		   &fin->ret);
   mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
 			     new C_OnFinisher(fin, mdcache->mds->finisher));
+}
+
+void CDir::_omap_fetch_start(version_t omap_version, bufferlist& hdrbl,
+			     map<string, bufferlist>& batch,
+			     bool more, int r, bool pipelined)
+{
+  ceph_assert(r == 0 || r == -ENOENT || r == -ENODATA);
+  ceph_assert(is_auth());
+  ceph_assert(!is_frozen());
+  ceph_assert(!fetch_state);
+
+  // Install state only after init: go_bad() runs waiters inline and may reenter.
+  auto st = std::make_unique<fetch_state_t>(true);
+  st->omap_version = omap_version;
+  st->pipelined = pipelined;
+  if (pipelined) {
+    if (!_omap_fetch_init(*st, hdrbl))
+      return;			// go_bad() already cleaned up
+  } else {
+    dout(10) << __func__ << " buffering header for " << *this << dendl;
+    st->pending_header = std::move(hdrbl);
+  }
+  fetch_state = std::move(st);
+  _omap_fetch_batch(batch, more, r);
+}
+
+void CDir::_omap_fetch_batch(map<string, bufferlist>& batch,
+			     bool more, int r)
+{
+  ceph_assert(is_auth());
+  ceph_assert(!is_frozen());
+
+  ceph_assert(fetch_state);
+  fetch_state_t& st = *fetch_state;
+
+  if (r < 0)
+    more = false;		// let the finish path report it
+  if (batch.empty() && more) {
+    derr << __func__ << " got an empty truncated omap batch for "
+	 << *this << dendl;
+    mdcache->mds->clog->error()
+      << "dir " << dirfrag()
+      << " omap fetch returned no keys but claimed more were available ("
+      << get_trimmed_path() << ")";
+    fetch_state.reset();
+    go_bad(true);
+    return;
+  }
+
+  if (!st.pipelined) {
+    // Buffered fetches restart on commits across batches, including the last
+    // reply. A single-batch fetch needs no version check.
+    const bool check_version = !st.first_batch || more;
+    st.first_batch = false;
+    if (check_version && st.omap_version < get_committed_version()) {
+      dout(10) << __func__ << " dir was committed to v" << get_committed_version()
+	       << " while fetching at v" << st.omap_version << ", restarting" << dendl;
+      fetch_state.reset();
+      _omap_fetch(nullptr, nullptr, false);
+      return;
+    }
+    if (st.pending.empty())
+      st.pending.swap(batch);
+    else
+      st.pending.insert(batch.begin(), batch.end());
+    if (more) {
+      _omap_fetch_more(st.pending.rbegin()->first);
+      return;
+    }
+    // Detach before init, whose error waiters may reenter the fetch path.
+    auto owned = std::move(fetch_state);
+    if (!_omap_fetch_init(*owned, owned->pending_header))
+      return;
+    std::vector<string_snap_t> null_keys;
+    auto pending = std::move(owned->pending);
+    _omap_decode_batch(*owned, pending, {}, null_keys);
+    _omap_fetch_finish(*owned, null_keys, r);
+    return;
+  }
+
+  // Continue after a commit: mutations require cached dentries, and
+  // _load_dentry() preserves them, so entries behind the cursor remain valid.
+  if (st.omap_version < get_committed_version() && !st.version_changed) {
+    st.version_changed = true;
+    dout(10) << __func__ << " dir was committed to v" << get_committed_version()
+	     << " while fetching at v" << st.omap_version << ", continuing" << dendl;
+  }
+
+  // The raw cursor lets the next read overlap decoding this batch.
+  if (more) {
+    _omap_fetch_more(batch.rbegin()->first);
+  }
+
+  std::vector<string_snap_t> null_keys;
+  _omap_decode_batch(st, batch, {}, null_keys);
+
+  if (!more) {
+    auto owned = std::move(fetch_state);
+    _omap_fetch_finish(*owned, null_keys, r);
+  } else {
+    // A batch may satisfy a keyed lookup before its reply arrives.
+    // Open recovered inodes before waking it; WAIT_COMPLETE waits for EOF.
+    _omap_open_undef_inodes(st);
+    if (!st.finished.empty())
+      mdcache->mds->queue_waiters(st.finished);
+  }
 }
 
 CDentry *CDir::_load_dentry(
@@ -2056,13 +2166,23 @@ CDentry *CDir::_load_dentry(
 }
 
 void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
-			 bool complete, const std::set<string>& keys, int r)
+                         const std::set<string>& keys, int r)
+{
+  ceph_assert(r == 0 || r == -ENOENT || r == -ENODATA);
+  fetch_state_t st(false);
+  if (!_omap_fetch_init(st, hdrbl, &keys))
+    return;
+  std::vector<string_snap_t> null_keys;
+  _omap_decode_batch(st, omap, keys, null_keys);
+  _omap_fetch_finish(st, null_keys, r);
+}
+
+bool CDir::_omap_fetch_init(fetch_state_t& st, bufferlist& hdrbl,
+                            const std::set<std::string> *keys)
 {
   LogChannelRef clog = mdcache->mds->clog;
-  dout(10) << "_fetched header " << hdrbl.length() << " bytes "
-	   << omap.size() << " keys for " << *this << dendl;
+  dout(10) << "_fetched header " << hdrbl.length() << " bytes for " << *this << dendl;
 
-  ceph_assert(r == 0 || r == -ENOENT || r == -ENODATA);
   ceph_assert(is_auth());
   ceph_assert(!is_frozen());
 
@@ -2072,8 +2192,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     clog->error() << "dir " << dirfrag() << " object missing on disk; some "
                      "files may be lost (" << get_trimmed_path() << ")";
 
-    go_bad(complete);
-    return;
+    go_bad(st.full_fetch, keys);
+    return false;
   }
 
   fnode_t got_fnode;
@@ -2086,15 +2206,15 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	   << ": " << err.what() << dendl;
       clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
 		   << err.what() << " (" << get_trimmed_path() << ")";
-      go_bad(complete);
-      return;
+      go_bad(st.full_fetch, keys);
+      return false;
     }
     if (!p.end()) {
       clog->warn() << "header buffer of dir " << dirfrag() << " has "
 		  << hdrbl.length() - p.get_off() << " extra bytes ("
                   << get_trimmed_path() << ")";
-      go_bad(complete);
-      return;
+      go_bad(st.full_fetch, keys);
+      return false;
     }
   }
 
@@ -2105,30 +2225,39 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   if (get_version() == 0) {
     set_fresh_fnode(allocate_fnode(got_fnode));
   }
+  // Adopting a disk fnode (even via a concurrent keyed read) is not a commit.
+  // Use the disk version as the baseline for a cold fetch.
+  if (st.omap_version == 0)
+    st.omap_version = got_fnode.version;
 
-  list<CInode*> undef_inodes;
-
-  // purge stale snaps?
-  bool force_dirty = false;
-  snapid_t snap_purge_target = 0;
-  const set<snapid_t> *snaps = NULL;
+  // Latch the purge watermark here; copy the current snapshot set only
+  // when decoding a batch, since it can change between replies.
   SnapRealm *realm = inode->find_snaprealm();
   if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
-    snaps = &realm->get_snaps();
+    st.snap_purge_target = realm->get_last_destroyed();
     dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
-	     << ", snap purge based on " << *snaps << dendl;
-    if (complete && r == 0 && get_num_snap_items() == 0)
-      snap_purge_target = realm->get_last_destroyed();
+	     << ", snap purge based on " << realm->get_snaps() << dendl;
   }
+  st.no_snap_items_at_start = (get_num_snap_items() == 0);
 
+  st.rand_threshold = get_inode()->get_ephemeral_rand();
+  return true;
+}
 
-  MDSContext::vec finished;
-  std::vector<string_snap_t> null_keys;
+void CDir::_omap_decode_batch(fetch_state_t& st, map<string, bufferlist>& batch,
+			      const std::set<string>& keys,
+			      std::vector<string_snap_t>& null_keys)
+{
+  dout(10) << "_fetched " << batch.size() << " keys for " << *this << dendl;
+
+  if (st.snap_purge_target)
+    st.snaps = inode->find_snaprealm()->get_snaps();
 
   auto k_it = keys.rbegin();
   auto w_it = waiting_on_dentry.rbegin();
-  std::string_view last_name = "";
+  MDSContext::vec& finished = st.finished;
+  std::string& last_name = st.last_name;
 
   auto proc_waiters = [&](const string_snap_t& key) {
     bool touch = false;
@@ -2155,7 +2284,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   };
   auto proc_nulls_and_waiters = [&](const string& str_key, const string_snap_t& key) {
     bool touch = false;
-    int count = 0;
 
     while (k_it != keys.rend()) {
       int cmp = k_it->compare(str_key);
@@ -2171,41 +2299,41 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       dentry_key_t::decode_helper(*k_it, n_key.name, n_key.snapid);
       ceph_assert(n_key.snapid == CEPH_NOSNAP);
       proc_waiters(n_key);
-      last_name = std::string_view(k_it->c_str(), n_key.name.length());
+      last_name.assign(*k_it, 0, n_key.name.length());
       null_keys.emplace_back(std::move(n_key));
       ++k_it;
 
-      if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+      if (!(++st.count % mdcache->mds->heartbeat_reset_grace()))
         mdcache->mds->heartbeat_reset();
     }
     return touch;
   };
 
-  int count = 0;
-  unsigned pos = omap.size() - 1;
-  double rand_threshold = get_inode()->get_ephemeral_rand();
-  for (auto p = omap.rbegin(); p != omap.rend(); ++p, --pos) {
+  unsigned idx = st.pos + batch.size();
+  for (auto p = batch.rbegin(); p != batch.rend(); ++p) {
+    --idx;
     string_snap_t key;
     dentry_key_t::decode_helper(p->first, key.name, key.snapid);
     bool touch = false;
 
     if (key.snapid == CEPH_NOSNAP) {
-      if (complete) {
+      if (st.full_fetch) {
 	touch = proc_waiters(key);
       } else {
 	touch = proc_nulls_and_waiters(p->first, key);
       }
-      last_name = std::string_view(p->first.c_str(), key.name.length());
+      last_name.assign(p->first, 0, key.name.length());
     }
 
-    if (!(++count % mdcache->mds->heartbeat_reset_grace()))
+    if (!(++st.count % mdcache->mds->heartbeat_reset_grace()))
       mdcache->mds->heartbeat_reset();
 
     CDentry *dn = nullptr;
     try {
       dn = _load_dentry(
-            p->first, key.name, key.snapid, p->second, pos, snaps,
-            rand_threshold, &force_dirty);
+            p->first, key.name, key.snapid, p->second, idx,
+            st.snap_purge_target ? &st.snaps : nullptr,
+            st.rand_threshold, &st.force_dirty);
     } catch (const buffer::error &err) {
       mdcache->mds->clog->warn() << "Corrupt dentry '" << key.name << "' in "
                                   "dir frag " << dirfrag() << ": "
@@ -2216,7 +2344,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       // dirfrag as a whole will continue to look okay (minus the
       // mysteriously-missing dentry)
       go_bad_dentry(key.snapid, key.name);
-      snap_purge_target = 0;
+      st.decode_error = true;
 
       // Anyone who was WAIT_DENTRY for this guy will get kicked
       // to RetryRequest, and hit the DamageTable-interrogating path.
@@ -2235,21 +2363,41 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
     CDentry::linkage_t *dnl = dn->get_linkage();
     if (dnl->is_primary() && dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF))
-      undef_inodes.push_back(dnl->get_inode());
+      st.remember_undef_inode(dnl->get_inode());
   }
+  st.pos += batch.size();
 
-  if (complete) {
-    if (!waiting_on_dentry.empty()) {
-      for (auto &p : waiting_on_dentry) {
-	std::copy(p.second.begin(), p.second.end(), std::back_inserter(finished));
-	if (p.first.snapid == CEPH_NOSNAP)
-	  null_keys.emplace_back(p.first);
-      }
-      waiting_on_dentry.clear();
-      put(PIN_DNWAITER);
-    }
-  } else {
+  if (!st.full_fetch) {
     proc_nulls_and_waiters("", string_snap_t());
+  }
+}
+
+void CDir::_omap_open_undef_inodes(fetch_state_t& st)
+{
+  for (CInode *in : st.undef_inodes) {
+    mdcache->opened_undef_inode(in);
+
+    if (!(++st.count % mdcache->mds->heartbeat_reset_grace()))
+      mdcache->mds->heartbeat_reset();
+  }
+  st.release_undef_inodes();
+}
+
+void CDir::_omap_fetch_finish(fetch_state_t& st,
+			      std::vector<string_snap_t>& null_keys, int r)
+{
+  ceph_assert(r == 0 || r == -ENOENT || r == -ENODATA);
+
+  MDSContext::vec& finished = st.finished;
+
+  if (st.full_fetch && !waiting_on_dentry.empty()) {
+    for (auto &p : waiting_on_dentry) {
+      std::copy(p.second.begin(), p.second.end(), std::back_inserter(finished));
+      if (p.first.snapid == CEPH_NOSNAP)
+	null_keys.emplace_back(p.first);
+    }
+    waiting_on_dentry.clear();
+    put(PIN_DNWAITER);
   }
 
   if (!null_keys.empty()) {
@@ -2264,7 +2412,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       }
       mdcache->touch_dentry(dn);
 
-      if (!(++count % mdcache->mds->heartbeat_reset_grace(2)))
+      if (!(++st.count % mdcache->mds->heartbeat_reset_grace(2)))
         mdcache->mds->heartbeat_reset();
     }
   }
@@ -2272,40 +2420,27 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
 
   // mark complete, !fetching
-  if (complete) {
+  if (st.full_fetch) {
     if (mdcache->mds->logger)
       mdcache->mds->logger->inc(l_mds_dir_fetch_complete);
     mark_complete();
-    state_clear(STATE_FETCHING);
-
-    if (state_test(STATE_BACKEND_FETCH)) {
-      state_clear(STATE_BACKEND_FETCH);
-      --mdcache->num_backend_fetching;
-    }
-
+    _end_full_fetch();
     take_waiting(WAIT_COMPLETE, finished);
   }
 
   // open & force frags
-  while (!undef_inodes.empty()) {
-    CInode *in = undef_inodes.front();
+  _omap_open_undef_inodes(st);
 
-    undef_inodes.pop_front();
-    in->state_clear(CInode::STATE_REJOINUNDEF);
-    mdcache->opened_undef_inode(in);
-
-    if (!(++count % mdcache->mds->heartbeat_reset_grace()))
-      mdcache->mds->heartbeat_reset();
-  }
-
-  if (snap_purge_target > fnode->snap_purged_thru && !mdcache->is_readonly()) {
+  if (st.full_fetch && r == 0 && !st.decode_error && st.no_snap_items_at_start &&
+      fnode->snap_purged_thru < st.snap_purge_target &&
+      !mdcache->is_readonly()) {
     pending_snap_purge_target = std::max(pending_snap_purge_target,
-                                       snap_purge_target);
-    force_dirty = true;
+                                         st.snap_purge_target);
+    st.force_dirty = true;
   }
 
   // dirty myself to remove stale snap dentries
-  if (force_dirty && !mdcache->is_readonly())
+  if (st.force_dirty && !mdcache->is_readonly())
     log_mark_dirty();
 
   auth_unpin(this);
@@ -2328,7 +2463,16 @@ void CDir::go_bad_dentry(snapid_t last, std::string_view dname)
   }
 }
 
-void CDir::go_bad(bool complete)
+void CDir::_end_full_fetch()
+{
+  state_clear(STATE_FETCHING);
+  if (state_test(STATE_BACKEND_FETCH)) {
+    state_clear(STATE_BACKEND_FETCH);
+    --mdcache->num_backend_fetching;
+  }
+}
+
+void CDir::go_bad(bool complete, const std::set<std::string> *keys)
 {
   dout(10) << __func__ << " " << frag << dendl;
   const bool fatal = mdcache->mds->damage_table.notify_dirfrag(
@@ -2347,11 +2491,31 @@ void CDir::go_bad(bool complete)
     
     state_set(STATE_BADFRAG);
     mark_complete();
+    _end_full_fetch();
   }
 
-  state_clear(STATE_FETCHING);
   auth_unpin(this);
-  finish_waiting(WAIT_COMPLETE, -EIO);
+
+  if (complete) {
+    finish_waiting(WAIT_COMPLETE | WAIT_DENTRY, -EIO);
+    return;
+  }
+
+  /* A keyed read speaks only for the keys it asked for.  Failing every dentry
+   * waiter would also fail lookups that another in-flight keyed read -- or a
+   * background full fetch that is still scanning -- is going to answer. */
+  MDSContext::vec finished;
+  if (keys) {
+    for (const auto& str : *keys) {
+      string_snap_t key;
+      dentry_key_t::decode_helper(str, key.name, key.snapid);
+      take_dentry_waiting(key.name, key.snapid, key.snapid, finished);
+    }
+  } else {
+    // nothing to answer for in particular: fail every dentry waiter
+    take_waiting(WAIT_DENTRY, finished);
+  }
+  finish_contexts(g_ceph_context, finished, -EIO);
 }
 
 // -----------------------

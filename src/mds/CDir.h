@@ -20,6 +20,8 @@
 #include <iosfwd>
 #include <list>
 #include <map>
+#include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -487,6 +489,9 @@ public:
     fetch("", CEPH_NOSNAP, c, ignore_authpinnability);
   }
   void fetch_keys(const std::vector<dentry_key_t>& keys, MDSContext *c);
+  bool is_fetching_pipelined() const {
+    return fetch_state && fetch_state->pipelined;
+  }
 
 #if 0  // unused?
   void wait_for_commit(Context *c, version_t v=0);
@@ -666,9 +671,80 @@ protected:
   friend class C_IO_Dir_Committed;
   friend class C_IO_Dir_Commit_Ops;
 
-  void _omap_fetch(std::set<std::string> *keys, MDSContext *fin=nullptr);
-  void _omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
-			std::map<std::string, bufferlist>& omap, MDSContext *fin);
+  // State shared by all batches of a dirfrag fetch.
+  struct fetch_state_t {
+    explicit fetch_state_t(bool full_fetch) : full_fetch(full_fetch) {}
+    fetch_state_t(const fetch_state_t&) = delete;
+    fetch_state_t& operator=(const fetch_state_t&) = delete;
+
+    ~fetch_state_t() {
+      release_undef_inodes();
+    }
+
+    void remember_undef_inode(CInode *in) {
+      if (undef_inodes.insert(in).second)
+        in->get(CInode::PIN_DIRFETCH_UNDEF);
+    }
+
+    void release_undef_inodes() {
+      for (auto *in : undef_inodes)
+        in->put(CInode::PIN_DIRFETCH_UNDEF);
+      undef_inodes.clear();
+    }
+
+    // A keyed fetch can request an empty set, so mode is independent of keys.size().
+    const bool full_fetch;
+
+    // Buffered fetches retain the submission version until all version checks pass.
+    // Init replaces v0 with the disk fnode version.
+    version_t omap_version = 0;
+    // Latch the mode so a runtime toggle cannot strand buffered batches.
+    bool pipelined = true;
+    bool first_batch = true;           ///< tracks the first buffered reply
+    bool version_changed = false;      ///< only used to log the transition once
+    bool force_dirty = false;
+    bool decode_error = false;         ///< never certify a damaged full scan
+    // Refresh snapshots per batch, but retain the initial purge watermark.
+    std::set<snapid_t> snaps;
+    snapid_t snap_purge_target = 0;
+    // Cached snap dentries bypass stale-item detection in _load_dentry().
+    // Only certify purging if none were cached when the scan began.
+    bool no_snap_items_at_start = false;
+    double rand_threshold = 0;
+    // Pin recovered inodes until they have been opened, before waking waiters.
+    std::set<CInode*> undef_inodes;
+    std::vector<MDSContext*> finished;
+    // Own the name across batch callback lifetimes.
+    std::string last_name;
+    unsigned pos = 0;                  ///< index of this batch's first entry
+    int count = 0;                     ///< heartbeat_reset() throttle, across batches
+    // Buffered mode accumulates all batches before decoding.
+    std::map<std::string, ceph::buffer::list> pending;
+    // Buffered fetches must pass all version checks before adopting the header.
+    ceph::buffer::list pending_header;
+  };
+  // Full fetches are serialized by STATE_FETCHING; keyed reads use stack state.
+  std::unique_ptr<fetch_state_t> fetch_state;
+
+  void _omap_fetch(std::set<std::string> *keys, MDSContext *fin=nullptr,
+                   std::optional<bool> pipelined=std::nullopt);
+  void _omap_fetch_more(std::string_view start_after);
+  void _omap_fetch_start(version_t omap_version, ceph::buffer::list& hdrbl,
+			 std::map<std::string, ceph::buffer::list>& batch,
+			 bool more, int r, bool pipelined);
+  void _omap_fetch_batch(std::map<std::string, ceph::buffer::list>& batch,
+			 bool more, int r);
+  // Return false for a bad header. keys limits keyed-read error wakeups.
+  bool _omap_fetch_init(fetch_state_t& st, ceph::buffer::list& hdrbl,
+			const std::set<std::string> *keys = nullptr);
+  void _omap_decode_batch(fetch_state_t& st,
+			  std::map<std::string, ceph::buffer::list>& batch,
+			  const std::set<std::string>& keys,
+			  std::vector<string_snap_t>& null_keys);
+  void _omap_open_undef_inodes(fetch_state_t& st);
+  void _omap_fetch_finish(fetch_state_t& st,
+			  std::vector<string_snap_t>& null_keys, int r);
+  void _end_full_fetch();
   CDentry *_load_dentry(
       std::string_view key,
       std::string_view dname,
@@ -682,10 +758,10 @@ protected:
   /**
    * Go bad due to a damaged header (register with damagetable and go BADFRAG)
    */
-  void go_bad(bool complete);
+  void go_bad(bool complete, const std::set<std::string> *keys = nullptr);
 
   void _omap_fetched(ceph::buffer::list& hdrbl, std::map<std::string, ceph::buffer::list>& omap,
-		     bool complete, const std::set<std::string>& keys, int r);
+		     const std::set<std::string>& keys, int r);
 
   // -- commit --
   void _commit(version_t want, int op_prio);

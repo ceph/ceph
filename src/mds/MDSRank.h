@@ -17,6 +17,7 @@
 #define MDS_RANK_H_
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <string_view>
 
@@ -399,6 +400,14 @@ class MDSRank {
       return inject_journal_corrupt_dentry_first;
     }
 
+    std::chrono::milliseconds get_inject_dir_fetch_delay() const {
+      return std::chrono::milliseconds{
+        inject_dir_fetch_delay_ms.load(std::memory_order_relaxed)};
+    }
+    bool get_dir_fetch_pipelined() const {
+      return dir_fetch_pipelined.load(std::memory_order_relaxed);
+    }
+
     std::string get_path(inodeno_t ino);
     uint64_t get_inode_rbytes(inodeno_t ino);
 
@@ -658,6 +667,10 @@ class MDSRank {
     bool standby_replaying = false;  // true if current replay pass is in standby-replay mode
     uint64_t extraordinary_events_dump_interval = 0;
     double inject_journal_corrupt_dentry_first = 0.0;
+    // Observers run without mds_lock; apply config before the admin reply,
+    // even when an injected delay blocks the finisher.
+    std::atomic<std::chrono::milliseconds::rep> inject_dir_fetch_delay_ms;
+    std::atomic_bool dir_fetch_pipelined;
 private:
     bool send_status = true;
 
