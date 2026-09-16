@@ -382,6 +382,10 @@ public:
   bool available() const {
     return !max_in_progress || in_progress < max_in_progress;
   }
+  bool background_available() const {
+    return !max_background_in_progress ||
+           background_in_progress < max_background_in_progress;
+  }
 
   // The returned guard's destructor is the mClock RequestCompletion
   // (release_throttle), so it must be held for the throttled operation's whole
@@ -389,16 +393,19 @@ public:
   // operation never counts against max_in_progress.
   class [[nodiscard("discarding the guard releases the throttle slot immediately")]] ThrottleReleaser {
     OperationThrottler *parent = nullptr;
+    SchedulerClass klass = SchedulerClass::client;
   public:
-    ThrottleReleaser(OperationThrottler *parent) : parent(parent) {}
+    ThrottleReleaser(OperationThrottler *parent, SchedulerClass klass)
+      : parent(parent), klass(klass) {}
     ThrottleReleaser(const ThrottleReleaser &) = delete;
     ThrottleReleaser(ThrottleReleaser &&rhs) noexcept {
       std::swap(parent, rhs.parent);
+      std::swap(klass, rhs.klass);
     }
 
     ~ThrottleReleaser() {
       if (parent) {
-	parent->release_throttle();
+        parent->release_throttle(klass);
       }
     }
   };
@@ -412,7 +419,7 @@ public:
       auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       seastar::steady_clock_type::now() - start).count();
       record_throttle_wait(klass, wait_ms);
-      return ThrottleReleaser{this};
+      return ThrottleReleaser{this, klass};
     });
   }
   void register_metrics(const std::string &sched_type);
@@ -426,6 +433,9 @@ private:
   uint64_t in_progress = 0;
 
   uint64_t pending = 0;
+  uint64_t background_pending = 0;  // background ops in scheduler queue
+  uint64_t max_background_in_progress = 0;
+  uint64_t background_in_progress = 0;
   bool started = false;
   bool stopped = false;
 
@@ -439,7 +449,7 @@ private:
   seastar::future<> acquire_throttle(
     crimson::osd::scheduler::params_t params);
 
-  void release_throttle();
+  void release_throttle(SchedulerClass klass);
   seastar::future<> background_task();
 };
 

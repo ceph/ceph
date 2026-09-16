@@ -235,13 +235,18 @@ seastar::future<> OperationThrottler::background_task() {
   LOG_PREFIX(OperationThrottler::background_task);
   while (!stopped) {
     co_await cv.wait([this] {
-      return (available() && !scheduler->empty()) || stopped;
+      if (stopped) return true;
+      if (scheduler->empty()) return false;
+      // wake if client slots available OR if background ops pending
+      // background ops don't need client slots
+      return available() || (background_pending > 0 && background_available());
     });
 
     // It might be possible as mclock scheduler can return a timestamp in double means
     // the work item is scheduled in the future, so in that case wait until
     // the returned timestamp in the dequeue response before retrying.
-    while (available() && !scheduler->empty() && !stopped) {
+    while (!scheduler->empty() && !stopped &&
+           (available() || (background_pending > 0 && background_available()))) {
       WorkItem work_item = scheduler->dequeue();
       if (auto when_ready = std::get_if<double>(&work_item)) {
         ceph::real_clock::time_point future_time = ceph::real_clock::from_double(*when_ready);
@@ -256,9 +261,17 @@ seastar::future<> OperationThrottler::background_task() {
         continue;
       }
       if (auto *item = std::get_if<crimson::osd::scheduler::item_t>(&work_item)) {
-        DEBUG("Waking up a work item");
+        const bool is_bg =
+          item->params.klass == SchedulerClass::background_recovery ||
+          item->params.klass == SchedulerClass::background_best_effort;
+        DEBUG("Waking up a work item (is_bg={})", is_bg);
         item->wake.set_value();
-        ++in_progress;
+        if (!is_bg) {
+          ++in_progress;
+        } else {
+          if (background_pending > 0) --background_pending;
+          ++background_in_progress;
+        }
         --pending;
         DEBUG("Updated counters during background_task: in_progress={}, pending={}", in_progress, pending);
       } else {
@@ -278,11 +291,18 @@ void OperationThrottler::wake() {
   cv.signal();
 }
 
-void OperationThrottler::release_throttle()
+void OperationThrottler::release_throttle(SchedulerClass klass)
 {
   LOG_PREFIX(OperationThrottler::release_throttle);
-  ceph_assert(in_progress > 0);
-  --in_progress;
+  const bool is_bg =
+    klass == SchedulerClass::background_recovery ||
+    klass == SchedulerClass::background_best_effort;
+  if (!is_bg) {
+    ceph_assert(in_progress > 0);
+    --in_progress;
+  } else {
+    if (background_in_progress > 0) --background_in_progress;
+  }
   DEBUG("Updated counters during release_throttle: in_progress={}, pending={}",
         in_progress, pending);
   wake();
@@ -293,6 +313,10 @@ seastar::future<> OperationThrottler::acquire_throttle(
 {
   crimson::osd::scheduler::item_t item{params, seastar::promise<>()};
   auto fut = item.wake.get_future();
+  const bool is_bg =
+    params.klass == SchedulerClass::background_recovery ||
+    params.klass == SchedulerClass::background_best_effort;
+  if (is_bg) ++background_pending;
   scheduler->enqueue(std::move(item));
   ++pending;
   wake();
@@ -354,7 +378,20 @@ void OperationThrottler::dump_detail(Formatter *f) const
 
 void OperationThrottler::update_from_config(const ConfigProxy &conf)
 {
-  max_in_progress = conf.get_val<uint64_t>("crimson_osd_scheduler_concurrency");
+  uint64_t concurrency = conf.get_val<uint64_t>("crimson_osd_scheduler_concurrency");
+  if (concurrency) {
+    // reserve 5% of slots for background ops (matching mClock default profile)
+    // minimum 1 background slot to ensure recovery always makes progress
+    // e.g. concurrency=8: max_background=1, max_in_progress=7
+    //      concurrency=20: max_background=1, max_in_progress=19
+    //      concurrency=100: max_background=5, max_in_progress=95
+    max_background_in_progress = std::max<uint64_t>(1, concurrency * 5 / 100);
+    max_in_progress = concurrency - max_background_in_progress;
+  } else {
+    // unlimited mode: no throttling for either
+    max_in_progress = 0;
+    max_background_in_progress = 0;
+  }
   wake();
 }
 
