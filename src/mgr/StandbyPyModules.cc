@@ -99,7 +99,7 @@ void StandbyPyModules::start_one(PyModuleRef py_module)
 
 int StandbyPyModule::load()
 {
-  Gil gil(py_module->pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true, get_name());
 
   // We tell the module how we name it, so that it can be consistent
   // with us in logging etc.
