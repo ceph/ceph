@@ -864,6 +864,39 @@ TEST_P(
   run_recovery(obj_name, false, pattern_p1);
 }
 
+TEST_P(TestECFailoverWithPeering, ScrubPartialWrite) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const std::string obj_name = "test_scrub_partial_write";
+
+  uint64_t partial_size = stripe_unit / 2;
+
+  std::cout << "Creating partial write object with size " << partial_size
+            << " bytes (stripe_unit=" << stripe_unit << ", full stripe would be "
+            << (k * stripe_unit) << " bytes)" << std::endl;
+
+  bufferlist bl = create_random_buffer(partial_size);
+  std::string test_data(bl.c_str(), bl.length());
+
+  std::cout << "Writing partial object (" << partial_size << " bytes)" << std::endl;
+  create_and_write_verify(obj_name, test_data);
+
+  write(obj_name, 0, test_data, test_data.size());
+
+  // NOTE: Partial writes may expose scrub issues with EC pools
+  std::cout << "Scrubbing partial write object to test scrub behavior" << std::endl;
+  bool corruption_detected = scrub_object(obj_name);
+
+  std::cout << "Scrub result for partial write: "
+            << (corruption_detected ? "corruption detected" : "no corruption detected")
+            << std::endl;
+
+  EXPECT_FALSE(corruption_detected)
+    << "scrub_object() should NOT detect corruption on valid partial write";
+
+  std::cout << "=== ScrubPartialWrite test completed ===" << std::endl;
+}
+
 /**
  * Test rollback after a sequence of blocked full-stripe and chunk writes.
  * This is a similar scenario to the previous test, but we force the shard
@@ -981,39 +1014,6 @@ TEST_P(TestECFailoverWithPeering, ScrubDetectsCorruption) {
   }
 
   std::cout << "=== ScrubDetectsCorruption test completed successfully ===" << std::endl;
-}
-
-TEST_P(TestECFailoverWithPeering, ScrubPartialWrite) {
-  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
-
-  const std::string obj_name = "test_scrub_partial_write";
-
-  uint64_t partial_size = stripe_unit / 2;
-
-  std::cout << "Creating partial write object with size " << partial_size
-            << " bytes (stripe_unit=" << stripe_unit << ", full stripe would be "
-            << (k * stripe_unit) << " bytes)" << std::endl;
-
-  bufferlist bl = create_random_buffer(partial_size);
-  std::string test_data(bl.c_str(), bl.length());
-
-  std::cout << "Writing partial object (" << partial_size << " bytes)" << std::endl;
-  create_and_write_verify(obj_name, test_data);
-
-  write(obj_name, 0, test_data, test_data.size());
-
-  // NOTE: Partial writes may expose scrub issues with EC pools
-  std::cout << "Scrubbing partial write object to test scrub behavior" << std::endl;
-  bool corruption_detected = scrub_object(obj_name);
-
-  std::cout << "Scrub result for partial write: "
-            << (corruption_detected ? "corruption detected" : "no corruption detected")
-            << std::endl;
-
-  EXPECT_FALSE(corruption_detected)
-    << "scrub_object() should NOT detect corruption on valid partial write";
-
-  std::cout << "=== ScrubPartialWrite test completed ===" << std::endl;
 }
 
 /**
