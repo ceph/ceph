@@ -141,7 +141,8 @@ Requirements:
 * Bucket-scope upgrades apply only to OSDs. CRUSH buckets do not influence upgrades
   of other daemon types, for example Monitors, Managers, and MDSes.
 
-Example:
+Example
+-------
 
 .. prompt:: bash #
 
