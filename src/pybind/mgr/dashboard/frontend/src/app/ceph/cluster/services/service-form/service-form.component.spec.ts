@@ -218,6 +218,32 @@ describe('ServiceFormComponent', () => {
       });
     });
 
+    describe('should test service cephfs-mirror', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'cephfs-mirror');
+      });
+
+      it('should allow creating cephfs-mirror without a name', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'cephfs-mirror',
+          placement: {},
+          unmanaged: false
+        });
+      });
+
+      it('should submit cephfs-mirror with the given name', () => {
+        formHelper.setValue('service_id', 'foo');
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'cephfs-mirror',
+          service_id: 'foo',
+          placement: {},
+          unmanaged: false
+        });
+      });
+    });
+
     describe('should test service rgw', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'rgw');
