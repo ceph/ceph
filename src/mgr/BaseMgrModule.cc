@@ -56,6 +56,7 @@ class MonCommandCompletion : public Context
   ActivePyModules *py_modules;
   PyObject *python_completion;
   const std::string tag;
+  const std::string module_name;
   SafeThreadState pThreadState;
 
 public:
@@ -64,9 +65,10 @@ public:
 
   MonCommandCompletion(
       ActivePyModules *py_modules_, PyObject* ev,
-      const std::string &tag_, PyThreadState *ts_)
+      const std::string &tag_, const std::string &module_name_,
+      PyThreadState *ts_)
     : py_modules(py_modules_), python_completion(ev),
-      tag(tag_), pThreadState(ts_)
+      tag(tag_), module_name(module_name_), pThreadState(ts_)
   {
     ceph_assert(python_completion != nullptr);
     Py_INCREF(python_completion);
@@ -77,7 +79,7 @@ public:
     if (python_completion) {
       // Usually do this in finish(): this path is only for if we're
       // being destroyed without completing.
-      Gil gil(pThreadState, true);
+      Gil gil(pThreadState, true, module_name);
       Py_DECREF(python_completion);
       python_completion = nullptr;
     }
@@ -92,7 +94,7 @@ public:
       // Scoped so the Gil is released before calling notify_all()
       // Create new thread state because this is called via the MonClient
       // Finisher, not the PyModules finisher.
-      Gil gil(pThreadState, true);
+      Gil gil(pThreadState, true, module_name);
 
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
       ceph_assert(set_fn != nullptr);
@@ -159,7 +161,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
   Py_DECREF(set_fn);
 
   MonCommandCompletion *command_c = new MonCommandCompletion(self->py_modules,
-      completion, tag, PyThreadState_Get());
+      completion, tag, self->this_module->get_name(), PyThreadState_Get());
 
   PyThreadState *tstate = PyEval_SaveThread();
 
