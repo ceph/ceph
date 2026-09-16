@@ -39,15 +39,8 @@ static int read_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Driver* dri
 {
   int r = -ENOTSUP;
 #ifdef WITH_RADOSGW_RADOS
-  rgw::sal::RadosStore* rados_store = static_cast<rgw::sal::RadosStore*>(driver);
-  // initialize a sync status manager to read the status
-  RGWMetaSyncStatusManager mgr(rados_store, rados_store->svc()->async_processor);
-  r = mgr.init(dpp);
-  if (r < 0) {
-    return r;
-  }
-  r = mgr.read_sync_status(dpp, sync_status);
-  mgr.stop();
+  auto *store = static_cast<rgw::sal::RadosStore*>(driver);
+  r = rgw_read_local_meta_sync_status(dpp, store, sync_status);
 #endif
   return r;
 }
@@ -60,6 +53,10 @@ int RGWPeriod::update_sync_status(const DoutPrefixProvider *dpp,
 {
   rgw_meta_sync_status status;
   int r = read_sync_status(dpp, driver, &status);
+  if (r == -ENOENT) {
+    // new zone joining might not have mdlog.sync-status created yet.
+    r = 0;
+  }
   if (r < 0) {
     ldpp_dout(dpp, 0) << "period failed to read sync status: "
                       << cpp_strerror(-r) << dendl;

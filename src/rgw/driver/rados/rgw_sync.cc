@@ -831,6 +831,26 @@ int RGWReadSyncStatusCoroutine::operate(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+int rgw_read_local_meta_sync_status(const DoutPrefixProvider *dpp,
+                                    rgw::sal::RadosStore* store,
+                                    rgw_meta_sync_status *sync_status)
+{
+  RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.start();
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    return ret;
+  }
+  RGWMetaSyncEnv env;
+  env.init(dpp, store->ctx(), store, nullptr /* conn */,
+           store->svc()->async_processor, &http_manager,
+           nullptr, store->getRados()->get_sync_tracer());
+  ret = crs.run(dpp, new RGWReadSyncStatusCoroutine(&env, sync_status));
+  http_manager.stop();
+  return ret;
+}
+
 class RGWFetchAllMetaCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
 
