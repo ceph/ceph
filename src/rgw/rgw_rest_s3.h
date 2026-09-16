@@ -811,7 +811,6 @@ protected:
   bool is_obj_update_op() const override {
     return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op() || is_select_op();
   }
-  RGWOp *get_common_read_op();
   RGWOp *get_obj_op(bool get_data);
 
   RGWOp *op_get() override;
@@ -845,7 +844,7 @@ public:
                                const std::string& frontend_prefix) override;
 
   RGWRESTMgr* get_resource_mgr_as_default(req_state* const s,
-                                          std::string_view uri,
+                                          const std::string& uri,
                                           std::string* our_uri) override;
 };
 

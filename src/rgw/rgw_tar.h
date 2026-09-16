@@ -13,8 +13,6 @@
 #include <boost/optional.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 
-#include "include/buffer.h"
-
 namespace rgw {
 namespace tar {
 

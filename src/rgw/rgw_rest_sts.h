@@ -250,7 +250,7 @@ public:
   ~RGWRESTMgr_STS() override = default;
 
   RGWRESTMgr *get_resource_mgr(req_state* const s,
-                               std::string_view uri,
+                               const std::string& uri,
                                std::string* const out_uri) override {
     return this;
   }
