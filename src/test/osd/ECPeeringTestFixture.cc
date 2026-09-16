@@ -53,11 +53,12 @@ ECPeeringTestFixture::ECPeeringTestFixture()
 void ECPeeringTestFixture::SetUp() {
   PGBackendTestFixture::SetUp();
 
-  // The harness does not use CRUSH, so we must set an upmap.  Choose the upmap
-  // to have shard == osd.
-  {
+  // Install a pg_upmap so that shard N is always on OSD N.
+  // Skipped when use_upmap() returns false (e.g. ECCrushTestFixture), which
+  // lets CRUSH determine placement naturally.
+  if (use_upmap()) {
     std::vector<int> initial_acting;
-    for (int i = 0; i < k + m; ++i) {
+    for (int i = 0; i < get_instance_count(); ++i) {
       initial_acting.push_back(i);
     }
     OSDMap::Incremental inc(osdmap->get_epoch() + 1);
@@ -154,6 +155,10 @@ void ECPeeringTestFixture::SetUp() {
     });
     return found_messages;
   });
+
+  // Allow derived fixtures to modify the OSDMap before the first peering
+  // cycle runs (e.g. ECCrushTestFixture installs a proper CRUSH map here).
+  pre_peering_hook();
 
   new_epoch_loop();
 }
