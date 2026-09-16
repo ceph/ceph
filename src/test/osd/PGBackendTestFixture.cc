@@ -35,7 +35,7 @@ void PGBackendTestFixture::setup_ec_pool()
 {
   CephContext *cct = g_ceph_context;
 
-  int num_osds = k + m;
+  int num_osds = num_zones * (k + m);
 
   osdmap = std::make_shared<OSDMap>();
   osdmap->set_max_osd(num_osds);
@@ -69,7 +69,7 @@ void PGBackendTestFixture::setup_ec_pool()
   // This will properly calculate up_osd_features
   osdmap->apply_incremental(inc);
 
-  pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags);
+  pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags, pool_id, num_zones);
   OSDMapTestHelpers::add_pool(osdmap, pool_id, pool);
 
   pgid = pg_t(0, pool_id);
