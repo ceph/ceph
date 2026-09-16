@@ -25,7 +25,7 @@ def get_dashboards_data() -> Dict[str, Any]:
     data: Dict[str, Any] = {'queries': {}, 'variables': {}, 'stats': {}}
     for file in sorted(Path(__file__).parent.parent
                        .joinpath('dashboards_out').glob('*.json')):
-        with open(file, 'r') as f:
+        with open(file, 'r', encoding='utf-8') as f:
             dashboard_data = json.load(f)
             data['stats'][str(file)] = {'total': 0, 'tested': 0}
             add_dashboard_queries(data, dashboard_data, str(file))

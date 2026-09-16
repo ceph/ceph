@@ -194,10 +194,18 @@ function(do_build_boost root_dir version)
       URL_HASH SHA256=${boost_sha256}
       DOWNLOAD_NO_PROGRESS 1)
   endif()
+  # Boost.Redis 1.87 includes <ciso646>, which libstdc++ 15 flags with a
+  # #warning in C++20 mode; with -Werror that fails every rgw translation
+  # unit on Ubuntu 26.04.  Upstream dropped the include in Boost 1.88
+  # (boostorg/redis e7c1b9ed5f); make the same one-line change to the
+  # bundled 1.87 until it is bumped.
+  set(patch_command
+    sed -i "/#include<ciso646>/d" <SOURCE_DIR>/boost/redis/adapter/detail/adapters.hpp)
   # build all components in a single shot
   include(ExternalProject)
   ExternalProject_Add(Boost
     ${source_dir}
+    PATCH_COMMAND ${patch_command}
     CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${configure_command}
     BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
     BUILD_IN_SOURCE 1
