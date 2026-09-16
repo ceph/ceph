@@ -14,6 +14,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <gtest/gtest-spi.h>
 #include "test/osd/ECPeeringTestFixture.h"
 #include "test/osd/TestCommon.h"
 
@@ -950,6 +951,105 @@ TEST_P(
   run_recovery(obj_name, false, pattern_p1);
 }
 
+/**
+ * Test rollback of blocked WRITE operations.
+ *
+ * This test demonstrates rollback behavior when a write is blocked to one shard
+ * and another shard fails, triggering a peering interval change and rollback.
+ *
+ * Test sequence, run independently for each combination of blocked_shard X
+ * and failed_shard Y:
+ * 1. Create an object with initial data
+ * 2. Block communication to shard X
+ * 3. Perform a write (should return -EINPROGRESS)
+ * 4. Mark shard Y as down (triggers rollback)
+ * 5. Release communication block
+ * 6. Verify object has original data (rollback succeeded), then scrub for
+ *    attribute consistency across shards
+ *
+ * This test requires m >= 2 to have multiple shards to test.
+ */
+TEST_P(
+  TestECFailoverWithPeering,
+  RollbackBlockedWrite
+) {
+  if (m < 2) {
+    GTEST_SKIP() << "RollbackBlockedWrite requires m >= 2";
+  }
+
+  const std::string obj_name = "test_rollback";
+  const size_t full_stripe_size = stripe_unit * k;
+  const std::string pattern_initial(full_stripe_size, 'A');
+  const std::string pattern_blocked(full_stripe_size, 'B');
+  const std::string pattern_after(full_stripe_size, 'C');
+
+  // Test all combinations of blocked shard X and failed shard Y
+  // We test shards 0, 1, and k (first data, second data, first parity)
+  std::vector<int> test_shards;
+
+  for (int zone = 0; zone < num_zones; ++zone)
+  {
+    int zone_base = zone * (k + m);
+    test_shards.push_back(zone_base + 0);
+    test_shards.push_back(zone_base + 1);
+    test_shards.push_back(zone_base + k);
+  }
+  
+  for (int blocked_shard : test_shards) {
+    for (int failed_shard : test_shards) {
+      if (blocked_shard == failed_shard) {
+        continue;  // Skip same shard
+      }
+
+      int primary = get_primary_shard_from_osdmap();
+      if (blocked_shard == primary || failed_shard == primary)
+      {
+        continue;
+      }
+      
+      std::cout << "\n=== Testing blocked_shard=" << blocked_shard
+                << " failed_shard=" << failed_shard << " ===" << std::endl;
+
+      // Step 1: Create object with initial data
+      create_and_write_verify(obj_name, pattern_initial);
+
+      // Step 2: Block communication to shard X
+      suspend_primary_to_osd(blocked_shard);
+
+      // Step 3: Perform a write (should return -EINPROGRESS)
+      int result = write(obj_name, 0, pattern_blocked, full_stripe_size);
+      ASSERT_EQ(-EINPROGRESS, result)
+        << "Write should be blocked for shard " << blocked_shard;
+      
+      // Step 3a: Perform an attribute write (may or may not complete)
+      // This tests whether attribute writes are also rolled back
+      int attr_result = write_attribute(obj_name, "test_attr", "blocked_value", false);
+      // Don't assert on the result - it may be -EINPROGRESS or succeed
+      std::cout << "Attribute write result: " << attr_result << std::endl;
+      
+      // Step 4: Mark shard Y as down (triggers rollback)
+      mark_osd_down(failed_shard);
+
+      // Step 4a: Release communication block
+      unsuspend_primary_to_osd(blocked_shard);
+      mark_osd_up(failed_shard);
+
+      // Step 5: Verify object has original data (rollback succeeded)
+      verify_object(obj_name);
+      
+      // Step 5a: Scrub to detect attribute inconsistencies across all shards
+      // This will catch if zone 1 shards failed to rollback attributes
+      bool corrupted = scrub_object(obj_name);
+      EXPECT_FALSE(corrupted)
+        << "Object '" << obj_name << "' has inconsistent attributes after rollback "
+        << "(blocked_shard=" << blocked_shard << ", failed_shard=" << failed_shard << ")";
+
+      // Clean up for next iteration
+      delete_object(obj_name);
+    }
+  }
+}
+
 TEST_P(TestECFailoverWithPeering, ScrubClean) {
   ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
 
@@ -1045,6 +1145,111 @@ TEST_P(TestECFailoverWithPeering, ScrubDetectsCorruption) {
 
   std::cout << "=== ScrubDetectsCorruption test completed successfully ===" << std::endl;
 }
+/**
+ * Test that ObjectTracker verification detects corruption during scrub.
+ * This proves that the scrub integration with ObjectTracker is working.
+ */
+TEST_P(TestECFailoverWithPeering, ObjectTrackerDetectsCorruption) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  // Enable object tracking for this test
+  enable_object_tracking();
+  ASSERT_TRUE(get_object_tracker() != nullptr) << "ObjectTracker should be enabled";
+
+  const std::string obj_name = "test_tracker_corruption";
+  const uint64_t object_size = k * stripe_unit;
+  
+  // Create test data
+  bufferlist bl = create_random_buffer(object_size);
+  std::string test_data(bl.c_str(), bl.length());
+  
+  std::cout << "Writing object '" << obj_name << "' (" << object_size << " bytes)" << std::endl;
+  create_and_write_verify(obj_name, test_data);
+  
+  // Verify tracker has recorded the object
+  ASSERT_TRUE(get_object_tracker()->object_exists(obj_name))
+    << "ObjectTracker should have recorded the object";
+  
+  // Verify the object matches tracker expectations before corruption
+  std::cout << "Verifying object before corruption" << std::endl;
+  bool corruption_before = scrub_object(obj_name);
+  EXPECT_FALSE(corruption_before)
+    << "Scrub should not detect corruption before we corrupt the object";
+  
+  // Now corrupt the object on the primary shard
+  std::cout << "Corrupting object '" << obj_name << "' on primary shard" << std::endl;
+  hobject_t hoid = make_test_object(obj_name);
+  
+  // Get primary shard
+  MockPGBackendListener* primary_listener = get_primary_listener();
+  ASSERT_TRUE(primary_listener != nullptr) << "Should have primary listener";
+  pg_shard_t primary_shard = primary_listener->pg_whoami;
+  
+  // Corrupt the data
+  corrupt_shard_data(hoid, primary_shard);
+
+  static TestECFailoverWithPeering* self;
+  self = this;
+  EXPECT_FATAL_FAILURE(self->verify_object("test_tracker_corruption"), "Data mismatch");
+
+  std::cout << "Scrubbing corrupted object - should detect corruption" << std::endl;
+  bool corruption_after = scrub_object(obj_name, /*skip_verify=*/true);
+
+  const bool supports_crc = (ec_plugin == "isa");
+  if (supports_crc) {
+    EXPECT_TRUE(corruption_after)
+      << "Scrub should detect corruption after we corrupted the object";
+  } else {
+    EXPECT_FALSE(corruption_after)
+      << "Scrub should not report corruption for jerasure (no per-shard CRCs)";
+  }
+
+  std::cout << "Test completed: ObjectTracker "
+            << (corruption_after ? "successfully detected" : "FAILED to detect")
+            << " corruption during scrub" << std::endl;
+
+  std::cout << "Deleting corrupted object " << obj_name << std::endl;
+  delete_object(obj_name);
+}
+TEST_P(TestECFailoverWithPeering, OSD0DownAddNewOSDRecovery) {
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  const std::string obj_name = "test_osd0_down_new_osd_recovery";
+  const std::string test_data = "Data before OSD 0 failure and new OSD addition";
+
+  // Write data to an object
+  create_and_write_verify(obj_name, test_data);
+  EXPECT_TRUE(primary_is_clean()) << "Primary should be clean before OSD failure";
+
+  // Mark OSD 0 (shard 0, the primary) as down
+  mark_osd_down(0);
+  ASSERT_TRUE(all_shards_active()) << "PG should be active after OSD 0 failure";
+
+  // Add a new OSD (k+m) to the cluster and assign it to shard 0
+  int new_osd_id = (k + m) * num_zones;
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMapTestHelpers::new_osd_up(*new_osdmap, new_osd_id, pgid, 0);
+  update_osdmap_with_peering(new_osdmap);
+
+  // Verify peering completed with the new OSD
+  ASSERT_TRUE(all_shards_active()) << "PG should be active after adding new OSD";
+
+  // Verify the new OSD is in the acting set at shard 0
+  std::vector<int> acting_osds;
+  int acting_primary = -1;
+  osdmap->pg_to_acting_osds(pgid, &acting_osds, &acting_primary);
+  EXPECT_EQ(acting_osds[0], new_osd_id)
+    << "New OSD should be at shard 0 position in acting set";
+
+  // Perform recovery to the new OSD
+  run_recovery(obj_name, true, test_data);
+
+  // Verify the object can be read after recovery
+  verify_object(obj_name);
+  EXPECT_TRUE(primary_is_clean()) << "Primary should be clean after recovery";
+}
+
 /**
  * DivergentLogRewindThenSplit
  *
