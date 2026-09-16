@@ -1099,7 +1099,7 @@ public:
         }
       }
     }
-    quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
+    quota_handler = RGWQuotaHandler::generate_handler(this, false);
     /* ordered listing cache */
     bucket_cache.reset(new BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));
