@@ -15,6 +15,7 @@
 # Define color variables
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -192,9 +193,9 @@ FDB_STATUS="unhealthy"
 BACKEND_STATUS="down"
 FRONTEND_STATUS="down"
 GW_STATUS="down"
-S3_STATUS="failed"
+S3_STATUS="skipped"
 S3_DETAIL=""
-FAST_TEST_STATUS="skipped"
+FAST_TEST_STATUS="${BLUE}skipped${NC}"
 
 kvrgw_instance_socket() { echo "/tmp/kvrgw-${1}.sock"; }
 kvrgw_instance_admin_socket() { echo "/tmp/kvrgw-admin-${1}.sock"; }
@@ -365,17 +366,107 @@ kvrgw_build() {
   cd "${ROOT}/frontend" && go mod tidy && go build -o "${ROOT}/build/kv-rgw-frontend" .
 }
 
+# Host path bind-mounted onto /usr/sbin/fdbserver in docker-compose.yml
+kvrgw_fdb_compose_server() {
+  local compose_file="${1:-${ROOT}/fdb-cluster/docker-compose.yml}"
+  grep -oP '^\s+- \K[^:]+:/usr/sbin/fdbserver' "${compose_file}" 2>/dev/null | head -1 | cut -d: -f1
+}
+
+kvrgw_fdb_dump_failure() {
+  local compose_dir="${ROOT}/fdb-cluster"
+  local compose_file="${compose_dir}/docker-compose.yml"
+  local host_srv expected="${FDB_ROOT}/usr/sbin/fdbserver"
+  host_srv="$(kvrgw_fdb_compose_server "${compose_file}")"
+  echo "ERROR: FDB cluster is not usable." >&2
+  echo "  compose: ${compose_file}" >&2
+  echo "  fdbserver bind-mount (host): ${host_srv:-<missing from compose>}" >&2
+  echo "  expected executable: ${expected}" >&2
+  if [[ -n "${host_srv}" ]]; then
+    ls -ld "${host_srv}" >&2 || echo "  (bind-mount path does not exist)" >&2
+  fi
+  if [[ -d "${host_srv:-}" ]]; then
+    echo "  Docker created a directory at the bind-mount because the binary was missing." >&2
+    echo "  Containers then exec that directory and crash (exit 126: Is a directory)." >&2
+  fi
+  echo "  docker compose ps:" >&2
+  (cd "${compose_dir}" && sudo docker compose ps) >&2 || true
+  echo "  fdb-storage00 logs (last 30):" >&2
+  sudo docker logs --tail 30 fdb-storage00 >&2 || true
+  echo "  regenerate compose bind-mounts: bash scripts/gen_docker_compose.sh ${ROOT}/FDB-Config9.md" >&2
+}
+
+kvrgw_fdb_check_server_mount() {
+  local compose_file="${ROOT}/fdb-cluster/docker-compose.yml"
+  local expected="${FDB_ROOT}/usr/sbin/fdbserver"
+  local host_srv
+  if [[ ! -f "${compose_file}" ]]; then
+    echo "ERROR: ${compose_file} missing (run gen_docker_compose.sh)" >&2
+    return 1
+  fi
+  host_srv="$(kvrgw_fdb_compose_server "${compose_file}")"
+  if [[ -z "${host_srv}" ]]; then
+    echo "ERROR: no fdbserver bind-mount in ${compose_file}" >&2
+    kvrgw_fdb_dump_failure
+    return 1
+  fi
+  if [[ ! -x "${expected}" ]]; then
+    echo "ERROR: missing ${expected} (run bash scripts/fetch_fdb.sh)" >&2
+    return 1
+  fi
+  if [[ -d "${host_srv}" ]]; then
+    echo "ERROR: compose mounts ${host_srv} which is a directory, not fdbserver." >&2
+    kvrgw_fdb_dump_failure
+    return 1
+  fi
+  if [[ ! -x "${host_srv}" ]]; then
+    echo "ERROR: fdbserver bind-mount is not an executable file: ${host_srv}" >&2
+    kvrgw_fdb_dump_failure
+    return 1
+  fi
+  if [[ "${host_srv}" != "${expected}" ]]; then
+    echo "ERROR: compose fdbserver path (${host_srv}) is not this tree (${expected})." >&2
+    echo "Stale docker-compose.yml from another checkout will crash-loop fdbserver." >&2
+    kvrgw_fdb_dump_failure
+    return 1
+  fi
+  return 0
+}
+
+kvrgw_fdb_wait_containers() {
+  local i status restarting
+  for i in $(seq 1 20); do
+    status="$(sudo docker inspect -f '{{.State.Status}}' fdb-storage00 2>/dev/null || echo missing)"
+    restarting="$(sudo docker inspect -f '{{.State.Restarting}}' fdb-storage00 2>/dev/null || echo true)"
+    if [[ "${status}" == "running" && "${restarting}" != "true" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ERROR: fdb-storage00 not running (status=${status:-unknown} restarting=${restarting:-unknown})" >&2
+  kvrgw_fdb_dump_failure
+  return 1
+}
+
+kvrgw_fdbcli() {
+  timeout "${FDB_CLI_TIMEOUT:-30}" "${FDB_CLI}" -C "${FDB_CLUSTER_FILE}" --exec "$1"
+}
+
 kvrgw_start_fdb() {
   echo "Starting FoundationDB (if needed)..."
+  kvrgw_fdb_check_server_mount || return 1
   "${ROOT}/scripts/start_fdb.sh" >/dev/null
   echo "Waiting for FDB..."
+  local _
   for _ in $(seq 1 30); do
-    if "${FDB_CLI}" -C "${FDB_CLUSTER_FILE}" --exec "status" 2>/dev/null | grep -q "Replication health     - Healthy"; then
+    if kvrgw_fdbcli "status" 2>/dev/null | grep -q "Replication health     - Healthy"; then
       FDB_STATUS="healthy"; return 0
     fi
     sleep 1
   done
-  FDB_STATUS="unhealthy"; return 1
+  FDB_STATUS="unhealthy"
+  echo "ERROR: FDB not healthy after start_fdb.sh" >&2
+  kvrgw_fdb_dump_failure
+  return 1
 }
 
 kvrgw_clean_fdb() {
@@ -394,6 +485,7 @@ kvrgw_clean_fdb() {
   local mounts=(/mnt/fdb0 /mnt/fdb1 /mnt/fdb2 /mnt/fdb-log0 /mnt/fdb-log1 /mnt/fdb-log2)
   echo "Stopping FDB containers..."
   (cd "${compose_dir}" && sudo docker compose down) >/dev/null 2>&1 || true
+  kvrgw_fdb_check_server_mount || return 1
   echo "Wiping FDB data..."
   for m in "${mounts[@]}"; do
     sudo rm -rf "${m}/data" "${m}/logs" "${m}/fdb.cluster" 2>/dev/null || true
@@ -406,34 +498,43 @@ kvrgw_clean_fdb() {
     echo "docker:${seed_id}@127.0.0.1:4500" | sudo tee "${m}/fdb.cluster" >/dev/null
   done
   echo "Restarting FDB containers..."
-  (cd "${compose_dir}" && sudo docker compose up -d) >/dev/null 2>&1
-  sleep 5
+  mkdir -p "${ROOT}/.logs"
+  if ! (cd "${compose_dir}" && sudo docker compose up -d) >"${ROOT}/.logs/fdb-cluster.log" 2>&1; then
+    echo "ERROR: docker compose up failed (see ${ROOT}/.logs/fdb-cluster.log)" >&2
+    cat "${ROOT}/.logs/fdb-cluster.log" >&2 || true
+    kvrgw_fdb_dump_failure
+    return 1
+  fi
+  kvrgw_fdb_wait_containers || return 1
   local cluster_file="/mnt/fdb0/fdb.cluster"
   local attempts=30
   while [[ ! -f "${cluster_file}" && $attempts -gt 0 ]]; do
     sleep 1; ((attempts--))
   done
-  [[ -f "${cluster_file}" ]] || { echo "ERROR: ${cluster_file} not created after restart" >&2; return 1; }
+  [[ -f "${cluster_file}" ]] || { echo "ERROR: ${cluster_file} not created after restart" >&2; kvrgw_fdb_dump_failure; return 1; }
+  mkdir -p "$(dirname "${FDB_CLUSTER_FILE}")"
   cp "${cluster_file}" "${FDB_CLUSTER_FILE}"
   echo "Initializing fresh FDB cluster (engine=${fdbcli_engine})..."
-  if ! "${FDB_CLI}" -C "${FDB_CLUSTER_FILE}" --exec "configure new single ${fdbcli_engine}"; then
-    echo "ERROR: configure new single ${fdbcli_engine} failed" >&2
+  if ! kvrgw_fdbcli "configure new single ${fdbcli_engine}"; then
+    echo "ERROR: configure new single ${fdbcli_engine} failed (coordinator not reachable within ${FDB_CLI_TIMEOUT:-30}s)" >&2
+    kvrgw_fdb_dump_failure
     return 1
   fi
-  "${FDB_CLI}" -C "${FDB_CLUSTER_FILE}" --exec "configure triple" >/dev/null 2>&1 || true
-  "${FDB_CLI}" -C "${FDB_CLUSTER_FILE}" --exec "coordinators auto" >/dev/null 2>&1 || true
+  kvrgw_fdbcli "configure triple" >/dev/null 2>&1 || true
+  kvrgw_fdbcli "coordinators auto" >/dev/null 2>&1 || true
   sleep 3
   cp /mnt/fdb0/fdb.cluster "${FDB_CLUSTER_FILE}"
   echo "Waiting for FDB healthy (up to 60s)..."
   local i
   for i in $(seq 1 60); do
-    if "${FDB_CLI}" -C "${FDB_CLUSTER_FILE}" --exec "status" 2>/dev/null | grep -q "Replication health     - Healthy"; then
+    if kvrgw_fdbcli "status" 2>/dev/null | grep -q "Replication health     - Healthy"; then
       echo "FDB healthy after ${i}s."
       return 0
     fi
     sleep 1
   done
   echo "ERROR: FDB not healthy after 60s" >&2
+  kvrgw_fdb_dump_failure
   return 1
 }
 
@@ -678,11 +779,6 @@ kvrgw_run_fast_tests() {
 kvrgw_print_report() {
   local n="${KVRGW_INSTANCES}" i fp rid
   echo ""; echo "KV-RGW reload report"; echo "===================="
-  if [[ "${FDB_STATUS}" == "healthy" ]]; then
-      FDB_STATUS="${GREEN}${FDB_STATUS}${NC}"
-  else
-      FDB_STATUS="${RED}${FDB_STATUS}${NC}"
-  fi
 
   # Colorize FDB status into a NEW variable
   if [[ "${FDB_STATUS}" == "healthy" ]]; then
@@ -699,6 +795,8 @@ kvrgw_print_report() {
 
   if [[ "${S3_STATUS}" == "ok" ]]; then
       S3_STATUS_COLORED="${GREEN}${S3_STATUS}${NC}"
+  elif [[ "${S3_STATUS}" == "skipped" ]]; then
+      S3_STATUS_COLORED="${BLUE}${S3_STATUS}${NC}"
   else
       S3_STATUS_COLORED="${RED}${S3_STATUS}${NC}"
   fi

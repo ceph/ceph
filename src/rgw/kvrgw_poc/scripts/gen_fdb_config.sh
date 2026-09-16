@@ -13,14 +13,17 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RESOURCES="${ROOT}/System-Resources.md"
+if [[ -f "${ROOT}/System-Resources.md" ]]; then
+  RESOURCES="${ROOT}/System-Resources.md"
+elif [[ -f "${ROOT}/docs/System-Resources.md" ]]; then
+  RESOURCES="${ROOT}/docs/System-Resources.md"
+else
+  echo "ERROR: System-Resources.md not found (tried ${ROOT}/ and ${ROOT}/docs/)" >&2
+  exit 1
+fi
 CONFIG="${1:-${ROOT}/FDB-Default-Config.txt}"
 OUTPUT_NAME="$(basename "${CONFIG}" .txt).md"
 OUTPUT="${ROOT}/${OUTPUT_NAME}"
-
-if [[ ! -f "${RESOURCES}" ]]; then
-  echo "ERROR: ${RESOURCES} not found" >&2; exit 1
-fi
 if [[ ! -f "${CONFIG}" ]]; then
   echo "ERROR: ${CONFIG} not found" >&2; exit 1
 fi

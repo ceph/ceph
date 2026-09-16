@@ -33,6 +33,27 @@ if [[ ! -f "${COMPOSE_DIR}/docker-compose.yml" ]]; then
   exit 1
 fi
 
+COMPOSE_FDBSERVER="$(grep -oP '^\s+- \K[^:]+:/usr/sbin/fdbserver' "${COMPOSE_DIR}/docker-compose.yml" 2>/dev/null | head -1 | cut -d: -f1 || true)"
+if [[ -z "${COMPOSE_FDBSERVER}" ]]; then
+  echo "ERROR: no fdbserver bind-mount in ${COMPOSE_DIR}/docker-compose.yml" >&2
+  exit 1
+fi
+if [[ -d "${COMPOSE_FDBSERVER}" ]]; then
+  echo "ERROR: compose mounts ${COMPOSE_FDBSERVER} which is a directory, not fdbserver." >&2
+  echo "Regenerate: bash scripts/gen_docker_compose.sh ${ROOT}/FDB-Config9.md" >&2
+  sudo docker logs --tail 20 fdb-storage00 >&2 || true
+  exit 1
+fi
+if [[ ! -x "${COMPOSE_FDBSERVER}" ]]; then
+  echo "ERROR: fdbserver bind-mount is not executable: ${COMPOSE_FDBSERVER}" >&2
+  exit 1
+fi
+if [[ "${COMPOSE_FDBSERVER}" != "${FDB_SERVER}" ]]; then
+  echo "ERROR: compose fdbserver path (${COMPOSE_FDBSERVER}) is not this tree (${FDB_SERVER})." >&2
+  echo "Regenerate: bash scripts/gen_docker_compose.sh ${ROOT}/FDB-Config9.md" >&2
+  exit 1
+fi
+
 MOUNTS=(/mnt/fdb0 /mnt/fdb1 /mnt/fdb2 /mnt/fdb-log0 /mnt/fdb-log1 /mnt/fdb-log2)
 for m in "${MOUNTS[@]}"; do
   if ! mountpoint -q "$m" 2>/dev/null; then
@@ -56,11 +77,16 @@ fi
 
 cp /mnt/fdb0/fdb.cluster "${CLUSTER_FILE}"
 
-if ! "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "status minimal" 2>/dev/null | grep -q "healthy\|available"; then
+if ! timeout 15 "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "status minimal" 2>/dev/null | grep -q "healthy\|available"; then
   echo "Initializing new FDB cluster..."
-  "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "configure new single ssd" >/dev/null 2>&1 || true
-  "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "configure triple" >/dev/null 2>&1 || true
-  "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "coordinators auto" >/dev/null 2>&1 || true
+  if ! timeout 30 "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "configure new single ssd"; then
+    echo "ERROR: configure new failed (coordinator not reachable). fdb-storage00 logs:" >&2
+    sudo docker logs --tail 30 fdb-storage00 >&2 || true
+    sudo docker ps -a --filter name=fdb-storage00 --format '{{.Names}} {{.Status}}' >&2 || true
+    exit 1
+  fi
+  timeout 30 "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "configure triple" >/dev/null 2>&1 || true
+  timeout 30 "${FDB_CLI}" -C "${CLUSTER_FILE}" --exec "coordinators auto" >/dev/null 2>&1 || true
   sleep 3
   cp /mnt/fdb0/fdb.cluster "${CLUSTER_FILE}"
 fi

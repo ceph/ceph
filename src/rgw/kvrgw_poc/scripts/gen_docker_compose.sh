@@ -15,11 +15,18 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FDB_MD="${1:?Usage: gen_docker_compose.sh <FDB-Config-XXX.md>}"
 COMPOSE_OUT="${ROOT}/fdb-cluster/docker-compose.yml"
-RESOURCES="${ROOT}/System-Resources.md"
+if [[ -f "${ROOT}/System-Resources.md" ]]; then
+  RESOURCES="${ROOT}/System-Resources.md"
+elif [[ -f "${ROOT}/docs/System-Resources.md" ]]; then
+  RESOURCES="${ROOT}/docs/System-Resources.md"
+else
+  echo "ERROR: System-Resources.md not found (tried ${ROOT}/ and ${ROOT}/docs/)" >&2
+  exit 1
+fi
 FDBSERVER_PATH="${ROOT}/third_party/fdb/usr/sbin/fdbserver"
 
 [[ -f "${FDB_MD}" ]] || { echo "ERROR: ${FDB_MD} not found" >&2; exit 1; }
-[[ -f "${RESOURCES}" ]] || { echo "ERROR: ${RESOURCES} not found" >&2; exit 1; }
+[[ -x "${FDBSERVER_PATH}" ]] || { echo "ERROR: fdbserver not executable at ${FDBSERVER_PATH} (run bash scripts/fetch_fdb.sh)" >&2; exit 1; }
 
 # #6: Build mount allowlist from System-Resources.md
 ALLOWED_MOUNTS=()

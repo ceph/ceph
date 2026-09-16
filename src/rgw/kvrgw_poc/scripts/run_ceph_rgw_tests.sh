@@ -15,7 +15,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-S3TESTS_DIR="${S3TESTS_DIR:-$HOME/clean/ceph/src/test/rgw/s3-tests}"
+S3TESTS_DIR="${S3TESTS_DIR:-../../test/rgw/s3-tests}"
 S3TEST_CONF="${S3TEST_CONF:-$ROOT/s3tests.conf}"
 
 CATEGORY=""
