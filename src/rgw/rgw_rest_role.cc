@@ -53,7 +53,7 @@ static void dump_iam_role(const RGWRoleInfo& role, Formatter *f)
 }
 
 static int parse_tags(const DoutPrefixProvider* dpp,
-                      const RGWHTTPArgs::name_value_map& params,
+                      const std::map<std::string, std::string>& params,
                       std::multimap<std::string, std::string>& tags,
                       std::string& message)
 {
