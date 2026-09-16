@@ -1779,7 +1779,7 @@ TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  lfdb::set(lfdb::make_transaction(j), key, n, lfdb::commit_after_op::commit);
  lfdb::get(lfdb::make_transaction(j), key, o, lfdb::commit_after_op::no_commit);
 
- REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
  // vector<uint8_t> -> vector<uint8_t>
@@ -1834,7 +1834,62 @@ TEST_CASE("fdb conversions (functions)", "[fdb][rgw]")
   }));
 
   CAPTURE(n);
-  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+ REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+ }
+}
+
+TEST_CASE("managed reads distinguish FDB failures from callback failures", "[fdb]")
+{
+ janitor dbh;
+
+ // FoundationDB's transaction_not_committed error is retryable:
+ constexpr fdb_error_t not_committed = 1020;
+ REQUIRE(fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, not_committed));
+
+ SECTION("successful reads do not commit") {
+  const auto key = test_key("managed-read-no-commit");
+
+  lfdb::detail::in_read_transaction(dbh, [&key](auto& txn) {
+   lfdb::set(txn, key, "discarded", lfdb::commit_after_op::no_commit);
+  });
+
+  CHECK_FALSE(lfdb::key_exists(dbh, key));
+ }
+
+ SECTION("retryable read failures replay the operation") {
+  std::size_t attempts = 0;
+
+  const auto result = lfdb::detail::in_read_transaction(
+   dbh, [&attempts](auto&) {
+    if (1 == ++attempts) {
+     throw lfdb::libfdb_exception(not_committed);
+    }
+
+    return 42;
+   });
+
+  CHECK(42 == result);
+  CHECK(2 == attempts);
+ }
+
+ SECTION("callback failures are never classified as FDB read failures") {
+  const auto key = test_key("managed-read-callback-error");
+  std::size_t calls = 0;
+
+  lfdb::set(dbh, key, "value");
+
+  try {
+   std::ignore = lfdb::get(
+    dbh, key, [&calls](std::span<const std::uint8_t>) {
+     ++calls;
+     throw lfdb::libfdb_exception(not_committed);
+    });
+   FAIL("expected callback failure");
+  } catch (const lfdb::libfdb_exception& e) {
+   CHECK(not_committed == e.fdb_error_value);
+  }
+
+  CHECK(1 == calls);
  }
 }
 

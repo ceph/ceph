@@ -19,6 +19,7 @@
 
 #include <tuple>
 #include <limits>
+#include <exception>
 
 namespace ceph::libfdb {
 
@@ -277,12 +278,36 @@ template <transaction_op FnT>
 auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>;
 
 template <transaction_op FnT>
+auto retry_read(transaction_handle& txn, FnT&& fn) -> operation_result_t<FnT>;
+
+template <transaction_op FnT>
 auto commit_noreplay(transaction_handle txn, const commit_after_op commit_after, FnT&& fn)
  -> operation_result_t<FnT>;
 
 template <transaction_op FnT>
 auto in_transaction(database_handle dbh, FnT&& fn)
  -> operation_result_t<FnT>;
+
+template <transaction_op FnT>
+auto in_read_transaction(database_handle dbh, FnT&& fn)
+ -> operation_result_t<FnT>;
+
+// Keep caller failures out of FoundationDB's retry classifier:
+struct user_callback_failure final
+{
+ std::exception_ptr cause;
+};
+
+inline void invoke_user_callback(concepts::value_callback auto& fn,
+                                 const std::span<const std::uint8_t> value)
+try
+{
+ std::invoke(fn, value);
+}
+catch (...)
+{
+ throw user_callback_failure {std::current_exception()};
+}
 
 } // namespace ceph::libfdb::detail
 
@@ -1096,7 +1121,7 @@ inline std::size_t get(ceph::libfdb::database_handle dbh,
                        concepts::string_pair_output_iterator auto out_iter,
                        const read_mode mode = read_mode::serializable)
 {
- auto result = detail::in_transaction(dbh,
+ auto result = detail::in_read_transaction(dbh,
           [&selection, mode](transaction_handle& txn) {
             using out_t = std::vector<std::pair<std::string, std::string>>;
             return detail::materialize_string_pair_selection<out_t>(*txn, selection, mode);
@@ -1141,7 +1166,7 @@ inline std::size_t get(ceph::libfdb::database_handle dbh,
 {
  using out_t = std::remove_cvref_t<decltype(out)>;
 
- auto result = detail::in_transaction(dbh,
+ auto result = detail::in_read_transaction(dbh,
           [&selection, mode](transaction_handle& txn) {
             return detail::materialize_string_pair_selection<out_t>(*txn, selection, mode);
           });
@@ -1231,11 +1256,23 @@ inline bool get(ceph::libfdb::database_handle dbh,
                 const concepts::libfdb_key auto& key,
                 OutputTargetOrFnT&& output_target_or_fn,
                 const read_mode mode = read_mode::serializable)
+try
 {
- return detail::in_transaction(dbh,
+ return detail::in_read_transaction(dbh,
           [key, &output_target_or_fn, mode](transaction_handle& txn) {
-            return get(txn, key, output_target_or_fn, mode, commit_after_op::no_commit);
+            auto&& output = detail::get_output_for(output_target_or_fn);
+
+            return get(txn, key,
+                       [&output](const std::span<const std::uint8_t> value) {
+                         detail::invoke_user_callback(output, value);
+                       },
+                       mode,
+                       commit_after_op::no_commit);
           });
+}
+catch (const detail::user_callback_failure& failure)
+{
+ std::rethrow_exception(failure.cause);
 }
 
 // Adapt "out" to FDB's raw little-endian representation used by numeric atomic
@@ -1283,7 +1320,7 @@ inline bool key_exists(database_handle dbh,
                        const concepts::libfdb_key auto& k,
                        const read_mode mode = read_mode::serializable)
 {
- return detail::in_transaction(dbh,
+ return detail::in_read_transaction(dbh,
           [k, mode](transaction_handle& txn) {
             return key_exists(txn, k, mode, commit_after_op::no_commit);
           });
@@ -1747,13 +1784,13 @@ auto blocks_selector(ceph::libfdb::database_handle dbh,
 
  auto plan = detail::plan_range_work(dbh, selector, target_bytes);
 
- auto read_blocks = [txr = make_transactor(dbh), mode](this auto& self, ceph::libfdb::select range, const int iteration)
+ auto read_blocks = [dbh, mode](this auto& self, ceph::libfdb::select range, const int iteration)
  -> std::generator<AssocT> {
-  auto read_result = txr([](auto& txn, ceph::libfdb::select range,
-                            const int iteration, const read_mode mode) {
-   return detail::materialize_query_window<ValueT, AssocT>(
-    *txn, std::move(range), iteration, mode);
-  }, std::move(range), iteration, mode);
+  auto read_result = detail::in_read_transaction(
+   dbh, [range = std::move(range), iteration, mode](transaction_handle& txn) {
+    return detail::materialize_query_window<ValueT, AssocT>(
+     *txn, range, iteration, mode);
+   });
 
   auto next_range = std::move(read_result.next_range);
 
@@ -2024,6 +2061,14 @@ auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>
           });
 }
 
+template <transaction_op FnT>
+auto retry_read(transaction_handle& txn, FnT&& fn) -> operation_result_t<FnT>
+{
+ return invoke_with_retry<invocation_failure_policy::retry>(
+  txn, std::forward<FnT>(fn),
+  [](transaction_handle&) noexcept { return true; });
+}
+
 template <result_reporting_transaction_op FnT>
 transaction_result maybe_retry_with_result(transaction_handle txn, FnT&& fn)
 {
@@ -2068,6 +2113,16 @@ auto in_transaction(database_handle dbh, FnT&& fn)
  -> operation_result_t<FnT>
 {
  return maybe_retry(make_transaction(dbh), std::forward<FnT>(fn));
+}
+
+template <transaction_op FnT>
+auto in_read_transaction(database_handle dbh, FnT&& fn)
+ -> operation_result_t<FnT>
+{
+ auto txn = make_transaction(dbh);
+
+ // Successful read-only transactions can simply be destroyed without commit:
+ return retry_read(txn, std::forward<FnT>(fn));
 }
 
 // Commit only once; the caller is responsible for transaction replay:
