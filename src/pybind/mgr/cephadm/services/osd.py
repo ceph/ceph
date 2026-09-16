@@ -139,9 +139,13 @@ class OSDService(CephService):
             futures = [create_from_spec_one(h, ds)
                        for h, ds in self.prepare_drivegroup(drive_group)]
             results = await gather(*futures, return_exceptions=True)
+            failed = []
             for result in results:
                 if isinstance(result, Exception):
                     self.mgr.log.error(f'Failed to create OSD: {result}')
+                    failed.append(result)
+            if failed:
+                raise failed[0]
             return [result for result in results if isinstance(result, str)]
 
         with self.mgr.async_timeout_handler('cephadm deploy (osd daemon)'):
