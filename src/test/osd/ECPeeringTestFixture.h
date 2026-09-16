@@ -214,23 +214,57 @@ public:
   // Inject a one-shot read error on the given shard's store for this object.
   void inject_read_error_for_shard(const std::string& obj_name, int shard, int error_code);
 
-  void run_recovery_and_verify_callbacks(
+  /**
+   * run_recovery - Run recovery for an object
+   *
+   * This helper function encapsulates the complete EC recovery flow:
+   * 1. Verifies consistency of missing sets
+   * 2. Runs the recovery operation
+   *
+   * @param obj_name The name of the object to recover
+   * @param recover_primary If true, recover to primary; if false, recover to peers
+   * @param expected_data The expected data content after recovery
+   */
+  void run_recovery(
     const std::string& obj_name,
-    int removed_osd,
+    bool recover_primary,
     const std::string& expected_data);
 
-  // Recover multiple objects in a single parallel operation (reproduces bug 75432).
-  void run_parallel_recovery_and_verify_callbacks(
+  /**
+   * run_parallel_recovery - Run parallel recovery for multiple objects
+   *
+   * This helper function recovers multiple objects in parallel within a single recovery
+   * operation. This is the key difference from run_recovery which recovers objects
+   * sequentially (one at a time).
+   *
+   * The parallel recovery flow:
+   * 1. Calls recover_object() for ALL objects first (queues them)
+   * 2. Calls run_recovery_op() ONCE to process all queued recoveries together
+   *
+   * This reproduces Bug 75432 where multiple objects in a single operation can cause
+   * assertion failures when some complete while others need resend.
+   *
+   * @param obj_names Vector of object names to recover in parallel
+   * @param recover_primary If true, recover to primary; if false, recover to peers
+   * @param expected_data Vector of expected data content (must match obj_names size)
+   */
+  void run_parallel_recovery(
     const std::vector<std::string>& obj_names,
-    int target_osd,
+    bool recover_primary,
     const std::vector<std::string>& expected_data);
 
 private:
-  void do_run_parallel_recovery_and_verify_callbacks_impl(
+  void do_run_parallel_recovery_impl(
     const std::vector<std::string>& obj_names,
-    int target_osd,
+    bool recover_primary,
     const std::vector<std::string>& expected_data,
     int instance);
+
+  /**
+   * Helper to check recovery completion and queue appropriate events.
+   * This mimics what PrimaryLogPG::start_recovery_ops() does when recovery completes.
+   */
+  void check_recovery_completion_impl(int osd_id);
 
 private:
   // Save initial config state for restoration in TearDown()
