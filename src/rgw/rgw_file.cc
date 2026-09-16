@@ -468,6 +468,7 @@ namespace rgw {
      * succeeds */
     int rc = -EINVAL;
     real_time t;
+    auto proto = g_rgwlib->get_protocol_type();
 
     std::string src_name{_src_name};
     std::string dst_name{_dst_name};
@@ -496,7 +497,7 @@ namespace rgw {
     }
 
     /* forbid renaming open files (violates intent, for now) */
-    if (rgw_fh->is_open()) {
+    if (rgw_fh->is_open() && proto != ProtocolType::SMB) {
       ldout(get_context(), 12) << __func__
 			<< " rejecting attempt to rename open file path="
 			<< rgw_fh->full_object_name()
