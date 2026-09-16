@@ -336,7 +336,16 @@ protected:
     new_epoch();
   }
 
-  // Helper - take OSD down by removing it from up/acting set
+  // Helper - only mark OSD down+out in the OSDMap
+  void mark_osd_down(int osd) {
+    dout(0) << "= mark osd." << osd << " down+out =" << dendl;
+    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
+    pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP); // XORed
+    pending_inc.new_weight[osd] = CEPH_OSD_OUT;
+    apply_incremental(pending_inc);
+  }
+
+  // Helper - take OSD down by removing it from up/acting set, update OSDMap
   void osd_down(int offset, int osd) {
     dout(0) << "= osd." << osd << "(" << offset << ") set down+out =" << dendl;
     ceph_assert(up[offset] == osd);
@@ -344,10 +353,15 @@ protected:
     ceph_assert(acting[offset] == osd);
     acting[offset] = pg_pool_t::pg_CRUSH_ITEM_NONE;
     up_acting.erase(remove(up_acting.begin(), up_acting.end(), osd), up_acting.end());
-    // Mark the OSD down+out in the OSDMap
+    mark_osd_down(osd);
+  }
+
+  // Helper - only mark OSD up+in in the OSDMap
+  void mark_osd_up(int osd) {
+    dout(0) << "= mark osd." << osd << " up+in =" << dendl;
     OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
-    pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP); // XORed
-    pending_inc.new_weight[osd] = CEPH_OSD_OUT;
+    pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP);
+    pending_inc.new_weight[osd] = CEPH_OSD_IN;
     apply_incremental(pending_inc);
   }
 
@@ -359,11 +373,7 @@ protected:
     ceph_assert(acting[offset] == pg_pool_t::pg_CRUSH_ITEM_NONE);
     acting[offset] = osd;
     up_acting.push_back(osd);
-    // Mark the OSD up+in in the OSD Map
-    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
-    pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP);
-    pending_inc.new_weight[osd] = CEPH_OSD_IN;
-    apply_incremental(pending_inc);
+    mark_osd_up(osd);
   }
 
   // ============================================================================
@@ -534,9 +544,20 @@ protected:
     return rc;
   }
 
+  bool dispatch_specific_osd(int fromosd)
+  {
+    dout(0) << "= dispatch_specific_osd fromosd=" << fromosd << " =" << dendl;
+    bool did_work = false;
+    did_work |= dispatch_peering_messages(fromosd);
+    did_work |= dispatch_cluster_messages(fromosd);
+    did_work |= dispatch_events(fromosd);
+    return did_work;
+  }
+
   // Dispatch all types of queued work repeatedly until queues are empty
   bool dispatch_all()
   {
+    dout(0) << "= dispatch_all =" << dendl;
     bool rc = false;
     bool did_work;
     do {
@@ -680,7 +701,7 @@ protected:
   // Helper - activate map event for all osds
   void test_event_activate_map(int toosd = -1)
   {
-    dout(0) << "= test_event_activate_map =" << dendl;
+    dout(0) << "= test_event_activate_map e" << osdmap->get_epoch() << " =" << dendl;
     for (auto osd : up_acting ) {
       if (toosd != -1 && toosd != osd) {
         continue;
