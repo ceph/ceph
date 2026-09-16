@@ -10,6 +10,7 @@
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
 #include "crimson/common/perf_counters_collection.h"
+#include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 
@@ -31,9 +32,12 @@ class PerfTree : public TMTestState {
   seastar::future<> run(KVPool<test_item_t>& kvs, double erase_ratio) {
     return tm_setup().then([this, &kvs, erase_ratio] {
       return seastar::async([this, &kvs, erase_ratio] {
+        auto collection_manager =
+          std::make_unique<crimson::os::seastore::collection_manager::FlatCollectionManager>(*tm);
         auto tree = std::make_unique<TreeBuilder<TRACK, ExtendedValue>>(kvs,
             (is_dummy ? NodeExtentManager::create_dummy(true)
-                      : NodeExtentManager::create_seastore(*tm)));
+                      : NodeExtentManager::create_seastore(
+                          *tm, coll_t::meta(), *collection_manager)));
         {
           auto t = create_mutate_transaction();
           with_trans_intr(*t, [&](auto &tr){
