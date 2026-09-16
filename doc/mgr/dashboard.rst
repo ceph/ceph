@@ -442,6 +442,10 @@ The setting can be unset using:
 
    ceph dashboard unset-rgw-hostname <gateway_name>
 
+The dashboard only talks to gateways whose frontend accepts a connection from
+the active manager. When no gateway is selected it prefers the default
+zonegroup and keeps its pick until it stops responding or a setting changes.
+
 If the Object Gateway takes too long to process requests and the dashboard runs
 into timeouts, you can set the timeout value to your needs:
 
