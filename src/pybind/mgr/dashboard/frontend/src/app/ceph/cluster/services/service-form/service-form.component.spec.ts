@@ -143,6 +143,41 @@ describe('ServiceFormComponent', () => {
       formHelper.expectError('count', 'pattern');
     });
 
+    it('should reject count greater than selected hosts', () => {
+      formHelper.setValue('service_type', 'cephfs-mirror');
+      formHelper.setValue('placement', 'hosts');
+      formHelper.setValue('hosts', [{ content: 'host1', selected: true }]);
+      formHelper.setValue('count', 2);
+      formHelper.expectError('count', 'maxHosts');
+    });
+
+    it('should allow count equal to selected hosts', () => {
+      formHelper.setValue('service_type', 'cephfs-mirror');
+      formHelper.setValue('placement', 'hosts');
+      formHelper.setValue('hosts', [
+        { content: 'host1', selected: true },
+        { content: 'host2', selected: true }
+      ]);
+      formHelper.setValue('count', 2);
+      formHelper.expectValid('count');
+    });
+
+    it('should allow count without selected hosts', () => {
+      formHelper.setValue('service_type', 'crash');
+      formHelper.setValue('placement', 'hosts');
+      formHelper.setValue('hosts', []);
+      formHelper.setValue('count', 3);
+      formHelper.expectValid('count');
+    });
+
+    it('should allow count greater than hosts for colocated services', () => {
+      formHelper.setValue('service_type', 'mds');
+      formHelper.setValue('placement', 'hosts');
+      formHelper.setValue('hosts', [{ content: 'host1', selected: true }]);
+      formHelper.setValue('count', 2);
+      formHelper.expectValid('count');
+    });
+
     it('should test unmanaged', () => {
       formHelper.setValue('service_type', 'mgr');
       formHelper.setValue('service_id', 'svc');
