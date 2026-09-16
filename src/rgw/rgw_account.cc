@@ -422,13 +422,14 @@ int remove(const DoutPrefixProvider* dpp,
     return -ENOTEMPTY;
   }
 
-  for (const auto& info : providers) {
-    ret = driver->delete_oidc_provider(dpp, y, info.tenant, info.provider_url);
+  for (const auto& oidc : providers) {
+    const auto url = url_remove_prefix(oidc.provider_url); // strip scheme://
+    ret = driver->delete_oidc_provider(dpp, y, info.id, url);
     if (ret < 0) {
-      err_msg = fmt::format("unable to delete oidc provider {}", info.provider_url);
+      err_msg = fmt::format("unable to delete oidc provider {}", oidc.provider_url);
       return ret;
     }
-    ldpp_dout_fmt(dpp, 1, "Deleted account oidc provider {}", info.provider_url);
+    ldpp_dout_fmt(dpp, 1, "Deleted account oidc provider {}", oidc.provider_url);
   }
 
   rgw::sal::TopicList topics;
