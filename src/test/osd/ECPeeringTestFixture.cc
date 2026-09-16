@@ -53,11 +53,12 @@ ECPeeringTestFixture::ECPeeringTestFixture()
 void ECPeeringTestFixture::SetUp() {
   PGBackendTestFixture::SetUp();
 
-  // The harness does not use CRUSH, so we must set an upmap.  Choose the upmap
-  // to have shard == osd.
-  {
+  // Install a pg_upmap so that shard N is always on OSD N.
+  // Skipped when use_upmap() returns false (e.g. ECCrushTestFixture), which
+  // lets CRUSH determine placement naturally.
+  if (use_upmap()) {
     std::vector<int> initial_acting;
-    for (int i = 0; i < k + m; ++i) {
+    for (int i = 0; i < get_instance_count(); ++i) {
       initial_acting.push_back(i);
     }
     OSDMap::Incremental inc(osdmap->get_epoch() + 1);
@@ -154,6 +155,10 @@ void ECPeeringTestFixture::SetUp() {
     });
     return found_messages;
   });
+
+  // Allow derived fixtures to modify the OSDMap before the first peering
+  // cycle runs (e.g. ECCrushTestFixture installs a proper CRUSH map here).
+  pre_peering_hook();
 
   new_epoch_loop();
 }
@@ -750,7 +755,7 @@ pg_t ECPeeringTestFixture::split_pg()
     int up_primary = -1, acting_primary = -1;
     osdmap->pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
                                  &acting_osds, &acting_primary);
-    for (int shard = 0; shard < k + m; shard++) {
+    for (int shard = 0; shard < get_instance_count(); shard++) {
       PeeringState* ps = get_peering_state(shard);
       OSDMapRef lastmap = ps->get_osdmap();
       PeeringCtx throwaway;
@@ -762,7 +767,7 @@ pg_t ECPeeringTestFixture::split_pg()
 
   // 2. Split each shard: create the child state, run production split_into(),
   //    then split the ObjectStore collection.
-  for (int shard = 0; shard < k + m; shard++) {
+  for (int shard = 0; shard < get_instance_count(); shard++) {
     create_child_peering_state(shard, split_bits);
     auto* parent_ps = get_peering_state(shard);
     parent_ps->split_into(child_pgid, get_child_peering_state(shard), split_bits);
@@ -785,7 +790,7 @@ pg_t ECPeeringTestFixture::split_pg()
   // 3. Peer the child PG: advance_map/activate_map cycles, applying up_thru and
   //    pg_temp as the monitor would.  The child primary requests pg_temp for EC
   //    primaryfirst ordering and stalls in WaitActingChange without it.
-  for (int shard = 0; shard < k + m; shard++) {
+  for (int shard = 0; shard < get_instance_count(); shard++) {
     auto evt = std::make_shared<PGPeeringEvent>(
       osdmap->get_epoch(), osdmap->get_epoch(), PeeringState::Initialize());
     spg_t child_spgid(child_pgid, shard_id_t(shard));
@@ -805,7 +810,7 @@ pg_t ECPeeringTestFixture::split_pg()
   int max_cycles = 10;
   bool more = true;
   while (more && --max_cycles) {
-    for (int shard = 0; shard < k + m; shard++) {
+    for (int shard = 0; shard < get_instance_count(); shard++) {
       PeeringState* ps = get_child_peering_state(shard);
       OSDMapRef lastmap = ps->get_osdmap();
       if (lastmap->get_epoch() == osdmap->get_epoch()) {
@@ -822,7 +827,7 @@ pg_t ECPeeringTestFixture::split_pg()
                       c_acting_primary, *child_test_pg->get_peering_ctx());
     }
     event_loop->run_until_idle();
-    for (int shard = 0; shard < k + m; shard++) {
+    for (int shard = 0; shard < get_instance_count(); shard++) {
       spg_t child_spgid(child_pgid, shard_id_t(shard));
       TestPG* child_test_pg = get_test_pg(shard, child_spgid);
       ceph_assert(child_test_pg != nullptr);
