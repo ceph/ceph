@@ -199,6 +199,28 @@ void OperationThrottler::register_metrics(const std::string &sched_type) {
         sm::description("mClock throttle wait distribution"), {label}),
     });
   }
+
+  // throttle state metrics for deadlock diagnosis
+  metrics.add_group(group_name, {
+    sm::make_gauge("throttle_max_in_progress",
+      [this] { return max_in_progress; },
+      sm::description("max concurrent client ops allowed by throttler")),
+    sm::make_gauge("throttle_max_background_in_progress",
+      [this] { return max_background_in_progress; },
+      sm::description("max concurrent background ops allowed by throttler")),
+    sm::make_gauge("throttle_in_progress",
+      [this] { return in_progress; },
+      sm::description("client ops currently holding throttle slots")),
+    sm::make_gauge("throttle_background_in_progress",
+      [this] { return background_in_progress; },
+      sm::description("background ops holding throttle slots (may exceed max when client slots free)")),
+    sm::make_gauge("throttle_pending",
+      [this] { return pending; },
+      sm::description("total ops waiting to acquire throttle slots")),
+    sm::make_gauge("throttle_background_pending",
+      [this] { return background_pending; },
+      sm::description("background ops waiting in scheduler queue")),
+  });
 }
 
 
