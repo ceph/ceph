@@ -845,6 +845,129 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
   return write_bucket_header(hctx, &header);
 }
 
+static int read_bucket_stats_summary(cls_method_context_t hctx,
+                                     rgw_bucket_stats_summary* summary)
+{
+  bufferlist bl;
+  const int r = cls_cxx_map_read_header(hctx, &bl);
+  if (r < 0) {
+    return r;
+  }
+  if (bl.length() == 0) {
+    return -ENOENT;
+  }
+
+  try {
+    auto iter = bl.cbegin();
+    decode(*summary, iter);
+  } catch (const ceph::buffer::error&) {
+    return -EIO;
+  }
+  return 0;
+}
+
+static int write_bucket_stats_summary(cls_method_context_t hctx,
+                                      const rgw_bucket_stats_summary& summary)
+{
+  bufferlist bl;
+  encode(summary, bl);
+  return cls_cxx_map_write_header(hctx, &bl);
+}
+
+static bool matches_bucket(const rgw_bucket_stats_summary& summary,
+                           const std::string& bucket_id,
+                           const real_time& bucket_creation_time)
+{
+  return summary.bucket_id == bucket_id &&
+      summary.bucket_creation_time == bucket_creation_time;
+}
+
+int rgw_bucket_stats_summary_set(cls_method_context_t hctx,
+                                 bufferlist* in, bufferlist* out)
+{
+  rgw_cls_bucket_stats_summary_set_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const ceph::buffer::error&) {
+    return -EINVAL;
+  }
+  return write_bucket_stats_summary(hctx, op.summary);
+}
+
+int rgw_bucket_stats_summary_apply_delta(cls_method_context_t hctx,
+                                         bufferlist* in, bufferlist* out)
+{
+  rgw_cls_bucket_stats_summary_apply_delta_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const ceph::buffer::error&) {
+    return -EINVAL;
+  }
+
+  rgw_bucket_stats_summary summary;
+  int r = read_bucket_stats_summary(hctx, &summary);
+  if (r < 0) {
+    return r;
+  }
+  if (!matches_bucket(summary, op.bucket_id, op.bucket_creation_time)) {
+    return -ESTALE;
+  }
+
+  for (const auto& [category, stats] : op.stats) {
+    auto& dest = summary.stats[category];
+    dest.total_size += stats.total_size;
+    dest.total_size_rounded += stats.total_size_rounded;
+    dest.num_entries += stats.num_entries;
+    dest.actual_size += stats.actual_size;
+  }
+  for (const auto& [category, stats] : op.dec_stats) {
+    auto& dest = summary.stats[category];
+    if (dest.total_size < stats.total_size ||
+        dest.total_size_rounded < stats.total_size_rounded ||
+        dest.num_entries < stats.num_entries ||
+        dest.actual_size < stats.actual_size) {
+      return -ERANGE;
+    }
+    dest.total_size -= stats.total_size;
+    dest.total_size_rounded -= stats.total_size_rounded;
+    dest.num_entries -= stats.num_entries;
+    dest.actual_size -= stats.actual_size;
+  }
+  summary.last_update = real_clock::now();
+  r = write_bucket_stats_summary(hctx, summary);
+  if (r < 0) {
+    return r;
+  }
+  encode(summary, *out);
+  return 0;
+}
+
+int rgw_bucket_stats_summary_set_generation(cls_method_context_t hctx,
+                                             bufferlist* in, bufferlist* out)
+{
+  rgw_cls_bucket_stats_summary_set_generation_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const ceph::buffer::error&) {
+    return -EINVAL;
+  }
+
+  rgw_bucket_stats_summary summary;
+  int r = read_bucket_stats_summary(hctx, &summary);
+  if (r < 0) {
+    return r;
+  }
+  if (!matches_bucket(summary, op.bucket_id, op.bucket_creation_time)) {
+    return -ESTALE;
+  }
+  summary.index_generation = op.index_generation;
+  summary.last_update = real_clock::now();
+  return write_bucket_stats_summary(hctx, summary);
+}
+
 int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -5379,6 +5502,9 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bucket_check_index;
   cls_method_handle_t h_rgw_bucket_rebuild_index;
   cls_method_handle_t h_rgw_bucket_update_stats;
+  cls_method_handle_t h_rgw_bucket_stats_summary_set;
+  cls_method_handle_t h_rgw_bucket_stats_summary_apply_delta;
+  cls_method_handle_t h_rgw_bucket_stats_summary_set_generation;
   cls_method_handle_t h_rgw_bucket_prepare_op;
   cls_method_handle_t h_rgw_bucket_complete_op;
   cls_method_handle_t h_rgw_bucket_link_olh;
@@ -5443,6 +5569,9 @@ CLS_INIT(rgw)
   cls.register_cxx_method(bucket_check_index, rgw_bucket_check_index, &h_rgw_bucket_check_index);
   cls.register_cxx_method(bucket_rebuild_index, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
   cls.register_cxx_method(bucket_update_stats, rgw_bucket_update_stats, &h_rgw_bucket_update_stats);
+  cls.register_cxx_method(bucket_stats_summary_set, rgw_bucket_stats_summary_set, &h_rgw_bucket_stats_summary_set);
+  cls.register_cxx_method(bucket_stats_summary_apply_delta, rgw_bucket_stats_summary_apply_delta, &h_rgw_bucket_stats_summary_apply_delta);
+  cls.register_cxx_method(bucket_stats_summary_set_generation, rgw_bucket_stats_summary_set_generation, &h_rgw_bucket_stats_summary_set_generation);
   cls.register_cxx_method(bucket_prepare_op, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls.register_cxx_method(bucket_complete_op, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
   cls.register_cxx_method(bucket_link_olh, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);

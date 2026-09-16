@@ -848,6 +848,40 @@ WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
 
 using rgw_bucket_dir_stats = std::map<RGWObjCategory, rgw_bucket_category_stats>;
 
+struct rgw_bucket_stats_summary {
+  std::string bucket_id;
+  ceph::real_time bucket_creation_time;
+  uint64_t index_generation = 0;
+  rgw_bucket_dir_stats stats;
+  ceph::real_time last_update;
+  ceph::real_time last_full_scan_started;
+  ceph::real_time last_full_scan_completed;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(bucket_id, bl);
+    encode(bucket_creation_time, bl);
+    encode(index_generation, bl);
+    encode(stats, bl);
+    encode(last_update, bl);
+    encode(last_full_scan_started, bl);
+    encode(last_full_scan_completed, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(bucket_id, bl);
+    decode(bucket_creation_time, bl);
+    decode(index_generation, bl);
+    decode(stats, bl);
+    decode(last_update, bl);
+    decode(last_full_scan_started, bl);
+    decode(last_full_scan_completed, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_bucket_stats_summary)
+
 struct rgw_bucket_dir_header {
   rgw_bucket_dir_stats stats;
   uint64_t tag_timeout;

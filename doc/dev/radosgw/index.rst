@@ -12,3 +12,4 @@
    Admin Ops Nonimplemented <admin/adminops_nonimplemented>
    s3_compliance
    bucket_index
+   bucket_stats_summary

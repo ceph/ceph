@@ -27,10 +27,15 @@
 #include "rgw_quota.h"
 #include "rgw_bucket.h"
 #include "driver/rados/rgw_user.h"
+#ifdef WITH_RADOSGW_RADOS
+#include "driver/rados/rgw_sal_rados.h"
+#endif
 
 #include "services/svc_sys_obj.h"
+#include "cls/rgw/cls_rgw_types.h"
 
 #include <atomic>
+#include <set>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -73,7 +78,9 @@ protected:
   virtual bool map_find_and_update(const rgw_owner& owner, const rgw_bucket& bucket, typename lru_map<T, RGWQuotaCacheStats>::UpdateContext *ctx) = 0;
   virtual void map_add(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs) = 0;
 
-  virtual void data_modified(const rgw_owner& owner, const rgw_bucket& bucket) {}
+  virtual void data_modified(const rgw_owner& owner, const rgw_bucket& bucket,
+                             int objs_delta, uint64_t added_bytes,
+                             uint64_t removed_bytes) {}
 public:
   RGWQuotaCache(rgw::sal::Driver* _driver, int size) : driver(_driver), stats_map(size) {
     async_refcount = new RefCountedWaitObject;
@@ -218,10 +225,54 @@ void RGWQuotaCache<T>::adjust_stats(const rgw_owner& owner, rgw_bucket& bucket, 
   RGWQuotaStatsUpdate<T> update(objs_delta, added_bytes, removed_bytes);
   map_find_and_update(owner, bucket, &update);
 
-  data_modified(owner, bucket);
+  data_modified(owner, bucket, objs_delta, added_bytes, removed_bytes);
 }
 
 class RGWBucketStatsCache : public RGWQuotaCache<rgw_bucket> {
+  struct PendingDelta {
+    rgw_owner owner;
+    int objs_delta = 0;
+    uint64_t added_bytes = 0;
+    uint64_t removed_bytes = 0;
+
+    explicit PendingDelta(const rgw_owner& owner) : owner(owner) {}
+  };
+
+  class SummarySyncThread : public Thread {
+    RGWBucketStatsCache* cache;
+    ceph::mutex lock = ceph::make_mutex("RGWBucketStatsCache::SummarySyncThread");
+    ceph::condition_variable cond;
+  public:
+    explicit SummarySyncThread(RGWBucketStatsCache* cache) : cache(cache) {}
+
+    void* entry() override;
+    void stop();
+  };
+
+  std::atomic<bool> down_flag = {false};
+  ceph::mutex pending_lock = ceph::make_mutex("RGWBucketStatsCache::pending");
+  std::map<rgw_bucket, PendingDelta> pending;
+  std::set<rgw_bucket> initialized_buckets;
+  SummarySyncThread* summary_sync_thread = nullptr;
+
+  static RGWStorageStats to_storage_stats(const rgw_bucket_stats_summary& summary);
+  static void add_pending_delta(RGWStorageStats& stats,
+                                const PendingDelta& delta);
+  static void to_summary_delta(const PendingDelta& pending,
+                               rgw_bucket_dir_stats& stats,
+                               rgw_bucket_dir_stats& dec_stats);
+
+  void queue_delta(const rgw_owner& owner, const rgw_bucket& bucket,
+                   int objs_delta, uint64_t added_bytes,
+                   uint64_t removed_bytes);
+  bool is_initialized(const rgw_bucket& bucket);
+  void mark_initialized(const rgw_bucket& bucket);
+  void update_cache_from_summary(const rgw_owner& owner,
+                                 const rgw_bucket& bucket,
+                                 const rgw_bucket_stats_summary& summary);
+  void flush_pending_deltas();
+  void stop_summary_sync_thread();
+
 protected:
   bool map_find(const rgw_owner& owner, const rgw_bucket& bucket, RGWQuotaCacheStats& qs) override {
     return stats_map.find(bucket, qs);
@@ -237,13 +288,232 @@ protected:
 
   int fetch_stats_from_storage(const rgw_owner& owner, const rgw_bucket& bucket, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp) override;
 
-public:
-  explicit RGWBucketStatsCache(rgw::sal::Driver* _driver) : RGWQuotaCache<rgw_bucket>(_driver, _driver->ctx()->_conf->rgw_bucket_quota_cache_size) {
+  void data_modified(const rgw_owner& owner, const rgw_bucket& bucket,
+                     int objs_delta, uint64_t added_bytes,
+                     uint64_t removed_bytes) override {
+    queue_delta(owner, bucket, objs_delta, added_bytes, removed_bytes);
+    if (!summary_sync_thread) {
+      flush_pending_deltas();
+    }
   }
+
+public:
+  RGWBucketStatsCache(rgw::sal::Driver* _driver, bool quota_threads)
+    : RGWQuotaCache<rgw_bucket>(
+          _driver, _driver->ctx()->_conf->rgw_bucket_quota_cache_size) {
+    if (quota_threads) {
+      summary_sync_thread = new SummarySyncThread(this);
+      summary_sync_thread->create("rgw_buck_sum");
+    }
+  }
+
+  ~RGWBucketStatsCache() override { stop_summary_sync_thread(); }
 
   int init_refresh(const rgw_owner& owner, const rgw_bucket& bucket,
                    boost::intrusive_ptr<RefCountedWaitObject> waiter) override;
 };
+
+RGWStorageStats RGWBucketStatsCache::to_storage_stats(
+    const rgw_bucket_stats_summary& summary)
+{
+  RGWStorageStats total;
+  for (const auto& [category, stats] : summary.stats) {
+    total.size += stats.total_size;
+    total.size_rounded += stats.total_size_rounded;
+    total.size_utilized += stats.actual_size;
+    total.num_objects += stats.num_entries;
+  }
+  return total;
+}
+
+void RGWBucketStatsCache::add_pending_delta(RGWStorageStats& stats,
+                                            const PendingDelta& delta)
+{
+  const auto rounded_added = rgw_rounded_objsize(delta.added_bytes);
+  const auto rounded_removed = rgw_rounded_objsize(delta.removed_bytes);
+
+  stats.size += delta.added_bytes;
+  stats.size = (stats.size >= delta.removed_bytes) ?
+      stats.size - delta.removed_bytes : 0;
+  stats.size_rounded += rounded_added;
+  stats.size_rounded = (stats.size_rounded >= rounded_removed) ?
+      stats.size_rounded - rounded_removed : 0;
+  stats.size_utilized += delta.added_bytes;
+  stats.size_utilized = (stats.size_utilized >= delta.removed_bytes) ?
+      stats.size_utilized - delta.removed_bytes : 0;
+  if (delta.objs_delta >= 0) {
+    stats.num_objects += delta.objs_delta;
+  } else if (stats.num_objects >= static_cast<uint64_t>(-delta.objs_delta)) {
+    stats.num_objects += delta.objs_delta;
+  } else {
+    stats.num_objects = 0;
+  }
+}
+
+void RGWBucketStatsCache::to_summary_delta(
+    const PendingDelta& pending,
+    rgw_bucket_dir_stats& stats,
+    rgw_bucket_dir_stats& dec_stats)
+{
+  if (pending.added_bytes || pending.objs_delta > 0) {
+    auto& add = stats[RGWObjCategory::Main];
+    add.total_size = pending.added_bytes;
+    add.total_size_rounded = rgw_rounded_objsize(pending.added_bytes);
+    add.num_entries = std::max(pending.objs_delta, 0);
+    add.actual_size = pending.added_bytes;
+  }
+  if (pending.removed_bytes || pending.objs_delta < 0) {
+    auto& dec = dec_stats[RGWObjCategory::Main];
+    dec.total_size = pending.removed_bytes;
+    dec.total_size_rounded = rgw_rounded_objsize(pending.removed_bytes);
+    dec.num_entries = -std::min(pending.objs_delta, 0);
+    dec.actual_size = pending.removed_bytes;
+  }
+}
+
+void RGWBucketStatsCache::queue_delta(const rgw_owner& owner,
+                                      const rgw_bucket& bucket,
+                                      int objs_delta, uint64_t added_bytes,
+                                      uint64_t removed_bytes)
+{
+#ifdef WITH_RADOSGW_RADOS
+  if (!dynamic_cast<rgw::sal::RadosStore*>(driver)) {
+    return;
+  }
+  std::lock_guard lock{pending_lock};
+  auto [iter, inserted] = pending.try_emplace(bucket, owner);
+  auto& delta = iter->second;
+  delta.objs_delta += objs_delta;
+  delta.added_bytes += added_bytes;
+  delta.removed_bytes += removed_bytes;
+#endif
+}
+
+bool RGWBucketStatsCache::is_initialized(const rgw_bucket& bucket)
+{
+  std::lock_guard lock{pending_lock};
+  return initialized_buckets.contains(bucket);
+}
+
+void RGWBucketStatsCache::mark_initialized(const rgw_bucket& bucket)
+{
+  std::lock_guard lock{pending_lock};
+  initialized_buckets.insert(bucket);
+}
+
+void RGWBucketStatsCache::update_cache_from_summary(
+    const rgw_owner& owner,
+    const rgw_bucket& bucket,
+    const rgw_bucket_stats_summary& summary)
+{
+  auto stats = to_storage_stats(summary);
+  {
+    std::lock_guard lock{pending_lock};
+    const auto iter = pending.find(bucket);
+    if (iter != pending.end()) {
+      add_pending_delta(stats, iter->second);
+    }
+  }
+
+  RGWQuotaCacheStats qs;
+  map_find(owner, bucket, qs);
+  set_stats(owner, bucket, qs, stats);
+}
+
+void RGWBucketStatsCache::flush_pending_deltas()
+{
+#ifdef WITH_RADOSGW_RADOS
+  auto* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+  if (!rados_store) {
+    return;
+  }
+
+  std::map<rgw_bucket, PendingDelta> deltas;
+  {
+    std::lock_guard lock{pending_lock};
+    deltas.swap(pending);
+  }
+
+  for (auto& [bucket_key, delta] : deltas) {
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    const DoutPrefix dpp(driver->ctx(), dout_subsys,
+                         "rgw bucket stats summary: ");
+    int r = driver->load_bucket(&dpp, bucket_key, &bucket, null_yield);
+    if (r < 0) {
+      ldpp_dout(&dpp, 10) << "could not load bucket=" << bucket_key
+                          << " for stats summary: " << cpp_strerror(-r)
+                          << dendl;
+      queue_delta(delta.owner, bucket_key, delta.objs_delta,
+                  delta.added_bytes, delta.removed_bytes);
+      continue;
+    }
+
+    rgw_bucket_stats_summary summary;
+    if (!is_initialized(bucket_key)) {
+      r = rados_store->getRados()->whole_update_bucket_stats_summary(
+          &dpp, bucket->get_info(), &summary, null_yield);
+      if (r == 0) {
+        mark_initialized(bucket_key);
+      }
+    } else {
+      rgw_bucket_dir_stats stats;
+      rgw_bucket_dir_stats dec_stats;
+      to_summary_delta(delta, stats, dec_stats);
+      r = rados_store->getRados()->apply_bucket_stats_summary_delta(
+          &dpp, bucket->get_info(), stats, dec_stats, &summary, null_yield);
+      if (r == -ENOENT || r == -ESTALE) {
+        r = rados_store->getRados()->whole_update_bucket_stats_summary(
+            &dpp, bucket->get_info(), &summary, null_yield);
+        if (r == 0) {
+          mark_initialized(bucket_key);
+        }
+      }
+    }
+
+    if (r < 0) {
+      ldpp_dout(&dpp, 10) << "could not update bucket stats summary for bucket="
+                          << bucket_key << ": " << cpp_strerror(-r) << dendl;
+      queue_delta(delta.owner, bucket_key, delta.objs_delta,
+                  delta.added_bytes, delta.removed_bytes);
+      continue;
+    }
+    update_cache_from_summary(delta.owner, bucket_key, summary);
+  }
+#endif
+}
+
+void* RGWBucketStatsCache::SummarySyncThread::entry()
+{
+  do {
+    cache->flush_pending_deltas();
+    if (cache->down_flag) {
+      break;
+    }
+
+    const auto seconds = std::max<uint64_t>(
+        1, cache->driver->ctx()->_conf->rgw_bucket_quota_ttl);
+    std::unique_lock locker{lock};
+    cond.wait_for(locker, std::chrono::seconds(seconds));
+  } while (!cache->down_flag);
+  return nullptr;
+}
+
+void RGWBucketStatsCache::SummarySyncThread::stop()
+{
+  std::lock_guard locker{lock};
+  cond.notify_all();
+}
+
+void RGWBucketStatsCache::stop_summary_sync_thread()
+{
+  down_flag = true;
+  if (summary_sync_thread) {
+    summary_sync_thread->stop();
+    summary_sync_thread->join();
+    delete summary_sync_thread;
+    summary_sync_thread = nullptr;
+  }
+}
 
 int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_owner& owner, const rgw_bucket& _b, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp)
 {
@@ -261,6 +531,43 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_owner& owner, const 
   if (is_layout_indexless(index)) {
     return 0;
   }
+
+#ifdef WITH_RADOSGW_RADOS
+  if (auto* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver)) {
+    rgw_bucket_stats_summary summary;
+    if (!is_initialized(_b)) {
+      r = rados_store->getRados()->whole_update_bucket_stats_summary(
+          dpp, bucket->get_info(), &summary, y);
+      if (r == 0) {
+        mark_initialized(_b);
+      }
+    } else {
+      r = rados_store->getRados()->read_bucket_stats_summary(
+          dpp, bucket->get_info(), &summary, y);
+      if (r == -ENOENT || r == -ESTALE) {
+        r = rados_store->getRados()->whole_update_bucket_stats_summary(
+            dpp, bucket->get_info(), &summary, y);
+        if (r == 0) {
+          mark_initialized(_b);
+        }
+      }
+    }
+    if (r == 0) {
+      stats = to_storage_stats(summary);
+      {
+        std::lock_guard lock{pending_lock};
+        const auto iter = pending.find(_b);
+        if (iter != pending.end()) {
+          add_pending_delta(stats, iter->second);
+        }
+      }
+      return 0;
+    }
+    ldpp_dout(dpp, 10) << "could not read bucket stats summary for bucket="
+                        << _b.name << ": " << cpp_strerror(-r)
+                        << "; falling back to index headers" << dendl;
+  }
+#endif
 
   string bucket_ver;
   string master_ver;
@@ -310,6 +617,12 @@ public:
 int RGWBucketStatsCache::init_refresh(const rgw_owner& owner, const rgw_bucket& bucket,
                                      boost::intrusive_ptr<RefCountedWaitObject> waiter)
 {
+#ifdef WITH_RADOSGW_RADOS
+  if (dynamic_cast<rgw::sal::RadosStore*>(driver)) {
+    return 0;
+  }
+#endif
+
   std::unique_ptr<rgw::sal::Bucket> rbucket;
 
   const DoutPrefix dp(driver->ctx(), dout_subsys, "rgw bucket async refresh handler: ");
@@ -482,7 +795,9 @@ protected:
   int sync_all_owners(const DoutPrefixProvider *dpp,
                       const std::string& metadata_section);
 
-  void data_modified(const rgw_owner& owner, const rgw_bucket& bucket) override;
+  void data_modified(const rgw_owner& owner, const rgw_bucket& bucket,
+                     int objs_delta, uint64_t added_bytes,
+                     uint64_t removed_bytes) override;
 
   void swap_modified_buckets(map<rgw_bucket, rgw_owner>& out) {
     std::unique_lock lock{mutex};
@@ -721,7 +1036,9 @@ int RGWOwnerStatsCache::sync_all_owners(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-void RGWOwnerStatsCache::data_modified(const rgw_owner& owner, const rgw_bucket& bucket)
+void RGWOwnerStatsCache::data_modified(const rgw_owner& owner,
+                                       const rgw_bucket& bucket,
+                                       int, uint64_t, uint64_t)
 {
   /* racy, but it's ok */
   mutex.lock_shared();
@@ -926,7 +1243,7 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
   }
 public:
   RGWQuotaHandlerImpl(const DoutPrefixProvider *dpp, rgw::sal::Driver* _driver, bool quota_threads) : driver(_driver),
-                                    bucket_stats_cache(_driver),
+                                    bucket_stats_cache(_driver, quota_threads),
                                     owner_stats_cache(dpp, _driver, quota_threads) {}
 
   int check_quota(const DoutPrefixProvider *dpp,
@@ -1064,4 +1381,3 @@ void RGWQuotaInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("check_on_raw", check_on_raw, obj);
   JSONDecoder::decode_json("enabled", enabled, obj);
 }
-

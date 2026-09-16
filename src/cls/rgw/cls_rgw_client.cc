@@ -86,6 +86,35 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
   o.exec(method::bucket_update_stats, in);
 }
 
+void cls_rgw_bucket_stats_summary_set(
+    librados::ObjectWriteOperation& op,
+    const rgw_bucket_stats_summary& summary)
+{
+  const auto call = rgw_cls_bucket_stats_summary_set_op{.summary = summary};
+  bufferlist in;
+  encode(call, in);
+  op.exec(method::bucket_stats_summary_set, in);
+}
+
+void cls_rgw_bucket_stats_summary_apply_delta(
+    librados::ObjectWriteOperation& op,
+    const rgw_cls_bucket_stats_summary_apply_delta_op& delta,
+    bufferlist* out, int* prval)
+{
+  bufferlist in;
+  encode(delta, in);
+  op.exec(method::bucket_stats_summary_apply_delta, in, out, prval);
+}
+
+void cls_rgw_bucket_stats_summary_set_generation(
+    librados::ObjectWriteOperation& op,
+    const rgw_cls_bucket_stats_summary_set_generation_op& generation)
+{
+  bufferlist in;
+  encode(generation, in);
+  op.exec(method::bucket_stats_summary_set_generation, in);
+}
+
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, const string& tag,
                                const cls_rgw_obj_key& key, const string& locator)
 {
