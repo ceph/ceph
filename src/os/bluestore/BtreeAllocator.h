@@ -200,10 +200,12 @@ private:
   void _add_to_tree(uint64_t start, uint64_t size);
   void _process_range_removal(uint64_t start, uint64_t end, range_tree_t::iterator& rs);
   void _remove_from_tree(uint64_t start, uint64_t size);
-  void _try_remove_from_tree(uint64_t start, uint64_t size,
-    std::function<void(uint64_t offset, uint64_t length, bool found)> cb);
 
   uint64_t _get_free() const {
     return num_free;
   }
+
+protected:
+  void _try_remove_from_tree(uint64_t start, uint64_t size,
+    std::function<void(uint64_t offset, uint64_t length, bool found)> cb);
 };
