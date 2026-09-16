@@ -1636,6 +1636,24 @@ TEST_CASE("query algebra examples execute against fdb", "[fdb][query][example]")
   CHECK_THAT(keys_from_blocks(active_cache),
              Catch::Matchers::RangeEquals(active_cache_keys));
 
+  const auto reverse_active_cache = lq::with_options(
+    active_cache,
+    lq::query_options {
+     .result_limit = 2,
+     .reverse_order = true
+    });
+  auto reverse_active_cache_keys = active_cache_keys;
+  std::ranges::reverse(reverse_active_cache_keys);
+
+  CHECK_THAT(keys_in(reverse_active_cache),
+             Catch::Matchers::RangeEquals(reverse_active_cache_keys));
+  CHECK_THAT(keys_from_transaction_scan(reverse_active_cache),
+             Catch::Matchers::RangeEquals(reverse_active_cache_keys));
+  CHECK_THAT(keys_from_managed_scan(reverse_active_cache),
+             Catch::Matchers::RangeEquals(reverse_active_cache_keys));
+  CHECK_THAT(keys_from_blocks(reverse_active_cache),
+             Catch::Matchers::RangeEquals(reverse_active_cache_keys));
+
   const auto visible_hot =
    lq::difference(lq::prefix(test_key("cache/hot/")),
                   lq::prefix(test_key("cache/hot/private/")));
@@ -2796,6 +2814,67 @@ TEST_CASE("generators honor selector endpoints", "[fdb]") {
  const auto reverse_keys = std::vector { make_key(6, prefix), make_key(5, prefix), make_key(4, prefix) };
  CHECK_THAT(collect_pair_keys(selector), Catch::Matchers::RangeEquals(reverse_keys));
  CHECK_THAT(collect_block_keys(selector), Catch::Matchers::RangeEquals(reverse_keys));
+}
+
+TEST_CASE("split ranges follow selector direction", "[fdb]")
+{
+ const std::array keys {"a"s, "b"s, "c"s, "d"s};
+ auto make_fdb_key = [](const std::string& key) {
+  const auto bytes = lfdb::detail::as_fdb_span(key);
+
+  return FDBKey {bytes.data(), static_cast<int>(std::size(bytes))};
+ };
+ const std::array split_points {
+  make_fdb_key(keys[0]), make_fdb_key(keys[1]),
+  make_fdb_key(keys[2]), make_fdb_key(keys[3])
+ };
+ auto selector = lfdb::select {
+  lfdb::exclusive(keys.front()), lfdb::inclusive(keys.back())
+ };
+ selector.options = {
+  .result_limit = 17,
+  .target_bytes = 4'096,
+  .streaming_mode = FDB_STREAMING_MODE_WANT_ALL
+ };
+
+ CHECK(std::empty(lfdb::detail::as_select_seq(
+   std::span<const FDBKey> {}, selector)));
+ CHECK(std::empty(lfdb::detail::as_select_seq(
+   std::span {split_points}.first<1>(), selector)));
+
+ const auto forward = lfdb::detail::as_select_seq(split_points, selector);
+
+ REQUIRE(3 == std::size(forward));
+ CHECK("a" == forward[0].begin_key);
+ CHECK("b" == forward[1].begin_key);
+ CHECK("c" == forward[2].begin_key);
+ CHECK_FALSE(forward.front().begin_inclusive);
+ CHECK_FALSE(forward.front().end_inclusive);
+ CHECK(forward[1].begin_inclusive);
+ CHECK_FALSE(forward[1].end_inclusive);
+ CHECK(forward.back().begin_inclusive);
+ CHECK(forward.back().end_inclusive);
+ CHECK(std::ranges::all_of(forward, [&selector](const auto& range) {
+  return selector.options == range.options;
+ }));
+
+ selector.options.reverse_order = true;
+
+ const auto reverse = lfdb::detail::as_select_seq(split_points, selector);
+
+ REQUIRE(3 == std::size(reverse));
+ CHECK("c" == reverse[0].begin_key);
+ CHECK("b" == reverse[1].begin_key);
+ CHECK("a" == reverse[2].begin_key);
+ CHECK(reverse.front().end_inclusive);
+ CHECK(reverse.front().begin_inclusive);
+ CHECK_FALSE(reverse[1].end_inclusive);
+ CHECK(reverse[1].begin_inclusive);
+ CHECK_FALSE(reverse.back().begin_inclusive);
+ CHECK_FALSE(reverse.back().end_inclusive);
+ CHECK(std::ranges::all_of(reverse, [&selector](const auto& range) {
+  return selector.options == range.options;
+ }));
 }
 
 TEMPLATE_PRODUCT_TEST_CASE("associative data", "[fdb][rgw]",

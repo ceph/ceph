@@ -999,6 +999,31 @@ inline void publish_string_pair_results(ContainerT& out, ContainerT&& tmp)
  ceph::util::append_range(out, move_range(tmp));
 }
 
+inline auto intervals(ceph::libfdb::select selection)
+{
+ // Raw selectors keep select compatibility but still execute in ordinary FDB keyspace:
+ return std::views::single(query::intersection(std::move(selection), query::universal()))
+      | std::views::filter([](const ceph::libfdb::select& range) {
+         return not query::is_empty(range);
+        });
+}
+
+template <query::non_interval_expression QueryT>
+inline auto intervals(const QueryT& query)
+{
+ std::vector<ceph::libfdb::select> out;
+
+ query::for_each_interval(query, [&out](ceph::libfdb::select interval) {
+  out.push_back(std::move(interval));
+ });
+
+ if (not std::empty(out) and out.front().options.reverse_order) {
+  std::ranges::reverse(out);
+ }
+
+ return out;
+}
+
 template <query::expression SelectionT, typename OutT>
 requires concepts::string_pair_output_iterator<OutT> ||
          concepts::string_pair_output_range<OutT>
@@ -1009,9 +1034,9 @@ inline std::size_t get_value_selection_from_transaction(transaction& txn,
 {
  std::size_t nread = 0;
 
- query::for_each_interval(selection, [&](const ceph::libfdb::select& interval) {
+ for (const auto& interval : intervals(selection)) {
   nread += detail::get_value_range_from_transaction(txn, interval, mode, out);
- });
+ }
 
  return nread;
 }
@@ -1363,27 +1388,6 @@ inline transactor make_transactor(database_handle dbh, const transaction_options
 namespace ceph::libfdb {
 
 namespace detail {
-
-inline auto intervals(ceph::libfdb::select selection)
-{
- // Raw selectors keep select compatibility but still execute in ordinary FDB keyspace:
- return std::views::single(query::intersection(std::move(selection), query::universal()))
-      | std::views::filter([](const ceph::libfdb::select& range) {
-         return not query::is_empty(range);
-        });
-}
-
-template <query::non_interval_expression QueryT>
-inline auto intervals(const QueryT& query)
-{
- std::vector<ceph::libfdb::select> out;
-
- query::for_each_interval(query, [&out](ceph::libfdb::select interval) {
-  out.push_back(std::move(interval));
- });
-
- return out;
-}
 
 template <typename ValueT, typename BlockRangeT>
 inline auto flatten_blocks(BlockRangeT block_range)

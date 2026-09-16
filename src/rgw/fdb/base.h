@@ -1816,7 +1816,7 @@ inline std::vector<ceph::libfdb::select> as_select_seq(std::span<const FDBKey> x
  }
 
  // Gather the flattened list into *overlapping* libfdb::select pairs:
- return ceph::util::collect_as<std::vector<ceph::libfdb::select>>(
+ auto ranges = ceph::util::collect_as<std::vector<ceph::libfdb::select>>(
           std::views::iota(std::size_t{0}, xs.size() - 1)
         | std::views::transform([&parent, xs](const auto i) {
            const auto& fst = xs[i];
@@ -1833,6 +1833,12 @@ inline std::vector<ceph::libfdb::select> as_select_seq(std::span<const FDBKey> x
            split.end_inclusive = (i + 2 == xs.size()) ? parent.end_inclusive : false;
            return split;
           }));
+
+ if (parent.options.reverse_order) {
+  std::ranges::reverse(ranges);
+ }
+
+ return ranges;
 }
 // Finding a clear example both in the samples and in the documentation is not very easy. The
 // statelessness of FDB requests bleeds into here with basically no hand-holding, but note for instance
