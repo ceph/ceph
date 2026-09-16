@@ -15,7 +15,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FDB_CLI="${ROOT}/third_party/fdb/usr/bin/fdbcli"
 CLUSTER_FILE="${ROOT}/.fdb/fdb.cluster"
-RESOURCES="${ROOT}/System-Resources.md"
+if [[ -f "${ROOT}/System-Resources.md" ]]; then
+  RESOURCES="${ROOT}/System-Resources.md"
+elif [[ -f "${ROOT}/docs/System-Resources.md" ]]; then
+  RESOURCES="${ROOT}/docs/System-Resources.md"
+else
+  RESOURCES="${ROOT}/System-Resources.md"
+fi
 
 usage() {
   echo "Usage: $(basename "$0") <Perf-Test-XXX.md> <FDB-Config-XXX.md>"

@@ -61,6 +61,14 @@ require_cmd aws
 require_cmd s5cmd
 require_cmd python3
 
+cleanup_all_buckets() {
+    echo "=== Removing all existing buckets ==="
+    aws --endpoint-url "${ENDPOINT}" s3api list-buckets --query 'Buckets[].Name' --output text \
+        | tr '\t' '\n' \
+        | grep -v '^$' \
+        | xargs -P "${PARALLEL}" -n 1 -I {} aws --endpoint-url "${ENDPOINT}" s3 rb "s3://{}" --force >/dev/null 2>&1 || true
+}
+
 verify_list_buckets() {
   python3 "${ROOT}/scripts/list_verify.py" aws-buckets \
     --endpoint "${ENDPOINT}" \

@@ -2105,6 +2105,7 @@ KvRgwServiceImpl::bucket_exists_cached(tenant_id_t tenant_id,
   return KVRGW_ERR_OK;
 }
 
+//--------------------------------------------------------------------------------
 KvRgwServiceImpl::PutContext
 KvRgwServiceImpl::put_prepare(KvTransaction &tr, PutInTxnParams &params,
                               bool need_bucket)
@@ -2128,6 +2129,7 @@ KvRgwServiceImpl::put_prepare(KvTransaction &tr, PutInTxnParams &params,
   return ctx;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode
 KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
                                PutInTxnParams &params, VerifiedBucket *verified,
@@ -2349,6 +2351,7 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
   return KVRGW_ERR_OK;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode
 KvRgwServiceImpl::put_object_in_txn(KvTransaction &tr, PutInTxnParams &params,
                                     VersioningState *out_versioning_state)
@@ -2359,6 +2362,7 @@ KvRgwServiceImpl::put_object_in_txn(KvTransaction &tr, PutInTxnParams &params,
   return put_finalize(tr, ctx, params, verified, vc, out_versioning_state);
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::put_object_single_txn(
     tenant_id_t tenant_id, const std::string &bucket_name,
     const std::string &object_name, const RefTag &ref_tag,
@@ -2424,6 +2428,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_single_txn(
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::select_storage_tier(
     tenant_id_t tenant_id, const std::string &bucket_name,
     const std::string &object_name, const RefTag &ref_tag,
@@ -2483,6 +2488,7 @@ KvrgwErrorCode KvRgwServiceImpl::select_storage_tier(
                            object_value, out_versioning_state, tags, metadata);
 }
 
+//--------------------------------------------------------------------------------
 KvRgwServiceImpl::PutObjectResult
 KvRgwServiceImpl::put_object_route(PutObjectRequest &req, const uint8_t *data,
                                    size_t data_len)
@@ -2566,10 +2572,13 @@ KvRgwServiceImpl::put_object_route(PutObjectRequest &req, const uint8_t *data,
   return result;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode
-KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id, std::string_view prefix,
+KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id,
+                               std::string_view prefix,
                                std::string_view continuation_token,
-                               uint32_t max_buckets, ListBucketsResult *out)
+                               uint32_t max_buckets,
+                               ListBucketsResult *out)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kListBuckets);
   ops_stats_.inc(OpType::kListBuckets);
@@ -2577,24 +2586,22 @@ KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id, std::string_view prefix,
   if (max_buckets == 0) {
     return KVRGW_ERR_INVALID_ARGUMENT;
   }
-  const uint32_t max_b = std::min(max_buckets, AWS_MaxBuckets);
+  max_buckets = std::min(max_buckets, AWS_MaxBuckets);
 
   const auto bprefix = make_bucket_prefix(tenant_id);
   const auto end = prefix_range_end(bprefix.view());
   std::string scan_begin;
   if (!continuation_token.empty()) {
-    scan_begin =
-        std::string(make_bucket_key(tenant_id, continuation_token).view());
+    scan_begin = make_bucket_key(tenant_id, continuation_token).view();
   }
   else {
-    scan_begin = std::string(bprefix.view());
+    //scan_begin = std::string(bprefix.view());
+    scan_begin = make_bucket_key(tenant_id, prefix).view();
   }
   bool exclusive_scan = !continuation_token.empty();
-  std::string last_key;
   while (true) {
-    auto rows =
-        store_.range_scan(scan_begin, end, kListBucketsFdbPage, exclusive_scan,
-                          listing_disable_ryw_, streamingMode);
+    auto rows = store_.range_scan(scan_begin, end, kListBucketsFdbPage,
+                                  exclusive_scan, listing_disable_ryw_, streamingMode);
     exclusive_scan = true;
     if (!rows) {
       return fdb_to_error(rows.error());
@@ -2603,41 +2610,46 @@ KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id, std::string_view prefix,
       break;
     }
 
-    for (const auto &row : *rows) {
-      last_key = row.key;
-      const auto parts = parse_bucket_key(row.key);
+    for (auto it = rows->begin(); it != rows->end(); ++it) {
+      const auto parts = parse_bucket_key(it->key);
       if (!parts) {
         continue;
       }
-      const auto bucket_value = parse_bucket_value(row.value);
+      const auto bucket_value = parse_bucket_value(it->value);
       if (!bucket_value) {
         continue;
       }
       if (!prefix.empty() &&
           parts->bucket_name.compare(0, prefix.size(), prefix) != 0) {
-        continue;
-      }
-      if (out->buckets.size() >= max_b) {
-        out->continuation_token = parts->bucket_name;
+        // prefix was depleted -> stop the scan
         return KVRGW_ERR_OK;
       }
-      out->buckets.push_back(
-          BucketListEntry{parts->bucket_name, bucket_value->created_at_unix});
+      if (out->buckets.size() >= max_buckets) {
+        // use last stored bucket_name
+        out->continuation_token = out->buckets.back().name;
+        return KVRGW_ERR_OK;
+      }
+      out->buckets.push_back(BucketListEntry{parts->bucket_name, bucket_value->created_at_unix});
     }
 
     if (static_cast<int>(rows->size()) < kListBucketsFdbPage) {
       break;
     }
-    scan_begin = last_key;
+    // use last stored bucket_name
+    scan_begin = rows->back().key;
   }
   return KVRGW_ERR_OK;
 }
 
-KvrgwErrorCode KvRgwServiceImpl::list_objects(
-    tenant_id_t tenant_id, std::string_view bucket_name,
-    std::string_view prefix, std::string_view delimiter, uint32_t max_keys,
-    std::string_view continuation_token, std::string_view marker,
-    ListObjectsResult *out)
+//--------------------------------------------------------------------------------
+KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
+                                              std::string_view bucket_name,
+                                              std::string_view prefix,
+                                              std::string_view delimiter,
+                                              uint32_t max_keys,
+                                              std::string_view continuation_token,
+                                              std::string_view marker,
+                                              ListObjectsResult *out)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kListObjects);
   ops_stats_.inc(OpType::kListObjects);
@@ -2682,13 +2694,13 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(
 
   std::string scan_begin;
   if (!start_after.empty()) {
-    scan_begin = std::string(make_object_key(bucket_id, start_after).view());
+    scan_begin = make_object_key(bucket_id, start_after).view();
   }
   else if (!list_prefix.empty()) {
-    scan_begin = std::string(make_object_key(bucket_id, list_prefix).view());
+    scan_begin = make_object_key(bucket_id, list_prefix).view();
   }
   else {
-    scan_begin = std::string(make_object_prefix(bucket_id).view());
+    scan_begin = make_object_prefix(bucket_id).view();
   }
 
   const std::string scan_end =
@@ -2827,6 +2839,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(
   return KVRGW_ERR_OK;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
     tenant_id_t tenant_id, std::string_view bucket_name, std::string_view key,
     version_id_t version_id, const DeleteCondition *cond)
@@ -3021,6 +3034,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode
 KvRgwServiceImpl::delete_multi(tenant_id_t tenant_id,
                                std::string_view bucket_name,
@@ -3425,6 +3439,7 @@ KvRgwServiceImpl::get_bucket_versioning(tenant_id_t tenant_id,
   return KVRGW_ERR_OK;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
                                              CopyObjectResult *out)
 {
@@ -3599,7 +3614,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     const bool same_object = (src_bucket_id == dst_bucket_id &&
                               src_key == dst_key && !req.src_version_id);
 
-    if (same_object && !req.replace_metadata && !req.replace_tags) {
+    if (same_object && !req.replace_metadata) {
       return KVRGW_ERR_INVALID_REQUEST;
     }
 
@@ -3888,20 +3903,44 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
 
-namespace {
-
+//namespace {
+//--------------------------------------------------------------------------------
 std::string delete_marker_detail(const ObjectValue &v)
 {
   return "DeleteMarker:" + v.hdr.version_id.to_hex() + ":" +
          std::to_string(v.hdr.last_modified_sec);
 }
 
-} // namespace
+//} // namespace
 
-KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
-    tenant_id_t tenant_id, const std::string &bucket_name, std::string_view key,
-    std::optional<version_id_t> version_id, bool load_kv_data,
-    ObjectValue *value, std::string *kv_data, std::string *error_detail)
+//--------------------------------------------------------------------------------
+// on failure read a fresh bucket-state copy, replacing error code if needed
+// should use it for all failures using cached bucket-state
+KvrgwErrorCode KvRgwServiceImpl::resolve_bucket_error(tenant_id_t tenant_id,
+                                                      const std::string &bucket_name,
+                                                      KvrgwErrorCode tentative_err_code)
+{
+  auto state = read_bucket_state(tenant_id, bucket_name);
+  if (!state) {
+    return fdb_to_error(state.error());
+  }
+  if (*state) {
+    return tentative_err_code;
+  }
+  else {
+    return KVRGW_ERR_NO_SUCH_BUCKET;
+  }
+}
+
+//--------------------------------------------------------------------------------
+KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(tenant_id_t tenant_id,
+                                                      const std::string &bucket_name,
+                                                      std::string_view key,
+                                                      std::optional<version_id_t> version_id,
+                                                      bool load_kv_data,
+                                                      ObjectValue *value,
+                                                      std::string *kv_data,
+                                                      std::string *error_detail)
 {
   auto bucket_id_res = get_bucket_id_cached(tenant_id, bucket_name);
   if (!bucket_id_res) {
@@ -3910,9 +3949,8 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
   if (!*bucket_id_res) {
     return KVRGW_ERR_NO_SUCH_BUCKET;
   }
-  if (auto ec =
-          check_access(tenant_id, bucket_name, **bucket_id_res, kDenyRead);
-      ec != KVRGW_ERR_OK) {
+  auto ec = check_access(tenant_id, bucket_name, **bucket_id_res, kDenyRead);
+  if (ec != KVRGW_ERR_OK) {
     return ec;
   }
   const bucket_id_t bucket_id = (**bucket_id_res).bucket_id;
@@ -3923,7 +3961,7 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
       if (error_detail) {
         *error_detail = delete_marker_detail(obj);
       }
-      return KVRGW_ERR_NO_SUCH_KEY;
+      return resolve_bucket_error(tenant_id, bucket_name, KVRGW_ERR_NO_SUCH_KEY);
     }
     *value = std::move(obj);
     if (kv_data) {
@@ -3982,23 +4020,23 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
         const uint8_t st = d_size_tier_from_size(v_obj->hdr.size);
         const uint32_t mtime = v_obj->hdr.last_modified_sec;
         const bucket_id_t d_bucket =
-            (v_obj->hdr.chunk.type == CHUNK_CHILD_D_REF)
-                ? v_obj->chunk_data_bucket_id
-                : bucket_id;
+          (v_obj->hdr.chunk.type == CHUNK_CHILD_D_REF)
+          ? v_obj->chunk_data_bucket_id
+          : bucket_id;
         const std::string_view ref_sv =
-            (v_obj->hdr.chunk.type == CHUNK_CHILD_D_REF)
-                ? std::string_view(
-                      reinterpret_cast<const char *>(v_obj->chunk_data_ref_tag),
-                      12)
-                : std::string_view(
-                      reinterpret_cast<const char *>(v_obj->hdr.ref_tag), 12);
+          (v_obj->hdr.chunk.type == CHUNK_CHILD_D_REF)
+          ? std::string_view(
+            reinterpret_cast<const char *>(v_obj->chunk_data_ref_tag),
+            12)
+          : std::string_view(
+            reinterpret_cast<const char *>(v_obj->hdr.ref_tag), 12);
         const auto d_key = make_d_key(d_bucket, st, ref_sv, mtime);
         auto d_val = tr->kv_get(d_key.view());
         if (!d_val) {
           return fdb_to_error(d_val.error());
         }
         if (!*d_val) {
-          return KVRGW_ERR_NO_SUCH_KEY;
+          return resolve_bucket_error(tenant_id, bucket_name, KVRGW_ERR_NO_SUCH_KEY);
         }
         const auto payload = child_value_payload(**d_val, v_obj->hdr.size);
         if (payload.size() != v_obj->hdr.size) {
@@ -4016,7 +4054,7 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
       return fdb_to_error(result_res.error());
     }
     if (!*result_res) {
-      return KVRGW_ERR_NO_SUCH_KEY;
+      return resolve_bucket_error(tenant_id, bucket_name, KVRGW_ERR_NO_SUCH_KEY);
     }
     return accept(std::move((*result_res)->value),
                   std::move((*result_res)->data));
@@ -4027,11 +4065,12 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
     return fdb_to_error(object_value.error());
   }
   if (!*object_value) {
-    return KVRGW_ERR_NO_SUCH_KEY;
+    return resolve_bucket_error(tenant_id, bucket_name, KVRGW_ERR_NO_SUCH_KEY);
   }
   return accept(std::move(**object_value), {});
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode
 KvRgwServiceImpl::get_object(tenant_id_t tenant_id,
                              std::string_view bucket_name, std::string_view key,
@@ -4123,6 +4162,7 @@ KvRgwServiceImpl::get_object(tenant_id_t tenant_id,
   return KVRGW_ERR_OK;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::head_object(
     tenant_id_t tenant_id, std::string_view bucket_name, std::string_view key,
     std::optional<version_id_t> version_id, ObjectValue *out,
@@ -4270,6 +4310,7 @@ void merge_version_streams(const std::vector<RangeScanResult> &o_rows,
 
 } // namespace
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     tenant_id_t tenant_id, std::string_view bucket_name,
     std::string_view prefix, uint32_t max_keys, std::string_view key_marker,
@@ -4424,6 +4465,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,
                                                std::string_view bucket_name,
                                                std::string_view key,
@@ -4469,6 +4511,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
     tenant_id_t tenant_id, std::string_view bucket_name, std::string_view key,
     std::span<const uint8_t> tags)
@@ -4565,6 +4608,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::get_object_tagging(
     tenant_id_t tenant_id, std::string_view bucket_name, std::string_view key,
     std::vector<uint8_t> &live, std::array<TagPair, MAX_TAG_COUNT> &out_tags,
@@ -4644,6 +4688,7 @@ KvrgwErrorCode KvRgwServiceImpl::get_object_tagging(
   return KVRGW_ERR_OK;
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
     tenant_id_t tenant_id, std::string_view bucket_name, std::string_view key)
 {
