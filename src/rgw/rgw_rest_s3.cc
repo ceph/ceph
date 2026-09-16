@@ -6086,7 +6086,7 @@ RGWRESTMgr_S3::RGWRESTMgr_S3(bool enable_s3control,
 RGWRESTMgr_S3::~RGWRESTMgr_S3() = default;
 
 RGWRESTMgr* RGWRESTMgr_S3::get_resource_mgr_as_default(req_state* s,
-                                                       const std::string& uri,
+                                                       const std::string_view uri,
                                                        std::string* out_uri)
 {
   // s3control apis all expect the request header x-amz-account-id,
@@ -6100,7 +6100,7 @@ RGWRESTMgr* RGWRESTMgr_S3::get_resource_mgr_as_default(req_state* s,
     if (auto i = std::ranges::mismatch(s3control_root, uri);
         i.in1 == s3control_root.end() && // matched full string
         (i.in2 == uri.end() || *i.in2 == '/')) { // end or /
-      const auto suffix = std::string{i.in2, uri.end()}; // trim prefix
+      const auto suffix = uri.substr(s3control_root.size());
       return s3control->get_resource_mgr(s, suffix, out_uri);
     }
   }
