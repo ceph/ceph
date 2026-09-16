@@ -560,45 +560,97 @@ public:
     bool can_create,
     const std::map<std::string, ceph::buffer::list, std::less<>> *attrs = nullptr);
   
-  int do_transaction_and_complete(
+  void do_transaction(
     const hobject_t& hoid,
     PGTransactionUPtr pg_t,
     const object_stat_sum_t& delta_stats,
     const eversion_t& at_version,
     std::vector<pg_log_entry_t> log_entries,
-    std::function<void(int)> on_write_complete = nullptr,
-bool run = true);
-  
+    std::function<void(int)> on_write_complete = nullptr);
+
   // Opt-in log trimming.  Default hooks return (0,0) so existing tests are
   // unaffected.  ECPeeringTestFixture overrides these to mirror PrimaryLogPG.
   bool enable_log_trimming = false;
   virtual eversion_t compute_submit_trim_to() { return eversion_t(0, 0); }
   virtual eversion_t compute_submit_pg_committed_to() { return eversion_t(0, 0); }
   virtual void on_primary_write_committed(const eversion_t& at_version) {}
-  int do_create_and_write_impl(
+
+  /**
+   * Schedule `body` to run on the primary OSD/PG and drain the event loop.
+   *
+   * This is the shared "run an op on the primary" wrapper used by every
+   * write-shaped public entry point (create_and_write, write,
+   * truncate_and_write, create_snapshot, rollback, delete_object,
+   * write_attribute): look up the primary TestPG (returning -EINVAL if
+   * there isn't one), allocate the heap-backed result cell that `body`
+   * writes into via its completion, schedule `body` on the primary OSD,
+   * optionally drain the event loop, and return the outcome.
+   *
+   * `result` is heap-allocated (not a stack reference) because the
+   * completion may still be queued (e.g. -EINPROGRESS, or a suspended
+   * shard) when this function returns; see make_write_completion().
+   */
+  int run_primary_op(
+    std::function<void(std::shared_ptr<int> result)> body,
+    bool run = true);
+
+  /**
+   * Build the completion lambda shared by every write-shaped transaction:
+   * decrement/erase the object's outstanding_writes counter, roll back the
+   * OBC via `on_error` if the transaction failed (and it wasn't just
+   * -EINPROGRESS), otherwise invoke `on_success` (e.g. to record the write
+   * in the ObjectTracker), and finally store the completion result in
+   * `result`. `on_error` and `on_success` may be nullptr.
+   */
+  std::function<void(int)> make_write_completion(
+    TestPG* test_pg,
+    const hobject_t& hoid,
+    std::shared_ptr<int> result,
+    std::function<void()> on_error,
+    std::function<void(int)> on_success);
+
+  /**
+   * Look up (creating if necessary) the OBCs for `hoid` and its snap=1
+   * clone `snap_hoid`, marking either as existing with size `size` if it
+   * was just created, and register both in `pg_t`'s obc_map. Shared by
+   * create_snapshot() and rollback().
+   */
+  void prepare_obc_pair(
+    const hobject_t& hoid,
+    const hobject_t& snap_hoid,
+    uint64_t size,
+    PGTransaction* pg_t,
+    ObjectContextRef& obc,
+    ObjectContextRef& snap_obc);
+
+  void do_create_and_write_impl(
     const std::string& obj_name,
-    const std::string& data);
-  
-  int do_write_impl(
+    const std::string& data,
+    const eversion_t& at_version,
+    std::shared_ptr<int> result);
+
+  void do_write_impl(
     const std::string& obj_name,
     uint64_t offset,
     const std::string& data,
     uint64_t object_size,
-    bool run = true);
+    const eversion_t& at_version,
+    std::shared_ptr<int> result);
 
-  int do_truncate_and_write_impl(
+  void do_truncate_and_write_impl(
     const std::string& obj_name,
     uint64_t object_size,
     std::optional<uint64_t> truncate_size,
     const std::vector<std::pair<uint64_t, std::string>>& writes,
-    bool run = true);
+    std::shared_ptr<int> result);
 
-  int do_write_attribute_impl(
+  void do_write_attribute_impl(
     const std::string& obj_name,
     const std::string& attr_name,
     const std::string& attr_value,
-    bool force_all_shards);
-  
+    bool force_all_shards,
+    std::shared_ptr<int> result);
+
   virtual int create_and_write(
     const std::string& obj_name,
     const std::string& data);

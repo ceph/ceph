@@ -364,24 +364,24 @@ void PGBackendTestFixture::set_messenger_on_all_pgs()
   }
 }
 
-int PGBackendTestFixture::do_transaction_and_complete(
+void PGBackendTestFixture::do_transaction(
   const hobject_t& hoid,
   PGTransactionUPtr pg_t,
   const object_stat_sum_t& delta_stats,
   const eversion_t& at_version,
   std::vector<pg_log_entry_t> log_entries,
-  std::function<void(int)> on_write_complete,
-  bool run)
+  std::function<void(int)> on_write_complete)
 {
   eversion_t trim_to = compute_submit_trim_to();
   eversion_t pg_committed_to = compute_submit_pg_committed_to();
   std::optional<pg_hit_set_history_t> hset_history;
 
-  bool completed = false;
-  int completion_result = -1;
-  Context *on_complete = new LambdaContext([&completed, &completion_result, on_write_complete](int r) {
-    completed = true;
-    completion_result = r;
+  Context *on_complete = new LambdaContext([this, at_version, on_write_complete](int r) {
+    // Mirror PrimaryLogPG::repop_all_committed advancing PeeringState's
+    // last-complete tracking once the write has committed.
+    if (r >= 0) {
+      on_primary_write_committed(at_version);
+    }
     // Call the write-specific completion lambda if provided
     if (on_write_complete) {
       on_write_complete(r);
@@ -407,29 +407,100 @@ int PGBackendTestFixture::do_transaction_and_complete(
     reqid,
     OpRequestRef()
   );
+}
+
+int PGBackendTestFixture::run_primary_op(
+  std::function<void(std::shared_ptr<int> result)> body,
+  bool run)
+{
+  TestPG* primary_test_pg = get_primary_test_pg();
+  if (!primary_test_pg) {
+    return -EINVAL;
+  }
+
+  int primary_osd = primary_test_pg->pg_whoami.osd;
+
+  // Heap-allocated so the completion can safely write into it even if it is
+  // still queued (e.g. -EINPROGRESS) after run_until_idle() returns.
+  auto result = std::make_shared<int>(-EINPROGRESS);
+
+  event_loop->run_in_pg(primary_osd, primary_test_pg, [body, result]() {
+    body(result);
+  });
 
   if (run) {
     event_loop->run_until_idle();
   }
 
-  if (!completed) {
-    completion_result = -EINPROGRESS;
-  } else if (completion_result >= 0) {
-    on_primary_write_committed(at_version);
-  }
+  return *result;
+}
 
-  return completion_result;
+std::function<void(int)> PGBackendTestFixture::make_write_completion(
+  TestPG* test_pg,
+  const hobject_t& hoid,
+  std::shared_ptr<int> result,
+  std::function<void()> on_error,
+  std::function<void(int)> on_success)
+{
+  return [test_pg, hoid, result, on_error, on_success](int r) {
+    // Decrement outstanding writes counter
+    auto it = test_pg->outstanding_writes.find(hoid);
+    if (it != test_pg->outstanding_writes.end() && it->second > 0) {
+      // Clean up the counter if it reaches 0, but don't clear attr_cache here.
+      // The attr_cache will be cleared on on_change() events.
+      if (--it->second == 0) {
+        test_pg->outstanding_writes.erase(it);
+      }
+    }
+
+    if (r != 0 && r != -EINPROGRESS) {
+      // Transaction failed — roll back OBC state.
+      // In production this would be handled differently, but for tests
+      // we just reset to a clean state.
+      if (on_error) {
+        on_error();
+      }
+      test_pg->outstanding_writes.erase(hoid);
+    } else if (r == 0 && on_success) {
+      on_success(r);
+    }
+
+    *result = r;
+  };
+}
+
+void PGBackendTestFixture::prepare_obc_pair(
+  const hobject_t& hoid,
+  const hobject_t& snap_hoid,
+  uint64_t size,
+  PGTransaction* pg_t,
+  ObjectContextRef& obc,
+  ObjectContextRef& snap_obc)
+{
+  obc = get_object_context(hoid, true);
+  if (obc && !obc->obs.exists) {
+    obc->obs.exists = true;
+    obc->obs.oi.size = size;
+  }
+  pg_t->obc_map[hoid] = obc;
+
+  snap_obc = get_object_context(snap_hoid, true);
+  if (snap_obc && !snap_obc->obs.exists) {
+    snap_obc->obs.exists = true;
+    snap_obc->obs.oi.size = size;
+  }
+  pg_t->obc_map[snap_hoid] = snap_obc;
 }
 
 // Helper function that performs the actual write logic
 // Must be called within event loop context on the primary OSD
-int PGBackendTestFixture::do_create_and_write_impl(
+void PGBackendTestFixture::do_create_and_write_impl(
   const std::string& obj_name,
-  const std::string& data)
+  const std::string& data,
+  const eversion_t& at_version,
+  std::shared_ptr<int> result)
 {
-  // Auto-generate version
-  eversion_t at_version = get_next_version();
-  
+
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
   pg_t->create(hoid);
@@ -494,39 +565,24 @@ int PGBackendTestFixture::do_create_and_write_impl(
   entry.prior_version = eversion_t(0, 0);
   log_entries.push_back(entry);
 
-  // Create completion lambda for write-specific cleanup
+  // Capture TestPG pointer before creating lambda
   TestPG* test_pg = get_test_pg();
-  auto write_complete = [test_pg, hoid, obc](int r) {
-    // Note: we do NOT update obc->obs after completion — it was already
-    // updated above before submit, matching PrimaryLogPG behavior.
-    // ECTransaction::attr_updates() will have updated attr_cache[OI_ATTR]
-    // to the new encoded OI during the transaction.
 
-    // Decrement outstanding writes counter
-    if (test_pg->outstanding_writes[hoid] > 0) {
-      test_pg->outstanding_writes[hoid]--;
-      // Clean up the counter if it reaches 0, but don't clear attr_cache here.
-      // The attr_cache will be cleared on on_change() events.
-      if (test_pg->outstanding_writes[hoid] == 0) {
-        test_pg->outstanding_writes.erase(hoid);
-      }
-    }
-
-    if (r != 0 && r != -EINPROGRESS) {
-      // Transaction failed — roll back OBC state.
-      // In production this would be handled differently, but for tests
-      // we just reset to a clean state.
+  // Note: we do NOT update obc->obs after completion — it was already
+  // updated above before submit, matching PrimaryLogPG behavior.
+  // ECTransaction::attr_updates() will have updated attr_cache[OI_ATTR]
+  // to the new encoded OI during the transaction.
+  auto write_complete = make_write_completion(
+    test_pg, hoid, result,
+    [obc, hoid]() {
       obc->obs.oi = object_info_t(hoid);
       obc->obs.exists = false;
       obc->attr_cache.clear();
-      test_pg->outstanding_writes.erase(hoid);
-    }
-  };
+    },
+    nullptr);
 
-  int result = do_transaction_and_complete(
+  do_transaction(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
-
-  return result;
 }
 
 // Public interface that schedules the write on the primary OSD
@@ -534,17 +590,11 @@ int PGBackendTestFixture::create_and_write(
   const std::string& obj_name,
   const std::string& data)
 {
-  // Get the primary OSD from the OSDMap
-  int primary_osd = osdmap->get_pg_acting_primary(pgid);
-  ceph_assert(primary_osd >= 0);
-  
-  int result = -1;
-  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, data]() {
-    result = do_create_and_write_impl(obj_name, data);
-  });
-  event_loop->run_until_idle();
-  
-  return result;
+  eversion_t version = get_next_version();
+  return run_primary_op(
+    [this, obj_name, data, version](std::shared_ptr<int> result) {
+      do_create_and_write_impl(obj_name, data, version, result);
+    });
 }
 
 void PGBackendTestFixture::set_object_context(
@@ -635,12 +685,13 @@ ObjectContextRef PGBackendTestFixture::get_object_context(
 }
 
 // Helper function for write implementation
-int PGBackendTestFixture::do_write_impl(
+void PGBackendTestFixture::do_write_impl(
   const std::string& obj_name,
   uint64_t offset,
   const std::string& data,
   uint64_t object_size,
-  bool run)
+  const eversion_t& at_version,
+  std::shared_ptr<int> result)
 {
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
@@ -666,7 +717,6 @@ int PGBackendTestFixture::do_write_impl(
 
   // Prior version comes from the object's current version
   eversion_t prior_version = obc->obs.oi.version;
-  eversion_t at_version = get_next_version();
 
   // Build the NEW OI
   object_info_t new_oi = obc->obs.oi;
@@ -694,32 +744,20 @@ int PGBackendTestFixture::do_write_impl(
   entry.prior_version = prior_version;
   log_entries.push_back(entry);
 
-  // Create completion lambda for write-specific cleanup
+  // Capture TestPG pointer before creating lambda
   TestPG* test_pg = get_test_pg();
-  auto write_complete = [test_pg, hoid, obc, prior_version, object_size](int r) {
-    // Decrement outstanding writes counter
-    if (test_pg->outstanding_writes[hoid] > 0) {
-      test_pg->outstanding_writes[hoid]--;
-      // Clean up the counter if it reaches 0, but don't clear attr_cache here.
-      // The attr_cache will be cleared on on_change() events.
-      if (test_pg->outstanding_writes[hoid] == 0) {
-        test_pg->outstanding_writes.erase(hoid);
-      }
-    }
 
-    if (r != 0 && r != -EINPROGRESS) {
-      // Roll back OBC on failure
+  auto write_complete = make_write_completion(
+    test_pg, hoid, result,
+    [obc, prior_version, object_size]() {
       obc->obs.oi.version = prior_version;
       obc->obs.oi.size = object_size;
       obc->attr_cache.clear();
-      test_pg->outstanding_writes.erase(hoid);
-    }
-  };
+    },
+    nullptr);
 
-  int result = do_transaction_and_complete(
-    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete, run);
-
-  return result;
+  do_transaction(
+    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
 }
 
 // Public interface that schedules the write on the primary OSD
@@ -730,28 +768,19 @@ int PGBackendTestFixture::write(
   uint64_t object_size,
   bool run)
 {
-  // Get the primary OSD from the OSDMap
-  int primary_osd = osdmap->get_pg_acting_primary(pgid);
-  ceph_assert(primary_osd >= 0);
-
-  auto result = std::make_shared<int>(-EINPROGRESS);
-  event_loop->schedule_transaction(primary_osd, [this, result, obj_name, offset, data, object_size]() {
-    // run=false: the outer write() handles draining after this lambda returns
-    *result = do_write_impl(obj_name, offset, data, object_size);
-  });
-  if (run) {
-    event_loop->run_until_idle();
-  }
-
-  return *result;
+  eversion_t version = get_next_version();
+  return run_primary_op(
+    [this, obj_name, offset, data, object_size, version](std::shared_ptr<int> result) {
+      do_write_impl(obj_name, offset, data, object_size, version, result);
+    }, run);
 }
 
-int PGBackendTestFixture::do_truncate_and_write_impl(
+void PGBackendTestFixture::do_truncate_and_write_impl(
   const std::string& obj_name,
   uint64_t object_size,
   std::optional<uint64_t> truncate_size,
   const std::vector<std::pair<uint64_t, std::string>>& writes,
-  bool run)
+  std::shared_ptr<int> result)
 {
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
@@ -762,8 +791,10 @@ int PGBackendTestFixture::do_truncate_and_write_impl(
   }
   pg_t->obc_map[hoid] = obc;
 
+  TestPG* test_pg = get_test_pg();
+
   // Track outstanding write
-  get_test_pg()->outstanding_writes[hoid]++;
+  test_pg->outstanding_writes[hoid]++;
 
   // Apply truncate if specified
   if (truncate_size.has_value()) {
@@ -817,28 +848,17 @@ int PGBackendTestFixture::do_truncate_and_write_impl(
   entry.prior_version = prior_version;
   log_entries.push_back(entry);
 
-  // Create completion lambda for write-specific cleanup
-  TestPG* test_pg = get_test_pg();
-  auto write_complete = [test_pg, hoid, obc, prior_version, object_size](int r) {
-    // Decrement outstanding writes counter
-    if (test_pg->outstanding_writes[hoid] > 0) {
-      test_pg->outstanding_writes[hoid]--;
-      if (test_pg->outstanding_writes[hoid] == 0) {
-        test_pg->outstanding_writes.erase(hoid);
-      }
-    }
-
-    if (r != 0 && r != -EINPROGRESS) {
-      // Roll back OBC on failure
+  auto write_complete = make_write_completion(
+    test_pg, hoid, result,
+    [obc, prior_version, object_size]() {
       obc->obs.oi.version = prior_version;
       obc->obs.oi.size = object_size;
       obc->attr_cache.clear();
-      test_pg->outstanding_writes.erase(hoid);
-    }
-  };
+    },
+    nullptr);
 
-  return do_transaction_and_complete(
-    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete, run);
+  do_transaction(
+    hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
 }
 
 int PGBackendTestFixture::truncate_and_write(
@@ -848,19 +868,10 @@ int PGBackendTestFixture::truncate_and_write(
   const std::vector<std::pair<uint64_t, std::string>>& writes,
   bool run)
 {
-  int primary_osd = osdmap->get_pg_acting_primary(pgid);
-  ceph_assert(primary_osd >= 0);
-
-  auto result = std::make_shared<int>(-EINPROGRESS);
-  event_loop->schedule_transaction(primary_osd, [this, result, obj_name, object_size, truncate_size, writes]() {
-    // run=false: the outer write() handles draining after this lambda returns
-    *result = do_truncate_and_write_impl(obj_name, object_size, truncate_size, writes);
-  });
-  if (run) {
-    event_loop->run_until_idle();
-  }
-
-  return *result;
+  return run_primary_op(
+    [this, obj_name, object_size, truncate_size, writes](std::shared_ptr<int> result) {
+      do_truncate_and_write_impl(obj_name, object_size, truncate_size, writes, result);
+    }, run);
 }
 
 int PGBackendTestFixture::create_snapshot(
@@ -868,55 +879,39 @@ int PGBackendTestFixture::create_snapshot(
   uint64_t snap_size,
   bool run)
 {
-  int primary_osd = osdmap->get_pg_acting_primary(pgid);
-  ceph_assert(primary_osd >= 0);
+  return run_primary_op(
+    [this, obj_name, snap_size](std::shared_ptr<int> result) {
+      hobject_t hoid = make_test_object(obj_name);
+      hobject_t snap_hoid(hoid);
+      snap_hoid.snap = 1;
 
-  // Run synchronously — the snap must exist in the store before rollback().
-  int result = -EINPROGRESS;
-  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, snap_size]() {
-    hobject_t hoid = make_test_object(obj_name);
-    hobject_t snap_hoid(hoid);
-    snap_hoid.snap = 1;
+      PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
 
-    PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+      ObjectContextRef obc, snap_obc;
+      prepare_obc_pair(hoid, snap_hoid, snap_size, pg_t.get(), obc, snap_obc);
 
-    ObjectContextRef obc = get_object_context(hoid, true);
-    if (obc && !obc->obs.exists) {
-      obc->obs.exists = true;
-      obc->obs.oi.size = snap_size;
-    }
-    pg_t->obc_map[hoid] = obc;
+      pg_t->clone(snap_hoid, hoid);
 
-    ObjectContextRef snap_obc = get_object_context(snap_hoid, true);
-    if (snap_obc && !snap_obc->obs.exists) {
-      snap_obc->obs.exists = true;
-      snap_obc->obs.oi.size = snap_size;
-    }
-    pg_t->obc_map[snap_hoid] = snap_obc;
+      eversion_t at_version = get_next_version();
 
-    pg_t->clone(snap_hoid, hoid);
+      object_stat_sum_t delta_stats;
+      delta_stats.num_object_clones = 1;
 
-    eversion_t at_version = get_next_version();
+      std::vector<pg_log_entry_t> log_entries;
+      pg_log_entry_t entry;
+      entry.op = pg_log_entry_t::CLONE;
+      entry.soid = snap_hoid;
+      entry.version = at_version;
+      entry.prior_version = obc->obs.oi.version;
+      log_entries.push_back(entry);
 
-    object_stat_sum_t delta_stats;
-    delta_stats.num_object_clones = 1;
+      TestPG* test_pg = get_test_pg();
+      auto snap_complete = make_write_completion(test_pg, hoid, result, nullptr, nullptr);
 
-    std::vector<pg_log_entry_t> log_entries;
-    pg_log_entry_t entry;
-    entry.op = pg_log_entry_t::CLONE;
-    entry.soid = snap_hoid;
-    entry.version = at_version;
-    entry.prior_version = obc->obs.oi.version;
-    log_entries.push_back(entry);
-
-    result = do_transaction_and_complete(
-      snap_hoid, std::move(pg_t), delta_stats, at_version,
-      std::move(log_entries), nullptr);
-  });
-  if (run) {
-    event_loop->run_until_idle();
-  }
-  return result;
+      do_transaction(
+        snap_hoid, std::move(pg_t), delta_stats, at_version,
+        std::move(log_entries), snap_complete);
+    }, run);
 }
 
 
@@ -925,86 +920,62 @@ int PGBackendTestFixture::rollback(
   uint64_t snap_size,
   bool run)
 {
-  int primary_osd = osdmap->get_pg_acting_primary(pgid);
-  ceph_assert(primary_osd >= 0);
+  return run_primary_op(
+    [this, obj_name, snap_size](std::shared_ptr<int> result) {
+      hobject_t hoid = make_test_object(obj_name);
+      hobject_t snap_hoid(hoid);
+      snap_hoid.snap = 1;
 
-  auto result = std::make_shared<int>(-EINPROGRESS);
-  event_loop->schedule_transaction(primary_osd, [this, result, obj_name, snap_size]() {
-    hobject_t hoid = make_test_object(obj_name);
-    hobject_t snap_hoid(hoid);
-    snap_hoid.snap = 1;
+      PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
 
-    PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+      ObjectContextRef obc, snap_obc;
+      prepare_obc_pair(hoid, snap_hoid, snap_size, pg_t.get(), obc, snap_obc);
 
-    ObjectContextRef obc = get_object_context(hoid, true);
-    if (obc && !obc->obs.exists) {
-      obc->obs.exists = true;
-      obc->obs.oi.size = snap_size;
-    }
-    pg_t->obc_map[hoid] = obc;
+      TestPG* test_pg = get_test_pg();
+      test_pg->outstanding_writes[hoid]++;
 
-    ObjectContextRef snap_obc = get_object_context(snap_hoid, true);
-    if (snap_obc && !snap_obc->obs.exists) {
-      snap_obc->obs.exists = true;
-      snap_obc->obs.oi.size = snap_size;
-    }
-    pg_t->obc_map[snap_hoid] = snap_obc;
+      pg_t->remove(hoid);
+      pg_t->clone(hoid, snap_hoid);
 
-    get_test_pg()->outstanding_writes[hoid]++;
+      eversion_t prior_version = obc->obs.oi.version;
+      eversion_t at_version = get_next_version();
 
-    pg_t->remove(hoid);
-    pg_t->clone(hoid, snap_hoid);
+      object_info_t new_oi = obc->obs.oi;
+      new_oi.version = at_version;
+      new_oi.prior_version = prior_version;
+      new_oi.size = snap_size;
 
-    eversion_t prior_version = obc->obs.oi.version;
-    eversion_t at_version = get_next_version();
-
-    object_info_t new_oi = obc->obs.oi;
-    new_oi.version = at_version;
-    new_oi.prior_version = prior_version;
-    new_oi.size = snap_size;
-
-    {
-      bufferlist oi_bl;
-      new_oi.encode(oi_bl,
-        osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      pg_t->setattr(hoid, OI_ATTR, oi_bl);
-    }
-
-    obc->obs.oi = new_oi;
-
-    object_stat_sum_t delta_stats;
-    std::vector<pg_log_entry_t> log_entries;
-    pg_log_entry_t entry;
-    entry.op = pg_log_entry_t::MODIFY;
-    entry.soid = hoid;
-    entry.version = at_version;
-    entry.prior_version = prior_version;
-    log_entries.push_back(entry);
-
-    TestPG* test_pg = get_test_pg();
-    auto complete = [test_pg, hoid, obc, prior_version, snap_size](int r) {
-      if (test_pg->outstanding_writes[hoid] > 0) {
-        test_pg->outstanding_writes[hoid]--;
-        if (test_pg->outstanding_writes[hoid] == 0) {
-          test_pg->outstanding_writes.erase(hoid);
-        }
+      {
+        bufferlist oi_bl;
+        new_oi.encode(oi_bl,
+          osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+        pg_t->setattr(hoid, OI_ATTR, oi_bl);
       }
-      if (r != 0 && r != -EINPROGRESS) {
-        obc->obs.oi.version = prior_version;
-        obc->obs.oi.size = snap_size;
-        obc->attr_cache.clear();
-        test_pg->outstanding_writes.erase(hoid);
-      }
-    };
 
-    *result = do_transaction_and_complete(
-      hoid, std::move(pg_t), delta_stats, at_version,
-      std::move(log_entries), complete);
-  });
-  if (run) {
-    event_loop->run_until_idle();
-  }
-  return *result;
+      obc->obs.oi = new_oi;
+
+      object_stat_sum_t delta_stats;
+      std::vector<pg_log_entry_t> log_entries;
+      pg_log_entry_t entry;
+      entry.op = pg_log_entry_t::MODIFY;
+      entry.soid = hoid;
+      entry.version = at_version;
+      entry.prior_version = prior_version;
+      log_entries.push_back(entry);
+
+      auto complete = make_write_completion(
+        test_pg, hoid, result,
+        [obc, prior_version, snap_size]() {
+          obc->obs.oi.version = prior_version;
+          obc->obs.oi.size = snap_size;
+          obc->attr_cache.clear();
+        },
+        nullptr);
+
+      do_transaction(
+        hoid, std::move(pg_t), delta_stats, at_version,
+        std::move(log_entries), complete);
+    }, run);
 }
 
 int PGBackendTestFixture::read_object(
@@ -1327,11 +1298,12 @@ void PGBackendTestFixture::update_osdmap(std::shared_ptr<OSDMap> new_osdmap)
 
 
 // Helper function for write_attribute implementation
-int PGBackendTestFixture::do_write_attribute_impl(
+void PGBackendTestFixture::do_write_attribute_impl(
   const std::string& obj_name,
   const std::string& attr_name,
   const std::string& attr_value,
-  bool force_all_shards)
+  bool force_all_shards,
+  std::shared_ptr<int> result)
 {
   hobject_t hoid = make_test_object(obj_name);
   PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
@@ -1372,22 +1344,17 @@ int PGBackendTestFixture::do_write_attribute_impl(
   
   object_stat_sum_t delta_stats;
   
+  // Capture TestPG pointer before creating lambda
   TestPG* test_pg = get_test_pg();
-  auto write_complete = [test_pg, hoid, obc, prior_version](int r) {
-    if (test_pg->outstanding_writes[hoid] > 0) {
-      test_pg->outstanding_writes[hoid]--;
-      if (test_pg->outstanding_writes[hoid] == 0) {
-        test_pg->outstanding_writes.erase(hoid);
-      }
-    }
-    
-    if (r != 0 && r != -EINPROGRESS) {
+  
+  auto write_complete = make_write_completion(
+    test_pg, hoid, result,
+    [obc, prior_version]() {
       obc->obs.oi.version = prior_version;
       obc->attr_cache.clear();
-      test_pg->outstanding_writes.erase(hoid);
-    }
-  };
-  
+    },
+    nullptr);
+
   // Control first_write_in_interval to simulate different write patterns
   if (force_all_shards && pool_type == EC) {
     PGBackend* primary_backend = get_primary_backend();
@@ -1395,11 +1362,9 @@ int PGBackendTestFixture::do_write_attribute_impl(
       primary_backend->on_change();
     }
   }
-  
-  int result = do_transaction_and_complete(
+
+  do_transaction(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
-  
-  return result;
 }
 
 // Public interface that schedules the write on the primary OSD
@@ -1409,17 +1374,10 @@ int PGBackendTestFixture::write_attribute(
   const std::string& attr_value,
   bool force_all_shards)
 {
-  // Get the primary OSD from the OSDMap
-  int primary_osd = osdmap->get_pg_acting_primary(pgid);
-  ceph_assert(primary_osd >= 0);
-  
-  int result = -1;
-  event_loop->schedule_transaction(primary_osd, [this, &result, obj_name, attr_name, attr_value, force_all_shards]() {
-    result = do_write_attribute_impl(obj_name, attr_name, attr_value, force_all_shards);
-  });
-  event_loop->run_until_idle();
-  
-  return result;
+  return run_primary_op(
+    [this, obj_name, attr_name, attr_value, force_all_shards](std::shared_ptr<int> result) {
+      do_write_attribute_impl(obj_name, attr_name, attr_value, force_all_shards, result);
+    });
 }
 
 object_info_t PGBackendTestFixture::read_shard_object_info(
