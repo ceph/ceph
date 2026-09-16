@@ -37,6 +37,7 @@ public:
     ec_plugin = config.ec_plugin;
     ec_technique = config.ec_technique;
     pool_flags = config.pool_flags;
+    num_zones = config.num_zones;
   }
   
   void SetUp() override {
@@ -45,20 +46,19 @@ public:
 };
 
 TEST_P(TestECFailoverWithPeering, BasicPeeringCycle) {
-  pg_t pgid = get_peering_state(0)->get_info().pgid.pgid;
+  pg_t pgid = get_primary_test_pg()->get_peering_state()->get_info().pgid.pgid;
   std::vector<int> acting_osds;
   int acting_primary = -1;
   osdmap->pg_to_acting_osds(pgid, &acting_osds, &acting_primary);
   
-  EXPECT_TRUE(get_peering_state(acting_primary)->is_clean())
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_clean())
     << "Primary should be clean after peering";
   
   // Verify primary is shard 0
-  EXPECT_TRUE(get_peering_listener(0)->backend_listener->pgb_is_primary())
-    << "Shard 0 should be primary";
+  ASSERT_EQ(get_primary_shard_from_osdmap(), 0) << "Shard 0 should be primary";
   
   for (int i = 1; i < k + m; i++) {
-    EXPECT_FALSE(get_peering_listener(i)->backend_listener->pgb_is_primary())
+    ASSERT_FALSE(get_test_pg_by_shard(i)->get_peering_listener()->backend_listener->pgb_is_primary())
       << "Shard " << i << " should not be primary";
   }
 }
@@ -70,8 +70,8 @@ TEST_P(TestECFailoverWithPeering, WriteWithPeering) {
   
   create_and_write_verify(obj_name, test_data);
 
-  auto* primary_ps = get_peering_state(0);
-  EXPECT_GT(primary_ps->get_pg_log().get_log().log.size(), 0)
+  auto* primary_ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_GT(primary_ps->get_pg_log().get_log().log.size(), 0)
     << "Primary should have log entries after write";
 }
 
@@ -86,18 +86,19 @@ TEST_P(TestECFailoverWithPeering, OSDFailureWithPeering) {
   int failed_osd = 1;  // Fail shard 1 which contains part of the data
 
   create_and_write_verify(obj_name, test_data_full);
+  // Measure the number of reads that occur.
   event_loop->reset_stats();
   bufferlist pre_failover_read;
-  verify_object(obj_name, test_data_read, 0, object_size);
-  EXPECT_EQ(4, event_loop->get_stats_by_type().at(EventLoop::EventType::OSD_MESSAGE));
+  read_object(obj_name, 0, read_length, pre_failover_read, object_size);
+  ASSERT_EQ(4, event_loop->get_stats_by_type().at(EventLoop::EventType::OSD_MESSAGE));
 
   // Use fixture helper to mark OSD as down
   mark_osd_down(failed_osd);
   
   // Reset EventLoop stats before post-failover read
   event_loop->reset_stats();
-  verify_object(obj_name, test_data_read, 0, object_size);
-  EXPECT_EQ(k * 2, event_loop->get_stats_by_type().at(EventLoop::EventType::OSD_MESSAGE));
+  verify_object(obj_name);
+  ASSERT_EQ(k * 2, event_loop->get_stats_by_type().at(EventLoop::EventType::OSD_MESSAGE));
 }
 
 TEST_P(TestECFailoverWithPeering, PrimaryFailoverWithPeering) {
@@ -120,37 +121,43 @@ TEST_P(TestECFailoverWithPeering, PrimaryFailoverWithPeering) {
   // For a non-optimized pool, it would be shard 1
   const pg_pool_t& pool = get_pool();
   if (pool.allows_ecoptimizations()) {
-    EXPECT_GE(new_primary_shard, k)
+    ASSERT_GE(new_primary_shard, k)
       << "New primary should be a coding shard (>= k) for optimized pool";
   } else {
-    EXPECT_EQ(new_primary_shard, 1)
+    ASSERT_EQ(new_primary_shard, 1)
       << "New primary should be shard 1 for non-optimized pool";
   }
   
-  EXPECT_TRUE(get_peering_listener(new_primary_shard)->backend_listener->pgb_is_primary())
+  TestPG* new_primary_pg = get_primary_test_pg();
+  ASSERT_TRUE(new_primary_pg != nullptr) << "New primary TestPG should exist";
+  ASSERT_TRUE(new_primary_pg->has_backend()) << "New primary should have backend";
+  EXPECT_TRUE(new_primary_pg->get_backend_listener()->pgb_is_primary())
     << "Shard " << new_primary_shard << " should be new primary";
   
-  EXPECT_FALSE(get_peering_listener(0)->backend_listener->pgb_is_primary())
+  TestPG* failed_pg = get_first_test_pg_for_osd(0);
+  ASSERT_TRUE(failed_pg != nullptr) << "Failed OSD TestPG should still exist";
+  ASSERT_TRUE(failed_pg->has_backend()) << "Failed OSD should still have backend";
+  EXPECT_FALSE(failed_pg->get_backend_listener()->pgb_is_primary())
     << "Failed shard should not be primary";
   
   std::string state = get_state_name(new_primary_shard);
-  EXPECT_TRUE(state.find("Active") != std::string::npos)
+  ASSERT_TRUE(state.find("Active") != std::string::npos)
     << "New primary should be Active after failover, got: " << state;
   
   // Verify the PG reached Active state
-  EXPECT_TRUE(get_peering_state(new_primary_shard)->is_active())
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active())
     << "New primary should be in Active state";
   
   // Verify reads work after primary failover (with EC reconstruction)
-  verify_object(obj_name, test_data, 0, test_data.length());
+  verify_object(obj_name);
 }
 
 TEST_P(TestECFailoverWithPeering, MultipleOSDFailuresWithPeering) {
-  // This test only runs for configurations with m=2
-  if (m != 2) {
-    GTEST_SKIP() << "MultipleOSDFailuresWithPeering only runs for m=2";
+  // This test only runs for configurations with m=2 and num_zones=1
+  if (m != 2 || num_zones != 1) {
+    GTEST_SKIP() << "MultipleOSDFailuresWithPeering only runs for m=2, num_zones=1";
   }
-  
+
   ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
   
   const std::string obj_name = "test_multiple_failures";
@@ -165,15 +172,15 @@ TEST_P(TestECFailoverWithPeering, MultipleOSDFailuresWithPeering) {
   // Use fixture helper to mark multiple OSDs as down
   mark_osds_down(failed_osds);
   
-  auto* primary_ps = get_peering_state(0);
+  auto* primary_ps = get_primary_test_pg()->get_peering_state();
   for (int failed_osd : failed_osds) {
-    EXPECT_TRUE(primary_ps->get_acting_recovery_backfill().count(
+    ASSERT_TRUE(primary_ps->get_acting_recovery_backfill().count(
       pg_shard_t(failed_osd, shard_id_t(failed_osd))) == 0)
       << "Failed OSD " << failed_osd << " should not be in acting set";
   }
   
   std::string primary_state = get_state_name(0);
-  EXPECT_TRUE(primary_state.find("Peering") != std::string::npos ||
+  ASSERT_TRUE(primary_state.find("Peering") != std::string::npos ||
               primary_state.find("Active") != std::string::npos ||
               primary_state.find("Recovery") != std::string::npos)
     << "Primary should be operational, got: " << primary_state;
@@ -189,16 +196,16 @@ TEST_P(TestECFailoverWithPeering, RecoveryWithPeering) {
   const std::string obj2_data = "Second object data for recovery test";
   
   int result = create_and_write(obj1_name, obj1_data);
-  EXPECT_EQ(result, 0) << "First pre-failure write should complete";
+  ASSERT_EQ(result, 0) << "First pre-failure write should complete";
   
   result = create_and_write(obj2_name, obj2_data);
-  EXPECT_EQ(result, 0) << "Second pre-failure write should complete";
+  ASSERT_EQ(result, 0) << "Second pre-failure write should complete";
   
-  EXPECT_TRUE(primary_is_clean()) << "Primary should be clean before recovery test";
+  ASSERT_TRUE(primary_is_clean()) << "Primary should be clean before recovery test";
   
-  auto* primary_ps = get_peering_state(0);
+  auto* primary_ps = get_primary_test_pg()->get_peering_state();
   eversion_t pre_failure_log_head = primary_ps->get_pg_log().get_log().head;
-  EXPECT_GT(pre_failure_log_head.version, 0u)
+  ASSERT_GT(pre_failure_log_head.version, 0u)
     << "Primary should have log entries before failure";
   
   int failed_osd = k - 1;  // Last data shard
@@ -217,24 +224,24 @@ TEST_P(TestECFailoverWithPeering, RecoveryWithPeering) {
   bufferlist obj1_read;
   int read_result = read_object(obj1_name, 0, obj1_data.length(),
                                 obj1_read, obj1_data.length());
-  EXPECT_GE(read_result, 0) << "First object should be readable after OSD failure";
+  ASSERT_GE(read_result, 0) << "First object should be readable after OSD failure";
   ASSERT_EQ(obj1_read.length(), obj1_data.length())
     << "First object read length should match after failure";
   {
     std::string read_str(obj1_read.c_str(), obj1_read.length());
-    EXPECT_EQ(read_str, obj1_data)
+    ASSERT_EQ(read_str, obj1_data)
       << "First object data should be correct after OSD failure (EC reconstruction)";
   }
   
   bufferlist obj2_read;
   read_result = read_object(obj2_name, 0, obj2_data.length(),
                             obj2_read, obj2_data.length());
-  EXPECT_GE(read_result, 0) << "Second object should be readable after OSD failure";
+  ASSERT_GE(read_result, 0) << "Second object should be readable after OSD failure";
   ASSERT_EQ(obj2_read.length(), obj2_data.length())
     << "Second object read length should match after failure";
   {
     std::string read_str(obj2_read.c_str(), obj2_read.length());
-    EXPECT_EQ(read_str, obj2_data)
+    ASSERT_EQ(read_str, obj2_data)
       << "Second object data should be correct after OSD failure (EC reconstruction)";
   }
   
@@ -242,61 +249,60 @@ TEST_P(TestECFailoverWithPeering, RecoveryWithPeering) {
   const std::string post_recovery_data = "Data written after OSD failure and recovery";
   
   result = create_and_write(post_recovery_obj, post_recovery_data);
-  EXPECT_EQ(result, 0) << "Write after OSD failure should complete successfully";
+  ASSERT_EQ(result, 0) << "Write after OSD failure should complete successfully";
   
   bufferlist post_recovery_read;
   read_result = read_object(post_recovery_obj, 0, post_recovery_data.length(),
                             post_recovery_read, post_recovery_data.length());
-  EXPECT_GE(read_result, 0) << "Post-recovery object should be readable";
+  ASSERT_GE(read_result, 0) << "Post-recovery object should be readable";
   ASSERT_EQ(post_recovery_read.length(), post_recovery_data.length())
     << "Post-recovery read length should match";
   {
     std::string read_str(post_recovery_read.c_str(), post_recovery_read.length());
-    EXPECT_EQ(read_str, post_recovery_data)
+    ASSERT_EQ(read_str, post_recovery_data)
       << "Post-recovery data should match what was written";
   }
   
   eversion_t post_recovery_log_head = primary_ps->get_pg_log().get_log().head;
-  EXPECT_GT(post_recovery_log_head.version, pre_failure_log_head.version)
+  ASSERT_GT(post_recovery_log_head.version, pre_failure_log_head.version)
     << "Primary PG log head should advance after post-recovery write";
   
   // Even though the OSD is "down", its PeeringState still holds the log
   // from before it went down.
-  auto* failed_ps = get_peering_state(failed_osd);
-  EXPECT_TRUE(failed_ps != nullptr) << "Failed OSD's PeeringState should still exist";
+  auto* failed_ps = get_first_test_pg_for_osd(failed_osd)->get_peering_state();
+  ASSERT_TRUE(failed_ps != nullptr) << "Failed OSD's PeeringState should still exist";
   
   size_t primary_log_size = primary_ps->get_pg_log().get_log().log.size();
   size_t failed_log_size = failed_ps->get_pg_log().get_log().log.size();
-  EXPECT_LE(failed_log_size, primary_log_size)
+  ASSERT_LE(failed_log_size, primary_log_size)
     << "Failed OSD's PG log size should not exceed primary's log size";
   // The primary wrote 3 objects (obj1, obj2, post_recovery_obj), so its log must be non-empty.
-  EXPECT_GT(primary_log_size, 0u)
+  ASSERT_GT(primary_log_size, 0u)
     << "Primary PG log should have entries after 3 writes";
   
-  auto* listener_ptr = get_peering_listener(0);
-  EXPECT_TRUE(listener_ptr != nullptr) << "Peering listener should exist";
-  EXPECT_TRUE(listener_ptr->activate_complete_called)
+  auto* listener_ptr = get_primary_test_pg()->get_peering_listener();
+  ASSERT_TRUE(listener_ptr != nullptr) << "Peering listener should exist";
+  ASSERT_TRUE(listener_ptr->activate_complete_called)
     << "on_activate_complete should have been called during peering";
 }
-
 TEST_P(TestECFailoverWithPeering, ZeroSizeObjectWithAttributesRecovery) {
   //  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
-  
+
   const std::string obj_name = "test_primary_failover";
   const std::string test_data;
-  
+
   create_and_write(obj_name, test_data);
-  
+
   // Mark OSD 0 (the initial primary) as down
   // PeeringState will automatically determine the new primary
   mark_osd_down(0);
-  
+
   write_attribute(obj_name, "key", "value", false);
-  
+
   // Determine the actual new primary from the OSDMap
   int new_primary_shard = get_primary_shard_from_osdmap();
   ASSERT_GE(new_primary_shard, 0) << "Should have a valid new primary after failover";
-  
+
   // For an optimized EC pool (k=4, m=2), the new primary should be a coding shard (>= k)
   // For a non-optimized pool, it would be shard 1
   const pg_pool_t& pool = get_pool();
@@ -307,31 +313,35 @@ TEST_P(TestECFailoverWithPeering, ZeroSizeObjectWithAttributesRecovery) {
     ASSERT_EQ(new_primary_shard, 1)
       << "New primary should be shard 1 for non-optimized pool";
   }
-  
-  ASSERT_TRUE(get_peering_listener(new_primary_shard)->backend_listener->pgb_is_primary())
+
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_listener()->backend_listener->pgb_is_primary())
     << "Shard " << new_primary_shard << " should be new primary";
-  
-  ASSERT_FALSE(get_peering_listener(0)->backend_listener->pgb_is_primary())
+
+  ASSERT_FALSE(get_first_test_pg_for_osd(0)->get_peering_listener()->backend_listener->pgb_is_primary())
     << "Failed shard should not be primary";
-  
+
   std::string state = get_state_name(new_primary_shard);
   ASSERT_TRUE(state.find("Active") != std::string::npos)
     << "New primary should be Active after failover, got: " << state;
-  
+
   // Verify the PG reached Active state
-  ASSERT_TRUE(get_peering_state(new_primary_shard)->is_active())
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active())
     << "New primary should be in Active state";
-  
+
   mark_osd_up(0);
-  
+
   run_recovery(obj_name, true, test_data);
-  
   // Verify that the attribute was recovered on shard 0
   hobject_t hoid = make_test_object(obj_name);
   ghobject_t ghoid = ghobject_t(hoid, ghobject_t::NO_GEN, shard_id_t(0));
-  
+
+  OsdTestFixture* osd_fixture = get_osd_fixture(0);
+  ceph_assert(osd_fixture != nullptr && osd_fixture->store);
+  TestPG* test_pg = get_test_pg(0, 0);
+  ceph_assert(test_pg != nullptr);
+
   ceph::buffer::ptr attr_value;
-  int r = store->getattr(chs[0], ghoid, "key", attr_value);
+  int r = osd_fixture->store->getattr(test_pg->ch, ghoid, "key", attr_value);
   ASSERT_GE(r, 0) << "Attribute 'key' should exist on recovered shard 0";
   ASSERT_EQ(std::string(attr_value.c_str(), attr_value.length()), "value")
     << "Attribute 'key' should have value 'value' after recovery";
@@ -354,18 +364,18 @@ namespace {
  */
 const std::vector<BackendConfig> kECPeeringConfigs = {
   // ISA plugin with optimizations (modern EC)
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, "EC_ISA_Opt_k4m2_su4k"},
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, "EC_ISA_Opt_k4m2_su8k"},
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, "EC_ISA_Opt_k4m2_su16k"},
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, "EC_ISA_Opt_k2m1_su4k"},
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, "EC_ISA_Opt_k8m3_su4k"},
-  
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 1, "EC_ISA_Opt_k4m2_su4k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, 1, "EC_ISA_Opt_k4m2_su8k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, 1, "EC_ISA_Opt_k4m2_su16k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 1, "EC_ISA_Opt_k2m1_su4k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, 1, "EC_ISA_Opt_k8m3_su4k"},
+
   // Jerasure plugin with optimizations (modern EC)
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, "EC_Jerasure_Opt_k4m2_su4k"},
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, "EC_Jerasure_Opt_k4m2_su8k"},
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, "EC_Jerasure_Opt_k4m2_su16k"},
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, "EC_Jerasure_Opt_k2m1_su4k"},
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, "EC_Jerasure_Opt_k8m3_su4k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 1, "EC_Jerasure_Opt_k4m2_su4k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, 1, "EC_Jerasure_Opt_k4m2_su8k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, 1, "EC_Jerasure_Opt_k4m2_su16k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 1, "EC_Jerasure_Opt_k2m1_su4k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, 1, "EC_Jerasure_Opt_k8m3_su4k"},
 };
 
 }  // namespace
@@ -408,11 +418,11 @@ TEST_P(
   mark_osd_down(failing_shard);
   unsuspend_primary_to_osd(blocked_shard);
   event_loop->run_until_idle();
-  
+
   // Ensure all shards have completed peering and applied rollback transactions
   ASSERT_TRUE(all_shards_active()) << "All shards should be active after peering";
-  
-  verify_object(obj_name, pattern_a, 0, pattern_a.length());
+
+  verify_object(obj_name);
 
   std::cout << "\n=== RollbackAfterOSDFailure Test Complete ===" << std::endl;
 }
@@ -433,10 +443,16 @@ TEST_P(
 TEST_P(TestECFailoverWithPeering, ECRecoveryTest) {
   ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
 
+  // Determine which OSDs to test based on num_zones
   std::vector<int> osds_to_test;
   osds_to_test.push_back(1); // Non-primary
   osds_to_test.push_back(0); // Primary
   osds_to_test.push_back(k); // First coding shard
+
+  if (num_zones > 1) {
+    osds_to_test.push_back(k + m + 1);  // k + m + 1
+    osds_to_test.push_back(2 * k + m);  // 2k + m
+  }
 
   // Run the test for each OSD
   for (int removed_osd : osds_to_test) {
@@ -480,10 +496,10 @@ TEST_P(TestECFailoverWithPeering, ECSequentialOSDFailoverTest) {
   const size_t data_size = stripe_unit * k;  // One full stripe
 
   // Calculate total number of OSDs to test
-  int total_osds = (k + m);
+  int total_osds = (k + m) * num_zones;
 
   std::cout << "\n=== Testing sequential OSD failover for " << total_osds
-            << " OSDs (k=" << k << ", m=" << m << ") ===" << std::endl;
+            << " OSDs (k=" << k << ", m=" << m << ", zones=" << num_zones << ") ===" << std::endl;
 
   // Create object with initial pattern
   std::string initial_pattern(data_size, 'A');
@@ -864,6 +880,9 @@ TEST_P(
   run_recovery(obj_name, false, pattern_p1);
 }
 
+/**
+ * Test rollback after a sequence of blocked full-stripe and chunk writes.
+ */
 TEST_P(TestECFailoverWithPeering, ScrubPartialWrite) {
   ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
 
@@ -988,7 +1007,10 @@ TEST_P(TestECFailoverWithPeering, ScrubDetectsCorruption) {
       std::cout << "Scrubbing object " << obj_name
                 << " to verify corruption detection for zone iteration " << zone
                 << ", shard offset " << shard_offset << std::endl;
-      bool corruption_detected = scrub_object(obj_name);
+      // skip_verify=true: verify_object() would read through the corrupted shard
+      // and produce wrong data, causing ASSERT_EQ to fire.  We skip it here
+      // because the point of this test is scrub-based detection, not read-back.
+      bool corruption_detected = scrub_object(obj_name, /*skip_verify=*/true);
 
       std::cout << "Zone iteration " << zone
                 << " corruption result for shard offset " << shard_offset
@@ -1010,12 +1032,19 @@ TEST_P(TestECFailoverWithPeering, ScrubDetectsCorruption) {
             << " during zone iteration " << zone << ", shard offset "
             << shard_offset << " (absolute shard " << absolute_shard << ")";
       }
+      
+      // Delete the corrupted object so teardown's scrub_all_objects() (which
+      // skips objects ObjectTracker reports as deleted) doesn't try to scrub
+      // it and report a spurious consistency failure. Deleting the object we
+      // just used, rather than marking its shard's OSD down, avoids changing
+      // cluster state as a side effect purely to satisfy teardown.
+      std::cout << "Deleting corrupted object " << obj_name << std::endl;
+      delete_object(obj_name);
     }
   }
 
   std::cout << "=== ScrubDetectsCorruption test completed successfully ===" << std::endl;
 }
-
 /**
  * DivergentLogRewindThenSplit
  *
