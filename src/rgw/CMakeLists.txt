@@ -1142,6 +1142,13 @@ if(WITH_RADOSGW_RADOS)
   target_compile_OPTIONS(rgw PUBLIC "-DWITH_RADOSGW_RADOS")
 endif()
 
+# AppMain (rgw_main.h) has members guarded by this macro, and RGWLib embeds
+# it by value, so anything that links librgw and includes rgw_lib.h must see
+# the same definition or its view of the class layout will not match.
+if(WITH_RADOSGW_LANCEDB)
+  target_compile_definitions(rgw PUBLIC WITH_RADOSGW_LANCEDB)
+endif()
+
 if(WITH_TESTS)
   add_executable(ceph_rgw_jsonparser
     rgw_jsonparser.cc)
