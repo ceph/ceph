@@ -154,41 +154,71 @@ class StoreDriver : public Driver {
 
 class StoreUser : public User {
   protected:
-    RGWUserInfo info;
+    /* Holds either a shared (immutable, cache-sourced) RGWUserInfo
+     * or an owned (mutable) copy.
+     * If in shared mode and write access is requested (via get_info_mut()),
+     * the value is copied and mode is changed to owned.
+     * The shared value is kept in case references to it have already
+     * been returned.
+     */
+    bool shared_mode = false;
+    RGWUserInfo owned_info;
+    std::shared_ptr<const RGWUserInfo> shared_info;
     RGWObjVersionTracker objv_tracker;
     Attrs attrs;
 
   public:
-    StoreUser() : info() {}
-    StoreUser(const rgw_user& _u) : info() { info.user_id = _u; }
-    StoreUser(const RGWUserInfo& _i) : info(_i) {}
+    StoreUser() {}
+    StoreUser(const rgw_user& _u) { owned_info.user_id = _u; }
+    StoreUser(const RGWUserInfo& _i) : owned_info(_i) {}
+    StoreUser(RGWUserInfo&& _i) : owned_info(std::move(_i)) {}
+    StoreUser(std::shared_ptr<const RGWUserInfo> _i) { set_info_shared(std::move(_i)); }
     StoreUser(StoreUser& _o) = default;
     virtual ~StoreUser() = default;
 
-    virtual std::string& get_display_name() override { return info.display_name; }
-    virtual const std::string& get_tenant() override { return info.user_id.tenant; }
-    virtual void set_tenant(std::string& _t) override { info.user_id.tenant = _t; }
-    virtual const std::string& get_ns() override { return info.user_id.ns; }
-    virtual void set_ns(std::string& _ns) override { info.user_id.ns = _ns; }
-    virtual void clear_ns() override { info.user_id.ns.clear(); }
-    virtual const rgw_user& get_id() const override { return info.user_id; }
-    virtual uint32_t get_type() const override { return info.type; }
-    virtual int32_t get_max_buckets() const override { return info.max_buckets; }
-    virtual void set_max_buckets(int32_t _max_buckets) override {
-      info.max_buckets = _max_buckets;
+    void set_info_shared(std::shared_ptr<const RGWUserInfo> _i) {
+      ceph_assert(_i);
+      shared_mode = true;
+      shared_info = std::move(_i);
     }
-    virtual const RGWUserCaps& get_caps() const override { return info.caps; }
+
+    virtual const std::string& get_display_name() override { return get_info().display_name; }
+    virtual const std::string& get_tenant() override { return get_info().user_id.tenant; }
+    virtual void set_tenant(std::string& _t) override { get_info_mut().user_id.tenant = _t; }
+    virtual const std::string& get_ns() override { return get_info().user_id.ns; }
+    virtual void set_ns(std::string& _ns) override { get_info_mut().user_id.ns = _ns; }
+    virtual void clear_ns() override { get_info_mut().user_id.ns.clear(); }
+    virtual const rgw_user& get_id() const override { return get_info().user_id; }
+    virtual uint32_t get_type() const override { return get_info().type; }
+    virtual int32_t get_max_buckets() const override { return get_info().max_buckets; }
+    virtual void set_max_buckets(int32_t _max_buckets) override {
+      get_info_mut().max_buckets = _max_buckets;
+    }
+    virtual const RGWUserCaps& get_caps() const override { return get_info().caps; }
     virtual RGWObjVersionTracker& get_version_tracker() override { return objv_tracker; }
     virtual Attrs& get_attrs() override { return attrs; }
     virtual void set_attrs(Attrs& _attrs) override { attrs = _attrs; }
-    virtual bool empty() const override { return info.user_id.id.empty(); }
-    virtual RGWUserInfo& get_info() override { return info; }
-    virtual void set_info(RGWQuotaInfo& _quota) override {
-      info.quota.user_quota.max_size = _quota.max_size;
-      info.quota.user_quota.max_objects = _quota.max_objects;
+    virtual bool empty() const override { return get_info().user_id.id.empty(); }
+    virtual const RGWUserInfo& get_info() const override {
+      return shared_mode ? *shared_info : owned_info;
+    }
+    virtual RGWUserInfo& get_info_mut() override {
+      if (shared_mode) {
+        owned_info = *shared_info;
+        shared_mode = false;
+      }
+      return owned_info;
+    }
+    virtual std::shared_ptr<const RGWUserInfo> get_info_shared() override {
+      return shared_mode ?
+        shared_info : std::make_shared<const RGWUserInfo>(owned_info);
     }
 
-    virtual void print(std::ostream& out) const override { out << info.user_id; }
+    virtual void set_info(RGWQuotaInfo& _quota) override {
+      get_info_mut().quota.user_quota.max_size = _quota.max_size;
+      get_info_mut().quota.user_quota.max_objects = _quota.max_objects;
+    }
+    virtual void print(std::ostream& out) const override { out << get_info().user_id; }
 
     friend class StoreBucket;
 };
