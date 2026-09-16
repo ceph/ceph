@@ -139,6 +139,7 @@ protected:
   uint64_t stripe_unit = 4096;  // aka chunk_size
   std::string ec_plugin = "isa";
   std::string ec_technique = "reed_sol_van";
+  int num_zones = 1;
 
   int num_replicas = 3;
   int min_size = 2;
@@ -253,7 +254,7 @@ public:
   }
   
   int get_instance_count() const {
-    return pool_type == EC ? (k + m) : num_replicas;
+    return pool_type == EC ? (num_zones * (k + m)) : num_replicas;
   }
   
   int get_data_chunk_count() const {
