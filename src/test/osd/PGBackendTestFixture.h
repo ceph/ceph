@@ -26,6 +26,7 @@
 #include "test/osd/MockMessenger.h"
 #include "test/osd/OsdTestFixture.h"
 #include "test/osd/MockStore.h"
+#include "test/osd/ObjectTracker.h"
 #include "common/TrackedOp.h"
 #include "os/memstore/MemStore.h"
 #include "osd/ECSwitch.h"
@@ -135,6 +136,10 @@ protected:
   // The epoch comes from osdmap, this tracks the second version number
   uint64_t next_version = 1;
 
+// Object tracker for monitoring operations
+  // Using shared_ptr to allow safe capture in async completion lambdas
+  std::shared_ptr<ObjectTracker> object_tracker;
+
   std::unique_ptr<NoDoutPrefix> dpp;
 
 public:
@@ -165,6 +170,9 @@ public:
     dpp = std::make_unique<NoDoutPrefix>(cct, ceph_subsys_osd);
     event_loop = std::make_unique<EventLoop>(dpp.get());
     
+    // Enable object tracking for all tests
+    enable_object_tracking();
+
     if (pool_type == EC) {
       setup_ec_pool();
     } else {
@@ -704,18 +712,44 @@ public:
     bufferlist& out_data,
     uint64_t object_size);
 
+  int delete_object(const std::string& obj_name);
+
   /**
-   * Read an object and verify that its contents match expected data.
+   * Read an attribute from an object.
+   *
+   * @param obj_name Name of the object
+   * @param attr_name Name of the attribute to read
+   * @param out_value Output buffer for the attribute value
+   * @return 0 on success, negative error code on failure
+   */
+  int read_attribute(
+    const std::string& obj_name,
+    const std::string& attr_name,
+    bufferlist& out_value);
+
+  /**
+   * Verify an attribute matches the value tracked by ObjectTracker.
+   *
+   * Reads the attribute from the store and asserts it equals the value that
+   * was recorded when the attribute was written.  ObjectTracker must be
+   * enabled when this is called.
+   *
+   * @param obj_name Name of the object
+   * @param attr_name Name of the attribute
+   */
+  void verify_attribute(
+    const std::string& obj_name,
+    const std::string& attr_name);
+
+  /**
+   * Read an object and verify that its contents match tracked data.
    *
    * This helper function combines read_object with assertions to verify:
    * 1. The read operation completes successfully (result >= 0)
-   * 2. The read data length matches expected length
-   * 3. The read data content matches expected content
+   * 2. The read data content matches ObjectTracker's expected content
+   * 3. All tracked attributes match ObjectTracker's expected values
    *
    * @param obj_name Name of the object to read
-   * @param expected_data Expected data content
-   * @param offset Offset to read from (default: 0)
-   * @param context_msg Optional context message to append to assertion messages
    */
   /**
    * Visualize data miscompare with hex+ASCII dump and line compression.
@@ -733,11 +767,24 @@ public:
     size_t size,
     const std::string& phase);
 
+  void verify_object(const std::string& obj_name);
+
+  /**
+   * Read an object and verify that its contents match the explicitly provided data.
+   *
+   * Use this overload when the expected data was built by the test itself (e.g.
+   * after a truncate+write sequence that is not tracked by ObjectTracker).
+   *
+   * @param obj_name   Name of the object to read
+   * @param expected   Expected object contents
+   * @param offset     Offset at which to start reading
+   * @param size       Number of bytes to read and compare
+   */
   void verify_object(
     const std::string& obj_name,
-    const std::string& expected_data,
-    size_t offset,
-    size_t object_size);
+    const std::string& expected,
+    uint64_t offset,
+    size_t size);
 
   /**
    * Create and write an object, then verify it was written correctly.
@@ -816,6 +863,17 @@ public:
     bool force_all_shards);
 
   /**
+   * List all attributes on an object.
+   *
+   * @param obj_name Name of the object
+   * @param attrs Output map of attribute name to bufferlist
+   * @return 0 on success, negative on error
+   */
+  int list_attributes(
+    const std::string& obj_name,
+    std::map<std::string, ceph::buffer::list, std::less<>>& attrs);
+
+  /**
    * Read object_info_t directly from the ObjectStore for a specific shard.
    *
    * This bypasses the OBC cache and reads the actual on-disk state,
@@ -870,6 +928,32 @@ public:
    * @return A bufferlist containing random data
    */
   bufferlist create_random_buffer(size_t size);
+
+  /**
+   * Get the object tracker instance.
+   *
+   * @return Pointer to the object tracker, or nullptr if not enabled
+   */
+  ObjectTracker* get_object_tracker() {
+    return object_tracker.get();
+  }
+
+  /**
+   * Enable object tracking.
+   *
+   * This creates an object tracker instance that will monitor all write operations.
+   * Should be called in SetUp() or at the start of a test.
+   */
+  void enable_object_tracking() {
+    object_tracker = std::make_shared<ObjectTracker>();
+  }
+
+  /**
+   * Disable object tracking and clear tracked state.
+   */
+  void disable_object_tracking() {
+    object_tracker.reset();
+  }
 
 };
 
