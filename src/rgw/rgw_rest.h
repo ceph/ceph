@@ -5,7 +5,10 @@
 
 #define TIME_BUF_SIZE 128
 
+#include <map>
+#include <memory>
 #include <string_view>
+#include <vector>
 #include <boost/container/flat_set.hpp>
 #include "common/sstring.hh"
 #include "common/strtol.h"
@@ -598,31 +601,35 @@ class StrategyRegistry;
 }
 
 class RGWRESTMgr {
-  bool should_log;
+  struct resource_route final {
+    std::string resource;
+    std::unique_ptr<RGWRESTMgr> mgr;
+  };
+
+  bool should_log = false;
+  std::vector<resource_route> resource_mgrs;
+  std::unique_ptr<RGWRESTMgr> default_mgr;
+
+  void add_resource_route(std::string resource, std::unique_ptr<RGWRESTMgr> mgr);
 
 protected:
-  std::map<std::string, RGWRESTMgr*> resource_mgrs;
-  std::multimap<size_t, std::string> resources_by_size;
-  RGWRESTMgr* default_mgr;
-
   virtual RGWRESTMgr* get_resource_mgr(req_state* s,
-                                       const std::string& uri,
+                                       std::string_view uri,
                                        std::string* out_uri);
 
   virtual RGWRESTMgr* get_resource_mgr_as_default(req_state* const s,
-                                                  const std::string& uri,
+                                                  std::string_view uri,
                                                   std::string* our_uri) {
     return this;
   }
 
 public:
-  RGWRESTMgr()
-    : should_log(false),
-      default_mgr(nullptr) {
-  }
+  RGWRESTMgr() = default;
   virtual ~RGWRESTMgr();
 
+  void register_resource(std::string resource, std::unique_ptr<RGWRESTMgr> mgr);
   void register_resource(std::string resource, RGWRESTMgr* mgr);
+  void register_default_mgr(std::unique_ptr<RGWRESTMgr> mgr);
   void register_default_mgr(RGWRESTMgr* mgr);
 
   virtual RGWRESTMgr* get_manager(req_state* const s,
@@ -631,6 +638,10 @@ public:
                                   const std::string& frontend_prefix,
                                   const std::string& uri,
                                   std::string* out_uri) final {
+    if (frontend_prefix.empty()) {
+      return get_resource_mgr(s, uri, out_uri);
+    }
+
     return get_resource_mgr(s, frontend_prefix + uri, out_uri);
   }
 
