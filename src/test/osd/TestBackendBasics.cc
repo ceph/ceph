@@ -127,15 +127,7 @@ public:
 
     // Update listener shardsets to remove failed shards
     for (int failed_osd : failed_osds) {
-      pg_shard_t failed_shard(failed_osd, shard_id_t(failed_osd));
-      for (auto& [instance_id, osd_fixture] : osd_fixtures) {
-        for (auto& [spgid, test_pg] : osd_fixture->pgs) {
-          if (test_pg && test_pg->has_backend()) {
-            test_pg->backend_listener->shardset.erase(failed_shard);
-            test_pg->backend_listener->acting_recovery_backfill_shard_id_set.erase(shard_id_t(failed_osd));
-          }
-        }
-      }
+      remove_shard_from_all_listeners(pg_shard_t(failed_osd, shard_id_t(failed_osd)));
     }
 
     // update_osdmap will query the OSDMap to determine the primary
@@ -964,15 +956,7 @@ public:
     // Finalize the CRUSH map to ensure working_size is calculated
     new_osdmap->crush->finalize();
 
-    pg_shard_t failed_shard(failed_osd, shard_id_t(failed_osd));
-    for (auto& [instance_id, osd_fixture] : osd_fixtures) {
-      for (auto& [spgid, test_pg] : osd_fixture->pgs) {
-        if (test_pg && test_pg->has_backend()) {
-          test_pg->backend_listener->shardset.erase(failed_shard);
-          test_pg->backend_listener->acting_recovery_backfill_shard_id_set.erase(shard_id_t(failed_osd));
-        }
-      }
-    }
+    remove_shard_from_all_listeners(pg_shard_t(failed_osd, shard_id_t(failed_osd)));
 
     // update_osdmap will query the OSDMap to determine the primary
     update_osdmap(new_osdmap);
