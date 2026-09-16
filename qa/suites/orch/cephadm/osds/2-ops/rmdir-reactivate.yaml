@@ -6,15 +6,15 @@ tasks:
         set -x
         ceph orch ps
         HOST=$(hostname -s)
-        OSD=$(ceph orch ps $HOST | grep osd | head -n 1 | awk '{print $1}')
+        OSD=$(ceph orch ps --daemon_type osd $HOST -f json | jq -r '.[0].daemon_name')
         echo "host $HOST, osd $OSD"
         ceph orch daemon stop $OSD
-        while ceph orch ps | grep $OSD | grep running ; do sleep 5 ; done
+        while ceph orch ps --daemon_type osd | grep $OSD | grep running ; do sleep 5 ; done
         ceph auth export $OSD > k
         ceph orch daemon rm $OSD --force
         ceph orch ps --refresh
-        while ceph orch ps | grep $OSD ; do sleep 5 ; done
+        while ceph orch ps --daemon_type osd | grep $OSD ; do sleep 5 ; done
         ceph auth add $OSD -i k
         ceph cephadm osd activate $HOST
-        while ! ceph orch ps | grep $OSD | grep running ; do sleep 5 ; done
+        while ! ceph orch ps --daemon_type osd | grep $OSD | grep running ; do sleep 5 ; done
 - cephadm.healthy:
