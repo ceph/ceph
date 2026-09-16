@@ -443,6 +443,7 @@ void Mirror::mirroring_enabled(const Filesystem &filesystem, uint64_t local_pool
 
   auto p = m_mirror_actions.emplace(filesystem, MirrorAction(local_pool_id));
   auto &mirror_action = p.first->second;
+  mirror_action.mirroring_enabled = true;
   mirror_action.action_ctxs.push_back(new C_EnableMirroring(this, filesystem, local_pool_id));
 }
 
@@ -501,6 +502,7 @@ void Mirror::mirroring_disabled(const Filesystem &filesystem) {
   }
 
   auto &mirror_action = m_mirror_actions.at(filesystem);
+  mirror_action.mirroring_enabled = false;
   mirror_action.action_ctxs.push_back(new C_DisableMirroring(this, filesystem));
 }
 
@@ -561,9 +563,11 @@ void Mirror::update_fs_mirrors() {
   {
     std::scoped_lock locker(m_lock);
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
-      auto failed_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed() &&
+      auto failed_restart = mirror_action.mirroring_enabled && mirror_action.fs_mirror &&
+        mirror_action.fs_mirror->is_failed() &&
         (failed_interval.count() > 0 && duration_cast<seconds>(clock::now() - mirror_action.fs_mirror->get_failed_ts()).count() > failed_interval.count());
-      auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
+      auto blocklisted_restart = mirror_action.mirroring_enabled && mirror_action.fs_mirror &&
+        mirror_action.fs_mirror->is_blocklisted() &&
         (blocklist_interval.count() > 0 && duration_cast<seconds>(clock::now() - mirror_action.fs_mirror->get_blocklisted_ts()).count() > blocklist_interval.count());
 
       if (!mirror_action.action_in_progress && !_is_restarting(filesystem)) {
