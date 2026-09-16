@@ -16,6 +16,17 @@ int mgr_perf_start(CephContext *cct)
   plb.add_u64_counter(l_mgr_cache_hit, "cache_hit", "Cache hits");
   plb.add_u64_counter(l_mgr_cache_miss, "cache_miss", "Cache miss");
 
+  // Only GIL waits in Gil and without_gil_t are counted. A Python thread
+  // taking the GIL back by itself (after I/O, sleep, a "with nogil" call
+  // in the rados/cephfs/rbd bindings or a forced switch) is not, nor is
+  // PyGILState_Ensure() in MgrMapCache.
+  plb.add_time_avg(l_mgr_gil_acquire_lat, "gil_acquire_lat",
+                   "Time to acquire the GIL in Gil");
+  plb.add_time_avg(l_mgr_gil_reacquire_lat, "gil_reacquire_lat",
+                   "Time to reacquire the GIL after a without_gil_t release");
+  plb.add_u64_counter(l_mgr_gil_slow_waits, "gil_slow_waits",
+                      "GIL acquisitions that waited longer than 5ms");
+
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);
   return 0;

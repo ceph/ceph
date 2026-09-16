@@ -17,12 +17,15 @@
 
 #include <cassert>
 #include <functional>
+#include <optional>
+#include <string>
 
 struct _ts;
 typedef struct _ts PyThreadState;
 
 #include <pthread.h>
 
+void gil_tag_thread_module(const std::string &name);
 
 /**
  * Wrap PyThreadState to carry a record of which POSIX thread
@@ -66,12 +69,14 @@ public:
   Gil(const Gil&) = delete;
   Gil& operator=(const Gil&) = delete;
 
-  Gil(SafeThreadState &ts, bool new_thread = false);
+  Gil(SafeThreadState &ts, bool new_thread = false,
+      const std::string &module_name = {});
   ~Gil();
 
 private:
   SafeThreadState &pThreadState;
   PyThreadState *pNewThreadState = nullptr;
+  std::optional<std::string> pPreviousModuleName;
 };
 
 // because the Python runtime could relinquish the GIL when performing GC
