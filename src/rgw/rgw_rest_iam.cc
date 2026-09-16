@@ -105,25 +105,26 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
 
 bool RGWHandler_REST_IAM::action_exists(const req_state* s) 
 {
-  if (s->info.args.exists("Action")) {
-    const std::string action_name = s->info.args.get("Action");
-    return op_generators.contains(action_name);
+  if (const auto action_name = s->info.args.get_optional("Action")) {
+    return op_generators.contains(*action_name);
   }
+
   return false;
 }
 
 RGWOp *RGWHandler_REST_IAM::op_post()
 {
-  if (s->info.args.exists("Action")) {
-    const std::string action_name = s->info.args.get("Action");
-    const auto action_it = op_generators.find(action_name);
+  if (const auto action_name = s->info.args.get_optional("Action")) {
+    const auto action_it = op_generators.find(*action_name);
     if (action_it != op_generators.end()) {
       return action_it->second(bl_post_body);
     }
-    ldpp_dout(s, 10) << "unknown action '" << action_name << "' for IAM handler" << dendl;
-  } else {
-    ldpp_dout(s, 10) << "missing action argument in IAM handler" << dendl;
+
+    ldpp_dout(s, 10) << "unknown action '" << *action_name << "' for IAM handler" << dendl;
+    return nullptr;
   }
+
+  ldpp_dout(s, 10) << "missing action argument in IAM handler" << dendl;
   return nullptr;
 }
 
