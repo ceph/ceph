@@ -168,7 +168,11 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   endif()
   string(APPEND CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_EXPORTS_C_FLAG}")
   string(APPEND CMAKE_LINKER_FLAGS " -rdynamic -export-dynamic ${CMAKE_EXE_EXPORTS_C_FLAG}")
-  string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-g ")
+  # Before Clang 21, -Og was a bare alias for -O1:
+  # no debuggability gain to justify the build time.
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 21)
+    string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-Og ")
+  endif()
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-inconsistent-missing-override>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-mismatched-tags>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-private-field>)
