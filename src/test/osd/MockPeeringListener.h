@@ -53,6 +53,8 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   coll_t coll;
   ObjectStore::CollectionHandle ch;
   std::unique_ptr<MockPGBackend> backend;
+  // Non-owning; set by ECPeeringTestFixture when a real IO backend exists.
+  PGBackend *pg_backend = nullptr;
   PerfCounters* recoverystate_perf;
   PerfCounters* logger_perf;
   std::vector<int> next_acting;
@@ -355,6 +357,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   void on_change(ObjectStore::Transaction &t) override {
     first_write_in_interval = true;
     change_called = true;
+    if (pg_backend) {
+      pg_backend->on_change();
+    }
   }
 
   std::pair<ghobject_t, bool> do_delete_work(
