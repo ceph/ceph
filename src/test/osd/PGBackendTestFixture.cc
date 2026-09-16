@@ -1553,7 +1553,79 @@ object_info_t PGBackendTestFixture::read_shard_object_info(
 }
 
 
-bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
+void PGBackendTestFixture::scrub_all_objects()
+{
+  if (!scrub_listener || !snap_reader) {
+    initialize_scrub_infra();
+  }
+
+  // Collect all objects from the primary OSD's store
+  std::set<std::string> all_object_names;
+  
+  TestPG* primary_pg = get_primary_test_pg();
+  if (!primary_pg) {
+    std::cerr << "WARNING: No primary PG found during teardown scrub" << std::endl;
+    return;
+  }
+  
+  int primary_osd = primary_pg->pg_whoami.osd;
+  OsdTestFixture* primary_fixture = get_osd_fixture(primary_osd);
+  if (!primary_fixture || !primary_pg->ch) {
+    std::cerr << "WARNING: No primary fixture or collection handle during teardown scrub" << std::endl;
+    return;
+  }
+
+  // List all objects in the collection
+  ghobject_t next;
+  while (true) {
+    std::vector<ghobject_t> objects;
+    int r = primary_fixture->store->collection_list(
+      primary_pg->ch,
+      next,
+      ghobject_t::get_max(),
+      primary_fixture->store->get_ideal_list_max(),
+      &objects,
+      &next);
+    
+    if (r < 0) {
+      std::cerr << "WARNING: collection_list failed during teardown scrub: "
+                << cpp_strerror(r) << std::endl;
+      break;
+    }
+    
+    if (objects.empty()) {
+      break;
+    }
+    
+    // Extract object names from hobject_t
+    for (const auto& ghobj : objects) {
+      const hobject_t& hobj = ghobj.hobj;
+      // Only scrub objects in our pool
+      if (hobj.pool == pool_id && !hobj.is_max()) {
+        all_object_names.insert(hobj.oid.name);
+      }
+    }
+  }
+
+  // Scrub each object found (skip deleted objects if ObjectTracker is enabled)
+  for (const auto& obj_name : all_object_names) {
+    // Skip objects that have been deleted (if ObjectTracker is tracking them)
+    if (object_tracker) {
+      const auto* obj_state = object_tracker->get_object_state(obj_name);
+      if (obj_state && !obj_state->exists) {
+        // Object was deleted, skip scrubbing it
+        continue;
+      }
+    }
+    
+    bool corrupted = scrub_object(obj_name);
+    EXPECT_FALSE(corrupted)
+      << "Object '" << obj_name << "' found to be corrupted during teardown scrub";
+  }
+
+}
+
+bool PGBackendTestFixture::scrub_object(const std::string& obj_name, bool skip_verify)
 {
   hobject_t hoid = make_test_object(obj_name);
 
@@ -1664,7 +1736,103 @@ bool PGBackendTestFixture::scrub_object(const std::string& obj_name)
 
   auto result = scrub_backend.scrub_compare_maps(false, *snap_reader);
 
-  return !result.inconsistent_objs.empty();
+  bool scrub_found_corruption = !result.inconsistent_objs.empty();
+  
+  // Verify attributes are consistent across all shards
+  if (!scrub_found_corruption && !skip_verify) {
+    // Get attributes from the primary shard as reference
+    std::map<std::string, ceph::buffer::ptr, std::less<>> primary_attrs;
+    int primary_shard_id = (int)primary_spg.shard;
+    
+    ghobject_t primary_ghoid(hoid, ghobject_t::NO_GEN, primary_spg.shard);
+    TestPG* primary_pg = get_test_pg_by_shard(primary_shard_id);
+    OsdTestFixture* primary_fixture = primary_pg ? get_osd_fixture(primary_pg->pg_whoami.osd) : nullptr;
+    
+    if (primary_pg && primary_fixture && primary_pg->ch && primary_fixture->store) {
+      int r = primary_fixture->store->getattrs(primary_pg->ch, primary_ghoid, primary_attrs);
+      if (r == 0) {
+        // Compare attributes on all other shards
+        for (size_t i = 0; i < acting_osds.size(); ++i) {
+          if (static_cast<int>(i) == primary_shard_id) continue; // Skip primary, already have it
+          
+          shard_id_t shard_id(i);
+          ghobject_t shard_ghoid(hoid, ghobject_t::NO_GEN, shard_id);
+          
+          TestPG* shard_pg = get_test_pg_by_shard(i);
+          OsdTestFixture* shard_fixture = shard_pg ? get_osd_fixture(shard_pg->pg_whoami.osd) : nullptr;
+          
+          if (!shard_pg || !shard_fixture || !shard_pg->ch || !shard_fixture->store) {
+            std::cerr << "WARNING: Cannot verify attributes for shard " << i << std::endl;
+            continue;
+          }
+          
+          std::map<std::string, ceph::buffer::ptr, std::less<>> shard_attrs;
+          r = shard_fixture->store->getattrs(shard_pg->ch, shard_ghoid, shard_attrs);
+          if (r < 0) {
+            std::cerr << "WARNING: Failed to get attributes for shard " << i << ": "
+                      << cpp_strerror(r) << std::endl;
+            continue;
+          }
+
+          if (!pool_info->is_nonprimary_shard(shard_id))
+          {
+            // Compare attribute sets
+            if (primary_attrs.size() != shard_attrs.size()) {
+              std::cerr << "ERROR: Attribute count mismatch for object " << obj_name
+                        << " - primary has " << primary_attrs.size()
+                        << " attrs, shard " << i << " has " << shard_attrs.size() << std::endl;
+
+              // List attributes on this shard to show what's different
+              std::cerr << "  Shard " << i << " attributes: ";
+              for (const auto& [attr_name, attr_ptr] : shard_attrs) {
+                std::cerr << attr_name << " ";
+              }
+              std::cerr << std::endl;
+
+              scrub_found_corruption = true;
+            }
+
+            // Compare each attribute
+            for (const auto& [attr_name, primary_bl] : primary_attrs) {
+              auto shard_it = shard_attrs.find(attr_name);
+              if (shard_it == shard_attrs.end()) {
+                std::cerr << "ERROR: Attribute '" << attr_name << "' missing on shard " << i
+                          << " for object " << obj_name << std::endl;
+                scrub_found_corruption = true;
+                continue;
+              }
+
+              // Convert buffer::ptr to bufferlist for comparison
+              bufferlist primary_bl_list, shard_bl_list;
+              primary_bl_list.append(primary_bl);
+              shard_bl_list.append(shard_it->second);
+
+              if (!primary_bl_list.contents_equal(shard_bl_list)) {
+                std::cerr << "ERROR: Attribute '" << attr_name << "' value mismatch on shard " << i
+                          << " for object " << obj_name << std::endl;
+                scrub_found_corruption = true;
+              }
+            }
+
+            // Check for extra attributes on shard
+            for (const auto& [attr_name, shard_bl] : shard_attrs) {
+              if (primary_attrs.find(attr_name) == primary_attrs.end()) {
+                std::cerr << "ERROR: Extra attribute '" << attr_name << "' on shard " << i
+                          << " for object " << obj_name << std::endl;
+                scrub_found_corruption = true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  if (!skip_verify) {
+    verify_object(obj_name);
+  }
+  
+  return scrub_found_corruption;
 }
 
 
