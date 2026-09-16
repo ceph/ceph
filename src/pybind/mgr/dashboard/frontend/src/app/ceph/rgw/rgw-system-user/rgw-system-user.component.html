@@ -29,18 +29,20 @@
               name="userName"
               formControlName="userName"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteSystemUserForm.showError('userName', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="multisiteSystemUserForm.showError('userName', formDir, 'uniqueName')"
-              i18n
-              >The chosen realm name is already in use.</span
-            >
+            @if (multisiteSystemUserForm.showError('userName', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (multisiteSystemUserForm.showError('userName', formDir, 'uniqueName')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The chosen realm name is already in use.</span
+              >
+            }
           </div>
         </div>
       </div>

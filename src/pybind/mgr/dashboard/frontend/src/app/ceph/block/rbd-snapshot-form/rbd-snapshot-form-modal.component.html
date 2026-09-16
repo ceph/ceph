@@ -52,49 +52,50 @@
             "
             autofocus
           />
-          <span
-            *ngIf="
-              (mirroring === 'snapshot' ? true : null) &&
-              snapshotForm.getValue('mirrorImageSnapshot') === true
-                ? true
-                : null
-            "
-          >
-            Snapshot mode is enabled on image <b>{{ imageName }}</b
-            >: snapshot names are auto generated</span
-          >
+          @if (
+            (mirroring === 'snapshot' ? true : null) &&
+            snapshotForm.getValue('mirrorImageSnapshot') === true
+              ? true
+              : null
+          ) {
+            <span>
+              Snapshot mode is enabled on image <b>{{ imageName }}</b
+              >: snapshot names are auto generated</span
+            >
+          }
         </cds-text-label>
         <ng-template #snapshotError>
-          <span
-            *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
-            class="invalid-feedback"
-            i18n
-            >This field is required.</span
-          >
-          <span
-            *ngIf="snapshotForm.showError('snapshotName', formDir, 'pattern')"
-            class="invalid-feedback"
-            i18n
-            >The snapshot name cannot start with "." and cannot contain "/" and "&#64;".</span
-          >
+          @if (snapshotForm.showError('snapshotName', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (snapshotForm.showError('snapshotName', formDir, 'pattern')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >The snapshot name cannot start with "." and cannot contain "/" and "&#64;".</span
+            >
+          }
         </ng-template>
       </div>
 
-      <ng-container *ngIf="mirroring === 'snapshot'">
-        <div
-          class="form-item"
-          *ngIf="peerConfigured$ | async as peerConfigured"
-        >
-          <cds-checkbox
-            id="mirrorImageSnapshot"
-            formControlName="mirrorImageSnapshot"
-            name="mirrorImageSnapshot"
-            (checkedChange)="onMirrorCheckBoxChange()"
-            i18n
-            >Mirror Image Snapshot
-          </cds-checkbox>
-        </div>
-      </ng-container>
+      @if (mirroring === 'snapshot') {
+        @if (peerConfigured$ | async; as peerConfigured) {
+          <div class="form-item">
+            <cds-checkbox
+              id="mirrorImageSnapshot"
+              formControlName="mirrorImageSnapshot"
+              name="mirrorImageSnapshot"
+              (checkedChange)="onMirrorCheckBoxChange()"
+              i18n
+              >Mirror Image Snapshot
+            </cds-checkbox>
+          </div>
+        }
+      }
     </form>
   </section>
   <cd-form-button-panel

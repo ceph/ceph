@@ -1,4 +1,4 @@
-<ng-container *ngIf="selection">
+@if (selection) {
   <cd-table
     [data]="scopes_permissions"
     [columns]="columns"
@@ -10,4 +10,4 @@
     [limit]="0"
   >
   </cd-table>
-</ng-container>
+}

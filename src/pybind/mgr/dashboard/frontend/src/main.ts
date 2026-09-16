@@ -1,4 +1,9 @@
-import { ApplicationRef, enableProdMode, isDevMode } from '@angular/core';
+import {
+  ApplicationRef,
+  enableProdMode,
+  isDevMode,
+  provideZoneChangeDetection
+} from '@angular/core';
 import { enableDebugTools } from '@angular/platform-browser';
 import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 
@@ -10,7 +15,7 @@ if (environment.production) {
 }
 
 platformBrowserDynamic()
-  .bootstrapModule(AppModule)
+  .bootstrapModule(AppModule, { applicationProviders: [provideZoneChangeDetection()] })
   .then((moduleRef) => {
     if (isDevMode()) {
       // source: https://medium.com/@dmitrymogilko/profiling-angular-change-detection-c00605862b9f

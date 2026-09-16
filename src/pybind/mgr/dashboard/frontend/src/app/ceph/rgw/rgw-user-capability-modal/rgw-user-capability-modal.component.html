@@ -23,47 +23,49 @@
     <div cdsModalContent>
       <!-- Type -->
       <div class="form-item">
-        <cds-text-label
-          for="type"
-          [invalid]="formGroup.controls.type.invalid && formGroup.controls.type.dirty"
-          [invalidText]="typeError"
-          *ngIf="editing"
-          i18n
-          >Type
-          <input
-            cdsText
-            id="type"
-            name="type"
-            formControlName="type"
-            [readonly]="true"
-            modal-primary-focus
-          />
-        </cds-text-label>
-
-        <cds-select
-          *ngIf="!editing"
-          label="Type"
-          i18n-label
-          for="type"
-          formControlName="type"
-          [invalid]="formGroup.controls.type.invalid && formGroup.controls.type.dirty"
-          [invalidText]="typeError"
-        >
-          <option value="">--- Select a type ---</option>
-          <option
-            *ngFor="let type of types"
-            [value]="type"
-          >
-            {{ type }}
-          </option>
-        </cds-select>
-        <ng-template #typeError>
-          <span
-            class="invalid-feedback"
-            *ngIf="formGroup.showError('type', frm, 'required')"
+        @if (editing) {
+          <cds-text-label
+            for="type"
+            [invalid]="formGroup.controls.type.invalid && formGroup.controls.type.dirty"
+            [invalidText]="typeError"
             i18n
-            >This field is required.</span
+            >Type
+            <input
+              cdsText
+              id="type"
+              name="type"
+              formControlName="type"
+              [readonly]="true"
+              modal-primary-focus
+            />
+          </cds-text-label>
+        }
+
+        @if (!editing) {
+          <cds-select
+            label="Type"
+            i18n-label
+            for="type"
+            formControlName="type"
+            [invalid]="formGroup.controls.type.invalid && formGroup.controls.type.dirty"
+            [invalidText]="typeError"
           >
+            <option value="">--- Select a type ---</option>
+            @for (type of types; track type) {
+              <option [value]="type">
+                {{ type }}
+              </option>
+            }
+          </cds-select>
+        }
+        <ng-template #typeError>
+          @if (formGroup.showError('type', frm, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
 
@@ -78,21 +80,21 @@
           [invalidText]="permError"
         >
           <option value="">--- Select a permission ---</option>
-          <option
-            *ngFor="let perm of ['read', 'write', '*']"
-            [value]="perm"
-          >
-            {{ perm }}
-          </option>
+          @for (perm of ['read', 'write', '*']; track perm) {
+            <option [value]="perm">
+              {{ perm }}
+            </option>
+          }
         </cds-select>
 
         <ng-template #permError>
-          <span
-            class="invalid-feedback"
-            *ngIf="formGroup.showError('perm', frm, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (formGroup.showError('perm', frm, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
     </div>

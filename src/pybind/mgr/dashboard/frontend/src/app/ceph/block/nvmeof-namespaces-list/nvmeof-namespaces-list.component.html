@@ -1,6 +1,6 @@
 <div class="nvmeof-content-layout">
   <div class="nvmeof-content-main">
-    <ng-container *ngIf="namespaces$ | async as namespaces">
+    @if (namespaces$ | async; as namespaces) {
       <cd-table
         [data]="namespaces"
         [compactSearchField]="true"
@@ -20,7 +20,6 @@
           <cd-nvmeof-gateway-group-filter (groupChange)="groupHandler.onGroupChange($event)">
           </cd-nvmeof-gateway-group-filter>
         </div>
-
         <div class="table-actions">
           <cd-table-actions
             [permission]="permission"
@@ -31,7 +30,7 @@
           </cd-table-actions>
         </div>
       </cd-table>
-    </ng-container>
+    }
   </div>
 </div>
 

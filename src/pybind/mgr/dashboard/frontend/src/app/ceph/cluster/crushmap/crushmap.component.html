@@ -10,12 +10,13 @@
       <div class="card-body">
         <div class="row">
           <div class="col-sm-6 col-lg-6 tree-container">
-            <cds-loading
-              *ngIf="loadingIndicator"
-              [isActive]="true"
-              [overlay]="false"
-              size="sm"
-            ></cds-loading>
+            @if (loadingIndicator) {
+              <cds-loading
+                [isActive]="true"
+                [overlay]="false"
+                size="sm"
+              ></cds-loading>
+            }
             <cds-tree-view
               #tree
               [isMultiSelect]="false"
@@ -30,8 +31,8 @@
                   [node]="node"
                   [depth]="depth"
                 >
-                  <ng-container *ngIf="node?.children && node?.children?.length">
-                    <ng-container *ngFor="let child of node.children; let i = index">
+                  @if (node?.children && node?.children?.length) {
+                    @for (child of node.children; track child; let i = $index) {
                       <!-- Increase the depth by 1 -->
                       <ng-container
                         *ngTemplateOutlet="
@@ -40,20 +41,19 @@
                         "
                       >
                       </ng-container>
-                    </ng-container>
-                  </ng-container>
+                    }
+                  }
                 </cds-tree-node>
               </ng-template>
               <ng-template
                 #tag
                 let-data
               >
-                <cds-tag
-                  *ngIf="data?.status"
-                  [class]="getStatusClasses(data.status)"
-                >
-                  {{ data?.status }}
-                </cds-tag>
+                @if (data?.status) {
+                  <cds-tag [class]="getStatusClasses(data.status)">
+                    {{ data?.status }}
+                  </cds-tag>
+                }
                 <span>&nbsp;</span>
                 <span
                   class="node-name"
@@ -61,23 +61,22 @@
                   [innerHTML]="data?.name"
                 ></span>
               </ng-template>
-              <ng-container *ngFor="let node of nodes">
+              @for (node of nodes; track node) {
                 <ng-container
                   *ngTemplateOutlet="nodeTemplateRef; context: { node: node, depth: 0 }"
                 >
                 </ng-container>
-              </ng-container>
+              }
             </cds-tree-view>
           </div>
-          <div
-            class="col-sm-6 col-lg-6 metadata"
-            *ngIf="metadata"
-          >
-            <legend>{{ metadataTitle }}</legend>
-            <div>
-              <cd-table-key-value [data]="metadata"></cd-table-key-value>
+          @if (metadata) {
+            <div class="col-sm-6 col-lg-6 metadata">
+              <legend>{{ metadataTitle }}</legend>
+              <div>
+                <cd-table-key-value [data]="metadata"></cd-table-key-value>
+              </div>
             </div>
-          </div>
+          }
         </div>
       </div>
     </div>
