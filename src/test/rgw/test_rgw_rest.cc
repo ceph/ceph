@@ -12,11 +12,34 @@
 
 #include "gtest/gtest.h"
 
+#include <memory>
 #include <string_view>
+#include <utility>
 
 #include "rgw_common.h"
+#include "rgw_rest.h"
 
 namespace {
+
+RGWRESTMgr *register_test_resource(RGWRESTMgr& mgr, std::string resource)
+{
+  auto resource_mgr = std::make_unique<RGWRESTMgr>();
+  auto *out = resource_mgr.get();
+
+  mgr.register_resource(std::move(resource), std::move(resource_mgr));
+
+  return out;
+}
+
+RGWRESTMgr *register_test_default_mgr(RGWRESTMgr& mgr)
+{
+  auto default_mgr = std::make_unique<RGWRESTMgr>();
+  auto *out = default_mgr.get();
+
+  mgr.register_default_mgr(std::move(default_mgr));
+
+  return out;
+}
 
 static_assert(requires(const RGWHTTPArgs::name_value_map& args,
                        std::string_view name) {
@@ -170,6 +193,83 @@ TEST(RGWRest, HttpArgsUpdatesCachedClassificationOnRemove)
   EXPECT_FALSE(args.exists(upload_id));
   EXPECT_FALSE(args.sub_resource_exists(upload_id));
   EXPECT_FALSE(args.exist_obj_excl_sub_resource());
+}
+
+TEST(RGWRest, RestManagerDoesNotConcatenateEmptyFrontendPrefix)
+{
+  RGWRESTMgr mgr;
+  std::string out_uri;
+
+  EXPECT_EQ(&mgr, mgr.get_manager(nullptr, "", "/bucket", &out_uri));
+  EXPECT_EQ("/bucket", out_uri);
+}
+
+TEST(RGWRest, RestManagerConcatenatesNonEmptyFrontendPrefix)
+{
+  RGWRESTMgr mgr;
+  std::string out_uri;
+
+  EXPECT_EQ(&mgr, mgr.get_manager(nullptr, "/prefix", "/bucket", &out_uri));
+  EXPECT_EQ("/prefix/bucket", out_uri);
+}
+
+TEST(RGWRest, RestManagerUsesLongestPrefixMatch)
+{
+  RGWRESTMgr mgr;
+  register_test_resource(mgr, "admin");
+  auto *usage = register_test_resource(mgr, "admin/usage");
+  std::string out_uri;
+
+  EXPECT_EQ(usage, mgr.get_manager(nullptr, "", "/admin/usage/show", &out_uri));
+  EXPECT_EQ("/show", out_uri);
+}
+
+TEST(RGWRest, RestManagerRequiresPathBoundary)
+{
+  RGWRESTMgr mgr;
+  register_test_resource(mgr, "admin");
+  std::string out_uri;
+
+  EXPECT_EQ(&mgr, mgr.get_manager(nullptr, "", "/administrator", &out_uri));
+  EXPECT_EQ("/administrator", out_uri);
+}
+
+TEST(RGWRest, RestManagerUsesDefaultOnlyWhenNoRouteMatches)
+{
+  RGWRESTMgr mgr;
+  auto *admin = register_test_resource(mgr, "admin");
+  auto *default_mgr = register_test_default_mgr(mgr);
+  std::string out_uri;
+
+  EXPECT_EQ(default_mgr, mgr.get_manager(nullptr, "", "/unknown", &out_uri));
+  EXPECT_EQ("/unknown", out_uri);
+
+  EXPECT_EQ(admin, mgr.get_manager(nullptr, "", "/admin", &out_uri));
+  EXPECT_EQ("", out_uri);
+}
+
+TEST(RGWRest, RestManagerReplacesDuplicateResource)
+{
+  RGWRESTMgr mgr;
+  register_test_resource(mgr, "admin");
+  auto *second = register_test_resource(mgr, "admin");
+  std::string out_uri;
+
+  EXPECT_EQ(second, mgr.get_manager(nullptr, "", "/admin", &out_uri));
+  EXPECT_EQ("", out_uri);
+}
+
+TEST(RGWRest, RestManagerCreatesIntermediateManagers)
+{
+  RGWRESTMgr mgr;
+  auto *v1 = register_test_resource(mgr, "auth/v1.0");
+  std::string out_uri;
+
+  auto *intermediate = mgr.get_manager(nullptr, "", "/auth/status", &out_uri);
+
+  EXPECT_NE(&mgr, intermediate);
+  EXPECT_NE(v1, intermediate);
+  EXPECT_EQ("/status", out_uri);
 }
 
 } // namespace

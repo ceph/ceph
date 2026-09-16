@@ -427,7 +427,7 @@ public:
 class RGWRESTMgr_SWIFT : public RGWRESTMgr {
 protected:
   RGWRESTMgr* get_resource_mgr_as_default(req_state* const s,
-                                          const std::string& uri,
+                                          std::string_view uri,
                                           std::string* const out_uri) override {
     return this->get_resource_mgr(s, uri, out_uri);
   }
@@ -499,7 +499,7 @@ public:
 class RGWRESTMgr_SWIFT_CrossDomain : public RGWRESTMgr {
 protected:
   RGWRESTMgr *get_resource_mgr(req_state* const s,
-                               const std::string& uri,
+                               std::string_view uri,
                                std::string* const out_uri) override {
     return this;
   }
@@ -556,7 +556,7 @@ public:
 class RGWRESTMgr_SWIFT_HealthCheck : public RGWRESTMgr {
 protected:
   RGWRESTMgr *get_resource_mgr(req_state* const s,
-                               const std::string& uri,
+                               std::string_view uri,
                                std::string* const out_uri) override {
     return this;
   }
