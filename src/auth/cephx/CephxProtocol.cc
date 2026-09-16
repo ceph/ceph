@@ -514,6 +514,70 @@ bool cephx_verify_authorizer(CephContext *cct, const KeyStore& keys,
     return false;
   }
 
+  // the key server stopped varying the uid and writes the same one into every
+  // ticket, so a different one means the block carrying it was scrambled.
+  if (ticket_info.ticket.auid != CEPH_AUTH_UID_DEFAULT) {
+    ldout(cct, 0) << "verify_authorizer bad auid in ticket for "
+          << ticket_info.ticket.name << ", rejecting" << dendl;
+    return false;
+  }
+
+  // the monitor never sets allow_all in a service ticket, so one that
+  // arrives with it set has been tampered with.
+  if (ticket_info.ticket.caps.allow_all) {
+    ldout(cct, 0) << "verify_authorizer allow_all set in ticket for "
+          << ticket_info.ticket.name << ", rejecting" << dendl;
+    return false;
+  }
+
+  // the key server clamps the ttl down and stamps the timestamps at mint
+  // time, so a ticket that outlives the configured ttl, or whose created or
+  // expires sits far from now, has been tampered with.  bounding both ends to
+  // now also denies a bit-flip its hiding place: reaching a capability byte
+  // scrambles the timestamps in the garbled block, and a scrambled pair almost
+  // never lands back inside the window.  the slack covers clock skew and a ttl
+  // change that has not reached us yet.  utime_t normalizes a carry away only
+  // once the nanoseconds pass a full second, so a minted timestamp reaches at
+  // most 1e9 and a larger one is scrambled rather than skewed.
+  {
+    const double now = ceph_clock_now();
+    const double created = ticket_info.ticket.created;
+    const double expires = ticket_info.ticket.expires;
+    const double max_ttl = service_id == CEPH_ENTITY_TYPE_AUTH ?
+        cct->_conf.get_val<double>("auth_mon_ticket_ttl") :
+        cct->_conf.get_val<double>("auth_service_ticket_ttl");
+    const double slop = 2 * max_ttl + 300;
+    if (static_cast<uint32_t>(ticket_info.ticket.created.nsec()) > 1000000000u ||
+        static_cast<uint32_t>(ticket_info.ticket.expires.nsec()) > 1000000000u ||
+        expires - created < 0 || expires - created > slop ||
+        created < now - slop || created > now + slop ||
+        expires < now - slop || expires > now + slop) {
+      ldout(cct, 0) << "verify_authorizer implausible ticket lifetime for "
+            << ticket_info.ticket.name << ", rejecting" << dendl;
+      return false;
+    }
+  }
+
+  // the key server stores the capabilities as one encoded string, so a decode
+  // that leaves bytes behind means the length prefix was shortened to truncate
+  // the string, which can drop the clause that scopes a grant.
+  if (ticket_info.ticket.caps.caps.length()) {
+    auto p = ticket_info.ticket.caps.caps.cbegin();
+    std::string str;
+    try {
+      decode(str, p);
+    } catch (const ceph::buffer::error&) {
+      ldout(cct, 0) << "verify_authorizer undecodable caps in ticket for "
+            << ticket_info.ticket.name << ", rejecting" << dendl;
+      return false;
+    }
+    if (!p.end()) {
+      ldout(cct, 0) << "verify_authorizer trailing bytes after caps in ticket for "
+            << ticket_info.ticket.name << ", rejecting" << dendl;
+      return false;
+    }
+  }
+
   ldout(cct, 10) << __func__ << ": global_id=" << global_id << dendl;
   ldout(cct, 30) << __func__ << ": session key=" << ticket_info.session_key << dendl;
 
