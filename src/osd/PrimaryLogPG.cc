@@ -16038,6 +16038,39 @@ void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
   // this is fine.
   std::set<hobject_t> skipped_clone_heads;
 
+  // Cancel any in-flight copy-from ops from the source PG making this
+  // reservation request that are for objects >= watermark.
+  // They must be stale ops from a previous interval. We can't rely on the source PG
+  // to drain these ops by quiescing because the source PG may have a
+  // new primary OSD. The source PG will re-send all objects from the watermark
+  // in the reservation request so cancelling here is safe.
+  {
+    std::vector<CopyOpRef> to_cancel;
+    for (auto& [dest, cop] : copy_ops) {
+      // Don't cancel copies belonging to other source PGs.
+      if (get_source_pg_from_hash(dest) != source_pg) {
+        continue;
+      }
+      hobject_t dest_in_source_pool = dest;
+      dest_in_source_pool.pool = watermark.pool;
+      if (dest_in_source_pool < watermark) {
+        continue;
+      }
+      // Collect first: cancel_copy() erases from copy_ops.
+      to_cancel.push_back(cop);
+    }
+    if (!to_cancel.empty()) {
+      std::vector<ceph_tid_t> tids;
+      for (auto& cop : to_cancel) {
+        dout(10) << __func__ << " cancelling in-flight copy for "
+                 << cop->obc->obs.oi.soid << " (>= watermark " << watermark
+                 << ")" << dendl;
+        cancel_copy(cop, false, &tids);
+      }
+      osd->objecter->op_cancel(tids, -ECANCELED);
+    }
+  }
+
   while (current < pg_end && !done) {
     vector<hobject_t> objects;
     hobject_t next;
