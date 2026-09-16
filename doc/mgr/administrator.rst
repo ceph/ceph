@@ -157,6 +157,20 @@ debugging performance issues or memory leaks. The ``notify_avg_usec`` and
 the CPU and memory counters monitor resource consumption. The default monitoring
 interval is 2 seconds.
 
+The same ``perf dump`` reports how long Manager threads wait for the Python GIL:
+
+- ``mgr.gil_acquire_lat``: waits when C++ code calls into a module
+- ``mgr.gil_reacquire_lat``: waits when a module returns from a call into the
+  Manager
+- ``mgr.gil_slow_waits``: number of waits longer than 5 ms
+
+``max_inc`` in the two latency counters is the longest single wait. Waits that
+happen inside Python itself (I/O, ``time.sleep()``, the rados bindings) are not
+counted. To log a sample of slow waits (at most one per second) with the
+waiting module, run ``ceph config set mgr debug_mgr 5``. Each logged line
+also reports how many slow waits were skipped and the longest of them. To
+log every slow wait, use ``debug_mgr 20``.
+
 
 Automatic Stats Period Tuning
 ------------------------------
