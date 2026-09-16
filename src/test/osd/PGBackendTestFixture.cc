@@ -579,7 +579,11 @@ void PGBackendTestFixture::do_create_and_write_impl(
       obc->obs.exists = false;
       obc->attr_cache.clear();
     },
-    nullptr);
+    [this, obj_name, data, at_version](int) {
+      if (object_tracker) {
+        object_tracker->record_create(obj_name, data, at_version);
+      }
+    });
 
   do_transaction(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
@@ -754,7 +758,11 @@ void PGBackendTestFixture::do_write_impl(
       obc->obs.oi.size = object_size;
       obc->attr_cache.clear();
     },
-    nullptr);
+    [this, obj_name, offset, data, at_version](int) {
+      if (object_tracker) {
+        object_tracker->record_data_write(obj_name, offset, data, at_version);
+      }
+    });
 
   do_transaction(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
@@ -855,7 +863,11 @@ void PGBackendTestFixture::do_truncate_and_write_impl(
       obc->obs.oi.size = object_size;
       obc->attr_cache.clear();
     },
-    nullptr);
+    [this, obj_name, truncate_size, writes, at_version](int) {
+      if (object_tracker) {
+        object_tracker->record_truncate_and_write(obj_name, truncate_size, writes, at_version);
+      }
+    });
 
   do_transaction(
     hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), write_complete);
@@ -976,6 +988,55 @@ int PGBackendTestFixture::rollback(
         hoid, std::move(pg_t), delta_stats, at_version,
         std::move(log_entries), complete);
     }, run);
+}
+
+int PGBackendTestFixture::delete_object(const std::string& obj_name)
+{
+  eversion_t at_version = get_next_version();
+  return run_primary_op(
+    [this, obj_name, at_version](std::shared_ptr<int> result) {
+      hobject_t hoid = make_test_object(obj_name);
+
+      // Get OBC
+      ObjectContextRef obc = get_object_context(hoid, false);
+      if (!obc) {
+        *result = -ENOENT;
+        return;
+      }
+
+      // Create PGTransaction for delete
+      std::unique_ptr<PGTransaction> pg_t(new PGTransaction());
+      pg_t->obc_map[hoid] = obc;  // Populate OBC map
+      pg_t->remove(hoid);
+
+      object_stat_sum_t delta_stats;
+      delta_stats.num_objects = -1;
+      delta_stats.num_bytes = -(int64_t)obc->obs.oi.size;
+
+      eversion_t prior_version = obc->obs.oi.version;
+
+      // Create log entry for delete
+      std::vector<pg_log_entry_t> log_entries;
+      pg_log_entry_t entry;
+      entry.op = pg_log_entry_t::DELETE;
+      entry.soid = hoid;
+      entry.version = at_version;
+      entry.prior_version = prior_version;
+      log_entries.push_back(entry);
+
+      TestPG* test_pg = get_test_pg();
+
+      auto delete_complete = make_write_completion(
+        test_pg, hoid, result, nullptr,
+        [this, obj_name, at_version](int) {
+          if (object_tracker) {
+            object_tracker->record_delete(obj_name, at_version);
+          }
+        });
+
+      do_transaction(
+        hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries), delete_complete);
+    });
 }
 
 int PGBackendTestFixture::read_object(
@@ -1159,35 +1220,107 @@ void PGBackendTestFixture::visualize_miscompare(
   std::cout << std::endl;
 }
 
+int PGBackendTestFixture::read_attribute(
+  const std::string& obj_name,
+  const std::string& attr_name,
+  bufferlist& out_value)
+{
+  hobject_t hoid = make_test_object(obj_name);
+  PGBackend* primary_backend = get_primary_backend();
+  if (!primary_backend) {
+    return -EINVAL;
+  }
+  
+  return primary_backend->objects_get_attr(hoid, attr_name, &out_value);
+}
+
+void PGBackendTestFixture::verify_attribute(
+  const std::string& obj_name,
+  const std::string& attr_name)
+{
+  ceph_assert(object_tracker);
+  auto expected_value = object_tracker->get_expected_attribute(obj_name, attr_name);
+  ASSERT_TRUE(expected_value.has_value())
+    << "ObjectTracker has no record of attribute " << attr_name << " for " << obj_name;
+
+  bufferlist attr_bl;
+  int result = read_attribute(obj_name, attr_name, attr_bl);
+  ASSERT_EQ(result, 0) << "Failed to read attribute " << attr_name << " from " << obj_name;
+
+  std::string actual_value(attr_bl.c_str(), attr_bl.length());
+  ASSERT_EQ(actual_value, *expected_value)
+    << "Attribute " << attr_name << " on " << obj_name << " doesn't match expected value";
+}
+
+void PGBackendTestFixture::verify_object(const std::string& obj_name)
+{
+  ceph_assert(object_tracker);
+
+  // Without this, an object the tracker has never seen (e.g. written before
+  // enable_object_tracking() was last called) would report object_size == 0
+  // and silently skip the data check below, indistinguishable from a
+  // legitimate empty object.
+  ASSERT_TRUE(object_tracker->object_exists(obj_name))
+    << "ObjectTracker has no record of " << obj_name
+    << "; verify_object() cannot check data it never saw written";
+
+  // Get the expected size and data for the entire object (offset 0, full
+  // size) from the object tracker, then delegate to the ranged overload.
+  uint64_t object_size = object_tracker->get_expected_size(obj_name);
+  std::string expected_data =
+    object_tracker->get_expected_data(obj_name, 0, object_size);
+  verify_object(obj_name, expected_data, 0, object_size);
+}
+
 void PGBackendTestFixture::verify_object(
   const std::string& obj_name,
-  const std::string& expected_data,
-  size_t offset,
-  size_t object_size)
+  const std::string& expected,
+  uint64_t offset,
+  size_t size)
 {
-  bufferlist read_data;
-  int read_result = read_object(obj_name, offset, expected_data.length(), read_data, object_size);
+  if (size > 0) {
+    bufferlist read_data;
+    uint64_t object_size = offset + size;
+    int read_result = read_object(obj_name, offset, size, read_data, object_size);
+    ASSERT_GE(read_result, 0) << "Read should complete successfully for " << obj_name;
 
-  EXPECT_GE(read_result, 0) << "Read should complete successfully";
-  EXPECT_EQ(read_data.length(), expected_data.length()) << "Read data length should match";
-  
-  if (read_data.length() == expected_data.length()) {
+    ASSERT_EQ(read_data.length(), size)
+      << "Read returned wrong number of bytes for " << obj_name;
+
     const char* read_buf = read_data.c_str();
-    const char* expected_buf = expected_data.c_str();
-    
-    // Check for mismatches
+    const char* expected_buf = expected.c_str() + offset;
+
     bool has_mismatch = false;
-    for (size_t i = 0; i < expected_data.length(); i++) {
+    for (size_t i = 0; i < size; i++) {
       if (read_buf[i] != expected_buf[i]) {
         has_mismatch = true;
         break;
       }
     }
-    
+
     if (has_mismatch) {
-      visualize_miscompare(obj_name, expected_buf, read_buf, expected_data.length(), "verify_object");
-      FAIL() << "Data mismatch detected";
+      visualize_miscompare(obj_name, expected_buf, read_buf, size, "verify_object");
+      FAIL() << "Data mismatch detected for " << obj_name;
     }
+  }
+
+  // List all actual attributes and verify no unexpected ones exist
+  std::map<std::string, ceph::buffer::list, std::less<>> actual_attrs;
+  int list_result = list_attributes(obj_name, actual_attrs);
+  ASSERT_EQ(0, list_result) << "Failed to list attributes for " << obj_name;
+  
+  // Check for unexpected attributes (excluding system attributes)
+  for (const auto& [attr_name, attr_bl] : actual_attrs) {
+    // Skip system attributes (start with _ or are snapset)
+    if (attr_name[0] == '_' || attr_name == "snapset") {
+      continue;
+    }
+    
+    // This is a user attribute - verify it's in the tracker
+    const auto* tracked_object = object_tracker->get_object_state(obj_name);
+    ASSERT_TRUE(tracked_object && tracked_object->attributes.count(attr_name) > 0)
+      << "Unexpected attribute '" << attr_name << "' found on object " << obj_name
+      << " - this attribute should not exist (may indicate failed rollback)";
   }
 }
 
@@ -1196,11 +1329,10 @@ void PGBackendTestFixture::create_and_write_verify(
   const std::string& data)
 {
   int result = create_and_write(obj_name, data);
-  
-  EXPECT_GE(result, 0) << "Write should complete successfully";
-  
+
+  ASSERT_GE(result, 0) << "Write should complete successfully";
   // Always verify - tests should only use this helper when success is expected
-  verify_object(obj_name, data, 0, data.length());
+  verify_object(obj_name);
 }
 
 void PGBackendTestFixture::write_verify(
@@ -1211,22 +1343,11 @@ void PGBackendTestFixture::write_verify(
   const std::string& context_msg)
 {
   int result = write(obj_name, offset, data, object_size);
-  
+
   std::string msg_suffix = context_msg.empty() ? "" : " (" + context_msg + ")";
-  EXPECT_GE(result, 0) << "Write should complete successfully" << msg_suffix;
-  
-  // Always verify - tests should only use this helper when success is expected
-  bufferlist read_data;
-  int read_result = read_object(obj_name, offset, data.length(), read_data,
-                                 std::max(object_size, offset + data.length()));
-  
-  EXPECT_GE(read_result, 0) << "Read should complete successfully" << msg_suffix;
-  EXPECT_EQ(read_data.length(), data.length()) << "Read data length should match" << msg_suffix;
-  
-  if (read_data.length() == data.length()) {
-    std::string read_string(read_data.c_str(), read_data.length());
-    EXPECT_EQ(read_string, data) << "Written data should match" << msg_suffix;
-  }
+  ASSERT_GE(result, 0) << "Write should complete successfully" << msg_suffix;
+
+  verify_object(obj_name);
 }
 
 // ---------------------------------------------------------------------------
@@ -1353,7 +1474,13 @@ void PGBackendTestFixture::do_write_attribute_impl(
       obc->obs.oi.version = prior_version;
       obc->attr_cache.clear();
     },
-    nullptr);
+    [this, obj_name, attr_name, attr_value, at_version](int) {
+      // Record in object tracker after successful write (excluding OI_ATTR as requested)
+      // Only record if object_tracker is still valid (may be null during teardown)
+      if (attr_name != OI_ATTR && object_tracker) {
+        object_tracker->record_attribute_write(obj_name, attr_name, attr_value, at_version);
+      }
+    });
 
   // Control first_write_in_interval to simulate different write patterns
   if (force_all_shards && pool_type == EC) {
@@ -1378,6 +1505,21 @@ int PGBackendTestFixture::write_attribute(
     [this, obj_name, attr_name, attr_value, force_all_shards](std::shared_ptr<int> result) {
       do_write_attribute_impl(obj_name, attr_name, attr_value, force_all_shards, result);
     });
+}
+
+int PGBackendTestFixture::list_attributes(
+  const std::string& obj_name,
+  std::map<std::string, ceph::buffer::list, std::less<>>& attrs)
+{
+  hobject_t hoid = make_test_object(obj_name);
+  
+  PGBackend* primary_backend = get_primary_backend();
+  if (!primary_backend) {
+    return -EINVAL;
+  }
+  
+  int r = primary_backend->objects_get_attrs(hoid, &attrs);
+  return r;
 }
 
 object_info_t PGBackendTestFixture::read_shard_object_info(
