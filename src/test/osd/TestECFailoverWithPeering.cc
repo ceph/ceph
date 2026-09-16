@@ -324,7 +324,7 @@ TEST_P(TestECFailoverWithPeering, ZeroSizeObjectWithAttributesRecovery) {
   
   mark_osd_up(0);
   
-  run_recovery_and_verify_callbacks(obj_name, 0, test_data);
+  run_recovery(obj_name, true, test_data);
   
   // Verify that the attribute was recovered on shard 0
   hobject_t hoid = make_test_object(obj_name);
@@ -451,7 +451,7 @@ TEST_P(TestECFailoverWithPeering, ECRecoveryTest) {
     mark_osd_up(removed_osd);
 
     // Use the fixture helper to run recovery and verify callbacks
-    run_recovery_and_verify_callbacks(obj_name, removed_osd, pattern_b);
+    run_recovery(obj_name, removed_osd == 0, pattern_b);
 
     std::cout << "=== Recovery test with OSD " << removed_osd << " completed successfully ===" << std::endl;
   }
@@ -496,7 +496,7 @@ TEST_P(TestECFailoverWithPeering, ECSequentialOSDFailoverTest) {
     mark_osd_down(osd_to_fail);
     write_verify(obj_name, 0, cycle_pattern, data_size);
     mark_osd_up(osd_to_fail);
-    run_recovery_and_verify_callbacks(obj_name, osd_to_fail, cycle_pattern);
+    run_recovery(obj_name, osd_to_fail == 0, cycle_pattern);
   }
 
   std::cout << "\n=== Sequential OSD failover test completed successfully ===" << std::endl;
@@ -624,9 +624,9 @@ TEST_P(TestECFailoverWithPeering, MultiObjectRecoveryReadCrash) {
 
   std::cout << "Starting recovery for all 3 objects..." << std::endl;
 
-  run_recovery_and_verify_callbacks(obj1_name, failed_osd, obj1_pattern_b);
-  run_recovery_and_verify_callbacks(obj2_name, failed_osd, obj2_pattern_b);
-  run_recovery_and_verify_callbacks(obj3_name, failed_osd, obj3_pattern_b);
+  run_recovery(obj1_name, false, obj1_pattern_b);
+  run_recovery(obj2_name, false, obj2_pattern_b);
+  run_recovery(obj3_name, false, obj3_pattern_b);
 
   // If the bug is present, we'll crash before getting here
   // If the bug is fixed, recovery should complete successfully
@@ -714,7 +714,7 @@ TEST_P(TestECFailoverWithPeering, MultiObjectParallelRecoveryCrash) {
 
   std::vector<std::string> obj_names = {obj1_name, obj2_name, obj3_name};
   std::vector<std::string> expected_data = {obj1_pattern_b, obj2_pattern_b, obj3_pattern_b};
-  run_parallel_recovery_and_verify_callbacks(obj_names, failed_osd, expected_data);
+  run_parallel_recovery(obj_names, false, expected_data);
 
   // If the bug is present, we'll crash before getting here
   // If the bug is fixed, recovery should complete successfully
@@ -787,7 +787,7 @@ TEST_P(
 
   // Now run the recovery - the target shard asserts it is being written with
   // the object version it is expecting. In the defect, this assert failed.
-  run_recovery_and_verify_callbacks(obj_name, recovery_target_shard, pattern_p1);
+  run_recovery(obj_name, false, pattern_p1);
 
   // Undo our config change!
   set_config("osd_async_recovery_min_cost", "100");
@@ -861,7 +861,7 @@ TEST_P(
 
   // Now run the recovery - the target shard asserts it is being written with
   // the object version it is expecting. In the defect, this assert failed.
-  run_recovery_and_verify_callbacks(obj_name, recovery_target_shard, pattern_p1);
+  run_recovery(obj_name, false, pattern_p1);
 }
 
 /**
@@ -895,7 +895,7 @@ TEST_P(
   unsuspend_primary_to_osd(blocked_shard);
   event_loop->run_until_idle();
 
-  run_recovery_and_verify_callbacks(obj_name, recovery_target_shard, pattern_p1);
+  run_recovery(obj_name, false, pattern_p1);
 }
 
 TEST_P(TestECFailoverWithPeering, ScrubClean) {
@@ -1107,7 +1107,7 @@ TEST_P(TestECFailoverWithPeering, DivergentLogRewindThenSplit) {
 
   // Phase 4: recover "trigger" so last_complete climbs to the head through the
   // rolled-forward entries.
-  run_recovery_and_verify_callbacks("trigger", target, pb);
+  run_recovery("trigger", target == 0, pb);
 
   // Stall reservation grants: the harness drives recovery directly, not through
   // the reservation path.  Without stalling, a grant delivered across the split's
@@ -1239,7 +1239,7 @@ TEST_P(TestECFailoverWithPeering, DivergentLogRewindThenNewInterval) {
   ASSERT_EQ(-EINPROGRESS, write("obj_clone", 0, pb, data_size));
 
   // Phase 4: recover the pre-existing missing so last_complete reaches head.
-  run_recovery_and_verify_callbacks("trigger", target, pb);
+  run_recovery("trigger", target == 0, pb);
   set_stall_recovery_reservations(true);
 
   // Phase 5: interval change rewinds the target to an empty log with missing(2).
