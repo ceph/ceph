@@ -92,6 +92,6 @@ function(build_opentelemetry)
     opentelemetry::libopentelemetry
     PROPERTIES
       INTERFACE_LINK_LIBRARIES "${opentelemetry_deps}"
-      INTERFACE_INCLUDE_DIRECTORIES "${opentelemetry_include_dir}")
+      INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${opentelemetry_include_dir}")
   include_directories(SYSTEM "${opentelemetry_include_dir}")
 endfunction()
