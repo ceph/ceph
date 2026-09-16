@@ -1,0 +1,545 @@
+syntax = "proto3";
+
+package kvrgw.v1;
+
+option go_package = "github.com/kv-poc/frontend/pb;kvrgw";
+
+// Universal error code for all KVRGW operations.
+// Carried in every response message — no grpc::Status error signaling.
+enum KvrgwErrorCode {
+  KVRGW_ERR_OK = 0;
+
+  // --- S3 errors (100-111) ---
+
+  // The specified object key does not exist in the bucket.
+  // Returned by GET, HEAD, DELETE when the target S3 object is missing.
+  KVRGW_ERR_NO_SUCH_KEY = 100;
+
+  // The specified bucket does not exist for this tenant.
+  // Returned when bucket lookup (B: key) yields no result.
+  KVRGW_ERR_NO_SUCH_BUCKET = 101;
+
+  // A bucket with this name already exists for this tenant.
+  // Returned by CreateBucket when B: key is already present.
+  KVRGW_ERR_BUCKET_ALREADY_EXISTS = 102;
+
+  // The bucket contains objects or pending uploads and cannot be deleted.
+  // Returned by DeleteBucket when S:O or P:O scan finds entries.
+  KVRGW_ERR_BUCKET_NOT_EMPTY = 103;
+
+  // A conditional write precondition failed (if-match, if-none-match, mtime, size).
+  // Returned by PUT, DELETE, COPY when ETag/mtime/size condition is not met.
+  KVRGW_ERR_PRECONDITION_FAILED = 104;
+
+  // Access denied by bucket policy (access_flags bitmask).
+  // Returned when check_access or verify_bucket_in_txn denies the operation.
+  KVRGW_ERR_ACCESS_DENIED = 105;
+
+  // Invalid request parameter (e.g. content-type too long, invalid bucket name chars).
+  KVRGW_ERR_INVALID_ARGUMENT = 106;
+
+  // Bucket name violates DNS-compliant naming rules.
+  KVRGW_ERR_INVALID_BUCKET_NAME = 107;
+
+  // The specified version ID does not exist for this object.
+  KVRGW_ERR_NO_SUCH_VERSION = 108;
+
+  // The tenant name is not registered (T: key missing).
+  // Returned when tenant_id_for_name() cannot resolve the tenant.
+  KVRGW_ERR_NO_SUCH_TENANT = 109;
+
+  // Byte-range request is not satisfiable for the object size.
+  // Returned by GET when Range header specifies an invalid or out-of-bounds range.
+  KVRGW_ERR_INVALID_RANGE = 110;
+
+  // Request is well-formed but not allowed (e.g. CopyObject to itself without REPLACE).
+  KVRGW_ERR_INVALID_REQUEST = 111;
+
+  // Object tag set is empty when a tagging header was present, or the tag set is invalid.
+  KVRGW_ERR_INVALID_TAG = 112;
+
+  // --- FDB retriable, definitely NOT committed (200-206) ---
+  // Category: is_retriable_idempotent() = true
+  // Safe to retry unconditionally — the transaction did NOT commit.
+
+  // FDB write-write conflict. Another transaction wrote the same key range.
+  // FDB error 1020. Most common retriable error under concurrent writes.
+  KVRGW_ERR_FDB_CONFLICT = 200;
+
+  // FDB storage server does not have recent mutations yet.
+  // FDB error 1037. Occurs when a storage server is catching up after lag.
+  KVRGW_ERR_FDB_PROCESS_BEHIND = 201;
+
+  // FDB read requested a version that does not yet exist.
+  // FDB error 1009. Occurs under high commit rates when GRV returns a stale version.
+  KVRGW_ERR_FDB_FUTURE_VERSION = 202;
+
+  // FDB transaction has been alive too long (5s default).
+  // FDB error 1007. Retry with a fresh transaction.
+  KVRGW_ERR_FDB_TRANSACTION_TOO_OLD = 203;
+
+  // FDB could not commit; transaction definitely not applied.
+  // FDB error 1020 variant via predicate. Distinct from commit_unknown.
+  KVRGW_ERR_FDB_NOT_COMMITTED = 204;
+
+  // FDB cluster version changed (coordinator failover or recovery).
+  // FDB error 1039. Retry with a fresh transaction.
+  KVRGW_ERR_FDB_CLUSTER_VERSION_CHANGED = 206;
+
+  // --- FDB retriable, commit outcome UNKNOWN (205) ---
+  // Category: is_retriable_not_idempotent() = true
+  // The commit MAY have succeeded. Safe to retry only if the operation is idempotent.
+
+  // FDB commit result unknown — network issue after commit sent.
+  // FDB error 1021. The transaction may or may not have been applied.
+  // All POC operations are idempotent, so retry is safe here.
+  KVRGW_ERR_FDB_COMMIT_UNKNOWN = 205;
+
+  // --- FDB permanent (300-302) ---
+  // Not retriable. Operation must fail.
+
+  // FDB key exceeds maximum size (10KB).
+  // FDB error 2102. Indicates a bug in key construction.
+  KVRGW_ERR_FDB_KEY_TOO_LARGE = 300;
+
+  // FDB value exceeds maximum size (100KB).
+  // FDB error 2103. Object too large for inline/D-tier storage.
+  KVRGW_ERR_FDB_VALUE_TOO_LARGE = 301;
+
+  // FDB transaction exceeds size limit (10MB).
+  // FDB error 2101. Too many mutations in one transaction.
+  KVRGW_ERR_FDB_TRANSACTION_TOO_LARGE = 302;
+
+  // --- Internal errors (400-405) ---
+  // Not retriable. Indicates bugs or system-level failures.
+
+  // Catch-all for unmapped FDB errors or unexpected failures.
+  KVRGW_ERR_INTERNAL = 400;
+
+  // KV value could not be parsed (corrupt or schema mismatch).
+  // Indicates data corruption — should never occur in normal operation.
+  KVRGW_ERR_CORRUPT_VALUE = 401;
+
+  // Bucket ID in transaction does not match cached value (stale cache race).
+  KVRGW_ERR_BUCKET_ID_MISMATCH = 402;
+
+  // Value exceeds the allowed size for its storage tier.
+  KVRGW_ERR_VALUE_TOO_LARGE = 403;
+
+  // Transaction conflict retry limit exceeded (10 attempts).
+  KVRGW_ERR_TRANSACTION_CONFLICT = 404;
+
+  // Maximum retry attempts exhausted for a retriable error.
+  KVRGW_ERR_MAX_RETRIES_EXCEEDED = 405;
+}
+
+service KvRgw {
+  rpc AddTenant(AddTenantRequest) returns (AddTenantResponse);
+  rpc ResolveTenant(ResolveTenantRequest) returns (ResolveTenantResponse);
+  rpc CreateBucket(CreateBucketRequest) returns (CreateBucketResponse);
+  rpc BucketExists(BucketExistsRequest) returns (BucketExistsResponse);
+  rpc ListBuckets(ListBucketsRequest) returns (ListBucketsResponse);
+  rpc DeleteBucket(DeleteBucketRequest) returns (DeleteBucketResponse);
+  rpc PutObject(stream PutObjectRequest) returns (PutObjectResponse);
+  rpc GetObject(GetObjectRequest) returns (stream GetObjectResponse);
+  rpc HeadObject(HeadObjectRequest) returns (HeadObjectResponse);
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
+  rpc ListObjectVersions(ListObjectVersionsRequest) returns (ListObjectVersionsResponse);
+  rpc DeleteObject(DeleteObjectRequest) returns (DeleteObjectResponse);
+  rpc DeleteObjectVersion(DeleteObjectVersionRequest) returns (DeleteObjectVersionResponse);
+  rpc DeleteMulti(DeleteMultiRequest) returns (DeleteMultiResponse);
+  rpc CopyObject(CopyObjectRequest) returns (CopyObjectResponse);
+  rpc PutBucketPolicy(PutBucketPolicyRequest) returns (PutBucketPolicyResponse);
+  rpc GetBucketPolicy(GetBucketPolicyRequest) returns (GetBucketPolicyResponse);
+  rpc DeleteBucketPolicy(DeleteBucketPolicyRequest) returns (DeleteBucketPolicyResponse);
+  rpc PutBucketVersioning(PutBucketVersioningRequest) returns (PutBucketVersioningResponse);
+  rpc GetBucketVersioning(GetBucketVersioningRequest) returns (GetBucketVersioningResponse);
+  rpc PutObjectTagging(PutObjectTaggingRequest) returns (PutObjectTaggingResponse);
+  rpc GetObjectTagging(GetObjectTaggingRequest) returns (GetObjectTaggingResponse);
+  rpc DeleteObjectTagging(DeleteObjectTaggingRequest) returns (DeleteObjectTaggingResponse);
+}
+
+message AddTenantRequest {
+  string tenant_name = 1;
+}
+
+message AddTenantResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  uint32 tenant_id = 3;
+}
+
+message ResolveTenantRequest {
+  string tenant_name = 1;
+}
+
+message ResolveTenantResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  bool exists = 3;
+  uint32 tenant_id = 4;
+}
+
+message CreateBucketRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+}
+
+message CreateBucketResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  bytes bucket_id = 3;
+}
+
+message BucketExistsRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+}
+
+message BucketExistsResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  bool exists = 3;
+  bytes bucket_id = 4;
+}
+
+message ListBucketsRequest {
+  string tenant_name = 1;
+  string prefix = 2;
+  string continuation_token = 3;
+  uint32 max_buckets = 4;
+}
+
+message BucketInfo {
+  string name = 1;
+  int64 creation_date_unix = 2;
+}
+
+message ListBucketsResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  repeated BucketInfo buckets = 3;
+  string continuation_token = 4;
+}
+
+message DeleteBucketRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+}
+
+message DeleteBucketResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+}
+
+message PutObjectRequest {
+  oneof payload {
+    PutObjectMetadata metadata = 1;
+    bytes data_chunk = 2;
+  }
+}
+
+message PutObjectMetadata {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string key = 3;
+  string content_type = 4;
+  uint64 content_length = 5;
+  string if_match = 6;
+  string if_none_match = 7;
+  repeated Tag tags = 8;
+  map<string, string> metadata = 9;
+}
+
+message PutObjectResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  string etag = 3;
+  string version_id = 4;
+}
+
+message ObjectByteRange {
+  int64 start = 1;
+  int64 end = 2;
+  bool from_end = 3;
+  bool end_unbounded = 4;
+}
+
+message GetObjectRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string key = 3;
+  ObjectByteRange range = 4;
+  bool range_requested = 5;
+  string version_id = 6;
+}
+
+message GetObjectResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  oneof payload {
+    ObjectMetadata metadata = 3;
+    bytes data_chunk = 4;
+  }
+}
+
+message HeadObjectRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string key = 3;
+  string version_id = 4;
+}
+
+message HeadObjectResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  ObjectMetadata metadata = 3;
+}
+
+message ListObjectsRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string prefix = 3;
+  string delimiter = 4;
+  uint32 max_keys = 5;
+  string continuation_token = 6;
+  string marker = 7;
+}
+
+message ListObjectEntry {
+  string key = 1;
+  uint64 size = 2;
+  string etag = 3;
+  int64 last_modified_unix = 4;
+}
+
+message ListObjectsResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  repeated ListObjectEntry objects = 3;
+  repeated string common_prefixes = 4;
+  bool is_truncated = 5;
+  string next_continuation_token = 6;
+}
+
+message DeleteObjectRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string key = 3;
+  string if_match = 4;
+  int64 if_match_last_modified_time = 5;
+  int64 if_match_size = 6;
+  bool has_if_match_size = 7;
+}
+
+message DeleteObjectResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  bool is_delete_marker = 3;
+  string version_id = 4;
+}
+
+message DeleteObjectVersionRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string key = 3;
+  uint32 version_id = 4;
+  string if_match = 5;
+  int64 if_match_last_modified_time = 6;
+  int64 if_match_size = 7;
+  bool has_if_match_size = 8;
+}
+
+message DeleteObjectVersionResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+}
+
+message DeleteMultiRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  repeated string keys = 3;
+  repeated DeleteMultiObject objects = 4;
+}
+
+message DeleteMultiObject {
+  string key = 1;
+  string version_id = 2;
+}
+
+message DeleteMultiError {
+  string key = 1;
+  string code = 2;
+  string message = 3;
+}
+
+message DeleteMultiResult {
+  string key = 1;
+  string version_id = 2;
+  bool delete_marker = 3;
+  string delete_marker_version_id = 4;
+}
+
+message DeleteMultiResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  repeated DeleteMultiResult deleted = 3;
+  repeated DeleteMultiError errors = 4;
+}
+
+message ObjectMetadata {
+  string etag = 1;
+  uint64 size = 2;
+  int64 last_modified_unix = 3;
+  string content_type = 4;
+  string version_id = 5;
+  uint32 tags_count = 6;
+  map<string, string> metadata = 7;
+}
+
+message PutBucketPolicyRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string policy_json = 3;
+}
+
+message PutBucketPolicyResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+}
+
+message GetBucketPolicyRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+}
+
+message GetBucketPolicyResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  string policy_json = 3;
+}
+
+message DeleteBucketPolicyRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+}
+
+message DeleteBucketPolicyResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+}
+
+message PutBucketVersioningRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string status = 3;  // "Enabled" or "Suspended"
+}
+
+message PutBucketVersioningResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+}
+
+message GetBucketVersioningRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+}
+
+message GetBucketVersioningResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  string status = 3;  // "", "Enabled", or "Suspended"
+}
+
+message ListObjectVersionsRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string prefix = 3;
+  uint32 max_keys = 4;
+  string key_marker = 5;
+  uint32 version_id_marker = 6;
+}
+
+message ObjectVersionEntry {
+  string key = 1;
+  uint32 version_id = 2;
+  bool is_latest = 3;
+  bool is_delete_marker = 4;
+  uint64 size = 5;
+  string etag = 6;
+  int64 last_modified_unix = 7;
+}
+
+message ListObjectVersionsResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  repeated ObjectVersionEntry versions = 3;
+  bool is_truncated = 4;
+  string next_key_marker = 5;
+  uint32 next_version_id_marker = 6;
+}
+
+message CopyObjectRequest {
+  string tenant_name = 1;
+  string src_bucket_name = 2;
+  string src_key = 3;
+  string dst_bucket_name = 4;
+  string dst_key = 5;
+  string src_version_id = 6;
+  string if_match = 7;
+  string if_none_match = 8;
+  string dst_if_match = 9;
+  string dst_if_none_match = 10;
+  string content_type = 11;
+  bool replace_metadata = 12;
+  map<string, string> metadata = 13;
+}
+
+message CopyObjectResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  string etag = 3;
+  int64 last_modified_unix = 4;
+  string version_id = 5;
+  string copy_source_version_id = 6;
+}
+
+message Tag {
+  string key = 1;
+  string value = 2;
+}
+
+message PutObjectTaggingRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string key = 3;
+  repeated Tag tags = 4;
+}
+
+message PutObjectTaggingResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+}
+
+message GetObjectTaggingRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string key = 3;
+}
+
+message GetObjectTaggingResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+  repeated Tag tags = 3;
+}
+
+message DeleteObjectTaggingRequest {
+  string tenant_name = 1;
+  string bucket_name = 2;
+  string key = 3;
+}
+
+message DeleteObjectTaggingResponse {
+  KvrgwErrorCode error_code = 1;
+  bytes error_detail = 2;
+}
