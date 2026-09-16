@@ -198,7 +198,10 @@ public:
   void advance_epoch();
 
   bool all_shards_active();
-  bool all_shards_clean();  // only the primary tracks PG_STATE_CLEAN in EC pools
+
+  // In EC pools, only the primary tracks PG_STATE_CLEAN.
+  bool primary_is_clean();
+
   std::string get_state_name(int shard);
 
   void suspend_osd(int osd);

@@ -415,7 +415,7 @@ bool ECPeeringTestFixture::all_shards_active() {
   return true;
 }
 
-bool ECPeeringTestFixture::all_shards_clean() {
+bool ECPeeringTestFixture::primary_is_clean() {
   // Get primary from OSDMap
   std::vector<int> acting_osds;
   int acting_primary = -1;
