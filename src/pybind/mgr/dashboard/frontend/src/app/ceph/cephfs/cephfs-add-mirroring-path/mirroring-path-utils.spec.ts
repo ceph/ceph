@@ -1,3 +1,5 @@
+import { of } from 'rxjs';
+
 import { FS_ROOT, FS_ROOT_PATH_SENTINEL, MirroringPathUtils } from './mirroring-path-utils';
 import { PathEntry } from './mirroring-path.model';
 
@@ -83,10 +85,10 @@ describe('MirroringPathUtils', () => {
         fullPath: '/volumes/g1/sv1',
         expanded: true,
         levels: [
-          { options: ['volumes'], selected: 'volumes' },
-          { options: ['g1'], selected: 'g1' },
-          { options: ['sv1', 'sv2'], selected: 'sv1' },
-          { options: [], selected: '' }
+          { options$: of(['volumes']), selected: 'volumes' },
+          { options$: of(['g1']), selected: 'g1' },
+          { options$: of(['sv1', 'sv2']), selected: 'sv1' },
+          { options$: of([]), selected: '' }
         ]
       };
 
