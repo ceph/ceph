@@ -2144,6 +2144,7 @@ def _pull_image(ctx, image, insecure=False):
         'error creating read-write layer with ID',
         'net/http: TLS handshake timeout',
         'Digest did not match, expected',
+        'failed to copy: httpReadSeeker: failed open: failed to do request',
     ]
 
     cmd = pull_command(ctx, image, insecure=insecure)
