@@ -67,9 +67,8 @@ int rgw_opa_authorize(RGWOp *& op,
 
   std::stringstream ss;
   jf.flush(ss);
-  const auto body = ss.str();
-  req.set_post_data(body);
-  req.set_send_length(body.length());
+  req.set_post_data(ss.str());
+  req.set_send_length(ss.str().length());
 
   /* send request */
   ret = req.process(op, s->yield);
