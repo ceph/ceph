@@ -181,7 +181,8 @@ class RadosStore : public StoreDriver {
                    const rgw_owner& owner,
                    RGWStorageStats& stats,
                    ceph::real_time& last_synced,
-                   ceph::real_time& last_updated) override;
+                   ceph::real_time& last_updated,
+                   std::optional<std::unordered_map<std::string, RGWStorageStats>>* sc_stats = nullptr) override;
     int load_stats_async(const DoutPrefixProvider* dpp,
                          const rgw_owner& owner,
                          boost::intrusive_ptr<ReadStatsCB> cb) override;
@@ -744,13 +745,13 @@ class RadosBucket : public StoreBucket {
                            const bucket_index_layout_generation& idx_layout,
                            int shard_id, std::string* bucket_ver, std::string* master_ver,
                            std::map<RGWObjCategory, RGWStorageStats>& stats,
+                           std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
                            std::string* max_marker = nullptr,
                            bool* syncstopped = nullptr) override;
     virtual int read_stats_async(const DoutPrefixProvider *dpp,
                                  const bucket_index_layout_generation& idx_layout,
                                  int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
-    int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                         RGWBucketEnt* ent) override;
+    int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y, RGWBucketEnt* ent) override;
     int check_bucket_shards(const DoutPrefixProvider* dpp, uint64_t num_objs,
                             optional_yield y) override;
     virtual int chown(const DoutPrefixProvider* dpp,
