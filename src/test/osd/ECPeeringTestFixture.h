@@ -221,5 +221,9 @@ private:
     int target_osd,
     const std::vector<std::string>& expected_data,
     int instance);
+
+private:
+  // Save initial config state for restoration in TearDown()
+  ConfigValues initial_config_values_;
 };
 

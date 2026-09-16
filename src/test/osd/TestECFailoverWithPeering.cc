@@ -896,8 +896,6 @@ TEST_P(
   event_loop->run_until_idle();
 
   run_recovery_and_verify_callbacks(obj_name, recovery_target_shard, pattern_p1);
-
-  set_config("osd_async_recovery_min_cost", "100");
 }
 
 TEST_P(TestECFailoverWithPeering, ScrubClean) {
