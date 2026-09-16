@@ -284,7 +284,7 @@ Device::close_ertr::future<> NVMeBlockDevice::close() {
 seastar::future<std::optional<nvme_identify_controller_data_t>>
 NVMeBlockDevice::identify_controller(seastar::file f) {
 
-  nvme_admin_command_t admin_command;
+  nvme_admin_command_t admin_command{};
   nvme_identify_controller_data_t data;
   admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
   admin_command.common.addr = (uint64_t)&data;
@@ -315,7 +315,7 @@ NVMeBlockDevice::identify_namespace(seastar::file f) {
     co_return std::nullopt;
   }
   namespace_id = nsid;
-  nvme_admin_command_t admin_command;
+  nvme_admin_command_t admin_command{};
   nvme_identify_namespace_data_t data;
   admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
   admin_command.common.addr = (uint64_t)&data;
@@ -403,7 +403,7 @@ nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() 
   }
 
   auto nsid = co_await get_nsid(device);
-  nvme_admin_command_t cmd;
+  nvme_admin_command_t cmd{};
   cmd.common.opcode = nvme_admin_command_t::OPCODE_FORMAT_NVM;
   cmd.common.nsid = nsid;
   // TODO: configure other protect information types (2 or 3) see above
