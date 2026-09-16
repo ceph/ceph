@@ -19,7 +19,6 @@
 #include "gtest/gtest.h"
 
 #include "test.h"
-#include "crimson_utils.h"
 
 using std::ostringstream;
 
@@ -1226,7 +1225,6 @@ TEST_P(LibRadosAioEC, RoundTrip2) {
 }
 
 TEST_P(LibRadosAioEC, RoundTripAppend) {
-  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion, my_completion2, my_completion3, my_completion4;
   const auto& params = GetParam();
@@ -1715,7 +1713,6 @@ TEST_P(LibRadosAioEC, ExecuteClass) {
 }
 
 TEST_P(LibRadosAioEC, MultiWrite) {
-  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion, my_completion2, my_completion3;
   const auto& params = GetParam();
