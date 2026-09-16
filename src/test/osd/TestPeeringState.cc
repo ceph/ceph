@@ -689,11 +689,12 @@ protected:
   // Helper - advance map for all osds
   void test_event_advance_map(int toosd = -1)
   {
-    dout(0) << "= test_event_advance_map =" << dendl;
+    dout(0) << "= test_event_advance_map e" << osdmap->get_epoch() << " =" << dendl;
     for (auto osd : up_acting ) {
       if (toosd != -1 && toosd != osd) {
         continue;
       }
+      ceph_assert(get_ps(osd));
       get_ps(osd)->advance_map(osdmap, osdmap, up, up_primary, acting, acting_primary, *(get_ctx(osd)));
     }
   }
@@ -2324,6 +2325,88 @@ TEST_F(PeeringStateTest, Issue74218) {
   verify_no_missing_or_unfound(acting[3], 3, true);
   verify_log_state(acting[3], expected2, expected2, expected2, eversion_t());
   verify_logs();
+}
+
+TEST_F(PeeringStateTest, LaggyGetInfoCatchesUp) {
+  dout(0) << "== PeeringIntervalBoundaryDiscrepancy2 ==" << dendl;
+  // Init
+  {
+    create_rep_pool();
+    test_create_peering_state();
+    test_init();
+    test_event_initialize();
+    test_peering();
+    EXPECT_EQ(osdmap->get_epoch(), 4);
+    verify_all_active_clean();
+
+    dout(0) << "= initial cluster deployed =" << dendl;
+  }
+
+  // Swap out OSD 1 for OSD 9
+  {
+    modify_up_acting(1, 9);
+    new_epoch(true);
+    EXPECT_EQ(osdmap->get_epoch(), 5);
+    test_create_peering_state(9, 1);
+    test_init(9);
+    test_event_initialize(9);
+    // deliver the OSDMap that [0,1,2] -> [0,9,2]
+    test_event_advance_map();
+    test_event_activate_map();
+  }
+
+  // start mimicking network delays to osd.2
+  {
+    bool cont;
+    do {
+      cont = dispatch_specific_osd(0);
+      cont |= dispatch_specific_osd(1);
+      cont |= dispatch_specific_osd(9);
+    } while (cont);
+  }
+
+  // suppose this network condition affects only the link between
+  // osd.0 (primary) and osd.2 (replica); osd.2 can communicate
+  // with monitors freely, so it can learn about osd.1 getting
+  // marked down.
+  // although acting set is [0,9,2], osd.1 is also in probe set,
+  // so it death makes `affected_by_map()` at primary to return
+  // `true` causing bump up of lpr and peering reset but without
+  // new past interval.
+  {
+    mark_osd_down(1);
+    EXPECT_EQ(osdmap->get_epoch(), 6);
+    EXPECT_EQ(get_ps(0)->get_last_peering_reset(), 5);
+    EXPECT_EQ(get_ps(9)->get_last_peering_reset(), 5);
+    EXPECT_EQ(get_ps(2)->get_last_peering_reset(), 5);
+    test_event_advance_map();
+    test_event_activate_map();
+    bool cont;
+    do {
+      cont = dispatch_specific_osd(0);
+      cont |= dispatch_specific_osd(9);
+    } while (cont);
+    // here is the asymmetry between primary and replicas in terms
+    // of lpr (see commit d1e95134d8af7e4a0ea49ee03d4bb1878ecdc981).
+    // however, it cannot lead to stall b/c of dropping response
+    // to the old (generated at e5) MOSDPGQuery as primary repeats
+    // it after Reset, even without new interval.
+    EXPECT_EQ(get_ps(0)->get_last_peering_reset(), 6);
+    EXPECT_EQ(get_ps(9)->get_last_peering_reset(), 5);
+    EXPECT_EQ(get_ps(2)->get_last_peering_reset(), 5);
+
+    // now primary is temporarily stuck in Started/Primary/Peering/GetInfo
+  }
+
+  dout(0) << "= end of the network delay =" << dendl;
+  {
+    bool cont;
+    do {
+      cont = dispatch_specific_osd(2);
+    } while (cont);
+    test_peering();
+    verify_all_active_clean();
+  }
 }
 
 // ============================================================================
