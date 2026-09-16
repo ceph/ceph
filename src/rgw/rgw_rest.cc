@@ -5,6 +5,10 @@
 #include <errno.h>
 #include <limits.h>
 
+#include <algorithm>
+#include <ranges>
+#include <string_view>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 #include "ceph_ver.h"
@@ -1920,16 +1924,15 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj, optional_yield y)
 
 void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
 {
+  register_resource(std::move(resource), std::unique_ptr<RGWRESTMgr> { mgr });
+}
+
+void RGWRESTMgr::register_resource(string resource, std::unique_ptr<RGWRESTMgr> mgr)
+{
   string r = "/";
   r.append(resource);
 
-  /* do we have a resource manager registered for this entry point? */
-  map<string, RGWRESTMgr *>::iterator iter = resource_mgrs.find(r);
-  if (iter != resource_mgrs.end()) {
-    delete iter->second;
-  }
-  resource_mgrs[r] = mgr;
-  resources_by_size.insert(pair<size_t, string>(r.size(), r));
+  add_resource_route(r, std::move(mgr));
 
   /* now build default resource managers for the path (instead of nested entry points)
    * e.g., if the entry point is /auth/v1.0/ then we'd want to create a default
@@ -1941,10 +1944,9 @@ void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
   while (pos != r.size() - 1 && pos != string::npos) {
     string s = r.substr(0, pos);
 
-    iter = resource_mgrs.find(s);
-    if (iter == resource_mgrs.end()) { /* only register it if one does not exist */
-      resource_mgrs[s] = new RGWRESTMgr; /* a default do-nothing manager */
-      resources_by_size.insert(pair<size_t, string>(s.size(), s));
+    const auto route = std::ranges::find(resource_mgrs, s, &resource_route::resource);
+    if (std::end(resource_mgrs) == route) {
+      add_resource_route(s, std::make_unique<RGWRESTMgr>());
     }
 
     pos = r.find('/', pos + 1);
@@ -1953,25 +1955,44 @@ void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
 
 void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
 {
-  delete default_mgr;
-  default_mgr = mgr;
+  register_default_mgr(std::unique_ptr<RGWRESTMgr> { mgr });
+}
+
+void RGWRESTMgr::register_default_mgr(std::unique_ptr<RGWRESTMgr> mgr)
+{
+  default_mgr = std::move(mgr);
+}
+
+void RGWRESTMgr::add_resource_route(std::string resource, std::unique_ptr<RGWRESTMgr> mgr)
+{
+  const auto route = std::ranges::find(resource_mgrs, resource, &resource_route::resource);
+  if (std::end(resource_mgrs) != route) {
+    route->mgr = std::move(mgr);
+    return;
+  }
+
+  resource_mgrs.push_back(resource_route {
+    .resource = std::move(resource),
+    .mgr = std::move(mgr),
+  });
+
+  std::ranges::sort(resource_mgrs, [] (const auto& lhs, const auto& rhs) {
+    return lhs.resource.size() > rhs.resource.size();
+  });
 }
 
 RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
-                                         const std::string& uri,
+                                         const std::string_view uri,
                                          std::string* const out_uri)
 {
   *out_uri = uri;
 
-  multimap<size_t, string>::reverse_iterator iter;
-
-  for (iter = resources_by_size.rbegin(); iter != resources_by_size.rend(); ++iter) {
-    string& resource = iter->second;
-    if (uri.compare(0, iter->first, resource) == 0 &&
-	(uri.size() == iter->first ||
-	 uri[iter->first] == '/')) {
-      std::string suffix = uri.substr(iter->first);
-      return resource_mgrs[resource]->get_resource_mgr(s, suffix, out_uri);
+  for (const auto& route : resource_mgrs) {
+    const std::string_view resource = route.resource;
+    if (uri.starts_with(resource) &&
+        (uri.size() == resource.size() || '/' == uri[resource.size()])) {
+      const auto suffix = uri.substr(resource.size());
+      return route.mgr->get_resource_mgr(s, suffix, out_uri);
     }
   }
 
@@ -1991,14 +2012,7 @@ void RGWREST::register_x_headers(const string& s_headers)
   }
 }
 
-RGWRESTMgr::~RGWRESTMgr()
-{
-  map<string, RGWRESTMgr *>::iterator iter;
-  for (iter = resource_mgrs.begin(); iter != resource_mgrs.end(); ++iter) {
-    delete iter->second;
-  }
-  delete default_mgr;
-}
+RGWRESTMgr::~RGWRESTMgr() = default;
 
 int rgw_rest_transform_s3_vhost_style(req_state* s)
 {
