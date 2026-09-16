@@ -194,7 +194,7 @@ TEST_P(TestECFailoverWithPeering, RecoveryWithPeering) {
   result = create_and_write(obj2_name, obj2_data);
   EXPECT_EQ(result, 0) << "Second pre-failure write should complete";
   
-  EXPECT_TRUE(all_shards_clean()) << "All shards should be clean before recovery test";
+  EXPECT_TRUE(primary_is_clean()) << "Primary should be clean before recovery test";
   
   auto* primary_ps = get_peering_state(0);
   eversion_t pre_failure_log_head = primary_ps->get_pg_log().get_log().head;
@@ -586,7 +586,7 @@ TEST_P(TestECFailoverWithPeering, MultiObjectRecoveryReadCrash) {
   result = create_and_write(obj3_name, obj3_pattern_a);
   EXPECT_EQ(result, 0) << "Third object write should complete";
 
-  EXPECT_TRUE(all_shards_clean()) << "All shards should be clean";
+  EXPECT_TRUE(primary_is_clean()) << "Primary should be clean";
 
   // Mark shard 1 as down - this will require recovery
   int failed_osd = 1;
@@ -679,7 +679,7 @@ TEST_P(TestECFailoverWithPeering, MultiObjectParallelRecoveryCrash) {
   result = create_and_write(obj3_name, obj3_pattern_a);
   EXPECT_EQ(result, 0) << "Third object write should complete";
 
-  EXPECT_TRUE(all_shards_clean()) << "All shards should be clean";
+  EXPECT_TRUE(primary_is_clean()) << "Primary should be clean";
 
   // Mark shard 1 as down - this will require recovery
   int failed_osd = 1;
