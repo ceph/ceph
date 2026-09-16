@@ -1,14 +1,14 @@
-<ng-container *ngIf="selection">
+@if (selection) {
   <table
     class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
     data-testid="config-details-table"
-  >
+    >
     <tbody>
       <tr>
         <td
           i18n
           class="bold w-25"
-        >
+          >
           Name
         </td>
         <td class="w-75">{{ selection.name }}</td>
@@ -17,7 +17,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Description
         </td>
         <td>{{ selection.desc }}</td>
@@ -26,7 +26,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Long description
         </td>
         <td>{{ selection.long_desc }}</td>
@@ -35,20 +35,22 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Current values
         </td>
         <td>
-          <span *ngFor="let conf of selection.value; last as isLast">
-            {{ conf.section }}: {{ conf.value }}{{ !isLast ? ',' : '' }}<br />
-          </span>
+          @for (conf of selection.value; track conf; let isLast = $last) {
+            <span>
+              {{ conf.section }}: {{ conf.value }}{{ !isLast ? ',' : '' }}<br />
+            </span>
+          }
         </td>
       </tr>
       <tr>
         <td
           i18n
           class="bold"
-        >
+          >
           Default
         </td>
         <td>{{ selection.default }}</td>
@@ -57,7 +59,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Daemon default
         </td>
         <td>{{ selection.daemon_default }}</td>
@@ -66,7 +68,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Type
         </td>
         <td>{{ selection.type }}</td>
@@ -75,7 +77,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Min
         </td>
         <td>{{ selection.min }}</td>
@@ -84,7 +86,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Max
         </td>
         <td>{{ selection.max }}</td>
@@ -93,40 +95,45 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Flags
         </td>
         <td>
-          <span *ngFor="let flag of selection.flags">
-            <span title="{{ flags[flag] }}">
-              <cds-tag class="tag-dark me-2">{{ flag | uppercase }}</cds-tag>
+          @for (flag of selection.flags; track flag) {
+            <span>
+              <span title="{{ flags[flag] }}">
+                <cds-tag class="tag-dark me-2">{{ flag | uppercase }}</cds-tag>
+              </span>
             </span>
-          </span>
+          }
         </td>
       </tr>
       <tr>
         <td
           i18n
           class="bold"
-        >
+          >
           Services
         </td>
         <td>
-          <span *ngFor="let service of selection.services">
-            <cds-tag
-              *ngIf="service"
-              class="tag-dark me-2"
-            >
-              {{ service }}
-            </cds-tag>
-          </span>
+          @for (service of selection.services; track service) {
+            <span>
+              @if (service) {
+                <cds-tag
+                  class="tag-dark me-2"
+                  >
+                  {{ service }}
+                </cds-tag>
+              }
+            </span>
+          }
         </td>
       </tr>
       <tr>
         <td
           i18n
           class="bold"
-        >
+          >
           Source
         </td>
         <td>{{ selection.source }}</td>
@@ -135,7 +142,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Level
         </td>
         <td>{{ selection.level }}</td>
@@ -144,7 +151,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Can be updated at runtime (editable)
         </td>
         <td>{{ selection.can_update_at_runtime | booleanText }}</td>
@@ -153,7 +160,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Tags
         </td>
         <td>{{ selection.tags }}</td>
@@ -162,7 +169,7 @@
         <td
           i18n
           class="bold"
-        >
+          >
           Enum values
         </td>
         <td>{{ selection.enum_values }}</td>
@@ -171,11 +178,11 @@
         <td
           i18n
           class="bold"
-        >
+          >
           See also
         </td>
         <td>{{ selection.see_also }}</td>
       </tr>
     </tbody>
   </table>
-</ng-container>
+}

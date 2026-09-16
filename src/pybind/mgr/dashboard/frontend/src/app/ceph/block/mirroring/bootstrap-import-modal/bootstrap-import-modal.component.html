@@ -55,12 +55,13 @@
           />
         </cds-text-label>
         <ng-template #siteNameError>
-          <span
-            *ngIf="importBootstrapForm.showError('siteName', formDir, 'required')"
-            class="invalid-feedback"
-            i18n
-            >This field is required.</span
-          >
+          @if (importBootstrapForm.showError('siteName', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
 
@@ -72,12 +73,11 @@
           id="direction"
           formControlName="direction"
         >
-          <option
-            *ngFor="let direction of directions"
-            [value]="direction.key"
-          >
-            {{ direction.desc }}
-          </option>
+          @for (direction of directions; track direction) {
+            <option [value]="direction.key">
+              {{ direction.desc }}
+            </option>
+          }
         </cds-select>
       </div>
 
@@ -92,7 +92,7 @@
             i18n
             >Pools</label
           >
-          <ng-container *ngFor="let pool of pools">
+          @for (pool of pools; track pool) {
             <cds-checkbox
               i18n-label
               [id]="pool.name"
@@ -101,14 +101,15 @@
             >
               {{ pool.name }}
             </cds-checkbox>
-          </ng-container>
+          }
         </fieldset>
-        <span
-          *ngIf="importBootstrapForm.showError('pools', formDir, 'requirePool')"
-          class="invalid-feedback"
-          i18n
-          >At least one pool is required.</span
-        >
+        @if (importBootstrapForm.showError('pools', formDir, 'requirePool')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >At least one pool is required.</span
+          >
+        }
       </div>
 
       <div class="form-item">
@@ -138,18 +139,20 @@
           </textarea>
         </cds-textarea-label>
         <ng-template #tokenError>
-          <span
-            *ngIf="importBootstrapForm.showError('token', formDir, 'required')"
-            class="invalid-feedback"
-            i18n
-            >This field is required.</span
-          >
-          <span
-            *ngIf="importBootstrapForm.showError('token', formDir, 'invalidToken')"
-            class="invalid-feedback"
-            i18n
-            >The token is invalid.</span
-          >
+          @if (importBootstrapForm.showError('token', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (importBootstrapForm.showError('token', formDir, 'invalidToken')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >The token is invalid.</span
+            >
+          }
         </ng-template>
       </div>
     </form>

@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, Input, OnChanges, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { PieChartOptions, ChartTabularData, ChartsModule } from '@carbon/charts-angular';
 
@@ -8,7 +8,7 @@ import { PieChartOptions, ChartTabularData, ChartsModule } from '@carbon/charts-
   styleUrls: ['./pie-chart.component.scss'],
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChartsModule, CommonModule]
+  imports: [ChartsModule]
 })
 export class PieChartComponent implements OnChanges {
   @Input() data!: { group: string; value: number }[];

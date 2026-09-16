@@ -25,21 +25,16 @@
               max="1"
               [value]="currentWeight"
             />
-            <span
-              class="invalid-feedback"
-              *ngIf="weight.errors"
-            >
-              <span
-                *ngIf="weight.errors?.required"
-                i18n
-                >This field is required.</span
-              >
-              <span
-                *ngIf="weight.errors?.max || weight.errors?.min"
-                i18n
-                >The value needs to be between 0 and 1.</span
-              >
-            </span>
+            @if (weight.errors) {
+              <span class="invalid-feedback">
+                @if (weight.errors?.required) {
+                  <span i18n>This field is required.</span>
+                }
+                @if (weight.errors?.max || weight.errors?.min) {
+                  <span i18n>The value needs to be between 0 and 1.</span>
+                }
+              </span>
+            }
           </div>
         </div>
       </div>

@@ -60,14 +60,15 @@
 </ng-template>
 
 <ng-template #grafanaContent>
-  <cd-grafana
-    i18n-title
-    title="CephFS Overview"
-    [grafanaPath]="'ceph-filesystem-overview?'"
-    [type]="'metrics'"
-    uid="718Bruins"
-    *ngIf="permissions.grafana.read"
-    grafanaStyle="three"
-  >
-  </cd-grafana>
+  @if (permissions.grafana.read) {
+    <cd-grafana
+      i18n-title
+      title="CephFS Overview"
+      [grafanaPath]="'ceph-filesystem-overview?'"
+      [type]="'metrics'"
+      uid="718Bruins"
+      grafanaStyle="three"
+    >
+    </cd-grafana>
+  }
 </ng-template>

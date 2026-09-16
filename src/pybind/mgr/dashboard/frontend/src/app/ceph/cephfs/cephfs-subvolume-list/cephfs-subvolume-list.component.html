@@ -1,15 +1,16 @@
 <div class="row">
-  <div
-    class="col-sm-2"
-    *ngIf="subVolumeGroups$ | async as subVolumeGroups"
-  >
-    <cd-vertical-navigation
-      title="Groups"
-      [items]="subvolumeGroupList"
-      inputIdentifier="group-filter"
-      (emitActiveItem)="selectSubVolumeGroup($event)"
-    ></cd-vertical-navigation>
-  </div>
+  @if (subVolumeGroups$ | async; as subVolumeGroups) {
+    <div
+      class="col-sm-2"
+      >
+      <cd-vertical-navigation
+        title="Groups"
+        [items]="subvolumeGroupList"
+        inputIdentifier="group-filter"
+        (emitActiveItem)="selectSubVolumeGroup($event)"
+      ></cd-vertical-navigation>
+    </div>
+  }
   <div class="col-10 vertical-line">
     <cd-table
       [data]="subVolumes$ | async"
@@ -19,7 +20,7 @@
       [hasDetails]="false"
       (fetchData)="fetchData()"
       (updateSelection)="updateSelection($event)"
-    >
+      >
       <div class="table-actions">
         <cd-table-actions
           [permission]="permissions.cephfs"
@@ -27,7 +28,7 @@
           class="btn-group"
           id="cephfs-subvolume-actions"
           [tableActions]="tableActions"
-        >
+          >
         </cd-table-actions>
       </div>
     </cd-table>
@@ -37,109 +38,115 @@
 <ng-template
   #quotaUsageTpl
   let-row="data.row"
->
-  <cd-usage-bar
-    *ngIf="row.info.bytes_pcent && row.info.bytes_pcent !== 'undefined'; else noLimitTpl"
-    [total]="row.info.bytes_quota"
-    [used]="row.info.bytes_used"
-    [title]="row.name"
-    decimals="2"
-  ></cd-usage-bar>
-
-  <ng-template #noLimitTpl>
-    <span
-      ngbTooltip="Quota limit is not set"
-      *ngIf="row.info.bytes_pcent === 'undefined'"
-      i18n-ngbTooltip
-    >
-      {{ row.info.bytes_used | dimlessBinary }}</span
-    >
-  </ng-template>
-</ng-template>
-
-<ng-template
-  #typeTpl
-  let-value="data.value"
->
-  <cd-label [value]="value"></cd-label>
-</ng-template>
-
-<ng-template
-  #modeToHumanReadableTpl
-  let-value="data.value"
->
-  <cds-tag
-    *ngFor="let result of value | octalToHumanReadable"
-    [class]="result.class"
-    [ngbTooltip]="result.toolTip"
   >
-    {{ result.content }}
-  </cds-tag>
-</ng-template>
+  @if (row.info.bytes_pcent && row.info.bytes_pcent !== 'undefined') {
+    <cd-usage-bar
+      [total]="row.info.bytes_quota"
+      [used]="row.info.bytes_used"
+      [title]="row.name"
+      decimals="2"
+    ></cd-usage-bar>
+  } @else {
+    @if (row.info.bytes_pcent === 'undefined') {
+      <span
+        ngbTooltip="Quota limit is not set"
+        i18n-ngbTooltip
+        >
+        {{ row.info.bytes_used | dimlessBinary }}</span
+        >
+      }
+    }
 
-<ng-template
-  #nameTpl
-  let-row="data.row"
->
-  <span class="fw-bold">{{ row.name }}</span>
-
-  <span *ngIf="row?.info?.state === 'complete'; else snapshotRetainedTpl">
-    <i
-      [ngClass]="[icons.success, icons.size24]"
-      ngbTooltip="{{ row.name }} is ready to use"
-      class="text-success"
-    ></i>
-  </span>
-
-  <ng-template #snapshotRetainedTpl>
-    <i
-      [ngClass]="[icons.warning, icons.size24]"
-      class="text-warning"
-      ngbTooltip="{{ row.name }} is removed after retaining the snapshots"
-    ></i>
   </ng-template>
 
-  <cd-label
-    [value]="row?.info?.type"
-    *ngIf="row?.info?.type !== 'subvolume'"
-  ></cd-label>
+  <ng-template
+    #typeTpl
+    let-value="data.value"
+    >
+    <cd-label [value]="value"></cd-label>
+  </ng-template>
 
-  <cd-label
-    value="namespaced"
-    *ngIf="row?.info?.pool_namespace"
-    [tooltipText]="row?.info?.pool_namespace"
-  ></cd-label>
-</ng-template>
+  <ng-template
+    #modeToHumanReadableTpl
+    let-value="data.value"
+    >
+    @for (result of value | octalToHumanReadable; track result) {
+      <cds-tag
+        [class]="result.class"
+        [ngbTooltip]="result.toolTip"
+        >
+        {{ result.content }}
+      </cds-tag>
+    }
+  </ng-template>
 
-<ng-template
-  #removeTmpl
-  let-form="form"
->
-  <ng-container [formGroup]="form">
-    <ng-container formGroupName="child">
-      <cd-alert-panel
-        *ngIf="errorMessage.length > 1"
-        type="error"
-      >
-        {{ errorMessage }}
-      </cd-alert-panel>
-      <div class="form-item cds-pt-3">
-        <cds-checkbox
-          id="retainSnapshots"
-          formControlName="retainSnapshots"
-          autofocus
-          [required]="true"
-          modal-primary-focus
-          ariaLabel="confirmation"
-          i18n
-          >Retain snapshots
+  <ng-template
+    #nameTpl
+    let-row="data.row"
+    >
+    <span class="fw-bold">{{ row.name }}</span>
+
+    @if (row?.info?.state === 'complete') {
+      <span>
+        <i
+          [ngClass]="[icons.success, icons.size24]"
+          ngbTooltip="{{ row.name }} is ready to use"
+          class="text-success"
+        ></i>
+      </span>
+    } @else {
+      <i
+        [ngClass]="[icons.warning, icons.size24]"
+        class="text-warning"
+        ngbTooltip="{{ row.name }} is removed after retaining the snapshots"
+      ></i>
+    }
+
+
+    @if (row?.info?.type !== 'subvolume') {
+      <cd-label
+        [value]="row?.info?.type"
+      ></cd-label>
+    }
+
+    @if (row?.info?.pool_namespace) {
+      <cd-label
+        value="namespaced"
+        [tooltipText]="row?.info?.pool_namespace"
+      ></cd-label>
+    }
+  </ng-template>
+
+  <ng-template
+    #removeTmpl
+    let-form="form"
+    >
+    <ng-container [formGroup]="form">
+      <ng-container formGroupName="child">
+        @if (errorMessage.length > 1) {
+          <cd-alert-panel
+            type="error"
+            >
+            {{ errorMessage }}
+          </cd-alert-panel>
+        }
+        <div class="form-item cds-pt-3">
+          <cds-checkbox
+            id="retainSnapshots"
+            formControlName="retainSnapshots"
+            autofocus
+            [required]="true"
+            modal-primary-focus
+            ariaLabel="confirmation"
+            i18n
+            >Retain snapshots
           <cd-help-text
             >The subvolume can be removed retaining existing snapshots using this option. If
             snapshots are retained, the subvolume is considered empty for all operations not
             involving the retained snapshots.</cd-help-text
           >
         </cds-checkbox>
-      </div>
-    </ng-container>
-  </ng-container>
-</ng-template>
+          </div>
+        </ng-container>
+      </ng-container>
+    </ng-template>

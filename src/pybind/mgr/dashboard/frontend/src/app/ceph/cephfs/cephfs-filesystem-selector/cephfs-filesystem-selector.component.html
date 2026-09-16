@@ -2,7 +2,7 @@
   <div
     class="cds--type-heading-03"
     i18n
-  >
+    >
     Select filesystem
   </div>
 </div>
@@ -11,11 +11,11 @@
     <div
       [cdsStack]="'vertical'"
       [gap]="2"
-    >
+      >
       <div
         class="cds--type-heading-compact-01"
         i18n
-      >
+        >
         Selection requirements
       </div>
       <ul class="cds--type-body-compact-01 requirements-list">
@@ -36,16 +36,16 @@
     headerTitle="Select target filesystem"
     headerDescription="Choose the filesystem that will receive mirrored data from the local cluster."
     (updateSelection)="updateSelection($event)"
-  >
+    >
     <ng-template
       #mdsStatus
       let-value="data.value"
       let-row="data.row"
-    >
+      >
       <div
         [cdsStack]="'horizontal'"
         gap="2"
-      >
+        >
         @if (value === 'Active') {
           <cd-icon type="success"></cd-icon>
         }
@@ -63,11 +63,11 @@
       #mirroringStatus
       let-value="data.value"
       let-row="data.row"
-    >
+      >
       <div
         [cdsStack]="'horizontal'"
         gap="2"
-      >
+        >
         @if (value === 'Enabled') {
           <cd-icon type="success"></cd-icon>
         }
@@ -81,20 +81,20 @@
     <ng-template
       let-row="row"
       let-col="col"
-    >
-      <ng-container [ngSwitch]="col.prop">
-        <ng-container *ngSwitchCase="'pools'">
+      >
+      @switch (col.prop) {
+        @case ('pools') {
           @for (pool of row.pools; track $index; let last = $last) {
             <cd-badge>{{ pool }}</cd-badge>
             @if (!last) {
               <span>, </span>
             }
           }
-        </ng-container>
-        <ng-container *ngSwitchDefault>
+        }
+        @default {
           {{ row[col.prop] }}
-        </ng-container>
-      </ng-container>
+        }
+      }
     </ng-template>
   </cd-table>
 </div>

@@ -5,15 +5,15 @@
   [useCssGrid]="true"
   [narrow]="true"
   [fullWidth]="true"
->
+  >
   <div
     cdsCol
     [columnNumbers]="{ sm: 4, md: 8 }"
-  >
+    >
     <div
       class="cds-mt-3 form-item"
       cdsRow
-    >
+      >
       <cds-combo-box
         type="single"
         label="Selected Gateway Group"
@@ -23,13 +23,13 @@
         (selected)="onGroupSelection($event)"
         (clear)="onGroupClear()"
         [disabled]="gwGroupsEmpty"
-      >
+        >
         <cds-dropdown-list></cds-dropdown-list>
       </cds-combo-box>
     </div>
   </div>
 </div>
-<ng-container *ngIf="subsystems$ | async as subsystems">
+@if (subsystems$ | async; as subsystems) {
   <cd-table
     #table
     [data]="subsystems"
@@ -42,38 +42,37 @@
     i18n-emptyStateTitle
     emptyStateMessage="Subsystems group NVMe namespaces and manage host access. Create a subsystem to start mapping NVMe volumes to hosts."
     i18n-emptyStateMessage
-  >
+    >
     <div class="table-actions">
       <cd-table-actions
         [permission]="permissions.nvmeof"
         [selection]="selection"
         class="btn-group"
         [tableActions]="tableActions"
-      >
+        >
       </cd-table-actions>
     </div>
-
     <cd-nvmeof-subsystems-details
       *cdTableDetail
       [selection]="expandedRow"
       [permissions]="permissions"
       [group]="expandedRow?.gw_group"
-    >
+      >
     </cd-nvmeof-subsystems-details>
   </cd-table>
-</ng-container>
+}
 
 <ng-template
   #customTableItemTemplate
   let-value="data.value"
   let-row="data.row"
->
+  >
   <a
     cdsLink
     [routerLink]="['/block/nvmeof/subsystems', value]"
     [queryParams]="{ group: row.gw_group }"
     (click)="$event.stopPropagation()"
-  >
+    >
     {{ value }}
   </a>
 </ng-template>
@@ -81,11 +80,11 @@
 <ng-template
   #authenticationTpl
   let-row="data.row"
->
+  >
   <div
     [cdsStack]="'horizontal'"
     gap="4"
-  >
+    >
     @if (row.auth === authType.NO_AUTH) {
       <cd-icon type="warning"></cd-icon>
     } @else {
@@ -98,29 +97,29 @@
 <ng-template
   #encryptionTpl
   let-row="data.row"
->
+  >
   <div
     [cdsStack]="'horizontal'"
     gap="4"
-  >
+    >
     @if (row.enable_ha) {
       <cd-icon type="success"></cd-icon>
       <span
         class="cds-ml-3"
         i18n
         >Enabled</span
-      >
-    } @else {
-      <cd-icon type="error"></cd-icon>
-      <span
-        class="cds-ml-3"
-        i18n
-        >Disabled</span
-      >
-    }
-  </div>
-</ng-template>
+        >
+      } @else {
+        <cd-icon type="error"></cd-icon>
+        <span
+          class="cds-ml-3"
+          i18n
+          >Disabled</span
+          >
+        }
+      </div>
+    </ng-template>
 
-<ng-template #deleteTpl></ng-template>
+    <ng-template #deleteTpl></ng-template>
 
-<router-outlet name="modal"></router-outlet>
+    <router-outlet name="modal"></router-outlet>
