@@ -8,6 +8,7 @@ from ..services.rgw_client import RgwClient, RgwMultisite
 from ..tests import ControllerTestCase, RgwStub
 
 
+@patch('dashboard.services.rgw_client._is_reachable', Mock(return_value=True))
 class RgwControllerTestCase(ControllerTestCase):
     @classmethod
     def setup_server(cls):
@@ -66,10 +67,14 @@ class RgwControllerTestCase(ControllerTestCase):
         self.assertJsonBody({'available': False, 'message': 'No RGW service is running.'})
 
 
+@patch('dashboard.services.rgw_client._is_reachable', Mock(return_value=True))
 class RgwDaemonControllerTestCase(ControllerTestCase):
     @classmethod
     def setup_server(cls):
         cls.setup_controllers([RgwDaemon], '/test')
+
+    def setUp(self) -> None:
+        RgwClient.drop_instance()
 
     @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
         return_value='dummy_admin'))
@@ -272,6 +277,8 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
         }])
 
         # Change the default zonegroup and test if the correct daemon gets picked up
+        # once the cached client is dropped
+        RgwClient.drop_instance()
         RgwMultisite().get_all_zonegroups_info.return_value = {'default_zonegroup': 'zonegroup1-id'}
         mgr.list_servers.return_value = list_servers_return_value
         mgr.get_metadata.side_effect = metadata_return_values
