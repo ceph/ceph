@@ -192,6 +192,16 @@ public:
       }
     }
 
+    // Scrub all objects before shutting down infrastructure (optimized EC pools only)
+    // This verifies that all objects remain consistent throughout the test
+    // Skip legacy EC pools (without FLAG_EC_OPTIMIZATIONS) as they have different behavior
+    if (pool_type == EC &&
+        (pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) &&
+        !osd_fixtures.empty() &&
+        !HasFailure()) {
+      scrub_all_objects();
+    }
+
     if (op_tracker) {
       op_tracker->on_shutdown();
       op_tracker.reset();
@@ -889,6 +899,19 @@ public:
     int shard);
 
   /**
+   * Scrub all objects in the collection during teardown.
+   *
+   * This utility method:
+   * 1. Enumerates all objects in the primary OSD's collection
+   * 2. Scrubs each object found
+   * 3. Reports any corruption detected
+   *
+   * This is called automatically during TearDown to verify that all
+   * objects remain consistent throughout the test.
+   */
+  void scrub_all_objects();
+
+  /**
    * Scrub an object and verify it has no corruption.
    *
    * This utility method:
@@ -903,7 +926,7 @@ public:
    * @param obj_name Name of the object to scrub
    * @return true if corruption detected, false if object is consistent
    */
-  bool scrub_object(const std::string& obj_name);
+  bool scrub_object(const std::string& obj_name, bool skip_verify = false);
 
   /**
    * Corrupt the data for a specific shard of an object.
