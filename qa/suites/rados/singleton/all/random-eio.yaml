@@ -37,6 +37,9 @@ tasks:
       time: 360
       type: rand
       objectsize: 1048576
+      # guardrail: cap the populate run at 32GB (96GB raw on 6x90GB OSDs),
+      # so that its size does not scale with the client's speed
+      max_objects: 32768
       pool: test
       create_pool: false
   - exec:
