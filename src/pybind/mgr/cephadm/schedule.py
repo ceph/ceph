@@ -170,7 +170,13 @@ class DaemonPlacement(NamedTuple):
         if not upgrade_in_progress:
             if self.ports:
                 if self.ports != dd.ports and dd.ports:
-                    return False
+                    # If the existing daemon ports are a leading subset of the
+                    # new spec ports, the extra ports were added as new defaults
+                    # (e.g. after an upgrade).  Treat the daemon as still matching
+                    # so we avoid a spurious redeploy purely because new default
+                    # ports appeared in the spec.
+                    if self.ports[:len(dd.ports)] != dd.ports:
+                        return False
                 if self.ip and dd.ip and self.ip != dd.ip:
                     return False
         return True
