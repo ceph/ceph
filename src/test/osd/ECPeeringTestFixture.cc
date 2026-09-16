@@ -51,6 +51,9 @@ ECPeeringTestFixture::ECPeeringTestFixture()
 }
 
 void ECPeeringTestFixture::SetUp() {
+  // Save the initial config state so we can restore it in TearDown()
+  initial_config_values_ = g_ceph_context->_conf.get_config_values();
+  
   PGBackendTestFixture::SetUp();
 
   // Install a pg_upmap so that shard N is always on OSD N.
@@ -164,6 +167,9 @@ void ECPeeringTestFixture::SetUp() {
 }
 
 void ECPeeringTestFixture::TearDown() {
+  // Restore the initial config state to undo any set_config() calls made during the test
+  g_ceph_context->_conf.set_config_values(initial_config_values_);
+  
   // OSD fixtures (which contain peering states, contexts, listeners, and dpps)
   // are cleared by the base class
   PGBackendTestFixture::TearDown();
