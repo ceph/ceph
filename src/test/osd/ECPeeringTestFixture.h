@@ -31,22 +31,12 @@ protected:
   class ShardDpp : public NoDoutPrefix {
   public:
     ECPeeringTestFixture *fixture;
-    spg_t spgid;
-
-    ShardDpp(CephContext *cct, ECPeeringTestFixture *f, spg_t id)
-      : NoDoutPrefix(cct, ceph_subsys_osd), fixture(f), spgid(id) {}
-
+    TestPG *test_pg;  // Direct pointer to the TestPG this DPP belongs to
+    ShardDpp(CephContext *cct, ECPeeringTestFixture *f, TestPG *tp)
+      : NoDoutPrefix(cct, ceph_subsys_osd), fixture(f), test_pg(tp) {}
+    
     std::ostream& gen_prefix(std::ostream& out) const override;
   };
-
-  // All peering state is stored in a single set of maps keyed by spg_t so
-  // that parent and child PG shards are handled uniformly (e.g. new_epoch()
-  // iterates once over all listeners regardless of which PG they belong to).
-  // The parent PG uses pgid; the child PG uses child_pgid (set by split_pg()).
-  std::map<spg_t, std::unique_ptr<PeeringState>>       pg_states;
-  std::map<spg_t, std::unique_ptr<PeeringCtx>>         pg_ctxs;
-  std::map<spg_t, std::unique_ptr<MockPeeringListener>> pg_listeners;
-  std::map<spg_t, std::unique_ptr<ShardDpp>>           pg_dpps;
 
   // Park recovery reservation grants so peering completes without launching
   // recovery (a grant delivered into a later interval hits Reset and aborts).
@@ -61,25 +51,37 @@ protected:
 public:
   ECPeeringTestFixture();
 
-  int queue_transaction_helper(int shard, ObjectStore::Transaction&& t);
+  int queue_transaction_helper(TestPG* test_pg, ObjectStore::Transaction&& t);
   
   void SetUp() override;
   void TearDown() override;
-  
-  PeeringState* create_peering_state(int shard);
-  PeeringState* create_child_peering_state(int shard, unsigned split_bits);
 
+  // No-arg variants delegate to the current EventLoop TestPG context
+  PeeringState* get_peering_state() {
+    return get_test_pg()->get_peering_state();
+  }
+  
+  PeeringCtx* get_peering_ctx() {
+    return get_test_pg()->get_peering_ctx();
+  }
+  
+  MockPeeringListener* get_peering_listener() {
+    return get_test_pg()->get_peering_listener();
+  }
+
+  // Shard-indexed accessor overloads
+  TestPG* find_test_pg_for_shard(int shard);
   PeeringState* get_peering_state(int shard);
   PeeringCtx* get_peering_ctx(int shard);
   MockPeeringListener* get_peering_listener(int shard);
-  
+
   int get_primary_shard_from_osdmap() const;
 
   MockPGBackendListener* get_primary_listener() override;
   PGBackend* get_primary_backend() override;
   
-  void init_peering(bool dne = false);
-  void event_initialize();
+  void init_peering(TestPG *test_pg);
+  void advance_map_impl();
   void event_advance_map();
   void event_activate_map();
   
@@ -90,8 +92,7 @@ public:
   void set_target_pg_log_entries(unsigned n);
 
   // Park recovery reservation grants so peering completes (peer_missing is
-  // populated) without launching recovery.  A grant delivered across a later
-  // interval change would hit a PeeringState in Reset and abort.
+  // populated) without launching recovery.
   void set_stall_recovery_reservations(bool v);
 
   eversion_t compute_submit_trim_to() override;
@@ -99,20 +100,47 @@ public:
   void on_primary_write_committed(const eversion_t& at_version) override;
 
   // Double pg_num and split the fixture PG into itself (parent, seed 0) and a
-  // child (seed 1).  Objects route to parent or child by hash (set_object_hash()).
-  // Returns the child pg_t.
+  // child (seed 1).  Returns the child pg_t.
   pg_t split_pg();
-
+  PeeringState* create_child_peering_state(int shard, unsigned split_bits);
   PeeringState* get_child_peering_state(int shard);
   pg_t get_child_pgid() const { return child_pgid; }
 
-private:
-  void dispatch_buffered_messages(spg_t spgid, PeeringCtx* ctx);
+  /**
+   * ensure_osd_fixture_exists - Create OSD fixture if it doesn't exist
+   *
+   * This is called in response to OSDMap updates to create fixtures for
+   * OSDs that are in the acting set but don't have fixtures yet.
+   *
+   * @param osd The OSD number to ensure exists
+   */
+  void ensure_osd_fixture_exists(int osd);
+  
+  /**
+   * ensure_test_pg_exists - Create TestPG if it doesn't exist
+   *
+   * This is called in response to OSDMap updates to create TestPGs for
+   * OSDs that are in the acting set but don't have TestPGs yet.
+   *
+   * @param osd The OSD number
+   * @param shard The shard number
+   */
+  void ensure_test_pg_exists(pg_shard_t pg_whoami);
 
-  // Shared tail of create_peering_state() and create_child_peering_state():
-  // constructs the PeeringState, wires pl->ps / pl->ctx, sets backend
-  // predicates, and stores everything in the unified pg_* maps.
-  PeeringState* create_peering_state_common(spg_t spgid);
+protected:
+  /**
+   * Override to defer TestPG creation until OSD map publication.
+   * TestPGs will be created lazily in event_advance_map() via ensure_test_pg_exists().
+   */
+  bool should_create_test_pgs_upfront() const override { return false; }
+
+private:
+  void dispatch_buffered_messages(int osd, PeeringCtx* ctx);
+
+  // Shared tail of ensure_test_pg_exists() and create_child_peering_state():
+  // test_pg->peering_listener must already be set by the caller.  Constructs
+  // the PeeringState, wires pl->ps / pl->ctx, and sets backend predicates.
+  void create_peering_state_common(TestPG* test_pg, spg_t spgid, pg_shard_t pg_whoami);
 
   // Core of new_epoch(): checks up_thru/pg_temp for the given PG and, if any
   // work was found (or if_required is false), bumps the osdmap epoch and
@@ -123,18 +151,25 @@ private:
 
 public:
 
-  void update_osdmap_with_peering(
-    std::shared_ptr<OSDMap> new_osdmap,
-    std::optional<pg_shard_t> new_primary = std::nullopt);
+  void update_osdmap_with_peering(std::shared_ptr<OSDMap> new_osdmap);
 
   void new_epoch_loop();
   bool new_epoch(bool if_required = false);
 
-  void run_first_peering();
+  // OSDMap manipulation helpers - these create a new epoch and trigger peering
   
+  /**
+   * Mark an OSD as down (exists but not UP).
+   * Creates a new OSDMap epoch and triggers peering.
+   */
   void mark_osd_down(int osd_id);
   void mark_osd_up(int osd_id);
   void mark_osds_down(const std::vector<int>& osd_ids);
+
+  /**
+   * Advance to a new epoch without changing OSD states.
+   * Useful for testing re-peering scenarios.
+   */
   void advance_epoch();
 
   bool all_shards_active();
