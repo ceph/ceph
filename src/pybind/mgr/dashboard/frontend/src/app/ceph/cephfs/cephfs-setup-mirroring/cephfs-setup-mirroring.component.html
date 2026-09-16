@@ -59,12 +59,11 @@
           i18n
         >
           <option value="">Select a filesystem</option>
-          <option
-            *ngFor="let fs of filesystems"
-            [value]="fs.name"
-          >
-            {{ fs.name }}
-          </option>
+          @for (fs of filesystems; track fs) {
+            <option [value]="fs.name">
+              {{ fs.name }}
+            </option>
+          }
         </cds-select>
         <ng-template #fsError>
           @if (setupForm.showError('filesystem', formDir, 'required')) {

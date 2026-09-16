@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ControlValueAccessor, NG_VALUE_ACCESSOR, ReactiveFormsModule } from '@angular/forms';
 import { ButtonModule, GridModule, IconModule, InputModule } from 'carbon-components-angular';
 import { ComponentsModule } from '../components.module';
@@ -7,7 +7,6 @@ import { ComponentsModule } from '../components.module';
 @Component({
   selector: 'cd-text-label-list',
   imports: [
-    CommonModule,
     ReactiveFormsModule,
     InputModule,
     IconModule,

@@ -12,7 +12,7 @@
     </h2>
 
     <!-- Step 1: Enter DHCHAP key -->
-    <ng-container *ngIf="!showConfirmation">
+    @if (!showConfirmation) {
       <h2
         class="cds--type-heading-03"
         cdsModalHeaderHeading
@@ -20,10 +20,10 @@
       >
         Edit Host Key
       </h2>
-    </ng-container>
+    }
 
     <!-- Step 2: Confirm changes -->
-    <ng-container *ngIf="showConfirmation">
+    @if (showConfirmation) {
       <h2
         class="cds--type-heading-03"
         cdsModalHeaderHeading
@@ -31,12 +31,12 @@
       >
         Confirm changes
       </h2>
-    </ng-container>
+    }
   </cds-modal-header>
 
   <section cdsModalContent>
     <!-- Step 1: Enter DHCHAP key -->
-    <ng-container *ngIf="!showConfirmation">
+    @if (!showConfirmation) {
       <p
         class="cds--type-body-01 cds-mb-5"
         i18n
@@ -75,24 +75,26 @@
           />
         </cds-text-label>
         <ng-template #dhchapKeyError>
-          <span
-            *ngIf="editForm.controls.dhchapKey.hasError('required')"
-            class="invalid-feedback"
-            i18n
-            >This field is required.</span
-          >
-          <span
-            *ngIf="editForm.controls.dhchapKey.hasError('invalidBase64')"
-            class="invalid-feedback"
-            i18n
-            >Invalid DH-HMAC-CHAP key. Please enter a valid Base64 encoded key.</span
-          >
+          @if (editForm.controls.dhchapKey.hasError('required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (editForm.controls.dhchapKey.hasError('invalidBase64')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Invalid DH-HMAC-CHAP key. Please enter a valid Base64 encoded key.</span
+            >
+          }
         </ng-template>
       </form>
-    </ng-container>
+    }
 
     <!-- Step 2: Confirm changes -->
-    <ng-container *ngIf="showConfirmation">
+    @if (showConfirmation) {
       <p
         class="cds--type-body-01"
         i18n
@@ -101,26 +103,28 @@
         secure communication with hosts. Ensure new keys are configured on all connected systems
         before continuing.
       </p>
-    </ng-container>
+    }
   </section>
 
   <!-- Step 1: Save button -->
-  <cd-form-button-panel
-    *ngIf="!showConfirmation"
-    (submitActionEvent)="onSave()"
-    (backActionEvent)="closeModal()"
-    [form]="editForm"
-    [submitText]="'Save'"
-    [modalForm]="true"
-  ></cd-form-button-panel>
+  @if (!showConfirmation) {
+    <cd-form-button-panel
+      (submitActionEvent)="onSave()"
+      (backActionEvent)="closeModal()"
+      [form]="editForm"
+      [submitText]="'Save'"
+      [modalForm]="true"
+    ></cd-form-button-panel>
+  }
 
   <!-- Step 2: Confirm button -->
-  <cd-form-button-panel
-    *ngIf="showConfirmation"
-    (submitActionEvent)="onSubmit()"
-    (backActionEvent)="goBack()"
-    [form]="editForm"
-    [submitText]="'Save changes'"
-    [modalForm]="true"
-  ></cd-form-button-panel>
+  @if (showConfirmation) {
+    <cd-form-button-panel
+      (submitActionEvent)="onSubmit()"
+      (backActionEvent)="goBack()"
+      [form]="editForm"
+      [submitText]="'Save changes'"
+      [modalForm]="true"
+    ></cd-form-button-panel>
+  }
 </cds-modal>

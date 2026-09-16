@@ -37,12 +37,16 @@
           />
         </cds-text-label>
         <ng-template #nameError>
-          <span *ngIf="roleForm.showError('name', formDir, 'required')">
-            <ng-container i18n> This field is required. </ng-container>
-          </span>
-          <span *ngIf="roleForm.showError('name', formDir, 'notUnique')">
-            <ng-container i18n> The chosen name is already in use. </ng-container>
-          </span>
+          @if (roleForm.showError('name', formDir, 'required')) {
+            <span>
+              <ng-container i18n> This field is required. </ng-container>
+            </span>
+          }
+          @if (roleForm.showError('name', formDir, 'notUnique')) {
+            <span>
+              <ng-container i18n> The chosen name is already in use. </ng-container>
+            </span>
+          }
         </ng-template>
       </div>
       <!-- Description -->

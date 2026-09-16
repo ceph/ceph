@@ -20,27 +20,38 @@
             </td>
             <td>{{ hostsCount }}</td>
           </tr>
-          <tr *ngIf="!isSimpleDeployment; else simpleDeploymentTextTpl">
-            <td>
-              <dl>
-                <dt>
-                  <p i18n>Storage Capacity</p>
-                </dt>
-                <dd>
-                  <p i18n>Number of devices</p>
-                </dd>
-                <dd>
-                  <p i18n>Raw capacity</p>
-                </dd>
-              </dl>
-            </td>
-            <td class="pt-5">
-              <p>{{ totalDevices }}</p>
-              <p>
-                {{ totalCapacity | dimlessBinary }}
-              </p>
-            </td>
-          </tr>
+          @if (!isSimpleDeployment) {
+            <tr>
+              <td>
+                <dl>
+                  <dt>
+                    <p i18n>Storage Capacity</p>
+                  </dt>
+                  <dd>
+                    <p i18n>Number of devices</p>
+                  </dd>
+                  <dd>
+                    <p i18n>Raw capacity</p>
+                  </dd>
+                </dl>
+              </td>
+              <td class="pt-5">
+                <p>{{ totalDevices }}</p>
+                <p>
+                  {{ totalCapacity | dimlessBinary }}
+                </p>
+              </td>
+            </tr>
+          } @else {
+            <tr>
+              <td>
+                <span i18n>Storage Capacity</span>
+              </td>
+              <td>
+                <span i18n>{{ deploymentDescText }}</span>
+              </td>
+            </tr>
+          }
           <tr>
             <td
               i18n
@@ -83,13 +94,3 @@
     </cd-hosts>
   </div>
 </div>
-<ng-template #simpleDeploymentTextTpl>
-  <tr>
-    <td>
-      <span i18n>Storage Capacity</span>
-    </td>
-    <td>
-      <span i18n>{{ deploymentDescText }}</span>
-    </td>
-  </tr>
-</ng-template>

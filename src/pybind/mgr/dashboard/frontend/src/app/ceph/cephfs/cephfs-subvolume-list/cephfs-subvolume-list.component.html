@@ -1,15 +1,14 @@
 <div class="row">
-  <div
-    class="col-sm-2"
-    *ngIf="subVolumeGroups$ | async as subVolumeGroups"
-  >
-    <cd-vertical-navigation
-      title="Groups"
-      [items]="subvolumeGroupList"
-      inputIdentifier="group-filter"
-      (emitActiveItem)="selectSubVolumeGroup($event)"
-    ></cd-vertical-navigation>
-  </div>
+  @if (subVolumeGroups$ | async; as subVolumeGroups) {
+    <div class="col-sm-2">
+      <cd-vertical-navigation
+        title="Groups"
+        [items]="subvolumeGroupList"
+        inputIdentifier="group-filter"
+        (emitActiveItem)="selectSubVolumeGroup($event)"
+      ></cd-vertical-navigation>
+    </div>
+  }
   <div class="col-10 vertical-line">
     <cd-table
       [data]="subVolumes$ | async"
@@ -38,24 +37,25 @@
   #quotaUsageTpl
   let-row="data.row"
 >
-  <cd-usage-bar
-    *ngIf="row.info?.bytes_pcent && row.info.bytes_pcent !== 'undefined'; else noLimitTpl"
-    [total]="row.info.bytes_quota"
-    [used]="row.info.bytes_used"
-    [title]="row.name"
-    decimals="2"
-  ></cd-usage-bar>
-
-  <ng-template #noLimitTpl>
-    <span
-      *ngIf="row.info?.bytes_pcent === 'undefined'; else missingQuotaTpl"
-      ngbTooltip="Quota limit is not set"
-      i18n-ngbTooltip
-    >
-      {{ row.info.bytes_used | dimlessBinary }}</span
-    >
-    <ng-template #missingQuotaTpl>-</ng-template>
-  </ng-template>
+  @if (row.info?.bytes_pcent && row.info.bytes_pcent !== 'undefined') {
+    <cd-usage-bar
+      [total]="row.info.bytes_quota"
+      [used]="row.info.bytes_used"
+      [title]="row.name"
+      decimals="2"
+    ></cd-usage-bar>
+  } @else {
+    @if (row.info?.bytes_pcent === 'undefined') {
+      <span
+        ngbTooltip="Quota limit is not set"
+        i18n-ngbTooltip
+      >
+        {{ row.info.bytes_used | dimlessBinary }}</span
+      >
+    } @else {
+      -
+    }
+  }
 </ng-template>
 
 <ng-template
@@ -69,13 +69,14 @@
   #modeToHumanReadableTpl
   let-value="data.value"
 >
-  <cds-tag
-    *ngFor="let result of value | octalToHumanReadable"
-    [class]="result.class"
-    [ngbTooltip]="result.toolTip"
-  >
-    {{ result.content }}
-  </cds-tag>
+  @for (result of value | octalToHumanReadable; track result) {
+    <cds-tag
+      [class]="result.class"
+      [ngbTooltip]="result.toolTip"
+    >
+      {{ result.content }}
+    </cds-tag>
+  }
 </ng-template>
 
 <ng-template
@@ -84,38 +85,43 @@
 >
   <span class="fw-bold">{{ row.name }}</span>
 
-  <span *ngIf="row?.info?.state === 'complete'">
-    <i
-      [ngClass]="[icons.success, icons.size24]"
-      ngbTooltip="{{ row.name }} is ready to use"
-      class="text-success"
-    ></i>
-  </span>
+  @if (row?.info?.state === 'complete') {
+    <span>
+      <i
+        [ngClass]="[icons.success, icons.size24]"
+        ngbTooltip="{{ row.name }} is ready to use"
+        class="text-success"
+      ></i>
+    </span>
+  }
 
-  <span *ngIf="row?.info?.state === 'snapshot-retained'">
-    <i
-      [ngClass]="[icons.warning, icons.size24]"
-      class="text-warning"
-      ngbTooltip="{{ row.name }} is removed after retaining the snapshots"
-    ></i>
-  </span>
+  @if (row?.info?.state === 'snapshot-retained') {
+    <span>
+      <i
+        [ngClass]="[icons.warning, icons.size24]"
+        class="text-warning"
+        ngbTooltip="{{ row.name }} is removed after retaining the snapshots"
+      ></i>
+    </span>
+  }
 
-  <cd-label
-    [value]="row?.info?.type"
-    *ngIf="row?.info?.type && row.info.type !== 'subvolume'"
-  ></cd-label>
+  @if (row?.info?.type && row.info.type !== 'subvolume') {
+    <cd-label [value]="row?.info?.type"></cd-label>
+  }
 
-  <cd-label
-    [value]="unmanagedState"
-    *ngIf="row?.info?.state === unmanagedState"
-    [tooltipText]="unmanagedHint"
-  ></cd-label>
+  @if (row?.info?.state === unmanagedState) {
+    <cd-label
+      [value]="unmanagedState"
+      [tooltipText]="unmanagedHint"
+    ></cd-label>
+  }
 
-  <cd-label
-    value="namespaced"
-    *ngIf="row?.info?.pool_namespace"
-    [tooltipText]="row?.info?.pool_namespace"
-  ></cd-label>
+  @if (row?.info?.pool_namespace) {
+    <cd-label
+      value="namespaced"
+      [tooltipText]="row?.info?.pool_namespace"
+    ></cd-label>
+  }
 </ng-template>
 
 <ng-template
@@ -124,12 +130,11 @@
 >
   <ng-container [formGroup]="form">
     <ng-container formGroupName="child">
-      <cd-alert-panel
-        *ngIf="errorMessage.length > 1"
-        type="error"
-      >
-        {{ errorMessage }}
-      </cd-alert-panel>
+      @if (errorMessage.length > 1) {
+        <cd-alert-panel type="error">
+          {{ errorMessage }}
+        </cd-alert-panel>
+      }
       <div class="form-item cds-pt-3">
         <cds-checkbox
           id="retainSnapshots"

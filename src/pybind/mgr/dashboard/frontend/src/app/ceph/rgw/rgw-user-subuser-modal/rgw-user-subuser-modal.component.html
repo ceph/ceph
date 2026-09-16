@@ -55,18 +55,20 @@
           />
         </cds-text-label>
         <ng-template #subuserHelper>
-          <span
-            class="invalid-feedback"
-            *ngIf="formGroup.showError('subuid', frm, 'required')"
-            i18n
-            >This field is required.</span
-          >
-          <span
-            class="invalid-feedback"
-            *ngIf="formGroup.showError('subuid', frm, 'subuserIdExists')"
-            i18n
-            >The chosen subuser ID is already in use.</span
-          >
+          @if (formGroup.showError('subuid', frm, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (formGroup.showError('subuid', frm, 'subuserIdExists')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >The chosen subuser ID is already in use.</span
+            >
+          }
         </ng-template>
       </div>
 
@@ -81,12 +83,11 @@
           [invalidText]="permError"
         >
           <option value="">--- Select a permission ---</option>
-          <option
-            *ngFor="let perm of ['read', 'write']"
-            [value]="perm"
-          >
-            {{ perm }}
-          </option>
+          @for (perm of ['read', 'write']; track perm) {
+            <option [value]="perm">
+              {{ perm }}
+            </option>
+          }
           <option
             i18n
             value="read-write"
@@ -102,68 +103,69 @@
         </cds-select>
 
         <ng-template #permError>
-          <span
-            class="invalid-feedback"
-            *ngIf="formGroup.showError('perm', frm, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (formGroup.showError('perm', frm, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
 
       <!-- Swift key -->
-      <fieldset *ngIf="!editing">
-        <legend i18n>Swift key</legend>
-
-        <!-- Auto-generate key -->
-        <div class="form-item">
-          <cds-checkbox
-            id="generate_secret"
-            formControlName="generate_secret"
-            i18n
-            >Auto-generate key
-          </cds-checkbox>
-        </div>
-
-        <!-- Secret key -->
-        <div
-          class="form-item form-item-append"
-          *ngIf="!editing && !formGroup.getValue('generate_secret')"
-        >
-          <cds-password-label
-            for="secret_key"
-            [invalid]="formGroup.controls.secret_key.invalid && formGroup.controls.secret_key.dirty"
-            [invalidText]="secretKeyError"
-            i18n
-            >Secret key
-            <input
-              cdsPassword
-              id="secret_key"
-              name="secret_key"
-              formControlName="secret_key"
-              [invalid]="
-                formGroup.controls.secret_key.invalid && formGroup.controls.secret_key.dirty
-              "
-              [autofocus]="true"
-            />
-          </cds-password-label>
-
-          <cd-copy-2-clipboard-button
-            source="secret_key"
-            class="mt-4"
-          >
-          </cd-copy-2-clipboard-button>
-
-          <ng-template #secretKeyError>
-            <span
-              class="invalid-feedback"
-              *ngIf="formGroup.showError('secret_key', frm, 'required')"
+      @if (!editing) {
+        <fieldset>
+          <legend i18n>Swift key</legend>
+          <!-- Auto-generate key -->
+          <div class="form-item">
+            <cds-checkbox
+              id="generate_secret"
+              formControlName="generate_secret"
               i18n
-              >This field is required.</span
-            >
-          </ng-template>
-        </div>
-      </fieldset>
+              >Auto-generate key
+            </cds-checkbox>
+          </div>
+          <!-- Secret key -->
+          @if (!editing && !formGroup.getValue('generate_secret')) {
+            <div class="form-item form-item-append">
+              <cds-password-label
+                for="secret_key"
+                [invalid]="
+                  formGroup.controls.secret_key.invalid && formGroup.controls.secret_key.dirty
+                "
+                [invalidText]="secretKeyError"
+                i18n
+                >Secret key
+                <input
+                  cdsPassword
+                  id="secret_key"
+                  name="secret_key"
+                  formControlName="secret_key"
+                  [invalid]="
+                    formGroup.controls.secret_key.invalid && formGroup.controls.secret_key.dirty
+                  "
+                  [autofocus]="true"
+                />
+              </cds-password-label>
+              <cd-copy-2-clipboard-button
+                source="secret_key"
+                class="mt-4"
+              >
+              </cd-copy-2-clipboard-button>
+              <ng-template #secretKeyError>
+                @if (formGroup.showError('secret_key', frm, 'required')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This field is required.</span
+                  >
+                }
+              </ng-template>
+            </div>
+          }
+        </fieldset>
+      }
     </div>
     <cd-form-button-panel
       (submitActionEvent)="onSubmit()"

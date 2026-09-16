@@ -20,70 +20,70 @@
           (select)="selectNode($event)"
         >
         </cds-tree-view>
-        <div *ngIf="loadingIndicator">
-          <cds-loading
-            [isActive]="true"
-            [overlay]="false"
-            size="sm"
-          ></cds-loading>
-        </div>
+        @if (loadingIndicator) {
+          <div>
+            <cds-loading
+              [isActive]="true"
+              [overlay]="false"
+              size="sm"
+            ></cds-loading>
+          </div>
+        }
       </div>
     </div>
   </div>
   <!-- Selection details -->
-  <div
-    class="col-sm-8 metadata"
-    *ngIf="selectedDir"
-  >
-    <div class="card">
-      <div class="card-header">
-        {{ selectedDir.path }}
-      </div>
-      <div class="card-body">
-        <ng-container *ngIf="selectedDir.path !== '/'">
-          <legend i18n>Quotas</legend>
+  @if (selectedDir) {
+    <div class="col-sm-8 metadata">
+      <div class="card">
+        <div class="card-header">
+          {{ selectedDir.path }}
+        </div>
+        <div class="card-body">
+          @if (selectedDir.path !== '/') {
+            <legend i18n>Quotas</legend>
+            <cd-table
+              [data]="settings"
+              [columns]="quota.columns"
+              [limit]="0"
+              [footer]="false"
+              selectionType="single"
+              (updateSelection)="quota.updateSelection($event)"
+              [onlyActionHeader]="true"
+              identifier="quotaKey"
+              [forceIdentifier]="true"
+              [toolHeader]="false"
+            >
+              <cd-table-actions
+                class="only-table-actions"
+                [permission]="permission"
+                [selection]="quota.selection"
+                [tableActions]="quota.tableActions"
+              >
+              </cd-table-actions>
+            </cd-table>
+          }
+          <legend i18n>Snapshots</legend>
           <cd-table
-            [data]="settings"
-            [columns]="quota.columns"
-            [limit]="0"
-            [footer]="false"
+            [data]="selectedDir.snapshots"
+            [columns]="snapshot.columns"
+            identifier="name"
+            forceIdentifier="true"
             selectionType="single"
-            (updateSelection)="quota.updateSelection($event)"
-            [onlyActionHeader]="true"
-            identifier="quotaKey"
-            [forceIdentifier]="true"
-            [toolHeader]="false"
+            (updateSelection)="snapshot.updateSelection($event)"
           >
             <cd-table-actions
-              class="only-table-actions"
+              class="table-actions"
               [permission]="permission"
-              [selection]="quota.selection"
-              [tableActions]="quota.tableActions"
+              [selection]="snapshot.selection"
+              [tableActions]="snapshot.tableActions"
             >
             </cd-table-actions>
           </cd-table>
-        </ng-container>
-
-        <legend i18n>Snapshots</legend>
-        <cd-table
-          [data]="selectedDir.snapshots"
-          [columns]="snapshot.columns"
-          identifier="name"
-          forceIdentifier="true"
-          selectionType="single"
-          (updateSelection)="snapshot.updateSelection($event)"
-        >
-          <cd-table-actions
-            class="table-actions"
-            [permission]="permission"
-            [selection]="snapshot.selection"
-            [tableActions]="snapshot.tableActions"
-          >
-          </cd-table-actions>
-        </cd-table>
+        </div>
       </div>
     </div>
-  </div>
+  }
 </div>
 
 <ng-template
