@@ -45,7 +45,7 @@ namespace {
 using namespace std::string_view_literals;
 
 static constexpr std::array sensitive_keywords = {
-  "password"sv
+  "password"sv, "secret"sv
 };
 
 enum struct http_arg_kind {

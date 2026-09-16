@@ -6,6 +6,7 @@
 #include <librdkafka/rdkafka.h>
 #include "include/ceph_assert.h"
 #include <sstream>
+#include <cstdio>
 #include <cstring>
 #include <unordered_map>
 #include <string>
@@ -83,7 +84,11 @@ connection_id_t::connection_id_t(
     const boost::optional<const std::string&>& _ssl_key_password,
     const boost::optional<const std::string&>& _kerberos_service_name,
     const boost::optional<const std::string&>& _kerberos_principal,
-    const boost::optional<const std::string&>& _kerberos_keytab
+    const boost::optional<const std::string&>& _kerberos_keytab,
+    const boost::optional<const std::string&>& _oauthbearer_token_endpoint_url,
+    const boost::optional<const std::string&>& _oauthbearer_client_id,
+    const boost::optional<const std::string&>& _oauthbearer_client_secret,
+    const boost::optional<const std::string&>& _oauthbearer_scope
   )
     : broker(_broker), user(_user), password(_password), ssl(_ssl),
       verify_ssl(_verify_ssl) {
@@ -112,6 +117,18 @@ connection_id_t::connection_id_t(
   if (_kerberos_keytab.has_value()) {
     kerberos_keytab = _kerberos_keytab.get();
   }
+  if (_oauthbearer_token_endpoint_url.has_value()) {
+    oauthbearer_token_endpoint_url = _oauthbearer_token_endpoint_url.get();
+  }
+  if (_oauthbearer_client_id.has_value()) {
+    oauthbearer_client_id = _oauthbearer_client_id.get();
+  }
+  if (_oauthbearer_client_secret.has_value()) {
+    oauthbearer_client_secret = _oauthbearer_client_secret.get();
+  }
+  if (_oauthbearer_scope.has_value()) {
+    oauthbearer_scope = _oauthbearer_scope.get();
+  }
 }
 
 // equality operator and hasher functor are needed
@@ -126,7 +143,11 @@ bool operator==(const connection_id_t& lhs, const connection_id_t& rhs) {
          lhs.ssl_key_password == rhs.ssl_key_password &&
          lhs.kerberos_service_name == rhs.kerberos_service_name &&
          lhs.kerberos_principal == rhs.kerberos_principal &&
-         lhs.kerberos_keytab == rhs.kerberos_keytab;
+         lhs.kerberos_keytab == rhs.kerberos_keytab &&
+         lhs.oauthbearer_token_endpoint_url == rhs.oauthbearer_token_endpoint_url &&
+         lhs.oauthbearer_client_id == rhs.oauthbearer_client_id &&
+         lhs.oauthbearer_client_secret == rhs.oauthbearer_client_secret &&
+         lhs.oauthbearer_scope == rhs.oauthbearer_scope;
 }
 
 struct connection_id_hasher {
@@ -145,6 +166,10 @@ struct connection_id_hasher {
     boost::hash_combine(h, k.kerberos_service_name);
     boost::hash_combine(h, k.kerberos_principal);
     boost::hash_combine(h, k.kerberos_keytab);
+    boost::hash_combine(h, k.oauthbearer_token_endpoint_url);
+    boost::hash_combine(h, k.oauthbearer_client_id);
+    boost::hash_combine(h, k.oauthbearer_client_secret);
+    boost::hash_combine(h, k.oauthbearer_scope);
     return h;
   }
 };
@@ -166,6 +191,15 @@ std::string to_string(const connection_id_t& id) {
   }
   if (!id.kerberos_keytab.empty()) {
     ss << " keytab=" << id.kerberos_keytab;
+  }
+  if (!id.oauthbearer_token_endpoint_url.empty()) {
+    ss << " token_endpoint=" << id.oauthbearer_token_endpoint_url;
+  }
+  if (!id.oauthbearer_client_id.empty()) {
+    ss << " client_id=" << id.oauthbearer_client_id;
+  }
+  if (!id.oauthbearer_scope.empty()) {
+    ss << " scope=" << id.oauthbearer_scope;
   }
   return ss.str();
 }
@@ -229,6 +263,10 @@ struct connection_t {
   const boost::optional<std::string> kerberos_service_name;
   const boost::optional<std::string> kerberos_principal;
   const boost::optional<std::string> kerberos_keytab;
+  const boost::optional<std::string> oauthbearer_token_endpoint_url;
+  const boost::optional<std::string> oauthbearer_client_id;
+  const boost::optional<std::string> oauthbearer_client_secret;
+  const boost::optional<std::string> oauthbearer_scope;
   utime_t timestamp = ceph_clock_now();
 
   // cleanup of all internal connection resource
@@ -259,7 +297,7 @@ struct connection_t {
   }
 
   // ctor for setting immutable values
-  connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl, 
+  connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl,
           const boost::optional<const std::string&>& _ca_location,
           const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism,
           const boost::optional<const std::string&>& _ssl_certificate,
@@ -267,10 +305,17 @@ struct connection_t {
           const boost::optional<const std::string&>& _ssl_key_password,
           const boost::optional<const std::string&>& _kerberos_service_name,
           const boost::optional<const std::string&>& _kerberos_principal,
-          const boost::optional<const std::string&>& _kerberos_keytab) :
+          const boost::optional<const std::string&>& _kerberos_keytab,
+          const boost::optional<const std::string&>& _oauthbearer_token_endpoint_url,
+          const boost::optional<const std::string&>& _oauthbearer_client_id,
+          const boost::optional<const std::string&>& _oauthbearer_client_secret,
+          const boost::optional<const std::string&>& _oauthbearer_scope) :
       cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism),
       ssl_certificate(_ssl_certificate), ssl_key(_ssl_key), ssl_key_password(_ssl_key_password),
-      kerberos_service_name(_kerberos_service_name), kerberos_principal(_kerberos_principal), kerberos_keytab(_kerberos_keytab) {}                                                                                                                                                        
+      kerberos_service_name(_kerberos_service_name), kerberos_principal(_kerberos_principal), kerberos_keytab(_kerberos_keytab),
+      oauthbearer_token_endpoint_url(_oauthbearer_token_endpoint_url),
+      oauthbearer_client_id(_oauthbearer_client_id), oauthbearer_client_secret(_oauthbearer_client_secret),
+      oauthbearer_scope(_oauthbearer_scope) {}
 
   // dtor also destroys the internals
   ~connection_t() {
@@ -337,6 +382,16 @@ void poll_err_callback(rd_kafka_t *rk, int err, const char *reason, void *opaque
 
 using connection_t_ptr = std::unique_ptr<connection_t>;
 
+// boost::optional<std::string> does not convert to boost::optional<const std::string&>,
+// so the held value has to be re-bound explicitly
+static boost::optional<const std::string&> optional_ref(
+    const boost::optional<std::string>& s) {
+  if (s) {
+    return *s;
+  }
+  return boost::none;
+}
+
 // utility function to create a producer, when the connection object already exists
 bool new_producer(connection_t* conn) {
   // reset all status codes
@@ -355,6 +410,31 @@ bool new_producer(connection_t* conn) {
   char errstr[512] = {0};
 
   const bool is_gssapi = conn->mechanism && boost::iequals(*conn->mechanism, "GSSAPI");
+  const bool is_oauthbearer = conn->mechanism && boost::iequals(*conn->mechanism, "OAUTHBEARER");
+  const auto set_oauthbearer_config = [&conn, &conf, &errstr]() {
+    if (const auto err_msg = validate_oauthbearer_params(
+            optional_ref(conn->oauthbearer_token_endpoint_url),
+            optional_ref(conn->oauthbearer_client_id),
+            optional_ref(conn->oauthbearer_client_secret));
+        !err_msg.empty()) {
+      // report via errstr, so that the caller logs it at the conf_error label
+      std::snprintf(errstr, sizeof(errstr), "%s", err_msg.c_str());
+      return false;
+    }
+    if (rd_kafka_conf_set(conf.get(), "sasl.mechanism", "OAUTHBEARER", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+        rd_kafka_conf_set(conf.get(), "sasl.oauthbearer.method", "oidc", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+        rd_kafka_conf_set(conf.get(), "sasl.oauthbearer.token.endpoint.url", conn->oauthbearer_token_endpoint_url->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+        rd_kafka_conf_set(conf.get(), "sasl.oauthbearer.client.id", conn->oauthbearer_client_id->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+        rd_kafka_conf_set(conf.get(), "sasl.oauthbearer.client.secret", conn->oauthbearer_client_secret->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+      return false;
+    }
+    if (conn->oauthbearer_scope &&
+        rd_kafka_conf_set(conf.get(), "sasl.oauthbearer.scope", conn->oauthbearer_scope->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+      return false;
+    }
+    ldout(conn->cct, 20) << "Kafka connect: successfully configured OAUTHBEARER/OIDC" << dendl;
+    return true;
+  };
 
   // set message timeout
   // according to documentation, value of zero will expire the message based on retries.
@@ -387,11 +467,11 @@ bool new_producer(connection_t* conn) {
     ldout(conn->cct, 20) << "Kafka connect: configured GSSAPI SASL" << dendl;
 
     if (conn->kerberos_service_name) {
-      if (rd_kafka_conf_set(conf.get(), "sasl.kerberos.service.name", conn->kerberos_service_name->c_str(), errstr, 
+      if (rd_kafka_conf_set(conf.get(), "sasl.kerberos.service.name", conn->kerberos_service_name->c_str(), errstr,
                             sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
     }
     if (conn->kerberos_principal) {
-      if (rd_kafka_conf_set(conf.get(), "sasl.kerberos.principal", conn->kerberos_principal->c_str(), errstr, 
+      if (rd_kafka_conf_set(conf.get(), "sasl.kerberos.principal", conn->kerberos_principal->c_str(), errstr,
                             sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
     }
     if (conn->kerberos_keytab) {
@@ -401,7 +481,13 @@ bool new_producer(connection_t* conn) {
       ldout(conn->cct, 20) << "Kafka connect: GSSAPI without keytab; using ticket cache" << dendl;
     }
   } else if (conn->use_ssl) {
-    if (!conn->user.empty()) {
+    if (is_oauthbearer) {
+      // use SSL+SASL/OAUTHBEARER
+      if (rd_kafka_conf_set(conf.get(), "security.protocol", "SASL_SSL", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+          !set_oauthbearer_config()) {
+        goto conf_error;
+      }
+    } else if (!conn->user.empty()) {
       // use SSL+SASL
       if (rd_kafka_conf_set(conf.get(), "security.protocol", "SASL_SSL", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
           rd_kafka_conf_set(conf.get(), "sasl.username", conn->user.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
@@ -448,6 +534,12 @@ bool new_producer(connection_t* conn) {
     // if (rd_kafka_conf_set(conn->conf, "enable.ssl.certificate.verification", "0", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
     ldout(conn->cct, 20) << "Kafka connect: successfully configured security" << dendl;
+  } else if (is_oauthbearer) {
+      // use SASL/OAUTHBEARER+PLAINTEXT
+      if (rd_kafka_conf_set(conf.get(), "security.protocol", "SASL_PLAINTEXT", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
+          !set_oauthbearer_config()) {
+        goto conf_error;
+      }
   } else if (!conn->user.empty()) {
     // use SASL+PLAINTEXT
     if (rd_kafka_conf_set(conf.get(), "security.protocol", "SASL_PLAINTEXT", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK ||
@@ -742,7 +834,11 @@ public:
                boost::optional<const std::string&> ssl_key_password,
                boost::optional<const std::string&> topic_kerberos_service_name,
                boost::optional<const std::string&> topic_kerberos_principal,
-               boost::optional<const std::string&> topic_kerberos_keytab) {
+               boost::optional<const std::string&> topic_kerberos_keytab,
+               boost::optional<const std::string&> oauthbearer_token_endpoint_url,
+               boost::optional<const std::string&> oauthbearer_client_id,
+               boost::optional<const std::string&> oauthbearer_client_secret,
+               boost::optional<const std::string&> oauthbearer_scope) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -772,22 +868,32 @@ public:
       password = topic_password.get();
     }
 
-    const bool is_gssapi = mechanism.has_value() && boost::iequals(mechanism.get(), "GSSAPI");
+    const bool is_gssapi = mechanism && boost::iequals(*mechanism, "GSSAPI");
 
-    if (is_gssapi) {
-      if (!user.empty() || !password.empty()) {
-        ldout(cct, 5) << "Kafka connect: user/password provided with GSSAPI; ignoring" << dendl;
-      }
-      user.clear();
-      password.clear();
-    } else {
-      // this should be validated by the regex in parse_url()
-      ceph_assert(user.empty() == password.empty());
+    const bool is_oauthbearer = mechanism && boost::iequals(*mechanism, "OAUTHBEARER");
 
-      if (!user.empty() && !use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
-        ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
+    if (is_gssapi || is_oauthbearer) {
+      if (!user.empty() || !password.empty() || topic_user_name.has_value() || topic_password.has_value()) {
+        ldout(cct, 1) << "Kafka connect: " << *mechanism << " does not accept user-name or password" << dendl;
         return false;
       }
+    }
+
+    if (is_oauthbearer) {
+      if (!use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
+        ldout(cct, 1) << "Kafka connect: OAUTHBEARER client secrets are only allowed over secure connection" << dendl;
+        return false;
+      }
+    }
+
+    if (!is_gssapi && !is_oauthbearer) {
+      // this should be validated by the regex in parse_url()
+      ceph_assert(user.empty() == password.empty());
+    }
+
+    if (!is_oauthbearer && !user.empty() && !use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
+      ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
+      return false;
     }
     
     // ssl_certificate and ssl_key must both be provided for mTLS
@@ -823,7 +929,9 @@ public:
 
     connection_id_t tmp_id(broker_list, user, password, ca_location, mechanism,
                            use_ssl, verify_ssl, ssl_certificate, ssl_key, ssl_key_password,
-                           kerberos_service_name, kerberos_principal, kerberos_keytab);
+                           kerberos_service_name, kerberos_principal, kerberos_keytab,
+                           oauthbearer_token_endpoint_url, oauthbearer_client_id,
+                           oauthbearer_client_secret, oauthbearer_scope);
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(tmp_id);
     // note that ssl vs. non-ssl connection to the same host are two separate connections
@@ -844,7 +952,9 @@ public:
 
     auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password,
                                                mechanism, ssl_certificate, ssl_key, ssl_key_password,
-                                               kerberos_service_name, kerberos_principal, kerberos_keytab);
+                                               kerberos_service_name, kerberos_principal, kerberos_keytab,
+                                               oauthbearer_token_endpoint_url, oauthbearer_client_id,
+                                               oauthbearer_client_secret, oauthbearer_scope);
     if (!new_producer(conn.get())) {
       ldout(cct, 10) << "Kafka connect: producer creation failed in new connection" << dendl;
       return false;
@@ -969,13 +1079,19 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> ssl_key_password,
              boost::optional<const std::string&> kerberos_service_name,
              boost::optional<const std::string&> kerberos_principal,
-             boost::optional<const std::string&> kerberos_keytab) {
+             boost::optional<const std::string&> kerberos_keytab,
+             boost::optional<const std::string&> oauthbearer_token_endpoint_url,
+             boost::optional<const std::string&> oauthbearer_client_id,
+             boost::optional<const std::string&> oauthbearer_client_secret,
+             boost::optional<const std::string&> oauthbearer_scope) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
   return s_manager->connect(conn_id, url, use_ssl, verify_ssl, ca_location,
                             mechanism, user_name, password, brokers,
                             ssl_certificate, ssl_key, ssl_key_password,
-                            kerberos_service_name, kerberos_principal, kerberos_keytab);
+                            kerberos_service_name, kerberos_principal, kerberos_keytab,
+                            oauthbearer_token_endpoint_url, oauthbearer_client_id,
+                            oauthbearer_client_secret, oauthbearer_scope);
 }
 
 int publish(const connection_id_t& conn_id,
