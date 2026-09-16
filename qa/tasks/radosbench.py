@@ -114,14 +114,19 @@ def task(ctx, config):
             f'--concurrent-ios={concurrency}',
         ]
 
+        # rados bench only accepts these on a write run; a seq/rand run picks
+        # the sizes up from the benchmark metadata written by the write run.
+        size_args = []
+        osize = config.get('objectsize', 65536)
+        if osize > 0:
+            size_args.append(f'--object-size={osize}')
+        size = config.get('size', 65536)
+        if size > 0:
+            size_args.append(f'--block-size={size}')
+
         # If doing a reading run then populate data
         if runtype == "write":
-            osize = config.get('objectsize', 65536)
-            if osize > 0:
-                bench_args.append(f'--object-size={osize}')
-            size = config.get('size', 65536)
-            if size > 0:
-                bench_args.append(f'--block-size={size}')
+            bench_args += size_args
         else:
             proc = remote.run(
                 args=[
@@ -129,6 +134,7 @@ def task(ctx, config):
                     " ".join([*cmd,
                               *extra_args,
                               *bench_args,
+                              *size_args,
                               str(60),
                               "write",
                               "--no-cleanup"
