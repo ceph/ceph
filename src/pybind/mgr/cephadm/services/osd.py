@@ -99,6 +99,19 @@ class OSDService(CephService):
             'ceph orch daemon add osd' where the requested devices are not reflected
             in inventory timestamps (and the check only compares timestamps, not spec content).
         """
+        ret, _ = self.create_from_spec_with_errors(drive_group, force_apply=force_apply)
+        return ret
+
+    def create_from_spec_with_errors(
+            self,
+            drive_group: DriveGroupSpec,
+            force_apply: bool = False,
+    ) -> Tuple[str, List[str]]:
+        """
+        Like create_from_spec(), but also returns the per-host errors, which
+        are otherwise only logged. Lets the caller tell a fully applied OSD
+        spec apart from one that failed on some or all hosts.
+        """
         logger.debug(f"Processing DriveGroup {drive_group}")
         self.validate_encryption(drive_group)
         creation_cfg, post_create_cfg = self._get_osd_spec_configs(drive_group)
@@ -142,6 +155,8 @@ class OSDService(CephService):
             self.mgr.cache.save_host(host)
             return ret_msg
 
+        errors: List[str] = []
+
         async def all_hosts() -> List[str]:
             futures = [create_from_spec_one(h, ds)
                        for h, ds in self.prepare_drivegroup(drive_group)]
@@ -149,11 +164,12 @@ class OSDService(CephService):
             for result in results:
                 if isinstance(result, Exception):
                     self.mgr.log.error(f'Failed to create OSD: {result}')
+                    errors.append(str(result))
             return [result for result in results if isinstance(result, str)]
 
         with self.mgr.async_timeout_handler('cephadm deploy (osd daemon)'):
             ret = self.mgr.wait_async(all_hosts())
-        return ", ".join(ret)
+        return ", ".join(ret), errors
 
     async def create_single_host(self,
                                  drive_group: DriveGroupSpec,
