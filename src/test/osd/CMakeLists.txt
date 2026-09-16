@@ -188,6 +188,12 @@ add_executable(unittest_ec_with_crush
 add_ceph_unittest(unittest_ec_with_crush)
 target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ec_with_crush ${EC_ISA_LIB} ec_jerasure)
+# unittest_split_ops_ut
+add_executable(unittest_split_ops_ut
+  TestSplitOpsUT.cc
+  )
+add_ceph_unittest(unittest_split_ops_ut)
+target_link_libraries(unittest_split_ops_ut osd global ${BLKID_LIBRARIES})
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
@@ -282,6 +288,7 @@ set(OSD_UNITTESTS
   unittest_pg_transaction
   unittest_pglog
   unittest_scrubber_be
+  unittest_split_ops_ut
 )
 
 # osd_unittests: build all OSD unit tests and run them via ctest.
