@@ -14,6 +14,9 @@ enum {
 
   l_mgr_cache_hit,
   l_mgr_cache_miss,
+  l_mgr_gil_acquire_lat,
+  l_mgr_gil_reacquire_lat,
+  l_mgr_gil_slow_waits,
 
   l_mgr_last,
 };
