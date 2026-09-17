@@ -213,30 +213,46 @@ void Background::set_manager(rgw::sal::LuaManager* _lua_manager) {
   lua_manager = _lua_manager;
 }
 
-void Background::process_script_add(std::string script_oid) {
-  auto script_ptr = make_unique<std::string>(std::move(script_oid));
-  if (processing_q.push(script_ptr.get())) {
+static void enqueue_script(boost::lockfree::queue<std::string*>& q, std::string script_oid) {
+  auto script_ptr = std::make_unique<std::string>(std::move(script_oid));
+  if (q.push(script_ptr.get())) {
     script_ptr.release();
   }
 }
 
+void Background::process_script_add(std::string script_oid) {
+  enqueue_script(processing_q, std::move(script_oid));
+}
+
+void Background::process_script_remove(std::string script_oid) {
+  enqueue_script(removal_q, std::move(script_oid));
+}
+
 void Background::process_scripts() {
-  std::set<std::string> removed;
   std::set<std::string> updated_scripts;
+  std::set<std::string> removed_scripts;
 
   const auto count = processing_q.consume_all([&](std::string* s) {
              std::unique_ptr<std::string> sptr(s);
              updated_scripts.insert(*sptr);
           });
+  const auto removed_count = removal_q.consume_all([&](std::string* s) {
+             std::unique_ptr<std::string> sptr(s);
+             removed_scripts.insert(*sptr);
+          });
 
-  if (updated_scripts.empty()) {
+  if (updated_scripts.empty() && removed_scripts.empty()) {
     return;
   }
-  ldpp_dout(&dp, 20) << "INFO: Num scripts to process: " << count << dendl;
-  //updating = true;
-  std::unique_ptr<lua_state_guard> lguard = initialize_lguard_state();
-  if (!lguard) {
-    return;
+  ldpp_dout(&dp, 20) << "INFO: Num scripts to process: " << count
+                     << ". Num scripts to remove: " << removed_count << dendl;
+  std::unique_ptr<lua_state_guard> lguard;
+  if (!updated_scripts.empty()) {
+    lguard = initialize_lguard_state();
+    if (!lguard) {
+      // still remove scripts from the cache
+      updated_scripts.clear();
+    }
   }
   std::string script;
   for (const auto& key: updated_scripts) {
@@ -245,13 +261,11 @@ void Background::process_scripts() {
       ldpp_dout(&dp, 10) << "ERROR: Failed to get script : " << key
                          << ". r = " << r << dendl;
       // Clear the cache
-      removed.insert(key);
       std::unique_lock<std::shared_mutex> lock(updating_mutex);
       lua_bytecode_cache.erase(key);
       continue;
     }
     if (r == -ENOENT) {
-      removed.insert(key);
       std::unique_lock<std::shared_mutex> lock(updating_mutex);
       lua_bytecode_cache.erase(key);
       continue;
@@ -266,8 +280,7 @@ void Background::process_scripts() {
           std::unique_lock<std::shared_mutex> lock(updating_mutex);
           lua_bytecode_cache.insert_or_assign(key, std::move(buffer));
         }
-        lua_pop(L, 1); 
-        removed.insert(key);
+        lua_pop(L, 1);
       } else {
         const std::string err(lua_tostring(L, -1));
         ldpp_dout(&dp, 1) << "Lua ERROR: failed to compile script : " << key
@@ -278,10 +291,14 @@ void Background::process_scripts() {
                         << ", error : " << e.what() << dendl;
     }
   }
-  
-  //updating = false;
-  for (const auto& key: removed) {
-    updated_scripts.erase(key);
+
+  // removals are processed after updates, so that a script which was removed
+  // after being updated does not remain in the cache
+  for (const auto& key: removed_scripts) {
+    std::unique_lock<std::shared_mutex> lock(updating_mutex);
+    if (lua_bytecode_cache.erase(key) > 0) {
+      ldpp_dout(&dp, 20) << "INFO: removed script from bytecode cache: " << key << dendl;
+    }
   }
 }
 
