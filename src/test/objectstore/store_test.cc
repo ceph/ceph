@@ -8188,7 +8188,7 @@ TEST_P(StoreTestSpecificAUSize, OnodeSizeTracking) {
   }
   get_mempool_stats(&total_bytes, &total_onodes);
   ASSERT_GT(total_bytes - total_bytes_prev, 0u);
-  ASSERT_EQ(total_onodes, 6u);
+  ASSERT_EQ(total_onodes, 6u); // +1 - onode itself
 
   {
     ObjectStore::Transaction t;
