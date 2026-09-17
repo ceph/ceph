@@ -425,6 +425,33 @@ constexpr decltype(auto) core_expression_of(ExprT&& expr)
  return std::forward<ExprT>(expr);
 }
 
+template <typename ExprT>
+struct is_keyspace_bounded : std::false_type {};
+
+template <>
+struct is_keyspace_bounded<interval> : std::true_type {};
+
+template <byte_interval_expression ExprT>
+struct is_keyspace_bounded<configured<ExprT>> : is_keyspace_bounded<ExprT> {};
+
+template <byte_interval_expression LHS_T, byte_interval_expression RHS_T>
+struct is_keyspace_bounded<core::detail::difference_expr<LHS_T, RHS_T>>
+ : is_keyspace_bounded<LHS_T> {};
+
+template <byte_interval_expression LHS_T, byte_interval_expression RHS_T>
+struct is_keyspace_bounded<core::detail::intersection_expr<LHS_T, RHS_T>>
+ : std::bool_constant<is_keyspace_bounded<LHS_T>::value ||
+                      is_keyspace_bounded<RHS_T>::value> {};
+
+template <byte_interval_expression LHS_T, byte_interval_expression RHS_T>
+struct is_keyspace_bounded<core::detail::set_union_expr<LHS_T, RHS_T>>
+ : std::bool_constant<is_keyspace_bounded<LHS_T>::value &&
+                      is_keyspace_bounded<RHS_T>::value> {};
+
+template <typename ExprT>
+inline constexpr bool is_keyspace_bounded_v =
+ is_keyspace_bounded<std::remove_cvref_t<ExprT>>::value;
+
 template <expression ExprT>
 constexpr auto configure(ExprT&& expr, const query_options& options)
 {
@@ -561,35 +588,35 @@ constexpr interval intersection(interval lhs, const interval& rhs)
  return detail::to_keyspace_select(core::intersection(lhs, rhs), lhs.options);
 }
 
-template <typename LhsT, typename RhsT>
-requires expression<LhsT> and expression<RhsT> and
-        (not (query_interval<LhsT> and query_interval<RhsT>))
-constexpr auto intersection(LhsT&& lhs, RhsT&& rhs)
+template <typename LHS_T, typename RHS_T>
+requires expression<LHS_T> and expression<RHS_T> and
+        (not (query_interval<LHS_T> and query_interval<RHS_T>))
+constexpr auto intersection(LHS_T&& lhs, RHS_T&& rhs)
 {
  return detail::with_options_of(lhs,
-  core::intersection(detail::core_expression_of(std::forward<LhsT>(lhs)),
-                     detail::core_expression_of(std::forward<RhsT>(rhs))));
+  core::intersection(detail::core_expression_of(std::forward<LHS_T>(lhs)),
+                     detail::core_expression_of(std::forward<RHS_T>(rhs))));
 }
 
-template <typename LhsT, typename RhsT>
-requires expression<LhsT> and expression<RhsT>
-constexpr auto difference(LhsT&& lhs, RhsT&& rhs)
+template <typename LHS_T, typename RHS_T>
+requires expression<LHS_T> and expression<RHS_T>
+constexpr auto difference(LHS_T&& lhs, RHS_T&& rhs)
 {
  // Query options are execution options for compiled ranges, not part of
  // interval algebra; rhs shapes the result but does not emit ranges, so its
  // options wouldn't have a job to do here:
  return detail::with_options_of(lhs,
-  core::difference(detail::core_expression_of(std::forward<LhsT>(lhs)),
-                   detail::core_expression_of(std::forward<RhsT>(rhs))));
+  core::difference(detail::core_expression_of(std::forward<LHS_T>(lhs)),
+                   detail::core_expression_of(std::forward<RHS_T>(rhs))));
 }
 
-template <typename LhsT, typename RhsT>
-requires expression<LhsT> and expression<RhsT>
-constexpr auto set_union(LhsT&& lhs, RhsT&& rhs)
+template <typename LHS_T, typename RHS_T>
+requires expression<LHS_T> and expression<RHS_T>
+constexpr auto set_union(LHS_T&& lhs, RHS_T&& rhs)
 {
  return detail::with_options_of(lhs,
-  core::set_union(detail::core_expression_of(std::forward<LhsT>(lhs)),
-                  detail::core_expression_of(std::forward<RhsT>(rhs))));
+  core::set_union(detail::core_expression_of(std::forward<LHS_T>(lhs)),
+                  detail::core_expression_of(std::forward<RHS_T>(rhs))));
 }
 
 template <expression ExprT>
@@ -651,16 +678,21 @@ constexpr std::size_t interval_count(const ExprT& expr)
 {
  std::size_t count = 0;
 
- for_each_interval(expr, [&count](const interval&) {
-  ++count;
- });
+ for_each_interval(expr, [&count](const interval&) { ++count; });
 
  return count;
 }
 
+// Relationship predicates are bounded to ordinary FoundationDB keyspace.
+// Common expression shapes are answered structurally; others use the same
+// canonical interval stream as query execution:
 template <expression ExprT>
 constexpr bool is_empty_expression(const ExprT& expr)
 {
+ if constexpr (detail::is_keyspace_bounded_v<ExprT>) {
+  return core::is_empty_expression(detail::core_expression_of(expr));
+ }
+
  return 0 == interval_count(expr);
 }
 
@@ -668,34 +700,39 @@ template <expression ExprT>
 constexpr bool contains(const ExprT& expr, const concepts::libfdb_key auto& key)
 {
  const auto key_view = detail::key_view(key);
- bool found = false;
 
- for_each_interval(expr, [&found, key_view](const interval& x) {
-  if (found) {
-   return;
-  }
+ if (detail::at_or_after_keyspace_limit(key_view)) {
+  return false;
+ }
 
-  found = core::contains(x, key_view);
- });
-
- return found;
+ return core::contains(detail::core_expression_of(expr), key_view);
 }
 
-template <expression LhsT, expression RhsT>
-constexpr bool is_disjoint(const LhsT& lhs, const RhsT& rhs)
+template <expression LHS_T, expression RHS_T>
+constexpr bool intersects(const LHS_T& lhs, const RHS_T& rhs)
 {
- return is_empty_expression(intersection(lhs, rhs));
+ if constexpr (detail::is_keyspace_bounded_v<LHS_T> &&
+               detail::is_keyspace_bounded_v<RHS_T>) {
+  return core::intersects(detail::core_expression_of(lhs), detail::core_expression_of(rhs));
+ }
+
+ return not is_empty_expression(intersection(lhs, rhs));
 }
 
-template <expression LhsT, expression RhsT>
-constexpr bool intersects(const LhsT& lhs, const RhsT& rhs)
+template <expression LHS_T, expression RHS_T>
+constexpr bool is_disjoint(const LHS_T& lhs, const RHS_T& rhs)
 {
- return not is_disjoint(lhs, rhs);
+ return not intersects(lhs, rhs);
 }
 
-template <expression LhsT, expression RhsT>
-constexpr bool encloses(const LhsT& outer, const RhsT& inner)
+template <expression LHS_T, expression RHS_T>
+constexpr bool encloses(const LHS_T& outer, const RHS_T& inner)
 {
+ if constexpr (detail::is_keyspace_bounded_v<LHS_T> &&
+               detail::is_keyspace_bounded_v<RHS_T>) {
+  return core::encloses(detail::core_expression_of(outer), detail::core_expression_of(inner));
+ }
+
  return is_empty_expression(difference(inner, outer));
 }
 
