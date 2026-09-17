@@ -1,7 +1,10 @@
 import json
 from unittest.mock import patch
 
+import pytest
+
 from cephadm.services.smb import SMBSpec, SMBExternalCephCluster
+from cephadm import utils
 from cephadm.module import CephadmOrchestrator
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 
@@ -167,7 +170,7 @@ def test_smb_get_dependencies(cephadm_module):
         ],
         ceph_cluster_configs=[
             SMBExternalCephCluster(
-                alias="exo",
+                alias='exo',
                 fsid='cf05db31-3d4e-4ffd-85ad-753434d5add1',
                 mon_host='[v2:192.168.76.200:3300/0,v1:192.168.76.200:6789/0]',
                 user='client.smb.remote1',
@@ -179,5 +182,79 @@ def test_smb_get_dependencies(cephadm_module):
     deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
     assert deps == [
         'smb+meta:ceph_cluster_config.exo=sha256:859b001f76df4d184b858b9c3e323ca8ff85a311414d0405f4484d17aa481ef3',
-        'smb+field:features=domain'
+        'smb+field:features=domain',
     ]
+
+
+# Umbrella SMBSpec has six flat TLS fields; it does not define ssl_certificates.
+_TLS_FIELDS = [
+    ('remote-control', 'remote_control_ssl_cert', 'REMOTE-CERT'),
+    ('remote-control', 'remote_control_ssl_key', 'REMOTE-KEY'),
+    ('remote-control', 'remote_control_ca_cert', 'REMOTE-CA'),
+    ('keybridge', 'keybridge_kmip_ssl_cert', 'KEYBRIDGE-CERT'),
+    ('keybridge', 'keybridge_kmip_ssl_key', 'KEYBRIDGE-KEY'),
+    ('keybridge', 'keybridge_kmip_ca_cert', 'KEYBRIDGE-CA'),
+]
+
+
+@pytest.mark.parametrize('feature,field,content', _TLS_FIELDS)
+def test_smb_tls_feature_dependencies(cephadm_module, feature, field, content):
+    from cephadm.services.smb import SMBService
+
+    spec = SMBSpec(
+        cluster_id='foxtrot',
+        config_uri='rados://.smb/foxtrot/config2.json',
+        features=[feature],
+        **{field: content},
+    )
+
+    deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
+    assert f'smb+field:{field}={utils.config_hash(content)}' in deps
+    # Sensitive certificate/key contents should not appear in stored deps.
+    assert not any(content in dep for dep in deps)
+
+
+def test_smb_tls_feature_rotation_changes_dependencies(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    spec = SMBSpec(
+        cluster_id='foxtrot',
+        config_uri='rados://.smb/foxtrot/config2.json',
+        features=['remote-control'],
+        remote_control_ssl_cert='CERT-1',
+    )
+    deps_before = SMBService.get_dependencies(
+        cephadm_module, spec, spec.service_type
+    )
+
+    spec.remote_control_ssl_cert = 'CERT-2'
+    deps_after = SMBService.get_dependencies(
+        cephadm_module, spec, spec.service_type
+    )
+
+    assert deps_before != deps_after
+    assert (
+        f'smb+field:remote_control_ssl_cert={utils.config_hash("CERT-1")}'
+        in deps_before
+    )
+    assert (
+        f'smb+field:remote_control_ssl_cert={utils.config_hash("CERT-2")}'
+        in deps_after
+    )
+
+
+def test_smb_disabled_tls_feature_not_in_dependencies(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    spec = SMBSpec(
+        cluster_id='foxtrot',
+        config_uri='rados://.smb/foxtrot/config2.json',
+        features=['domain'],
+        remote_control_ssl_cert='IGNORED-CERT',
+        remote_control_ssl_key='IGNORED-KEY',
+        keybridge_kmip_ssl_cert='IGNORED-KEYBRIDGE-CERT',
+    )
+
+    deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
+    for _, field, _ in _TLS_FIELDS:
+        assert not any(f'smb+field:{field}=' in dep for dep in deps)
