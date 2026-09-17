@@ -272,6 +272,35 @@ To check if a subvolume group has namespace isolation enabled, use the
 ``fs subvolumegroup info`` command and look for the ``pool_namespace``
 field in the output.
 
+Namespace isolation is opt-in, so upgrading a cluster does not change any
+existing subvolume group, subvolume, or the data in it. Nothing is migrated
+automatically.
+
+Because ``fs subvolumegroup create`` is idempotent, an existing subvolume
+group can be given namespace isolation by re-running the command with the
+``--namespace-isolated`` option:
+
+.. prompt:: bash #
+
+   ceph fs subvolumegroup create <vol_name> <group_name> --namespace-isolated [--pool-namespace <namespace>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>]
+
+Note the following restrictions when an existing subvolume group is
+converted this way:
+
+* The idempotent create re-applies the UID, GID and file mode of the group.
+  Any of the three that is not passed on the command line is reset to its
+  default (``0``, ``0`` and ``755``, respectively), so pass the values that
+  the group is already using. The size (quota), data pool layout,
+  normalization form and case sensitivity of the group are left unchanged.
+* Only the subvolumes that are created in the group *after* it has been
+  converted inherit namespace isolation. Subvolumes that already exist are
+  not moved, and their data remains in the RADOS namespace that it was
+  written to. Isolating such a subvolume requires creating a new subvolume
+  in the group and copying the data into it.
+* Namespace isolation cannot be removed from a subvolume group after it has
+  been set. Re-running the create command without ``--namespace-isolated``
+  leaves the ``ceph.dir.layout.pool_namespace`` extended attribute in place.
+
 Remove a subvolume group by running a command of the following form:
 
 .. prompt:: bash #

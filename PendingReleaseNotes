@@ -38,7 +38,12 @@
   ``fs subvolume create`` invocation. An optional ``--pool-namespace`` flag allows
   specifying an explicit RADOS namespace to override the auto-generated name.
   This provides per-tenant RADOS-level security isolation at the subvolume group
-  granularity.
+  granularity. The option is opt-in: upgraded clusters are unaffected and no
+  existing subvolume group is migrated automatically. An existing group can be
+  converted by re-running ``fs subvolumegroup create`` with
+  ``--namespace-isolated``, but only subvolumes created afterwards inherit the
+  isolation. See the "Subvolume groups" section of ``doc/cephfs/fs-volumes.rst``
+  for the restrictions that apply when converting an existing group.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
