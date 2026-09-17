@@ -10,6 +10,7 @@
 
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_objects.h"
 #endif
 #include "store_test_fixture.h"
 
