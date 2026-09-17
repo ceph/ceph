@@ -19,13 +19,10 @@ source "${SCRIPT_DIR}/cmake/presets/detect_host.sh"
 
 ARGS="${ARGS} -GNinja"
 bootstrap_local_presets "${SCRIPT_DIR}/cmake/presets"
+detect_host_settings
 write_host_json "${SCRIPT_DIR}/cmake/presets/host.json"
-ARGS+="$(build_host_cmake_args)"
-if [ -n "${WITH_SCCACHE:-}" ]; then
-    echo "enabling sccache"
-elif [ -n "${WITH_CCACHE:-}" ]; then
-    echo "enabling ccache"
-fi
+build_host_cmake_args
+ARGS+="${HOST_CMAKE_ARGS}"
 
 mkdir $BUILD_DIR
 cd $BUILD_DIR
