@@ -457,6 +457,11 @@ struct C_GroupGetInfo : public Context {
   }
 
   void finish(int r) override {
+    if (promotion_state == mirror::PROMOTION_STATE_ERROR) {
+      on_finish->complete(-ESTALE);
+      return;
+    }
+
     if (r < 0) {
       on_finish->complete(r);
       return;
@@ -2590,9 +2595,11 @@ int Mirror<I>::group_resync(IoCtx& group_ioctx, const char *group_name) {
                    << dendl;
     return -EINVAL;
   } else if (r < 0) {
-    lderr(cct) << "failed to get mirror group info: "
-               << cpp_strerror(r) << dendl;
-    return r;
+    if (promotion_state != mirror::PROMOTION_STATE_ERROR) {
+      lderr(cct) << "failed to get mirror group info: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
   if (promotion_state == mirror::PROMOTION_STATE_PRIMARY) {
