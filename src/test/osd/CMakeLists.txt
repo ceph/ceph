@@ -116,6 +116,7 @@ add_executable(unittest_peeringstate
   TestPeeringState.cc
   $<TARGET_OBJECTS:pg_backend_test_fixture>
   $<TARGET_OBJECTS:ec_peering_test_fixture>
+  $<TARGET_OBJECTS:object_tracker>
   )
 add_ceph_unittest(unittest_peeringstate)
 target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
@@ -123,6 +124,7 @@ target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLK
 add_library(pg_backend_test_fixture OBJECT
   PGBackendTestFixture.cc
   MockPGBackendListener.cc
+  MockStore.cc
 )
 target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 
@@ -133,11 +135,27 @@ add_library(ec_peering_test_fixture OBJECT
 )
 target_link_libraries(ec_peering_test_fixture osd os global GTest::GTest)
 
+# object_tracker: object library for ObjectTracker implementation
+add_library(object_tracker OBJECT
+  ObjectTracker.cc
+)
+target_link_libraries(object_tracker osd global)
+
+# unittest_object_tracker
+add_executable(unittest_object_tracker
+  TestObjectTracker.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:object_tracker>
+  )
+add_ceph_unittest(unittest_object_tracker)
+target_link_libraries(unittest_object_tracker osd global ${BLKID_LIBRARIES})
+
 # unittest_backend_basics (replaces unittest_ecbasics + unittest_replicatedbasics)
 add_executable(unittest_backend_basics
   TestBackendBasics.cc
   $<TARGET_OBJECTS:unit-main>
   $<TARGET_OBJECTS:pg_backend_test_fixture>
+  $<TARGET_OBJECTS:object_tracker>
   )
 add_ceph_unittest(unittest_backend_basics)
 target_link_libraries(unittest_backend_basics osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
@@ -149,6 +167,7 @@ add_executable(unittest_ecfailover_with_peering
   $<TARGET_OBJECTS:store_test_fixture>
   $<TARGET_OBJECTS:pg_backend_test_fixture>
   $<TARGET_OBJECTS:ec_peering_test_fixture>
+  $<TARGET_OBJECTS:object_tracker>
   )
 add_ceph_unittest(unittest_ecfailover_with_peering)
 target_link_libraries(unittest_ecfailover_with_peering osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
@@ -241,6 +260,7 @@ set(OSD_UNITTESTS
   unittest_osd_osdcap
   unittest_osd_types
   unittest_osdscrub
+  unittest_object_tracker
   unittest_peeringstate
   unittest_pg_transaction
   unittest_pglog

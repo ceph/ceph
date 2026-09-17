@@ -140,7 +140,12 @@ struct PGLogTestBase {
 
 class PGLogTest : virtual public ::testing::Test, protected PGLog, public PGLogTestBase  {
 public:
-  PGLogTest() : PGLog(g_ceph_context) {}
+  pg_pool_t test_pool;
+  
+  PGLogTest() : PGLog(g_ceph_context) {
+    test_pool.type = pg_pool_t::TYPE_REPLICATED;
+    test_pool.size = 3;
+  }
   void SetUp() override {
     missing.may_include_deletes = true;
   }
