@@ -204,7 +204,8 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
 }
 
 int D4NFilterBucket::fetch_objects_batch(const DoutPrefixProvider* dpp, const ListParams& params, int batch_size,
-                            std::string& cursor_or_start, std::string& marker, bool is_first_batch, FetchContext& fetch_ctx, optional_yield y)
+                            std::string& cursor_or_start, std::string& marker, bool is_first_batch, FetchContext& fetch_ctx,
+                            std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn, optional_yield y)
 {
   auto bucketDir = this->filter->get_bucket_dir();
   // Only relevant on the very first batch: are we resuming mid-way
@@ -225,7 +226,7 @@ int D4NFilterBucket::fetch_objects_batch(const DoutPrefixProvider* dpp, const Li
     marker_needs_inclusion,
     fetch_ctx.objects,
     continuation_token,
-    std::nullopt);
+    txn);
 
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " scan_objects failed: " << ret << dendl;
@@ -251,7 +252,8 @@ int D4NFilterBucket::fetch_objects_batch(const DoutPrefixProvider* dpp, const Li
 
 int D4NFilterBucket::build_versioned_entries(const DoutPrefixProvider* dpp, const rgw::d4n::CacheObject& obj,
                               const ListParams& params, std::vector<rgw_bucket_dir_entry>& entries,
-                              std::string& last_version, int& num_objs, bool& object_exhausted, int max, optional_yield y) {
+                              std::string& last_version, int& num_objs, bool& object_exhausted, int max,
+                              std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn, optional_yield y) {
   std::vector<rgw::d4n::CacheObjectVersion> versions;
   std::string objName = obj.objName;
   if (objName[0] == '_') {
@@ -272,7 +274,7 @@ int D4NFilterBucket::build_versioned_entries(const DoutPrefixProvider* dpp, cons
     }
 
     std::string continuation_token;
-    auto ret = objDir->list_versions(dpp, y, bucket_id, obj.objName, start_version, count, versions, continuation_token, std::nullopt);
+    auto ret = objDir->list_versions(dpp, y, bucket_id, obj.objName, start_version, count, versions, continuation_token, txn);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " list_versions failed: " << ret << dendl;
       return ret;
@@ -363,6 +365,7 @@ int D4NFilterBucket::process_objects_batch(const DoutPrefixProvider* dpp,
                               int& num_objs, int max,
                               bool is_truncated, //is input_objects truncated
                               bool& stopped_early,
+                              std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn,
                               optional_yield y)
 {
   ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " is_truncated: " << is_truncated << dendl;
@@ -404,7 +407,7 @@ int D4NFilterBucket::process_objects_batch(const DoutPrefixProvider* dpp,
 
     // 3. Not grouped -- expand versions (or single entry) against remaining budget
     bool object_exhausted = true; // all versions listed
-    int ret = build_versioned_entries(dpp, cache_obj, params, cache_results.objs, last_version, num_objs, object_exhausted, max, y);
+    int ret = build_versioned_entries(dpp, cache_obj, params, cache_results.objs, last_version, num_objs, object_exhausted, max, txn, y);
     if (ret < 0) return ret;
 
     if (num_objs == max) {
@@ -426,6 +429,7 @@ int D4NFilterBucket::process_objects_batch(const DoutPrefixProvider* dpp,
 }
 
 int D4NFilterBucket::populate_cache_results(const DoutPrefixProvider* dpp, std::vector<rgw_bucket_dir_entry>& entries,
+                                            std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn,
                                             optional_yield y)
 {
   if (entries.empty()) {
@@ -656,10 +660,14 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
     bool is_first_batch = true;
 
     while (num_objs < max) {
+      // Create transaction for this batch
+      auto txn = filter->get_txn_factory()->create_transaction(dpp);
+      auto txn_ref = std::ref(*txn);
+
       FetchContext fetch_ctx;
       // 1. Fetch from cache using list_objects method that performs prefix matching or range requests
       int ret = fetch_objects_batch(dpp, params, max,
-                                      cursor_or_start, marker, is_first_batch, fetch_ctx, y);
+                                      cursor_or_start, marker, is_first_batch, fetch_ctx, txn_ref, y);
       if (ret < 0) {
         return ret;
       }
@@ -677,12 +685,18 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
       // 2. Filter(if needed), group by delimiter and build versioned entries
       ret = process_objects_batch(dpp, fetch_ctx.objects, params, cache_results,
                                   store_results, last_version, num_objs, max,
-                                  fetch_ctx.has_more, stopped_early, y);
+                                  fetch_ctx.has_more, stopped_early, txn_ref, y);
       if (ret < 0) {
         return ret;
       }
       // 3. Fetch block metadata and populate cache_results.objs
-      ret = populate_cache_results(dpp, cache_results.objs, y);
+      ret = populate_cache_results(dpp, cache_results.objs, txn_ref, y);
+      if (ret < 0) {
+        return ret;
+      }
+
+      // Commit this batch transaction
+      ret = txn->commit(dpp, y);
       if (ret < 0) {
         return ret;
       }
