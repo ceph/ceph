@@ -4,6 +4,13 @@
  OS Recommendations
 ====================
 
+.. meta::
+   :description: The operating systems, kernels, and container hosts that each Ceph release is built and tested on.
+   :ceph-page-type: reference
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: docs
+
 Recommended Deployment Method: Containers via Cephadm
 =====================================================
 
@@ -215,6 +222,12 @@ Anticipated Horizontal OS Upgrade Paths
 | Rocky 10 (`May 2035 <Rocky_>`_)      | Rocky 11 (May 2038*)                 | X, Y                      |
 +--------------------------------------+--------------------------------------+---------------------------+
 
+Additional Resources
+====================
+
+- :ref:`hardware-recommendations`
+- :ref:`ceph-releases-general`
+- :ref:`cephadm_deploying_new_cluster`
 
 .. _CentOS: https://www.centos.org/cl-vs-cs/
 .. _Debian_b: https://www.debian.org/releases/bookworm/

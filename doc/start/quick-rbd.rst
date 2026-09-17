@@ -1,73 +1,124 @@
-==========================
- Block Device Quick Start
-==========================
+.. _quick-rbd:
 
-Ensure your :term:`Ceph Storage Cluster` is in an ``active + clean`` state
-before working with the :term:`Ceph Block Device`.
+========================================
+ Creating and Mounting a Block Device
+========================================
 
-.. note:: The Ceph Block Device is also known as :term:`RBD` or :term:`RADOS`
-   Block Device.
+.. meta::
+   :description: Create a Ceph block device image, map it on a client, and mount a file system on it.
+   :ceph-page-type: procedure
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rbd
 
+This procedure creates a :term:`Ceph Block Device` (RBD) image, maps it on a
+Linux client, and mounts a file system on it. Use it to try block storage on a
+new cluster. For day-to-day image management, see :ref:`ceph_block_device`.
 
-.. ditaa::
+:Applies to: Squid, Tentacle
+:Last reviewed: September 2026
 
-           /------------------\         /----------------\
-           |    Admin Node    |         |   ceph-client  |
-           |                  +-------->+ cCCC           |
-           |                  |         |      ceph      |
-           \------------------/         \----------------/
+Prerequisites
+=============
 
+- A running Ceph cluster that reports ``HEALTH_OK``.
+- A Linux client host that has the ``ceph-common`` package installed, and a
+  copy of ``/etc/ceph/ceph.conf`` and of a keyring that is allowed to use the
+  cluster.
+- A client host that is not also a host of the Ceph cluster, unless the client
+  is a virtual machine. Mapping a block device with the kernel client on a
+  host that runs Ceph daemons can cause a deadlock.
 
-You may use a virtual machine for your ``ceph-client`` node, but do not
-execute the following procedures on the same physical node as your Ceph
-Storage Cluster nodes (unless you use a VM).
+Procedure
+=========
 
-Create a Block Device Pool
-==========================
+#. On a cluster host, create a :term:`pool<Pools>` for block device images. This example
+   uses the pool name ``rbd1701``:
 
-#. On the admin node, use the ``ceph`` tool to :ref:`create a pool <createpool>`
-   (we recommend the name 'rbd').
+   .. prompt:: bash #
 
-#. On the admin node, use the ``rbd`` tool to initialize the pool for use by RBD:
+      ceph osd pool create rbd1701
 
-   .. prompt:: bash $
+   The command prints ``pool 'rbd1701' created``.
 
-      rbd pool init <pool-name>
+#. Initialize the pool for use by RBD:
 
-Configure a Block Device
-========================
+   .. prompt:: bash #
 
-#. On the ``ceph-client`` node, create a block device image.
+      rbd pool init rbd1701
 
-   .. prompt:: bash $
+#. On the client host, create a 1 GB image:
 
-      rbd create foo --size 40G [-m <mon-IP>] [-k /path/to/ceph.client.admin.keyring] [-p <pool-name>]
+   .. prompt:: bash #
 
-#. On the ``ceph-client`` node, map the image to a block device.
+      rbd create rbd1701/image1701 --size 1G
 
-   .. prompt:: bash $
+#. Map the image to a block device:
 
-      sudo rbd map foo [-m <mon-IP>] [-k /path/to/ceph.client.admin.keyring] [-p <pool-name>]
+   .. prompt:: bash #
 
-#. Use the block device by creating a file system on the ``ceph-client``
-   node.
+      rbd map rbd1701/image1701
 
-   .. prompt:: bash $
+   The command prints the name of the new device, for example ``/dev/rbd0``.
 
-      sudo mkfs.ext4 -m0 /dev/rbd/<pool-name>/foo
+#. Create a file system on the device:
 
-   This may take a few moments.
+   .. prompt:: bash #
 
-#. Mount the file system on the ``ceph-client`` node.
+      mkfs.ext4 /dev/rbd/rbd1701/image1701
 
-   .. prompt:: bash $
+#. Create a mount point:
 
-      sudo mkdir /mnt/ceph-block-device
-      sudo mount /dev/rbd/<pool-name>/foo /mnt/ceph-block-device
-      cd /mnt/ceph-block-device
+   .. prompt:: bash #
 
-#. Optionally configure the block device to be automatically mapped and mounted
-   at boot (and unmounted/unmapped at shutdown) - see the :ref:`rbdmap manpage <rbdmap>`.
+      mkdir /mnt/ceph-block-device
 
-See :ref:`ceph_block_device` for additional details.
+#. Mount the file system:
 
+   .. prompt:: bash #
+
+      mount /dev/rbd/rbd1701/image1701 /mnt/ceph-block-device
+
+Verification
+============
+
+- List the mapped images:
+
+  .. prompt:: bash #
+
+     rbd device list
+
+  The output shows ``image1701`` in pool ``rbd1701`` and the device that it is
+  mapped to.
+
+- Confirm that the file system is mounted:
+
+  .. prompt:: bash #
+
+     df -h /mnt/ceph-block-device
+
+Troubleshooting
+===============
+
+- If ``rbd map`` reports ``RBD image feature set mismatch``, the kernel on the
+  client does not support every feature that is enabled on the image. Run the
+  ``rbd feature disable`` command that the error message suggests, then map
+  the image again.
+- If ``rbd`` commands hang or report an authentication error, check that
+  ``/etc/ceph/ceph.conf`` and the keyring on the client are copies of the
+  files on the cluster, and that the client can reach the Monitors over the
+  network.
+
+Next Steps
+==========
+
+- Map the image automatically at boot. See the :ref:`rbdmap manpage <rbdmap>`.
+- Create a Ceph user for block device clients instead of using the ``admin``
+  user. See :doc:`/rbd/rados-rbd-cmds`.
+
+Additional Resources
+====================
+
+- :ref:`ceph_block_device`
+- :ref:`Pools <rados_pools>`
+- :doc:`/rbd/rbd-ko`
