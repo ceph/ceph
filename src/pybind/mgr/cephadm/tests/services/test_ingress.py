@@ -1763,3 +1763,99 @@ def test_tls_dependencies_apply_only_to_haproxy():
     assert 'certificate_source: inline' not in new_keepalived_deps
     assert not any(dep.startswith('ssl_cert:') for dep in new_keepalived_deps)
     assert not any(dep.startswith('ssl_key:') for dep in new_keepalived_deps)
+
+
+def test_haproxy_monitor_tls_dependencies_change_on_cert_rotation():
+    mgr = MagicMock()
+    backend_spec = RGWSpec(service_id='foo')
+    mgr.spec_store.__getitem__.return_value.spec = backend_spec
+    mgr.cache.get_daemons_by_service.return_value = [
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id='foo.host1',
+            hostname='host1',
+            service_name='rgw.foo',
+        )
+    ]
+
+    old_spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='cephadm-signed',
+        monitor_ssl=True,
+        monitor_cert_source='inline',
+        monitor_ssl_cert='old-monitor-cert',
+        monitor_ssl_key='old-monitor-key',
+    )
+    new_spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='cephadm-signed',
+        monitor_ssl=True,
+        monitor_cert_source='inline',
+        monitor_ssl_cert='new-monitor-cert',
+        monitor_ssl_key='new-monitor-key',
+    )
+
+    old_haproxy_deps = IngressService.get_dependencies(mgr, old_spec, 'haproxy')
+    new_haproxy_deps = IngressService.get_dependencies(mgr, new_spec, 'haproxy')
+    old_keepalived_deps = IngressService.get_dependencies(mgr, old_spec, 'keepalived')
+    new_keepalived_deps = IngressService.get_dependencies(mgr, new_spec, 'keepalived')
+
+    assert old_haproxy_deps != new_haproxy_deps
+    assert 'monitor_cert_source: inline' in new_haproxy_deps
+    assert (
+        f'monitor_ssl_cert: {utils.config_hash(new_spec.monitor_ssl_cert)}'
+        in new_haproxy_deps
+    )
+    assert (
+        f'monitor_ssl_key: {utils.config_hash(new_spec.monitor_ssl_key)}'
+        in new_haproxy_deps
+    )
+
+    assert old_keepalived_deps == new_keepalived_deps
+    assert not any(dep.startswith('monitor_') for dep in new_keepalived_deps)
+
+
+def test_haproxy_monitor_tls_reuse_service_cert_has_no_duplicate_cert_dependencies():
+    mgr = MagicMock()
+    backend_spec = RGWSpec(service_id='foo')
+    mgr.spec_store.__getitem__.return_value.spec = backend_spec
+    mgr.cache.get_daemons_by_service.return_value = [
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id='foo.host1',
+            hostname='host1',
+            service_name='rgw.foo',
+        )
+    ]
+
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='inline',
+        ssl_cert='service-cert',
+        ssl_key='service-key',
+        monitor_ssl=True,
+        monitor_cert_source='reuse_service_cert',
+    )
+
+    deps = IngressService.get_dependencies(mgr, spec, 'haproxy')
+
+    assert 'monitor_cert_source: reuse_service_cert' in deps
+    assert f'ssl_cert: {utils.config_hash(spec.ssl_cert)}' in deps
+    assert f'ssl_key: {utils.config_hash(spec.ssl_key)}' in deps
+    assert not any(dep.startswith('monitor_ssl_cert:') for dep in deps)
+    assert not any(dep.startswith('monitor_ssl_key:') for dep in deps)
