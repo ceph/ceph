@@ -252,7 +252,7 @@ int lua_execute(lua_State* L, const DoutPrefixProvider* dpp, const LuaCodeType& 
             lua_pop(L, 1);
             return -1;
           }
-          if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+          if (lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) {
             const std::string err(lua_tostring(L, -1));
             ldpp_dout(dpp, 1) << "Lua ERROR: failed to execute bytecode : " << err << dendl;
             lua_pop(L, 1);
