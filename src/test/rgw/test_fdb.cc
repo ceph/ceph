@@ -1914,6 +1914,45 @@ TEST_CASE("managed reads distinguish FDB failures from callback failures", "[fdb
 
   CHECK(1 == calls);
  }
+
+ SECTION("for_each callback failures are never replayed") {
+  const auto key = test_key("managed-read-for-each-error");
+  std::size_t calls = 0;
+
+  lfdb::set(dbh, key, "value");
+
+  try {
+   lfdb::for_each(dbh, lfdb::select {key}, [&calls](auto&&) {
+    ++calls;
+    throw lfdb::libfdb_exception(not_committed);
+   });
+   FAIL("expected callback failure");
+  } catch (const lfdb::libfdb_exception& e) {
+   CHECK(not_committed == e.fdb_error_value);
+  }
+
+  CHECK(1 == calls);
+ }
+
+ SECTION("transform callback failures are never replayed") {
+  const auto key = test_key("managed-read-transform-error");
+  std::size_t calls = 0;
+
+  lfdb::set(dbh, key, "value");
+
+  try {
+   std::ignore = lfdb::transform(
+    dbh, lfdb::select {key}, [&calls](auto&&) -> std::string {
+     ++calls;
+     throw lfdb::libfdb_exception(not_committed);
+    });
+   FAIL("expected callback failure");
+  } catch (const lfdb::libfdb_exception& e) {
+   CHECK(not_committed == e.fdb_error_value);
+  }
+
+  CHECK(1 == calls);
+ }
 }
 
 TEST_CASE("read_query_window", "[fdb]")

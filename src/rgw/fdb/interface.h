@@ -298,11 +298,10 @@ struct user_callback_failure final
  std::exception_ptr cause;
 };
 
-inline void invoke_user_callback(concepts::value_callback auto& fn,
-                                 const std::span<const std::uint8_t> value)
+inline decltype(auto) invoke_user_callback(auto& fn, auto&&... arguments)
 try
 {
- std::invoke(fn, value);
+ return std::invoke(fn, std::forward<decltype(arguments)>(arguments)...);
 }
 catch (...)
 {
@@ -325,7 +324,7 @@ namespace ceph::libfdb {
                                          const key_selector& selector,
                                          const read_mode mode = read_mode::serializable)
 {
- return detail::in_transaction(dbh,
+ return detail::in_read_transaction(dbh,
           [selector, mode](transaction_handle& txn) {
             return get_key(txn, selector, mode);
           });
@@ -1458,9 +1457,9 @@ template <query::expression SelectionT>
 [[nodiscard]] inline std::int64_t approximate_range_size(database_handle dbh,
                                                          SelectionT selection)
 {
- return detail::in_transaction(dbh,
-          [selection = std::move(selection)](transaction_handle& txn) mutable {
-            return approximate_range_size(txn, std::move(selection));
+ return detail::in_read_transaction(dbh,
+          [selection = std::move(selection)](transaction_handle& txn) {
+            return approximate_range_size(txn, selection);
           });
 }
 
@@ -1579,19 +1578,29 @@ inline void for_each(ceph::libfdb::transaction_handle txn,
 }
 
 // Database-handle functional helpers run inside the managed transaction loop.
-// Keep callbacks replay-safe; use an explicit transaction for side effects that
-// must not be repeated.
+// Keep callback side effects replay-safe; callback exceptions themselves escape
+// without being classified as FoundationDB failures:
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_consumer<FnT, ValueT>
 inline void for_each(ceph::libfdb::database_handle dbh,
                      SelectionT selection,
                      FnT&& fn,
                      const read_mode mode = read_mode::serializable)
+try
 {
- detail::in_transaction(dbh,
+ detail::in_read_transaction(dbh,
   [selection = std::move(selection), fn = std::forward<FnT>(fn), mode](auto& txn) mutable {
-   for_each<ValueT>(txn, selection, fn, mode);
+   for_each<ValueT>(txn, selection,
+                    [&fn](auto&& row) {
+                     detail::invoke_user_callback(
+                      fn, std::forward<decltype(row)>(row));
+                    },
+                    mode);
   });
+}
+catch (const detail::user_callback_failure& failure)
+{
+ std::rethrow_exception(failure.cause);
 }
 
 template <typename ValueT = std::string,
@@ -1641,11 +1650,21 @@ requires detail::row_invocable<FnT, ValueT> &&
                              SelectionT selection,
                              FnT&& fn,
                              const read_mode mode = read_mode::serializable)
+try
 {
- return detail::in_transaction(dbh,
+ return detail::in_read_transaction(dbh,
   [selection = std::move(selection), fn = std::forward<FnT>(fn), mode](auto& txn) mutable {
-   return transform<ValueT>(txn, selection, fn, mode);
+   return transform<ValueT>(txn, selection,
+                            [&fn](auto&& row) -> decltype(auto) {
+                             return detail::invoke_user_callback(
+                              fn, std::forward<decltype(row)>(row));
+                            },
+                            mode);
   });
+}
+catch (const detail::user_callback_failure& failure)
+{
+ std::rethrow_exception(failure.cause);
 }
 
 template <typename ValueT = std::string,
@@ -1756,9 +1775,10 @@ template <typename ValueT = std::string>
                         page p,
                         const read_mode mode = read_mode::serializable)
 {
- return make_transactor(dbh)([selector = std::move(selector), p, mode](auto& txn) {
-  return scan<ValueT>(txn, selector, p, mode);
- });
+ return detail::in_read_transaction(
+  dbh, [selector = std::move(selector), p, mode](auto& txn) {
+   return scan<ValueT>(txn, selector, p, mode);
+  });
 }
 
 // blocks() is for truly large scans that benefit from split planning:
