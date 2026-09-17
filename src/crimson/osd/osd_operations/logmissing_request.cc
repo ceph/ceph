@@ -70,17 +70,6 @@ LogMissingRequest::with_pg_interruptible(
   LOG_PREFIX(LogMissingRequest::with_pg_interruptible);
   DEBUGI("{}: pg present", *this);
 
-  // acquire throttle BEFORE entering exclusive process stage
-  // shared with RepRequest -- don't block it while waiting for slot
-  // uses immediate class so wait is instantaneous (high_priority queue)
-  auto throttle = co_await interruptor::make_interruptible(
-    shard_services.get_throttle(
-      scheduler::params_t{
-        1,
-        static_cast<unsigned>(req->get_priority()),
-        0,
-        SchedulerClass::immediate}));
-
   co_await this->template enter_stage<interruptor>(
     repop_pipeline(*pg).process);
 
@@ -91,6 +80,22 @@ LogMissingRequest::with_pg_interruptible(
     return pg->osdmap_gate.wait_for_map(
       std::move(trigger), req->min_epoch);
   }));
+
+  if (pg->can_discard_replica_op(*req)) {
+    co_return;
+  }
+
+  // acquire throttle AFTER process stage -- ordering preserved by pipeline
+  // process stage serializes repops/log missing in correct log entry order
+  // throttle before process stage causes out-of-order log entries (assert v > last_update)
+  auto throttle = co_await interruptor::make_interruptible(
+    shard_services.get_throttle(
+      scheduler::params_t{
+        1,
+        static_cast<unsigned>(req->get_priority()),
+        0,
+        SchedulerClass::immediate}));
+
   co_await pg->do_update_log_missing(req, get_remote_connection());
   logger().debug("{}: complete", *this);
   co_await interruptor::make_interruptible(handle.complete());
