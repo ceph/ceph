@@ -49,8 +49,6 @@ struct ImageMap<I>::C_NotifyInstance : public Context {
   void finish(int r) override {
     if (acquire_release) {
       image_map->handle_peer_ack(global_id, r);
-    } else {
-      image_map->handle_peer_ack_remove(global_id, r);
     }
     image_map->finish_async_op();
   }
@@ -199,7 +197,7 @@ void ImageMap<I>::process_updates() {
   // notify listener (acquire, release) and update on-disk map. note
   // that its safe to process this outside m_lock as we still hold
   // timer lock.
-  notify_listener_acquire_release_images(acquire_updates, release_updates);
+  notify_listener_acquire_release_entities(acquire_updates, release_updates);
   update_image_mapping(std::move(map_updates), std::move(map_removals));
 }
 
@@ -309,7 +307,7 @@ void ImageMap<I>::schedule_action(const GlobalId &global_id) {
 }
 
 template <typename I>
-void ImageMap<I>::notify_listener_acquire_release_images(
+void ImageMap<I>::notify_listener_acquire_release_entities(
     const Updates &acquire, const Updates &release) {
   if (acquire.empty() && release.empty()) {
     return;
@@ -360,8 +358,8 @@ void ImageMap<I>::notify_listener_acquire_release_images(
 }
 
 template <typename I>
-void ImageMap<I>::notify_listener_remove_images(const std::string &mirror_uuid,
-                                                const Updates &remove) {
+void ImageMap<I>::notify_listener_remove_entities(const std::string &mirror_uuid,
+                                                  const Updates &remove) {
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "remove=[" << remove << "]" << dendl;
 
@@ -403,23 +401,6 @@ void ImageMap<I>::handle_load(const std::map<GlobalId,
 }
 
 template <typename I>
-void ImageMap<I>::handle_peer_ack_remove(const GlobalId &global_id, int r) {
-  std::lock_guard locker{m_lock};
-  dout(5) << "global_id=" << global_id << dendl;
-
-  if (r < 0) {
-    derr << "failed to remove global_id=" << global_id << dendl;
-  }
-
-  auto peer_it = m_peer_map.find(global_id);
-  if (peer_it == m_peer_map.end()) {
-    return;
-  }
-
-  m_peer_map.erase(peer_it);
-}
-
-template <typename I>
 void ImageMap<I>::update_images_added(
     const std::string &mirror_uuid,
     const MirrorEntities &entities) {
@@ -452,22 +433,31 @@ void ImageMap<I>::update_images_removed(
     image_map::LookupInfo info = m_policy->lookup(global_id);
     bool entity_mapped = (info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
 
-    bool entity_removed = entity_mapped;
+    bool entity_removed = false;
     bool peer_removed = false;
     auto peer_it = m_peer_map.find(global_id);
     if (peer_it != m_peer_map.end()) {
       auto& peer_set = peer_it->second;
-      peer_removed = peer_set.erase(mirror_uuid);
-      entity_removed = peer_removed && peer_set.empty();
+
+      // remove this peer
+      peer_removed = (peer_set.erase(mirror_uuid) > 0);
+
+      // only when last peer is gone
+      if (peer_removed && peer_set.empty()) {
+        entity_removed = true;
+
+        // erase map entry safely
+        m_peer_map.erase(peer_it);
+      }
     }
 
     if (entity_mapped && peer_removed && !mirror_uuid.empty()) {
-      // peer entity has been deleted or local non-image entity needs restart
+      // notify listener for this peer entity removal
       to_remove.emplace_back(entity, info.instance_id);
     }
 
     if (entity_removed) {
-      // local and peer images have been deleted
+      // local and peer entities have been deleted
       if (m_policy->remove_entity(global_id)) {
         schedule_action(global_id);
       }
@@ -476,8 +466,8 @@ void ImageMap<I>::update_images_removed(
 
   if (!to_remove.empty()) {
     // removal notification will be notified instantly. this is safe
-    // even after scheduling action for images as we still hold m_lock
-    notify_listener_remove_images(mirror_uuid, to_remove);
+    // even after scheduling action for entities as we still hold m_lock
+    notify_listener_remove_entities(mirror_uuid, to_remove);
   }
 }
 
