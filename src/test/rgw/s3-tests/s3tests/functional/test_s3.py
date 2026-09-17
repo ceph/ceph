@@ -5699,6 +5699,32 @@ def test_object_copy_to_itself_with_metadata():
     response = client.get_object(Bucket=bucket_name, Key='foo123bar')
     assert response['Metadata'] == metadata
 
+@pytest.mark.encryption
+@pytest.mark.fails_on_dbstore
+def test_object_copy_to_itself_sse_c():
+    _test_copy_enc(1000, 'sse-c', 'sse-c', self_copy=True)
+
+@pytest.mark.encryption
+@pytest.mark.fails_on_dbstore
+def test_object_copy_to_itself_sse_kms():
+    _test_copy_enc(1000, 'sse-kms', 'sse-kms', self_copy=True)
+
+@pytest.mark.encryption
+def test_object_copy_sse_c_and_sse_kms():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    client.put_object(Bucket=bucket_name, Key='foo123bar', Body='foo')
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'foo123bar'}
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name,
+                      CopySource=copy_source, Key='bar321foo',
+                      ServerSideEncryption='aws:kms',
+                      SSECustomerAlgorithm='AES256',
+                      SSECustomerKey='pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs=',
+                      SSECustomerKeyMD5='DWygnHRtgiJ77HCm+1rvHw==')
+    status = _get_status(e.response)
+    assert status == 400
+
 @pytest.mark.fails_on_dbstore
 def test_object_copy_diff_bucket():
     bucket_name1 = get_new_bucket()
@@ -15588,7 +15614,48 @@ def test_sse_kms_default_upload_1mb():
 def test_sse_kms_default_upload_8mb():
     _test_sse_kms_default_upload(8*1024*1024)
 
+@pytest.mark.encryption
+@pytest.mark.bucket_encryption
+@pytest.mark.fails_on_dbstore
+def test_sse_kms_default_copy():
+    kms_keyid = get_main_kms_keyid()
+    if kms_keyid is None:
+        pytest.skip('[s3 main] section missing kms_keyid')
+    src_bucket_name = get_new_bucket()
+    dest_bucket_name = get_new_bucket()
+    client = get_client()
+    _put_bucket_encryption_kms(client, dest_bucket_name)
 
+    data = 'A'*1000
+    client.put_object(Bucket=src_bucket_name, Key='testobj', Body=data)
+
+    copy_source = {'Bucket': src_bucket_name, 'Key': 'testobj'}
+    response = client.copy_object(Bucket=dest_bucket_name, CopySource=copy_source, Key='testobj')
+    assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == 'aws:kms'
+    assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption-aws-kms-key-id'] == kms_keyid
+
+    response = client.get_object(Bucket=dest_bucket_name, Key='testobj')
+    assert response['ResponseMetadata']['HTTPHeaders']['x-amz-server-side-encryption'] == 'aws:kms'
+    assert _get_body(response) == data
+
+@pytest.mark.encryption
+@pytest.mark.bucket_encryption
+@pytest.mark.fails_on_dbstore
+def test_object_copy_to_itself_bucket_encryption():
+    kms_keyid = get_main_kms_keyid()
+    if kms_keyid is None:
+        pytest.skip('[s3 main] section missing kms_keyid')
+    bucket_name = get_new_bucket()
+    client = get_client()
+    _put_bucket_encryption_kms(client, bucket_name)
+    client.put_object(Bucket=bucket_name, Key='testobj', Body='A'*1000)
+
+    copy_source = {'Bucket': bucket_name, 'Key': 'testobj'}
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name,
+                      CopySource=copy_source, Key='testobj')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidRequest'
 
 @pytest.mark.encryption
 @pytest.mark.bucket_encryption
@@ -21625,7 +21692,7 @@ _copy_enc_dest_modes = {
     }
 }
 
-def _test_copy_enc(file_size, source_mode_key, dest_mode_key, source_sc=None, dest_sc=None):
+def _test_copy_enc(file_size, source_mode_key, dest_mode_key, source_sc=None, dest_sc=None, self_copy=False):
     source_args = _copy_enc_source_modes[source_mode_key]
     dest_args = _copy_enc_dest_modes[dest_mode_key]
 
@@ -21640,18 +21707,19 @@ def _test_copy_enc(file_size, source_mode_key, dest_mode_key, source_sc=None, de
     response = client.put_object(Bucket=bucket_name, Key='testobj', Body=data, **args)
     assert source_args.get('assert', lambda r: True)(response)
 
-    # copy the object to a new key, with destination encryption
-    dest_bucket_name = get_new_bucket()
+    # copy the object with destination encryption
+    dest_bucket_name = bucket_name if self_copy else get_new_bucket()
+    dest_key = 'testobj' if self_copy else 'testobj2'
     copy_args = {key: value() if callable(value) else value for key, value in dest_args.get('args', {}).items()}
     copy_args.update(source_args.get('source_copy_args', {}))
     if dest_sc:
         copy_args['StorageClass'] = dest_sc
-    response = client.copy_object(Bucket=dest_bucket_name, Key='testobj2', CopySource={'Bucket': bucket_name, 'Key': 'testobj'}, **copy_args)
+    response = client.copy_object(Bucket=dest_bucket_name, Key=dest_key, CopySource={'Bucket': bucket_name, 'Key': 'testobj'}, **copy_args)
     assert dest_args.get('assert', lambda r: True)(response)
 
     # verify the copy is encrypted
     get_args = dest_args.get('get_args', {})
-    response = client.get_object(Bucket=dest_bucket_name, Key='testobj2', **get_args)
+    response = client.get_object(Bucket=dest_bucket_name, Key=dest_key, **get_args)
     assert dest_args.get('assert', lambda r: True)(response)
     body = _get_body(response)
     assert body == data
