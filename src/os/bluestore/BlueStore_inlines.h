@@ -18,7 +18,7 @@
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
 
-inline BlueStore::SharedBlobRef BlueStore::SharedBlobSet::lookup(uint64_t sbid) {
+inline bluestore::SharedBlobRef bluestore::SharedBlobSet::lookup(uint64_t sbid) {
   std::lock_guard l(lock);
   auto p = sb_map.find(sbid);
   if (p == sb_map.end() || p->second->nref == 0) {
@@ -27,13 +27,13 @@ inline BlueStore::SharedBlobRef BlueStore::SharedBlobSet::lookup(uint64_t sbid) 
   return p->second;
 }
 
-inline void BlueStore::SharedBlobSet::add(Collection* coll, SharedBlob *sb) {
+inline void bluestore::SharedBlobSet::add(Collection* coll, SharedBlob *sb) {
   std::lock_guard l(lock);
   sb_map[sb->get_sbid()] = sb;
   sb->collection = coll;
 }
 
-inline bool BlueStore::SharedBlobSet::remove(SharedBlob *sb, bool verify_nref_is_zero) {
+inline bool bluestore::SharedBlobSet::remove(SharedBlob *sb, bool verify_nref_is_zero) {
   std::lock_guard l(lock);
   ceph_assert(sb->get_parent() == this);
   if (verify_nref_is_zero && sb->nref != 0) {
@@ -48,7 +48,7 @@ inline bool BlueStore::SharedBlobSet::remove(SharedBlob *sb, bool verify_nref_is
   return true;
 }
 
-inline BlueStore::BlobRef BlueStore::Collection::new_blob() {
+inline bluestore::BlobRef bluestore::Collection::new_blob() {
   BlobRef b = new Blob(this);
   b->get_cache()->add_blob();
   return b;
@@ -88,17 +88,6 @@ inline void BlueStore::_buffer_cache_write(
   unsigned flags) {
   onode->bc.write(onode->c->cache,
                   txc, offset, bl, flags);
-}
-
-inline void BlueStore::debug_punch_hole(
-  CollectionRef& c,
-  OnodeRef& o,
-  uint32_t off,
-  uint32_t len) {
-  BlueStore::TransContext txc(cct, c.get(), nullptr, nullptr);
-  BlueStore::WriteContext wctx;
-  o->extent_map.punch_hole(c, off, len, &wctx.old_extents);
-  _wctx_finish(&txc, c, o, &wctx, nullptr);
 }
 
 #endif

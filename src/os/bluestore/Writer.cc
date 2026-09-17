@@ -35,89 +35,12 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Writer::blob_data_p
   return out;
 }
 
-/// Empties range [offset~length] of object o that is in collection c.
-/// Collects unused elements:
-/// released - sequence of allocation units that are no longer used
-/// pruned_blobs - set of blobs that are no longer used
-/// shared_changed - set of shared blobs that are modified,
-///                  including the case of shared blob being empty
-/// statfs_delta - delta of stats
-/// returns: iterator to ExtentMap following last element removed
-BlueStore::extent_map_t::iterator BlueStore::_punch_hole_2(
-  Collection* c,
-  OnodeRef& o,
-  uint32_t offset,
-  uint32_t length,
-  PExtentVector& released,
-  std::vector<BlobRef>& pruned_blobs,       //completely emptied out blobs
-  std::set<SharedBlobRef>& shared_changed,  //shared blobs that have changed
-  volatile_statfs& statfs_delta)
-{
-  ExtentMap& emap = o->extent_map;
-  uint32_t end = offset + length;
-  auto p = emap.maybe_split_at(offset);
-  while (p != emap.extent_map.end() && p->logical_offset < end) {
-    // here split tail extent, if needed
-    if (end < p->logical_end()) {
-      p = emap.split_at(p, end);
-      --p;
-    }
-    // here always whole lextent to drop
-    auto& bblob = p->blob->dirty_blob();
-    uint32_t released_size = 0;
-    if (!bblob.is_shared()) {
-      released_size =
-        p->blob->put_ref_accumulate(c, p->blob_offset, p->length, &released);
-    } else {
-      // make sure shared blob is loaded
-      c->load_shared_blob(p->blob->get_shared_blob());
-      // more complicated shared blob release
-      PExtentVector local_released;  //no longer used by local blob
-      PExtentVector shared_released; //no longer used by shared blob too
-      p->blob->put_ref_accumulate(c, p->blob_offset, p->length, &local_released);
-      // filter local release disk regions
-      // through SharedBlob's multi-ref ref_map disk regions
-      bool unshare = false; //is there a chance that shared blob can be unshared?
-      // TODO - make put_ref return released_size directly
-      for (const auto& de: local_released) {
-        p->blob->get_shared_blob()->put_ref(de.offset, de.length, &shared_released, &unshare);
-      }
-      for (const auto& de : shared_released) {
-        released_size += de.length;
-      }
-      released.insert(released.end(), shared_released.begin(), shared_released.end());
-      shared_changed.insert(p->blob->get_shared_blob());
-    }
-    statfs_delta.allocated() -= released_size;
-    statfs_delta.stored() -= p->length;
-    if (bblob.is_compressed()) {
-      statfs_delta.compressed_allocated() -= released_size;
-      statfs_delta.compressed_original() -= p->length;
-      if (!bblob.has_disk()) {
-        statfs_delta.compressed() -= bblob.get_compressed_payload_length();
-      }
-    }
-    if (!bblob.has_disk()) {
-      pruned_blobs.push_back(p->blob);
-      if (p->blob->is_spanning()) {
-        emap.spanning_blob_map.erase(p->blob->id);
-        p->blob->id = -1;
-      }
-    }
-    Extent* e = &(*p);
-    p = emap.extent_map.erase(p);
-    delete e;
-  }
-  return p;
-}
-
-
 /// Signals that a range [offset~length] is no longer used.
 /// Collects allocation units that became unused into *released_disk.
 /// Returns:
 ///   disk space size to release
 uint32_t bluestore::Blob::put_ref_accumulate(
-  BlueStore::Collection *coll,
+  BlueStore::Collection* coll, //FIXME: redundant
   uint32_t offset,
   uint32_t length,
   PExtentVector *released_disk)
@@ -219,7 +142,7 @@ inline void BlueStore::Writer::_maybe_expand_blob(
 // +2 nick + sdisk + suse + sbuf + schk + attrs
 // +3 ptr + disk + use + buf
 // +4 ptr + disk + use + chk + buf + attrs
-using exmp_it = BlueStore::extent_map_t::iterator;
+using exmp_it = bluestore::extent_map_t::iterator;
 
 uint16_t BlueStore::Writer::debug_level_to_pp_mode(CephContext* cct) {
   static constexpr uint16_t modes[5] = {
@@ -236,14 +159,14 @@ uint16_t BlueStore::Writer::debug_level_to_pp_mode(CephContext* cct) {
 }
 
 
-inline BlueStore::extent_map_t::iterator BlueStore::Writer::_find_mutable_blob_left(
-  BlueStore::extent_map_t::iterator it,
+inline bluestore::extent_map_t::iterator BlueStore::Writer::_find_mutable_blob_left(
+  bluestore::extent_map_t::iterator it,
   uint32_t search_begin, // only interested in blobs that are
   uint32_t search_end,   // within range [begin - end)
   uint32_t mapmust_begin,// for 'unused' case: the area
   uint32_t mapmust_end)  // [begin - end) must be mapped
 {
-  extent_map_t& map = onode->extent_map.extent_map;
+  bluestore::extent_map_t& map = onode->extent_map.extent_map;
   if (it == map.begin()) {
     return map.end();
   }
@@ -269,14 +192,14 @@ inline BlueStore::extent_map_t::iterator BlueStore::Writer::_find_mutable_blob_l
   return map.end();
 }
 
-inline BlueStore::extent_map_t::iterator BlueStore::Writer::_find_mutable_blob_right(
-  BlueStore::extent_map_t::iterator it,
+inline bluestore::extent_map_t::iterator BlueStore::Writer::_find_mutable_blob_right(
+  bluestore::extent_map_t::iterator it,
   uint32_t search_begin,  // only interested in blobs that are
   uint32_t search_end,    // within range [begin - end)
   uint32_t mapmust_begin, // for 'unused' case: the area
   uint32_t mapmust_end)   // [begin - end) must be mapped
 {
-  extent_map_t& map = onode->extent_map.extent_map;
+  bluestore::extent_map_t& map = onode->extent_map.extent_map;
   for (;it != map.end();++it) {
     if (it->logical_offset >= search_end) break;
     if (search_begin > it->blob_start()) continue;
@@ -836,7 +759,7 @@ void BlueStore::Writer::_try_reuse_allocated_l(
   uint32_t block_size = bstore->block_size;
   ceph_assert(!bd.is_compressed());
   ceph_assert(p2phase<uint32_t>(logical_offset, au_size) != 0);
-  BlueStore::ExtentMap& emap = onode->extent_map;
+  bluestore::ExtentMap& emap = onode->extent_map;
   auto it = after_punch_it;
   while (it != emap.extent_map.begin()) {
     --it;
@@ -911,7 +834,7 @@ void BlueStore::Writer::_try_reuse_allocated_r(
   search_end = std::min(right_shard_bound, search_end);
   ceph_assert(!bd.is_compressed());
   ceph_assert(p2phase<uint32_t>(end_offset, au_size) != 0);
-  BlueStore::ExtentMap& emap = onode->extent_map;
+  bluestore::ExtentMap& emap = onode->extent_map;
   for (auto& it = after_punch_it; it != emap.extent_map.end(); ++it) {
     // first of all, check it we can even use the blob here
     if (it->logical_offset >= search_end) break;
@@ -1051,7 +974,7 @@ void BlueStore::Writer::_do_put_new_blobs(
   blob_vec::iterator& bd_it,
   blob_vec::iterator bd_end)
 {
-  extent_map_t& emap = onode->extent_map.extent_map;
+  bluestore::extent_map_t& emap = onode->extent_map.extent_map;
   uint32_t blob_size = wctx->target_blob_size;
   while (bd_it != bd_end) {
     Extent* le = nullptr;
@@ -1099,7 +1022,7 @@ void BlueStore::Writer::_do_put_blobs(
   exmp_it after_punch_it)
 {
   Collection* coll = onode->c;
-  extent_map_t& emap = onode->extent_map.extent_map;
+  bluestore::extent_map_t& emap = onode->extent_map.extent_map;
   uint32_t au_size = bstore->min_alloc_size;
   uint32_t blob_size = wctx->target_blob_size;
   auto bd_it = bd.begin();
@@ -1443,8 +1366,8 @@ void BlueStore::Writer::do_write_with_blobs(
   dout(20) << "blobs to put:" << blob_data_printer(bd, location) << dendl;
   statfs_delta.stored() += ref_end - location;
   exmp_it after_punch_it =
-    bstore->_punch_hole_2(onode->c, onode, location, data_end - location,
-    released, pruned_blobs, txc->shared_blobs, statfs_delta);
+    onode->extent_map.punch_hole_2(onode->c, onode, location, data_end - location,
+      released, pruned_blobs, txc->shared_blobs, statfs_delta);
   dout(25) << "after punch_hole_2: " << std::endl << onode->print(pp_mode) << dendl;
 
   // todo: if we align to disk block before splitting, we could do it in one go

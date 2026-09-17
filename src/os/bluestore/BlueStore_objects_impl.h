@@ -16,9 +16,6 @@
 #define CEPH_OSD_BLUESTORE_BLUESTORE_OBJECTS_IMPL_H
 
 #include <boost/intrusive_ptr.hpp>
-#include <boost/intrusive/set.hpp>
-
-#include "bluestore_types.h"
 
 namespace bluestore {
 
@@ -37,81 +34,42 @@ namespace bluestore {
     static constexpr uint16_t JUSTID = 2048; // used to suppress printing length, spanning and shared blob
   };
 
-  struct Onode;
-  typedef boost::intrusive_ptr<Onode> OnodeRef;
-  struct SharedBlob;
-  typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
+  // forward declarations from BlueStore_object.h
+  struct Collection;
+  typedef boost::intrusive_ptr<Collection> CollectionRef;
+
   struct Blob;
   typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef mempool::bluestore_cache_meta::map<int, BlobRef> blob_map_t;
 
-  /// a logical extent, pointing to (some portion of) a blob
-  typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
+  struct Onode;
+  typedef boost::intrusive_ptr<Onode> OnodeRef;
+  struct OnodeSpace;
+  struct OnodeCacheShard;
 
-  struct Extent : public ExtentBase {
-    MEMPOOL_CLASS_HELPERS();
+  struct Extent;
+  struct ExtentMap;
+  struct OldExtent;
+  struct OldExtentMap;
 
-    uint32_t logical_offset = 0;      ///< logical offset
-    uint32_t blob_offset = 0;         ///< blob offset
-    uint32_t length = 0;              ///< length
-    BlobRef  blob;                    ///< the blob with our data
+  struct SharedBlob;
+  typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
+  struct SharedBlobSet;
 
-    /// ctor for lookup only
-    explicit Extent(uint32_t lo) : ExtentBase(), logical_offset(lo) { }
-    /// ctor for delayed initialization (see decode_some())
-    explicit Extent() : ExtentBase() {
-    }
-    /// ctor for general usage
-    Extent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
-      : ExtentBase(),
-        logical_offset(lo), blob_offset(o), length(l) {
-      assign_blob(b);
-    }
-    ~Extent();
-    struct printer : public bluestore::printer {
-      const Extent& ext;
-      uint16_t mode;
-      printer(const Extent& ext, uint16_t mode)
-      :ext(ext), mode(mode) {}
-    };
-    friend std::ostream& operator<<(std::ostream& out, const printer &p);
-    printer print(uint16_t mode) const {
-      return printer(*this, mode);
-    }
+  struct TransContext;
 
-    void dump(ceph::Formatter* f) const;
+  struct DeferredBatch;
 
-    void assign_blob(const BlobRef& b);
+  class OpSequencer;
+  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
+  struct deferred_osr_queue_t;
 
-    // comparators for intrusive_set
-    friend bool operator<(const Extent &a, const Extent &b) {
-      return a.logical_offset < b.logical_offset;
-    }
-    friend bool operator>(const Extent &a, const Extent &b) {
-      return a.logical_offset > b.logical_offset;
-    }
-    friend bool operator==(const Extent &a, const Extent &b) {
-      return a.logical_offset == b.logical_offset;
-    }
+  struct WriteContext;
 
-    uint32_t blob_start() const {
-      return logical_offset - blob_offset;
-    }
+  struct BigDeferredWriteContext;
 
-    uint32_t blob_end() const;
+  struct GarbageCollector;
 
-    uint32_t logical_end() const {
-      return logical_offset + length;
-    }
-
-    // return true if any piece of the blob is out of
-    // the given range [o, o + l].
-    bool blob_escapes_range(uint32_t o, uint32_t l) const {
-      return blob_start() < o || blob_end() > o + l;
-    }
-  };
-
-  std::ostream& operator<<(std::ostream& out, const Extent& e);
+  struct printer;
 }
 
 #endif

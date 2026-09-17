@@ -18,6 +18,7 @@
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
 #include "BlueStore_inlines.h"
+#include "Compression.h"
 #include "os/kv.h"
 #include "common/pretty_binary.h"
 
@@ -43,36 +44,295 @@ using ceph::Formatter;
 
 using bid_t = decltype(bluestore::Blob::id);
 
-// Blob
+void get_shared_blob_key(uint64_t sbid, string* key);
+
+template<typename S>
+int get_key_object(const S& key, ghobject_t* oid);
+
+template<typename S>
+void get_object_key(CephContext* cct, const ghobject_t& oid, S* key);
+
+// Collection
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+#define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
 #undef dout_context
-#define dout_context collection->store->cct
+#define dout_context store->cct
 
-bluestore::Blob::~Blob()
+bluestore::Collection::Collection(BlueStore* store_,
+  OnodeCacheShard* oc, BlueStore::BufferCacheShard* bc, coll_t cid)
+  : ObjectStore::CollectionImpl(store_->cct, cid),
+  store(store_),
+  cache(bc),
+  exists(true),
+  onode_space(oc),
+  commit_queue(nullptr)
 {
- again:
-  auto coll_cache = get_cache();
-  if (coll_cache) {
-    std::lock_guard l(coll_cache->lock);
-    if (coll_cache != get_cache()) {
-      goto again;
+}
+
+bool bluestore::Collection::flush_commit(Context* c)
+{
+  return osr->flush_commit(c);
+}
+
+void bluestore::Collection::flush()
+{
+  osr->flush();
+}
+
+void bluestore::Collection::flush_all_but_last()
+{
+  osr->flush_all_but_last();
+}
+
+void bluestore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
+{
+  ceph_assert(!b->get_shared_blob());
+  const bluestore_blob_t& blob = b->get_blob();
+  if (!blob.is_shared()) {
+    return;
+  }
+
+  SharedBlobRef sb = shared_blob_set.lookup(sbid);
+  if (sb) {
+    b->set_shared_blob(sb);
+    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+      << std::dec << " had " << *b->get_shared_blob() << dendl;
+  }
+  else {
+    b->set_shared_blob(new SharedBlob(sbid, this));
+    shared_blob_set.add(this, b->get_shared_blob().get());
+    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+      << std::dec << " opened " << *b->get_shared_blob()
+      << dendl;
+  }
+}
+
+void bluestore::Collection::load_shared_blob(SharedBlobRef sb)
+{
+  if (!sb->is_loaded()) {
+
+    bufferlist v;
+    string key;
+    auto sbid = sb->get_sbid();
+    get_shared_blob_key(sbid, &key);
+    int r = store->get_kv()->get(PREFIX_SHARED_BLOB, key, &v);
+    if (r < 0) {
+      lderr(store->cct) << __func__ << " sbid 0x" << std::hex << sbid
+	<< std::dec << " not found at key "
+	<< pretty_binary_string(key) << dendl;
+      ceph_abort_msg("uh oh, missing shared_blob");
     }
-    coll_cache->rm_blob();
+
+    sb->loaded = true;
+    sb->persistent = new bluestore_shared_blob_t(sbid);
+    auto p = v.cbegin();
+    decode(*(sb->persistent), p);
+    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+      << std::dec << " loaded shared_blob " << *sb << dendl;
   }
 }
 
-void bluestore::Blob::dump(Formatter* f) const
+void bluestore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 {
-  if (is_spanning()) {
-    f->dump_unsigned("spanning_id ", id);
+  ldout(store->cct, 10) << __func__ << " " << *b << dendl;
+
+  // update blob
+  bluestore_blob_t& blob = b->dirty_blob();
+  blob.set_flag(bluestore_blob_t::FLAG_SHARED);
+  // drop any unused parts, unlikely we could use them in future
+  blob.clear_flag(bluestore_blob_t::FLAG_HAS_UNUSED);
+  // update shared blob
+  b->set_shared_blob(new SharedBlob(sbid, this));
+  b->get_shared_blob()->loaded = true;
+  b->get_shared_blob()->persistent = new bluestore_shared_blob_t(sbid);
+  shared_blob_set.add(this, b->get_shared_blob().get());
+  for (auto p : blob.get_extents()) {
+    if (p.is_valid()) {
+      b->get_shared_blob()->get_ref(
+	p.offset,
+	p.length);
+    }
   }
-  blob.dump(f);
-  if (shared_blob) {
-    f->dump_object("shared", *shared_blob);
-  }
+  ldout(store->cct, 20) << __func__ << " now " << *b << dendl;
 }
+
+uint64_t bluestore::Collection::make_blob_unshared(SharedBlob* sb)
+{
+  ldout(store->cct, 10) << __func__ << " " << *sb << dendl;
+  ceph_assert(sb->is_loaded());
+
+  uint64_t sbid = sb->get_sbid();
+  shared_blob_set.remove(sb);
+  sb->loaded = false;
+  delete sb->persistent;
+  sb->sbid_unloaded = 0;
+  ldout(store->cct, 20) << __func__ << " now " << *sb << dendl;
+  return sbid;
+}
+
+BlueStore::OnodeRef bluestore::Collection::get_onode(
+  const ghobject_t& oid,
+  bool create,
+  bool is_createop)
+{
+  ceph_assert(create ? ceph_mutex_is_wlocked(lock) : ceph_mutex_is_locked(lock));
+
+  spg_t pgid;
+  if (cid.is_pg(&pgid)) {
+    if (!oid.match(cnode.bits, pgid.ps())) {
+      lderr(store->cct) << __func__ << " oid " << oid << " not part of "
+	<< pgid << " bits " << cnode.bits << dendl;
+      ceph_abort();
+    }
+  }
+
+  OnodeRef o = onode_space.lookup(oid);
+  if (o) {
+    store->logger->inc(l_bluestore_onode_hits);
+    return o;
+  }
+  store->logger->inc(l_bluestore_onode_misses);
+  auto start = mono_clock::now(); //miss
+  BLUE_SCOPE(get_onode);
+  string key;
+  get_object_key(store->cct, oid, &key);
+
+  ldout(store->cct, 20) << __func__ << " oid " << oid << " key "
+    << pretty_binary_string(key) << dendl;
+
+  bufferlist v;
+  int r = -ENOENT;
+  Onode* on;
+  if (!is_createop) {
+    r = store->get_kv()->get(PREFIX_OBJ, key.c_str(), key.size(), &v);
+    ldout(store->cct, 20) << " r " << r << " v.len " << v.length() << dendl;
+  }
+  if (v.length() == 0) {
+    ceph_assert(r == -ENOENT);
+    if (!create) {
+      store->logger->tinc(l_bluestore_onode_miss_lat, mono_clock::now() - start);
+      return OnodeRef();
+    }
+  }
+  else {
+    ceph_assert(r >= 0);
+  }
+
+  // new object, load onode if available
+  on = Onode::create_decode(this, oid, key, v, true, store->segment_size != 0);
+  o.reset(on);
+  store->logger->tinc(l_bluestore_onode_miss_lat, mono_clock::now() - start);
+  return onode_space.add_onode(oid, o);
+}
+
+void bluestore::Collection::split_cache(
+  Collection* dest)
+{
+  ldout(store->cct, 10) << __func__ << " to " << dest << dendl;
+
+  auto* ocache = get_onode_cache();
+  auto* ocache_dest = dest->get_onode_cache();
+
+  // lock cache shards
+  std::lock(ocache->lock, ocache_dest->lock, cache->lock, dest->cache->lock);
+  std::lock_guard l(ocache->lock, std::adopt_lock);
+  std::lock_guard l2(ocache_dest->lock, std::adopt_lock);
+  std::lock_guard l3(cache->lock, std::adopt_lock);
+  std::lock_guard l4(dest->cache->lock, std::adopt_lock);
+
+  int destbits = dest->cnode.bits;
+  spg_t destpg;
+  bool is_pg = dest->cid.is_pg(&destpg);
+  ceph_assert(is_pg);
+
+  auto p = onode_space.onode_map.begin();
+  while (p != onode_space.onode_map.end()) {
+    OnodeRef o = p->second;
+    if (!p->second->oid.match(destbits, destpg.pgid.ps())) {
+      // onode does not belong to this child
+      ldout(store->cct, 20) << __func__ << " not moving " << o << " " << o->oid
+	<< dendl;
+      ++p;
+    }
+    else {
+      ldout(store->cct, 20) << __func__ << " moving " << o << " " << o->oid
+	<< dendl;
+
+      // ensuring that nref is always >= 2 and hence onode is pinned
+      OnodeRef o_pin = o;
+
+      p = onode_space.onode_map.erase(p);
+      dest->onode_space.onode_map[o->oid] = o;
+      if (o->cached) {
+	get_onode_cache()->_move_pinned(dest->get_onode_cache(), o.get());
+      }
+      o->c = dest;
+
+      // move over shared blobs and buffers.  cover shared blobs from
+      // both extent map and spanning blob map (the full extent map
+      // may not be faulted in)
+
+      auto rehome_blob = [&](Blob* b) {
+	cache->rm_blob();
+	dest->cache->add_blob();
+	SharedBlob* sb = b->get_shared_blob().get();
+	b->collection = dest;
+	if (sb) {
+	  if (sb->collection == dest) {
+	    ldout(store->cct, 20) << __func__ << "  already moved " << *sb
+	      << dendl;
+	    return;
+	  }
+	  ldout(store->cct, 20) << __func__ << "  moving " << *b << dendl;
+	  ldout(store->cct, 20) << __func__ << "  moving " << *sb << dendl;
+	  shared_blob_set.remove(sb);
+	  dest->shared_blob_set.add(dest, sb);
+	  sb->collection = dest;
+	}
+	};
+
+      for (auto& e : o->extent_map.extent_map) {
+	e.blob->last_encoded_id = -1;
+      }
+      for (auto& b : o->extent_map.spanning_blob_map) {
+	b.second->last_encoded_id = -1;
+      }
+
+      for (auto& b : o->bc.buffer_map) {
+	ceph_assert(!b.is_writing());
+	ldout(store->cct, 1)
+	  << __func__ << "   moving " << b << dendl;
+	dest->cache->_move(cache, &b);
+      }
+      for (auto& e : o->extent_map.extent_map) {
+	cache->rm_extent();
+	dest->cache->add_extent();
+	Blob* tb = e.blob.get();
+	if (tb->last_encoded_id == -1) {
+	  rehome_blob(tb);
+	  tb->last_encoded_id = 0;
+	}
+      }
+      for (auto& b : o->extent_map.spanning_blob_map) {
+	Blob* tb = b.second.get();
+	if (tb->last_encoded_id == -1) {
+	  // Having blob in spanning but not mapped is an error.
+	  // It will be dropped during encode_some(),
+	  // but in the meantime we want cache to be consistent.
+	  ldout(store->cct, 10) << __func__ << " spanning blob not in map " << *tb << dendl;
+	  rehome_blob(tb);
+	  tb->last_encoded_id = 0;
+	}
+      }
+    }
+  }
+  // The cache has now more elements.
+  // Trimming right away will cause stalls.
+  // It will get adjusted in MempoolThread
+}
+
+// Blob
 
 namespace bluestore {
   ostream& operator<<(ostream& out, const bluestore::Blob& b)
@@ -92,8 +352,50 @@ namespace bluestore {
   }
 }
 
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+#undef dout_context
+#define dout_context collection->store->cct
+
+bluestore::Blob::Blob(bluestore::CollectionRef collection) : collection(collection)
+{
+}
+
+bluestore::Blob::~Blob()
+{
+ again:
+  auto coll_cache = get_cache();
+  if (coll_cache) {
+    std::lock_guard l(coll_cache->lock);
+    if (coll_cache != get_cache()) {
+      goto again;
+    }
+    coll_cache->rm_blob();
+  }
+}
+
+void bluestore::Blob::set_shared_blob(SharedBlobRef sb)
+{
+  ceph_assert((bool)sb);
+  ceph_assert(!shared_blob);
+  ceph_assert(sb->collection == collection);
+  shared_blob = sb;
+  ceph_assert(get_cache());
+}
+
+void bluestore::Blob::dump(Formatter* f) const
+{
+  if (is_spanning()) {
+    f->dump_unsigned("spanning_id ", id);
+  }
+  blob.dump(f);
+  if (shared_blob) {
+    f->dump_object("shared", *shared_blob);
+  }
+}
+
 void bluestore::Blob::get_ref(
-  BlueStore::Collection *coll,
+  bluestore::Collection *coll,
   uint32_t offset,
   uint32_t length)
 {
@@ -119,7 +421,7 @@ void bluestore::Blob::get_ref(
 }
 
 bool bluestore::Blob::put_ref(
-  BlueStore::Collection *coll,
+  bluestore::Collection *coll,
   uint32_t offset,
   uint32_t length,
   PExtentVector *r)
@@ -218,10 +520,11 @@ bool bluestore::Blob::can_reuse_blob(uint32_t min_alloc_size,
   return true;
 }
 
-#undef dout_prefix
-#define dout_prefix *_dout << "bluestore.blob(" << this << ") "
-#undef dout_context
-#define dout_context cct
+void bluestore::Blob::dup(Blob& o)
+{
+  o.set_shared_blob(shared_blob);
+  o.blob = blob;
+}
 
 void bluestore::Blob::dup(const Blob& from, bool copy_used_in_blob)
 {
@@ -686,7 +989,7 @@ uint32_t bluestore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
 #undef dout_context
 #define dout_context collection->store->cct
 
-void bluestore::Blob::split(BlueStore::Collection *coll, uint32_t blob_offset, Blob *r)
+void bluestore::Blob::split(bluestore::Collection *coll, uint32_t blob_offset, Blob *r)
 {
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " start " << *this << dendl;
@@ -882,7 +1185,7 @@ void bluestore::Onode::decode_raw(
 }
 
 bluestore::Onode* bluestore::Onode::create_decode(
-  BlueStore::CollectionRef c,
+  bluestore::CollectionRef c,
   const ghobject_t& oid,
   const string& key,
   const bufferlist& v,
@@ -973,7 +1276,7 @@ void bluestore::Onode::decode_omap_key(const string& key, string *user_key)
   *user_key = key.substr(calc_userkey_offset_in_omap_key());
 }
 
-void bluestore::Onode::finish_write(BlueStore::TransContext* txc, uint32_t offset, uint32_t length)
+void bluestore::Onode::finish_write(TransContext* txc, uint32_t offset, uint32_t length)
 {
   while (true) {
     BlueStore::BufferCacheShard *cache = c->cache;
@@ -1025,6 +1328,165 @@ int bluestore::Onode::get_fragmentation_score()
   return frag.frag_score;
 }
 
+// OnodeSpace
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.OnodeSpace(" << this << " in " << cache << ") "
+
+BlueStore::OnodeRef bluestore::OnodeSpace::add_onode(const ghobject_t& oid,
+  OnodeRef& o)
+{
+  std::lock_guard l(cache->lock);
+  // add entry or return existing one
+  auto p = onode_map.emplace(oid, o);
+  if (!p.second) {
+    ldout(cache->cct, 30) << __func__ << " " << oid << " " << o
+      << " raced, returning existing " << p.first->second
+      << dendl;
+    return p.first->second;
+  }
+  ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
+  cache->_add(o.get(), 1);
+  cache->_trim_some();
+  return o;
+}
+
+void bluestore::OnodeSpace::_remove(const ghobject_t& oid)
+{
+  ldout(cache->cct, 20) << __func__ << " " << oid << " " << dendl;
+  onode_map.erase(oid);
+}
+
+BlueStore::OnodeRef bluestore::OnodeSpace::lookup(const ghobject_t& oid)
+{
+  ldout(cache->cct, 30) << __func__ << dendl;
+  OnodeRef o;
+
+  {
+    std::lock_guard l(cache->lock);
+    auto p = onode_map.find(oid);
+    if (p == onode_map.end()) {
+      ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
+    }
+    else {
+      ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
+	<< " " << p->second->nref
+	<< " " << p->second->cached
+	<< dendl;
+      // This will pin onode and implicitly touch the cache when Onode
+      // eventually will become unpinned
+      o = p->second;
+    }
+  }
+
+  return o;
+}
+
+void bluestore::OnodeSpace::clear()
+{
+  std::lock_guard l(cache->lock);
+  ldout(cache->cct, 10) << __func__ << " " << onode_map.size() << dendl;
+  for (auto& p : onode_map) {
+    cache->_rm(p.second.get());
+  }
+  onode_map.clear();
+}
+
+bool bluestore::OnodeSpace::empty()
+{
+  std::lock_guard l(cache->lock);
+  return onode_map.empty();
+}
+
+void bluestore::OnodeSpace::rename(
+  OnodeRef& oldo,
+  const ghobject_t& old_oid,
+  const ghobject_t& new_oid,
+  const mempool::bluestore_cache_meta::string& new_okey)
+{
+  std::lock_guard l(cache->lock);
+  ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
+    << dendl;
+  auto po = onode_map.find(old_oid);
+  auto pn = onode_map.find(new_oid);
+  ceph_assert(po != pn);
+
+  ceph_assert(po != onode_map.end());
+  if (pn != onode_map.end()) {
+    ldout(cache->cct, 30) << __func__ << "  removing target " << pn->second
+      << dendl;
+    cache->_rm(pn->second.get());
+    onode_map.erase(pn);
+  }
+  OnodeRef o = po->second;
+
+  // install a non-existent onode at old location
+  oldo.reset(new Onode(o->c, old_oid, o->key));
+  po->second = oldo;
+  cache->_add(oldo.get(), 1);
+  // add at new position and fix oid, key.
+  // This will pin 'o' and implicitly touch cache
+  // when it will eventually become unpinned
+  onode_map.insert(std::make_pair(new_oid, o));
+
+  o->oid = new_oid;
+  o->key = new_okey;
+  cache->_trim_some();
+}
+
+bool bluestore::OnodeSpace::map_any(std::function<bool(Onode*)> f)
+{
+  std::lock_guard l(cache->lock);
+  ldout(cache->cct, 20) << __func__ << dendl;
+  for (auto& i : onode_map) {
+    if (f(i.second.get())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template <int LogLevelV = 30>
+void bluestore::OnodeSpace::dump(CephContext* cct)
+{
+  for (auto& i : onode_map) {
+    ldout(cct, LogLevelV) << i.first << " : " << i.second
+      << " " << i.second->nref
+      << " " << i.second->cached
+      << dendl;
+  }
+}
+
+//Extent
+void bluestore::Extent::dump(Formatter* f) const
+{
+  f->dump_unsigned("logical_offset", logical_offset);
+  f->dump_unsigned("length", length);
+  f->dump_unsigned("blob_offset", blob_offset);
+  f->dump_object("blob", *blob);
+}
+
+namespace bluestore {
+  ostream& operator<<(ostream& out, const bluestore::Extent& e)
+  {
+    return out << std::hex << "0x" << e.logical_offset << "~" << e.length
+      << ": 0x" << e.blob_offset << "~" << e.length << std::dec
+      << " " << *e.blob;
+  }
+}
+// OldExtent
+bluestore::OldExtent* bluestore::OldExtent::create(bluestore::CollectionRef c,
+  uint32_t lo,
+  uint32_t o,
+  uint32_t l,
+  BlobRef& b)
+{
+  OldExtent* oe = new OldExtent(lo, o, l, b);
+  b->put_ref(c.get(), o, l, &(oe->r));
+  oe->blob_empty = !b->is_referenced();
+  return oe;
+}
+
 // ExtentMap
 
 #undef dout_prefix
@@ -1051,7 +1513,7 @@ void bluestore::ExtentMap::scan_shared_blobs(
   uint64_t start, uint64_t length,
   std::multimap<uint64_t /*blob.logical_offset*/, Blob*>& candidates)
 {
-  BlueStore::Collection* c = onode->c;
+  bluestore::Collection* c = onode->c;
   uint64_t end = start + length;
   // last_encoded_id will be used to process each blob only once
   // so reset them first
@@ -1145,13 +1607,13 @@ void bluestore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end
 
 // Convert blobs in selected range to shared blobs.
 void bluestore::ExtentMap::make_range_shared_maybe_merge(
-  BlueStore::TransContext* txc, OnodeRef& onoderef, uint64_t srcoff, uint64_t length)
+  TransContext* txc, OnodeRef& onoderef, uint64_t srcoff, uint64_t length)
 {
   ceph_assert(onoderef == onode);
   uint64_t end = srcoff + length;
   uint32_t dirty_range_begin = BlueStore::OBJECT_MAX_SIZE;
   uint32_t dirty_range_end = 0;
-  BlueStore::Collection* c = onode->c;
+  bluestore::Collection* c = onode->c;
   BlueStore* store = c->store;
   // load entire object; in most cases we clone entire object anyway
   fault_range(store->db, 0, BlueStore::OBJECT_MAX_SIZE);
@@ -1211,8 +1673,8 @@ void bluestore::ExtentMap::make_range_shared_maybe_merge(
   }
 }
 
-void bluestore::ExtentMap::dup(BlueStore* b, BlueStore::TransContext* txc,
-  BlueStore::CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
+void bluestore::ExtentMap::dup(BlueStore* b, TransContext* txc,
+  CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
   //_dup_writing needs cache lock
   BlueStore::BufferCacheShard* bcs = c->cache;
@@ -1326,8 +1788,8 @@ void bluestore::ExtentMap::dup(BlueStore* b, BlueStore::TransContext* txc,
   bcs->lock.unlock();
 }
 
-void bluestore::ExtentMap::dup_esb(BlueStore* b, BlueStore::TransContext* txc,
-  BlueStore::CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
+void bluestore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
+  CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
   ceph_assert(onode == oldo);
   ceph_assert(onode->c == c);
@@ -2154,7 +2616,7 @@ void bluestore::ExtentMap::ExtentDecoder::decode_extent(
   Extent* le,
   __u8 struct_v,
   bptr_c_it_t& p,
-  BlueStore::Collection* c)
+  bluestore::Collection* c)
 {
   uint64_t blobid;
   denc_varint(blobid, p);
@@ -2191,7 +2653,7 @@ void bluestore::ExtentMap::ExtentDecoder::decode_extent(
 }
 
 unsigned bluestore::ExtentMap::ExtentDecoder::decode_some(
-  const bufferlist& bl, BlueStore::Collection* c)
+  const bufferlist& bl, bluestore::Collection* c)
 {
   __u8 struct_v;
   uint32_t num;
@@ -2216,7 +2678,7 @@ unsigned bluestore::ExtentMap::ExtentDecoder::decode_some(
 }
 
 void bluestore::ExtentMap::ExtentDecoder::decode_spanning_blobs(
-  bptr_c_it_t& p, BlueStore::Collection* c)
+  bptr_c_it_t& p, bluestore::Collection* c)
 {
   __u8 struct_v;
   denc(struct_v, p);
@@ -2244,7 +2706,7 @@ bluestore::BlobRef bluestore::ExtentMap::ExtentDecoderFull::decode_create_blob(
   __u8 struct_v,
   uint64_t* sbid,
   bool include_ref_map,
-  BlueStore::Collection* c) {
+  bluestore::Collection* c) {
   BlobRef b = c ? c->new_blob() : new Blob(nullptr);
   b->decode<true>(p, struct_v, sbid, include_ref_map, c);
   return b;
@@ -2478,14 +2940,14 @@ void bluestore::ExtentMap::dirty_range(
   }
 }
 
-BlueStore::extent_map_t::iterator bluestore::ExtentMap::find(
+bluestore::extent_map_t::iterator bluestore::ExtentMap::find(
   uint64_t offset)
 {
   Extent dummy(offset);
   return extent_map.find(dummy);
 }
 
-BlueStore::extent_map_t::iterator bluestore::ExtentMap::seek_lextent(
+bluestore::extent_map_t::iterator bluestore::ExtentMap::seek_lextent(
   uint64_t offset)
 {
   Extent dummy(offset);
@@ -2499,7 +2961,7 @@ BlueStore::extent_map_t::iterator bluestore::ExtentMap::seek_lextent(
   return fp;
 }
 
-BlueStore::extent_map_t::const_iterator bluestore::ExtentMap::seek_lextent(
+bluestore::extent_map_t::const_iterator bluestore::ExtentMap::seek_lextent(
   uint64_t offset) const
 {
   Extent dummy(offset);
@@ -2515,8 +2977,8 @@ BlueStore::extent_map_t::const_iterator bluestore::ExtentMap::seek_lextent(
 
 // Split extent at desired offset.
 // Returns iterator to the right part.
-BlueStore::extent_map_t::iterator bluestore::ExtentMap::split_at(
-  BlueStore::extent_map_t::iterator p, uint32_t offset)
+bluestore::extent_map_t::iterator bluestore::ExtentMap::split_at(
+  bluestore::extent_map_t::iterator p, uint32_t offset)
 {
   ceph_assert(p != extent_map.end());
   ceph_assert(p->logical_offset < offset);
@@ -2530,7 +2992,7 @@ BlueStore::extent_map_t::iterator bluestore::ExtentMap::split_at(
 
 // If inside extent split it, and return right part.
 // If not inside extent return extent on right.
-BlueStore::extent_map_t::iterator bluestore::ExtentMap::maybe_split_at(uint32_t offset)
+bluestore::extent_map_t::iterator bluestore::ExtentMap::maybe_split_at(uint32_t offset)
 {
   auto p = seek_lextent(offset);
   if (p != extent_map.end()) {
@@ -2551,7 +3013,7 @@ BlueStore::extent_map_t::iterator bluestore::ExtentMap::maybe_split_at(uint32_t 
 
 // If there exist extent at `offset` return it,
 // otherwise return smallest that `offset < logical_offset`.
-BlueStore::extent_map_t::iterator bluestore::ExtentMap::seek_nextent(
+bluestore::extent_map_t::iterator bluestore::ExtentMap::seek_nextent(
   uint64_t offset)
 {
   Extent dummy(offset);
@@ -2632,10 +3094,10 @@ int bluestore::ExtentMap::compress_extent_map(
 }
 
 void bluestore::ExtentMap::punch_hole(
-  BlueStore::CollectionRef &c,
+  bluestore::CollectionRef &c,
   uint64_t offset,
   uint64_t length,
-  BlueStore::old_extent_map_t *old_extents)
+  OldExtentMap *old_extents)
 {
   auto p = seek_lextent(offset);
   uint64_t end = offset + length;
@@ -2647,7 +3109,7 @@ void bluestore::ExtentMap::punch_hole(
       if (p->logical_end() > end) {
 	// split and deref middle
 	uint64_t front = offset - p->logical_offset;
-	BlueStore::OldExtent* oe = BlueStore::OldExtent::create(c, offset, p->blob_offset + front,
+	bluestore::OldExtent* oe = bluestore::OldExtent::create(c, offset, p->blob_offset + front,
 					  length, p->blob);
 	old_extents->push_back(*oe);
 	add(end,
@@ -2660,7 +3122,7 @@ void bluestore::ExtentMap::punch_hole(
 	// deref tail
 	ceph_assert(p->logical_end() > offset); // else seek_lextent bug
 	uint64_t keep = offset - p->logical_offset;
-	BlueStore::OldExtent* oe = BlueStore::OldExtent::create(c, offset, p->blob_offset + keep,
+	bluestore::OldExtent* oe = bluestore::OldExtent::create(c, offset, p->blob_offset + keep,
 					  p->length - keep, p->blob);
 	old_extents->push_back(*oe);
 	p->length = keep;
@@ -2670,7 +3132,7 @@ void bluestore::ExtentMap::punch_hole(
     }
     if (p->logical_offset + p->length <= end) {
       // deref whole lextent
-      BlueStore::OldExtent* oe = BlueStore::OldExtent::create(c, p->logical_offset, p->blob_offset,
+      bluestore::OldExtent* oe = bluestore::OldExtent::create(c, p->logical_offset, p->blob_offset,
 				        p->length, p->blob);
       old_extents->push_back(*oe);
       rm(p++);
@@ -2679,7 +3141,7 @@ void bluestore::ExtentMap::punch_hole(
     // deref head
     uint64_t keep = p->logical_end() - end;
     BlobRef b = p->blob;
-    BlueStore::OldExtent* oe = BlueStore::OldExtent::create(c, p->logical_offset, p->blob_offset,
+    bluestore::OldExtent* oe = bluestore::OldExtent::create(c, p->logical_offset, p->blob_offset,
 				      p->length - keep, b);
     old_extents->push_back(*oe);
 
@@ -2689,11 +3151,87 @@ void bluestore::ExtentMap::punch_hole(
   }
 }
 
-bluestore::Extent *bluestore::ExtentMap::set_lextent(
-  BlueStore::CollectionRef &c,
+/// Empties range [offset~length] of object o that is in collection c.
+/// Collects unused elements:
+/// released - sequence of allocation units that are no longer used
+/// pruned_blobs - set of blobs that are no longer used
+/// shared_changed - set of shared blobs that are modified,
+///                  including the case of shared blob being empty
+/// statfs_delta - delta of stats
+/// returns: iterator to ExtentMap following last element removed
+bluestore::extent_map_t::iterator
+bluestore::ExtentMap::punch_hole_2(
+  Collection* c, //FIXME: redundant
+  OnodeRef& o,	 //FIXME: redundant
+  uint32_t offset,
+  uint32_t length,
+  PExtentVector& released,
+  std::vector<BlobRef>& pruned_blobs,       //completely emptied out blobs
+  std::set<SharedBlobRef>& shared_changed,  //shared blobs that have changed
+  volatile_statfs& statfs_delta)
+{
+  uint32_t end = offset + length;
+  auto p = maybe_split_at(offset);
+  while (p != extent_map.end() && p->logical_offset < end) {
+    // here split tail extent, if needed
+    if (end < p->logical_end()) {
+      p = split_at(p, end);
+      --p;
+    }
+    // here always whole lextent to drop
+    auto& bblob = p->blob->dirty_blob();
+    uint32_t released_size = 0;
+    if (!bblob.is_shared()) {
+      released_size =
+	p->blob->put_ref_accumulate(c, p->blob_offset, p->length, &released);
+    } else {
+      // make sure shared blob is loaded
+      c->load_shared_blob(p->blob->get_shared_blob());
+      // more complicated shared blob release
+      PExtentVector local_released;  //no longer used by local blob
+      PExtentVector shared_released; //no longer used by shared blob too
+      p->blob->put_ref_accumulate(c, p->blob_offset, p->length, &local_released);
+      // filter local release disk regions
+      // through SharedBlob's multi-ref ref_map disk regions
+      bool unshare = false; //is there a chance that shared blob can be unshared?
+      // TODO - make put_ref return released_size directly
+      for (const auto& de : local_released) {
+	p->blob->get_shared_blob()->put_ref(de.offset, de.length, &shared_released, &unshare);
+      }
+      for (const auto& de : shared_released) {
+	released_size += de.length;
+      }
+      released.insert(released.end(), shared_released.begin(), shared_released.end());
+      shared_changed.insert(p->blob->get_shared_blob());
+    }
+    statfs_delta.allocated() -= released_size;
+    statfs_delta.stored() -= p->length;
+    if (bblob.is_compressed()) {
+      statfs_delta.compressed_allocated() -= released_size;
+      statfs_delta.compressed_original() -= p->length;
+      if (!bblob.has_disk()) {
+	statfs_delta.compressed() -= bblob.get_compressed_payload_length();
+      }
+    }
+    if (!bblob.has_disk()) {
+      pruned_blobs.push_back(p->blob);
+      if (p->blob->is_spanning()) {
+	spanning_blob_map.erase(p->blob->id);
+	p->blob->id = -1;
+      }
+    }
+    Extent* e = &(*p);
+    p = extent_map.erase(p);
+    delete e;
+  }
+  return p;
+}
+
+bluestore::Extent* bluestore::ExtentMap::set_lextent(
+  bluestore::CollectionRef &c,
   uint64_t logical_offset,
   uint64_t blob_offset, uint64_t length, BlobRef b,
-  BlueStore::old_extent_map_t *old_extents)
+  bluestore::OldExtentMap *old_extents)
 {
   // We need to have completely initialized Blob to increment its ref counters.
   ceph_assert(b->get_blob().get_logical_length() != 0);
@@ -2872,7 +3410,7 @@ ostream& operator<<(ostream& out, const bluestore::SharedBlob& sb)
 }
 }
 
-bluestore::SharedBlob::SharedBlob(uint64_t i, BlueStore::Collection *_coll)
+bluestore::SharedBlob::SharedBlob(uint64_t i, bluestore::Collection *_coll)
   : collection(_coll), sbid_unloaded(i)
 {
   ceph_assert(sbid_unloaded > 0);
@@ -2920,4 +3458,549 @@ void bluestore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
   ceph_assert(persistent);
   persistent->ref_map.put(offset, length, r,
     unshare && !*unshare ? unshare : nullptr);
+}
+
+// Garbage Collector
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.GarbageCollector "
+#undef dout_context
+#define dout_context cct
+
+
+void bluestore::GarbageCollector::process_protrusive_extents(
+  const bluestore::ExtentMap& extent_map,
+  uint64_t start_offset,
+  uint64_t end_offset,
+  uint64_t start_touch_offset,
+  uint64_t end_touch_offset,
+  uint64_t min_alloc_size)
+{
+  ceph_assert(start_offset <= start_touch_offset && end_offset >= end_touch_offset);
+
+  uint64_t lookup_start_offset = p2align(start_offset, min_alloc_size);
+  uint64_t lookup_end_offset = round_up_to(end_offset, min_alloc_size);
+
+  dout(30) << __func__ << " (hex): [" << std::hex
+    << lookup_start_offset << ", " << lookup_end_offset
+    << ")" << std::dec << dendl;
+
+  for (auto it = extent_map.seek_lextent(lookup_start_offset);
+    it != extent_map.extent_map.end() &&
+    it->logical_offset < lookup_end_offset;
+    ++it) {
+    uint64_t alloc_unit_start = it->logical_offset / min_alloc_size;
+    uint64_t alloc_unit_end = (it->logical_end() - 1) / min_alloc_size;
+
+    dout(30) << __func__ << " " << *it
+      << "alloc_units: " << alloc_unit_start << ".." << alloc_unit_end
+      << dendl;
+
+    Blob* b = it->blob.get();
+
+    if (it->logical_offset >= start_touch_offset &&
+      it->logical_end() <= end_touch_offset) {
+      // Process extents within the range affected by
+      // the current write request.
+      // Need to take into account if existing extents
+      // can be merged with them (uncompressed case)
+      if (!b->get_blob().is_compressed()) {
+	if (blob_info_counted && used_alloc_unit == alloc_unit_start) {
+	  --blob_info_counted->expected_allocations; // don't need to allocate
+	  // new AU for compressed
+	  // data since another
+	  // collocated uncompressed
+	  // blob already exists
+	  dout(30) << __func__ << " --expected:"
+	    << alloc_unit_start << dendl;
+	}
+	used_alloc_unit = alloc_unit_end;
+	blob_info_counted = nullptr;
+      }
+    } else if (b->get_blob().is_compressed()) {
+
+      // additionally we take compressed blobs that were not impacted
+      // by the write into account too
+      BlobInfo& bi =
+	affected_blobs.emplace(
+	  b, BlobInfo(b->get_referenced_bytes())).first->second;
+
+      int adjust =
+	(used_alloc_unit && used_alloc_unit == alloc_unit_start) ? 0 : 1;
+      bi.expected_allocations += alloc_unit_end - alloc_unit_start + adjust;
+      dout(30) << __func__ << " expected_allocations="
+	<< bi.expected_allocations << " end_au:"
+	<< alloc_unit_end << dendl;
+
+      blob_info_counted = &bi;
+      used_alloc_unit = alloc_unit_end;
+
+      ceph_assert(it->length <= bi.referenced_bytes);
+      bi.referenced_bytes -= it->length;
+      dout(30) << __func__ << " affected_blob:" << *b
+	<< " unref 0x" << std::hex << it->length
+	<< " referenced = 0x" << bi.referenced_bytes
+	<< std::dec << dendl;
+      // NOTE: we can't move specific blob to resulting GC list here
+      // when reference counter == 0 since subsequent extents might
+      // decrement its expected_allocation.
+      // Hence need to enumerate all the extents first.
+      if (!bi.collect_candidate) {
+	bi.first_lextent = it;
+	bi.collect_candidate = true;
+      }
+      bi.last_lextent = it;
+    } else {
+      if (blob_info_counted && used_alloc_unit == alloc_unit_start) {
+	// don't need to allocate new AU for compressed data since another
+	// collocated uncompressed blob already exists
+	--blob_info_counted->expected_allocations;
+	dout(30) << __func__ << " --expected_allocations:"
+	  << alloc_unit_start << dendl;
+      }
+      used_alloc_unit = alloc_unit_end;
+      blob_info_counted = nullptr;
+    }
+  }
+
+  for (auto b_it = affected_blobs.begin();
+    b_it != affected_blobs.end();
+    ++b_it) {
+    Blob* b = b_it->first;
+    BlobInfo& bi = b_it->second;
+    if (bi.referenced_bytes == 0) {
+      uint64_t len_on_disk = b_it->first->get_blob().get_ondisk_capacity();
+      int64_t blob_expected_for_release =
+	round_up_to(len_on_disk, min_alloc_size) / min_alloc_size;
+
+      dout(30) << __func__ << " " << *(b_it->first)
+	<< " expected4release=" << blob_expected_for_release
+	<< " expected_allocations=" << bi.expected_allocations
+	<< dendl;
+      int64_t benefit = blob_expected_for_release - bi.expected_allocations;
+      if (benefit >= g_conf()->bluestore_gc_enable_blob_threshold) {
+	if (bi.collect_candidate) {
+	  auto it = bi.first_lextent;
+	  bool bExit = false;
+	  do {
+	    if (it->blob.get() == b) {
+	      extents_to_collect.insert(it->logical_offset, it->length);
+	    }
+	    bExit = it == bi.last_lextent;
+	    ++it;
+	  } while (!bExit);
+	}
+	expected_for_release += blob_expected_for_release;
+	expected_allocations += bi.expected_allocations;
+      }
+    }
+  }
+}
+
+int64_t bluestore::GarbageCollector::estimate(
+  uint64_t start_offset,
+  uint64_t length,
+  const bluestore::ExtentMap& extent_map,
+  const bluestore::OldExtentMap& old_extents,
+  uint64_t min_alloc_size)
+{
+
+  affected_blobs.clear();
+  extents_to_collect.clear();
+  used_alloc_unit = boost::optional<uint64_t >();
+  blob_info_counted = nullptr;
+
+  uint64_t gc_start_offset = start_offset;
+  uint64_t gc_end_offset = start_offset + length;
+
+  uint64_t end_offset = start_offset + length;
+
+  for (auto it = old_extents.begin(); it != old_extents.end(); ++it) {
+    Blob* b = it->e.blob.get();
+    if (b->get_blob().is_compressed()) {
+
+      // update gc_start_offset/gc_end_offset if needed
+      gc_start_offset = min(gc_start_offset, (uint64_t)it->e.blob_start());
+      gc_end_offset = std::max(gc_end_offset, (uint64_t)it->e.blob_end());
+
+      auto o = it->e.logical_offset;
+      auto l = it->e.length;
+
+      uint64_t ref_bytes = b->get_referenced_bytes();
+      // micro optimization to bypass blobs that have no more references
+      if (ref_bytes != 0) {
+	dout(30) << __func__ << " affected_blob:" << *b
+	  << " unref 0x" << std::hex << o << "~" << l
+	  << std::dec << dendl;
+	affected_blobs.emplace(b, BlobInfo(ref_bytes));
+      }
+    }
+  }
+  dout(30) << __func__ << " gc range(hex): [" << std::hex
+    << gc_start_offset << ", " << gc_end_offset
+    << ")" << std::dec << dendl;
+
+  // enumerate preceeding extents to check if they reference affected blobs
+  if (gc_start_offset < start_offset || gc_end_offset > end_offset) {
+    process_protrusive_extents(extent_map,
+      gc_start_offset,
+      gc_end_offset,
+      start_offset,
+      end_offset,
+      min_alloc_size);
+  }
+  return expected_for_release - expected_allocations;
+}
+
+// TransContext
+bool bluestore::TransContext::add_writing(Onode* o, uint32_t off, uint32_t len)
+{
+  std::lock_guard l(writings_lock);
+
+  // Need to indicate non-initial observers that we're done.
+  if (were_writings && writings.empty()) {
+    return false;
+  }
+  writings.emplace_back(o, off, len);
+  were_writings = true;
+  return true;
+}
+
+void bluestore::TransContext::finish_writing()
+{
+  write_list_t finished;
+  {
+    std::lock_guard l(writings_lock);
+    finished.swap(writings);
+  }
+  for (auto& e : finished) {
+    e.onode->finish_write(this, e.offset, e.length);
+  }
+}
+
+
+// DeferredBatch
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.DeferredBatch(" << this << ") "
+#undef dout_context
+#define dout_context cct
+
+void bluestore::DeferredBatch::prepare_write(
+  CephContext* cct,
+  uint64_t seq, uint64_t offset, uint64_t length,
+  bufferlist::const_iterator& blp)
+{
+  _discard(cct, offset, length);
+  auto i = iomap.insert(std::make_pair(offset, deferred_io()));
+  ceph_assert(i.second);  // this should be a new insertion
+  i.first->second.seq = seq;
+  blp.copy(length, i.first->second.bl);
+  i.first->second.bl.reassign_to_mempool(
+    mempool::mempool_bluestore_writing_deferred);
+  dout(20) << __func__ << " seq " << seq
+    << " 0x" << std::hex << offset << "~" << length
+    << " crc " << i.first->second.bl.crc32c(-1)
+    << std::dec << dendl;
+#ifdef DEBUG_DEFERRED
+  seq_bytes[seq] += length;
+  _audit(cct);
+#endif
+}
+
+void bluestore::DeferredBatch::_discard(
+  CephContext* cct, uint64_t offset, uint64_t length)
+{
+  generic_dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
+    << std::dec << dendl;
+  [[maybe_unused]] uint64_t delta;
+  auto p = iomap.lower_bound(offset);
+  if (p != iomap.begin()) {
+    --p;
+    auto end = p->first + p->second.bl.length();
+    if (end > offset) {
+      bufferlist head;
+      head.substr_of(p->second.bl, 0, offset - p->first);
+      dout(20) << __func__ << "  keep head " << p->second.seq
+	<< " 0x" << std::hex << p->first << "~" << p->second.bl.length()
+	<< " -> 0x" << head.length() << std::dec << dendl;
+      if (end > offset + length) {
+	bufferlist tail;
+	tail.substr_of(p->second.bl, offset + length - p->first,
+	  end - (offset + length));
+	dout(20) << __func__ << "  keep tail " << p->second.seq
+	  << " 0x" << std::hex << p->first << "~" << p->second.bl.length()
+	  << " -> 0x" << tail.length() << std::dec << dendl;
+	auto& n = iomap[offset + length];
+	n.bl.swap(tail);
+	n.seq = p->second.seq;
+	delta = length;
+      }
+      else {
+	delta = end - offset;
+      }
+#if defined(DEBUG_DEFERRED)
+      auto i = seq_bytes.find(p->second.seq);
+      ceph_assert(i != seq_bytes.end());
+      i->second -= delta;
+      ceph_assert(i->second >= 0);
+#endif
+      p->second.bl.swap(head);
+    }
+    ++p;
+  }
+  while (p != iomap.end()) {
+    if (p->first >= offset + length) {
+      break;
+    }
+    auto end = p->first + p->second.bl.length();
+    if (end > offset + length) {
+      unsigned drop_front = offset + length - p->first;
+      unsigned keep_tail = end - (offset + length);
+      dout(20) << __func__ << "  truncate front " << p->second.seq
+	<< " 0x" << std::hex << p->first << "~" << p->second.bl.length()
+	<< " drop_front 0x" << drop_front << " keep_tail 0x" << keep_tail
+	<< " to 0x" << (offset + length) << "~" << keep_tail
+	<< std::dec << dendl;
+      auto& s = iomap[offset + length];
+      s.seq = p->second.seq;
+      s.bl.substr_of(p->second.bl, drop_front, keep_tail);
+      delta = drop_front;
+    }
+    else {
+      dout(20) << __func__ << "  drop " << p->second.seq
+	<< " 0x" << std::hex << p->first << "~" << p->second.bl.length()
+	<< std::dec << dendl;
+      delta = p->second.bl.length();
+    }
+#if defined(DEBUG_DEFERRED)
+    auto i = seq_bytes.find(p->second.seq);
+    ceph_assert(i != seq_bytes.end());
+    i->second -= delta;
+    ceph_assert(i->second >= 0);
+#endif
+    p = iomap.erase(p);
+  }
+}
+
+#if defined(DEBUG_DEFERRED)
+void bluestore::DeferredBatch::_audit(CephContext* cct)
+{
+  map<uint64_t, int> sb;
+  for (auto p : seq_bytes) {
+    sb[p.first] = 0;  // make sure we have the same set of keys
+  }
+  uint64_t pos = 0;
+  for (auto& p : iomap) {
+    ceph_assert(p.first >= pos);
+    sb[p.second.seq] += p.second.bl.length();
+    pos = p.first + p.second.bl.length();
+  }
+  ceph_assert(sb == seq_bytes);
+}
+#endif
+
+/// Checks for writes to the same pextent within a blob
+bool bluestore::WriteContext::has_conflict(
+  BlobRef b,
+  uint64_t loffs,
+  uint64_t loffs_end,
+  uint64_t min_alloc_size)
+{
+  ceph_assert((loffs % min_alloc_size) == 0);
+  ceph_assert((loffs_end % min_alloc_size) == 0);
+  for (auto w : writes) {
+    if (b == w.b) {
+      auto loffs2 = p2align(w.logical_offset, min_alloc_size);
+      auto loffs2_end = p2roundup(w.logical_offset + w.length0, min_alloc_size);
+      if ((loffs <= loffs2 && loffs_end > loffs2) ||
+	(loffs >= loffs2 && loffs < loffs2_end)) {
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
+// OnodeCacheShard
+bluestore::OnodeCacheShard* bluestore::OnodeCacheShard::create(
+  CephContext* cct,
+  std::string type,
+  PerfCounters* logger)
+{
+  OnodeCacheShard* c = nullptr;
+  // Currently we only implement an LRU cache for onodes
+  c = new LruOnodeCacheShard(cct);
+  c->logger = logger;
+  return c;
+}
+
+// LruOnodeCacheShard
+void bluestore::LruOnodeCacheShard::_add(Onode* o, int level)
+{
+  o->set_cached();
+  if (o->pin_nref == 1) {
+    (level > 0) ? lru.push_front(*o) : lru.push_back(*o);
+    o->cache_age_bin = age_bins.front();
+    *(o->cache_age_bin) += 1;
+  }
+  ++num; // we count both pinned and unpinned entries
+  dout(20) << __func__ << " " << this << " " << o->oid << " added, num="
+    << num << dendl;
+}
+void bluestore::LruOnodeCacheShard::_rm(Onode* o)
+{
+  o->clear_cached();
+  if (o->lru_item.is_linked()) {
+    *(o->cache_age_bin) -= 1;
+    lru.erase(lru.iterator_to(*o));
+  }
+  ceph_assert(num);
+  --num;
+  dout(20) << __func__ << " " << this << " " << " " << o->oid << " removed, num=" << num << dendl;
+}
+
+void bluestore::LruOnodeCacheShard::maybe_unpin(Onode* o)
+{
+  OnodeCacheShard* ocs = this;
+  ocs->lock.lock();
+  // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
+  while (ocs != o->c->get_onode_cache()) {
+    ocs->lock.unlock();
+    ocs = o->c->get_onode_cache();
+    ocs->lock.lock();
+  }
+  if (o->is_cached() && o->pin_nref == 1) {
+    if (!o->lru_item.is_linked()) {
+      if (o->exists) {
+	lru.push_front(*o);
+	o->cache_age_bin = age_bins.front();
+	*(o->cache_age_bin) += 1;
+	dout(20) << __func__ << " " << this << " " << o->oid << " unpinned"
+	  << dendl;
+      }
+      else {
+	ceph_assert(num);
+	--num;
+	o->clear_cached();
+	dout(20) << __func__ << " " << this << " " << o->oid << " removed"
+	  << dendl;
+	// remove will also decrement nref
+	o->c->onode_space._remove(o->oid);
+      }
+    } else if (o->exists) {
+      // move onode within LRU
+      lru.erase(lru.iterator_to(*o));
+      lru.push_front(*o);
+      if (o->cache_age_bin != age_bins.front()) {
+	*(o->cache_age_bin) -= 1;
+	o->cache_age_bin = age_bins.front();
+	*(o->cache_age_bin) += 1;
+      }
+      dout(20) << __func__ << " " << this << " " << o->oid << " touched"
+	<< dendl;
+    }
+  }
+  ocs->lock.unlock();
+}
+
+void bluestore::LruOnodeCacheShard::_trim_to(uint64_t new_size)
+{
+  if (new_size >= lru.size()) {
+    return; // don't even try
+  }
+  uint64_t n = num - new_size; // note: we might get empty LRU
+  // before n == 0 due to pinned
+  // entries. And hence being unable
+  // to reach new_size target.
+  while (n-- > 0 && lru.size() > 0) {
+    Onode* o = &lru.back();
+    lru.pop_back();
+
+    dout(20) << __func__ << "  rm " << o->oid << " "
+      << o->nref << " " << o->cached << dendl;
+
+    *(o->cache_age_bin) -= 1;
+    if (o->pin_nref > 1) {
+      dout(20) << __func__ << " " << this << " " << " " << " " << o->oid << dendl;
+    } else {
+      ceph_assert(num);
+      --num;
+      o->clear_cached();
+      o->c->onode_space._remove(o->oid);
+    }
+  }
+}
+void bluestore::LruOnodeCacheShard::_move_pinned(OnodeCacheShard* to, Onode* o)
+{
+  if (to == this) {
+    return;
+  }
+  _rm(o);
+  ceph_assert(o->nref > 1);
+  to->_add(o, 0);
+}
+void bluestore::LruOnodeCacheShard::add_stats(uint64_t* onodes, uint64_t* pinned_onodes)
+{
+  std::lock_guard l(lock);
+  *onodes += num;
+  *pinned_onodes += num - lru.size();
+}
+#ifdef DEBUG_CACHE
+void bluestore::LruOnodeCacheShard::_audit(const char* when)
+{
+}
+#endif
+
+//BigDeferredWriteContext
+bool bluestore::BigDeferredWriteContext::can_defer(
+  bluestore::extent_map_t::iterator ep,
+  uint64_t prefer_deferred_size,
+  uint64_t block_size,
+  uint64_t offset,
+  uint64_t l)
+{
+  bool res = false;
+  auto& blob = ep->blob->get_blob();
+  if (offset >= ep->blob_start() &&
+    blob.is_mutable()) {
+    off = offset;
+    b_off = offset - ep->blob_start();
+    uint64_t chunk_size = blob.get_chunk_size(block_size);
+    uint64_t ondisk = blob.get_ondisk_capacity();
+    used = std::min(l, ondisk - b_off);
+
+    // will read some data to fill out the chunk?
+    head_read = p2phase<uint64_t>(b_off, chunk_size);
+    tail_read = p2nphase<uint64_t>(b_off + used, chunk_size);
+    b_off -= head_read;
+
+    ceph_assert(b_off % chunk_size == 0);
+    ceph_assert(blob_aligned_len() % chunk_size == 0);
+
+    res = blob_aligned_len() < prefer_deferred_size &&
+      blob_aligned_len() <= ondisk &&
+      blob.is_allocated(b_off, blob_aligned_len());
+    if (res) {
+      blob_ref = ep->blob;
+      blob_start = ep->blob_start();
+    }
+  }
+  return res;
+}
+bool bluestore::BigDeferredWriteContext::apply_defer()
+{
+  int r = blob_ref->get_blob().map(
+    b_off, blob_aligned_len(),
+    [&](const bluestore_pextent_t& pext,
+      uint64_t offset,
+      uint64_t length) {
+	// apply deferred if overwrite breaks blob continuity only.
+	// if it totally overlaps some pextent - fallback to regular write
+	if (pext.offset < offset ||
+	  pext.end() > offset + length) {
+	  res_extents.emplace_back(bluestore_pextent_t(offset, length));
+	  return 0;
+	}
+	return -1;
+    });
+  return r >= 0;
 }
