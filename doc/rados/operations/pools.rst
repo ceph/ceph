@@ -92,6 +92,42 @@ To list your cluster's pools with additional information, execute:
    pool 3 'default.rgw.control' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 32 pgp_num 32 autoscale_mode on last_change 23 flags hashpspool stripe_width 0 application rgw read_balance_score 4.00
    pool 4 'default.rgw.meta' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 128 pgp_num 128 autoscale_mode on last_change 25 flags hashpspool stripe_width 0 pg_autoscale_bias 4 application rgw read_balance_score 4.00
 
+
+During operation some pools may be hidden from the normal ``osd pool ls`` and
+``osd pool ls detail`` views. For example all source pools from pool migrations
+are hidden
+
+To show all hidden pools, pass the ``--show-all`` flag:
+
+.. prompt:: bash $
+
+   ceph osd pool ls --show-all
+
+::
+
+   rbd
+   .mgr
+   .migrate-1
+     .migrate-2
+     test-pool
+
+.. prompt:: bash $
+
+   ceph osd pool ls detail --show-all
+
+::
+
+   pool 1 'rbd' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 32 pgp_num 32 autoscale_mode on last_change 11 flags hashpspool,split_reads,supports_omap stripe_width 0 application rbd read_balance_score 1.69
+   pool 2 '.mgr' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 1 pgp_num 1 autoscale_mode on last_change 20 flags hashpspool,split_reads,supports_omap stripe_width 0 pg_num_max 32 pg_num_min 1 application mgr read_balance_score 6.00
+   pool 3 '.migrate-1' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 32 pgp_num 32 autoscale_mode off last_change 75 flags hashpspool,nopgchange,split_reads,supports_omap stripe_width 0 read_balance_score 1.69
+     pool 4 '.migrate-2' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 32 pgp_num 32 autoscale_mode off last_change 119 flags hashpspool,nopgchange,split_reads,supports_omap stripe_width 0 read_balance_score 1.50
+     pool 5 'test-pool' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 32 pgp_num 32 autoscale_mode on last_change 119 flags hashpspool,split_reads,supports_omap stripe_width 0 read_balance_score 1.50
+
+A full pool migration chain is displayed with the original source pool
+(the source pool with the lowest pool ID) coming first, followed by the other
+pools in the migration chain indented and in assending pool ID order,
+with the last indented pool being the current target pool.
+
 To retrieve even more information, you can execute this command with the ``--format`` (or ``-f``) option and the ``json``, ``json-pretty``, ``xml`` or ``xml-pretty`` value.
 
 .. _createpool:
@@ -209,6 +245,20 @@ following:
   :Required: No.
   :Default: The default behavior is determined by the :confval:`osd_pool_default_pg_autoscale_mode` option.
 
+.. describe:: --enable-ec-optimizations
+
+   For ``erasure`` pools only. Enables erasure code optimizations at pool
+   creation time. When enabled, this flag automatically sets the
+   ``allow_ec_optimizations`` pool flag, which enables performance optimizations
+   for erasure-coded pools. This flag can only be enabled for erasure-coded
+   pools and requires all OSDs to be running Tentacle or later. If the pool
+   does not support EC optimizations (e.g., non-EC pool, unsupported erasure
+   code profile, or insufficient OSD version), the flag is silently ignored.
+
+  :Type: Boolean
+  :Required: No.
+  :Default: false
+
 .. describe:: [expected-num-objects]
 
    The expected number of RADOS objects for this pool. By setting this value,
@@ -218,6 +268,25 @@ following:
    :Type: Integer
    :Required: No.
    :Default: 0, no splitting at the time of pool creation.
+
+.. _migratepool:
+
+Migrating a Pool
+================
+
+To perform a non-disruptive migration of all data from an existing pool to a new pool
+while keeping the original pool name, run:
+
+.. prompt:: bash $
+
+   ceph osd pool migrate {pool-name} [options]
+
+PGs in the source pool (renamed to ``.migrate-<n>``) will be migrated to the new
+pool. The new pool will inherit any configuration values from the source pool that 
+are not explicitly specified in the command. This can be used to perform 
+non-disruptive configuration changes that would not otherwise be possible, 
+such as moving all objects from a replicated pool to an erasure coded pool.
+
 
 .. _associate-pool-to-application:
 

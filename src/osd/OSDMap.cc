@@ -1805,6 +1805,9 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
       if (crush->is_v5_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
+    if (pool.second.is_migrating()) {
+      features |= CEPH_FEATURE_SERVER_UMBRELLA;
+    }
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
 
@@ -1858,6 +1861,9 @@ ceph_release_t OSDMap::get_min_compat_client() const
 {
   uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
 
+  if (HAVE_FEATURE(f, SERVER_UMBRELLA)) {
+    return ceph_release_t::umbrella;     // v21.2.0
+  }
   if (HAVE_FEATURE(f, CRUSH_MSR)) {
     return ceph_release_t::squid;        // v19.2.0
   }
@@ -4416,41 +4422,125 @@ string OSDMap::get_flag_string() const
 }
 
 void OSDMap::print_pools(CephContext *cct, ostream& out,
-                         bool show_rule_names) const
+                         bool show_rule_names, bool show_all) const
 {
   const CrushWrapper *crush_for_names = show_rule_names ? crush.get() : nullptr;
-  for (const auto &[pid, pdata] : pools) {
+  // Emits the full detail line for pool epid with the given indent prefix.
+  auto emit_pool = [&](int64_t epid, const std::string& indent) {
+    const auto &epdata = pools.at(epid);
     std::string name("<unknown>");
-    const auto &pni = pool_name.find(pid);
+    const auto &pni = pool_name.find(epid);
     if (pni != pool_name.end())
       name = pni->second;
     char rb_score_str[32] = "";
     int rc = 0;
     read_balance_info_t rb_info;
-    if (pdata.is_replicated()) {
-      rc = calc_read_balance_score(cct, pid, &rb_info);
+    if (epdata.is_replicated()) {
+      rc = calc_read_balance_score(cct, epid, &rb_info);
       if (rc >= 0)
-        snprintf (rb_score_str, sizeof(rb_score_str),
-		  " read_balance_score %.2f", rb_info.acting_adj_score);
+        snprintf(rb_score_str, sizeof(rb_score_str),
+                 " read_balance_score %.2f", rb_info.acting_adj_score);
     }
-
-    out << "pool " << pid << " '" << name << "' ";
-    pdata.print(out, crush_for_names);
+    out << indent << "pool " << epid << " '" << name << "' ";
+    epdata.print(out, crush_for_names);
     out << rb_score_str << "\n";
     if (rb_info.err_msg.length() > 0) {
-      out << (rc < 0 ? " ERROR: " : " Warning: ") << rb_info.err_msg << "\n";
+      out << indent << (rc < 0 ? " ERROR: " : " Warning: ") << rb_info.err_msg << "\n";
+    }
+    for (const auto &snap : epdata.snaps)
+      out << indent << "\tsnap " << snap.second.snapid << " '" << snap.second.name << "' " << snap.second.stamp << "\n";
+    if (!epdata.removed_snaps.empty())
+      out << indent << "\tremoved_snaps " << epdata.removed_snaps << "\n";
+    auto p = removed_snaps_queue.find(epid);
+    if (p != removed_snaps_queue.end()) {
+      out << indent << "\tremoved_snaps_queue " << p->second << "\n";
+    }
+  };
+
+  std::vector<int64_t> displayed_pools;
+
+  for (const auto &[pid, pdata] : pools) {
+    // Without --show-all, suppress source/intermediate pools and only
+    // show the tip of each migration chain (the target pool).
+    if (!show_all && pdata.is_migration_src()) {
+      continue;
     }
 
-  //TODO - print error messages here.
+    if (show_all) {
+      // Skip if already output as part of a cascade.
+      if (std::find(displayed_pools.begin(), displayed_pools.end(), pid) != displayed_pools.end()) {
+        continue;
+      }
 
-    for (const auto &snap : pdata.snaps)
-      out << "\tsnap " << snap.second.snapid << " '" << snap.second.name << "' " << snap.second.stamp << "\n";
+      // Resolve the tip: if this pool is a src use its migration_target,
+      // otherwise it is already the tip (or standalone).
+      int64_t check_id = pdata.migration_target.value_or(pid);
 
-    if (!pdata.removed_snaps.empty())
-      out << "\tremoved_snaps " << pdata.removed_snaps << "\n";
-    auto p = removed_snaps_queue.find(pid);
-    if (p != removed_snaps_queue.end()) {
-      out << "\tremoved_snaps_queue " << p->second << "\n";
+      // Collect all src pools pointing at check_id (ascending ID order
+      // because pools map is ordered by key).
+      std::vector<int64_t> cascade;
+      for (const auto &[pool_id, pool_data] : pools) {
+        if (pool_data.migration_target.has_value() &&
+            *pool_data.migration_target == check_id) {
+          cascade.push_back(pool_id);
+        }
+      }
+
+      if (cascade.empty()) {
+        // Standalone pool — not part of any migration cascade.
+        emit_pool(pid, "");
+      } else {
+        // Root (lowest ID, cascade[0]) is unindented; all others indented;
+        // tip (check_id) is printed last, also indented.
+        emit_pool(cascade.front(), "");
+        displayed_pools.push_back(cascade.front());
+        for (size_t i = 1; i < cascade.size(); i++) {
+          emit_pool(cascade[i], "    ");
+          displayed_pools.push_back(cascade[i]);
+        }
+        emit_pool(check_id, "    ");
+        displayed_pools.push_back(check_id);
+      }
+    } else {
+      // Default (no --show-all): show only the tip, use root pool's ID.
+      int64_t display_pid = pid;
+      if (is_pool_migration_target(pid)) {
+        for (const auto &[scan_pid, scan_pool] : pools) {
+          if (scan_pool.migration_target.has_value() &&
+              *scan_pool.migration_target == pid &&
+              scan_pid < display_pid) {
+            display_pid = scan_pid;
+          }
+        }
+      }
+      std::string name("<unknown>");
+      const auto &pni = pool_name.find(pid);
+      if (pni != pool_name.end())
+        name = pni->second;
+      char rb_score_str[32] = "";
+      int rc = 0;
+      read_balance_info_t rb_info;
+      if (pdata.is_replicated()) {
+        rc = calc_read_balance_score(cct, pid, &rb_info);
+        if (rc >= 0)
+          snprintf(rb_score_str, sizeof(rb_score_str),
+                   " read_balance_score %.2f", rb_info.acting_adj_score);
+      }
+      out << "pool " << display_pid << " '" << name << "' ";
+      pdata.print(out, crush_for_names);
+      out << rb_score_str << "\n";
+      if (rb_info.err_msg.length() > 0) {
+        out << (rc < 0 ? " ERROR: " : " Warning: ") << rb_info.err_msg << "\n";
+      }
+      //TODO - print error messages here.
+      for (const auto &snap : pdata.snaps)
+        out << "\tsnap " << snap.second.snapid << " '" << snap.second.name << "' " << snap.second.stamp << "\n";
+      if (!pdata.removed_snaps.empty())
+        out << "\tremoved_snaps " << pdata.removed_snaps << "\n";
+      auto p = removed_snaps_queue.find(pid);
+      if (p != removed_snaps_queue.end()) {
+        out << "\tremoved_snaps_queue " << p->second << "\n";
+      }
     }
   }
   out << std::endl;

@@ -609,8 +609,13 @@ int librados::RadosClient::pool_list(std::list<std::pair<int64_t, string> >& v)
     return r;
 
   objecter->with_osdmap([&](const OSDMap& o) {
-      for (auto p : o.get_pools())
-	v.push_back(std::make_pair(p.first, o.get_pool_name(p.first)));
+      for (auto p : o.get_pools()) {
+        // Skip migration source pools — only show the leaf (latest target)
+        // pool in a migration cascade, consistent with "osd pool ls".
+        if (p.second.is_migration_src())
+          continue;
+ v.push_back(std::make_pair(p.first, o.get_pool_name(p.first)));
+      }
     });
   return 0;
 }
