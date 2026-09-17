@@ -21,7 +21,6 @@
 #include "memstore/MemStore.h"
 #if defined(WITH_BLUESTORE)
 #include "bluestore/BlueStore.h"
-#include "bluestore/BlueStore_objects.h"
 #endif
 
 using std::string;

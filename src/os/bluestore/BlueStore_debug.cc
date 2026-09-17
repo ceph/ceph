@@ -84,7 +84,6 @@ std::ostream &operator<<(std::ostream &out, const maybe_K &k) {
 }
 // cheap, not very reliable but portable detector where heap starts
 static std::unique_ptr<char> heap_begin(new char);
-std::ostream& operator<<(std::ostream& out, const BlueStore::Buffer& b);
 
 namespace bluestore {
 std::ostream& operator<<(std::ostream& out, const bluestore::Blob::printer &p)
