@@ -3,6 +3,13 @@
 Extending Ceph
 ==============
 
+.. meta::
+   :description: How shared object classes extend Ceph with new object methods.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
 You can extend Ceph by creating shared object classes called 'Ceph Classes'.
 Ceph loads ``.so`` classes stored in the ``osd class dir`` directory dynamically
 (i.e., ``$libdir/rados-classes`` by default). When you implement a class, you

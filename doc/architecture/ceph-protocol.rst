@@ -3,6 +3,13 @@
 Ceph Protocol
 =============
 
+.. meta::
+   :description: How clients talk to the cluster with the native protocol and librados, including watch/notify and data striping.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
 Ceph Clients use the native protocol for interacting with the Ceph Storage
 Cluster. Ceph packages this functionality into the ``librados`` library so that
 you can create your own custom Ceph Clients. The following diagram depicts the
@@ -277,6 +284,12 @@ files on a storage drive.
 .. note:: Since a client writes to a single pool, all data striped into objects
    get mapped to placement groups in the same pool. So they use the same CRUSH
    map and the same access controls.
+
+Additional Resources
+--------------------
+
+- :ref:`Introduction to librados <librados-intro>`
+- :ref:`Ceph Storage Cluster APIs <rados api>`
 
 
 .. _striping: https://en.wikipedia.org/wiki/Data_striping

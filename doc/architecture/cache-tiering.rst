@@ -1,6 +1,13 @@
 Cache Tiering
 =============
 
+.. meta::
+   :description: What cache tiering is. Cache tiering is deprecated.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
 .. note:: Cache tiering is deprecated in Reef.
 
 A cache tier provides Ceph Clients with better I/O performance for a subset of

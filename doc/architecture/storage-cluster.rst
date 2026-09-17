@@ -3,6 +3,13 @@
 The Ceph Storage Cluster
 ========================
 
+.. meta::
+   :description: What a Ceph Storage Cluster is, which daemons it consists of, and how it stores data as objects.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
 Ceph provides an infinitely scalable :term:`Ceph Storage Cluster` based upon
 :abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, a reliable,
 distributed storage service that uses the intelligence in each of its nodes to
@@ -82,5 +89,13 @@ created date, and the last modified date.
 
 .. note:: An object ID is unique across the entire cluster, not just the local
    filesystem.
+
+Additional Resources
+--------------------
+
+- :ref:`ceph-cluster-components`
+- :ref:`arch_scalability_and_high_availability`
+- :ref:`Pools <rados_pools>`
+
 
 .. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: https://ceph.io/assets/pdfs/weil-rados-pdsw07.pdf

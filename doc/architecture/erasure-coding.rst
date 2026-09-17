@@ -3,6 +3,13 @@
 Erasure Coding
 ==============
 
+.. meta::
+   :description: How an erasure coded pool splits objects into data and coding chunks, and how it handles interrupted writes.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
 An erasure coded pool stores each object as ``K+M`` chunks. It is divided into
 ``K`` data chunks and ``M`` coding chunks. The pool is configured to have a size
 of ``K+M`` so that each chunk is stored in an OSD in the acting set. The rank of
@@ -401,6 +408,12 @@ the erasure coding library during scrubbing and stored on the new primary
    +-------------+
 
 See `Erasure Code Notes`_ for additional details.
+
+Additional Resources
+~~~~~~~~~~~~~~~~~~~~
+
+- :ref:`Erasure Code <ecpool>`
+- :ref:`Pools <rados_pools>`
 
 
 .. _Erasure Code Notes: https://github.com/ceph/ceph/blob/40059e12af88267d0da67d8fd8d9cd81244d8f93/doc/dev/osd_internals/erasure_coding/developer_notes.rst

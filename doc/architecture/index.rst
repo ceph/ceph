@@ -4,13 +4,17 @@
  Architecture
 ==============
 
-:term:`Ceph` uniquely delivers **object, block, and file storage** in one
-unified system. Ceph is highly reliable, easy to manage, and free. Ceph
-delivers extraordinary scalability–thousands of clients accessing petabytes to
-exabytes of data. A :term:`Ceph Node` leverages commodity hardware and
-intelligent daemons, and a :term:`Ceph Storage Cluster` accommodates large
-numbers of nodes, which communicate with each other to replicate and
-redistribute data dynamically.
+.. meta::
+   :description: How Ceph works: the storage cluster, data placement, high availability, erasure coding, and client interfaces.
+   :ceph-page-type: assembly
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
+Ceph delivers object, block, and file storage from one cluster of commodity
+hardware. Its daemons replicate and redistribute data among themselves, so the
+cluster scales from a few nodes to thousands and keeps working when hardware
+fails. These pages explain how.
 
 .. image:: ../images/stack.png
 
@@ -21,7 +25,14 @@ redistribute data dynamically.
    Scalability and High Availability <scalability-high-availability>
    Dynamic Cluster Management <dynamic-cluster-management>
    Erasure Coding <erasure-coding>
-   Cache Tiering <cache-tiering>
-   Extending Ceph <extending-ceph>
-   Ceph Protocol <ceph-protocol>
    Ceph Clients <ceph-clients>
+   Ceph Protocol <ceph-protocol>
+   Extending Ceph <extending-ceph>
+   Cache Tiering <cache-tiering>
+
+Additional Resources
+====================
+
+- :ref:`ceph-cluster-components`
+- :doc:`Glossary </glossary>`
+- :ref:`hardware-recommendations`
