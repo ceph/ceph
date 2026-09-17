@@ -15,16 +15,22 @@ using namespace rados::cls;
 class LibRadosSplitOpPP : public RadosTestPP {
 public:
   static void SetUpTestCase() {
-    auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
-    pool_name_default = get_temp_pool_name(pool_prefix);
-    std::map<std::string, std::string> config = {{"rados_replica_read_policy", "default"}};
-    ASSERT_EQ("", connect_cluster_pp(s_cluster, config));
-    ASSERT_EQ("", create_pool_pp(pool_name_default, s_cluster, 3));
-    s_cluster.wait_for_latest_osdmap();
+    RadosTestPP::SetUpTestCase(3);
+    ASSERT_NO_FATAL_FAILURE(set_client_config_overrides(
+        s_cluster, {{"rados_replica_read_policy", "default"}}));
   }
 };
 
-typedef RadosTestECPP LibRadosSplitOpECPP;
+class LibRadosSplitOpECPP : public RadosTestECPP {
+public:
+  static void
+  SetUpTestCase()
+  {
+    RadosTestECPP::SetUpTestCase();
+    ASSERT_NO_FATAL_FAILURE(set_client_config_overrides(
+        s_cluster, {{"rados_replica_read_policy", "default"}}));
+  }
+};
 
 // After a write is committed, it isn't necessarily true that the log is
 // committed. We do a read of the written area, which allows us to be

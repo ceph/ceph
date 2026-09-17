@@ -89,6 +89,10 @@ protected:
 
   static void cleanup_default_namespace(librados::IoCtx ioctx);
   static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
+  static void set_client_config_overrides(
+      librados::Rados& cluster,
+      const std::map<std::string, std::string>& config);
+  static void clear_all_client_config_overrides(librados::Rados& cluster);
 
   uint64_t get_perf_counter_by_path(std::string_view path);
 
@@ -164,7 +168,7 @@ public:
   RadosTestPP(bool c=false) : cleanup(c) {}
   ~RadosTestPP() override {}
 protected:
-  static void SetUpTestCase();
+  static void SetUpTestCase(int pool_size = 0);
   static void TearDownTestCase();
   static std::string pool_name_default;
   std::string pool_name;
