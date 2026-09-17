@@ -2445,6 +2445,52 @@ class TestCephadm(object):
 
         assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.module.HostCache.get_daemon_types")
+    @mock.patch("cephadm.module.HostCache.get_hosts")
+    def test_maintenance_exit_unexpected_traceback(self, _hosts, _get_daemon_types, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        traceback = (
+            "Traceback (most recent call last):\n"
+            "  File \"/tmp/tmp.cephadm.build/__main__.py\", line 2399, in <module>\n"
+            "    main()\n"
+            "ValueError: invalid literal for int() with base 10: "
+            "'Old database has been renamed to /var/lib/containers/storage/libpod/bolt_state'"
+        )
+        _run_cephadm.side_effect = async_side_effect(([''], [traceback], 1))
+        _get_daemon_types.return_value = ['crash']
+        _hosts.return_value = [hostname, 'other_host']
+        cephadm_module.inventory.add_host(HostSpec(hostname, status='maintenance'))
+
+        with pytest.raises(OrchestratorError, match='Failed to exit maintenance state for host host1, cluster fsid'):
+            cephadm_module.exit_host_maintenance(hostname)
+
+        assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.CephadmOrchestrator._host_ok_to_stop")
+    @mock.patch("cephadm.module.HostCache.get_daemon_types")
+    @mock.patch("cephadm.module.HostCache.get_hosts")
+    def test_maintenance_enter_unexpected_traceback(self, _hosts, _get_daemon_types, _host_ok, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        traceback = (
+            "Traceback (most recent call last):\n"
+            "  File \"/tmp/tmp.cephadm.build/__main__.py\", line 2399, in <module>\n"
+            "    main()\n"
+            "ValueError: invalid literal for int() with base 10: "
+            "'Old database has been renamed to /var/lib/containers/storage/libpod/bolt_state'"
+        )
+        _run_cephadm.side_effect = async_side_effect(([''], [traceback], 1))
+        _host_ok.return_value = 0, 'it is okay'
+        _get_daemon_types.return_value = ['crash']
+        _hosts.return_value = [hostname, 'other_host']
+        cephadm_module.inventory.add_host(HostSpec(hostname))
+
+        with pytest.raises(OrchestratorError, match='Failed to place host1 into maintenance for cluster fsid'):
+            cephadm_module.enter_host_maintenance(hostname)
+
+        assert not cephadm_module.inventory._inventory[hostname]['status']
+
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     @mock.patch("cephadm.CephadmOrchestrator._host_ok_to_stop")

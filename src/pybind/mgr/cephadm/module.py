@@ -2678,6 +2678,21 @@ Then run the following:
             self.set_health_warning("HOST_IN_MAINTENANCE", f"{len(in_maintenance)} {s} in maintenance mode", 1, [
                                     f"{h} is in maintenance" for h in in_maintenance])
 
+    @staticmethod
+    def _host_maintenance_failed(code: int, err: List[str]) -> bool:
+        """True if `cephadm host-maintenance` did not complete successfully.
+
+        The binary writes success/failed/skipped to stderr and returns 1 on
+        failure. Unexpected crashes (for example a Python traceback) will not
+        start with 'failed' or 'ERROR', so the exit code must be honored too.
+        """
+        msg = ''
+        if err:
+            msg = err[0].strip().split('\n')[-1]
+        if code:
+            return True
+        return msg.startswith('failed') or msg.startswith('ERROR')
+
     @handle_orch_error
     @host_exists()
     def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> str:
@@ -2738,8 +2753,10 @@ Then run the following:
                         hostname, cephadmNoImage, "host-maintenance",
                         ["enter"],
                         error_ok=True))
-            returned_msg = _err[0].split('\n')[-1]
-            if (returned_msg.startswith('failed') or returned_msg.startswith('ERROR')) and not yes_i_really_mean_it:
+            returned_msg = _err[0].split('\n')[-1] if _err else ''
+            if self._host_maintenance_failed(_code, _err) and not yes_i_really_mean_it:
+                self.log.warning(
+                    f"Failed to place {hostname} into maintenance: {returned_msg}")
                 raise OrchestratorError(f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}", errno=errno.EPERM)
             if "osd" in host_daemons:
                 crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
@@ -2823,10 +2840,10 @@ Then run the following:
                 outs, errs, _code = self.wait_async(
                     CephadmServe(self)._run_cephadm(hostname, cephadmNoImage,
                                                     'host-maintenance', ['exit'], error_ok=True))
-            returned_msg = errs[0].split('\n')[-1]
-            if (returned_msg.startswith('failed') or returned_msg.startswith('ERROR')):
+            returned_msg = errs[0].split('\n')[-1] if errs else ''
+            if self._host_maintenance_failed(_code, errs):
                 self.log.warning(
-                    f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
+                    f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}: {returned_msg}")
                 if not force:
                     raise OrchestratorError(
                         f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}", errno=errno.EPERM)
