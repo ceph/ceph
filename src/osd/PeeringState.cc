@@ -5603,6 +5603,10 @@ PeeringState::Start::Start(my_context ctx)
     post_event(MakePrimary());
   } else { //is_stray
     psdout(1) << "transitioning to Stray" << dendl;
+    // This OSD is not primary, so drop any in-progress active-rebuild span.
+    // This prevents reusing a stale rebuild_active_start from an OSD that loses
+    // primary mid-span and is later re-promoted for the same PG.
+    ps->rebuild_active_start = utime_t();
     post_event(MakeStray());
   }
 }
@@ -5815,6 +5819,19 @@ void PeeringState::Peering::exit()
   pl->get_peering_perf().tinc(rs_peering_latency, dur);
 }
 
+void PeeringState::close_rebuild_span()
+{
+  if (rebuild_active_start != utime_t()) {
+    utime_t dur = ceph_clock_now() - rebuild_active_start;
+    if (dur.to_msec() > 0) {
+      PerfCounters &perf = pl->get_peering_perf();
+      perf.tinc_with_max(rs_pg_rebuild_duration, dur);
+      perf.set_min_nonzero(rs_pg_rebuild_duration_min, dur.to_nsec());
+    }
+    rebuild_active_start = utime_t();
+  }
+}
+
 
 /*------Backfilling-------*/
 PeeringState::Backfilling::Backfilling(my_context ctx)
@@ -5830,6 +5847,10 @@ PeeringState::Backfilling::Backfilling(my_context ctx)
   ps->state_clear(PG_STATE_BACKFILL_WAIT);
   ps->state_set(PG_STATE_BACKFILLING);
   pl->on_backfill_reserved();
+  // Arm the active-rebuild latch unless a span is already in progress.
+  if (ps->rebuild_active_start == utime_t()) {
+    ps->rebuild_active_start = ceph_clock_now();
+  }
   pl->publish_stats_to_osd();
 }
 
@@ -6086,6 +6107,8 @@ PeeringState::NotBackfilling::NotBackfilling(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
   ps->state_clear(PG_STATE_REPAIR);
+  // Close the active-rebuild latch
+  ps->close_rebuild_span();
   pl->publish_stats_to_osd();
 }
 
@@ -6127,6 +6150,8 @@ PeeringState::NotRecovering::NotRecovering(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
   ps->state_clear(PG_STATE_REPAIR);
+  // Close the active-rebuild latch (recovery-track pause path)
+  ps->close_rebuild_span();
   pl->publish_stats_to_osd();
 }
 
@@ -6557,6 +6582,11 @@ PeeringState::Recovering::Recovering(my_context ctx)
   ps->state_set(PG_STATE_RECOVERING);
   pl->on_recovery_reserved();
   ceph_assert(!ps->state_test(PG_STATE_ACTIVATING));
+  // Arm the active-rebuild latch (rs_pg_rebuild_duration) unless a
+  // span is already in progress
+  if (ps->rebuild_active_start == utime_t()) {
+    ps->rebuild_active_start = ceph_clock_now();
+  }
   pl->publish_stats_to_osd();
 }
 
@@ -6672,6 +6702,12 @@ PeeringState::Recovered::Recovered(my_context ctx)
   DECLARE_LOCALS;
 
   psdout(10) << "Recovered::Recovered: entering Recovered state" << dendl;
+
+  // Close the active-rebuild latch. This is the *success* close
+  // point for both tracks -- AllReplicasRecovered (from Recovering) and
+  // Backfilled (from Backfilling) both transition straight here.
+  // A no-op if nothing ever needed recovering (e.g. Activating -> Recovered).
+  ps->close_rebuild_span();
 
   ceph_assert(!ps->needs_recovery());
 

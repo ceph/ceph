@@ -2391,6 +2391,34 @@ public:
     }
   }
 
+  /**
+   * active-rebuild span (rs_pg_rebuild_duration), the subset of a
+   * vulnerability window where this PG was actually in Recovering or
+   * Backfilling -- as opposed to rs_pg_vulnerability_duration, which spans
+   * the whole redundancy-loss episode including any silent/waiting time.
+   * The state machine is the source of truth for "is real recovery work
+   * happening".
+   * This is set at the following sites:
+   *  1. Recovering::Recovering()/Backfilling::Backfilling()
+   *  2. Remains set, if a span is already in progress or if rebuild switches
+   *     between recovering/backfilling and across suspend and resume cycles.
+   * This is reset at the following sites:
+   *  1. NotBackfilling/NotRecovering/Recovered
+   *  2. Also reset (silently, no recording) in Start::Start()'s not-primary
+   *     branch -- if this OSD stops being primary for the PG mid-span, this
+   *     PeeringState instance will never revisit NotRecovering/NotBackfilling/
+   *     Recovered again to close it.
+   */
+  utime_t rebuild_active_start;
+
+  /**
+   * Close the active-rebuild latch (rebuild_active_start) if one is armed,
+   * recording rs_pg_rebuild_duration/rs_pg_rebuild_duration_min. No-op if
+   * the latch was never armed. See rebuild_active_start's comment above for
+   * the three call sites this is used from.
+   */
+  void close_rebuild_span();
+
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
 
