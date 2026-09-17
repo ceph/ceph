@@ -1,6 +1,7 @@
 #include "RadosIo.h"
 
 #include <fmt/format.h>
+#include <map>
 #include <json_spirit/json_spirit.h>
 
 #include <ranges>
@@ -8,16 +9,23 @@
 #include "DataGenerator.h"
 #include "IoOp.h"
 #include "common/ceph_json.h"
+#include "common/debug.h"
+#include "common/dout.h"
 #include "common/io_exerciser/IoSequence.h"
 #include "common/json/OSDStructures.h"
 #include "librados/librados_asio.h"
 
 #include <boost/asio/io_context.hpp>
 
+#define dout_subsys ceph_subsys_rados
+#define dout_context g_ceph_context
+
 using RadosIo = ceph::io_exerciser::RadosIo;
 using ConsistencyChecker = ceph::consistency::ConsistencyChecker;
 
 using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
+using MapextOp = ceph::io_exerciser::MapextOp;
+using WriteZeroDataOp = ceph::io_exerciser::WriteZeroDataOp;
 
 namespace {
 template <typename S>
@@ -55,7 +63,8 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
     : Model(primary_oid, secondary_oid, block_size, delete_objects),
       rados(rados),
       asio(asio),
-      om(std::make_unique<ObjectModel>(primary_oid, secondary_oid, block_size, seed, delete_objects)),
+      om(std::make_unique<ObjectModel>(primary_oid, secondary_oid, block_size, seed,
+                                       is_replicated_pool, delete_objects)),
       db(data_generation::DataGenerator::create_generator(
           data_generation_type, *om)),
       pool(pool),
@@ -234,6 +243,14 @@ void RadosIo::applyIoOp(IoOp& op) {
     case OpType::FailedWrite2:
       [[fallthrough]];
     case OpType::FailedWrite3:
+      [[fallthrough]];
+    case OpType::Zero:
+      [[fallthrough]];
+    case OpType::Zero2:
+      [[fallthrough]];
+    case OpType::WriteZeroData:
+      [[fallthrough]];
+    case OpType::Mapext:
       applyReadWriteOp(op);
       break;
     case OpType::TruncateWrite:
@@ -243,6 +260,46 @@ void RadosIo::applyIoOp(IoOp& op) {
     case OpType::TruncateWrite3:
       applyTruncateWriteOp(op);
       break;
+    case OpType::WriteAndZero: {
+      start_io();
+      WriteAndZeroOp& wzOp = static_cast<WriteAndZeroOp&>(op);
+      auto write_op_info = std::make_shared<AsyncOpInfo<1>>(
+          std::array<uint64_t, 1>{wzOp.write_offset},
+          std::array<uint64_t, 1>{wzOp.write_length});
+      if (wzOp.write_offset + wzOp.write_length <= om->get_primary_size()) {
+        write_op_info->bufferlist[0] =
+            db->generate_data(wzOp.write_offset, wzOp.write_length);
+      } else {
+        write_op_info->bufferlist[0].append_zero(wzOp.write_length * block_size);
+      }
+      librados::ObjectWriteOperation wop;
+      wop.write(wzOp.write_offset * block_size, write_op_info->bufferlist[0]);
+      wop.zero(wzOp.zero_offset * block_size, wzOp.zero_length * block_size);
+      auto writeandzero_cb = [this](boost::system::error_code ec, version_t ver) {
+        ceph_assert(ec == boost::system::errc::success);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, primary_oid,
+                              std::move(wop), 0, nullptr, writeandzero_cb);
+      num_io++;
+      break;
+    }
+    case OpType::ZeroAndTruncate: {
+      start_io();
+      ZeroAndTruncateOp& ztOp = static_cast<ZeroAndTruncateOp&>(op);
+      auto op_info = std::make_shared<AsyncOpInfo<0>>();
+      librados::ObjectWriteOperation wop;
+      wop.zero(ztOp.zero_offset * block_size, ztOp.zero_length * block_size);
+      wop.truncate(ztOp.truncate_size * block_size);
+      auto zeroandtruncate_cb = [this](boost::system::error_code ec, version_t ver) {
+        ceph_assert(ec == boost::system::errc::success);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, primary_oid,
+                              std::move(wop), 0, nullptr, zeroandtruncate_cb);
+      num_io++;
+      break;
+    }
     case OpType::InjectReadError:
       [[fallthrough]];
     case OpType::InjectWriteError:
@@ -303,6 +360,24 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
     num_io++;
   };
 
+  auto applyZeroOp = [this]<OpType opType, int N>(
+                         ReadWriteOp<opType, N> zeroOp) {
+    auto op_info =
+        std::make_shared<AsyncOpInfo<N>>(zeroOp.offset, zeroOp.length);
+    librados::ObjectWriteOperation wop;
+    for (int i = 0; i < N; i++) {
+      wop.zero(zeroOp.offset[i] * block_size,
+               zeroOp.length[i] * block_size);
+    }
+    auto zero_cb = [this](boost::system::error_code ec, version_t ver) {
+      ceph_assert(ec == boost::system::errc::success);
+      finish_io();
+    };
+    librados::async_operate(asio.get_executor(), io, primary_oid,
+                            std::move(wop), 0, nullptr, zero_cb);
+    num_io++;
+  };
+
   auto applyWriteOp = [this]<OpType opType, int N>(
                           ReadWriteOp<opType, N> writeOp) {
     auto op_info =
@@ -341,6 +416,102 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
     };
     librados::async_operate(asio.get_executor(), io, primary_oid,
                             std::move(wop), 0, nullptr, write_cb);
+    num_io++;
+  };
+
+  auto applyMapextOp = [this]<OpType opType, int N>(
+                           ReadWriteOp<opType, N> mop) {
+    // Shared state kept alive until the async callback fires.
+    struct MapextOpState {
+      std::map<uint64_t, uint64_t> actual_map;
+      std::array<uint64_t, N> offset;
+      std::array<uint64_t, N> length;
+      int prval{0};
+    };
+    auto state = std::make_shared<MapextOpState>();
+    state->offset = mop.offset;
+    state->length = mop.length;
+
+    librados::ObjectReadOperation rop;
+    rop.mapext(mop.offset[0] * block_size, mop.length[0] * block_size,
+               &state->actual_map, &state->prval);
+
+    auto mapext_cb = [this, state](boost::system::error_code ec,
+                                   version_t ver, bufferlist bl) {
+      ceph_assert(ec == boost::system::errc::success);
+      ceph_assert(state->prval >= 0);
+
+      // Compute expected extent map from the model and filter to the
+      // queried [offset_bytes, offset_bytes+length_bytes) range.
+      const uint64_t off_bytes = state->offset[0] * block_size;
+      const uint64_t end_bytes = off_bytes + state->length[0] * block_size;
+      std::map<uint64_t, uint64_t> expected;
+      for (auto& [ext_off, ext_len] : om->get_expected_extent_map()) {
+        const uint64_t ext_end = ext_off + ext_len;
+        if (ext_off >= end_bytes || ext_end <= off_bytes) {
+          continue;  // outside query range
+        }
+        const uint64_t clamp_off = std::max(ext_off, off_bytes);
+        const uint64_t clamp_end = std::min(ext_end, end_bytes);
+        expected.emplace(clamp_off, clamp_end - clamp_off);
+      }
+
+      if (state->actual_map != expected) {
+        auto fmt_extents = [](const std::map<uint64_t, uint64_t>& m) {
+          if (m.empty()) return std::string("(none)");
+          std::string s;
+          for (auto& [o, l] : m) {
+            if (!s.empty()) s += ", ";
+            s += fmt::format("[{}+{})", o, l);
+          }
+          return s;
+        };
+
+        std::string msg;
+        msg += "Mapext mismatch!\n";
+        msg += fmt::format("  Query range : [{}+{})\n",
+                           off_bytes, state->length[0] * block_size);
+        msg += fmt::format("  Actual   ({}): {}\n",
+                           state->actual_map.size(),
+                           fmt_extents(state->actual_map));
+        msg += fmt::format("  Expected ({}): {}\n",
+                           expected.size(),
+                           fmt_extents(expected));
+
+        // Show extents present in actual but not in expected (unexpected)
+        std::map<uint64_t, uint64_t> unexpected;
+        for (auto& [o, l] : state->actual_map) {
+          if (expected.find(o) == expected.end() || expected.at(o) != l) {
+            unexpected.emplace(o, l);
+          }
+        }
+        if (!unexpected.empty()) {
+          msg += fmt::format("  Unexpected extents (in actual, not in expected): {}\n",
+                             fmt_extents(unexpected));
+        }
+
+        // Show extents present in expected but not in actual (missing)
+        std::map<uint64_t, uint64_t> missing;
+        for (auto& [o, l] : expected) {
+          if (state->actual_map.find(o) == state->actual_map.end() ||
+              state->actual_map.at(o) != l) {
+            missing.emplace(o, l);
+          }
+        }
+        if (!missing.empty()) {
+          msg += fmt::format("  Missing extents (in expected, not in actual): {}\n",
+                             fmt_extents(missing));
+        }
+
+        lderr(g_ceph_context) << msg << dendl;
+        ceph_abort_msg("Mapext result does not match expected extent map");
+      }
+
+      finish_io();
+    };
+
+    librados::async_operate(asio.get_executor(), io, primary_oid,
+                            std::move(rop), 0, nullptr, mapext_cb);
     num_io++;
   };
 
@@ -407,6 +578,40 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       applyFailedWriteOp(writeOp);
       break;
     }
+    case OpType::Zero: {
+      start_io();
+      ZeroOp& zeroOp = static_cast<ZeroOp&>(op);
+      applyZeroOp(zeroOp);
+      break;
+    }
+    case OpType::Zero2: {
+      start_io();
+      DoubleZeroOp& zeroOp = static_cast<DoubleZeroOp&>(op);
+      applyZeroOp(zeroOp);
+      break;
+    }
+    case OpType::WriteZeroData: {
+      start_io();
+      WriteZeroDataOp& wzdOp = static_cast<WriteZeroDataOp&>(op);
+      auto op_info = std::make_shared<AsyncOpInfo<1>>(wzdOp.offset, wzdOp.length);
+      op_info->bufferlist[0].append_zero(wzdOp.length[0] * block_size);
+      librados::ObjectWriteOperation wop;
+      wop.write(wzdOp.offset[0] * block_size, op_info->bufferlist[0]);
+      auto writezerodata_cb = [this](boost::system::error_code ec, version_t ver) {
+        ceph_assert(ec == boost::system::errc::success);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, primary_oid,
+                              std::move(wop), 0, nullptr, writezerodata_cb);
+      num_io++;
+      break;
+    }
+    case OpType::Mapext: {
+      start_io();
+      MapextOp& mop = static_cast<MapextOp&>(op);
+      applyMapextOp(mop);
+      break;
+    }
 
     default:
       ceph_abort_msg(
@@ -421,10 +626,10 @@ void RadosIo::applyTruncateWriteOp(IoOp& op) {
     auto op_info =
         std::make_shared<AsyncOpInfo<N>>(truncWriteOp.offset, truncWriteOp.length);
     librados::ObjectWriteOperation wop;
-    
+
     // First, add the truncate operation
     wop.truncate(truncWriteOp.size * block_size);
-    
+
     // Then, add the write operations
     for (int i = 0; i < N; i++) {
       op_info->bufferlist[i] =
@@ -432,7 +637,7 @@ void RadosIo::applyTruncateWriteOp(IoOp& op) {
       wop.write(truncWriteOp.offset[i] * block_size,
                 op_info->bufferlist[i]);
     }
-    
+
     auto write_cb = [this](boost::system::error_code ec, version_t ver) {
       ceph_assert(ec == boost::system::errc::success);
       finish_io();

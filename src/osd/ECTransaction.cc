@@ -114,12 +114,57 @@ void ECTransaction::Generate::encode_and_write() {
           CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY);
       }
 
+      const bool is_data_shard =
+        (int)sinfo.get_raw_shard(shard) < (int)sinfo.get_k();
+
       for (auto &&[offset, len]: to_write_eset) {
         buffer::list bl;
         to_write.get_buffer(shard, offset, len, bl);
-        t.write(coll_t(spg_t(pgid, shard)),
-                ghobject_t(oid, ghobject_t::NO_GEN, shard),
-                offset, bl.length(), bl, fadvise_flags);
+
+        if (!is_data_shard || !zero_extents.contains(shard)) {
+          // Parity shards, or no zero extents for this shard: write everything.
+          t.write(coll_t(spg_t(pgid, shard)),
+                  ghobject_t(oid, ghobject_t::NO_GEN, shard),
+                  offset, bl.length(), bl, fadvise_flags);
+          continue;
+        }
+
+        // Data shard with zero extents: split [offset, offset+len) at
+        // zero_extents boundaries.  Sub-ranges fully covered by zero_extents
+        // are hole-punched; the rest are written.
+        const extent_set &zset = zero_extents.at(shard);
+        uint64_t pos = offset;
+        uint64_t end = offset + len;
+
+        while (pos < end) {
+          auto zit = zset.lower_bound(pos);
+          uint64_t next_zero_start = (zit != zset.end()) ? zit.get_start() : end;
+          uint64_t next_zero_end   = (zit != zset.end()) ? zit.get_start() + zit.get_len() : end;
+
+          // Emit a write for any gap before the next zero interval.
+          if (pos < next_zero_start) {
+            uint64_t write_start = pos;
+            uint64_t write_end   = std::min(next_zero_start, end);
+            uint64_t write_len   = write_end - write_start;
+            buffer::list sub_bl;
+            sub_bl.substr_of(bl, write_start - offset, write_len);
+            t.write(coll_t(spg_t(pgid, shard)),
+                    ghobject_t(oid, ghobject_t::NO_GEN, shard),
+                    write_start, write_len, sub_bl, fadvise_flags);
+            pos = write_end;
+          }
+
+          if (pos >= end) break;
+
+          // Emit a zero (hole-punch) for the covered sub-range.
+          uint64_t zero_start = pos;
+          uint64_t zero_end   = std::min(next_zero_end, end);
+          uint64_t zero_len   = zero_end - zero_start;
+          t.zero(coll_t(spg_t(pgid, shard)),
+                 ghobject_t(oid, ghobject_t::NO_GEN, shard),
+                 zero_start, zero_len);
+          pos = zero_end;
+        }
       }
     }
   }
@@ -706,6 +751,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     plan(plan),
     read_sem(&sinfo),
     to_write(&sinfo),
+    zero_extents(sinfo.get_k_plus_m()),
     ec_omap_journal(ec_omap_journal),
     pg_log(pg_log) {
   ldpp_dout(dpp, 20) << __func__ << ": " << oid
@@ -986,6 +1032,7 @@ void ECTransaction::Generate::overlay_writes() {
   for (auto &&extent: op.buffer_updates) {
     using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
     bufferlist bl;
+    bool is_zero = false;
     match(
       extent.get_val(),
       [&](const BufferUpdate::Write &wop) {
@@ -994,6 +1041,7 @@ void ECTransaction::Generate::overlay_writes() {
       },
       [&](const BufferUpdate::Zero &) {
         bl.append_zero(extent.get_len());
+        is_zero = true;
       },
       [&](const BufferUpdate::CloneRange &) {
         ceph_abort_msg(
@@ -1004,6 +1052,11 @@ void ECTransaction::Generate::overlay_writes() {
     uint64_t len = extent.get_len();
 
     sinfo.ro_range_to_shard_extent_map(off, len, bl, to_write);
+
+    if (is_zero) {
+      sinfo.ro_range_to_shard_extent_set(off, len, zero_extents);
+    }
+
     debug(oid, "overlay_buffer", to_write, dpp);
   }
 }
@@ -1193,7 +1246,8 @@ void ECTransaction::Generate::written_shards() {
       }
       if (update) {
         bufferlist bl;
-        oi.encode(bl, osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+        oi.encode(bl, osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr),
+                  osdmap->require_osd_release);
         op.attr_updates[OI_ATTR] = bl;
         // Update cached OI
         obc->obs.oi.shard_versions = oi.shard_versions;

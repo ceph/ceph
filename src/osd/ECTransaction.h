@@ -175,6 +175,7 @@ class Generate {
   const WritePlanObj &plan;
   std::optional<ECUtil::shard_extent_map_t> read_sem;
   ECUtil::shard_extent_map_t to_write;
+  ECUtil::shard_extent_set_t zero_extents;
   std::vector<std::pair<uint64_t, uint64_t>> rollback_extents;
   std::vector<shard_id_set> rollback_shards;
   uint32_t fadvise_flags = 0;
