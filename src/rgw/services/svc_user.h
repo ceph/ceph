@@ -69,21 +69,29 @@ public:
                                optional_yield y,
                                const DoutPrefixProvider *dpp) = 0;
 
-  virtual int get_user_info_by_email(const std::string& email, RGWUserInfo *info,
+  virtual int get_user_info_by_uid(const rgw_user& uid,
+                             std::shared_ptr<const RGWUserInfo>& info,
+                             RGWObjVersionTracker *objv_tracker,
+                             std::map<std::string, bufferlist>* pattrs,
+                             real_time *pmtime,
+                             optional_yield y,
+                             const DoutPrefixProvider *dpp) = 0;
+  virtual int get_user_info_by_email(const std::string& email,
+                             std::shared_ptr<const RGWUserInfo>& info,
                              RGWObjVersionTracker *objv_tracker,
                              std::map<std::string, bufferlist>* pattrs,
                              real_time *pmtime,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) = 0;
   virtual int get_user_info_by_swift(const std::string& swift_name,
-                             RGWUserInfo *info,        /* out */
+                             std::shared_ptr<const RGWUserInfo>& info,
                              RGWObjVersionTracker * const objv_tracker,
                              std::map<std::string, bufferlist>* pattrs,
                              real_time * const pmtime,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) = 0;
   virtual int get_user_info_by_access_key(const std::string& access_key,
-                                  RGWUserInfo *info,
+                                  std::shared_ptr<const RGWUserInfo>& info,
                                   RGWObjVersionTracker* objv_tracker,
                                   std::map<std::string, bufferlist>* pattrs,
                                   real_time *pmtime,
