@@ -1096,6 +1096,9 @@ def main():
     except rados.PermissionDeniedError as e:
         print(str(e), file=sys.stderr)
         return errno.EACCES
+    except rados.ObjectNotFound as e:
+        print(str(e), file=sys.stderr)
+        return errno.ENOENT
     except Exception as e:
         print(str(e), file=sys.stderr)
         return 1
