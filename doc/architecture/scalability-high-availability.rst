@@ -5,6 +5,13 @@
 Scalability and High Availability
 =================================
 
+.. meta::
+   :description: How CRUSH, the cluster map, Monitor quorum, cephx authentication, and intelligent daemons let Ceph scale without a single point of failure.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
 In traditional architectures, clients talk to a centralized component. This
 centralized component might be a gateway, a broker, an API, or a facade. A
 centralized component of this kind acts as a single point of entry to a complex
@@ -408,6 +415,13 @@ the greater cluster provides several benefits:
 
 By performing this data replication, Ceph OSD Daemons relieve Ceph
 clients and their network interfaces of the burden of replicating data.
+
+Additional Resources
+~~~~~~~~~~~~~~~~~~~~
+
+- :ref:`CRUSH Maps <rados-crush-map>`
+- :ref:`Cephx Config Reference <rados-cephx-config-ref>`
+- :doc:`/architecture/dynamic-cluster-management`
 
 
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)

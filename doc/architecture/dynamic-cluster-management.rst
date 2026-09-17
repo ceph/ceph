@@ -1,6 +1,13 @@
 Dynamic Cluster Management
 ==========================
 
+.. meta::
+   :description: How pools, placement groups, peering, rebalancing, and scrubbing let a Ceph cluster place data and heal itself.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
 In the :ref:`Scalability and High Availability <arch_scalability_and_high_availability>` section, we explained how Ceph uses
 CRUSH, cluster topology, and intelligent daemons to scale and maintain high
 availability. Key to Ceph's design is the autonomous, self-healing, and
@@ -241,6 +248,13 @@ performed weekly) finds bad blocks on a drive that weren't apparent in a light
 scrub.
 
 See :ref:`Data Scrubbing <rados_config_scrubbing>` for details on configuring scrubbing.
+
+Additional Resources
+~~~~~~~~~~~~~~~~~~~~
+
+- :ref:`Pools <rados_pools>`
+- :ref:`Placement Groups <placement groups>`
+- :ref:`CRUSH Maps <rados-crush-map>`
 
 
 .. _Report Peering Failure: ../../rados/configuration/mon-osd-interaction#osds-report-peering-failure
