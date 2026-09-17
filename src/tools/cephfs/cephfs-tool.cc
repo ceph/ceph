@@ -152,6 +152,89 @@ struct RandomHelper {
   }
 };
 
+// fio-compatible random offset generator (lib/rand.h, io_u.c __get_next_rand_offset).
+// Uses tausworthe64 only; sufficient for all practical file sizes in this tool.
+struct FioRandomState {
+  uint64_t s1 = 0, s2 = 0, s3 = 0, s4 = 0, s5 = 0;
+
+  static uint64_t
+  seed_min(uint64_t x, uint64_t m)
+  {
+    return (x < m) ? x + m : x;
+  }
+
+  static uint64_t
+  next_rand(uint64_t& s1, uint64_t& s2, uint64_t& s3, uint64_t& s4, uint64_t& s5)
+  {
+    uint64_t xval;
+
+    xval = ((s1 << 1) ^ s1) >> 53;
+    s1 = ((s1 & 18446744073709551614ULL) << 10) ^ xval;
+
+    xval = ((s2 << 24) ^ s2) >> 50;
+    s2 = ((s2 & 18446744073709551104ULL) << 5) ^ xval;
+
+    xval = ((s3 << 3) ^ s3) >> 23;
+    s3 = ((s3 & 18446744073709547520ULL) << 29) ^ xval;
+
+    xval = ((s4 << 5) ^ s4) >> 24;
+    s4 = ((s4 & 18446744073709420544ULL) << 23) ^ xval;
+
+    xval = ((s5 << 3) ^ s5) >> 33;
+    s5 = ((s5 & 18446744073701163008ULL) << 8) ^ xval;
+
+    return (s1 ^ s2 ^ s3 ^ s4 ^ s5);
+  }
+
+  void
+  init(uint64_t seed)
+  {
+    int cranks = 6;
+
+#define LCG64(x, s) ((x) * 6906969069ULL ^ (s))
+    s1 = seed_min(LCG64((0x2 ^ 31) + (0x2 ^ 17) + (0x2 ^ 7), seed), 1);
+    s2 = seed_min(LCG64(s1, seed), 7);
+    s3 = seed_min(LCG64(s2, seed), 15);
+    s4 = seed_min(LCG64(s3, seed), 33);
+    s5 = seed_min(LCG64(s4, seed), 49);
+#undef LCG64
+
+    while (cranks--) {
+      next_rand(s1, s2, s3, s4, s5);
+    }
+  }
+
+  static uint64_t
+  last_block(uint64_t file_size, uint64_t block_size)
+  {
+    if (block_size == 0) {
+      return 0;
+    }
+    return file_size / block_size;
+  }
+
+  uint64_t
+  next_offset(uint64_t file_size, uint64_t block_size)
+  {
+    uint64_t lastb = last_block(file_size, block_size);
+    if (!lastb) {
+      return 0;
+    }
+
+    uint64_t r = next_rand(s1, s2, s3, s4, s5);
+    // 0x1p64 is exact 2^64; UINT64_MAX is not representable in double.
+    uint64_t b = static_cast<uint64_t>(
+        lastb * (static_cast<double>(r) / 0x1p64));
+    return b * block_size;
+  }
+
+  static uint64_t
+  io_size_at(uint64_t offset, uint64_t file_size, uint64_t block_size)
+  {
+    return std::min(block_size, file_size - offset);
+  }
+};
+
 // Configuration for the benchmark
 struct BenchConfig {
   int num_threads;
@@ -184,6 +267,7 @@ struct BenchConfig {
   bool async_write_fsync;    // --async-write-fsync: carry fsync with each async write (Ganesha-style)
   bool shared_file;          // --shared-file: use a single file for all threads
   int queue_depth;           // --queue-depth: max outstanding async I/Os per worker thread
+  bool random_io;            // --random-io: random offsets within files (fio tausworthe)
 #ifdef CEPH_LOCKSTAT
   string lockstat_dump_path; // --lockstat-dump: base path for per-phase lock contention dumps
   uint64_t lockstat_threshold_ns; // --lockstat-threshold: only record lock holds >= N ns (0 = all)
@@ -451,6 +535,12 @@ bench_write_worker(
   auto buffer = std::vector<char>(config.block_size);
   RandomHelper::fill_buffer(std::as_writable_bytes(std::span(buffer)));
 
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
+
   for (int i = 0;; ++i) {
     if (stop_signal) {
       break; // Check if we should stop
@@ -494,8 +584,20 @@ bench_write_worker(
         break;
       }
 
-      uint64_t to_write = std::min(config.block_size, config.file_size - written);
-      if (int rc = ceph_write(cmount, fd, buffer.data(), to_write, -1); rc < 0) {
+      uint64_t to_write;
+      int64_t write_offset;
+      if (config.random_io) {
+        write_offset = static_cast<int64_t>(
+            fio_rand.next_offset(config.file_size, config.block_size));
+        to_write = FioRandomState::io_size_at(
+            static_cast<uint64_t>(write_offset), config.file_size,
+            config.block_size);
+      } else {
+        write_offset = -1;
+        to_write = std::min(config.block_size, config.file_size - written);
+      }
+      if (int rc = ceph_write(cmount, fd, buffer.data(), to_write, write_offset);
+          rc < 0) {
         ss << "Thread " << thread_id << " write error: " << strerror(-rc) << std::endl;
         stats.errors++;
         stop_signal = true;
@@ -565,6 +667,12 @@ bench_async_write_worker(
   // Semaphore for queue depth management
   std::counting_semaphore<> queue_semaphore(config.queue_depth);
   std::atomic<int> active_callbacks{0};
+
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
 
   // Allocate queue of async contexts
   std::vector<std::unique_ptr<AsyncIOContext>> io_queue;
@@ -687,9 +795,18 @@ bench_async_write_worker(
       }
 
       // Setup I/O operation
-      uint64_t to_write = std::min(config.block_size, config.file_size - written);
+      uint64_t io_offset;
+      uint64_t to_write;
+      if (config.random_io) {
+        io_offset = fio_rand.next_offset(config.file_size, config.block_size);
+        to_write = FioRandomState::io_size_at(
+            io_offset, config.file_size, config.block_size);
+      } else {
+        io_offset = written;
+        to_write = std::min(config.block_size, config.file_size - written);
+      }
       available_ctx->fh = fh;
-      available_ctx->offset = written;
+      available_ctx->offset = io_offset;
       available_ctx->completed.store(false, std::memory_order_release);
       available_ctx->result = 0;
       
@@ -700,7 +817,7 @@ bench_async_write_worker(
       available_ctx->io_info.fh = fh;
       available_ctx->io_info.iov = &available_ctx->iov;
       available_ctx->io_info.iovcnt = 1;
-      available_ctx->io_info.off = written;
+      available_ctx->io_info.off = io_offset;
       available_ctx->io_info.result = 0;
 
       // Submit async I/O
@@ -802,6 +919,12 @@ bench_read_worker(
 
   std::vector<char> buffer(config.block_size);
 
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
+
   for (int i = 0;; ++i) {
     if (stop_signal) {
       break;
@@ -840,7 +963,17 @@ bench_read_worker(
         break;
       }
 
-      int rc = ceph_read(cmount, fd, buffer.data(), config.block_size, -1);
+      int rc;
+      if (config.random_io) {
+        int64_t read_offset = static_cast<int64_t>(
+            fio_rand.next_offset(config.file_size, config.block_size));
+        uint64_t to_read = FioRandomState::io_size_at(
+            static_cast<uint64_t>(read_offset), config.file_size,
+            config.block_size);
+        rc = ceph_read(cmount, fd, buffer.data(), to_read, read_offset);
+      } else {
+        rc = ceph_read(cmount, fd, buffer.data(), config.block_size, -1);
+      }
       if (rc < 0) {
         ss << "Thread " << thread_id << " read error: " << strerror(-rc) << std::endl;
         stats.errors++;
@@ -901,6 +1034,12 @@ bench_async_read_worker(
   // Semaphore for queue depth management
   std::counting_semaphore<> queue_semaphore(config.queue_depth);
   std::atomic<int> active_callbacks{0};
+
+  FioRandomState fio_rand;
+  if (config.random_io) {
+    std::random_device rd;
+    fio_rand.init(static_cast<uint64_t>(rd()) << 32 | rd());
+  }
 
   // Allocate queue of async contexts
   std::vector<std::unique_ptr<AsyncIOContext>> io_queue;
@@ -1008,9 +1147,18 @@ bench_async_read_worker(
       }
 
       // Setup I/O operation
-      uint64_t to_read = std::min(config.block_size, config.file_size - total_read);
+      uint64_t io_offset;
+      uint64_t to_read;
+      if (config.random_io) {
+        io_offset = fio_rand.next_offset(config.file_size, config.block_size);
+        to_read = FioRandomState::io_size_at(
+            io_offset, config.file_size, config.block_size);
+      } else {
+        io_offset = total_read;
+        to_read = std::min(config.block_size, config.file_size - total_read);
+      }
       available_ctx->fh = fh;
-      available_ctx->offset = total_read;
+      available_ctx->offset = io_offset;
       available_ctx->completed.store(false, std::memory_order_release);
       available_ctx->result = 0;
       
@@ -1021,7 +1169,7 @@ bench_async_read_worker(
       available_ctx->io_info.fh = fh;
       available_ctx->io_info.iov = &available_ctx->iov;
       available_ctx->io_info.iovcnt = 1;
-      available_ctx->io_info.off = total_read;
+      available_ctx->io_info.off = io_offset;
       available_ctx->io_info.result = 0;
 
       // Submit async I/O
@@ -1397,6 +1545,7 @@ int do_bench(BenchConfig& config) {
       json_formatter->dump_bool("async_write_fsync", config.async_write_fsync);
       json_formatter->dump_bool("shared_file", config.shared_file);
     }
+    json_formatter->dump_bool("random_io", config.random_io);
     json_formatter->close_section(); // configuration
     json_formatter->open_array_section("iterations");
   }
@@ -1439,6 +1588,7 @@ int do_bench(BenchConfig& config) {
     cout << "  Shared file (all threads): "
          << (config.shared_file ? "yes" : "no") << std::endl;
   }
+  cout << "  Random I/O: " << (config.random_io ? "enabled" : "disabled") << std::endl;
 
   if (int rc = ceph_mkdir(shared_cmount, config.subdir.c_str(), 0755); rc < 0) {
     cerr << "Failed to create bench directory '" << config.subdir << "': " << strerror(-rc) << std::endl;
@@ -1857,6 +2007,7 @@ int main(int argc, char **argv) {
     ("async-write-fsync", po::bool_switch(&config.async_write_fsync), "With async-io, fsync each write via io_info.fsync (Ganesha-style; needs async-io)")
     ("shared-file", po::bool_switch(&config.shared_file), "With async-io, all threads write to one shared file (stress cap flush waiters)")
     ("queue-depth", po::value<int>(&config.queue_depth)->default_value(16), "Queue depth for async I/O (number of outstanding I/Os per thread)")
+    ("random-io", po::bool_switch(&config.random_io), "Use random offsets within each file (fio tausworthe64 algorithm)")
 #ifdef CEPH_LOCKSTAT
     ("lockstat-dump", po::value<string>(&config.lockstat_dump_path), "Base path for lockstat output files (iteration and phase will be appended)")
     ("lockstat-threshold", po::value<uint64_t>(&config.lockstat_threshold_ns)->default_value(0), "Lockstat threshold in nanoseconds (0 = collect all)")
