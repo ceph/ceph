@@ -86,6 +86,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
 #define RGW_ATTR_RATELIMIT	RGW_ATTR_PREFIX "ratelimit"
 #define RGW_ATTR_LC		RGW_ATTR_PREFIX "lc"
+#define RGW_ATTR_INVENTORY	RGW_ATTR_PREFIX "inventory"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG RGW_ATTR_PREFIX "etag"
 #define RGW_ATTR_CKSUM          RGW_ATTR_PREFIX "cksum"

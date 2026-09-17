@@ -1,0 +1,13 @@
+{
+  "sourceBucket" : "rgw-inv-src-hst0052",
+  "destinationBucket" : "arn:aws:s3:::rgw-inv-dst-hst0052",
+  "version" : "2016-11-30",
+  "creationTimestamp" : "1786323600000",
+  "fileFormat" : "Parquet",
+  "fileSchema" : "message s3.inventory {  required binary bucket (STRING);  required binary key (STRING);  optional binary version_id (STRING);  optional boolean is_latest;  optional boolean is_delete_marker;  optional int64 size;  optional int64 last_modified_date (TIMESTAMP(MILLIS,true));  optional binary e_tag (STRING);  optional binary storage_class (STRING);  optional boolean is_multipart_uploaded;  optional binary replication_status (STRING);  optional binary encryption_status (STRING);  optional int64 object_lock_retain_until_date (TIMESTAMP(MILLIS,true));  optional binary object_lock_mode (STRING);  optional binary object_lock_legal_hold_status (STRING);  optional binary intelligent_tiering_access_tier (STRING);  optional binary bucket_key_status (STRING);}",
+  "files" : [ {
+    "key" : "inv/rgw-inv-src-hst0052/full-inventory/data/04fa16ce-6b89-49d7-83ad-f3424793577b.parquet",
+    "size" : 4550,
+    "MD5checksum" : "35659a742aaba880f539821997e8fb27"
+  } ]
+}
