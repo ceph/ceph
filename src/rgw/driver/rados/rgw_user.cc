@@ -1899,6 +1899,37 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   size_t max_buckets = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
+  rgw::sal::BucketList vector_listing;
+  do {
+    ret = driver->list_vector_buckets(dpp, user->get_id(), user->get_tenant(),
+                                      vector_listing.next_marker, string(),
+                                      max_buckets, vector_listing, y);
+    if (ret < 0) {
+      set_err_msg(err_msg, "unable to list user vector buckets");
+      return ret;
+    }
+
+    if (!vector_listing.buckets.empty() && !purge_data) {
+      set_err_msg(err_msg, "must specify purge data to remove user with vector buckets");
+      return -EEXIST; // change to code that maps to 409: conflict
+    }
+
+    for (const auto& ent : vector_listing.buckets) {
+      std::unique_ptr<rgw::sal::VectorBucket> vector_bucket;
+      ret = driver->load_vector_bucket(dpp, ent.bucket, &vector_bucket, y);
+      if (ret < 0) {
+        set_err_msg(err_msg, "unable to load vector bucket " + ent.bucket.name);
+        return ret;
+      }
+
+      ret = vector_bucket->remove(dpp, true, y);
+      if (ret < 0) {
+        set_err_msg(err_msg, "unable to delete user vector bucket data");
+        return ret;
+      }
+    }
+  } while (!vector_listing.next_marker.empty());
+
   rgw::sal::BucketList listing;
   do {
     ret = driver->list_buckets(dpp, user->get_id(), user->get_tenant(),

@@ -110,3 +110,4 @@ Other
    Export over NFS <nfs>
    Share over SMB <smb>
    Full Object Deduplication <s3_objects_dedup>
+   S3 Vectors <s3vectors>
