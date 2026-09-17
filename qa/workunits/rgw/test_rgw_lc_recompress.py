@@ -5,7 +5,8 @@ import sys
 import time
 from common import exec_cmd, create_user, boto_connect, object_stat, \
     get_compression_type, get_storage_class, get_crypt_mode, \
-    make_compressible_body, upload_object, MULTIPART_THRESHOLD
+    get_crypt_attr_raw, make_compressible_body, upload_object, \
+    MULTIPART_THRESHOLD
 
 """
 Tests that RGW lifecycle transitions correctly recompress objects
@@ -41,18 +42,6 @@ KMS_KEY_ID = 'testkey-1'
 
 LC_POLL_INTERVAL = 10
 LC_TIMEOUT = 120
-
-
-def get_crypt_salt(stat):
-    """
-    Extract the raw crypt salt attr for rotation comparisons.
-    Returns None if absent. The value may contain non-printable bytes
-    (decoded with errors='replace') but two distinct 32-byte random
-    salts are overwhelmingly unlikely to collide under that encoding.
-    """
-    attrs = stat.get('attrs', {})
-    salt = attrs.get('user.rgw.crypt.salt', '')
-    return salt if salt else None
 
 
 def is_aead_crypt_mode(mode):
@@ -176,13 +165,14 @@ def run_test(size_kb, encrypt):
     verify_transition(stat, 'STANDARD', None, encrypt)
     log.info('Initial upload verified: STANDARD, no compression')
     # Salt rotation only applies to AEAD modes (CBC has no salt attr).
-    prev_salt = get_crypt_salt(stat) if encrypt else None
+    prev_salt = None
+    if encrypt and is_aead_crypt_mode(get_crypt_mode(stat)):
+        prev_salt = get_crypt_attr_raw(BUCKET_NAME, object_key, 'salt')
 
     def assert_salt_rotated(new_stat, prev):
         if not encrypt or not is_aead_crypt_mode(get_crypt_mode(new_stat)):
             return None
-        new_salt = get_crypt_salt(new_stat)
-        assert new_salt is not None, 'AEAD object missing crypt.salt'
+        new_salt = get_crypt_attr_raw(BUCKET_NAME, object_key, 'salt')
         assert new_salt != prev, \
             'crypt.salt did not rotate across re-encryption'
         return new_salt
@@ -233,8 +223,7 @@ def run_test(size_kb, encrypt):
         assert copy_orig == len(object_body), \
             f'Same-codec copy orig_size {copy_orig} != plaintext {len(object_body)}'
         if is_aead_crypt_mode(get_crypt_mode(copy_stat)):
-            copy_salt = get_crypt_salt(copy_stat)
-            assert copy_salt is not None, 'AEAD copy missing crypt.salt'
+            copy_salt = get_crypt_attr_raw(BUCKET_NAME, copy_key, 'salt')
             assert copy_salt != prev_salt, \
                 'Copy salt did not rotate vs source'
         body = bucket.Object(copy_key).get()['Body'].read()
