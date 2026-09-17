@@ -139,6 +139,20 @@ class IngressService(CephService):
             hosts = get_placement_hosts(spec, mgr.cache.get_schedulable_hosts(), mgr.cache.get_draining_hosts())
             deps.append(f'placement_hosts:{",".join(sorted(h.hostname for h in hosts))}')
 
+        if ingress_spec.monitor_ssl:
+            deps.append(f'monitor_cert_source: {ingress_spec.monitor_cert_source}')
+            if (
+                ingress_spec.monitor_cert_source != MonitorCertSource.REUSE_SERVICE_CERT.value
+                and ingress_spec.monitor_ssl_cert
+                and ingress_spec.monitor_ssl_key
+            ):
+                deps.append(
+                    f'monitor_ssl_cert: {utils.config_hash(ingress_spec.monitor_ssl_cert)}'
+                )
+                deps.append(
+                    f'monitor_ssl_key: {utils.config_hash(ingress_spec.monitor_ssl_key)}'
+                )
+
         return sorted(deps)
 
     def haproxy_generate_config(
