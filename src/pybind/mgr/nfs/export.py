@@ -894,6 +894,9 @@ class ExportMgr:
                 raise NFSInvalidOperation('access_key_id change is not allowed')
             elif old_rgw_fsal.secret_access_key != new_rgw_fsal.secret_access_key:
                 raise NFSInvalidOperation('secret_access_key change is not allowed')
+            need_nfs_service_restart = not (old_rgw_fsal.user_id == new_rgw_fsal.user_id
+                                            and old_export.path == new_export.path
+                                            and old_export.pseudo == new_export.pseudo)
 
         # check QOS
         if new_export_dict.get('qos_block'):
