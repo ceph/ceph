@@ -3938,10 +3938,16 @@ Then run the following:
             )
             daemons.append(sd)
 
+        # Config generation historically uses the persisted service definition.
+        # The spec passed to daemon-add may contain only placement information, so
+        # keep using it for daemon placement/construction but pass the stored spec
+        # to prepare_create() for config and dependency generation.
+        service_spec = self.spec_store[spec.service_name()].spec
+
         @forall_hosts
         def create_func_map(daemon_spec: CephadmDaemonDeploySpec) -> str:
             daemon_spec = service_registry.get_service(daemon_type).prepare_create(
-                DaemonDeployContext(daemon_spec, spec))
+                DaemonDeployContext(daemon_spec, service_spec))
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
                 return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec))
 
