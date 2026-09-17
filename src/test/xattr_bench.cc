@@ -20,7 +20,6 @@
 #include <iterator>
 #include <sstream>
 #include "os/bluestore/BlueStore.h"
-#include "os/bluestore/BlueStore_objects.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_mutex.h"

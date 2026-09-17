@@ -16,6 +16,7 @@
 #include "bluestore_types.h"
 #include "common/Formatter.h"
 #include "common/Checksummer.h"
+#include "osd/osd_types.h"
 #include "include/stringify.h"
 
 using std::list;
@@ -44,6 +45,39 @@ void assert_fail(const char* assertion, const char* file,
 }
 
 } // namespace bluestore_decode
+
+// volatile_statfs
+void volatile_statfs::publish(store_statfs_t* buf) const
+{
+  buf->allocated = allocated();
+  buf->data_stored = stored();
+  buf->data_compressed = compressed();
+  buf->data_compressed_original = compressed_original();
+  buf->data_compressed_allocated = compressed_allocated();
+}
+volatile_statfs& volatile_statfs::operator=(const store_statfs_t& st) {
+  values[STATFS_ALLOCATED] = st.allocated;
+  values[STATFS_STORED] = st.data_stored;
+  values[STATFS_COMPRESSED_ORIGINAL] = st.data_compressed_original;
+  values[STATFS_COMPRESSED] = st.data_compressed;
+  values[STATFS_COMPRESSED_ALLOCATED] = st.data_compressed_allocated;
+  return *this;
+}
+
+std::ostream& operator<<(std::ostream& out, const volatile_statfs& s)
+{
+  return out
+    << " allocated:"
+    << s.values[volatile_statfs::STATFS_ALLOCATED]
+    << " stored:"
+    << s.values[volatile_statfs::STATFS_STORED]
+    << " compressed:"
+    << s.values[volatile_statfs::STATFS_COMPRESSED]
+    << " compressed_orig:"
+    << s.values[volatile_statfs::STATFS_COMPRESSED_ORIGINAL]
+    << " compressed_alloc:"
+    << s.values[volatile_statfs::STATFS_COMPRESSED_ALLOCATED];
+}
 
 //bluestore_stats_t
 
