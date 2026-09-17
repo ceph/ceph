@@ -37,7 +37,7 @@ Prerequisites
 Procedure
 =========
 
-#. Install ``cephadm`` by following :ref:`get-cephadm`, then confirm that it
+#. Install :term:`cephadm` by following :ref:`get-cephadm`, then confirm that it
    runs:
 
    .. prompt:: bash #

@@ -23,7 +23,7 @@ Prerequisites
 
 - A running Ceph cluster that reports ``HEALTH_OK``.
 - A Linux client host that has the ``ceph-common`` package installed, and a
-  copy of ``/etc/ceph/ceph.conf`` and of a keyring that is allowed to use the
+  copy of ``/etc/ceph/ceph.conf`` and of a :term:`keyring<Keyring>` that is allowed to use the
   cluster.
 - A client host that is not also a host of the Ceph cluster, unless the client
   is a virtual machine. Mapping a block device with the kernel client on a

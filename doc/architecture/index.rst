@@ -30,6 +30,15 @@ fails. These pages explain how.
    Extending Ceph <extending-ceph>
    Cache Tiering <cache-tiering>
 
+Why This Matters for Sizing
+===========================
+
+Ceph uses the CPU and RAM of every server. Heartbeats, peering, rebalancing,
+and recovery all run on the OSD hosts, not on clients or on a central gateway,
+because there is no central gateway. Keep this in mind when reading the
+:ref:`hardware-recommendations` and the :doc:`Network Configuration Reference
+</rados/configuration/network-config-ref>`.
+
 Additional Resources
 ====================
 
