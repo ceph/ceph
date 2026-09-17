@@ -344,6 +344,10 @@
 
 /* Defined if getentropy() is available */
 #cmakedefine HAVE_GETENTROPY
+#cmakedefine HAVE_SYS_RANDOM_H
+
+/* POSIX per-process timers: timer_create(2) and friends */
+#cmakedefine HAVE_TIMER_CREATE
 
 /* Defined if libradosstriper is enabled: */
 #cmakedefine WITH_LIBRADOSSTRIPER

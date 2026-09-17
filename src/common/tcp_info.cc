@@ -19,7 +19,9 @@
 
 namespace ceph {
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
+// Darwin exposes connection stats as struct tcp_connection_info via
+// TCP_CONNECTION_INFO, which shares no fields with Linux' struct tcp_info.
 struct tcp_info {};
 
 bool tcp_info(int fd, struct tcp_info& info) {

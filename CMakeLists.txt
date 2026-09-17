@@ -294,7 +294,7 @@ if(WITH_RBD AND LINUX)
 endif()
 
 # libnbd
-if(WITH_RBD AND NOT WIN32)
+if(WITH_RBD AND NOT WIN32 AND NOT APPLE)
   find_package(libnbd 1.0 REQUIRED)
   set(HAVE_LIBNBD ${LIBNBD_FOUND})
 endif()

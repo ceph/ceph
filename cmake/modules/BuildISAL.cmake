@@ -24,7 +24,7 @@ function(build_isal)
   endif()
   # isa-l 2.32.0 includes SVE and SVE2-optimized assembly for better performance on
   # compatible ARM CPUs
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64")
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm64|ARM64")
     list(APPEND arm_cflags "-Wa,-march=armv8-a+sve")
   endif()
   if(arm_cflags)
