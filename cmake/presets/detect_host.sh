@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # detect_host.sh - platform-specific CMake settings shared by do_cmake.sh and presets.
 #
-# Source this file, then call detect_host_settings to populate variables or
-# write_host_json / build_host_cmake_args to consume them.
+# Call detect_host_settings once in the current shell, then call write_host_json
+# and/or build_host_cmake_args to consume the detected variables.
 
 detect_host_settings() {
+  if [ -n "${HOST_SETTINGS_DETECTED:-}" ]; then
+    return 0
+  fi
+  HOST_SETTINGS_DETECTED=1
+
   PYBUILD="3"
   CXX_COMPILER="g++"
   C_COMPILER="gcc"
@@ -64,8 +69,10 @@ detect_host_settings() {
   fi
 
   if type sccache > /dev/null 2>&1; then
+    echo "enabling sccache" >&2
     WITH_SCCACHE="ON"
   elif type ccache > /dev/null 2>&1; then
+    echo "enabling ccache" >&2
     WITH_CCACHE="ON"
   fi
 
@@ -79,8 +86,6 @@ detect_host_settings() {
 }
 
 _host_cache_var_lines() {
-  detect_host_settings
-
   local pairs=(
     "WITH_PYTHON3=${PYBUILD}"
     "CMAKE_CXX_COMPILER=${CXX_COMPILER}"
@@ -115,11 +120,10 @@ _host_cache_var_lines() {
 
 write_host_json() {
   local outfile="${1:?output file required}"
-  local cache_vars
-  cache_vars=$(_host_cache_var_lines)
 
   mkdir -p "$(dirname "$outfile")"
-  cat >"$outfile" <<EOF
+  {
+    cat <<EOF
 {
   "version": 10,
   "configurePresets": [
@@ -127,33 +131,33 @@ write_host_json() {
       "name": "_host",
       "hidden": true,
       "cacheVariables": {
-${cache_vars}
+EOF
+    _host_cache_var_lines
+    cat <<EOF
       }
     }
   ]
 }
 EOF
+  } >"$outfile"
 }
 
 build_host_cmake_args() {
-  detect_host_settings
-
-  local args=""
-  args+=" -DWITH_PYTHON3=${PYBUILD}"
+  HOST_CMAKE_ARGS=""
+  HOST_CMAKE_ARGS+=" -DWITH_PYTHON3=${PYBUILD}"
   if [ -n "$WITH_SCCACHE" ]; then
-    args+=" -DWITH_SCCACHE=${WITH_SCCACHE}"
+    HOST_CMAKE_ARGS+=" -DWITH_SCCACHE=${WITH_SCCACHE}"
   elif [ -n "$WITH_CCACHE" ]; then
-    args+=" -DWITH_CCACHE=${WITH_CCACHE}"
+    HOST_CMAKE_ARGS+=" -DWITH_CCACHE=${WITH_CCACHE}"
   fi
-  args+=" -DCMAKE_CXX_COMPILER=${CXX_COMPILER}"
-  args+=" -DCMAKE_C_COMPILER=${C_COMPILER}"
+  HOST_CMAKE_ARGS+=" -DCMAKE_CXX_COMPILER=${CXX_COMPILER}"
+  HOST_CMAKE_ARGS+=" -DCMAKE_C_COMPILER=${C_COMPILER}"
   if [ -n "$HOST_RADOSGW_AMQP_ENDPOINT" ]; then
-    args+=" -DWITH_RADOSGW_AMQP_ENDPOINT=${HOST_RADOSGW_AMQP_ENDPOINT}"
+    HOST_CMAKE_ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=${HOST_RADOSGW_AMQP_ENDPOINT}"
   fi
   if [ -n "$HOST_RADOSGW_KAFKA_ENDPOINT" ]; then
-    args+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=${HOST_RADOSGW_KAFKA_ENDPOINT}"
+    HOST_CMAKE_ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=${HOST_RADOSGW_KAFKA_ENDPOINT}"
   fi
-  echo "$args"
 }
 
 bootstrap_local_preset_file() {
