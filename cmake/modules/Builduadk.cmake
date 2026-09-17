@@ -18,9 +18,6 @@ function(build_uadk)
     include(ExternalProject)
     ExternalProject_Add(uadk_ext
         UPDATE_COMMAND "" # this disables rebuild on each run
-        GIT_REPOSITORY "https://github.com/ceph/uadk.git"
-        GIT_CONFIG advice.detachedHead=false
-        GIT_TAG 267cf34617cc5d6af63191464db40eefcfb78448
         SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/uadk"
         BUILD_IN_SOURCE 1
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=which g++
