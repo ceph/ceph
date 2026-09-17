@@ -1741,6 +1741,23 @@ class CephadmUpgrade:
             logger.info('OSD/mds daemons not all upgraded, delaying key rotation')
             return True
 
+    def _get_current_auth_allowed_ciphers(self) -> Optional[List[str]]:
+        """
+        Return the cephx cipher names the mons currently allow, sorted, or None on failure.
+        """
+        try:
+            monmap = self.mgr.get('mon_map')
+            allowed_ciphers = monmap.get('auth_allowed_ciphers', [])
+            allowed_cipher_names = []
+            for cipher in allowed_ciphers:
+                allowed_cipher_names.append(cipher['name'])
+            if not allowed_cipher_names:
+                allowed_cipher_names = ALLOWED_CIPHERS
+            return sorted(allowed_cipher_names)
+        except Exception as e:
+            logger.error(f'Failed to fetch current auth_allowed_ciphers from mon_map: {e}')
+            return None
+
     def _rotate_mgr_mon_auth_keys(self, target_image: str, target_digests: Optional[List[str]] = None) -> None:
         if self.upgrade_state:
             if self.upgrade_state.rotated_mgr_mon_auth_key_daemons is None:
@@ -1761,10 +1778,14 @@ class CephadmUpgrade:
                     # start by setting the allowed ciphers. Preferred ciphers should be left
                     # to the user to not potentially brake clusters and the service cipher
                     # cannot be set until after all keyrings have been rotated
+                    allowed_ciphers = [SERVICE_CIPHER]
+                    current_ciphers = self._get_current_auth_allowed_ciphers()
+                    if current_ciphers and 'aes' in current_ciphers:
+                        allowed_ciphers = ALLOWED_CIPHERS
                     ret, image, err = self.mgr.check_mon_command({
                         'prefix': 'mon set',
                         'name': 'auth_allowed_ciphers',
-                        'value': ','.join(ALLOWED_CIPHERS),
+                        'value': ','.join(allowed_ciphers),
                     })
                     self.upgrade_state.has_set_cephx_allowed_ciphers = True
                     self._save_upgrade_state()
