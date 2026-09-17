@@ -4,6 +4,13 @@
  Get Involved in the Ceph Community!
 =====================================
 
+.. meta::
+   :description: The mailing lists, chat channels, meetings, and trackers of the Ceph community.
+   :ceph-page-type: reference
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: docs
+
 These are exciting times in the Ceph community! Get involved!
 
 +----------------------+-------------------------------------------------+-----------------------------------------------+
