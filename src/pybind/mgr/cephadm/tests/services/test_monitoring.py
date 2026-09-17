@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch, ANY, MagicMock
 
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.services.monitoring import AlertmanagerService, PrometheusService
 from cephadm.services.smb import SMBSpec
 from cephadm.module import CephadmOrchestrator
@@ -1687,7 +1687,7 @@ class TestMonitoring:
             with with_service(cephadm_module, ServiceSpec('mgr')) as _, \
                     with_service(cephadm_module, GrafanaSpec(initial_admin_password='secure')):
                 out = service_registry.get_service('grafana').generate_config(
-                    CephadmDaemonDeploySpec('test', 'daemon', 'grafana'))
+                    DaemonDeployContext(CephadmDaemonDeploySpec('test', 'daemon', 'grafana')))
                 assert out == (
                     {
                         'files':
@@ -1787,7 +1787,7 @@ class TestMonitoring:
             with with_service(cephadm_module, ServiceSpec('mgr')) as _, \
                     with_service(cephadm_module, GrafanaSpec(anonymous_access=False, initial_admin_password='secure')):
                 out = service_registry.get_service('grafana').generate_config(
-                    CephadmDaemonDeploySpec('test', 'daemon', 'grafana'))
+                    DaemonDeployContext(CephadmDaemonDeploySpec('test', 'daemon', 'grafana')))
                 assert out == (
                     {
                         'files':
@@ -1924,7 +1924,7 @@ spec:
         }
         cephadm_module.spec_store['prometheus'].spec = PrometheusSpec('prometheus')
 
-        svc.generate_config(daemon_spec)
+        svc.generate_config(DaemonDeployContext(daemon_spec))
 
         cephadm_module.check_mon_command.assert_called_once_with({
             'prefix': 'config-key set',
@@ -1956,7 +1956,7 @@ spec:
         }
         cephadm_module.spec_store['prometheus'].spec = PrometheusSpec('prometheus')
 
-        svc.generate_config(daemon_spec)
+        svc.generate_config(DaemonDeployContext(daemon_spec))
 
         cephadm_module.check_mon_command.assert_not_called()
 

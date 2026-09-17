@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from cephadm.services.service_registry import service_registry
 from cephadm.services.monitoring import GrafanaService
-from cephadm.services.cephadmservice import CephadmService, CephService
+from cephadm.services.cephadmservice import CephadmService, CephService, DaemonDeployContext
 from orchestrator import OrchestratorError
 
 
@@ -70,8 +70,8 @@ class CephServiceWithDependencies(CephService):
 class ServiceWithConfig(CephadmService):
     TYPE = 'test'
 
-    def generate_config(self, daemon_spec, spec=None):
-        self.seen_spec = spec
+    def generate_config(self, deploy_ctx):
+        self.seen_ctx = deploy_ctx
         return {}, []
 
 
@@ -103,15 +103,14 @@ class TestCephadmService:
         for service in service_registry.get_all_services():
             assert 'get_dependencies' not in service.__class__.__dict__
 
-    def test_prepare_create_passes_spec_to_generate_config(self):
+    def test_prepare_create_passes_context_to_generate_config(self):
         mgr = FakeMgr()
         service = ServiceWithConfig(mgr)
-        daemon_spec = MagicMock()
-        spec = MagicMock()
+        deploy_ctx = DaemonDeployContext(MagicMock(), MagicMock())
 
-        service.prepare_create(daemon_spec, spec)
+        service.prepare_create(deploy_ctx)
 
-        assert service.seen_spec is spec
+        assert service.seen_ctx is deploy_ctx
 
     def test_generate_config_uses_canonical_dependencies(self):
         mgr = FakeMgr()
@@ -130,7 +129,7 @@ class TestCephadmService:
         spec.ssl_key = None
         spec.ssl_ca_cert = None
 
-        _, deps = service.generate_config(daemon_spec, spec)
+        _, deps = service.generate_config(DaemonDeployContext(daemon_spec, spec))
 
         assert deps == ['certificate_source: cephadm-signed', 'service-specific']
 

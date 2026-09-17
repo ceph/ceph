@@ -3,7 +3,7 @@ import pytest
 
 from unittest.mock import MagicMock, patch
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import (
     IngressSpec,
@@ -973,11 +973,11 @@ class TestIngressService:
             with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_daemon_spec = service_registry.get_service('ingress').prepare_create(
-                    CephadmDaemonDeploySpec(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
                         host='test',
                         daemon_type='haproxy',
                         daemon_id='ingress',
-                        service_name=ispec.service_name()))
+                        service_name=ispec.service_name())))
 
                 assert haproxy_daemon_spec.port_ips == {str(frontend_port): ip}
 
@@ -1011,7 +1011,9 @@ class TestIngressService:
                                 keepalive_only=True)
             with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=s.service_name()))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='test', daemon_id='foo.test.0.0',
+                        service_name=s.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Bind_addr = 1.2.3.0/24" in ganesha_conf
 
@@ -1313,12 +1315,12 @@ class TestIngressService:
         assert gen_config_lines == exp_config_lines
 
         nfs_generated_conf, _ = nfs_svc.generate_config(
-            CephadmDaemonDeploySpec(
+            DaemonDeployContext(CephadmDaemonDeploySpec(
                 host='test',
                 daemon_id='foo.test.0.0',
                 service_name=nfs_service.service_name(),
                 rank=0,
-            ),
+            )),
         )
         ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
         haproxy_hosts = {
@@ -1458,13 +1460,13 @@ class TestIngressService:
         assert 'server nfs.foo.0 10.10.2.20:12049 id 1 check inter 30s rise 2 fall 3' in gen_config_lines
 
         nfs_generated_conf, _ = nfs_svc.generate_config(
-            CephadmDaemonDeploySpec(
+            DaemonDeployContext(CephadmDaemonDeploySpec(
                 host='test',
                 daemon_id='foo.test.0.0',
                 service_name=nfs_service.service_name(),
                 rank=0,
                 ip='10.10.2.20'
-            ),
+            )),
         )
         ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
         assert "Bind_addr = 10.10.2.20" in ganesha_conf

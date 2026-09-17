@@ -2,7 +2,7 @@ import json
 from typing import Dict, List
 from unittest.mock import MagicMock, call, patch
 
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.services.iscsi import IscsiService
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import IscsiServiceSpec
@@ -85,7 +85,7 @@ class TestISCSIService:
         iscsi_daemon_spec = CephadmDaemonDeploySpec(
             host='host', daemon_id='a', service_name=self.iscsi_spec.service_name())
 
-        self.iscsi_service.prepare_create(iscsi_daemon_spec)
+        self.iscsi_service.prepare_create(DaemonDeployContext(iscsi_daemon_spec))
 
         expected_caps = ['mon',
                          'profile rbd, allow command "osd blocklist", allow command "config-key get" with "key" prefix "iscsi/"',
