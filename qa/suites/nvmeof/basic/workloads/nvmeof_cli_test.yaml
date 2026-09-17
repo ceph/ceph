@@ -10,10 +10,6 @@ tasks:
       namespaces_count: 20
       cli_image: quay.io/ceph/nvmeof-cli:devel
 
-- cephadm.wait_for_service:
-    service: nvmeof.mypool.mygroup0
-    refresh: True
-
 - workunit:
     no_coverage_and_limits: true
     clients:

@@ -6,6 +6,7 @@ tasks:
 - cephadm:
 - cephadm.shell:
     host.a:
+    - ceph config set mgr mgr/cephadm/device_cache_timeout 86400
     # get state before nvmeof deployment
     - ceph orch status
     - ceph orch ps

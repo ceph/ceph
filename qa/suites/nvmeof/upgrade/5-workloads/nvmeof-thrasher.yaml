@@ -1,3 +1,19 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      # nvmeof daemon thrashing, same set as qa/suites/nvmeof/thrash/thrashers/
+      - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
+      - CEPHADM_STRAY_DAEMON
+      - stray daemon.* not managed by cephadm
+      - CEPHADM_DAEMON_PLACE_FAIL
+      - Failed to place .* daemon
+      - CEPHADM_APPLY_SPEC_FAIL
+      - Failed to apply .* service
+      - Cannot place .* Unknown hosts
+      - CEPHADM_REFRESH_FAILED
+      - failed to probe daemons or devices
+
 tasks:
 - workunit:
     no_coverage_and_limits: true

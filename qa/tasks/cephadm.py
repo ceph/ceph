@@ -573,6 +573,21 @@ def ceph_crash(ctx, config):
                     pass
 
 
+def _pull_image_on_remotes(remotes, cmd):
+    """
+    Run the pull command on each remote in parallel and return the remotes
+    it failed on.
+    """
+    failed = []
+    for remote, proc in [(r, r.run(args=cmd, wait=False)) for r in remotes]:
+        try:
+            proc.wait()
+        except CommandFailedError as e:
+            log.warning('Image pull failed on %s: %s', remote.shortname, e)
+            failed.append(remote)
+    return failed
+
+
 @contextlib.contextmanager
 def pull_image(ctx, config):
     cluster_name = config['cluster']
@@ -595,7 +610,18 @@ def pull_image(ctx, config):
             '--registry-password', registry['password'],
         ]
         cmd = login_cmd + [run.Raw('&&')] + cmd
-    run.wait(ctx.cluster.run(args=cmd, wait=False))
+
+    remotes = list(ctx.cluster.remotes.keys())
+    with contextutil.safe_while(
+            sleep=60, tries=5, action='pull image') as proceed:
+        while proceed():
+            remotes = _pull_image_on_remotes(remotes, cmd)
+            if not remotes:
+                break
+            log.warning(
+                'Image pull failed on %s, retrying',
+                ', '.join(r.shortname for r in remotes),
+            )
 
     try:
         yield

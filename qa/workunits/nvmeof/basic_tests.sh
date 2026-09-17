@@ -1,7 +1,6 @@
 #!/bin/bash -x
 
-# https://tracker.ceph.com/issues/74922
-sudo systemctl stop udisks2 2>/dev/null || true
+sudo systemctl mask --now udisks2 2>/dev/null || true
 
 source /etc/os-release
 # install nvme 2.13 (issue with latest nvme version 2.16 with centos9: https://tracker.ceph.com/issues/74615#note-5)
