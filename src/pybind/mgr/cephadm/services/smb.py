@@ -467,6 +467,28 @@ class SMBService(CephService):
             out.append(Dep.META(f'ceph_cluster_config.{ccc.alias}', value))
         # Add features as a dependency
         out.append(Dep.FIELD('features', ','.join(sorted(smb_spec.features or []))))
+
+        # Umbrella SMBSpec uses flat TLS fields for these two features.
+        # Track their inputs so inline TLS rotations trigger reconfiguration.
+        tls_fields = {
+            'remote-control': (
+                'remote_control_ssl_cert',
+                'remote_control_ssl_key',
+                'remote_control_ca_cert',
+            ),
+            'keybridge': (
+                'keybridge_kmip_ssl_cert',
+                'keybridge_kmip_ssl_key',
+                'keybridge_kmip_ca_cert',
+            ),
+        }
+        for feature, fields in tls_fields.items():
+            if feature not in (smb_spec.features or []):
+                continue
+            for field in fields:
+                tls_value = getattr(smb_spec, field, None)
+                if tls_value:
+                    out.append(Dep.FIELD(field, utils.config_hash(tls_value)))
         return out
 
     def choose_next_action(
