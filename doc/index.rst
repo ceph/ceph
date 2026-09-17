@@ -2,100 +2,55 @@
  Welcome to Ceph
 =================
 
-Ceph delivers **object, block, and file storage in one unified system**.
+.. meta::
+   :description: Ceph documentation. Ceph delivers object, block, and file storage in one unified system.
+   :ceph-page-type: assembly
+   :ceph-owner: docs
 
-.. warning::
+Ceph delivers **object, block, and file storage in one unified system**. It
+runs on ordinary servers, keeps redundant copies of your data, and has no
+single point of failure.
 
-   :ref:`If this is your first time using Ceph, read the "Basic Workflow"
-   page in the Ceph Developer Guide to learn how to contribute to the
-   Ceph project. (Click anywhere in this paragraph to read the "Basic
-   Workflow" page of the Ceph Developer Guide.) <basic workflow dev guide>`.
+**New to Ceph?** Go to :ref:`Start Here <start-here>`. It explains what Ceph
+is and walks you through a first cluster.
 
-.. note::
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
 
-   :ref:`If you want to make a commit to the documentation but you don't
-   know how to get started, read the "Documenting Ceph" page. (Click anywhere
-   in this paragraph to read the "Documenting Ceph" page.) <documenting_ceph>`.
-
-.. container:: columns-3
-
-   .. container:: column
-
-      .. raw:: html
-
-          <h3>Ceph Object Store</h3>
-
-      - RESTful Interface
-      - S3- and Swift-compliant APIs
-      - S3-style subdomains
-      - Unified S3/Swift namespace
-      - User management
-      - Usage tracking
-      - Striped objects
-      - Cloud solution integration
-      - Multi-site deployment
-      - Multi-site replication
-
-   .. container:: column
-
-      .. raw:: html
-
-          <h3>Ceph Block Device</h3>
-
-      - Thin-provisioned
-      - Images up to 16 exabytes
-      - Configurable striping
-      - In-memory caching
-      - Snapshots
-      - Copy-on-write cloning
-      - Kernel driver support
-      - KVM/libvirt support
-      - Back-end for cloud solutions
-      - Incremental backup
-      - Disaster recovery (multisite asynchronous replication)
-
-   .. container:: column
-
-      .. raw:: html
-
-          <h3>Ceph File System</h3>
-
-      - POSIX-compliant semantics
-      - Separates metadata from data
-      - Dynamic rebalancing
-      - Subdirectory snapshots
-      - Configurable striping
-      - Kernel driver support
-      - FUSE support
-      - NFS/CIFS deployable
-      - Use with Hadoop (replace HDFS)
-
-.. container:: columns-3
-
-   .. container:: column
-
-      See `Ceph Object Store`_ for additional details.
-
-   .. container:: column
-
-      See `Ceph Block Device`_ for additional details.
-
-   .. container:: column
-
-      See `Ceph File System`_ for additional details.
-
-Ceph is highly reliable, easy to manage, and free. The power of Ceph
-can transform your company's IT infrastructure and your ability to manage vast
-amounts of data. To try Ceph, see our `Getting Started`_ guides. To learn more
-about Ceph, see our `Architecture`_ section.
-
-
-
-.. _Ceph Object Store: radosgw
-.. _Ceph Block Device: rbd
-.. _Ceph File System: cephfs
-.. _Getting Started: start
-.. _Architecture: architecture/
+   * - I want to
+     - Go to
+   * - Learn what Ceph is
+     - :ref:`Start Here <start-here>`, :ref:`Architecture <architecture>`,
+       :doc:`Glossary <glossary>`
+   * - Deploy a cluster
+     - :ref:`Installing Ceph <install-overview>`,
+       :ref:`Cephadm <cephadm>`,
+       :doc:`Upgrading <cephadm/upgrade>`
+   * - Operate a cluster
+     - :ref:`Cluster operations <rados-operations>`,
+       :ref:`Manager modules <ceph-manager-daemon>`,
+       :ref:`Dashboard <mgr-dashboard>`,
+       :ref:`Monitoring <monitoring>`
+   * - Use a storage service
+     - :ref:`Block Device (RBD) <ceph_block_device>`,
+       :ref:`File System (CephFS) <ceph-file-system>`,
+       :ref:`Object Gateway (RGW) <object-gateway>`,
+       :ref:`Kubernetes (CSI) <ceph-csi>`
+   * - Fix a problem
+     - :ref:`Troubleshooting <rados_troubleshooting>`,
+       :doc:`Health checks <rados/operations/health-checks>`,
+       :doc:`CephFS troubleshooting <cephfs/troubleshooting>`,
+       :doc:`RGW troubleshooting <radosgw/troubleshooting>`
+   * - Look something up
+     - :doc:`Configuration <rados/configuration/index>`,
+       :doc:`APIs <api/index>`,
+       :ref:`Releases <ceph-releases-general>`,
+       :doc:`Glossary <glossary>`
+   * - Contribute
+     - :doc:`Developer Guide <dev/developer_guide/index>`,
+       :ref:`Documenting Ceph <documenting_ceph>`,
+       :ref:`Get Involved <Get Involved>`
 
 .. toctree::
    :maxdepth: 3
