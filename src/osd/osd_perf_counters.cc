@@ -564,6 +564,25 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
     "counter cannot lose a lower value (the companion max is "
     "pg_vulnerability_duration's max_inc).",
     NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_time_avg(rs_pg_rebuild_duration, "pg_rebuild_duration",
+    "Average PG active-rebuild duration on this OSD (primary role only): "
+    "wall-clock time actually spent in Recovering or Backfilling, a "
+    "subset of the PG's overall vulnerability window "
+    "(pg_vulnerability_duration). A purely silent window (e.g. an empty "
+    "PG) records nothing here even though pg_vulnerability_duration "
+    "does -- their difference, summed over a window, is the silent "
+    "exposure time (degraded with no observed recovery progress). "
+    "Recorded via tinc_with_max(), so the LONGRUNAVG's max_inc field is "
+    "the longest single rebuild span seen; see pg_rebuild_duration_min "
+    "for the shortest.",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_time(rs_pg_rebuild_duration_min, "pg_rebuild_duration_min",
+    "Shortest single PG active-rebuild span recorded on this OSD (primary "
+    "role only), in seconds; 0 until the first span is recorded. Updated "
+    "with an atomic compare-exchange so concurrently-recording PGs on the "
+    "shared OSD-wide counter cannot lose a lower value (the companion max "
+    "is pg_rebuild_duration's max_inc).",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
 
   return rs_perf.create_perf_counters();
 }
