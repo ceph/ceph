@@ -923,6 +923,17 @@ class Bucket {
 				 keep_index_consistent,
 				 optional_yield y, const
 				 DoutPrefixProvider *dpp) = 0;
+    /** Remove all objects from the bucket but keep the bucket itself and its
+     *  policies (lifecycle, ACL, etc.).  Objects are queued to garbage
+     *  collection as normal. */
+    virtual int remove_all_objects(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) = 0;
+    /** Remove all objects from the bucket but keep the bucket itself and its
+     *  policies (lifecycle, ACL, etc.), bypassing garbage collection via
+     *  async AIO deletion. */
+    virtual int remove_all_objects_bypass_gc(int concurrent_max,
+				       bool keep_index_consistent,
+				       optional_yield y,
+				       const DoutPrefixProvider* dpp) = 0;
     /** Get then ACL for this bucket */
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     /** Set the ACL for this bucket */
