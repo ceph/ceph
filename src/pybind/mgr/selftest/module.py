@@ -35,8 +35,11 @@ class Module(MgrModule):
     """
 
     # notify() is only called for types listed here -- osd_map lets
-    # test_notify_failure trigger it via a plain "ceph osd set noout".
-    NOTIFY_TYPES = [NotifyType.osd_map]
+    # test_notify_failure trigger it via a plain "ceph osd set noout",
+    # clog lets test_notify_clog_failure trigger it via "self-test
+    # cluster-log" (exercises ActivePyModule::notify_clog(), a separate
+    # C++ call site from the one osd_map goes through).
+    NOTIFY_TYPES = [NotifyType.osd_map, NotifyType.clog]
 
     # The test code in qa/ relies on these options existing -- they
     # are of course not really used for anything in the module
@@ -65,6 +68,9 @@ class Module(MgrModule):
                min=1,
                max=42),
         Option(name='notify_throw',
+               type='bool',
+               default=False),
+        Option(name='notify_clog_throw',
                type='bool',
                default=False),
         Option(name='config_notify_throw',
@@ -492,6 +498,15 @@ class Module(MgrModule):
         self._event.set()
 
     def notify(self, notify_type: NotifyType, notify_id: str) -> None:
+        # clog notifications arrive via a separate C++ call site
+        # (ActivePyModule::notify_clog) from every other notify_type
+        # (ActivePyModule::notify) -- keep their throw flags independent
+        # so tests for one path can't be triggered by ambient traffic on
+        # the other (clog entries are frequent in a live cluster).
+        if notify_type == NotifyType.clog:
+            if self.get_module_option('notify_clog_throw'):
+                raise RuntimeError("Synthetic exception in notify_clog")
+            return
         if self.get_module_option('notify_throw'):
             raise RuntimeError("Synthetic exception in notify")
 
