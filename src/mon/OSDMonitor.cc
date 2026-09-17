@@ -14409,7 +14409,38 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
 
+    string source_pool_name = "";
+
     if (is_migrate) {
+      // Shared guards for both migration paths
+      bool experimental_enabled =
+        g_ceph_context->check_experimental_feature_enabled("poolmigration");
+      if (!experimental_enabled) {
+        ss << "Pool migration is an experimental feature that may cause "
+           << "unrecoverable data corruption. If you are sure, add "
+           << "'poolmigration' to the experimental features config "
+           << "(enable_experimental_unrecoverable_data_corrupting_features).";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
+      if (osdmap.require_min_compat_client < ceph_release_t::umbrella) {
+        ss << "require_min_compat_client "
+           << osdmap.require_min_compat_client
+           << " < umbrella, which is required for pool migration. "
+           << "Try 'ceph osd set-require-min-compat-client umbrella' "
+           << "before using the new feature";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
+      if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+        ss << "All OSDs must be upgraded to umbrella or "
+           << "later before using pool migration";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
       if (pool_id < 0) {
         ss << "pool '" << poolstr << "' does not exist";
         err = -ENOENT;
@@ -14445,36 +14476,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         break;
       }
 
-      bool experimental_enabled =
-        g_ceph_context->check_experimental_feature_enabled("poolmigration");
-      if (!experimental_enabled) {
-        ss << "Pool migration is an experimental feature that may cause "
-           << "unrecoverable data corruption. If you are sure, add "
-           << "'poolmigration' to the experimental features config "
-           << "(enable_experimental_unrecoverable_data_corrupting_features).";
-        err = -EPERM;
-        goto reply_no_propose;
-      }
-
-      if (osdmap.require_min_compat_client < ceph_release_t::umbrella) {
-        ss << "require_min_compat_client "
-           << osdmap.require_min_compat_client
-           << " < umbrella, which is required for pool migration. "
-           << "Try 'ceph osd set-require-min-compat-client umbrella' "
-           << "before using the new feature";
-        err = -EPERM;
-        goto reply_no_propose;
-      }
-
-      if (osdmap.require_osd_release < ceph_release_t::umbrella) {
-        ss << "All OSDs must be upgraded to umbrella or "
-            << "later before using pool migration";
-        err = -EPERM;
-        goto reply_no_propose;
-      }
-
-      const pg_pool_t *source_pool = osdmap.get_pg_pool(pool_id);
-      if (source_pool->is_migrating()) {
+      const pg_pool_t *src = osdmap.get_pg_pool(pool_id);
+      if (src->is_migrating()) {
         ss << "Cannot migrate from a pool which is part of an ongoing migration";
         err = -EINVAL;
         goto reply_no_propose;
@@ -14488,19 +14491,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
 
       migrate_pool_id = pool_id;
-    }
 
-    string source_pool_name;
-    if (is_migrate) {
-      // Find the pending renamed name of the source pool
+      // Resolve source_pool_name to the pending renamed pool name
       for (auto& [id, name] : pending_inc.new_pool_names) {
         if (id == migrate_pool_id) {
           source_pool_name = name;
           break;
         }
       }
-    } else {
-      source_pool_name = cmd_getval_or<std::string>(cmdmap, "migrate_from_pool", "");
     }
 
     if (poolstr[0] == '.' && !confirm) {
@@ -14539,34 +14537,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     std::optional<int64_t> source_pool_id;
     const pg_pool_t *source_pool = nullptr;
     if (!source_pool_name.empty()) {
-      bool experimental_enabled =
-        g_ceph_context->check_experimental_feature_enabled("poolmigration");
-      if (!experimental_enabled) {
-        ss << "Pool migration is an experimental feature that may cause "
-           << "unrecoverable data corruption. If you are sure, add "
-           << "'poolmigration' to the experimental features config "
-           << "(enable_experimental_unrecoverable_data_corrupting_features).";
-        err = -EPERM;
-        goto reply_no_propose;
-      }
-
-      if (osdmap.require_min_compat_client < ceph_release_t::umbrella) {
-	ss << "require_min_compat_client "
-	   << osdmap.require_min_compat_client
-	   << " < umbrella, which is required for pool migration. "
-           << "Try 'ceph osd set-require-min-compat-client umbrella' "
-           << "before using the new feature";
-	err = -EPERM;
-	goto reply_no_propose;
-      }
-
-      if (osdmap.require_osd_release < ceph_release_t::umbrella) {
-        ss << "All OSDs must be upgraded to umbrella or "
-            << "later before using pool migration";
-        err = -EPERM;
-        goto reply_no_propose;
-      }
-
       source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
       if (source_pool_id < 0) {
         for (auto& [id, name] : pending_inc.new_pool_names) {
@@ -14606,7 +14576,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     default_type_str = (source_pool) ? string(source_pool->get_type_name())
       : g_conf().get_val<string>("osd_pool_default_type");
-    pool_type_str = cmd_getval_or<string>(cmdmap, "pool_type", default_type_str);
+    bool pool_type_explicit = cmd_getval(cmdmap, "pool_type", pool_type_str);
+    if (!pool_type_explicit) {
+      pool_type_str = default_type_str;
+    }
     int pool_type;
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
@@ -14622,7 +14595,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (source_pool) {
       bool source_not_legacy_ec = source_pool->get_type() == pg_pool_t::TYPE_REPLICATED ||
         source_pool->allows_ecoptimizations();
-      bool target_is_legacy_ec = (pool_type == pg_pool_t::TYPE_ERASURE && !enable_ec_optimizations);
+      bool target_is_legacy_ec = (pool_type_explicit &&
+                                  pool_type == pg_pool_t::TYPE_ERASURE &&
+                                  !enable_ec_optimizations);
       if (source_not_legacy_ec && target_is_legacy_ec && !confirm) {
         ss << "You are attempting to migrate to a pool type with less features " <<
           "than the source pool which will result in functionality loss. Perhaps you want to enable " <<
