@@ -24,10 +24,10 @@ let auth: any;
 
 const fillAuth = () => {
   window.localStorage.setItem(LocalStorage.DASHBOARD_USERNAME, auth.username);
-  window.localStorage.setItem('dashboard_permissions', auth.permissions);
-  window.localStorage.setItem('user_pwd_expiration_date', auth.pwdExpirationDate);
-  window.localStorage.setItem('user_pwd_update_required', auth.pwdUpdateRequired);
-  window.localStorage.setItem('sso', auth.sso);
+  window.localStorage.setItem(LocalStorage.DASHBOARD_PERMISSIONS, auth.permissions);
+  window.localStorage.setItem(LocalStorage.PWD_EXPIRATION_DATE, auth.pwdExpirationDate);
+  window.localStorage.setItem(LocalStorage.PWD_UPDATE_REQUIRED, auth.pwdUpdateRequired);
+  window.localStorage.setItem(LocalStorage.SSO, auth.sso);
   window.localStorage.setItem('telemetry_notification_hidden', 'true'); // disable telemetry notification in e2e
 };
 
