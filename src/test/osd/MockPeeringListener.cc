@@ -27,9 +27,10 @@ void MockPeeringListener::request_local_background_io_reservation(
   if (event_loop && fixture) {
     // Schedule the event through the event loop for deterministic execution
     PGPeeringEventRef evt_ref = std::move(on_grant);
-    int shard = pg_whoami.osd;
-    event_loop->schedule_peering_event(shard, [this, evt_ref, shard]() {
-      fixture->get_peering_state(shard)->handle_event(evt_ref, fixture->get_peering_ctx(shard));
+    int osd = pg_whoami.osd;
+    TestPG* test_pg = fixture->get_test_pg();
+    event_loop->schedule_peering_event(osd, test_pg, [evt_ref, test_pg]() {
+      test_pg->get_peering_state()->handle_event(evt_ref, test_pg->get_peering_ctx());
     });
   } else if (inject_event_stall) {
     stalled_events.push_back(std::move(on_grant));
@@ -53,9 +54,10 @@ void MockPeeringListener::request_remote_recovery_reservation(
   if (event_loop && fixture) {
     // Schedule the event through the event loop for deterministic execution
     PGPeeringEventRef evt_ref = std::move(on_grant);
-    int shard = pg_whoami.osd;
-    event_loop->schedule_peering_event(shard, [this, evt_ref, shard]() {
-      fixture->get_peering_state(shard)->handle_event(evt_ref, fixture->get_peering_ctx(shard));
+    int osd = pg_whoami.osd;
+    TestPG* test_pg = fixture->get_test_pg();
+    event_loop->schedule_peering_event(osd, test_pg, [evt_ref, test_pg]() {
+      test_pg->get_peering_state()->handle_event(evt_ref, test_pg->get_peering_ctx());
     });
   } else if (inject_event_stall) {
     stalled_events.push_back(std::move(on_grant));
@@ -78,8 +80,9 @@ void MockPeeringListener::schedule_event_on_commit(
   if (event_loop && fixture) {
     // Schedule the event through the event loop for deterministic execution
     int shard = pg_whoami.osd;
-    event_loop->schedule_peering_event(shard, [this, on_commit, shard]() {
-      fixture->get_peering_state(shard)->handle_event(on_commit, fixture->get_peering_ctx(shard));
+    TestPG* test_pg = fixture->get_test_pg();
+    event_loop->schedule_peering_event(shard, test_pg, [this, on_commit]() {
+      fixture->get_peering_state()->handle_event(on_commit, fixture->get_peering_ctx());
     });
   } else if (inject_event_stall) {
     stalled_events.push_back(std::move(on_commit));
@@ -99,8 +102,9 @@ void MockPeeringListener::on_activate_complete() {
     if (event_loop && fixture) {
       // Use event loop for deterministic execution
       int shard = pg_whoami.osd;
-      event_loop->schedule_peering_event(shard, [this, evt, shard]() {
-        fixture->get_peering_state(shard)->handle_event(evt, fixture->get_peering_ctx(shard));
+      TestPG* test_pg = fixture->get_test_pg();
+      event_loop->schedule_peering_event(shard, test_pg, [this, evt]() {
+        fixture->get_peering_state()->handle_event(evt, fixture->get_peering_ctx());
       });
     } else if (inject_event_stall) {
       stalled_events.push_back(evt);

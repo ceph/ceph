@@ -48,9 +48,12 @@ bool operator>(const MemStore::CollectionRef& l,
 
 int MemStore::mount()
 {
-  int r = _load();
-  if (r < 0)
-    return r;
+  int r = 0;
+  if (!path.empty()) {
+    r = _load();
+    if (r < 0)
+      return r;
+  }
   finisher.start();
   return 0;
 }
@@ -59,7 +62,10 @@ int MemStore::umount()
 {
   finisher.wait_for_empty();
   finisher.stop();
-  return _save();
+  if (!path.empty()) {
+    return _save();
+  }
+  return 0;
 }
 
 int MemStore::_save()
@@ -170,6 +176,34 @@ int MemStore::_load()
   return 0;
 }
 
+int MemStore::write_meta(const std::string& key, const std::string& value)
+{
+  if (path.empty()) {
+    // In-memory mode: store metadata in memory
+    std::lock_guard l{meta_lock};
+    meta_map[key] = value;
+    return 0;
+  }
+  // Disk mode: use parent implementation
+  return ObjectStore::write_meta(key, value);
+}
+
+int MemStore::read_meta(const std::string& key, std::string *value)
+{
+  if (path.empty()) {
+    // In-memory mode: read metadata from memory
+    std::lock_guard l{meta_lock};
+    auto it = meta_map.find(key);
+    if (it == meta_map.end()) {
+      return -ENOENT;
+    }
+    *value = it->second;
+    return 0;
+  }
+  // Disk mode: use parent implementation
+  return ObjectStore::read_meta(key, value);
+}
+
 void MemStore::set_fsid(uuid_d u)
 {
   int r = write_meta("fsid", stringify(u));
@@ -201,18 +235,20 @@ int MemStore::mkfs()
     dout(1) << __func__ << " new fsid " << fsid_str << dendl;
   } else if (r < 0) {
     return r;
-  } else {  
+  } else {
     dout(1) << __func__ << " had fsid " << fsid_str << dendl;
   }
 
-  std::string fn = path + "/collections";
-  derr << path << dendl;
-  ceph::buffer::list bl;
-  std::set<coll_t> collections;
-  encode(collections, bl);
-  r = bl.write_file(fn.c_str());
-  if (r < 0)
-    return r;
+  if (!path.empty()) {
+    std::string fn = path + "/collections";
+    derr << path << dendl;
+    ceph::buffer::list bl;
+    std::set<coll_t> collections;
+    encode(collections, bl);
+    r = bl.write_file(fn.c_str());
+    if (r < 0)
+      return r;
+  }
 
   r = write_meta("type", "memstore");
   if (r < 0)

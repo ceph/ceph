@@ -1,0 +1,8 @@
+# Enable EC optimizations
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_pool_default_flag_ec_optimizations: true
+    pool-config:
+      ec_pool: true

@@ -123,6 +123,8 @@ target_link_libraries(unittest_peeringstate osd os global ${CMAKE_DL_LIBS} ${BLK
 add_library(pg_backend_test_fixture OBJECT
   PGBackendTestFixture.cc
   MockPGBackendListener.cc
+  MockStore.cc
+  ObjectTracker.cc
 )
 target_link_libraries(pg_backend_test_fixture osd os global GTest::GTest)
 
@@ -153,6 +155,54 @@ add_executable(unittest_ecfailover_with_peering
 add_ceph_unittest(unittest_ecfailover_with_peering)
 target_link_libraries(unittest_ecfailover_with_peering osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ecfailover_with_peering ${EC_ISA_LIB} ec_jerasure)
+
+# ec_crush_test_fixture: object library for ECCrushTestFixture implementation
+add_library(ec_crush_test_fixture OBJECT
+  ECCrushTestFixture.cc
+)
+target_link_libraries(ec_crush_test_fixture osd os global GTest::GTest)
+
+# unittest_ec_with_crush
+add_executable(unittest_ec_with_crush
+  TestECWithCRUSH.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:ec_crush_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  )
+add_ceph_unittest(unittest_ec_with_crush)
+target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+add_dependencies(unittest_ec_with_crush ec_isa ec_jerasure)
+
+# unittest_objecttracker
+add_executable(unittest_objecttracker
+  TestObjectTracker.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  )
+add_ceph_unittest(unittest_objecttracker)
+target_link_libraries(unittest_objecttracker osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+
+# unittest_ec_acting_stretch
+add_executable(unittest_ec_acting_stretch
+  TestECActingStretch.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:store_test_fixture>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  )
+add_ceph_unittest(unittest_ec_acting_stretch)
+target_link_libraries(unittest_ec_acting_stretch osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+add_dependencies(unittest_ec_acting_stretch ec_isa ec_jerasure)
+
+# unittest_stretch_ec_min_size
+add_executable(unittest_stretch_ec_min_size
+  TestStretchECMinSize.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_stretch_ec_min_size)
+target_link_libraries(unittest_stretch_ec_min_size osd global ${BLKID_LIBRARIES})
+
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
@@ -223,6 +273,15 @@ add_executable(unittest_ec_omap_journal
 add_ceph_unittest(unittest_ec_omap_journal)
 target_link_libraries(unittest_ec_omap_journal osd global ${BLKID_LIBRARIES})
 
+# unittest_split_ops_ut
+add_executable(unittest_split_ops_ut
+  TestSplitOpsUT.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_split_ops_ut)
+target_link_libraries(unittest_split_ops_ut osd global ${BLKID_LIBRARIES})
+add_dependencies(unittest_split_ops_ut ${EC_ISA_LIB} ec_jerasure)
+
 # osd_unittests: custom target that builds and runs all OSD unit tests
 # Not including unittest_osdmap, as it is slow. It is tested elsewhere.
 set(OSD_UNITTESTS
@@ -230,6 +289,7 @@ set(OSD_UNITTESTS
   unittest_ec_omap_journal
   unittest_ec_transaction
   unittest_ec_transaction_l
+  unittest_ec_with_crush
   unittest_ecbackend
   unittest_ecbackend_l
   unittest_ecfailover_with_peering
@@ -245,6 +305,7 @@ set(OSD_UNITTESTS
   unittest_pg_transaction
   unittest_pglog
   unittest_scrubber_be
+  unittest_split_ops_ut
 )
 
 # osd_unittests: build all OSD unit tests and run them via ctest.

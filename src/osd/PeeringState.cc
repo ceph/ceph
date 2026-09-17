@@ -1224,10 +1224,23 @@ unsigned PeeringState::get_recovery_priority()
     ret = OSD_RECOVERY_PRIORITY_FORCED;
   } else {
     // XXX: This priority boost isn't so much about inactive, but about data-at-risk
-    if (is_degraded() && info.stats.avail_no_missing.size() < pool.info.min_size) {
-      base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
-      // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = base + (pool.info.min_size - info.stats.avail_no_missing.size());
+    if (is_degraded()) {
+      unsigned num_avail_no_missing_below_min_size = 0;
+      if (pool.info.is_erasure() && pool.info.is_stretch_pool()) {
+        vector<int> avail_osds;
+        for (auto& s : info.stats.avail_no_missing) {
+          avail_osds.push_back(s.osd);
+        }
+        num_avail_no_missing_below_min_size = get_osdmap()->stretch_ec_num_acting_below_min_size(pool.info, avail_osds);
+      }  
+      if (num_avail_no_missing_below_min_size) {
+        base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
+        ret = base + num_avail_no_missing_below_min_size;
+      } else if(info.stats.avail_no_missing.size() < pool.info.min_size) {
+        base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
+        // inactive: no. of replicas < min_size, highest priority since it blocks IO
+        ret = base + (pool.info.min_size - info.stats.avail_no_missing.size());
+      }
     }
 
     int64_t pool_recovery_priority = 0;
@@ -1248,7 +1261,15 @@ unsigned PeeringState::get_backfill_priority()
   if (state & PG_STATE_FORCED_BACKFILL) {
     ret = OSD_BACKFILL_PRIORITY_FORCED;
   } else {
-    if (actingset.size() < pool.info.min_size) {
+    unsigned num_acting_below_min_size = 0;
+    if (pool.info.is_erasure() && pool.info.is_stretch_pool()) {
+      num_acting_below_min_size = get_osdmap()->stretch_ec_num_acting_below_min_size(pool.info, acting);
+    } 
+    if (num_acting_below_min_size) {
+      base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
+      // inactive: no. of replicas < min_size, highest priority since it blocks IO
+      ret = base + num_acting_below_min_size;
+    } else if (actingset.size() < pool.info.min_size) {
       base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
       // inactive: no. of replicas < min_size, highest priority since it blocks IO
       ret = base + (pool.info.min_size - actingset.size());
@@ -1906,6 +1927,143 @@ void PeeringState::calc_ec_acting(
   _want->swap(want);
 }
 
+void PeeringState::calc_ec_acting_stretch(
+  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  unsigned size,
+  const vector<int> &acting,
+  const vector<int> &up,
+  const map<pg_shard_t, pg_info_t> &all_info,
+  bool restrict_to_up_acting,
+  vector<int> *_want,
+  set<pg_shard_t> *backfill,
+  set<pg_shard_t> *acting_backfill,
+  const OSDMapRef osdmap,
+  const PGPool& pool,
+  ostream &ss)
+{
+  // For EC pools with stretch mode, each zone must have a complete set of k+m shards.
+  // We don't support zones having a subset of k+m shards.
+  ceph_assert(pool.info.peering_crush_bucket_target > 0);
+  if (pool.info.size % pool.info.peering_crush_bucket_target != 0)
+  {
+    ss << "pool size " << pool.info.size << " is not evenly divisible by peering_crush_bucket_target "
+       << pool.info.peering_crush_bucket_target << std::endl;
+  }
+  // bucket_max is the maximum number of items that can be in a single bucket.
+  // With the assertion above, size is evenly divisible by num_zones, so this is always exact.
+  unsigned bucket_max = pool.info.size / pool.info.peering_crush_bucket_target;
+
+  vector<int> want(size, CRUSH_ITEM_NONE);
+  map<shard_id_t, set<pg_shard_t> > all_info_by_shard;
+  for (auto i = all_info.begin();
+       i != all_info.end();
+       ++i) {
+    all_info_by_shard[i->first.shard].insert(i->first);
+  }
+
+  // Track how many shards selected from each zone/bucket
+  std::map<int, unsigned> zone_shard_count;
+
+  // Helper to get zone for an OSD
+  auto get_zone = [&](int osd) -> int {
+    return osdmap->crush->get_parent_of_type(
+      osd,
+      pool.info.peering_crush_bucket_barrier,
+      pool.info.crush_rule);
+  };
+
+  // Helper to check if a zone has reached bucket_max
+  auto zone_at_max = [&](int zone) -> bool {
+    auto it = zone_shard_count.find(zone);
+    return (it != zone_shard_count.end() && it->second >= bucket_max);
+  };
+
+  // Helper to increment zone count when selecting an OSD
+  auto select_osd = [&](int osd) {
+    int zone = get_zone(osd);
+    zone_shard_count[zone]++;
+  };
+
+  for (uint8_t i = 0; i < want.size(); ++i) {
+    ss << "For position " << (unsigned)i << ": ";
+    // Determine which zone this shard position should belong to
+    int expected_zone = CRUSH_ITEM_NONE;
+    // We first trying to fill the position with up[i]
+    if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE) {
+      expected_zone = get_zone(up[i]);
+
+      if (!all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.is_incomplete() &&
+          all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.last_update >=
+          auth_log_shard->second.log_tail) {
+        ss << " selecting up[i]: " << pg_shard_t(up[i], shard_id_t(i))
+           << " in expected zone " << expected_zone << std::endl;
+        want[i] = up[i];
+        select_osd(up[i]);
+        continue;
+      }
+
+      ss << " backfilling up[i]: " << pg_shard_t(up[i], shard_id_t(i)) << " and ";
+      backfill->insert(pg_shard_t(up[i], shard_id_t(i)));
+    }
+    if (expected_zone == CRUSH_ITEM_NONE &&
+        acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE) {
+      expected_zone = get_zone(acting[i]);
+    }
+    // Try acting[i] when up[i] doesn't work out
+    if (acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE &&
+        !all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.is_incomplete() &&
+        all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.last_update >=
+        auth_log_shard->second.log_tail) {
+      ss << " selecting acting[i]: " << pg_shard_t(acting[i], shard_id_t(i)) << std::endl;
+      want[i] = acting[i];
+      select_osd(acting[i]);
+    } else if (!restrict_to_up_acting) {
+      // Search for stray, but ONLY from the same zone
+      // and only if zone hasn't reached bucket_max
+      for (auto j = all_info_by_shard[shard_id_t(i)].begin();
+           j != all_info_by_shard[shard_id_t(i)].end();
+           ++j) {
+        ceph_assert(static_cast<int>(j->shard) == i);
+
+        int stray_zone = get_zone(j->osd);
+
+        // Check if stray is in the expected zone.
+        if (expected_zone != CRUSH_ITEM_NONE &&
+            stray_zone != expected_zone) {
+          ss << " skipping stray " << *j << " (wrong zone)" << std::endl;
+          continue;
+        }
+
+        // Check if zone has already reached bucket_max
+        if (zone_at_max(stray_zone)) {
+          ss << " skipping stray " << *j << " (zone " << stray_zone 
+             << " at bucket_max " << bucket_max << ")" << std::endl;
+          continue;
+        }
+
+        // The stray is in the valid zone and is good.
+        if (!all_info.find(*j)->second.is_incomplete() &&
+            all_info.find(*j)->second.last_update >= auth_log_shard->second.log_tail) {
+          ss << " selecting stray: " << *j << " (zone " << stray_zone << ")" << std::endl;
+          want[i] = j->osd;
+          select_osd(j->osd);
+          break;
+        }
+      }
+      if (want[i] == CRUSH_ITEM_NONE)
+        ss << " failed to fill position " << (int)i << std::endl;
+    }
+  }
+  // acting_backfill includes all want and backfill items.
+  for (uint8_t i = 0; i < want.size(); ++i) {
+    if (want[i] != CRUSH_ITEM_NONE) {
+      acting_backfill->insert(pg_shard_t(want[i], shard_id_t(i)));
+    }
+  }
+  acting_backfill->insert(backfill->begin(), backfill->end());
+  _want->swap(want);
+}
+
 std::pair<map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
 PeeringState::select_replicated_primary(
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
@@ -2483,11 +2641,13 @@ void PeeringState::choose_async_recovery_ec(
     vector<int> candidate_want(*want);
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
     ceph_assert(want_acting_size > 0);
-    --want_acting_size;
-    if ((want_acting_size >= pool.info.min_size) &&
-	recoverable(candidate_want)) {
+    if ((want_acting_size > pool.info.min_size) &&
+        pool.info.stretch_set_can_peer(candidate_want, *osdmap, NULL) &&
+        (osdmap->stretch_ec_num_acting_below_min_size(pool.info, candidate_want) == 0) &&
+	      recoverable(candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
+      --want_acting_size;
     }
   }
   psdout(20) << "result want=" << *want
@@ -2645,6 +2805,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
       get_osdmap(),
       ss);
     if (pool.info.is_stretch_pool()) {
+      psdout(20) << "calling calc_replicated_acting_stretch for replicated pool in stretch mode" << dendl;
       calc_replicated_acting_stretch(
 	primary_shard,
 	oldest_log,
@@ -2661,6 +2822,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 	pool,
 	ss);
     } else {
+      psdout(20) << "calling calc_replicated_acting for replicated pool (non-stretch mode)" << dendl;
       calc_replicated_acting(
 	primary_shard,
 	oldest_log,
@@ -2678,7 +2840,24 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 	ss);
     }
   } else {
-    calc_ec_acting(
+    if (pool.info.is_stretch_pool()) {
+      psdout(20) << "calling calc_ec_acting_stretch for EC pool in stretch mode" << dendl;
+      calc_ec_acting_stretch(
+      auth_log_shard,
+      get_osdmap()->get_pg_size(info.pgid.pgid),
+      acting,
+      up,
+      all_info,
+      restrict_to_up_acting,
+      &want,
+      &want_backfill,
+      &want_acting_backfill,
+      get_osdmap(),
+      pool,
+      ss);
+    } else {
+      psdout(20) << "calling calc_ec_acting for EC pool (non-stretch mode)" << dendl;
+      calc_ec_acting(
       auth_log_shard,
       get_osdmap()->get_pg_size(info.pgid.pgid),
       acting,
@@ -2689,6 +2868,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
       &want_backfill,
       &want_acting_backfill,
       ss);
+    }
   }
   psdout(10) << ss.str() << dendl;
 
@@ -3363,7 +3543,7 @@ void PeeringState::rewind_divergent_log(
   PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
   pg_log.rewind_divergent_log(
     newhead, info, rollbacker.get(), dirty_info, dirty_big_info,
-    pool.info.allows_ecoptimizations(), pg_whoami);
+    pool.info.allows_ecoptimizations(), pg_whoami, pool.info);
 }
 
 
@@ -3513,9 +3693,9 @@ void PeeringState::proc_master_log(
       }
     }
     while (p != pg_log.get_log().log.end()) {
-      if (p->is_written_shard(from.shard)) {
+      if (p->is_written_shard(pool.info.get_relative_shard(from.shard))) {
         psdout(10) << "entry " << p->version << " has written shards "
-		   << p->written_shards << " so is divergent" << dendl;
+     << p->written_shards << " so is divergent" << dendl;
 	// This entry was meant to be written on from, this is the first
 	// divergent entry
 	break;
@@ -3527,7 +3707,7 @@ void PeeringState::proc_master_log(
 	psdout(20) << "version " << p->version
 		   << " testing osd " << pg_shard
 		   << " written=" << p->written_shards << dendl;
-	if (p->is_written_shard(pg_shard.shard)) {
+	if (p->is_written_shard(pool.info.get_relative_shard(pg_shard.shard))) {
 	  if (pi.last_update < p->version) {
 	    if (!shards_with_update.contains(pg_shard.shard)) {
 	      shards_without_update.insert(pg_shard.shard);
@@ -3581,7 +3761,7 @@ void PeeringState::proc_master_log(
       if (invalidate_stats && my_info.stats.version == olog.head &&
           (!pool.info.is_nonprimary_shard(shard.shard) ||
            (head_log_entry &&
-            head_log_entry->is_written_shard(shard.shard)))) {
+            head_log_entry->is_written_shard(pool.info.get_relative_shard(shard.shard))))) {
         oinfo.stats = my_info.stats;
         invalidate_stats = false;
         psdout(10) << "keeping stats for " << shard
@@ -3620,8 +3800,8 @@ void PeeringState::proc_master_log(
       (pool.info.allows_ecoptimizations() &&
        pool.info.is_nonprimary_shard(from.shard) &&
       (!head_log_entry ||
-       !head_log_entry->is_written_shard(from.shard)))){
-    invalidate_stats = true;
+       !head_log_entry->is_written_shard(pool.info.get_relative_shard(from.shard))))){
+   invalidate_stats = true;
   }
 
   info.stats.stats_invalid |= invalidate_stats;
@@ -3669,7 +3849,7 @@ void PeeringState::proc_replica_log(
     apply_pwlc(info.partial_writes_last_complete[from.shard], from, oinfo,
 	       &olog);
   }
-  pg_log.proc_replica_log(oinfo, olog, omissing, from, pg_whoami, pool.info.allows_ecoptimizations());
+  pg_log.proc_replica_log(oinfo, olog, omissing, from, pg_whoami, pool.info.allows_ecoptimizations(), pool.info);
 
   peer_info[from] = oinfo;
   update_peer_info(from, oinfo);
@@ -8184,7 +8364,10 @@ boost::statechart::result PeeringState::Incomplete::react(const AdvMap &advmap) 
   // Reset if min_size turn smaller than previous value, pg might now be able to go active
   if (!advmap.osdmap->have_pg_pool(poolnum) ||
       advmap.lastmap->get_pools().find(poolnum)->second.min_size >
-      advmap.osdmap->get_pools().find(poolnum)->second.min_size) {
+      advmap.osdmap->get_pools().find(poolnum)->second.min_size ||
+      (advmap.osdmap->get_pools().find(poolnum)->second.is_stretch_pool() &&
+       advmap.lastmap->get_pools().find(poolnum)->second.peering_crush_bucket_count >
+       advmap.osdmap->get_pools().find(poolnum)->second.peering_crush_bucket_count)) {
     post_event(advmap);
     return transit< Reset >();
   }

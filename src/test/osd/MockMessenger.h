@@ -24,6 +24,11 @@
 #include "common/TrackedOp.h"
 #include "osd/OpRequest.h"
 #include "msg/async/frames_v2.h"
+#include "messages/MOSDFastDispatchOp.h"
+#include "messages/MOSDPeeringOp.h"
+
+// Forward declaration
+class TestPG;
 
 #define dout_subsys ceph_subsys_osd
 
@@ -48,11 +53,13 @@ class MockMessenger {
 public:
   using MessageHandler = std::function<bool(int from_osd, int to_osd, MessageRef)>;
   using EpochGetter = std::function<epoch_t(int osd)>;
+  using TestPGGetter = std::function<TestPG*(int osd, spg_t spgid)>;
   
 private:
   EventLoop* event_loop = nullptr;
   std::map<int, MessageHandler> handlers;
   EpochGetter epoch_getter;
+  TestPGGetter test_pg_getter;
   DoutPrefixProvider *dpp = nullptr;
   
 public:
@@ -68,8 +75,19 @@ public:
    *
    * @param getter Lambda that accepts an OSD number and returns its current epoch
    */
-  void set_epoch_getter(EpochGetter getter) {
-    epoch_getter = std::move(getter);
+  void set_epoch_getter(const EpochGetter& getter) {
+    epoch_getter = getter;
+  }
+  
+  /**
+   * Set the TestPG getter callback.
+   * This callback is used to look up a TestPG by (osd, spg_t).
+   * MockMessenger will extract spg_t from messages and use this to find the target TestPG.
+   *
+   * @param getter Lambda that accepts (osd, spg_t) and returns TestPG*
+   */
+  void set_test_pg_getter(const TestPGGetter& getter) {
+    test_pg_getter = getter;
   }
   
   /**
@@ -166,6 +184,35 @@ public:
     // This ensures internal structures like txn_payload are properly serialized
     m->encode(CEPH_FEATURES_ALL, 0);
     
+    // Extract spg_t from message BEFORE encoding to determine target TestPG
+    TestPG* target_test_pg = nullptr;
+    ceph_assert(test_pg_getter);
+    if (test_pg_getter) {
+      spg_t spgid;
+      bool has_spg = false;
+      
+      // Try MOSDFastDispatchOp first (covers most OSD ops)
+      if (auto* fast_op = dynamic_cast<MOSDFastDispatchOp*>(m)) {
+        spgid = fast_op->get_spg();
+        has_spg = true;
+      }
+      // Try MOSDPeeringOp (covers peering messages)
+      else if (auto* peering_op = dynamic_cast<MOSDPeeringOp*>(m)) {
+        spgid = peering_op->get_spg();
+        has_spg = true;
+      }
+      
+      ceph_assert(has_spg);
+      if (has_spg) {
+        target_test_pg = test_pg_getter(to_osd, spgid);
+        std::cout << "MockMessenger: Extracted spg=" << spgid
+                   << " for OSD." << to_osd << ", target_test_pg="
+                   << target_test_pg << std::endl;
+        ceph_assert(target_test_pg);
+      }
+      
+    }
+    
     // Copy the message components to simulate network transmission
     // This creates independent copies that can be decoded into a new message object
     // on the receiver side, avoiding use-after-free issues
@@ -189,8 +236,12 @@ public:
 
 
     // Schedule event on EventLoop with the copied message components
+    // Capture target_test_pg so it's available when the event runs
     event_loop->schedule_osd_message(from_osd, to_osd,
-      [this, header, footer, mf, from_osd, to_osd, send_epoch]() mutable {
+      [this, header, footer, mf, from_osd, to_osd, send_epoch, target_test_pg]() mutable {
+        // Set the TestPG context for this event
+        EventLoop::set_current_test_pg(target_test_pg);
+        
         // Get the receiver's current epoch when processing
         epoch_t current_epoch = 0;
         if (epoch_getter) {

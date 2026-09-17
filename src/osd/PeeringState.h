@@ -1763,6 +1763,23 @@ private:
     std::set<pg_shard_t> *backfill,
     std::set<pg_shard_t> *acting_backfill,
     std::ostream &ss);
+  
+public:
+  static void calc_ec_acting_stretch(
+    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    unsigned size,
+    const std::vector<int> &acting,
+    const std::vector<int> &up,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
+    bool restrict_to_up_acting,
+    std::vector<int> *want,
+    std::set<pg_shard_t> *backfill,
+    std::set<pg_shard_t> *acting_backfill,
+    const OSDMapRef osdmap,
+    const PGPool& pool,
+    std::ostream &ss);
+
+private:
 
   static std::pair<std::map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
   select_replicated_primary(
@@ -2499,8 +2516,13 @@ public:
    * applicable stretch cluster constraints.
    */
   bool acting_set_writeable() {
-    return (actingset.size() >= pool.info.min_size) &&
-      (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
+    if(pool.info.is_erasure() && pool.info.is_stretch_pool()) {
+      return (get_osdmap()->stretch_ec_num_acting_below_min_size(pool.info, acting) == 0) &&
+        (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
+    } else {
+      return (actingset.size() >= pool.info.min_size) &&
+        (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
+    }
   }
 
   /**

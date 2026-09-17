@@ -227,8 +227,8 @@ void PGBackend::rollback(
       auto dpp = pg->get_parent()->get_dpp();
       const pg_pool_t &pool = pg->get_parent()->get_pool();
       if (pool.is_nonprimary_shard(pg->get_parent()->whoami_shard().shard)) {
-        if (entry.is_written_shard(pg->get_parent()->whoami_shard().shard)) {
-	  // Written shard - only rollback OI attr
+        if (entry.is_written_shard(pool.get_relative_shard(pg->get_parent()->whoami_shard().shard))) {
+          // Written shard - only rollback OI attr
 	  ldpp_dout(dpp, 20) << " entry " << entry.version
 			     << " written shard OI attr rollback "
 			     << pg->get_parent()->whoami_shard().shard
