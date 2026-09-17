@@ -91,6 +91,9 @@ class TestModuleSelftest(MgrTestCase):
     def test_orchestrator(self):
         self._selftest_plugin("orchestrator")
 
+    def test_balancer(self):
+        self._selftest_plugin("balancer")
+
 
     def test_selftest_config_update(self):
         """
