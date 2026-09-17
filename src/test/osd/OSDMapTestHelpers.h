@@ -189,6 +189,8 @@ public:
     pool.crush_rule = 0;
     pool.erasure_code_profile = "default";
     pool.stripe_width = stripe_width;
+    pool.set_pg_num(1);
+    pool.set_pgp_num(1);
     
     // Set flags as specified by caller
     pool.flags = flags;
