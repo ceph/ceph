@@ -108,6 +108,20 @@ def get_crypt_mode(stat):
     mode = mode.strip().strip('\x00')
     return mode if mode else None
 
+def get_crypt_attr_raw(bucket_name, object_key, name):
+    """
+    Read a crypt attr whole, straight off the object's head rados object.
+
+    Object stat can't be used where the exact bytes matter: it truncates
+    an attr at the first null byte.
+    """
+    out = exec_cmd(f'radosgw-admin object manifest --bucket={bucket_name}'
+                   f' --object={object_key}')
+    # the head object is always the first entry
+    head = json.loads(out)['objects'][0]['raw_obj']
+    return exec_cmd(f'rados -p {head["pool"]} getxattr {head["oid"]}'
+                    f' user.rgw.crypt.{name}')
+
 def make_compressible_body(size_bytes):
     """Generate compressible data of the requested size."""
     pattern = b'The quick brown fox jumps over the lazy dog. '
