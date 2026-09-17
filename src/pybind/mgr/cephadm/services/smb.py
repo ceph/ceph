@@ -32,6 +32,7 @@ from .cephadmservice import (
     AuthEntity,
     CephService,
     CephadmDaemonDeploySpec,
+    DaemonDeployContext,
     simplified_keyring,
 )
 from ..tlsobject_types import TLSCredentials, EMPTY_TLS_CREDENTIALS
@@ -142,14 +143,13 @@ class SMBService(CephService):
         return None
 
     def prepare_create(
-        self, daemon_spec: CephadmDaemonDeploySpec,
-        spec: Optional[ServiceSpec] = None,
+            self,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
         logger.debug('smb prepare_create')
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(
-            daemon_spec, spec
-        )
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(deploy_ctx)
         return daemon_spec
 
     # Flat SSL fields on SMBSpec per feature, used as a fallback when
@@ -224,9 +224,10 @@ class SMBService(CephService):
         return self._lookup_rgw_creds_uri(self.mgr, cluster_id)
 
     def generate_config(
-        self, daemon_spec: CephadmDaemonDeploySpec,
-        spec: Optional[ServiceSpec] = None,
+            self,
+            deploy_ctx: DaemonDeployContext,
     ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
         logger.debug('smb generate_config')
         assert self.TYPE == daemon_spec.daemon_type
         super().register_for_certificates(daemon_spec)

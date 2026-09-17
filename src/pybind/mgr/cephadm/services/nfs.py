@@ -17,7 +17,7 @@ from ceph.utils import with_units_to_int
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
-from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService, \
+from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService, DaemonDeployContext, \
     RGW_PROFILE_RELEASE
 from cephadm.schedule import get_placement_hosts
 if TYPE_CHECKING:
@@ -191,11 +191,11 @@ class NFSService(CephService):
 
     def prepare_create(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(deploy_ctx)
         return daemon_spec
 
     def get_daemon_nodeid(self, service_name: str, rank: Optional[int]) -> str:
@@ -212,9 +212,10 @@ class NFSService(CephService):
 
     def generate_config(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
+        spec = deploy_ctx.service_spec
         assert self.TYPE == daemon_spec.daemon_type
         super().prepare_certificates(daemon_spec)
         daemon_type = daemon_spec.daemon_type

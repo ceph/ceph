@@ -1,6 +1,6 @@
 from dataclasses import replace
 from typing import List, cast, Optional, TYPE_CHECKING
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, DaemonDeployContext
 from ceph.deployment.service_spec import TracingSpec, ServiceSpec
 from orchestrator import DaemonDescription
 from .service_registry import register_cephadm_service
@@ -18,9 +18,10 @@ class ElasticSearchService(CephadmService):
 
     def prepare_create(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
+        spec = deploy_ctx.service_spec
         assert self.TYPE == daemon_spec.daemon_type
         daemon_spec.deps = self.get_dependencies(
             self.mgr, spec, daemon_spec.daemon_type)
@@ -47,9 +48,10 @@ class JaegerAgentService(CephadmService):
 
     def prepare_create(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
+        spec = deploy_ctx.service_spec
         assert self.TYPE == daemon_spec.daemon_type
         collectors = []
         for dd in self.mgr.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
@@ -94,9 +96,10 @@ class JaegerCollectorService(CephadmService):
 
     def prepare_create(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
+        spec = deploy_ctx.service_spec
         assert self.TYPE == daemon_spec.daemon_type
         elasticsearch_nodes = get_elasticsearch_nodes(self, daemon_spec)
         daemon_spec.final_config = {'elasticsearch_nodes': ",".join(elasticsearch_nodes)}
@@ -112,9 +115,10 @@ class JaegerQueryService(CephadmService):
 
     def prepare_create(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
+        spec = deploy_ctx.service_spec
         assert self.TYPE == daemon_spec.daemon_type
         elasticsearch_nodes = get_elasticsearch_nodes(self, daemon_spec)
         daemon_spec.final_config = {'elasticsearch_nodes': ",".join(elasticsearch_nodes)}

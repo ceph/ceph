@@ -4,7 +4,7 @@ from copy import copy
 
 from orchestrator import DaemonDescription, DaemonDescriptionStatus
 from ceph.deployment.service_spec import OAuth2ProxySpec, MgmtGatewaySpec, ServiceSpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, DaemonDeployContext
 from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
@@ -20,12 +20,12 @@ class OAuth2ProxyService(CephadmService):
 
     def prepare_create(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
-        super().prepare_create(daemon_spec, spec)
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
+        super().prepare_create(deploy_ctx)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(deploy_ctx)
         return daemon_spec
 
     @classmethod
@@ -65,9 +65,9 @@ class OAuth2ProxyService(CephadmService):
 
     def generate_config(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
         svc_spec = cast(OAuth2ProxySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         allowlist_domains = copy(svc_spec.allowlist_domains) or []

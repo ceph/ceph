@@ -5,7 +5,7 @@ from typing import List, cast, Optional, NamedTuple
 from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource, ServiceSpec
+from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource
 
 from orchestrator import (
     OrchestratorError,
@@ -13,7 +13,7 @@ from orchestrator import (
     DaemonDescriptionStatus,
     HostSpec,
 )
-from .cephadmservice import CephadmDaemonDeploySpec, CephService
+from .cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
 from .service_registry import register_cephadm_service
 from .. import utils
 
@@ -118,12 +118,14 @@ class NvmeofService(CephService):
 
     def prepare_create(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
+        spec = deploy_ctx.service_spec
         assert self.TYPE == daemon_spec.daemon_type
 
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        deploy_ctx.service_spec = spec
         nvmeof_gw_id = daemon_spec.daemon_id
         host_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         map_addr = spec.addr_map.get(daemon_spec.host) if spec.addr_map else None
@@ -185,7 +187,7 @@ class NvmeofService(CephService):
         if spec.encryption_key:
             daemon_spec.extra_files['encryption_key'] = spec.encryption_key
 
-        daemon_spec.final_config, _ = self.generate_config(daemon_spec, spec)
+        daemon_spec.final_config, _ = self.generate_config(deploy_ctx)
         daemon_spec.deps = self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 

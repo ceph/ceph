@@ -5,7 +5,9 @@ from ceph.deployment.utils import wrap_ipv6
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
+from cephadm.services.cephadmservice import (
+    CephadmService, CephadmDaemonDeploySpec, DaemonDeployContext, get_dashboard_endpoints,
+)
 from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
@@ -26,13 +28,13 @@ class MgmtGatewayService(CephadmService):
 
     def prepare_create(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
         super().prepare_certificates(daemon_spec)
         self.mgr.cert_mgr.register_self_signed_cert_key_pair(MgmtGatewayService.TYPE, INTERNAL_CERT_LABEL)
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(deploy_ctx)
         return daemon_spec
 
     def get_service_endpoints(self, service_name: str) -> List[str]:
@@ -94,9 +96,9 @@ class MgmtGatewayService(CephadmService):
 
     def generate_config(
             self,
-            daemon_spec: CephadmDaemonDeploySpec,
-            spec: Optional[ServiceSpec] = None,
+            deploy_ctx: DaemonDeployContext,
     ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
         svc_spec = cast(MgmtGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         scheme = 'https'
