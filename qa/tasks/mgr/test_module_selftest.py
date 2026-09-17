@@ -331,6 +331,41 @@ class TestModuleSelftest(MgrTestCase):
 
         self.mgr_cluster.mon_manager.raw_cluster_cmd("crash", "prune", "0")
 
+    def test_notify_clog_failure(self):
+        """
+        That an exception thrown from a module's notify() while handling a
+        clog entry marks the module failed and raises a health check.
+        This exercises ActivePyModule::notify_clog(), a separate C++ call
+        site from the one test_notify_failure exercises above.
+        """
+        self._load_module("selftest")
+        self.mgr_cluster.set_module_conf(
+            "selftest", "notify_clog_throw", "true")
+
+        # set_module_conf only returns once the mon has the new value --
+        # it still needs to propagate mon->mgr before the running module
+        # will see it (see test_selftest_config_update above).
+        def notify_clog_throw_armed():
+            val = self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "config", "get",
+                "notify_clog_throw").strip()
+            return val == "True"
+        self.wait_until_true(notify_clog_throw_armed, timeout=30)
+
+        # Any cluster log entry will do -- emit one directly via the
+        # selftest module itself rather than depending on ambient cluster
+        # activity.
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "self-test", "cluster-log", "cluster", "info",
+            "trigger notify_clog")
+
+        self.wait_for_health(
+            "Module 'selftest' has failed: Synthetic exception in "
+            "notify_clog",
+            timeout=30)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("crash", "prune", "0")
+
     def test_config_notify_failure(self):
         """
         That an exception thrown from a module's config_notify() marks the

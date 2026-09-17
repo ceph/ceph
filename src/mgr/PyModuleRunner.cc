@@ -117,6 +117,9 @@ PyModuleRunner::ShutdownResult PyModuleRunner::shutdown()
          << timeout.count() << "s" << dendl;
     py_module->fail("shutdown() timed out after " +
                      std::to_string(timeout.count()) + "s");
+    if (py_module->perfcounter) {
+      py_module->perfcounter->set(py_module->l_pym_alive, 0);
+    }
     dead = true;
     // Caller MUST NOT destruct `this` normally now -- the detached task
     // (call + join) is still running in the background, referencing
