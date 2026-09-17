@@ -6,6 +6,7 @@ Conflicts=umount.target
 PartOf=ceph-fuse.target
 
 [Service]
+CapabilityBoundingSet=~CAP_SYS_MODULE CAP_SYSLOG
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
 ExecStart=@CMAKE_INSTALL_PREFIX@/bin/ceph-fuse -f %I
 LockPersonality=true
@@ -13,15 +14,17 @@ MemoryDenyWriteExecute=true
 NoNewPrivileges=true
 # ceph-fuse requires access to /dev fuse device
 PrivateDevices=no
-ProtectControlGroups=true
+# a private mount namespace would hide the FUSE mount on %I from the host
+ProtectControlGroups=false
 ProtectHostname=true
-ProtectKernelLogs=true
-ProtectKernelModules=true
-ProtectKernelTunables=true
+ProtectKernelLogs=false
+ProtectKernelModules=false
+ProtectKernelTunables=false
 Restart=on-failure
 RestrictSUIDSGID=true
 StartLimitBurst=3
 StartLimitInterval=30min
+SystemCallFilter=~@module syslog
 TasksMax=infinity
 
 [Install]
