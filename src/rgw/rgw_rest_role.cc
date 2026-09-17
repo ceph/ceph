@@ -1120,11 +1120,20 @@ void RGWAttachRolePolicy_IAM::execute(optional_yield y)
   }
 
   try {
+    std::string_view account;
+    if (const auto& acc = s->auth.identity->get_account(); acc) {
+      account = acc->id;
+    }
     // make sure the policy exists
-    if (!rgw::IAM::get_managed_policy(s->cct, policy_arn)) {
-      op_ret = ERR_NO_SUCH_ENTITY;
-      s->err.message = "The requested PolicyArn is not recognized";
-      return;
+    rgw::IAM::ManagedPolicyInfo info;
+    auto const policy_name = policy_arn.substr(policy_arn.find_last_of('/') + 1);
+    op_ret = driver->get_customer_managed_policy(this, y, account, policy_name, info);
+    if(op_ret < 0){
+      if (!rgw::IAM::get_managed_policy(s->cct, policy_arn)) {
+        op_ret = ERR_NO_SUCH_ENTITY;
+        s->err.message = "The requested PolicyArn is not recognized";
+        return;
+      }
     }
   } catch (rgw::IAM::PolicyParseException& e) {
     ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
