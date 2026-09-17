@@ -42,7 +42,11 @@ function run() {
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     # Check if radostrace binary exists
-    if [ ! -x ./bin/radostrace ]; then
+    if [ -x "./bin/radostrace" ]; then
+        RADOSTRACE="./bin/radostrace"
+    elif command -v radostrace &>/dev/null; then
+        RADOSTRACE="$(command -v radostrace)"
+    else
         echo "radostrace binary not found, skipping tests"
         return 0
     fi
@@ -84,10 +88,10 @@ function TEST_radostrace_help() {
     local dir=$1
 
     # Test that radostrace --help works (doesn't need sudo)
-    ./bin/radostrace --help || return 1
-    ./bin/radostrace --help | grep -q "Usage" || return 1
-    ./bin/radostrace --help | grep -q "\-p, \-\-pid" || return 1
-    ./bin/radostrace --help | grep -q "\-t, \-\-timeout" || return 1
+    $RADOSTRACE --help || return 1
+    $RADOSTRACE --help | grep -q "Usage" || return 1
+    $RADOSTRACE --help | grep -q "\-p, \-\-pid" || return 1
+    $RADOSTRACE --help | grep -q "\-t, \-\-timeout" || return 1
 }
 
 function TEST_radostrace_basic() {
@@ -112,7 +116,7 @@ function TEST_radostrace_basic() {
     # Start radostrace in background with debug mode (long timeout, we'll kill it after)
     # Use stdbuf -o0 for unbuffered output so grep can detect messages immediately
     echo "Starting radostrace with debug mode..."
-    $SUDO stdbuf -o0 ./bin/radostrace -d -t 120 > $trace_output 2>&1 &
+    $SUDO stdbuf -o0 $RADOSTRACE -d -t 120 > $trace_output 2>&1 &
     trace_pid=$!
     echo "radostrace started with PID $trace_pid"
 
@@ -186,7 +190,7 @@ function TEST_radostrace_pid_filter() {
 
     # Start radostrace filtering on bench PID with debug mode
     # Use stdbuf -o0 for unbuffered output so grep can detect messages immediately
-    $SUDO stdbuf -o0 ./bin/radostrace -d -p $bench_pid -t 120 > $trace_output 2>&1 &
+    $SUDO stdbuf -o0 $RADOSTRACE -d -p $bench_pid -t 120 > $trace_output 2>&1 &
     trace_pid=$!
     echo "radostrace started with PID $trace_pid"
 
@@ -249,7 +253,7 @@ function TEST_radostrace_rbd() {
     # Start radostrace in background with debug mode
     # Use stdbuf -o0 for unbuffered output so grep can detect messages immediately
     echo "Starting radostrace..."
-    $SUDO stdbuf -o0 ./bin/radostrace -d -t 120 > $trace_output 2>&1 &
+    $SUDO stdbuf -o0 $RADOSTRACE -d -t 120 > $trace_output 2>&1 &
     trace_pid=$!
     echo "radostrace started with PID $trace_pid"
 
