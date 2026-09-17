@@ -24,6 +24,15 @@
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
+>=20.2.6
+
+* RGW: A CopyObject request whose source and destination are the same object
+  is now accepted when it changes the object's encryption type, key or
+  algorithm, so an existing object can be re-encrypted in place without
+  replacing its metadata. An object written with ``aes-256-cbc`` counts as
+  changed once ``rgw_crypt_sse_algorithm`` is ``aes-256-gcm``, and the new
+  encryption can come from the bucket's default encryption.
+
 >=20.2.3
 
 * RBD: It's possible to specify source cluster's ``mon_host`` and ``key`` for
