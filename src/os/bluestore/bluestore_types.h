@@ -740,7 +740,7 @@ public:
       if (++p == extents.end())
         return false;
     }
-    ceph_abort_msg("we should not get here");
+    // indicate false if ending offset is beyond blob capacity
     return false;
   }
 
