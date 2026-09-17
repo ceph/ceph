@@ -52,7 +52,12 @@ class FakeMgr:
 
 class ServiceWithDependencies(CephadmService):
     @classmethod
-    def _get_dependencies(cls, mgr, spec=None, daemon_type=None):
+    def _get_service_dependencies(
+        cls,
+        mgr,
+        spec=None,
+        daemon_type=None,
+    ):
         return ['service-specific']
 
 
@@ -60,7 +65,12 @@ class CephServiceWithDependencies(CephService):
     TYPE = 'test'
 
     @classmethod
-    def _get_dependencies(cls, mgr, spec=None, daemon_type=None):
+    def _get_service_dependencies(
+        cls,
+        mgr,
+        spec=None,
+        daemon_type=None,
+    ):
         return ['service-specific']
 
     def get_config_and_keyring(self, *args, **kwargs):

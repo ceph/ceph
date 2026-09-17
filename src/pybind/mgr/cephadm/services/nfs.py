@@ -148,11 +148,11 @@ class NFSService(CephService):
         create_ganesha_pool(self.mgr)
 
     @classmethod
-    def _get_dependencies(
+    def _get_service_dependencies(
         cls,
         mgr: "CephadmOrchestrator",
         spec: Optional[ServiceSpec] = None,
-        daemon_type: Optional[str] = None
+        daemon_type: Optional[str] = None,
     ) -> List[str]:
         assert spec
         deps: List[str] = []

@@ -528,9 +528,9 @@ class SMBService(CephService):
         return ip
 
     @classmethod
-    def _get_dependencies(
+    def _get_service_dependencies(
         cls,
-        mgr: 'CephadmOrchestrator',
+        mgr: "CephadmOrchestrator",
         spec: Optional[ServiceSpec] = None,
         daemon_type: Optional[str] = None,
     ) -> List[str]:

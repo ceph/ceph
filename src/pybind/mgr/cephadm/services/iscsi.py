@@ -40,9 +40,12 @@ class IscsiService(CephService):
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
     @classmethod
-    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                          spec: Optional[ServiceSpec] = None,
-                          daemon_type: Optional[str] = None) -> List[str]:
+    def _get_service_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
         deps = []
         if spec:
             iscsi_spec = cast(IscsiServiceSpec, spec)

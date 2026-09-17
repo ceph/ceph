@@ -29,9 +29,12 @@ class OAuth2ProxyService(CephadmService):
         return daemon_spec
 
     @classmethod
-    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                          spec: Optional[ServiceSpec] = None,
-                          daemon_type: Optional[str] = None) -> List[str]:
+    def _get_service_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
         # adding dependency as redirect_url calculation depends on the mgmt-gateway
         deps = [
             f'{d.name()}:{d.ports[0]}' if d.ports else d.name()

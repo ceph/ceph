@@ -355,8 +355,13 @@ class CephadmService(metaclass=ABCMeta):
         spec: Optional[ServiceSpec] = None,
         daemon_type: Optional[str] = None,
     ) -> List[str]:
-        """Return the complete dependency set for this service."""
-        deps = cls._get_dependencies(mgr, spec, daemon_type)
+        """Return the complete dependency set.
+
+        This is the public entry point for dependency calculation. It combines
+        common dependencies with the service-specific dependencies returned by
+        ``_get_service_dependencies()``.
+        """
+        deps = cls._get_service_dependencies(mgr, spec, daemon_type)
 
         if spec is None:
             return sorted(deps)
@@ -376,7 +381,7 @@ class CephadmService(metaclass=ABCMeta):
         return sorted(deps)
 
     @classmethod
-    def _get_dependencies(
+    def _get_service_dependencies(
         cls,
         mgr: "CephadmOrchestrator",
         spec: Optional[ServiceSpec] = None,
@@ -1355,9 +1360,12 @@ class MgrService(CephService):
         return ports
 
     @classmethod
-    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                          spec: Optional[ServiceSpec] = None,
-                          daemon_type: Optional[str] = None) -> List[str]:
+    def _get_service_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
         return sorted(
             [f'port:{p}' for p in cls._get_mgr_service_ports(mgr)]
             + [f'sd_port:{mgr.service_discovery_port}']
@@ -1539,9 +1547,12 @@ class RgwService(CephService):
         return True
 
     @classmethod
-    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                          spec: Optional[ServiceSpec] = None,
-                          daemon_type: Optional[str] = None) -> List[str]:
+    def _get_service_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
         deps = []
         # we keep the following deps calculation for backward compatibility
         # as old RGW specs use rgw_frontend_ssl_certificate instead of modern
@@ -2115,9 +2126,12 @@ class CephExporterService(CephService):
         return True
 
     @classmethod
-    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                          spec: Optional[ServiceSpec] = None,
-                          daemon_type: Optional[str] = None) -> List[str]:
+    def _get_service_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
 
         deps = [f'secure_monitoring_stack:{mgr.secure_monitoring_stack}']
         deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
@@ -2223,9 +2237,19 @@ class CephadmAgent(CephService):
     TYPE = 'agent'
 
     @classmethod
-    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
-                          spec: Optional[ServiceSpec] = None,
-                          daemon_type: Optional[str] = None) -> List[str]:
+    def _get_service_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
+        """Return service-specific dependencies.
+
+        Protected override hook for subclasses to provide dependencies specific to
+        the service. This method should not be called directly; callers should use
+        ``get_dependencies()``, which is the public entry point and computes the
+        complete dependency set.
+        """
         agent = mgr.http_server.agent
         return sorted(
             [
