@@ -26,6 +26,8 @@ using ceph::test::PoolTypeTestFixture;
 class OmapTest : public PoolTypeTestFixture {
 protected:
   static std::string pool_name_prefix();
+  static void SetUpTestSuite();
+  static void TearDownTestSuite();
   void SetUp() override;
   void TearDown() override;
   void check_omap_read(
@@ -116,6 +118,38 @@ protected:
 std::string OmapTest::pool_name_prefix()
 {
   return "omap_test_";
+}
+
+void OmapTest::SetUpTestSuite()
+{
+  // All OmapTest tests call SKIP_IF_CRIMSON(), so on a Crimson cluster only
+  // the replicated pool is needed.  Attempting to set up a FAST_EC pool on
+  // Crimson can crash the test process (set_allow_ec_overwrites fails and
+  // shuts down the rados handle, leading to a segfault during teardown).
+  if (is_crimson_cluster()) {
+    ASSERT_EQ("", connect_cluster_pp(rados));
+    std::string pname = get_temp_pool_name(
+      pool_name_prefix() + pool_type_name(PoolType::REPLICATED) + "_");
+    ASSERT_EQ("", create_pool_by_type(pname, rados, PoolType::REPLICATED));
+    after_pool_create(PoolType::REPLICATED, pname, rados);
+    pool_names[PoolType::REPLICATED] = pname;
+    return;
+  }
+  PoolTypeTestFixture::SetUpTestSuite();
+}
+
+void OmapTest::TearDownTestSuite()
+{
+  if (is_crimson_cluster()) {
+    auto it = pool_names.find(PoolType::REPLICATED);
+    if (it != pool_names.end()) {
+      ASSERT_EQ(0, destroy_pool_by_type(it->second, rados, PoolType::REPLICATED));
+    }
+    pool_names.clear();
+    rados.shutdown();
+    return;
+  }
+  PoolTypeTestFixture::TearDownTestSuite();
 }
 
 void OmapTest::SetUp()
