@@ -549,6 +549,36 @@ q::for_each_interval(public_keys, [](const lfdb::select& interval) {
 });
 ```
 
+Most callers only need to ask about the selection, not materialize its
+canonical intervals. The relationship predicates work directly with composed
+expressions:
+
+```cpp
+const auto objects = q::prefix("bucket/objects/");
+const auto hidden = q::prefix("bucket/objects/.hidden/");
+const auto visible = q::difference(objects, hidden);
+const auto page = q::between("bucket/objects/a", "bucket/objects/z");
+
+if (q::contains(visible, object_key)) {
+  load_object(object_key);
+}
+
+if (q::intersects(visible, page)) {
+  read_page(q::intersection(visible, page));
+}
+
+assert(q::encloses(objects, visible));
+assert(q::is_disjoint(hidden, visible));
+```
+
+`q::is_empty_expression()` answers whether an expression selects no ordinary
+FoundationDB keys. `q::interval_count()` instead counts the canonical,
+nonoverlapping intervals an expression emits; use it only when the count itself
+is needed. These predicates are `constexpr` and can participate in constant
+evaluation when the expression's value types permit it. Complements and
+unbounded expressions are still interpreted relative to FoundationDB's
+ordinary keyspace.
+
 ### Prefix Cursors
 
 This is the common "list records under a prefix, optionally starting after a
