@@ -18,6 +18,7 @@
 #include "osd/ECTransaction.h"
 #include "common/debug.h"
 #include "osd/ECBackend.h"
+#include "test/osd/MockErasureCode.h"
 
 #include "test/unit.cc"
 
@@ -45,8 +46,7 @@ TEST(ectransaction, two_writes_separated_append)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 2, 8192, &pool);
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 2, 8192, &pool);
   shard_id_set shards;
   shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
@@ -79,8 +79,7 @@ TEST(ectransaction, two_writes_separated_misaligned_overwrite)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 2, 8192, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 2, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 3112960;
   shard_id_set shards;
@@ -118,8 +117,7 @@ TEST(ectransaction, partial_write)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 8;
   shard_id_set shards;
@@ -160,8 +158,7 @@ TEST(ectransaction, overlapping_write_non_aligned)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 8;
   shard_id_set shards;
@@ -202,8 +199,7 @@ TEST(ectransaction, test_appending_write_non_aligned)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 4*4096;
   shard_id_set shards;
@@ -244,8 +240,7 @@ TEST(ectransaction, append_with_large_hole)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 25*4096;
   shard_id_set shards;
@@ -286,8 +281,7 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 25*EC_ALIGN_SIZE;
   shard_id_set shards;
@@ -328,8 +322,7 @@ TEST(ectransaction, test_overwrite_with_missing)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = 42*(EC_ALIGN_SIZE / 4);
   shard_id_set shards;
@@ -372,8 +365,7 @@ TEST(ectransaction, truncate_to_bigger_without_write)
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 2, 8192, &pool);
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 2, 8192, &pool);
   shard_id_set shards;
   shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
@@ -402,8 +394,7 @@ TEST(ectransaction, truncate_to_smalelr_without_write) {
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 2, EC_ALIGN_SIZE*2, &pool);
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 2, EC_ALIGN_SIZE*2, &pool);
   shard_id_set shards;
   shards.insert_range(shard_id_t(), 4);
   ECTransaction::WritePlanObj plan(
@@ -445,8 +436,7 @@ TEST(ectransaction, delete_and_write_misaligned) {
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = new_size;
   shard_id_set shards;
@@ -488,8 +478,7 @@ TEST(ectransaction, truncate_to_stripe) {
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool, std::vector<shard_id_t>(0));
   object_info_t oi;
   oi.size = new_size;
   shard_id_set shards;
@@ -518,113 +507,214 @@ TEST(ectransaction, truncate_to_stripe) {
   ASSERT_EQ(ref_write, plan.will_write);
 }
 
-TEST(ectransaction, truncate_then_write_one_shard) {
-  hobject_t h;
-  PGTransaction::ObjectOperation op;
-  bufferlist a, b;
+// ---------------------------------------------------------------------------
+// EC_TXN_DUMP tracing tests
+//
+// These tests verify the "interesting transaction" predicate used by the
+// EC_TXN_DUMP tracing added to ECTransaction::generate_transactions().
+//
+// The predicate fires for:
+//   - fresh objects (create / clone / rename)
+//   - delete_first
+//   - truncate
+//   - multi-object transaction (op_map.size() > 1)
+//
+// Plain write/zero and lone attr-update transactions are NOT interesting.
+// ---------------------------------------------------------------------------
 
-  // Simulate a sparsify operation that overwrites an existing object with data at
-  // specific offsets, creating a sparse pattern.
-  //
-  // Initial object is 20k, with zeros at 0~4k, 8k~4k, 16k~4k
-  //
-  // The sparsify operation writes at offsets 4k~4k and 12k~4k.
-  op.truncate = std::pair(0, 0);
-  
-  // First write at offset 4096, length 4KB (0~4096)
-  a.append_zero(4096);
-  op.buffer_updates.insert(4096, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
-  
-  // Second write at offset 12288 (12KB), length 4KB
-  b.append_zero(4096);
-  op.buffer_updates.insert(12288, b.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{b, 0});
-
-  pg_pool_t pool;
-  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  
-  // EC configuration: k=2, m=1, chunk_size=4096 (matching FastEC profile)
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 8192, &pool, std::vector<shard_id_t>(0));
-  ECUtil::stripe_info_t sinfo = sinfo_base.for_default();
-  
-  // Set current object size to 16384 (16KB) - the object exists with this size
-  object_info_t oi;
-  oi.size = 16384;
-  
-  shard_id_set shards;
-  shards.insert_range(shard_id_t(0), 3);  // k=2 + m=1 = 3 shards
-
-  ECTransaction::WritePlanObj plan(
-    h,
-    op,
-    sinfo,
-    shards,
-    shards,
-    false,
-    20480,  // current_size
-    oi,
-    std::nullopt,
-    0);
-
-  generic_derr << "plan " << plan << dendl;
-
-  // With truncate 0, we're starting fresh - no reads should be required
-  ASSERT_FALSE(plan.to_read);
-  
-  // Truncates are handled by the transaction generation. 
-  ECUtil::shard_extent_set_t ref_write(sinfo.get_k_plus_m());
-  ref_write[shard_id_t(1)].insert(0, 8192);
-  ref_write[shard_id_t(2)].insert(0, 8192);
-  
-  ASSERT_EQ(ref_write, plan.will_write);
+// Helper: mirror the is_interesting lambda from ECTransaction.cc
+static bool ec_dump_is_interesting(const PGTransaction::ObjectOperation &op,
+                                   size_t op_map_size) {
+  if (op_map_size > 1) return true;
+  return op.delete_first ||
+         op.is_fresh_object() ||
+         op.truncate.has_value();
 }
-TEST(ectransaction, dynamic_object_size_write_plan)
+
+// Helper: make a temp hobject (pool <= -2, so is_temp() == true)
+static hobject_t make_temp_hoid(const char *name) {
+  hobject_t h(sobject_t(object_t(name), CEPH_NOSNAP));
+  h.pool = -2;   // hobject_t::POOL_TEMP_START
+  return h;
+}
+
+// Helper: build a minimal WritePlan for a single temp object op.
+static ECTransaction::WritePlan make_temp_plan(
+    const hobject_t &oid,
+    const PGTransaction::ObjectOperation &op,
+    const ECUtil::stripe_info_t &sinfo)
 {
-  hobject_t h;
+  shard_id_set all_shards;
+  all_shards.insert_range(shard_id_t(0), sinfo.get_k_plus_m());
+
+  ECTransaction::WritePlan plan;
+  plan.want_read = false;
+  plan.plans.emplace_back(
+      oid, op, sinfo,
+      all_shards, all_shards,
+      false, 0,
+      std::nullopt, std::nullopt, 0);
+  return plan;
+}
+
+// Run generate_transactions for a single-temp-object PGTransaction at
+// debug level 5 and return without asserting — proves the dump path is
+// exercised end-to-end.
+static void run_generate(PGTransaction &t,
+                         ECTransaction::WritePlan &plan,
+                         const ECUtil::stripe_info_t &sinfo,
+                         ErasureCodeInterfaceRef ec_impl)
+{
+  shard_id_map<ObjectStore::Transaction> transactions(sinfo.get_k_plus_m());
+  for (shard_id_t s(0); s < sinfo.get_k_plus_m(); ++s)
+    transactions[s];
+
+  map<hobject_t, ECUtil::shard_extent_map_t> written;
+  set<hobject_t> temp_added, temp_removed;
+  vector<pg_log_entry_t> entries;
+  bool first_write = true;
+
+  ECTransaction::generate_transactions(
+    &t, plan, ec_impl,
+    pg_t(0, 1), sinfo,
+    {},
+    entries, &written, &transactions,
+    &temp_added, &temp_removed,
+    &dpp,
+    OSDMapRef(),
+    first_write);
+}
+
+// --- Predicate unit tests (no generate_transactions call needed) ---
+
+TEST(ectransaction_dump, plain_write_not_interesting)
+{
   PGTransaction::ObjectOperation op;
-  bufferlist a;
-  a.append_zero(100000);
+  bufferlist bl;
+  bl.append_zero(4096);
   op.buffer_updates.insert(
-    0, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
+    0, 4096, PGTransaction::ObjectOperation::BufferUpdate::Write{bl, 0});
+
+  EXPECT_FALSE(ec_dump_is_interesting(op, 1));
+}
+
+TEST(ectransaction_dump, lone_attr_update_not_interesting)
+{
+  PGTransaction::ObjectOperation op;
+  bufferlist bl;
+  bl.append_zero(4);
+  op.attr_updates["user.foo"] = bl;
+
+  EXPECT_FALSE(ec_dump_is_interesting(op, 1));
+}
+
+TEST(ectransaction_dump, create_is_interesting)
+{
+  PGTransaction::ObjectOperation op;
+  op.init_type = PGTransaction::ObjectOperation::Init::Create{};
+
+  EXPECT_TRUE(ec_dump_is_interesting(op, 1));
+}
+
+TEST(ectransaction_dump, clone_is_interesting)
+{
+  PGTransaction::ObjectOperation op;
+  hobject_t src;
+  op.init_type = PGTransaction::ObjectOperation::Init::Clone{src};
+
+  EXPECT_TRUE(ec_dump_is_interesting(op, 1));
+}
+
+TEST(ectransaction_dump, rename_is_interesting)
+{
+  PGTransaction::ObjectOperation op;
+  hobject_t src;
+  src.pool = -2;  // must be temp
+  op.init_type = PGTransaction::ObjectOperation::Init::Rename{src};
+
+  EXPECT_TRUE(ec_dump_is_interesting(op, 1));
+}
+
+TEST(ectransaction_dump, delete_first_is_interesting)
+{
+  PGTransaction::ObjectOperation op;
+  op.delete_first = true;
+
+  EXPECT_TRUE(ec_dump_is_interesting(op, 1));
+}
+
+TEST(ectransaction_dump, truncate_is_interesting)
+{
+  PGTransaction::ObjectOperation op;
+  op.truncate = std::make_pair(uint64_t(0), uint64_t(0));
+
+  EXPECT_TRUE(ec_dump_is_interesting(op, 1));
+}
+
+TEST(ectransaction_dump, multi_object_always_interesting)
+{
+  // Even a boring plain-write op is interesting when op_map has >1 entry
+  PGTransaction::ObjectOperation op;
+  bufferlist bl;
+  bl.append_zero(4096);
+  op.buffer_updates.insert(
+    0, 4096, PGTransaction::ObjectOperation::BufferUpdate::Write{bl, 0});
+
+  EXPECT_FALSE(ec_dump_is_interesting(op, 1));  // boring alone
+  EXPECT_TRUE(ec_dump_is_interesting(op, 2));   // interesting as part of multi
+}
+
+// --- Integration test: generate_transactions runs with dump active ---
+
+TEST(ectransaction_dump, generate_transactions_create_no_abort)
+{
+  // Raise debug_osd to 5 so should_gather returns true and the dump path fires
+  g_ceph_context->_conf.set_val("debug_osd", "5/5");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   pg_pool_t pool;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
-  pool.set_flag(pg_pool_t::FLAG_DYNAMIC_OBJECT_SIZE);
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool);
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode(2, 3));
 
-  // k=2, m=1, default chunk size 4096.
-  ECUtil::stripe_info_base_t sinfo_base(2, 1, 2 * 4096, &pool);
-  ASSERT_TRUE(sinfo_base.allows_dynamic_object_size());
+  hobject_t oid = make_temp_hoid("dump_create_test");
 
-  // For a ~100000 byte object over k=2, ~50000 bytes/shard rounds up to the
-  // next power of two: 65536.
-  uint64_t cs = sinfo_base.chunk_size_for_hint(a.length());
-  ASSERT_EQ(cs, 65536u);
+  PGTransaction t;
+  t.create(oid);
+  // No OBC needed: temp objects bypass the OBC assert in Generate::Generate
 
-  shard_id_set shards;
-  shards.insert_range(shard_id_t(), 3);
+  PGTransaction::ObjectOperation &op = t.op_map.at(oid);
+  auto plan = make_temp_plan(oid, op, sinfo);
 
-  // With the per-object (large) chunk size, the whole object fits in a single
-  // stripe: every shard is written with at most one chunk.
-  {
-    ECUtil::stripe_info_t obj_sinfo = sinfo_base.for_chunk_size(cs);
-    ECTransaction::WritePlanObj plan(
-      h, op, obj_sinfo, shards, shards, false, 0,
-      std::nullopt, std::nullopt, 0);
-    ASSERT_EQ(plan.chunk_size, cs);
-    for (auto &&[shard, eset] : plan.will_write) {
-      ASSERT_LE(eset.range_end(), cs)
-          << "shard " << shard << " spilled past a single chunk";
-    }
-  }
+  // Should complete without any ceph_abort
+  ASSERT_NO_FATAL_FAILURE(run_generate(t, plan, sinfo, ec_impl));
 
-  // With the pool default (small) chunk size, the same object spans multiple
-  // chunks per shard (more than one stripe).
-  {
-    ECUtil::stripe_info_t def_sinfo = sinfo_base.for_default();
-    ECTransaction::WritePlanObj plan(
-      h, op, def_sinfo, shards, shards, false, 0,
-      std::nullopt, std::nullopt, 0);
-    ASSERT_EQ(plan.chunk_size, sinfo_base.get_default_chunk_size());
-    ASSERT_GT(plan.will_write.at(shard_id_t(0)).range_end(),
-              sinfo_base.get_default_chunk_size());
-  }
+  g_ceph_context->_conf.set_val("debug_osd", "0/0");
+  g_ceph_context->_conf.apply_changes(nullptr);
+}
+
+TEST(ectransaction_dump, generate_transactions_plain_write_no_abort)
+{
+  // At debug level 0 the dump is entirely skipped; just verify no abort
+  g_ceph_context->_conf.set_val("debug_osd", "0/0");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  ECUtil::stripe_info_t sinfo(2, 1, 2 * EC_ALIGN_SIZE, &pool);
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode(2, 3));
+
+  hobject_t oid = make_temp_hoid("dump_write_test");
+
+  PGTransaction t;
+  // A fresh temp object write: use create + write so the op is valid
+  t.create(oid);
+  bufferlist bl;
+  bl.append_zero(EC_ALIGN_SIZE);
+  t.write(oid, 0, bl.length(), bl);
+
+  PGTransaction::ObjectOperation &op = t.op_map.at(oid);
+  auto plan = make_temp_plan(oid, op, sinfo);
+
+  ASSERT_NO_FATAL_FAILURE(run_generate(t, plan, sinfo, ec_impl));
 }

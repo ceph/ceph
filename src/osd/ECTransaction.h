@@ -34,6 +34,9 @@ class WritePlanObj {
   ECUtil::shard_extent_set_t will_write;
   const uint64_t orig_size;
   const uint64_t projected_size;
+  // The per-object EC chunk size used to plan and generate this write (for the
+  // dynamic-object-size feature; equals the pool default otherwise).
+  const uint64_t chunk_size;
   bool invalidates_cache;
   bool do_parity_delta_write = false;
 
@@ -55,6 +58,7 @@ class WritePlanObj {
        << " will_write: " << will_write
        << " orig_size: " << orig_size
        << " projected_size: " << projected_size
+       << " chunk_size: " << chunk_size
        << " invalidates_cache: " << invalidates_cache
        << " do_pdw: " << do_parity_delta_write
        << "}";
@@ -163,7 +167,9 @@ class Generate {
   PGTransaction &t;
   const ErasureCodeInterfaceRef &ec_impl;
   const pg_t &pgid;
-  const ECUtil::stripe_info_t &sinfo;
+  // Object-scoped geometry view, built for this object's chunk size (held by
+  // value so it can differ per object under the dynamic-object-size feature).
+  const ECUtil::stripe_info_t sinfo;
   shard_id_map<ceph::os::Transaction> &transactions;
   DoutPrefixProvider *dpp;
   const OSDMapRef &osdmap;

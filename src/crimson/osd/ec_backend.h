@@ -109,6 +109,7 @@ private:
     const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
     uint64_t object_size,
+    uint64_t chunk_size,
     GenContextURef<ec_extents_t &&> &&func) override;
 
   void objects_read_and_reconstruct_for_rmw(
@@ -116,7 +117,7 @@ private:
     GenContextURef<ec_extents_t&&> &&func) override;
 
   ceph::ErasureCodeInterfaceRef ec_impl;
-  const ECUtil::stripe_info_t sinfo;
+  const ECUtil::stripe_info_base_t sinfo;
 
   const bool fast_read;
   const bool allows_ecoverwrites;

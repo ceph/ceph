@@ -15,7 +15,7 @@ namespace ceph {
 namespace consistency {
 class ECEncoderSwitch {
   private:
-    ceph::consistency::ECEncoder<ECUtil::stripe_info_t> encoder_optimized;
+    ceph::consistency::ECEncoder<ECUtil::stripe_info_base_t> encoder_optimized;
     ceph::consistency::ECEncoder<stripe_info_l_t> encoder_legacy;
     bool optimizations_enabled;
 

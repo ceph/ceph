@@ -434,7 +434,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual unsigned int get_ec_data_chunk_count() const { return 0; };
    virtual int get_ec_stripe_chunk_size() const { return 0; };
    virtual bool get_ec_supports_crc_encode_decode() const = 0;
-   virtual uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const { return size; };
+   virtual uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard, uint64_t chunk_size = 0) const { return size; };
    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
    virtual bool get_is_nonprimary_shard(shard_id_t shard) const {
      return false; // Only EC has nonprimary shards.
@@ -450,7 +450,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        const bufferlist &in_bl) const = 0;
    virtual shard_id_map<bufferlist> ec_decode_acting_set(
        const shard_id_map<bufferlist> &shard_map, int chunk_size) const = 0;
-   virtual ECUtil::stripe_info_t ec_get_sinfo() const = 0;
+   virtual const ECUtil::stripe_info_base_t &ec_get_sinfo() const = 0;
    virtual bool remove_ec_omap_journal_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
      return false; // Only EC uses ec_omap_journal
    };
@@ -648,6 +648,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      uint32_t op_flags,
      ceph::buffer::list *bl,
      uint64_t object_size,
+     uint64_t chunk_size,
      std::optional<CoroHandles> coro
    ) = 0;
 
@@ -662,18 +663,20 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const hobject_t &hoid,
      std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
-     ceph::buffer::list *bl) {
+     ceph::buffer::list *bl,
+     uint64_t chunk_size = 0) {
      return -EOPNOTSUPP;
    }
 
    virtual std::pair<uint64_t, uint64_t> extent_to_shard_extent(
-       uint64_t off, uint64_t len) {
+       uint64_t off, uint64_t len, uint64_t chunk_size = 0) {
      return std::pair(off, len);
    }
 
    virtual void objects_read_async(
      const hobject_t &hoid,
      uint64_t object_size,
+     uint64_t chunk_size,
      const std::list<std::pair<ec_align_t,
 		std::pair<ceph::buffer::list*, Context*>>> &to_read,
      Context *on_complete, bool fast_read = false) = 0;
@@ -687,7 +690,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual uint64_t be_get_ondisk_size(uint64_t logical_size,
                                        shard_id_t shard_id,
-                                       bool object_is_legacy_ec) const = 0;
+                                       bool object_is_legacy_ec,
+                                       uint64_t chunk_size = 0) const = 0;
 
    virtual int be_deep_scrub(
      [[maybe_unused]] const Scrub::ScrubCounterSet& io_counters,

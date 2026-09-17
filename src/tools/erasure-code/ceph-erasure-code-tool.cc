@@ -54,7 +54,7 @@ void usage(const std::string message, ostream &out) {
 int ec_init(const std::string &profile_str,
             const std::string &stripe_unit_str,
             ceph::ErasureCodeInterfaceRef *ec_impl,
-            std::unique_ptr<ECUtil::stripe_info_t> *sinfo) {
+            std::unique_ptr<ECUtil::stripe_info_base_t> *sinfo) {
   ceph::ErasureCodeProfile profile;
   std::vector<std::string> opts;
   boost::split(opts, profile_str, boost::is_any_of(", "));
@@ -95,7 +95,7 @@ int ec_init(const std::string &profile_str,
   uint64_t stripe_size = atoi(profile["k"].c_str());
   ceph_assert(stripe_size > 0);
   uint64_t stripe_width = stripe_size * stripe_unit;
-  sinfo->reset(new ECUtil::stripe_info_t(*ec_impl, nullptr, stripe_width));
+  sinfo->reset(new ECUtil::stripe_info_base_t(*ec_impl, nullptr, stripe_width));
 
   return 0;
 }
@@ -189,13 +189,13 @@ int do_encode(const std::vector<const char*> &args) {
   }
 
   ceph::ErasureCodeInterfaceRef ec_impl;
-  std::unique_ptr<ECUtil::stripe_info_t> sinfo;
+  std::unique_ptr<ECUtil::stripe_info_base_t> sinfo;
   int r = ec_init(args[0], args[1], &ec_impl, &sinfo);
   if (r < 0) {
     return r;
   }
 
-  ECUtil::shard_extent_map_t encoded_data(sinfo.get());
+  ECUtil::shard_extent_map_t encoded_data(sinfo->for_default());
   std::vector<std::string> shards;
   boost::split(shards, args[2], boost::is_any_of(","));
   ceph::bufferlist input_data;
@@ -208,13 +208,13 @@ int do_encode(const std::vector<const char*> &args) {
     return 1;
   }
 
-  uint64_t stripe_width = sinfo->get_stripe_width();
+  uint64_t stripe_width = sinfo->get_default_stripe_width();
   if (input_data.length() % stripe_width != 0) {
     uint64_t pad = stripe_width - input_data.length() % stripe_width;
     input_data.append_zero(pad);
   }
 
-  sinfo->ro_range_to_shard_extent_map(0, input_data.length(), input_data, encoded_data);
+  sinfo->for_default().ro_range_to_shard_extent_map(0, input_data.length(), input_data, encoded_data);
   encoded_data.insert_parity_buffers();
   r = encoded_data.encode(ec_impl);
   if (r < 0) {
@@ -244,13 +244,13 @@ int do_decode(const std::vector<const char*> &args) {
   }
 
   ceph::ErasureCodeInterfaceRef ec_impl;
-  std::unique_ptr<ECUtil::stripe_info_t> sinfo;
+  std::unique_ptr<ECUtil::stripe_info_base_t> sinfo;
   int r = ec_init(args[0], args[1], &ec_impl, &sinfo);
   if (r) {
     return r;
   }
 
-  ECUtil::shard_extent_map_t encoded_data(sinfo.get());
+  ECUtil::shard_extent_map_t encoded_data(sinfo->for_default());
   std::vector<std::string> shards;
   boost::split(shards, args[2], boost::is_any_of(","));
   std::string fname = args[3];
@@ -271,7 +271,7 @@ int do_decode(const std::vector<const char*> &args) {
   }
 
   ECUtil::shard_extent_set_t wanted(sinfo->get_k_plus_m());
-  sinfo->ro_range_to_shard_extent_set(encoded_data.get_ro_start(),
+  sinfo->for_default().ro_range_to_shard_extent_set(encoded_data.get_ro_start(),
     encoded_data.get_ro_end() - encoded_data.get_ro_start(), wanted);
 
   r = encoded_data.decode(ec_impl, wanted, encoded_data.get_ro_end());

@@ -97,7 +97,8 @@ class TestPg : public PgScrubBeListener {
 
   virtual uint64_t logical_to_ondisk_size(uint64_t logical_size,
                                           shard_id_t shard_id,
-                                          bool unused) const
+                                          bool unused,
+                                          uint64_t chunk_size = 0) const
   {
     return logical_size;
   }
@@ -114,19 +115,19 @@ class TestPg : public PgScrubBeListener {
     shard_id_map<bufferlist> encode_map(get_ec_sinfo().get_k_plus_m());
     for (shard_id_t i; i < get_ec_sinfo().get_k_plus_m(); ++i) {
       bufferlist bl;
-      bl.append(buffer::create(get_ec_sinfo().get_chunk_size(), 0));
+      bl.append(buffer::create(get_ec_sinfo().get_default_chunk_size(), 0));
       bl.rebuild();
       encode_map.insert(i, bl);
     }
 
     for (shard_id_t i; i < get_ec_sinfo().get_k(); ++i) {
-      for (int j = 0; std::cmp_less(j, get_ec_sinfo().get_chunk_size()); j++) {
+      for (int j = 0; std::cmp_less(j, get_ec_sinfo().get_default_chunk_size()); j++) {
         encode_map.at(i).c_str()[j] =
-            chunks[j + (get_ec_sinfo().get_chunk_size() * i.id)];
+            chunks[j + (get_ec_sinfo().get_default_chunk_size() * i.id)];
         for (shard_id_t k{static_cast<int8_t>(get_ec_sinfo().get_k_plus_m())};
              k < get_ec_sinfo().get_k_plus_m(); ++k) {
           encode_map.at(k).c_str()[j] +=
-              chunks[j + (get_ec_sinfo().get_chunk_size() * i.id)];
+              chunks[j + (get_ec_sinfo().get_default_chunk_size() * i.id)];
         }
       }
     }
@@ -183,11 +184,11 @@ class TestPg : public PgScrubBeListener {
     return get_is_ec_optimized();
   }
 
-  ECUtil::stripe_info_t get_ec_sinfo() const final { return *m_sinfo; }
+  ECUtil::stripe_info_base_t get_ec_sinfo() const final { return *m_sinfo; }
 
   void set_stripe_info(unsigned int k, unsigned int m, uint64_t stripe_width,
                        const pg_pool_t* pool) {
-    m_sinfo.reset(new ECUtil::stripe_info_t{k, m, stripe_width, pool});
+    m_sinfo.reset(new ECUtil::stripe_info_base_t{k, m, stripe_width, pool});
   }
 
   bool is_waiting_for_unreadable_object() const final { return false; }
@@ -195,7 +196,7 @@ class TestPg : public PgScrubBeListener {
   std::shared_ptr<PGPool> m_pool;
   pg_info_t& m_info;
   pg_shard_t m_pshard;
-  std::unique_ptr<ECUtil::stripe_info_t> m_sinfo;
+  std::unique_ptr<ECUtil::stripe_info_base_t> m_sinfo;
 
   bool get_is_nonprimary_shard(const pg_shard_t &pg_shard) const final
   {
@@ -1001,7 +1002,8 @@ class ECOptimisedPg : public TestPg {
 
   uint64_t logical_to_ondisk_size(uint64_t logical_size,
                                   shard_id_t shard_id,
-                                  bool object_is_legacy_ec) const final {
+                                  bool object_is_legacy_ec,
+                                  uint64_t chunk_size = 0) const final {
     if (object_is_legacy_ec) {
       uint64_t chunks = (logical_size + STRIPE_WIDTH - 1) / STRIPE_WIDTH;
       return chunks * CHUNK_SIZE;

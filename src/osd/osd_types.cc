@@ -1409,7 +1409,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	   ("read_ratio", pool_opts_t::opt_desc_t(
              pool_opts_t::READ_RATIO, pool_opts_t::INT))
 	   ("pct_update_delay", pool_opts_t::opt_desc_t(
-             pool_opts_t::PCT_UPDATE_DELAY, pool_opts_t::INT));
+             pool_opts_t::PCT_UPDATE_DELAY, pool_opts_t::INT))
+	   ("ec_dynamic_max_chunk_size", pool_opts_t::opt_desc_t(
+             pool_opts_t::EC_DYNAMIC_MAX_CHUNK_SIZE, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name)
 {
@@ -6623,7 +6625,7 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   for (auto i = watchers.cbegin(); i != watchers.cend(); ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(18, 8, bl);
+  ENCODE_START(19, 8, bl);
   encode(soid, bl);
   encode(myoloc, bl);	//Retained for compatibility
   encode((__u32)0, bl); // was category, no longer used
@@ -6658,13 +6660,14 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(manifest, bl);
   }
   encode(shard_versions, bl);
+  encode(ec_chunk_size, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(18, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(19, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   decode(soid, bl);
   decode(myoloc, bl);
@@ -6753,6 +6756,11 @@ void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
   if (struct_v >= 18) {
     decode(shard_versions, bl);
   }
+  if (struct_v >= 19) {
+    decode(ec_chunk_size, bl);
+  } else {
+    ec_chunk_size = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -6800,6 +6808,7 @@ void object_info_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->dump_unsigned("ec_chunk_size", ec_chunk_size);
 }
 
 list<object_info_t> object_info_t::generate_test_instances()

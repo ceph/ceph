@@ -10,7 +10,7 @@ using ECEncoderSwitch = ceph::consistency::ECEncoderSwitch;
 ECEncoderSwitch::ECEncoderSwitch(ceph::ErasureCodeProfile profile,
                                  int chunk_size,
                                  bool optimizations_enabled) :
-  encoder_optimized(ceph::consistency::ECEncoder<ECUtil::stripe_info_t>(profile, chunk_size)),
+  encoder_optimized(ceph::consistency::ECEncoder<ECUtil::stripe_info_base_t>(profile, chunk_size)),
   encoder_legacy(ceph::consistency::ECEncoder<stripe_info_l_t>(profile, chunk_size)),
   optimizations_enabled(optimizations_enabled) {}
 

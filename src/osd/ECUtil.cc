@@ -155,7 +155,7 @@ void ECUtil::stripe_info_t::trim_shard_extent_set_for_ro_offset(
     shard_extent_set_t &shard_extent_set) const {
   /* If the offset is within the first shard, then the remaining shards are
    * not written and we don't need to generated zeros for either */
-  int ro_offset_shard = (ro_offset / chunk_size) % k;
+  int ro_offset_shard = (ro_offset / chunk_size) % get_k();
   if (ro_offset_shard == 0) {
     uint64_t shard_offset = ro_offset_to_shard_offset(
       ro_offset, raw_shard_id_t(0));
@@ -201,8 +201,8 @@ void shard_extent_map_t::erase_after_ro_offset(uint64_t ro_offset) {
     return;
   }
 
-  shard_extent_set_t ro_to_erase(sinfo->get_k_plus_m());
-  sinfo->ro_range_to_shard_extent_set(ro_offset, ro_end - ro_offset,
+  shard_extent_set_t ro_to_erase(sinfo.get_k_plus_m());
+  sinfo.ro_range_to_shard_extent_set(ro_offset, ro_end - ro_offset,
                                       ro_to_erase);
   for (auto &&[shard, eset] : ro_to_erase) {
     if (extent_maps.contains(shard)) {
@@ -232,8 +232,8 @@ shard_extent_map_t shard_extent_map_t::intersect_ro_range(
     return shard_extent_map_t(sinfo);
   }
 
-  shard_extent_set_t ro_to_intersect(sinfo->get_k_plus_m());
-  sinfo->ro_range_to_shard_extent_set(ro_offset, ro_length, ro_to_intersect);
+  shard_extent_set_t ro_to_intersect(sinfo.get_k_plus_m());
+  sinfo.ro_range_to_shard_extent_set(ro_offset, ro_length, ro_to_intersect);
 
   return intersect(ro_to_intersect);
 }
@@ -272,8 +272,8 @@ shard_extent_map_t shard_extent_map_t::intersect(
         out.start_offset = min(out.start_offset, range_start);
         out.end_offset = max(out.end_offset, range_end);
 
-        raw_shard_id_t raw_shard = sinfo->get_raw_shard(shard);
-        if (raw_shard < sinfo->get_k()) {
+        raw_shard_id_t raw_shard = sinfo.get_raw_shard(shard);
+        if (raw_shard < sinfo.get_k()) {
           out.ro_start = std::min(out.ro_start,
                                   calc_ro_offset(raw_shard, range_start));
           out.ro_end = std::max(out.ro_end, calc_ro_end(raw_shard, range_end));
@@ -343,7 +343,7 @@ void shard_extent_map_t::deep_copy(shard_extent_map_t const &other) {
 }
 
 /* Insert a buffer for a particular shard.
- * NOTE: DO NOT CALL sinfo->get_min_want_shards()
+ * NOTE: DO NOT CALL sinfo.get_min_want_shards()
  */
 void shard_extent_map_t::insert_in_shard(shard_id_t shard, uint64_t off,
                                          const buffer::list &bl) {
@@ -352,15 +352,15 @@ void shard_extent_map_t::insert_in_shard(shard_id_t shard, uint64_t off,
   }
 
   extent_maps[shard].insert(off, bl.length(), bl);
-  raw_shard_id_t raw_shard = sinfo->get_raw_shard(shard);
+  raw_shard_id_t raw_shard = sinfo.get_raw_shard(shard);
 
-  if (raw_shard >= sinfo->get_k()) {
+  if (raw_shard >= sinfo.get_k()) {
     return;
   }
 
-  uint64_t new_start = calc_ro_offset(sinfo->get_raw_shard(shard), off);
+  uint64_t new_start = calc_ro_offset(sinfo.get_raw_shard(shard), off);
   uint64_t new_end =
-      calc_ro_end(sinfo->get_raw_shard(shard), off + bl.length());
+      calc_ro_end(sinfo.get_raw_shard(shard), off + bl.length());
   if (empty()) {
     ro_start = new_start;
     ro_end = new_end;
@@ -405,7 +405,7 @@ void shard_extent_map_t::insert_ro_zero_buffer(uint64_t ro_offset,
                                                uint64_t ro_length) {
   buffer::list zero_buffer;
   zero_buffer.append_zero(ro_length);
-  sinfo->ro_range_to_shard_extent_map(ro_offset, ro_length, zero_buffer, *this);
+  sinfo.ro_range_to_shard_extent_map(ro_offset, ro_length, zero_buffer, *this);
 }
 
 /* Append zeros to the extent maps, such that all bytes from the current end
@@ -432,7 +432,7 @@ void shard_extent_map_t::insert_ro_extent_map(const extent_map &host_extent_map)
        range != host_extent_map.end();
        ++range) {
     buffer::list bl = range.get_val();
-    sinfo->ro_range_to_shard_extent_map(
+    sinfo.ro_range_to_shard_extent_map(
       range.get_off(),
       range.get_len(),
       bl,
@@ -457,9 +457,9 @@ void shard_extent_map_t::insert_parity_buffers() {
    * e.g. appends will not provide parity buffers.
    * We should EITHER have no buffers, or have the right buffers.
    */
-  for (raw_shard_id_t raw_shard(sinfo->get_k()); raw_shard < sinfo->
+  for (raw_shard_id_t raw_shard(sinfo.get_k()); raw_shard < sinfo.
        get_k_plus_m(); ++raw_shard) {
-    shard_id_t shard = sinfo->get_shard(raw_shard);
+    shard_id_t shard = sinfo.get_shard(raw_shard);
 
     for (auto &&[offset, length] : encode_set) {
       /* No need to recreate buffers we already have */
@@ -488,7 +488,7 @@ slice_iterator shard_extent_map_t::begin_slice_iterator(
 int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
     DoutPrefixProvider *dpp,
     shard_id_set *dedup_zeros) {
-  shard_id_set out_set = sinfo->get_parity_shards();
+  shard_id_set out_set = sinfo.get_parity_shards();
   bool rebuild_req = false;
 
   for (auto iter = begin_slice_iterator(out_set, dpp, dedup_zeros); !iter.is_end(); ++iter) {
@@ -520,19 +520,19 @@ int shard_extent_map_t::encode_parity_delta(
     const ErasureCodeInterfaceRef &ec_impl,
     shard_extent_map_t &old_sem,
     DoutPrefixProvider *dpp) {
-  shard_id_set out_set = sinfo->get_parity_shards();
+  shard_id_set out_set = sinfo.get_parity_shards();
 
   pad_and_rebuild_to_ec_align();
   old_sem.pad_and_rebuild_to_ec_align();
 
-  for (auto data_shard : sinfo->get_data_shards()) {
+  for (auto data_shard : sinfo.get_data_shards()) {
     shard_extent_map_t s(sinfo);
     if (!contains_shard(data_shard)) {
       continue;
     }
     s.extent_maps[shard_id_t(0)] = old_sem.extent_maps[data_shard];
     s.extent_maps[shard_id_t(1)] = extent_maps[data_shard];
-    for (shard_id_t parity_shard : sinfo->get_parity_shards()) {
+    for (shard_id_t parity_shard : sinfo.get_parity_shards()) {
       if (extent_maps.contains(parity_shard)) {
         s.extent_maps[parity_shard] = extent_maps[parity_shard];
       }
@@ -554,7 +554,7 @@ int shard_extent_map_t::encode_parity_delta(
         .length() != 0) {
         ec_impl->encode_delta(data_shards[shard_id_t(0)],
                               data_shards[shard_id_t(1)], &delta);
-        shard_id_map<bufferptr> in(sinfo->get_k_plus_m());
+        shard_id_map<bufferptr> in(sinfo.get_k_plus_m());
         in.emplace(data_shard, delta);
         ec_impl->apply_delta(in, parity_shards);
       }
@@ -653,18 +653,18 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
     return 0;
   }
 
-  shard_id_set decode_set = shard_id_set::intersection(need_set, sinfo->get_data_shards());
-  shard_id_set encode_set = shard_id_set::intersection(need_set, sinfo->get_parity_shards());
+  shard_id_set decode_set = shard_id_set::intersection(need_set, sinfo.get_data_shards());
+  shard_id_set encode_set = shard_id_set::intersection(need_set, sinfo.get_parity_shards());
 
   if (!encode_set.empty()) {
-    shard_extent_set_t read_mask(sinfo->get_k_plus_m());
-    sinfo->ro_size_to_read_mask(object_size, read_mask);
+    shard_extent_set_t read_mask(sinfo.get_k_plus_m());
+    sinfo.ro_size_to_read_mask(object_size, read_mask);
 
     /* The function has been asked to "decode" parity. To achieve this, we
      * need all the data shards to be present... So first see if there are
      * any missing...
      */
-    shard_id_set decode_for_parity_shards = shard_id_set::difference(sinfo->get_data_shards(), have_set);
+    shard_id_set decode_for_parity_shards = shard_id_set::difference(sinfo.get_data_shards(), have_set);
     decode_for_parity_shards = shard_id_set::intersection(decode_for_parity_shards, read_mask.get_shard_id_set());
 
     if (!decode_for_parity_shards.empty()) {
@@ -694,7 +694,7 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
     r = _decode(ec_impl, want_set, decode_set, dpp);
   }
   if (!r && !encode_set.empty()) {
-    pad_on_shards(get_extent_superset(), sinfo->get_parity_shards());
+    pad_on_shards(get_extent_superset(), sinfo.get_parity_shards());
     r = encode(ec_impl, dpp, dedup_zeros?&need_set:nullptr);
   }
 
@@ -810,10 +810,10 @@ shard_extent_map_t shard_extent_map_t::slice_map(
     extent_map iemap = emap.intersect(offset, length);
 
     if (!iemap.empty()) {
-      raw_shard_id_t raw_shard = sinfo->get_raw_shard(shard);
+      raw_shard_id_t raw_shard = sinfo.get_raw_shard(shard);
       slice.start_offset = min(slice.start_offset, iemap.get_start_off());
       slice.end_offset = max(slice.end_offset, iemap.get_end_off());
-      if (raw_shard < sinfo->get_k()) {
+      if (raw_shard < sinfo.get_k()) {
         slice.ro_start = min(slice.ro_start,
                              calc_ro_offset(raw_shard, iemap.get_start_off()));
         slice.ro_end = max(slice.ro_end,
@@ -937,7 +937,7 @@ void shard_extent_map_t::pad_with_other(shard_id_t shard, uint64_t offset,
 }
 
 ECUtil::shard_extent_set_t shard_extent_map_t::get_extent_set() {
-  shard_extent_set_t shard_eset(sinfo->get_k_plus_m());
+  shard_extent_set_t shard_eset(sinfo.get_k_plus_m());
   for (auto &&[shard, emap] : extent_maps) {
     emap.to_interval_set(shard_eset[shard]);
   }
@@ -955,12 +955,12 @@ bufferlist shard_extent_map_t::get_ro_buffer(
     uint64_t ro_offset,
     uint64_t ro_length) const {
   bufferlist bl;
-  uint64_t chunk_size = sinfo->get_chunk_size();
-  uint64_t stripe_size = sinfo->get_stripe_width();
-  int data_chunk_count = sinfo->get_k();
+  uint64_t chunk_size = sinfo.get_chunk_size();
+  uint64_t stripe_size = sinfo.get_stripe_width();
+  int data_chunk_count = sinfo.get_k();
 
   pair read_pair(ro_offset, ro_length);
-  auto chunk_aligned_read = sinfo->ro_range_to_chunk_ro_range(read_pair);
+  auto chunk_aligned_read = sinfo.ro_range_to_chunk_ro_range(read_pair);
 
   raw_shard_id_t raw_shard((ro_offset / chunk_size) % data_chunk_count);
 
@@ -978,7 +978,7 @@ bufferlist shard_extent_map_t::get_ro_buffer(
                                       chunk_offset + chunk_size) -
         sub_chunk_offset;
 
-    get_buffer(sinfo->get_shard(raw_shard), sub_chunk_shard_offset,
+    get_buffer(sinfo.get_shard(raw_shard), sub_chunk_shard_offset,
                sub_chunk_len, bl);
   }
   return bl;
