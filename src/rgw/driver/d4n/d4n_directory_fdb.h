@@ -36,6 +36,7 @@ using std::vector;
 using namespace std::literals::string_literals;
 
 namespace lfdb = ceph::libfdb;
+namespace fdbc = lfdb::layer::content;
 
 namespace rgw::d4n {
 
@@ -245,7 +246,7 @@ private:
                 std::string& continuation_token,
 		std::optional<std::reference_wrapper<Transaction>> txn);
 
-    std::string build_object_index(const std::string& bucket_id, const std::string& obj_name);
+    fdbc::compiled_key build_object_index(std::string_view bucket_id, std::string_view obj_name);
 };
 
 class FDBObjectDirectory : public FDBDirectory, public ObjectDirectory {
@@ -346,21 +347,13 @@ private:
                  std::string& index,
 		 std::optional<std::reference_wrapper<Transaction>> txn);
 
-    std::string get_versions_subspace(const DoutPrefixProvider* dpp,
-                                      const std::string& bucket_id,
-                                      const std::string& obj_name);
-    std::string get_score_subspace(const DoutPrefixProvider* dpp,
-                                   const std::string& bucket_id,
-                                   const std::string& obj_name);
-    std::string build_versions_index(const DoutPrefixProvider* dpp,
-                                     const std::string& bucket_id,
-                                     const std::string& obj_name,
-                                     const std::string& score,
-                                     const std::string& version);
-    std::string build_version_score_index(const DoutPrefixProvider* dpp,
-                                          const std::string& bucket_id,
-                                          const std::string& obj_name,
-                                          const std::string& version);
+    fdbc::compiled_key get_versions_subspace(fdbc::compiled_key object_index);
+    fdbc::compiled_key get_score_subspace(fdbc::compiled_key object_index);
+    fdbc::compiled_key build_versions_index(fdbc::compiled_key versions_subspace,
+                                            std::string_view score,
+                                            std::string_view version);
+    fdbc::compiled_key build_version_score_index(fdbc::compiled_key score_subspace,
+                                                 std::string_view version);
 
 };
 
