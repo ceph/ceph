@@ -641,6 +641,29 @@ TEST_CASE("version stamps", "[fdb]") {
   CHECK_FALSE(stamp.is_resolved());
  }
 
+ SECTION("replay reset discards abandoned versionstamps") {
+  constexpr fdb_error_t not_committed = 1020;
+  REQUIRE(0 != fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, not_committed));
+
+  const auto abandoned_key = test_key("versionstamp/replay/abandoned");
+  const auto committed_key = test_key("versionstamp/replay/committed");
+  auto txn = lfdb::make_transaction(dbh);
+
+  lfdb::versionstamp abandoned_stamp;
+  lfdb::set(txn, abandoned_key, lfdb::versioned("", abandoned_stamp));
+
+  lfdb::reset_for_replay(txn, not_committed);
+
+  lfdb::versionstamp committed_stamp;
+  lfdb::set(txn, committed_key, lfdb::versioned("", committed_stamp));
+  REQUIRE(lfdb::commit(txn));
+
+  CHECK_FALSE(abandoned_stamp.is_resolved());
+  CHECK(committed_stamp.is_resolved());
+  CHECK_FALSE(lfdb::key_exists(dbh, abandoned_key));
+  CHECK(lfdb::key_exists(dbh, committed_key));
+ }
+
  SECTION("resolved versionstamp cannot be reused for commit") {
   const auto first_key = test_key("versionstamp/reuse/first");
   const auto second_key = test_key("versionstamp/reuse/second");

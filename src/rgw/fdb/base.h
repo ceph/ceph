@@ -1067,6 +1067,9 @@ class transaction final
   if (fdb_error_t on_error_r = detail::get_future_error(on_error_result); 0 != on_error_r) {
    throw libfdb_exception(on_error_r);
   }
+
+  // Discard versionstamps registered by the abandoned attempt:
+  version_stamps.clear();
  }
 
  bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key,
