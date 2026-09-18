@@ -2284,6 +2284,9 @@ class RGWDeleteMultiObj : public RGWOp {
   void handle_objects(const std::vector<RGWMultiDelObject>& objects,
                       uint32_t max_aio, boost::asio::yield_context yield);
 
+  int run_lua_script(rgw::lua::context ctx,
+                     const rgw::sal::Object* multi_delete_obj);
+
 protected:
   std::vector<delete_multi_obj_entry> ops_log_entries;
   bufferlist data;
