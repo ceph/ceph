@@ -11,9 +11,6 @@
 from datetime import datetime, timedelta
 import logging
 import json
-import base64
-import hashlib
-import hmac
 import threading
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -232,7 +229,6 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def _handle_post_auth(self):
-        global COUNTERS
         with LOCK:
             COUNTERS['auth_post'] += 1
         data = self._get_data()
@@ -254,7 +250,6 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def _handle_s3tokens(self):
-        global COUNTERS
         with LOCK:
             COUNTERS['s3tokens_post'] += 1
 
@@ -279,8 +274,6 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
         data = self._get_data()
         cred = data.get('credentials', {})
         access_key_id = cred.get('access', '')
-        string_to_sign_b64 = cred.get('token', '')
-        signature = cred.get('signature', '')
 
         if access_key_id not in EC2_CREDS:
             self.send_response(404)
@@ -309,7 +302,6 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
                                        'code': 404, 'title': 'Not Found'}})
 
     def _handle_get_credentials(self):
-        global COUNTERS
         with LOCK:
             COUNTERS['credentials_get'] += 1
 
