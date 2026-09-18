@@ -740,6 +740,9 @@ public:
   bool throttle_available() const {
     return local_state.throttler.available();
   }
+  bool background_throttle_available() const {
+    return local_state.throttler.background_available();
+  }
 
   auto local_update_priority(
     singleton_orderer_t &orderer,
