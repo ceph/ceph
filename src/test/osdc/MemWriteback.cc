@@ -109,7 +109,7 @@ ceph_tid_t MemWriteback::write(const object_t& oid,
 				uint64_t trunc_size, __u32 trunc_seq,
 				ceph_tid_t journal_tid,
                                 const ZTracer::Trace &parent_trace,
-                                Context *oncommit)
+                                Context *oncommit, uint64_t change_attr)
 {
   ceph_assert(snapc.seq == 0);
   C_DelayWrite *wrapper = new C_DelayWrite(this, m_cct, oncommit, m_lock, oid,
