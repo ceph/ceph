@@ -22,8 +22,7 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
-import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
-import { SHARE_PATH } from '../smb-share-list/smb-share-list.component';
+import { getClusterPath, getSharePath } from '../utils';
 
 const QOS_IOPS_MAX = 1_000_000;
 const QOS_BW_MAX_BYTES = 2 ** 40;
@@ -78,7 +77,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.resource = $localize`Share`;
-    this.isEdit = this.router.url.startsWith(`/${SHARE_PATH}/${URLVerbs.EDIT}`);
+    this.isEdit = this.router.url.startsWith(`/${getSharePath(this.router.url)}/${URLVerbs.EDIT}`);
     this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
   }
   ngOnInit() {
@@ -325,12 +324,12 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
 
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`${SHARE_PATH}/${urlVerb}`, { share_id }),
+        task: new FinishedTask(`${getSharePath(this.router.url)}/${urlVerb}`, { share_id }),
         call: this.smbService.createShare(requestModel)
       })
       .subscribe({
         complete: () => {
-          this.router.navigate([CLUSTER_PATH]);
+          this.router.navigate([getClusterPath(this.router.url)]);
         },
         error: () => {
           component.smbShareForm.setErrors({ cdSubmitButton: true });
