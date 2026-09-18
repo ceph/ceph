@@ -988,8 +988,9 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph-syn DESTINATION bin)
   if(LINUX)
     add_subdirectory(mount)
+    # uses Linux-only APIs: fscrypt UAPI, O_TMPFILE, AT_EMPTY_PATH
+    add_subdirectory(libcephfs_proxy)
   endif()
-  add_subdirectory(libcephfs_proxy)
 endif(WITH_LIBCEPHFS)
 
 if(WITH_LIBCEPHSQLITE)
