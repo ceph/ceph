@@ -796,42 +796,38 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.omap_get_vals_by_keys(os, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_OMAPSETVALS:
-#if 0
-    if (!pg.get_pgpool().info.supports_omap()) {
+    if (!pg->get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
-#endif
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_set_vals(os, osd_op, txn, *osd_op_params, delta_stats);
     });
   case CEPH_OSD_OP_OMAPSETHEADER:
-#if 0
-    if (!pg.get_pgpool().info.supports_omap()) {
+    if (!pg->get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
-#endif
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_set_header(os, osd_op, txn, *osd_op_params,
         delta_stats);
     });
   case CEPH_OSD_OP_OMAPRMKEYRANGE:
-#if 0
-    if (!pg.get_pgpool().info.supports_omap()) {
+    if (!pg->get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
     }
-#endif
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_remove_range(os, osd_op, txn, delta_stats);
     });
   case CEPH_OSD_OP_OMAPRMKEYS:
-    /** TODO: Implement supports_omap()
-    if (!pg.get_pgpool().info.supports_omap()) {
+    if (!pg->get_pgpool().info.supports_omap()) {
       return crimson::ct_error::operation_not_supported::make();
-    }*/
+    }
     return do_write_op([&osd_op, this](auto& backend, auto& os, auto& txn) {
       return backend.omap_remove_key(os, osd_op, txn, *osd_op_params, delta_stats);
     });
   case CEPH_OSD_OP_OMAPCLEAR:
+    if (!pg->get_pgpool().info.supports_omap()) {
+      return crimson::ct_error::operation_not_supported::make();
+    }
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
       return backend.omap_clear(os, osd_op, txn, *osd_op_params, delta_stats);
     });
