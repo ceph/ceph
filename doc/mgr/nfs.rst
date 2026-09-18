@@ -34,7 +34,8 @@ Create NFS-Ganesha Cluster
    ceph nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] \
           [--ingress-mode {default|keepalive-only|haproxy-standard|haproxy-protocol}] \
           [--ingress-placement <placement>] [--port <int>] \
-          [--enable-rdma] [--rdma_port <int>] [--enable-nfsv3] [-i <spec_file>]
+          [--enable-rdma] [--rdma_port <int>] [--enable-nfsv3] \
+          [--clients-per-pool <int>] [-i <spec_file>]
 
 This creates a common recovery pool for all NFS-Ganesha daemons, a new user based on
 ``cluster_id``, and a common NFS-Ganesha config RADOS object.
@@ -68,6 +69,47 @@ NFS can be deployed on a port other than 2049 (the default) with ``--port <port>
 
 By default, only NFSv4 protocol is enabled. To enable both NFSv3 and NFSv4 protocols,
 add the ``--enable-nfsv3`` flag.
+
+By default, NFS-Ganesha shares a single CephFS client handle among all exports
+of the same filesystem (the default ``cmount_path`` is ``/``).  To spread
+export load across a bounded number of independent CephFS client handles,
+create the NFS cluster with ``--clients-per-pool N`` where ``N`` is an
+integer greater than or equal to 2:
+
+.. prompt:: bash #
+
+   ceph nfs cluster create mynfs --clients-per-pool 3
+
+When the first CephFS export with ``cmount_path=/`` for a filesystem is
+created, cephadm provisions ``N`` distinct CephX users and stores them in a
+``CEPH_USERS`` RADOS object
+(``ceph-users-nfs.<cluster_id>``). NFS-Ganesha loads that object alongside
+the existing export configuration and cycles through the handles in
+round-robin. The export block itself carries the first identity of the pool,
+so the export stays usable on its own.
+
+Exports with a non-root ``cmount_path`` keep a dedicated CephX user, as they
+did before client-pool mode.
+
+Pool users are removed when the last ``cmount_path=/`` export for that
+filesystem is deleted.
+
+``clients_per_pool`` is immutable after cluster creation. It cannot be set or
+changed on an already-running nfs cluster (including after an upgrade). To change
+the pool size, delete the cluster and create a new one. RGW exports are not
+supported by client-pool mode.
+
+Pool CephX keys are rotated with the existing ``nfs cluster rotate-key``
+command. Pool users are treated as export keys: ``CEPH_USERS`` is rewritten
+with the new secrets and Ganesha is notified. Slot 0 of a pool is also the
+FSAL user of that pool's exports, so rotating it refreshes both ``CEPH_USERS``
+and the FSAL block of every export using that pool. The NFS service is not
+redeployed unless daemon keys are also rotated.
+
+.. prompt:: bash #
+
+   ceph nfs cluster rotate-key mynfs --all-daemon-and-export-keys
+   ceph nfs cluster rotate-key mynfs --auth-entities client.nfs.mynfs.cephfs.pool.0
 
 To deploy NFS with a high-availability front-end (virtual IP and load balancer), add the
 ``--ingress`` flag and specify a virtual IP address. This will deploy a combination
@@ -194,6 +236,47 @@ orchestration, these commands check service status:
 
    ceph orch ls --service_name=nfs.<cluster_id>
    ceph orch ls --service_name=ingress.nfs.<cluster_id>
+
+
+Rotate NFS Cluster Keys
+-----------------------
+
+.. prompt:: bash #
+
+   ceph nfs cluster rotate-key <cluster_id> [--all-daemon-and-export-keys] [--auth-entities <entity>...] [--key-type <type>]
+
+Rotate auth keys belonging to an NFS cluster. ``<cluster_id>`` is required.
+
+Which keys get rotated must be requested explicitly: exactly one of
+``--all-daemon-and-export-keys`` or ``--auth-entities`` has to be given. If
+neither (or both) is given, the command fails without rotating anything.
+
+``--all-daemon-and-export-keys`` rotates every auth entity of the cluster,
+including daemon keyrings (for example ``client.nfs.<cluster_id>`` and
+``client.nfs.<daemon_id>-rgw``) and CephFS export keyrings
+(``client.nfs.<cluster_id>.<fs_name>.<hash>`` or, with client-pool mode,
+``client.nfs.<cluster_id>.<fs_name>.pool.<N>``).
+
+``--auth-entities <entity> [<entity>...]`` rotates only the listed entities.
+The names must match the entity names reported by ``ceph auth ls`` (the
+``client.`` prefix may be omitted) and each entity must belong to the cluster.
+Rotating a subset leaves the cluster with a mix of old and new keys: entities
+that are not listed keep their current key until they are rotated separately.
+
+``--key-type <type>`` is optional and is passed through to ``ceph auth rotate``
+(for example ``aes256k``).
+
+After export keys are rotated, matching CephFS exports are updated with the new
+keyrings. In client-pool mode the ``CEPH_USERS`` RADOS object is updated as
+well, and rotating pool slot 0 updates both it and the FSAL credentials of the
+exports that carry it. After any daemon keys are rotated, the NFS service is
+redeployed (``ceph orch redeploy nfs.<cluster_id>``).
+
+For example::
+
+   ceph nfs cluster rotate-key cephfs-nfs1 --all-daemon-and-export-keys --key-type aes256k
+   ceph nfs cluster rotate-key cephfs-nfs1 --auth-entities client.nfs.cephfs-nfs1.cephfs.c44692f7 --key-type aes256k
+   ceph nfs cluster rotate-key cephfs-nfs1 --auth-entities client.nfs.cephfs-nfs1.cephfs.pool.0
 
 
 Updating an NFS Cluster

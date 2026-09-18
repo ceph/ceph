@@ -155,6 +155,21 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf,
                                             earmark_resolver=earmark_resolver)
 
+    @NFSCLICommand('nfs cluster rotate-key', perm='rw')
+    @object_format.Responder()
+    def _cmd_nfs_cluster_rotate_key(self,
+                                    cluster_id: str,
+                                    all_daemon_and_export_keys: bool = False,
+                                    auth_entities: Optional[List[str]] = None,
+                                    key_type: Optional[str] = None) -> Dict[str, Any]:
+        """Rotate NFS cluster/daemon and export auth keys; redeploy service if daemon keys change"""
+        return self.nfs.rotate_keys(
+            cluster_id=cluster_id,
+            all_daemon_and_export_keys=all_daemon_and_export_keys,
+            auth_entities=auth_entities,
+            key_type=key_type
+        )
+
     @NFSCLICommand('nfs cluster create', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_create(self,
@@ -171,6 +186,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 rdma_port: Optional[int] = None,
                                 enable_nfsv3: bool = False,
                                 ingress_placement: Optional[str] = None,
+                                clients_per_pool: Optional[int] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
         cluster_qos_config = None
@@ -223,7 +239,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            tls_ciphers=tls_ciphers,
                                            enable_rdma=enable_rdma,
                                            rdma_port=rdma_port,
-                                           ingress_placement=ingress_placement)
+                                           ingress_placement=ingress_placement,
+                                           clients_per_pool=clients_per_pool)
 
     @NFSCLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
