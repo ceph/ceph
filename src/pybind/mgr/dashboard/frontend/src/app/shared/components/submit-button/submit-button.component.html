@@ -10,10 +10,11 @@
   modal-primary-focus
 >
   <ng-content></ng-content>
-  <cds-loading
-    [isActive]="loading"
-    [overlay]="false"
-    size="sm"
-    *ngIf="loading"
-  ></cds-loading>
+  @if (loading) {
+    <cds-loading
+      [isActive]="loading"
+      [overlay]="false"
+      size="sm"
+    ></cds-loading>
+  }
 </button>

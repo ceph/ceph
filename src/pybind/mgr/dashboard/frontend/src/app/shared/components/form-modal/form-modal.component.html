@@ -5,12 +5,11 @@
   [hasScrollingContent]="true"
 >
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3
-      cdsModalHeaderHeading
-      *ngIf="titleText"
-    >
-      {{ titleText }}
-    </h3>
+    @if (titleText) {
+      <h3 cdsModalHeaderHeading>
+        {{ titleText }}
+      </h3>
+    }
   </cds-modal-header>
   <div
     cdsModalContent
@@ -21,110 +20,111 @@
       #formDir="ngForm"
       novalidate
     >
-      <p
-        *ngIf="message"
-        id="description"
-      >
-        {{ message }}
-      </p>
-      <ng-container *ngFor="let field of fields">
+      @if (message) {
+        <p id="description">
+          {{ message }}
+        </p>
+      }
+      @for (field of fields; track field) {
         <div class="form-item">
-          <cds-text-label
-            *ngIf="field.type === 'text'"
-            [labelInputID]="field.name"
-            [invalid]="getError(field)"
-            [invalidText]="getError(field)"
-            [cdRequiredField]="field?.required === true ? field.label : ''"
-            i18n
-          >
-            {{ field.label }}
-            <input
-              cdsText
-              type="text"
-              [id]="field.name"
-              [name]="field.name"
-              [formControlName]="field.name"
+          @if (field.type === 'text') {
+            <cds-text-label
+              [labelInputID]="field.name"
               [invalid]="getError(field)"
-              autofocus
-            />
-          </cds-text-label>
-          <cds-number
-            *ngIf="field.type === 'number'"
-            [invalid]="getError(field)"
-            [invalidText]="getError(field)"
-            [label]="field.label"
-            [cdRequiredField]="field?.required === true ? field.label : ''"
-            [formControlName]="field.name"
-            [id]="field.name"
-            i18n
-          ></cds-number>
-          <cds-text-label
-            *ngIf="field.type === 'binary'"
-            [labelInputID]="field.name"
-            [invalid]="getError(field)"
-            [invalidText]="getError(field)"
-            [cdRequiredField]="field?.required === true ? field.label : ''"
-            i18n
-          >
-            {{ field.label }}
-            <input
-              type="text"
-              [id]="field.name"
-              [name]="field.name"
+              [invalidText]="getError(field)"
+              [cdRequiredField]="field?.required === true ? field.label : ''"
+              i18n
+            >
+              {{ field.label }}
+              <input
+                cdsText
+                type="text"
+                [id]="field.name"
+                [name]="field.name"
+                [formControlName]="field.name"
+                [invalid]="getError(field)"
+                autofocus
+              />
+            </cds-text-label>
+          }
+          @if (field.type === 'number') {
+            <cds-number
+              [invalid]="getError(field)"
+              [invalidText]="getError(field)"
+              [label]="field.label"
+              [cdRequiredField]="field?.required === true ? field.label : ''"
               [formControlName]="field.name"
-              cdsText
-              cdDimlessBinary
-            />
-          </cds-text-label>
-          <cds-select
-            *ngIf="field.type === 'select'"
-            [label]="field.label"
-            [for]="field.name"
-            [id]="field.name"
-            [formControlName]="field.name"
-            [options]="field?.typeConfig?.options"
-            [placeholder]="field?.typeConfig?.placeholder"
-            [invalid]="getError(field)"
-            [invalidText]="getError(field)"
-            [cdRequiredField]="field?.required === true ? field.label : ''"
-            i18n
-          >
-            <option
-              *ngIf="field?.typeConfig?.placeholder"
-              [ngValue]="null"
+              [id]="field.name"
+              i18n
+            ></cds-number>
+          }
+          @if (field.type === 'binary') {
+            <cds-text-label
+              [labelInputID]="field.name"
+              [invalid]="getError(field)"
+              [invalidText]="getError(field)"
+              [cdRequiredField]="field?.required === true ? field.label : ''"
+              i18n
             >
-              {{ field?.typeConfig?.placeholder }}
-            </option>
-            <option
-              *ngFor="let option of field?.typeConfig?.options"
-              [value]="option.value"
+              {{ field.label }}
+              <input
+                type="text"
+                [id]="field.name"
+                [name]="field.name"
+                [formControlName]="field.name"
+                cdsText
+                cdDimlessBinary
+              />
+            </cds-text-label>
+          }
+          @if (field.type === 'select') {
+            <cds-select
+              [label]="field.label"
+              [for]="field.name"
+              [id]="field.name"
+              [formControlName]="field.name"
+              [options]="field?.typeConfig?.options"
+              [placeholder]="field?.typeConfig?.placeholder"
+              [invalid]="getError(field)"
+              [invalidText]="getError(field)"
+              [cdRequiredField]="field?.required === true ? field.label : ''"
+              i18n
             >
-              {{ option.text }}
-            </option>
-          </cds-select>
-
-          <cds-combo-box
-            *ngIf="field.type === 'select-badges'"
-            type="multi"
-            selectionFeedback="top-after-reopen"
-            [label]="field.label"
-            [for]="field.name"
-            [formControlName]="field.name"
-            itemValueKey="content"
-            [id]="field.name"
-            [invalid]="getError(field)"
-            [invalidText]="getError(field)"
-            [appendInline]="false"
-            cdDynamicInputCombobox
-            (updatedItems)="onLabelsUpdated(field, $event)"
-            [items]="field?.typeConfig?.options"
-            [cdRequiredField]="field?.required === true ? field.label : ''"
-            i18n
-          >
-            <cds-dropdown-list></cds-dropdown-list>
-          </cds-combo-box>
+              @if (field?.typeConfig?.placeholder) {
+                <option [ngValue]="null">
+                  {{ field?.typeConfig?.placeholder }}
+                </option>
+              }
+              @for (option of field?.typeConfig?.options; track option) {
+                <option [value]="option.value">
+                  {{ option.text }}
+                </option>
+              }
+            </cds-select>
+          }
+          @if (field.type === 'select-badges') {
+            <cds-combo-box
+              type="multi"
+              selectionFeedback="top-after-reopen"
+              [label]="field.label"
+              [for]="field.name"
+              [formControlName]="field.name"
+              itemValueKey="content"
+              [id]="field.name"
+              [invalid]="getError(field)"
+              [invalidText]="getError(field)"
+              [appendInline]="false"
+              cdDynamicInputCombobox
+              (updatedItems)="onLabelsUpdated(field, $event)"
+              [items]="field?.typeConfig?.options"
+              [cdRequiredField]="field?.required === true ? field.label : ''"
+              i18n
+            >
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+          }
         </div>
-      </ng-container>
+      }
     </form>
   </div>
   <cd-form-button-panel

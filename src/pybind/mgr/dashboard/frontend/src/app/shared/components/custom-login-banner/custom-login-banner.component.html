@@ -1,6 +1,5 @@
-<p
-  class="login-text"
-  *ngIf="bannerText$ | async as bannerText"
->
-  {{ bannerText }}
-</p>
+@if (bannerText$ | async; as bannerText) {
+  <p class="login-text">
+    {{ bannerText }}
+  </p>
+}

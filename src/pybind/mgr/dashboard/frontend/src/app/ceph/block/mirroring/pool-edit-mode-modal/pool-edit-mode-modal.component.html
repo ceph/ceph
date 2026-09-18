@@ -41,20 +41,20 @@
           cdRequiredField="Mode"
           i18n
         >
-          <option
-            *ngFor="let mirrorMode of mirrorModes"
-            [value]="mirrorMode.id"
-          >
-            {{ mirrorMode.name }}
-          </option>
+          @for (mirrorMode of mirrorModes; track mirrorMode) {
+            <option [value]="mirrorMode.id">
+              {{ mirrorMode.name }}
+            </option>
+          }
         </cds-select>
         <ng-template #mirrorModeError>
-          <span
-            class="invalid-feedback"
-            *ngIf="editModeForm.showError('mirrorMode', formDir, 'cannotDisable')"
-            i18n
-            >Peer clusters must be removed prior to disabling mirror.</span
-          >
+          @if (editModeForm.showError('mirrorMode', formDir, 'cannotDisable')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Peer clusters must be removed prior to disabling mirror.</span
+            >
+          }
         </ng-template>
       </div>
     </form>

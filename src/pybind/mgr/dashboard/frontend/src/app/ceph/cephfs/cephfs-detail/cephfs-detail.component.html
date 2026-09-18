@@ -24,14 +24,13 @@
 </div>
 
 <legend i18n>MDS performance counters</legend>
-<div
-  class="row"
-  *ngFor="let mdsCounter of objectValues(data.mdsCounters); trackBy: trackByFn"
->
-  <div class="col-md-12">
-    <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
+@for (mdsCounter of objectValues(data.mdsCounters); track trackByFn($index, mdsCounter)) {
+  <div class="row">
+    <div class="col-md-12">
+      <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
+    </div>
   </div>
-</div>
+}
 
 <!-- templates -->
 <ng-template

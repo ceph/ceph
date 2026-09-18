@@ -15,29 +15,31 @@
     >&nbsp;
   </button>
   <div ngbDropdownMenu>
-    <button
-      ngbDropdownItem
-      (click)="download('json')"
-      type="button"
-      *ngIf="objectItem"
-    >
-      <svg
-        [cdsIcon]="icons.code"
-        size="16"
-      ></svg>
-      <span>&nbsp;JSON</span>
-    </button>
-    <button
-      ngbDropdownItem
-      (click)="download()"
-      *ngIf="textItem"
-      type="button"
-    >
-      <svg
-        [cdsIcon]="icons.document"
-        size="16"
-      ></svg>
-      <span>&nbsp;Text</span>
-    </button>
+    @if (objectItem) {
+      <button
+        ngbDropdownItem
+        (click)="download('json')"
+        type="button"
+      >
+        <svg
+          [cdsIcon]="icons.code"
+          size="16"
+        ></svg>
+        <span>&nbsp;JSON</span>
+      </button>
+    }
+    @if (textItem) {
+      <button
+        ngbDropdownItem
+        (click)="download()"
+        type="button"
+      >
+        <svg
+          [cdsIcon]="icons.document"
+          size="16"
+        ></svg>
+        <span>&nbsp;Text</span>
+      </button>
+    }
   </div>
 </div>

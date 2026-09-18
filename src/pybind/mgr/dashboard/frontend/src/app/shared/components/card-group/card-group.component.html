@@ -1,15 +1,14 @@
-<div
-  class="row"
-  *ngIf="groupTitle"
->
-  <div class="info-group-title">
-    <span
-      i18n
-      data-testid="group-title"
-      >{{ groupTitle }}</span
-    >
+@if (groupTitle) {
+  <div class="row">
+    <div class="info-group-title">
+      <span
+        i18n
+        data-testid="group-title"
+        >{{ groupTitle }}</span
+      >
+    </div>
   </div>
-</div>
+}
 
 <div class="row">
   <ng-content></ng-content>
