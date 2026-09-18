@@ -26,6 +26,11 @@ export class RbdService extends ApiClient {
     return _.indexOf(pool.application_metadata, 'rbd') !== -1 && !pool.pool_name.includes('/');
   }
 
+  isRBDCapablePool(pool: any): boolean {
+    return pool.type === 'replicated' ||
+      (pool.type === 'erasure' && (pool.flags_names || '').includes('supports_omap'));
+  }
+
   create(rbd: any) {
     return this.http.post('api/block/image', rbd, { observe: 'response' });
   }

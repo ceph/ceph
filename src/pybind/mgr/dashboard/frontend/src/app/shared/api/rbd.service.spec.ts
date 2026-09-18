@@ -170,6 +170,32 @@ describe('RbdService', () => {
     });
   });
 
+  describe('isRBDCapablePool', () => {
+    it('should return true for replicated pools', () => {
+      expect(service.isRBDCapablePool({ type: 'replicated', flags_names: '' })).toBe(true);
+    });
+
+    it('should return true for erasure pools with supports_omap', () => {
+      expect(
+        service.isRBDCapablePool({ type: 'erasure', flags_names: 'ec_overwrites,supports_omap' })
+      ).toBe(true);
+    });
+
+    it('should return false for erasure pools without supports_omap', () => {
+      expect(
+        service.isRBDCapablePool({ type: 'erasure', flags_names: 'ec_overwrites' })
+      ).toBe(false);
+    });
+
+    it('should return false for erasure pools with no flags', () => {
+      expect(service.isRBDCapablePool({ type: 'erasure', flags_names: '' })).toBe(false);
+    });
+
+    it('should handle missing flags_names', () => {
+      expect(service.isRBDCapablePool({ type: 'erasure' })).toBe(false);
+    });
+  });
+
   describe('should parse image spec', () => {
     it('with namespace', () => {
       const imageSpec = ImageSpec.fromString('mypool/myns/myimage');
