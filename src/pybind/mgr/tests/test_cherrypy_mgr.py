@@ -2,8 +2,73 @@ import unittest
 from unittest import mock
 import cherrypy
 import cherrypy_mgr
+import logging
 
-from cherrypy_mgr import CherryPyMgr
+from cherrypy_mgr import CherryPyMgr, CherryPyAccessFilter
+
+
+class TestCherryPyAccessFilter(unittest.TestCase):
+    def setUp(self):
+        self.filter = CherryPyAccessFilter(interval=300.0)
+        self.monotonic_patcher = mock.patch('cherrypy_mgr.time.monotonic', return_value=100.0)
+        self.mock_monotonic = self.monotonic_patcher.start()
+
+    def tearDown(self):
+        self.monotonic_patcher.stop()
+
+    def _record(self, name: str, message: str) -> logging.LogRecord:
+        return logging.LogRecord(name, logging.INFO, __file__, 0, message, (), None)
+
+    def test_rate_limits_200_within_interval(self):
+        record = self._record(
+            'cherrypy.access.123',
+            '127.0.0.1 - - [time] "GET /metrics HTTP/1.1" 200 1 "" "Prometheus/3.6.0"'
+        )
+
+        self.assertTrue(self.filter.filter(record))
+        self.assertFalse(self.filter.filter(record))
+
+    def test_non_200_always_passes(self):
+        record = self._record(
+            'cherrypy.access.123',
+            '127.0.0.1 - - [time] "GET /metrics HTTP/1.1" 500 1 "" "Prometheus/3.6.0"'
+        )
+
+        self.assertTrue(self.filter.filter(record))
+        self.assertTrue(self.filter.filter(record))
+        self.assertEqual(self.filter._last, {})
+
+    def test_regex_key_extraction_without_query_params(self):
+        record = self._record(
+            'cherrypy.access.123',
+            '127.0.0.1 - - [time] "GET /metrics HTTP/1.1" 200 1 "" "Prometheus/3.6.0"'
+        )
+
+        self.assertTrue(self.filter.filter(record))
+        self.assertEqual(self.filter._last, {'/metrics': 100.0})
+
+    def test_regex_key_extraction_with_query_params(self):
+        record = self._record(
+            'cherrypy.access.123',
+            '127.0.0.1 - - [time] "GET /sd/prometheus/sd-config?service=ceph HTTP/1.1" 200 1 "" "Prometheus/3.6.0"'
+        )
+
+        self.assertTrue(self.filter.filter(record))
+        self.assertEqual(
+            self.filter._last,
+            {'/sd/prometheus/sd-config?service=ceph': 100.0}
+        )
+
+    def test_fallback_when_regex_does_not_match(self):
+        message = 'raw" 200 message without an HTTP request pattern'
+        record = self._record('cherrypy.access.123', message)
+
+        self.assertTrue(self.filter.filter(record))
+        self.assertEqual(
+            self.filter._last,
+            {'raw" 200 message without an HTTP request pattern': 100.0}
+        )
+
 
 class TestCherryPyMgr(unittest.TestCase):
     def setUp(self):
