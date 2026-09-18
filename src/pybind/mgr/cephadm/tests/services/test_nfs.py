@@ -750,6 +750,51 @@ class TestNFS:
                 assert "client_oc_size = 1048576;" in ganesha_conf
                 assert "client_oc_max_dirty = 0;" in ganesha_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_enable_metrics(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """NFS metrics: Enable_Metrics rendered only when enable_nfs_metrics=True."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            # Default (enable_nfs_metrics=False): no Enable_Metrics in config
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']))
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Monitoring_Port = 9587;" in ganesha_conf
+                assert "Enable_Metrics" not in ganesha_conf
+
+            # Explicit enable_nfs_metrics=True: Enable_Metrics rendered
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
+                                      enable_nfs_metrics=True)
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Monitoring_Port = 9587;" in ganesha_conf
+                assert "Enable_Metrics = true;" in ganesha_conf
+
+
+def test_nfs_enable_nfs_metrics_spec_roundtrip():
+    """Verify enable_nfs_metrics survives JSON serialization round-trip."""
+    from ceph.deployment.service_spec import ServiceSpec
+    spec = NFSServiceSpec(service_id="foo", enable_nfs_metrics=True)
+    json_data = spec.to_json()
+    assert json_data['spec']['enable_nfs_metrics'] is True
+
+    restored = ServiceSpec.from_json(json_data)
+    assert restored.enable_nfs_metrics is True
+
+    # Default (False) should not appear in serialized output
+    spec_default = NFSServiceSpec(service_id="bar")
+    json_default = spec_default.to_json()
+    assert 'enable_nfs_metrics' not in json_default.get('spec', {})
+
 
 def test_nfs_placement_count_per_host_rejected():
     spec = NFSServiceSpec(

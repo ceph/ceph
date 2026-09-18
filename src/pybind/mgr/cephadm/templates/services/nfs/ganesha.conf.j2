@@ -20,6 +20,9 @@ NFS_CORE_PARAM {
 {% if monitoring_port %}
         Monitoring_Port = {{ monitoring_port }};
 {% endif %}
+{% if enable_nfs_metrics %}
+        Enable_Metrics = true;
+{% endif %}
 {% if bind_addr %}
         Bind_addr = {{ bind_addr }};
 {% endif %}
