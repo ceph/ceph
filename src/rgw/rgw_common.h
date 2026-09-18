@@ -1320,9 +1320,11 @@ struct req_state : DoutPrefixProvider {
   std::shared_ptr<RateLimiter> ratelimit_data;
   RGWRateLimitInfo user_ratelimit;
   RGWRateLimitInfo bucket_ratelimit;
+  RGWRateLimitInfo account_ratelimit;
   int64_t ratelimit_retry_after{0};
   std::string ratelimit_bucket_marker;
   std::string ratelimit_user_name;
+  std::optional<RGWAccountInfo> account;
   bool content_started{false};
   RGWFormat format{RGWFormat::PLAIN};
   ceph::Formatter *formatter{nullptr};
