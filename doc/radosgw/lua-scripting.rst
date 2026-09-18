@@ -22,6 +22,8 @@ All Lua language features can be used in all contexts.
 An execution of a script in a context can use up to 128K byte of memory. This include all libraries used by Lua, but not the memory which is managed by the RGW itself, and may be accessed from Lua.
 To change this default value, use the ``rgw_lua_max_memory_per_state`` configuration parameter. Note that the basic overhead of Lua with its standard libraries is ~32K bytes. To disable the limit, use zero.
 By default, the execution of a Lua script is limited to a maximum runtime of 1000 milliseconds. This limit can be changed using the ``rgw_lua_max_runtime_per_state`` configuration parameter. If a Lua script exceeds this runtime, it will be terminated. To disable the runtime limit, use zero.
+Scripts maintain separate local scopes during execution. When a global variable is declared within a script, it remains confined to that script's scope and cannot be accessed by other scripts. The execution order follows lexicographical sorting of script names with the unnamed script running first. CPU and memory limits are enforced per script, except in the ``background`` context, where all scripts share the same resource limits. Multiple scripts can be specified for all contexts except ``getdata`` and ``putdata``. The name ``default`` is reserved for the unnamed script.
+
 
 .. warning:: Be cautious when modifying the memory limit. If the current memory usage exceeds the newly set limit, all previously stored data in the background state will be lost.
 
@@ -50,27 +52,34 @@ To upload a script:
 
 ::
 
-   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postauth|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postauth|postrequest|background|getdata|putdata} [--tenant={tenant-name}] [--script-name={script-name}]
 
 * When uploading a script with the ``background`` context, a tenant name should not be specified.
-
+* When uploading a script with the ``getdata`` or ``putdata`` contexts, a script name should not be specified.
+* When uploading a script with the name ``default``, it is mapped to an empty string (``""``), which is equivalent to omitting the ``--script-name`` flag entirely.
 ::
 
-  # cephadm shell radosgw-admin script put --infile=/rootfs/{lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+  # cephadm shell radosgw-admin script put --infile=/rootfs/{lua-file-path} --context={prerequest|postauth|postrequest|background|getdata|putdata} [--tenant={tenant-name}] [--script-name={script-name}]
 
 
 To print the content of the script to standard output:
 
 ::
 
-   # radosgw-admin script get --context={preRequest|postAuth|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script get --context={preRequest|postAuth|postRequest|background|getdata|putdata} [--tenant={tenant-name}] [--script-name={script-name}]
 
+
+To list the scripts to standard output:
+
+::
+
+   # radosgw-admin script list --context={prerequest|postauth|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 To remove the script:
 
 ::
 
-   # radosgw-admin script rm --context={preRequest|postAuth|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script rm --context={preRequest|postAuth|postRequest|background|getdata|putdata} [--tenant={tenant-name}] [--script-name={script-name}]
 
 
 Package Management via CLI
