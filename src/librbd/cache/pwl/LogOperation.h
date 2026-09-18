@@ -12,8 +12,6 @@ namespace librbd {
 namespace cache {
 namespace pwl {
 
-struct WriteBufferAllocation;
-
 class WriteLogOperationSet;
 
 class WriteLogOperation;
@@ -51,17 +49,12 @@ public:
   virtual void appending() = 0;
   virtual void complete(int r) = 0;
   virtual void mark_log_entry_completed() {};
-  virtual bool reserved_allocated() const {
-    return false;
-  }
   virtual bool is_writing_op() const {
     return false;
   }
   virtual void init_op(uint64_t current_sync_gen, bool persist_on_flush,
                     uint64_t last_op_sequence_num, Context *write_persist,
                     Context *write_append) {};
-  virtual void copy_bl_to_cache_buffer(
-      std::vector<WriteBufferAllocation>::iterator allocation) {};
 };
 
 class SyncPointLogOperation : public GenericLogOperation {
@@ -115,9 +108,6 @@ public:
   void mark_log_entry_completed() override{
     sync_point->log_entry->writes_completed++;
   }
-  bool reserved_allocated() const override {
-    return true;
-  }
   bool is_writing_op() const override {
     return true;
   }
@@ -134,7 +124,6 @@ public:
   std::shared_ptr<WriteLogEntry> log_entry;
   bufferlist bl;
   bool is_writesame = false;
-  WriteBufferAllocation *buffer_alloc = nullptr;
   WriteLogOperation(WriteLogOperationSet &set,
                     uint64_t image_offset_bytes,
                     uint64_t write_bytes, CephContext *cct,
@@ -148,7 +137,6 @@ public:
   WriteLogOperation(const WriteLogOperation&) = delete;
   WriteLogOperation &operator=(const WriteLogOperation&) = delete;
   void init(bool has_data,
-            std::vector<WriteBufferAllocation>::iterator allocation,
             uint64_t current_sync_gen, uint64_t last_op_sequence_num,
             bufferlist &write_req_bl, uint64_t buffer_offset,
             bool persist_on_flush);
@@ -207,9 +195,6 @@ public:
   DiscardLogOperation &operator=(const DiscardLogOperation&) = delete;
   const std::shared_ptr<GenericLogEntry> get_log_entry() override {
     return log_entry;
-  }
-  bool reserved_allocated() const override {
-    return false;
   }
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,

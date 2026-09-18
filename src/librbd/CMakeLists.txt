@@ -5,17 +5,12 @@ set(librbd_types_srcs
   watcher/Types.cc
   WatchNotifyTypes.cc)
 
-if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
+if(WITH_RBD_SSD_CACHE)
  list(APPEND librbd_types_srcs cache/pwl/Types.cc)
 endif()
 
 add_library(rbd_types STATIC
   ${librbd_types_srcs})
-
-if (WITH_RBD_RWL)
-  target_link_libraries(rbd_types
-    PUBLIC pmdk::pmemobj)
-endif()
 
 set(librbd_internal_srcs
   AsioEngine.cc
@@ -271,7 +266,7 @@ set_target_properties(librbd_plugin_parent_cache PROPERTIES
 install(TARGETS librbd_plugin_parent_cache DESTINATION ${librbd_plugins_dir})
 add_dependencies(librbd_plugins librbd_plugin_parent_cache)
 
-if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
+if(WITH_RBD_SSD_CACHE)
   set(rbd_plugin_pwl_srcs
     cache/WriteLogImageDispatch.cc
     cache/pwl/AbstractWriteLog.cc
@@ -285,26 +280,12 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     cache/pwl/ShutdownRequest.cc
     cache/pwl/SyncPoint.cc
     cache/pwl/Types.cc
-    plugin/WriteLogImageCache.cc)
-
-    if(WITH_RBD_SSD_CACHE)
-      set(rbd_plugin_pwl_srcs
-        ${rbd_plugin_pwl_srcs}
-        cache/pwl/ssd/LogEntry.cc
-        cache/pwl/ssd/LogOperation.cc
-        cache/pwl/ssd/ReadRequest.cc
-        cache/pwl/ssd/Request.cc
-        cache/pwl/ssd/WriteLog.cc)
-    endif()
-    if(WITH_RBD_RWL)
-      set(rbd_plugin_pwl_srcs
-        ${rbd_plugin_pwl_srcs}
-        cache/pwl/rwl/WriteLog.cc
-        cache/pwl/rwl/LogEntry.cc
-        cache/pwl/rwl/LogOperation.cc
-        cache/pwl/rwl/ReadRequest.cc
-        cache/pwl/rwl/Request.cc)
-    endif()
+    plugin/WriteLogImageCache.cc
+    cache/pwl/ssd/LogEntry.cc
+    cache/pwl/ssd/LogOperation.cc
+    cache/pwl/ssd/ReadRequest.cc
+    cache/pwl/ssd/Request.cc
+    cache/pwl/ssd/WriteLog.cc)
 
   add_library(librbd_plugin_pwl_cache SHARED
     ${rbd_plugin_pwl_srcs})
@@ -315,12 +296,6 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     libneorados
     librados
     StdFilesystem::filesystem)
-
-  if(WITH_RBD_RWL)
-    target_link_libraries(librbd_plugin_pwl_cache
-      PUBLIC pmdk::pmemobj
-      PRIVATE pmdk::pmem)
-  endif()
 
   set_target_properties(librbd_plugin_pwl_cache PROPERTIES
     OUTPUT_NAME ceph_librbd_pwl_cache

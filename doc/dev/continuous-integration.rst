@@ -205,9 +205,6 @@ libboost
 libzbd
     packages `libzbd`_ . The upstream libzbd includes debian packaging already.
 
-libpmem
-    packages `pmdk`_ .
-
 .. note::
 
    please ensure that the package version and the release number of the
@@ -218,7 +215,6 @@ libpmem
 
 .. _boost: https://www.boost.org
 .. _libzbd: https://github.com/westerndigitalcorporation/libzbd
-.. _pmdk: https://github.com/pmem/pmdk
 
 But in addition to these libraries, ``ceph-mgr-dashboard``'s frontend uses lots of
 JavaScript packages. Quite a few of them are not packaged by distros. Not to
@@ -232,7 +228,6 @@ libraries in our dist tarball. They are
 
 - boost
 - liburing
-- pmdk
 
 ``make-dist`` is a script used by our CI pipeline to create dist tarball so the
 tarball can be used to build the Ceph packages in a clean room environment. When
