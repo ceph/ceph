@@ -282,9 +282,6 @@ class CephMgrCommands(Directive):
                          'rook.rook_client.ceph',
                          'rook.rook_client._helper',
                          'cherrypy=3.2.3']
-        # make diskprediction_local happy
-        mock_imports += ['numpy',
-                         'scipy']
         # make cephadm happy
         mock_imports += ['cherrypy.process',
                          'cherrypy.process.servers',
