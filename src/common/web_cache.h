@@ -433,6 +433,7 @@ bool WebCache<Key, Value>::remove_if(
         sieve_remove_unmutexed(_sieve_queue, _sieve_hand, search->second);
     _lookup.erase(search);
     _sieve_hand = hand_moved;
+    perf_set(Metric::size, _lookup.size());
     return true;
   }
   return false;
