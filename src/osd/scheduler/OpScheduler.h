@@ -95,7 +95,7 @@ public:
     queue(std::forward<Args>(args)...)
   {}
 
-  void enqueue(OpSchedulerItem &&item) final {
+  void enqueue(OpSchedulerItem &&item) override {
     unsigned priority = item.get_priority();
     unsigned cost = item.get_cost();
 
@@ -107,7 +107,7 @@ public:
 	item.get_owner(), priority, cost, std::move(item));
   }
 
-  void enqueue_front(OpSchedulerItem &&item) final {
+  void enqueue_front(OpSchedulerItem &&item) override {
     unsigned priority = item.get_priority();
     unsigned cost = item.get_cost();
     if (priority >= cutoff)
@@ -120,29 +120,29 @@ public:
 	priority, cost, std::move(item));
   }
 
-  bool empty() const final {
+  bool empty() const override {
     return queue.empty();
   }
 
-  WorkItem dequeue() final {
+  WorkItem dequeue() override {
     return queue.dequeue();
   }
 
-  void dump(ceph::Formatter &f) const final {
+  void dump(ceph::Formatter &f) const override {
     return queue.dump(&f);
   }
 
-  void print(std::ostream &out) const final {
+  void print(std::ostream &out) const override {
     out << "ClassedOpQueueScheduler(queue=";
     queue.print(out);
     out << ", cutoff=" << cutoff << ")";
   }
 
-  op_queue_type_t get_type() const final {
+  op_queue_type_t get_type() const override {
     return queue.get_type();
   }
 
-  ~ClassedOpQueueScheduler() final {};
+  virtual ~ClassedOpQueueScheduler() {};
 };
 
 }
