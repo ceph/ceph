@@ -32,7 +32,6 @@ set(osd_srcs
   Watch.cc
   Session.cc
   SnapMapper.cc
-  osd_types.cc
   scheduler/OpScheduler.cc
   scheduler/OpSchedulerItem.cc
   scheduler/mClockScheduler.cc
