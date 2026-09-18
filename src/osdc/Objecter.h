@@ -325,7 +325,6 @@ struct ObjectOperation {
     else
       add_pgls_filter(CEPH_OSD_OP_PGLS_FILTER, count, filter, cookie,
 		      start_epoch);
-    flags |= CEPH_OSD_FLAG_PGOP;
   }
 
   void pg_nls(uint64_t count, const ceph::buffer::list& filter,
@@ -335,7 +334,6 @@ struct ObjectOperation {
     else
       add_pgls_filter(CEPH_OSD_OP_PGNLS_FILTER, count, filter, cookie,
 		      start_epoch);
-    flags |= CEPH_OSD_FLAG_PGOP;
   }
 
   void scrub_ls(const librados::object_id_t& start_after,
@@ -3002,8 +3000,9 @@ private:
               extra_read_flags.load(std::memory_order_relaxed) |
               CEPH_OSD_FLAG_READ;
 
-    // If the op is rwordered, strip out the balanced and localized flags.
-    if (flags & CEPH_OSD_FLAG_RWORDERED) {
+    // If the op is rwordered or a PG op, strip out the balanced and localized
+    // flags since those ops must be handled by the primary OSD.
+    if (flags & (CEPH_OSD_FLAG_RWORDERED | CEPH_OSD_FLAG_PGOP)) {
       ret &= ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
     }
     return ret;
@@ -3162,8 +3161,9 @@ public:
     snapid_t snapid, ceph::buffer::list *pbl, int flags,
     Context *onack, version_t *objver = NULL,
     int *data_offset = NULL,
-    uint64_t features = 0) {
-    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, -1, onack, objver,
+    uint64_t features = 0,
+    int mask = ~0) {
+    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, mask, onack, objver,
 			    data_offset);
     if (features)
       o->features = features;
@@ -3172,13 +3172,26 @@ public:
     return tid;
   }
 
+  ceph_tid_t read_primary(
+    const object_t& oid, const object_locator_t& oloc,
+    ObjectOperation& op,
+    snapid_t snapid, ceph::buffer::list *pbl, int flags,
+    Context *onack, version_t *objver = NULL,
+    int *data_offset = NULL,
+    uint64_t features = 0) {
+    int mask = ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
+    return read(oid, oloc, op, snapid, pbl, flags, onack, objver,
+                data_offset, features, mask);
+  }
+
   void read(const object_t& oid, const object_locator_t& oloc,
 	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
 	    int flags, Op::OpComp onack,
 	    version_t *objver = nullptr, int *data_offset = nullptr,
 	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr,
-	    uint64_t subsystem = 0) {
-    Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags),
+	    uint64_t subsystem = 0,
+            int mask = ~0) {
+    Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags) & mask,
 		   std::move(onack), objver,
 		   data_offset, parent_trace, subsystem);
     o->priority = op.priority;
@@ -3197,16 +3210,26 @@ public:
     op.clear();
     op_submit(o);
   }
+  void read_primary(const object_t& oid, const object_locator_t& oloc,
+	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
+	    int flags, Op::OpComp onack,
+	    version_t *objver = nullptr, int *data_offset = nullptr,
+	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr,
+	    uint64_t subsystem = 0) {
+    int mask = ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
+    read(oid, oloc, std::move(op), snapid, pbl, flags, std::move(onack),
+         objver, data_offset, features, parent_trace, subsystem, mask);
+  }
 
   Op *prepare_pg_read_op(
     uint32_t hash, object_locator_t oloc,
     ObjectOperation& op, ceph::buffer::list *pbl, int flags,
     Context *onack, epoch_t *reply_epoch,
     int *ctx_budget) {
+    flags |= CEPH_OSD_FLAG_PGOP | CEPH_OSD_FLAG_IGNORE_OVERLAY;
     Op *o = new Op(object_t(), oloc,
 		   std::move(op.ops),
-		   get_read_flags(flags) |
-		   CEPH_OSD_FLAG_IGNORE_OVERLAY,
+		   get_read_flags(flags),
 		   onack, NULL);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
@@ -3242,10 +3265,10 @@ public:
     ObjectOperation& op, ceph::buffer::list *pbl, int flags,
     Op::OpComp onack, epoch_t *reply_epoch, int *ctx_budget) {
     ceph_tid_t tid;
+    flags |= CEPH_OSD_FLAG_PGOP | CEPH_OSD_FLAG_IGNORE_OVERLAY;
     Op *o = new Op(object_t(), oloc,
 		   std::move(op.ops),
-		   flags | global_op_flags | CEPH_OSD_FLAG_READ |
-		   CEPH_OSD_FLAG_IGNORE_OVERLAY,
+		   get_read_flags(flags),
 		   std::move(onack), nullptr);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
