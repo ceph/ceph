@@ -290,6 +290,9 @@ Pool specific commands
 :command:`rmsnap` *foo*
   Remove pool snapshot named *foo*.
 
+:command:`rollbacksnap` *foo*
+  Rollback the entire snapshot named *foo*.
+
 :command:`bench` *seconds* *mode* [ -b *objsize* ] [ -t *threads* ]
   Benchmark for *seconds*. The mode can be *write*, *seq*, or
   *rand*. *seq* and *rand* are read benchmarks, either

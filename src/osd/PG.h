@@ -850,7 +850,12 @@ protected:
 
   // ------------------
   interval_set<snapid_t> snap_trimq;
+  // pending per-PG rollback work
+  std::map<snapid_t, rollback_snap_info_t> rollback_trimq;
+  // count of in-flight JIT rollback transactions per rollback_id
+  std::map<snapid_t, int> jit_rollback_inflight;
   std::set<snapid_t> snap_trimq_repeat;
+  std::set<snapid_t> rollback_trimq_repeat;
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */

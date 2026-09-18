@@ -117,6 +117,8 @@
 
 #include "messages/MMonGetPurgedSnaps.h"
 #include "messages/MMonGetPurgedSnapsReply.h"
+#include "messages/MMonGetCompletedRollbacks.h"
+#include "messages/MMonGetCompletedRollbacksReply.h"
 
 #include "common/perf_counters.h"
 #include "common/Timer.h"
@@ -3305,6 +3307,19 @@ will start to track new ops received afterwards.";
     }
   }
 
+  else if (prefix == "reset_completed_rollbacks_last") {
+    lock_guard l(osd_lock);
+    superblock.completed_rollbacks_last = 0;
+    ObjectStore::Transaction t;
+    dout(10) << __func__ << " updating superblock" << dendl;
+    write_superblock(cct, superblock, t);
+    ret = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+    if (ret < 0) {
+      ss << "Error writing superblock: " << cpp_strerror(ret);
+      goto out;
+    }
+  }
+
   else if (prefix == "dump_osd_network") {
     lock_guard l(osd_lock);
     int64_t value = 0;
@@ -4448,6 +4463,11 @@ void OSD::final_init()
     "reset_purged_snaps_last",
     asok_hook,
     "Reset the superblock's purged_snaps_last");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "reset_completed_rollbacks_last",
+    asok_hook,
+    "Reset the superblock's completed_rollbacks_last");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
     "scrubdebug "						\
@@ -6936,10 +6956,17 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     derr << "osdmap fullness state needs update" << dendl;
     send_full_update();
   } else if (monmap.min_mon_release >= ceph_release_t::octopus &&
-	     superblock.purged_snaps_last < superblock.current_epoch) {
+      superblock.purged_snaps_last < superblock.current_epoch) {
     dout(10) << __func__ << " purged_snaps_last " << superblock.purged_snaps_last
-	     << " < newest_map " << superblock.current_epoch << dendl;
+      << " < newest_map " << superblock.current_epoch << dendl;
     _get_purged_snaps();
+  } else if (monmap.min_mon_release >= ceph_release_t::umbrella &&
+      superblock.completed_rollbacks_last < superblock.current_epoch) {
+    // WI-17-d: analogous guard for completed_rollbacks catch-up
+    dout(10) << __func__ << " completed_rollbacks_last "
+             << superblock.completed_rollbacks_last
+             << " < newest_map " << superblock.current_epoch << dendl;
+    _get_completed_rollbacks();
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
 
@@ -7012,6 +7039,54 @@ void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
   } else {
     start_boot();
   }
+out:
+  m->put();
+}
+
+void OSD::_get_completed_rollbacks()
+{
+  // Stateless, may send overlapping requests; correctness guaranteed by
+  // idempotent apply in handle_get_completed_rollbacks_reply().
+  dout(10) << __func__
+           << " completed_rollbacks_last " << superblock.completed_rollbacks_last
+           << ", newest_map " << superblock.current_epoch << dendl;
+  auto *m = new MMonGetCompletedRollbacks(
+    superblock.completed_rollbacks_last + 1,
+    superblock.current_epoch + 1);
+  monc->send_mon_message(m);
+}
+
+void OSD::handle_get_completed_rollbacks_reply(
+  MMonGetCompletedRollbacksReply *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  ObjectStore::Transaction t;
+
+  if (!is_preboot() ||
+      m->last < superblock.completed_rollbacks_last) {
+    goto out;
+  }
+
+  {
+    OSDriver osdriver{store.get(), service.meta_ch, make_purged_snaps_oid()};
+    SnapMapper::record_completed_rollbacks(
+      cct,
+      osdriver,
+      osdriver.get_transaction(&t),
+      m->completed_rollbacks);
+  }
+
+  superblock.completed_rollbacks_last = m->last;
+  write_superblock(cct, superblock, t);
+  store->queue_transaction(service.meta_ch, std::move(t));
+  service.publish_superblock(superblock);
+
+  if (m->last < superblock.current_epoch) {
+    _get_completed_rollbacks();   // more epochs to fetch
+  } else {
+    start_boot();                 // fully caught up
+  }
+
 out:
   m->put();
 }
@@ -7861,6 +7936,10 @@ void OSD::_dispatch(Message *m)
   case MSG_MON_GET_PURGED_SNAPS_REPLY:
     handle_get_purged_snaps_reply(static_cast<MMonGetPurgedSnapsReply*>(m));
     break;
+  case MSG_MON_GET_COMPLETED_ROLLBACKS_REPLY:
+    handle_get_completed_rollbacks_reply(
+      static_cast<MMonGetCompletedRollbacksReply*>(m));
+    break;
 
     // osd
   case MSG_COMMAND:
@@ -8346,6 +8425,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   uint64_t txn_size = 0;
 
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;
+  // WI-17-c: parallel map for completed rollbacks (mirrors purged_snaps)
+  map<epoch_t, mempool::osdmap::map<int64_t, snap_interval_set_t>> completed_rollbacks;
 
   // store new maps: queue for disk and put in the osdmap cache
   epoch_t start = std::max(superblock.get_newest_map() + 1, first);
@@ -8368,6 +8449,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       o->decode(bl);
 
       purged_snaps[e] = o->get_new_purged_snaps();
+      completed_rollbacks[e] = o->get_new_completed_rollbacks();
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
@@ -8440,6 +8522,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
       got_full_map(e);
       purged_snaps[e] = o->get_new_purged_snaps();
+      completed_rollbacks[e] = o->get_new_completed_rollbacks();
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
@@ -8513,6 +8596,21 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << __func__ << " superblock purged_snaps_last is "
 	     << superblock.purged_snaps_last
 	     << ", not recording new purged_snaps" << dendl;
+  }
+
+  // WI-17-c: record new completed_rollbacks (mirrors purged_snaps recording)
+  if (superblock.completed_rollbacks_last == start - 1) {
+    OSDriver osdriver{store.get(), service.meta_ch, make_purged_snaps_oid()};
+    SnapMapper::record_completed_rollbacks(
+      cct,
+      osdriver,
+      osdriver.get_transaction(&t),
+      completed_rollbacks);
+    superblock.completed_rollbacks_last = last;
+  } else {
+    dout(10) << __func__ << " superblock completed_rollbacks_last is "
+             << superblock.completed_rollbacks_last
+             << ", not recording new completed_rollbacks" << dendl;
   }
 
   // superblock and commit

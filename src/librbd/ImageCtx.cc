@@ -295,6 +295,9 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove", "Snap removals");
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback", "Snap rollbacks");
+    plb.add_u64_counter(l_librbd_snap_rollback_pool_op_fallback,
+                        "snap_rollback_pool_op_fallback",
+                        "Snap rollbacks that fell back to per-object path");
     plb.add_u64_counter(l_librbd_snap_rename, "snap_rename", "Snap rename");
     plb.add_u64_counter(l_librbd_notify, "notify", "Updated header notifications");
     plb.add_u64_counter(l_librbd_resize, "resize", "Resizes");

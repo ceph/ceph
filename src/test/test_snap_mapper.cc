@@ -551,6 +551,13 @@ public:
     return mapper->make_purged_snap_key(std::forward<Args>(args)...);
   }
 
+  std::vector<hobject_t> get_next_rollback_objects(
+    snapid_t snap,
+    const hobject_t &after,
+    unsigned max) {
+    return mapper->get_next_rollback_objects(snap, after, max);
+  }
+
   // must be called with lock held to protect access to
   // snap_to_hobject and hobject_to_snap
   int trim_snap(snapid_t snapid, unsigned max_count, vector<hobject_t> & out) {
@@ -948,6 +955,54 @@ TEST_F(SnapMapperTest, More) {
 TEST_F(SnapMapperTest, MultiPG) {
   init(50);
   run();
+}
+
+TEST_F(SnapMapperTest, RollbackObjects) {
+  // Initialize with 4 PGs (bits=2, mask=0..3)
+  init(4);
+
+  // Each PG creates a snap
+  std::map<pg_t, snapid_t> pg_snaps;
+  for (auto &pair : mappers) {
+    pg_snaps[pair.first] = pair.second->create_snap();
+  }
+
+  // Create some objects for each PG under its snap
+  std::map<pg_t, std::set<hobject_t>> expected_objects;
+  int obj_idx = 0;
+  for (int i = 0; i < 20; ++i) {
+    for (auto &pair : mappers) {
+      pg_t pgid = pair.first;
+      auto &verifier = *pair.second;
+      snapid_t snap = pg_snaps[pgid];
+      hobject_t hoid = verifier.create_hobject(obj_idx++, snap, 0, "");
+      verifier.add_object_to_snaps(hoid, {snap});
+      expected_objects[pgid].insert(hoid);
+    }
+  }
+
+  // Now, call get_next_rollback_objects on each PG's mapper and verify results
+  for (auto &pair : mappers) {
+    pg_t pgid = pair.first;
+    auto &verifier = *pair.second;
+    snapid_t snap = pg_snaps[pgid];
+    
+    std::vector<hobject_t> retrieved;
+    hobject_t cursor = hobject_t{};
+    while (true) {
+      auto batch = verifier.get_next_rollback_objects(snap, cursor, 5);
+      if (batch.empty()) {
+        break;
+      }
+      retrieved.insert(retrieved.end(), batch.begin(), batch.end());
+      cursor = batch.back();
+    }
+
+    // Verify that retrieved objects exactly match the expected objects for this PG
+    auto &expected = expected_objects[pgid];
+    std::set<hobject_t> retrieved_set(retrieved.begin(), retrieved.end());
+    EXPECT_EQ(retrieved_set, expected);
+  }
 }
 
 // Check to_object_key against current format to detect accidental changes in encoding
