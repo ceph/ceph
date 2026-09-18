@@ -171,16 +171,20 @@ class CephadmServe:
                 self.mgr.service_action('reconfig', svc)
 
     def _serve_sleep(self) -> None:
-        sleep_interval = max(
-            30,
-            min(
-                self.mgr.host_check_interval,
-                self.mgr.facts_cache_timeout,
-                self.mgr.daemon_cache_timeout,
-                self.mgr.device_cache_timeout,
-                self.mgr.stray_daemon_check_interval,
-            )
-        )
+        candidates = [
+            self.mgr.host_check_interval,
+            self.mgr.facts_cache_timeout,
+            self.mgr.daemon_cache_timeout,
+            self.mgr.device_cache_timeout,
+            self.mgr.stray_daemon_check_interval,
+        ]
+        if self.mgr.use_agent:
+            # _agent_down() only runs once per serve loop, so cap the sleep at
+            # the down-detection threshold. A future larger refactor is to run
+            # agent-down detection on its own thread.
+            down_mult = max(self.mgr.agent_down_multiplier, 1.5)
+            candidates.append(int(down_mult * self.mgr.agent_refresh_rate))
+        sleep_interval = max(30, min(candidates))
         self.log.debug('Sleeping for %d seconds', sleep_interval)
         self.mgr.event.wait(sleep_interval)
         self.mgr.event.clear()
