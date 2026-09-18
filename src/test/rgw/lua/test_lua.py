@@ -483,6 +483,65 @@ end
             assert result[1] == 0
 
 
+# the lua background thread compiles scripts into bytecode every 5 seconds
+LUA_BYTECODE_CACHE_SYNC_TIME = 10
+
+
+def put_metadata_script(value):
+    """ install a prerequest script that tags every uploaded object with x-amz-meta-test=<value> """
+    script = '''
+if Request.RGWOp == "put_obj" then
+    Request.HTTP.Metadata["x-amz-meta-test"] = "{}"
+end
+'''.format(value)
+    result = put_script(script, "prerequest")
+    assert result[1] == 0
+
+
+def assert_metadata_script(conn, bucket_name, key, expected):
+    """ upload an object and verify which prerequest script tagged it """
+    conn.put_object(Body="1234567890".encode("ascii"), Bucket=bucket_name, Key=key)
+    result = conn.get_object(Bucket=bucket_name, Key=key)
+    assert result['ResponseMetadata']['HTTPHeaders'].get('x-amz-meta-test') == expected
+
+
+@pytest.mark.example_test
+def test_script_recreated_after_rm():
+    # This test covers the loss of the script watch in the lua bytecode cache.
+    #
+    # When a script is removed, the OSD disconnects the watch on its object, and the
+    # watch cannot be re-established since the object is gone. If the script is then
+    # created again before the background thread evicted the old bytecode, the
+    # background thread compiles the new script without any watch on it. From this
+    # point on, updates to the script are never noticed by the cache.
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    conn.create_bucket(Bucket=bucket_name)
+    key = "hello"
+
+    try:
+        put_metadata_script("original")
+        time.sleep(LUA_BYTECODE_CACHE_SYNC_TIME)
+        # a request reads the script from rados, and starts watching it
+        assert_metadata_script(conn, bucket_name, key, "original")
+
+        # the removal and re-creation of the script must happen within the same
+        # background thread interval, so repeat a few times to make sure it does
+        for i in range(4):
+            value = "recreated-{}".format(i)
+            out, err = admin(['script', 'rm', '--context', 'prerequest'])
+            assert err == 0
+            put_metadata_script(value)
+            time.sleep(LUA_BYTECODE_CACHE_SYNC_TIME)
+            # the re-created script must be executed
+            assert_metadata_script(conn, bucket_name, key, value)
+    finally:
+        out, err = admin(['script', 'rm', '--context', 'prerequest'])
+        assert err == 0
+        conn.delete_object(Bucket=bucket_name, Key=key)
+        conn.delete_bucket(Bucket=bucket_name)
+
+
 @pytest.mark.example_test
 def test_interrupt_request():
     script = '''
