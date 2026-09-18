@@ -3,15 +3,16 @@
 =====================
  BlueStore Migration
 =====================
-.. warning:: Filestore has been deprecated in the Reef release and is no longer supported.
-	     Please migrate to BlueStore.
+.. warning:: Filestore was deprecated in the Reef release and is no longer
+	     supported. Filestore OSDs cannot run on Reef or later releases,
+	     so any remaining Filestore OSDs must be migrated to BlueStore
+	     before the cluster is upgraded to Reef.
 
-Each OSD must be formatted as either Filestore or BlueStore. However, a Ceph
-cluster can operate with a mixture of both Filestore OSDs and BlueStore OSDs.
-Because BlueStore is superior to Filestore in performance and robustness, and
-because Filestore is not supported by Ceph releases beginning with Reef, users
-deploying Filestore OSDs should transition to BlueStore. There are several
-strategies for making the transition to BlueStore.
+This page is for clusters that still contain Filestore OSDs deployed
+on releases before Reef. A pre-Reef cluster can operate with a mixture
+of Filestore OSDs and BlueStore OSDs while the migration is in
+progress. There are several strategies for making the transition to
+BlueStore.
 
 BlueStore is so different from Filestore that an individual OSD cannot be
 converted in place. Instead, the conversion process must use either (1) the
