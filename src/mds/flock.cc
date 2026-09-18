@@ -362,7 +362,7 @@ bool ceph_lock_state_t::remove_all_from (client_t client)
     multimap<uint64_t, ceph_filelock>::iterator iter = held_locks.begin();
     while (iter != held_locks.end()) {
       if ((client_t)iter->second.client == client) {
-	held_locks.erase(iter++);
+	iter = held_locks.erase(iter);
       } else
 	++iter;
     }
@@ -380,7 +380,7 @@ bool ceph_lock_state_t::remove_all_from (client_t client)
       if (type == CEPH_LOCK_FCNTL) {
 	remove_global_waiting(iter->second, this);
       }
-      waiting_locks.erase(iter++);
+      iter = waiting_locks.erase(iter);
     }
     client_waiting_lock_counts.erase(client);
   }
