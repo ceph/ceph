@@ -15,9 +15,9 @@ std::ostream& operator<<(std::ostream& os, const aio_t& aio)
   return os;
 }
 
-int aio_queue_t::submit_batch(aio_iter begin, aio_iter end, 
-			      void *priv,
-			      int *retries, int submit_retries, int initial_delay_us)
+int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
+                              void *priv,
+                              int *retries, int submit_retries, int initial_delay_us)
 {
   // 2^16 * 125us = ~8 seconds, so default max sleep is ~16 seconds
   int attempts = submit_retries;
@@ -48,32 +48,43 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
     }
 #elif defined(HAVE_POSIXAIO)
     cur->priv = priv;
-    if (cur->n_aiocb == 1) {
-      // TODO: consider batching multiple reads together with lio_listio
-      cur->aio.aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
-      cur->aio.aiocb.aio_sigevent.sigev_notify_kqueue = ctx;
-      cur->aio.aiocb.aio_sigevent.sigev_value.sival_ptr = &(*cur);
-      r = aio_write(&cur->aio.aiocb);
+    cur->aio.aio_sigevent.sigev_notify = SIGEV_KEVENT;
+    cur->aio.aio_sigevent.sigev_notify_kqueue = ctx;
+    cur->aio.aio_sigevent.sigev_notify_kevent_flags = EV_ONESHOT;
+    cur->aio.aio_sigevent.sigev_value.sival_ptr = &(*cur);
+    if (cur->aio.aio_lio_opcode == LIO_WRITE) {
+      r = aio_writev(&cur->aio);
     } else {
-      struct sigevent sev;
-      sev.sigev_notify = SIGEV_KEVENT;
-      sev.sigev_notify_kqueue = ctx;
-      sev.sigev_value.sival_ptr = &(*cur);
-      r = lio_listio(LIO_NOWAIT, &cur->aio.aiocbp, cur->n_aiocb, &sev);
+      r = aio_readv(&cur->aio);
     }
-    ++cur;
+    // aio_writev()/aio_readv() follow the classic POSIX convention: 0 on
+    // success, -1 with errno set on failure -- not -errno, and not a count
+    // of submitted items like Linux io_submit(). Normalize to Ceph's
+    // -errno convention so the retry handling below works.
+    if (r < 0) {
+      r = -errno;
+    }
 #endif
     if (r < 0) {
       if (r == -EAGAIN && attempts-- > 0) {
-	usleep(delay);
-	delay *= 2;
-	(*retries)++;
-	continue;
+        usleep(delay);
+        delay *= 2;
+        (*retries)++;
+        continue;
       }
       return r;
     }
+#if defined(HAVE_LIBAIO)
     ceph_assert(r > 0);
     done += r;
+#elif defined(HAVE_POSIXAIO)
+    // Success means r == 0; count one aio_t submitted (matching the
+    // pending/running accounting in KernelDevice, which is per aio_t).
+    // Advance only here -- on -EAGAIN the retry above must resubmit this
+    // same aio_t, not skip past it.
+    ++cur;
+    done += 1;
+#endif
     attempts = submit_retries;
     delay = initial_delay_us;
     pushed = pulled = 0;
@@ -108,27 +119,15 @@ int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 #if defined(HAVE_LIBAIO)
     paio[i] = (aio_t *)events[i].obj;
     paio[i]->rval = events[i].res;
-#else
+#elif defined(HAVE_POSIXAIO)
     paio[i] = (aio_t*)events[i].udata;
-    if (paio[i]->n_aiocb == 1) {
-      paio[i]->rval = aio_return(&paio[i]->aio.aiocb);
-    } else {
-      // Emulate the return value of pwritev.  I can't find any documentation
-      // for what the value of io_event.res is supposed to be.  I'm going to
-      // assume that it's just like pwritev/preadv/pwrite/pread.
-      paio[i]->rval = 0;
-      for (int j = 0; j < paio[i]->n_aiocb; j++) {
-	int res = aio_return(&paio[i]->aio.aiocbp[j]);
-	if (res < 0) {
-	  paio[i]->rval = res;
-	  break;
-	} else {
-	  paio[i]->rval += res;
-	}
-      }
-      free(paio[i]->aio.aiocbp);
-    }
+    // Always reap with aio_return(), even when aio_error() reports failure:
+    // a completed aiocb that is never returned leaks its kernel job entry.
+    int err = aio_error(&paio[i]->aio);
+    ssize_t ret = aio_return(&paio[i]->aio);
+    paio[i]->rval = err ? -err : ret;
 #endif
   }
   return r;
 }
+
