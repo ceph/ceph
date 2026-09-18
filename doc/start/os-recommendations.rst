@@ -11,6 +11,11 @@
    :ceph-reviewed: 2026-09
    :ceph-owner: docs
 
+This page lists the deployment method, kernels, and Linux distributions that
+each Ceph release is built and tested on. In the platform tables, each row is
+a distribution, each column is a Ceph release, and the letter in a cell says
+whether packages are provided and how far they were tested.
+
 Recommended Deployment Method: Containers via Cephadm
 =====================================================
 
@@ -73,6 +78,10 @@ Ceph does not require a specific Linux distribution. Ceph can run on any
 distribution that includes a supported kernel and ``systemd``. Ceph is
 sometimes ported to non-Linux systems but these are not supported by the
 core Ceph effort.
+
+.. note:: ARM architecture containers provide a limited set of daemons.
+   Check that the daemons you need are available before you plan an ARM
+   deployment.
 
 +----------------+-------------------------+----------------+-------------------+-----------------+----------------+----------------+----------------+
 | Distribution   | Distribution EOL        | Squid (19.2.z) | Tentacle (20.2.z) | Umbrella (21.x) | Vampire (22.x) | W (23.x)       | X (24.x)       |
@@ -186,9 +195,9 @@ profiles, so it is worth verifying::
 
 Make the setting persistent with a ``udev`` rule keyed on
 ``/sys/block/*/queue/rotational`` so it survives reboots and applies to
-devices added later.  For BlueStore this is a modest tuning knob -- its
+devices added later.  For BlueStore this is a modest tuning knob because its
 large, mostly-sequential I/O together with the drive's own reordering does
-most of the work -- but setting it per device class avoids pathological
+most of the work, but setting it per device class avoids pathological
 behavior.
 
 Host Distribution Upgrades (Horizontal Paths)
@@ -233,4 +242,4 @@ Additional Resources
 .. _Debian_b: https://www.debian.org/releases/bookworm/
 .. _Debian_t: https://www.debian.org/releases/trixie/
 .. _Rocky: https://github.com/rocky-linux/wiki.rockylinux.org/blob/main/docs/rocky/version.md
-.. _Ubuntu: https://ubuntu.com/about/release-cycle
+.. _Ubuntu: https://wiki.ubuntu.com/Releases

@@ -1,8 +1,8 @@
 .. _minimum-hardware:
 
-==================================
- Minimum Hardware Recommendations
-==================================
+=============================
+ Minimum Hardware per Daemon
+=============================
 
 .. meta::
    :description: The minimum CPU, memory, storage, and network resources for each Ceph daemon.
@@ -12,24 +12,23 @@
    :ceph-owner: docs
 
 Ceph can run on inexpensive commodity hardware. Small production clusters
-and development clusters can run successfully with modest hardware.  When
-we speak of CPU *cores*, we mean *threads* when hyperthreading (HT) is
-enabled. For Ceph, HT is almost always advantageous.
-Each modern physical x64 CPU core typically
+and development clusters can run successfully with modest hardware. In this
+table, cores means threads when hyperthreading (HT) is enabled. For Ceph, HT
+is almost always advantageous. Each modern physical x64 CPU core typically
 provides two logical CPU threads; other CPU architectures may vary.
 
-There are many factors that influence resource choices.  The
-minimum resources that suffice for one purpose will not necessarily suffice for
-another.  A sandbox cluster with one OSD built on a laptop with VirtualBox or
-on a trio of Raspberry Pis will get by with fewer resources than a production
-deployment with a thousand OSDs serving five thousand RBD clients.  The
-classic Fisher Price PXL 2000 captures video, as does an IMAX or RED camera.
-One would not expect the former to do the job of the latter.  We especially
-cannot stress enough the criticality of using enterprise-quality storage
-media for production workloads.
+There are many factors that influence resource choices. The minimum
+resources that suffice for one purpose will not necessarily suffice for
+another. A sandbox cluster with one :term:`OSD` built on a laptop with
+VirtualBox or on a trio of Raspberry Pis will get by with fewer resources
+than a production deployment with a thousand OSDs serving five thousand RBD
+clients.
+
+.. warning:: Use enterprise-quality storage media for production workloads.
 
 Additional insights into resource planning for production clusters are
-found above and elsewhere within this documentation.
+found in :ref:`hardware-recommendations` and elsewhere within this
+documentation.
 
 +--------------+----------------+------------------------------------------+
 |  Process     | Criteria       | Bare Minimum and Recommended             |
@@ -51,9 +50,8 @@ found above and elsewhere within this documentation.
 |              |                |   client throughput and latency.         |
 |              |                |   Benchmarking is highly recommended.    |
 |              +----------------+------------------------------------------+
-|              | RAM            | - >= 4 GB per daemon (more is better)    |
-|              |                | - 2-4 GB may function but will be slow   |
-|              |                | - Less than 2 GB is not recommended      |
+|              | RAM            | >= 4 GiB per OSD; see :ref:`CPU and      |
+|              |                | Memory Sizing <hardware-cpu-memory>`     |
 |              +----------------+------------------------------------------+
 |              | Storage Drives | 1x storage drive per OSD in most cases.  |
 |              |                | PCIe Gen 4+ SSDs larger than 30 TB may   |
@@ -64,7 +62,9 @@ found above and elsewhere within this documentation.
 |              | (optional)     |  4-5x HDD OSDs per DB/WAL SATA SSD       |
 |              |                |  <= 15 HDD OSDs per DB/WAL NVMe SSD      |
 |              +----------------+------------------------------------------+
-|              | Network        |  1x 1 Gb/s (bonded 25+ Gb/s recommended) |
+|              | Network        | 1x 1 Gb/s; see :ref:`Network Sizing      |
+|              |                | <hardware-networks>` for the             |
+|              |                | recommendation                           |
 +--------------+----------------+------------------------------------------+
 | ``ceph-mon`` | Processor      | - 2 cores minimum                        |
 |              +----------------+------------------------------------------+
@@ -73,20 +73,23 @@ found above and elsewhere within this documentation.
 |              +----------------+------------------------------------------+
 |              | Storage        |  100 GB per daemon, SSD strongly urged   |
 |              +----------------+------------------------------------------+
-|              | Network        |  1x 1 Gb/s (10+ Gb/s recommended)        |
+|              | Network        | 1x 1 Gb/s; see :ref:`Network Sizing      |
+|              |                | <hardware-networks>` for the             |
+|              |                | recommendation                           |
 +--------------+----------------+------------------------------------------+
 | ``ceph-mds`` | Processor      | - 2 cores minimum, higher freq is        |
 |              |                |   better than more cores                 |
 |              +----------------+------------------------------------------+
 |              | RAM            |  >= 8 GiB per daemon                     |
 |              +----------------+------------------------------------------+
-|              | Network        |  1x 1 Gb/s (10+ Gb/s recommended)        |
+|              | Network        | 1x 1 Gb/s; see :ref:`Network Sizing      |
+|              |                | <hardware-networks>` for the             |
+|              |                | recommendation                           |
 +--------------+----------------+------------------------------------------+
 
 .. tip:: When running an OSD node with a single storage drive, create a
    partition for your OSD that is separate from the partition
-   containing the OS. We recommend separate drives for the
-   OS and for OSD storage.
+   containing the OS. Use separate drives for the OS and for OSD storage.
 
 Additional Resources
 ====================
