@@ -136,7 +136,7 @@ double Allocator::get_fragmentation_score()
     score_sum += get_score(len);
     sum += len;
   };
-  foreach(iterated_allocation);
+  foreach_interruptible(iterated_allocation);
   if (sum == 0) {
     return 0.0;
   }
