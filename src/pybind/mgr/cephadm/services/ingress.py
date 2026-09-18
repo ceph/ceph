@@ -9,7 +9,7 @@ from ceph.deployment.utils import is_ipv6
 from mgr_util import build_url
 from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, CephadmService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
 from .service_registry import register_cephadm_service
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.schedule import get_placement_hosts
@@ -38,9 +38,20 @@ class IngressService(CephService):
         return 'haproxy_monitor_ssl_key'
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+    def _include_tls_dependencies(
+        cls,
+        spec: Optional[ServiceSpec],
+        daemon_type: Optional[str] = None,
+    ) -> bool:
+        return (
+            daemon_type == 'haproxy'
+            and super()._include_tls_dependencies(spec, daemon_type)
+        )
+
+    @classmethod
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         if daemon_type == 'haproxy':
             return IngressService.get_haproxy_dependencies(mgr, spec)
         elif daemon_type == 'keepalived':
@@ -71,8 +82,9 @@ class IngressService(CephService):
     def prepare_create(
             self,
             daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
     ) -> CephadmDaemonDeploySpec:
-        super().prepare_create(daemon_spec)
+        super().prepare_create(daemon_spec, spec)
         if daemon_spec.daemon_type == 'haproxy':
             return self.haproxy_prepare_create(daemon_spec)
         if daemon_spec.daemon_type == 'keepalived':
@@ -81,7 +93,8 @@ class IngressService(CephService):
 
     def generate_config(
             self,
-            daemon_spec: CephadmDaemonDeploySpec
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         if daemon_spec.daemon_type == 'haproxy':
             return self.haproxy_generate_config(daemon_spec)
@@ -123,8 +136,7 @@ class IngressService(CephService):
             hosts = get_placement_hosts(spec, mgr.cache.get_schedulable_hosts(), mgr.cache.get_draining_hosts())
             deps.append(f'placement_hosts:{",".join(sorted(h.hostname for h in hosts))}')
 
-        parent_deps = CephadmService.get_dependencies(mgr, spec)
-        return sorted(deps + parent_deps)
+        return sorted(deps)
 
     def haproxy_generate_config(
             self,
@@ -299,7 +311,7 @@ class IngressService(CephService):
             monitor_ssl_cert = [tls_creds.cert, tls_creds.key]
             config_files['files']['stats_haproxy.pem'] = '\n'.join(monitor_ssl_cert)
 
-        return config_files, self.get_haproxy_dependencies(self.mgr, spec)
+        return config_files, self.get_dependencies(self.mgr, spec, 'haproxy')
 
     def get_stats_certs(
         self,
@@ -386,14 +398,21 @@ class IngressService(CephService):
         return False
 
     @staticmethod
-    def get_keepalived_dependencies(mgr: "CephadmOrchestrator", spec: Optional[ServiceSpec]) -> List[str]:
+    def get_keepalived_dependencies(
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec],
+    ) -> List[str]:
         # because cephadm creates new daemon instances whenever
         # port or ip changes, identifying daemons by name is
         # sufficient to detect changes.
         if not spec:
             return []
+
         daemons = mgr.cache.get_daemons_by_service(spec.service_name())
-        return sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
+        return sorted([
+            d.name() for d in daemons
+            if d.daemon_type == 'haproxy'
+        ])
 
     def keepalived_generate_config(
             self,
@@ -567,7 +586,7 @@ class IngressService(CephService):
             }
         }
 
-        return config_file, self.get_keepalived_dependencies(self.mgr, spec)
+        return config_file, self.get_dependencies(self.mgr, spec, 'keepalived')
 
     def get_monitoring_details(self, service_name: str, host: str) -> Tuple[Optional[str], Optional[int]]:
         spec = cast(IngressSpec, self.mgr.spec_store[service_name].spec)

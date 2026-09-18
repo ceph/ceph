@@ -1959,3 +1959,165 @@ spec:
         svc.generate_config(daemon_spec)
 
         cephadm_module.check_mon_command.assert_not_called()
+
+
+def _dependency_test_mgr():
+    mgr = MagicMock()
+    mgr.cache = MagicMock()
+    mgr.service_discovery_port = 8765
+    mgr.secure_monitoring_stack = False
+    mgr._get_security_config.return_value = (False, False, False)
+    mgr._get_prometheus_credentials.return_value = (None, None)
+    mgr._get_alertmanager_credentials.return_value = (None, None)
+    return mgr
+
+
+def _dependency_test_daemon(name):
+    daemon = MagicMock()
+    daemon.name.return_value = name
+    return daemon
+
+
+def test_ceph_exporter_get_dependencies():
+    from cephadm.services.cephadmservice import CephExporterService
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr.cache.get_daemons_by_types.return_value = ['mgmt-gateway.gw1']
+
+    assert CephExporterService.get_dependencies(mgr) == [
+        'mgmt-gateway.gw1',
+        'secure_monitoring_stack:True',
+    ]
+
+
+def test_grafana_get_dependencies():
+    from cephadm import utils
+    from cephadm.services.monitoring import GrafanaService
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr._get_security_config.return_value = (True, True, True)
+    mgr._get_prometheus_credentials.return_value = ('prom-user', 'prom-pass')
+
+    def by_service(service_name):
+        return {
+            'prometheus': [_dependency_test_daemon('prometheus.a')],
+            'loki': [_dependency_test_daemon('loki.a')],
+            'mgmt-gateway': [_dependency_test_daemon('mgmt-gateway.a')],
+            'oauth2-proxy': [_dependency_test_daemon('oauth2-proxy.a')],
+        }.get(service_name, [])
+
+    mgr.cache.get_daemons_by_service.side_effect = by_service
+
+    assert GrafanaService.get_dependencies(mgr) == sorted([
+        'secure_monitoring_stack:True',
+        f'cred:{utils.config_hash("prom-userprom-pass")}',
+        'prometheus.a',
+        'loki.a',
+        'mgmt-gateway.a',
+        'oauth2-proxy.a',
+    ])
+
+
+def test_alertmanager_get_dependencies():
+    from cephadm import utils
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr._get_security_config.return_value = (True, False, False)
+    mgr._get_alertmanager_credentials.return_value = ('alert-user', 'alert-pass')
+
+    def by_types(types):
+        if types == ['alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy']:
+            return ['alertmanager.a', 'snmp-gateway.a', 'oauth2-proxy.a']
+        if types == ['mgr']:
+            return ['mgr.a']
+        return []
+
+    mgr.cache.get_daemons_by_types.side_effect = by_types
+
+    assert AlertmanagerService.get_dependencies(mgr) == sorted([
+        'secure_monitoring_stack:True',
+        f'cred:{utils.config_hash("alert-useralert-pass")}',
+        'alertmanager.a',
+        'snmp-gateway.a',
+        'oauth2-proxy.a',
+        'mgr.a',
+    ])
+
+
+def test_prometheus_get_dependencies():
+    from cephadm import utils
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr._get_security_config.return_value = (True, False, False)
+    mgr._get_prometheus_credentials.return_value = ('prom-user', 'prom-pass')
+    mgr._get_alertmanager_credentials.return_value = ('alert-user', 'alert-pass')
+    mgr.cache.get_daemons_by_service.side_effect = (
+        lambda service_name: ['alertmanager.a'] if service_name == 'alertmanager' else []
+    )
+    mgr.cache.get_daemons_by_type.side_effect = (
+        lambda service_name: ['oauth2-proxy.a'] if service_name == 'oauth2-proxy' else []
+    )
+    mgr.cache.get_daemons_by_types.side_effect = (
+        lambda types: ['mgr.a'] if types == ['mgr'] else []
+    )
+    spec = PrometheusSpec(
+        'prometheus',
+        remote_write_url='https://remote.example/api/v1/write',
+        remote_write_allowed_metrics=['ceph_health_status'],
+    )
+
+    with patch.object(
+        service_registry,
+        'get_services_requiring_monitoring',
+        return_value=['alertmanager', 'node-exporter'],
+    ):
+        deps = PrometheusService.get_dependencies(mgr, spec, 'prometheus')
+
+    assert deps == sorted([
+        '8765',
+        'secure_monitoring_stack:True',
+        f'prom-cred:{utils.config_hash("prom-userprom-pass")}',
+        f'alert-cred:{utils.config_hash("alert-useralert-pass")}',
+        'alertmanager_configured:True',
+        'node-exporter_configured:False',
+        'mgmt-gateway_configured:False',
+        'oauth2-proxy_configured:True',
+        'mgr.a',
+        'remote_write_url:https://remote.example/api/v1/write',
+        "remote_write_metrics:['ceph_health_status']",
+    ])
+
+
+def test_node_exporter_get_dependencies():
+    from cephadm.services.monitoring import NodeExporterService
+
+    mgr = _dependency_test_mgr()
+    mgr.secure_monitoring_stack = True
+    mgr.cache.get_daemons_by_types.return_value = ['mgmt-gateway.a']
+
+    assert NodeExporterService.get_dependencies(mgr) == [
+        'mgmt-gateway.a',
+        'secure_monitoring_stack:True',
+    ]
+
+
+def test_alloy_get_dependencies():
+    from cephadm.services.monitoring import AlloyService
+
+    mgr = _dependency_test_mgr()
+    mgr.cache.get_daemons_by_types.return_value = ['loki.b', 'loki.a']
+
+    assert AlloyService.get_dependencies(mgr) == ['loki.a', 'loki.b']
+
+
+def test_promtail_get_dependencies():
+    from cephadm.services.monitoring import PromtailService
+
+    mgr = _dependency_test_mgr()
+    mgr.cache.get_daemons_by_types.return_value = ['loki.b', 'loki.a']
+
+    assert PromtailService.get_dependencies(mgr) == ['loki.a', 'loki.b']

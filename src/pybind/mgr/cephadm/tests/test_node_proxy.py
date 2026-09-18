@@ -428,3 +428,18 @@ class TestNodeProxyCacheCommon:
         cache = self._make_cache()
         result = cache.common('fcm', hostname='at4n1')
         assert result == {'at4n1': {'local': {'nvme0n1': {}}}}
+
+
+def test_node_proxy_get_dependencies():
+    from cephadm.services.node_proxy import NodeProxy
+
+    mgr = MagicMock()
+    mgr.get_mgr_ip.return_value = '10.0.0.1'
+    mgr.http_server.agent.server_port = 7150
+    mgr.cert_mgr.get_root_ca.return_value = 'ROOT-CA'
+
+    assert NodeProxy.get_dependencies(mgr) == sorted([
+        '10.0.0.1',
+        '7150',
+        'ROOT-CA',
+    ])

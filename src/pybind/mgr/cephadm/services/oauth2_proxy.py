@@ -18,24 +18,27 @@ class OAuth2ProxyService(CephadmService):
     TYPE = 'oauth2-proxy'
     SVC_TEMPLATE_PATH = 'services/oauth2-proxy/oauth2-proxy.conf.j2'
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        super().prepare_create(daemon_spec)
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        super().prepare_create(daemon_spec, spec)
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec, spec)
         return daemon_spec
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         # adding dependency as redirect_url calculation depends on the mgmt-gateway
         deps = [
             f'{d.name()}:{d.ports[0]}' if d.ports else d.name()
             for service in ['mgmt-gateway']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
-        return sorted(deps + parent_deps)
+        return sorted(deps)
 
     def get_service_ips_and_hosts(self, service_name: str) -> List[str]:
         entries = set()
@@ -60,7 +63,11 @@ class OAuth2ProxyService(CephadmService):
         # if empty list provided, return empty Daemon Desc
         return DaemonDescription()
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         svc_spec = cast(OAuth2ProxySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         allowlist_domains = copy(svc_spec.allowlist_domains) or []
@@ -83,7 +90,8 @@ class OAuth2ProxyService(CephadmService):
             }
         }
 
-        return daemon_config, sorted(OAuth2ProxyService.get_dependencies(self.mgr))
+        return daemon_config, self.get_dependencies(
+            self.mgr, svc_spec, daemon_spec.daemon_type)
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """

@@ -16,8 +16,14 @@ class ElasticSearchService(CephadmService):
     TYPE = 'elasticsearch'
     DEFAULT_SERVICE_PORT = 9200
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.deps = self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 
 
@@ -27,9 +33,9 @@ class JaegerAgentService(CephadmService):
     DEFAULT_SERVICE_PORT = 6799
 
     @classmethod
-    def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
-                         daemon_type: Optional[str] = None) -> List[str]:
+    def _get_dependencies(cls, mgr: "CephadmOrchestrator",
+                          spec: Optional[ServiceSpec] = None,
+                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []  # type: List[str]
         for dd in mgr.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
             # scrape jaeger-collector nodes
@@ -39,7 +45,11 @@ class JaegerAgentService(CephadmService):
             deps.append(url)
         return sorted(deps)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         collectors = []
         for dd in self.mgr.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
@@ -49,7 +59,8 @@ class JaegerAgentService(CephadmService):
             url = build_url(host=dd.hostname, port=port).lstrip('/')
             collectors.append(url)
         daemon_spec.final_config = {'collector_nodes': ",".join(collectors)}
-        daemon_spec.deps = self.get_dependencies(self.mgr)
+        daemon_spec.deps = self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 
     def choose_next_action(
@@ -81,10 +92,16 @@ class JaegerCollectorService(CephadmService):
     TYPE = 'jaeger-collector'
     DEFAULT_SERVICE_PORT = 14250
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         elasticsearch_nodes = get_elasticsearch_nodes(self, daemon_spec)
         daemon_spec.final_config = {'elasticsearch_nodes': ",".join(elasticsearch_nodes)}
+        daemon_spec.deps = self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 
 
@@ -93,10 +110,16 @@ class JaegerQueryService(CephadmService):
     TYPE = 'jaeger-query'
     DEFAULT_SERVICE_PORT = 16686
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+            spec: Optional[ServiceSpec] = None,
+    ) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         elasticsearch_nodes = get_elasticsearch_nodes(self, daemon_spec)
         daemon_spec.final_config = {'elasticsearch_nodes': ",".join(elasticsearch_nodes)}
+        daemon_spec.deps = self.get_dependencies(
+            self.mgr, spec, daemon_spec.daemon_type)
         return daemon_spec
 
 
