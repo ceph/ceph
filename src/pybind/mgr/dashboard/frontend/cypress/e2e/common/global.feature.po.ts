@@ -9,8 +9,14 @@ Given('I am logged in', () => {
 });
 
 Given('I am on the {string} page', (page: string) => {
-  cy.visit(urlsCollection.pages[page].url);
-  cy.get(urlsCollection.pages[page].id).should('exist');
+  const url = urlsCollection.pages[page].url;
+  const id = urlsCollection.pages[page].id;
+  urlsCollection.stubOrchestratorEndpoints();
+  cy.visit(url);
+  if (page === 'onboarding') {
+    cy.wait(['@orchStatus', '@orchConfig']);
+  }
+  cy.get(id).should('exist');
 });
 
 Then('I should be on the {string} page', (page: string) => {
