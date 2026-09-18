@@ -311,6 +311,18 @@ void PGLog::proc_replica_log(
   if (lu < oinfo.last_update) {
     dout(10) << " peer osd." << from << " last_update now " << lu << dendl;
     oinfo.last_update = lu;
+    for (auto &[shard, versionrange] : oinfo.partial_writes_last_complete) {
+      auto & [fromversion, toversion] = versionrange;
+      if (toversion > oinfo.last_update) {
+        dout(10) << __func__ << " peer osd." << from << ": rolling pwlc back "
+                    "for shard " << shard << " from " << toversion << " to "
+                 << oinfo.last_update << dendl;
+        toversion = oinfo.last_update;
+      }
+      if (fromversion > toversion) {
+        fromversion = toversion;
+      }
+    }
   }
 
   if (omissing.have_missing()) {
