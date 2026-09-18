@@ -2326,6 +2326,91 @@ TEST_F(PeeringStateTest, Issue74218) {
   verify_logs();
 }
 
+
+TEST_F(PeeringStateTest, LaggyActivationCatchesUp) {
+  dout(0) << "== PeeringIntervalBoundaryDiscrepancy2 ==" << dendl;
+  // Init
+  {
+    create_rep_pool();
+    test_create_peering_state();
+    test_init();
+    test_event_initialize();
+    test_peering();
+    verify_all_active_clean();
+    dout(0) << "= initial cluster deployed =" << dendl;
+  }
+
+  // Swap out OSD 1 for OSD 9
+  {
+    modify_up_acting(1, 9);
+    new_epoch(true);
+    test_create_peering_state(9, 1);
+    test_init(9);
+    test_event_initialize(9);
+    test_event_advance_map();
+    test_event_activate_map();
+    while (true) {
+      dispatch_all();
+      if (get_ps(0)->get_need_up_thru()) {
+        dout(0) << "= stopped at WaitUpThru =" << dendl;
+        break;
+      }
+    }
+    EXPECT_EQ(osdmap->get_epoch(), 5);
+    new_epoch();
+    EXPECT_EQ(osdmap->get_epoch(), 6);
+  }
+
+  // deliver the osdmap with primary marked as upthru. it should go
+  // to the Active state and generate activate events for replicas.
+  {
+    test_event_advance_map();
+    test_event_activate_map();
+    // distrubute these activate messages from primary to replicas
+    dispatch_specific_osd(0);
+    dispatch_specific_osd(9);
+    dispatch_specific_osd(2);
+
+    dout(0) << "= past WaitUpThru =" << dendl;
+  }
+
+  // replicas will do activate_commit and inform primary about that
+  // let's itentionally hold this msgs in the queue for one replica.
+  {
+    dispatch_specific_osd(0);
+    dispatch_specific_osd(9);
+    // NO: dispatch_specific_osd(2);
+  }
+
+  // acting set is [0,9,2] but osd.1 needs to be probed us well
+  // due to a past interval -- marking it down affects the peering
+  {
+    mark_osd_down(1);
+    EXPECT_EQ(osdmap->get_epoch(), 7);
+    EXPECT_EQ(get_ps(0)->get_last_peering_reset(), 5); // no new interval
+    test_event_advance_map();
+    test_event_activate_map();
+    bool cont;
+    do {
+      cont = dispatch_specific_osd(0);
+      cont |= dispatch_specific_osd(9);
+    } while (cont);
+    // we're outisde of Peering so no changes to LPR
+    EXPECT_EQ(get_ps(0)->get_last_peering_reset(), 5);
+    EXPECT_EQ(get_ps(9)->get_last_peering_reset(), 5);
+    EXPECT_EQ(get_ps(2)->get_last_peering_reset(), 5);
+  }
+
+  // osd.2 holds the message, which stalls the primary (osd.0) at
+  // the activation stage but ultimately dispatching the due messages
+  // from osd.2 unblock the peering.
+  {
+    dispatch_specific_osd(2);
+    test_peering();
+    verify_all_active_clean();
+  }
+}
+
 // ============================================================================
 // Rebuild Stats Perf Counter Tests
 //
