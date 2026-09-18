@@ -830,6 +830,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   addCustomFilter() {
+    if (this.stagedCustomFilters.length === 0) this.nextFilterId = 0;
     this.stagedCustomFilters = [
       ...this.stagedCustomFilters,
       { id: this.nextFilterId++, key: '', value: '' }
@@ -840,6 +841,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.stagedCustomFilters = this.stagedCustomFilters.filter(
       (filter) => filter.id !== idToRemove
     );
+
+    if (this.stagedCustomFilters.length === 0) {
+      this.addCustomFilter();
+    }
   }
 
   initColumnFilters() {
@@ -1550,6 +1555,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
     if (this.customFilter) {
       this.addCustomFilter();
+      this.customFilterChange.emit(this.customFilters);
     }
 
     this.updateFilter();

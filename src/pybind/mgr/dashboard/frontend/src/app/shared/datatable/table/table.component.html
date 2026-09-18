@@ -163,15 +163,15 @@
                 }
               }
               @if (customFilter) {
+                @if (isCustomFilterString) {
+                  <div
+                    cdsRow
+                    class="cds-mt-4 cds--type-body-02"
+                  >
+                    Filter {{ customFilter }}:
+                  </div>
+                }
                 @for (filter of stagedCustomFilters; track filter.id; let i = $index) {
-                  @if (isCustomFilterString) {
-                    <div
-                      cdsRow
-                      class="cds-mt-4 cds--type-body-02"
-                    >
-                      Filter {{ customFilter }}:
-                    </div>
-                  }
                   <div
                     cdsRow
                     [cdsLayer]="1"
@@ -209,21 +209,19 @@
                       </cds-text-label>
                     </div>
 
-                    @if (i !== 0) {
-                      <div
-                        cdsCol
-                        [columnNumbers]="{ sm: 2, md: 2, lg: 2 }"
-                        class="cds-mt-6"
+                    <div
+                      cdsCol
+                      [columnNumbers]="{ sm: 2, md: 2, lg: 2 }"
+                      class="cds-mt-6"
+                    >
+                      <cds-icon-button
+                        kind="ghost"
+                        size="sm"
+                        (click)="removeCustomFilter(filter.id)"
                       >
-                        <cds-icon-button
-                          kind="ghost"
-                          size="sm"
-                          (click)="removeCustomFilter(filter.id)"
-                        >
-                          <cd-icon type="trash"></cd-icon>
-                        </cds-icon-button>
-                      </div>
-                    }
+                        <cd-icon type="trash"></cd-icon>
+                      </cds-icon-button>
+                    </div>
                   </div>
                 }
                 @if (stagedCustomFilters.length < 5) {
