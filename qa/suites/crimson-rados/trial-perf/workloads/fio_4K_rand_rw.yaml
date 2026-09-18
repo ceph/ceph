@@ -1,0 +1,70 @@
+tasks:
+- cbt:
+    benchmarks:
+      librbdfio:
+        op_size: [4096]
+        time: 60
+        mode: ['randread']
+        norandommap: True
+        vol_size: 4096 # Volume size in Megabytes
+        procs_per_volume: [1]
+        volumes_per_client: [2]
+        iodepth: [32]
+        osd_ra: [4096]
+        pool_profile: 'rbd'
+        poolname: 'rbd'
+        log_avg_msec: 100
+        time: 300 # length of run
+        ramp: 30 # ramp up time
+        log_iops: True
+        log_bw:  True
+        log_lat: True
+        mode: 'randwrite'
+        iodepth: [1, 4 ,16]
+        op_size: [4096] # block IO size in bytes
+        procs_per_client: [1]
+        volumes_per_client: [1] # volumes per ceph node
+          # for tests involving specific CPU cores:
+        #fio_cpu_set: '15-15'
+        # Optional FIO options for the /prefill stage
+        prefill:
+          blocksize: '4M'
+          numjobs: 1
+        # Each block below uses its own local options during its execution
+        workloads:
+          precondition:
+            jobname: 'precond1rw'
+            mode: 'randwrite'
+            numjobs: [ 1 ]
+            iodepth: [ 4 ]
+            monitor: False # whether to run the monitors along the test
+          randread4k:
+            jobname: 'rr'
+            mode: 'randread'
+            numjobs: [ 1 ]
+            #numjobs: [ 1, 4, 8 ]
+            iodepth: [ 1, 4, 8 ]
+            # ToDo: can we add a list of the monitoring subset we are interested for this workload?
+          randwrite4k:
+            jobname: 'rw'
+            mode: 'randwrite'
+            numjobs: [ 1 ]
+              #numjobs: [ 1, 4, 8 ]
+            iodepth: [ 1, 4, 8 ]
+    cluster:
+      user: 'ubuntu'
+      osds_per_node: 3
+      iterations: 1
+      pool_profiles:
+        rbd:
+          pg_size: 128
+          pgp_size: 128
+          replication: 3
+    monitoring_profiles:
+      perf:
+        nodes:
+          - osds
+        perf_cmd: 'perf'
+        args: 'stat -p {pid} -o {perf_dir}/perf_stat.{pid}'
+        pid_glob: crimson-osd.*.pid
+        # TODO: enable ceph tell osd.i perf to get perf counters from the OSDs
