@@ -174,7 +174,7 @@ class TestNFS:
                                 keepalived_password='12345',
                                 virtual_interface_networks=['1.2.3.0/24'],
                                 virtual_ip="1.2.3.4/32")
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -221,7 +221,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -259,7 +259,7 @@ class TestNFS:
                                 ssl=True,
                                 enable_stats=True,
                                 monitor_ssl=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -311,7 +311,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -351,7 +351,7 @@ class TestNFS:
                                 monitor_ssl=True,
                                 monitor_cert_source='cephadm-signed'
                                 )
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -403,7 +403,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][1] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
                 gen_config_lines = [line.rstrip() for line in haproxy_generated_conf[0]['files']['haproxy.cfg'].splitlines()]
@@ -440,7 +440,7 @@ class TestNFS:
                                 virtual_ip="1.2.3.4/32",
                                 enable_stats=True,
                                 monitor_ip_addrs={'test': '1.2.3.1'})
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -491,7 +491,7 @@ class TestNFS:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
 

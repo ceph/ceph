@@ -338,7 +338,7 @@ class TestIngressService:
                                 virtual_interface_networks=['1.2.3.0/24'],
                                 virtual_ip="1.2.3.4/32",
                                 enable_stats=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the keepalived conf based on the specified spec
                 keepalived_generated_conf = service_registry.get_service('ingress').keepalived_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -434,7 +434,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -468,7 +468,7 @@ class TestIngressService:
                                 virtual_interface_networks=['1.2.3.0/24'],
                                 virtual_ip="1.2.3.4/32",
                                 enable_stats=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the keepalived conf based on the specified spec
                 keepalived_generated_conf = service_registry.get_service('ingress').keepalived_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -566,7 +566,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1::4:443 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1::4:443 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -599,7 +599,7 @@ class TestIngressService:
                                 virtual_ip="1.2.3.4/32",
                                 use_tcp_mode_over_rgw=True,
                                 enable_stats=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -646,7 +646,7 @@ class TestIngressService:
                                 'hash-type   consistent\n    '
                                 'option ssl-hello-chk\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1::4:443 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1::4:443 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -677,7 +677,7 @@ class TestIngressService:
                                 virtual_interface_networks=['1.2.3.0/24'],
                                 virtual_ip="1.2.3.4/32",
                                 enable_stats=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the keepalived conf based on the specified spec
                 # Test with only 1 IP on the list, as it will fail with more VIPS but only one host.
                 keepalived_generated_conf = service_registry.get_service('ingress').keepalived_generate_config(
@@ -774,7 +774,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
 
