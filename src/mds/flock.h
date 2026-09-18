@@ -114,10 +114,8 @@ public:
    * previous lock or making a previous lock smaller.
    *
    * @param removal_lock The lock to remove
-   * @param activated_locks A return parameter, holding activated wait locks.
    */
-  void remove_lock(const ceph_filelock removal_lock,
-                   std::list<ceph_filelock>& activated_locks);
+  void remove_lock(const ceph_filelock removal_lock);
 
   bool remove_all_from(client_t client);
 
