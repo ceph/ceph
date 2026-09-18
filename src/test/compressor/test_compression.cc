@@ -166,7 +166,7 @@ TEST_P(CompressorTest, big_round_trip_file)
 }
 #endif
 
-
+#ifndef __clang_analyzer__
 TEST_P(CompressorTest, round_trip_osdmap)
 {
 #include "osdmaps/osdmap.2982809.h"
@@ -205,6 +205,7 @@ TEST_P(CompressorTest, round_trip_osdmap)
   }
   delete o;
 }
+#endif // __clang_analyzer__
 
 TEST_P(CompressorTest, compress_decompress)
 {
