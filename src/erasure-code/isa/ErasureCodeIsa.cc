@@ -461,28 +461,51 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
 
   int decode_index[k];
 
-  std::string erasure_signature; // describes a matrix configuration for caching
+  // ---------------------------------------------
+  // Construct cache signature including k,m parameters
+  //
+  // CRITICAL: The decoding table size depends on both (k,m) and the erasure
+  // pattern. The cache key MUST include k,m to prevent collisions where
+  // different (k,m) configurations with similar erasure patterns would
+  // retrieve incorrectly-sized cached buffers, causing buffer overflows
+  // or data corruption.
+  //
+  // Signature format: "k<k>m<m>a<avail_chunks>e<erased_chunks>"
+  // Example: "k3m2a+0+2+3e-1-4" means k=3, m=2, available chunks 0,2,3,
+  //          and erased chunks 1,4
+  // ---------------------------------------------
+  char sig_buf[512];
+  int offset = snprintf(sig_buf, sizeof(sig_buf), "k%dm%da", k, m);
 
   // ---------------------------------------------
-  // Construct b by removing error rows
+  // Add available chunk indices to signature
   // ---------------------------------------------
-
   for (i = 0, r = 0; i < k; i++, r++) {
-    char id[128];
     while (erasure_contains(erasures, r))
       r++;
 
     decode_index[i] = r;
 
-    snprintf(id, sizeof (id), "+%d", r);
-    erasure_signature += id;
+    offset += snprintf(sig_buf + offset, sizeof(sig_buf) - offset, "+%d", r);
+    if (offset >= (int)sizeof(sig_buf)) {
+      dout(0) << "isa_decode: signature buffer overflow" << dendl;
+      return -1;
+    }
   }
 
+  // ---------------------------------------------
+  // Add erased chunk indices to signature
+  // ---------------------------------------------
+  offset += snprintf(sig_buf + offset, sizeof(sig_buf) - offset, "e");
   for (int p = 0; p < nerrs; p++) {
-    char id[128];
-    snprintf(id, sizeof (id), "-%d", erasures[p]);
-    erasure_signature += id;
+    offset += snprintf(sig_buf + offset, sizeof(sig_buf) - offset, "-%d", erasures[p]);
+    if (offset >= (int)sizeof(sig_buf)) {
+      dout(0) << "isa_decode: signature buffer overflow" << dendl;
+      return -1;
+    }
   }
+
+  std::string erasure_signature(sig_buf);
 
   // ---------------------------------------------
   // Try to get an already computed matrix
