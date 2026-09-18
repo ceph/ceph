@@ -38,6 +38,8 @@
     [maxLimit]="25"
     identifier="hostname"
     [forceIdentifier]="true"
+    [autoReload]="tableAutoReload"
+    [updateSelectionOnRefresh]="updateSelectionOnRefresh"
     (updateSelection)="updateSelection($event)"
     emptyStateTitle="No nodes available"
     i18n-emptyStateTitle

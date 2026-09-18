@@ -422,6 +422,40 @@ describe('NvmeofGatewayNodeComponent', () => {
     expect(component.hosts[0].hostname).toBe('gateway-node-1');
   }));
 
+  it('should list every placement host in details mode even if inventory lags', fakeAsync(() => {
+    (component as any).route.snapshot.data = { mode: 'details' };
+    component.ngOnInit();
+    component.groupName = 'group1';
+
+    spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(
+      of({
+        groups: [
+          [
+            {
+              service_id: 'nvmeof.group1',
+              spec: { group: 'group1' },
+              placement: { hosts: ['gateway-node-1', 'gateway-node-2', 'gateway-node-new'] }
+            }
+          ]
+        ],
+        hosts: mockGatewayNodes
+      } as any)
+    );
+
+    fixture.detectChanges();
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    tick(100);
+
+    expect(component.hosts.map((host) => host.hostname)).toEqual([
+      'gateway-node-1',
+      'gateway-node-2',
+      'gateway-node-new'
+    ]);
+    expect(component.gatewayDetails.find((detail) => detail.label === 'Gateway nodes')?.value).toBe(
+      3
+    );
+  }));
+
   it('should show Encryption and mTLS status from encryption_key and enable_auth', fakeAsync(() => {
     (component as any).route.snapshot.data = { mode: 'details' };
     component.ngOnInit();
@@ -469,6 +503,162 @@ describe('NvmeofGatewayNodeComponent', () => {
     (component as any).route.snapshot.data = { mode: 'details' };
     component.ngOnInit();
     expect(component.selectionType).toBe('single');
+  });
+
+  it('should disable table auto-reload in selector mode so membership is not reset', () => {
+    component.mode = 'selector' as any;
+    expect(component.tableAutoReload).toBe(false);
+    expect(component.updateSelectionOnRefresh).toBe('never');
+  });
+
+  it('should auto-reload the table in details mode', () => {
+    component.mode = 'details' as any;
+    expect(component.tableAutoReload).toBe(5000);
+    expect(component.updateSelectionOnRefresh).toBe('onChange');
+  });
+
+  it('should ignore empty selection updates that would wipe existing membership', () => {
+    const existing = new CdTableSelection();
+    existing.selected = [mockGatewayNodes[0], mockGatewayNodes[1]];
+    component.selection = existing;
+
+    const empty = new CdTableSelection();
+    empty.selected = [];
+    component.updateSelection(empty);
+
+    expect(component.getSelectedHostnames()).toEqual(['gateway-node-1', 'gateway-node-2']);
+  });
+
+  it('should keep existing hosts when a selection update contains only a newly added host', () => {
+    component.mode = 'selector' as any;
+    const existing = new CdTableSelection();
+    existing.selected = [mockGatewayNodes[0], mockGatewayNodes[1]];
+    component.selection = existing;
+    component.table = {
+      selection: new CdTableSelection(),
+      model: { data: [], selectRow: () => undefined }
+    } as any;
+
+    const onlyNewHost = new CdTableSelection();
+    onlyNewHost.selected = [mockGatewayNodes[2]];
+    component.updateSelection(onlyNewHost);
+
+    expect(component.getSelectedHostnames()).toEqual([
+      'gateway-node-1',
+      'gateway-node-2',
+      'gateway-node-3'
+    ]);
+  });
+
+  describe('edit mode host selection', () => {
+    const mockGroupsAndHosts = {
+      groups: [
+        [
+          {
+            service_id: 'nvmeof.group1',
+            spec: { group: 'group1' },
+            placement: { hosts: ['gateway-node-1', 'gateway-node-2'] }
+          }
+        ]
+      ],
+      hosts: mockGatewayNodes
+    };
+
+    function stubTable(): void {
+      component.table = {
+        selection: new CdTableSelection(),
+        model: { data: [], selectRow: () => undefined },
+        updateSelection: { emit: () => undefined },
+        refreshBtn: () => undefined
+      } as any;
+    }
+
+    it('should preselect existing hosts and include an additional selected gateway', fakeAsync(() => {
+      stubTable();
+      component.preSelectedHostnames = ['gateway-node-1', 'gateway-node-2'];
+      spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(of(mockGroupsAndHosts as any));
+
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      tick(100);
+
+      expect(component.hosts.map((host) => host.hostname)).toEqual([
+        'gateway-node-1',
+        'gateway-node-2',
+        'gateway-node-3'
+      ]);
+      expect(component.getSelectedHostnames()).toEqual(['gateway-node-1', 'gateway-node-2']);
+      expect(component.table.selection.selected.map((host: any) => host.hostname)).toEqual([
+        'gateway-node-1',
+        'gateway-node-2'
+      ]);
+
+      const withNewGateway = new CdTableSelection();
+      withNewGateway.selected = [mockGatewayNodes[0], mockGatewayNodes[1], mockGatewayNodes[2]];
+      component.updateSelection(withNewGateway);
+
+      expect(component.getSelectedHostnames()).toEqual([
+        'gateway-node-1',
+        'gateway-node-2',
+        'gateway-node-3'
+      ]);
+    }));
+
+    it('should not reset a newly added gateway on a subsequent host fetch', fakeAsync(() => {
+      stubTable();
+      component.preSelectedHostnames = ['gateway-node-1', 'gateway-node-2'];
+      spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(of(mockGroupsAndHosts as any));
+
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      tick(100);
+
+      const withNewGateway = new CdTableSelection();
+      withNewGateway.selected = [mockGatewayNodes[0], mockGatewayNodes[1], mockGatewayNodes[2]];
+      component.updateSelection(withNewGateway);
+      component.isLoadingHosts = false;
+
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      tick(100);
+
+      expect(component.getSelectedHostnames()).toEqual([
+        'gateway-node-1',
+        'gateway-node-2',
+        'gateway-node-3'
+      ]);
+    }));
+
+    it('should keep current-group hosts available when another group exists', fakeAsync(() => {
+      stubTable();
+      component.groupName = 'group1';
+      component.preSelectedHostnames = ['gateway-node-1', 'gateway-node-2'];
+      spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(
+        of({
+          groups: [
+            [
+              {
+                service_id: 'nvmeof.group1',
+                spec: { group: 'group1' },
+                placement: { hosts: ['gateway-node-1', 'gateway-node-2'] }
+              },
+              {
+                service_id: 'nvmeof.group2',
+                spec: { group: 'group2' },
+                placement: { hosts: ['gateway-node-2'] }
+              }
+            ]
+          ],
+          hosts: mockGatewayNodes
+        } as any)
+      );
+
+      component.getHosts(new CdTableFetchDataContext(() => undefined));
+      tick(100);
+
+      expect(component.hosts.map((host) => host.hostname)).toEqual([
+        'gateway-node-1',
+        'gateway-node-2',
+        'gateway-node-3'
+      ]);
+    }));
   });
 
   it('should remove gateway', () => {
