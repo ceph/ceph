@@ -1045,12 +1045,12 @@ function test_mon_mds()
   ceph fs set cephfs allow_new_snaps no
   expect_false ceph fs set cephfs allow_new_snaps taco
 
-  # we should never be able to add EC pools as data or metadata pools
-  # create an ec-pool...
+  # adding an EC pool to a filesystem with only replicated data pools requires
+  # --force; without it the command is rejected
   ceph osd pool create mds-ec-pool 16 16 erasure
   set +e
   ceph fs add_data_pool cephfs mds-ec-pool 2>$TMPFILE
-  check_response 'erasure-code' $? 22
+  check_response 'Mixing pool types' $? 22
   set -e
   ec_poolnum=$(ceph osd dump | grep "pool.* 'mds-ec-pool" | awk '{print $2;}')
   data_poolnum=$(ceph osd dump | grep "pool.* 'fs_data" | awk '{print $2;}')

@@ -1,8 +1,11 @@
 overrides:
   ceph:
     cephfs:
-      ec_profile:
-        - disabled
+      pool_types:
+        data_pool:
+          - type=replicated
+        metadata_pool:
+          - type=replicated
     conf:
       client:
         client_fscrypt_dummy_encryption: true

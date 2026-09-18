@@ -4,11 +4,6 @@ overrides:
     bdev_inject_crash_probability: .5
   ceph:
     fs: xfs
-    cephfs:
-      ec_profile:
-        - m=2
-        - k=2
-        - crush-failure-domain=osd
     conf:
       osd:
         osd objectstore: bluestore

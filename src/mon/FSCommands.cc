@@ -285,7 +285,20 @@ class FsNewHandler : public FileSystemCommandHandler
     if (r < 0) {
       return r;
     }
-    
+
+    if (metadata_pool->is_erasure() && !data_pool->is_erasure()) {
+      bool really_mean_it = false;
+      cmd_getval(cmdmap, "yes_i_really_really_mean_it", really_mean_it);
+      if (!really_mean_it) {
+        ss << "pool '" << metadata_name << "' is an erasure-coded pool but"
+              " pool '" << data_name << "' is a replicated pool."
+              " Using an EC metadata pool with a replicated data pool is not a"
+              " recommended configuration."
+              " Use --yes-i-really-really-mean-it to override.";
+        return -EINVAL;
+      }
+    }
+
     if (!mon->osdmon()->is_writeable()) {
       // not allowed to write yet, so retry when we can
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
@@ -1080,6 +1093,9 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       return -EINVAL;
     }
 
+    bool force = false;
+    cmd_getval(cmdmap, "force", force);
+
     int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
     if (poolid < 0) {
       string err;
@@ -1090,7 +1106,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       }
     }
 
-    int r = _check_pool(mon->osdmon()->osdmap, poolid, POOL_DATA_EXTRA, false, &ss);
+    int r = _check_pool(mon->osdmon()->osdmap, poolid, POOL_DATA_EXTRA, force, &ss);
     if (r != 0) {
       return r;
     }
@@ -1105,6 +1121,44 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     if (fsp->get_mds_map().is_data_pool(poolid)) {
       ss << "data pool " << poolid << " is already on fs " << fs_name;
       return 0;
+    }
+
+    // Warn when mixing EC and replicated data pools unless the filesystem
+    // already has a mix (in which case the damage is already done).
+    const pg_pool_t *new_pool = mon->osdmon()->osdmap.get_pg_pool(poolid);
+    ceph_assert(new_pool != NULL);
+    const auto& existing_pools = fsp->get_mds_map().get_data_pools();
+    if (!existing_pools.empty()) {
+      bool have_ec = false;
+      bool have_replicated = false;
+      for (int64_t existing_id : existing_pools) {
+        const pg_pool_t *ep = mon->osdmon()->osdmap.get_pg_pool(existing_id);
+        if (ep) {
+          if (ep->is_erasure()) {
+            have_ec = true;
+          } else {
+            have_replicated = true;
+          }
+        }
+      }
+      // Only gate if the existing set is uniform (all one type) and the new
+      // pool is the other type.  If already mixed, allow without --force.
+      if (!have_ec != !have_replicated) {
+        // existing pools are all one type
+        if (new_pool->is_erasure() != have_ec) {
+          // new pool is the other type
+          if (!force) {
+            ss << "pool '" << poolname << "' is "
+               << (new_pool->is_erasure() ? "an erasure-coded" : "a replicated")
+               << " pool, but all existing data pools on filesystem '" << fs_name
+               << "' are "
+               << (have_ec ? "erasure-coded" : "replicated")
+               << ". Mixing pool types is not recommended."
+               << " Use --force to override.";
+            return -EINVAL;
+          }
+        }
+      }
     }
 
     if (!mon->osdmon()->is_writeable()) {
@@ -1968,10 +2022,17 @@ int FileSystemCommandHandler::_check_pool(
   }
 
   if (pool->is_erasure()) {
-    if (type == POOL_METADATA) {
+    if (type == POOL_METADATA && !pool->supports_omap()) {
       *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
-         << " is an erasure-coded pool.  Use of erasure-coded pools"
-         << " for CephFS metadata is not permitted";
+         << " is an erasure-coded pool that doesn't support omap."
+         << " Erasure-coded pools require EC optimizations to be enabled to support omap,"
+         << " which is necessary for use as a CephFS metadata pool."
+         << " Enable EC optimizations on this pool to make it available as a metadata pool.";
+      return -EINVAL;
+    } else if (type == POOL_METADATA && !force) {
+      *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
+             " is an erasure-coded pool."
+             " Use of an EC pool as a CephFS metadata pool requires --force.";
       return -EINVAL;
     } else if (type == POOL_DATA_DEFAULT && !force) {
       *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"

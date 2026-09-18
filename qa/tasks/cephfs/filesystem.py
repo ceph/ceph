@@ -561,7 +561,28 @@ class FilesystemBase(MDSClusterBase):
         self.data_pool_name = None
         self.data_pools = None
         self.fs_config = fs_config
-        self.ec_profile = fs_config.get('ec_profile')
+
+        pool_types = fs_config.get('pool_types', {})
+
+        def _parse_pool_type(tokens):
+            """Return (is_erasure, profile_tokens) from a pool_types token list."""
+            if not tokens:
+                return False, []
+            is_erasure = 'type=erasure' in tokens
+            profile_tokens = [t for t in tokens if not t.startswith('type=')]
+            return is_erasure, profile_tokens
+
+        data_tokens = pool_types.get('data_pool', [])
+        meta_tokens = pool_types.get('metadata_pool', [])
+        self.data_pool_is_erasure, self.data_pool_ec_profile = _parse_pool_type(data_tokens)
+        self.metadata_pool_is_erasure, self.metadata_pool_ec_profile = _parse_pool_type(meta_tokens)
+
+        # Legacy key — still accepted for backward compatibility
+        if not self.data_pool_is_erasure:
+            legacy_ec = fs_config.get('ec_profile')
+            if legacy_ec and 'disabled' not in legacy_ec:
+                self.data_pool_is_erasure = True
+                self.data_pool_ec_profile = legacy_ec
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
@@ -723,35 +744,86 @@ class FilesystemBase(MDSClusterBase):
                                                  False)
         fs_ops = kwargs.pop("fs_ops", None)
 
-        # will use the ec pool to store the data and a small amount of
-        # metadata still goes to the primary data pool for all files.
-        if not metadata_overlay and self.ec_profile and 'disabled' not in self.ec_profile:
+        # When using an EC data pool it will store all file data; only a small
+        # amount of metadata still goes to the primary replicated data pool.
+        if not metadata_overlay and self.data_pool_is_erasure:
             self.target_size_ratio = 0.05
 
         log.debug("Creating filesystem '{0}'".format(self.name))
 
+        # --- Build the pool that will be passed as the default data pool to fs new ---
+        # For EC data: create the EC pool now (with omap support) and use it directly.
+        # For replicated data: create the ordinary replicated pool as before.
+        if self.data_pool_is_erasure:
+            ec_data_profile_name = data_pool_name + "_ec_profile"
+            log.debug("EC data profile tokens: %s", self.data_pool_ec_profile)
+            cmd = ['osd', 'erasure-code-profile', 'set', ec_data_profile_name]
+            cmd.extend(self.data_pool_ec_profile)
+            self.run_ceph_cmd(*cmd)
+            try:
+                self.run_ceph_cmd(
+                    'osd', 'pool', 'create', data_pool_name,
+                    'erasure', ec_data_profile_name,
+                    '--pg_num_min', str(self.pg_num_min),
+                    '--target_size_ratio', str(self.target_size_ratio_ec))
+            except CommandFailedError as e:
+                if e.exitstatus == 22:  # nautilus couldn't specify --pg_num_min option
+                    self.run_ceph_cmd(
+                        'osd', 'pool', 'create', data_pool_name,
+                        str(self.pg_num_min), 'erasure', ec_data_profile_name)
+                else:
+                    raise
+            self.run_ceph_cmd('osd', 'pool', 'set', data_pool_name,
+                              'allow_ec_overwrites', 'true')
+            self.run_ceph_cmd('osd', 'pool', 'set', data_pool_name,
+                              'allow_ec_optimizations', 'true')
+        else:
+            try:
+                self.run_ceph_cmd('osd', 'pool', 'create', data_pool_name,
+                                  str(self.pg_num),
+                                  '--pg_num_min', str(self.pg_num_min),
+                                  '--target_size_ratio',
+                                  str(self.target_size_ratio))
+            except CommandFailedError as e:
+                if e.exitstatus == 22:  # nautilus couldn't specify --pg_num_min option
+                    self.run_ceph_cmd('osd', 'pool', 'create',
+                                      data_pool_name, str(self.pg_num),
+                                      str(self.pg_num_min))
+                else:
+                    raise
+
+        # --- Create the metadata pool (EC or replicated) ---
         try:
-            self.run_ceph_cmd('osd', 'pool', 'create',self.metadata_pool_name,
-                              '--pg_num_min', str(self.pg_num_min))
-
-            self.run_ceph_cmd('osd', 'pool', 'create', data_pool_name,
-                              str(self.pg_num),
-                              '--pg_num_min', str(self.pg_num_min),
-                              '--target_size_ratio',
-                              str(self.target_size_ratio))
-        except CommandFailedError as e:
-            if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                self.run_ceph_cmd('osd', 'pool', 'create',
-                                  self.metadata_pool_name,
-                                  str(self.pg_num_min))
-
-                self.run_ceph_cmd('osd', 'pool', 'create',
-                                  data_pool_name, str(self.pg_num),
-                                  str(self.pg_num_min))
+            if self.metadata_pool_is_erasure:
+                ec_meta_profile_name = self.metadata_pool_name + "_ec_profile"
+                log.debug("EC metadata profile tokens: %s", self.metadata_pool_ec_profile)
+                cmd = ['osd', 'erasure-code-profile', 'set', ec_meta_profile_name]
+                cmd.extend(self.metadata_pool_ec_profile)
+                self.run_ceph_cmd(*cmd)
+                self.run_ceph_cmd('osd', 'pool', 'create', self.metadata_pool_name,
+                                  'erasure', ec_meta_profile_name,
+                                  '--pg_num_min', str(self.pg_num_min))
+                self.run_ceph_cmd('osd', 'pool', 'set', self.metadata_pool_name,
+                                  'allow_ec_overwrites', 'true')
+                self.run_ceph_cmd('osd', 'pool', 'set', self.metadata_pool_name,
+                                  'allow_ec_optimizations', 'true')
             else:
-                raise
+                try:
+                    self.run_ceph_cmd('osd', 'pool', 'create', self.metadata_pool_name,
+                                      '--pg_num_min', str(self.pg_num_min))
+                except CommandFailedError as e:
+                    if e.exitstatus == 22:  # nautilus couldn't specify --pg_num_min option
+                        self.run_ceph_cmd('osd', 'pool', 'create',
+                                          self.metadata_pool_name,
+                                          str(self.pg_num_min))
+                    else:
+                        raise
+        except CommandFailedError:
+            raise
 
         args = ["fs", "new", self.name, self.metadata_pool_name, data_pool_name]
+        if self.data_pool_is_erasure or self.metadata_pool_is_erasure:
+            args.append('--force')
         if recover:
             args.append('--recover')
         if metadata_overlay:
@@ -764,32 +836,8 @@ class FilesystemBase(MDSClusterBase):
                 args.append(key_or_val)
         self.run_ceph_cmd(*args)
 
-        if not recover:
-            if self.ec_profile and 'disabled' not in self.ec_profile:
-                ec_data_pool_name = data_pool_name + "_ec"
-                log.debug("EC profile is %s", self.ec_profile)
-                cmd = ['osd', 'erasure-code-profile', 'set', ec_data_pool_name]
-                cmd.extend(self.ec_profile)
-                self.run_ceph_cmd(*cmd)
-                try:
-                    self.run_ceph_cmd(
-                        'osd', 'pool', 'create', ec_data_pool_name,
-                        'erasure', ec_data_pool_name,
-                        '--pg_num_min', str(self.pg_num_min),
-                        '--target_size_ratio', str(self.target_size_ratio_ec))
-                except CommandFailedError as e:
-                    if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                        self.run_ceph_cmd(
-                            'osd', 'pool', 'create', ec_data_pool_name,
-                            str(self.pg_num_min), 'erasure', ec_data_pool_name)
-                    else:
-                        raise
-                self.run_ceph_cmd('osd', 'pool', 'set', ec_data_pool_name,
-                                  'allow_ec_overwrites', 'true')
-                self.add_data_pool(ec_data_pool_name, create=False)
-                self.check_pool_application(ec_data_pool_name)
-
-                self.run_client_payload(f"setfattr -n ceph.dir.layout.pool -v {ec_data_pool_name} . && getfattr -n ceph.dir.layout .")
+        if not recover and self.data_pool_is_erasure:
+            self.run_client_payload(f"setfattr -n ceph.dir.layout.pool -v {data_pool_name} . && getfattr -n ceph.dir.layout .")
 
         self.check_pool_application(self.metadata_pool_name)
         self.check_pool_application(data_pool_name)
@@ -1007,7 +1055,7 @@ class FilesystemBase(MDSClusterBase):
         for name, value in layout.items():
             mount.run_shell(args=["setfattr", "-n", "ceph.dir.layout."+name, "-v", str(value), path])
 
-    def add_data_pool(self, name, create=True):
+    def add_data_pool(self, name, create=True, force=False):
         if create:
             try:
                 self.run_ceph_cmd('osd', 'pool', 'create', name,
@@ -1018,7 +1066,10 @@ class FilesystemBase(MDSClusterBase):
                                     str(self.pg_num_min))
                 else:
                     raise
-        self.run_ceph_cmd('fs', 'add_data_pool', self.name, name)
+        args = ['fs', 'add_data_pool', self.name, name]
+        if force:
+            args.append('--force')
+        self.run_ceph_cmd(*args)
         self.get_pool_names(refresh = True)
         for poolid, fs_name in self.data_pools.items():
             if name == fs_name:
