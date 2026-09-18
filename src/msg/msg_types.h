@@ -493,10 +493,12 @@ struct entity_addr_t {
       encode(t, bl);
     }
     encode(nonce, bl);
+    // The encoding is a 2 byte family followed by the bytes of sa_data, i.e.
+    // exactly sizeof(sockaddr_in{,6}).  The BSDs spend the first two bytes on
+    // a 1 byte sa_len plus a 1 byte sa_family instead of a 2 byte family, but
+    // the structs are the same size and sa_data sits at the same offset, so
+    // the encoded length is the same everywhere.
     __u32 elen = get_sockaddr_len();
-#if (__FreeBSD__) || defined(__APPLE__)
-      elen -= sizeof(u.sa.sa_len);
-#endif
     encode(elen, bl);
     if (elen) {
       uint16_t ss_family = u.sa.sa_family;
@@ -506,7 +508,7 @@ struct entity_addr_t {
       }
 #endif
       encode(ss_family, bl);
-      elen -= sizeof(u.sa.sa_family);
+      elen -= sizeof(ss_family);
       bl.append(u.sa.sa_data, elen);
     }
     ENCODE_FINISH(bl);
@@ -542,7 +544,7 @@ struct entity_addr_t {
 #endif
       u.sa.sa_family = ss_family;
       elen -= sizeof(ss_family);
-      if (elen > get_sockaddr_len() - sizeof(u.sa.sa_family)) {
+      if (elen > get_sockaddr_len() - sizeof(ss_family)) {
 	throw ceph::buffer::malformed_input("elen exceeds sockaddr len");
       }
       bl.copy(elen, u.sa.sa_data);
