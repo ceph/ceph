@@ -2136,6 +2136,7 @@ private:
 		   const UserPerm& perms, InodeRef *inp = 0);
   int _getattr(const InodeRef& in, int mask, const UserPerm& perms, bool force=false);
   int _readlink(const InodeRef& diri, const char* relpath, char *buf, size_t size, const UserPerm& perms);
+  int _readlink(Inode *in, char *buf, size_t size);
   int _getxattr(Inode *in, const char *name, void *value, size_t len,
 		const UserPerm& perms);
   int _getxattr(const InodeRef &in, const char *name, void *value, size_t len,
