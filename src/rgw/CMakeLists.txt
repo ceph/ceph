@@ -794,6 +794,7 @@ target_link_libraries(rgw_a
   PRIVATE
     rgw_schedulers
     kmip
+    heap_profiler
     legacy-option-headers
     common_utf8 global
     heap_profiler
