@@ -14229,12 +14229,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   }
   pending_pool_migration_reservation_ops.clear();
   pool_migration_reservations_granted_source = false;
-  if (pool_migration_reservation_tid != 0) {
-    if (pool_migration_reservation_tid != std::numeric_limits<ceph_tid_t>::max()) {
-      osd->objecter->op_cancel(pool_migration_reservation_tid, -ECANCELED);
-    }
-    pool_migration_reservation_tid = 0;
-  }
+  cancel_pool_migration_reservation_op();
 }
 
 void PrimaryLogPG::plpg_on_role_change()
@@ -15868,9 +15863,10 @@ struct C_PoolMigrationReservationCallback : public Context {
   PrimaryLogPGRef pg;
   epoch_t last_peering_reset;
   ceph_tid_t tid;
+  uint64_t gen;
 
-  C_PoolMigrationReservationCallback(PrimaryLogPG *p, epoch_t lpr)
-    : pg(p), last_peering_reset(lpr), tid(0)
+  C_PoolMigrationReservationCallback(PrimaryLogPG *p, epoch_t lpr, uint64_t g)
+    : pg(p), last_peering_reset(lpr), tid(0), gen(g)
   {}
 
   void finish(int r) override {
@@ -15879,8 +15875,9 @@ struct C_PoolMigrationReservationCallback : public Context {
       return;
     }
     std::scoped_lock lock(*pg);
-    if (last_peering_reset != pg->get_last_peering_reset()) {
-      pg->pool_migration_reservation_tid = 0;
+    if (last_peering_reset != pg->get_last_peering_reset() ||
+        gen != pg->pool_migration_reservation_gen) {
+      ldpp_dout(pg, 10) << "C_PoolMigrationReservationCallback::finish stale, ignoring" << dendl;
       return;
     }
 
@@ -15892,10 +15889,14 @@ struct C_PoolMigrationReservationCallback : public Context {
         pg->pool_migration_reservations_granted_source = false;
         pg->pool_migration_reservation_tid = std::numeric_limits<ceph_tid_t>::max();
         PrimaryLogPGRef pgref = pg;
+        uint64_t my_gen = gen;
         std::lock_guard timer_lock(pg->osd->recovery_request_lock);
         pg->osd->recovery_request_timer.add_event_after(
           1.0,
-          pgref->bless_context(new LambdaContext([pgref](int) {
+          pgref->bless_context(new LambdaContext([pgref, my_gen](int) {
+            if (my_gen != pgref->pool_migration_reservation_gen) {
+              return;
+            }
             pgref->pool_migration_reservation_tid = 0;
             pgref->queue_recovery();
           })));
@@ -16829,7 +16830,8 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
     num_objects,
     epoch);
 
-  C_PoolMigrationReservationCallback *fin = new C_PoolMigrationReservationCallback(this, get_last_peering_reset());
+  C_PoolMigrationReservationCallback *fin = new C_PoolMigrationReservationCallback(
+    this, get_last_peering_reset(), pool_migration_reservation_gen);
   SnapContext snapc;
   Objecter::Op *objecter_op = osd->objecter->prepare_mutate_op(
     object_t(fmt::format("pool_migration_reserve_{:x}", pool_migration_target_pg->ps())),
@@ -16855,10 +16857,29 @@ void PrimaryLogPG::pool_migration_request_target_reservation() {
            << " tid=" << tid << dendl;
 }
 
+void PrimaryLogPG::cancel_pool_migration_reservation_op()
+{
+  // Invalidate any outstanding reservation request so its async callback
+  // and EBUSY retry timer cannot fire and clobber the tid of a subsequent
+  // reservation.
+  ++pool_migration_reservation_gen;
+  if (pool_migration_reservation_tid != 0) {
+    if (pool_migration_reservation_tid != std::numeric_limits<ceph_tid_t>::max()) {
+      osd->objecter->op_cancel(pool_migration_reservation_tid, -ECANCELED);
+    }
+    pool_migration_reservation_tid = 0;
+  }
+}
+
 void PrimaryLogPG::pool_migration_release_target_reservation()
 {
+  // Cancel any in-flight (requested but not-yet-granted) target reservation.
+  // This is to try to avoid stale callbacks firing when we think we've exited migration state.
+  // Must run before the early return below.
+  cancel_pool_migration_reservation_op();
+
   if (!pool_migration_reservations_granted_source || !pool_migration_target_pg.has_value()) {
-    return;  // nothing to release, do nothing
+    return;  // nothing granted to release
   }
   dout(20) << __func__ << " Sending release to target PG "
            << *pool_migration_target_pg << dendl;

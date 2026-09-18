@@ -1240,6 +1240,10 @@ protected:
   std::set<hobject_t> pool_migration_source_delete_pending_lock;
   /// current source PG reservation TID. Not 0 means source PG is waiting for a response
   ceph_tid_t pool_migration_reservation_tid = 0;
+  /// increased whenever an outstanding reservation attempt is abandoned (release /
+  /// on_change); async reservation continuations that captured an older value
+  /// are stale and must not touch pool_migration_reservation_tid
+  uint64_t pool_migration_reservation_gen = 0;
   /// source PG has received reservation granted response from target PG
   bool pool_migration_reservations_granted_source = false;
   /// target PG has taken reservations and replied to the source PG
@@ -1466,6 +1470,7 @@ protected:
   uint16_t count_remaining_target_pgs(const hobject_t &hobj);
   void pool_migration_request_target_reservation() override;
   void pool_migration_release_target_reservation() override;
+  void cancel_pool_migration_reservation_op();
 
   void start_target_pool_migration(int64_t num_bytes, int64_t num_objects);
   void stop_target_pool_migration();
