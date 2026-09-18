@@ -1,0 +1,105 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - client.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+  - client.1
+overrides:
+  cephadm:
+    cephadm_mode: cephadm-package
+  install:
+    extra_packages: [cephadm]
+  ceph:
+    log-ignorelist:
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        # ---- Step 1: Verify cephadm_invoker.py is installed on all hosts ----
+        HOSTNAMES=$(ceph orch host ls --format json | jq -r '.[] | .hostname')
+        for host in $HOSTNAMES; do
+          # The invoker should be present from the cephadm package
+          ceph cephadm check-host ${host} 2> ${host}-check.txt
+          HOST_CHECK=$(cat ${host}-check.txt)
+          if ! grep -q "Host looks OK" <<< "$HOST_CHECK"; then
+            printf "check-host failed for ${host}:\n\n$HOST_CHECK"
+            exit 1
+          fi
+        done
+
+        # ---- Step 2: Verify sudo hardening is initially disabled ----
+        SUDO_HARDENING=$(ceph config get mgr mgr/cephadm/sudo_hardening)
+        if [ "$SUDO_HARDENING" != "false" ]; then
+          echo "Expected sudo_hardening to be false initially, got: $SUDO_HARDENING"
+          exit 1
+        fi
+
+        # ---- Step 3: Enable sudo hardening ----
+        ceph cephadm prepare-host-and-enable-sudo-hardening cephadm
+
+        # Wait for the orchestrator to settle after switching SSH user
+        sleep 30
+
+        # ---- Step 4: Verify sudo hardening is enabled ----
+        SUDO_HARDENING=$(ceph config get mgr mgr/cephadm/sudo_hardening)
+        if [ "$SUDO_HARDENING" != "true" ]; then
+          echo "Expected sudo_hardening to be true after enabling, got: $SUDO_HARDENING"
+          exit 1
+        fi
+
+        # ---- Step 5: Verify SSH user was changed to cephadm ----
+        SSH_USER=$(ceph cephadm get-user)
+        if [ "$SSH_USER" != "cephadm" ]; then
+          echo "Expected ssh_user to be 'cephadm', got: $SSH_USER"
+          exit 1
+        fi
+
+        # ---- Step 6: Verify cluster health after enabling sudo hardening ----
+        # Wait for services to stabilize under the new execution model
+        sleep 30
+
+        # Verify all hosts are reachable through the invoker
+        for host in $HOSTNAMES; do
+          ceph cephadm check-host ${host} 2> ${host}-hardened-check.txt
+          HOST_CHECK=$(cat ${host}-hardened-check.txt)
+          if ! grep -q "Host looks OK" <<< "$HOST_CHECK"; then
+            printf "check-host failed after hardening for ${host}:\n\n$HOST_CHECK"
+            exit 1
+          fi
+        done
+
+        # ---- Step 7: Verify orchestrator operations work through invoker ----
+        ceph orch ps
+        ceph orch ls
+        ceph orch host ls
+        ceph orch device ls
+
+        # Verify daemons are running
+        RUNNING_DAEMONS=$(ceph orch ps --format json | jq '[.[] | select(.status_desc == "running")] | length')
+        if [ "$RUNNING_DAEMONS" -lt 1 ]; then
+          echo "No running daemons found after enabling sudo hardening"
+          ceph orch ps
+          exit 1
+        fi
+
+        # ---- Step 8: Disable sudo hardening and verify ----
+        ceph config set mgr mgr/cephadm/sudo_hardening false
+        sleep 15
+        SUDO_HARDENING=$(ceph config get mgr mgr/cephadm/sudo_hardening)
+        if [ "$SUDO_HARDENING" != "false" ]; then
+          echo "Expected sudo_hardening to be false after disabling, got: $SUDO_HARDENING"
+          exit 1
+        fi
