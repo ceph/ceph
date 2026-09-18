@@ -81,6 +81,14 @@ tl::expected<std::unique_ptr<KeyringSecret>, std::error_code> LinuxKeyring::add(
 }
 
 bool LinuxKeyring::supported(std::error_code* ec) noexcept {
+  // Was a process keyring installed before this thread was created?
+  if (!LinuxKeyringSecret::has_process_keyring()) {
+    if (ec != nullptr) {
+      *ec = std::error_code(errno, std::system_category());
+    }
+    return false;
+  }
+  // Can this thread use the process keyring? 
   LinuxKeyring keyring;
   auto maybe_secret = keyring.add("ceph_test_keyring_support", "ceph");
   if (!maybe_secret) {
@@ -113,6 +121,9 @@ std::error_code LinuxKeyringSecret::initialize_process_keyring() noexcept {
   return {};
 }
 
+bool LinuxKeyringSecret::has_process_keyring() noexcept {
+  return keyctl_get_keyring_ID(KEY_SPEC_PROCESS_KEYRING, 0) != -1;
+}
 
 [[nodiscard]] std::error_code LinuxKeyringSecret::read(std::string& out) const {
   out.clear();

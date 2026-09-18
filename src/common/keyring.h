@@ -102,7 +102,8 @@ class LinuxKeyringSecret : public KeyringSecret {
   ~LinuxKeyringSecret() noexcept override;
 
   [[nodiscard]] static std::error_code initialize_process_keyring() noexcept;
-
+  [[nodiscard]] static bool has_process_keyring() noexcept;
+  
   [[nodiscard]] std::error_code read(std::string& out) const override;
   [[nodiscard]] std::error_code remove() const override;
   [[nodiscard]] bool initialized() const override;

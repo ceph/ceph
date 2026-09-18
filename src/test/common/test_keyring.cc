@@ -14,6 +14,11 @@ class LinuxKeyringTest : public ::testing::Test {
   LinuxKeyringTest() : keyring(new LinuxKeyring()) {}
 
   void SetUp() override {
+    const auto init_ec = LinuxKeyringSecret::initialize_process_keyring();
+    if (init_ec) { 
+      GTEST_SKIP()<< "Cannot install a process keyring: " << init_ec.message()
+                  << ". Skipping test";
+    }
     std::error_code ec;
     if (!keyring->supported(&ec)) {
       GTEST_SKIP() << "Linux Keyring is unsupported. " << ec
