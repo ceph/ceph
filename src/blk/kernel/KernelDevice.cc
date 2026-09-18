@@ -170,6 +170,7 @@ int KernelDevice::open(const string& p)
   bool is_block;
   r = stat(path.c_str(), &statbuf);
   if (r != 0) {
+    r = -errno;
     derr << __func__ << " stat got: " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
