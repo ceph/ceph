@@ -1,10 +1,10 @@
 .. index:: Extensibility, Ceph Classes
 
-Extending Ceph
-==============
+Ceph Object Classes
+===================
 
 .. meta::
-   :description: How shared object classes extend Ceph with new object methods.
+   :description: How shared object classes (Ceph Classes) extend the OSD with new object methods.
    :ceph-page-type: concept
    :ceph-applies-to: squid, tentacle
    :ceph-reviewed: 2026-09

@@ -11,16 +11,11 @@
    :ceph-reviewed: 2026-09
    :ceph-owner: docs
 
-A Ceph cluster is a set of daemons that run on one or more hosts. Three kinds
+A Ceph cluster is a set of daemons (background programs) that run on one or
+more hosts. Three kinds
 are always present: Monitors, Managers, and OSDs. Two more are added for
 specific storage interfaces: Metadata Servers for CephFS, and Object Gateways
 for object storage.
-
-.. ditaa::
-
-            +------+ +----------+ +----------+ +-------+ +------+
-            | OSDs | | Monitors | | Managers | | MDSes | | RGWs |
-            +------+ +----------+ +----------+ +-------+ +------+
 
 .. list-table::
    :header-rows: 1
@@ -41,39 +36,41 @@ for object storage.
    * - :term:`Manager <Ceph Manager>`
      - ``ceph-mgr``
      - Tracks runtime metrics and cluster state (storage utilization,
-       performance, load) and hosts Python modules for orchestration, the
-       :ref:`Dashboard <mgr-dashboard>`, data balancing, and non-native
-       clients. Taking this work off the Monitors makes the cluster easier
+       performance, load) and hosts Python modules for orchestration
+       (deploying daemons, through ``ceph orch``), the :ref:`Dashboard
+       <mgr-dashboard>`, data balancing, and access for non-native clients
+       such as NFS. Taking this work off the Monitors makes the cluster easier
        to scale.
      - Two for high availability, ideally one per Monitor. One is enough for
        a test cluster.
    * - :term:`OSD <Ceph OSD>`
      - ``ceph-osd``
      - Manages one storage device, usually one disk. Stores data as objects,
-       replicates, recovers, and rebalances it, and reports on other OSDs by
-       checking their heartbeats.
-     - At least as many as the number of copies of each object, and three
-       for redundancy in production.
+       replicates, recovers, and rebalances it, and reports OSDs that stop
+       answering heartbeat checks.
+     - At least as many as the number of copies of each object (or of
+       chunks, for erasure coding), and three for redundancy in production.
    * - :term:`Metadata Server <Ceph Metadata Server>`
      - ``ceph-mds``
      - Stores the metadata of the :term:`Ceph File System` so that clients
        can run commands like ``ls`` and ``find`` without loading the storage
        cluster. Needed only if you use CephFS. See
        :ref:`orchestrator-cli-cephfs` and :ref:`arch-cephfs`.
-     - One per file system, plus a standby.
+     - At least one active per file system, plus a standby.
    * - :term:`Object Gateway <Ceph Object Gateway>`
      - ``ceph-radosgw``
-     - A RESTful gateway between applications and the cluster. The
-       S3-compatible API is the most used; Swift is also available. Needed
+     - An HTTP gateway between applications and the cluster. The
+       S3-compatible API is the most used; the OpenStack Swift API is also
+       available. Needed
        only if you use object storage.
      - One, or more behind a load balancer.
 
 How Data Is Placed
 ==================
 
-Ceph stores data as objects in logical pools. For each object, the
-:term:`CRUSH` algorithm calculates which :term:`placement group<Placement
-Groups (PGs)>` (PG) holds it and which OSDs store that PG. Because every
+Ceph stores data as objects in logical pools. Ceph hashes each object name
+to a :term:`placement group<Placement Groups (PGs)>` (PG), and the
+:term:`CRUSH` algorithm calculates which OSDs store that PG. Because every
 daemon and client can run the same calculation, nothing keeps a central lookup
 table, and the cluster can scale, rebalance, and recover on its own.
 

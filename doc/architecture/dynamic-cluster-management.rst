@@ -8,12 +8,12 @@ Dynamic Cluster Management
    :ceph-reviewed: 2026-09
    :ceph-owner: rados
 
-In the :ref:`Scalability and High Availability <arch_scalability_and_high_availability>` section, we explained how Ceph uses
-CRUSH, cluster topology, and intelligent daemons to scale and maintain high
-availability. Key to Ceph's design is the autonomous, self-healing, and
-intelligent Ceph OSD Daemon. Let's take a deeper look at how CRUSH works to
-enable modern cloud storage infrastructures to place data, rebalance the
-cluster, and adaptively place and balance data and recover from faults.
+This page explains how a Ceph cluster manages itself: how pools and
+placement groups organize data, how :term:`CRUSH` maps placement groups to
+OSDs, and how OSDs peer, rebalance, and scrub to recover from faults without a
+central controller. It builds on :ref:`Scalability and High Availability
+<arch_scalability_and_high_availability>`, which introduces CRUSH and the
+cluster map.
 
 .. index:: architecture; pools
 

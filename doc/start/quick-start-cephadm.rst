@@ -23,12 +23,15 @@ Prerequisites
 =============
 
 - One Linux host, physical or virtual, on which you have root access.
-- The software listed in :ref:`cephadm-host-requirements`: Python 3, systemd,
+- The software listed in the :ref:`cephadm host requirements
+  <cephadm-host-requirements>`: Python 3, systemd,
   Podman or Docker, time synchronization, and LVM2.
 - ``ssh`` installed and running on the host.
-- At least two unused storage devices of 5 GB or more on the host. A device is
-  unused if it has no partitions, no LVM state, and no file system, and is not
-  mounted.
+- At least two unused storage devices on the host, each 6 GiB or larger. Ceph
+  rejects devices under 5 GiB, and a disk that a hypervisor or cloud provider
+  labels "5 GB" can fall short of that. A device is unused if it has no
+  partition table, no LVM state, no file system, and no label from an earlier
+  OSD, and is not mounted.
 - The IP address of the host.
 
 .. warning:: Ceph erases every device that you give to it. Do not use a device
@@ -37,26 +40,29 @@ Prerequisites
 Procedure
 =========
 
-#. Install :term:`cephadm` by following :ref:`get-cephadm`, then confirm that it
-   runs:
+#. Install :term:`cephadm` by following :ref:`get-cephadm`.
+
+#. Confirm that ``cephadm`` runs:
 
    .. prompt:: bash #
 
       cephadm version
 
-   The command prints the Ceph version that ``cephadm`` will deploy.
+   The command prints the version of ``cephadm``. It deploys the matching Ceph
+   release unless you pass ``--image``.
 
-#. Bootstrap the cluster. Replace ``<mon-ip>`` with the IP address of the
+#. Bootstrap the cluster, replacing ``<mon-ip>`` with the IP address of the
    host:
 
    .. prompt:: bash #
 
       cephadm bootstrap --mon-ip <mon-ip> --single-host-defaults
 
-   The ``--single-host-defaults`` flag lets Ceph keep all copies of an object
-   on one host, which a cluster does not allow by default. The command takes a
-   few minutes. It ends by printing the address and the initial password of
-   the Ceph Dashboard, followed by this line::
+   The ``--single-host-defaults`` flag keeps two copies of each object instead
+   of three and lets both copies sit on one host, which a cluster does not
+   allow by default. The command takes a few minutes. It prints the address
+   and the initial password of the Ceph Dashboard, then a few hints, and ends
+   with this line::
 
       Bootstrap complete.
 
@@ -77,8 +83,9 @@ Procedure
    Each device that Ceph can use shows ``Yes`` in the ``Available`` column.
    Note the hostname and the path of two available devices.
 
-#. Create an :term:`OSD` on the first device. Replace ``<host>`` and ``<device-path>``
-   with the values from the previous step, for example ``host1701:/dev/sdx``:
+#. Create an :term:`OSD` on the first device, replacing ``<host>`` and
+   ``<device-path>`` with values from the previous step, for example
+   ``host1701:/dev/sdx``:
 
    .. prompt:: bash #
 
@@ -93,28 +100,31 @@ Procedure
 Verification
 ============
 
-Check the state of the cluster:
+- Check the state of the cluster:
 
-.. prompt:: bash #
+  .. prompt:: bash #
 
-   ceph status
+     ceph status
 
-The cluster is ready when the output shows ``health: HEALTH_OK``, one Monitor
-in quorum, an active Manager, and two OSDs that are ``up`` and ``in``. It can
-take a minute or two after the last OSD is created for the cluster to reach
-``HEALTH_OK``.
+  The cluster is ready when the output shows ``health: HEALTH_OK`` (no
+  warnings), one Monitor in :term:`quorum<Quorum>`, an active Manager, and two
+  OSDs that are ``up`` and ``in``. It can take a minute or two after the last
+  OSD is created for the cluster to reach ``HEALTH_OK``.
 
 Troubleshooting
 ===============
 
 - **The bootstrap command stops with an error.** Check that the host meets
   the requirements in `Prerequisites`_, that ``ssh`` is running, and that
-  ``<mon-ip>`` is an address of this host. See :doc:`/cephadm/troubleshooting`.
-- **A device shows "No" in the "Available" column.** The device has
-  partitions, LVM state, or a file system, or it is smaller than 5 GB. The
-  conditions are listed in :ref:`cephadm-deploy-osds`.
+  ``<mon-ip>`` is an address of this host. See :doc:`cephadm troubleshooting
+  </cephadm/troubleshooting>`.
+- **A device shows "No" in the "Available" column.** The "Reject Reasons"
+  column of the same output says why: usually a partition table, LVM state, a
+  file system, or a size under 5 GiB. The conditions are listed in
+  :ref:`cephadm-deploy-osds`.
 - **The cluster stays in "HEALTH_WARN" with undersized or degraded placement
-  groups.** The cluster has fewer than two OSDs, or it was bootstrapped without
+  groups.** Ceph cannot store the required number of copies. Either the
+  cluster has fewer than two OSDs, or it was bootstrapped without
   ``--single-host-defaults``. See :ref:`one-node-cluster`.
 
 Next Steps

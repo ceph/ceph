@@ -23,8 +23,9 @@ Prerequisites
 
 - A running Ceph cluster that reports ``HEALTH_OK``.
 - A Linux client host that has the ``ceph-common`` package installed, and a
-  copy of ``/etc/ceph/ceph.conf`` and of a :term:`keyring<Keyring>` that is allowed to use the
-  cluster.
+  copy of ``/etc/ceph/ceph.conf`` and of a :term:`keyring<Keyring>` that is
+  allowed to use the cluster. On a cephadm bootstrap host both files are in
+  ``/etc/ceph``; the keyring is ``ceph.client.admin.keyring``.
 - A client host that is not also a host of the Ceph cluster, unless the client
   is a virtual machine. Mapping a block device with the kernel client on a
   host that runs Ceph daemons can cause a deadlock.
@@ -32,8 +33,8 @@ Prerequisites
 Procedure
 =========
 
-#. On a cluster host, create a :term:`pool<Pools>` for block device images. This example
-   uses the pool name ``rbd1701``:
+#. On a cluster host, inside ``cephadm shell``, create a :term:`pool<Pools>`
+   for block device images. This example uses the pool name ``rbd1701``:
 
    .. prompt:: bash #
 
@@ -60,6 +61,9 @@ Procedure
       rbd map rbd1701/image1701
 
    The command prints the name of the new device, for example ``/dev/rbd0``.
+   The ``udev`` rule shipped with ``ceph-common`` also creates the link
+   ``/dev/rbd/rbd1701/image1701``, which the next steps use. If that link does
+   not exist, use the ``/dev/rbdN`` name that ``rbd map`` printed.
 
 #. Create a file system on the device:
 
@@ -106,8 +110,8 @@ Troubleshooting
   the image again.
 - If ``rbd`` commands hang or report an authentication error, check that
   ``/etc/ceph/ceph.conf`` and the keyring on the client are copies of the
-  files on the cluster, and that the client can reach the Monitors over the
-  network.
+  files on the cluster. Then check that the client can reach the Monitors
+  over the network.
 
 Next Steps
 ==========
