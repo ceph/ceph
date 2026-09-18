@@ -148,6 +148,8 @@
 #include <memory>
 #include <string>
 #include "include/buffer_fwd.h"
+#include "common/mini_flat_map.h"
+#include "osd/ECTypes.h"
 #include "osd/osd_types.h"
 
 #define IGNORE_DEPRECATED \
