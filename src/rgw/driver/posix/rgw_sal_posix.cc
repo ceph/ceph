@@ -3302,6 +3302,8 @@ int POSIXObject::copy_object(const ACLOwner& owner,
                               bool high_precision_time,
                               const char* if_match,
                               const char* if_nomatch,
+                              const char* dest_if_match,
+                              const char* dest_if_nomatch,
                               AttrsMod attrs_mod,
                               bool copy_if_newer,
                               Attrs& attrs,
@@ -3326,6 +3328,9 @@ int POSIXObject::copy_object(const ACLOwner& owner,
     ldpp_dout(dpp, 0) << "ERROR: could not get bucket to copy " << get_name()
                       << dendl;
     return -EINVAL;
+  }
+  if (dest_if_match || dest_if_nomatch) {
+    return -ERR_NOT_IMPLEMENTED;
   }
   bool has_instance = !get_key().instance.empty();
 

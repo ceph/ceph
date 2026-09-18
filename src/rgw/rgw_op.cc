@@ -6684,6 +6684,8 @@ void RGWCopyObj::execute(optional_yield y)
 	   high_precision_time,
 	   if_match,
 	   if_nomatch,
+	   dest_if_match,
+	   dest_if_nomatch,
 	   attrs_mod,
 	   copy_if_newer,
 	   attrs,
