@@ -8,7 +8,7 @@ from cephadm.services.nvmeof import NvmeofService, NVMEOF_CLIENT_CERT_LABEL
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import NvmeofServiceSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from cephadm.tlsobject_types import TLSCredentials
 
 cephadm_root_ca = """-----BEGIN CERTIFICATE-----\nMIIE7DCCAtSgAwIBAgIUE8b2zZ64geu2ns3Zfn3/4L+Cf6MwDQYJKoZIhvcNAQEL\nBQAwFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MB4XDTI0MDYyNjE0NDA1M1oXDTM0\nMDYyNzE0NDA1M1owFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MIICIjANBgkqhkiG\n9w0BAQEFAAOCAg8AMIICCgKCAgEAsZRJsdtTr9GLG1lWFql5SGc46ldFanNJd1Gl\nqXq5vgZVKRDTmNgAb/XFuNEEmbDAXYIRZolZeYKMHfn0pouPRSel0OsC6/02ZUOW\nIuN89Wgo3IYleCFpkVIumD8URP3hwdu85plRxYZTtlruBaTRH38lssyCqxaOdEt7\nAUhvYhcMPJThB17eOSQ73mb8JEC83vB47fosI7IhZuvXvRSuZwUW30rJanWNhyZq\neS2B8qw2RSO0+77H6gA4ftBnitfsE1Y8/F9Z/f92JOZuSMQXUB07msznPbRJia3f\nueO8gOc32vxd1A1/Qzp14uX34yEGY9ko2lW226cZO29IVUtXOX+LueQttwtdlpz8\ne6Npm09pXhXAHxV/OW3M28MdXmobIqT/m9MfkeAErt5guUeC5y8doz6/3VQRjFEn\nRpN0WkblgnNAQ3DONPc+Qd9Fi/wZV2X7bXoYpNdoWDsEOiE/eLmhG1A2GqU/mneP\nzQ6u79nbdwTYpwqHpa+PvusXeLfKauzI8lLUJotdXy9EK8iHUofibB61OljYye6B\nG3b8C4QfGsw8cDb4APZd/6AZYyMx/V3cGZ+GcOV7WvsC8k7yx5Uqasm/kiGQ3EZo\nuNenNEYoGYrjb8D/8QzqNUTwlEh27/ps80tO7l2GGTvWVZL0PRZbmLDvO77amtOf\nOiRXMoUCAwEAAaMwMC4wGwYDVR0RBBQwEocQAAAAAAAAAAAAAAAAAAAAATAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQAxwzX5AhYEWhTV4VUwUj5+\nqPdl4Q2tIxRokqyE+cDxoSd+6JfGUefUbNyBxDt0HaBq8obDqqrbcytxnn7mpnDu\nhtiauY+I4Amt7hqFOiFA4cCLi2mfok6g2vL53tvhd9IrsfflAU2wy7hL76Ejm5El\nA+nXlkJwps01Whl9pBkUvIbOn3pXX50LT4hb5zN0PSu957rjd2xb4HdfuySm6nW4\n4GxtVWfmGA6zbC4XMEwvkuhZ7kD2qjkAguGDF01uMglkrkCJT3OROlNBuSTSBGqt\ntntp5VytHvb7KTF7GttM3ha8/EU2KYaHM6WImQQTrOfiImAktOk4B3lzUZX3HYIx\n+sByO4P4dCvAoGz1nlWYB2AvCOGbKf0Tgrh4t4jkiF8FHTXGdfvWmjgi1pddCNAy\nn65WOCmVmLZPERAHOk1oBwqyReSvgoCFo8FxbZcNxJdlhM0Z6hzKggm3O3Dl88Xl\n5euqJjh2STkBW8Xuowkg1TOs5XyWvKoDFAUzyzeLOL8YSG+gXV22gPTUaPSVAqdb\nwd0Fx2kjConuC5bgTzQHs8XWA930U3XWZraj21Vaa8UxlBLH4fUro8H5lMSYlZNE\nJHRNW8BkznAClaFSDG3dybLsrzrBFAu/Qb5zVkT1xyq0YkepGB7leXwq6vjWA5Pw\nmZbKSphWfh0qipoqxqhfkw==\n-----END CERTIFICATE-----\n"""
@@ -25,6 +25,26 @@ class FakeInventory:
         return '1.2.3.4'
 
 
+class FakeHostSpec:
+    def __init__(self, hostname: str):
+        self.hostname = hostname
+
+
+class FakeCache:
+    def __init__(self):
+        self._daemons: List[DaemonDescription] = []
+        self._unreachable_hosts: List[FakeHostSpec] = []
+
+    def get_daemons_by_type(self, daemon_type: str) -> List[DaemonDescription]:
+        return [d for d in self._daemons if d.daemon_type == daemon_type]
+
+    def get_daemons_by_service(self, service_name: str) -> List[DaemonDescription]:
+        return [d for d in self._daemons if d.service_name() == service_name]
+
+    def get_unreachable_hosts(self) -> List[FakeHostSpec]:
+        return self._unreachable_hosts
+
+
 class FakeMgr:
     def __init__(self):
         self.config = ''
@@ -35,6 +55,7 @@ class FakeMgr:
         self.log = MagicMock()
         self.cert_mgr = MagicMock()
         self.inventory = FakeInventory()
+        self.cache = FakeCache()
 
     def _check_mon_command(self, cmd_dict, inbuf=None):
         prefix = cmd_dict.get('prefix')
@@ -81,6 +102,90 @@ class TestNVMEOFService:
     @patch('cephadm.utils.resolve_ip')
     def test_nvmeof_dashboard_config(self, mock_resolve_ip):
         pass
+
+    def _make_daemon(self, daemon_id, hostname, service_name, status=DaemonDescriptionStatus.running):
+        return DaemonDescription(
+            daemon_type='nvmeof',
+            daemon_id=daemon_id,
+            hostname=hostname,
+            service_name=service_name,
+            status=status,
+        )
+
+    def test_ok_to_stop_last_daemon_in_group_warns(self):
+        """Stopping the last running daemon in a gateway group should warn."""
+        self.mgr.cache._daemons = [
+            self._make_daemon('pool.grp1.node0.aaa', 'node0', 'nvmeof.pool.grp1',
+                              status=DaemonDescriptionStatus.stopped),
+            self._make_daemon('pool.grp1.node1.bbb', 'node1', 'nvmeof.pool.grp1',
+                              status=DaemonDescriptionStatus.running),
+            self._make_daemon('pool.grp2.node2.ccc', 'node2', 'nvmeof.pool.grp2',
+                              status=DaemonDescriptionStatus.running),
+            self._make_daemon('pool.grp2.node3.ddd', 'node3', 'nvmeof.pool.grp2',
+                              status=DaemonDescriptionStatus.running),
+        ]
+        self.mgr.cache._unreachable_hosts = []
+
+        result = self.nvmeof_service.ok_to_stop(['pool.grp1.node1.bbb'])
+        assert result.retval != 0
+        assert 'nvmeof.pool.grp1' in result.stderr
+
+    def test_ok_to_stop_safe_when_group_has_remaining(self):
+        """Stopping one daemon when the group still has another running should be safe."""
+        self.mgr.cache._daemons = [
+            self._make_daemon('pool.grp1.node0.aaa', 'node0', 'nvmeof.pool.grp1',
+                              status=DaemonDescriptionStatus.running),
+            self._make_daemon('pool.grp1.node1.bbb', 'node1', 'nvmeof.pool.grp1',
+                              status=DaemonDescriptionStatus.running),
+            self._make_daemon('pool.grp2.node2.ccc', 'node2', 'nvmeof.pool.grp2',
+                              status=DaemonDescriptionStatus.running),
+        ]
+        self.mgr.cache._unreachable_hosts = []
+
+        result = self.nvmeof_service.ok_to_stop(['pool.grp1.node0.aaa'])
+        assert result.retval == 0
+
+    def test_ok_to_stop_force_bypasses_warning(self):
+        """The --force flag should bypass per-group warnings."""
+        self.mgr.cache._daemons = [
+            self._make_daemon('pool.grp1.node0.aaa', 'node0', 'nvmeof.pool.grp1',
+                              status=DaemonDescriptionStatus.stopped),
+            self._make_daemon('pool.grp1.node1.bbb', 'node1', 'nvmeof.pool.grp1',
+                              status=DaemonDescriptionStatus.running),
+        ]
+        self.mgr.cache._unreachable_hosts = []
+
+        result = self.nvmeof_service.ok_to_stop(['pool.grp1.node1.bbb'], force=True)
+        assert result.retval == 0
+
+    def test_ok_to_stop_multiple_groups_warns_per_group(self):
+        """Stopping last daemons in multiple groups should warn about the affected group."""
+        self.mgr.cache._daemons = [
+            self._make_daemon('pool.grp1.node0.aaa', 'node0', 'nvmeof.pool.grp1',
+                              status=DaemonDescriptionStatus.running),
+            self._make_daemon('pool.grp2.node2.ccc', 'node2', 'nvmeof.pool.grp2',
+                              status=DaemonDescriptionStatus.running),
+        ]
+        self.mgr.cache._unreachable_hosts = []
+
+        result = self.nvmeof_service.ok_to_stop(
+            ['pool.grp1.node0.aaa', 'pool.grp2.node2.ccc'])
+        assert result.retval != 0
+        assert 'nvmeof.pool.grp' in result.stderr
+
+    def test_ok_to_stop_unreachable_host_not_counted(self):
+        """Daemons on unreachable hosts should not count as running."""
+        self.mgr.cache._daemons = [
+            self._make_daemon('pool.grp1.node0.aaa', 'node0', 'nvmeof.pool.grp1',
+                              status=DaemonDescriptionStatus.running),
+            self._make_daemon('pool.grp1.node1.bbb', 'node1', 'nvmeof.pool.grp1',
+                              status=DaemonDescriptionStatus.running),
+        ]
+        self.mgr.cache._unreachable_hosts = [FakeHostSpec('node0')]
+
+        result = self.nvmeof_service.ok_to_stop(['pool.grp1.node1.bbb'])
+        assert result.retval != 0
+        assert 'nvmeof.pool.grp1' in result.stderr
 
     @patch("cephadm.inventory.Inventory.get_addr", lambda _, __: '192.168.100.100')
     @patch("cephadm.serve.CephadmServe._run_cephadm")
