@@ -43,7 +43,7 @@
 #include "messages/MGenericMessage.h"
 
 #include "include/ceph_assert.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/stringify.h"
 #include "include/util.h" // for dump_services()
 #include "mds/cephfs_features.h"
