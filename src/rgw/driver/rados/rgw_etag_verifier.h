@@ -25,15 +25,12 @@ class ETagVerifier : public rgw::putobj::Pipe
 {
 protected:
   CephContext* cct;
-  MD5 hash;
+  MD5NonCrypto hash;
   std::string calculated_etag;
 
 public:
   ETagVerifier(CephContext* cct_, rgw::sal::DataProcessor *next)
-    : Pipe(next), cct(cct_) {
-      // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-      hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-    }
+    : Pipe(next), cct(cct_) {}
 
   virtual void calculate_etag() = 0;
   std::string get_calculated_etag() { return calculated_etag;}
@@ -55,7 +52,7 @@ class ETagVerifier_MPU : public ETagVerifier
 {
   std::vector<uint64_t> part_ofs;
   uint64_t cur_part_index{0}, next_part_index{1};
-  MD5 mpu_etag_hash;
+  MD5NonCrypto mpu_etag_hash;
  
   void process_end_of_MPU_part();
 
@@ -65,10 +62,7 @@ public:
                              rgw::sal::DataProcessor *next)
     : ETagVerifier(cct, next),
       part_ofs(std::move(part_ofs))
-  {
-    // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-  }
+  {}
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
   void calculate_etag() override;
