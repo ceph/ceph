@@ -29,7 +29,6 @@ import {
   TilesModule,
   LayerModule,
   AccordionModule,
-  MenuButtonModule,
   ContextMenuModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
@@ -155,7 +154,6 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     TilesModule,
     LayerModule,
     AccordionModule,
-    MenuButtonModule,
     ContextMenuModule
   ],
   declarations: [

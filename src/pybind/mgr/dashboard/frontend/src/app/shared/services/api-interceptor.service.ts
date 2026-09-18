@@ -111,7 +111,8 @@ export class ApiInterceptorService implements HttpInterceptor {
             case 403: {
               const UNSCOPED_UI_APIS = [
                 'ui-api/prometheus/prometheus-api-host',
-                'ui-api/prometheus/alertmanager-api-host'
+                'ui-api/prometheus/alertmanager-api-host',
+                'ui-api/osd/deployment_options'
               ];
               if (!UNSCOPED_UI_APIS.some((path) => request.url.startsWith(path))) {
                 this.router.navigate(['error'], {

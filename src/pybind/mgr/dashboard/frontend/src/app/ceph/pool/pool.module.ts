@@ -38,7 +38,6 @@ import {
   ModalModule,
   ButtonModule,
   GridModule,
-  MenuButtonModule,
   ContextMenuModule
 } from 'carbon-components-angular';
 import HelpIcon from '@carbon/icons/es/help/16';
@@ -83,7 +82,6 @@ import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
     ModalModule,
     ButtonModule,
     GridModule,
-    MenuButtonModule,
     ContextMenuModule,
     AreaChartComponent
   ],
