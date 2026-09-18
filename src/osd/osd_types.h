@@ -1864,6 +1864,10 @@ public:
     return has_flag(FLAG_EC_OPTIMIZATIONS);
   }
 
+  bool allows_nonprimary_reads() const {
+    return !is_tier() && !has_tiers() && (get_dedup_tier() <= 0);
+  }
+
   bool is_crimson() const {
     return has_flag(FLAG_CRIMSON);
   }
