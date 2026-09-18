@@ -232,6 +232,7 @@
         [class.roles-clear-disabled]="isAdminRoleProtected"
       >
         <cds-combo-box
+          #rolesComboBox
           label="Roles"
           type="multi"
           selectionFeedback="top-after-reopen"
@@ -246,6 +247,7 @@
           [cdRequiredField]="!isSSO ? 'Roles' : ''"
           [invalid]="!userForm.controls.roles.valid && userForm.controls.roles.dirty"
           [invalidText]="rolesError"
+          (selected)="onRolesSelected()"
           (clear)="onRolesClear()"
           i18n
         >
