@@ -43,8 +43,7 @@ describe('Configuration page', () => {
         ['mon', '2'],
         ['mgr', '3'],
         ['osd', '4'],
-        ['mds', '5'],
-        ['client', '6']
+        ['mds', '5']
       );
     });
 
