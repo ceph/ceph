@@ -286,15 +286,15 @@ public:
 
   static bool check_omap_dir(std::string &omap_dir);
   /// Opens underlying db
-  int open(std::ostream &out, const std::string& cfs="") override {
-    return do_open(out, false, false, cfs);
+  int open(std::ostream &out) override {
+    return do_open(out, false, false);
   }
   /// Creates underlying db if missing and opens it
   int create_and_open(std::ostream &out,
 		      const std::string& cfs="") override;
 
-  int open_read_only(std::ostream &out, const std::string& cfs="") override {
-    return do_open(out, false, true, cfs);
+  int open_read_only(std::ostream &out) override {
+    return do_open(out, false, true);
   }
 
   void close() override;
