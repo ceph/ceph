@@ -69,6 +69,9 @@ function(build_rocksdb)
   if(HAS_WARNING_PESSIMIZING_MOVE)
     string(APPEND rocksdb_CXX_FLAGS " -Wno-pessimizing-move")
   endif()
+  # rocksdb headers use uint64_t without <cstdint>, which libstdc++ 16 no
+  # longer includes transitively
+  string(APPEND rocksdb_CXX_FLAGS " -include cstdint")
   if(rocksdb_CXX_FLAGS)
     list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_FLAGS='${rocksdb_CXX_FLAGS}')
   endif()
