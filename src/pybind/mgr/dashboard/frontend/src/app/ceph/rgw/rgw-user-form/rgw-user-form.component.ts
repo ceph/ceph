@@ -1,18 +1,36 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
-import { AbstractControl, FormGroup, ValidationErrors, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  AsyncValidatorFn,
+  FormGroup,
+  ValidationErrors,
+  Validators
+} from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
-import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
+import {
+  concat as observableConcat,
+  forkJoin as observableForkJoin,
+  Observable,
+  of as observableOf,
+  timer as observableTimer
+} from 'rxjs';
+import { map, switchMap, take } from 'rxjs/operators';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
-import { ActionLabelsI18n, URLVerbs, USER } from '~/app/shared/constants/app.constants';
+import {
+  ActionLabelsI18n,
+  AppConstants,
+  URLVerbs,
+  USER
+} from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdValidators, DUE_TIMER } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
@@ -56,6 +74,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   usernameExists: boolean;
   showTenant = false;
   previousTenant: string = null;
+  originalUid: string;
+  isDashboardUser = false;
   @ViewChild(RgwRateLimitComponent, { static: false }) rateLimitComponent!: RgwRateLimitComponent;
   accounts: Account[] = [];
   initialUserPolicies: string[] = [];
@@ -98,13 +118,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       user_id: [
         null,
         [Validators.required, Validators.pattern(/^[a-zA-Z0-9!@#%^&*()._-]+$/)],
-        this.editing
-          ? []
-          : [
-              CdValidators.unique(this.rgwUserService.exists, this.rgwUserService, () =>
-                this.userForm.getValue('tenant')
-              )
-            ]
+        [this.userIdValidator()]
       ],
       show_tenant: [this.editing],
       tenant: [
@@ -284,6 +298,11 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
           });
           this.capabilities = resp[0].caps;
           this.uid = this.getUID();
+          this.originalUid = this.uid;
+          this.isDashboardUser = this.uid === AppConstants.defaultUser;
+          if (this.isDashboardUser) {
+            this.userForm.get('user_id')?.disable();
+          }
           this.initialUserPolicies = resp[0].managed_user_policies ?? [];
 
           this.managedPolicies.forEach((policy) => {
@@ -349,6 +368,24 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     return null;
   }
 
+  userIdValidator(): AsyncValidatorFn {
+    return (control: AbstractControl): Observable<ValidationErrors | null> => {
+      if (control.pristine || !control.value) {
+        return observableOf(null);
+      }
+      const tenant = this.userForm ? this.userForm.getValue('tenant') : null;
+      const uName = tenant ? `${tenant}$${control.value}` : control.value;
+      if (this.editing && this.originalUid && uName === this.originalUid) {
+        return observableOf(null);
+      }
+      return observableTimer(DUE_TIMER).pipe(
+        switchMap(() => this.rgwUserService.exists(uName)),
+        map((exists: boolean) => (exists ? { notUnique: true } : null)),
+        take(1)
+      );
+    };
+  }
+
   rateLimitFormInit(rateLimitForm: FormGroup) {
     this.userForm.addControl('rateLimit', rateLimitForm);
   }
@@ -369,9 +406,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       // Edit
       if (this._isGeneralDirty()) {
         const args = this._getUpdateArgs();
-        this.submitObservables.push(this.rgwUserService.update(this.uid, args));
+        this.submitObservables.push(this.rgwUserService.update(this.originalUid || this.uid, args));
       }
-      notificationTitle = $localize`Updated Object Gateway user '${this.uid}'`;
+      const isRenamed = Boolean(this.originalUid && this.uid !== this.originalUid);
+      notificationTitle = isRenamed
+        ? $localize`Renamed Object Gateway user to '${this.uid}'`
+        : $localize`Updated Object Gateway user '${this.uid}'`;
     } else {
       // Add
       const args = this._getCreateArgs();
@@ -686,6 +726,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   private _isGeneralDirty(): boolean {
     return [
+      'user_id',
       'display_name',
       'email',
       'max_buckets_mode',
@@ -788,6 +829,10 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     const keys = ['display_name', 'email', 'max_buckets', 'system', 'suspended'];
     for (const key of keys) {
       result[key] = this.userForm.getValue(key);
+    }
+    const currentUid = this.getUID();
+    if (this.originalUid && currentUid !== this.originalUid) {
+      result['new_uid'] = currentUid;
     }
     if (this.userForm.getValue('account_id')) {
       result['account_id'] = this.userForm.getValue('account_id');
