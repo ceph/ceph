@@ -5900,7 +5900,6 @@ namespace {
 		   int* rval)
   {
     OSDOp& osd_op = op->add_op(CEPH_OSD_OP_SCRUBLS);
-    op->flags |= CEPH_OSD_FLAG_PGOP;
     ceph_assert(interval);
     arg.encode(osd_op.indata);
     unsigned p = op->ops.size() - 1;

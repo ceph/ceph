@@ -1303,7 +1303,7 @@ int librados::IoCtxImpl::get_inconsistent_objects(const pg_t& pg,
   op.scrub_ls(start_after, max_to_get, objects, interval, &c->rval);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
-    oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP | extra_op_flags, oncomplete,
+    oloc.hash, oloc, op, nullptr, extra_op_flags, oncomplete,
     nullptr, nullptr);
   objecter->op_submit(o, &c->tid);
   return 0;
@@ -1324,7 +1324,7 @@ int librados::IoCtxImpl::get_inconsistent_snapsets(const pg_t& pg,
   op.scrub_ls(start_after, max_to_get, snapsets, interval, &c->rval);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
-    oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP | extra_op_flags, oncomplete,
+    oloc.hash, oloc, op, nullptr, extra_op_flags, oncomplete,
     nullptr, nullptr);
   objecter->op_submit(o, &c->tid);
   return 0;

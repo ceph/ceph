@@ -325,7 +325,6 @@ struct ObjectOperation {
     else
       add_pgls_filter(CEPH_OSD_OP_PGLS_FILTER, count, filter, cookie,
 		      start_epoch);
-    flags |= CEPH_OSD_FLAG_PGOP;
   }
 
   void pg_nls(uint64_t count, const ceph::buffer::list& filter,
@@ -335,7 +334,6 @@ struct ObjectOperation {
     else
       add_pgls_filter(CEPH_OSD_OP_PGNLS_FILTER, count, filter, cookie,
 		      start_epoch);
-    flags |= CEPH_OSD_FLAG_PGOP;
   }
 
   void scrub_ls(const librados::object_id_t& start_after,
@@ -3228,10 +3226,10 @@ public:
     ObjectOperation& op, ceph::buffer::list *pbl, int flags,
     Context *onack, epoch_t *reply_epoch,
     int *ctx_budget) {
+    flags |= CEPH_OSD_FLAG_PGOP | CEPH_OSD_FLAG_IGNORE_OVERLAY;
     Op *o = new Op(object_t(), oloc,
 		   std::move(op.ops),
-		   get_read_flags(flags) |
-		   CEPH_OSD_FLAG_IGNORE_OVERLAY,
+		   get_read_flags(flags),
 		   onack, NULL);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
@@ -3267,10 +3265,10 @@ public:
     ObjectOperation& op, ceph::buffer::list *pbl, int flags,
     Op::OpComp onack, epoch_t *reply_epoch, int *ctx_budget) {
     ceph_tid_t tid;
+    flags |= CEPH_OSD_FLAG_PGOP | CEPH_OSD_FLAG_IGNORE_OVERLAY;
     Op *o = new Op(object_t(), oloc,
 		   std::move(op.ops),
-		   flags | global_op_flags | CEPH_OSD_FLAG_READ |
-		   CEPH_OSD_FLAG_IGNORE_OVERLAY,
+		   get_read_flags(flags),
 		   std::move(onack), nullptr);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
