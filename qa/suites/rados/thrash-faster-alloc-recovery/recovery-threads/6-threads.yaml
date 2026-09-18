@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        bluestore_allocation_recovery_threads: 6
