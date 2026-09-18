@@ -367,6 +367,18 @@ class TestCephAdm(object):
     @pytest.mark.parametrize("test_input, expected", [
         ("1.6.2", (1,6,2)),
         ("1.6.2-stable2", (1,6,2)),
+        (
+            "Old database has been renamed to "
+            "/var/lib/containers/storage/libpod/bolt_state.db-old "
+            "and will no longer be used\n4.9.3\n",
+            (4, 9, 3),
+        ),
+        (
+            "Old database has been renamed to "
+            "/var/lib/containers/storage/libpod/bolt_state.db-old "
+            "and will no longer be used\n4.9.3",
+            (4, 9, 3),
+        ),
     ])
     def test_parse_podman_version(self, test_input, expected):
         from cephadmlib.container_engines import _parse_podman_version
@@ -1678,6 +1690,9 @@ class TestMaintenance:
     def test_parser_BAD(self):
         with pytest.raises(SystemExit):
             _cephadm._parse_args(['host-maintenance', 'wah'])
+
+    def test_skips_container_engine_check(self):
+        assert _cephadm.command_maintenance in _cephadm._SKIP_CONTAINER_ENGINE_CHECK
 
     @mock.patch('os.listdir', return_value=[])
     @mock.patch('cephadm.call')
