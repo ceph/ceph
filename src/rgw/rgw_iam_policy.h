@@ -24,6 +24,7 @@
 
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
+#include "log/Log.h"
 
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
