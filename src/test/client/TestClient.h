@@ -53,6 +53,26 @@ public:
     ClientScaffold(Messenger *m, MonClient *mc, Objecter *objecter_, fscrypt_env *fse) : Client(m, mc, objecter_), fse(fse) {}
     virtual ~ClientScaffold()
     { }
+    int read_snapdiff_page(dir_result_t* dirp, snapid_t other_snap,
+                           unsigned max_bytes) {
+      RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+      if (!mref_reader.is_state_satisfied()) {
+        return -ENOTCONN;
+      }
+      std::scoped_lock l(client_lock);
+      auto& diri = dirp->inode;
+      filepath path;
+      diri->make_nosnap_relative_path(path);
+      auto req = new MetaRequest(CEPH_MDS_OP_READDIR_SNAPDIFF);
+      req->set_filepath(path);
+      req->set_inode(diri.get());
+      req->head.args.snapdiff.snap_other = other_snap;
+      req->head.args.snapdiff.frag = diri->dirfragtree[0];
+      req->head.args.snapdiff.flags = CEPH_READDIR_REPLY_BITFLAGS;
+      req->head.args.snapdiff.max_bytes = max_bytes;
+      req->dirp = dirp;
+      return make_request(req, dirp->perms);
+    }
     int check_dummy_op(const UserPerm& perms){
       RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
       if (!mref_reader.is_state_satisfied()) {
