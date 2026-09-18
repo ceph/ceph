@@ -508,6 +508,13 @@ void rgw::keystone::TokenEnvelope::User::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("domain", domain, obj);
 }
 
+void rgw::keystone::TokenEnvelope::ApplicationCredential::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("name", name, obj, true);
+  JSONDecoder::decode_json("restricted", restricted, obj, true);
+}
+
 void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
 {
   std::string expires_iso8601;
@@ -516,6 +523,12 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
   JSONDecoder::decode_json("roles", roles, root_obj, true);
   JSONDecoder::decode_json("project", project, root_obj, true);
+
+  // Optional application_credential field (only present for app cred auth)
+  ApplicationCredential tmp_app_cred;
+  if (JSONDecoder::decode_json("application_credential", tmp_app_cred, root_obj, false)) {
+    app_cred = std::move(tmp_app_cred);
+  }
 
   struct tm t;
   if (parse_iso8601(expires_iso8601.c_str(), &t)) {
