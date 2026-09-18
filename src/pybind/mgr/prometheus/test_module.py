@@ -471,3 +471,89 @@ class HardwareMetricsTest(TestCase):
         self.module._process_processors(self.status, self.hostname)
         for labels in self.module.metrics['hardware_cpu_cores'].value:
             self.assertEqual(len(labels), 5)
+
+
+class RgwSyncMetricsTest(TestCase):
+    def setUp(self):
+        from prometheus.module import Module
+        self.module = mock.MagicMock(spec=Module)
+        self.module.metrics = {}
+        self.module.add_fixed_name_metrics = Module.add_fixed_name_metrics.__get__(
+            self.module)
+
+    def _add_sync_metric(self, zone_name: str, counter: str,
+                         value: float = 1.0) -> str:
+        """Insert a raw RGW sync perf-counter metric and return its path."""
+        path = 'data-sync-from-{}.{}'.format(zone_name, counter)
+        m = Metric('counter', path, 'test desc', ('instance_id',))
+        m.set(value, ('rgw.0',))
+        self.module.metrics[path] = m
+        return path
+
+    def test_hyphenated_zone_name(self):
+        """Zone names with hyphens are recognised and the full name extracted."""
+        self._add_sync_metric('zone-a', 'fetch_bytes')
+        self.module.add_fixed_name_metrics()
+        self.assertIn('data-sync-from-zone.fetch_bytes', self.module.metrics)
+        fixed = self.module.metrics['data-sync-from-zone.fetch_bytes']
+        self.assertIn('source_zone', fixed.labelnames)
+        label_idx = fixed.labelnames.index('source_zone')
+        zones = {lv[label_idx] for lv in fixed.value}
+        self.assertEqual(zones, {'zone-a'})
+
+    def test_multi_hyphenated_zone_name(self):
+        """Zone names with multiple hyphens must be extracted in full."""
+        self._add_sync_metric('zone2-zg1-realm1', 'fetch_bytes')
+        self.module.add_fixed_name_metrics()
+        fixed = self.module.metrics['data-sync-from-zone.fetch_bytes']
+        label_idx = fixed.labelnames.index('source_zone')
+        zones = {lv[label_idx] for lv in fixed.value}
+        self.assertEqual(zones, {'zone2-zg1-realm1'})
+
+    def test_underscore_zone_name(self):
+        """Zone names with underscores are recognised and the full name extracted."""
+        self._add_sync_metric('my_zone', 'fetch_bytes')
+        self.module.add_fixed_name_metrics()
+        self.assertIn('data-sync-from-zone.fetch_bytes', self.module.metrics)
+        fixed = self.module.metrics['data-sync-from-zone.fetch_bytes']
+        label_idx = fixed.labelnames.index('source_zone')
+        zones = {lv[label_idx] for lv in fixed.value}
+        self.assertEqual(zones, {'my_zone'})
+
+    def test_underscore_zone_name_long(self):
+        """Long zone names with underscores (reviewer's exact test case)."""
+        zone = 'A_ZONE_WITHUNDERSCORE_IN_THE_NAME'
+        self._add_sync_metric(zone, 'fetch_bytes')
+        self.module.add_fixed_name_metrics()
+        fixed = self.module.metrics['data-sync-from-zone.fetch_bytes']
+        label_idx = fixed.labelnames.index('source_zone')
+        zones = {lv[label_idx] for lv in fixed.value}
+        self.assertEqual(zones, {zone})
+
+    def test_longrunavg_counters_get_separate_fixed_paths(self):
+        """poll_latency_sum and poll_latency_count must each get their own path."""
+        self._add_sync_metric('my_zone', 'poll_latency_sum')
+        self._add_sync_metric('my_zone', 'poll_latency_count')
+        self.module.add_fixed_name_metrics()
+        self.assertIn('data-sync-from-zone.poll_latency_sum', self.module.metrics)
+        self.assertIn('data-sync-from-zone.poll_latency_count', self.module.metrics)
+
+    def test_multiple_zones_merged_under_fixed_path(self):
+        """Metrics from different source zones share one fixed path, distinguished by label."""
+        self._add_sync_metric('zone-a', 'fetch_bytes', 10.0)
+        self._add_sync_metric('zone_b', 'fetch_bytes', 20.0)
+        self.module.add_fixed_name_metrics()
+        fixed = self.module.metrics['data-sync-from-zone.fetch_bytes']
+        label_idx = fixed.labelnames.index('source_zone')
+        zones = {lv[label_idx] for lv in fixed.value}
+        self.assertEqual(zones, {'zone-a', 'zone_b'})
+
+    def test_non_sync_metric_not_affected(self):
+        """Metrics that are not RGW sync counters must not be modified."""
+        unrelated = Metric('counter', 'rgw.op_put_obj', '', ('instance_id',))
+        unrelated.set(5.0, ('rgw.0',))
+        self.module.metrics['rgw.op_put_obj'] = unrelated
+        self.module.add_fixed_name_metrics()
+        # No new data-sync-from-zone.* key should appear for non-sync metrics
+        sync_keys = [k for k in self.module.metrics if k.startswith('data-sync-from-zone')]
+        self.assertEqual(sync_keys, [])
