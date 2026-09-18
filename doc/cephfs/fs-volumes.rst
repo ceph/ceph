@@ -217,7 +217,7 @@ Create a subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
-   ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--normalization <form>] [--casesensitive <bool>]
+   ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--normalization <form>] [--casesensitive <bool>] [--namespace-isolated] [--pool-namespace <namespace>]
 
 The command succeeds even if the subvolume group already exists.
 
@@ -251,6 +251,55 @@ file. The case of the file name used when the file was created is preserved.
 
 .. note:: Setting ``--casesensitive=0`` option implicitly enables
    Unicode normalization on the subvolume group.
+
+A subvolume group can be created in a separate RADOS namespace by specifying
+the ``--namespace-isolated`` option. When a subvolume group has namespace
+isolation enabled, the group directory is placed in its own RADOS namespace
+(``fsvolumens__<group>``), and any subvolume subsequently created within that
+group automatically inherits namespace isolation -- each subvolume gets its
+own unique RADOS namespace (``fsvolumens__<group>_<subvolume>``) without
+needing the ``--namespace-isolated`` flag on the ``fs subvolume create``
+command. This provides security isolation at the RADOS level for all
+subvolumes belonging to the group.
+
+An explicit RADOS namespace can be specified via the ``--pool-namespace``
+option (e.g. ``--pool-namespace my-custom-ns``), which overrides the
+auto-generated namespace. This is useful when a RADOS namespace has been
+pre-created by an administrator and needs to be associated with a specific
+subvolume group.
+
+To check if a subvolume group has namespace isolation enabled, use the
+``fs subvolumegroup info`` command and look for the ``pool_namespace``
+field in the output.
+
+Namespace isolation is opt-in, so upgrading a cluster does not change any
+existing subvolume group, subvolume, or the data in it. Nothing is migrated
+automatically.
+
+Because ``fs subvolumegroup create`` is idempotent, an existing subvolume
+group can be given namespace isolation by re-running the command with the
+``--namespace-isolated`` option:
+
+.. prompt:: bash #
+
+   ceph fs subvolumegroup create <vol_name> <group_name> --namespace-isolated [--pool-namespace <namespace>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>]
+
+Note the following restrictions when an existing subvolume group is
+converted this way:
+
+* The idempotent create re-applies the UID, GID and file mode of the group.
+  Any of the three that is not passed on the command line is reset to its
+  default (``0``, ``0`` and ``755``, respectively), so pass the values that
+  the group is already using. The size (quota), data pool layout,
+  normalization form and case sensitivity of the group are left unchanged.
+* Only the subvolumes that are created in the group *after* it has been
+  converted inherit namespace isolation. Subvolumes that already exist are
+  not moved, and their data remains in the RADOS namespace that it was
+  written to. Isolating such a subvolume requires creating a new subvolume
+  in the group and copying the data into it.
+* Namespace isolation cannot be removed from a subvolume group after it has
+  been set. Re-running the create command without ``--namespace-isolated``
+  leaves the ``ceph.dir.layout.pool_namespace`` extended attribute in place.
 
 Remove a subvolume group by running a command of the following form:
 
@@ -303,6 +352,8 @@ The output format is JSON and contains fields as follows:
 * ``bytes_used``: current used size of the subvolume group in bytes
 * ``created_at``: creation time of the subvolume group in the format "YYYY-MM-DD HH:MM:SS"
 * ``data_pool``: data pool to which the subvolume group belongs
+* ``pool_namespace``: RADOS namespace of the subvolume group if namespace isolation is
+  enabled, otherwise empty string
 
 Check for the presence of a given subvolume group by running a command of the
 following form:
