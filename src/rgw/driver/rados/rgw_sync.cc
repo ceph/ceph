@@ -1394,9 +1394,30 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
       break;
     }
 
+    fetched_ver = obj_version();
+    if (sync_status != -ENOENT) {
+      JSONParser parser;
+      if (parser.parse(md_bl.c_str(), md_bl.length())) {
+        try {
+          JSONDecoder::decode_json("ver", fetched_ver, &parser);
+        } catch (const JSONDecoder::err&) {
+          fetched_ver = obj_version();
+        }
+      }
+    }
+
     retcode = 0;
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       if (sync_status != -ENOENT) {
+        /*
+         A queued retry typically re-reads the already applied remote state.
+         Comparing the tag and ver skips this retry
+        */
+        if (!fetched_ver.tag.empty() && fetched_ver == prev_applied_ver) {
+          tn->log(10, SSTR("skipping store of unchanged metadata entry: "
+                           << section << ":" << key << " ver=" << fetched_ver.ver));
+          break;
+        }
         if (section == "bucket.instance" &&
             cct->_conf->rgw_inject_delay_sec > 0 &&
             std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
@@ -1421,6 +1442,9 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
         }
         tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
         yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
+        if (retcode == 0) {
+          prev_applied_ver = fetched_ver;
+        }
       } else {
         tn->log(10, SSTR("removing local metadata entry:" << section << ":" << key));
         yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
