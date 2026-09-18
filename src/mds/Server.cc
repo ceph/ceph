@@ -12412,13 +12412,16 @@ void Server::_readdir_diff(
 	         << start_len << " < " << bytes_left << dendl;
 	bufferlist keep;
 
-	keep.substr_of(dnbl, 0,
-          name == last_name ? rollback_pos : start_len);
+	if (name == last_name) {
+	  keep.substr_of(dnbl, 0, rollback_pos);
+	  numfiles = rollback_num;
+	} else {
+	  keep.substr_of(dnbl, 0, start_len);
+	}
 	dnbl.swap(keep);
 
         last_name.clear();
         rollback_pos = 0;
-        numfiles = rollback_num;
         rollback_num = 0;
 	return false;
       }
