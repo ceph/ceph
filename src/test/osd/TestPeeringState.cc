@@ -336,7 +336,16 @@ protected:
     new_epoch();
   }
 
-  // Helper - take OSD down by removing it from up/acting set
+  // Helper - only mark OSD down+out in the OSDMap
+  void mark_osd_down(int osd) {
+    dout(0) << "= mark osd." << osd << " down+out =" << dendl;
+    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
+    pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP); // XORed
+    pending_inc.new_weight[osd] = CEPH_OSD_OUT;
+    apply_incremental(pending_inc);
+  }
+
+  // Helper - take OSD down by removing it from up/acting set, update OSDMap
   void osd_down(int offset, int osd) {
     dout(0) << "= osd." << osd << "(" << offset << ") set down+out =" << dendl;
     ceph_assert(up[offset] == osd);
@@ -344,10 +353,15 @@ protected:
     ceph_assert(acting[offset] == osd);
     acting[offset] = pg_pool_t::pg_CRUSH_ITEM_NONE;
     up_acting.erase(remove(up_acting.begin(), up_acting.end(), osd), up_acting.end());
-    // Mark the OSD down+out in the OSDMap
+    mark_osd_down(osd);
+  }
+
+  // Helper - only mark OSD up+in in the OSDMap
+  void mark_osd_up(int osd) {
+    dout(0) << "= mark osd." << osd << " up+in =" << dendl;
     OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
-    pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP); // XORed
-    pending_inc.new_weight[osd] = CEPH_OSD_OUT;
+    pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP);
+    pending_inc.new_weight[osd] = CEPH_OSD_IN;
     apply_incremental(pending_inc);
   }
 
@@ -359,11 +373,7 @@ protected:
     ceph_assert(acting[offset] == pg_pool_t::pg_CRUSH_ITEM_NONE);
     acting[offset] = osd;
     up_acting.push_back(osd);
-    // Mark the OSD up+in in the OSD Map
-    OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
-    pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP);
-    pending_inc.new_weight[osd] = CEPH_OSD_IN;
-    apply_incremental(pending_inc);
+    mark_osd_up(osd);
   }
 
   // ============================================================================
@@ -534,9 +544,20 @@ protected:
     return rc;
   }
 
+  bool dispatch_specific_osd(int fromosd)
+  {
+    dout(0) << "= dispatch_specific_osd fromosd=" << fromosd << " =" << dendl;
+    bool did_work = false;
+    did_work |= dispatch_peering_messages(fromosd);
+    did_work |= dispatch_cluster_messages(fromosd);
+    did_work |= dispatch_events(fromosd);
+    return did_work;
+  }
+
   // Dispatch all types of queued work repeatedly until queues are empty
   bool dispatch_all()
   {
+    dout(0) << "= dispatch_all =" << dendl;
     bool rc = false;
     bool did_work;
     do {
@@ -680,7 +701,7 @@ protected:
   // Helper - activate map event for all osds
   void test_event_activate_map(int toosd = -1)
   {
-    dout(0) << "= test_event_activate_map =" << dendl;
+    dout(0) << "= test_event_activate_map e" << osdmap->get_epoch() << " =" << dendl;
     for (auto osd : up_acting ) {
       if (toosd != -1 && toosd != osd) {
         continue;
@@ -2303,6 +2324,91 @@ TEST_F(PeeringStateTest, Issue74218) {
   verify_no_missing_or_unfound(acting[3], 3, true);
   verify_log_state(acting[3], expected2, expected2, expected2, eversion_t());
   verify_logs();
+}
+
+
+TEST_F(PeeringStateTest, LaggyActivationCatchesUp) {
+  dout(0) << "== PeeringIntervalBoundaryDiscrepancy2 ==" << dendl;
+  // Init
+  {
+    create_rep_pool();
+    test_create_peering_state();
+    test_init();
+    test_event_initialize();
+    test_peering();
+    verify_all_active_clean();
+    dout(0) << "= initial cluster deployed =" << dendl;
+  }
+
+  // Swap out OSD 1 for OSD 9
+  {
+    modify_up_acting(1, 9);
+    new_epoch(true);
+    test_create_peering_state(9, 1);
+    test_init(9);
+    test_event_initialize(9);
+    test_event_advance_map();
+    test_event_activate_map();
+    while (true) {
+      dispatch_all();
+      if (get_ps(0)->get_need_up_thru()) {
+        dout(0) << "= stopped at WaitUpThru =" << dendl;
+        break;
+      }
+    }
+    EXPECT_EQ(osdmap->get_epoch(), 5);
+    new_epoch();
+    EXPECT_EQ(osdmap->get_epoch(), 6);
+  }
+
+  // deliver the osdmap with primary marked as upthru. it should go
+  // to the Active state and generate activate events for replicas.
+  {
+    test_event_advance_map();
+    test_event_activate_map();
+    // distrubute these activate messages from primary to replicas
+    dispatch_specific_osd(0);
+    dispatch_specific_osd(9);
+    dispatch_specific_osd(2);
+
+    dout(0) << "= past WaitUpThru =" << dendl;
+  }
+
+  // replicas will do activate_commit and inform primary about that
+  // let's itentionally hold this msgs in the queue for one replica.
+  {
+    dispatch_specific_osd(0);
+    dispatch_specific_osd(9);
+    // NO: dispatch_specific_osd(2);
+  }
+
+  // acting set is [0,9,2] but osd.1 needs to be probed us well
+  // due to a past interval -- marking it down affects the peering
+  {
+    mark_osd_down(1);
+    EXPECT_EQ(osdmap->get_epoch(), 7);
+    EXPECT_EQ(get_ps(0)->get_last_peering_reset(), 5); // no new interval
+    test_event_advance_map();
+    test_event_activate_map();
+    bool cont;
+    do {
+      cont = dispatch_specific_osd(0);
+      cont |= dispatch_specific_osd(9);
+    } while (cont);
+    // we're outisde of Peering so no changes to LPR
+    EXPECT_EQ(get_ps(0)->get_last_peering_reset(), 5);
+    EXPECT_EQ(get_ps(9)->get_last_peering_reset(), 5);
+    EXPECT_EQ(get_ps(2)->get_last_peering_reset(), 5);
+  }
+
+  // osd.2 holds the message, which stalls the primary (osd.0) at
+  // the activation stage but ultimately dispatching the due messages
+  // from osd.2 unblock the peering.
+  {
+    dispatch_specific_osd(2);
+    test_peering();
+    verify_all_active_clean();
+  }
 }
 
 // ============================================================================
