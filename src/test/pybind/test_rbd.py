@@ -1369,7 +1369,8 @@ class TestImage(object):
         self.image.unlock('')
 
     def test_list_lockers(self):
-        eq([], self.image.list_lockers())
+        eq({'tag': '', 'exclusive': False, 'lockers': []},
+           self.image.list_lockers())
         self.image.lock_exclusive('test')
         lockers = self.image.list_lockers()
         eq(1, len(lockers['lockers']))
@@ -1378,7 +1379,8 @@ class TestImage(object):
         eq('', lockers['tag'])
         assert lockers['exclusive']
         self.image.unlock('test')
-        eq([], self.image.list_lockers())
+        eq({'tag': '', 'exclusive': True, 'lockers': []},
+           self.image.list_lockers())
 
         num_shared = 10
         for i in range(num_shared):
@@ -1391,7 +1393,8 @@ class TestImage(object):
         for i in range(num_shared):
             eq(str(i), cookies[i])
             self.image.unlock(str(i))
-        eq([], self.image.list_lockers())
+        eq({'tag': 'tag', 'exclusive': False, 'lockers': []},
+           self.image.list_lockers())
 
     def test_diff_iterate(self):
         def cb(offset, length, exists):
