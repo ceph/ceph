@@ -2,222 +2,86 @@
  Beginner's Guide
 ==========================
 
-The purpose of A Beginner's Guide to Ceph is to make Ceph comprehensible.
-
-Ceph is a clustered and distributed storage manager. If that's too cryptic,
-then just think of Ceph as a computer program that stores data and uses a
-network to make sure that there is a backup copy of the data.
-
-Components of Ceph
-==================
-
-Storage Interfaces
-------------------
-
-Ceph offers several "storage interfaces", which is another
-way of saying "ways of storing data". These storage interfaces include:
-
-- CephFS (a file system)
-- RBD (block devices)
-- RGW (an object store)
-
-Deep down, though, all three of these are really RADOS object stores. CephFS
-and RBD are just presenting themselves as file systems and block devices.
-
-Storage Manager: What is It?
-----------------------------
-
-Ceph is a clustered and distributed storage manager that offers data
-redundancy. This sentence might be too cryptic for first-time readers of the
-Ceph Beginner's Guide, so let's explain all of the terms in it:
-
-- **Storage manager.** Ceph is a storage manager. This means that Ceph is
-  software that helps storage resources store data. Storage resources come in
-  several forms: hard disk drives (HDD), solid-state drives (SSD), magnetic
-  tape, floppy disks, punched tape, Hollerith-style punch cards, and magnetic
-  drum memory are all forms of storage resources. In this beginner's guide,
-  we'll focus on hard disk drives (HDD) and solid-state drives (SSD).
-- **Clustered and distributed storage manager.** Ceph is a clustered and
-  distributed storage manager. This means that the storage manager is deployed
-  not just on a single server but on several servers that work together as a
-  system: the data that is stored and the infrastructure that supports it is
-  spread across multiple servers and is not centralized in a single server. To
-  better understand what distributed means in this context, it might be helpful
-  to describe what it is not: it is not a system like a traditional enterprise
-  storage array, which is a system that exposes a single logical disk over the
-  network in a 1:1 (one-to-one) mapping.
-- **Data Redundancy.** Having a second copy of your data somewhere.
-
-Ceph Monitor
-------------
-
-The Ceph Monitor is one of the daemons essential to the functioning of a Ceph
-cluster. Monitors know the location of all the data in the Ceph cluster.
-Monitors maintain maps of the cluster state, and those maps make it possible
-for Ceph daemons to work together. These maps include the Monitor map, the OSD
-map, the MDS map, and the CRUSH map. At least three Monitors are required for
-the daemons to be resistant to failures. A majority of the Monitors must be in
-the "up" state in order for them to reach quorum. Quorum is a state that is
-necessary for a Ceph cluster to work properly.
-
-Manager
--------
-
-The Ceph Manager is one of the daemons essential to the functioning of the Ceph
-cluster. Managers are in charge of various Ceph cluster management and
-monitoring tasks that are provided by Manager modules. These tasks include
-orchestration, the Ceph dashboard web GUI, balancing the data and load evenly
-in the Ceph cluster, keeping track of runtime metrics, and providing
-connectivity to non-native clients. Offloading less than critical and
-resource-intensive tasks from Monitors to Managers simplifies scaling the
-Ceph cluster.
-
-OSD
----
-
-Object Storage Daemons (OSDs) store objects.
-
-An OSD is a process that runs on a storage server. The OSD is responsible for
-managing a single unit of storage, which is usually a single disk.
-
-Pools
------
-
-A pool is an abstraction that can be designated as either "replicated" or
-"erasure coded". In Ceph, the method of data protection is set at the pool
-level. Ceph offers and supports two types of data protection: replication and
-erasure coding. Objects are stored in pools. "A storage pool is a collection of
-storage volumes. A storage volume is the basic unit of storage, such as
-allocated space on a disk or a single tape cartridge. The server uses the
-storage volumes to store backed-up, archived, or space-managed files." (IBM
-Tivoli Storage Manager, Version 7.1, "Storage Pools")
-
-Placement Groups
-----------------
-
-Placement groups are a part of pools.
-
-MDS
----
-
-A metadata server (MDS) is necessary for the proper functioning of CephFS.
-See :ref:`orchestrator-cli-cephfs` and :ref:`arch-cephfs`.
-
-Deploying Your First Ceph Cluster
-=================================
-
-The recommended way to deploy a Ceph cluster is with ``cephadm``, which
-bootstraps a cluster on a single host from a container image and then
-expands it to additional hosts. Once the ``cephadm`` command is
-available on the first host, creating a cluster comes down to a single
-command:
-
-.. prompt:: bash #
-
-   cephadm bootstrap --mon-ip <ip-of-this-host>
-
-This creates a working single-host cluster, complete with a web-based
-dashboard, that can then be expanded with additional hosts and storage
-devices. Follow :ref:`cephadm_deploying_new_cluster` for the complete
-procedure: it covers the host requirements, how to obtain ``cephadm``
-for your distribution, and how to add hosts and deploy OSDs.
-
-If you are running Ceph inside Kubernetes, use `Rook
-<https://rook.io>`_ instead. An overview of all installation methods is
-in :ref:`install-overview`.
-
-Building a Development Cluster from Source (vstart)
-===================================================
-
-.. note:: This procedure is intended for developers who want to modify
-   or contribute to Ceph. It compiles Ceph from source, which can take
-   several hours, and produces a throwaway development cluster. If you
-   want to deploy Ceph to store data, use ``cephadm`` as described
-   above instead.
-
-#. Clone the ``ceph/ceph`` repository:
-
-   .. prompt:: bash #
-
-      git clone git@github.com:ceph/ceph
-
-#. Update the submodules in the ``ceph/ceph`` repository:
-
-   .. prompt:: bash #
-
-      git submodule update --init --recursive --progress
-
-#. Run ``install-deps.sh`` from within the directory into which you cloned the
-   ``ceph/ceph`` repository:
-
-   .. prompt:: bash #
-
-      ./install-deps.sh
-
-#. Install the ``python3-routes`` package:
-
-   .. prompt:: bash #
-
-      apt install python3-routes
-
-#. Move into the ``ceph`` directory. You will know that you are in the correct
-   directory if it contains the file ``do_cmake.sh``:
-
-   .. prompt:: bash #
-
-      cd ceph
-
-#. Run the ``do_cmake.sh`` script:
-
-   .. prompt:: bash #
-
-      ./do_cmake.sh
-
-#. The ``do_cmake.sh`` script creates a ``build/`` directory. Move into the
-   ``build/`` directory:
-
-   .. prompt:: bash #
-
-      cd build
-
-#. Use ``ninja`` to build the development environment:
-
-   .. prompt:: bash #
-
-      ninja -j3
-
-   .. note:: This step takes a long time to run. The ``ninja -j3`` command
-      kicks off a process consisting of 2289 steps. This step took over three
-      hours when I ran it on an Intel NUC with an i7 in September of 2024.
-
-#. Install the Ceph development environment:
-
-   .. prompt:: bash #
-
-      ninja install
-
-   This step does not take as long as the previous step.
-
-#. Build the vstart cluster:
-
-   .. prompt:: bash #
-
-      ninja vstart
-
-#. Start the vstart cluster:
-
-   .. prompt:: bash #
-
-      ../src/vstart.sh --debug --new -x --localhost --bluestore
-
-   .. note:: Run this command from within the ``ceph/build`` directory.
-
-
-
-
-Links
------
-
-#. `Ceph Wiki (requires Ceph Redmine Tracker account) <https://tracker.ceph.com/projects/ceph/wiki>`_
-#. `Sage Weil's 27 June 2019 "Intro To Ceph" tech talk (1h27m) <https://www.youtube.com/watch?v=PmLPbrf-x9g>`_
-#. `Sage Weil's 2018 talk "Ceph, the Future of Storage" (27m) <https://www.youtube.com/watch?v=szE4Hg1eXoA>`_
+.. meta::
+   :description: A plain-language explanation of what Ceph is and what its components do.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: docs
+
+Ceph is software that stores data on several servers and keeps extra copies of
+it over the network. In a cluster set up as recommended, the loss of one disk
+or one server loses nothing.
+
+What the Words Mean
+===================
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Term
+     - Meaning
+   * - Storage manager
+     - Software that puts data on storage devices, usually hard disk drives
+       (HDDs) and solid-state drives (SSDs), and gets it back.
+   * - Clustered and distributed
+     - Runs on several servers that work together as one system. Data, and
+       the services that manage it, are spread across those servers.
+   * - Data redundancy
+     - A second copy of your data, or enough coded pieces of it to rebuild it,
+       always exists somewhere else in the cluster.
+
+Which Interface to Use
+======================
+
+Ceph offers three ways of storing data, all on the same object store,
+:term:`RADOS`.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 35 35
+
+   * - Interface
+     - What it gives you
+     - Typical use
+   * - :term:`CephFS<Ceph File System>`
+     - A shared file system that behaves like a local Linux file system
+       (POSIX-compatible)
+     - Home directories, shared project data, NFS and SMB exports
+   * - :term:`RBD`
+     - Block devices (virtual disks)
+     - Disks for virtual machines and containers
+   * - :term:`RGW<Ceph Object Gateway>`
+     - An object store with S3-compatible and Swift-compatible APIs
+     - Backups, media, data lakes, cloud-native applications
+
+What Runs the Cluster
+=====================
+
+A cluster is run by :term:`Monitors <Ceph Monitor>`, :term:`Managers <Ceph
+Manager>`, and :term:`OSDs <Ceph OSD>`, plus :term:`Metadata Servers <Ceph
+Metadata Server>` for CephFS and :term:`Object Gateways <Ceph Object Gateway>`
+for object storage. See :ref:`ceph-cluster-components` for what each one does
+and how many you need.
+
+Pools and Placement Groups
+==========================
+
+Objects are stored in :term:`pools<Pools>`. Each pool is either *replicated*,
+which keeps whole copies of each object, or *erasure coded*, which splits each
+object into data and coding chunks. The method of data protection is set per
+pool.
+
+Each pool is divided into :term:`placement groups<Placement Groups (PGs)>`
+(PGs). Ceph maps every object to one PG, and each PG to a set of OSDs.
+
+Additional Resources
+====================
+
+- :ref:`The Parts of a Ceph Cluster <ceph-cluster-components>`
+- :ref:`Architecture <architecture>`
+- :ref:`Deploying a Single-Host Test Cluster <quick-start-cephadm>`
+- `Ceph Wiki (requires Ceph Redmine Tracker account) <https://tracker.ceph.com/projects/ceph/wiki>`_
+- `Sage Weil's 27 June 2019 "Intro To Ceph" tech talk (1h27m) <https://www.youtube.com/watch?v=PmLPbrf-x9g>`_
+- `Sage Weil's 2018 talk "Ceph, the Future of Storage" (27m) <https://www.youtube.com/watch?v=szE4Hg1eXoA>`_

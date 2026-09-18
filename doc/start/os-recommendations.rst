@@ -4,68 +4,23 @@
  OS Recommendations
 ====================
 
-Recommended Deployment Method: Containers via Cephadm
-=====================================================
+.. meta::
+   :description: The operating systems, kernels, and container hosts that each Ceph release is built and tested on.
+   :ceph-page-type: reference
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: docs
 
-The Ceph project strongly prefers and natively supports container-based
-releases deployed via :ref:`cephadm <cephadm>`. While legacy package-based
-installations (via ``.deb`` or ``.rpm``) are still supported, containerized
-deployments are preferred for all new and existing clusters. 
- 
-Container-based deployments offer significant advantages, particularly
-regarding cluster upgrades. Because Ceph and its dependencies are packaged into
-immutable container images, you avoid host-level OS package conflicts,
-dependency nightmares, and broken libraries. This decoupled architecture allows you
-to upgrade your Ceph cluster seamlessly, independently of the underlying host
-operating system's package manager.
-
-Ceph Dependencies
-=================
-
-As a general rule, we recommend deploying Ceph on newer releases of Linux.
-We also recommend deploying on releases with long-term support.
-
-Linux Kernel
-------------
-
-- **Ceph Kernel Client**
-
-  If you are using the kernel client to map RBD block devices or mount
-  CephFS, the general advice is to use a "stable" or "long-term
-  maintenance" kernel series provided by either https://kernel.org or
-  your Linux distribution on any client hosts.
-
-  For RBD, if you choose to *track* long-term kernels, we recommend
-  *at least* 4.19-based "long-term maintenance" kernel series.  If you can
-  use a newer "stable" or "long-term maintenance" kernel series, do it.
-
-  For CephFS, see the section about :ref:`Mounting CephFS using Kernel
-  Driver <cephfs_which_kernel_version>` for kernel version guidance.
-
-  Older kernel client versions may not support your :ref:`CRUSH
-  tunables <crush-map-tunables>` profile or other newer features of the Ceph
-  cluster, requiring the storage cluster to be configured with those features
-  disabled. For RBD, a kernel of version 5.3 or Enterprise Linux (EL) 8.2 is the minimum
-  necessary for reasonable support for RBD image features.
-
-- **Ceph MS Windows Client**
-
-  Ceph's MS Windows native client support is "best effort".  There is no
-  full-time maintainer. As of July 2025 there are no plans to remove this
-  client but the future is uncertain.
+The Linux distributions, kernels, and container hosts that each Ceph release
+is built and tested on.
 
 .. _start-platforms:
 
 Platforms
 =========
 
-The chart below shows the platforms for which Ceph provides packages, and
-the platforms on which Ceph has been tested.
-
-Ceph does not require a specific Linux distribution. Ceph can run on any
-distribution that includes a supported kernel and ``systemd``. Ceph is
-sometimes ported to non-Linux systems but these are not supported by the
-core Ceph effort.
+Ceph runs on any Linux distribution with a supported kernel and
+``systemd``; only the distributions below get packages and testing.
 
 +----------------+-------------------------+----------------+-------------------+-----------------+----------------+----------------+----------------+
 | Distribution   | Distribution EOL        | Squid (19.2.z) | Tentacle (20.2.z) | Umbrella (21.x) | Vampire (22.x) | W (23.x)       | X (24.x)       |
@@ -92,26 +47,19 @@ core Ceph effort.
 | MS Windows     |  Varies                 | D              | D                 | D               | D              | D              | D              |
 +----------------+-------------------------+----------------+-------------------+-----------------+----------------+----------------+----------------+
 
-
 **Table legend:**
 
 - **A**: Ceph provides packages and has done comprehensive tests on the software in them.
-- **B**: Ceph provides packages and has done basic tests on the software in them.
 - **C**: Ceph provides packages only. No tests have been done on these releases.
 - **D**: Client packages are available from an external site but are not maintained or tested by the core Ceph team.
-- **Ae**: It is expected that CentOS 9.stream will EOL before the Umbrella Ceph release is EOL. This means that CentOS 9.stream RPMs will no longer be generated for new minor releases of Umbrella when that occurs because CentOS deactivates its public repositories. It is strongly recommended to migrate to Rocky 10 or another supported distribution before that occurs.
-  
-.. note:: Dates marked with * are anticipated based on standard 10-year Enterprise Linux lifecycles and 5-year Ubuntu LTS lifecycles.
+- **Ae**: CentOS 9 Stream is expected to reach EOL before Umbrella does; after that no new Umbrella RPMs are built for it. Move to Rocky 10 or another supported distribution first.
 
-.. note:: Releases in the future are included for anticipated OS support and are not final.
+.. note:: Dates marked with * and columns for future releases are anticipated, not final.
 
 .. warning:: Starting with CentOS 10 Stream and onwards, CentOS will no longer be built for or tested on by the upstream Ceph project.
 
 Container Hosts
 ---------------
-
-This table shows the operating systems that support Ceph's official
-container images.
 
 +----------------+-------------------------+----------------+-------------------+-----------------+----------------+----------------+----------------+
 | Distribution   | Distribution EOL        | Squid (19.2.z) | Tentacle (20.2.z) | Umbrella (21.x) | Vampire (22.x) | W (23.x)       | X (24.x)       |
@@ -134,75 +82,64 @@ container images.
 
 **Table legend:**
 
-- **H**: Ceph tests this distribution as a container host.
+- **H**: Ceph tests its container image with this distribution as the host. The image itself is built on Rocky 10; see below.
 
-.. warning:: This does not indicate that the container image is built on that distribution. It means the container image is tested to run on that distribution.
+Container Base Image
+====================
 
+Since Umbrella the container image is built on Rocky Linux 10 (CentOS 9
+Stream before that). The host does not need to run Rocky 10; any
+distribution marked H above works.
 
-Umbrella Container Base Image
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. note:: ARM architecture containers provide a limited set of daemons.
+   Check that the daemons you need are available before you plan an ARM
+   deployment.
 
-Starting with the Umbrella release, the default base image for official Ceph
-containers is Rocky Linux 10. Prior to Umbrella, CentOS 9 Stream had been used.
-
-As a cluster administrator, you **do not** need to run Rocky Linux 10 as the
-host operating system to use these containers. The Rocky 10 base image is used
-strictly for static package management and to bundle Ceph's internal
-dependencies within the isolated container boundary. Because ``cephadm``
-leverages standard container runtimes (Podman or Docker), the Ceph container
-will run smoothly on any supported container host OS (such as Ubuntu 24.04 or
-CentOS 9), completely isolated from the host's native package manager.
-
-
-Block Device I/O Scheduler
+Kernel Version for Clients
 ==========================
 
-Set the Linux block-layer I/O scheduler to match the class of device
-backing each OSD:
+.. list-table::
+   :header-rows: 1
+   :widths: 12 38 50
 
-* **Rotational (HDD) devices:** ``mq-deadline`` (or ``bfq``).  Request
-  merging and the deadline elevator complement the drive's own command
-  reordering (NCQ/TCQ) and help avoid read starvation during recovery
-  and backfill.
-* **Solid-state (SSD / NVMe) devices:** ``none``.  These devices reorder
-  requests internally, so a kernel-level elevator only adds latency.
+   * - Client
+     - Minimum kernel
+     - Note
+   * - RBD
+     - 5.3, or Enterprise Linux 8.2 (4.19 long-term at the very least)
+     - Older kernels need :ref:`CRUSH tunables <crush-map-tunables>` and
+       image features disabled on the cluster.
+   * - CephFS
+     - See :ref:`cephfs_which_kernel_version`
+     -
+   * - Both
+     - Use a "stable" or "long-term maintenance" series from kernel.org or
+       your distribution.
+     -
 
-Recent ``blk-mq`` kernels frequently default to these values already, but
-this is not guaranteed across distributions, kernel versions, or TuneD
-profiles, so it is worth verifying::
+The Windows client is best effort, with no full-time maintainer.
 
-    # the active scheduler is shown in brackets
-    cat /sys/block/sda/queue/scheduler
+For the I/O scheduler setting per drive type, see
+:ref:`Storage Devices <hardware-storage-devices>`.
 
-    # set it for a single device
-    echo mq-deadline > /sys/block/sda/queue/scheduler
+Deployment Method
+=================
 
-Make the setting persistent with a ``udev`` rule keyed on
-``/sys/block/*/queue/rotational`` so it survives reboots and applies to
-devices added later.  For BlueStore this is a modest tuning knob -- its
-large, mostly-sequential I/O together with the drive's own reordering does
-most of the work -- but setting it per device class avoids pathological
-behavior.
+Deploy Ceph as containers with :ref:`cephadm <cephadm>`. Package installs
+(``.deb``, ``.rpm``) are still supported, but containers let you upgrade
+Ceph independently of the host's packages.
 
-Host Distribution Upgrades (Horizontal Paths)
-=============================================
+Upgrading the Host OS
+=====================
 
-When managing the lifecycle of your hardware, you will eventually need to
-upgrade the underlying host operating system to avoid hitting an End-of-Life
-(EOL) situation where packages cannot be upgraded. It is highly recommended to
-plan these horizontal upgrades when the same version of Ceph packages exists
-for both the old and new host operating system.
+Upgrade the host OS one node at a time, on a Ceph release that supports both
+the old and the new OS. Do not upgrade the OS and Ceph at the same time.
 
-Attempting to upgrade the host OS and the Ceph version simultaneously greatly
-increases the risk of downtime and complicates troubleshooting. Ensure that
-your current Ceph release supports both the old and new host operating systems
-before beginning a horizontal node-by-node OS upgrade.
-
-Anticipated Horizontal OS Upgrade Paths
----------------------------------------
+Upgrade Paths
+-------------
 
 +--------------------------------------+--------------------------------------+---------------------------+
-| Current OS (EOL)                     | Target OS (EOL)                      | Ideal Ceph Release Window |
+| Current OS (EOL)                     | Target OS (EOL)                      | Do it on                  |
 +======================================+======================================+===========================+
 | CentOS 9 (`May 2027 <CentOS_>`_)     | Rocky 10 (`May 2035 <Rocky_>`_)      | Tentacle, Umbrella        |
 +--------------------------------------+--------------------------------------+---------------------------+
@@ -215,9 +152,15 @@ Anticipated Horizontal OS Upgrade Paths
 | Rocky 10 (`May 2035 <Rocky_>`_)      | Rocky 11 (May 2038*)                 | X, Y                      |
 +--------------------------------------+--------------------------------------+---------------------------+
 
+Additional Resources
+====================
+
+- :ref:`hardware-recommendations`
+- :ref:`ceph-releases-general`
+- :ref:`cephadm_deploying_new_cluster`
 
 .. _CentOS: https://www.centos.org/cl-vs-cs/
 .. _Debian_b: https://www.debian.org/releases/bookworm/
 .. _Debian_t: https://www.debian.org/releases/trixie/
 .. _Rocky: https://github.com/rocky-linux/wiki.rockylinux.org/blob/main/docs/rocky/version.md
-.. _Ubuntu: https://ubuntu.com/about/release-cycle
+.. _Ubuntu: https://wiki.ubuntu.com/Releases

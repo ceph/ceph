@@ -5,6 +5,13 @@
 Ceph Clients
 ============
 
+.. meta::
+   :description: The service interfaces that Ceph clients use: object storage, block devices, and the file system.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
 Ceph Clients include a number of service interfaces. These include:
 
 - **Block Devices:** The :term:`Ceph Block Device` (a.k.a., RBD) service
@@ -160,5 +167,13 @@ either for high availability or for scalability.
 Combinations of `standby` and `active` etc are possible, for example
 running 3 `active` ``ceph-mds`` instances for scaling, and one `standby`
 instance for high availability.
+
+Additional Resources
+--------------------
+
+- :ref:`object-gateway`
+- :ref:`ceph_block_device`
+- :ref:`ceph-file-system`
+
 
 .. _RESTful: https://en.wikipedia.org/wiki/RESTful

@@ -1,12 +1,19 @@
 Dynamic Cluster Management
 ==========================
 
-In the :ref:`Scalability and High Availability <arch_scalability_and_high_availability>` section, we explained how Ceph uses
-CRUSH, cluster topology, and intelligent daemons to scale and maintain high
-availability. Key to Ceph's design is the autonomous, self-healing, and
-intelligent Ceph OSD Daemon. Let's take a deeper look at how CRUSH works to
-enable modern cloud storage infrastructures to place data, rebalance the
-cluster, and adaptively place and balance data and recover from faults.
+.. meta::
+   :description: How pools, placement groups, peering, rebalancing, and scrubbing let a Ceph cluster place data and heal itself.
+   :ceph-page-type: concept
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: rados
+
+This page explains how a Ceph cluster manages itself: how pools and
+placement groups organize data, how :term:`CRUSH` maps placement groups to
+OSDs, and how OSDs peer, rebalance, and scrub to recover from faults without a
+central controller. It builds on :ref:`Scalability and High Availability
+<arch_scalability_and_high_availability>`, which introduces CRUSH and the
+cluster map.
 
 .. index:: architecture; pools
 
@@ -241,6 +248,13 @@ performed weekly) finds bad blocks on a drive that weren't apparent in a light
 scrub.
 
 See :ref:`Data Scrubbing <rados_config_scrubbing>` for details on configuring scrubbing.
+
+Additional Resources
+~~~~~~~~~~~~~~~~~~~~
+
+- :ref:`Pools <rados_pools>`
+- :ref:`Placement Groups <placement groups>`
+- :ref:`CRUSH Maps <rados-crush-map>`
 
 
 .. _Report Peering Failure: ../../rados/configuration/mon-osd-interaction#osds-report-peering-failure

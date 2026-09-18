@@ -1,101 +1,93 @@
-===============
- Intro to Ceph
-===============
+.. _start-here:
 
-Ceph can be used to provide :term:`Ceph Object Storage` to :term:`Cloud
-Platforms` and Ceph can be used to provide :term:`Ceph Block Device` services
-to :term:`Cloud Platforms`. Ceph can be used to deploy a :term:`Ceph File
-System`.  All :term:`Ceph Storage Cluster` deployments begin with setting up
-each :term:`Ceph Node` and then setting up the network. 
+============
+ Start Here
+============
 
-A Ceph Storage Cluster requires the following: at least one Ceph Monitor and at
-least one Ceph Manager, and at least as many :term:`Ceph Object Storage
-Daemon<Ceph OSD>`\s (OSDs) as there are copies of a given object stored in the
-Ceph cluster (for example, if three copies of a given object are stored in the
-Ceph cluster, then at least three OSDs must exist in that Ceph cluster).
+.. meta::
+   :description: The starting point for readers who are new to Ceph: what to read, what to try, and where to look things up.
+   :ceph-page-type: assembly
+   :ceph-applies-to: squid, tentacle
+   :ceph-reviewed: 2026-09
+   :ceph-owner: docs
 
-The Ceph Metadata Server is necessary to run Ceph File System clients.
+Read the Learn pages, then deploy a test cluster under Set Up. The Look Up
+pages hold the numbers you need while you plan.
 
-.. note::
+.. toctree::
+   :maxdepth: 1
+   :hidden:
 
-   It is a best practice to have a Ceph Manager for each Monitor, but it is not
-   necessary. 
+   Beginner's Guide <beginners-guide>
+   ceph-cluster-components
+   quick-start-cephadm
+   quick-rbd
+   Hardware Recommendations <hardware-recommendations>
+   minimum-hardware
+   hardware-cpu-memory
+   hardware-storage-devices
+   hardware-networks
+   OS Recommendations <os-recommendations>
+   get-involved
+   documenting-ceph
 
-.. ditaa::
+Learn
+=====
 
-            +------+ +----------+ +----------+ +-------+ +------+
-            | OSDs | | Monitors | | Managers | | MDSes | | RGWs |
-            +------+ +----------+ +----------+ +-------+ +------+
+Read these before you install anything.
 
-- **Monitors**: A :term:`Ceph Monitor` (``ceph-mon``) maintains maps of the
-  cluster state, including the :ref:`monitor map<display-mon-map>`, manager
-  map, the OSD map, the MDS map, and the CRUSH map.  These maps are critical
-  cluster state required for Ceph daemons to coordinate with each other.
-  Monitors are also responsible for managing authentication between daemons and
-  clients.  At least three monitors are normally required for redundancy and
-  high availability.
+- :doc:`Beginner's Guide <beginners-guide>`: what Ceph is, in plain language.
+- :ref:`The Parts of a Ceph Cluster <ceph-cluster-components>`: the daemons
+  in a cluster, what each one does, and how many you need.
+- :ref:`Architecture <architecture>`: how Ceph stores data, places it with
+  :term:`CRUSH`, and recovers from failures.
+- :ref:`Hardware Recommendations <hardware-recommendations>`: how to choose
+  CPUs, memory, storage devices, and networks for a cluster.
 
-- **Managers**: A :term:`Ceph Manager` daemon (``ceph-mgr``) is
-  responsible for keeping track of runtime metrics and the current
-  state of the Ceph cluster, including storage utilization, current
-  performance metrics, and system load.  The Ceph Manager daemons also
-  host python-based modules to manage and expose Ceph cluster
-  information, including a web-based :ref:`mgr-dashboard`.
-  At least two managers are normally required for high
-  availability.
+Set Up
+======
 
-- **Ceph OSDs**: An Object Storage Daemon (:term:`Ceph OSD`,
-  ``ceph-osd``) stores data, handles data replication, recovery,
-  rebalancing, and provides some monitoring information to Ceph
-  Monitors and Managers by checking other Ceph OSD Daemons for a
-  heartbeat. At least three Ceph OSDs are normally required for 
-  redundancy and high availability.
+- :ref:`Deploying a Single-Host Test Cluster <quick-start-cephadm>`: a working
+  cluster on one machine, for learning and testing.
+- :ref:`Creating and Mounting a Block Device <quick-rbd>`: a first block
+  device on the new cluster.
 
-- **MDSes**: A :term:`Ceph Metadata Server` (MDS, ``ceph-mds``) stores metadata
-  for the :term:`Ceph File System`. Ceph Metadata Servers allow CephFS users to
-  run basic commands (like ``ls``, ``find``, etc.) without placing a burden on
-  the Ceph Storage Cluster.
+Look Up
+=======
 
-- **RGWs**: A :term:`Ceph Object Gateway` (RGW, ``ceph-radosgw``) daemon provides
-  a RESTful gateway between applications and Ceph storage clusters. The
-  S3-compatible API is most commonly used, though Swift is also available.
+- :ref:`Minimum Hardware per Daemon <minimum-hardware>`: the smallest
+  configuration for each daemon.
+- :ref:`CPU and Memory Sizing <hardware-cpu-memory>`: cores and RAM for each
+  daemon, and the settings that control memory use.
+- :ref:`Storage Devices <hardware-storage-devices>`: drive layout, HDD and
+  SSD selection, controllers, and write caches.
+- :ref:`Network Sizing <hardware-networks>`: link speeds, replication times,
+  bonding, and management networks.
+- :ref:`OS Recommendations <os-recommendations>`: the platforms that each Ceph
+  release is built and tested on.
+- :ref:`Ceph Releases <ceph-releases-general>`: the release cycle, and which
+  releases are currently maintained.
+- :doc:`Glossary </glossary>`: definitions of the terms used throughout this
+  documentation.
 
-Ceph stores data as objects within logical storage pools. Using the
-:term:`CRUSH` algorithm, Ceph calculates which placement group (PG) should
-contain the object, and which OSD should store the placement group.  The
-CRUSH algorithm enables the Ceph Storage Cluster to scale, rebalance, and
-recover dynamically.
+Next Steps
+==========
 
-.. container:: columns-2
+- Deploy a production cluster. See :ref:`cephadm_deploying_new_cluster`, or
+  :ref:`install-overview` for the other installation methods, including Rook
+  for Kubernetes.
+- Set up the kind of storage that your applications need:
+  :ref:`Ceph Block Device <ceph_block_device>`,
+  :ref:`Ceph File System <ceph-file-system>`,
+  :ref:`Ceph Object Gateway <object-gateway>`, or
+  :ref:`Ceph CSI <ceph-csi>` for Kubernetes.
 
-   .. container:: column
+Additional Resources
+====================
 
-      .. raw:: html
-
-          <h3>Recommendations</h3>
-
-      To begin using Ceph in production, you should review our hardware
-      recommendations and operating system recommendations.
-
-      .. toctree::
-         :maxdepth: 2
-
-         Beginner's Guide <beginners-guide>
-         Hardware Recommendations <hardware-recommendations>
-         OS Recommendations <os-recommendations>
-
-   .. container:: column
-
-      .. raw:: html
-
-          <h3>Get Involved</h3>
-
-      You can avail yourself of help or contribute documentation, source
-      code or bugs by getting involved in the Ceph community.
-
-      .. toctree::
-         :maxdepth: 2
-
-         get-involved
-         documenting-ceph
-
+- :ref:`Ceph Community Channels <get-involved>`: mailing lists, chat channels, and
+  community meetings.
+- :ref:`Troubleshooting <rados_troubleshooting>`: what to check when a
+  cluster is unhealthy.
+- :ref:`Documenting Ceph <documenting_ceph>`: how to fix or improve this
+  documentation.
