@@ -1,0 +1,543 @@
+<div cdsCol
+     [columnNumbers]="{ md: 8 }">
+  <ng-container *cdFormLoading="loading">
+    <form name="nfsForm"
+          #formDir="ngForm"
+          [formGroup]="nfsForm"
+          novalidate>
+      <div i18n="form title"
+           class="form-header">
+        Create NFS Cluster
+      </div>
+
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="cluster_id"
+          i18n
+          helperText="Unique identifier for the NFS cluster. This will be used as the service ID (e.g., 'nfs01')."
+          i18n-helperText
+          cdRequiredField="Cluster Name"
+          [invalid]="nfsForm.controls.cluster_id.invalid && nfsForm.controls.cluster_id.dirty"
+          [invalidText]="clusterIdError">
+          Cluster Name
+          <input
+            cdsText
+            type="text"
+            id="cluster_id"
+            formControlName="cluster_id"
+            [invalid]="nfsForm.controls.cluster_id.invalid && nfsForm.controls.cluster_id.dirty"
+          />
+        </cds-text-label>
+        <ng-template #clusterIdError>
+          <span
+            class="invalid-feedback"
+            *ngIf="nfsForm.showError('cluster_id', formDir, 'required')"
+            i18n>This field is required.</span>
+        </ng-template>
+      </div>
+
+      <cd-form-advanced-fieldset title="Deployment"
+                                 i18n-title>
+        <div class="form-item">
+          <cds-select
+            label="Placement"
+            i18n-label
+            formControlName="placement"
+            id="placement"
+            helperText="Choose whether to place NFS daemons on specific hosts or hosts with specific labels."
+            i18n-helperText
+          >
+            <option value="hosts"
+                    i18n>Hosts</option>
+            <option value="label"
+                    i18n>Labels</option>
+          </cds-select>
+        </div>
+
+        <ng-container *ngIf="hostsAndLabels$ | async as data">
+          <div *ngIf="nfsForm.controls.placement.value === 'label'"
+               class="form-item">
+            <cds-combo-box
+              type="multi"
+              selectionFeedback="top-after-reopen"
+              label="Label"
+              i18n-label
+              formControlName="label"
+              id="label"
+              placeholder="Select labels..."
+              [appendInline]="true"
+              [items]="data.labels"
+              i18n-placeholder
+              (selected)="multiSelector($event, 'label')"
+              [invalid]="nfsForm.controls.label.invalid && nfsForm.controls.label.dirty"
+              [invalidText]="labelError"
+              cdRequiredField="Label"
+              i18n
+            >
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+            <ng-template #labelError>
+              <span
+                class="invalid-feedback"
+                *ngIf="nfsForm.showError('label', formDir, 'required')"
+                i18n>This field is required.</span>
+            </ng-template>
+          </div>
+
+          <div *ngIf="nfsForm.controls.placement.value === 'hosts'"
+               class="form-item">
+            <cds-combo-box
+              type="multi"
+              selectionFeedback="top-after-reopen"
+              label="Hosts"
+              i18n-label
+              formControlName="hosts"
+              id="hosts"
+              placeholder="Select hosts..."
+              i18n-placeholder
+              [appendInline]="true"
+              [items]="data.hosts"
+              (selected)="multiSelector($event, 'hosts')"
+              i18n
+            >
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+          </div>
+        </ng-container>
+
+        <div class="form-item">
+          <cds-number
+            id="count"
+            formControlName="count"
+            label="Number of Daemons"
+            i18n-label
+            [min]="1"
+            helperText="Number of NFS daemon instances to deploy."
+            i18n-helperText
+          ></cds-number>
+        </div>
+      </cd-form-advanced-fieldset>
+
+      <cd-form-advanced-fieldset title="Network"
+                                 i18n-title>
+        <div class="form-item">
+          <cds-number
+            id="port"
+            formControlName="port"
+            label="Service Port"
+            i18n-label
+            [min]="1"
+            placeholder="2049"
+            helperText="NFS service port. Default is 2049."
+            i18n-helperText
+          ></cds-number>
+        </div>
+
+        <ng-container formArrayName="networks">
+          <div class="form-item form-item-append"
+               *ngFor="let _ of networks.controls; index as i">
+            <div cdsRow>
+              <div cdsCol
+                   [columnNumbers]="{ lg: 11 }">
+                <cds-text-label
+                  [labelInputID]="'network-' + i"
+                  i18n
+                  helperText="CIDR network where NFS should bind."
+                  i18n-helperText>
+                  Public Network
+                  <input
+                    cdsText
+                    type="text"
+                    [id]="'network-' + i"
+                    [formControlName]="i"
+                    placeholder="10.0.0.0/24"
+                    i18n-placeholder
+                  />
+                </cds-text-label>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{ lg: 1 }"
+                   class="item-action-btn spacing">
+                <cds-icon-button
+                  kind="danger"
+                  size="sm"
+                  i18n-aria-label
+                  aria-label="Remove"
+                  (click)="removeNetwork(i)">
+                  <cd-icon type="trash"></cd-icon>
+                </cds-icon-button>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+        <div class="form-item">
+          <button cdsButton="tertiary"
+                  size="sm"
+                  type="button"
+                  (click)="addNetwork()"
+                  i18n>Add Network</button>
+        </div>
+
+        <ng-container formArrayName="bind_addrs">
+          <div class="form-item form-item-append"
+               *ngFor="let _ of bind_addrs.controls; index as i"
+               [formGroupName]="i">
+            <div cdsRow>
+              <div cdsCol
+                   [columnNumbers]="{ lg: 6 }">
+                <cds-text-label
+                  [labelInputID]="'bind-host-' + i"
+                  i18n>Hostname
+                  <input cdsText
+                         type="text"
+                         formControlName="hostname"
+                         [id]="'bind-host-' + i" />
+                </cds-text-label>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{ lg: 5 }">
+                <cds-text-label
+                  [labelInputID]="'bind-ip-' + i"
+                  i18n>Address
+                  <input cdsText
+                         type="text"
+                         formControlName="ip"
+                         [id]="'bind-ip-' + i"
+                         placeholder="192.168.1.10"
+                         i18n-placeholder />
+                </cds-text-label>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{ lg: 1 }"
+                   class="item-action-btn spacing">
+                <cds-icon-button
+                  kind="danger"
+                  size="sm"
+                  i18n-aria-label
+                  aria-label="Remove"
+                  (click)="removeBindAddr(i)">
+                  <cd-icon type="trash"></cd-icon>
+                </cds-icon-button>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+        <div class="form-item">
+          <button cdsButton="tertiary"
+                  size="sm"
+                  type="button"
+                  (click)="addBindAddr()"
+                  i18n>Add Address</button>
+        </div>
+
+        <div class="form-item">
+          <cds-checkbox
+            id="enable_nfsv3"
+            formControlName="enable_nfsv3"
+            i18n>Enable NFSv3
+            <cd-help-text>Enable NFS version 3 in addition to NFSv4.</cd-help-text>
+          </cds-checkbox>
+        </div>
+
+        <div class="form-item">
+          <cds-checkbox
+            id="enable_rdma"
+            formControlName="enable_rdma"
+            i18n>Enable RDMA
+            <cd-help-text>
+              Enable NFS over RDMA. New exports on this cluster will default to TCP and RDMA transports.
+            </cd-help-text>
+          </cds-checkbox>
+        </div>
+
+        <ng-container *ngIf="nfsForm.get('enable_rdma').value">
+          <div class="form-item">
+            <cds-number
+              id="rdma_port"
+              formControlName="rdma_port"
+              label="RDMA Port"
+              i18n-label
+              [min]="1"
+              max="65535"
+              placeholder="20049"
+              helperText="Optional RDMA port. Defaults to 20049 when omitted."
+              i18n-helperText
+            ></cds-number>
+          </div>
+
+          <ng-container formArrayName="rdma_networks">
+            <div class="form-item form-item-append"
+                 *ngFor="let _ of rdma_networks.controls; index as i">
+              <div cdsRow>
+                <div cdsCol
+                     [columnNumbers]="{ lg: 11 }">
+                  <cds-text-label
+                    [labelInputID]="'rdma-network-' + i"
+                    i18n
+                    helperText="RDMA-capable network interface or CIDR."
+                    i18n-helperText>
+                    RDMA Interface
+                    <input
+                      cdsText
+                      type="text"
+                      [id]="'rdma-network-' + i"
+                      [formControlName]="i"
+                      placeholder="10.0.0.0/24"
+                      i18n-placeholder
+                    />
+                  </cds-text-label>
+                </div>
+                <div cdsCol
+                     [columnNumbers]="{ lg: 1 }"
+                     class="item-action-btn spacing">
+                  <cds-icon-button
+                    kind="danger"
+                    size="sm"
+                    i18n-aria-label
+                    aria-label="Remove"
+                    (click)="removeRdmaNetwork(i)">
+                    <cd-icon type="trash"></cd-icon>
+                  </cds-icon-button>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+          <div class="form-item">
+            <button cdsButton="tertiary"
+                    size="sm"
+                    type="button"
+                    (click)="addRdmaNetwork()"
+                    i18n>Add Interface</button>
+          </div>
+        </ng-container>
+
+        <ng-container formArrayName="monitoring_addrs">
+          <div class="form-item form-item-append"
+               *ngFor="let _ of monitoring_addrs.controls; index as i"
+               [formGroupName]="i">
+            <div cdsRow>
+              <div cdsCol
+                   [columnNumbers]="{ lg: 6 }">
+                <cds-text-label
+                  [labelInputID]="'monitor-host-' + i"
+                  i18n>Hostname
+                  <input cdsText
+                         type="text"
+                         formControlName="hostname"
+                         [id]="'monitor-host-' + i" />
+                </cds-text-label>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{ lg: 5 }">
+                <cds-text-label
+                  [labelInputID]="'monitor-ip-' + i"
+                  i18n>Address
+                  <input cdsText
+                         type="text"
+                         formControlName="ip"
+                         [id]="'monitor-ip-' + i"
+                         placeholder="192.168.1.10"
+                         i18n-placeholder />
+                </cds-text-label>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{ lg: 1 }"
+                   class="item-action-btn spacing">
+                <cds-icon-button
+                  kind="danger"
+                  size="sm"
+                  i18n-aria-label
+                  aria-label="Remove"
+                  (click)="removeMonitoringAddr(i)">
+                  <cd-icon type="trash"></cd-icon>
+                </cds-icon-button>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+        <div class="form-item">
+          <button cdsButton="tertiary"
+                  size="sm"
+                  type="button"
+                  (click)="addMonitoringAddr()"
+                  i18n>Add Address</button>
+        </div>
+
+        <div class="form-item">
+          <cds-number
+            id="monitoring_port"
+            formControlName="monitoring_port"
+            label="Monitoring Port"
+            i18n-label
+            [min]="1"
+            max="65535"
+            placeholder="9587"
+            helperText="Optional port for NFS monitoring. Default is 9587."
+            i18n-helperText
+          ></cds-number>
+        </div>
+      </cd-form-advanced-fieldset>
+
+      <cd-form-advanced-fieldset title="Ingress for High Availability"
+                                 i18n-title>
+        <div class="form-item">
+          <cds-checkbox
+            id="ingress"
+            formControlName="ingress"
+            i18n>Enable Ingress
+            <cd-help-text>Create an ingress service with a virtual IP for highly available NFS access.</cd-help-text>
+          </cds-checkbox>
+        </div>
+
+        <ng-container *ngIf="nfsForm.get('ingress').value">
+          <div class="form-item">
+            <cds-select
+              label="Ingress Placement"
+              i18n-label
+              formControlName="ingress_placement"
+              id="ingress_placement"
+              helperText="Placement for ingress daemons."
+              i18n-helperText
+            >
+              <option value="hosts"
+                      i18n>Hosts</option>
+              <option value="label"
+                      i18n>Labels</option>
+            </cds-select>
+          </div>
+
+          <ng-container *ngIf="hostsAndLabels$ | async as data">
+            <div *ngIf="nfsForm.controls.ingress_placement.value === 'label'"
+                 class="form-item">
+              <cds-combo-box
+                type="multi"
+                selectionFeedback="top-after-reopen"
+                label="Ingress Label"
+                i18n-label
+                formControlName="ingress_label"
+                id="ingress_label"
+                placeholder="Select labels..."
+                [appendInline]="true"
+                [items]="data.labels"
+                i18n-placeholder
+                (selected)="multiSelector($event, 'ingress_label')"
+                i18n
+              >
+                <cds-dropdown-list></cds-dropdown-list>
+              </cds-combo-box>
+            </div>
+
+            <div *ngIf="nfsForm.controls.ingress_placement.value === 'hosts'"
+                 class="form-item">
+              <cds-combo-box
+                type="multi"
+                selectionFeedback="top-after-reopen"
+                label="Ingress Hosts"
+                i18n-label
+                formControlName="ingress_hosts"
+                id="ingress_hosts"
+                placeholder="Select hosts..."
+                i18n-placeholder
+                [appendInline]="true"
+                [items]="data.hosts"
+                (selected)="multiSelector($event, 'ingress_hosts')"
+                i18n
+              >
+                <cds-dropdown-list></cds-dropdown-list>
+              </cds-combo-box>
+            </div>
+          </ng-container>
+
+          <div class="form-item">
+            <cds-number
+              id="ingress_count"
+              formControlName="ingress_count"
+              label="Daemon Count"
+              i18n-label
+              [min]="1"
+              helperText="Number of ingress daemon instances to deploy."
+              i18n-helperText
+            ></cds-number>
+          </div>
+
+          <ng-container formArrayName="virtual_ips">
+            <div class="form-item form-item-append"
+                 *ngFor="let _ of virtual_ips.controls; index as i">
+              <div cdsRow>
+                <div cdsCol
+                     [columnNumbers]="{ lg: 11 }">
+                  <cds-text-label
+                    [labelInputID]="'virtual_ip-' + i"
+                    i18n
+                    helperText="Virtual IP address with CIDR notation for the ingress service."
+                    i18n-helperText
+                    cdRequiredField="Virtual IP"
+                    [invalid]="virtual_ips.at(i).invalid && virtual_ips.at(i).dirty"
+                    [invalidText]="virtualIpError">
+                    Virtual IP
+                    <input
+                      cdsText
+                      type="text"
+                      [id]="'virtual_ip-' + i"
+                      [formControlName]="i"
+                      placeholder="192.0.2.10/24 or 2001:db8::1/64"
+                      i18n-placeholder
+                      [invalid]="virtual_ips.at(i).invalid && virtual_ips.at(i).dirty"
+                    />
+                  </cds-text-label>
+                </div>
+                <div cdsCol
+                     [columnNumbers]="{ lg: 1 }"
+                     class="item-action-btn spacing"
+                     *ngIf="virtual_ips.length > 1">
+                  <cds-icon-button
+                    kind="danger"
+                    size="sm"
+                    i18n-aria-label
+                    aria-label="Remove"
+                    (click)="removeVirtualIp(i)">
+                    <cd-icon type="trash"></cd-icon>
+                  </cds-icon-button>
+                </div>
+              </div>
+            </div>
+          </ng-container>
+          <div class="form-item">
+            <button cdsButton="tertiary"
+                    size="sm"
+                    type="button"
+                    (click)="addVirtualIp()"
+                    i18n>Add Virtual IP</button>
+          </div>
+          <ng-template #virtualIpError>
+            <span class="invalid-feedback"
+                  i18n>Virtual IP is required when ingress is enabled.</span>
+          </ng-template>
+
+          <div class="form-item">
+            <cds-select
+              formControlName="ingress_mode"
+              label="Ingress Mode"
+              i18n-label
+              id="ingress_mode"
+              helperText="Select the ingress mode for load balancing and high availability."
+              i18n-helperText
+            >
+              <option *ngFor="let m of ingressModes"
+                      [value]="m.value">{{ m.label }}</option>
+            </cds-select>
+            <p class="cds--form__helper-text"
+               *ngIf="getIngressModeHelpText()">{{ getIngressModeHelpText() }}</p>
+          </div>
+        </ng-container>
+      </cd-form-advanced-fieldset>
+
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="nfsForm"
+        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
+    </form>
+  </ng-container>
+</div>
