@@ -35,7 +35,8 @@ class PeerReplayer {
 public:
   PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
                RadosRef local_cluster, const Filesystem &filesystem,
-               const Peer &peer, const std::set<std::string, std::less<>> &directories,
+               const Peer &peer,
+               const std::map<std::string, PriorityMode, std::less<>> &directories,
                IoCtxRef local_ioctx, MountRef mount, ServiceDaemon *service_daemon);
   ~PeerReplayer();
 
@@ -45,8 +46,10 @@ public:
   // shutdown replayer for a peer
   void shutdown();
 
-  // add a directory to mirror queue
-  void add_directory(std::string_view dir_root);
+  // add a directory to mirror queue. re-adding a tracked directory with a
+  // different priority mode requests a mode change for it.
+  void add_directory(std::string_view dir_root,
+                     PriorityMode priority = PriorityMode::THREAD_SHARED);
 
   // remove a directory from queue
   void remove_directory(std::string_view dir_root, bool purging = false);
@@ -96,54 +99,89 @@ private:
   }
 
   struct Replayer;
+  struct SyncScheduler;
+
   class SnapshotReplayerThread : public Thread {
   public:
-    SnapshotReplayerThread(PeerReplayer *peer_replayer)
-      : m_peer_replayer(peer_replayer) {
+    // shared crawler -- scans for and crawls any "thread-shared" directory.
+    SnapshotReplayerThread(PeerReplayer *peer_replayer, SyncScheduler *scheduler)
+      : m_peer_replayer(peer_replayer),
+        m_scheduler(scheduler) {
+    }
+    // dedicated crawler -- bound to a single "per-thread" directory.
+    SnapshotReplayerThread(PeerReplayer *peer_replayer, SyncScheduler *scheduler,
+                           std::string_view dir_root)
+      : m_peer_replayer(peer_replayer),
+        m_scheduler(scheduler),
+        m_dir_root(dir_root),
+        m_dedicated(true) {
     }
 
     void *entry() override {
-      m_peer_replayer->run(this);
+      if (m_dedicated) {
+        m_peer_replayer->run_dedicated(this);
+      } else {
+        m_peer_replayer->run(this);
+      }
       return 0;
+    }
+
+    SyncScheduler *get_scheduler() const {
+      return m_scheduler;
+    }
+    const std::string &get_dir_root() const {
+      return m_dir_root;
+    }
+    bool is_dedicated() const {
+      return m_dedicated;
     }
 
   private:
     PeerReplayer *m_peer_replayer;
+    SyncScheduler *m_scheduler;
+    std::string m_dir_root;
+    bool m_dedicated = false;
   };
 
   class SnapshotDataSyncThreadGuard {
   public:
-    explicit SnapshotDataSyncThreadGuard(PeerReplayer *peer_replayer)
-      : m_peer_replayer(peer_replayer) {
-      m_peer_replayer->m_active_datasync_threads.fetch_add(1, std::memory_order_relaxed);
+    explicit SnapshotDataSyncThreadGuard(std::atomic<int> &counter)
+      : m_counter(counter) {
+      m_counter.fetch_add(1, std::memory_order_relaxed);
     }
 
     ~SnapshotDataSyncThreadGuard() {
-      m_peer_replayer->m_active_datasync_threads.fetch_sub(1, std::memory_order_relaxed);
+      m_counter.fetch_sub(1, std::memory_order_relaxed);
     }
 
     SnapshotDataSyncThreadGuard(const SnapshotDataSyncThreadGuard&) = delete;
     SnapshotDataSyncThreadGuard& operator=(const SnapshotDataSyncThreadGuard&) = delete;
 
   private:
-    PeerReplayer* m_peer_replayer;
+    std::atomic<int> &m_counter;
   };
 
   class SnapshotDataSyncThread : public Thread {
   public:
-    SnapshotDataSyncThread(PeerReplayer *peer_replayer)
-      : m_peer_replayer(peer_replayer) {
+    SnapshotDataSyncThread(PeerReplayer *peer_replayer, SyncScheduler *scheduler)
+      : m_peer_replayer(peer_replayer),
+        m_scheduler(scheduler) {
     }
 
-    void *entry() override {
-      SnapshotDataSyncThreadGuard guard(m_peer_replayer); //active thread counter
-      m_peer_replayer->run_datasync(this);
-      return 0;
+    // defined out-of-line -- needs a complete SyncScheduler.
+    void *entry() override;
+
+    SyncScheduler *get_scheduler() const {
+      return m_scheduler;
     }
 
   private:
     PeerReplayer *m_peer_replayer;
+    SyncScheduler *m_scheduler;
   };
+
+  typedef std::vector<std::unique_ptr<SnapshotReplayerThread>> SnapshotReplayers;
+  typedef std::vector<std::unique_ptr<SnapshotDataSyncThread>> SnapshotDataReplayers;
 
   class TickThread : public Thread {
   public:
@@ -236,7 +274,8 @@ private:
 
   class SyncMechanism {
   public:
-    explicit SyncMechanism(PeerReplayer& peer_replayer, std::string_view dir_root,
+    explicit SyncMechanism(PeerReplayer& peer_replayer, SyncScheduler *scheduler,
+                           std::string_view dir_root,
                            MountRef local, MountRef remote, FHandles *fh,
                            const Peer &peer, /* keep dout happy */
                            const Snapshot &current, boost::optional<Snapshot> prev);
@@ -309,6 +348,12 @@ private:
     ceph::mutex& get_sdq_lock() {
       return sdq_lock;
     }
+    // the scheduler whose queue this job is (or was) parked on -- either the
+    // peer replayer's shared scheduler or the private one belonging to a
+    // "per-thread" priority directory.
+    SyncScheduler *get_scheduler() const {
+      return m_sched;
+    }
     std::string_view get_m_dir_root() {
       return m_dir_root;
     }
@@ -330,6 +375,7 @@ private:
     int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
   protected:
     PeerReplayer& m_peer_replayer;
+    SyncScheduler *m_sched;
     // It's not used in RemoteSync but required to be accessed in datasync threads
     std::string m_dir_root;
     MountRef m_local;
@@ -356,7 +402,8 @@ private:
 
   class RemoteSync : public SyncMechanism {
   public:
-    RemoteSync(PeerReplayer& peer_replayer, std::string_view dir_root,
+    RemoteSync(PeerReplayer& peer_replayer, SyncScheduler *scheduler,
+               std::string_view dir_root,
                MountRef local, MountRef remote, FHandles *fh,
                const Peer &peer, /* keep dout happy */
                const Snapshot &current, boost::optional<Snapshot> prev);
@@ -373,7 +420,8 @@ private:
 
   class SnapDiffSync : public SyncMechanism {
   public:
-    SnapDiffSync(PeerReplayer& peer_replayer, std::string_view dir_root, MountRef local,
+    SnapDiffSync(PeerReplayer& peer_replayer, SyncScheduler *scheduler,
+                 std::string_view dir_root, MountRef local,
                  MountRef remote, FHandles *fh, const Peer &peer, const Snapshot &current,
                  boost::optional<Snapshot> prev);
     ~SnapDiffSync();
@@ -397,6 +445,102 @@ private:
     void fini_directory(SyncEntry &entry);
 
     std::map<std::string, std::set<std::string>> m_deleted;
+  };
+
+  /* A scheduler owns a queue of snapshot sync jobs (SyncMechanism) and the pool
+   * of data sync threads that drain it. A peer replayer always has one shared
+   * scheduler, used by every directory whose priority mode is "thread-shared",
+   * plus one private scheduler per directory whose priority mode is
+   * "per-thread". Isolating the queue and the thread pool is what keeps a
+   * "per-thread" directory from contending with the rest for data sync threads.
+   */
+  struct SyncScheduler {
+    SyncScheduler(PeerReplayer *peer_replayer, const std::string &name,
+                  bool dedicated = false);
+    ~SyncScheduler();
+
+    SyncScheduler(const SyncScheduler&) = delete;
+    SyncScheduler& operator=(const SyncScheduler&) = delete;
+
+    // spawn @nr_threads data sync threads draining this scheduler's queue.
+    void spawn_datasync_threads(uint64_t nr_threads);
+    // wake every data sync thread blocked on this scheduler so that it can
+    // notice retirement and exit, then join them all.
+    void stop_datasync_threads();
+
+    // a retiring scheduler is going away -- its crawler (if any) and data sync
+    // threads stop looking for work and exit.
+    void set_retiring() {
+      m_retiring.store(true, std::memory_order_release);
+    }
+    bool is_retiring() const {
+      return m_retiring.load(std::memory_order_acquire);
+    }
+
+    void enqueue_syncm(const std::shared_ptr<SyncMechanism>& item);
+    bool is_syncm_active_unlocked(const std::shared_ptr<SyncMechanism>& syncm_obj);
+    void remove_syncm_unlocked(const std::shared_ptr<SyncMechanism>& syncm_obj);
+    std::shared_ptr<SyncMechanism> pick_next_syncm_and_mark_unlocked();
+    void mark_and_notify_syncms_to_backoff(int err);
+    void mark_all_syncms_to_backoff_unlocked(int err);
+    void notify_all_syncms_to_backoff_unlocked();
+
+    ceph::mutex& get_smq_lock() {
+      return smq_lock;
+    }
+    int get_num_queued_snapshots_unlocked() const {
+      return syncm_q.size();
+    }
+    int get_num_datasync_threads() const {
+      return m_data_replayers.size();
+    }
+    int get_active_datasync_threads() const {
+      return m_active_datasync_threads.load(std::memory_order_relaxed);
+    }
+    const std::string &get_name() const {
+      return m_name;
+    }
+
+    PeerReplayer *m_peer_replayer;
+    std::string m_name;
+    Peer m_peer; /* keep dout happy */
+
+    ceph::mutex smq_lock;
+    ceph::condition_variable smq_cv;
+    std::deque<std::shared_ptr<SyncMechanism>> syncm_q;
+
+    SnapshotDataReplayers m_data_replayers;
+    std::atomic<int> m_active_datasync_threads{0};
+    std::atomic<bool> m_retiring{false};
+    bool m_dedicated;
+  };
+
+  /* Crawler thread plus private data sync scheduler backing a single directory
+   * running in "per-thread" priority mode.
+   */
+  struct DedicatedReplayer {
+    DedicatedReplayer(PeerReplayer *peer_replayer, const std::string &dir_root)
+      : dir_root(dir_root),
+        scheduler(peer_replayer, "dedicated-" + dir_root, true) {
+    }
+
+    std::string dir_root;
+    SyncScheduler scheduler;
+    std::unique_ptr<SnapshotReplayerThread> crawler;
+  };
+
+  /* Active and requested priority mode of a mirrored directory. A requested
+   * mode differing from the active one is applied by the tick thread the next
+   * time the directory is idle (i.e. not registered with a crawler), so a
+   * priority change never aborts an in-progress snapshot synchronization.
+   */
+  struct DirPriority {
+    PriorityMode active = PriorityMode::THREAD_SHARED;
+    PriorityMode desired = PriorityMode::THREAD_SHARED;
+
+    bool has_pending_change() const {
+      return active != desired;
+    }
   };
 
   // stats sent to service daemon
@@ -699,9 +843,6 @@ private:
     return false;
   }
 
-  typedef std::vector<std::unique_ptr<SnapshotReplayerThread>> SnapshotReplayers;
-  typedef std::vector<std::unique_ptr<SnapshotDataSyncThread>> SnapshotDataReplayers;
-
   CephContext *m_cct;
   FSMirror *m_fs_mirror;
   RadosRef m_local_cluster;
@@ -723,16 +864,20 @@ private:
   RadosRef m_remote_cluster;
   MountRef m_remote_mount;
   std::atomic<bool> m_stopping{false};
+  // shared crawler pool -- services every "thread-shared" directory
   SnapshotReplayers m_replayers;
+  // shared data sync queue and thread pool
+  SyncScheduler m_shared_scheduler;
 
-  SnapshotDataReplayers m_data_replayers;
+  // priority mode (active and requested) of every tracked directory
+  std::map<std::string, DirPriority> m_dir_priority;
+  // crawler + private data sync pool for each "per-thread" directory
+  std::map<std::string, std::unique_ptr<DedicatedReplayer>> m_dedicated_replayers;
+  // only used to give dedicated crawler threads distinct names
+  uint64_t m_dedicated_replayer_id = 0;
+
   std::unique_ptr<TickThread> m_tick_thread;
-  std::atomic<int> m_active_datasync_threads{0};
   ceph::mutex m_mirror_obj_write_l = ceph::make_mutex("PeerReplayer::m_mirror_obj_write_l");
-
-  ceph::mutex smq_lock;
-  ceph::condition_variable smq_cv;
-  std::deque<std::shared_ptr<SyncMechanism>> syncm_q;
 
   std::atomic<uint64_t> blockdiff_min_file_size{0};
   std::atomic<bool> distribute_datasync_threads{true};
@@ -755,18 +900,23 @@ private:
   void refresh_directory_current_sync_perf_counters(const std::string &dir_root);
 
   void run(SnapshotReplayerThread *replayer);
+  void run_dedicated(SnapshotReplayerThread *replayer);
   void run_datasync(SnapshotDataSyncThread *data_replayer);
   void run_tick();
-  void remove_syncm(const std::shared_ptr<SyncMechanism>& syncm_obj);
-  bool is_syncm_active(const std::shared_ptr<SyncMechanism>& syncm_obj);
-  std::shared_ptr<SyncMechanism> pick_next_syncm_and_mark();
-  int get_active_datasync_threads() const {
-    return m_active_datasync_threads.load(std::memory_order_relaxed);
-  }
-  void mark_and_notify_syncms_to_backoff(int err);
-  void mark_all_syncms_to_backoff_unlocked(int err);
-  void notify_all_syncms_to_backoff();
 
+  // priority mode handling
+  PriorityMode get_directory_priority(const std::string &dir_root) const;
+  bool _is_per_thread(const std::string &dir_root) const;
+  // create/retire private crawler+datasync pools for directories whose
+  // requested priority mode differs from the active one. called by the tick
+  // thread with @locker held; may drop and retake it to join threads.
+  void apply_pending_priorities(std::unique_lock<ceph::mutex> &locker);
+  void _retire_dedicated_replayers(
+    std::vector<std::unique_ptr<DedicatedReplayer>> *retired);
+  void shutdown_dedicated_replayers();
+
+  bool _can_pick_directory(const std::string &dir_root, const monotime &now,
+                           uint64_t retry_timo);
   boost::optional<std::string> pick_directory();
   int register_directory(const std::string &dir_root, SnapshotReplayerThread *replayer);
   void unregister_directory(const std::string &dir_root,
@@ -774,7 +924,11 @@ private:
   int try_lock_directory(const std::string &dir_root, SnapshotReplayerThread *replayer,
                          DirRegistry *registry);
   void unlock_directory(const std::string &dir_root, const DirRegistry &registry);
-  int sync_snaps(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
+  // crawl and synchronize @dir_root once, pushing data sync jobs onto @sched.
+  void sync_directory(const std::string &dir_root, SnapshotReplayerThread *replayer,
+                      SyncScheduler *sched, std::unique_lock<ceph::mutex> &locker);
+  int sync_snaps(const std::string &dir_root, SyncScheduler *sched,
+                 std::unique_lock<ceph::mutex> &locker);
   void load_persisted_dir_sync_stats();
   void load_persisted_dir_sync_stat(const std::string &dir_root);
   void apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat, const bufferlist &bl);
@@ -811,15 +965,16 @@ private:
   int pre_sync_check_and_open_handles(const std::string &dir_root, const Snapshot &current,
                                       boost::optional<Snapshot> prev, FHandles *fh);
 
-  int do_synchronize(const std::string &dir_root, const Snapshot &current,
-                     boost::optional<Snapshot> prev);
-  int do_synchronize(const std::string &dir_root, const Snapshot &current) {
-    return do_synchronize(dir_root, current, boost::none);
+  int do_synchronize(const std::string &dir_root, SyncScheduler *sched,
+                     const Snapshot &current, boost::optional<Snapshot> prev);
+  int do_synchronize(const std::string &dir_root, SyncScheduler *sched,
+                     const Snapshot &current) {
+    return do_synchronize(dir_root, sched, current, boost::none);
   }
 
-  int synchronize(const std::string &dir_root, const Snapshot &current,
-                  boost::optional<Snapshot> prev);
-  int do_sync_snaps(const std::string &dir_root);
+  int synchronize(const std::string &dir_root, SyncScheduler *sched,
+                  const Snapshot &current, boost::optional<Snapshot> prev);
+  int do_sync_snaps(const std::string &dir_root, SyncScheduler *sched);
 
   int remote_file_op(std::shared_ptr<SyncMechanism>& syncm, const std::string &dir_root,
                      const std::string &epath, const struct ceph_statx &stx,
@@ -828,14 +983,6 @@ private:
                      const FHandles &fh, uint64_t num_blocks, struct cblock *b);
   int sync_perms(const std::string& path);
 
-  // add syncm to syncm_q
-  void enqueue_syncm(const std::shared_ptr<SyncMechanism>& item);
-  ceph::mutex& get_smq_lock() {
-    return smq_lock;
-  }
-  int get_num_queued_snapshots_unlocked() {
-    return syncm_q.size();
-  }
   void set_changed_mirroring_configurations();
   uint64_t get_blockdiff_min_file_size() const {
     return blockdiff_min_file_size.load(std::memory_order_relaxed);
