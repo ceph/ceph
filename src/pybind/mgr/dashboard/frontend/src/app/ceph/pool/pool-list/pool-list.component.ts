@@ -1,6 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
+import { BehaviorSubject } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
@@ -9,7 +10,9 @@ import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile
 import { PoolService } from '~/app/shared/api/pool.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeleteGuardModalComponent } from '~/app/shared/components/delete-guard-modal/delete-guard-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -33,6 +36,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'pool';
+const POOL_CONFIG = 'mon_allow_pool_delete';
 
 @Component({
   selector: 'cd-pool-list',
@@ -53,16 +57,23 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   @ViewChild('poolConfigurationSourceTpl')
   poolConfigurationSourceTpl: TemplateRef<any>;
 
-  pools: Pool[];
-  columns: CdTableColumn[];
+  @ViewChild('poolEnableTpl', { static: true })
+  poolEnableTpl!: TemplateRef<any>;
+
+  @ViewChild('poolNoPermsTpl', { static: true })
+  poolNoPermsTpl!: TemplateRef<any>;
+
+  pools: Pool[] = [];
+  columns: CdTableColumn[] = [];
   selection = new CdTableSelection();
   executingTasks: ExecutingTask[] = [];
   permissions: Permissions;
   tableActions: CdTableAction[];
   tableStatus = new TableStatusViewCache();
   cacheTiers: any[] = [];
-  monAllowPoolDelete = false;
-  ecProfileList: ErasureCodeProfile[];
+  monAllowPoolDelete$ = new BehaviorSubject<boolean>(false);
+  ecProfileList: ErasureCodeProfile[] = [];
+  viewUrl = '/pool/view';
 
   constructor(
     private poolService: PoolService,
@@ -97,20 +108,19 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deletePoolModal(),
-        name: this.actionLabels.DELETE,
-        disable: this.getDisableDesc.bind(this)
+        name: this.actionLabels.DELETE
       }
     ];
 
     // Note, we need read permissions to get the 'mon_allow_pool_delete'
     // configuration option.
     if (this.permissions.configOpt.read) {
-      this.configurationService.get('mon_allow_pool_delete').subscribe((data: any) => {
+      this.configurationService.get(POOL_CONFIG).subscribe((data: any) => {
         if (_.has(data, 'value')) {
           const monSection = _.find(data.value, (v) => {
             return v.section === 'mon';
           }) || { value: false };
-          this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
+          this.monAllowPoolDelete$.next(monSection.value === 'true');
         }
       });
     }
@@ -225,9 +235,27 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
 
   deletePoolModal() {
     const name = this.selection.first().pool_name;
+    if (!this.monAllowPoolDelete$.getValue()) {
+      if (this.permissions.configOpt.read && this.permissions.pool.read) {
+        this.modalService.show(ConfirmationModalComponent, {
+          titleText: $localize`Can't delete ${name}`,
+          buttonText: $localize`Enable`,
+          bodyTpl: this.poolEnableTpl,
+          warning: true,
+          onSubmit: () => this.enablePoolDeletion()
+        });
+      } else {
+        this.modalService.show(DeleteGuardModalComponent, {
+          resourceName: name,
+          resourceType: $localize`Pool`,
+          bodyTemplate: this.poolNoPermsTpl
+        });
+      }
+      return;
+    }
     this.modalService.show(DeleteConfirmationModalComponent, {
       impact: DeletionImpact.high,
-      itemDescription: 'Pool',
+      itemDescription: $localize`Pool`,
       itemNames: [name],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
@@ -235,6 +263,19 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
           call: this.poolService.delete(name)
         })
     });
+  }
+
+  enablePoolDeletion() {
+    this.configurationService
+      .create({
+        name: POOL_CONFIG,
+        value: [{ section: 'mon', value: true }],
+        force_update: false
+      })
+      .subscribe(() => {
+        this.monAllowPoolDelete$.next(true);
+        this.modalService.dismissAll();
+      });
   }
 
   getPgStatusCellClass(_row: any, _column: any, value: string): object {
@@ -323,18 +364,6 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       const cacheTierIds = this.expandedRow['tiers'];
       this.cacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
     }
-  }
-
-  getDisableDesc(): boolean | string {
-    if (this.selection?.hasSelection) {
-      if (!this.monAllowPoolDelete) {
-        return $localize`Pool deletion is disabled by the mon_allow_pool_delete configuration setting.`;
-      }
-
-      return false;
-    }
-
-    return true;
   }
 
   setExpandedRow(expandedRow: any) {

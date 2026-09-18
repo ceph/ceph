@@ -79,7 +79,7 @@
         <cd-form-button-panel
           (submitActionEvent)="submit()"
           [form]="roleForm"
-          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+          [submitText]="submitAction"
           wrappingClass="text-right"
         >
         </cd-form-button-panel>

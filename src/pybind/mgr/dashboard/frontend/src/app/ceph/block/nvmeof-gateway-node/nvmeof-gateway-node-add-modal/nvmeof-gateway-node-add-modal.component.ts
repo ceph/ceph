@@ -5,7 +5,8 @@ import {
   ViewChild,
   TemplateRef,
   OnDestroy,
-  Inject
+  Inject,
+  ViewEncapsulation
 } from '@angular/core';
 import { Subscription } from 'rxjs';
 
@@ -26,7 +27,8 @@ import { TaskMessageService } from '~/app/shared/services/task-message.service';
   selector: 'cd-nvmeof-gateway-node-add-modal',
   templateUrl: './nvmeof-gateway-node-add-modal.component.html',
   styleUrls: ['./nvmeof-gateway-node-add-modal.component.scss'],
-  standalone: false
+  standalone: false,
+  encapsulation: ViewEncapsulation.None
 })
 export class NvmeofGatewayNodeAddModalComponent extends CdForm implements OnInit, OnDestroy {
   hosts: Host[] = [];
@@ -169,8 +171,8 @@ export class NvmeofGatewayNodeAddModalComponent extends CdForm implements OnInit
 
     const { status, ...modifiedSpec } = this.serviceSpec;
 
-    if ('events' in modifiedSpec) {
-      delete (modifiedSpec as any).events;
+    if (modifiedSpec.events) {
+      delete modifiedSpec.events;
     }
 
     if (modifiedSpec.placement) {
@@ -180,7 +182,7 @@ export class NvmeofGatewayNodeAddModalComponent extends CdForm implements OnInit
     }
 
     if ('locations' in modifiedSpec.placement) {
-      delete (modifiedSpec.placement as any).locations;
+      delete modifiedSpec.placement.locations;
     }
 
     modifiedSpec.placement.hosts = newHosts;

@@ -86,6 +86,10 @@ describe('UserFormComponent', () => {
       component.ngOnInit();
     });
 
+    it('should set submit label to Create User', () => {
+      expect(component.submitAction).toBe('Create User');
+    });
+
     it('should not disable fields', () => {
       [
         'username',
@@ -253,6 +257,10 @@ describe('UserFormComponent', () => {
       expect(form.get('password').valid).toBeTruthy();
       form.get('confirmpassword').setValue('');
       expect(form.get('confirmpassword').valid).toBeTruthy();
+    });
+
+    it('should set submit label to Save changes', () => {
+      expect(component.submitAction).toBe('Save changes');
     });
 
     it('should alert if user is removing needed role permission', () => {
