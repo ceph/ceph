@@ -16,12 +16,14 @@
 #include "common/async/yield_context.h"
 
 #include <boost/asio/io_context.hpp>
+#include <atomic>
 #include <cstddef>
 #include <cstring>
 #include <map>
 #include <memory>
 #include <numeric>
 #include <string>
+#include <thread>
 #include <vector>
 
 #define dout_subsys ceph_subsys_rgw
@@ -55,7 +57,7 @@ TEST(NullSafety, NullDriverReturnsError) {
   CRgwListResult result{};
 
   // core ops
-  EXPECT_LT(rgw_put_object(nullptr, nullptr, nullptr, &b, &o, &buf, nullptr), 0);
+  EXPECT_LT(rgw_put_object(nullptr, nullptr, nullptr, &b, &o, &buf, nullptr, nullptr), 0);
   EXPECT_LT(rgw_get_object(nullptr, nullptr, nullptr, &b, &o, 0, 0, &buf), 0);
   EXPECT_LT(rgw_delete_object(nullptr, nullptr, nullptr, &b, &o), 0);
   EXPECT_LT(rgw_head_object(nullptr, nullptr, nullptr, &b, &o, &meta), 0);
@@ -65,7 +67,7 @@ TEST(NullSafety, NullDriverReturnsError) {
   // conditional put
   int canceled = 0;
   EXPECT_LT(rgw_put_object_conditional(nullptr, nullptr, nullptr,
-             &b, &o, &buf, nullptr, nullptr, &canceled, nullptr), 0);
+             &b, &o, &buf, nullptr, nullptr, &canceled, nullptr, nullptr), 0);
 
   // copy
   CRgwBucket db{"dst", nullptr};
@@ -80,7 +82,7 @@ TEST(NullSafety, NullDriverReturnsError) {
 
   // multipart
   char* upload_id = nullptr;
-  EXPECT_LT(rgw_init_multipart(nullptr, nullptr, nullptr, &b, &o, &upload_id), 0);
+  EXPECT_LT(rgw_multipart_init(nullptr, nullptr, nullptr, &b, &o, nullptr, &upload_id), 0);
 
   char* etag = nullptr;
   uint8_t data[] = {0};
@@ -102,13 +104,13 @@ TEST(NullSafety, NullBucketAndKeyReturnsError) {
   CRgwBuffer buf{nullptr, 0};
 
   // null bucket
-  EXPECT_LT(rgw_put_object(driver, nullptr, nullptr, nullptr, &o, &buf, nullptr), 0);
+  EXPECT_LT(rgw_put_object(driver, nullptr, nullptr, nullptr, &o, &buf, nullptr, nullptr), 0);
   EXPECT_LT(rgw_get_object(driver, nullptr, nullptr, nullptr, &o, 0, 0, &buf), 0);
   EXPECT_LT(rgw_delete_object(driver, nullptr, nullptr, nullptr, &o), 0);
   EXPECT_LT(rgw_head_object(driver, nullptr, nullptr, nullptr, &o, nullptr), 0);
 
   // null object key
-  EXPECT_LT(rgw_put_object(driver, nullptr, nullptr, &b, nullptr, &buf, nullptr), 0);
+  EXPECT_LT(rgw_put_object(driver, nullptr, nullptr, &b, nullptr, &buf, nullptr, nullptr), 0);
   EXPECT_LT(rgw_get_object(driver, nullptr, nullptr, &b, nullptr, 0, 0, &buf), 0);
   EXPECT_LT(rgw_delete_object(driver, nullptr, nullptr, &b, nullptr), 0);
 
@@ -119,7 +121,7 @@ TEST(NullSafety, NullBucketAndKeyReturnsError) {
              nullptr, nullptr, nullptr, 100, nullptr), 0);
 
   // multipart null output
-  EXPECT_LT(rgw_init_multipart(driver, nullptr, nullptr, &b, &o, nullptr), 0);
+  EXPECT_LT(rgw_multipart_init(driver, nullptr, nullptr, &b, &o, nullptr, nullptr), 0);
   EXPECT_LT(rgw_multipart_put_part(driver, nullptr, nullptr,
              &b, &o, "id", 1, nullptr, 0, nullptr), 0);
 }
@@ -169,7 +171,7 @@ protected:
   int put(const char* key, const uint8_t* data, size_t len) {
     CRgwObject obj{key, nullptr};
     CRgwBuffer buf{const_cast<uint8_t*>(data), len};
-    return rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &buf, nullptr);
+    return rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &buf, nullptr, nullptr);
   }
 
   int put_str(const char* key, const std::string& data) {
@@ -230,12 +232,12 @@ TEST_F(SALWrapperTest, NullBufferPut) {
   CRgwObject obj{"test/null-buf", nullptr};
 
   // null buffer pointer is treated as a zero-byte put (valid)
-  EXPECT_EQ(0, rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, nullptr, nullptr));
+  EXPECT_EQ(0, rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, nullptr, nullptr, nullptr));
   created_keys_.emplace_back("test/null-buf");
 
   // buffer with null data but non-zero length is invalid
   CRgwBuffer bad_buf{nullptr, 100};
-  EXPECT_LT(rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &bad_buf, nullptr), 0);
+  EXPECT_LT(rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &bad_buf, nullptr, nullptr), 0);
 }
 
 // --------------- Put / Get ---------------
@@ -317,6 +319,188 @@ TEST_F(SALWrapperTest, PutGetMultipleObjects) {
     rgw_free_buffer(&buf);
   }
 }
+
+
+// --------------- Put/Get with Attributes ---------------
+
+TEST_F(SALWrapperTest, PutObjectWithAttributes) {
+  std::string data = "object with attributes";
+  CRgwObject obj{"test/put-with-attrs", nullptr};
+  CRgwBuffer buf{reinterpret_cast<uint8_t*>(const_cast<char*>(data.data())), data.size()};
+  
+  // Set attributes
+  CRgwObjectMeta attrs{};
+  attrs.content_type = const_cast<char*>("text/plain");
+  attrs.cache_control = const_cast<char*>("max-age=3600");
+  attrs.content_encoding = const_cast<char*>("gzip");
+  attrs.metadata = const_cast<char*>("{\"user-key\":\"user-value\",\"x-custom\":\"test\"}");
+  
+  char* etag = nullptr;
+  ASSERT_EQ(0, rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &buf, &attrs, &etag));
+  ASSERT_NE(etag, nullptr);
+  created_keys_.emplace_back("test/put-with-attrs");
+  
+  // Verify attributes were set
+  CRgwObjectMeta meta{};
+  ASSERT_EQ(0, head("test/put-with-attrs", &meta));
+  
+  ASSERT_NE(meta.content_type, nullptr);
+  EXPECT_STREQ("text/plain", meta.content_type);
+  
+  ASSERT_NE(meta.cache_control, nullptr);
+  EXPECT_STREQ("max-age=3600", meta.cache_control);
+  
+  ASSERT_NE(meta.content_encoding, nullptr);
+  EXPECT_STREQ("gzip", meta.content_encoding);
+  
+  ASSERT_NE(meta.metadata, nullptr);
+  std::string metadata_str(meta.metadata);
+  EXPECT_TRUE(metadata_str.find("user-key") != std::string::npos);
+  EXPECT_TRUE(metadata_str.find("user-value") != std::string::npos);
+  
+  rgw_free_object_meta(&meta);
+  free(etag);
+}
+
+TEST_F(SALWrapperTest, PutObjectWithContentType) {
+  std::string data = "JSON content";
+  CRgwObject obj{"test/put-json", nullptr};
+  CRgwBuffer buf{reinterpret_cast<uint8_t*>(const_cast<char*>(data.data())), data.size()};
+  
+  CRgwObjectMeta attrs{};
+  attrs.content_type = const_cast<char*>("application/json");
+  
+  char* etag = nullptr;
+  ASSERT_EQ(0, rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &buf, &attrs, &etag));
+  created_keys_.emplace_back("test/put-json");
+  
+  CRgwObjectMeta meta{};
+  ASSERT_EQ(0, head("test/put-json", &meta));
+  ASSERT_NE(meta.content_type, nullptr);
+  EXPECT_STREQ("application/json", meta.content_type);
+  
+  rgw_free_object_meta(&meta);
+  free(etag);
+}
+
+TEST_F(SALWrapperTest, PutObjectWithCustomMetadata) {
+  std::string data = "data with custom metadata";
+  CRgwObject obj{"test/put-custom-meta", nullptr};
+  CRgwBuffer buf{reinterpret_cast<uint8_t*>(const_cast<char*>(data.data())), data.size()};
+  
+  CRgwObjectMeta attrs{};
+  attrs.metadata = const_cast<char*>("{\"x-amz-meta-author\":\"test-user\",\"x-amz-meta-version\":\"1.0\"}");
+  
+  char* etag = nullptr;
+  ASSERT_EQ(0, rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &buf, &attrs, &etag));
+  created_keys_.emplace_back("test/put-custom-meta");
+  
+  CRgwObjectMeta meta{};
+  ASSERT_EQ(0, head("test/put-custom-meta", &meta));
+  ASSERT_NE(meta.metadata, nullptr);
+  
+  std::string metadata_str(meta.metadata);
+  EXPECT_TRUE(metadata_str.find("x-amz-meta-author") != std::string::npos);
+  EXPECT_TRUE(metadata_str.find("test-user") != std::string::npos);
+  EXPECT_TRUE(metadata_str.find("x-amz-meta-version") != std::string::npos);
+  EXPECT_TRUE(metadata_str.find("1.0") != std::string::npos);
+  
+  rgw_free_object_meta(&meta);
+  free(etag);
+}
+
+TEST_F(SALWrapperTest, PutObjectAttributesOverwrite) {
+  std::string data = "original data";
+  CRgwObject obj{"test/attrs-overwrite", nullptr};
+  CRgwBuffer buf{reinterpret_cast<uint8_t*>(const_cast<char*>(data.data())), data.size()};
+  
+  // First put with initial attributes
+  CRgwObjectMeta attrs1{};
+  attrs1.content_type = const_cast<char*>("text/plain");
+  attrs1.cache_control = const_cast<char*>("max-age=1800");
+  
+  char* etag1 = nullptr;
+  ASSERT_EQ(0, rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &buf, &attrs1, &etag1));
+  created_keys_.emplace_back("test/attrs-overwrite");
+  
+  // Second put with different attributes
+  std::string data2 = "updated data";
+  CRgwBuffer buf2{reinterpret_cast<uint8_t*>(const_cast<char*>(data2.data())), data2.size()};
+  CRgwObjectMeta attrs2{};
+  attrs2.content_type = const_cast<char*>("application/json");
+  attrs2.cache_control = const_cast<char*>("max-age=7200");
+  
+  char* etag2 = nullptr;
+  ASSERT_EQ(0, rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &buf2, &attrs2, &etag2));
+  
+  // Verify new attributes replaced old ones
+  CRgwObjectMeta meta{};
+  ASSERT_EQ(0, head("test/attrs-overwrite", &meta));
+  
+  ASSERT_NE(meta.content_type, nullptr);
+  EXPECT_STREQ("application/json", meta.content_type);
+  
+  ASSERT_NE(meta.cache_control, nullptr);
+  EXPECT_STREQ("max-age=7200", meta.cache_control);
+  
+  rgw_free_object_meta(&meta);
+  free(etag1);
+  free(etag2);
+}
+
+TEST_F(SALWrapperTest, GetObjectPreservesAttributes) {
+  std::string data = "data to retrieve";
+  CRgwObject obj{"test/get-with-attrs", nullptr};
+  CRgwBuffer put_buf{reinterpret_cast<uint8_t*>(const_cast<char*>(data.data())), data.size()};
+  
+  CRgwObjectMeta attrs{};
+  attrs.content_type = const_cast<char*>("text/html");
+  attrs.content_encoding = const_cast<char*>("deflate");
+  
+  char* etag = nullptr;
+  ASSERT_EQ(0, rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &put_buf, &attrs, &etag));
+  created_keys_.emplace_back("test/get-with-attrs");
+  
+  // Get the object
+  CRgwBuffer get_buf{};
+  ASSERT_EQ(0, get("test/get-with-attrs", &get_buf));
+  ASSERT_EQ(data.size(), get_buf.len);
+  EXPECT_EQ(0, memcmp(data.data(), get_buf.data, get_buf.len));
+  
+  // Verify attributes are still present via head
+  CRgwObjectMeta meta{};
+  ASSERT_EQ(0, head("test/get-with-attrs", &meta));
+  
+  ASSERT_NE(meta.content_type, nullptr);
+  EXPECT_STREQ("text/html", meta.content_type);
+  
+  ASSERT_NE(meta.content_encoding, nullptr);
+  EXPECT_STREQ("deflate", meta.content_encoding);
+  
+  rgw_free_buffer(&get_buf);
+  rgw_free_object_meta(&meta);
+  free(etag);
+}
+
+TEST_F(SALWrapperTest, PutObjectWithNullAttributes) {
+  std::string data = "data without attributes";
+  CRgwObject obj{"test/put-null-attrs", nullptr};
+  CRgwBuffer buf{reinterpret_cast<uint8_t*>(const_cast<char*>(data.data())), data.size()};
+  
+  // Put with null attributes pointer (should succeed)
+  char* etag = nullptr;
+  ASSERT_EQ(0, rgw_put_object(driver(), dpp(), nullptr, &bucket_, &obj, &buf, nullptr, &etag));
+  created_keys_.emplace_back("test/put-null-attrs");
+  
+  // Verify object exists and has default/no attributes
+  CRgwObjectMeta meta{};
+  ASSERT_EQ(0, head("test/put-null-attrs", &meta));
+  EXPECT_EQ(data.size(), meta.size);
+  
+  rgw_free_object_meta(&meta);
+  free(etag);
+}
+
 
 // --------------- Get edge cases ---------------
 
@@ -792,7 +976,7 @@ TEST_F(SALWrapperTest, ConditionalPutIfNomatch) {
   int canceled = 0;
   int ret = rgw_put_object_conditional(driver(), dpp(), nullptr,
                                        &bucket_, &obj, &buf,
-                                       nullptr, "*", &canceled, nullptr);
+                                       nullptr, "*", &canceled, nullptr, nullptr);
   ASSERT_EQ(0, ret);
   EXPECT_EQ(1, canceled);
 
@@ -853,7 +1037,7 @@ TEST_F(SALWrapperTest, ConditionalPutIfMatchSucceeds) {
   int canceled = 0;
   ASSERT_EQ(0, rgw_put_object_conditional(driver(), dpp(), nullptr,
                                           &bucket_, &obj, &buf,
-                                          etag.c_str(), nullptr, &canceled, nullptr));
+                                          etag.c_str(), nullptr, &canceled, nullptr, nullptr));
   EXPECT_EQ(0, canceled);
 
   CRgwBuffer get_buf{};
@@ -875,7 +1059,7 @@ TEST_F(SALWrapperTest, ConditionalPutIfMatchWrongEtag) {
   int canceled = 0;
   ASSERT_EQ(0, rgw_put_object_conditional(driver(), dpp(), nullptr,
                                           &bucket_, &obj, &buf,
-                                          "bogus-etag", nullptr, &canceled, nullptr));
+                                          "bogus-etag", nullptr, &canceled, nullptr, nullptr));
   EXPECT_EQ(1, canceled);
 
   CRgwBuffer get_buf{};
@@ -936,7 +1120,7 @@ TEST_F(SALWrapperTest, MultipartBasic) {
   CRgwObject obj{"test/multipart-obj", nullptr};
   char* upload_id = nullptr;
 
-  int ret = rgw_init_multipart(driver(), dpp(), nullptr, &bucket_, &obj, &upload_id);
+  int ret = rgw_multipart_init(driver(), dpp(), nullptr, &bucket_, &obj, nullptr, &upload_id);
   ASSERT_EQ(0, ret);
   ASSERT_NE(upload_id, nullptr);
   EXPECT_GT(strlen(upload_id), 0u);
@@ -982,8 +1166,8 @@ TEST_F(SALWrapperTest, MultipartAbort) {
   CRgwObject obj{"test/multipart-abort", nullptr};
   char* upload_id = nullptr;
 
-  ASSERT_EQ(0, rgw_init_multipart(driver(), dpp(), nullptr,
-                                  &bucket_, &obj, &upload_id));
+  ASSERT_EQ(0, rgw_multipart_init(driver(), dpp(), nullptr,
+                                  &bucket_, &obj, nullptr, &upload_id));
   ASSERT_NE(upload_id, nullptr);
 
   // upload one part
@@ -1028,8 +1212,8 @@ TEST_F(SALWrapperTest, MultipartSinglePart) {
   CRgwObject obj{"test/multipart-single", nullptr};
   char* upload_id = nullptr;
 
-  ASSERT_EQ(0, rgw_init_multipart(driver(), dpp(), nullptr,
-                                  &bucket_, &obj, &upload_id));
+  ASSERT_EQ(0, rgw_multipart_init(driver(), dpp(), nullptr,
+                                  &bucket_, &obj, nullptr, &upload_id));
   ASSERT_NE(upload_id, nullptr);
 
   std::string data = "single part upload content";
@@ -1053,6 +1237,160 @@ TEST_F(SALWrapperTest, MultipartSinglePart) {
   free(upload_id);
   free(etag);
 }
+
+
+// Test that multipart complete handles concurrent operations safely with locking
+TEST_F(SALWrapperTest, MultipartCompleteConcurrentSafety) {
+  CRgwObject obj{"test/multipart-concurrent", nullptr};
+  
+  char* upload_id = nullptr;
+  int ret = rgw_multipart_init(driver(), dpp(), nullptr, &bucket_, &obj, 
+                               nullptr, &upload_id);
+  ASSERT_EQ(0, ret);
+  ASSERT_NE(upload_id, nullptr);
+
+  // Upload a single part
+  std::string data = "multipart data for concurrent test";
+  char* etag = nullptr;
+  ret = rgw_multipart_put_part(driver(), dpp(), nullptr, &bucket_, &obj,
+                               upload_id, 1,
+                               reinterpret_cast<const uint8_t*>(data.data()),
+                               data.size(), &etag);
+  ASSERT_EQ(0, ret);
+  ASSERT_NE(etag, nullptr);
+
+  // Spawn multiple threads to complete the same upload concurrently
+  const int num_threads = 5;
+  std::vector<std::thread> threads;
+  std::atomic<int> success_count{0};
+  std::atomic<int> error_count{0};
+  const char* etags[] = {etag};
+  
+  for (int i = 0; i < num_threads; i++) {
+    threads.emplace_back([&]() {
+      int result = rgw_multipart_complete(driver(), dpp(), nullptr, &bucket_, &obj,
+                                         upload_id, etags, 1);
+      if (result == 0) {
+        success_count++;
+      } else {
+        error_count++;
+      }
+    });
+  }
+  
+  // Wait for all threads to complete
+  for (auto& t : threads) {
+    t.join();
+  }
+  
+  // Only one thread should succeed, others should fail gracefully
+  EXPECT_EQ(1, success_count.load()) << "Expected exactly one successful completion";
+  EXPECT_EQ(num_threads - 1, error_count.load()) << "Expected other threads to fail";
+  
+  created_keys_.emplace_back("test/multipart-concurrent");
+
+  // Verify the object was created successfully
+  CRgwObjectMeta meta{};
+  ASSERT_EQ(0, head("test/multipart-concurrent", &meta));
+  EXPECT_EQ(data.size(), meta.size);
+  
+  rgw_free_object_meta(&meta);
+  free(upload_id);
+  free(etag);
+}
+
+// Test that multipart complete is idempotent (can be called multiple times)
+TEST_F(SALWrapperTest, MultipartCompleteIdempotent) {
+  CRgwObject obj{"test/multipart-idempotent", nullptr};
+  char* upload_id = nullptr;
+
+  ASSERT_EQ(0, rgw_multipart_init(driver(), dpp(), nullptr,
+                                  &bucket_, &obj, nullptr, &upload_id));
+  ASSERT_NE(upload_id, nullptr);
+
+  // Upload one part
+  std::string data = "idempotent test data";
+  char* etag = nullptr;
+  ASSERT_EQ(0, rgw_multipart_put_part(driver(), dpp(), nullptr, &bucket_, &obj,
+                                      upload_id, 1,
+                                      reinterpret_cast<const uint8_t*>(data.data()),
+                                      data.size(), &etag));
+  ASSERT_NE(etag, nullptr);
+
+  // Complete the upload
+  const char* etags[] = {etag};
+  ASSERT_EQ(0, rgw_multipart_complete(driver(), dpp(), nullptr, &bucket_, &obj,
+                                      upload_id, etags, 1));
+  created_keys_.emplace_back("test/multipart-idempotent");
+
+  // Try to complete again with the same upload_id - should fail gracefully
+  // The lock mechanism should prevent racing completions
+  int ret = rgw_multipart_complete(driver(), dpp(), nullptr, &bucket_, &obj,
+                                   upload_id, etags, 1);
+  // Expect either success (idempotent) or specific error indicating upload doesn't exist
+  EXPECT_TRUE(ret == -ERR_NO_SUCH_UPLOAD);
+
+  // Verify the object still exists and is correct
+  CRgwBuffer buf{};
+  ASSERT_EQ(0, get("test/multipart-idempotent", &buf));
+  ASSERT_EQ(data.size(), buf.len);
+  EXPECT_EQ(0, memcmp(data.data(), buf.data, buf.len));
+  rgw_free_buffer(&buf);
+
+  free(upload_id);
+  free(etag);
+}
+
+// Test multipart with custom metadata
+TEST_F(SALWrapperTest, MultipartWithCustomMetadata) {
+  CRgwObject obj{"test/multipart-custom-meta", nullptr};
+  
+  // Create attributes with custom metadata (JSON format)
+  CRgwObjectMeta init_attrs{};
+  init_attrs.content_type = const_cast<char*>("text/plain");
+  init_attrs.metadata = const_cast<char*>("{\"user-key\":\"user-value\",\"x-custom\":\"test\"}");
+  
+  char* upload_id = nullptr;
+  int ret = rgw_multipart_init(driver(), dpp(), nullptr, &bucket_, &obj, 
+                               &init_attrs, &upload_id);
+  ASSERT_EQ(0, ret);
+  ASSERT_NE(upload_id, nullptr);
+
+  // Upload a part
+  std::string data = "data with custom metadata";
+  char* etag = nullptr;
+  ret = rgw_multipart_put_part(driver(), dpp(), nullptr, &bucket_, &obj,
+                               upload_id, 1,
+                               reinterpret_cast<const uint8_t*>(data.data()),
+                               data.size(), &etag);
+  ASSERT_EQ(0, ret);
+  ASSERT_NE(etag, nullptr);
+
+  // Complete the upload
+  const char* etags[] = {etag};
+  ret = rgw_multipart_complete(driver(), dpp(), nullptr, &bucket_, &obj,
+                               upload_id, etags, 1);
+  ASSERT_EQ(0, ret);
+  created_keys_.emplace_back("test/multipart-custom-meta");
+
+  // Verify metadata was preserved
+  CRgwObjectMeta meta{};
+  ASSERT_EQ(0, head("test/multipart-custom-meta", &meta));
+  
+  ASSERT_NE(meta.content_type, nullptr);
+  EXPECT_STREQ("text/plain", meta.content_type);
+  
+  // Custom metadata should be preserved
+  ASSERT_NE(meta.metadata, nullptr);
+  std::string metadata_str(meta.metadata);
+  EXPECT_TRUE(metadata_str.find("user-key") != std::string::npos);
+  EXPECT_TRUE(metadata_str.find("user-value") != std::string::npos);
+  
+  rgw_free_object_meta(&meta);
+  free(upload_id);
+  free(etag);
+}
+
 
 // ===========================================================================
 // main() — bootstrap SAL driver
