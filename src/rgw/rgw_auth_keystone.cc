@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -31,6 +32,202 @@ using namespace std;
 namespace rgw {
 namespace auth {
 namespace keystone {
+
+namespace detail {
+
+/* Match a request path against an access-rule path pattern. Behaviour
+ * matches keystonemiddleware's _path_matches reference matcher:
+ *
+ *   *       compiles to '[^/]+'   (one segment; non-empty, no '/')
+ *   **      compiles to '.*'      (zero or more arbitrary chars)
+ *   {tag}   compiles to '[^/]+'   (same as '*')
+ *   <other> literal               ('/' is never elided)
+ *
+ * Anchored at both ends. Callers must pass already-decoded paths with the
+ * query string stripped. Declared in the header for unit testing. */
+bool
+path_matches_pattern(const std::string_view pattern, const std::string_view path)
+{
+  size_t pi = 0;
+  size_t si = 0;
+
+  /* Backtrack for the most recent '**'; extends by one path char. */
+  size_t dstar_pi = std::string::npos;
+  size_t dstar_si = 0;
+
+  /* Backtrack for the most recent '*' or '{tag}'; extends by one
+   * non-slash char. */
+  size_t star_pi = std::string::npos;
+  size_t star_si = 0;
+
+  while (si < path.size()) {
+    if (pi + 1 < pattern.size() && pattern[pi] == '*' &&
+        pattern[pi + 1] == '*') {
+      dstar_pi = pi + 2;
+      dstar_si = si;
+      pi = dstar_pi;
+      star_pi = std::string::npos;
+      continue;
+    }
+
+    if (pi < pattern.size() && pattern[pi] == '{') {
+      const size_t close = pattern.find('}', pi);
+      if (close == std::string::npos) {
+        return false;
+      }
+      if (path[si] == '/') {
+        goto backtrack;
+      }
+      pi = close + 1;
+      si++;
+      star_pi = pi;
+      star_si = si;
+      continue;
+    }
+
+    if (pi < pattern.size() && pattern[pi] == '*') {
+      if (path[si] == '/') {
+        goto backtrack;
+      }
+      pi++;
+      si++;
+      star_pi = pi;
+      star_si = si;
+      continue;
+    }
+
+    if (pi < pattern.size() && pattern[pi] == path[si]) {
+      pi++;
+      si++;
+      continue;
+    }
+
+  backtrack:
+    /* Try '*' before '**': falling back to '**' invalidates any '*'
+     * that came after it. */
+    if (star_pi != std::string::npos && path[star_si] != '/') {
+      pi = star_pi;
+      si = ++star_si;
+      continue;
+    }
+    if (dstar_pi != std::string::npos) {
+      pi = dstar_pi;
+      si = ++dstar_si;
+      star_pi = std::string::npos;
+      continue;
+    }
+    return false;
+  }
+
+  /* Path exhausted: only trailing '**' tokens match the empty remainder. */
+  while (pi + 1 < pattern.size() && pattern[pi] == '*' &&
+         pattern[pi + 1] == '*') {
+    pi += 2;
+  }
+  return pi == pattern.size();
+}
+
+bool
+service_type_matches(
+    const std::span<const std::string> accepted_service_types,
+    const std::span<const rgw::keystone::TokenEnvelope::CatalogService> catalog,
+    const std::string_view service_type)
+{
+  const bool accepted = std::any_of(
+      accepted_service_types.begin(), accepted_service_types.end(),
+      [service_type](const std::string& candidate) {
+        return candidate == service_type;
+      });
+  return accepted && std::any_of(
+      catalog.begin(), catalog.end(),
+      [service_type](const auto& service) {
+        return service.type == service_type;
+      });
+}
+
+} // namespace detail
+
+static bool
+check_access_rules(
+    const DoutPrefixProvider* dpp,
+    std::span<const rgw::keystone::TokenEnvelope::ApplicationCredential::AccessRule> rules,
+    const std::span<const std::string> accepted_service_types,
+    const std::span<const rgw::keystone::TokenEnvelope::CatalogService> catalog,
+    const std::string_view method,
+    const std::string_view raw_path)
+{
+  /* Access rules are defined against path only. */
+  const std::string_view path = raw_path.substr(0, raw_path.find('?'));
+
+  for (const auto& rule : rules) {
+    if (!detail::service_type_matches(accepted_service_types, catalog,
+                                      rule.service)) {
+      continue;
+    }
+    if (rule.method != method) {
+      continue;
+    }
+    if (detail::path_matches_pattern(rule.path, path)) {
+      ldpp_dout(dpp, 10) << "keystone access rule matched: service="
+                         << rule.service << " method=" << rule.method
+                         << " path=" << rule.path << dendl;
+      return true;
+    }
+  }
+  ldpp_dout(dpp, 10) << "keystone access rule denied: no rule matched method="
+                     << method << " path=" << path
+                     << " (rules=" << rules.size() << ")" << dendl;
+  return false;
+}
+
+/* Mirrors keystonemiddleware's validate_allowed_request: absent access_rules
+ * permits; an accepted catalog service is required; a valid service token
+ * bypasses method/path matching; otherwise an empty or unmatched list denies. */
+static bool
+enforce_access_rules(
+    const DoutPrefixProvider* dpp,
+    const rgw::keystone::TokenEnvelope& t,
+    const std::span<const std::string> accepted_service_types,
+    const bool service_request,
+    const req_state* s)
+{
+  if (!t.has_access_rules_field()) {
+    return true;
+  }
+  const auto catalog = t.get_catalog();
+  const bool catalog_has_accepted_service = std::any_of(
+      accepted_service_types.begin(), accepted_service_types.end(),
+      [catalog](const std::string& service_type) {
+        return std::any_of(catalog.begin(), catalog.end(),
+                           [&service_type](const auto& service) {
+                             return service.type == service_type;
+                           });
+      });
+  if (!catalog_has_accepted_service) {
+    ldpp_dout(dpp, 5) << "denying request: no accepted service type is "
+                         "present in the token catalog" << dendl;
+    return false;
+  }
+  if (service_request) {
+    ldpp_dout(dpp, 10) << "skipping access-rule method/path matching: "
+                          "valid service token present" << dendl;
+    return true;
+  }
+  const auto rules = t.get_access_rules();
+  if (rules.empty()) {
+    ldpp_dout(dpp, 5) << "denying request: empty access_rules whitelist"
+                      << dendl;
+    return false;
+  }
+  if (check_access_rules(dpp, rules, accepted_service_types, catalog,
+                         s->info.method, s->relative_uri)) {
+    return true;
+  }
+  ldpp_dout(dpp, 5) << "denying request: application credential access "
+                       "rules do not permit method=" << s->info.method
+                    << " path=" << s->relative_uri << dendl;
+  return false;
+}
 
 bool
 TokenEngine::is_applicable(const std::string& token) const noexcept
@@ -70,6 +267,9 @@ admin_token_retry:
   }
 
   validate.append_header("X-Subject-Token", token);
+  if (cct->_conf->rgw_keystone_verify_access_rules) {
+    validate.append_header("OpenStack-Identity-Access-Rules", "1.0");
+  }
 
   std::string admin_token;
   bool admin_token_cached = false;
@@ -269,6 +469,9 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     std::vector<std::string> plain;
   } service_token_roles(cct);
 
+  static const auto access_rule_service_types = get_str_vec(
+      cct->_conf->rgw_keystone_accepted_service_types);
+
   if (! is_applicable(token)) {
     return result_t::deny();
   }
@@ -280,20 +483,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   const auto& token_id = rgw_get_token_id(token);
   ldpp_dout(dpp, 20) << "token_id=" << token_id << dendl;
 
-  /* Check cache first. */
-  t = token_cache.find(token_id);
-  if (t) {
-    ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
-                   << dendl;
-    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t));
-    return result_t::grant(std::move(apl));
-  }
-
-  /* We have a service token and a token so we verify the service
-   * token and if it's invalid the request is invalid. If it's valid
-   * we allow an expired token to be used when doing lookup in Keystone.
-   * We never get to this if the token is in the cache. */
+  /* Validate the service token before the user-token cache lookup. This
+   * mirrors keystonemiddleware (which validates service_token before
+   * user_token) and lets a single `allow_expired` flag gate access-rule
+   * enforcement uniformly on both cache-hit and cache-miss paths. */
   if (g_conf()->rgw_keystone_service_token_enabled && ! service_token.empty()) {
     boost::optional<TokenEngine::token_envelope_t> st;
 
@@ -353,6 +546,21 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     }
   }
 
+  /* Check user-token cache. */
+  t = token_cache.find(token_id);
+  if (t) {
+    ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
+                   << dendl;
+    if (cct->_conf->rgw_keystone_verify_access_rules &&
+        !enforce_access_rules(dpp, *t, access_rule_service_types,
+                              allow_expired, s)) {
+      return result_t::deny(-EPERM);
+    }
+    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
+                                              get_creds_info(*t));
+    return result_t::grant(std::move(apl));
+  }
+
   /* Token not in cache. Go to the Keystone for validation. This happens even
    * for the legacy PKI/PKIz token types. That's it, after the PKI/PKIz
    * RadosGW-side validation has been removed, we always ask Keystone. */
@@ -395,6 +603,14 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
+      /* Enforce access rules before caching so a denied request never
+       * poisons the cache. Skip for service-to-service requests. */
+      if (cct->_conf->rgw_keystone_verify_access_rules &&
+          !enforce_access_rules(dpp, *t, access_rule_service_types,
+                                allow_expired, s)) {
+        return result_t::deny(-EPERM);
+      }
+
       token_cache.add(token_id, *t);
       auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                                 get_creds_info(*t));
