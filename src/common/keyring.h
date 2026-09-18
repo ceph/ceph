@@ -101,10 +101,7 @@ class LinuxKeyringSecret : public KeyringSecret {
 
   ~LinuxKeyringSecret() noexcept override;
 
-  // Initialize the process keyring. Do this before starting any
-  // threads that want to share possession of keys in the process
-  // keyring
-  static void initialize_process_keyring() noexcept;
+  [[nodiscard]] static std::error_code initialize_process_keyring() noexcept;
 
   [[nodiscard]] std::error_code read(std::string& out) const override;
   [[nodiscard]] std::error_code remove() const override;

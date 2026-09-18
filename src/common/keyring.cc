@@ -106,9 +106,13 @@ bool LinuxKeyring::supported(std::error_code* ec) noexcept {
   return true;
 }
 
-void LinuxKeyringSecret::initialize_process_keyring() noexcept {
-  keyctl_get_keyring_ID(KEY_SPEC_PROCESS_KEYRING, 1);
+std::error_code LinuxKeyringSecret::initialize_process_keyring() noexcept {
+  if (keyctl_get_keyring_ID(KEY_SPEC_PROCESS_KEYRING, 1) == -1) {
+    return {errno, std::system_category()};
+  }
+  return {};
 }
+
 
 [[nodiscard]] std::error_code LinuxKeyringSecret::read(std::string& out) const {
   out.clear();

@@ -115,7 +115,10 @@ int main(int argc, char *argv[])
     global_init_daemonize(g_ceph_context);
   }
 
-  LinuxKeyringSecret::initialize_process_keyring();
+  if (const auto ec = LinuxKeyringSecret::initialize_process_keyring(); ec) {
+    derr << "WARNING: failed to install the process keyring (" << ec.message()
+         << "); the SSE-KMS secret cache will stay disabled" << dendl;
+  }
 
   ceph::mutex mutex = ceph::make_mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
