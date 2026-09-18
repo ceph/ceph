@@ -11,6 +11,7 @@ from typing import (
     TypeVar,
     Callable,
     Set,
+    Tuple,
     cast)
 from os.path import normpath
 from ceph.fs.earmarking import EarmarkTopScope
@@ -44,7 +45,8 @@ from .utils import (
     check_fs,
     get_nfs_spec_for_cluster,
     restart_nfs_service,
-    cephfs_path_is_dir)
+    cephfs_path_is_dir,
+    normalize_auth_entity)
 from .rados_utils import NFSRados
 
 if TYPE_CHECKING:
@@ -490,6 +492,64 @@ class ExportMgr:
     ) -> Optional[Dict[str, Any]]:
         export = self._fetch_export(cluster_id, pseudo_path)
         return export.to_dict() if export else None
+
+    def reload_exports(self) -> None:
+        """Drop the cached exports so that they are re-read from RADOS."""
+        self._exports = None
+
+    def get_cephfs_export_user_ids(self, cluster_id: str) -> Set[str]:
+        """Return CephFS export user_ids for the cluster."""
+        return {
+            export.fsal.user_id
+            for export in self.exports.get(cluster_id, [])
+            if isinstance(export.fsal, CephFSFSAL) and export.fsal.user_id
+        }
+
+    def refresh_export_keys(
+            self,
+            cluster_id: str,
+            entities: List[str]
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Re-fetch CephX keys for the given export entities and update matching
+        CephFS exports so Ganesha receives the new keyrings.
+
+        Returns the pseudo paths that were updated and the ones that could not
+        be. One failure must not stop the others: their keys are already
+        rotated, so an export left behind is one Ganesha cannot authenticate.
+        """
+        entity_set = {normalize_auth_entity(e) for e in entities}
+        updated_pseudos: List[str] = []
+        stale_pseudos: List[str] = []
+
+        for export in list(self.exports.get(cluster_id, [])):
+            if not isinstance(export.fsal, CephFSFSAL) or not export.fsal.user_id:
+                continue
+            entity = f'client.{export.fsal.user_id}'
+            if entity not in entity_set:
+                continue
+
+            old_key = export.fsal.cephx_key
+            try:
+                self._ensure_cephfs_export_user(export)
+                if export.fsal.cephx_key == old_key:
+                    log.warning(
+                        "Export %s key for user %s did not change after rotate",
+                        export.pseudo, export.fsal.user_id
+                    )
+                self.exports[cluster_id].remove(export)
+                self._update_export(cluster_id, export, need_nfs_service_restart=False)
+            except Exception:
+                stale_pseudos.append(export.pseudo)
+                log.exception("Failed to update export %s after key rotation", export.pseudo)
+                continue
+
+            updated_pseudos.append(export.pseudo)
+            log.info(
+                "Updated export %s with rotated key for user %s",
+                export.pseudo, export.fsal.user_id
+            )
+        return updated_pseudos, stale_pseudos
 
     # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
     # Do not change interface without updating the Dashboard code
