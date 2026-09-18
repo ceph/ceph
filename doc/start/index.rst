@@ -29,6 +29,9 @@ helps you deploy a first cluster, and shows where to go next.
    quick-rbd
    Hardware Recommendations <hardware-recommendations>
    minimum-hardware
+   hardware-cpu-memory
+   hardware-storage-devices
+   hardware-networks
    OS Recommendations <os-recommendations>
    get-involved
    documenting-ceph
@@ -57,13 +60,19 @@ worked.
 - :ref:`Creating and Mounting a Block Device <quick-rbd>`: a first block
   device on the new cluster.
 
-Reference
-=========
+Look Up
+=======
 
 Facts to look up while you plan.
 
-- :ref:`Minimum Hardware Recommendations <minimum-hardware>`: the smallest
+- :ref:`Minimum Hardware per Daemon <minimum-hardware>`: the smallest
   configuration for each daemon.
+- :ref:`CPU and Memory Sizing <hardware-cpu-memory>`: cores and RAM for each
+  daemon, and the settings that control memory use.
+- :ref:`Storage Devices <hardware-storage-devices>`: drive layout, HDD and
+  SSD selection, controllers, and write caches.
+- :ref:`Network Sizing <hardware-networks>`: link speeds, replication times,
+  bonding, and management networks.
 - :ref:`OS Recommendations <os-recommendations>`: the platforms that each Ceph
   release is built and tested on.
 - :ref:`Ceph Releases <ceph-releases-general>`: the release cycle, and which
@@ -86,7 +95,7 @@ Next Steps
 Additional Resources
 ====================
 
-- :ref:`Get Involved <Get Involved>`: mailing lists, chat channels, and
+- :ref:`Ceph Community Channels <get-involved>`: mailing lists, chat channels, and
   community meetings.
 - :ref:`Troubleshooting <rados_troubleshooting>`: what to check when a
   cluster is unhealthy.

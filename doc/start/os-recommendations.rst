@@ -11,6 +11,11 @@
    :ceph-reviewed: 2026-09
    :ceph-owner: docs
 
+This page lists the deployment method, kernels, and Linux distributions that
+each Ceph release is built and tested on. In the platform tables, each row is
+a distribution, each column is a Ceph release, and the letter in a cell says
+whether packages are provided and how far they were tested.
+
 Recommended Deployment Method: Containers via Cephadm
 =====================================================
 
@@ -52,7 +57,7 @@ Linux Kernel
   Older kernel client versions may not support your :ref:`CRUSH
   tunables <crush-map-tunables>` profile or other newer features of the Ceph
   cluster, requiring the storage cluster to be configured with those features
-  disabled. For RBD, a kernel of version 5.3 or CentOS 8.2 is the minimum
+  disabled. For RBD, a kernel of version 5.3 or Enterprise Linux (EL) 8.2 is the minimum
   necessary for reasonable support for RBD image features.
 
 - **Ceph MS Windows Client**
@@ -61,6 +66,8 @@ Linux Kernel
   full-time maintainer. As of July 2025 there are no plans to remove this
   client but the future is uncertain.
 
+.. _start-platforms:
+
 Platforms
 =========
 
@@ -68,9 +75,13 @@ The chart below shows the platforms for which Ceph provides packages, and
 the platforms on which Ceph has been tested.
 
 Ceph does not require a specific Linux distribution. Ceph can run on any
-distribution that includes a supported kernel and supported system startup
-framework, for example ``sysvinit`` or ``systemd``. Ceph is sometimes ported to
-non-Linux systems but these are not supported by the core Ceph effort.
+distribution that includes a supported kernel and ``systemd``. Ceph is
+sometimes ported to non-Linux systems but these are not supported by the
+core Ceph effort.
+
+.. note:: ARM architecture containers provide a limited set of daemons.
+   Check that the daemons you need are available before you plan an ARM
+   deployment.
 
 +----------------+-------------------------+----------------+-------------------+-----------------+----------------+----------------+----------------+
 | Distribution   | Distribution EOL        | Squid (19.2.z) | Tentacle (20.2.z) | Umbrella (21.x) | Vampire (22.x) | W (23.x)       | X (24.x)       |
@@ -159,6 +170,36 @@ will run smoothly on any supported container host OS (such as Ubuntu 24.04 or
 CentOS 9), completely isolated from the host's native package manager.
 
 
+Block Device I/O Scheduler
+==========================
+
+Set the Linux block-layer I/O scheduler to match the class of device
+backing each OSD:
+
+* **Rotational (HDD) devices:** ``mq-deadline`` (or ``bfq``).  Request
+  merging and the deadline elevator complement the drive's own command
+  reordering (NCQ/TCQ) and help avoid read starvation during recovery
+  and backfill.
+* **Solid-state (SSD / NVMe) devices:** ``none``.  These devices reorder
+  requests internally, so a kernel-level elevator only adds latency.
+
+Recent ``blk-mq`` kernels frequently default to these values already, but
+this is not guaranteed across distributions, kernel versions, or TuneD
+profiles, so it is worth verifying::
+
+    # the active scheduler is shown in brackets
+    cat /sys/block/sda/queue/scheduler
+
+    # set it for a single device
+    echo mq-deadline > /sys/block/sda/queue/scheduler
+
+Make the setting persistent with a ``udev`` rule keyed on
+``/sys/block/*/queue/rotational`` so it survives reboots and applies to
+devices added later.  For BlueStore this is a modest tuning knob because its
+large, mostly-sequential I/O together with the drive's own reordering does
+most of the work, but setting it per device class avoids pathological
+behavior.
+
 Host Distribution Upgrades (Horizontal Paths)
 =============================================
 
@@ -201,4 +242,4 @@ Additional Resources
 .. _Debian_b: https://www.debian.org/releases/bookworm/
 .. _Debian_t: https://www.debian.org/releases/trixie/
 .. _Rocky: https://github.com/rocky-linux/wiki.rockylinux.org/blob/main/docs/rocky/version.md
-.. _Ubuntu: https://ubuntu.com/about/release-cycle
+.. _Ubuntu: https://wiki.ubuntu.com/Releases
