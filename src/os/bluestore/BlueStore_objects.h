@@ -296,7 +296,7 @@ namespace bluestore {
     }
 
     bool can_merge_blob(const Blob* other, uint32_t& blob_end) const;
-    uint32_t merge_blob(CephContext* cct, Blob* blob_to_dissolve);
+    uint32_t merge_blob(Blob* blob_to_dissolve);
 
     bool can_split_at(uint32_t blob_offset) const {
       return used_in_blob.can_split_at(blob_offset) &&
@@ -311,11 +311,11 @@ namespace bluestore {
     void dup(Blob& o);
     void add_tail(uint32_t new_blob_size, uint32_t min_release_size);
     void dup(const Blob& from, bool copy_used_in_blob);
-    void copy_from(CephContext* cct, const Blob& from,
+    void copy_from(const Blob& from,
 		   uint32_t min_release_size, uint32_t start, uint32_t len);
-    void copy_extents(CephContext* cct, const Blob& from, uint32_t start,
+    void copy_extents(const Blob& from, uint32_t start,
 		      uint32_t pre_len, uint32_t main_len, uint32_t post_len);
-    void copy_extents_over_empty(CephContext* cct, const Blob& from, uint32_t start, uint32_t len);
+    void copy_extents_over_empty(const Blob& from, uint32_t start, uint32_t len);
 
     inline const bluestore_blob_t& get_blob() const {
       return blob;
