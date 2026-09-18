@@ -18,6 +18,7 @@
 
 #include "common/fmt_common.h"
 #include "include/buffer.h"
+#include "include/denc.h"
 
 template<typename KeyT, typename IntT>
 concept ExplicitlyCastableToOrFrom = requires(KeyT key, IntT v) { IntT(key); KeyT(v); };

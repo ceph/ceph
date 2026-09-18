@@ -27,6 +27,8 @@
 #include "messages/MMgrCommand.h"
 #include "msg/Connection.h" // for ConnectionRef
 
+class Context;
+
 class CommandOp
 {
   public:

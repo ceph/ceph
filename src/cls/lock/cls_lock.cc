@@ -12,6 +12,7 @@
 #include <map>
 #include <sstream>
 
+#include "include/container_ios.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "objclass/objclass.h"

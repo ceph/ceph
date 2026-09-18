@@ -31,6 +31,7 @@
 #include <dirent.h>
 #include <boost/algorithm/string/replace.hpp>
 //#include "common/debug.h"
+#include "include/container_ios.h" // for stringify(std::set)
 #include "include/scope_guard.h"
 #include "include/uuid.h"
 #include "include/stringify.h"

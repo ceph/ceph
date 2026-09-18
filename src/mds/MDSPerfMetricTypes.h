@@ -9,6 +9,7 @@
 
 #include "common/Formatter.h"
 #include "include/cephfs/types.h" // for mds_rank_t
+#include "include/container_ios.h"
 #include "include/denc.h"
 #include "include/utime.h"
 #include "mdstypes.h"

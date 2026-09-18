@@ -23,6 +23,7 @@
 #include "include/utime.h"
 
 #include "include/ceph_assert.h"
+#include "include/client_t.h"
 #include "include/cephfs/dump.h"
 #include "include/cephfs/types.h"
 

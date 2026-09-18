@@ -77,6 +77,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/str_list.cc
   ${PROJECT_SOURCE_DIR}/src/common/str_map.cc
   ${PROJECT_SOURCE_DIR}/src/common/strtol.cc
+  ${PROJECT_SOURCE_DIR}/src/common/tracer.cc
   ${PROJECT_SOURCE_DIR}/src/common/reverse.c
   ${PROJECT_SOURCE_DIR}/src/common/types.cc
   ${PROJECT_SOURCE_DIR}/src/common/utf8.c
@@ -110,7 +111,10 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/include/filepath.cc
   ${PROJECT_SOURCE_DIR}/src/include/object.cc
+  ${PROJECT_SOURCE_DIR}/src/include/client_t.cc
   ${PROJECT_SOURCE_DIR}/src/include/types.cc
+  ${PROJECT_SOURCE_DIR}/src/include/errorcode32.cc
+  ${PROJECT_SOURCE_DIR}/src/include/shard_id.cc
   ${PROJECT_SOURCE_DIR}/src/include/utime.cc
   ${PROJECT_SOURCE_DIR}/src/include/uuid.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
