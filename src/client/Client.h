@@ -2048,6 +2048,7 @@ private:
   /* Flags for VXattr */
   static const unsigned VXATTR_RSTAT = 0x1;
   static const unsigned VXATTR_DIRSTAT = 0x2;
+  static const unsigned VXATTR_ALTNAME = 0x3;
 
   static const VXattr _dir_vxattrs[];
   static const VXattr _file_vxattrs[];
@@ -2247,6 +2248,10 @@ private:
   bool _vxattrcb_mirror_info_exists(Inode *in);
   size_t _vxattrcb_mirror_info(Inode *in, char *val, size_t size);
 
+  size_t _vxattrcb_alternate_name(Inode *in, char *val, size_t size);
+  int _vxattrcb_alternate_name_set(Inode *in, const void *val, size_t size, const UserPerm& perms);
+  bool _vxattrcb_alternate_name_exists(Inode *in);
+
   size_t _vxattrcb_cluster_fsid(Inode *in, char *val, size_t size);
   size_t _vxattrcb_client_id(Inode *in, char *val, size_t size);
 
@@ -2421,6 +2426,7 @@ private:
 
   bool is_fuse = false;
   bool client_permissions;
+  bool alternate_name_visible;
   bool fuse_default_permissions;
   bool respect_subvolume_snapshot_visibility;
 

@@ -421,6 +421,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   fuse_default_permissions = cct->_conf.get_val<bool>(
     "fuse_default_permissions");
 
+  alternate_name_visible = cct->_conf.get_val<bool>(
+    "client_alternate_name_visible");
+
   _collect_and_send_global_metrics = cct->_conf.get_val<bool>(
     "client_collect_and_send_global_metrics");
 
@@ -15266,9 +15269,16 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
   in->make_nosnap_relative_path(path);
-  req->set_filepath(path); // why not filepath(ino=in->ino) FIXME ??
+  req->set_filepath(path);
+
+  if (flags & VXATTR_ALTNAME) {
+    req->set_dentry(in->get_first_parent());
+    req->dentry_drop = CEPH_CAP_FILE_SHARED;
+    req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  } else {
+    req->set_inode(in);
+  }
   req->set_string2(name);
-  req->set_inode(in);
   req->head.args.setxattr.flags = xattr_flags;
 
   bufferlist bl;
@@ -15723,6 +15733,34 @@ size_t Client::_vxattrcb_caps(Inode *in, char *val, size_t size)
   return snprintf(val, size, "%s/0x%x", ccap_string(issued).c_str(), issued);
 }
 
+size_t Client::_vxattrcb_alternate_name(Inode *in, char *val, size_t size)
+{
+  auto altn = in->get_first_parent()->alternate_name;
+  auto length = altn.length();
+
+  if (size < length) {
+    return -ERANGE;
+  }
+
+  memcpy(val, altn.c_str(), length);
+  return length;
+}
+
+int Client::_vxattrcb_alternate_name_set(Inode *in, const void *val, size_t size,
+				       const UserPerm& perms)
+{
+  if (!alternate_name_visible || fscrypt_as)
+    return -EPERM;
+
+  return _do_setxattr(in, "ceph.alternate_name", val, size, VXATTR_ALTNAME, perms);
+}
+
+bool Client::_vxattrcb_alternate_name_exists(Inode *in)
+{
+  auto alternate_name = in->get_first_parent()->alternate_name.c_str();
+  return alternate_name_visible && !fscrypt_as && alternate_name;
+}
+
 bool Client::_vxattrcb_mirror_info_exists(Inode *in)
 {
   // checking one of the xattrs would suffice
@@ -15904,6 +15942,14 @@ const Client::VXattr Client::_common_vxattrs[] = {
     exists_cb: &Client::_vxattrcb_fscrypt_file_exists,
     flags: 0,
   },
+  {
+    name: "ceph.alternate_name",
+    getxattr_cb: &Client::_vxattrcb_alternate_name,
+    setxattr_cb: &Client::_vxattrcb_alternate_name_set,
+    readonly: false,
+    exists_cb: &Client::_vxattrcb_alternate_name_exists,
+    flags: 0,
+  },
   { name: "" }     /* Required table terminator */
 };
 
@@ -15993,10 +16039,12 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
   req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
-  req->set_alternate_name(wdr.alternate_name);
+  if (!alternate_name_visible) {
+    req->set_alternate_name(wdr.alternate_name);
 #if defined(__linux__)
-  wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
+  }
   req->set_filepath(wdr.getpath());
   req->set_inode(wdr.diri);
   req->head.args.mknod.rdev = rdev;
@@ -16129,8 +16177,9 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
   req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
 
   req->set_filepath(wdr.getpath());
-  req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
   req->set_inode(wdr.diri);
+  if (!alternate_name_visible) {
+    req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
   if (fscrypt_options.fscrypt_auth.size())
     req->fscrypt_auth = fscrypt_options.fscrypt_auth;
 #if defined(__linux__)
@@ -16139,7 +16188,7 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
 #endif
   if (fscrypt_options.fscrypt_file.size())
     req->fscrypt_file = fscrypt_options.fscrypt_file;
-
+  }
   req->head.args.open.flags = cflags | CEPH_O_CREAT;
 
   req->head.args.open.stripe_unit = stripe_unit;
@@ -16233,16 +16282,17 @@ int Client::_mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& p
   req->set_inode(wdr.diri);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
-  if (fscrypt_options.fscrypt_auth.size())
-    req->fscrypt_auth = fscrypt_options.fscrypt_auth;
+  if (!alternate_name_visible) {
+    req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
+    if (fscrypt_options.fscrypt_auth.size())
+      req->fscrypt_auth = fscrypt_options.fscrypt_auth;
 #if defined(__linux__)
-  else
-    wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    else
+      wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
-  if (fscrypt_options.fscrypt_file.size())
-    req->fscrypt_file = fscrypt_options.fscrypt_file;
-
+    if (fscrypt_options.fscrypt_file.size())
+      req->fscrypt_file = fscrypt_options.fscrypt_file;
+  }
   mode |= S_IFDIR;
   bufferlist bl;
   int res = _posix_acl_create(wdr.diri, &mode, bl, perm);
@@ -16379,15 +16429,16 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
-
-  if (fscrypt_options.fscrypt_auth.size())
-    req->fscrypt_auth = fscrypt_options.fscrypt_auth;
+  if (!alternate_name_visible) {
+    if (fscrypt_options.fscrypt_auth.size())
+      req->fscrypt_auth = fscrypt_options.fscrypt_auth;
 #if defined(__linux__)
-  else
-    wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    else
+      wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
-  if (fscrypt_options.fscrypt_file.size())
-    req->fscrypt_file = fscrypt_options.fscrypt_file;
+    if (fscrypt_options.fscrypt_file.size())
+      req->fscrypt_file = fscrypt_options.fscrypt_file;
+  }
 #if defined(__linux__)
   auto fscrypt_ctx = fscrypt->init_ctx(req->fscrypt_auth);
   if (fscrypt_ctx && fscrypt_as) {
@@ -16715,10 +16766,12 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 
   req->set_filepath(wdr_to.getpath());
   req->set_filepath2(wdr_from.getpath());
-  req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
+  if (!alternate_name_visible) {
+    req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
 #if defined(__linux__)
-  wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
+  }
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
     req->set_old_dentry(wdr_from.dn);
@@ -16827,10 +16880,12 @@ int Client::_link(Inode *diri_from, const char* path_from, Inode* diri_to, const
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
   req->set_filepath(wdr_to.getpath());
-  req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
+  if (!alternate_name_visible) {
+    req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
 #if defined(__linux__)
-  wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
+  }
   req->set_filepath2(wdr_from.getpath());
   req->set_inode(wdr_to.diri);
   req->inode_drop = CEPH_CAP_FILE_SHARED;
@@ -18991,6 +19046,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
 {
   static constexpr auto as_sv = std::to_array<std::string_view>({
     "client_acl_type",
+    "client_alternate_name_visible",
     "client_cache_mid",
     "client_cache_size",
     "client_caps_release_delay",
@@ -19032,6 +19088,9 @@ void Client::handle_conf_change(const ConfigProxy& conf,
     acl_type = NO_ACL;
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
+  }
+  if (changed.count("client_alternate_name_visible")) {
+    alternate_name_visible = cct->_conf.get_val<bool>("client_alternate_name_visible");
   }
   if (changed.count("client_oc_size")) {
     objectcacher->set_max_size(cct->_conf->client_oc_size);

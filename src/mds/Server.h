@@ -495,6 +495,7 @@ private:
     return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
            xattr_name.rfind("ceph.file.layout", 0) == 0 ||
            xattr_name.rfind("ceph.quota", 0) == 0 ||
+           xattr_name.rfind("ceph.alternate_name", 0) == 0 ||
            xattr_name == "ceph.quiesce.block"sv ||
            xattr_name == "ceph.dir.subvolume" ||
            xattr_name == "ceph.dir.pin" ||
