@@ -375,7 +375,9 @@ target_link_libraries(rgw_common
     global
     cls_rgw_client
     keyring
-    rt
+    # There is no librt on Darwin; its clock and timer entry points are
+    # in libc there.
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:rt>
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -497,7 +499,9 @@ if(WITH_RADOSGW_STANDALONE)
     global
     cls_rgw_client
     keyring
-    rt
+    # There is no librt on Darwin; its clock and timer entry points are
+    # in libc there.
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:rt>
     ICU::uc
     OATH::OATH
     dmclock::dmclock
