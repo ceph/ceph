@@ -39,6 +39,7 @@ public:
     uint64_t snap_id;
     std::vector<uint64_t> snaps;
     interval_set<uint64_t> snap_overlap;
+    interval_set<uint64_t> allocated_extents;
 
     bool exists;
     ceph::shared_mutex lock =

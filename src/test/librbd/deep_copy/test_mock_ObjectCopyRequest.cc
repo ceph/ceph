@@ -83,8 +83,10 @@ namespace librbd {
 namespace deep_copy {
 
 using ::testing::_;
+using ::testing::AtLeast;
 using ::testing::DoAll;
 using ::testing::DoDefault;
+using ::testing::Expectation;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
@@ -203,11 +205,51 @@ public:
             })));
   }
 
-  void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
+  Expectation expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
+    if ((m_src_image_ctx->features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+      return {};
+    }
+    return EXPECT_CALL(mock_exclusive_lock, start_op(_))
+      .WillOnce(Return(new LambdaContext([](int){})));
+  }
+
+  void expect_start_ops(librbd::MockExclusiveLock &mock_exclusive_lock,
+                        uint32_t count) {
+    if ((m_src_image_ctx->features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0 ||
+        count == 0) {
+      return;
+    }
+    EXPECT_CALL(mock_exclusive_lock, start_op(_))
+      .Times(count)
+      .WillRepeatedly(Invoke([](int*) {
+          return new LambdaContext([](int){});
+        }));
+  }
+
+  void expect_start_ops_after(librbd::MockExclusiveLock &mock_exclusive_lock,
+                              uint32_t count,
+                              const Expectation& prerequisite) {
+    if ((m_src_image_ctx->features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0 ||
+        count == 0) {
+      return;
+    }
+    EXPECT_CALL(mock_exclusive_lock, start_op(_))
+      .Times(count)
+      .After(prerequisite)
+      .WillRepeatedly(Invoke([](int*) {
+          return new LambdaContext([](int){});
+        }));
+  }
+
+  void allow_start_ops(librbd::MockExclusiveLock &mock_exclusive_lock) {
     if ((m_src_image_ctx->features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
       return;
     }
-    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(Return(new LambdaContext([](int){})));
+    EXPECT_CALL(mock_exclusive_lock, start_op(_))
+      .Times(AtLeast(1))
+      .WillRepeatedly(Invoke([](int*) {
+          return new LambdaContext([](int){});
+        }));
   }
 
   void expect_list_snaps(librbd::MockTestImageCtx &mock_image_ctx, int r) {
@@ -335,9 +377,10 @@ public:
     }
   }
 
-  void expect_prepare_copyup(MockTestImageCtx& mock_image_ctx, int r = 0) {
-    EXPECT_CALL(*mock_image_ctx.io_object_dispatcher,
-            prepare_copyup(_, _)).WillOnce(Return(r));
+  Expectation expect_prepare_copyup(MockTestImageCtx& mock_image_ctx,
+                                    int r = 0) {
+    return EXPECT_CALL(*mock_image_ctx.io_object_dispatcher,
+                       prepare_copyup(_, _)).WillOnce(Return(r));
   }
 
   int create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
@@ -565,7 +608,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
   expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_write(mock_dst_io_ctx, one, {0, {}}, 0);
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
@@ -642,7 +685,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteError) {
 
   expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, -EINVAL);
+  expect_write(mock_dst_io_ctx, one, {0, {}}, -EINVAL);
 
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -656,6 +699,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
 
   interval_set<uint64_t> two;
   scribble(m_src_image_ctx, 10, 102400, &two);
+  auto two_sparse = two;
   ASSERT_EQ(0, create_snap("two"));
 
   if (one.range_end() < two.range_end()) {
@@ -702,9 +746,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
                            OBJECT_EXISTS_CLEAN : OBJECT_EXISTS, 0);
   expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_write(mock_dst_io_ctx, one, {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, two,
+  expect_write(mock_dst_io_ctx, two_sparse,
                {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
 
   request->send();
@@ -750,19 +794,22 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
   librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
     request->get_dst_io_ctx()));
 
-  InSequence seq;
   expect_list_snaps(mock_src_image_ctx, 0);
   expect_read(mock_src_image_ctx, m_src_snap_ids[0], 0, one.range_end(), 0);
-  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[0], OBJECT_EXISTS, 0);
-  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_dst_image_ctx, mock_object_map,
                            m_dst_snap_ids[1], OBJECT_EXISTS, 0);
   expect_prepare_copyup(mock_dst_image_ctx);
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
-  expect_start_op(mock_exclusive_lock);
+  expect_write(mock_dst_io_ctx, one, {0, {}}, 0);
+  allow_start_ops(mock_exclusive_lock);
+
+  for (auto extent : one) {
+    auto end_offset = extent.first + extent.second;
+    if (end_offset < one.range_end()) {
+      expect_truncate(mock_dst_io_ctx, end_offset, 0);
+    }
+  }
   expect_truncate(mock_dst_io_ctx, trim_offset, 0);
 
   request->send();
@@ -819,7 +866,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
 
   expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_write(mock_dst_io_ctx, one, {0, {}}, 0);
   expect_start_op(mock_exclusive_lock);
   expect_remove(mock_dst_io_ctx, 0);
 
@@ -967,28 +1014,37 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnapsStart) {
   librados::MockTestMemIoCtxImpl &mock_dst_io_ctx(get_mock_io_ctx(
     request->get_dst_io_ctx()));
 
-  InSequence seq;
-  expect_list_snaps(mock_src_image_ctx, 0);
+  Expectation prepare_copyup;
+  {
+    InSequence seq;
+    expect_list_snaps(mock_src_image_ctx, 0);
 
-  expect_read(mock_src_image_ctx, m_src_snap_ids[1], two, 0);
-  expect_read(mock_src_image_ctx, m_src_snap_ids[2], three, 0);
+    expect_read(mock_src_image_ctx, m_src_snap_ids[1], two, 0);
+    expect_read(mock_src_image_ctx, m_src_snap_ids[2], three, 0);
 
-  expect_start_op(mock_exclusive_lock);
-  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
-                           m_dst_snap_ids[1], OBJECT_EXISTS, 0);
+    expect_start_op(mock_exclusive_lock);
+    expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                             m_dst_snap_ids[1], OBJECT_EXISTS, 0);
 
-  expect_start_op(mock_exclusive_lock);
-  expect_update_object_map(mock_dst_image_ctx, mock_object_map,
-                           CEPH_NOSNAP, OBJECT_EXISTS, 0);
+    expect_start_op(mock_exclusive_lock);
+    expect_update_object_map(mock_dst_image_ctx, mock_object_map,
+                             CEPH_NOSNAP, OBJECT_EXISTS, 0);
 
-  expect_prepare_copyup(mock_dst_image_ctx);
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, two,
-               {m_dst_snap_ids[0], {m_dst_snap_ids[0]}}, 0);
+    prepare_copyup = expect_prepare_copyup(mock_dst_image_ctx);
+  }
 
-  expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, three,
-               {m_dst_snap_ids[1], {m_dst_snap_ids[1], m_dst_snap_ids[0]}}, 0);
+  expect_start_ops_after(mock_exclusive_lock, 2, prepare_copyup);
+  SnapContext two_snapc{m_dst_snap_ids[0], {m_dst_snap_ids[0]}};
+  EXPECT_CALL(mock_dst_io_ctx, write(_, _, _, _, two_snapc))
+    .Times(AtLeast(1))
+    .After(prepare_copyup)
+    .WillRepeatedly(DoDefault());
+  SnapContext three_snapc{m_dst_snap_ids[1],
+                          {m_dst_snap_ids[1], m_dst_snap_ids[0]}};
+  EXPECT_CALL(mock_dst_io_ctx, write(_, _, _, _, three_snapc))
+    .Times(AtLeast(1))
+    .After(prepare_copyup)
+    .WillRepeatedly(DoDefault());
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
@@ -1033,7 +1089,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Incremental) {
     request1->get_dst_io_ctx()));
   expect_prepare_copyup(mock_dst_image_ctx);
   expect_start_op(mock_exclusive_lock);
-  expect_write(mock_dst_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_write(mock_dst_io_ctx, one, {0, {}}, 0);
 
   request1->send();
   ASSERT_EQ(0, ctx1.wait());
