@@ -5051,9 +5051,9 @@ Then run the following:
             # `--daemon_types "mon, crash"` is treated the same as `--daemon_types "mon,crash"`.
             daemon_types = [dtype.strip() for dtype in daemon_types]
             for dtype in daemon_types:
-                if dtype not in utils.CEPH_IMAGE_TYPES:
+                if dtype not in utils.SUPPORTED_UPGRADE_DAEMON_TYPES:
                     raise OrchestratorError(f'Upgrade aborted - Got unexpected daemon type "{dtype}".\n'
-                                            f'Viable daemon types for this command are: {utils.CEPH_IMAGE_TYPES}')
+                                            f'Viable daemon types for this command are: {utils.SUPPORTED_UPGRADE_DAEMON_TYPES}')
         if services is not None:
             for service in services:
                 if service not in self.spec_store:
