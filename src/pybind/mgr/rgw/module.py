@@ -183,6 +183,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  zonegroup_name: Optional[str] = None,
                                  zone_name: Optional[str] = None,
                                  port: Optional[int] = None,
+                                 secondary_port: Optional[int] = None,
                                  placement: Optional[str] = None,
                                  zone_endpoints: Optional[str] = None,
                                  start_radosgw: Optional[bool] = True,
@@ -201,6 +202,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  rgw_zonegroup=zonegroup_name,
                                  rgw_zone=zone_name,
                                  rgw_frontend_port=port,
+                                 rgw_frontend_secondary_port=secondary_port,
                                  placement=placement_spec,
                                  zone_endpoints=zone_endpoints)]
         else:
@@ -442,6 +444,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                              zone_name: Optional[str] = None,
                              realm_token: Optional[str] = None,
                              port: Optional[int] = None,
+                             secondary_port: Optional[int] = None,
                              placement: Optional[str] = None,
                              start_radosgw: Optional[bool] = True,
                              zone_endpoints: Optional[str] = None,
@@ -452,6 +455,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             created_zones = self.rgw_zone_create(zone_name=zone_name,
                                                  realm_token=realm_token,
                                                  port=port,
+                                                 secondary_port=secondary_port,
                                                  placement=placement,
                                                  start_radosgw=start_radosgw,
                                                  zone_endpoints=zone_endpoints,
@@ -465,6 +469,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         zone_name: Optional[str] = None,
                         realm_token: Optional[str] = None,
                         port: Optional[int] = None,
+                        secondary_port: Optional[int] = None,
                         placement: Optional[Union[str, Dict[str, Any]]] = None,
                         tier_type: Optional[str] = None,
                         start_radosgw: Optional[bool] = True,
@@ -487,6 +492,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  rgw_zone=zone_name,
                                  rgw_realm_token=realm_token,
                                  rgw_frontend_port=port,
+                                 rgw_frontend_secondary_port=secondary_port,
                                  placement=placement_spec,
                                  zone_endpoints=zone_endpoints)]
         else:
@@ -538,10 +544,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                            zone_name: Optional[str] = None,
                            realm_token: Optional[str] = None,
                            port: Optional[int] = None,
+                           secondary_port: Optional[int] = None,
                            placement: Optional[dict] = None,
                            tier_type: Optional[str] = None,
                            start_radosgw: Optional[bool] = True,
                            zone_endpoints: Optional[str] = None) -> None:
         placement_spec = placement.get('placement') if placement else None
-        self.rgw_zone_create(zone_name, realm_token, port, placement_spec, tier_type, start_radosgw,
+        self.rgw_zone_create(zone_name, realm_token, port, secondary_port, placement_spec, tier_type, start_radosgw,
                              zone_endpoints, secondary_zone_period_retry_limit=5)
