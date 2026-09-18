@@ -30,7 +30,7 @@ void maybe_warn_about_blocking(const DoutPrefixProvider* dpp)
 
   // for validation, tests can assert that no requests block
   const auto& conf = dpp->get_cct()->_conf;
-  ceph_assert_always(!conf->rgw_asio_assert_yielding);
+  ceph_assert(!conf->rgw_asio_assert_yielding);
 
   // otherwise just log the warning and optional backtrace
   ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;

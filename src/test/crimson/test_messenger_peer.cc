@@ -445,7 +445,7 @@ int main(int argc, char** argv)
   entity_addr_t cmd_peer_addr;
   cmd_peer_addr.parse(addr.c_str(), nullptr);
   cmd_peer_addr.set_nonce(CMD_SRV_NONCE);
-  ceph_assert_always(cmd_peer_addr.is_msgr2());
+  ceph_assert(cmd_peer_addr.is_msgr2());
   auto test_peer_addr = get_test_peer_addr(cmd_peer_addr);
   auto nonstop = vm["nonstop"].as<bool>();
   ldout(cct, 0) << "test configuration: cmd_peer_addr=" << cmd_peer_addr
