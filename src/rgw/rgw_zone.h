@@ -8,7 +8,9 @@
 #include "rgw_common.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_sync_policy.h"
-
+#include "include/encoding_list.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 
 struct RGWZoneParams {
   std::string id;

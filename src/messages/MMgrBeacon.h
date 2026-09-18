@@ -20,6 +20,10 @@
 #include "mon/MonCommand.h"
 #include "mon/MgrMap.h"
 
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/types.h"
 
 

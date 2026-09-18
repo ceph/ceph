@@ -14,6 +14,11 @@
  */
 
 #include "types.h"
+#include "si_u_t.h"
+#include "byte_u_t.h"
+#include "weightf_t.h"
+#include "ceph_fs.h"
+#include "common/Formatter.h"
 
 #include <iomanip>
 
@@ -47,22 +52,6 @@ inline std::ostream& format_u(std::ostream& out, const uint64_t v, const uint64_
 
     return out << buffer;
   }
-}
-
-void client_t::dump(ceph::Formatter *f) const {
-  f->dump_int("id", v);
-}
-
-std::list<client_t> client_t::generate_test_instances() {
-  std::list<client_t> ls;
-  ls.emplace_back();
-  ls.push_back(client_t(1));
-  ls.push_back(client_t(123));
-  return ls;
-}
-
-std::ostream& operator<<(std::ostream& out, const client_t& c) {
-  return out << c.v;
 }
 
 std::ostream& operator<<(std::ostream& out, const si_u_t& b)
@@ -111,26 +100,4 @@ std::ostream& operator<<(std::ostream& out, const weightf_t& w)
     std::streamsize p = out.precision();
     return out << std::fixed << std::setprecision(5) << w.v << std::setprecision(p);
  }
-}
-
-void shard_id_t::dump(ceph::Formatter *f) const {
-  f->dump_int("id", id);
-}
-
-std::list<shard_id_t> shard_id_t::generate_test_instances() {
-  std::list<shard_id_t> ls;
-  ls.push_back(shard_id_t(1));
-  ls.push_back(shard_id_t(2));
-  return ls;
-}
-
-void errorcode32_t::dump(ceph::Formatter *f) const {
-  f->dump_int("code", code);
-}
-
-std::list<errorcode32_t> errorcode32_t::generate_test_instances() {
-  std::list<errorcode32_t> ls;
-  ls.push_back(errorcode32_t(1));
-  ls.push_back(errorcode32_t(2));
-  return ls;
 }

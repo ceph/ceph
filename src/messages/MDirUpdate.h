@@ -18,6 +18,7 @@
 #define CEPH_MDIRUPDATE_H
 
 #include "messages/MMDSOp.h"
+#include "include/encoding_set.h"
 
 class MDirUpdate final : public MMDSOp {
 public:

@@ -28,6 +28,7 @@
 
 #include "common/dout.h"
 #include "common/Formatter.h"
+#include "include/encoding_map.h"
 
 class RGWSI_Zone;
 struct RGWZoneGroup;

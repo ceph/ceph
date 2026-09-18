@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "Message.h"
+#include "CompletionHook.h"
 
 #ifdef ENCODE_DUMP
 # include <typeinfo>
@@ -11,6 +12,7 @@
 #include <iostream>
 
 #include "include/types.h"
+#include "include/msgr_encoder.h"
 
 #include "global/global_context.h"
 
@@ -234,6 +236,20 @@
 #define DEBUGLVL  10    // debug level of output
 
 #define dout_subsys ceph_subsys_ms
+
+Message::~Message() {
+  if (byte_throttler)
+    byte_throttler->put(payload.length() + middle.length() + data.length());
+  release_message_throttle();
+  trace.event("message destructed");
+  /* call completion hooks (if any) */
+  if (completion_hook)
+    completion_hook->complete(0);
+}
+
+void Message::print(std::ostream& out) const {
+  out << get_type_name() << " magic: " << magic;
+}
 
 void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
 {
@@ -1072,6 +1088,13 @@ void Message::encode_otel_trace(ceph::bufferlist &bl, uint64_t features) const
 void Message::decode_otel_trace(ceph::bufferlist::const_iterator &p, bool create)
 {
   tracing::decode(otel_trace, p);
+}
+
+std::ostream& operator<<(std::ostream& out, const Message& m) {
+  m.print(out);
+  if (m.get_header().version)
+    out << " v" << m.get_header().version;
+  return out;
 }
 
 // This routine is not used for ordinary messages, but only when encapsulating a message

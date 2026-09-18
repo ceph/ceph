@@ -8,6 +8,8 @@
 #include <list>
 #include <stdexcept>
 
+using namespace ceph;
+
 struct NameAndStatus {
   // these are sub-tags
   std::string name;

@@ -13,7 +13,7 @@
  *
  */
 #include <iostream>
-#include "mon/mon_types.h"
+#include "mon/mon_feature_t.h"
 
 #include "gtest/gtest.h"
 

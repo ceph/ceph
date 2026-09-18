@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "include/encoding_unordered_map.h"
 #include "include/types.h"
 #include <unordered_map>
 

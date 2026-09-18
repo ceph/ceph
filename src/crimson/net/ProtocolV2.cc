@@ -7,6 +7,7 @@
 #include <fmt/ranges.h>
 #include "include/msgr.h"
 #include "include/random.h"
+#include "include/sha_digest_fmt.h"
 #include "msg/msg_fmt.h"
 
 #include "crimson/auth/AuthClient.h"

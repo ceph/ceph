@@ -17,6 +17,7 @@
 #include <string>
 #include "common/Formatter.h"
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 
 struct MonCommand {
   std::string cmdstring;

@@ -30,6 +30,7 @@
 #include "include/ceph_assert.h"
 #include "common/ceph_context.h"
 #include "common/debug.h"
+#include "common/PluginRegistry.h"
 
 #define dout_subsys ceph_subsys_bdev
 #define dout_context cct

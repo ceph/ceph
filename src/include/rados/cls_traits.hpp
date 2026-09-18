@@ -1,5 +1,5 @@
 #pragma once
-#include <type_traits>
+
 #include "cls_flags.hpp"
 
 template <int Flags>
