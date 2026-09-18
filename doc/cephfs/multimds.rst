@@ -199,16 +199,24 @@ that should be pinned. For example:
 
 .. prompt:: bash #
 
-    setfattr -n ceph.dir.pin.random -v 0.5 /cephfs/tmp
+    setfattr -n ceph.dir.pin.random -v 0.01 /cephfs/tmp
 
 Would cause any directory loaded into cache or created under ``/tmp`` to be
-ephemerally pinned 50 percent of the time.
+ephemerally pinned 1 percent of the time.
 
 It is recommended to only set this to small values, like ``.001`` or ``0.1%``.
 Having too many subtrees may degrade performance. For this reason, the config
 ``mds_export_ephemeral_random_max`` enforces a cap on the maximum of this
 percentage (default: ``.01``). The MDS returns ``EINVAL`` when attempting to
 set a value beyond this config.
+
+The number of directories actually pinned is the probability multiplied by the
+number of sub-directories, so this policy is only useful where there are many
+of them. At the default cap of ``.01``, a tree of twenty sub-directories pins
+0.2 of them on average -- in practice none, leaving the whole tree on one rank
+with nothing to indicate that the setting had no effect. Thousands of
+sub-directories are needed before ``.01`` pins a useful number. For smaller
+trees, prefer a distributed ephemeral pin or an explicit pin.
 
 Both random and distributed ephemeral pin policies are off by default in
 Octopus. The features may be enabled via the

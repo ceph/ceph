@@ -6681,6 +6681,9 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       respond_to_request(mdr, -EDOM);
       return;
     } else if (mdcache->export_ephemeral_random_max < val) {
+      dout(10) << "value " << val << " for " << name << " exceeds "
+	       << "mds_export_ephemeral_random_max ("
+	       << mdcache->export_ephemeral_random_max << ")" << dendl;
       respond_to_request(mdr, -EINVAL);
       return;
     }
