@@ -78,7 +78,7 @@ CachedExtentRef Cache::retire_absent_extent_addr_by_type(
     return retire_absent_extent_addr<omap_manager::OMapLeafNode>(
       t, laddr, addr, length, std::move(extent_init_func));
   case extent_types_t::COLL_BLOCK:
-    return retire_absent_extent_addr<collection_manager::CollectionNode>(
+    return retire_absent_extent_addr<collection_manager::FlatCollectionNode>(
       t, laddr, addr, length, std::move(extent_init_func));
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return retire_absent_extent_addr<TestBlockPhysical>(
@@ -1248,7 +1248,7 @@ CachedExtentRef Cache::alloc_remapped_extent_by_type(
     return alloc_remapped_extent<onode::SeastoreNodeExtent>(
       t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
   case extent_types_t::COLL_BLOCK:
-    return alloc_remapped_extent<collection_manager::CollectionNode>(
+    return alloc_remapped_extent<collection_manager::FlatCollectionNode>(
       t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
   case extent_types_t::OBJECT_DATA_BLOCK:
     return alloc_remapped_extent<ObjectDataBlock>(
@@ -1302,7 +1302,7 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
     return alloc_new_non_data_extent<omap_manager::OMapLeafNode>(
       t, length, opt);
   case extent_types_t::COLL_BLOCK:
-    return alloc_new_non_data_extent<collection_manager::CollectionNode>(
+    return alloc_new_non_data_extent<collection_manager::FlatCollectionNode>(
       t, length, opt);
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return alloc_new_non_data_extent<TestBlockPhysical>(t, length, opt);
@@ -2698,7 +2698,7 @@ Cache::_get_absent_extent_by_type(
     break;
   case extent_types_t::COLL_BLOCK:
     ret = CachedExtent::make_cached_extent_ref<
-      collection_manager::CollectionNode>(length);
+      collection_manager::FlatCollectionNode>(length);
     break;
   case extent_types_t::ONODE_BLOCK_STAGED:
     ret = CachedExtent::make_cached_extent_ref<
@@ -2808,7 +2808,7 @@ Cache::do_get_caching_extent_by_type(
       return CachedExtentRef(extent.detach(), false /* add_ref */);
     });
   case extent_types_t::COLL_BLOCK:
-    return do_get_caching_extent<collection_manager::CollectionNode>(
+    return do_get_caching_extent<collection_manager::FlatCollectionNode>(
       offset, length, std::move(extent_init_func), std::move(on_cache), p_src
     ).safe_then([](auto extent) {
       return CachedExtentRef(extent.detach(), false /* add_ref */);
