@@ -84,6 +84,7 @@ and ``ceph-disk`` is fully disabled. Encryption is fully supported.
    lvm/list
    lvm/zap
    lvm/migrate
+   lvm/rotate-dmcrypt-key
    lvm/newdb
    lvm/newwal
    simple/index
