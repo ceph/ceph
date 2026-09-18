@@ -611,3 +611,9 @@ add_rgw_cargo_test_binary(
   UNIT_TEST
   DEPENDS   ceph_rgw_sal_test_env)
 endif()
+
+# unittest_rgw_limiter
+add_executable(unittest_rgw_limiter test_rgw_limiter.cc)
+add_ceph_unittest(unittest_rgw_limiter)
+target_link_libraries(unittest_rgw_limiter
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
