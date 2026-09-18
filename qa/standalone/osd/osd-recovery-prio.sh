@@ -426,13 +426,19 @@ function TEST_recovery_pool_priority() {
     ceph pg dump pgs
     ERRORS=0
 
+    # Pause recovery so reservations are held while we inspect them
+    ceph osd set norecover
+
     ceph osd pool set $pool1 size 2
     ceph osd pool set $pool2 size 2
 
     # Wait for both PGs to be in recovering state
     ceph pg dump pgs
 
-    # Wait for recovery to start
+    # Wait for recovery to start on both PGs so reservations are
+    # created. If we check too early we may miss the reservation
+    # creation and if we wait too long the recovery may complete
+    # and reservations be removed.
     set -o pipefail
     count=0
     while(true)
@@ -446,6 +452,7 @@ function TEST_recovery_pool_priority() {
       if test "$count" -eq "10"
       then
         echo "Recovery never started on both PGs"
+        ceph osd unset norecover
         return 1
       fi
       count=$(expr $count + 1)
@@ -519,6 +526,8 @@ function TEST_recovery_pool_priority() {
         ERRORS=$(expr $ERRORS + 1)
       fi
     fi
+
+    ceph osd unset norecover
 
     wait_for_clean || return 1
 
