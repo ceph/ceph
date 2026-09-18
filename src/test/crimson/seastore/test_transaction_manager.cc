@@ -1870,19 +1870,19 @@ struct transaction_manager_test_t :
 struct tm_single_device_test_t :
   public transaction_manager_test_t {
 
-  tm_single_device_test_t() : transaction_manager_test_t(1, 0) {}
+  tm_single_device_test_t() : transaction_manager_test_t(0, 1) {}
 };
 
 struct tm_single_device_intergrity_check_test_t :
   public transaction_manager_test_t {
 
-  tm_single_device_intergrity_check_test_t() : transaction_manager_test_t(1, 0) {}
+  tm_single_device_intergrity_check_test_t() : transaction_manager_test_t(0, 1) {}
 };
 
 struct tm_multi_device_test_t :
   public transaction_manager_test_t {
 
-  tm_multi_device_test_t() : transaction_manager_test_t(3, 0) {}
+  tm_multi_device_test_t() : transaction_manager_test_t(0, 3) {}
 };
 
 struct tm_multi_tier_device_test_t :
@@ -1894,7 +1894,7 @@ struct tm_multi_tier_device_test_t :
 struct tm_random_block_device_test_t :
   public transaction_manager_test_t {
 
-  tm_random_block_device_test_t() : transaction_manager_test_t(1, 0) {}
+  tm_random_block_device_test_t() : transaction_manager_test_t(0, 1) {}
 };
 
 TEST_P(tm_random_block_device_test_t, scatter_allocation)

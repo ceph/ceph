@@ -137,6 +137,12 @@ struct device_id_printer_t {
 
 std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id);
 
+std::optional<device_id_t> parse_device_id(
+  const seastar::sstring &name,
+  device_id_t base);
+
+constexpr std::string CACHE_DEV_PREFIX = "block_cache";
+
 // 1 bit in paddr_t to identify the absolute physical address type
 enum class paddr_types_t {
   SEGMENT = 0,
