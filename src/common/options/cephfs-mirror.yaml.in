@@ -25,6 +25,23 @@ options:
   services:
   - cephfs-mirror
   min: 1
+- name: cephfs_mirror_max_datasync_threads_per_directory
+  type: uint
+  level: advanced
+  desc: number of data synchronization threads dedicated to a "per-thread" priority
+    directory
+  long_desc: Number of worker threads in the private data synchronization thread pool
+    that is created for every mirrored directory whose priority mode is set to
+    "per-thread". Such a directory also gets a crawler thread of its own, so it is
+    not scheduled on (and does not contend for) the shared crawler and data sync
+    thread pools sized by cephfs_mirror_max_concurrent_directory_syncs and
+    cephfs_mirror_max_datasync_threads. The value is sampled when the private pool
+    is created, so changing it affects directories that switch to "per-thread" mode
+    afterwards.
+  default: 4
+  services:
+  - cephfs-mirror
+  min: 1
 - name: cephfs_mirror_distribute_datasync_threads
   type: bool
   level: advanced
