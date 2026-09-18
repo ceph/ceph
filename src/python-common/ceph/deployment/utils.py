@@ -1,4 +1,5 @@
 import ipaddress
+import posixpath
 import socket
 from typing import Tuple, Optional, Any, List
 from urllib.parse import urlparse
@@ -197,3 +198,31 @@ def verify_non_empty_string(field: Any, field_name: str) -> None:
     # isinstance first so we never call .strip() on None or non-str
     if not isinstance(field, str) or not field.strip():
         raise SpecValidationError(f"Invalid {field_name}: Must be a non-empty string.")
+
+
+def verify_path(field: Any, field_name: str) -> None:
+    """
+    Validate an absolute filesystem path string without touching the host FS.
+    """
+    if field is None:
+        return
+    verify_non_empty_string(field, field_name)
+    if not field.startswith('/'):
+        raise SpecValidationError(
+            f'{field_name} must be an absolute path starting with /, got {field!r}')
+    if '..' in field.split('/'):
+        raise SpecValidationError(
+            f"{field_name} must not contain '..' path components, got {field!r}")
+    normalized = '/' + posixpath.normpath(field).lstrip('/')
+    if normalized == '/':
+        raise SpecValidationError(
+            f'{field_name} must not be the filesystem root (/), got {field!r}')
+    protected_dirs = frozenset([
+        '/bin', '/boot', '/dev', '/etc', '/home', '/lib', '/lib32', '/lib64',
+        '/libx32', '/log', '/media', '/mnt', '/opt', '/proc', '/root', '/run',
+        '/sbin', '/srv', '/sys', '/tmp', '/usr', '/var',
+    ])
+    if normalized in protected_dirs:
+        raise SpecValidationError(
+            f'{field_name} must not be a protected system directory, '
+            f'got {field!r}. Use a subdirectory of it instead.')
