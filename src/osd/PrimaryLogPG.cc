@@ -15973,11 +15973,9 @@ bool PrimaryLogPG::_range_available_for_scrub(const hobject_t& begin,
 int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ctx)
 {
   OpRequestRef op = ctx->op;
-  // Only supports replicated pools
-  ceph_assert(!pool.info.is_erasure());
 
-  if (!is_primary()) {
-    // Must be a balanced/localized read that has failed on a replica.
+  if (!is_primary() || pool.info.is_erasure()) {
+    // Must be a balanced/localized/EC direct read that has failed on a replica.
     // Replicas cannot run recovery, so the request need to be
     // failed with EAGAIN to the client which will then retry the
     // request to the primary

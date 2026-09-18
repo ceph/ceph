@@ -14,6 +14,7 @@ using ConsistencyOp = ceph::io_exerciser::ConsistencyOp;
 using SwapOp = ceph::io_exerciser::SwapOp;
 using CopyOp = ceph::io_exerciser::CopyOp;
 using SingleReadOp = ceph::io_exerciser::SingleReadOp;
+using SingleSparseReadOp = ceph::io_exerciser::SingleSparseReadOp;
 using DoubleReadOp = ceph::io_exerciser::DoubleReadOp;
 using TripleReadOp = ceph::io_exerciser::TripleReadOp;
 using SingleWriteOp = ceph::io_exerciser::SingleWriteOp;
@@ -167,6 +168,8 @@ std::string ceph::io_exerciser::ReadWriteOp<opType, numIOs>::to_string(
       [[fallthrough]];
     case OpType::Read3:
       return fmt::format("Read{} ({})", numIOs, offset_length_desc);
+    case OpType::SparseRead:
+      return fmt::format("SparseRead ({})", offset_length_desc);
     case OpType::Write:
       [[fallthrough]];
     case OpType::Write2:
@@ -198,6 +201,20 @@ std::unique_ptr<SingleReadOp> SingleReadOp::generate(uint64_t offset,
 std::unique_ptr<SingleReadOp> SingleReadOp::generate(uint64_t offset,
                                   uint64_t length, bool balanced_read) {
   return std::make_unique<SingleReadOp>(offset, length, balanced_read);
+}
+
+SingleSparseReadOp::SingleSparseReadOp(uint64_t offset, uint64_t length,
+                                        std::optional<bool> balanced_read)
+    : ReadWriteOp<OpType::SparseRead, 1>({offset}, {length}, balanced_read) {}
+
+std::unique_ptr<SingleSparseReadOp> SingleSparseReadOp::generate(
+    uint64_t offset, uint64_t length) {
+  return std::make_unique<SingleSparseReadOp>(offset, length, std::nullopt);
+}
+
+std::unique_ptr<SingleSparseReadOp> SingleSparseReadOp::generate(
+    uint64_t offset, uint64_t length, bool balanced_read) {
+  return std::make_unique<SingleSparseReadOp>(offset, length, balanced_read);
 }
 
 DoubleReadOp::DoubleReadOp(uint64_t offset1, uint64_t length1, uint64_t offset2,
