@@ -10,7 +10,7 @@ from ..services.certificate import CertificateService
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import str_to_bool
-from . import APIDoc, APIRouter, EndpointDoc, ReadPermission, RESTController
+from . import APIDoc, APIRouter, DeletePermission, EndpointDoc, ReadPermission, RESTController
 from .orchestrator import raise_if_no_orchestrator
 
 
@@ -145,6 +145,32 @@ class Certificate(RESTController):
             cert_details, cert_name or user_cert_name, cert_scope_str, target_key,
             include_target=True, include_details=True
         )
+
+    @EndpointDoc("Delete Certificate for Service",
+                 parameters={
+                     'service_name': (str, 'Service name (e.g., "rgw.myzone")')
+                 })
+    @raise_if_no_orchestrator([OrchFeature.SERVICE_LIST, OrchFeature.DAEMON_LIST])
+    @DeletePermission
+    @handle_orchestrator_error('certificate')
+    def delete(self, service_name: str) -> None:
+        """
+        Remove certificate and key for a service.
+
+        This endpoint removes all certificates associated with a service.
+        For HOST scope certificates (like cephadm-signed), it removes
+        certificates from all hosts where the service daemons run.
+
+        :param service_name: The service name, e.g. 'rgw.myzone'.
+        :return: None
+        """
+        orch = OrchClient.instance()
+
+        try:
+            CertificateService.delete_service_certificate(orch, service_name)
+        except LookupError as e:
+            raise DashboardException(msg=str(e), http_status_code=404,
+                                     component='certificate')
 
     @EndpointDoc("Get Root CA Certificate",
                  responses={
