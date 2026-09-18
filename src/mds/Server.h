@@ -575,7 +575,12 @@ private:
     unsigned req_flags,
     unsigned diff_mask,
     bufferlist& dirbl);
-  bool build_snap_diff(
+  enum class SnapDiffStatus {
+    MORE,
+    FRAG_END,
+    RETRY,
+  };
+  SnapDiffStatus build_snap_diff(
     const MDRequestRef& mdr,
     CDir* dir,
     int bytes_left,
