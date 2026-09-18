@@ -1,0 +1,188 @@
+# cephadm-pod.yaml – Kubernetes Pod spec for running cephadm via podman kube play.
+#
+# This file is intended for use with Podman's Kubernetes-compatible play command:
+#
+#   podman kube play src/cephadm/cephadm-pod.yaml
+#
+# The pod is configured for one-shot execution (restartPolicy: Never).
+# After the pod exits, remove it with:
+#
+#   podman kube down src/cephadm/cephadm-pod.yaml
+#
+# Override the image without editing this file:
+#
+#   CEPHADM_IMAGE=quay.ceph.io/ceph-ci/ceph:main \
+#     envsubst < src/cephadm/cephadm-pod.yaml | podman kube play -
+#
+# To pass cephadm arguments set the CEPHADM_ARGS environment variable or edit
+# the args list in the container spec below.
+#
+# Limitations:
+#   * "podman kube play" does not support all Docker-Compose / docker run
+#     options.  In particular, host-namespace flags (hostPID, hostIPC,
+#     hostNetwork) and the cgroupns setting are used here as standard Pod spec
+#     fields.  Some distributions ship older Podman versions that may not
+#     support every field.
+#   * All host paths listed in the volumeMounts / hostPath sections must exist
+#     before running "podman kube play".
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cephadm
+  labels:
+    app: cephadm
+spec:
+  # Never restart – cephadm commands are one-shot.
+  restartPolicy: Never
+
+  # Host namespaces – same rationale as container-run.sh.
+  hostNetwork: true
+  hostPID: true
+  hostIPC: true
+
+  # UTS namespace: use the host UTS so that hostname() returns the real node
+  # name, which cephadm uses as the monitor ID and orchestrator host name.
+  hostUsers: true   # Podman extension; ensures consistent UID/GID mapping.
+
+  containers:
+    - name: cephadm
+      image: "${CEPHADM_IMAGE:-cephadm:latest}"
+
+      # Pass cephadm subcommand + arguments here, or leave empty to get help.
+      # Example: ["bootstrap", "--mon-ip", "192.168.1.10"]
+      args: []
+
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        privileged: false
+        # Capabilities – mirror the --cap-add list in container-run.sh.
+        capabilities:
+          add:
+            - SYS_ADMIN
+            - NET_ADMIN
+            - SYS_PTRACE
+            - CHOWN
+            - DAC_OVERRIDE
+            - DAC_READ_SEARCH
+            - FOWNER
+            - SETUID
+            - SETGID
+            - SYS_RAWIO
+            - MKNOD
+            - SYS_RESOURCE
+            - AUDIT_WRITE
+            - KILL
+        # Disable SELinux label confinement so bind-mounts are accessible.
+        seLinuxOptions:
+          type: ""
+
+      env:
+        # Tell the podman client inside the container to use the host socket
+        # (remote mode) rather than trying to start its own daemon.
+        - name: CONTAINER_HOST
+          value: "unix:///run/podman/podman.sock"
+        - name: DOCKER_HOST
+          value: "unix:///var/run/docker.sock"
+
+      volumeMounts:
+        - name: run-systemd
+          mountPath: /run/systemd
+        - name: dbus-socket
+          mountPath: /run/dbus/system_bus_socket
+        - name: sys
+          mountPath: /sys
+        - name: dev
+          mountPath: /dev
+        - name: run-udev
+          mountPath: /run/udev
+          readOnly: true
+        - name: proc
+          mountPath: /proc
+        - name: var-lib-ceph
+          mountPath: /var/lib/ceph
+        - name: var-log-ceph
+          mountPath: /var/log/ceph
+        - name: etc-ceph
+          mountPath: /etc/ceph
+        - name: etc-systemd-system
+          mountPath: /etc/systemd/system
+        - name: etc-sysctl-d
+          mountPath: /etc/sysctl.d
+        - name: etc-logrotate-d
+          mountPath: /etc/logrotate.d
+        - name: run-cephadm
+          mountPath: /run/cephadm
+        - name: tmp
+          mountPath: /tmp
+        - name: podman-sock
+          mountPath: /run/podman/podman.sock
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+
+  volumes:
+    - name: run-systemd
+      hostPath:
+        path: /run/systemd
+        type: Directory
+    - name: dbus-socket
+      hostPath:
+        path: /run/dbus/system_bus_socket
+        type: Socket
+    - name: sys
+      hostPath:
+        path: /sys
+        type: Directory
+    - name: dev
+      hostPath:
+        path: /dev
+        type: Directory
+    - name: run-udev
+      hostPath:
+        path: /run/udev
+        type: Directory
+    - name: proc
+      hostPath:
+        path: /proc
+        type: Directory
+    - name: var-lib-ceph
+      hostPath:
+        path: /var/lib/ceph
+        type: DirectoryOrCreate
+    - name: var-log-ceph
+      hostPath:
+        path: /var/log/ceph
+        type: DirectoryOrCreate
+    - name: etc-ceph
+      hostPath:
+        path: /etc/ceph
+        type: DirectoryOrCreate
+    - name: etc-systemd-system
+      hostPath:
+        path: /etc/systemd/system
+        type: Directory
+    - name: etc-sysctl-d
+      hostPath:
+        path: /etc/sysctl.d
+        type: DirectoryOrCreate
+    - name: etc-logrotate-d
+      hostPath:
+        path: /etc/logrotate.d
+        type: DirectoryOrCreate
+    - name: run-cephadm
+      hostPath:
+        path: /run/cephadm
+        type: DirectoryOrCreate
+    - name: tmp
+      hostPath:
+        path: /tmp
+        type: Directory
+    - name: podman-sock
+      hostPath:
+        path: /run/podman/podman.sock
+        type: Socket
+    - name: docker-sock
+      hostPath:
+        path: /var/run/docker.sock
+        type: Socket
