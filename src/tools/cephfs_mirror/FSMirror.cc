@@ -382,18 +382,25 @@ void FSMirror::handle_shutdown_instance_watcher(int r) {
   }
 }
 
-void FSMirror::handle_acquire_directory(string_view dir_path) {
-  dout(5) << ": dir_path=" << dir_path << dendl;
+void FSMirror::handle_acquire_directory(string_view dir_path, PriorityMode priority) {
+  dout(5) << ": dir_path=" << dir_path << ", priority=" << priority << dendl;
 
   {
     std::scoped_lock locker(m_lock);
-    m_directories.emplace(dir_path);
+    // an acquire for an already tracked directory is how a priority change is
+    // relayed by the mirroring manager module, so always refresh the mode.
+    auto it = m_directories.find(dir_path);
+    if (it == m_directories.end()) {
+      m_directories.emplace(dir_path, priority);
+    } else {
+      it->second = priority;
+    }
     m_service_daemon->add_or_update_fs_attribute(m_filesystem.fscid, SERVICE_DAEMON_DIR_COUNT_KEY,
                                                  m_directories.size());
 
     for (auto &[peer, peer_replayer] : m_peer_replayers) {
       dout(10) << ": peer=" << peer << dendl;
-      peer_replayer->add_directory(dir_path);
+      peer_replayer->add_directory(dir_path, priority);
     }
   }
   if (m_perf_counters) {
