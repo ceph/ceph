@@ -1035,7 +1035,10 @@ class ServiceSpec(object):
             self.ssl_ca_cert = ssl_ca_cert
             self.custom_sans = custom_sans
 
-        if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
+        if (
+            self.service_type in self.REQUIRES_SERVICE_ID
+            or self.service_type in ('osd', 'cephfs-mirror')
+        ):
             self.service_id = service_id
 
         #: If set to ``true``, the orchestrator will not deploy nor remove
@@ -1326,7 +1329,7 @@ class ServiceSpec(object):
         if self.service_type in self.REQUIRES_CERTIFICATES:
             self._normalize_and_validate_tls()
 
-        if self.service_type != 'osd':
+        if self.service_type not in ('osd', 'cephfs-mirror'):
             if self.service_type in self.REQUIRES_SERVICE_ID and not self.service_id:
                 raise SpecValidationError('Cannot add Service: id required')
             if self.service_type not in self.REQUIRES_SERVICE_ID and self.service_id:
