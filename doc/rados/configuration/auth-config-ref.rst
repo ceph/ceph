@@ -525,7 +525,7 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    .. code:: bash
 
-       ceph -n client.admin -k /etc/ceph/ceph.client.admin.keyring ceph auth ls
+       ceph -n client.admin -k /etc/ceph/ceph.client.admin.keyring auth ls
 
    If everything looks good, remove the backup key:
 
