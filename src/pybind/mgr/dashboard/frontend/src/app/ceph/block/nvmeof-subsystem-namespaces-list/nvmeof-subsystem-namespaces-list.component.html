@@ -4,6 +4,7 @@
   (fetchData)="listNamespaces()"
   [columns]="namespacesColumns"
   selectionType="single"
+  [autoReload]="false"
   (updateSelection)="updateSelection($event)"
   emptyStateTitle="No namespaces created."
   i18n-emptyStateTitle

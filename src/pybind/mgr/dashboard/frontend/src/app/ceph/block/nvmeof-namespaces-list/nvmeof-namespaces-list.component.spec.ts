@@ -1,8 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { HttpClientModule } from '@angular/common/http';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { BehaviorSubject, Subject, of } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, of, throwError } from 'rxjs';
 import { skip, take } from 'rxjs/operators';
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -15,6 +16,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list.component';
 import { NvmeofGatewayGroupFilterComponent } from '../nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
 const mockNamespaces = [
   {
@@ -68,6 +70,10 @@ class MockNvmeOfService {
   listNamespaces(_group?: string) {
     return of(this.namespacesResponse);
   }
+
+  deleteNamespace() {
+    return of({});
+  }
 }
 
 class MockAuthStorageService {
@@ -77,24 +83,33 @@ class MockAuthStorageService {
 }
 
 class MockModalCdsService {
-  show = jasmine.createSpy('show');
+  show = jest.fn();
 }
 
-class MockTaskWrapperService {}
+class MockTaskWrapperService {
+  wrapTaskAroundCall = jest.fn();
+}
 
 describe('NvmeofNamespacesListComponent', () => {
   let component: NvmeofNamespacesListComponent;
   let fixture: ComponentFixture<NvmeofNamespacesListComponent>;
   let queryParams$: BehaviorSubject<Record<string, string>>;
+  let refresh$: Subject<void>;
   let modalService: MockModalCdsService;
   let nvmeofService: MockNvmeOfService;
+  let nvmeofStateService: { refresh$: any; requestRefresh: jest.Mock };
+  let taskWrapper: MockTaskWrapperService;
   const activatedRouteMock = {
     queryParams: null as any,
     snapshot: { queryParams: {} as Record<string, string> }
   };
 
   beforeEach(async () => {
-    const refresh$ = new Subject<void>();
+    refresh$ = new Subject<void>();
+    nvmeofStateService = {
+      refresh$: refresh$.asObservable(),
+      requestRefresh: jest.fn()
+    };
     queryParams$ = new BehaviorSubject<Record<string, string>>({});
     activatedRouteMock.queryParams = queryParams$.asObservable();
     activatedRouteMock.snapshot.queryParams = queryParams$.value;
@@ -115,7 +130,7 @@ describe('NvmeofNamespacesListComponent', () => {
         { provide: ActivatedRoute, useValue: activatedRouteMock },
         {
           provide: NvmeofStateService,
-          useValue: { refresh$: refresh$.asObservable(), requestRefresh: jest.fn() }
+          useValue: nvmeofStateService
         }
       ],
       schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -137,10 +152,16 @@ describe('NvmeofNamespacesListComponent', () => {
     fixture.detectChanges();
     modalService = TestBed.inject(ModalCdsService) as any;
     nvmeofService = TestBed.inject(NvmeofService) as any;
+    taskWrapper = TestBed.inject(TaskWrapperService) as any;
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should disable periodic table auto-reload', () => {
+    const tableDebug = fixture.debugElement.query(By.directive(TableComponent));
+    expect(tableDebug.componentInstance.autoReload).toBe(false);
   });
 
   it('should retrieve namespaces', (done) => {
@@ -168,7 +189,7 @@ describe('NvmeofNamespacesListComponent', () => {
     } as any;
     component.deleteNamespaceModal();
     expect(modalService.show).toHaveBeenCalled();
-    const args = modalService.show.calls.mostRecent().args[1];
+    const args = modalService.show.mock.calls[0][1];
     expect(args.itemNames).toEqual([1]);
     expect(args.itemDescription).toBeDefined();
     expect(typeof args.submitActionObservable).toBe('function');
@@ -209,5 +230,54 @@ describe('NvmeofNamespacesListComponent', () => {
     component.group = 'g1';
     component.onGroupChange(null);
     expect(component.group).toBeNull();
+  });
+
+  it('should refresh the list when refresh$ emits', () => {
+    const listSpy = jest.spyOn(component, 'listNamespaces');
+    listSpy.mockClear();
+
+    refresh$.next();
+
+    expect(listSpy).toHaveBeenCalled();
+  });
+
+  it('should request list refresh after successful delete', () => {
+    taskWrapper.wrapTaskAroundCall.mockReturnValue(
+      new Observable((observer) => {
+        observer.complete();
+      })
+    );
+    component.selection = {
+      first: () => ({
+        nsid: 1,
+        ns_subsystem_nqn: 'nqn.2001-07.com.ceph:1721040751436'
+      })
+    } as any;
+    component.groupHandler.group = 'g1';
+
+    component.deleteNamespaceModal();
+    const submitActionObservable = modalService.show.mock.calls[0][1].submitActionObservable;
+    submitActionObservable().subscribe();
+
+    expect(nvmeofStateService.requestRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not request list refresh after failed delete', () => {
+    taskWrapper.wrapTaskAroundCall.mockReturnValue(throwError(() => ({ message: 'failed' })));
+    component.selection = {
+      first: () => ({
+        nsid: 1,
+        ns_subsystem_nqn: 'nqn.2001-07.com.ceph:1721040751436'
+      })
+    } as any;
+    component.groupHandler.group = 'g1';
+
+    component.deleteNamespaceModal();
+    const submitActionObservable = modalService.show.mock.calls[0][1].submitActionObservable;
+    submitActionObservable().subscribe({
+      error: () => undefined
+    });
+
+    expect(nvmeofStateService.requestRefresh).not.toHaveBeenCalled();
   });
 });
