@@ -70,6 +70,16 @@ USERROLES = {
 }
 
 
+SERVICE_CATALOG = [
+    {
+        'id': '4c609e8c4f684861bdafc117133805aa',
+        'name': 'swift',
+        'type': 'object-store',
+        'endpoints': [],
+    },
+]
+
+
 TOKENS = {
     'admin-token-1': {
         'username': 'admin',
@@ -145,10 +155,56 @@ TOKENS = {
             'access_rules': [],
         },
     },
+    # App cred whose rule targets a different OpenStack service. Denies Swift.
+    'appcred-token-wrong-service': {
+        'username': 'deadbeef',
+        'project': 'deadbeef',
+        'expired': False,
+        'application_credential': {
+            'id': 'appcred-wrong-service-id',
+            'name': 'wrong-service',
+            'restricted': True,
+            'access_rules': [
+                {
+                    'service': 'compute',
+                    'method': 'GET',
+                    'path': '/v1/AUTH_**',
+                },
+            ],
+        },
+    },
+    # Matching object-store rule, but object-store is absent from this token's
+    # catalog. Upstream middleware rejects the request before rule matching.
+    'appcred-token-missing-catalog-service': {
+        'username': 'deadbeef',
+        'project': 'deadbeef',
+        'expired': False,
+        'catalog': [
+            {
+                'id': '1af98d45f67e4c20b7779328a1d4b03d',
+                'name': 'nova',
+                'type': 'compute',
+                'endpoints': [],
+            },
+        ],
+        'application_credential': {
+            'id': 'appcred-missing-catalog-service-id',
+            'name': 'missing-catalog-service',
+            'restricted': True,
+            'access_rules': [
+                {
+                    'service': 'object-store',
+                    'method': 'GET',
+                    'path': '/v1/AUTH_**',
+                },
+            ],
+        },
+    },
 }
 
 
-def _generate_token_result(username, project, expired=False, application_credential=None):
+def _generate_token_result(username, project, expired=False,
+                           application_credential=None, catalog=None):
     userdata = USERS[username]
     projectdata = PROJECTS[project]
     userroles = USERROLES[username]
@@ -165,7 +221,7 @@ def _generate_token_result(username, project, expired=False, application_credent
     result = {
         'token': {
             'audit_ids': ['3T2dc1CGQxyJsHdDu1xkcw'],
-            'catalog': [],
+            'catalog': SERVICE_CATALOG if catalog is None else catalog,
             'expires_at': expires_at,
             'is_domain': False,
             'issued_at': issued_at,
@@ -186,6 +242,16 @@ COUNTERS = {
     'get_total': 0,
     'post_total': 0,
 }
+
+
+def _supports_access_rules(headers):
+    value = headers.get('OpenStack-Identity-Access-Rules')
+    if value is None:
+        return False
+    try:
+        return float(value) >= 1.0
+    except ValueError:
+        return False
 
 
 class HTTPRequestHandler(BaseHTTPRequestHandler):
@@ -228,7 +294,13 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
         auth_token = self.headers.get('X-Subject-Token', None)
         if auth_token and auth_token in TOKENS:
             tokendata = TOKENS[auth_token]
+            application_credential = tokendata.get('application_credential')
             if tokendata['expired'] and 'allow_expired=1' not in self.path:
+                self.send_response(404)
+                self.end_headers()
+            elif (application_credential is not None and
+                  application_credential.get('access_rules') is not None and
+                  not _supports_access_rules(self.headers)):
                 self.send_response(404)
                 self.end_headers()
             else:
@@ -239,7 +311,8 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
                     tokendata['username'],
                     tokendata['project'],
                     tokendata['expired'],
-                    tokendata.get('application_credential'),
+                    application_credential,
+                    tokendata.get('catalog'),
                 )
                 self._set_data(result)
         else:

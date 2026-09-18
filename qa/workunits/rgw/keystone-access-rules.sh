@@ -27,6 +27,8 @@
 #     rgw_keystone_admin_user="admin"
 #     rgw_keystone_api_version=3
 #     rgw_keystone_implicit_tenants=true
+#     rgw_keystone_service_token_accepted_roles=admin
+#     rgw_keystone_service_token_enabled=true
 #     rgw_keystone_url="http://localhost:5000"
 #     rgw_swift_account_in_url=true'
 

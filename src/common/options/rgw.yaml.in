@@ -1030,6 +1030,38 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_verify_access_rules
+  type: bool
+  level: advanced
+  desc: Enforce Keystone application credential access rules for Swift requests.
+  fmt_desc: When enabled, RGW requests application credential access rules from
+    Keystone and rejects Swift requests that do not match an accepted service
+    type, HTTP method, and path. When disabled, a conforming Keystone server
+    rejects validation of credentials that contain access rules.
+  default: true
+  flags:
+  - startup
+  services:
+  - rgw
+  see_also:
+  - rgw_keystone_accepted_service_types
+  with_legacy: true
+- name: rgw_keystone_accepted_service_types
+  type: str
+  level: advanced
+  desc: Keystone service types that identify Swift access rules for RGW.
+  fmt_desc: A comma-separated list of Keystone service types whose application
+    credential access rules may authorize Swift requests. A type must also be
+    present in the validated token's service catalog. Rules for all other
+    service types are ignored. An empty list matches no rules.
+  default: object-store
+  flags:
+  - startup
+  services:
+  - rgw
+  see_also:
+  - rgw_keystone_verify_access_rules
+  with_legacy: true
 - name: rgw_keystone_implicit_tenants
   type: str
   level: advanced

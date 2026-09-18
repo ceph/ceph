@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <boost/optional.hpp>
@@ -25,6 +27,12 @@ namespace detail {
  * pattern. Exposed for unit testing. See rgw_auth_keystone.cc for the
  * full pattern syntax. */
 bool path_matches_pattern(std::string_view pattern, std::string_view path);
+
+/* Return whether a rule's service type identifies this RGW endpoint and is
+ * present in the validated token's service catalog. Exposed for testing. */
+bool service_type_matches(std::span<const std::string> accepted_service_types,
+                          std::span<const rgw::keystone::TokenEnvelope::CatalogService> catalog,
+                          std::string_view service_type);
 } // namespace detail
 
 class TokenEngine : public rgw::auth::Engine {

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -31,9 +32,6 @@ using namespace std;
 namespace rgw {
 namespace auth {
 namespace keystone {
-
-/* Service type for access rules matching. */
-static constexpr const char* const SWIFT_SERVICE_TYPE = "object-store";
 
 namespace detail {
 
@@ -129,12 +127,32 @@ path_matches_pattern(const std::string_view pattern, const std::string_view path
   return pi == pattern.size();
 }
 
+bool
+service_type_matches(
+    const std::span<const std::string> accepted_service_types,
+    const std::span<const rgw::keystone::TokenEnvelope::CatalogService> catalog,
+    const std::string_view service_type)
+{
+  const bool accepted = std::any_of(
+      accepted_service_types.begin(), accepted_service_types.end(),
+      [service_type](const std::string& candidate) {
+        return candidate == service_type;
+      });
+  return accepted && std::any_of(
+      catalog.begin(), catalog.end(),
+      [service_type](const auto& service) {
+        return service.type == service_type;
+      });
+}
+
 } // namespace detail
 
 static bool
 check_access_rules(
     const DoutPrefixProvider* dpp,
     std::span<const rgw::keystone::TokenEnvelope::ApplicationCredential::AccessRule> rules,
+    const std::span<const std::string> accepted_service_types,
+    const std::span<const rgw::keystone::TokenEnvelope::CatalogService> catalog,
     const std::string_view method,
     const std::string_view raw_path)
 {
@@ -142,7 +160,8 @@ check_access_rules(
   const std::string_view path = raw_path.substr(0, raw_path.find('?'));
 
   for (const auto& rule : rules) {
-    if (rule.service != SWIFT_SERVICE_TYPE) {
+    if (!detail::service_type_matches(accepted_service_types, catalog,
+                                      rule.service)) {
       continue;
     }
     if (rule.method != method) {
@@ -162,14 +181,36 @@ check_access_rules(
 }
 
 /* Mirrors keystonemiddleware's validate_allowed_request: absent access_rules
- * permits; empty list denies; non-empty list permits only on a match. */
+ * permits; an accepted catalog service is required; a valid service token
+ * bypasses method/path matching; otherwise an empty or unmatched list denies. */
 static bool
 enforce_access_rules(
     const DoutPrefixProvider* dpp,
     const rgw::keystone::TokenEnvelope& t,
+    const std::span<const std::string> accepted_service_types,
+    const bool service_request,
     const req_state* s)
 {
   if (!t.has_access_rules_field()) {
+    return true;
+  }
+  const auto catalog = t.get_catalog();
+  const bool catalog_has_accepted_service = std::any_of(
+      accepted_service_types.begin(), accepted_service_types.end(),
+      [catalog](const std::string& service_type) {
+        return std::any_of(catalog.begin(), catalog.end(),
+                           [&service_type](const auto& service) {
+                             return service.type == service_type;
+                           });
+      });
+  if (!catalog_has_accepted_service) {
+    ldpp_dout(dpp, 5) << "denying request: no accepted service type is "
+                         "present in the token catalog" << dendl;
+    return false;
+  }
+  if (service_request) {
+    ldpp_dout(dpp, 10) << "skipping access-rule method/path matching: "
+                          "valid service token present" << dendl;
     return true;
   }
   const auto rules = t.get_access_rules();
@@ -178,7 +219,8 @@ enforce_access_rules(
                       << dendl;
     return false;
   }
-  if (check_access_rules(dpp, rules, s->info.method, s->relative_uri)) {
+  if (check_access_rules(dpp, rules, accepted_service_types, catalog,
+                         s->info.method, s->relative_uri)) {
     return true;
   }
   ldpp_dout(dpp, 5) << "denying request: application credential access "
@@ -225,7 +267,9 @@ admin_token_retry:
   }
 
   validate.append_header("X-Subject-Token", token);
-  validate.append_header("OpenStack-Identity-Access-Rules", "1.0");
+  if (cct->_conf->rgw_keystone_verify_access_rules) {
+    validate.append_header("OpenStack-Identity-Access-Rules", "1.0");
+  }
 
   std::string admin_token;
   bool admin_token_cached = false;
@@ -425,6 +469,9 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     std::vector<std::string> plain;
   } service_token_roles(cct);
 
+  static const auto access_rule_service_types = get_str_vec(
+      cct->_conf->rgw_keystone_accepted_service_types);
+
   if (! is_applicable(token)) {
     return result_t::deny();
   }
@@ -504,11 +551,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (t) {
     ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
                    << dendl;
-    if (allow_expired) {
-      ldpp_dout(dpp, 10) << "skipping access-rule enforcement: valid service token present"
-                         << dendl;
-    } else if (!enforce_access_rules(dpp, *t, s)) {
-      return result_t::deny(-EACCES);
+    if (cct->_conf->rgw_keystone_verify_access_rules &&
+        !enforce_access_rules(dpp, *t, access_rule_service_types,
+                              allow_expired, s)) {
+      return result_t::deny(-EPERM);
     }
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t));
@@ -559,11 +605,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
                     << " expires: " << t->get_expires() << dendl;
       /* Enforce access rules before caching so a denied request never
        * poisons the cache. Skip for service-to-service requests. */
-      if (allow_expired) {
-        ldpp_dout(dpp, 10) << "skipping access-rule enforcement: valid service token present"
-                           << dendl;
-      } else if (!enforce_access_rules(dpp, *t, s)) {
-        return result_t::deny(-EACCES);
+      if (cct->_conf->rgw_keystone_verify_access_rules &&
+          !enforce_access_rules(dpp, *t, access_rule_service_types,
+                                allow_expired, s)) {
+        return result_t::deny(-EPERM);
       }
 
       token_cache.add(token_id, *t);

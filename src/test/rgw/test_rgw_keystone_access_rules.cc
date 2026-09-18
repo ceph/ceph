@@ -2,9 +2,38 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "rgw_auth_keystone.h"
+#include <string>
+#include <vector>
+
 #include <gtest/gtest.h>
 
 using rgw::auth::keystone::detail::path_matches_pattern;
+using rgw::auth::keystone::detail::service_type_matches;
+using CatalogService = rgw::keystone::TokenEnvelope::CatalogService;
+
+TEST(ServiceTypeMatches, AcceptedType)
+{
+  const std::vector<std::string> accepted = {"object-store", "swift"};
+  const std::vector<CatalogService> catalog = {
+      {.type = "object-store"}, {.type = "swift"}, {.type = "compute"}};
+  EXPECT_TRUE(service_type_matches(accepted, catalog, "object-store"));
+  EXPECT_TRUE(service_type_matches(accepted, catalog, "swift"));
+  EXPECT_FALSE(service_type_matches(accepted, catalog, "compute"));
+}
+
+TEST(ServiceTypeMatches, EmptyListMatchesNothing)
+{
+  const std::vector<std::string> accepted;
+  const std::vector<CatalogService> catalog = {{.type = "object-store"}};
+  EXPECT_FALSE(service_type_matches(accepted, catalog, "object-store"));
+}
+
+TEST(ServiceTypeMatches, ServiceMustBeInCatalog)
+{
+  const std::vector<std::string> accepted = {"object-store"};
+  const std::vector<CatalogService> catalog = {{.type = "compute"}};
+  EXPECT_FALSE(service_type_matches(accepted, catalog, "object-store"));
+}
 
 // Exact matches
 TEST(PathMatchesPattern, ExactMatch)

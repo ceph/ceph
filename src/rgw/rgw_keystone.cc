@@ -493,6 +493,11 @@ void rgw::keystone::TokenEnvelope::User::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("domain", domain, obj);
 }
 
+void rgw::keystone::TokenEnvelope::CatalogService::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("type", type, obj, true);
+}
+
 void rgw::keystone::TokenEnvelope::ApplicationCredential::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
@@ -512,6 +517,7 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
   JSONDecoder::decode_json("roles", roles, root_obj, true);
   JSONDecoder::decode_json("project", project, root_obj, true);
+  JSONDecoder::decode_json("catalog", catalog, root_obj, false);
 
   // Optional, only present for application-credential authentication.
   ApplicationCredential tmp_app_cred;

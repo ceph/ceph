@@ -174,6 +174,12 @@ public:
     void decode_json(JSONObj *obj);
   };
 
+  class CatalogService {
+  public:
+    std::string type;
+    void decode_json(JSONObj *obj);
+  };
+
   class ApplicationCredential {
   public:
     // OpenStack application credential access rule.
@@ -199,6 +205,7 @@ public:
   Project project;
   User user;
   std::list<Role> roles;
+  std::vector<CatalogService> catalog;
   std::optional<ApplicationCredential> app_cred;
 
   void decode(JSONObj* obj);
@@ -216,6 +223,7 @@ public:
   const std::string& get_user_id() const {return user.id;};
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const std::string& r) const;
+  std::span<const CatalogService> get_catalog() const { return catalog; }
   // True iff the access_rules field was present (possibly empty) on the
   // application credential.
   bool has_access_rules_field() const {
