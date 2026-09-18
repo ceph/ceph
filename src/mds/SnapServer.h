@@ -74,6 +74,8 @@ public:
   bool force_update(snapid_t last, snapid_t v2_since,
 		    std::map<snapid_t, SnapInfo>& _snaps);
 
+  void handle_pool_changes();
+
 protected:
   void encode_server_state(bufferlist& bl) const override;
   void decode_server_state(bufferlist::const_iterator& bl) override;
@@ -97,6 +99,21 @@ protected:
   std::map<version_t, SnapInfo> pending_update;
   std::map<version_t, std::pair<snapid_t,snapid_t> > pending_destroy; // (removed_snap, seq)
   std::set<version_t> pending_noop;
+
+  /*
+   * Baseline copy of this fs's data pools as of the last reconcile (in
+   * MDSRankDispatcher::handle_mds_map). On each mdsmap update we diff the
+   * current data_pools against this and pools that disappeared are moved
+   * into @pending_purge_pools.
+   */
+  std::vector<int64_t> tracked_data_pools;
+  /*
+   * Data pools removed from the fs (no longer in data_pools) that snapshots
+   * may still reference. Maps pool id -> the snapid below which references may
+   * exist and purged on each snap destroy, until no live snap <= that snapid
+   * remains.
+   */
+  std::map<int64_t, snapid_t> pending_purge_pools;
 
   version_t last_checked_osdmap = 0;
 };

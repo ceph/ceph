@@ -2607,6 +2607,10 @@ void MDSRankDispatcher::handle_mds_map(
       mdlog->set_write_iohint(0);
     else
       mdlog->set_write_iohint(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+
+    if (mdsmap->get_tableserver() == whoami) {
+      snapserver->handle_pool_changes();
+    }
   }
 
   if (oldmap.get_max_mds() != mdsmap->get_max_mds()) {

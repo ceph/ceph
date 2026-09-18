@@ -1,6 +1,7 @@
 import errno
 import logging
 import signal
+from io import StringIO
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra.run import Raw
@@ -38,6 +39,10 @@ class TestSnapshots(CephFSTestCase):
 
     def _get_pending_snap_destroy(self, rank=0, status=None):
         return self._get_snapserver_dump(rank,status=status)["pending_destroy"]
+
+    def _pool_object_count(self, pool):
+        out = self.fs.rados(['ls'], pool=pool, stdout=StringIO()).stdout.getvalue()
+        return len(out.split())
 
     def test_allow_new_snaps_config(self):
         """
@@ -576,6 +581,78 @@ class TestSnapshots(CephFSTestCase):
             # after reducing limit we expect the new snapshot creation to fail
             pass
         self.delete_dir_and_snaps("accounts", new_limit + 1)
+
+    def test_rm_snaps_post_data_pool_removal(self):
+        """
+        Test that removing a secondary data pool from a CephFS before deleting
+        snapshots that reference objects in that pool doesn't cause the snap
+        trimmer to skip those objects (i.e. leave them orphaned).
+        """
+        data_pools = ['second_pool', 'third_pool']
+        path_1, path_2 = 'pools/second', 'pools/third'
+        vx = 'ceph.dir.layout.pool'
+        
+        for pool in data_pools:
+            self.assertEqual(self.get_ceph_cmd_result(
+                args=f'osd pool create {pool}', check_status=False), 0)
+            self.assertEqual(self.get_ceph_cmd_result(
+                args=f'fs add_data_pool {self.fs.name} {pool}',
+                check_status=False), 0)
+
+        self.mount_a.run_shell_payload(f'mkdir -p {path_1} {path_2}')
+
+        self.mount_a.setfattr(path_1, vx, data_pools[0])
+        self.mount_a.setfattr(path_2, vx, data_pools[1])
+
+        # ensure the pool object count is empty
+        self.assertEqual(self._pool_object_count(data_pools[0]), 0)
+
+        self.mount_a.run_shell_payload(
+            f'for i in $(seq 1 100); do echo test_$i >> {path_1}/file$i; done')
+        self.mount_a.run_shell_payload('sync')
+        self.wait_until_equal(lambda: self._pool_object_count(data_pools[0]),
+                              100, timeout=60)
+
+        self.mount_a.run_shell_payload(
+            'for i in $(seq 1 99); do mkdir -p .snap/snap_$i; done')
+        self.mount_a.run_shell_payload(f'cp -r {path_1}/* {path_2}/')
+        self.mount_a.run_shell_payload(f'rm -rf {path_1}')
+        # heads become whiteouts (still listed) while clones being held by snaps
+        self.assertEqual(self._pool_object_count(data_pools[0]), 100)
+
+        # remove the pool while snapshots still reference its clones
+        self.assertEqual(self.get_ceph_cmd_result(
+            args=f'fs rm_data_pool {self.fs.name} {data_pools[0]}',
+            check_status=False), 0)
+        self.assertEqual(self._pool_object_count(data_pools[0]), 100)
+
+        # delete the snapshots; whiteouts count should drop to zero
+        self.mount_a.run_shell_payload(f'rmdir .snap/*')
+        self.wait_until_equal(lambda: self._pool_object_count(data_pools[0]),
+                              0, timeout=60)
+
+        # now check happy path i.e. remove snaps first and then rm_data_pool
+        self.assertEqual(self._pool_object_count(data_pools[1]), 100)
+        self.mount_a.run_shell_payload(
+            'for i in $(seq 1 99); do mkdir -p .snap/snap_$i; done')
+        # path_2 contains cp'd files from path_1
+        self.mount_a.run_shell_payload(f'rm -rf {path_2}')
+        # clones still being held by snaps
+        self.assertEqual(self._pool_object_count(data_pools[1]), 100)
+        self.mount_a.run_shell_payload(f'rmdir .snap/*')
+        # should drop to zero
+        self.wait_until_equal(lambda: self._pool_object_count(data_pools[1]),
+                                      0, timeout=60)
+        self.assertEqual(self.get_ceph_cmd_result(
+                    args=f'fs rm_data_pool {self.fs.name} {data_pools[1]}',
+                    check_status=False), 0)
+
+        # cleanup
+        for pool in data_pools:
+            self.assertEqual(self.get_ceph_cmd_result(
+                args=f'osd pool rm {pool} {pool} --yes-i-really-really-mean-it',
+                check_status=False), 0)
+        self.mount_a.run_shell_payload('rm -rf pools/')
 
 
 class TestMonSnapsAndFsPools(CephFSTestCase):
