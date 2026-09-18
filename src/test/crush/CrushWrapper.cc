@@ -1455,6 +1455,160 @@ TEST_F(CrushWrapperTest, try_remap_rule) {
   }
 }
 
+TEST_F(CrushWrapperTest, verify_upmap_nested_choose) {
+  // Reproduce a multi-level EC pod/rack topology that triggers the
+  // verify_upmap nested-choose bug (see tracker #57348):
+  //
+  //   take <root>
+  //   choose_indep   2 type pod
+  //   choose_indep   2 type rack
+  //   chooseleaf_indep 1 type osd
+  //   emit
+  //
+  // pool_size = 4 (2 pods * 2 racks * 1 osd). A natural CRUSH output
+  // legitimately contains 4 distinct racks; the buggy validator
+  // compared 4 against the local numrep (2) and rejected. The fix
+  // compares against numrep * outer_numrep_product (= 2 * 2 = 4).
+  //
+  // The topology has 3 pods (more than the rule asks for) so that we
+  // can also construct an invalid up set that legitimately exceeds the
+  // pod count and exercises the negative path.
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "rack");
+  c.set_type_name(3, "pod");
+  c.set_type_name(4, "root");
+
+  int bno;
+  int r = c.add_bucket(0, CRUSH_BUCKET_STRAW2,
+                       CRUSH_HASH_DEFAULT, 4, 0, NULL,
+                       NULL, &bno);
+  ASSERT_EQ(0, r);
+  c.set_item_name(bno, "default");
+
+  c.set_max_devices(12);
+
+  // 3 pods x 2 racks/pod x 1 host/rack x 2 osds/host = 12 osds
+  auto add = [&](int osd, const string& pod, const string& rack,
+                 const string& host) {
+    map<string, string> loc;
+    loc["host"] = host;
+    loc["rack"] = rack;
+    loc["pod"] = pod;
+    loc["root"] = "default";
+    c.insert_item(cct, osd, 1, "osd." + stringify(osd), loc);
+  };
+  add(0,  "pod0", "r00", "h00");
+  add(1,  "pod0", "r00", "h00");
+  add(2,  "pod0", "r01", "h01");
+  add(3,  "pod0", "r01", "h01");
+  add(4,  "pod1", "r10", "h10");
+  add(5,  "pod1", "r10", "h10");
+  add(6,  "pod1", "r11", "h11");
+  add(7,  "pod1", "r11", "h11");
+  add(8,  "pod2", "r20", "h20");
+  add(9,  "pod2", "r20", "h20");
+  add(10, "pod2", "r21", "h21");
+  add(11, "pod2", "r21", "h21");
+  c.finalize();
+
+  // build the nested rule (rule type doesn't affect verify_upmap)
+  int rule = c.add_rule(-1, 5, 0);
+  ASSERT_GE(rule, 0);
+  c.set_rule_step_take(rule, 0, bno);
+  c.set_rule_step_choose_indep(rule, 1, 2, c.get_type_id("pod"));
+  c.set_rule_step_choose_indep(rule, 2, 2, c.get_type_id("rack"));
+  c.set_rule_step_choose_leaf_indep(rule, 3, 1, 0);
+  c.set_rule_step_emit(rule, 4);
+
+  const int pool_size = 4;
+
+  // A valid up set: one osd from each (pod, rack) combination spanning
+  // 2 pods. The four OSDs come from four distinct racks. Pre-fix this
+  // returned -EINVAL because 4 > 2 (the inner numrep) at the rack step.
+  {
+    vector<int> up = {0, 2, 4, 6};
+    ASSERT_EQ(0, c.verify_upmap(cct, rule, pool_size, up));
+  }
+
+  // Same shape but swap one OSD inside its rack -- another legitimate
+  // upmap target. Still 4 distinct racks, must still pass.
+  {
+    vector<int> up = {1, 2, 4, 6};   // 1 instead of 0, same rack r00
+    ASSERT_EQ(0, c.verify_upmap(cct, rule, pool_size, up));
+    vector<int> up2 = {0, 2, 5, 6};  // 5 instead of 4, same rack r10
+    ASSERT_EQ(0, c.verify_upmap(cct, rule, pool_size, up2));
+  }
+
+  // Choose any 2 of the 3 pods -- all three pairings must validate.
+  {
+    vector<int> up_p1p2 = {4, 6, 8, 10};
+    ASSERT_EQ(0, c.verify_upmap(cct, rule, pool_size, up_p1p2));
+    vector<int> up_p0p2 = {0, 2, 8, 10};
+    ASSERT_EQ(0, c.verify_upmap(cct, rule, pool_size, up_p0p2));
+  }
+
+  // Negative: an up set spanning 3 pods exceeds the pod count limit
+  // (3 distinct pods > numrep=2 at the pod step). Must be rejected.
+  {
+    vector<int> up = {0, 4, 8, 6}; // pods: pod0, pod1, pod2, pod1
+    ASSERT_LT(c.verify_upmap(cct, rule, pool_size, up), 0);
+  }
+  {
+    vector<int> up = {0, 2, 4, 8}; // pods: pod0, pod0, pod1, pod2
+    ASSERT_LT(c.verify_upmap(cct, rule, pool_size, up), 0);
+  }
+}
+
+TEST_F(CrushWrapperTest, verify_upmap_single_level) {
+  // Regression guard: the nested-choose fix must not change behavior
+  // for plain single-level rules.
+  //
+  //   take <root>
+  //   chooseleaf_firstn 3 type host
+  //   emit
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "root");
+
+  int bno;
+  ASSERT_EQ(0, c.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                            2, 0, NULL, NULL, &bno));
+  c.set_item_name(bno, "default");
+  c.set_max_devices(6);
+
+  auto add = [&](int osd, const string& host) {
+    map<string, string> loc;
+    loc["host"] = host;
+    loc["root"] = "default";
+    c.insert_item(cct, osd, 1, "osd." + stringify(osd), loc);
+  };
+  add(0, "h0"); add(1, "h0");
+  add(2, "h1"); add(3, "h1");
+  add(4, "h2"); add(5, "h2");
+  c.finalize();
+
+  ostringstream err;
+  int rule = c.add_simple_rule("simple", "default", "host", "",
+                               "firstn", pg_pool_t::TYPE_REPLICATED, &err);
+  ASSERT_GE(rule, 0);
+
+  // 3 OSDs across 3 distinct hosts -- must pass.
+  {
+    vector<int> up = {0, 2, 4};
+    ASSERT_EQ(0, c.verify_upmap(cct, rule, 3, up));
+  }
+  // 3 OSDs but two share a host -- must fail (chooseleaf check).
+  {
+    vector<int> up = {0, 1, 4};
+    ASSERT_LT(c.verify_upmap(cct, rule, 3, up), 0);
+  }
+}
+
 // Local Variables:
 // compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && valgrind --tool=memcheck bin/unittest_crush_wrapper"
 // End:
