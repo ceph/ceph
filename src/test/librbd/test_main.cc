@@ -12,6 +12,8 @@
 extern void register_test_librbd();
 #ifdef TEST_LIBRBD_INTERNALS
 extern void register_test_deep_copy();
+extern void register_test_diff_iterate();
+extern void register_test_encryption();
 extern void register_test_groups();
 extern void register_test_image_watcher();
 extern void register_test_internal();
@@ -33,6 +35,8 @@ int main(int argc, char **argv)
   register_test_librbd();
 #ifdef TEST_LIBRBD_INTERNALS
   register_test_deep_copy();
+  register_test_diff_iterate();
+  register_test_encryption();
   register_test_groups();
   register_test_image_watcher();
   register_test_internal();
