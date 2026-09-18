@@ -308,8 +308,8 @@ inline const char* table_name_upvalue(lua_State* L) {
 // - since we have only one iterator per map/table we don't allow for nested loops or another iterationn
 // after breaking out of an iteration
 template<typename MapType>
-typename MapType::iterator* create_iterator_metadata(lua_State* L, const std::string_view name, 
-    const typename MapType::iterator& start_it, const typename MapType::iterator& end_it) {
+typename MapType::iterator* create_iterator_metadata(lua_State* L, const std::string_view name,
+    const typename MapType::iterator& start_it, const typename MapType::iterator& end_it, MapType* map) {
   using Iterator = typename MapType::iterator;
   // create metatable for userdata
   // metatable is created before the userdata to save on allocation if the metatable already exists
@@ -350,14 +350,21 @@ typename MapType::iterator* create_iterator_metadata(lua_State* L, const std::st
   // add "tostring" closure to metatable
   lua_pushliteral(L, "__tostring");
   lua_pushlightuserdata(L, new_it);
+  lua_pushlightuserdata(L, map);
   lua_pushcclosure(L, [](lua_State* L) {
       // the key of the table is expected to be convertible to char*
       static_assert(std::is_constructible<typename MapType::key_type, const char*>());
       auto iter = reinterpret_cast<Iterator*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+      auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
       ceph_assert(iter);
+      if (*iter == map->end()) {
+        // iterator is past-the-end; return "nil" to match Lua's tostring(nil) behavior
+        lua_pushliteral(L, "nil");
+        return ONE_RETURNVAL;
+      }
       pushstring(L, (*iter)->first);
       return ONE_RETURNVAL;
-    }, ONE_UPVAL);
+    }, TWO_UPVALS);
   lua_rawset(L, metatable_pos);
   // define a finalizer of the iterator
   lua_pushliteral(L, "__gc");
@@ -447,10 +454,12 @@ int next(lua_State* L) {
     // pop the 2 nils
     lua_pop(L, 2);
     // create userdata
-    next_it = create_iterator_metadata<MapType>(L, name, map->begin(), map->end());
+    next_it = create_iterator_metadata<MapType>(L, name, map->begin(), map->end(), map);
   } else {
     next_it = reinterpret_cast<Iterator*>(lua_touserdata(L, 2));
-    *next_it = std::next(*next_it);
+    if (*next_it != map->end()) {
+      *next_it = std::next(*next_it);
+    }
   }
   ceph_assert(next_it);
 
