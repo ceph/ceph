@@ -37,10 +37,11 @@ public:
                             uint32_t iv_length) const override {
       return m_data_cryptor->init_context(ctx, iv, iv_length);
     }
-    inline int update_context(T* ctx, const unsigned char* in,
-                              unsigned char* out,
-                              uint32_t len) const override {
-      return m_data_cryptor->update_context(ctx, in, out, len);
+    inline int update_context(T* ctx, const CryptArgs& params) const override {
+      return m_data_cryptor->update_context(ctx, params);
+    }
+    inline int decrypt(T* ctx, const CryptArgs& params) const override {
+      return m_data_cryptor->decrypt(ctx, params);
     }
 
     using ContextQueue = boost::lockfree::queue<T*>;

@@ -2,7 +2,9 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "LoadRequest.h"
+#include <string>
 
+#include "acconfig.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
@@ -178,17 +180,13 @@ void LoadRequest<I>::handle_read_header(int r) {
   ceph_assert(*m_detected_format_name == "LUKS");
   *m_detected_format_name = m_header.get_format_name();
 
-  auto cipher = m_header.get_cipher();
-  if (strcmp(cipher, "aes") != 0) {
-    lderr(m_image_ctx->cct) << "unsupported cipher: " << cipher << dendl;
-    finish(-ENOTSUP);
-    return;
-  }
-
-  auto cipher_mode = m_header.get_cipher_mode();
-  if (strcmp(cipher_mode, "xts-plain64") != 0) {
-    lderr(m_image_ctx->cct) << "unsupported cipher mode: " << cipher_mode
-                            << dendl;
+  std::string cipher = std::string(m_header.get_cipher()) + "-" + std::string(m_header.get_cipher_mode());
+  if (cipher != "aes-xts-plain64"
+#ifdef HAVE_CRYPT_FORMAT_INLINE
+      && cipher != "aes-xts-random"
+#endif
+     ) {
+    lderr(m_image_ctx->cct) << "unsupported cipher or cipher mode: " << cipher << dendl;
     finish(-ENOTSUP);
     return;
   }
@@ -229,7 +227,7 @@ void LoadRequest<I>::handle_read_keyslots(int r) {
 
 template <typename I>
 void LoadRequest<I>::read_volume_key() {
-  char volume_key[64];
+  char volume_key[96];
   size_t volume_key_size = sizeof(volume_key);
 
   auto r = m_header.read_volume_key(
@@ -249,11 +247,61 @@ void LoadRequest<I>::read_volume_key() {
     return;
   }
 
+  size_t meta_size = 0;
+  std::string openssl_cipher;
+
+#ifdef HAVE_CRYPT_FORMAT_INLINE
+  if (strcmp(m_header.get_cipher(), "aes") == 0 &&
+      strcmp(m_header.get_cipher_mode(), "xts-random") == 0) {
+    // AEAD: native LUKS2 inline integrity format
+    // TODO: derive meta_size from the LUKS2 segment integrity type
+    // when additional AEAD configs (hmac(sha512), GCM) are supported
+    meta_size = 48;  // 16 IV + 32 HMAC tag for hmac(sha256)
+    openssl_cipher = "aes-256-xts";
+
+    // Verify that cryptsetup's parsed integrity metadata agrees with
+    // our expected tag size. This is the same code path that would
+    // feed parameters to dm-crypt during device activation.
+    struct crypt_params_integrity ip;
+    memset(&ip, 0, sizeof(ip));
+    if (m_header.get_integrity_info(&ip) != 0 ||
+        ip.integrity == nullptr ||
+        ip.tag_size != meta_size) {
+      lderr(m_image_ctx->cct) << "integrity metadata mismatch: expected "
+          << "tag_size=" << meta_size << ", got tag_size=" << ip.tag_size
+          << dendl;
+      finish(-EINVAL);
+      return;
+    }
+
+    ldout(m_image_ctx->cct, 20)
+        << "detected AEAD configuration: cipher=aes-xts-random"
+        << " integrity=" << ip.integrity
+        << " meta_size=" << meta_size << dendl;
+  }
+#endif
+
+  if (openssl_cipher.empty()) {
+    if (strcmp(m_header.get_cipher(), "aes") == 0 &&
+        strcmp(m_header.get_cipher_mode(), "xts-plain64") == 0) {
+      if (volume_key_size == 32) {
+        openssl_cipher = "aes-128-xts";
+      } else if (volume_key_size == 64) {
+        openssl_cipher = "aes-256-xts";
+      }
+    } else {
+      lderr(m_image_ctx->cct) << "unsupported cipher configuration" << dendl;
+      finish(-ENOTSUP);
+      return;
+    }
+  }
+
   r = util::build_crypto(
-          m_image_ctx->cct, reinterpret_cast<unsigned char*>(volume_key),
-          volume_key_size, m_header.get_sector_size(),
-          m_header.get_data_offset(), m_result_crypto);
-  ceph_memzero_s(volume_key, 64, 64);
+          m_image_ctx->cct, openssl_cipher.c_str(), 
+          reinterpret_cast<unsigned char*>(volume_key),
+          volume_key_size, m_header.get_sector_size(), 
+          m_header.get_data_offset(), meta_size, m_result_crypto);
+  ceph_memzero_s(volume_key, sizeof(volume_key), sizeof(volume_key));
   finish(r);
 }
 

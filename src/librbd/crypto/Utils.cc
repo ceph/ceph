@@ -37,33 +37,35 @@ void set_crypto(I *image_ctx,
 }
 
 int build_crypto(
-        CephContext* cct, const unsigned char* key, uint32_t key_length,
-        uint64_t block_size, uint64_t data_offset,
+        CephContext* cct, const char* cipher_suite,
+        const unsigned char* key, uint32_t key_length,
+        uint64_t block_size, uint64_t data_offset, uint32_t meta_size,
         std::unique_ptr<CryptoInterface>* result_crypto) {
-  const char* cipher_suite;
-  switch (key_length) {
-    case 32:
-      cipher_suite = "aes-128-xts";
-      break;
-    case 64:
-      cipher_suite = "aes-256-xts";
-      break;
-    default:
-      lderr(cct) << "unsupported key length: " << key_length << dendl;
-      return -ENOTSUP;
-  }
-
-  auto data_cryptor = new openssl::DataCryptor(cct);
-  int r = data_cryptor->init(cipher_suite, key, key_length);
-  if (r != 0) {
-    lderr(cct) << "error initializing data cryptor: " << cpp_strerror(r)
-               << dendl;
-    delete data_cryptor;
-    return r;
+  openssl::DataCryptor* data_cryptor;
+  if (meta_size > 0) {
+    // Authenticated encryption: authenc(hmac(sha256),xts(aes))
+    auto authenc = new openssl::AuthEncDataCryptor(cct);
+    int r = authenc->init(cipher_suite, key, key_length);
+    if (r != 0) {
+      lderr(cct) << "error initializing authenc data cryptor: "
+                 << cpp_strerror(r) << dendl;
+      delete authenc;
+      return r;
+    }
+    data_cryptor = authenc;
+  } else {
+    data_cryptor = new openssl::DataCryptor(cct);
+    int r = data_cryptor->init(cipher_suite, key, key_length);
+    if (r != 0) {
+      lderr(cct) << "error initializing data cryptor: " << cpp_strerror(r)
+                 << dendl;
+      delete data_cryptor;
+      return r;
+    }
   }
 
   result_crypto->reset(BlockCrypto<EVP_CIPHER_CTX>::create(
-          cct, data_cryptor, block_size, data_offset));
+          cct, data_cryptor, block_size, data_offset, meta_size));
   return 0;
 }
 

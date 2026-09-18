@@ -22,6 +22,8 @@
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Utils.h"
+#include "librbd/crypto/CryptoInterface.h"
+#include "librbd/crypto/EncryptionFormat.h"
 
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
@@ -402,6 +404,16 @@ void CopyupRequest<I>::copyup() {
   m_image_ctx->image_lock.lock_shared();
   auto snapc = m_image_ctx->snapc;
   auto io_context = m_image_ctx->get_data_io_context();
+// AEAD integrity tags live beyond object_size; thick copyup clips to
+// [0, object_size) and would discard them. Force sparse copyup for
+// AEAD images since cls_cxx_write handles offsets beyond object_size.
+  bool force_sparse_copyup = false;
+  if (m_image_ctx->encryption_format) {
+    auto crypto = m_image_ctx->encryption_format->get_crypto();
+    if (crypto && crypto->get_meta_size() != 0) {
+      force_sparse_copyup = true;
+    }
+  }
   m_image_ctx->image_lock.unlock_shared();
 
   m_lock.lock();
@@ -434,7 +446,7 @@ void CopyupRequest<I>::copyup() {
     op = &write_op;
   }
 
-  if (m_image_ctx->enable_sparse_copyup) {
+  if (m_image_ctx->enable_sparse_copyup || force_sparse_copyup) {
     cls_client::sparse_copyup(op, m_copyup_extent_map, m_copyup_data);
   } else {
     // convert the sparse read back into a standard (thick) read
