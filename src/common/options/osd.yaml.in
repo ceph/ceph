@@ -251,6 +251,18 @@ options:
   level: advanced
   desc: Asserts that no clone-objects were added to a snap after we start trimming it
   default: false
+- name: osd_debug_drop_pg_lease_renewals
+  type: bool
+  level: dev
+  desc: Silently drop scheduled PG lease renewals (testing only)
+  long_desc: When set, PG::schedule_renew_lease() does not arm the renewal timer,
+    which simulates a lost RenewLease peering event.  Used by
+    qa/standalone/osd/osd-lease-laggy.sh to verify that a laggy PG still recovers
+    when the lease renewal chain stalls.
+  default: false
+  flags:
+  - runtime
+  with_legacy: true
 - name: osd_scrub_begin_hour
   type: int
   level: advanced
