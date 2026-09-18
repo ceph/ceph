@@ -79,3 +79,6 @@ feature and a worked example.
 .. confval:: mds_dmclock_reservation
 .. confval:: mds_dmclock_weight
 .. confval:: mds_dmclock_limit
+.. confval:: mds_export_ephemeral_distributed_factor
+.. confval:: mds_export_ephemeral_frag_factor
+.. confval:: mds_export_ephemeral_random_max
