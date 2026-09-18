@@ -2679,8 +2679,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     @API.expose
     def remote(self, module_name: str, method_name: str, *args: Any, **kwargs: Any) -> Any:
         """
-        Invoke a method on another module.  All arguments, and the return
-        value from the other module must be serializable.
+        Invoke a method on another module. If the two modules share a
+        Python interpreter (the default, unless one of them is listed in
+        mgr_subinterpreter_modules), arguments and the return value are
+        passed by reference, not copied: modifying one in place affects
+        the other module's state directly. Otherwise they are pickled,
+        so must be serializable, and are safely copied.
 
         Limitation: Do not import any modules within the called method.
         Otherwise you will get an error in Python 2::

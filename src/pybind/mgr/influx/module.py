@@ -428,6 +428,30 @@ class Module(MgrModule):
 
         return json.dumps(result, indent=2, sort_keys=True)
 
+    # The two methods below have no callers within this module -- they
+    # are only ever invoked via remote() by the selftest module's test
+    # commands (remote-benchmark, remote-mutation). Not dead code.
+
+    def remote_bench_echo(self, payload: Any) -> Any:
+        """
+        Called via remote() by the selftest module's remote-benchmark
+        command. Returns `payload` unchanged, to measure remote() dispatch
+        overhead in isolation from any real work.
+        """
+        return payload
+
+    def remote_mutate(self, container: List[Any], value: Any) -> int:
+        """
+        Called via remote() by the selftest module's remote-mutation
+        command. Appends `value` to `container` in place and returns the
+        container's new length. If remote() passed `container` by
+        reference (same interpreter), the caller's own list grows; if it
+        was pickled (cross interpreter), the caller's original list is
+        left untouched.
+        """
+        container.append(value)
+        return len(container)
+
     @InfluxCLICommand.Read('influx config-show')
     def config_show(self) -> Tuple[int, str, str]:
         """
