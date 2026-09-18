@@ -1409,6 +1409,19 @@ class Module(MgrModule, OrchestratorClientMixin):
                                                                service.get('name', ''))})
         return ret
 
+    def _parse_rgw_instance_id(self, daemon_id: Optional[str]) -> str:
+        """
+        Extract the RGW instance id from a daemon_id in the form
+        <host>.<rgw>.<instance>, matching the instance id used by
+        ceph-exporter. Falls back to the full daemon_id (or empty
+        string) when it doesn't have enough dot-separated segments to
+        safely index, e.g. a daemon_id with only one dot such as
+        "host1.rgw0" rather than the expected "host1.rgw.0".
+        """
+        if daemon_id and daemon_id.count('.') >= 2:
+            return daemon_id.split(".")[2]
+        return daemon_id if daemon_id else ""
+
     @profile_method()
     def get_metadata_and_osd_status(self) -> None:
         osd_map = self.get('osd_map')
@@ -1597,10 +1610,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         if modify_instance_id:
             daemons = raise_if_exception(self.list_daemons(daemon_type='rgw'))
             for daemon in daemons:
-                if daemon.daemon_id and '.' in daemon.daemon_id:
-                    instance_id = daemon.daemon_id.split(".")[2]
-                else:
-                    instance_id = daemon.daemon_id if daemon.daemon_id else ""
+                instance_id = self._parse_rgw_instance_id(daemon.daemon_id)
                 self.metrics['rgw_metadata'].set(1,
                                                  (f"{daemon.daemon_type}.{daemon.daemon_id}",
                                                   str(daemon.hostname),
