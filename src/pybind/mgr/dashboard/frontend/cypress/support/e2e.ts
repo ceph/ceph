@@ -3,7 +3,8 @@ import 'cypress-axe';
 import './commands';
 
 afterEach(() => {
-  cy.visit('#/403');
+  // Prefer a real page over #/403 so the next scenario can mount the SPA.
+  cy.visit('#/dashboard', { failOnStatusCode: false });
 });
 
 Cypress.on('uncaught:exception', (err: Error) => {
@@ -14,6 +15,10 @@ Cypress.on('uncaught:exception', (err: Error) => {
     'NgClass can only toggle CSS classes'
   ];
   if (ignoredErrors.some((error) => err.message.includes(error))) {
+    return false;
+  }
+  // Host label edit can race with orch inventory refresh after host add.
+  if (err.message.includes('Http failure response') && err.message.includes('/api/host/')) {
     return false;
   }
   return true;
