@@ -1,0 +1,50 @@
+---
+# Network
+public_network: "192.168.3.0/24"
+cluster_network: "192.168.4.0/24"
+
+# NVMe-of
+nvmeof_backing_devices:
+  - /dev/vds
+  - /dev/vdt
+  - /dev/vdu
+  - /dev/vdv
+nvmeof_devices_info: |
+  {% set subsystems = [] %}
+  {% for path in nvmeof_backing_devices %}
+    {% set device_entry = {
+                            'allowed_hosts': [
+                              'hostnqn'
+                            ],
+                            'attr': {
+                              'allow_any_host': '0'
+                            },
+                            'namespaces': [
+                              {
+                                'device': {
+                                  'nguid': lookup('pipe', 'uuidgen'),
+                                  'path': path
+                                 },
+                                 'enable': 1,
+                                 'nsid': loop.index
+                              }
+                            ],
+                            'nqn': 'testnqn' ~ (loop.index) | string
+                          } %}
+    {% set _ = subsystems.append(device_entry) %}
+  {% endfor %}
+  {{ subsystems }}
+nvmeof:
+  hosts:
+    - nqn: hostnqn
+  ports:
+    - addr:
+        adrfam: ''
+        traddr: ''
+        treq: not specified
+        trsvcid: ''
+        trtype: loop
+      portid: 1
+      referrals: []
+      subsystems: "{{ range(1, nvmeof_backing_devices | length + 1) | map('string') | map('regex_replace', '^(.*)$', 'testnqn\\1') | list }}"
+  subsystems: "{{ nvmeof_devices_info | from_yaml }}"
