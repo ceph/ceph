@@ -91,20 +91,73 @@ else()
   set(USING_MOLD_LINKER FALSE CACHE INTERNAL "")
 endif()
 
-option(WITH_CCACHE "Build with ccache.")
+option(WITH_PCH "Build with precompiled headers" OFF)
+option(WITH_CCACHE "Build with ccache." OFF)
+option(WITH_SCCACHE "Build with sccache." OFF)
+
+# A compiler cache and WITH_PCH are safe together only under Clang.  CMake
+# builds the precompiled header from a stub source holding nothing but a
+# comment, the payload arriving through -include, and both caches key that
+# compilation on the stub's preprocessed text.  A macro definition emits no
+# text, so editing one in the payload leaves the key unchanged, the cache
+# restores the previous precompiled header, and every translation unit is then
+# rebuilt against it and silently carries the old value.  Measured under gcc
+# 15.2 with ccache 4.12.3 (with pch_defines, which is what makes ccache cache
+# these objects at all) and with sccache 0.13.0; Clang was correct under
+# both.  Changes that do emit text, an inline body or a new #include, are
+# caught everywhere.
+#
+# Allow-listed rather than refusing GNU, so that a compiler this was never
+# measured on fails closed.
+if(WITH_PCH AND (WITH_CCACHE OR WITH_SCCACHE)
+    AND NOT CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  message(FATAL_ERROR
+    "WITH_PCH with WITH_CCACHE or WITH_SCCACHE is supported only under Clang: "
+    "with ${CMAKE_CXX_COMPILER_ID} the cache does not notice changes to macros "
+    "in the precompiled header and would serve stale objects.  Build with "
+    "Clang, or turn off WITH_PCH or the cache.")
+endif()
+
 if(WITH_CCACHE)
   if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
     message(WARNING "Compiler launcher already set. stop configuring ccache")
+    if(WITH_PCH)
+      # The sloppiness below is what makes PCH-built objects cacheable, and it
+      # is not reached on this path.
+      message(WARNING "WITH_PCH needs pch_defines and time_macros in "
+        "CCACHE_SLOPPINESS. Set it in the environment or ccache.conf, or "
+        "objects built against a precompiled header will never be cached.")
+    endif()
   else()
     find_program(CCACHE_EXECUTABLE ccache
       REQUIRED)
     message(STATUS "Building with ccache: ${CCACHE_EXECUTABLE}, CCACHE_DIR=$ENV{CCACHE_DIR}")
     set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
+    set(cxx_launcher ${CCACHE_EXECUTABLE})
+    if(WITH_PCH)
+      # Objects built against a precompiled header are uncacheable unless
+      # ccache is told to tolerate how a PCH handles __DATE__/__TIME__ and -D.
+      # Without this, a PCH-enabled target gets no cache hits at all.  Only C++
+      # is wrapped: the precompiled header is applied to CXX sources alone, so
+      # C compilation would take the looser hashing and gain nothing.
+
+      # CCACHE_SLOPPINESS replaces the ccache.conf value rather than adding to
+      # it, so start from whatever the developer already configured.
+      execute_process(
+        COMMAND ${CCACHE_EXECUTABLE} --get-config sloppiness
+        OUTPUT_VARIABLE ccache_sloppiness
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+
+      # ccache trims spaces, drops empty entries and de-duplicates, so the two
+      # values this needs can simply be appended to that.
+      list(PREPEND cxx_launcher ${CMAKE_COMMAND} -E env
+        "CCACHE_SLOPPINESS=${ccache_sloppiness},pch_defines,time_macros")
+    endif()
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${cxx_launcher})
   endif()
 endif(WITH_CCACHE)
 
-option(WITH_SCCACHE "Build with sccache.")
 if(WITH_SCCACHE)
   find_program(SCCACHE_EXECUTABLE sccache
     REQUIRED)

@@ -263,9 +263,70 @@ UNIX timestamp) and set ``ENABLE_GIT_VERSION`` to ``OFF`` when running
   production or debugging purposes, as they do not contain the correct build
   time and git version information.
 
+Building Ceph with precompiled headers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``WITH_PCH`` lets the compiler parse the core ``std``, ``fmt``, ``boost`` and
+Ceph infrastructure headers once per target rather than once per translation
+unit. It is off by default:
+
+.. prompt:: bash $
+
+  cmake -DWITH_PCH=ON ..
+
+Only the targets measured to benefit are accelerated. They are listed at the
+end of ``src/CMakeLists.txt``, with the per-target figures and the conditions
+they were measured under.
+
+Clang gains the most, and unevenly: it cuts the compile CPU of the ``rbd`` and
+``common`` targets by half or more, while ``osd``, ``mds`` and the ``rgw``
+targets gain much less. GCC gains less, but more evenly across the set. This
+is compiler CPU on the accelerated targets alone; the wall-clock gain over a
+whole ``vstart`` build is smaller, as the rest of the build and the linking are
+untouched.
+
+The cost is disk. Each accelerated target writes its own precompiled header
+into the build tree, roughly 100MB under Clang against roughly 400MB under GCC,
+or roughly 1GB against 4GB across the targets of a ``vstart`` build. Release
+builds are smaller for both.
+
+``WITH_PCH`` is worth enabling under Clang: the larger speed-up for a quarter
+of the disk, with ``ccache`` or ``sccache`` alongside it. Under GCC it is the
+lesser option, a smaller gain for four times the disk, and it cannot be
+combined with a compiler cache at all.
+
+``cmake`` refuses ``WITH_CCACHE`` or ``WITH_SCCACHE`` together with
+``WITH_PCH`` under every compiler but Clang, because neither cache notices
+when a macro in the payload changes: it restores the precompiled header it
+built before, and every translation unit is then rebuilt against that and
+silently carries the old value. Changes that emit text, an inline function
+body or a new ``#include``, are caught normally.
+
+With Clang, both caches work correctly:
+``sccache`` needs no configuration at all.
+``ccache`` needs ``pch_defines`` and ``time_macros`` in ``CCACHE_SLOPPINESS``,
+or objects built against a precompiled header are not cached at all;
+``WITH_PCH`` adds both for that build, without modifying ``ccache.conf``.
+Refer to the `precompiled headers`_ section of the ccache manual.
+
+Which to prefer under GCC depends on what you rebuild. A cache does nothing
+for a cold build or for the recompilation that follows a change to a widely
+included header, which is exactly where a precompiled header helps; a
+precompiled header does nothing for a rebuild that a cache can answer
+outright.
+
+.. important:: A precompiled header must never be what makes a translation
+   unit compile. Every translation unit has to keep including what it uses, so
+   that the default build still works.
+
+In CI it suits jobs that only have to answer, quickly, whether the tree still
+compiles; a job whose build gets delivered should keep the settings of the
+deliverable. Some job has to build without it, or nothing catches the drift.
+
 .. _`ccache`: https://ccache.samba.org/
 .. _`run modes`: https://ccache.samba.org/manual.html#_run_modes
 .. _`configuration`: https://ccache.samba.org/manual.html#_configuration
+.. _`precompiled headers`: https://ccache.dev/manual/latest.html#_precompiled_headers
 
 Development-mode cluster
 ------------------------
