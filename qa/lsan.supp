@@ -64,8 +64,11 @@ leak:libcryptsetup
 leak:^RAND_bytes_ex
 leak:^RAND_priv_bytes_ex
 # OpenSSL per-thread error stack/strings, freed only by OPENSSL_thread_stop.
+# ossl_err_get_state_int is internal, so a stripped .dynsym leaves
+# only its exported caller ERR_set_mark to match on.
 leak:^ossl_err_get_state_int
 leak:^ERR_add_error_vdata
+leak:^ERR_set_mark
 
 # unittest-seastore stops the seastar reactor (SeastarRunner, on its own thread)
 # without draining its pending tasks, so a few cached extents those tasks still
