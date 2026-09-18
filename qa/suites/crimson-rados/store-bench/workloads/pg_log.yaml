@@ -1,0 +1,14 @@
+roles:
+- - osd.0
+
+tasks:
+- install:
+- crimson_store_bench:
+    work_load_type: pg_log
+    duration: 30
+    num_concurrent_io: 4
+    smp: 4
+    num_logs: 4
+    log_size: 1024
+    log_length: 256
+    dump_metrics: true
