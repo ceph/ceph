@@ -72,6 +72,13 @@ public:
   void set_diff_mask(unsigned mask) {
     diff_mask = mask;
   }
+  void remount() {
+    ceph_shutdown(cmount);
+    ceph_create(&cmount, NULL);
+    ceph_conf_read_file(cmount, NULL);
+    ceph_conf_parse_env(cmount, NULL);
+    ceph_assert(0 == ceph_mount(cmount, NULL));
+  }
   int conf_get(const char *option, char *buf, size_t len) {
     return ceph_conf_get(cmount, option, buf, len);
   }
@@ -2446,4 +2453,91 @@ TEST(LibCephFS, SnapDiffStatDelta) {
 
   test_mount.rmsnap("snap1");
   test_mount.rmsnap("snap2");
+}
+
+// Large xattrs and varying file counts force overflow at the last entry.
+TEST(LibCephFS, SnapDiffDeletedEntryAtFragEnd) {
+  TestMount test_mount("snapdiff_deleted_frag_end");
+
+  const int max_files = 24;
+  const string xattr_value(60000, 'x');
+  char path[PATH_MAX];
+  for (int n = 1; n <= max_files; n++) {
+    snprintf(path, sizeof(path), "d%d", n);
+    ASSERT_EQ(0, test_mount.mkdir(path));
+    for (int i = 0; i < n; i++) {
+      snprintf(path, sizeof(path), "d%d/f%d", n, i);
+      ASSERT_LE(0, test_mount.write_full(path, path));
+      ASSERT_EQ(0, test_mount.setxattr(path, "user.big", xattr_value.c_str()));
+    }
+  }
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  for (int n = 1; n <= max_files; n++) {
+    for (int i = 0; i < n; i++) {
+      snprintf(path, sizeof(path), "d%d/f%d", n, i);
+      ASSERT_EQ(0, test_mount.unlink(path));
+    }
+  }
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  uint64_t snapid1;
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+
+  for (int n = 1; n <= max_files; n++) {
+    vector<pair<string, uint64_t>> expected;
+    for (int i = 0; i < n; i++) {
+      expected.emplace_back("f" + stringify(i), snapid1);
+    }
+    snprintf(path, sizeof(path), "d%d", n);
+    SCOPED_TRACE(path);
+    test_mount.verify_snap_diff(expected, path, "snap1", "snap2");
+  }
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffCreatedEntryAtFragEnd) {
+  TestMount test_mount("snapdiff_created_frag_end");
+
+  const int max_files = 24;
+  const string xattr_value(60000, 'x');
+  char path[PATH_MAX];
+  for (int n = 1; n <= max_files; n++) {
+    snprintf(path, sizeof(path), "d%d", n);
+    ASSERT_EQ(0, test_mount.mkdir(path));
+  }
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  for (int n = 1; n <= max_files; n++) {
+    for (int i = 0; i < n; i++) {
+      snprintf(path, sizeof(path), "d%d/f%d", n, i);
+      ASSERT_LE(0, test_mount.write_full(path, path));
+      ASSERT_EQ(0, test_mount.setxattr(path, "user.big", xattr_value.c_str()));
+    }
+  }
+  // Drop caps before snap2 to avoid COW adding another head dentry.
+  test_mount.remount();
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  uint64_t snapid1;
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+
+  for (int n = 1; n <= max_files; n++) {
+    vector<pair<string, uint64_t>> expected;
+    for (int i = 0; i < n; i++) {
+      expected.emplace_back("f" + stringify(i), snapid2);
+    }
+    snprintf(path, sizeof(path), "d%d", n);
+    SCOPED_TRACE(path);
+    test_mount.verify_snap_diff(expected, path, "snap1", "snap2");
+  }
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
