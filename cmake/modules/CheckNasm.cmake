@@ -19,7 +19,7 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
       set(CMAKE_REQUIRED_QUIET ${save_quiet})
       if(${_support_x64})
         # nasm removes the file on failure, and we expect failure, so use temp file
-        execute_process(COMMAND mktemp --suffix=.o
+        execute_process(COMMAND mktemp -t nasm
           OUTPUT_VARIABLE nasm_tmp_obj
           OUTPUT_STRIP_TRAILING_WHITESPACE)
         execute_process(COMMAND nasm -f ${object_format} -i
@@ -32,7 +32,7 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
         if(NOT rc)
           set(${_support_x64_and_avx2} TRUE)
         endif()
-        execute_process(COMMAND mktemp --suffix=.o
+        execute_process(COMMAND mktemp -t nasm
           OUTPUT_VARIABLE nasm_tmp_obj
           OUTPUT_STRIP_TRAILING_WHITESPACE)
         execute_process(COMMAND nasm -D HAVE_AS_KNOWS_AVX512 -f ${object_format}
@@ -45,7 +45,7 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
         if(NOT rt)
           set(${_support_x64_and_avx512} TRUE)
         endif()
-        execute_process(COMMAND mktemp --suffix=.o
+        execute_process(COMMAND mktemp -t nasm
           OUTPUT_VARIABLE nasm_tmp_obj
           OUTPUT_STRIP_TRAILING_WHITESPACE)
         execute_process(COMMAND nasm -D AS_FEATURE_LEVEL=10 -f ${object_format}
