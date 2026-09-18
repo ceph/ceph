@@ -1,8 +1,9 @@
 .. _Get Involved:
+.. _get-involved:
 
-=====================================
- Get Involved in the Ceph Community!
-=====================================
+=========================
+ Ceph Community Channels
+=========================
 
 .. meta::
    :description: The mailing lists, chat channels, meetings, and trackers of the Ceph community.
@@ -11,7 +12,8 @@
    :ceph-reviewed: 2026-09
    :ceph-owner: docs
 
-These are exciting times in the Ceph community! Get involved!
+The Ceph community talks in these places. Pick the channel that fits
+your question.
 
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | Channel              | Description                                     | Contact Info                                  |

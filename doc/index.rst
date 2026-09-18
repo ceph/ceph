@@ -5,6 +5,8 @@
 .. meta::
    :description: Ceph documentation. Ceph delivers object, block, and file storage in one unified system.
    :ceph-page-type: assembly
+   :ceph-applies-to: all releases
+   :ceph-reviewed: 2026-09
    :ceph-owner: docs
 
 Ceph delivers **object, block, and file storage in one unified system**. It
@@ -28,8 +30,8 @@ is and walks you through a first cluster.
        :ref:`Cephadm <cephadm>`,
        :doc:`Upgrading <cephadm/upgrade>`
    * - Operate a cluster
-     - :ref:`Cluster operations <rados-operations>`,
-       :ref:`Manager modules <ceph-manager-daemon>`,
+     - :ref:`Cluster Operations <rados-operations>`,
+       :ref:`Manager Modules <ceph-manager-daemon>`,
        :ref:`Dashboard <mgr-dashboard>`,
        :ref:`Monitoring <monitoring>`
    * - Use a storage service
@@ -39,9 +41,9 @@ is and walks you through a first cluster.
        :ref:`Kubernetes (CSI) <ceph-csi>`
    * - Fix a problem
      - :ref:`Troubleshooting <rados_troubleshooting>`,
-       :doc:`Health checks <rados/operations/health-checks>`,
-       :doc:`CephFS troubleshooting <cephfs/troubleshooting>`,
-       :doc:`RGW troubleshooting <radosgw/troubleshooting>`
+       :doc:`Health Checks <rados/operations/health-checks>`,
+       :doc:`CephFS Troubleshooting <cephfs/troubleshooting>`,
+       :doc:`RGW Troubleshooting <radosgw/troubleshooting>`
    * - Look something up
      - :doc:`Configuration <rados/configuration/index>`,
        :doc:`APIs <api/index>`,
@@ -50,7 +52,20 @@ is and walks you through a first cluster.
    * - Contribute
      - :doc:`Developer Guide <dev/developer_guide/index>`,
        :ref:`Documenting Ceph <documenting_ceph>`,
-       :ref:`Get Involved <Get Involved>`
+       :ref:`Ceph Community Channels <get-involved>`
+
+Next Steps
+==========
+
+- New to Ceph: :ref:`Start Here <start-here>`.
+- Ready to deploy: :ref:`cephadm_deploying_new_cluster`.
+
+Additional Resources
+====================
+
+- :ref:`Ceph Releases <ceph-releases-general>`
+- :doc:`Ceph Foundation <foundation>`
+- `Report a documentation bug <https://pad.ceph.com/p/Report_Documentation_Bugs>`_
 
 .. toctree::
    :maxdepth: 3

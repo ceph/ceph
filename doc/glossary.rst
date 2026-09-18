@@ -305,13 +305,6 @@
         Hybrid OSD  
                 Refers to an OSD that has both HDD and SSD drives.
 
-        librados
-                An API that can be used to create a custom interface to a Ceph
-                storage cluster. ``librados`` makes it possible to interact
-                with Ceph Monitors and with OSDs. See :ref:`Introduction to
-                librados <librados-intro>`. See :ref:`librados (Python)
-                <librados-python>`.
-
 	Keyring
                 A file that holds one or more Ceph user names and their secret
                 keys. Clients and daemons present a key from a keyring to
@@ -319,6 +312,13 @@
                 the administrator's keyring to
                 ``/etc/ceph/ceph.client.admin.keyring``. See :ref:`User
                 Management <user-management>`.
+
+        librados
+                An API that can be used to create a custom interface to a Ceph
+                storage cluster. ``librados`` makes it possible to interact
+                with Ceph Monitors and with OSDs. See :ref:`Introduction to
+                librados <librados-intro>`. See :ref:`librados (Python)
+                <librados-python>`.
 
 	LVM tags
                 **L**\ogical **V**\olume **M**\anager tags. Extensible metadata
