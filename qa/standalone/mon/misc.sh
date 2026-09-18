@@ -289,7 +289,9 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "nvmeof_beacon_diff" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "umbrella")'
     jq_success "$jqinput" "$jqfilter" "umbrella" || return 1
-    jqfilter='.monmap.features.persistent | length == 14'
+    jqfilter='.monmap.features.persistent[]|select(. == "cephx_auth_aes256k")'
+    jq_success "$jqinput" "$jqfilter" "cephx_auth_aes256k" || return 1
+    jqfilter='.monmap.features.persistent | length == 15'
     jq_success "$jqinput" "$jqfilter" || return 1
 
     CEPH_ARGS=$CEPH_ARGS_orig
