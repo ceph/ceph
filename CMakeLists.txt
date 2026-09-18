@@ -464,7 +464,26 @@ set(ALLOCATOR "" CACHE STRING
   "specify memory allocator to use. currently tcmalloc, tcmalloc_minimal, \
 jemalloc, and libc is supported. if not specified, will try to find tcmalloc, \
 and then jemalloc. If neither of then is found. use the one in libc.")
-if(ALLOCATOR)
+option(GOOGLE_TCMALLOC "Build Google's TCMalloc instead of gperftools" OFF)
+option(GOOGLE_TCMALLOC_THP
+  "Allow transparent huge pages with Google's TCMalloc" OFF)
+if(GOOGLE_TCMALLOC_THP AND NOT GOOGLE_TCMALLOC)
+  message(FATAL_ERROR "GOOGLE_TCMALLOC_THP requires GOOGLE_TCMALLOC=ON")
+endif()
+if(GOOGLE_TCMALLOC)
+  if(ALLOCATOR AND NOT ALLOCATOR STREQUAL "tcmalloc")
+    message(FATAL_ERROR "GOOGLE_TCMALLOC requires ALLOCATOR=tcmalloc")
+  endif()
+  if(WITH_ASAN OR WITH_ASAN_LEAK OR WITH_TSAN OR WITH_CRIMSON)
+    message(FATAL_ERROR
+      "GOOGLE_TCMALLOC is incompatible with ASAN, LeakSanitizer, TSAN, and Crimson")
+  endif()
+  include(BuildGoogleTCMalloc)
+  build_google_tcmalloc()
+  set(ALLOCATOR tcmalloc)
+  set(ALLOC_LIBS google_tcmalloc)
+  set(HAVE_GOOGLE_TCMALLOC ON)
+elseif(ALLOCATOR)
   if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
     find_package(gperftools 2.6.2 REQUIRED)
     set(ALLOC_LIBS gperftools::${ALLOCATOR})
@@ -480,7 +499,7 @@ elseif(WITH_ASAN)
   # Force libc: tcmalloc/jemalloc still export operator new/delete even when the
   # sanitizer shadows malloc, so sanitizer-allocated memory is freed via tcmalloc and SIGSEGVs.
   set(ALLOCATOR "libc")
-else(ALLOCATOR)
+else()
   find_package(gperftools 2.6.2)
   set(HAVE_LIBTCMALLOC ${gperftools_FOUND})
   if(NOT gperftools_FOUND)
@@ -499,7 +518,7 @@ else(ALLOCATOR)
     endif()
     set(ALLOCATOR "libc")
   endif(gperftools_FOUND)
-endif(ALLOCATOR)
+endif()
 if(NOT ALLOCATOR STREQUAL "libc")
   add_compile_options(
     $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-malloc>

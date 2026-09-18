@@ -17,11 +17,15 @@
 
 #include "acconfig.h"
 
+#ifdef HAVE_GOOGLE_TCMALLOC
+#include "google_tcmalloc.h"
+#else
 // Use the newer gperftools header locations if available.
 // If not, fall back to the old (gperftools < 2.0) locations.
 
 #include <gperftools/heap-profiler.h>
 #include <gperftools/malloc_extension.h>
+#endif
 
 #include "common/environment.h"
 #include "common/LogClient.h"
@@ -48,38 +52,60 @@ void ceph_heap_profiler_init()
 
 void ceph_heap_profiler_stats(char *buf, int length)
 {
+#ifdef HAVE_GOOGLE_TCMALLOC
+  ceph_tcmalloc_get_stats(buf, length);
+#else
   MallocExtension::instance()->GetStats(buf, length);
+#endif
 }
 
 void ceph_heap_release_free_memory()
 {
+#ifdef HAVE_GOOGLE_TCMALLOC
+  ceph_tcmalloc_release_free_memory();
+#else
   MallocExtension::instance()->ReleaseFreeMemory();
+#endif
 }
 
 double ceph_heap_get_release_rate()
 {
+#ifdef HAVE_LIBTCMALLOC
   return MallocExtension::instance()->GetMemoryReleaseRate();
+#else
+  return 0;
+#endif
 }
 
 void ceph_heap_set_release_rate(double val)
 {
+#ifdef HAVE_LIBTCMALLOC
   MallocExtension::instance()->SetMemoryReleaseRate(val);
+#endif
 }
 
 bool ceph_heap_get_numeric_property(
   const char *property, size_t *value)
 {
+#ifdef HAVE_GOOGLE_TCMALLOC
+  return ceph_tcmalloc_get_numeric_property(property, value);
+#else
   return MallocExtension::instance()->GetNumericProperty(
     property,
     value);
+#endif
 }
 
 bool ceph_heap_set_numeric_property(
   const char *property, size_t value)
 {
+#ifdef HAVE_GOOGLE_TCMALLOC
+  return false;
+#else
   return MallocExtension::instance()->SetNumericProperty(
     property,
     value);
+#endif
 }
 
 bool ceph_heap_profiler_running()
@@ -91,6 +117,7 @@ bool ceph_heap_profiler_running()
 #endif
 }
 
+#ifdef HAVE_LIBTCMALLOC
 static void get_profile_name(char *profile_name, int profile_name_len)
 {
 #if __GNUC__ && __GNUC__ >= 8
@@ -116,6 +143,7 @@ static void get_profile_name(char *profile_name, int profile_name_len)
 #pragma GCC diagnostic pop
 #endif
 }
+#endif
 
 void ceph_heap_profiler_start()
 {
@@ -164,9 +192,6 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
   } else if (cmd.size() == 1 && cmd[0] == "stop_profiler") {
     ceph_heap_profiler_stop();
     out << g_conf()->name << " stopped profiler";
-  } else if (cmd.size() == 1 && cmd[0] == "release") {
-    ceph_heap_release_free_memory();
-    out << g_conf()->name << " releasing free RAM back to system.";
   } else if (cmd.size() == 1 && cmd[0] == "get_release_rate") {
     out << g_conf()->name << " release rate: " 
 	<< std::setprecision(4) << ceph_heap_get_release_rate() << "\n";
@@ -181,7 +206,10 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
     }
   } else
 #endif
-  if (cmd.size() == 1 && cmd[0] == "stats") {
+  if (cmd.size() == 1 && cmd[0] == "release") {
+    ceph_heap_release_free_memory();
+    out << g_conf()->name << " releasing free RAM back to system.";
+  } else if (cmd.size() == 1 && cmd[0] == "stats") {
     char heap_stats[HEAP_PROFILER_STATS_SIZE];
     ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
     out << g_conf()->name << " tcmalloc heap stats:"
