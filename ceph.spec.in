@@ -54,7 +54,11 @@
 %bcond_without lttng
 %bcond_without libradosstriper
 %bcond_without ocf
+%ifarch x86_64 aarch64 loongarch64
 %bcond_without lancedb
+%else
+%bcond_with lancedb
+%endif
 %global luarocks_package_name luarocks
 %bcond_without lua_packages
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
