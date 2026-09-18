@@ -200,15 +200,48 @@ void RadosTestECPPNS::TearDown()
 std::string RadosTestPP::pool_name_default;
 Rados RadosTestPPBase::s_cluster;
 
-void RadosTestPP::SetUpTestCase()
+void RadosTestPP::SetUpTestCase(int pool_size)
 {
   init_rand();
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
   pool_name_default = get_temp_pool_name(pool_prefix);
-  std::map<std::string, std::string> config = {{"rados_replica_read_policy", "default"}};
-  ASSERT_EQ("", connect_cluster_pp(s_cluster, config));
-  ASSERT_EQ("", create_pool_pp(pool_name_default, s_cluster));
+  ASSERT_EQ("", connect_cluster_pp(s_cluster));
+  ASSERT_NO_FATAL_FAILURE(clear_all_client_config_overrides(s_cluster));
+  ASSERT_EQ("", create_pool_pp(pool_name_default, s_cluster, pool_size));
   s_cluster.wait_for_latest_osdmap();
+}
+
+// Sets config values for the client. Does not propagate them across the cluster
+void RadosTestPPBase::set_client_config_overrides(
+    librados::Rados& cluster,
+    const std::map<std::string, std::string>& config)
+{
+  for (const auto& [key, value] : config) {
+    int ret = cluster.conf_set(key.c_str(), value.c_str());
+    ASSERT_EQ(0, ret);
+  }
+}
+
+// Clears all config values for the client. Does not propagate them across the cluster
+void RadosTestPPBase::clear_all_client_config_overrides(librados::Rados& cluster)
+{
+  CephContext* cct = static_cast<CephContext*>(cluster.cct());
+  std::vector<std::string> keys;
+  cct->_conf.get_config_values().for_each(
+      [&keys](
+          std::string_view name,
+          const std::map<int32_t, Option::value_t>& configs) {
+        if (configs.count(CONF_OVERRIDE)) {
+          keys.emplace_back(name);
+        }
+      });
+  for (const auto& key : keys) {
+    int ret = cct->_conf.rm_val(key);
+    ASSERT_EQ(0, ret);
+  }
+  if (!keys.empty()) {
+    cct->_conf.apply_changes(nullptr);
+  }
 }
 
 void RadosTestPP::TearDownTestCase()
@@ -392,8 +425,8 @@ void RadosTestECPP::SetUpTestCase()
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
   pool_name_default = get_temp_pool_name(pool_prefix);
   pool_name_fast = get_temp_pool_name(pool_prefix);
-  std::map<std::string, std::string> config = {{"rados_replica_read_policy", "default"}};
-  ASSERT_EQ("", connect_cluster_pp(s_cluster, config));
+  ASSERT_EQ("", connect_cluster_pp(s_cluster));
+  ASSERT_NO_FATAL_FAILURE(clear_all_client_config_overrides(s_cluster));
   ASSERT_EQ("", create_ec_pool_pp(pool_name_default, s_cluster, false));
   ASSERT_EQ("", create_ec_pool_pp(pool_name_fast, s_cluster, true));
   s_cluster.wait_for_latest_osdmap();

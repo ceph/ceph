@@ -20,8 +20,27 @@
 using namespace librados;
 using std::string;
 
-typedef RadosTestPP LibRadosIoPP;
-typedef RadosTestECPP LibRadosIoECPP;
+class LibRadosIoPP : public RadosTestPP {
+public:
+  static void
+  SetUpTestCase()
+  {
+    RadosTestPP::SetUpTestCase();
+    ASSERT_NO_FATAL_FAILURE(set_client_config_overrides(
+        s_cluster, {{"rados_replica_read_policy", "default"}}));
+  }
+};
+
+class LibRadosIoECPP : public RadosTestECPP {
+public:
+  static void
+  SetUpTestCase()
+  {
+    RadosTestECPP::SetUpTestCase();
+    ASSERT_NO_FATAL_FAILURE(set_client_config_overrides(
+        s_cluster, {{"rados_replica_read_policy", "default"}}));
+  }
+};
 
 TEST_P(LibRadosIoPP, TooBigPP) {
   IoCtx ioctx;
