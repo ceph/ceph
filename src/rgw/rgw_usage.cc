@@ -107,7 +107,6 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
         }
 
         dump_usage_categories_info(formatter, entry, categories);
-
         formatter->open_object_section("s3select");
         if (!categories || categories->empty() || categories->count("s3select")) {
           formatter->dump_unsigned("bytes_processed", entry.s3select_usage.bytes_processed);
