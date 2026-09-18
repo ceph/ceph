@@ -11,6 +11,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { ConfigurationComponent } from './configuration.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 describe('ConfigurationComponent', () => {
   let component: ConfigurationComponent;
@@ -36,6 +37,26 @@ describe('ConfigurationComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('isEditable', () => {
+    it('should return true for a single selected configuration', () => {
+      const selection = new CdTableSelection();
+      selection.selected = [{ name: 'public_network', can_update_at_runtime: false }];
+      expect(component.isEditable(selection)).toBe(true);
+    });
+
+    it('should return false when no configuration or multiple configurations are selected', () => {
+      const selection = new CdTableSelection();
+      selection.selected = [];
+      expect(component.isEditable(selection)).toBe(false);
+
+      selection.selected = [
+        { name: 'public_network', can_update_at_runtime: false },
+        { name: 'cluster_network', can_update_at_runtime: false }
+      ];
+      expect(component.isEditable(selection)).toBe(false);
+    });
   });
 
   // TODO: Re-write this unit test to reflect latest changes on datatble markup

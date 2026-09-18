@@ -1,0 +1,107 @@
+<cds-modal
+  size="md"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h4
+      cdsModalHeaderLabel
+      class="cds--type-label-01"
+      i18n
+    >
+      Cluster Configuration
+    </h4>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      Restart Required Services
+    </h3>
+  </cds-modal-header>
+
+  <section cdsModalContent>
+    <div class="cds-mb-4">
+      <cd-alert-panel
+        type="warning"
+        spacingClass="cds-mb-3"
+      >
+        <span i18n>
+          Restarting services may cause temporary service disruption, potential downtime, or data
+          unavailability. Please make sure no I/O is happening before proceeding.
+        </span>
+      </cd-alert-panel>
+      <cd-alert-panel
+        type="info"
+        spacingClass="cds-mb-3"
+        *ngIf="hasMgrService"
+      >
+        <span i18n>
+          Note: Manager (MGR) hosts the active Dashboard session. Restarting MGR via UI will
+          temporarily drop connection. Use CLI (ceph orch restart mgr) or allow failover.
+        </span>
+      </cd-alert-panel>
+      <p
+        class="cds--type-body-01 cds-mb-3"
+        i18n
+      >
+        Configuration option <strong>{{ configName }}</strong> was updated successfully. The
+        following service(s) require a restart for changes to take effect:
+      </p>
+
+      <!-- Carbon Service Restart List -->
+      <div class="service-restart-list cds-mb-4">
+        <div
+          *ngFor="let item of serviceItems"
+          class="service-restart-row"
+        >
+          <div class="service-info">
+            <span class="service-name">{{ item.name | uppercase }}</span>
+            <cds-tag [type]="item.tagType">{{ item.statusText }}</cds-tag>
+          </div>
+          <button
+            type="button"
+            cdsButton="tertiary"
+            size="sm"
+            [disabled]="item.status === 'restarting' || item.status === 'restarted'"
+            (click)="restartSingleService(item)"
+          >
+            <ng-container *ngIf="item.status === 'restarting'">
+              <cds-inline-loading
+                status="active"
+                loadingText="Restarting..."
+              ></cds-inline-loading>
+            </ng-container>
+            <ng-container *ngIf="item.status !== 'restarting'">
+              {{ item.status === 'restarted' ? 'Restarted' : 'Restart' }}
+            </ng-container>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <cds-modal-footer>
+    <button
+      type="button"
+      cdsButton="secondary"
+      (click)="skipRestart()"
+    >
+      <ng-container *ngIf="allRestarted">Close</ng-container>
+      <ng-container *ngIf="!allRestarted">Skip / Restart Later</ng-container>
+    </button>
+    <button
+      type="button"
+      cdsButton="primary"
+      [disabled]="allRestarted || restartingAll"
+      (click)="restartAllServices()"
+    >
+      <ng-container *ngIf="restartingAll">
+        <cds-inline-loading
+          status="active"
+          loadingText="Restarting All..."
+        ></cds-inline-loading>
+      </ng-container>
+      <ng-container *ngIf="!restartingAll"> Restart All Services </ng-container>
+    </button>
+  </cds-modal-footer>
+</cds-modal>
