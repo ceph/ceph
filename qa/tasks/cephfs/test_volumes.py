@@ -2894,7 +2894,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # set earmark
         earmark = "smb"
-        self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, "--earmark", earmark)
+        self._fs_cmd("subvolume", "earmark", "set", self.volname, subvolume, earmark)
 
         # get earmark
         get_earmark = self._fs_cmd("subvolume", "earmark", "get", self.volname, subvolume)
@@ -3082,10 +3082,10 @@ class TestSubvolumes(TestVolumesHelper):
         # set enctag
         enctag_error = "b" * 256 #expect a failure since lenght is too long
         with self.assertRaises(CommandFailedError):
-            self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, "--enctag", enctag_error)
+            self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, enctag_error)
 
         enctag = "tag2"
-        self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, "--enctag", enctag)
+        self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, enctag)
 
         # get enctag
         get_enctag = self._fs_cmd("subvolume", "enctag", "get", self.volname, subvolume)

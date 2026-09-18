@@ -700,7 +700,7 @@ Use a command of the following form to set the earmark of a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume earmark set <vol_name> <subvol_name> [--group_name <subvol_group_name>] <earmark>
+   ceph fs subvolume earmark set <vol_name> <subvol_name> <earmark> [--group_name <subvol_group_name>]
 
 Removing Earmark of a Subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -727,7 +727,7 @@ Use a command of the following form to set the enctag on a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume enctag set <vol_name> <subvol_name> [--group_name <subvol_group_name>] <enctag>
+   ceph fs subvolume enctag set <vol_name> <subvol_name> <enctag> [--group_name <subvol_group_name>]
 
 Removing enctag of a subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
