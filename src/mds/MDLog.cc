@@ -712,6 +712,7 @@ void MDLog::log_trim_upkeep(void) {
   std::unique_lock mds_lock(mds->mds_lock);
   while (!upkeep_log_trim_shutdown.load()) {
     if (mds->is_active() || mds->is_stopping()) {
+      MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_log_trim);
       trim();
     }
 
