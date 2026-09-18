@@ -2831,6 +2831,9 @@ struct bucket_source_sync_info {
   std::string status;
   rgw_bucket bucket_source;
 
+  std::optional<BucketSyncState> sync_state;
+  std::optional<ceph::real_time> oldest_applied_marker_timestamp;
+
   bucket_source_sync_info(const RGWZone& source): _source(source) {}
 
   void _print_plaintext(std::ostream& out, int width) const {
@@ -2855,6 +2858,10 @@ struct bucket_source_sync_info {
     } else {
       out << indented{width} << "bucket is caught up with source\n";
     }
+    if (oldest_applied_marker_timestamp) {
+      out << indented{width} << "oldest applied marker timestamp: "
+          << to_iso_8601(*oldest_applied_marker_timestamp, iso_8601_format::YMDhmsn) << "\n";
+    }
   }
 
   void _print_formatter(std::ostream& out, Formatter* formatter) const {
@@ -2872,6 +2879,10 @@ struct bucket_source_sync_info {
     formatter->dump_string("source_bucket", bucket_source.name);
     formatter->dump_string("source_bucket_id", bucket_source.bucket_id);
 
+    if (sync_state) {
+      encode_json("sync_state", *sync_state, formatter);
+    }
+
     if (!status.empty()) {
       formatter->dump_string("status", status);
       formatter->close_section();
@@ -2888,12 +2899,48 @@ struct bucket_source_sync_info {
       formatter->close_section();
     }
     formatter->close_section();
+
+    if (oldest_applied_marker_timestamp) {
+      formatter->dump_string("oldest_applied_marker_timestamp",
+                             to_iso_8601(*oldest_applied_marker_timestamp, iso_8601_format::YMDhmsn));
+    }
+
     formatter->close_section();
     formatter->flush(out);
   }
 };
 
 #ifdef WITH_RADOSGW_RADOS
+static void populate_bucket_source_incremental_progress(
+    bucket_source_sync_info& info,
+    const std::vector<rgw_bucket_shard_sync_info>& shard_status)
+{
+  info.sync_state = BucketSyncState::Incremental;
+
+  if (info.shards_behind.empty()) {
+    info.oldest_applied_marker_timestamp = ceph::real_clock::now();
+    return;
+  }
+
+  // Only report an aggregate when every behind shard has a valid local
+  // applied marker; otherwise bucket-wide progress cannot be determined.
+  std::optional<ceph::real_time> oldest;
+  for (const auto& [shard_id, _] : info.shards_behind) {
+    if (shard_id < 0 || static_cast<size_t>(shard_id) >= shard_status.size()) {
+      return;
+    }
+    const auto& ts = shard_status[shard_id].inc_marker.timestamp;
+    if (ceph::real_clock::is_zero(ts)) {
+      return;
+    }
+    if (!oldest || ts < *oldest) {
+      oldest = ts;
+    }
+  }
+
+  info.oldest_applied_marker_timestamp = oldest;
+}
+
 static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* driver,
                                      const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
@@ -2932,14 +2979,17 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   r = rgw_read_bucket_full_sync_status(dpp, driver, pipe, &full_status, null_yield);
   if (r >= 0) {
     if (full_status.state == BucketSyncState::Init) {
+      source_sync_info.sync_state = BucketSyncState::Init;
       source_sync_info.status = "init: bucket sync has not started";
       return 0;
     }
     if (full_status.state == BucketSyncState::Stopped) {
+      source_sync_info.sync_state = BucketSyncState::Stopped;
       source_sync_info.status = "stopped: bucket sync is disabled";
       return 0;
     }
     if (full_status.state == BucketSyncState::Full) {
+      source_sync_info.sync_state = BucketSyncState::Full;
       source_sync_info.status = fmt::format("full sync: {} objects completed", full_status.full.count);
       return 0;
     }
@@ -2949,12 +2999,14 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
     // no full status, but there may be per-shard status from before upgrade
     const auto& logs = source_bucket->get_info().layout.logs;
     if (logs.empty()) {
+      source_sync_info.sync_state = BucketSyncState::Init;
       source_sync_info.status = "init: bucket sync has not started";
       return 0;
     }
     const auto& log = logs.front();
     if (log.gen > 0) {
       // this isn't the backward-compatible case, so we just haven't started yet
+      source_sync_info.sync_state = BucketSyncState::Init;
       source_sync_info.status = "init: bucket sync has not started";
       return 0;
     }
@@ -3011,6 +3063,9 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   }
 
   source_sync_info.shards_behind = std::move(shards_behind);
+
+  populate_bucket_source_incremental_progress(source_sync_info, shard_status);
+
   return 0;
 }
 #endif
