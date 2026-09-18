@@ -146,9 +146,14 @@ int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
   if (attrs)
     flags |= CACHE_FLAG_XATTRS;
   
+  /* refresh_version is the version the caller already holds, so a match means
+   * the cache has nothing newer. expected_version is the version the caller
+   * requires, so a mismatch means the cache missed an update. */
+  auto expected_version = rgw_expected_version(dpp);
   int r = cache.get(dpp, name, info, flags, cache_info);
   if (r == 0 &&
-      (!refresh_version || !info.version.compare(&(*refresh_version)))) {
+      (!refresh_version || !info.version.compare(&(*refresh_version))) &&
+      (!expected_version || info.version.compare(&(*expected_version)))) {
     if (info.status < 0)
       return info.status;
 
