@@ -34,9 +34,7 @@ And('enter {string} {string} in the modal', (field: string, value: string) => {
  * @param value Value that should be filled in the field.
  */
 And('enter {string} {string} in the carbon modal', (field: string, value: string) => {
-  cy.get('cds-modal').within(() => {
-    cy.get(`input[id=${field}]`).clear().type(value);
-  });
+  cy.get(`cds-modal input[id=${field}]`).filter(':visible').clear().type(value);
 });
 
 And('select options {string}', (labels: string) => {
@@ -78,15 +76,24 @@ And('I click on submit button', () => {
 });
 
 /**
- * Clicks a button in the carbon modal and waits for the modal to close.
- * The form must be done validating before the click: the submit button
- * silently ignores clicks while the form is invalid or has pending
- * validators, which leaves the modal open and fails every later step.
+ * Clicks a button in the carbon modal and waits until only the tearsheet
+ * modal overlay remains so the hosts table is interactable again.
+ * The form must be valid before click: submit silently ignores invalid forms.
  */
 And('I submit the carbon modal with {string}', (button: string) => {
-  cy.get('cds-modal form').should('have.class', 'ng-valid');
-  cy.get(`cds-modal button[aria-label="${button}"]`).should('be.enabled').click();
-  cy.get('cds-modal').should('not.exist');
+  cy.get('cds-modal form').filter(':visible').should('have.class', 'ng-valid');
+  cy.get(`cds-modal button[aria-label="${button}"]`)
+    .filter(':visible')
+    .should('be.enabled')
+    .click();
+  // Tearsheet keeps one .cds--modal.is-visible; do not wait for all cds-modal to vanish.
+  cy.get('section.cds--modal.is-visible').should('have.length', 1);
+});
+
+And('I cancel the carbon modal', () => {
+  // cd-back-button uses aria-label="Back" while the visible label is Cancel.
+  cy.get('cds-modal button[aria-label="Back"]').filter(':visible').click({ force: true });
+  cy.get('section.cds--modal.is-visible').should('have.length', 1);
 });
 
 /**
@@ -102,7 +109,7 @@ Then('I check the tick box in carbon modal', () => {
 });
 
 Then('I confirm the resource {string}', (name: string) => {
-  cy.get('cds-modal input#resource_name').type(name);
+  cy.get('cds-modal input#resource_name').filter(':visible').clear().type(name);
 });
 
 And('I confirm to {string}', (action: string) => {
@@ -117,7 +124,10 @@ And('I confirm to {string} on carbon modal', (action: string) => {
 
 Then('I should see an error in {string} field', (field: string) => {
   cy.get('cds-modal').within(() => {
-    cy.get(`input[id=${field}]`).should('have.class', 'ng-invalid');
+    // Blur so async validators (e.g. unique hostname) run.
+    cy.get(`input[id=${field}]`).blur();
+    // Carbon shows validation in .cds--form-requirement, not always ng-invalid on input.
+    cy.get(`cds-text-label[for=${field}] .cds--form-requirement`).should('be.visible');
   });
 });
 
