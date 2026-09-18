@@ -589,6 +589,7 @@ class ExportMgr:
             'entity': f'client.{entity}',
             'caps': nfs_caps,
             'format': 'json',
+            'key_type': 'aes256k',
         })
         if ret == -errno.EINVAL and 'does not match' in err:
             ret, out, err = self.mgr.mon_command({
