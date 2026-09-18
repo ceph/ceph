@@ -154,6 +154,9 @@ public:
   bool is_http_protocol() const;
   std::string get_config_prefix() const;
   std::string get_frontend_name() const;
+  ProtocolType get_protocol_type() const {
+    return protocol_type;
+  }
 
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();

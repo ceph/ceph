@@ -37,6 +37,7 @@ namespace rgw {
     CephContext *get_cct() const override { return cct.get(); }
     unsigned get_subsys() const { return ceph_subsys_rgw; }
     std::ostream& gen_prefix(std::ostream& out) const { return out << "lib rgw: "; }
+    ProtocolType get_protocol_type() const { return main.get_protocol_type(); }
 
     void set_fe(RGWLibFrontend* fe);
 
