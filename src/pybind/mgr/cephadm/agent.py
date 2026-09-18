@@ -10,7 +10,7 @@ from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CertificateSource
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from mgr_util import test_port_allocation, PortAlreadyInUse
 from mgr_util import verify_tls_files
 import tempfile
@@ -1029,7 +1029,7 @@ class CephadmAgentHelpers:
                         f'(last_deps={last_deps} -> deps={deps}); '
                         f'pushing updated config via HTTP')
                     daemon_spec = service_registry.get_service(daemon_type_to_service(
-                        daemon_spec.daemon_type)).prepare_create(daemon_spec)
+                        daemon_spec.daemon_type)).prepare_create(DaemonDeployContext(daemon_spec, spec))
                     self.mgr.agent_helpers._request_agent_acks(
                         hosts={daemon_spec.host},
                         increment=True,

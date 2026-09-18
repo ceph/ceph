@@ -3,7 +3,7 @@ import pytest
 
 from unittest.mock import MagicMock, patch
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import (
     IngressSpec,
@@ -338,7 +338,7 @@ class TestIngressService:
                                 virtual_interface_networks=['1.2.3.0/24'],
                                 virtual_ip="1.2.3.4/32",
                                 enable_stats=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the keepalived conf based on the specified spec
                 keepalived_generated_conf = service_registry.get_service('ingress').keepalived_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -434,7 +434,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -468,7 +468,7 @@ class TestIngressService:
                                 virtual_interface_networks=['1.2.3.0/24'],
                                 virtual_ip="1.2.3.4/32",
                                 enable_stats=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the keepalived conf based on the specified spec
                 keepalived_generated_conf = service_registry.get_service('ingress').keepalived_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -566,7 +566,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1::4:443 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1::4:443 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -599,7 +599,7 @@ class TestIngressService:
                                 virtual_ip="1.2.3.4/32",
                                 use_tcp_mode_over_rgw=True,
                                 enable_stats=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
                     CephadmDaemonDeploySpec(host='test', daemon_id='ingress', service_name=ispec.service_name()))
@@ -646,7 +646,7 @@ class TestIngressService:
                                 'hash-type   consistent\n    '
                                 'option ssl-hello-chk\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1::4:443 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1::4:443 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -677,7 +677,7 @@ class TestIngressService:
                                 virtual_interface_networks=['1.2.3.0/24'],
                                 virtual_ip="1.2.3.4/32",
                                 enable_stats=True)
-            with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
+            with with_service(cephadm_module, s) as backend_daemons, with_service(cephadm_module, ispec) as _:
                 # generate the keepalived conf based on the specified spec
                 # Test with only 1 IP on the list, as it will fail with more VIPS but only one host.
                 keepalived_generated_conf = service_registry.get_service('ingress').keepalived_generate_config(
@@ -774,7 +774,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
+                                + backend_daemons[0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -973,11 +973,11 @@ class TestIngressService:
             with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_daemon_spec = service_registry.get_service('ingress').prepare_create(
-                    CephadmDaemonDeploySpec(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
                         host='test',
                         daemon_type='haproxy',
                         daemon_id='ingress',
-                        service_name=ispec.service_name()))
+                        service_name=ispec.service_name())))
 
                 assert haproxy_daemon_spec.port_ips == {str(frontend_port): ip}
 
@@ -1011,7 +1011,9 @@ class TestIngressService:
                                 keepalive_only=True)
             with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=s.service_name()))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
+                        host='test', daemon_id='foo.test.0.0',
+                        service_name=s.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Bind_addr = 1.2.3.0/24" in ganesha_conf
 
@@ -1313,12 +1315,12 @@ class TestIngressService:
         assert gen_config_lines == exp_config_lines
 
         nfs_generated_conf, _ = nfs_svc.generate_config(
-            CephadmDaemonDeploySpec(
+            DaemonDeployContext(CephadmDaemonDeploySpec(
                 host='test',
                 daemon_id='foo.test.0.0',
                 service_name=nfs_service.service_name(),
                 rank=0,
-            ),
+            )),
         )
         ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
         haproxy_hosts = {
@@ -1458,13 +1460,13 @@ class TestIngressService:
         assert 'server nfs.foo.0 10.10.2.20:12049 id 1 check inter 30s rise 2 fall 3' in gen_config_lines
 
         nfs_generated_conf, _ = nfs_svc.generate_config(
-            CephadmDaemonDeploySpec(
+            DaemonDeployContext(CephadmDaemonDeploySpec(
                 host='test',
                 daemon_id='foo.test.0.0',
                 service_name=nfs_service.service_name(),
                 rank=0,
                 ip='10.10.2.20'
-            ),
+            )),
         )
         ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
         assert "Bind_addr = 10.10.2.20" in ganesha_conf
@@ -1689,3 +1691,171 @@ def test_keepalived_should_auto_start_keepalive_only_backend():
 
     mgr.cache.get_daemons_by_service.side_effect = _with_nfs
     assert IngressService.keepalived_should_auto_start(mgr, k, spec)
+
+
+def test_tls_dependencies_apply_only_to_haproxy():
+    mgr = MagicMock()
+    backend_spec = RGWSpec(service_id='foo')
+    mgr.spec_store.__getitem__.return_value.spec = backend_spec
+
+    backend_daemons = [
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id='foo.host1',
+            hostname='host1',
+            service_name='rgw.foo',
+        )
+    ]
+    haproxy_daemons = [
+        DaemonDescription(
+            daemon_type='haproxy',
+            daemon_id='test.host1',
+            hostname='host1',
+            service_name='ingress.test',
+        )
+    ]
+
+    def _get_daemons_by_service(service_name: str):
+        if service_name == 'rgw.foo':
+            return backend_daemons
+        if service_name == 'ingress.test':
+            return haproxy_daemons
+        return []
+
+    mgr.cache.get_daemons_by_service.side_effect = _get_daemons_by_service
+
+    old_spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='inline',
+        ssl_cert='old-cert',
+        ssl_key='old-key',
+    )
+    new_spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='inline',
+        ssl_cert='new-cert',
+        ssl_key='new-key',
+    )
+
+    old_haproxy_deps = IngressService.get_dependencies(mgr, old_spec, 'haproxy')
+    new_haproxy_deps = IngressService.get_dependencies(mgr, new_spec, 'haproxy')
+    old_keepalived_deps = IngressService.get_dependencies(mgr, old_spec, 'keepalived')
+    new_keepalived_deps = IngressService.get_dependencies(mgr, new_spec, 'keepalived')
+
+    assert old_haproxy_deps != new_haproxy_deps
+    assert 'rgw.foo.host1' in new_haproxy_deps
+    assert 'certificate_source: inline' in new_haproxy_deps
+    assert f'ssl_cert: {utils.config_hash(new_spec.ssl_cert)}' in new_haproxy_deps
+    assert f'ssl_key: {utils.config_hash(new_spec.ssl_key)}' in new_haproxy_deps
+
+    assert old_keepalived_deps == new_keepalived_deps
+    assert new_keepalived_deps == ['haproxy.test.host1']
+    assert 'certificate_source: inline' not in new_keepalived_deps
+    assert not any(dep.startswith('ssl_cert:') for dep in new_keepalived_deps)
+    assert not any(dep.startswith('ssl_key:') for dep in new_keepalived_deps)
+
+
+def test_haproxy_monitor_tls_dependencies_change_on_cert_rotation():
+    mgr = MagicMock()
+    backend_spec = RGWSpec(service_id='foo')
+    mgr.spec_store.__getitem__.return_value.spec = backend_spec
+    mgr.cache.get_daemons_by_service.return_value = [
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id='foo.host1',
+            hostname='host1',
+            service_name='rgw.foo',
+        )
+    ]
+
+    old_spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='cephadm-signed',
+        monitor_ssl=True,
+        monitor_cert_source='inline',
+        monitor_ssl_cert='old-monitor-cert',
+        monitor_ssl_key='old-monitor-key',
+    )
+    new_spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='cephadm-signed',
+        monitor_ssl=True,
+        monitor_cert_source='inline',
+        monitor_ssl_cert='new-monitor-cert',
+        monitor_ssl_key='new-monitor-key',
+    )
+
+    old_haproxy_deps = IngressService.get_dependencies(mgr, old_spec, 'haproxy')
+    new_haproxy_deps = IngressService.get_dependencies(mgr, new_spec, 'haproxy')
+    old_keepalived_deps = IngressService.get_dependencies(mgr, old_spec, 'keepalived')
+    new_keepalived_deps = IngressService.get_dependencies(mgr, new_spec, 'keepalived')
+
+    assert old_haproxy_deps != new_haproxy_deps
+    assert 'monitor_cert_source: inline' in new_haproxy_deps
+    assert (
+        f'monitor_ssl_cert: {utils.config_hash(new_spec.monitor_ssl_cert)}'
+        in new_haproxy_deps
+    )
+    assert (
+        f'monitor_ssl_key: {utils.config_hash(new_spec.monitor_ssl_key)}'
+        in new_haproxy_deps
+    )
+
+    assert old_keepalived_deps == new_keepalived_deps
+    assert not any(dep.startswith('monitor_') for dep in new_keepalived_deps)
+
+
+def test_haproxy_monitor_tls_reuse_service_cert_has_no_duplicate_cert_dependencies():
+    mgr = MagicMock()
+    backend_spec = RGWSpec(service_id='foo')
+    mgr.spec_store.__getitem__.return_value.spec = backend_spec
+    mgr.cache.get_daemons_by_service.return_value = [
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id='foo.host1',
+            hostname='host1',
+            service_name='rgw.foo',
+        )
+    ]
+
+    spec = IngressSpec(
+        service_id='test',
+        backend_service='rgw.foo',
+        frontend_port=8443,
+        monitor_port=1967,
+        virtual_ip='192.168.122.100/24',
+        ssl=True,
+        certificate_source='inline',
+        ssl_cert='service-cert',
+        ssl_key='service-key',
+        monitor_ssl=True,
+        monitor_cert_source='reuse_service_cert',
+    )
+
+    deps = IngressService.get_dependencies(mgr, spec, 'haproxy')
+
+    assert 'monitor_cert_source: reuse_service_cert' in deps
+    assert f'ssl_cert: {utils.config_hash(spec.ssl_cert)}' in deps
+    assert f'ssl_key: {utils.config_hash(spec.ssl_key)}' in deps
+    assert not any(dep.startswith('monitor_ssl_cert:') for dep in deps)
+    assert not any(dep.startswith('monitor_ssl_key:') for dep in deps)
