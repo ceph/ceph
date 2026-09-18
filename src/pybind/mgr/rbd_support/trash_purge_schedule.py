@@ -50,6 +50,9 @@ class TrashPurgeScheduleHandler:
                         self.condition.wait(min(wait_time, refresh_delay))
                         continue
                 pool_id, namespace = ns_spec
+                self.log.info(
+                    "TrashPurgeScheduleHandler: executing trash purge for "
+                    "pool_id={}, namespace={}".format(pool_id, namespace))
                 self.trash_purge(pool_id, namespace)
                 with self.lock:
                     self.enqueue(datetime.now(timezone.utc), pool_id, namespace)
@@ -66,6 +69,9 @@ class TrashPurgeScheduleHandler:
             with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                 ioctx.set_namespace(namespace)
                 rbd.RBD().trash_purge(ioctx, datetime.now(timezone.utc))
+            self.log.info(
+                "trash purge completed for pool_id={}, namespace={}".format(
+                    pool_id, namespace))
         except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
             raise
         except Exception as e:
@@ -81,7 +87,7 @@ class TrashPurgeScheduleHandler:
         self.log.debug("TrashPurgeScheduleHandler: queue is initialized")
 
     def load_schedules(self) -> None:
-        self.log.info("TrashPurgeScheduleHandler: load_schedules")
+        self.log.debug("TrashPurgeScheduleHandler: load_schedules")
         self.schedules.load()
 
     def refresh_pools(self) -> float:
