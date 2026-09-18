@@ -1156,6 +1156,24 @@ public:
     const std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>>& to_remap) const;
   bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
 
+  /**
+   * For every PG of @pool_id, stage pg_upmap_items into @pending_inc that
+   * keep each shard of the PG's current acting set (as known from this map,
+   * i.e. up + pg_temp) whenever the pool's crush rule in @newmap allows it,
+   * relocating only the shards that violate the new failure domain.  @newmap
+   * must be a scratch copy of this map with the pool's new crush_rule
+   * applied.  Replacement OSDs for the violating shards are picked either
+   * load-aware (lowest planned shard count per crush weight across the free
+   * failure-domain buckets, the default) or, with load_aware_fill=false, by
+   * preferring the raw CRUSH pick and falling back to deterministic hashing.
+   * Returns the number of PGs pinned, or -errno.
+   */
+  int calc_crush_rule_change_pins(CephContext *cct,
+                                  const OSDMap& newmap,
+                                  int64_t pool_id,
+                                  Incremental *pending_inc,
+                                  bool load_aware_fill = true) const;
+
   int apply_incremental(const Incremental &inc);
 
   /// try to re-use/reference addrs in oldmap from newmap
