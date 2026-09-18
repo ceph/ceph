@@ -38,7 +38,6 @@
 #include <dirent.h>
 #include <optional>
 #include <random>
-#include <sstream>
 #include <string.h>
 
 using namespace std;
@@ -135,13 +134,18 @@ public:
 
   bool wait_for_subtree_on_rank(const char* relpath, const char* rank) {
     const auto path = make_file_path(relpath);
+    const auto rank_id = std::stoi(rank);
     for (unsigned attempt = 0; attempt < 30; ++attempt) {
       auto subtrees = tell_rank(rank, "get subtrees");
       if (!subtrees.is_null()) {
-        std::ostringstream oss;
-        json_spirit::write(subtrees, oss);
-        if (oss.str().find(path) != std::string::npos) {
-          return true;
+        for (const auto& subtree : subtrees.get_array()) {
+          const auto& entry = subtree.get_obj();
+          if (entry.at("dir").get_obj().at("path").get_str() == path &&
+              entry.at("is_auth").get_bool() &&
+              entry.at("auth_first").get_int() == rank_id &&
+              entry.at("auth_second").get_int() == -2) {
+            return true;
+          }
         }
       }
       sleep(1);
@@ -2537,6 +2541,32 @@ TEST(LibCephFS, SnapDiffCreatedEntryAtFragEnd) {
     SCOPED_TRACE(path);
     test_mount.verify_snap_diff(expected, path, "snap1", "snap2");
   }
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffRemoteDentryNotInCache) {
+  TestMount test_mount("snapdiff_remote_dentry");
+
+  ASSERT_EQ(0, test_mount.mkdir("primary"));
+  ASSERT_EQ(0, test_mount.mkdir("links"));
+  ASSERT_EQ(0, test_mount.setxattr("links", "ceph.dir.pin", "0"));
+  ASSERT_LE(0, test_mount.write_full("primary/file", "data"));
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  ASSERT_EQ(0, test_mount.link("primary/file", "links/link"));
+  // Empty directories are not exported.
+  ASSERT_TRUE(test_mount.wait_for_subtree_on_rank("links", "0"));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  test_mount.remount();
+  ASSERT_FALSE(test_mount.tell_rank0("cache drop").is_null());
+
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  vector<pair<string, uint64_t>> expected;
+  expected.emplace_back("link", snapid2);
+  test_mount.verify_snap_diff(expected, "links", "snap1", "snap2");
 
   ASSERT_EQ(0, test_mount.rmsnap("snap1"));
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));
