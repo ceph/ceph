@@ -547,7 +547,7 @@ void bluestore::Blob::dup(const Blob& from, bool copy_used_in_blob)
 // copies part of a Blob
 // it is used to create a consistent blob out of parts of other blobs
 void bluestore::Blob::copy_from(
-  CephContext* cct, const Blob& from, uint32_t min_release_size, uint32_t start, uint32_t len)
+  const Blob& from, uint32_t min_release_size, uint32_t start, uint32_t len)
 {
   dout(20) << __func__ << " to=" << *this << " from=" << from
 	   << " [" << std::hex << start << "~" << len
@@ -584,13 +584,13 @@ void bluestore::Blob::copy_from(
   }
 
   if (end_aligned >= start_roundup) {
-    copy_extents(cct, from, start_aligned,
+    copy_extents(from, start_aligned,
 		 start_roundup - start_aligned,/*pre_len*/
 		 end_aligned - start_roundup,/*main_len*/
 		 end_roundup - end_aligned/*post_len*/);
   } else {
     // it is uncommon case that <start, start + len) in single allocation unit
-    copy_extents(cct, from, start_aligned,
+    copy_extents(from, start_aligned,
 		 start_roundup - start_aligned,/*pre_len*/
 		 0 /*main_len*/, 0/*post_len*/);
   }
@@ -610,7 +610,7 @@ void bluestore::Blob::copy_from(
 }
 
 void bluestore::Blob::copy_extents(
-  CephContext* cct, const Blob& from, uint32_t start,
+  const Blob& from, uint32_t start,
   uint32_t pre_len, uint32_t main_len, uint32_t post_len)
 {
   // There are 2 valid states:
@@ -690,13 +690,13 @@ void bluestore::Blob::copy_extents(
   }
   // it is possible that here is nothing to copy
   if (main_len > 0) {
-    copy_extents_over_empty(cct, from, start, main_len);
+    copy_extents_over_empty(from, start, main_len);
   }
 }
 
 // assumes that target (this->extents) has hole in relevant location
 void bluestore::Blob::copy_extents_over_empty(
-  CephContext* cct, const Blob& from, uint32_t start, uint32_t len)
+  const Blob& from, uint32_t start, uint32_t len)
 {
   dout(20) << __func__ << " to=" << *this << " from=" << from
 	   << "[0x" << std::hex << start << "~" << len << std::dec << "]" << dendl;
@@ -857,7 +857,7 @@ bool bluestore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) co
 }
 
 // Merges 2 blobs together. Move extents, csum, tracker from src to dst.
-uint32_t bluestore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
+uint32_t bluestore::Blob::merge_blob(Blob* blob_to_dissolve)
 {
   Blob* dst = this;
   Blob* src = blob_to_dissolve;
@@ -1640,7 +1640,7 @@ void bluestore::ExtentMap::make_range_shared_maybe_merge(
         find_mergable_companion(e.blob.get(), e.blob_start(), blob_width, candidates);
       if (b) {
         dout(20) << __func__ << " merging to: " << *b << " bc=" << onode->bc << dendl;
-        uint32_t b_logical_length = b->merge_blob(store->cct, e.blob.get());
+        uint32_t b_logical_length = b->merge_blob(e.blob.get());
         for (auto p : blob.get_extents()) {
           if (p.is_valid()) {
             b->get_dirty_shared_blob()->get_ref(p.offset, p.length);
@@ -1880,7 +1880,7 @@ void bluestore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
     } else {
       // copy part
       uint32_t min_release_size = e.blob->get_blob().get_release_size(c->store->min_alloc_size);
-      cb->copy_from(b->cct, *e.blob, min_release_size,
+      cb->copy_from(*e.blob, min_release_size,
 		    e.blob_offset + skip_front, e.length - skip_front - skip_back);
     }
 
