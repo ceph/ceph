@@ -1,3 +1,4 @@
+import asyncio
 import errno
 import json
 import logging
@@ -59,6 +60,21 @@ MID_UPGRADE_MUTED_WARNINGS = [
     'AUTH_INSECURE_SERVICE_KEY_TYPE',
     'AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE'
 ]
+
+# Parallel registry pre-pull across many hosts. Single-command
+# default_cephadm_command_timeout (15m) is too short for multi-GB images.
+UPGRADE_IMAGE_MIRROR_MIN_TIMEOUT = 7200
+
+UPGRADE_IMAGE_MIRROR_METHOD_NONE = 'none'
+UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY = 'registry'
+# Empty string or "none" disables pre-distribution (default).
+UPGRADE_IMAGE_MIRROR_METHODS_DISABLED = frozenset({
+    '',
+    UPGRADE_IMAGE_MIRROR_METHOD_NONE,
+})
+UPGRADE_IMAGE_MIRROR_METHODS_ENABLED = frozenset({
+    UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY,
+})
 
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
@@ -235,7 +251,8 @@ class UpgradeState:
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
                  has_set_cephx_allowed_ciphers: Optional[bool] = False,
                  health_warnings_muted: Optional[bool] = False,
-                 rotated_osd_mds_keyrings: Optional[bool] = False
+                 rotated_osd_mds_keyrings: Optional[bool] = False,
+                 image_mirror_done: bool = False,
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -262,6 +279,7 @@ class UpgradeState:
         self.has_set_cephx_allowed_ciphers = has_set_cephx_allowed_ciphers
         self.rotated_osd_mds_keyrings = rotated_osd_mds_keyrings
         self.health_warnings_muted = health_warnings_muted
+        self.image_mirror_done = image_mirror_done
 
     def to_json(self) -> dict:
         return {
@@ -287,7 +305,8 @@ class UpgradeState:
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
             'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
             'health_warnings_muted': self.health_warnings_muted,
-            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings
+            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings,
+            'image_mirror_done': self.image_mirror_done,
         }
 
     @classmethod
@@ -1189,9 +1208,13 @@ class CephadmUpgrade:
             # were doing something
             return
 
-        logger.error('Upgrade: Paused due to %s: %s' % (alert_id,
-                                                        alert['summary']))
-        self.upgrade_state.error = alert_id + ': ' + alert['summary']
+        detail = alert.get('detail', [])
+        summary = alert['summary']
+        if detail:
+            summary = f"{summary}: {'; '.join(str(d) for d in detail[:5])}"
+
+        logger.error('Upgrade: Paused due to %s: %s' % (alert_id, summary))
+        self.upgrade_state.error = alert_id + ': ' + summary
         self.upgrade_state.paused = True
         # Do not restore PG autoscaling here: upgrade is only paused. Restore
         # only on upgrade_stop or _mark_upgrade_complete so that resume
@@ -2136,6 +2159,417 @@ class CephadmUpgrade:
         self._ok_to_upgrade_osds_in_crush_bucket = None
         self._save_upgrade_state()
 
+    def _get_upgrade_scope_hosts(self, daemons: List[DaemonDescription]) -> List[str]:
+        hosts = sorted({d.hostname for d in daemons if d.hostname})
+        return [h for h in hosts if h not in self.mgr.offline_hosts]
+
+    async def _inspect_image_on_host(
+        self,
+        host: str,
+        target_image: str,
+    ) -> Optional[Dict[str, Any]]:
+        out, _, code = await CephadmServe(self.mgr)._run_cephadm(
+            host, '', 'inspect-image', [],
+            image=target_image, no_fsid=True, error_ok=True)
+        if code:
+            return None
+        try:
+            return json.loads(''.join(out))
+        except json.JSONDecodeError:
+            return None
+
+    def _target_image_inspect_refs(self, target_image: str) -> List[str]:
+        refs: List[str] = []
+        assert self.upgrade_state is not None
+        for candidate in (
+            target_image,
+            self.upgrade_state._target_name,
+        ):
+            if candidate and candidate not in refs:
+                refs.append(candidate)
+        target_id = self.upgrade_state.target_id
+        if target_id:
+            bare_id = target_id.replace('sha256:', '')
+            for id_ref in (bare_id, f'sha256:{bare_id}'):
+                if id_ref not in refs:
+                    refs.append(id_ref)
+        return refs
+
+    async def _host_has_target_image_on_host(
+        self,
+        host: str,
+        target_image: str,
+        target_digests: List[str],
+    ) -> bool:
+        for ref in self._target_image_inspect_refs(target_image):
+            inspect_info = await self._inspect_image_on_host(host, ref)
+            if self._host_has_target_image(inspect_info, target_digests):
+                return True
+        return False
+
+    def _host_has_target_image(
+        self,
+        inspect_info: Optional[Dict[str, Any]],
+        target_digests: List[str],
+    ) -> bool:
+        if not inspect_info:
+            return False
+        repo_digests = inspect_info.get('repo_digests', []) or []
+        target_id = self.upgrade_state.target_id if self.upgrade_state else None
+        image_id = inspect_info.get('image_id')
+        if target_id and image_id:
+            if image_id.replace('sha256:', '') == target_id.replace('sha256:', ''):
+                return True
+        if any(d in target_digests for d in repo_digests):
+            return True
+        target_shas = {
+            d.split('@sha256:', 1)[1]
+            for d in target_digests
+            if '@sha256:' in d
+        }
+        for digest in repo_digests:
+            if '@sha256:' in digest and digest.split('@sha256:', 1)[1] in target_shas:
+                return True
+        return False
+
+    async def _registry_login_if_needed(self, host: str) -> None:
+        if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
+            creds = self.mgr.get_store('registry_credentials')
+            if creds:
+                await CephadmServe(self.mgr)._registry_login(host, json.loads(str(creds)))
+
+    def _parse_pull_image_info(self, out: List[str]) -> Optional[Dict[str, Any]]:
+        try:
+            info = json.loads(''.join(out))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+        if not isinstance(info, dict):
+            return None
+        return info
+
+    def _ceph_version_token_from_pull(self, ceph_version: str) -> Optional[str]:
+        """Normalize ``ceph --version`` output to the short token stored in upgrade state."""
+        if not ceph_version:
+            return None
+        if ceph_version.startswith('ceph version '):
+            parts = ceph_version.split(' ')
+            if len(parts) >= 3:
+                return parts[2]
+            return None
+        return ceph_version
+
+    def _set_target_from_pull_info(self, info: Dict[str, Any]) -> Optional[str]:
+        """
+        Persist target_id / digests / version from cephadm pull/inspect JSON.
+
+        Returns an error string on failure, or None on success.
+        """
+        assert self.upgrade_state is not None
+        image_id = info.get('image_id')
+        digests = info.get('repo_digests') or []
+        ceph_version = info.get('ceph_version') or ''
+        if not image_id or not digests:
+            return 'pull did not return image_id and repo_digests'
+        version_token = self._ceph_version_token_from_pull(str(ceph_version))
+        if not version_token:
+            return 'unable to extract ceph version from container'
+        self.upgrade_state.target_id = str(image_id)
+        self.upgrade_state.target_digests = list(digests)
+        self.upgrade_state.target_version = version_token
+        self._save_upgrade_state()
+        return None
+
+    async def _pre_pull_image_discover_async(
+        self,
+        target_image: str,
+        hosts: List[str],
+    ) -> bool:
+        """
+        Parallel registry pull that also learns target digests/version.
+
+        Used when upgrade_image_mirror_method=registry and upgrade state does not
+        yet have target metadata, so we avoid a serial "First pull" on one host
+        before pulling everywhere else.
+        """
+        assert self.upgrade_state is not None
+        max_parallel = max(1, self.mgr.upgrade_image_mirror_max_parallel)
+        logger.info(
+            'Upgrade: discovering and pre-pulling image %s on %d host(s), '
+            'up to %d in parallel',
+            target_image, len(hosts), max_parallel)
+        self.upgrade_info_str = (
+            f'Discovering and pre-pulling upgrade image on {len(hosts)} host(s)')
+
+        pullargs: List[str] = []
+        if self.mgr.registry_insecure:
+            pullargs.append('--insecure')
+
+        sem = asyncio.Semaphore(max_parallel)
+        # host -> (code, pull_info_or_None, error_reason)
+        results: Dict[str, Tuple[int, Optional[Dict[str, Any]], str]] = {}
+
+        async def _pull_on_host(host: str) -> None:
+            async with sem:
+                if not self.upgrade_state or self.upgrade_state.paused:
+                    return
+                try:
+                    await self._registry_login_if_needed(host)
+                    logger.info('Upgrade: pulling image %s on host %s', target_image, host)
+                    out, errs, code = await CephadmServe(self.mgr)._run_cephadm(
+                        host, '', 'pull', pullargs,
+                        image=target_image, no_fsid=True, error_ok=True)
+                    if code:
+                        reason = ''.join(errs) if errs else 'unknown error'
+                        logger.error('Upgrade: failed to pull image on host %s', host)
+                        results[host] = (code, None, reason)
+                    else:
+                        info = self._parse_pull_image_info(out)
+                        if not info:
+                            results[host] = (1, None, 'invalid or empty pull JSON')
+                            logger.error(
+                                'Upgrade: invalid pull JSON on host %s', host)
+                        else:
+                            results[host] = (0, info, '')
+                            logger.info('Upgrade: pulled image on host %s', host)
+                except Exception as e:
+                    results[host] = (1, None, str(e))
+
+        await asyncio.gather(*[_pull_on_host(host) for host in hosts])
+
+        failed_hosts: List[Tuple[str, str]] = []
+        for host in hosts:
+            if host not in results:
+                failed_hosts.append((host, 'pre-pull interrupted or skipped'))
+                continue
+            code, _info, reason = results[host]
+            if code:
+                failed_hosts.append((host, reason))
+
+        if failed_hosts:
+            detail = [
+                f'failed to pull image on {host}: {reason}'
+                for host, reason in failed_hosts
+            ]
+            self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                'severity': 'warning',
+                'summary': 'Upgrade: failed to pre-pull target image',
+                'count': len(failed_hosts),
+                'detail': detail,
+            })
+            return False
+
+        reference: Optional[Dict[str, Any]] = None
+        for host in hosts:
+            _code, info, _reason = results[host]
+            if not info:
+                continue
+            image_id = info.get('image_id')
+            digests = info.get('repo_digests') or []
+            version_token = self._ceph_version_token_from_pull(
+                str(info.get('ceph_version') or ''))
+            if image_id and digests and version_token:
+                reference = info
+                break
+
+        if not reference:
+            self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                'severity': 'warning',
+                'summary': 'Upgrade: failed to pull target image',
+                'count': 1,
+                'detail': [
+                    'unable to extract image digests/version from parallel pull'],
+            })
+            return False
+
+        apply_err = self._set_target_from_pull_info(reference)
+        if apply_err:
+            self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                'severity': 'warning',
+                'summary': 'Upgrade: failed to pull target image',
+                'count': 1,
+                'detail': [apply_err],
+            })
+            return False
+
+        assert self.upgrade_state.target_digests is not None
+        target_digests = self.upgrade_state.target_digests
+        logger.info(
+            'Upgrade: discovered target digests %s version %s from parallel pull',
+            target_digests, self.upgrade_state.target_version)
+
+        for host in hosts:
+            _code, info, _reason = results[host]
+            if not self._host_has_target_image(info, target_digests):
+                got_digests = info.get('repo_digests') if info else None
+                self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                    'severity': 'warning',
+                    'summary': 'Upgrade: failed to pre-pull target image',
+                    'count': 1,
+                    'detail': [
+                        f'host {host} pull returned mismatched digests '
+                        f'(got {got_digests}, expected {target_digests})',
+                    ],
+                })
+                return False
+
+        self.upgrade_state.image_mirror_done = True
+        self._save_upgrade_state()
+        logger.info('Upgrade: registry pre-pull complete')
+        return True
+
+    async def _pre_pull_image_on_hosts_async(
+        self,
+        target_image: str,
+        target_digests: List[str],
+        hosts: List[str],
+    ) -> bool:
+        assert self.upgrade_state is not None
+        # Discover digests/version from parallel pulls only when digests are
+        # unknown. If digests are already known (typical resume path), use the
+        # normal skip-or-pull flow.
+        discovering = not target_digests
+        if discovering:
+            return await self._pre_pull_image_discover_async(target_image, hosts)
+
+        hosts_needing_image: List[str] = []
+        for host in hosts:
+            if not await self._host_has_target_image_on_host(
+                    host, target_image, target_digests):
+                hosts_needing_image.append(host)
+
+        if not hosts_needing_image:
+            logger.info('Upgrade: all in-scope hosts already have target image')
+            self.upgrade_state.image_mirror_done = True
+            self._save_upgrade_state()
+            return True
+
+        max_parallel = max(1, self.mgr.upgrade_image_mirror_max_parallel)
+        logger.info(
+            'Upgrade: pre-pulling image %s on %d host(s), up to %d in parallel',
+            target_image, len(hosts_needing_image), max_parallel)
+        self.upgrade_info_str = (
+            f'Pre-pulling upgrade image on {len(hosts_needing_image)} host(s)')
+
+        pullargs: List[str] = []
+        if self.mgr.registry_insecure:
+            pullargs.append('--insecure')
+
+        sem = asyncio.Semaphore(max_parallel)
+        failed_hosts: List[Tuple[str, str]] = []
+        done = 0
+        total = len(hosts_needing_image)
+
+        async def _pull_on_host(host: str) -> None:
+            nonlocal done
+            async with sem:
+                if not self.upgrade_state or self.upgrade_state.paused:
+                    return
+                try:
+                    await self._registry_login_if_needed(host)
+                    logger.info('Upgrade: pulling image %s on host %s', target_image, host)
+                    _out, errs, code = await CephadmServe(self.mgr)._run_cephadm(
+                        host, '', 'pull', pullargs,
+                        image=target_image, no_fsid=True, error_ok=True)
+                    done += 1
+                    if code:
+                        reason = ''.join(errs) if errs else 'unknown error'
+                        logger.error(
+                            'Upgrade: failed to pull image on host %s (%d/%d done)',
+                            host, done, total)
+                        failed_hosts.append((host, reason))
+                    else:
+                        logger.info(
+                            'Upgrade: pulled image on host %s (%d/%d done)',
+                            host, done, total)
+                except Exception as e:
+                    done += 1
+                    failed_hosts.append((host, str(e)))
+
+        await asyncio.gather(*[_pull_on_host(host) for host in hosts_needing_image])
+
+        if failed_hosts:
+            detail = [
+                f'failed to pull image on {host}: {reason}'
+                for host, reason in failed_hosts
+            ]
+            self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                'severity': 'warning',
+                'summary': 'Upgrade: failed to pre-pull target image',
+                'count': len(failed_hosts),
+                'detail': detail,
+            })
+            return False
+
+        for host in hosts_needing_image:
+            if not await self._host_has_target_image_on_host(
+                    host, target_image, target_digests):
+                tried = self._target_image_inspect_refs(target_image)
+                self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                    'severity': 'warning',
+                    'summary': 'Upgrade: failed to pre-pull target image',
+                    'count': 1,
+                    'detail': [
+                        f'host {host} does not have target image after pull '
+                        f'(tried {tried})',
+                    ],
+                })
+                return False
+
+        self.upgrade_state.image_mirror_done = True
+        self._save_upgrade_state()
+        logger.info('Upgrade: registry pre-pull complete')
+        return True
+
+    def _pre_pull_image_on_hosts(
+        self,
+        target_image: str,
+        target_digests: List[str],
+        hosts: List[str],
+    ) -> bool:
+        timeout = self._mirror_operation_timeout(len(hosts))
+        logger.info(
+            'Upgrade: registry pre-pull timeout set to %d seconds for %d host(s)',
+            timeout, len(hosts))
+        return self.mgr.wait_async(
+            self._pre_pull_image_on_hosts_async(
+                target_image, target_digests, hosts),
+            timeout=timeout)
+
+    def _mirror_operation_timeout(self, host_count: int) -> int:
+        per_host = max(self.mgr.default_cephadm_command_timeout, 1800)
+        return max(UPGRADE_IMAGE_MIRROR_MIN_TIMEOUT, per_host * max(host_count, 1))
+
+    def _get_upgrade_image_mirror_method(self) -> str:
+        raw = getattr(self.mgr, 'upgrade_image_mirror_method', '') or ''
+        return str(raw).strip().lower()
+
+    def _upgrade_image_mirror_enabled(self) -> bool:
+        return self._get_upgrade_image_mirror_method() in UPGRADE_IMAGE_MIRROR_METHODS_ENABLED
+
+    def _pre_distribute_upgrade_images(
+        self,
+        target_image: str,
+        target_digests: List[str],
+        hosts: List[str],
+    ) -> bool:
+        method = self._get_upgrade_image_mirror_method()
+        if method in UPGRADE_IMAGE_MIRROR_METHODS_DISABLED:
+            return True
+        if method == UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY:
+            return self._pre_pull_image_on_hosts(
+                target_image, target_digests, hosts)
+        self._fail_upgrade('UPGRADE_FAILED_PULL', {
+            'severity': 'error',
+            'summary': 'Upgrade: invalid upgrade_image_mirror_method',
+            'count': 1,
+            'detail': [
+                f'unknown upgrade_image_mirror_method {method!r}; '
+                f'expected empty/{UPGRADE_IMAGE_MIRROR_METHOD_NONE!r} '
+                f'(disabled) or {UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY!r}',
+            ],
+        })
+        return False
+
     def _do_upgrade(self):
         # type: () -> None
         if not self.upgrade_state:
@@ -2159,9 +2593,24 @@ class CephadmUpgrade:
         target_digests = self.upgrade_state.target_digests
         target_version = self.upgrade_state.target_version
 
+        need_metadata = not target_id or not target_version or not target_digests
+        registry_discover_hosts: List[str] = []
+        use_registry_discover = False
+        if (
+            need_metadata
+            and self._upgrade_image_mirror_enabled()
+            and not self.upgrade_state.image_mirror_done
+            and self._get_upgrade_image_mirror_method() == UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY
+        ):
+            registry_discover_hosts = self._get_upgrade_scope_hosts(
+                self._get_filtered_daemons())
+            use_registry_discover = bool(registry_discover_hosts)
+
         first = False
-        if not target_id or not target_version or not target_digests:
-            # need to learn the container hash
+        if need_metadata and not use_registry_discover:
+            # need to learn the container hash (serial pull on one host).
+            # Skipped for registry pre-pull: digests/version are learned from the
+            # parallel pulls so we do not pay ~2x wall-clock for large images.
             logger.info('Upgrade: First pull of %s' % target_image)
             self.upgrade_info_str = 'Doing first pull of %s image' % (target_image)
             try:
@@ -2192,10 +2641,25 @@ class CephadmUpgrade:
             self.upgrade_state.target_digests = target_digests
             self._save_upgrade_state()
             target_image = self.target_image
+            target_version = self.upgrade_state.target_version
+            first = True
+
+        if use_registry_discover:
+            logger.info(
+                'Upgrade: discovering target image via parallel registry '
+                'pre-pull of %s', target_image)
+            if not self._pre_pull_image_on_hosts(
+                    target_image, target_digests or [], registry_discover_hosts):
+                return
+            target_id = self.upgrade_state.target_id
+            target_digests = self.upgrade_state.target_digests
+            target_version = self.upgrade_state.target_version
+            target_image = self.target_image
             first = True
 
         if target_digests is None:
             target_digests = []
+        assert target_version is not None
         if target_version.startswith('ceph version '):
             # tolerate/fix upgrade state from older version
             self.upgrade_state.target_version = target_version.split(' ')[2]
@@ -2218,6 +2682,19 @@ class CephadmUpgrade:
                 'detail': [version_error],
             })
             return
+
+        if (
+            self._upgrade_image_mirror_enabled()
+            and not self.upgrade_state.image_mirror_done
+        ):
+            # Registry when metadata was already known (resume). Discover path
+            # above already marked image_mirror_done.
+            daemons = self._get_filtered_daemons()
+            hosts = self._get_upgrade_scope_hosts(daemons)
+            if hosts and not self._pre_distribute_upgrade_images(
+                target_image, target_digests, hosts
+            ):
+                return
 
         image_settings = self.get_distinct_container_image_settings()
 
