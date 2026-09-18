@@ -32,6 +32,7 @@
 #include "osd/osd_types.h"
 
 #include "crush/CrushWrapper.h"
+#include "include/ceph_features.h"
 
 using namespace std;
 
@@ -1453,6 +1454,207 @@ TEST_F(CrushWrapperTest, try_remap_rule) {
     ASSERT_EQ(5, out[1]);
     ASSERT_EQ(16, out[2]);
   }
+}
+
+
+namespace {
+
+// build root -> nhosts hosts -> nosds osds each, every osd at nominal weight
+// osd_weight, and return the root's id
+int build_flat_tree(CephContext *cct, CrushWrapper *c, int nhosts, int nosds,
+		    float osd_weight)
+{
+  c->create();
+  c->set_tunables_optimal();
+  c->set_type_name(0, "osd");
+  c->set_type_name(1, "host");
+  c->set_type_name(2, "root");
+
+  int root;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+			     2, 0, NULL, NULL, &root));
+  c->set_item_name(root, "default");
+
+  int osd = 0;
+  for (int h = 0; h < nhosts; ++h) {
+    string hname = "host" + stringify(h);
+    map<string,string> loc;
+    loc["root"] = "default";
+    loc["host"] = hname;
+    for (int i = 0; i < nosds; ++i, ++osd) {
+      EXPECT_EQ(0, c->insert_item(cct, osd, osd_weight,
+				  "osd." + stringify(osd), loc));
+    }
+  }
+  return root;
+}
+
+// map every x in [0,n) through rule and collect the results
+vector<vector<int>> map_all(const CrushWrapper *c, int rule, int n, int nrep,
+			    int nosd)
+{
+  vector<__u32> reweights(nosd, 0x10000);
+  vector<vector<int>> out;
+  for (int x = 0; x < n; ++x) {
+    vector<int> result;
+    c->do_rule(rule, x, result, nrep, reweights, 0);
+    out.push_back(result);
+  }
+  return out;
+}
+
+}
+
+TEST_F(CrushWrapperTest, weight_shift_default) {
+  CrushWrapper c;
+  c.create();
+  // every map ever written before weight_shift existed means 1.0 == 1 TiB, and
+  // that has to stay the default
+  ASSERT_EQ(0u, c.get_weight_shift());
+  ASSERT_EQ(1ull << 40, c.raw_weight_unit_bytes());
+  // at shift 0 the raw and nominal scales are the same
+  ASSERT_EQ(0x10000, c.nominal_weightf_to_raw(1.0));
+  ASSERT_DOUBLE_EQ(1.0, c.raw_to_nominal_weightf(0x10000));
+}
+
+TEST_F(CrushWrapperTest, weight_shift_scales) {
+  CrushWrapper c;
+  c.create();
+  c.set_weight_shift(4);
+  ASSERT_EQ(16ull << 40, c.raw_weight_unit_bytes());
+  // a nominal weight of 1.0 is now stored as 1/16th of a raw unit
+  ASSERT_EQ(0x10000 / 16, c.nominal_weightf_to_raw(1.0));
+  ASSERT_DOUBLE_EQ(1.0, c.raw_to_nominal_weightf(0x10000 / 16));
+  // a nominal weight below what the coarser unit can express rounds away, the
+  // same way it always has at the bottom of the 16.16 range
+  ASSERT_EQ(0, c.nominal_weightf_to_raw(0.00001));
+}
+
+TEST_F(CrushWrapperTest, weight_shift_nominal_weights_are_stable) {
+  CrushWrapper c;
+  build_flat_tree(cct, &c, 4, 4, 8.0);
+
+  // the weights an operator sees do not move when the map is rescaled
+  ASSERT_FLOAT_EQ(128.0, c.get_bucket_weightf(c.get_item_id("default")));
+  ASSERT_FLOAT_EQ(32.0, c.get_bucket_weightf(c.get_item_id("host0")));
+  ASSERT_FLOAT_EQ(8.0, c.get_item_weightf(0));
+  int raw_before = c.get_item_weight(0);
+
+  ASSERT_EQ(0, c.rescale_weights(cct, 3, NULL));
+
+  ASSERT_EQ(3u, c.get_weight_shift());
+  ASSERT_FLOAT_EQ(128.0, c.get_bucket_weightf(c.get_item_id("default")));
+  ASSERT_FLOAT_EQ(32.0, c.get_bucket_weightf(c.get_item_id("host0")));
+  ASSERT_FLOAT_EQ(8.0, c.get_item_weightf(0));
+  // ... while the raw weight actually stored shrank by 2^3
+  ASSERT_EQ(raw_before / 8, c.get_item_weight(0));
+
+  // and back down again
+  ASSERT_EQ(0, c.rescale_weights(cct, 0, NULL));
+  ASSERT_EQ(0u, c.get_weight_shift());
+  ASSERT_EQ(raw_before, c.get_item_weight(0));
+  ASSERT_FLOAT_EQ(128.0, c.get_bucket_weightf(c.get_item_id("default")));
+}
+
+TEST_F(CrushWrapperTest, weight_shift_preserves_placement) {
+  CrushWrapper c;
+  int root = build_flat_tree(cct, &c, 8, 6, 9.0);
+  int nosd = 48;
+  ASSERT_EQ(0, c.add_simple_rule_at("rule", "default", "host", 0, "",
+				    "firstn", pg_pool_t::TYPE_REPLICATED,
+				    0, NULL));
+  int rule = c.get_rule_id("rule");
+  ASSERT_GE(rule, 0);
+  (void)root;
+
+  auto before = map_all(&c, rule, 2000, 3, nosd);
+
+  ASSERT_EQ(0, c.rescale_weights(cct, 4, NULL));
+
+  auto after = map_all(&c, rule, 2000, 3, nosd);
+
+  // scaling every weight by the same factor leaves the ratios CRUSH compares
+  // alone, so with weights that divide evenly the mappings are identical
+  ASSERT_EQ(before, after);
+
+  // now with a weight that does not divide evenly, so the rescale has to
+  // round.  that perturbs each weight by at most half a raw unit, which should
+  // barely move anything.
+  ASSERT_LE(0, c.adjust_item_weightf(cct, 0, 9.03));
+  before = map_all(&c, rule, 2000, 3, nosd);
+  ASSERT_EQ(0, c.rescale_weights(cct, 8, NULL));
+  after = map_all(&c, rule, 2000, 3, nosd);
+  int moved = 0;
+  for (unsigned i = 0; i < before.size(); ++i) {
+    if (before[i] != after[i]) {
+      ++moved;
+    }
+  }
+  cout << "rounding moved " << moved << "/" << before.size()
+       << " mappings" << std::endl;
+  ASSERT_LT(moved, (int)before.size() / 100);
+}
+
+TEST_F(CrushWrapperTest, weight_shift_encode_decode) {
+  CrushWrapper c;
+  build_flat_tree(cct, &c, 2, 2, 4.0);
+  ASSERT_EQ(0, c.rescale_weights(cct, 5, NULL));
+
+  bufferlist bl;
+  c.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  CrushWrapper d;
+  auto p = bl.cbegin();
+  d.decode(p);
+  ASSERT_EQ(5u, d.get_weight_shift());
+  ASSERT_FLOAT_EQ(16.0, d.get_bucket_weightf(d.get_item_id("default")));
+  ASSERT_EQ(c.get_item_weight(0), d.get_item_weight(0));
+
+  // an older peer is not told about the shift; it still decodes the same raw
+  // weights, and therefore computes the same mappings
+  bufferlist old;
+  c.encode(old, CEPH_FEATURES_SUPPORTED_DEFAULT & ~CEPH_FEATUREMASK_SERVER_VAMPIRE);
+  CrushWrapper e;
+  auto q = old.cbegin();
+  e.decode(q);
+  ASSERT_EQ(0u, e.get_weight_shift());
+  ASSERT_EQ(c.get_item_weight(0), e.get_item_weight(0));
+}
+
+TEST_F(CrushWrapperTest, weight_shift_limits) {
+  CrushWrapper c;
+  build_flat_tree(cct, &c, 2, 2, 1.0);
+  ostringstream err;
+  ASSERT_EQ(-EINVAL, c.rescale_weights(cct, CRUSH_MAX_WEIGHT_SHIFT + 1, &err));
+  ASSERT_FALSE(err.str().empty());
+
+  // a root is bounded by the width of the weight field, a bucket that some
+  // parent references by the signed item weight the draw reads
+  int root = c.get_item_id("default");
+  int host = c.get_item_id("host0");
+  ASSERT_EQ(CRUSH_MAX_BUCKET_WEIGHT, c.max_raw_weight_for_bucket(root));
+  ASSERT_EQ(CRUSH_MAX_ITEM_WEIGHT, c.max_raw_weight_for_bucket(host));
+}
+
+TEST_F(CrushWrapperTest, make_weight_headroom) {
+  CrushWrapper c;
+  // 4 hosts of 15000.0 each: a root of 60000.0, close to the most a 16.16
+  // weight can express, with every host still well inside the item limit
+  build_flat_tree(cct, &c, 4, 3, 5000.0);
+  ASSERT_EQ(0u, c.get_weight_shift());
+
+  // a modest addition still fits, so nothing should move
+  ostringstream err;
+  ASSERT_EQ(0, c.make_weight_headroom(cct, 100.0, &err));
+  ASSERT_EQ(0u, c.get_weight_shift());
+
+  // one that does not fit gets us room instead of an error
+  ASSERT_EQ(1, c.make_weight_headroom(cct, 20000.0, &err));
+  ASSERT_GT(c.get_weight_shift(), 0u);
+  // and the capacity the map describes is unchanged
+  ASSERT_NEAR(60000.0, c.get_bucket_weightf(c.get_item_id("default")), 1.0);
+
+  // now the addition fits at the new shift
+  ASSERT_EQ(0, c.make_weight_headroom(cct, 20000.0, &err));
 }
 
 // Local Variables:
