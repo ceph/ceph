@@ -59,10 +59,13 @@ tasks:
     smb_shares:
       - share1
       - share2
+    params:
+      fs_case:
+        cluster_id: modtest1
     timeout: 1h
     clients:
       client.0:
-        - [default, hosts_access, domain]
+        - [default, domain, fs_case, hosts_access]
 
 - cephadm.shell:
     host.a:
