@@ -85,16 +85,53 @@ function TEST_scrub_test() {
       local anotherosd="2"
     fi
 
-    local corrupt_data_file=$(file_with_random_data 512)
+    # Corrupt the object with a SAME-SIZE replacement so the size matches but
+    # the data digest (CRC) will differ. This means:
+    #   - shallow scrub: sizes agree -> no SIZE_MISMATCH -> no shallow error
+    #   - deep scrub:    CRC disagrees -> DATA_DIGEST_MISMATCH -> deep error
+    local corrupt_data_file=$(file_with_random_data 1032)
     objectstore_tool $dir $anotherosd obj1 set-bytes $corrupt_data_file || return 1
     rm -f $corrupt_data_file
 
     local pgid="${poolid}.0"
+
+    #
+    # Part A: shallow scrub - same-size corruption is NOT detectable by shallow scrub.
+    #         No inconsistency expected. last_scrub_duration is written;
+    #         last_deep_scrub_duration stays 0.
+    #
+    pg_scrub "$pgid" || return 1
+
+    # same-size corruption: shallow scrub cannot detect it
+    ceph pg dump pgs | grep ^${pgid} | grep -vq -- +inconsistent || return 1
+    test "$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_shallow_scrub_errors')" = "0" || return 1
+    test "$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_deep_scrub_errors')" = "0" || return 1
+    test "$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_scrub_errors')" = "0" || return 1
+    # last_scrub_duration must be non-zero; last_deep_scrub_duration must stay 0
+    test "$(ceph pg $pgid query | jq '.info.stats.last_scrub_duration')" != "0" || return 1
+    test "$(ceph pg $pgid query | jq '.info.stats.last_deep_scrub_duration')" = "0" || return 1
+
+    #
+    # Part B: deep scrub detects the DATA_DIGEST_MISMATCH (deep error).
+    #         num_deep_scrub_errors becomes non-zero; last_deep_scrub_duration
+    #         is written; last_scrub_duration is NOT updated by the deep scrub.
+    #
+    local last_scrub_dur="$(ceph pg $pgid query | jq '.info.stats.last_scrub_duration')"
     pg_deep_scrub "$pgid" || return 1
 
     ceph pg dump pgs | grep ^${pgid} | grep -q -- +inconsistent || return 1
+    # deep scrub: DATA_DIGEST_MISMATCH -> shallow_errors=0, deep_errors=2
+    test "$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_shallow_scrub_errors')" = "0" || return 1
+    test "$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_deep_scrub_errors')" = "2" || return 1
     test "$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_scrub_errors')" = "2" || return 1
+    # last_deep_scrub_duration must now be non-zero
+    test "$(ceph pg $pgid query | jq '.info.stats.last_deep_scrub_duration')" != "0" || return 1
+    # last_scrub_duration must be unchanged from before the deep scrub
+    test "$(ceph pg $pgid query | jq '.info.stats.last_scrub_duration')" = "$last_scrub_dur" || return 1
 
+    #
+    # Part C: error persistence when primary OSD is temporarily brought down.
+    #
     ceph osd out $primary
     wait_for_clean || return 1
 
@@ -107,6 +144,10 @@ function TEST_scrub_test() {
     ceph osd in $primary
     wait_for_clean || return 1
 
+    #
+    # Part D: repair clears errors. Verify both shallow and deep error counters
+    #         are cleared, and that a subsequent shallow scrub still shows clean.
+    #
     repair "$pgid" || return 1
     wait_for_clean || return 1
 
@@ -121,6 +162,18 @@ function TEST_scrub_test() {
     test "$(ceph pg $pgid query | jq '.peer_info[0].stats.stat_sum.num_scrub_errors')" = "0" || return 1
     test "$(ceph pg $pgid query | jq '.peer_info[1].stats.stat_sum.num_scrub_errors')" = "0" || return 1
     ceph pg dump pgs | grep ^${pgid} | grep -vq -- +inconsistent || return 1
+
+    # shallow scrub after repair must also show no errors, and must update
+    # last_scrub_duration without touching last_deep_scrub_duration
+    ceph osd in $primary
+    wait_for_clean || return 1
+    local last_deep_dur="$(ceph pg $pgid query | jq '.info.stats.last_deep_scrub_duration')"
+    pg_scrub "$pgid" || return 1
+    test "$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_scrub_errors')" = "0" || return 1
+    test "$(ceph pg $pgid query | jq '.info.stats.last_scrub_duration')" != "0" || return 1
+    # last_deep_scrub_duration must be unchanged after a shallow scrub
+    test "$(ceph pg $pgid query | jq '.info.stats.last_deep_scrub_duration')" = "$last_deep_dur" || return 1
+
     perf_counters $dir $OSDS
 }
 
@@ -526,6 +579,24 @@ function TEST_just_deep_scrubs() {
     perf_counters $dir ${cluster_conf['osds_num']}
 }
 
+# TEST_dump_scrub_schedule()
+#
+# Tests scheduling state publishing for shallow scrubs, and verifies the
+# correct behavior of last_scrub_duration and last_deep_scrub_duration:
+#
+#   step 1: run a deep scrub first.
+#           - last_deep_scrub_duration becomes non-zero
+#           - last_scrub_duration must stay 0 (deep must NOT write it)
+#
+#   step 2: set noscrub, request schedule-scrub (shallow).
+#           - verify the shallow scrub is scheduled but blocked
+#
+#   step 3: unset noscrub, let the shallow scrub run.
+#           - last_scrub_duration becomes non-zero
+#           - last_deep_scrub_duration must be preserved (deep must NOT be overwritten)
+#           - verify scheduling state transitions (active ΓåÆ idle)
+#           - verify both via 'pg query' and 'pg dump'
+#
 function TEST_dump_scrub_schedule() {
     local dir=$1
     local poolname=test
@@ -553,7 +624,7 @@ function TEST_dump_scrub_schedule() {
 
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd $ceph_osd_args|| return 1
+      run_osd $dir $osd $ceph_osd_args || return 1
     done
 
     # Create a pool with a single pg
@@ -572,10 +643,8 @@ function TEST_dump_scrub_schedule() {
     #local now_is=`date -I"ns"` # note: uses a comma for the ns part
     local now_is=`date +'%Y-%m-%dT%H:%M:%S.%N%:z'`
 
-    # before the scrubbing starts
-
-    # last scrub duration should be 0. The scheduling data should show
-    # a time in the future:
+    # before the scrubbing starts - both duration fields must be 0.
+    # The scheduling data should show a time in the future:
     # e.g. 'periodic scrub scheduled @ 2021-10-12T20:32:43.645168+0000'
 
     declare -A expct_starting=( ['query_active']="false" ['query_is_future']="true" ['query_schedule']="scrub scheduled" )
@@ -583,31 +652,39 @@ function TEST_dump_scrub_schedule() {
     extract_published_sch $pgid $now_is "2019-10-12T20:32:43.645168+0000" sched_data
     schedule_against_expected sched_data expct_starting "initial"
     (( ${sched_data['dmp_last_duration']} == 0)) || return 1
+    (( ${sched_data['dmp_last_deep_duration']} == 0)) || return 1
     echo "last-scrub  --- " ${sched_data['query_last_scrub']}
 
     #
-    # step 1: scrub once (mainly to ensure there is no urgency to scrub)
+    # step 1: deep-scrub once (mainly to ensure there is no urgency to scrub,
+    #         and to set last_deep_scrub_duration while leaving last_scrub_duration=0).
     #
 
     saved_last_stamp=${sched_data['query_last_stamp']}
     ceph tell osd.* config set osd_scrub_sleep "0"
     ceph tell $pgid deep-scrub
 
-    # wait for the 'last duration' entries to change. Note that the 'dump' one will need
-    # up to 5 seconds to sync
-
+    # wait for last_deep_scrub_duration to become non-zero.
+    # last_scrub_duration must remain 0 (deep scrub must NOT write it).
     sleep 5
     sched_data=()
-    declare -A expct_qry_duration=( ['query_last_duration']="0" ['query_last_duration_neg']="not0" )
-    wait_any_cond $pgid 10 $saved_last_stamp expct_qry_duration "WaitingAfterScrub " sched_data || return 1
-    # verify that 'pg dump' also shows the change in last_scrub_duration
+    declare -A expct_qry_duration=( ['query_last_deep_duration']="0" ['query_last_deep_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_qry_duration "WaitingAfterDeepScrub " sched_data || return 1
+    # last_scrub_duration must still be 0 - deep scrub must not update it
+    (( ${sched_data['query_last_duration']} == 0)) || return 1
+    # verify that 'pg dump' also shows the change in last_deep_scrub_duration
     sched_data=()
-    declare -A expct_dmp_duration=( ['dmp_last_duration']="0" ['dmp_last_duration_neg']="not0" )
-    wait_any_cond $pgid 10 $saved_last_stamp expct_dmp_duration "WaitingAfterScrub_dmp " sched_data || return 1
+    declare -A expct_dmp_duration=( ['dmp_last_deep_duration']="0" ['dmp_last_deep_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_dmp_duration "WaitingAfterDeepScrub_dmp " sched_data || return 1
+    # last_scrub_duration must still be 0 in pg dump too
+    (( ${sched_data['dmp_last_duration']} == 0)) || return 1
+
+    # save last_deep_scrub_duration so we can prove shallow scrub does not overwrite it
+    local last_deep_dur=${sched_data['dmp_last_deep_duration']}
 
     #
-    # step 2: set noscrub and request a "periodic scrub". Watch for the change in the 'is the scrub
-    #         scheduled for the future' value
+    # step 2: set noscrub and request a "periodic scrub" (shallow).
+    #         Watch for the change in the 'is the scrub scheduled for the future' value.
     #
 
     ceph osd set noscrub || return 1
@@ -630,7 +707,9 @@ function TEST_dump_scrub_schedule() {
     ## wait_any_cond $pgid 15 $saved_last_stamp expct_scrub_peri_sched_dmp "waitingBeingScheduled" sched_data || echo "must be fixed"
 
     #
-    # step 3: allow scrubs. Watch for the conditions during the scrubbing
+    # step 3: allow scrubs. Watch for the conditions during the scrubbing,
+    #         then verify last_scrub_duration is set and last_deep_scrub_duration
+    #         is preserved.
     #
 
     saved_last_stamp=${sched_data['query_last_stamp']}
@@ -646,6 +725,232 @@ function TEST_dump_scrub_schedule() {
     sched_data=()
     wait_any_cond $pgid 10 $saved_last_stamp cond_active_dmp "WaitingActive " sched_data
     sleep 4
+
+    # after the shallow scrub: last_scrub_duration must be non-zero
+    sched_data=()
+    declare -A expct_qry_shallow=( ['query_last_duration']="0" ['query_last_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_qry_shallow "WaitingAfterShallowScrub " sched_data || return 1
+    # last_deep_scrub_duration must be preserved - shallow scrub must not overwrite it
+    (( ${sched_data['query_last_deep_duration']} == $last_deep_dur)) || return 1
+    # verify via pg dump too
+    sched_data=()
+    declare -A expct_dmp_shallow=( ['dmp_last_duration']="0" ['dmp_last_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_dmp_shallow "WaitingAfterShallowScrub_dmp " sched_data || return 1
+    # last_deep_scrub_duration must be preserved in pg dump too
+    (( ${sched_data['dmp_last_deep_duration']} == $last_deep_dur)) || return 1
+
+    perf_counters $dir $OSDS
+}
+
+# TEST_dump_deep_scrub_schedule()
+#
+# A mirror of TEST_dump_scrub_schedule() but exercising the deep-scrub scheduling
+# path and the new last_deep_scrub_duration / deep_scrub_duration fields.
+#
+# Test structure:
+#   step 1: run a shallow scrub first.
+#           - last_scrub_duration    becomes non-zero
+#           - last_deep_scrub_duration must stay 0  (shallow must NOT write it)
+#
+#   step 2: set nodeep-scrub, request schedule-deep-scrub.
+#           - verify the deep scrub is blocked (scrub seq counter unchanged)
+#
+#   step 3: unset nodeep-scrub, let the deep scrub run.
+#           - last_deep_scrub_duration becomes non-zero
+#           - last_scrub_duration must be unchanged (deep must NOT write it)
+#           - verify both via 'pg query' and 'pg dump'
+#
+#   step 4: run another shallow scrub.
+#           - last_scrub_duration    updates to a new non-zero value
+#           - last_deep_scrub_duration must be preserved (unchanged from step 3)
+#
+function TEST_dump_deep_scrub_schedule() {
+    local dir=$1
+    local poolname=test
+    local OSDS=3
+    local objects=90
+
+    TESTDATA="testdata.$$"
+
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
+
+    local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
+            --osd_scrub_interval_randomize_ratio=0 \
+            --osd_scrub_backoff_ratio=0.0 \
+            --osd_op_queue=wpq \
+            --osd_stats_update_period_not_scrubbing=1 \
+            --osd_stats_update_period_scrubbing=1 \
+            --osd_scrub_retry_after_noscrub=1 \
+            --osd_scrub_retry_pg_state=2 \
+            --osd_scrub_retry_delay=2 \
+            --osd_scrub_sleep=0.2"
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd $ceph_osd_args || return 1
+    done
+
+    # Create a pool with a single pg
+    create_pool $poolname 1 1
+    wait_for_clean || return 1
+    poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+
+    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    for i in `seq 1 $objects`
+    do
+        rados -p $poolname put obj${i} $TESTDATA
+    done
+    rm -f $TESTDATA
+
+    local pgid="${poolid}.0"
+    local now_is=`date +'%Y-%m-%dT%H:%M:%S.%N%:z'`
+
+    # turn on the publishing of test data in the 'scrubber' section of 'pg query' output
+    set_query_debug $pgid
+
+    # Verify initial state: both duration fields are 0
+    declare -A expct_starting=( ['query_active']="false" ['query_is_future']="true" ['query_schedule']="scrub scheduled" )
+    declare -A sched_data
+    extract_published_sch $pgid $now_is "2019-10-12T20:32:43.645168+0000" sched_data
+    schedule_against_expected sched_data expct_starting "initial"
+    (( ${sched_data['dmp_last_duration']} == 0)) || return 1
+    (( ${sched_data['dmp_last_deep_duration']} == 0)) || return 1
+    echo "last-scrub --- " ${sched_data['query_last_scrub']}
+
+    #
+    # step 1: run a shallow scrub first.
+    #         last_scrub_duration must become non-zero.
+    #         last_deep_scrub_duration must remain 0.
+    #
+
+    saved_last_stamp=${sched_data['query_last_stamp']}
+    ceph tell osd.* config set osd_scrub_sleep "0"
+    ceph tell $pgid scrub
+
+    # wait for last_scrub_duration to become non-zero via query
+    sleep 5
+    sched_data=()
+    declare -A expct_shallow_qry=( ['query_last_duration']="0" ['query_last_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_shallow_qry "WaitingAfterShallowScrub " sched_data || return 1
+    # last_deep_scrub_duration must still be 0 - shallow scrub must not write it
+    (( ${sched_data['query_last_deep_duration']} == 0)) || return 1
+    # verify via pg dump too
+    sched_data=()
+    declare -A expct_shallow_dmp=( ['dmp_last_duration']="0" ['dmp_last_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_shallow_dmp "WaitingAfterShallowScrub_dmp " sched_data || return 1
+    (( ${sched_data['dmp_last_deep_duration']} == 0)) || return 1
+
+    # save last_scrub_duration so we can prove deep scrub does not overwrite it
+    local last_shallow_dur=${sched_data['dmp_last_duration']}
+
+    #
+    # step 2: block deep scrubs with nodeep-scrub, then request schedule-deep-scrub.
+    #         Verify the deep scrub is queued but does not run.
+    #
+
+    ceph osd set nodeep-scrub || return 1
+    sleep 2
+    ceph tell osd.* config set osd_scrub_chunk_max "3" || return 1
+    ceph tell osd.* config set osd_scrub_sleep "2.0" || return 1
+    sleep 5
+    saved_last_stamp=${sched_data['query_last_stamp']}
+
+    extract_published_sch $pgid $now_is $now_is sched_data
+    local dbg_counter_before=${sched_data['query_scrub_seq']}
+    echo "test counter before schedule-deep-scrub: $dbg_counter_before"
+
+    ceph tell $pgid schedule-deep-scrub
+    sleep 1
+    sched_data=()
+    declare -A expct_deep_peri_sched=( ['query_is_future']="false" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_deep_peri_sched "waitingDeepBeingScheduled" sched_data || return 1
+
+    # nodeep-scrub is active: deep scrub must not have run
+    (( ${sched_data['dmp_last_deep_duration']} == 0)) || return 1
+    (( ${sched_data['query_last_deep_duration']} == 0)) || return 1
+    echo "test counter after schedule-deep-scrub (should be unchanged): " ${sched_data['query_scrub_seq']}
+    (( ${sched_data['query_scrub_seq']} == $dbg_counter_before)) || return 1
+
+    #
+    # step 3: unset nodeep-scrub - the queued deep scrub must now run.
+    #         last_deep_scrub_duration must become non-zero.
+    #         last_scrub_duration must be preserved (equal to $last_shallow_dur).
+    #
+
+    saved_last_stamp=${sched_data['query_last_stamp']}
+    ceph osd unset nodeep-scrub
+
+    declare -A cond_deep_active=( ['query_active']="true" )
+    sched_data=()
+    wait_any_cond $pgid 10 $saved_last_stamp cond_deep_active "WaitingDeepActive " sched_data || return 1
+
+    # check pg-dump shows scrubbing active (or we missed it)
+    declare -A cond_deep_active_dmp=( ['dmp_state_has_scrubbing']="true" ['query_active']="false" )
+    sched_data=()
+    wait_any_cond $pgid 10 $saved_last_stamp cond_deep_active_dmp "WaitingDeepActive_dmp " sched_data
+
+    # wait for last_deep_scrub_duration to become non-zero via query
+    sleep 5
+    sched_data=()
+    declare -A expct_deep_qry=( ['query_last_deep_duration']="0" ['query_last_deep_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_deep_qry "WaitingAfterDeepScrub " sched_data || return 1
+    # last_scrub_duration must be preserved - deep scrub must not overwrite it
+    (( ${sched_data['query_last_duration']} == $last_shallow_dur)) || return 1
+    # verify via pg dump too
+    sched_data=()
+    declare -A expct_deep_dmp=( ['dmp_last_deep_duration']="0" ['dmp_last_deep_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_deep_dmp "WaitingAfterDeepScrub_dmp " sched_data || return 1
+    # last_scrub_duration must be preserved in pg dump too
+    (( ${sched_data['dmp_last_duration']} == $last_shallow_dur)) || return 1
+
+    # save last_deep_scrub_duration so we can prove shallow scrub does not overwrite it
+    local last_deep_dur=${sched_data['dmp_last_deep_duration']}
+
+    #
+    # step 4: run another shallow scrub.
+    #         last_scrub_duration must update.
+    #         last_deep_scrub_duration must be preserved (unchanged from step 3).
+    #
+
+    ceph osd set noscrub || return 1
+    sleep 2
+    ceph tell osd.* config set osd_shallow_scrub_chunk_max "3" || return 1
+    ceph tell osd.* config set osd_scrub_sleep "2.0" || return 1
+    sleep 5
+    saved_last_stamp=${sched_data['query_last_stamp']}
+
+    ceph tell $pgid schedule-scrub
+    sleep 1
+    sched_data=()
+    declare -A expct_shallow2_sched=( ['query_is_future']="false" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_shallow2_sched "waitingShallow2BeingScheduled" sched_data || return 1
+
+    saved_last_stamp=${sched_data['query_last_stamp']}
+    ceph osd unset noscrub
+
+    declare -A cond_shallow2_active=( ['query_active']="true" )
+    sched_data=()
+    wait_any_cond $pgid 10 $saved_last_stamp cond_shallow2_active "WaitingShallow2Active " sched_data || return 1
+
+    declare -A cond_shallow2_active_dmp=( ['dmp_state_has_scrubbing']="true" ['query_active']="false" )
+    sched_data=()
+    wait_any_cond $pgid 10 $saved_last_stamp cond_shallow2_active_dmp "WaitingShallow2Active_dmp " sched_data
+
+    # wait for last_scrub_duration to update
+    sleep 5
+    sched_data=()
+    declare -A expct_shallow2_qry=( ['query_last_duration']="0" ['query_last_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_shallow2_qry "WaitingAfterShallowScrub2 " sched_data || return 1
+    # last_deep_scrub_duration must be preserved - shallow scrub must not overwrite it
+    (( ${sched_data['query_last_deep_duration']} == $last_deep_dur)) || return 1
+    # verify via pg dump too
+    sched_data=()
+    declare -A expct_shallow2_dmp=( ['dmp_last_duration']="0" ['dmp_last_duration_neg']="not0" )
+    wait_any_cond $pgid 10 $saved_last_stamp expct_shallow2_dmp "WaitingAfterShallowScrub2_dmp " sched_data || return 1
+    # last_deep_scrub_duration must be preserved in pg dump too
+    (( ${sched_data['dmp_last_deep_duration']} == $last_deep_dur)) || return 1
+
     perf_counters $dir $OSDS
 }
 
