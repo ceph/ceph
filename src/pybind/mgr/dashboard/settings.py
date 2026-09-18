@@ -147,7 +147,6 @@ class SettingsMeta(type):
             mgr.set_module_option(attr, None)
 
 
-# pylint: disable=no-init
 class Settings(object, metaclass=SettingsMeta):
     pass
 
