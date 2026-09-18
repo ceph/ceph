@@ -91,3 +91,9 @@
 [submodule "src/rgw/lancedb-c"]
 	path = src/rgw/lancedb-c
 	url = https://github.com/lancedb/lancedb-c.git
+[submodule "src/tools/CephBPF/libbpf"]
+	path = src/tools/CephBPF/libbpf
+	url = https://github.com/libbpf/libbpf.git
+[submodule "src/tools/CephBPF/bpftool"]
+	path = src/tools/CephBPF/bpftool
+	url = https://github.com/libbpf/bpftool.git
