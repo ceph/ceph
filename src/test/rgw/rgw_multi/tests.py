@@ -474,10 +474,10 @@ def data_sync_making_progress(zone):
         time.sleep(config.checkpoint_delay)
     return result or oldest_inc_change is None
 
-def set_master_zone(zone):
+def set_master_zone(zone, period_args=None):
     zone.modify(zone.cluster, ['--master'])
     zonegroup = zone.zonegroup
-    zonegroup.period.update(zone, commit=True)
+    zonegroup.period.update(zone, period_args, commit=True)
     zonegroup.master_zone = zone
     log.info('Set master zone=%s, waiting %ds for reconfiguration..', zone.name, config.reconfigure_delay)
     time.sleep(config.reconfigure_delay)
@@ -1487,6 +1487,49 @@ def test_multi_period_incremental_sync():
         for zone in zonegroup.zones:
             mdlog = mdlog_list(zone, period)
             assert len(mdlog) == 0
+
+def test_failover_failback():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.zones) < 2:
+        raise SkipTest("test_failover_failback requires 2 or more zones")
+
+    orig = zonegroup.master_zone
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    orig_conn = next(z for z in zonegroup_conns.rw_zones if z.zone == orig)
+    secondary_conn = next(z for z in zonegroup_conns.rw_zones if z.zone != orig)
+    secondary = secondary_conn.zone
+    buckets = []
+
+    def create_and_put(zone_conn, key, body):
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone_conn.name, bucket_name)
+        zone_conn.create_bucket(bucket_name)
+        zone_conn.s3_client.put_object(Bucket=bucket_name, Key=key, Body=body)
+        buckets.append(bucket_name)
+
+    def checkpoint_buckets():
+        zonegroup_meta_checkpoint(zonegroup)
+        for bucket_name in buckets:
+            zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
+
+    try:
+        zonegroup_meta_checkpoint(zonegroup)
+
+        create_and_put(orig_conn, 'before-failover', 'before')
+        checkpoint_buckets()
+
+        set_master_zone(secondary, ['--yes-i-really-mean-it'])
+        create_and_put(secondary_conn, 'after-failover', 'during')
+        zone_meta_checkpoint(orig)
+        checkpoint_buckets()
+
+        set_master_zone(orig, ['--yes-i-really-mean-it'])
+        create_and_put(orig_conn, 'after-failback', 'after')
+        checkpoint_buckets()
+    finally:
+        if zonegroup.master_zone != orig:
+            log.info('restoring original master zone=%s', orig.name)
+            set_master_zone(orig, ['--yes-i-really-mean-it'])
 
 def test_datalog_autotrim():
     zonegroup = realm.master_zonegroup()
