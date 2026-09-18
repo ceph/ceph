@@ -185,6 +185,24 @@ public:
     return pool_id;
   }
 
+  // OSDMapTest is a friend of OSDMap, but TEST_F generates subclasses that
+  // do not inherit that friendship. Expose pack_upmap_results and direct
+  // pg_upmap_items writes through the fixture so individual tests can use
+  // them without needing per-test friend declarations.
+  int call_pack_upmap_results(
+      const std::set<pg_t>& to_unmap,
+      const std::map<pg_t, mempool::osdmap::vector<std::pair<int, int>>>& to_upmap,
+      OSDMap& tmp_osd_map,
+      OSDMap::Incremental& pending_inc) {
+    return osdmap.pack_upmap_results(g_ceph_context, to_unmap, to_upmap,
+                                     tmp_osd_map, &pending_inc);
+  }
+  void set_pg_upmap_items(
+      OSDMap& target, pg_t pg,
+      const mempool::osdmap::vector<std::pair<int32_t,int32_t>>& items) {
+    target.pg_upmap_items[pg] = items;
+  }
+
   void balance_capacity(int64_t pid) {
     set<int64_t> only_pools;
     only_pools.insert(pid);
@@ -1923,6 +1941,66 @@ TEST_F(OSDMapTest, TryDropRemapOverfullBothOverfull) {
     int up_primary;
     newmap.pg_to_up_acting_osds(pg6, &up, &up_primary, nullptr, nullptr);
     ASSERT_EQ(up[0], 1);
+  }
+}
+
+TEST_F(OSDMapTest, BUG_77013_pack_upmap_results_dedup) {
+  // https://tracker.ceph.com/issues/77013
+  //
+  // pack_upmap_results is called once per accepted calc_pg_upmaps iteration
+  // and accumulates into pending_inc.  A pg that is partially dropped in one
+  // iteration (new_pg_upmap_items[pg] = smaller set) and then fully dropped
+  // in a later iteration (old_pg_upmap_items.insert(pg)) used to leave both
+  // entries set, producing duplicate osdmaptool output and silently undoing
+  // a later add via apply_incremental's new-then-old ordering.
+  //
+  // This test pre-seeds pending_inc with a stale entry in one map and calls
+  // pack_upmap_results to drive the opposite map, asserting the stale entry
+  // is cleared.  Setup uses a single fake pg and a minimal tmp_osd_map to
+  // avoid coupling to the balancer's pg_upmap_items math.
+  set_up_map(3, true);
+
+  pg_t pg(0, 99);
+  mempool::osdmap::vector<pair<int32_t,int32_t>> stale_items{{0, 1}};
+  mempool::osdmap::vector<pair<int32_t,int32_t>> fresh_items{{0, 2}};
+
+  // Direction 1: pending_inc has stale new_pg_upmap_items[pg] from a prior
+  // partial drop.  A subsequent full drop must clear it.
+  {
+    OSDMap tmp_osd_map;
+    tmp_osd_map.deepish_copy_from(osdmap);
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pg_upmap_items[pg] = stale_items;
+    // Mirror real flow: pg_upmap_items must exist in tmp before unmap.
+    set_pg_upmap_items(tmp_osd_map, pg, stale_items);
+
+    set<pg_t> to_unmap{pg};
+    map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>> to_upmap;
+    call_pack_upmap_results(to_unmap, to_upmap, tmp_osd_map, pending_inc);
+
+    EXPECT_TRUE(pending_inc.old_pg_upmap_items.count(pg));
+    EXPECT_FALSE(pending_inc.new_pg_upmap_items.count(pg))
+        << "stale new_pg_upmap_items survived a later unmap";
+  }
+
+  // Direction 2: pending_inc has stale old_pg_upmap_items[pg] from a prior
+  // full drop.  A subsequent fresh add must clear it, otherwise apply's
+  // "new first, then old" ordering would erase the add.
+  {
+    OSDMap tmp_osd_map;
+    tmp_osd_map.deepish_copy_from(osdmap);
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.old_pg_upmap_items.insert(pg);
+
+    set<pg_t> to_unmap;
+    map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>> to_upmap;
+    to_upmap[pg] = fresh_items;
+    call_pack_upmap_results(to_unmap, to_upmap, tmp_osd_map, pending_inc);
+
+    EXPECT_TRUE(pending_inc.new_pg_upmap_items.count(pg));
+    EXPECT_EQ(pending_inc.new_pg_upmap_items[pg], fresh_items);
+    EXPECT_FALSE(pending_inc.old_pg_upmap_items.count(pg))
+        << "stale old_pg_upmap_items survived a later upmap add";
   }
 }
 
