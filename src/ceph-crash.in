@@ -59,7 +59,7 @@ def post_crash(path):
         f.close()
         if rc == 0 and stderr == "":
             break
-        if rc == errno.EACCES:
+        if rc in (errno.EACCES, errno.ENOENT):
             log.debug('post %s as %s failed: %s' % (path, n, stderr))
         else:
             log.warning('post %s as %s failed: %s' % (path, n, stderr))
