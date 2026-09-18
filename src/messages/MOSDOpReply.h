@@ -106,6 +106,9 @@ public:
       ops[i].outdata = std::move(o[i].outdata);
     }
   }
+  auto const& get_ops() const {
+    return ops;
+  }
   void claim_ops(std::vector<OSDOp>& o) {
     o.swap(ops);
     bdata_encode = false;
