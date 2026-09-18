@@ -1,0 +1,28 @@
+# Metadata pool: Erasure Coded
+# Data pool: None
+
+overrides:
+  ceph:
+    create_rbd_pool: false
+    fs: xfs
+    conf:
+      osd: # force bluestore since it's required for ec overwrites
+        osd objectstore: bluestore
+        bluestore block size: 96636764160
+        enable experimental unrecoverable data corrupting features: "*"
+        osd debug randomize hobject sort order: false
+
+tasks:
+- exec:
+    cluster1.client.0:
+      - sudo ceph --cluster cluster1 osd erasure-code-profile set metaprofile crush-failure-domain=osd m=1 k=2
+      - sudo ceph --cluster cluster1 osd pool create rbd 8 8 erasure metaprofile
+      - sudo ceph --cluster cluster1 osd pool set rbd allow_ec_overwrites true
+      - sudo ceph --cluster cluster1 osd pool set rbd allow_ec_optimizations true
+      - rbd --cluster cluster1 pool init rbd
+    cluster2.client.0:
+      - sudo ceph --cluster cluster2 osd erasure-code-profile set metaprofile crush-failure-domain=osd m=1 k=2
+      - sudo ceph --cluster cluster2 osd pool create rbd 8 8 erasure metaprofile
+      - sudo ceph --cluster cluster2 osd pool set rbd allow_ec_overwrites true
+      - sudo ceph --cluster cluster2 osd pool set rbd allow_ec_optimizations true
+      - rbd --cluster cluster2 pool init rbd
