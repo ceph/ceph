@@ -13,8 +13,7 @@ Ceph delivers **object, block, and file storage in one unified system**. It
 runs on ordinary servers, keeps redundant copies of your data, and has no
 single point of failure.
 
-**New to Ceph?** Go to :ref:`Start Here <start-here>`. It explains what Ceph
-is and walks you through a first cluster.
+**New to Ceph?** Go to :ref:`Start Here <start-here>`.
 
 .. list-table::
    :header-rows: 1
@@ -23,8 +22,7 @@ is and walks you through a first cluster.
    * - I want to
      - Go to
    * - Learn what Ceph is
-     - :ref:`Start Here <start-here>`, :ref:`Architecture <architecture>`,
-       :doc:`Glossary <glossary>`
+     - :ref:`Start Here <start-here>`, :ref:`Architecture <architecture>`
    * - Deploy a cluster
      - :ref:`Installing Ceph <install-overview>`,
        :ref:`Cephadm <cephadm>`,
@@ -54,18 +52,11 @@ is and walks you through a first cluster.
        :ref:`Documenting Ceph <documenting_ceph>`,
        :ref:`Ceph Community Channels <get-involved>`
 
-Next Steps
-==========
-
-- New to Ceph: :ref:`Start Here <start-here>`.
-- Ready to deploy: :ref:`cephadm_deploying_new_cluster`.
-
 Additional Resources
 ====================
 
 - :ref:`Ceph Releases <ceph-releases-general>`
 - :doc:`Ceph Foundation <foundation>`
-- `Report a documentation bug <https://pad.ceph.com/p/Report_Documentation_Bugs>`_
 
 .. toctree::
    :maxdepth: 3

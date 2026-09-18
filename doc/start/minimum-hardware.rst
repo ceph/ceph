@@ -11,44 +11,16 @@
    :ceph-reviewed: 2026-09
    :ceph-owner: docs
 
-Ceph can run on inexpensive commodity hardware. Small production clusters
-and development clusters can run successfully with modest hardware. In this
-table, cores means threads when hyperthreading (HT) is enabled. For Ceph, HT
-is almost always advantageous. Each modern physical x64 CPU core typically
-provides two logical CPU threads; other CPU architectures may vary.
-
-There are many factors that influence resource choices. The minimum
-resources that suffice for one purpose will not necessarily suffice for
-another. A sandbox cluster with one :term:`OSD` built on a laptop with
-VirtualBox or on a trio of Raspberry Pis will get by with fewer resources
-than a production deployment with a thousand OSDs serving five thousand RBD
-clients.
-
-.. warning:: Use enterprise-quality storage media for production workloads.
-
-Additional insights into resource planning for production clusters are
-found in :ref:`hardware-recommendations` and elsewhere within this
-documentation.
+The smallest configuration that each daemon runs with. Cores means threads
+when hyperthreading is enabled. Production clusters need more; see
+:ref:`hardware-recommendations`.
 
 +--------------+----------------+------------------------------------------+
-|  Process     | Criteria       | Bare Minimum and Recommended             |
+|  Process     | Criteria       | Minimum (recommended where shown)        |
 +==============+================+==========================================+
-| ``ceph-osd`` | Processor      | - 1 min, 3 recommended threads per HDD   |
-|              |                |   OSD. 4, 6 respectively for NVMe SSD    |
-|              |                |   OSDs.                                  |
-|              |                |                                          |
-|              |                | * Results are before replication.        |
-|              |                | * Results may vary across CPU and drive  |
-|              |                |   models and Ceph configuration:         |
-|              |                |   (erasure coding, compression, etc)     |
-|              |                | * ARM processors specifically may        |
-|              |                |   require more cores for performance.    |
-|              |                | * SSD OSDs, especially NVMe, will        |
-|              |                |   benefit from additional cores per OSD. |
-|              |                | * Actual performance depends on many     |
-|              |                |   factors including drives, net, and     |
-|              |                |   client throughput and latency.         |
-|              |                |   Benchmarking is highly recommended.    |
+| ``ceph-osd`` | Processor      | 1 thread minimum, 3 recommended per HDD  |
+|              |                | OSD; 4 minimum, 6 recommended per NVMe   |
+|              |                | SSD OSD.                                 |
 |              +----------------+------------------------------------------+
 |              | RAM            | >= 4 GiB per OSD; see :ref:`CPU and      |
 |              |                | Memory Sizing <hardware-cpu-memory>`     |
@@ -62,34 +34,39 @@ documentation.
 |              | (optional)     |  4-5x HDD OSDs per DB/WAL SATA SSD       |
 |              |                |  <= 15 HDD OSDs per DB/WAL NVMe SSD      |
 |              +----------------+------------------------------------------+
-|              | Network        | 1x 1 Gb/s; see :ref:`Network Sizing      |
-|              |                | <hardware-networks>` for the             |
-|              |                | recommendation                           |
+|              | Network        | 1 Gb/s minimum; 10 Gb/s recommended      |
+|              |                | (:ref:`Network Sizing                    |
+|              |                | <hardware-networks>`)                    |
 +--------------+----------------+------------------------------------------+
-| ``ceph-mon`` | Processor      | - 2 cores minimum                        |
+| ``ceph-mon`` | Processor      | 2 cores minimum                          |
 |              +----------------+------------------------------------------+
 |              | RAM            |  >= 5 GB per daemon (large / production  |
 |              |                |  clusters need more)                     |
 |              +----------------+------------------------------------------+
 |              | Storage        |  100 GB per daemon, SSD strongly urged   |
 |              +----------------+------------------------------------------+
-|              | Network        | 1x 1 Gb/s; see :ref:`Network Sizing      |
-|              |                | <hardware-networks>` for the             |
-|              |                | recommendation                           |
+|              | Network        | 1 Gb/s minimum; 10 Gb/s recommended      |
+|              |                | (:ref:`Network Sizing                    |
+|              |                | <hardware-networks>`)                    |
 +--------------+----------------+------------------------------------------+
-| ``ceph-mds`` | Processor      | - 2 cores minimum, higher freq is        |
-|              |                |   better than more cores                 |
+| ``ceph-mds`` | Processor      | 2 cores minimum, higher freq is better   |
+|              |                | than more cores                          |
 |              +----------------+------------------------------------------+
 |              | RAM            |  >= 8 GiB per daemon                     |
 |              +----------------+------------------------------------------+
-|              | Network        | 1x 1 Gb/s; see :ref:`Network Sizing      |
-|              |                | <hardware-networks>` for the             |
-|              |                | recommendation                           |
+|              | Network        | 1 Gb/s minimum; 10 Gb/s recommended      |
+|              |                | (:ref:`Network Sizing                    |
+|              |                | <hardware-networks>`)                    |
 +--------------+----------------+------------------------------------------+
 
-.. tip:: When running an OSD node with a single storage drive, create a
-   partition for your OSD that is separate from the partition
-   containing the OS. Use separate drives for the OS and for OSD storage.
+Thread counts are before replication and vary with CPU and drive model,
+erasure coding, and compression; ARM CPUs may need more cores. Benchmark.
+
+.. warning:: Use enterprise-quality storage media for production workloads.
+
+.. tip:: Use a separate drive for the OS. If a node has only one drive, put
+   the OSD on its own partition. See
+   :ref:`Storage Devices <hardware-storage-devices>`.
 
 Additional Resources
 ====================

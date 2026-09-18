@@ -11,8 +11,8 @@
    :ceph-reviewed: 2026-09
    :ceph-owner: docs
 
-This page lists the network recommendations for a Ceph cluster. For the
-principles behind them, see :ref:`Networks <hardware-recommendations-networks>`
+For the principles behind these recommendations, see
+:ref:`Networks <hardware-recommendations-networks>`
 on the Hardware Recommendations page. For how to configure the public and
 cluster networks, see the :doc:`Network Configuration Reference
 </rados/configuration/network-config-ref>`.
@@ -41,20 +41,19 @@ Link Speeds
 
 Notes:
 
-- A 40 Gb/s link is effectively four 10 Gb/s channels in parallel, and a
-  100 Gb/s link is effectively four 25 Gb/s channels in parallel.
 - Bond links active/active across separate network switches, both for
   throughput and for tolerance of network failures and maintenance. Check
   that the bonding hash policy distributes traffic across links.
+- 802.1Q VLANs need VLAN-capable NICs and switches.
+- Put BMC traffic (iDRAC, CIMC, iLO; IPMI or Redfish) on its own
+  out-of-band network. Hypervisor SSH, VM image uploads, and OS installs can
+  load a shared network heavily.
 
-Replication Time
-================
+Recovery Time by Link Speed
+===========================
 
-The faster a :term:`placement group <Placement Groups (PGs)>` (PG) returns
-from a degraded state to ``active + clean`` (healthy), the shorter the
-window in which a second failure can make data unavailable or lost; this
-table shows how long replication of a given amount of data takes at two
-link speeds.
+How long replication of a given amount of data takes, by link speed. Until
+it finishes, a second failure can make data unavailable or lost.
 
 .. list-table::
    :header-rows: 1
@@ -69,27 +68,6 @@ link speeds.
    * - 10 TiB
      - 30 hours
      - 3 hours
-
-VLANs
-=====
-
-Some deployments use VLANs to make hardware and network cabling more
-manageable. VLANs that use 802.1Q (the IEEE VLAN tagging standard) require
-VLAN-capable NICs and switches.
-
-Baseboard Management Controller (BMC)
-=====================================
-
-Most server chassis have a BMC. Well-known examples are iDRAC (Dell), CIMC
-(Cisco UCS), and iLO (HPE). Administration and deployment tools may use BMCs
-extensively, especially through IPMI or Redfish.
-
-- Weigh the cost and benefit of a separate out-of-band network for security
-  and administration. Hypervisor SSH access, VM image uploads, OS image
-  installs, and management sockets can impose significant loads on a
-  network.
-- Each traffic path is a potential capacity, throughput, or performance
-  bottleneck. Consider every path before deploying a large-scale cluster.
 
 Additional Resources
 ====================

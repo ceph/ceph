@@ -30,39 +30,37 @@ for object storage.
      - Holds the maps of the cluster state (:ref:`monitor map
        <display-mon-map>`, Manager map, OSD map, MDS map, CRUSH map) that
        daemons use to coordinate, and handles authentication between daemons
-       and clients. A majority of Monitors must be up to form a
-       :term:`quorum<Quorum>`, and the cluster does not work without one.
-     - Three for redundancy. One is enough for a test cluster.
+       and clients.
+     - Three for redundancy; a majority must be up or the cluster stops. One
+       is enough for a test cluster.
    * - :term:`Manager <Ceph Manager>`
      - ``ceph-mgr``
      - Tracks runtime metrics and cluster state (storage utilization,
        performance, load) and hosts Python modules for orchestration
        (deploying daemons, through ``ceph orch``), the :ref:`Dashboard
        <mgr-dashboard>`, data balancing, and access for non-native clients
-       such as NFS. Taking this work off the Monitors makes the cluster easier
-       to scale.
-     - Two for high availability, ideally one per Monitor. One is enough for
-       a test cluster.
+       such as NFS.
+     - Two for high availability, ideally one per Monitor; with one, a
+       Manager restart pauses the Dashboard and modules. One is enough for a
+       test cluster.
    * - :term:`OSD <Ceph OSD>`
      - ``ceph-osd``
      - Manages one storage device, usually one disk. Stores data as objects,
        replicates, recovers, and rebalances it, and reports OSDs that stop
        answering heartbeat checks.
      - At least as many as the number of copies of each object (or of
-       chunks, for erasure coding), and three for redundancy in production.
+       chunks, for erasure coding); below that, pools cannot become healthy.
+       Three for redundancy in production.
    * - :term:`Metadata Server <Ceph Metadata Server>`
      - ``ceph-mds``
-     - Stores the metadata of the :term:`Ceph File System` so that clients
-       can run commands like ``ls`` and ``find`` without loading the storage
-       cluster. Needed only if you use CephFS. See
+     - Stores the metadata of the :term:`Ceph File System` (directory
+       listings, file attributes). Needed only if you use CephFS. See
        :ref:`orchestrator-cli-cephfs` and :ref:`arch-cephfs`.
      - At least one active per file system, plus a standby.
    * - :term:`Object Gateway <Ceph Object Gateway>`
      - ``ceph-radosgw``
-     - An HTTP gateway between applications and the cluster. The
-       S3-compatible API is the most used; the OpenStack Swift API is also
-       available. Needed
-       only if you use object storage.
+     - An HTTP gateway that provides S3-compatible and Swift-compatible APIs.
+       Needed only if you use object storage.
      - One, or more behind a load balancer.
 
 How Data Is Placed

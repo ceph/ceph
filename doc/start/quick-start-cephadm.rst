@@ -27,11 +27,10 @@ Prerequisites
   <cephadm-host-requirements>`: Python 3, systemd,
   Podman or Docker, time synchronization, and LVM2.
 - ``ssh`` installed and running on the host.
-- At least two unused storage devices on the host, each 6 GiB or larger. Ceph
-  rejects devices under 5 GiB, and a disk that a hypervisor or cloud provider
-  labels "5 GB" can fall short of that. A device is unused if it has no
-  partition table, no LVM state, no file system, and no label from an earlier
-  OSD, and is not mounted.
+- At least two unused storage devices on the host, each 6 GiB or larger (Ceph
+  rejects devices under 5 GiB, and a disk labeled "5 GB" can fall short).
+  Unused means no partition table, no LVM state, no file system, no label from
+  an earlier OSD, and not mounted.
 - The IP address of the host.
 
 .. warning:: Ceph erases every device that you give to it. Do not use a device
@@ -48,8 +47,7 @@ Procedure
 
       cephadm version
 
-   The command prints the version of ``cephadm``. It deploys the matching Ceph
-   release unless you pass ``--image``.
+   The command prints the version of ``cephadm``.
 
 #. Bootstrap the cluster, replacing ``<mon-ip>`` with the IP address of the
    host:
@@ -58,11 +56,10 @@ Procedure
 
       cephadm bootstrap --mon-ip <mon-ip> --single-host-defaults
 
-   The ``--single-host-defaults`` flag keeps two copies of each object instead
-   of three and lets both copies sit on one host, which a cluster does not
-   allow by default. The command takes a few minutes. It prints the address
-   and the initial password of the Ceph Dashboard, then a few hints, and ends
-   with this line::
+   ``--single-host-defaults`` lets the cluster keep its copies on one host.
+   The command takes a few minutes. It prints the address and the initial
+   password of the Ceph Dashboard, then a few hints, and ends with this
+   line::
 
       Bootstrap complete.
 
@@ -72,7 +69,8 @@ Procedure
 
       cephadm shell
 
-   Run the remaining commands in this shell.
+   Run the remaining commands in this shell. The prompt changes to
+   ``[ceph: root@<host> /]#``.
 
 #. List the storage devices that Ceph can see:
 
@@ -95,7 +93,8 @@ Procedure
 
       Created osd(s) 0 on host 'host1701'
 
-#. Run the same command again for the second device.
+#. Run the same command again for the second device. It reports ``Created
+   osd(s) 1``.
 
 Verification
 ============
@@ -126,6 +125,12 @@ Troubleshooting
   groups.** Ceph cannot store the required number of copies. Either the
   cluster has fewer than two OSDs, or it was bootstrapped without
   ``--single-host-defaults``. See :ref:`one-node-cluster`.
+- **"cephadm: command not found" after installation.** If you downloaded
+  the ``cephadm`` binary, run it as ``./cephadm`` from the directory that
+  holds it, or install it as a package as described in :ref:`get-cephadm`.
+- **"ceph orch device ls" prints nothing.** The inventory can take a minute
+  to fill after bootstrap. Run ``ceph orch device ls --refresh`` and try
+  again.
 
 Next Steps
 ==========
