@@ -8096,7 +8096,7 @@ int main(int argc, const char **argv)
       if (!rgw::sal::User::empty(user)) {
         if (!user_op.has_existing_user()) {
           cerr << "ERROR: could not find user: " << user << std::endl;
-          return -ENOENT;
+          return ENOENT;
         }
       }
       bucket_op.marker = marker;
@@ -8224,7 +8224,7 @@ int main(int argc, const char **argv)
       rgw_bucket bucket;
       if (!rgw_find_bucket_by_id(dpp(), driver->ctx(), driver, marker, bucket_id, &bucket)) {
         cerr << "failure: no such bucket id" << std::endl;
-        return -ENOENT;
+        return ENOENT;
       }
       bucket_op.set_tenant(bucket.tenant);
       bucket_op.set_bucket_name(bucket.name);
@@ -8516,7 +8516,7 @@ int main(int argc, const char **argv)
     if (ret < 0) {
       cerr << "ERROR: failed to get pending log entries for bucket '" << bucket_name
            << "': " << cpp_strerror(-ret) << std::endl;
-      return ret;
+      return -ret;
     }
 
     formatter->open_array_section("pending_logs");
@@ -9346,7 +9346,7 @@ next:
 					  yes_i_really_mean_it,
 					  &bucket);
     if (ret < 0) {
-      return ret;
+      return -ret;
     }
 
     auto zone_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone;
@@ -9402,7 +9402,7 @@ next:
 					  yes_i_really_mean_it,
 					  &bucket);
     if (ret < 0) {
-      return ret;
+      return -ret;
     }
 
     int num_source_shards = rgw::current_num_shards(bucket->get_info().layout);
@@ -9572,17 +9572,17 @@ next:
   if (opt_cmd == OPT::BUCKET_SET_MIN_SHARDS) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     if (!num_shards_specified) {
       cerr << "ERROR: --num-shards not specified" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     if (num_shards < 1) {
       cerr << "ERROR: --num-shards must be at least 1" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
