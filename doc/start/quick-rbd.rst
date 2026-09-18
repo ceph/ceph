@@ -48,11 +48,15 @@ Procedure
 
       rbd pool init rbd1701
 
+   The command prints nothing on success.
+
 #. On the client host, create a 1 GB image:
 
    .. prompt:: bash #
 
       rbd create rbd1701/image1701 --size 1G
+
+   The command prints nothing. ``rbd ls rbd1701`` lists ``image1701``.
 
 #. Map the image to a block device:
 
@@ -60,16 +64,19 @@ Procedure
 
       rbd map rbd1701/image1701
 
-   The command prints the name of the new device, for example ``/dev/rbd0``.
-   The ``udev`` rule shipped with ``ceph-common`` also creates the link
-   ``/dev/rbd/rbd1701/image1701``, which the next steps use. If that link does
-   not exist, use the ``/dev/rbdN`` name that ``rbd map`` printed.
+   The command prints the device name, for example ``/dev/rbd0``. The next
+   steps use the link ``/dev/rbd/rbd1701/image1701`` that the ``ceph-common``
+   udev rule creates. If that link does not exist, use the ``/dev/rbdN`` name
+   instead.
 
 #. Create a file system on the device:
 
    .. prompt:: bash #
 
       mkfs.ext4 /dev/rbd/rbd1701/image1701
+
+   The output ends with ``Writing superblocks and filesystem accounting
+   information: done``.
 
 #. Create a mount point:
 
@@ -82,6 +89,8 @@ Procedure
    .. prompt:: bash #
 
       mount /dev/rbd/rbd1701/image1701 /mnt/ceph-block-device
+
+   The command prints nothing on success.
 
 Verification
 ============
@@ -101,6 +110,9 @@ Verification
 
      df -h /mnt/ceph-block-device
 
+  The output shows the ``/dev/rbd`` device mounted on
+  ``/mnt/ceph-block-device`` with about 1 GB of space.
+
 Troubleshooting
 ===============
 
@@ -108,6 +120,12 @@ Troubleshooting
   client does not support every feature that is enabled on the image. Run the
   ``rbd feature disable`` command that the error message suggests, then map
   the image again.
+- If ``rbd map`` reports ``rbd: map failed: (2) No such file or directory`` or
+  ``modprobe: FATAL: Module rbd not found``, the client kernel has no ``rbd``
+  module. Run ``modprobe rbd``, then map the image again.
+- If ``mkfs.ext4`` or ``mount`` reports ``No such file or directory`` for
+  ``/dev/rbd/rbd1701/image1701``, the udev link was not created. Use the
+  ``/dev/rbdN`` device name that ``rbd map`` printed.
 - If ``rbd`` commands hang or report an authentication error, check that
   ``/etc/ceph/ceph.conf`` and the keyring on the client are copies of the
   files on the cluster. Then check that the client can reach the Monitors

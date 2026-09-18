@@ -11,10 +11,8 @@
    :ceph-reviewed: 2026-09
    :ceph-owner: rados
 
-Ceph delivers object, block, and file storage from one cluster of commodity
-hardware. Its daemons replicate and redistribute data among themselves, so the
-cluster scales from a few nodes to thousands and keeps working when hardware
-fails. These pages explain how.
+These pages explain how Ceph stores data, keeps it available when hardware
+fails, and serves it to clients.
 
 .. image:: ../images/stack.png
    :alt: The Ceph stack: RADOS at the base; librados above it; RADOSGW, RBD,
@@ -53,8 +51,8 @@ How Clients Use It
   interfaces.
 - :doc:`Ceph Protocol <ceph-protocol>`: librados, watch/notify, and striping.
 
-Internals
-=========
+Extending Ceph and Legacy Features
+==================================
 
 - :doc:`Ceph Object Classes <extending-ceph>`: extending the OSD with your own
   object methods.
@@ -64,11 +62,9 @@ Internals
 Why This Matters for Sizing
 ===========================
 
-Ceph uses the CPU and RAM of every server. Heartbeats, peering, rebalancing,
-and recovery all run on the OSD hosts, not on clients or on a central gateway,
-because there is no central gateway. Keep this in mind when reading the
-:ref:`hardware-recommendations` and the :doc:`Network Configuration Reference
-</rados/configuration/network-config-ref>`.
+Heartbeats, peering, rebalancing, and recovery run on the OSD hosts, so every
+server needs CPU, RAM, and network for them. See
+:ref:`hardware-recommendations`.
 
 Next Steps
 ==========

@@ -11,13 +11,8 @@
    :ceph-reviewed: 2026-09
    :ceph-owner: docs
 
-Ceph is open-source software that turns a group of ordinary servers into a
-single storage system. One Ceph cluster provides object, block, and file
-storage, keeps redundant copies of the data that it stores, and has no single
-point of failure.
-
-This section is for readers who are new to Ceph. It explains what Ceph is,
-helps you deploy a first cluster, and shows where to go next.
+Read the Learn pages, then deploy a test cluster under Set Up. The Look Up
+pages hold the numbers you need while you plan.
 
 .. toctree::
    :maxdepth: 1
@@ -52,9 +47,6 @@ Read these before you install anything.
 Set Up
 ======
 
-Each of these pages covers one task and ends with a way to check that it
-worked.
-
 - :ref:`Deploying a Single-Host Test Cluster <quick-start-cephadm>`: a working
   cluster on one machine, for learning and testing.
 - :ref:`Creating and Mounting a Block Device <quick-rbd>`: a first block
@@ -62,8 +54,6 @@ worked.
 
 Look Up
 =======
-
-Facts to look up while you plan.
 
 - :ref:`Minimum Hardware per Daemon <minimum-hardware>`: the smallest
   configuration for each daemon.
