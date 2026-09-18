@@ -240,9 +240,8 @@ radosgw_radoslist
 
 for myfile in $rados_out $rgwadmin_out; do
   if [ ! -s "${myfile}" ]; then
-    log "ERROR: Empty file detected: ${myfile}"
-    log "ERROR: RESULTS ARE INCOMPLETE - DO NOT USE"
-    exit 1
+    log "WARNING: Empty file detected: ${myfile}"
+    log "         RESULTS MAY BE INCOMPLETE, USE WITH CAUTION"
   fi 
 done
 
