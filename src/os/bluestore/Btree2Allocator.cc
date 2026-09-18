@@ -382,8 +382,15 @@ void Btree2Allocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   ceph_assert(size != 0);
 
   auto rt_p = range_tree.lower_bound(start);
-  if ((rt_p == range_tree.end() || rt_p->first > start) && rt_p != range_tree.begin()) {
-    --rt_p;
+  // lower_bound() returns the first range starting at or past 'start', hence
+  // it skips a range which begins before 'start' but reaches into
+  // [start, end). Step back to the preceding range only if it actually does
+  // so - otherwise lower_bound()'s result is already the one we want.
+  if (rt_p != range_tree.begin()) {
+    auto prev_rt_p = std::prev(rt_p);
+    if (prev_rt_p->second > start) {
+      rt_p = prev_rt_p;
+    }
   }
 
   if (rt_p == range_tree.end() || rt_p->first >= end) {
@@ -402,6 +409,12 @@ void Btree2Allocator::_try_remove_from_tree(uint64_t start, uint64_t size,
     cb(start, range_end - start, true);
     start = range_end;
 
+    // _remove_from_tree() returns an iterator to the range it re-inserted,
+    // which for a left-over split is the remainder *below* start. Skip it,
+    // otherwise the loop would process it again and never make progress.
+    while (rt_p != range_tree.end() && rt_p->second <= start) {
+      ++rt_p;
+    }
   } while (rt_p != range_tree.end() && rt_p->first < end && start < end);
   if (start < end) {
     cb(start, end - start, false);
