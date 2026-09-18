@@ -24,6 +24,7 @@ from ceph.deployment.service_spec import (
     ServiceSpec,
     YamlLiteralString,
     TunedProfileSpec,
+    MgmtGatewaySpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -1807,3 +1808,26 @@ def test_tuned_profile_spec_profile_name_validation(spec_yaml, expect_error, err
         assert spec.placement is not None
         # round-trip
         assert TunedProfileSpec.from_json(spec.to_json()).profile_name == spec.profile_name
+
+@pytest.mark.parametrize(
+    "virtual_ip, valid",
+    [
+        ("10.128.8.255", True),
+        ("2001:db8::1", True),
+        ("[2001:db8::1]", True),
+        ("ceph.example.com", False),
+        ("10.128.8.255/22", False),
+        ("invalid", False),
+    ],
+)
+def test_mgmt_gateway_virtual_ip_validation(virtual_ip, valid):
+    spec = MgmtGatewaySpec(virtual_ip=virtual_ip)
+
+    if valid:
+        spec.validate()
+    else:
+        with pytest.raises(
+            SpecValidationError,
+            match=r"Invalid virtual_ip: .*\. Must be a valid IP address\.",
+        ):
+            spec.validate()

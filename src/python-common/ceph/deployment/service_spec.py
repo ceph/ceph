@@ -2748,6 +2748,7 @@ class MgmtGatewaySpec(ServiceSpec):
     def validate(self) -> None:
         super(MgmtGatewaySpec, self).validate()
         validate_port(self.port, 'port')
+        self._validate_virtual_ip(self.virtual_ip)
         self._validate_certificate(self.ssl_cert, "ssl_cert")
         self._validate_private_key(self.ssl_key, "ssl_key")
         self._validate_boolean_switch(self.ssl_prefer_server_ciphers, "ssl_prefer_server_ciphers")
@@ -2795,6 +2796,16 @@ class MgmtGatewaySpec(ServiceSpec):
             if protocol not in valid_protocols:
                 raise SpecValidationError(f"Invalid SSL Protocol: {protocol}. \
                 Must be one of {valid_protocols}.")
+
+    def _validate_virtual_ip(self, virtual_ip: Optional[str]) -> None:
+        if virtual_ip is None:
+            return
+        try:
+            ip_address(unwrap_ipv6(virtual_ip))
+        except ValueError:
+            raise SpecValidationError(
+                f"Invalid virtual_ip: {virtual_ip}. Must be a valid IP address."
+            )
 
 
 yaml.add_representer(MgmtGatewaySpec, ServiceSpec.yaml_representer)
