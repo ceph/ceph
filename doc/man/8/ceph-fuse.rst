@@ -78,6 +78,28 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 
    Disable multi-threaded operation.
 
+.. option:: --client_force_lazyio
+
+   Enable LazyIO globally for all regular file opens on this mount.  When
+   set, the client requests ``CEPH_CAP_FILE_LAZYIO`` from the MDS, which
+   allows buffered reads and writes via the page cache even when multiple
+   clients hold the file open for write — at the expense of cache
+   coherency.  Applications are responsible for managing data
+   consistency themselves via
+   ``ceph_lazyio_propagate()`` / ``ceph_lazyio_synchronize()``.
+
+   .. warning::
+      Do not use this option unless you fully understand its
+      consequences and are handling your own data consistency.  LazyIO
+      relaxes CephFS cache coherency guarantees.  Applications may read
+      stale data, and overlapping writes from different clients may
+      produce undefined behavior.  Improper use can lead to silent data
+      corruption.  This option is intended only for HPC and similar
+      specialized workloads that can tolerate relaxed consistency and
+      where the application coordinates I/O externally.
+
+   Default: off.
+
 .. option:: --client_fs
 
    Pass the name of Ceph FS to be mounted. Not passing this option mounts the
