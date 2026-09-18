@@ -197,3 +197,14 @@ def verify_non_empty_string(field: Any, field_name: str) -> None:
     # isinstance first so we never call .strip() on None or non-str
     if not isinstance(field, str) or not field.strip():
         raise SpecValidationError(f"Invalid {field_name}: Must be a non-empty string.")
+
+
+def validate_ip(ip_addr: Optional[str]) -> None:
+    if ip_addr is None:
+        return
+    try:
+        ipaddress.ip_address(unwrap_ipv6(ip_addr))
+    except ValueError:
+        raise SpecValidationError(
+            f"Invalid virtual_ip: {ip_addr}. Must be a valid IP address."
+        )
