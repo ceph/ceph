@@ -1,5 +1,5 @@
-# type: ignore[no-redef]
-# pylint: disable=E0611,W0613,E0102
+# type: ignore
+# pylint: disable=E0611,W0613,E0102,E1102
 import copy
 
 from behave import given, then, when
