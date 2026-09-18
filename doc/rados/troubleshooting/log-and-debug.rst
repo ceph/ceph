@@ -102,8 +102,8 @@ configuration file:
          
      [osd]
          debug_osd = 1/5
-         debug_filestore = 1/5
-         debug_journal = 1
+         debug_bluestore = 1/5
+         debug_bluefs = 1
          debug_monc = 5/20
          
     [mds]
@@ -427,11 +427,6 @@ OSD
 
 .. confval:: osd_debug_drop_ping_probability
 .. confval:: osd_debug_drop_ping_duration
-
-Filestore
----------
-
-.. confval:: filestore_debug_omap_check
 
 MDS
 ---
