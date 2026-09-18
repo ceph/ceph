@@ -104,6 +104,13 @@ bool SnapInfo::will_md_op_succeed(const string& key, const string& val,
                << dendl;
       return false;
     }
+  } else if (op_flag == CEPH_SNAP_MD_OP_UPDATE) {
+    if (metadata.count(key) == 0) {
+      dout(10) << __func__ << " snapshot metadata op will fail: update would "
+               << "be attempted for a non-existing key. op_flag=" << op_flag
+               << dendl;
+      return false;
+    }
   } else {
     // NOTE: in case of wrong mode/op_flag value, client code exits with
     // appropriate error number instead of contacting MDS with wrong
@@ -131,6 +138,8 @@ void SnapInfo::do_md_op(const string& key, const string& val,
     metadata.emplace(key, val);
   } else if (op_flag == CEPH_SNAP_MD_OP_REMOVE) {
     metadata.erase(key);
+  } else if (op_flag == CEPH_SNAP_MD_OP_UPDATE) {
+    metadata.insert_or_assign(key, val);
   }
 }
 

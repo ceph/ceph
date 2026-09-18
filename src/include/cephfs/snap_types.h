@@ -22,4 +22,6 @@ enum {
         // update
 	CEPH_SNAP_MD_OP_EXCL      = (1 << 1),
 	CEPH_SNAP_MD_OP_REMOVE    = (1 << 2),
+        // update only; fails if key is absent
+	CEPH_SNAP_MD_OP_UPDATE    = (1 << 3),
 };
