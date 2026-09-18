@@ -93,6 +93,10 @@ class SubvolumeV2(SubvolumeV1):
                 raise VolumeException(-e.args[0], e.args[1])
 
     def mark_subvolume(self):
+        # Guard against setting xattr on parent group or root volume directory
+        if os.path.normpath(self.base_path) == os.path.normpath(self.group.path):
+            raise VolumeException(-errno.EINVAL, "cannot mark group directory as a subvolume")
+
         # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
         # subvolume root is where snapshots would be taken, and hence is the base_path for v2 subvolumes
         try:
