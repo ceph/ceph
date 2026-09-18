@@ -1,0 +1,3 @@
+@use '../../../shared/resource-page-card' as resource-page-card;
+
+@include resource-page-card.base();
