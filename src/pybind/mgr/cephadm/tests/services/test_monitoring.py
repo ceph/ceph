@@ -576,6 +576,55 @@ class TestMonitoring:
                     use_current_daemon_image=False,
                 )
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("socket.getfqdn")
+    def test_node_exporter_binds_to_network(
+        self,
+        mock_getfqdn,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
+        mock_getfqdn.return_value = 'host1.test'
+
+        with with_host(cephadm_module, "test"):
+            cephadm_module.cache.update_host_networks('test', {
+                '1.2.3.0/24': {
+                    'if0': ['1.2.3.1']
+                },
+            })
+            with with_service(cephadm_module, MonitoringSpec('node-exporter',
+                                                             networks=['1.2.3.0/24'],
+                                                             only_bind_port_on_networks=True)):
+                stdin = json.loads(_run_cephadm.call_args.kwargs['stdin'])
+                assert stdin['params']['port_ips'] == {'9100': '1.2.3.1'}
+                assert stdin['config_blobs']['ip_to_bind_to'] == '1.2.3.1'
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("socket.getfqdn")
+    @patch('cephadm.services.cephadmservice.CephExporterService.get_keyring_with_caps',
+           Mock(return_value='[client.ceph-exporter.test]\nkey = fake-secret\n'))
+    def test_ceph_exporter_binds_to_network(
+        self,
+        mock_getfqdn,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
+        mock_getfqdn.return_value = 'host1.test'
+
+        with with_host(cephadm_module, "test"):
+            cephadm_module.cache.update_host_networks('test', {
+                '1.2.3.0/24': {
+                    'if0': ['1.2.3.1']
+                },
+            })
+            with with_service(cephadm_module, CephExporterSpec('ceph-exporter',
+                                                               networks=['1.2.3.0/24'],
+                                                               only_bind_port_on_networks=True)):
+                stdin = json.loads(_run_cephadm.call_args.kwargs['stdin'])
+                assert stdin['config_blobs']['addrs'] == '1.2.3.1'
+
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
