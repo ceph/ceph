@@ -90,10 +90,13 @@ tasks:
     smb_shares:
       - share1
       - share2
+    params:
+      fs_case:
+        cluster_id: modtest1
     timeout: 1h
     clients:
       client.0:
-        - [default, hosts_access, rate_limiting, ceph_smb_ctl_local]
+        - [default, fs_case, hosts_access, rate_limiting, ceph_smb_ctl_local]
 
 - cephadm.shell:
     host.a:
