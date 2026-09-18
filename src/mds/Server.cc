@@ -12606,8 +12606,8 @@ bool Server::build_snap_diff(
     // better for the MDS to do the work, if we think the client will stat any of these files.
     if (dnl->is_remote() && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
-      dout(20) << __func__ << " remote in: " << *in << " ino " << std::hex << dnl->get_remote_ino() << std::dec << dendl;
       if (in) {
+	dout(20) << __func__ << " remote in: " << *in << dendl;
 	dn->link_remote(dnl, in);
       } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
@@ -12627,6 +12627,8 @@ bool Server::build_snap_diff(
 	} else {
 	  mds->locker->drop_locks(mdr.get());
 	  mdr->drop_local_auth_pins();
+	  if (waiting)
+	    *waiting = true;
 	  mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
 	}
 	return false;
