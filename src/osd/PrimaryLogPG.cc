@@ -16662,6 +16662,12 @@ void PrimaryLogPG::stop_target_pool_migration()
 
 void PrimaryLogPG::stop_pool_migration_unfound()
 {
+  // Always signal: this is only reached from the FATAL_ERROR quiesce completion,
+  // i.e. a genuine fatal copy failure. A racing DeferPoolMigration may already
+  // have left MigratingSource (clearing PG_STATE_MIGRATING); the Active-level
+  // reaction records the terminal state (visible in pg status and to
+  // mark_unfound_lost) rather than dropping it. Note a pending DoPoolMigration
+  // retry may re-enter MigratingSource and clear it again.
   queue_peering_event(
     PGPeeringEventRef(
       std::make_shared<PGPeeringEvent>(
@@ -16672,6 +16678,10 @@ void PrimaryLogPG::stop_pool_migration_unfound()
 
 void PrimaryLogPG::stop_pool_migration_toofull()
 {
+  if (!recovery_state.is_migrating()) {
+    dout(10) << __func__ << " no longer migrating, not signaling toofull" << dendl;
+    return;
+  }
   queue_peering_event(
     PGPeeringEventRef(
       std::make_shared<PGPeeringEvent>(
@@ -16682,6 +16692,10 @@ void PrimaryLogPG::stop_pool_migration_toofull()
 
 void PrimaryLogPG::stop_pool_migration_revoked()
 {
+  if (!recovery_state.is_migrating()) {
+    dout(10) << __func__ << " no longer migrating, not signaling revoked" << dendl;
+    return;
+  }
   queue_peering_event(
     PGPeeringEventRef(
       std::make_shared<PGPeeringEvent>(
@@ -16692,6 +16706,12 @@ void PrimaryLogPG::stop_pool_migration_revoked()
 
 void PrimaryLogPG::stop_pool_migration_error(int error_code)
 {
+  // Always signal: this is only reached from the FATAL_ERROR quiesce completion,
+  // i.e. a genuine fatal copy failure. A racing DeferPoolMigration may already
+  // have left MigratingSource (clearing PG_STATE_MIGRATING); the Active-level
+  // reaction records the terminal state (visible in pg status and to
+  // mark_unfound_lost) rather than dropping it. Note a pending DoPoolMigration
+  // retry may re-enter MigratingSource and clear it again.
   queue_peering_event(
     PGPeeringEventRef(
       std::make_shared<PGPeeringEvent>(

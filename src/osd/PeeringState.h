@@ -933,6 +933,10 @@ public:
       boost::statechart::custom_reaction< PgCreateEvt >,
       boost::statechart::custom_reaction< DeferPoolMigration >,
       boost::statechart::custom_reaction< PoolMigrationDone >,
+      boost::statechart::custom_reaction< PoolMigrationStoppedUnfound >,
+      boost::statechart::custom_reaction< PoolMigrationStoppedTooFull >,
+      boost::statechart::custom_reaction< PoolMigrationStoppedRevoked >,
+      boost::statechart::custom_reaction< PoolMigrationStoppedError >,
       boost::statechart::custom_reaction< StartTargetPoolMigration >,
       boost::statechart::custom_reaction< StopTargetPoolMigration >,
       boost::statechart::custom_reaction< RemotePoolMigrationRevokedTooFull>,
@@ -983,6 +987,14 @@ public:
     boost::statechart::result react(const PoolMigrationDone& evt) {
       return discard_event();
     }
+    boost::statechart::result react(const PoolMigrationStoppedUnfound& evt);
+    boost::statechart::result react(const PoolMigrationStoppedTooFull& evt) {
+      return discard_event();
+    }
+    boost::statechart::result react(const PoolMigrationStoppedRevoked& evt) {
+      return discard_event();
+    }
+    boost::statechart::result react(const PoolMigrationStoppedError& evt);
     boost::statechart::result react(const StartTargetPoolMigration& evt) {
       pool_migration_target_reservation_requested = true;
       pool_migration_target_reservation_num_bytes = evt.source_num_bytes;

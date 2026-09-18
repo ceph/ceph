@@ -451,14 +451,16 @@ else()
 endif()
 
 # in osd/PeeringState.h, the number of elements in PeeringState::Active::reactions
-# is now 21 which exceeds the default value of BOOST_MPL_LIMIT_VECTOR_SIZE, which
-# is 20. so we need to override it. see
+# now exceeds the default value of BOOST_MPL_LIMIT_LIST_SIZE, which is 20, so we
+# override it. The limit must be a multiple of 10, and
+# BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS forces the preprocessor to regenerate the
+# mpl::list machinery for the requested size. see
 # https://www.boost.org/doc/libs/1_74_0/libs/mpl/doc/refmanual/limit-list-size.html
 # link with this library, if your code includes osd/PeeringState.h (indirectly)
 add_library(Boost::MPL INTERFACE IMPORTED)
 set_target_properties(Boost::MPL PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS
-    "BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS;BOOST_MPL_LIMIT_LIST_SIZE=30")
+    "BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS;BOOST_MPL_LIMIT_LIST_SIZE=40")
 
 if(WITH_CRIMSON)
   find_package(c-ares 1.13.0 QUIET)

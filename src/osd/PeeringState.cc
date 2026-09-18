@@ -6324,6 +6324,25 @@ PeeringState::MigratingSource::react(const DeferPoolMigration &c)
 }
 
 boost::statechart::result
+PeeringState::Active::react(const PoolMigrationStoppedUnfound &)
+{
+  DECLARE_LOCALS;
+  psdout(10) << "migration unfound signalled while not migrating, recording" << dendl;
+  ps->state_set(PG_STATE_MIGRATION_UNFOUND);
+  return discard_event();
+}
+
+boost::statechart::result
+PeeringState::Active::react(const PoolMigrationStoppedError &evt)
+{
+  DECLARE_LOCALS;
+  psdout(10) << "migration error " << evt.error_code
+             << " signalled while not migrating, recording" << dendl;
+  ps->state_set(PG_STATE_MIGRATION_ERROR);
+  return discard_event();
+}
+
+boost::statechart::result
 PeeringState::MigratingSource::react(const PoolMigrationStoppedUnfound &)
 {
   DECLARE_LOCALS;
