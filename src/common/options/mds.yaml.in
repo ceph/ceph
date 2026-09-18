@@ -1883,3 +1883,19 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_log_hard_limit_segments
+  type: uint
+  level: advanced
+  desc: maximum number of segments which may be untrimmed before freezing client writes
+  fmt_desc: The hard limit of the number of segments (objects) in the journal before
+    the MDS rejects client mutating operations with ENOSPC to prevent unbounded memory usage.
+    To ensure health warnings are generated before client writes are blocked, this value must
+    be strictly greater than ``mds_log_max_segments * mds_log_warn_factor``. If configured
+    lower than this calculated safety threshold, the MDS will automatically clamp the limit
+    to the safe minimum. Set to 0 to disable.
+  default: 512
+  min: 0
+  services:
+  - mds
+  flags:
+  - runtime
