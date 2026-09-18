@@ -2648,6 +2648,8 @@ struct extent_info_t {
 std::ostream &operator<<(std::ostream &out, const extent_info_t &header);
 
 using segment_nonce_t = uint32_t;
+inline constexpr segment_nonce_t SEGMENT_NONCE_MASK =
+  (std::numeric_limits<segment_nonce_t>::max() >> 1) + 1;
 
 /**
  * Segment header
@@ -2678,6 +2680,8 @@ struct segment_header_t {
     return type;
   }
 
+  bool operator==(const segment_header_t &) const = default;
+
   DENC(segment_header_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.modify_time, p);
@@ -2693,6 +2697,19 @@ struct segment_header_t {
   }
 };
 std::ostream &operator<<(std::ostream &out, const segment_header_t &header);
+
+inline constexpr segment_header_t NULL_SEGMENT_HEADER =
+  segment_header_t{
+    std::numeric_limits<mod_time_point_t>::max(),
+    NULL_SEG_SEQ,
+    NULL_SEG_ID,
+    JOURNAL_SEQ_NULL,
+    JOURNAL_SEQ_NULL,
+    0,
+    segment_type_t::NULL_SEG,
+    data_category_t::NUM,
+    NULL_GENERATION
+  };
 
 struct segment_tail_t {
   segment_seq_t segment_seq;
@@ -2721,6 +2738,16 @@ struct segment_tail_t {
   }
 };
 std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail);
+
+inline constexpr segment_tail_t NULL_SEGMENT_TAIL =
+  segment_tail_t{
+    NULL_SEG_SEQ,
+    NULL_SEG_ID,
+    0,
+    segment_type_t::NULL_SEG,
+    std::numeric_limits<mod_time_point_t>::max(),
+    0
+  };
 
 enum class transaction_type_t : uint8_t {
   MUTATE = 0,
