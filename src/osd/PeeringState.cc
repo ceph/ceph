@@ -5847,7 +5847,11 @@ void PeeringState::Backfilling::suspend_backfill()
 boost::statechart::result
 PeeringState::Backfilling::react(const Backfilled &c)
 {
+  DECLARE_LOCALS;
   backfill_release_reservations();
+  if (ps->needs_recovery()) {
+    return transit<WaitLocalRecoveryReserved>();
+  }
   return transit<Recovered>();
 }
 
