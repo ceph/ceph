@@ -49,6 +49,25 @@
   handlers in ceph-fuse or libcephfs clients because there is no logic to propagate
   changes to open file handles.
 
+* CephFS: Mirrored directories can now be assigned a priority mode that
+  controls how the cephfs-mirror daemon's threads are allocated to them.
+  A directory in ``thread-shared`` mode (the default, and the previous
+  behaviour) is crawled and synchronized by the daemon's shared thread
+  pools. A directory in ``per-thread`` mode gets a crawler thread and a
+  private pool of data sync threads of its own, sized by the new
+  ``cephfs_mirror_max_datasync_threads_per_directory`` option, so its
+  replication progress does not depend on how many other directories are
+  being mirrored. The mode can be set when a directory is added,
+  ``ceph fs snapshot mirror add <fs_name> <path> [<priority_mode>]``, or
+  afterwards with ``ceph fs snapshot mirror priority set <fs_name> <path>
+  <priority_mode>`` and queried with ``ceph fs snapshot mirror priority
+  get <fs_name> <path>``. A mode change takes effect once the directory
+  finishes any in-progress snapshot synchronization.
+
+* CephFS: The output of ``ceph fs snapshot mirror ls`` changed from a list
+  of mirrored directory paths to an object keyed by path, carrying each
+  directory's ``priority_mode``.
+
 * RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
