@@ -1,0 +1,1951 @@
+
+backend/src/id_tag.hpp,950
+#define KVRGW_ID_TAG_HPPKVRGW_ID_TAG_HPP16,426
+namespace kvrgw {kvrgw28,621
+namespace detail {detail30,640
+  constexpr T process_endian(T value) {process_endian32,688
+constexpr T to_big_endian(T value) {to_big_endian41,902
+constexpr T from_big_endian(T value) {from_big_endian46,1009
+constexpr inline T read_be_field(const uint8_t* source_ptr) {read_be_field51,1118
+constexpr inline void write_be_field(uint8_t* dest_ptr, T value) {write_be_field58,1377
+using tag_count_t = uint16_t;tag_count_t64,1623
+using tag_size_t  = uint16_t;tag_size_t65,1653
+using TagPair     = std::pair<std::string_view, std::string_view>;TagPair66,1683
+static constexpr size_t MAX_TAG_COUNT = 10;MAX_TAG_COUNT68,1751
+static constexpr size_t MAX_KEY_SIZE = 128;MAX_KEY_SIZE69,1795
+static constexpr size_t MAX_VALUE_SIZE = 256;MAX_VALUE_SIZE70,1839
+static constexpr size_t SIZES_PER_TAG_BYTES = sizeof(tag_size_t) * 2;SIZES_PER_TAG_BYTES71,1885
+
+backend/src/perf_driver.hpp,191
+namespace kvrgw {kvrgw20,455
+struct PerfConfig {PerfConfig25,516
+  std::string tenant_name{"kv-poc"};tenant_name26,536
+  PerfDataStore* perf_data_store{nullptr};perf_data_store27,573
+
+backend/src/err_insertion.hpp,1322
+namespace kvrgw {kvrgw21,464
+enum class FaultType : uint8_t {FaultType23,483
+  kAbortAfterBatchPhase2 = 0,kAbortAfterBatchPhase224,516
+  kAbortAfterSinglePhase2,kAbortAfterSinglePhase225,546
+  kAbortSweeperAfterPutGo,kAbortSweeperAfterPutGo26,573
+  kAbortGcWorkerMidGroup,kAbortGcWorkerMidGroup27,600
+  kCountkCount28,626
+inline constexpr size_t kFaultTypeCount = static_cast<size_t>(FaultType::kCount);kFaultTypeCount31,639
+struct FaultPayload {FaultPayload33,722
+  std::atomic<int32_t> call_count{0};call_count34,744
+  int32_t period{0};period35,782
+  std::atomic<int64_t> next_trigger_ns{0};next_trigger_ns36,803
+  int64_t interval_us{0};interval_us37,846
+  std::atomic<uint8_t> remaining_burst{0};remaining_burst38,872
+  uint8_t burst_size{0};burst_size39,915
+class ErrInsertion {ErrInsertion42,944
+  static constexpr uint8_t kModeDisabled = 0x00;kModeDisabled44,974
+  static constexpr uint8_t kModeFixed    = 0x01;kModeFixed45,1023
+  static constexpr uint8_t kModeCounter  = 0x02;kModeCounter46,1072
+  static constexpr uint8_t kModeTime     = 0x03;kModeTime47,1121
+  inline bool is_error_active(FaultType type) const {is_error_active54,1390
+  std::atomic<uint8_t> flags_[kFaultTypeCount]{};flags_64,1676
+  mutable FaultPayload payload_[kFaultTypeCount]{};payload_65,1726
+
+backend/src/ref_count.hpp,754
+namespace kvrgw {kvrgw26,555
+struct RValue {RValue30,636
+  uint64_t ref_count{};ref_count31,652
+  std::string chunk_descriptor;chunk_descriptor32,676
+inline RValue parse_r_value(std::string_view raw) {parse_r_value35,712
+inline std::string write_r_value(uint64_t count, std::string_view chunk_descriptor) {write_r_value47,995
+struct DRefInfo {DRefInfo54,1226
+  bool shared{false};shared55,1244
+  uint64_t ref_count{};ref_count56,1266
+inline DRefInfo read_d_ref_count(std::string_view d_value) {read_d_ref_count59,1294
+inline std::string write_d_with_ref(std::string_view data, uint64_t new_count) {write_d_with_ref70,1566
+inline std::string_view d_data_portion(std::string_view d_value, uint64_t data_size) {d_data_portion81,1936
+
+backend/src/id_tag.cpp,294
+namespace kvrgw {kvrgw17,424
+bool encoded_tag_frame_size(std::span<const uint8_t> input, size_t &out_size)encoded_tag_frame_size19,443
+bool encode(std::span<const TagPair> tags_in, std::vector<uint8_t> &out)encode58,1658
+bool decode(std::span<const uint8_t> input_buffer,decode133,3873
+
+backend/src/data_store.hpp,899
+namespace kvrgw {kvrgw27,588
+class DataStore {DataStore29,607
+  std::error_code read_all(std::string_view ref_tag, std::string* out) {read_all38,1012
+class FileDataStore : public DataStore {FileDataStore43,1139
+  std::filesystem::path root_;root_54,1652
+class PerfDataStore : public DataStore {PerfDataStore57,1687
+  void set_sim_write_us(int64_t us) { sim_write_us_.store(us, std::memory_order_relaxed); }set_sim_write_us64,2068
+  void set_sim_read_us(int64_t us) { sim_read_us_.store(us, std::memory_order_relaxed); }set_sim_read_us65,2160
+  int64_t sim_write_us() const { return sim_write_us_.load(std::memory_order_relaxed); }sim_write_us66,2250
+  int64_t sim_read_us() const { return sim_read_us_.load(std::memory_order_relaxed); }sim_read_us67,2339
+  std::atomic<int64_t> sim_write_us_{0};sim_write_us_70,2437
+  std::atomic<int64_t> sim_read_us_{0};sim_read_us_71,2478
+
+backend/src/key_buf.hpp,1889
+namespace kvrgw {kvrgw26,564
+struct KeyBuf {KeyBuf28,583
+  static constexpr size_t kMaxSize = 1100;kMaxSize29,599
+  uint8_t data[kMaxSize];data30,642
+  size_t len{};len31,668
+  void set_header(const H& hdr) {set_header34,708
+  bool append(const void* src, size_t n) {append40,850
+  bool append_byte(uint8_t b) {append_byte49,1022
+  std::string_view view() const {view55,1136
+  const uint8_t* ptr() const { return data; }ptr59,1230
+  size_t size() const { return len; }size60,1276
+struct KeyHeaderS {KeyHeaderS65,1341
+  char ns;ns66,1361
+  uint16_t shard_count;shard_count67,1372
+  uint16_t shard_id;shard_id68,1396
+  uint8_t bucket_id[8];bucket_id69,1417
+  char cat;cat70,1441
+  KeyHeaderS(char ns_, uint16_t sc, uint16_t si, const void* bid, char cat_)KeyHeaderS72,1454
+struct KeyHeaderG {KeyHeaderG78,1665
+  char ns;ns79,1685
+  uint8_t size_tier;size_tier80,1696
+  uint16_t shard_count;shard_count81,1717
+  uint16_t shard_id;shard_id82,1741
+  uint8_t bucket_id[8];bucket_id83,1762
+  char cat;cat84,1786
+  KeyHeaderG(uint8_t tier, uint16_t sc, uint16_t si, const void* bid, char cat_)KeyHeaderG86,1799
+struct KeyHeaderD {KeyHeaderD92,2031
+  char ns;ns93,2051
+  uint16_t shard_count;shard_count94,2062
+  uint16_t shard_id;shard_id95,2086
+  uint8_t bucket_id[8];bucket_id96,2107
+  uint8_t size_tier;size_tier97,2131
+  uint8_t hash_prefix;hash_prefix98,2152
+  uint32_t mtime;mtime99,2175
+  uint8_t ref_tag[kRefTagSize];ref_tag100,2193
+  KeyHeaderD(uint16_t sc, uint16_t si, const void* bid,KeyHeaderD102,2226
+struct KeyHeaderB {KeyHeaderB111,2576
+  char ns;ns112,2596
+  tenant_id_t tenant_id;tenant_id113,2607
+  KeyHeaderB(tenant_id_t tid)KeyHeaderB115,2633
+struct KeyHeaderL {KeyHeaderL119,2709
+  char ns;ns120,2729
+  char type;type121,2740
+  KeyHeaderL(char t) : ns('L'), type(t) {}KeyHeaderL123,2754
+
+backend/src/bucket_policy.hpp,292
+namespace kvrgw {kvrgw20,446
+constexpr uint8_t kDenyRead         = 1 << 0;kDenyRead22,465
+constexpr uint8_t kDenyWrite        = 1 << 1;kDenyWrite23,511
+constexpr uint8_t kDenyList         = 1 << 2;kDenyList24,557
+constexpr uint8_t kDenyDeleteBucket = 1 << 3;kDenyDeleteBucket25,603
+
+backend/src/id_tags.h,3213
+#define ID_TAG_SET_ENCODER_HPPID_TAG_SET_ENCODER_HPP26,604
+namespace kvrgw {kvrgw37,779
+validate_characters_strict(std::string_view view, bool allow_all_spaces) noexceptvalidate_characters_strict41,896
+constexpr bool isValidIdTagKey(std::string_view key) noexceptisValidIdTagKey74,1866
+constexpr bool isValidIdTagValue(std::string_view value) noexceptisValidIdTagValue96,2544
+constexpr T ensure_big_endian(T value) {ensure_big_endian117,3227
+constexpr T from_big_endian(T value) {from_big_endian126,3474
+class IDTagSetEncoder {IDTagSetEncoder133,3639
+  static constexpr size_t BUFFER_SIZE = 8*1024;BUFFER_SIZE135,3671
+  static constexpr size_t MAX_TAG_COUNT = 10;MAX_TAG_COUNT136,3719
+  static constexpr size_t MAX_KEY_SIZE = 128;MAX_KEY_SIZE137,3765
+  static constexpr size_t MAX_VALUE_SIZE = 256;MAX_VALUE_SIZE138,3811
+  using TagPair = std::pair<std::string_view, std::string_view>;TagPair140,3860
+  bool set_tags(std::span<const TagPair> tags) {set_tags145,4000
+  inline std::span<const TagPair> get_tags() const {get_tags154,4272
+  inline std::span<const uint8_t> get_buffer() const {get_buffer162,4479
+  inline size_t size() const { return encoded_size; }size170,4679
+  inline bool is_valid() const { return valid; }is_valid171,4733
+  using tag_count_t = uint16_t;tag_count_t174,4792
+  using tag_size_t  = uint16_t;tag_size_t175,4824
+  static constexpr size_t SIZES_PER_TAG_BYTES = sizeof(tag_size_t) * 2;SIZES_PER_TAG_BYTES178,4890
+  std::array<uint8_t, BUFFER_SIZE> buffer{};buffer180,4963
+  std::array<TagPair, MAX_TAG_COUNT> views_cache{};views_cache181,5008
+  uint16_t encoded_size = 0;encoded_size182,5060
+  tag_count_t active_tag_count = 0;active_tag_count183,5089
+  bool valid = false;valid184,5125
+class IDTagSetEncoder {IDTagSetEncoder243,5242
+  static constexpr size_t BUFFER_SIZE = 8192;BUFFER_SIZE245,5274
+  static constexpr size_t MAX_TAG_COUNT = 10;MAX_TAG_COUNT246,5320
+  static constexpr size_t MAX_KEY_SIZE = 128;MAX_KEY_SIZE247,5366
+  static constexpr size_t MAX_VALUE_SIZE = 256;MAX_VALUE_SIZE248,5412
+  using Tag = std::pair<std::string_view, std::string_view>'Tag250,5461
+  size_t encoded_size = 0;encoded_size254,5626
+  bool valid = false;valid255,5653
+    const uint16_t tag_count = static_cast<uint16_t>(tags.size());tag_count278,6058
+    const size_t sizes_array_bytes = tag_count * 4;sizes_array_bytes279,6125
+    const size_t metadata_bytes = 2 + sizes_array_bytes;metadata_bytes280,6177
+    size_t total_data_bytes = 0;total_data_bytes283,6316
+    const size_t total_required_bytes = metadata_bytes + total_data_bytes;total_required_bytes291,6557
+    uint8_t* size_ptr = &buffer[2];size_ptr299,6854
+    uint8_t* data_ptr = &buffer[metadata_bytes];data_ptr300,6890
+      const uint16_t key_len = static_cast<uint16_t>(key.size());key_len304,7043
+      const uint16_t val_len = static_cast<uint16_t>(value.size());val_len305,7109
+    [[nodiscard]] std::span<const uint8_t> get_buffer() const {get_buffer327,7660
+    [[nodiscard]] size_t size() const { return encoded_size; }size332,7832
+    [[nodiscard]] bool is_valid() const { return valid; }is_valid333,7895
+int main() {main347,7987
+
+backend/src/ref_count_ops.cpp,136
+namespace kvrgw {kvrgw19,472
+void decrement_or_del_child_d(KvTransaction &tr, std::string_view d_key,decrement_or_del_child_d21,491
+
+backend/src/service_impl.cpp,8200
+namespace kvrgw {kvrgw44,991
+constexpr FDBStreamingMode streamingMode = FDB_STREAMING_MODE_EXACT;streamingMode45,1009
+namespace {__anon7f079e83011146,1078
+int64_t now_unix()now_unix48,1091
+std::string prefix_range_end(std::string_view prefix)prefix_range_end55,1256
+std::string base64_encode(std::string_view data)base64_encode69,1590
+std::optional<std::string> base64_decode(std::string_view data)base64_decode82,2055
+bool starts_with(std::string_view value, std::string_view prefix)starts_with97,2501
+uint64_t read_counter_le(const char *data, size_t len)read_counter_le103,2665
+void write_counter_le(uint64_t val, KvTransaction &tr, std::string_view key)write_counter_le115,2873
+bool is_valid_bucket_name(std::string_view name)is_valid_bucket_name122,3042
+bool write_object_value(OValueBuf &buf, const ObjectValue &value)write_object_value178,4218
+BatchCommitQueue::BatchCommitQueue(KvRgwServiceImpl &service)BatchCommitQueue221,5422
+BatchCommitQueue::~BatchCommitQueue() { stop(); }~BatchCommitQueue229,5642
+void BatchCommitQueue::start(int num_threads)start231,5693
+void BatchCommitQueue::stop()stop243,5965
+std::future<BatchPutResult> BatchCommitQueue::enqueue(BatchCommitEntry entry)enqueue260,6302
+void BatchCommitQueue::run()run277,6785
+void BatchCommitQueue::start_batch(InFlightBatch &ib)start_batch512,14296
+bool BatchCommitQueue::do_phase3_work(InFlightBatch &ib)do_phase3_work601,17655
+  struct IssuedBkt {IssuedBkt624,18343
+    tenant_id_t tid;tid625,18364
+    const std::string *name;name626,18385
+void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)commit_batch758,22414
+    struct IssuedBkt {IssuedBkt896,27004
+      tenant_id_t tid;tid897,27027
+      const std::string *name;name898,27050
+KvRgwServiceImpl::KvRgwServiceImpl(KvStore &store, DataStore &data_store,KvRgwServiceImpl1056,31929
+void KvRgwServiceImpl::put_bucket_cache(tenant_id_t tenant_id,put_bucket_cache1070,32497
+void KvRgwServiceImpl::invalidate_bucket_cache(tenant_id_t tenant_id,invalidate_bucket_cache1081,32982
+KvrgwErrorCode KvRgwServiceImpl::check_access(tenant_id_t tenant_id,check_access1088,33234
+FdbFuture KvRgwServiceImpl::issue_bucket_get(KvTransaction &tr,issue_bucket_get1110,33963
+KvRgwServiceImpl::resolve_bucket_verify(KvTransaction &tr, FdbFuture &f,resolve_bucket_verify1120,34437
+KvRgwServiceImpl::verify_bucket_in_txn(KvTransaction &tr, tenant_id_t tenant_id,verify_bucket_in_txn1153,35660
+KvRgwServiceImpl::get_bucket_id_cached(tenant_id_t tenant_id,get_bucket_id_cached1165,36284
+KvRgwServiceImpl::read_bucket_state(tenant_id_t tenant_id,read_bucket_state1185,37094
+bucket_id_t KvRgwServiceImpl::resolve_bucket_id(tenant_id_t tenant_id,resolve_bucket_id1211,38052
+void KvRgwServiceImpl::put_tenant_cache(std::string_view tenant_name,put_tenant_cache1221,38339
+void KvRgwServiceImpl::invalidate_tenant_cache(const std::string &tenant_name)invalidate_tenant_cache1228,38583
+KvRgwServiceImpl::resolve_tenant_id(std::string_view tenant_name)resolve_tenant_id1235,38793
+KvRgwServiceImpl::tenant_id_for_name(const std::string &tenant_name,tenant_id_for_name1261,39512
+KvrgwErrorCode KvRgwServiceImpl::add_tenant(std::string_view tenant_name,add_tenant1293,40356
+KvrgwErrorCode KvRgwServiceImpl::resolve_tenant(std::string_view tenant_name,resolve_tenant1378,42970
+KvRgwServiceImpl::load_object(bucket_id_t bucket_id,load_object1398,43554
+KvRgwServiceImpl::load_object_with_data(bucket_id_t bucket_id,load_object_with_data1413,43992
+bool KvRgwServiceImpl::move_object_to_g(KvTransaction &tr,move_object_to_g1474,46047
+KvRgwServiceImpl::compute_new_version(VersioningState versioning_state,compute_new_version1539,48528
+void KvRgwServiceImpl::displace_old_object(KvTransaction &tr,displace_old_object1559,49134
+KvRgwServiceImpl::delete_prepare(KvTransaction &tr, tenant_id_t tenant_id,delete_prepare1658,53132
+KvRgwServiceImpl::delete_verify_bucket(KvTransaction &tr, DeleteContext &ctx,delete_verify_bucket1685,54104
+KvRgwServiceImpl::delete_apply(KvTransaction &tr, DeleteContext &ctx,delete_apply1723,55411
+KvRgwServiceImpl::delete_single(KvTransaction &tr, tenant_id_t tenant_id,delete_single1802,57901
+bool KvRgwServiceImpl::delete_multi_try_commit(delete_multi_try_commit1818,58455
+void KvRgwServiceImpl::delete_multi_one_key(delete_multi_one_key1883,60246
+void apply_tags_to_value(ObjectValue &obj, std::span<const uint8_t> encoded,apply_tags_to_value1902,60909
+void clear_object_tags(ObjectValue &obj, KvTransaction &tr,clear_object_tags1918,61551
+KvrgwErrorCode KvRgwServiceImpl::put_object_phase3(put_object_phase31929,61890
+KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,create_bucket1980,63648
+KvrgwErrorCode KvRgwServiceImpl::bucket_exists(tenant_id_t tenant_id,bucket_exists2065,66325
+KvRgwServiceImpl::bucket_exists_cached(tenant_id_t tenant_id,bucket_exists_cached2088,67089
+KvRgwServiceImpl::put_prepare(KvTransaction &tr, PutInTxnParams &params,put_prepare2110,67798
+KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,put_finalize2134,68592
+KvRgwServiceImpl::put_object_in_txn(KvTransaction &tr, PutInTxnParams &params,put_object_in_txn2356,75570
+KvrgwErrorCode KvRgwServiceImpl::put_object_single_txn(put_object_single_txn2366,75998
+KvrgwErrorCode KvRgwServiceImpl::select_storage_tier(select_storage_tier2432,78385
+KvRgwServiceImpl::put_object_route(PutObjectRequest &req, const uint8_t *data,put_object_route2493,80875
+KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id,list_buckets2577,83698
+KvrgwErrorCode KvRgwServiceImpl::list_objects(list_objects2644,85739
+KvrgwErrorCode KvRgwServiceImpl::delete_object_version(delete_object_version2838,91567
+KvRgwServiceImpl::delete_multi(tenant_id_t tenant_id,delete_multi3033,98481
+KvrgwErrorCode KvRgwServiceImpl::delete_bucket(tenant_id_t tenant_id,delete_bucket3126,101570
+KvrgwErrorCode KvRgwServiceImpl::put_bucket_policy(tenant_id_t tenant_id,put_bucket_policy3245,105124
+KvrgwErrorCode KvRgwServiceImpl::get_bucket_policy(tenant_id_t tenant_id,get_bucket_policy3289,106576
+KvRgwServiceImpl::delete_bucket_policy(tenant_id_t tenant_id,delete_bucket_policy3313,107413
+KvrgwErrorCode KvRgwServiceImpl::put_bucket_versioning(put_bucket_versioning3354,108617
+KvRgwServiceImpl::get_bucket_versioning(tenant_id_t tenant_id,get_bucket_versioning3419,110572
+KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,copy_object3436,111156
+        [&]() -> std::expected<BktVerifyResult, KvrgwErrorCode> {__anon7f079e8302023618,116858
+namespace {__anon7f079e8303113899,126607
+std::string delete_marker_detail(const ObjectValue &v)delete_marker_detail3901,126620
+KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(load_object_for_read3909,126807
+  auto accept = [&](ObjectValue obj, std::string data) -> KvrgwErrorCode {__anon7f079e8304023929,127531
+KvRgwServiceImpl::get_object(tenant_id_t tenant_id,get_object4044,131241
+KvrgwErrorCode KvRgwServiceImpl::head_object(head_object4134,134573
+namespace {__anon7f079e8305114146,135072
+constexpr std::string_view kLovTok{"lov1."};kLovTok4148,135085
+void append_version_entry(KvRgwServiceImpl::ListObjectVersionsResult *out,append_version_entry4150,135131
+std::string encode_lov_cursors(std::string_view last_o, std::string_view last_v)encode_lov_cursors4159,135564
+bool decode_lov_cursors(std::string_view marker, std::string *last_o,decode_lov_cursors4175,136190
+void merge_version_streams(const std::vector<RangeScanResult> &o_rows,merge_version_streams4203,136949
+  auto load_o = [&]() -> bool {__anon7f079e8306024217,137521
+  auto load_v = [&]() -> bool {__anon7f079e8307024231,137916
+KvrgwErrorCode KvRgwServiceImpl::list_object_versions(list_object_versions4281,139408
+KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,delete_object4435,144635
+KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(put_object_tagging4480,146074
+KvrgwErrorCode KvRgwServiceImpl::get_object_tagging(get_object_tagging4576,148801
+KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(delete_object_tagging4655,151200
+
+backend/src/sweeper.cpp,413
+namespace kvrgw {kvrgw26,568
+Sweeper::Sweeper(KvStore &store, std::atomic<bool> &stop_flag, int interval_sec,Sweeper28,587
+void Sweeper::run()run35,812
+void Sweeper::sweep_once()sweep_once45,1022
+  const auto end = [&prefix]() {__anon2057309c010248,1111
+void Sweeper::process_bucket(bucket_id_t bucket_id, bool force)process_bucket144,3989
+  const auto end = [&prefix]() {__anon2057309c0202147,4110
+
+backend/src/kvrgw_c_api.cpp,5293
+namespace {__anon4ff523ad011139,859
+std::string_view sv(const char *p, size_t n)sv57,1308
+void copy_cstr(char *dst, size_t dst_cap, std::string_view s)copy_cstr65,1426
+kvrgw_err_t arena_put(char *arena, size_t cap, size_t *used, std::string_view s,arena_put77,1688
+void fill_object_meta(const ObjectValue &v, kvrgw_object_meta *meta)fill_object_meta95,2172
+kvrgw_err_t fill_kv_pairs(std::span<const MetaPair> kvs, uint32_t n,fill_kv_pairs110,2739
+kvrgw_err_t fill_decoded_metadata(std::span<const uint8_t> live, uint16_t n,fill_decoded_metadata147,3706
+kvrgw_err_t encode_kv_tags(const kvrgw_kv *tags, size_t n,encode_kv_tags167,4434
+kvrgw_err_t encode_kv_metadata(const kvrgw_kv *meta, size_t n,encode_kv_metadata187,5011
+std::optional<version_id_t> parse_version(const char *p, size_t n)parse_version208,5679
+VersioningState to_vs(uint8_t state)to_vs217,5868
+kvrgw::KvRgwServiceImpl *svc(KvRgwHandle *h)svc228,6100
+kvrgw_err_t abi_guard(auto &&fn)abi_guard234,6262
+bool ok(auto ec) { return static_cast<kvrgw_err_t>(ec) == KVRGW_ERR_OK; }ok244,6380
+kvrgw_err_t kvrgw_start(const char *data_root, size_t data_root_len,kvrgw_start250,6485
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0202253,6599
+void kvrgw_stop(KvRgwHandle *h)kvrgw_stop274,7148
+kvrgw_err_t kvrgw_add_tenant(KvRgwHandle *h, const char *name, size_t name_len,kvrgw_add_tenant288,7345
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0302291,7474
+kvrgw_err_t kvrgw_resolve_tenant(KvRgwHandle *h, const char *name,kvrgw_resolve_tenant305,7789
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0402309,7976
+kvrgw_err_t kvrgw_create_bucket(KvRgwHandle *h, uint32_t tenant_id,kvrgw_create_bucket323,8362
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0502326,8503
+kvrgw_err_t kvrgw_delete_bucket(KvRgwHandle *h, uint32_t tenant_id,kvrgw_delete_bucket335,8711
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0602338,8852
+kvrgw_err_t kvrgw_bucket_exists(KvRgwHandle *h, uint32_t tenant_id,kvrgw_bucket_exists347,9060
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0702351,9268
+kvrgw_err_t kvrgw_bucket_exists_cached(KvRgwHandle *h, uint32_t tenant_id,kvrgw_bucket_exists_cached368,9713
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0802372,9942
+kvrgw_err_t kvrgw_put_bucket_versioning(KvRgwHandle *h, uint32_t tenant_id,kvrgw_put_bucket_versioning389,10430
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0902393,10642
+kvrgw_err_t kvrgw_get_bucket_versioning(KvRgwHandle *h, uint32_t tenant_id,kvrgw_get_bucket_versioning403,10908
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0a02407,11125
+kvrgw_err_t kvrgw_put_bucket_policy(KvRgwHandle *h, uint32_t tenant_id,kvrgw_put_bucket_policy420,11491
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0b02424,11715
+kvrgw_err_t kvrgw_get_bucket_policy(KvRgwHandle *h, uint32_t tenant_id,kvrgw_get_bucket_policy434,11983
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0c02438,12212
+kvrgw_err_t kvrgw_delete_bucket_policy(KvRgwHandle *h, uint32_t tenant_id,kvrgw_delete_bucket_policy460,12780
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0d02463,12935
+kvrgw_err_t kvrgw_put_object(kvrgw_put_object472,13150
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0e02481,13696
+kvrgw_err_t kvrgw_get_object(kvrgw_get_object602,17715
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad0f02610,18142
+kvrgw_err_t kvrgw_head_object(KvRgwHandle *h, uint32_t tenant_id,kvrgw_head_object650,19491
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad1002658,19993
+kvrgw_err_t kvrgw_delete_object(KvRgwHandle *h, uint32_t tenant_id,kvrgw_delete_object682,20833
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad1102690,21322
+kvrgw_err_t kvrgw_delete_object_version(kvrgw_delete_object_version717,22269
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad1202723,22596
+kvrgw_err_t kvrgw_delete_multi(KvRgwHandle *h, uint32_t tenant_id,kvrgw_delete_multi743,23360
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad1302751,23842
+kvrgw_err_t kvrgw_list_buckets(KvRgwHandle *h, uint32_t tenant_id,kvrgw_list_buckets816,26236
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad1402825,26808
+kvrgw_err_t kvrgw_list_objects(kvrgw_list_objects866,28188
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad1502877,28814
+kvrgw_err_t kvrgw_list_object_versions(kvrgw_list_object_versions939,31062
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad1602948,31554
+kvrgw_err_t kvrgw_copy_object(KvRgwHandle *h, uint32_t tenant_id,kvrgw_copy_object1003,33575
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad17021010,33982
+kvrgw_err_t kvrgw_put_object_tagging(KvRgwHandle *h, uint32_t tenant_id,kvrgw_put_object_tagging1077,36604
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad18021082,36903
+kvrgw_err_t kvrgw_get_object_tagging(KvRgwHandle *h, uint32_t tenant_id,kvrgw_get_object_tagging1108,37667
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad19021115,38087
+kvrgw_err_t kvrgw_delete_object_tagging(KvRgwHandle *h, uint32_t tenant_id,kvrgw_delete_object_tagging1154,39254
+  return abi_guard([&]() -> kvrgw_err_t {__anon4ff523ad1a021158,39484
+
+backend/src/kv_store.hpp,2019
+namespace kvrgw {kvrgw33,677
+class FdbFuture {FdbFuture35,696
+  FdbFuture() noexcept : f_(nullptr) {}FdbFuture37,723
+  explicit FdbFuture(FDBFuture* f) noexcept : f_(f) {}FdbFuture38,763
+  ~FdbFuture() { if (f_) fdb_future_destroy(f_); }~FdbFuture39,818
+  FdbFuture(FdbFuture&& o) noexcept : f_(std::exchange(o.f_, nullptr)) {}FdbFuture41,870
+  FdbFuture& operator=(FdbFuture&& o) noexcept {operator =42,944
+  FDBFuture* raw() const { return f_; }raw53,1215
+  explicit operator bool() const { return f_ != nullptr; }operator bool54,1255
+  bool is_ready() const { return f_ && fdb_future_is_ready(f_); }is_ready55,1314
+  FDBFuture* f_;f_58,1391
+struct RangeScanResult {RangeScanResult61,1412
+  std::string key;key62,1437
+  std::string value;value63,1456
+struct TxnStats {TxnStats66,1481
+  std::atomic<uint64_t> commits{0};commits67,1499
+  std::atomic<uint64_t> conflicts{0};conflicts68,1535
+  std::atomic<uint64_t> internals{0};internals69,1573
+struct FdbPutStats {FdbPutStats72,1615
+  std::atomic<uint64_t> num_put{0};num_put73,1636
+  std::atomic<uint64_t> key_bytes{0};key_bytes74,1672
+  std::atomic<uint64_t> value_bytes{0};value_bytes75,1710
+  void record(size_t key_len, size_t value_len) {record77,1751
+  void reset() {reset83,1985
+enum class TxnRetryPolicy { kRetry, kNoRetry };TxnRetryPolicy90,2163
+enum class TxnRetryPolicy { kRetry, kNoRetry };kRetry90,2163
+enum class TxnRetryPolicy { kRetry, kNoRetry };kNoRetry90,2163
+class KvStore {KvStore94,2234
+  TxnStats& txn_stats() { return txn_stats_; }txn_stats137,4190
+  FdbPutStats& fdb_put_stats() { return fdb_put_stats_; }fdb_put_stats138,4237
+  std::unique_ptr<Impl> impl_;impl_145,4378
+  TxnStats txn_stats_;txn_stats_146,4409
+  FdbPutStats fdb_put_stats_;fdb_put_stats_147,4432
+class KvTransaction {KvTransaction150,4466
+  KvStore& store_;store_183,5788
+  std::unique_ptr<Impl> impl_;impl_185,5822
+auto KvStore::run_transaction(Fn&& fn, TxnRetryPolicy policy)run_transaction189,5880
+
+backend/src/err_insertion.cpp,448
+namespace kvrgw {kvrgw19,443
+void ErrInsertion::set_fixed(FaultType type)set_fixed21,462
+void ErrInsertion::set_counter(FaultType type, int32_t period,set_counter31,782
+void ErrInsertion::set_time(FaultType type, int64_t interval_us,set_time42,1187
+void ErrInsertion::clear(FaultType type)clear54,1657
+bool ErrInsertion::check_and_update(FaultType type) constcheck_and_update63,1979
+int64_t ErrInsertion::now_ns() constnow_ns117,3319
+
+backend/src/byte_range.cpp,136
+namespace kvrgw {kvrgw17,421
+resolve_byte_range(const ByteRange &range, int64_t object_size, bool *invalid)resolve_byte_range20,470
+
+backend/src/ref_tag.cpp,565
+namespace kvrgw {kvrgw24,538
+RefTagGenerator::RefTagGenerator(uint32_t rgw_id) : rgw_id_(rgw_id) {}RefTagGenerator26,557
+RefTag RefTagGenerator::next()next28,629
+std::string RefTagGenerator::to_hex(std::string_view ref_tag)to_hex42,972
+std::string RefTagGenerator::from_hex(std::string_view ref_tag_hex)from_hex53,1251
+    auto nibble = [](char c) -> int {__anon66fafdb9010261,1510
+std::string RefTagGenerator::filename_for(std::string_view ref_tag)filename_for81,1943
+bool RefTagGenerator::equal(std::string_view a, std::string_view b)equal90,2165
+
+backend/src/gc_policy.hpp,436
+namespace kvrgw {kvrgw19,428
+struct GcPolicy {GcPolicy21,447
+  bool suspended = false;suspended22,465
+  int interval_sec = 10;interval_sec23,491
+  int max_objects_per_sec = 0;max_objects_per_sec24,516
+  int max_mb_per_sec = 0;max_mb_per_sec25,547
+struct GcConfigSnapshot {GcConfigSnapshot28,577
+  uint32_t active_age = 0;active_age29,603
+  uint32_t pending_age = 0;pending_age30,630
+  GcPolicy active{};active31,658
+
+backend/src/error_codes.hpp,1104
+namespace kvrgw {kvrgw21,464
+namespace fdb {fdb55,1936
+  constexpr fdb_error_t kConflict              = 1020;kConflict56,1952
+  constexpr fdb_error_t kProcessBehind         = 1037;kProcessBehind57,2007
+  constexpr fdb_error_t kFutureVersion         = 1009;kFutureVersion58,2062
+  constexpr fdb_error_t kTransactionTooOld     = 1007;kTransactionTooOld59,2117
+  constexpr fdb_error_t kCommitUnknownResult   = 1021;kCommitUnknownResult60,2172
+  constexpr fdb_error_t kClusterVersionChanged = 1039;kClusterVersionChanged61,2227
+  constexpr fdb_error_t kKeyTooLarge           = 2102;kKeyTooLarge62,2282
+  constexpr fdb_error_t kValueTooLarge         = 2103;kValueTooLarge63,2337
+  constexpr fdb_error_t kTransactionTooLarge   = 2101;kTransactionTooLarge64,2392
+inline KvrgwErrorCode fdb_to_error(fdb_error_t err) {fdb_to_error67,2450
+inline bool is_retriable_idempotent(KvrgwErrorCode c) {is_retriable_idempotent82,3283
+inline bool is_retriable_not_idempotent(KvrgwErrorCode c) {is_retriable_not_idempotent96,3654
+inline bool is_retriable(KvrgwErrorCode c) {is_retriable100,3761
+
+backend/src/perf_driver.cpp,10489
+namespace kvrgw {kvrgw53,1154
+namespace {__anon3904f839011155,1173
+static unsigned constexpr AWS_MAX_BUCKET_NAME = 64;AWS_MAX_BUCKET_NAME56,1185
+static constexpr int GET_REQUESTS_QUEUE_SIZE = 1024;GET_REQUESTS_QUEUE_SIZE57,1237
+static constexpr int GET_FUTURE_MAX = 1024;GET_FUTURE_MAX58,1290
+static constexpr auto GET_IDLE_SLEEP = std::chrono::microseconds(10);GET_IDLE_SLEEP59,1334
+static constexpr int kKeyPrefixMaxLen = 768;kKeyPrefixMaxLen60,1404
+static constexpr int kNameMidLen = 21;kNameMidLen61,1449
+static constexpr int GET_OBJECT_NAME_MAX = kKeyPrefixMaxLen + kNameMidLen + 1;GET_OBJECT_NAME_MAX62,1488
+int g_instance_id = 0;g_instance_id65,1614
+char g_key_prefix[kKeyPrefixMaxLen + 1] = "perf";g_key_prefix66,1637
+char g_key_suffix[kKeyPrefixMaxLen + 1] = "";g_key_suffix67,1687
+const char *g_metadata_file = nullptr;g_metadata_file68,1733
+std::vector<uint8_t> g_put_tag_buf;g_put_tag_buf69,1772
+std::span<const uint8_t> g_put_tags{};g_put_tags70,1808
+std::string make_object_name(int thread_id, uint64_t seq)make_object_name72,1848
+ObjectValue build_object_value(const RefTag &ref_tag, const uint8_t *data,build_object_value86,2270
+struct BenchResult {BenchResult118,3331
+  std::atomic<int64_t> ops{};ops119,3352
+  std::atomic<int64_t> errors{};errors120,3382
+  std::atomic<int64_t> retries{};retries121,3415
+  std::atomic<int64_t> err_counts[::kvrgw::v1::KvrgwErrorCode_ARRAYSIZE]{};err_counts122,3449
+  void record_error(KvrgwErrorCode code)record_error124,3526
+namespace {__anon3904f8390211130,3659
+void print_results(const char *label, const BenchResult &result,print_results132,3672
+void print_fdb_put_stats(KvStore &store)print_fdb_put_stats182,5795
+struct ParsedParams {ParsedParams194,6292
+  int concurrency = 64;concurrency195,6314
+  int duration = 30;duration196,6338
+  int buckets = 1;buckets197,6359
+  int versions = 0;versions198,6378
+  int burst = 1;burst199,6398
+  int64_t count = 0;count200,6415
+  int64_t base_files = 0;base_files201,6436
+  int64_t overwrite_count = -1;overwrite_count202,6462
+  int progress_sec = 10;progress_sec203,6494
+  int producers = 0;producers204,6519
+  int consumers = 0;consumers205,6540
+  int max_futures = 0;max_futures206,6561
+  std::string mode = "none";mode207,6584
+  std::vector<uint64_t> tiers;tiers208,6613
+ParsedParams parse_params(const std::string &line)parse_params211,6648
+static void fill_idtag_buffer_random(std::span<char> buffer, size_t num_bytes)fill_idtag_buffer_random274,8591
+                  [&distrib]() { return charset[distrib(gen)]; });__anon3904f8390302290,9256
+static bool init_put_tags()init_put_tags294,9409
+static void progress_tick(int thread_id, int progress_sec, OpType op,progress_tick353,11434
+std::string tier_label(uint64_t size)tier_label399,13323
+static constexpr int kMaxBuckets = 128;kMaxBuckets411,13511
+struct PutWorkerResult {PutWorkerResult413,13552
+  int64_t ops{};ops414,13577
+  int64_t errors{};errors415,13594
+  int64_t retries{};retries416,13614
+  uint64_t bucket_seq[kMaxBuckets]{};bucket_seq417,13635
+void put_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,put_worker420,13677
+void put_pad_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,put_pad_worker481,15711
+void get_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,get_worker510,16757
+void delete_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,delete_worker533,17537
+void delete_direct_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,delete_direct_worker557,18377
+void delete_multi_direct_worker(KvRgwServiceImpl &service,delete_multi_direct_worker577,19087
+static std::vector<std::string> list_all_buckets(KvRgwServiceImpl &service,list_all_buckets613,20423
+static std::vector<std::string> list_all_objects(KvRgwServiceImpl &service,list_all_objects633,21074
+static void cmd_create_buckets(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_create_buckets655,21863
+static void cmd_put(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_put684,22997
+static void put_multi_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,put_multi_worker800,27119
+static void cmd_put_multi(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_put_multi867,29405
+static void cmd_get(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_get911,30923
+struct GetRequest {GetRequest956,32389
+  int bidx = 0;bidx957,32409
+  char name[GET_OBJECT_NAME_MAX]{};name958,32425
+  uint32_t version_raw = 0;version_raw959,32461
+  bool has_version = false;has_version960,32489
+  bool eof = false;eof961,32517
+  std::chrono::steady_clock::time_point creation{};creation962,32537
+  std::chrono::steady_clock::time_point serviced{};serviced963,32589
+struct GetTask {GetTask966,32645
+  GetRequest req{};req967,32662
+  std::unique_ptr<KvTransaction> txn;txn968,32682
+  FdbFuture future;future969,32720
+  bool occupied = false;occupied970,32740
+struct GetQueue {GetQueue973,32769
+  GetRequest items[GET_REQUESTS_QUEUE_SIZE]{};items974,32787
+  int head = 0;head975,32834
+  int tail = 0;tail976,32850
+  std::mutex mu;mu977,32866
+  std::counting_semaphore<GET_REQUESTS_QUEUE_SIZE> empty{empty978,32883
+  std::counting_semaphore<GET_REQUESTS_QUEUE_SIZE> filled{0};filled980,32973
+  void push(const GetRequest &r, std::atomic<int64_t> *blocked_ns)push982,33036
+  bool try_pop(GetRequest *out)try_pop1000,33568
+  GetRequest pop()pop1018,33932
+static void get_producer_thread_range(int producer_id, int nprod, int nthreads,get_producer_thread_range1033,34216
+static bool get_enqueue_one(GetQueue &q, GetRequest r, std::atomic<bool> *stop,get_enqueue_one1050,34713
+static bool get_enqueue_key(GetQueue &q, int bidx, int thread_id, uint64_t seq,get_enqueue_key1069,35255
+static void get_complete_task(GetTask &task, KvRgwServiceImpl &service,get_complete_task1100,36273
+static bool get_issue_task(GetTask &task, const GetRequest &req,get_issue_task1150,37904
+static int get_find_free_slot(GetTask *array, unsigned max_futures)get_find_free_slot1177,38983
+static void get_test_producer(get_test_producer1190,39225
+  auto one_pass = [&]() -> bool {__anon3904f83904021203,39802
+static void get_test_consumer(KvRgwServiceImpl &service, int consumer_id,get_test_consumer1262,41453
+static void cmd_get_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_get_test1349,43826
+static void cmd_delete(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_delete1576,51734
+static void delete_multi_worker(KvRgwServiceImpl &service,delete_multi_worker1649,54285
+static void cmd_delete_multi(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_delete_multi1687,55647
+static void cmd_delete_buckets(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_delete_buckets1761,58304
+static void cmd_list_buckets(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_list_buckets1780,59014
+static void cmd_list_objects(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_list_objects1792,59538
+struct ThreadRange {ThreadRange1814,60347
+  std::string bucket_name;bucket_name1815,60368
+  bucket_id_t bucket_id{};bucket_id1816,60395
+  std::vector<std::string> keys;keys1817,60422
+prepare_thread_ranges(KvRgwServiceImpl &service, tenant_id_t tenant_id,prepare_thread_ranges1821,60491
+void copy_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,copy_worker1860,61668
+void put_overwrite_standalone_worker(KvRgwServiceImpl &service,put_overwrite_standalone_worker1884,62489
+void put_overwrite_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,put_overwrite_worker1935,64644
+void put_overwrite_versioned_worker(KvRgwServiceImpl &service,put_overwrite_versioned_worker1965,65665
+void delete_version_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,delete_version_worker1998,66853
+static void cmd_copy(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_copy2023,67807
+static int parse_perf_bucket_index(std::string_view name)parse_perf_bucket_index2056,68856
+static void cmd_put_overwrite_standalone(KvRgwServiceImpl &service,cmd_put_overwrite_standalone2066,69176
+static void cmd_put_overwrite(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_put_overwrite2158,72496
+static void cmd_put_overwrite_versioned(KvRgwServiceImpl &service,cmd_put_overwrite_versioned2221,74494
+static void cmd_delete_version(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_delete_version2278,76461
+class KeyIterator {KeyIterator2321,77841
+  KeyIterator(std::string_view base_prefix, std::string_view base_suffix,KeyIterator2323,77869
+  bool next()next2363,79377
+  std::string_view view() const { return {buf_, static_cast<size_t>(len_)}; }view2372,79492
+  void reset()reset2374,79571
+  uint64_t total_keys() consttotal_keys2386,79750
+  bool is_done() const { return done_; }is_done2411,80452
+  char buf_[GET_OBJECT_NAME_MAX];buf_2414,80503
+  int len_;len_2415,80537
+  int thread_pos_, instance_pos_, seq_pos_;thread_pos_2416,80549
+  int thread_pos_, instance_pos_, seq_pos_;instance_pos_2416,80549
+  int thread_pos_, instance_pos_, seq_pos_;seq_pos_2416,80549
+  int thread_id_, instance_id_;thread_id_2417,80593
+  int thread_id_, instance_id_;instance_id_2417,80593
+  uint64_t seq_;seq_2418,80625
+  int thread_count_, instance_count_;thread_count_2419,80642
+  int thread_count_, instance_count_;instance_count_2419,80642
+  const uint64_t *max_seq_;max_seq_2420,80680
+  bool done_;done_2421,80708
+  int bucket_idx_;bucket_idx_2422,80722
+  int num_buckets_;num_buckets_2423,80741
+  uint64_t files_per_thread_;files_per_thread_2424,80761
+  bool in_bucket() constin_bucket2426,80792
+  bool advance_raw()advance_raw2437,81079
+  void skip_to_match()skip_to_match2461,81534
+  void write_thread()write_thread2470,81660
+  void write_instance()write_instance2477,81914
+  void write_seq()write_seq2482,82059
+static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,cmd_list_test2494,82342
+  auto fmt_M = [](uint64_t n, char *buf, size_t buflen) -> const char * {__anon3904f83905022677,87974
+  auto fmt_K = [](uint64_t n, char *buf, size_t buflen) -> const char * {__anon3904f83906022681,88121
+    auto pctl = [&](double p) -> int64_t {__anon3904f83907022944,97362
+int run_perf_driver(KvRgwRuntime &runtime)run_perf_driver2976,98417
+int run_perf_driver(KvRgwServiceImpl &service, KvStore &store,run_perf_driver2983,98604
+
+backend/src/admin_server.cpp,637
+namespace kvrgw {kvrgw35,761
+namespace {__anon8c9bf1c0011137,780
+bool parse_bool(const std::string &value, bool *out)parse_bool39,793
+bool parse_int_field(const std::string &key, const std::string &value,parse_int_field52,1062
+bool parse_set_policy(const std::string &args, GcPolicy *policy,parse_set_policy80,1812
+std::string format_config_line(const GcConfigSnapshot &snap)format_config_line109,2610
+AdminServer::AdminServer(GcConfigState &gc_config, TierConfigState &tier_config,AdminServer123,3071
+std::string AdminServer::handle_line(const std::string &line)handle_line136,3717
+bool AdminServer::run()run541,16661
+
+backend/src/fdb.hpp,48
+#define FDB_API_VERSION FDB_API_VERSION17,408
+
+backend/src/error_codes.cpp,101
+namespace kvrgw {kvrgw17,422
+const char *kvrgw_strerror(KvrgwErrorCode code)kvrgw_strerror19,441
+
+backend/src/tenant_value.cpp,592
+namespace kvrgw {kvrgw21,485
+namespace {__anona669eea7011123,504
+void append_uint32_be(std::string &out, uint32_t value)append_uint32_be25,517
+void append_int64_be(std::string &out, int64_t value)append_int64_be31,674
+uint32_t read_uint32_be(std::string_view data, size_t offset)read_uint32_be37,854
+int64_t read_int64_be(std::string_view data, size_t offset)read_int64_be45,1068
+std::string make_tenant_value(tenant_id_t tenant_id, int64_t created_at_unix)make_tenant_value55,1319
+std::optional<TenantValue> parse_tenant_value(std::string_view data)parse_tenant_value64,1541
+
+backend/src/id_meta.hpp,464
+#define KVRGW_ID_META_HPPKVRGW_ID_META_HPP16,427
+namespace kvrgw {kvrgw26,572
+using MetaPair = std::pair<std::string_view, std::string_view>;MetaPair28,591
+static constexpr size_t MAX_META_COUNT = 128;MAX_META_COUNT30,656
+static constexpr size_t MAX_META_KEY_SIZE = 256;MAX_META_KEY_SIZE31,702
+static constexpr size_t MAX_META_VALUE_SIZE = 2048;MAX_META_VALUE_SIZE32,751
+static constexpr size_t MAX_META_FRAME_BYTES = 2048;MAX_META_FRAME_BYTES33,803
+
+backend/src/gc_value.cpp,1151
+namespace kvrgw {kvrgw25,550
+namespace {__anon665c7b87011127,569
+void gc_hdr_to_be(GcValueHeader &hdr)gc_hdr_to_be29,582
+void gc_hdr_from_be(GcValueHeader &hdr)gc_hdr_from_be35,703
+void po_hdr_to_be(PoValueHeader &hdr)po_hdr_to_be41,826
+void po_hdr_from_be(PoValueHeader &hdr)po_hdr_from_be47,973
+std::string make_gc_value(const GcValueHeader &hdr)make_gc_value55,1138
+std::optional<GcValue> parse_gc_value(std::string_view data)parse_gc_value64,1345
+std::string make_po_value(uint64_t estimated_size, uint32_t created_at_unix)make_po_value80,1822
+std::optional<PoValue> parse_po_value(std::string_view data)parse_po_value91,2132
+std::string make_group_po_value(const GroupPoEntry *entries, size_t count,make_group_po_value102,2389
+std::optional<GroupPoValue> parse_group_po_value(std::string_view data)parse_group_po_value120,3067
+std::string make_group_gc_value(const GroupGcEntry *entries, size_t count)make_group_gc_value152,4055
+std::optional<GroupGcValue> parse_group_gc_value(std::string_view data)parse_group_gc_value169,4693
+std::expected<void, fdb_error_t> move_po_to_go(KvTransaction &tr,move_po_to_go200,5693
+
+backend/src/bucket_policy.cpp,316
+namespace kvrgw {kvrgw19,454
+namespace {__anon111af4ce011121,473
+uint8_t flag_for_action(const std::string &action)flag_for_action23,486
+bool is_wildcard_principal(const nlohmann::json &principal)is_wildcard_principal43,964
+uint8_t parse_policy_flags(std::string_view policy_json)parse_policy_flags68,1535
+
+backend/src/tier_config_state.hpp,493
+namespace kvrgw {kvrgw25,530
+struct TierConfigSnapshot {TierConfigSnapshot27,549
+  uint32_t active_age{};active_age28,577
+  uint32_t pending_age{};pending_age29,602
+  TierConfig active;active30,628
+class TierConfigState {TierConfigState33,653
+  mutable std::mutex mu_;mu_47,1063
+  TierConfig active_;active_48,1089
+  TierConfig pending_;pending_49,1111
+  std::atomic<uint32_t> active_age_{0};active_age_50,1134
+  std::atomic<uint32_t> pending_age_{0};pending_age_51,1174
+
+backend/src/gc_config_state.cpp,464
+namespace kvrgw {kvrgw17,426
+GcConfigState::GcConfigState(GcPolicy initial)GcConfigState19,445
+std::optional<uint32_t> GcConfigState::try_stage(const GcPolicy &policy)try_stage24,553
+uint32_t GcConfigState::active_age() constactive_age37,931
+GcConfigSnapshot GcConfigState::snapshot() constsnapshot42,1033
+GcPolicy GcConfigState::active_policy_copy() constactive_policy_copy52,1315
+void GcConfigState::maybe_apply_pending()maybe_apply_pending58,1425
+
+backend/src/typed_ids.hpp,3676
+namespace kvrgw {kvrgw22,488
+using tenant_id_t = uint32_t;tenant_id_t24,507
+using bucket_id_t = uint64_t;bucket_id_t25,537
+class __attribute__((packed)) etag_t {etag_t27,568
+  uint8_t bytes_[16]{};bytes_28,607
+  uint16_t part_count_{0};part_count_29,631
+  void serialize(uint8_t* out) const { std::memcpy(out, bytes_, 16); }serialize34,691
+  void deserialize(const uint8_t* src) { std::memcpy(bytes_, src, 16); }deserialize35,762
+  const uint8_t* data() const { return bytes_; }data40,915
+  uint8_t* data() { return bytes_; }data41,964
+  uint16_t part_count() const { return part_count_; }part_count42,1001
+  void set_part_count(uint16_t pc) { part_count_ = pc; }set_part_count43,1055
+  bool is_multipart() const { return part_count_ > 0; }is_multipart44,1112
+  bool operator==(const etag_t& o) const {operator ==46,1169
+  bool operator!=(const etag_t& o) const { return !(*this == o); }operator !=49,1299
+class __attribute__((packed)) cond_flags_t {cond_flags_t53,1407
+  uint8_t bits_{0};bits_54,1452
+  static constexpr uint8_t kIfMatch           = 0x01;kIfMatch57,1482
+  static constexpr uint8_t kIfNoneMatch       = 0x02;kIfNoneMatch58,1536
+  static constexpr uint8_t kIfModifiedSince   = 0x04;kIfModifiedSince59,1590
+  static constexpr uint8_t kIfUnmodifiedSince = 0x08;kIfUnmodifiedSince60,1644
+  static constexpr uint8_t kHasMtime          = 0x10;kHasMtime61,1698
+  static constexpr uint8_t kHasSize           = 0x20;kHasSize62,1752
+  static constexpr uint8_t kEtagIsStar        = 0x40;kEtagIsStar63,1806
+  bool has_any() const { return bits_ != 0; }has_any65,1861
+  bool if_match() const { return bits_ & kIfMatch; }if_match66,1907
+  bool if_none_match() const { return bits_ & kIfNoneMatch; }if_none_match67,1960
+  bool if_modified_since() const { return bits_ & kIfModifiedSince; }if_modified_since68,2022
+  bool if_unmodified_since() const { return bits_ & kIfUnmodifiedSince; }if_unmodified_since69,2092
+  bool has_mtime() const { return bits_ & kHasMtime; }has_mtime70,2166
+  bool has_size() const { return bits_ & kHasSize; }has_size71,2221
+  bool etag_is_star() const { return bits_ & kEtagIsStar; }etag_is_star72,2274
+  void set_if_match() { bits_ |= kIfMatch; }set_if_match74,2335
+  void set_if_none_match() { bits_ |= kIfNoneMatch; }set_if_none_match75,2380
+  void set_if_modified_since() { bits_ |= kIfModifiedSince | kHasMtime; }set_if_modified_since76,2434
+  void set_if_unmodified_since() { bits_ |= kIfUnmodifiedSince | kHasMtime; }set_if_unmodified_since77,2508
+  void set_has_size() { bits_ |= kHasSize; }set_has_size78,2586
+  void set_etag_star() { bits_ |= kIfMatch | kEtagIsStar; }set_etag_star79,2631
+  void clear() { bits_ = 0; }clear80,2691
+struct __attribute__((packed)) Condition {Condition84,2767
+  cond_flags_t flags{};flags85,2810
+  uint8_t _pad{0};_pad86,2834
+  etag_t etag{};etag87,2853
+  uint32_t mtime{0};mtime88,2870
+  uint64_t size{0};size89,2891
+class version_id_t {version_id_t93,2955
+  uint32_t val_{0};val_94,2976
+  explicit version_id_t(uint32_t v) : val_(v) {}version_id_t98,3034
+  uint32_t raw() const { return val_; }raw100,3084
+  bool is_valid() const { return val_ != 0; }is_valid102,3148
+  bool operator==(const version_id_t& o) const { return val_ == o.val_; }operator ==109,3369
+  bool operator!=(const version_id_t& o) const { return val_ != o.val_; }operator !=110,3443
+  bool operator<(const version_id_t& o) const { return val_ < o.val_; }operator <111,3517
+inline const version_id_t kNullVersion{0xFFFFFFFF};kNullVersion115,3635
+inline const version_id_t kFirstVersionId{0xFFFFFFFE};kFirstVersionId116,3687
+
+backend/src/admin_server.hpp,1470
+namespace kvrgw {kvrgw27,611
+struct ErrorStats {ErrorStats33,688
+  std::atomic<int64_t> counts[::kvrgw::v1::KvrgwErrorCode_ARRAYSIZE]{};counts34,708
+  void record(KvrgwErrorCode code) {record36,781
+  int64_t get(KvrgwErrorCode code) const {get40,899
+  void reset() {reset44,1022
+class AdminServer {AdminServer49,1113
+  GcConfigState& config_;config_64,1610
+  TierConfigState& tier_config_;tier_config_65,1636
+  std::string socket_path_;socket_path_66,1669
+  std::atomic<bool>& stop_flag_;stop_flag_67,1697
+  LatencyStats* latency_stats_{};latency_stats_68,1730
+  ErrorStats* error_stats_{};error_stats_69,1764
+  BatchStats* batch_stats_{};batch_stats_70,1794
+  ErrInsertion* err_insertion_{};err_insertion_71,1824
+  OpsStats* ops_stats_{};ops_stats_72,1858
+  std::chrono::steady_clock::time_point bs_last_time_{};bs_last_time_74,1885
+  int64_t bs_prev_commits_{};bs_prev_commits_75,1942
+  int64_t bs_prev_entries_{};bs_prev_entries_76,1972
+  int64_t bs_prev_wait_{};bs_prev_wait_77,2002
+  int64_t bs_prev_queue_{};bs_prev_queue_78,2029
+  std::chrono::steady_clock::time_point lat_last_time_{};lat_last_time_80,2058
+  int64_t lat_prev_count_[static_cast<int>(OpType::kCount)]{};lat_prev_count_81,2116
+  int64_t lat_prev_total_us_[static_cast<int>(OpType::kCount)]{};lat_prev_total_us_82,2179
+  std::chrono::steady_clock::time_point ops_last_time_{};ops_last_time_84,2246
+  uint64_t ops_prev_get_{};ops_prev_get_85,2304
+
+backend/src/data_store.cpp,920
+namespace kvrgw {kvrgw25,548
+FileDataStore::FileDataStore(std::filesystem::path root)FileDataStore29,593
+std::string FileDataStore::ref_tag_to_filename(std::string_view ref_tag) constref_tag_to_filename35,730
+std::filesystem::path FileDataStore::path_for(std::string_view ref_tag) constpath_for40,863
+std::error_code FileDataStore::write(std::string_view ref_tag,write45,993
+std::error_code FileDataStore::read(std::string_view ref_tag, uint64_t offset,read60,1429
+std::error_code FileDataStore::remove(std::string_view ref_tag)remove109,2735
+std::error_code PerfDataStore::write(std::string_view, std::string_view data)write124,3133
+std::error_code PerfDataStore::read(std::string_view, uint64_t, uint64_t length,read133,3372
+std::error_code PerfDataStore::remove(std::string_view) { return {}; }remove149,3798
+std::filesystem::path PerfDataStore::path_for(std::string_view) constpath_for151,3870
+
+backend/src/id_meta.cpp,296
+namespace kvrgw {kvrgw17,425
+bool encoded_metadata_frame_size(std::span<const uint8_t> input,encoded_metadata_frame_size19,444
+bool encode_metadata(std::span<const MetaPair> meta_in,encode_metadata61,1743
+bool decode_metadata(std::span<const uint8_t> input_buffer,decode_metadata141,4128
+
+backend/src/tier_config_state.cpp,660
+namespace kvrgw {kvrgw23,523
+TierConfigState::TierConfigState(TierConfig initial)TierConfigState25,542
+std::optional<uint32_t> TierConfigState::try_stage(const TierConfig &config)try_stage30,642
+uint32_t TierConfigState::active_age() constactive_age43,1017
+TierConfigSnapshot TierConfigState::snapshot() constsnapshot48,1121
+TierConfig TierConfigState::active_copy() constactive_copy58,1402
+void TierConfigState::maybe_apply_pending()maybe_apply_pending64,1502
+TierConfig TierConfigState::load_from_yaml(const std::string &path)load_from_yaml79,1892
+TierConfig TierConfigState::apply_env_overrides(TierConfig base)apply_env_overrides102,2490
+
+backend/src/kvrgw_runtime.cpp,1128
+namespace {__anon7971c255011125,546
+int env_int(const char *name, int default_value)env_int27,559
+void run_network()run_network36,757
+namespace kvrgw {kvrgw46,944
+KvRgwRuntime::~KvRgwRuntime() { stop(); }~KvRgwRuntime48,963
+void KvRgwRuntime::request_stop() { stop_.store(true); }request_stop50,1006
+bool KvRgwRuntime::stop_requested() const { return stop_.load(); }stop_requested52,1064
+KvRgwServiceImpl &KvRgwRuntime::service() { return *service_; }service54,1132
+KvStore &KvRgwRuntime::store() { return *store_; }store56,1197
+PerfDataStore *KvRgwRuntime::perf_data_store()perf_data_store58,1249
+void KvRgwRuntime::join_workers()join_workers66,1381
+void KvRgwRuntime::stop_fdb_network()stop_fdb_network79,1610
+void KvRgwRuntime::stop()stop93,1919
+bool KvRgwRuntime::start(const KvRgwStartOptions &opts)start111,2265
+#define BLUE BLUE154,3615
+  admin_thread_ = std::thread([this]() {__anon7971c2550202223,6198
+    sweeper_thread_ = std::thread([this]() { sweeper_->run(); });__anon7971c2550302230,6369
+    gc_thread_ = std::thread([this]() { gc_worker_->run(); });__anon7971c2550402231,6435
+
+backend/src/fdb_latency.hpp,4344
+namespace kvrgw {kvrgw23,505
+enum class OpType : uint8_t {OpType25,524
+  kPutObject,kPutObject26,554
+  kGetObject,kGetObject27,568
+  kHeadObject,kHeadObject28,582
+  kDeleteObject,kDeleteObject29,597
+  kDeleteMulti,kDeleteMulti30,614
+  kDeleteBucket,kDeleteBucket31,630
+  kCreateBucket,kCreateBucket32,647
+  kListBuckets,kListBuckets33,664
+  kListObjects,kListObjects34,680
+  kListObjectVersions,kListObjectVersions35,696
+  kDeleteObjectVersion,kDeleteObjectVersion36,719
+  kCopyObject,kCopyObject37,743
+  kPutObjectTagging,kPutObjectTagging38,758
+  kGetObjectTagging,kGetObjectTagging39,779
+  kDeleteObjectTagging,kDeleteObjectTagging40,800
+  kBucketExists,kBucketExists41,824
+  kPutBucketPolicy,kPutBucketPolicy42,841
+  kGetBucketPolicy,kGetBucketPolicy43,861
+  kDeleteBucketPolicy,kDeleteBucketPolicy44,881
+  kPutBucketVersioning,kPutBucketVersioning45,904
+  kGetBucketVersioning,kGetBucketVersioning46,928
+  kOther,kOther47,952
+  kCountkCount48,962
+inline const char* op_type_name(OpType op) {op_type_name51,975
+struct RequestLatency {RequestLatency78,2406
+  int64_t fdb_get_us{};fdb_get_us79,2430
+  int64_t fdb_put_us{};fdb_put_us80,2454
+  int64_t fdb_del_us{};fdb_del_us81,2478
+  int64_t fdb_commit_us{};fdb_commit_us82,2502
+  int64_t fdb_scan_us{};fdb_scan_us83,2529
+  int64_t disk_us{};disk_us84,2554
+  int fdb_get_count{};fdb_get_count85,2575
+  int fdb_put_count{};fdb_put_count86,2598
+  int fdb_del_count{};fdb_del_count87,2621
+  int fdb_commit_count{};fdb_commit_count88,2644
+  int fdb_scan_count{};fdb_scan_count89,2670
+  int disk_count{};disk_count90,2694
+  int64_t fdb_total_us() const {fdb_total_us92,2715
+  int fdb_total_ops() const {fdb_total_ops96,2832
+inline thread_local RequestLatency* tl_request_latency = nullptr;tl_request_latency101,2964
+inline void fdb_record_get(int64_t us) {fdb_record_get103,3031
+inline void fdb_record_put(int64_t us) {fdb_record_put106,3155
+inline void fdb_record_del(int64_t us) {fdb_record_del109,3279
+inline void fdb_record_commit(int64_t us) {fdb_record_commit112,3403
+inline void fdb_record_scan(int64_t us) {fdb_record_scan115,3536
+inline void fdb_record_disk(int64_t us) {fdb_record_disk118,3663
+struct OpStats {OpStats122,3783
+  std::atomic<int64_t> count{};count123,3800
+  std::atomic<int64_t> total_us{};total_us124,3832
+  std::atomic<int64_t> fdb_us{};fdb_us125,3867
+  std::atomic<int64_t> fdb_get_us{};fdb_get_us126,3900
+  std::atomic<int64_t> fdb_put_us{};fdb_put_us127,3937
+  std::atomic<int64_t> fdb_del_us{};fdb_del_us128,3974
+  std::atomic<int64_t> fdb_commit_us{};fdb_commit_us129,4011
+  std::atomic<int64_t> fdb_scan_us{};fdb_scan_us130,4051
+  std::atomic<int64_t> fdb_ops{};fdb_ops131,4089
+  std::atomic<int64_t> disk_us{};disk_us132,4123
+struct LatencyStats {LatencyStats135,4161
+  OpStats ops[static_cast<int>(OpType::kCount)];ops136,4183
+  std::atomic<int64_t> txn_retries{0};txn_retries138,4233
+  std::atomic<int64_t> txn_hard_failures{0};txn_hard_failures139,4272
+  std::atomic<int64_t> txn_max_retries_exceeded{0};txn_max_retries_exceeded140,4317
+  std::atomic<int64_t> list_scan_us{0};list_scan_us142,4370
+  std::atomic<int64_t> list_scan_n{0};list_scan_n143,4410
+  std::atomic<int64_t> list_iter_sum{0};list_iter_sum144,4449
+  std::atomic<int64_t> list_rpc_n{0};list_rpc_n145,4490
+  std::atomic<int64_t> list_drain_calls{0};list_drain_calls146,4528
+  void record_list_scan(int64_t us) {record_list_scan148,4573
+  void record_list_call(int64_t iters) {record_list_call153,4732
+  int64_t avg_range_scan_us() const {avg_range_scan_us158,4897
+  int64_t avg_list_iter_per_call() const {avg_list_iter_per_call164,5091
+  void reset_list_scan_stats() {reset_list_scan_stats170,5290
+  void record(OpType op, int64_t total_us, const RequestLatency& fdb) {record178,5600
+  void dump(FILE* out = stderr) const {dump192,6406
+  void reset() {reset219,7946
+class ScopedRequestLatency {ScopedRequestLatency239,8757
+  ScopedRequestLatency(LatencyStats& stats, OpType op)ScopedRequestLatency241,8795
+  ~ScopedRequestLatency() {~ScopedRequestLatency246,8962
+  LatencyStats& stats_;stats_257,9361
+  OpType op_;op_258,9385
+  RequestLatency req_{};req_259,9399
+  std::chrono::steady_clock::time_point start_;start_260,9424
+
+backend/src/tenant_value.hpp,167
+namespace kvrgw {kvrgw24,515
+struct TenantValue {TenantValue26,534
+  tenant_id_t tenant_id{};tenant_id27,555
+  int64_t created_at_unix{};created_at_unix28,582
+
+backend/src/gc_config_state.hpp,331
+namespace kvrgw {kvrgw24,509
+class GcConfigState {GcConfigState26,528
+  mutable std::mutex mu_;mu_37,813
+  GcPolicy active_policy_;active_policy_38,839
+  GcPolicy pending_policy_;pending_policy_39,866
+  std::atomic<uint32_t> active_age_{0};active_age_40,894
+  std::atomic<uint32_t> pending_age_{0};pending_age_41,934
+
+backend/src/gc_worker.cpp,658
+namespace kvrgw {kvrgw28,621
+namespace {__anon213a84a4011130,640
+uint64_t blob_bytes_for(const DataStore &data_store, std::string_view ref_tag)blob_bytes_for32,653
+GcWorker::GcWorker(KvStore &store, DataStore &data_store, GcConfigState &config,GcWorker48,996
+void GcWorker::sleep_ms(int ms)sleep_ms55,1222
+bool GcWorker::rate_allow(RateWindow *rate, const GcPolicy &policy,rate_allow62,1374
+void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)gc_once90,2167
+  const auto end = [&prefix]() {__anon213a84a4020293,2273
+    auto clean_children = [&](KvTransaction &txn) {__anon213a84a40302159,4033
+void GcWorker::run()run242,6448
+
+backend/src/gc_value.hpp,815
+namespace kvrgw {kvrgw28,597
+struct PoValue {PoValue33,657
+  PoValueHeader hdr{};hdr34,674
+struct GcValue {GcValue37,701
+  GcValueHeader hdr{};hdr38,718
+struct GroupPoEntry {GroupPoEntry41,745
+  RefTag ref_tag{};ref_tag42,767
+  uint64_t object_size{};object_size43,787
+struct GroupPoValue {GroupPoValue46,817
+  std::array<GroupPoEntry, kMaxBatchSize> entries{};entries47,839
+  uint8_t count{};count48,892
+  uint32_t created_at_unix{};created_at_unix49,911
+struct GroupGcEntry {GroupGcEntry52,945
+  RefTag ref_tag{};ref_tag53,967
+  ChunkType chunk{};chunk54,987
+  uint8_t flags{};flags55,1008
+  uint64_t object_size{};object_size56,1027
+struct GroupGcValue {GroupGcValue59,1057
+  std::array<GroupGcEntry, kMaxBatchSize> entries{};entries60,1079
+  uint8_t count{};count61,1132
+
+backend/src/ops_stats.hpp,325
+namespace kvrgw {kvrgw23,491
+struct OpsStats {OpsStats25,510
+  static constexpr std::size_t kN = static_cast<std::size_t>(OpType::kCount);kN26,528
+  void inc(OpType op) {inc28,607
+  void snapshot(std::array<uint64_t, kN>& out) const {snapshot32,719
+  std::array<std::atomic<uint64_t>, kN> counts_{};counts_39,897
+
+backend/src/ref_tag.hpp,323
+namespace kvrgw {kvrgw25,529
+using RefTag = std::array<uint8_t, kRefTagSize>;RefTag27,548
+inline std::string_view ref_tag_view(const RefTag& rt) {ref_tag_view29,598
+class RefTagGenerator {RefTagGenerator33,722
+  uint32_t rgw_id_;rgw_id_45,1068
+  uint64_t seq_id_{0};seq_id_46,1088
+  std::mutex mu_;mu_47,1111
+
+backend/src/object_value.hpp,4934
+namespace kvrgw {kvrgw28,593
+enum ChunkType : uint8_t {ChunkType30,612
+  CHUNK_INLINE       = 'I',CHUNK_INLINE31,639
+  CHUNK_CHILD_D      = 'D',CHUNK_CHILD_D32,667
+  CHUNK_CHILD_D_REF  = 'd',CHUNK_CHILD_D_REF33,695
+  CHUNK_STORAGE      = 'S',CHUNK_STORAGE34,723
+  CHUNK_STORAGE_REF  = 's',CHUNK_STORAGE_REF35,751
+enum ChildValueFlags : uint8_t {ChildValueFlags38,783
+  CHILD_FLAG_SHARED = 1 << 0,  // bit 0CHILD_FLAG_SHARED39,816
+constexpr ChildValueFlags operator|(ChildValueFlags a, ChildValueFlags b) {operator |43,878
+constexpr ChildValueFlags operator&(ChildValueFlags a, ChildValueFlags b) {operator &46,1046
+constexpr ChildValueFlags& operator|=(ChildValueFlags& a, ChildValueFlags b) {operator |=49,1214
+constexpr bool child_flag_shared(ChildValueFlags flags) {child_flag_shared53,1320
+struct ChunkDescriptor {ChunkDescriptor59,1491
+  ChunkType type{CHUNK_STORAGE};type60,1516
+struct ObjectValueHeader {ObjectValueHeader63,1553
+  uint8_t ref_tag[kRefTagSize]{};ref_tag64,1580
+  uint16_t etag_part_count{};etag_part_count65,1614
+  uint16_t annotations_count{};annotations_count66,1644
+  uint8_t etag[kEtagSize]{};etag68,1677
+  uint64_t size{};size70,1707
+  uint32_t last_modified_sec{};last_modified_sec71,1726
+  uint32_t last_modified_nsec{};last_modified_nsec72,1758
+  ChunkDescriptor chunk;chunk74,1792
+  uint8_t flags{};flags75,1817
+  uint8_t tags_count{};tags_count76,1836
+  uint8_t content_type_len{};content_type_len77,1860
+  version_id_t version_id{};version_id79,1891
+  version_id_t next_vid{};next_vid80,1920
+  uint16_t metadata_count{};metadata_count82,1948
+struct GcValueHeader {GcValueHeader85,1981
+  ChunkDescriptor chunk;chunk86,2004
+  uint8_t flags{};flags87,2029
+  uint64_t object_size{};object_size88,2048
+  uint32_t mtime{};mtime89,2074
+struct PoValueHeader {PoValueHeader92,2098
+  uint64_t estimated_size{};estimated_size93,2121
+  uint32_t created_at_unix{};created_at_unix94,2150
+struct BucketValueHeader {BucketValueHeader97,2184
+  uint8_t bucket_id[8]{};bucket_id98,2211
+  int64_t created_at_unix{};created_at_unix99,2237
+  uint8_t access_flags{};access_flags100,2266
+  VersioningState versioning_state{};versioning_state101,2292
+struct ChildValueHeader {ChildValueHeader104,2334
+  ChildValueFlags flags{};flags105,2360
+  uint8_t pad[3]{};pad106,2387
+  uint32_t ref_count{};ref_count107,2407
+struct OValueBuf {OValueBuf120,2790
+  static constexpr size_t kMaxSize = kMaxOValueBytes;kMaxSize121,2809
+  uint8_t data[kMaxSize];data122,2863
+  size_t len{};len123,2889
+  bool set_header(const ObjectValueHeader& hdr) {set_header125,2906
+  bool append(const void* src, size_t n) {append134,3103
+  std::string_view view() const {view143,3275
+struct ObjectValue {ObjectValue148,3372
+  ObjectValueHeader hdr{};hdr149,3393
+  std::string content_type;content_type150,3420
+  std::vector<uint8_t> inline_data;inline_data151,3448
+  std::vector<uint8_t> metadata_frame;metadata_frame152,3484
+  static constexpr uint8_t kFlagExtendedAttrs        = 0x01;kFlagExtendedAttrs154,3524
+  static constexpr uint8_t kFlagFenced               = 0x02;kFlagFenced155,3585
+  static constexpr uint8_t kFlagSharedData           = 0x04;kFlagSharedData156,3646
+  static constexpr uint8_t kFlagExternalTags         = 0x08;kFlagExternalTags157,3707
+  static constexpr uint8_t kFlagExternalAnnotations  = 0x10;kFlagExternalAnnotations158,3768
+  bool has_extended_attrs() const { return (hdr.flags & kFlagExtendedAttrs) != 0; }has_extended_attrs160,3830
+  bool has_annotations() const { return hdr.annotations_count > 0; }has_annotations161,3914
+  bool has_external_annotations() const { return (hdr.flags & kFlagExternalAnnotations) && hdr.ahas_external_annotations162,3983
+  bool has_metadata() const { return hdr.metadata_count > 0; }has_metadata163,4103
+  bool is_delete_marker() const { return (hdr.flags & kFlagFenced) != 0; }is_delete_marker164,4166
+  bool has_shared_data() const { return (hdr.flags & kFlagSharedData) != 0; }has_shared_data165,4241
+  bool has_external_tags() const { return (hdr.flags & kFlagExternalTags) != 0; }has_external_tags166,4319
+  bool has_data() const { return hdr.size > 0 || hdr.chunk.type != CHUNK_INLINE; }has_data167,4401
+  etag_t get_etag() const {get_etag169,4485
+  void set_etag(const etag_t& e) {set_etag175,4617
+  void set_etag_raw(const uint8_t* digest, uint16_t part_count = 0) {set_etag_raw179,4725
+  bucket_id_t chunk_data_bucket_id{};chunk_data_bucket_id186,4921
+  uint8_t chunk_data_ref_tag[kRefTagSize]{};chunk_data_ref_tag187,4959
+struct BucketValue {BucketValue190,5008
+  bucket_id_t bucket_id{};bucket_id191,5029
+  int64_t created_at_unix{};created_at_unix192,5056
+  uint8_t access_flags{};access_flags193,5085
+  VersioningState versioning_state{};versioning_state194,5111
+  std::string policy_json;policy_json195,5149
+
+backend/src/object_value.cpp,1437
+namespace kvrgw {kvrgw27,584
+void hdr_to_be(ObjectValueHeader &hdr)hdr_to_be29,603
+void hdr_from_be(ObjectValueHeader &hdr)hdr_from_be41,1071
+namespace {__anonb5902454011153,1541
+std::string etag_to_hex(const uint8_t *etag, size_t len)etag_to_hex55,1554
+std::string ObjectValue::etag_display() const { return get_etag().to_hex(); }etag_display69,1859
+namespace {__anonb5902454021171,1938
+size_t object_payload_offset(const ObjectValueHeader &hdr,object_payload_offset73,1951
+std::span<const uint8_t> object_inline_metadata_bytes(std::string_view data)object_inline_metadata_bytes95,2626
+std::optional<ObjectValue> parse_object_value(std::string_view data)parse_object_value122,3382
+void child_hdr_to_be(ChildValueHeader &hdr)child_hdr_to_be197,5831
+void child_hdr_from_be(ChildValueHeader &hdr)child_hdr_from_be202,5920
+std::string make_child_value(ChildValueHeader hdr, std::string_view payload)make_child_value207,6011
+bool parse_child_value_header(std::string_view data, ChildValueHeader &out)parse_child_value_header217,6283
+std::string_view child_value_payload(std::string_view data)child_value_payload227,6535
+std::string_view child_value_payload(std::string_view data,child_value_payload235,6715
+std::string make_bucket_value(bucket_id_t bucket_id, int64_t created_at_unix,make_bucket_value244,6984
+std::optional<BucketValue> parse_bucket_value(std::string_view data)parse_bucket_value262,7676
+
+backend/src/keys.hpp,2089
+namespace kvrgw {kvrgw26,561
+struct BucketKeyParts {BucketKeyParts28,580
+  tenant_id_t tenant_id{};tenant_id29,604
+  std::string bucket_name;bucket_name30,631
+struct ObjectKeyParts {ObjectKeyParts33,662
+  uint16_t shard_count{};shard_count34,686
+  uint16_t shard_id{};shard_id35,712
+  bucket_id_t bucket_id{};bucket_id36,735
+  std::string object_name;object_name37,762
+struct PoKeyParts {PoKeyParts40,793
+  uint16_t shard_count{};shard_count41,813
+  uint16_t shard_id{};shard_id42,839
+  bucket_id_t bucket_id{};bucket_id43,862
+  std::string object_name;object_name44,889
+  RefTag ref_tag{};ref_tag45,916
+struct GoKeyParts {GoKeyParts48,940
+  uint8_t size_tier{};size_tier49,960
+  uint16_t shard_count{};shard_count50,983
+  uint16_t shard_id{};shard_id51,1009
+  bucket_id_t bucket_id{};bucket_id52,1032
+  RefTag ref_tag{};ref_tag53,1059
+struct DKeyParts {DKeyParts56,1083
+  uint16_t shard_count{};shard_count57,1102
+  uint16_t shard_id{};shard_id58,1128
+  bucket_id_t bucket_id{};bucket_id59,1151
+  uint8_t size_tier{};size_tier60,1178
+  uint8_t hash_prefix{};hash_prefix61,1201
+  uint32_t mtime{};mtime62,1226
+  RefTag ref_tag{};ref_tag63,1246
+struct LKeyParts {LKeyParts66,1270
+  char type{};type67,1289
+  std::string name;name68,1304
+struct VersionKeyParts {VersionKeyParts122,3345
+  uint16_t shard_count{};shard_count123,3370
+  uint16_t shard_id{};shard_id124,3396
+  bucket_id_t bucket_id{};bucket_id125,3419
+  std::string object_name;object_name126,3446
+  version_id_t version_id{};version_id127,3473
+struct GroupPoKeyParts {GroupPoKeyParts139,3932
+  uint16_t shard_count{};shard_count140,3957
+  uint16_t shard_id{};shard_id141,3983
+  bucket_id_t bucket_id{};bucket_id142,4006
+  RefTag group_ref_tag{};group_ref_tag143,4033
+struct GroupGoKeyParts {GroupGoKeyParts148,4137
+  uint8_t size_tier{};size_tier149,4162
+  uint16_t shard_count{};shard_count150,4185
+  uint16_t shard_id{};shard_id151,4211
+  bucket_id_t bucket_id{};bucket_id152,4234
+  RefTag group_ref_tag{};group_ref_tag153,4261
+
+backend/src/keys.cpp,3661
+namespace kvrgw {kvrgw25,540
+namespace {__anonae4178bd011127,559
+void encode_bucket_id(bucket_id_t id, void *out)encode_bucket_id29,572
+bucket_id_t decode_bucket_id_bytes(const void *data)decode_bucket_id_bytes35,689
+uint8_t size_tier_from_size(uint64_t object_size_bytes)size_tier_from_size44,829
+uint64_t size_tier_min_bytes(uint8_t tier)size_tier_min_bytes61,1196
+uint64_t size_tier_max_bytes(uint8_t tier)size_tier_max_bytes69,1334
+uint8_t d_size_tier_from_size(uint64_t object_size_bytes)d_size_tier_from_size77,1488
+uint8_t d_hash_prefix(std::string_view ref_tag)d_hash_prefix90,1740
+bool is_valid_l_type(char type)is_valid_l_type103,2033
+KeyBuf make_l_key(char type, std::string_view name)make_l_key108,2133
+std::optional<LKeyParts> parse_l_key(std::string_view key)parse_l_key119,2384
+KeyBuf make_bucket_key(tenant_id_t tenant_id, std::string_view bucket_name)make_bucket_key137,2796
+KeyBuf make_bucket_prefix(tenant_id_t tenant_id)make_bucket_prefix146,3011
+KeyBuf make_tenant_key(std::string_view tenant_name)make_tenant_key154,3145
+std::optional<BucketKeyParts> parse_bucket_key(std::string_view key)parse_bucket_key163,3356
+KeyBuf make_object_key(bucket_id_t bucket_id, std::string_view object_name)make_object_key179,3783
+KeyBuf make_object_prefix(bucket_id_t bucket_id)make_object_prefix190,4100
+KeyBuf make_version_prefix(bucket_id_t bucket_id)make_version_prefix200,4336
+std::optional<ObjectKeyParts> parse_object_key(std::string_view key)parse_object_key210,4574
+KeyBuf make_po_key(bucket_id_t bucket_id, std::string_view object_name,make_po_key230,5199
+KeyBuf make_group_po_key(bucket_id_t bucket_id, std::string_view group_ref_tag)make_group_po_key243,5619
+KeyBuf make_p_prefix(uint16_t shard_count, uint16_t shard_id)make_p_prefix254,5941
+KeyBuf make_p_bucket_prefix(bucket_id_t bucket_id)make_p_bucket_prefix266,6237
+std::optional<PoKeyParts> parse_po_key(std::string_view key)parse_po_key276,6473
+KeyBuf make_go_key(const ObjectKeyParts &object_key,make_go_key300,7270
+KeyBuf make_g_prefix()make_g_prefix313,7720
+std::optional<GoKeyParts> parse_go_key(std::string_view key)parse_go_key321,7843
+KeyBuf make_d_key(bucket_id_t bucket_id, uint8_t size_tier,make_d_key340,8481
+KeyBuf make_d_bucket_prefix(bucket_id_t bucket_id)make_d_bucket_prefix352,8841
+KeyBuf make_d_bucket_tier_prefix(bucket_id_t bucket_id, uint8_t size_tier)make_d_bucket_tier_prefix367,9208
+std::optional<DKeyParts> parse_d_key(std::string_view key)parse_d_key374,9379
+std::optional<bucket_id_t> extract_bucket_id(std::string_view bucket_value)extract_bucket_id396,10118
+uint8_t extract_access_flags(std::string_view bucket_value)extract_access_flags404,10315
+VersioningState extract_versioning_state(std::string_view bucket_value)extract_versioning_state412,10481
+KeyBuf make_v_key(bucket_id_t bucket_id, std::string_view object_name,make_v_key420,10685
+KeyBuf make_v_prefix(bucket_id_t bucket_id, std::string_view object_name)make_v_prefix435,11137
+std::optional<VersionKeyParts> parse_v_key(std::string_view key)parse_v_key447,11478
+KeyBuf make_r_key(std::string_view ref_tag)make_r_key467,12153
+KeyBuf make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag)make_ct_key476,12321
+KeyBuf make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag)make_c_prefix489,12693
+std::optional<GroupPoKeyParts> parse_group_po_key(std::string_view key)parse_group_po_key500,12995
+KeyBuf make_group_go_key(bucket_id_t bucket_id, std::string_view group_ref_tag)make_group_go_key519,13661
+std::optional<GroupGoKeyParts> parse_group_go_key(std::string_view key)parse_group_go_key530,13981
+
+backend/src/constants.hpp,3500
+namespace kvrgw {kvrgw21,469
+inline constexpr uint32_t kDefaultTenantId = 1;kDefaultTenantId23,488
+inline constexpr uint16_t kShardCount = 1;kShardCount24,536
+inline constexpr uint16_t kShardId = 0;kShardId25,579
+inline constexpr char kNamespaceBucket = 'B';kNamespaceBucket26,619
+inline constexpr char kNamespaceTenant = 'T';kNamespaceTenant27,665
+inline constexpr char kNamespaceObject = 'S';kNamespaceObject28,711
+inline constexpr char kNamespacePending = 'P';kNamespacePending29,757
+inline constexpr char kNamespaceGc = 'G';kNamespaceGc30,804
+inline constexpr char kNamespaceData = 'D';kNamespaceData31,846
+inline constexpr char kNamespaceLocal = 'L';kNamespaceLocal32,890
+inline constexpr char kLocalTypeNumeric = 'N';kLocalTypeNumeric33,935
+inline constexpr char kLocalTypeIdMap = 'I';kLocalTypeIdMap34,982
+inline constexpr char kCategoryObject = 'O';kCategoryObject35,1027
+inline constexpr char kCategoryVersion = 'V';kCategoryVersion36,1072
+inline constexpr char kOpTypeObject = 'O';kOpTypeObject37,1118
+inline constexpr char kOpTypeGroup = 'G';kOpTypeGroup38,1161
+inline constexpr uint32_t kNullVersionRaw    = 0xFFFFFFFF;kNullVersionRaw40,1204
+inline constexpr uint32_t kFirstVersionIdRaw = 0xFFFFFFFE;kFirstVersionIdRaw41,1263
+enum VersioningState : uint8_t {VersioningState43,1323
+  VERSIONING_DISABLED  = 0,VERSIONING_DISABLED44,1356
+  VERSIONING_ENABLED   = 1,VERSIONING_ENABLED45,1384
+  VERSIONING_SUSPENDED = 2,VERSIONING_SUSPENDED46,1412
+inline constexpr uint32_t kDefaultMaxInline = 0;kDefaultMaxInline49,1444
+inline constexpr uint32_t kDefaultMaxKvStore = 0;kDefaultMaxKvStore50,1493
+inline constexpr bool kDefaultKvStoreCoalescing = false;kDefaultKvStoreCoalescing51,1543
+inline constexpr size_t kRefTagSize = 12;kRefTagSize53,1601
+inline constexpr size_t kEtagSize = 16;kEtagSize54,1643
+inline constexpr size_t kMaxContentTypeLen = 255;kMaxContentTypeLen55,1683
+inline constexpr char kCategoryChild = 'C';kCategoryChild57,1734
+inline constexpr char kChildTypeTags = 'T';kChildTypeTags58,1778
+inline constexpr char kChildTypeAnnotation = 'A';kChildTypeAnnotation59,1822
+inline constexpr char kChildTypeExtended = 'E';kChildTypeExtended60,1872
+inline constexpr size_t kMaxTags = 10;kMaxTags62,1921
+inline constexpr size_t kMaxTagKeyLen = 128;kMaxTagKeyLen63,1960
+inline constexpr size_t kMaxTagValueLen = 256;kMaxTagValueLen64,2005
+inline constexpr size_t kMaxTagPayload = 5120;kMaxTagPayload65,2052
+inline constexpr size_t kMaxInlineTagPayload = 256;kMaxInlineTagPayload66,2099
+inline constexpr size_t kMaxOValueBytes = 1024;kMaxOValueBytes67,2151
+inline constexpr uint8_t kFlagExternalTags = 0x08;kFlagExternalTags68,2199
+inline constexpr std::string_view kLocalCounterTenantId = "tenant_id";kLocalCounterTenantId70,2251
+inline constexpr std::string_view kLocalCounterBucketId = "bucket_id";kLocalCounterBucketId71,2322
+inline constexpr std::string_view kLocalCounterRgwId = "rgw_id";kLocalCounterRgwId72,2393
+inline constexpr int kMaxBatchSize = 16;kMaxBatchSize74,2459
+inline constexpr uint32_t AWS_MaxKeys = 1000;AWS_MaxKeys76,2501
+inline constexpr uint32_t AWS_MaxBuckets = 10000;AWS_MaxBuckets77,2547
+inline constexpr int kListBucketsFdbPage = 1000;kListBucketsFdbPage78,2597
+inline constexpr uint32_t kSweeperMaxKeys = 1000;kSweeperMaxKeys80,2647
+inline constexpr uint32_t kGcMaxKeys = 1000;kGcMaxKeys81,2697
+inline constexpr uint32_t kFdbMaxKeys = 5000;kFdbMaxKeys82,2742
+
+backend/src/sweeper.hpp,228
+namespace kvrgw {kvrgw23,496
+class Sweeper {Sweeper25,515
+  KvStore& store_;store_35,738
+  std::atomic<bool>& stop_flag_;stop_flag_36,757
+  int interval_sec_;interval_sec_37,790
+  int min_age_sec_;min_age_sec_38,811
+
+backend/src/main.cpp,186
+namespace {__anon2d2f2ae6011123,528
+kvrgw::KvRgwRuntime *g_runtime = nullptr;g_runtime25,541
+void handle_signal(int)handle_signal27,584
+int main(int argc, char **argv)main36,694
+
+backend/src/gc_worker.hpp,429
+namespace kvrgw {kvrgw25,546
+class GcWorker {GcWorker27,565
+  struct RateWindow {RateWindow38,746
+    std::chrono::steady_clock::time_point window_start{};window_start39,768
+    int objects = 0;objects40,826
+    uint64_t bytes = 0;bytes41,847
+  KvStore& store_;store_48,1043
+  DataStore& data_store_;data_store_49,1062
+  GcConfigState& config_;config_50,1088
+  std::atomic<bool>& stop_flag_;stop_flag_51,1114
+
+backend/src/service_impl.hpp,14360
+namespace kvrgw {kvrgw53,1175
+struct TierConfig {TierConfig57,1214
+  uint32_t max_inline{kDefaultMaxInline};max_inline58,1234
+  uint32_t max_kv_store{kDefaultMaxKvStore};max_kv_store59,1276
+  bool kv_store_coalescing{kDefaultKvStoreCoalescing};kv_store_coalescing60,1321
+  int batch_size{5};batch_size61,1376
+  int batch_timeout_us{1000};batch_timeout_us62,1397
+  int batch_threads{8};batch_threads63,1427
+struct BatchPutResult {BatchPutResult68,1480
+  KvrgwErrorCode error_code{KVRGW_ERR_OK};error_code69,1504
+  version_id_t version_id{};version_id70,1547
+  BatchPutResult(KvrgwErrorCode ec) : error_code(ec) {}BatchPutResult72,1606
+  BatchPutResult(KvrgwErrorCode ec, version_id_t vid) : error_code(ec), version_id(vid) {}BatchPutResult73,1662
+struct BatchCommitEntry {BatchCommitEntry76,1757
+  tenant_id_t tenant_id;tenant_id77,1783
+  std::string bucket_name;bucket_name78,1808
+  std::string object_name;object_name79,1835
+  RefTag ref_tag{};ref_tag80,1862
+  ObjectValue value;value81,1882
+  std::string data;data82,1903
+  ChunkType chunk_type{CHUNK_INLINE};chunk_type83,1923
+  std::string if_match;if_match84,1961
+  std::string if_none_match;if_none_match85,1985
+  std::vector<uint8_t> tag_encoded;tag_encoded86,2014
+  std::array<uint8_t, MAX_META_FRAME_BYTES> metadata_encoded{};metadata_encoded87,2050
+  size_t metadata_encoded_size{0};metadata_encoded_size88,2114
+  std::chrono::steady_clock::time_point enqueued_at;enqueued_at89,2149
+  std::promise<BatchPutResult> promise;promise90,2202
+struct BatchStats {BatchStats93,2246
+  std::atomic<int64_t> batch_commits{0};batch_commits94,2266
+  std::atomic<int64_t> total_entries_batched{0};total_entries_batched95,2307
+  std::atomic<int64_t> conflict_pushbacks{0};conflict_pushbacks96,2356
+  std::atomic<int64_t> min_batch_size{0};min_batch_size97,2402
+  std::atomic<int64_t> max_batch_size{0};max_batch_size98,2444
+  std::atomic<int64_t> total_wait_us{0};total_wait_us99,2486
+  std::atomic<int64_t> min_wait_us{0};min_wait_us100,2527
+  std::atomic<int64_t> max_wait_us{0};max_wait_us101,2566
+  std::atomic<int64_t> total_queue_size_at_extract{0};total_queue_size_at_extract102,2605
+  void reset() {reset104,2661
+class BatchCommitQueue {BatchCommitQueue114,2951
+  BatchStats& stats() { return stats_; }stats122,3174
+  struct InFlightBatch {InFlightBatch125,3226
+    enum Phase : uint8_t { PHASE_EMPTY = 0, PHASE_1 = 1, PHASE_2 = 2, PHASE_3 = 3 };Phase126,3251
+    enum Phase : uint8_t { PHASE_EMPTY = 0, PHASE_1 = 1, PHASE_2 = 2, PHASE_3 = 3 };PHASE_EMPTY126,3251
+    enum Phase : uint8_t { PHASE_EMPTY = 0, PHASE_1 = 1, PHASE_2 = 2, PHASE_3 = 3 };PHASE_1126,3251
+    enum Phase : uint8_t { PHASE_EMPTY = 0, PHASE_1 = 1, PHASE_2 = 2, PHASE_3 = 3 };PHASE_2126,3251
+    enum Phase : uint8_t { PHASE_EMPTY = 0, PHASE_1 = 1, PHASE_2 = 2, PHASE_3 = 3 };PHASE_3126,3251
+    enum Step : uint8_t { STEP_WORKING = 0, STEP_COMMIT_ISSUED = 1, STEP_IO_ISSUED = 2 };Step127,3336
+    enum Step : uint8_t { STEP_WORKING = 0, STEP_COMMIT_ISSUED = 1, STEP_IO_ISSUED = 2 };STEP_WORKING127,3336
+    enum Step : uint8_t { STEP_WORKING = 0, STEP_COMMIT_ISSUED = 1, STEP_IO_ISSUED = 2 };STEP_COMMIT_ISSUED127,3336
+    enum Step : uint8_t { STEP_WORKING = 0, STEP_COMMIT_ISSUED = 1, STEP_IO_ISSUED = 2 };STEP_IO_ISSUED127,3336
+    uint8_t phase{PHASE_EMPTY};phase129,3427
+    uint8_t step{STEP_WORKING};step130,3459
+    uint8_t entry_count{0};entry_count131,3491
+    uint8_t storage_entry_count{0};storage_entry_count132,3519
+    uint8_t p3_attempt{0};p3_attempt133,3555
+    bucket_id_t group_bucket_id{};group_bucket_id135,3583
+    GroupPoEntry storage_entries[kMaxBatchSize];storage_entries136,3618
+    BatchCommitEntry entries[kMaxBatchSize];entries137,3667
+    std::unique_ptr<KvTransaction> txn;txn139,3713
+    FdbFuture commit_future;commit_future140,3753
+    void reset() {reset142,3783
+  struct WorkerState {WorkerState163,4357
+    static constexpr int kMaxInflight = 4;kMaxInflight164,4380
+    InFlightBatch slots[kMaxInflight];slots165,4423
+  KvRgwServiceImpl& service_;service_173,4623
+  std::mutex mu_;mu_174,4653
+  std::condition_variable cv_;cv_175,4671
+  std::deque<BatchCommitEntry> pending_;pending_176,4702
+  std::atomic<bool> stop_{false};stop_177,4743
+  std::vector<std::thread> workers_;workers_178,4777
+  BatchStats stats_;stats_179,4814
+  static constexpr int kMaxInflight = 4;kMaxInflight180,4835
+  int max_inflight_{kMaxInflight};max_inflight_181,4876
+class KvRgwServiceImpl final {KvRgwServiceImpl195,5361
+  LatencyStats& latency_stats() { return latency_stats_; }latency_stats200,5555
+  OpsStats& ops_stats() { return ops_stats_; }ops_stats201,5614
+  ErrorStats& error_stats() { return *error_stats_; }error_stats202,5661
+  ErrInsertion& err_insertion() { return err_insertion_; }err_insertion203,5715
+  KvStore& store() { return store_; }store204,5774
+  TierConfigState& tier_config_state() { return tier_config_state_; }tier_config_state205,5812
+  bool listing_disable_ryw() const { return listing_disable_ryw_; }listing_disable_ryw207,5883
+  void set_listing_disable_ryw(bool v) { listing_disable_ryw_ = v; }set_listing_disable_ryw208,5951
+  RefTagGenerator& ref_tags() { return ref_tags_; }ref_tags209,6020
+  BatchCommitQueue& batch_queue() { return batch_queue_; }batch_queue210,6072
+  struct BucketListEntry {BucketListEntry235,7753
+    std::string name;name236,7780
+    int64_t created_at_unix = 0;created_at_unix237,7802
+  struct ListBucketsResult {ListBucketsResult240,7841
+    std::vector<BucketListEntry> buckets;buckets241,7870
+    std::string continuation_token;continuation_token242,7912
+  struct ObjectListEntry {ObjectListEntry251,8237
+    std::string key;key252,8264
+    uint64_t size = 0;size253,8285
+    std::string etag;etag254,8308
+    int64_t last_modified_unix = 0;last_modified_unix255,8330
+  struct ListObjectsResult {ListObjectsResult258,8372
+    std::vector<ObjectListEntry> objects;objects259,8401
+    std::vector<std::string> common_prefixes;common_prefixes260,8443
+    bool is_truncated = false;is_truncated261,8489
+    std::string next_continuation_token;next_continuation_token262,8520
+  struct DeleteCondition {DeleteCondition274,9020
+    std::string if_match;if_match275,9047
+    int64_t if_match_last_modified_time = 0;if_match_last_modified_time276,9073
+    int64_t if_match_size = 0;if_match_size277,9118
+    bool has_if_match_size = false;has_if_match_size278,9149
+  struct DeleteMultiObjectRef {DeleteMultiObjectRef287,9517
+    std::string_view key;key288,9549
+    std::string_view version_id;version_id289,9575
+  struct DeleteMultiKeyOutcome {DeleteMultiKeyOutcome292,9614
+    std::string key;key293,9647
+    enum class Status { Deleted, Error } status{Status::Deleted};Status294,9668
+    enum class Status { Deleted, Error } status{Status::Deleted};Deleted294,9668
+    enum class Status { Deleted, Error } status{Status::Deleted};Error294,9668
+    enum class Status { Deleted, Error } status{Status::Deleted};status294,9668
+    std::string error_code;error_code295,9734
+    std::string error_message;error_message296,9762
+    std::string version_id;version_id297,9793
+    bool created_dm{false};created_dm298,9821
+    version_id_t dm_version_id{};dm_version_id299,9849
+  struct CopyObjectRequest {CopyObjectRequest308,10217
+    tenant_id_t tenant_id{};tenant_id309,10246
+    std::string_view src_bucket_name;src_bucket_name310,10275
+    std::string_view src_key;src_key311,10313
+    std::string_view dst_bucket_name;dst_bucket_name312,10343
+    std::string_view dst_key;dst_key313,10381
+    std::optional<version_id_t> src_version_id;src_version_id314,10411
+    std::string_view if_match;if_match315,10459
+    std::string_view if_none_match;if_none_match316,10490
+    std::string_view dst_if_match;dst_if_match317,10526
+    std::string_view dst_if_none_match;dst_if_none_match318,10561
+    std::string_view content_type;content_type319,10601
+    bool replace_metadata = false;replace_metadata320,10636
+    bool replace_tags = false;replace_tags321,10671
+    std::span<const uint8_t> tags;tags322,10702
+    std::span<const uint8_t> metadata;metadata323,10737
+  struct CopyObjectResult {CopyObjectResult326,10782
+    std::string etag;etag327,10810
+    int64_t last_modified_unix = 0;last_modified_unix328,10832
+    std::optional<version_id_t> version_id;version_id329,10868
+    version_id_t copy_source_version_id{};copy_source_version_id330,10912
+  struct GetObjectResult {GetObjectResult335,11045
+    ObjectValue value;value336,11072
+    std::string body;body337,11095
+    std::string error_detail;error_detail338,11117
+  struct ObjectVersionEntry {ObjectVersionEntry349,11649
+    std::string key;key350,11679
+    version_id_t version_id{};version_id351,11700
+    bool is_latest = false;is_latest352,11731
+    bool is_delete_marker = false;is_delete_marker353,11759
+    uint64_t size = 0;size354,11794
+    std::string etag;etag355,11817
+    int64_t last_modified_unix = 0;last_modified_unix356,11839
+  struct ListObjectVersionsResult {ListObjectVersionsResult359,11881
+    std::vector<ObjectVersionEntry> versions;versions360,11917
+    bool is_truncated = false;is_truncated361,11963
+    std::string next_key_marker;next_key_marker362,11994
+    version_id_t next_version_id_marker{};next_version_id_marker363,12027
+  struct DeleteResult {DeleteResult374,12533
+    bool created_dm = false;created_dm375,12557
+    version_id_t dm_version_id{};dm_version_id376,12586
+  struct PutCondition {PutCondition393,13527
+    std::string if_match;if_match394,13551
+    std::string if_none_match;if_none_match395,13577
+  struct PutObjectRequest {PutObjectRequest398,13614
+    tenant_id_t tenant_id;tenant_id399,13642
+    std::string bucket_name;bucket_name400,13669
+    std::string object_name;object_name401,13698
+    RefTag ref_tag{};ref_tag402,13727
+    ObjectValue value;value403,13749
+    uint64_t estimated_size;estimated_size404,13772
+    PutCondition* cond;cond405,13801
+    std::span<const uint8_t> tags;tags406,13825
+    std::span<const uint8_t> metadata;metadata407,13860
+  struct PutObjectResult {PutObjectResult410,13905
+    KvrgwErrorCode error_code{KVRGW_ERR_OK};error_code411,13932
+    std::string etag;etag412,13977
+    version_id_t version_id{};version_id413,13999
+  struct PutInTxnParams {PutInTxnParams418,14134
+    tenant_id_t tenant_id;tenant_id419,14160
+    const std::string& bucket_name;bucket_name420,14187
+    bucket_id_t bucket_id;bucket_id421,14223
+    const std::string& object_name;object_name422,14250
+    const RefTag& ref_tag;ref_tag423,14286
+    ObjectValue& value;value424,14313
+    const std::string* data;data425,14337
+    const PutCondition* cond;cond426,14366
+    std::span<const uint8_t> tags;tags427,14396
+    bool skip_bucket_verify;skip_bucket_verify428,14431
+    bool is_storage_tier;is_storage_tier429,14460
+    std::span<const uint8_t> metadata{};metadata430,14486
+  static constexpr auto kBucketCacheTtl = std::chrono::seconds(3);kBucketCacheTtl447,15763
+  struct BucketCacheEntry {BucketCacheEntry449,15831
+    bucket_id_t bucket_id{};bucket_id450,15859
+    uint8_t access_flags{};access_flags451,15888
+    VersioningState versioning_state{};versioning_state452,15916
+    std::chrono::steady_clock::time_point cached_at;cached_at453,15956
+  struct BucketCacheKey {BucketCacheKey456,16015
+    tenant_id_t tenant_id{};tenant_id457,16041
+    std::string bucket_name;bucket_name458,16070
+    bool operator==(const BucketCacheKey& other) const {operator ==460,16100
+  struct BucketCacheKeyHash {BucketCacheKeyHash465,16248
+    size_t operator()(const BucketCacheKey& key) const {operator ()466,16278
+  struct BucketState {BucketState472,16448
+    bucket_id_t bucket_id{};bucket_id473,16471
+    uint8_t access_flags{};access_flags474,16500
+    VersioningState versioning_state{};versioning_state475,16528
+    int64_t created_at_unix{};created_at_unix476,16568
+  struct PutContext {PutContext479,16605
+    FdbFuture f_bkt;f_bkt480,16627
+    FdbFuture f_obj;f_obj481,16648
+    FdbFuture f_po;f_po482,16669
+    bool has_bucket_future{false};has_bucket_future483,16689
+    bool is_storage_tier{false};is_storage_tier484,16724
+    KeyBuf object_key;object_key485,16757
+  struct VerifiedBucket {VerifiedBucket488,16786
+    tenant_id_t tenant_id{};tenant_id489,16812
+    const std::string* bucket_name{nullptr};bucket_name490,16841
+    BucketState state;state491,16886
+  struct LoadResult {LoadResult518,18236
+    ObjectValue value;value519,18258
+    std::string data;data520,18281
+  struct NewVersionIds {NewVersionIds541,18968
+    version_id_t version_id;version_id542,18993
+    version_id_t next_vid;next_vid543,19022
+  struct DeleteContext {DeleteContext554,19315
+    FdbFuture f_obj;f_obj555,19340
+    FdbFuture f_bkt;f_bkt556,19361
+    std::string object_key;object_key557,19382
+    std::string bucket_raw;bucket_raw558,19410
+    bucket_id_t bucket_id{};bucket_id559,19438
+    tenant_id_t tenant_id{};tenant_id560,19467
+    std::string bucket_name;bucket_name561,19496
+  struct BktVerifyResult {BktVerifyResult641,21999
+    bucket_id_t bucket_id{};bucket_id642,22026
+    VersioningState versioning_state{};versioning_state643,22055
+  KvStore& store_;store_669,22780
+  DataStore& data_store_;data_store_670,22799
+  RefTagGenerator& ref_tags_;ref_tags_671,22825
+  TierConfigState& tier_config_state_;tier_config_state_672,22855
+  Sweeper& sweeper_;sweeper_673,22894
+  LatencyStats latency_stats_;latency_stats_674,22915
+  OpsStats ops_stats_;ops_stats_675,22946
+  std::unique_ptr<ErrorStats> error_stats_;error_stats_676,22969
+  ErrInsertion err_insertion_;err_insertion_677,23013
+  bool listing_disable_ryw_{true};listing_disable_ryw_678,23044
+  BatchCommitQueue batch_queue_;batch_queue_679,23079
+  std::mutex cache_mu_;cache_mu_680,23112
+  std::unordered_map<std::string, tenant_id_t> tenant_cache_;tenant_cache_681,23136
+  std::unordered_map<BucketCacheKey, BucketCacheEntry, BucketCacheKeyHash> bucket_cache_;bucket_cache_682,23198
+
+backend/src/kvrgw_runtime.hpp,1242
+namespace kvrgw {kvrgw32,725
+struct KvRgwStartOptions {KvRgwStartOptions34,744
+  bool perf_mode = false;perf_mode35,771
+  std::string data_root;data_root36,797
+class KvRgwRuntime {KvRgwRuntime39,826
+  std::atomic<bool> stop_{false};stop_62,1365
+  bool network_started_{false};network_started_63,1399
+  bool started_{false};started_64,1431
+  bool perf_mode_{false};perf_mode_65,1455
+  std::thread network_thread_;network_thread_67,1482
+  std::optional<KvStore> store_;store_68,1513
+  std::optional<RefTagGenerator> ref_tags_;ref_tags_69,1546
+  std::optional<PerfDataStore> perf_data_store_;perf_data_store_70,1590
+  std::optional<FileDataStore> file_data_store_;file_data_store_71,1639
+  std::optional<TierConfigState> tier_config_state_;tier_config_state_72,1688
+  std::optional<Sweeper> sweeper_;sweeper_73,1741
+  std::optional<KvRgwServiceImpl> service_;service_74,1776
+  std::optional<GcConfigState> gc_config_;gc_config_75,1820
+  std::optional<GcWorker> gc_worker_;gc_worker_76,1863
+  std::optional<AdminServer> admin_server_;admin_server_77,1901
+  std::thread admin_thread_;admin_thread_78,1945
+  std::thread sweeper_thread_;sweeper_thread_79,1974
+  std::thread gc_thread_;gc_thread_80,2005
+
+backend/src/typed_ids.cpp,570
+namespace kvrgw {kvrgw21,479
+std::string etag_t::to_hex() constto_hex23,498
+etag_t etag_t::from_hex(std::string_view hex)from_hex36,789
+    auto nibble = [](char c) -> uint8_t {__anonc9eeaa26010244,1015
+bool version_id_t::is_null() const { return val_ == 0xFFFFFFFF; }is_null74,1720
+void version_id_t::serialize(uint8_t *out) constserialize76,1787
+version_id_t version_id_t::deserialize(const uint8_t *src)deserialize82,1900
+std::string version_id_t::to_hex() constto_hex89,2043
+version_id_t version_id_t::from_hex(std::string_view hex)from_hex96,2199
+
+backend/src/byte_range.hpp,339
+namespace kvrgw {kvrgw20,448
+struct ByteRange {ByteRange22,467
+  int64_t start = 0;start23,486
+  int64_t end = 0;end24,507
+  bool from_end = false;from_end25,526
+  bool end_unbounded = false;end_unbounded26,551
+struct ByteRangeSlice {ByteRangeSlice29,585
+  int64_t start = 0;start30,609
+  int64_t length = 0;length31,630
+
+backend/src/kv_store.cpp,2788
+namespace kvrgw {kvrgw24,524
+namespace {__anon1b681aee011126,543
+struct FdbKeyValue {FdbKeyValue28,556
+  std::string key;key29,577
+  std::string value;value30,596
+struct FdbRangePage {FdbRangePage33,621
+  std::vector<FdbKeyValue> rows;rows34,643
+  bool more = false;more35,676
+FdbFuture fdb_issue_get_range(FDBTransaction *tr, std::string_view begin_key,fdb_issue_get_range38,701
+std::expected<FdbRangePage, fdb_error_t> fdb_wait_get_range(FdbFuture &future)fdb_wait_get_range50,1292
+fdb_get_range(FDBTransaction *tr, std::string_view begin_key,fdb_get_range78,2146
+range_scan_in_transaction(FDBTransaction *tr, std::string_view start,range_scan_in_transaction89,2667
+struct KvStore::Impl {Impl130,3787
+  FDBDatabase *db{nullptr};db131,3810
+struct KvTransaction::Impl {Impl134,3842
+  FDBTransaction *tr{nullptr};tr135,3871
+std::expected<KvStore, fdb_error_t> KvStore::create()create138,3906
+KvStore::~KvStore()~KvStore148,4151
+KvStore::KvStore(KvStore &&other) noexcept : impl_(std::move(other.impl_)) {}KvStore155,4245
+KvStore &KvStore::operator=(KvStore &&other) noexceptoperator =156,4323
+FDBDatabase *KvStore::database() const { return impl_->db; }database162,4432
+KvStore::get(std::string_view key)get165,4549
+std::expected<void, fdb_error_t> KvStore::set(std::string_view key,set174,4708
+KvStore::range_scan(std::string_view start, std::string_view end, int limit,range_scan186,5053
+KvStore::begin_transaction()begin_transaction208,5810
+std::expected<uint32_t, fdb_error_t> KvStore::allocate_rgw_id()allocate_rgw_id217,6071
+KvTransaction::KvTransaction(KvStore &store, FDBTransaction *tr)KvTransaction262,7578
+KvTransaction::~KvTransaction()~KvTransaction269,7803
+FdbFuture KvTransaction::kv_async_get(std::string_view key)kv_async_get277,7987
+KvTransaction::kv_wait_get(FdbFuture &f)kv_wait_get286,8336
+KvTransaction::kv_get(std::string_view key)kv_get311,8993
+std::expected<void, fdb_error_t> KvTransaction::disable_ryw()disable_ryw318,9181
+FdbFuture KvTransaction::kv_async_get_range(std::string_view start,kv_async_get_range328,9510
+KvTransaction::kv_wait_range(FdbFuture &f, bool *more)kv_wait_range339,10049
+void KvTransaction::kv_put(std::string_view key, std::string_view value)kv_put357,10543
+void KvTransaction::kv_del(std::string_view key)kv_del367,11022
+void KvTransaction::kv_range_clear(std::string_view begin, std::string_view end)kv_range_clear375,11321
+KvTransaction::kv_range_scan(std::string_view start, std::string_view end,kv_range_scan385,11784
+std::expected<void, fdb_error_t> KvTransaction::commit()commit393,12052
+FdbFuture KvTransaction::commit_async()commit_async405,12388
+std::expected<void, fdb_error_t> KvTransaction::resolve_commit(FdbFuture &f)resolve_commit410,12488
+
+backend/include/kvrgw_c_api.h,6194
+#define KVRGW_C_API_HKVRGW_C_API_H2,22
+typedef int32_t kvrgw_err_t;kvrgw_err_t11,126
+enum {__anonb6d71cee010313,156
+  KVRGW_ERR_OK = 0,KVRGW_ERR_OK14,163
+  KVRGW_ERR_NO_SUCH_KEY = 100,KVRGW_ERR_NO_SUCH_KEY15,183
+  KVRGW_ERR_NO_SUCH_BUCKET = 101,KVRGW_ERR_NO_SUCH_BUCKET16,214
+  KVRGW_ERR_BUCKET_ALREADY_EXISTS = 102,KVRGW_ERR_BUCKET_ALREADY_EXISTS17,248
+  KVRGW_ERR_BUCKET_NOT_EMPTY = 103,KVRGW_ERR_BUCKET_NOT_EMPTY18,289
+  KVRGW_ERR_PRECONDITION_FAILED = 104,KVRGW_ERR_PRECONDITION_FAILED19,325
+  KVRGW_ERR_ACCESS_DENIED = 105,KVRGW_ERR_ACCESS_DENIED20,364
+  KVRGW_ERR_INVALID_ARGUMENT = 106,KVRGW_ERR_INVALID_ARGUMENT21,397
+  KVRGW_ERR_INVALID_BUCKET_NAME = 107,KVRGW_ERR_INVALID_BUCKET_NAME22,433
+  KVRGW_ERR_NO_SUCH_VERSION = 108,KVRGW_ERR_NO_SUCH_VERSION23,472
+  KVRGW_ERR_NO_SUCH_TENANT = 109,KVRGW_ERR_NO_SUCH_TENANT24,507
+  KVRGW_ERR_INVALID_RANGE = 110,KVRGW_ERR_INVALID_RANGE25,541
+  KVRGW_ERR_INVALID_REQUEST = 111,KVRGW_ERR_INVALID_REQUEST26,574
+  KVRGW_ERR_INVALID_TAG = 112,KVRGW_ERR_INVALID_TAG27,609
+  KVRGW_ERR_FDB_CONFLICT = 200,KVRGW_ERR_FDB_CONFLICT28,640
+  KVRGW_ERR_FDB_PROCESS_BEHIND = 201,KVRGW_ERR_FDB_PROCESS_BEHIND29,672
+  KVRGW_ERR_FDB_FUTURE_VERSION = 202,KVRGW_ERR_FDB_FUTURE_VERSION30,710
+  KVRGW_ERR_FDB_TRANSACTION_TOO_OLD = 203,KVRGW_ERR_FDB_TRANSACTION_TOO_OLD31,748
+  KVRGW_ERR_FDB_NOT_COMMITTED = 204,KVRGW_ERR_FDB_NOT_COMMITTED32,791
+  KVRGW_ERR_FDB_COMMIT_UNKNOWN = 205,KVRGW_ERR_FDB_COMMIT_UNKNOWN33,828
+  KVRGW_ERR_FDB_CLUSTER_VERSION_CHANGED = 206,KVRGW_ERR_FDB_CLUSTER_VERSION_CHANGED34,866
+  KVRGW_ERR_FDB_KEY_TOO_LARGE = 300,KVRGW_ERR_FDB_KEY_TOO_LARGE35,913
+  KVRGW_ERR_FDB_VALUE_TOO_LARGE = 301,KVRGW_ERR_FDB_VALUE_TOO_LARGE36,950
+  KVRGW_ERR_FDB_TRANSACTION_TOO_LARGE = 302,KVRGW_ERR_FDB_TRANSACTION_TOO_LARGE37,989
+  KVRGW_ERR_INTERNAL = 400,KVRGW_ERR_INTERNAL38,1034
+  KVRGW_ERR_CORRUPT_VALUE = 401,KVRGW_ERR_CORRUPT_VALUE39,1062
+  KVRGW_ERR_BUCKET_ID_MISMATCH = 402,KVRGW_ERR_BUCKET_ID_MISMATCH40,1095
+  KVRGW_ERR_VALUE_TOO_LARGE = 403,KVRGW_ERR_VALUE_TOO_LARGE41,1133
+  KVRGW_ERR_TRANSACTION_CONFLICT = 404,KVRGW_ERR_TRANSACTION_CONFLICT42,1168
+  KVRGW_ERR_MAX_RETRIES_EXCEEDED = 405KVRGW_ERR_MAX_RETRIES_EXCEEDED43,1208
+enum {__anonb6d71cee020346,1251
+  KVRGW_VERSIONING_DISABLED = 0,KVRGW_VERSIONING_DISABLED47,1258
+  KVRGW_VERSIONING_ENABLED = 1,KVRGW_VERSIONING_ENABLED48,1291
+  KVRGW_VERSIONING_SUSPENDED = 2KVRGW_VERSIONING_SUSPENDED49,1323
+enum { KVRGW_MAX_LIST_KEYS = 1000 };__anonb6d71cee030352,1360
+enum { KVRGW_MAX_LIST_KEYS = 1000 };KVRGW_MAX_LIST_KEYS52,1360
+enum { KVRGW_MAX_LIST_BUCKETS = 10000 };__anonb6d71cee040353,1397
+enum { KVRGW_MAX_LIST_BUCKETS = 10000 };KVRGW_MAX_LIST_BUCKETS53,1397
+typedef struct KvRgwHandle KvRgwHandle;KvRgwHandle55,1439
+typedef struct {__anonb6d71cee050857,1480
+  const char* data;data58,1497
+  size_t len;len59,1517
+} kvrgw_buf;kvrgw_buf60,1531
+typedef struct {__anonb6d71cee060862,1545
+  const char* key;key63,1562
+  size_t key_len;key_len64,1581
+  const char* value;value65,1599
+  size_t value_len;value_len66,1620
+} kvrgw_kv;kvrgw_kv67,1640
+typedef struct {__anonb6d71cee070869,1653
+  int64_t start;start70,1670
+  int64_t end;end71,1687
+  int from_end;from_end72,1702
+  int end_unbounded;end_unbounded73,1718
+} kvrgw_byte_range;kvrgw_byte_range74,1739
+typedef struct {__anonb6d71cee080876,1760
+  char etag[48];etag77,1777
+  uint64_t size;size78,1794
+  int64_t last_modified_unix;last_modified_unix79,1811
+  char content_type[256];content_type80,1841
+  char version_id[9];version_id81,1867
+  uint32_t tags_count;tags_count82,1889
+  char error_detail[128];error_detail83,1912
+} kvrgw_object_meta;kvrgw_object_meta84,1938
+typedef struct {__anonb6d71cee090886,1960
+  uint32_t key_off;key_off87,1977
+  uint32_t key_len;key_len88,1997
+  uint64_t size;size89,2017
+  uint32_t etag_off;etag_off90,2034
+  uint32_t etag_len;etag_len91,2055
+  int64_t last_modified_unix;last_modified_unix92,2076
+} kvrgw_list_obj_entry;kvrgw_list_obj_entry93,2106
+typedef struct {__anonb6d71cee0a0895,2131
+  uint32_t name_off;name_off96,2148
+  uint32_t name_len;name_len97,2169
+  int64_t created_at_unix;created_at_unix98,2190
+} kvrgw_list_bkt_entry;kvrgw_list_bkt_entry99,2217
+typedef struct {__anonb6d71cee0b08101,2242
+  uint32_t key_off;key_off102,2259
+  uint32_t key_len;key_len103,2279
+  uint32_t version_id;version_id104,2299
+  int is_latest;is_latest105,2322
+  int is_delete_marker;is_delete_marker106,2339
+  uint64_t size;size107,2363
+  uint32_t etag_off;etag_off108,2380
+  uint32_t etag_len;etag_len109,2401
+  int64_t last_modified_unix;last_modified_unix110,2422
+} kvrgw_list_ver_entry;kvrgw_list_ver_entry111,2452
+typedef struct {__anonb6d71cee0c08113,2477
+  uint32_t key_off;key_off114,2494
+  uint32_t key_len;key_len115,2514
+  int status; /* 0 deleted, 1 error */status116,2534
+  uint32_t err_code_off;err_code_off117,2573
+  uint32_t err_code_len;err_code_len118,2598
+  uint32_t err_msg_off;err_msg_off119,2623
+  uint32_t err_msg_len;err_msg_len120,2647
+  uint32_t version_id_off;version_id_off121,2671
+  uint32_t version_id_len;version_id_len122,2698
+  int created_dm;created_dm123,2725
+  uint32_t dm_version_id;dm_version_id124,2743
+} kvrgw_del_multi_out;kvrgw_del_multi_out125,2769
+typedef struct {__anonb6d71cee0d08127,2793
+  kvrgw_buf src_bucket;src_bucket128,2810
+  kvrgw_buf src_key;src_key129,2834
+  kvrgw_buf dst_bucket;dst_bucket130,2855
+  kvrgw_buf dst_key;dst_key131,2879
+  kvrgw_buf src_version_id;src_version_id132,2900
+  kvrgw_buf if_match;if_match133,2928
+  kvrgw_buf if_none_match;if_none_match134,2950
+  kvrgw_buf dst_if_match;dst_if_match135,2977
+  kvrgw_buf dst_if_none_match;dst_if_none_match136,3003
+  kvrgw_buf content_type;content_type137,3034
+  int replace_metadata;replace_metadata138,3060
+  const kvrgw_kv* metadata;metadata139,3084
+  size_t metadata_count;metadata_count140,3112
+  int replace_tags;replace_tags141,3137
+  const kvrgw_kv* tags;tags142,3157
+  size_t tags_count;tags_count143,3181
+} kvrgw_copy_args;kvrgw_copy_args144,3202
+
+backend/tools/gc_ctl.cpp,2982
+namespace {__anon59e8bb16011137,807
+void run_network()run_network39,820
+std::string prefix_range_end(std::string_view prefix)prefix_range_end47,991
+std::string bucket_id_hex(kvrgw::bucket_id_t id)bucket_id_hex61,1325
+std::optional<uint64_t> blob_file_size(const kvrgw::DataStore &data_store,blob_file_size75,1689
+uint64_t parse_size_arg(const char *text)parse_size_arg90,2099
+struct GcEntry {GcEntry131,3204
+  std::string ref_tag_hex;ref_tag_hex132,3221
+  uint8_t size_tier{};size_tier133,3248
+  std::optional<uint64_t> blob_bytes;blob_bytes134,3271
+  std::string bucket_id_hex;bucket_id_hex135,3309
+  uint16_t shard_count{};shard_count136,3338
+  uint16_t shard_id{};shard_id137,3364
+  bool size_mismatch{};size_mismatch138,3387
+bool tier_overlaps_range(uint8_t tier, uint64_t min_bytes, uint64_t max_bytes)tier_overlaps_range141,3415
+bool entry_in_size_range(const GcEntry &entry, uint64_t min_bytes,entry_in_size_range148,3680
+std::vector<GcEntry> scan_gc_entries(kvrgw::KvStore &store,scan_gc_entries158,4004
+std::filesystem::path data_root_from_env()data_root_from_env217,6117
+void usage(const char *prog)usage225,6312
+std::string admin_socket_path()admin_socket_path246,7250
+std::string admin_request(const std::string &line)admin_request254,7402
+uint32_t parse_active_age(const std::string &response)parse_active_age302,8616
+uint32_t parse_handle(const std::string &response)parse_handle311,8912
+struct ParsedGcConfig {ParsedGcConfig323,9274
+  uint32_t active_age = 0;active_age324,9298
+  uint32_t pending_age = 0;pending_age325,9325
+  bool suspended = false;suspended326,9353
+  int interval_sec = 0;interval_sec327,9379
+  int max_objects_per_sec = 0;max_objects_per_sec328,9403
+  int max_mb_per_sec = 0;max_mb_per_sec329,9434
+ParsedGcConfig parse_gc_config(const std::string &response)parse_gc_config332,9464
+bool is_admin_command(const std::string &command)is_admin_command369,10539
+int cmd_set_gc_config(int argc, char **argv)cmd_set_gc_config375,10732
+int cmd_query_active_age()cmd_query_active_age391,11148
+int cmd_get_gc_config()cmd_get_gc_config398,11302
+int cmd_wait_applied(int argc, char **argv)cmd_wait_applied410,11782
+int run_admin_command(int argc, char **argv)run_admin_command466,13417
+int parse_list_limit(int argc, char **argv, int start_idx, int default_limit)parse_list_limit485,13848
+int cmd_count(kvrgw::KvStore &store, kvrgw::DataStore &data_store)cmd_count505,14395
+int cmd_count_by_tier(kvrgw::KvStore &store, kvrgw::DataStore &data_store)cmd_count_by_tier524,14939
+  struct TierStats {TierStats527,15078
+    size_t count = 0;count528,15099
+    uint64_t bytes = 0;bytes529,15121
+    size_t missing = 0;missing530,15145
+int cmd_list(kvrgw::KvStore &store, kvrgw::DataStore &data_store, int limit)cmd_list558,15954
+int cmd_list_by_size(kvrgw::KvStore &store, kvrgw::DataStore &data_store,cmd_list_by_size579,16655
+int main(int argc, char **argv)main616,17775
+
+backend/tests/object_value_test.cpp,942
+namespace {__anonf94163fe011130,670
+void test_bucket_value_endianness()test_bucket_value_endianness32,683
+void test_ref_tag_zero_base64_roundtrip()test_ref_tag_zero_base64_roundtrip48,1185
+void test_legacy_bucket_value_ten_bytes()test_legacy_bucket_value_ten_bytes76,2337
+void test_tenant_value_roundtrip()test_tenant_value_roundtrip89,2683
+void test_bucket_value_versioning_state()test_bucket_value_versioning_state103,3111
+void test_object_value_header_version_fields()test_object_value_header_version_fields118,3595
+void test_is_delete_marker_flag()test_is_delete_marker_flag154,4888
+void test_child_value_header_layout()test_child_value_header_layout169,5280
+void test_tag_encode_exact_size()test_tag_encode_exact_size189,6011
+void test_inline_metadata_frame_roundtrip()test_inline_metadata_frame_roundtrip216,7050
+void test_child_d_header_then_data()test_child_d_header_then_data257,8708
+int main()main278,9400
+
+backend/tests/gc_config_state_test.cpp,23
+int main()main20,466
+
+backend/tests/fdb_error_test.cpp,5908
+namespace inject {inject40,1233
+struct GetResult {GetResult42,1253
+  fdb_error_t wait_err = 0;wait_err43,1272
+  fdb_error_t get_err = 0;get_err44,1300
+  bool present = false;present45,1327
+  std::string value;value46,1351
+struct CommitResult {CommitResult49,1376
+  fdb_error_t wait_err = 0;wait_err50,1398
+  fdb_error_t get_err = 0;get_err51,1426
+struct RangeResult {RangeResult54,1457
+  fdb_error_t wait_err = 0;wait_err55,1478
+  fdb_error_t get_err = 0;get_err56,1506
+  std::vector<std::pair<std::string, std::string>> rows;rows57,1533
+static std::deque<GetResult> g_get_queue;g_get_queue60,1594
+static std::deque<CommitResult> g_commit_queue;g_commit_queue61,1636
+static std::deque<RangeResult> g_range_queue;g_range_queue62,1684
+static std::deque<fdb_error_t> g_create_txn_queue;g_create_txn_queue63,1730
+static int g_get_calls = 0;g_get_calls65,1782
+static int g_commit_calls = 0;g_commit_calls66,1810
+static int g_range_calls = 0;g_range_calls67,1841
+static int g_create_txn_calls = 0;g_create_txn_calls68,1871
+void reset()reset70,1907
+void push_create_txn_error(fdb_error_t err)push_create_txn_error82,2117
+void push_create_txn_success() { g_create_txn_queue.push_back(0); }push_create_txn_success87,2203
+void push_get_error(fdb_error_t err)push_get_error89,2272
+void push_get_success(bool present, const std::string &value = {})push_get_success94,2360
+void push_commit_error(fdb_error_t err) { g_commit_queue.push_back({0, err}); }push_commit_error99,2481
+void push_commit_success() { g_commit_queue.push_back({0, 0}); }push_commit_success101,2562
+void push_range_error(fdb_error_t err)push_range_error103,2628
+void push_range_success(push_range_success108,2713
+enum class FutureKind { GET, COMMIT, RANGE };FutureKind120,3060
+enum class FutureKind { GET, COMMIT, RANGE };GET120,3060
+enum class FutureKind { GET, COMMIT, RANGE };COMMIT120,3060
+enum class FutureKind { GET, COMMIT, RANGE };RANGE120,3060
+struct MockFuture {MockFuture122,3107
+  FutureKind kind;kind123,3127
+  fdb_error_t wait_err = 0;wait_err124,3146
+  fdb_error_t result_err = 0;result_err125,3174
+  bool present = false;present126,3204
+  std::string value;value127,3228
+  std::vector<FDBKeyValue> kv_array;kv_array128,3249
+  std::vector<std::string> key_storage;key_storage129,3286
+  std::vector<std::string> val_storage;val_storage130,3326
+fdb_error_t fdb_select_api_version_impl(int, int) { return 0; }fdb_select_api_version_impl139,3561
+fdb_error_t fdb_create_database(const char *, FDBDatabase **out)fdb_create_database141,3626
+void fdb_database_destroy(FDBDatabase *) {}fdb_database_destroy148,3784
+fdb_error_t fdb_database_create_transaction(FDBDatabase *, FDBTransaction **out)fdb_database_create_transaction150,3829
+void fdb_transaction_destroy(FDBTransaction *) {}fdb_transaction_destroy166,4250
+void fdb_transaction_set(FDBTransaction *, const uint8_t *, int,fdb_transaction_set168,4301
+void fdb_transaction_clear(FDBTransaction *, const uint8_t *, int) {}fdb_transaction_clear173,4418
+void fdb_transaction_atomic_op(FDBTransaction *, const uint8_t *, int,fdb_transaction_atomic_op175,4489
+FDBFuture *fdb_transaction_get(FDBTransaction *, const uint8_t *, int,fdb_transaction_get180,4635
+FDBFuture *fdb_transaction_commit(FDBTransaction *)fdb_transaction_commit200,5172
+FDBFuture *fdb_transaction_get_range(FDBTransaction *, const uint8_t *, int,fdb_transaction_get_range214,5565
+fdb_error_t fdb_future_block_until_ready(FDBFuture *future)fdb_future_block_until_ready246,6845
+fdb_error_t fdb_future_get_value(FDBFuture *future, fdb_bool_t *out_present,fdb_future_get_value252,6984
+fdb_error_t fdb_future_get_error(FDBFuture *future)fdb_future_get_error272,7554
+fdb_error_t fdb_future_get_keyvalue_array(FDBFuture *future,fdb_future_get_keyvalue_array278,7687
+void fdb_future_destroy(FDBFuture *future)fdb_future_destroy292,8154
+const char *fdb_get_error(fdb_error_t code)fdb_get_error297,8251
+static int g_pass = 0;g_pass329,9080
+static int g_fail = 0;g_fail330,9103
+#define TEST(TEST332,9127
+#define ASSERT_TRUE(ASSERT_TRUE339,9561
+#define ASSERT_EQ(ASSERT_EQ348,10143
+struct TestEntry {TestEntry358,10806
+  const char *name;name359,10825
+  void (*fn)();fn360,10845
+static std::vector<TestEntry> &tests()tests363,10865
+TEST(is_retriable_1020)TEST373,11140
+TEST(is_retriable_0)TEST378,11232
+TEST(is_retriable_1021)TEST383,11319
+TEST(is_retriable_2000)TEST388,11411
+TEST(is_retriable_4000)TEST393,11504
+TEST(txn_get_propagates_1020)TEST402,11805
+TEST(txn_get_propagates_2000)TEST413,12093
+TEST(txn_get_propagates_4000)TEST424,12381
+TEST(txn_get_success_present)TEST435,12669
+TEST(txn_get_success_absent)TEST447,12999
+TEST(txn_commit_propagates_1020)TEST462,13487
+TEST(txn_commit_propagates_2000)TEST473,13776
+TEST(txn_commit_success)TEST484,14065
+TEST(txn_range_scan_propagates_1020)TEST498,14509
+TEST(txn_range_scan_propagates_4000)TEST509,14821
+TEST(txn_range_scan_success_empty)TEST520,15133
+TEST(txn_range_scan_success_rows)TEST531,15425
+TEST(store_get_propagates_error)TEST548,16067
+TEST(store_get_success)TEST558,16317
+TEST(store_range_scan_propagates_error)TEST573,16805
+TEST(store_range_scan_success)TEST583,17078
+TEST(allocate_retries_on_1020_commit)TEST597,17576
+TEST(allocate_retries_on_1020_get)TEST616,18142
+TEST(allocate_stops_on_non_retriable_commit)TEST632,18637
+TEST(allocate_stops_on_non_retriable_get)TEST644,18984
+TEST(allocate_exhausts_retries)TEST655,19287
+TEST(allocate_preserves_error_code_4100)TEST669,19663
+TEST(begin_transaction_propagates_error)TEST684,20173
+TEST(begin_transaction_success)TEST694,20435
+TEST(store_get_propagates_begin_txn_error)TEST702,20603
+TEST(allocate_retries_begin_txn_1020)TEST712,20870
+TEST(allocate_stops_begin_txn_non_retriable)TEST727,21325
+int main()main742,21812
+
+backend/tests/data_store_test.cpp,292
+namespace {__anon8882e691011123,522
+std::string make_ref_tag(char fill) { return std::string(12, fill); }make_ref_tag25,535
+void test_read_all_and_partial()test_read_all_and_partial27,606
+void test_large_file_partial_read()test_large_file_partial_read74,1843
+int main()main103,2671
+
+backend/tests/data_store_error_test.cpp,882
+namespace {__anon4953cafa011128,723
+std::string make_ref_tag(char fill) { return std::string(12, fill); }make_ref_tag30,736
+const auto kTmpRoot =kTmpRoot32,807
+int g_pass = 0;g_pass35,895
+int g_fail = 0;g_fail36,911
+#define RUN_TEST(RUN_TEST38,928
+#define ASSERT_TRUE(ASSERT_TRUE47,1510
+void test_write_success()test_write_success58,2201
+void test_write_open_fail()test_write_open_fail66,2401
+void test_read_success_full()test_read_success_full79,2746
+void test_read_success_partial()test_read_success_partial92,3111
+void test_read_missing_file()test_read_missing_file105,3481
+void test_read_all_missing_file()test_read_all_missing_file115,3731
+void test_read_offset_past_end()test_read_offset_past_end125,3981
+void test_remove_success()test_remove_success137,4343
+void test_remove_idempotent()test_remove_idempotent150,4717
+int main()main159,4883
+
+backend/tests/err_insertion_test.cpp,772
+static void test_disabled_by_default()test_disabled_by_default25,540
+static void test_fixed_mode()test_fixed_mode37,965
+static void test_counter_mode()test_counter_mode52,1434
+static void test_counter_with_burst()test_counter_with_burst68,1788
+static void test_time_mode()test_time_mode100,3087
+static void test_time_with_burst()test_time_with_burst114,3632
+static void test_burst_does_not_increment_counter()test_burst_does_not_increment_counter140,4813
+static void test_clear_resets_all()test_clear_resets_all170,6095
+static void test_independent_fault_types()test_independent_fault_types187,6598
+static void test_concurrent_counter()test_concurrent_counter204,7276
+    threads.emplace_back([&] {__anondaf8556e0102215,7577
+int main()main239,8358
+
+backend/tests/l_key_test.cpp,23
+int main()main23,522
+
+backend/tests/kv_range_test.cpp,474
+namespace {__anonff7f67f8011129,642
+void run_network()run_network31,655
+std::string prefix_range_end(std::string_view prefix)prefix_range_end39,826
+int64_t now_unix()now_unix53,1160
+void txn_put(kvrgw::KvStore &store, std::string_view key,txn_put60,1325
+void txn_del(kvrgw::KvStore &store, std::string_view key)txn_del70,1550
+void cleanup_tenant_buckets(kvrgw::KvStore &store, kvrgw::tenant_id_t tenant_id)cleanup_tenant_buckets79,1731
+int main()main92,2083
