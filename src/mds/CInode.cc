@@ -4319,7 +4319,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       optmetadata_t empty;
       encode(empty, bl);
     }
-    encode(get_subvolume_id(), bl);
+    // get_subvolume_id() would walk the parent chain to re-derive the realm
+    // already found above.
+    encode(realm ? realm->get_subvolume_ino() : inodeno_t(0), bl);
     // encode inodestat
     ENCODE_FINISH(bl);
   }
