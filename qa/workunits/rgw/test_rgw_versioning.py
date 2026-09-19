@@ -145,6 +145,42 @@ def main():
     assert num_leftover_olh_entries == 0, \
       'Found leftover olh entries after concurrent deletes'
 
+    # TESTCASE 'verify that reads recover after a canceled olh replay'
+    log.debug('TEST: verify that reads recover after a canceled olh replay\n')
+    key = 'olh-replay-race'
+    current_version = bucket.Object(key).put(Body=b'b')['VersionId']
+    marker = json.loads(exec_cmd(f'radosgw-admin bucket stats --bucket {BUCKET_NAME}'))['marker']
+    olh_oid = f'{marker}_{key}'
+    olh_ver = exec_cmd(f'rados -p {DATA_POOL} getxattr {olh_oid} user.rgw.olh.ver').decode()
+    try:
+        # force the replay's version check to fail
+        exec_cmd(f'rados -p {DATA_POOL} setxattr {olh_oid} user.rgw.olh.ver 9223372036854775807')
+        connection.ObjectVersion(bucket.name, key, current_version).delete()
+        assert 'Errors' not in bucket.delete_objects(Delete={'Objects': [{'Key': key}]})
+        new_version = bucket.Object(key).put(Body=b'c')['VersionId']
+        bucket.Object(key).get()
+        assert False, 'expected 503 while the olh replay is canceled'
+    except botocore.exceptions.ClientError as e:
+        assert e.operation_name == 'GetObject'
+        assert e.response['ResponseMetadata']['HTTPStatusCode'] == 503
+    finally:
+        exec_cmd(f'rados -p {DATA_POOL} setxattr {olh_oid} user.rgw.olh.ver {olh_ver}')
+    assert bucket.Object(key).get()['VersionId'] == new_version
+
+    # TESTCASE 'verify that a delete writes a delete marker after its olh replay removes the head'
+    log.debug('TEST: verify that a delete writes a delete marker after its olh replay removes the head\n')
+    key = 'olh-replay-remove'
+    version = bucket.Object(key).put(Body=b'a')['VersionId']
+    olh_oid = f'{marker}_{key}'
+    olh_ver = exec_cmd(f'rados -p {DATA_POOL} getxattr {olh_oid} user.rgw.olh.ver').decode()
+    try:
+        # leave the unlink pending in the olh log
+        exec_cmd(f'rados -p {DATA_POOL} setxattr {olh_oid} user.rgw.olh.ver 9223372036854775807')
+        connection.ObjectVersion(bucket.name, key, version).delete()
+    finally:
+        exec_cmd(f'rados -p {DATA_POOL} setxattr {olh_oid} user.rgw.olh.ver {olh_ver}')
+    assert bucket.Object(key).delete().get('DeleteMarker'), 'expected a delete marker'
+
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.object_versions.all().delete()
