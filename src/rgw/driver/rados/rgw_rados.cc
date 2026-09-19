@@ -7625,13 +7625,14 @@ int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
                             optional_yield y, bool assume_noent)
 {
   int ret;
+  unsigned attempts = 0;
 
   do {
     ret = get_obj_state_impl(dpp, octx, bucket_info, obj, psm,
                              follow_olh, y, assume_noent);
-  } while (ret == -EAGAIN);
+  } while (ret == -EAGAIN && ++attempts < 5);
 
-  return ret;
+  return ret == -EAGAIN ? -ERR_SERVICE_UNAVAILABLE : ret;
 }
 
 int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
@@ -10525,13 +10526,23 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
     ldpp_dout(dpp, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj.bucket << dendl;
 
     int ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, y);
-    if (ret < 0) {
-      if (ret == -ECANCELED) {
-        // In this context, ECANCELED means that the OLH tag changed in either the bucket index entry or the OLH object.
-        // If the OLH tag changed, it indicates that a previous OLH entry was removed since this request started. We
-        // return ENOENT to indicate that the OLH object was removed.
-        ret = -ENOENT;
+    if (ret == -ECANCELED) {
+      // ECANCELED can mean the olh tag changed in the bucket index or object,
+      // or another replay advanced the olh version. If a version was linked,
+      // reread the olh head and replay again instead of treating it as removed.
+      if (state->attrset.find(RGW_ATTR_OLH_INFO) == state->attrset.end()) {
+        return -ENOENT; // no version was ever linked
       }
+      // callers hold pointers to this state, so reset it in place rather than invalidate()
+      RGWObjState fresh;
+      fresh.is_atomic = state->is_atomic;
+      fresh.prefetch_data = state->prefetch_data;
+      fresh.compressed = state->compressed;
+      *state = fresh;
+      obj_ctx.get_state(olh_obj)->manifest.reset();
+      return -EAGAIN;
+    }
+    if (ret < 0) {
       return ret;
     }
   }
