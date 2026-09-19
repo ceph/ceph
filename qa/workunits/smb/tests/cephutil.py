@@ -56,6 +56,15 @@ class JSONResult:
         )
 
 
+class ProcessError(subprocess.CalledProcessError):
+    def __str__(self):
+        return (
+            f'ProcessError: returncode={self.returncode}; command={self.cmd};'
+            f' stdout={self.stdout!r}; stderr={self.stderr!r}'
+        )
+
+
+
 def cephadm_shell_cmd(
     smb_cfg, args, load_json=None, input_json=None, **kwargs
 ):
@@ -85,7 +94,11 @@ def cephadm_shell_cmd(
     for v in volumes:
         cmd.extend(['-v', v])
     cmd += list(args)
-    proc = subprocess.run(cmd, **kwargs)
+    try:
+        proc = subprocess.run(cmd, **kwargs)
+    except subprocess.CalledProcessError as err:
+        err.__class__ = ProcessError
+        raise err
     if load is not None:
         return JSONResult.load(load, proc)
     return proc
