@@ -6,6 +6,14 @@ add_executable(unittest_mds_authcap
 add_ceph_unittest(unittest_mds_authcap)
 target_link_libraries(unittest_mds_authcap mds global ${BLKID_LIBRARIES})
 
+# unittest_mds_table_save_unlock — regression for mds_lock held across Objecter throttle
+add_executable(unittest_mds_table_save_unlock
+  TestMDSTable_save_unlock.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_mds_table_save_unlock)
+target_link_libraries(unittest_mds_table_save_unlock mds osdc global ${BLKID_LIBRARIES})
+
 # unittest_mds_sessionfilter
 add_executable(unittest_mds_sessionfilter
   TestSessionFilter.cc

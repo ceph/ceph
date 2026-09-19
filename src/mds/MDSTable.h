@@ -16,17 +16,20 @@
 #ifndef CEPH_MDSTABLE_H
 #define CEPH_MDSTABLE_H
 
-#include "include/buffer.h"
-#include "include/object.h" // for object_t
-#include "include/types.h" // for version_t
-#include "include/cephfs/types.h" // for mds_rank_t
-
+#include <functional>
 #include <map>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "common/fair_mutex.h"
+#include "include/buffer.h"
+#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/object.h" // for object_t
+#include "include/types.h" // for version_t
+
 class Context;
+class Finisher;
 class MDSContext;
 class MDSRank;
 
@@ -94,5 +97,49 @@ protected:
   version_t version = 0, committing_version = 0, committed_version = 0, projected_version = 0;
 
   std::map<version_t, std::vector<MDSContext*> > waitfor_save;
+
+  friend class MDSTableTestAccess;
 };
+
+/**
+ * Test-only helpers for MDSTable::save unlock-across-Objecter regression.
+ *
+ * test_io supplies lock/finisher/pool so unit tests need not construct MDSRank.
+ * When a write hook is installed, it replaces objecter->write_full and is
+ * invoked with the MDS lock released (matching production submit).
+ */
+class MDSTableTestAccess {
+public:
+  struct TestIO {
+    ceph::fair_mutex* lock = nullptr;
+    Finisher* finisher = nullptr;
+    int64_t pool = 1;
+  };
+
+  using write_hook_t = std::function<void(Context* fin)>;
+
+  static void set_write_hook(write_hook_t hook);
+  static void clear_write_hook();
+  static void set_test_io(TestIO* io);
+  static void clear_test_io();
+
+  static void
+  set_active(MDSTable& t)
+  {
+    t.state = MDSTable::STATE_ACTIVE;
+  }
+
+  static void
+  set_versions(
+      MDSTable& t,
+      version_t version,
+      version_t committing,
+      version_t committed)
+  {
+    t.version = version;
+    t.committing_version = committing;
+    t.committed_version = committed;
+  }
+};
+
 #endif

@@ -14,16 +14,18 @@
  */
 
 #include "MDSTable.h"
-#include "MDSContext.h"
-#include "MDSRank.h"
 
-#include "osdc/Objecter.h"
+#include <functional>
 
 #include "common/debug.h"
-#include "common/errno.h" // for cpp_strerror()
-#include "common/Finisher.h"
 
+#include "common/Finisher.h"
+#include "common/errno.h" // for cpp_strerror()
 #include "include/ceph_assert.h"
+#include "osdc/Objecter.h"
+
+#include "MDSContext.h"
+#include "MDSRank.h"
 
 
 #define dout_context g_ceph_context
@@ -32,6 +34,66 @@
 #define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
 
 using namespace std;
+
+namespace {
+std::function<void(Context*)> g_mds_table_write_hook;
+MDSTableTestAccess::TestIO* g_mds_table_test_io = nullptr;
+
+ceph::fair_mutex&
+mds_table_lock(MDSRank* mds)
+{
+  if (g_mds_table_test_io) {
+    ceph_assert(g_mds_table_test_io->lock);
+    return *g_mds_table_test_io->lock;
+  }
+  ceph_assert(mds);
+  return mds->mds_lock;
+}
+
+Finisher*
+mds_table_finisher(MDSRank* mds)
+{
+  if (g_mds_table_test_io) {
+    ceph_assert(g_mds_table_test_io->finisher);
+    return g_mds_table_test_io->finisher;
+  }
+  ceph_assert(mds);
+  return mds->finisher;
+}
+
+int64_t
+mds_table_pool(MDSRank* mds)
+{
+  if (g_mds_table_test_io)
+    return g_mds_table_test_io->pool;
+  ceph_assert(mds);
+  return mds->get_metadata_pool();
+}
+} // namespace
+
+void
+MDSTableTestAccess::set_write_hook(write_hook_t hook)
+{
+  g_mds_table_write_hook = std::move(hook);
+}
+
+void
+MDSTableTestAccess::clear_write_hook()
+{
+  g_mds_table_write_hook = nullptr;
+}
+
+void
+MDSTableTestAccess::set_test_io(TestIO* io)
+{
+  g_mds_table_test_io = io;
+}
+
+void
+MDSTableTestAccess::clear_test_io()
+{
+  g_mds_table_test_io = nullptr;
+}
 
 class MDSTableIOContext : public MDSIOContextBase
 {
@@ -59,6 +121,9 @@ public:
 
 void MDSTable::save(MDSContext *onfinish, version_t v)
 {
+  auto& lock = mds_table_lock(mds);
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
+
   if (v > 0 && v <= committing_version) {
     dout(10) << "save v " << version << " - already saving "
 	     << committing_version << " >= needed " << v << dendl;
@@ -66,7 +131,17 @@ void MDSTable::save(MDSContext *onfinish, version_t v)
       waitfor_save[v].push_back(onfinish);
     return;
   }
-  
+
+  // A prior write_full may still be in flight (we drop mds_lock around the
+  // Objecter submit below). Do not start another RADOS write until it completes.
+  if (committing_version > committed_version) {
+    dout(10) << "save v " << version << " - deferring, write in flight for "
+             << committing_version << dendl;
+    if (onfinish)
+      waitfor_save[version].push_back(onfinish);
+    return;
+  }
+
   dout(10) << "save v " << version << dendl;
   ceph_assert(is_active());
   
@@ -82,16 +157,28 @@ void MDSTable::save(MDSContext *onfinish, version_t v)
   // write (async)
   SnapContext snapc;
   object_t oid = get_object_name();
-  object_locator_t oloc(mds->get_metadata_pool());
-  mds->objecter->write_full(oid, oloc,
-			    snapc,
-			    bl, ceph::real_clock::now(), 0,
-			    new C_OnFinisher(new C_IO_MT_Save(this, version),
-					     mds->finisher));
+  object_locator_t oloc(mds_table_pool(mds));
+  Context* fin = new C_OnFinisher(
+      new C_IO_MT_Save(this, version), mds_table_finisher(mds));
+
+  // Objecter may block in _throttle_op. MDLog::log_trim_upkeep holds
+  // mds_lock across try_expire -> save; do not keep mds_lock while waiting
+  // on the throttle or the whole MDS stalls (dispatch/asok blocked).
+  lock.unlock();
+  if (g_mds_table_write_hook) {
+    g_mds_table_write_hook(fin);
+  } else {
+    ceph_assert(mds);
+    mds->objecter->write_full(
+        oid, oloc, snapc, bl, ceph::real_clock::now(), 0, fin);
+  }
+  lock.lock();
 }
 
 void MDSTable::save_2(int r, version_t v)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+
   if (r < 0) {
     dout(1) << "save error " << r << " v " << v << dendl;
     mds->clog->error() << "failed to store table " << table_name << " object,"
@@ -101,17 +188,23 @@ void MDSTable::save_2(int r, version_t v)
   }
 
   dout(10) << "save_2 v " << v << dendl;
-  committed_version = v;
-  
+  if (v >= committed_version)
+    committed_version = v;
+
   MDSContext::vec ls;
   while (!waitfor_save.empty()) {
     auto it = waitfor_save.begin();
     if (it->first > v) break;
-    auto& v = it->second;
-    ls.insert(ls.end(), v.begin(), v.end());
+    auto& contexts = it->second;
+    ls.insert(ls.end(), contexts.begin(), contexts.end());
     waitfor_save.erase(it);
   }
   finish_contexts(g_ceph_context, ls, 0);
+
+  // Table may have advanced while mds_lock was dropped around write_full.
+  if (version > committed_version) {
+    save(nullptr, version);
+  }
 }
 
 
