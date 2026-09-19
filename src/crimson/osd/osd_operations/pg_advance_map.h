@@ -36,10 +36,6 @@ protected:
   PeeringCtx rctx;
   const bool do_init;
 
-  // For splitting
-  std::set<spg_t> children_pgids;
-  std::set<Ref<PG>> split_pgs;
-
 public:
   PGAdvanceMap(
     Ref<PG> pg, ShardServices &shard_services, epoch_t to,
@@ -71,8 +67,6 @@ public:
                                                    PeeringCtx &rctx);
   seastar::future<> split_pg(std::set<spg_t> split_children,
                              cached_map_t next_map);
-  void split_stats(std::set<Ref<PG>> child_pgs,
-		   const std::set<spg_t> &child_pgids);
 
   std::tuple<
     PGPeeringPipeline::Process::BlockingEvent,
@@ -91,7 +85,8 @@ private:
   PGPeeringPipeline &peering_pp(PG &pg);
   seastar::future<Ref<PG>> handle_split_pg_creation(
     spg_t child_pgid,
-    cached_map_t next_map);
+    cached_map_t next_map,
+    const object_stat_sum_t& stats);
   seastar::future<> finish_merge_source(
     spg_t parent,
     PeeringCtx &rctx);
