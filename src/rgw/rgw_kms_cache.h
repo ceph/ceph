@@ -106,6 +106,8 @@ class KMSCache {
       const std::string& key_id, const FetchFn& fetch, std::string& actual_key,
       optional_yield y);
 
-  void disable_cache() { cct->_conf->rgw_crypt_s3_kms_cache_enabled = false; }
+  void disable_cache() {
+    cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "false");
+  }
 };
 }  // namespace rgw::kms

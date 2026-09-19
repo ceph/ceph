@@ -115,7 +115,7 @@ KMSCache::KMSCache(CephContext* _cct, std::unique_ptr<Keyring> _keyring)
   if (!keyring->supported(&ec)) {
     ldout(cct, 1) << "KMS Cache: " << keyring->name() << " unsupported ("
                   << ec.message() << "). Disabling Cache." << dendl;
-    cct->_conf->rgw_crypt_s3_kms_cache_enabled = false;
+    cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "false");
   }
 }
 
