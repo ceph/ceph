@@ -226,7 +226,8 @@ private:
 
 PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
                            RadosRef local_cluster, const Filesystem &filesystem,
-                           const Peer &peer, const std::set<std::string, std::less<>> &directories,
+                           const Peer &peer,
+                           const std::map<std::string, PriorityMode, std::less<>> &directories,
                            IoCtxRef local_ioctx, MountRef mount, ServiceDaemon *service_daemon)
   : m_cct(cct),
     m_fs_mirror(fs_mirror),
@@ -234,12 +235,18 @@ PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
     m_local_ioctx(local_ioctx),
     m_filesystem(filesystem),
     m_peer(peer),
-    m_directories(directories.begin(), directories.end()),
     m_local_mount(mount),
     m_service_daemon(service_daemon),
     m_asok_hook(new PeerReplayerAdminSocketHook(cct, filesystem, peer, this)),
     m_lock(ceph::make_mutex("cephfs::mirror::PeerReplayer::" + stringify(peer.uuid))),
-    smq_lock(ceph::make_mutex("cephfs::mirror::PeerReplayer::smq" + stringify(peer.uuid))) {
+    m_shared_scheduler(this, "shared-" + stringify(peer.uuid)) {
+  for (auto &[dir_root, priority] : directories) {
+    m_directories.emplace_back(dir_root);
+    // every directory starts out thread-shared -- the tick thread promotes the
+    // ones that asked for "per-thread" mode once they are idle.
+    m_dir_priority[dir_root].desired = priority;
+  }
+
   // reset sync stats sent via service daemon
   m_service_daemon->add_or_update_peer_attribute(m_filesystem.fscid, m_peer,
                                                  SERVICE_DAEMON_FAILED_DIR_COUNT_KEY, (uint64_t)0);
@@ -632,7 +639,7 @@ int PeerReplayer::init() {
 
   while (nr_replayers-- > 0) {
     std::unique_ptr<SnapshotReplayerThread> replayer(
-      new SnapshotReplayerThread(this));
+      new SnapshotReplayerThread(this, &m_shared_scheduler));
     std::string name("replayer-" + stringify(nr_replayers));
     replayer->create(name.c_str());
     m_replayers.push_back(std::move(replayer));
@@ -640,14 +647,7 @@ int PeerReplayer::init() {
 
   auto nr_data_replayers = g_ceph_context->_conf.get_val<uint64_t>(
     "cephfs_mirror_max_datasync_threads");
-  dout(20) << ": spawning " << nr_data_replayers << " snapshot data replayer(s)" << dendl;
-  while (nr_data_replayers-- > 0) {
-    std::unique_ptr<SnapshotDataSyncThread> data_replayer(
-      new SnapshotDataSyncThread(this));
-    std::string name("d_replayer-" + stringify(nr_data_replayers));
-    data_replayer->create(name.c_str());
-    m_data_replayers.push_back(std::move(data_replayer));
-  }
+  m_shared_scheduler.spawn_datasync_threads(nr_data_replayers);
 
   m_tick_thread.reset(new TickThread(this));
   m_tick_thread->create("tick");
@@ -666,21 +666,21 @@ void PeerReplayer::shutdown() {
     return;
   }
 
-  // wake up all datasync threads waiting on syncm_q
+  // Stop the tick thread first -- it is what creates and retires the dedicated
+  // replayers torn down below, so letting it run concurrently with the teardown
+  // would race a freshly spawned crawler past it.
   {
-    std::unique_lock smq_l1(smq_lock);
-    for (auto& syncm : syncm_q) {
-      std::unique_lock sdq_l1(syncm->get_sdq_lock());
-      syncm->sdq_cv_notify_all_unlocked();
-    }
-    smq_cv.notify_all(); // wake up syncm_q wait
+    std::scoped_lock lock(m_lock);
+    m_cond.notify_all();
+  }
+  if (m_tick_thread) {
+    m_tick_thread->join();
+    m_tick_thread.reset();
   }
 
-  // Join data sync threads first
-  for (auto &replayer : m_data_replayers) {
-    replayer->join();
-  }
-  m_data_replayers.clear();
+  // Join data sync threads first -- crawler threads park in wait_for_sync()
+  // until the data sync threads that drain their queue are done.
+  m_shared_scheduler.stop_datasync_threads();
 
   // Wake up crawler thread shutdown wait after datasync thread die
   {
@@ -693,10 +693,8 @@ void PeerReplayer::shutdown() {
   }
   m_replayers.clear();
 
-  if (m_tick_thread) {
-    m_tick_thread->join();
-    m_tick_thread.reset();
-  }
+  // dedicated (per-thread priority) crawlers and their private data sync pools
+  shutdown_dedicated_replayers();
 
   ceph_unmount(m_remote_mount);
   ceph_release(m_remote_mount);
@@ -704,8 +702,8 @@ void PeerReplayer::shutdown() {
   m_remote_cluster.reset();
 }
 
-void PeerReplayer::add_directory(string_view dir_root) {
-  dout(20) << ": dir_root=" << dir_root << dendl;
+void PeerReplayer::add_directory(string_view dir_root, PriorityMode priority) {
+  dout(20) << ": dir_root=" << dir_root << ", priority=" << priority << dendl;
   if (m_perf_counters) {
     m_perf_counters->inc(l_cephfs_mirror_peer_replayer_add_directory);
   }
@@ -715,9 +713,19 @@ void PeerReplayer::add_directory(string_view dir_root) {
     std::scoped_lock locker(m_lock);
     m_checkpoint_init_pending.insert(_dir_root);
 
+    // record the requested priority mode -- the tick thread applies it the
+    // next time the directory is idle.
+    auto &dir_priority = m_dir_priority[_dir_root];
+    if (dir_priority.desired != priority) {
+      dout(5) << ": dir_root=" << _dir_root << " priority mode change requested: "
+              << dir_priority.desired << " -> " << priority << dendl;
+      dir_priority.desired = priority;
+    }
+
     if (std::find(m_directories.begin(), m_directories.end(), _dir_root) !=
         m_directories.end()) {
       dout(10) << ": dir_root=" << _dir_root << " already in replay list" << dendl;
+      m_cond.notify_all();
       return;
     }
     m_directories.emplace_back(_dir_root);
@@ -1163,13 +1171,173 @@ void PeerReplayer::persist_dir_sync_stat(const std::string &dir_root) {
   aio_comp->release();
 }
 
-void PeerReplayer::enqueue_syncm(const std::shared_ptr<SyncMechanism>& item) {
-  dout(20) << ": Enqueue syncm object=" << item << dendl;
+PeerReplayer::SyncScheduler::SyncScheduler(PeerReplayer *peer_replayer,
+                                          const std::string &name, bool dedicated)
+  : m_peer_replayer(peer_replayer),
+    m_name(name),
+    m_peer(peer_replayer->m_peer),
+    smq_lock(ceph::make_mutex("cephfs::mirror::PeerReplayer::smq::" + name)),
+    m_dedicated(dedicated) {
+}
+
+PeerReplayer::SyncScheduler::~SyncScheduler() {
+  ceph_assert(m_data_replayers.empty());
+}
+
+void PeerReplayer::SyncScheduler::spawn_datasync_threads(uint64_t nr_threads) {
+  dout(20) << ": spawning " << nr_threads << " snapshot data replayer(s) for scheduler="
+           << m_name << dendl;
+  // thread names are truncated by the kernel, so keep them short and only
+  // distinguish shared from dedicated pools.
+  std::string prefix(m_dedicated ? "dd_replayer-" : "d_replayer-");
+  for (uint64_t i = 0; i < nr_threads; ++i) {
+    std::unique_ptr<SnapshotDataSyncThread> data_replayer(
+      new SnapshotDataSyncThread(m_peer_replayer, this));
+    std::string name(prefix + stringify(i));
+    data_replayer->create(name.c_str());
+    m_data_replayers.push_back(std::move(data_replayer));
+  }
+}
+
+void PeerReplayer::SyncScheduler::stop_datasync_threads() {
+  dout(20) << ": stopping " << m_data_replayers.size()
+           << " snapshot data replayer(s) for scheduler=" << m_name << dendl;
+  set_retiring();
+  // wake up all datasync threads waiting on syncm_q
+  {
+    std::unique_lock smq_l1(smq_lock);
+    for (auto& syncm : syncm_q) {
+      std::unique_lock sdq_l1(syncm->get_sdq_lock());
+      syncm->sdq_cv_notify_all_unlocked();
+    }
+    smq_cv.notify_all(); // wake up syncm_q wait
+  }
+
+  for (auto &replayer : m_data_replayers) {
+    replayer->join();
+  }
+  m_data_replayers.clear();
+}
+
+void PeerReplayer::SyncScheduler::enqueue_syncm(const std::shared_ptr<SyncMechanism>& item) {
+  dout(20) << ": Enqueue syncm object=" << item << " scheduler=" << m_name << dendl;
   std::lock_guard lock(smq_lock);
   syncm_q.push_back(item);
   smq_cv.notify_all();
 }
 
+bool PeerReplayer::SyncScheduler::is_syncm_active_unlocked(
+    const std::shared_ptr<PeerReplayer::SyncMechanism>& syncm_obj) {
+  // caller holds smq_lock
+  return std::find(syncm_q.begin(), syncm_q.end(), syncm_obj) != syncm_q.end();
+}
+
+void PeerReplayer::SyncScheduler::remove_syncm_unlocked(
+    const std::shared_ptr<PeerReplayer::SyncMechanism>& syncm_obj) {
+  // caller holds smq_lock
+  auto it = std::find(syncm_q.begin(), syncm_q.end(), syncm_obj);
+  if (it != syncm_q.end()) {
+    syncm_q.erase(it);
+  }
+}
+
+/* The data sync threads should consume the next syncm job if the present syncm has no
+ * pending work. This can evidently happen if the last file being synced in the present
+ * syncm job is a large file. In this case, one data sync thread is busy syncing the
+ * large file, the rest of data sync threads could start consuming the next syncm job
+ * instead of being idle waiting for the last file to be synced from present syncm job.
+ */
+std::shared_ptr<PeerReplayer::SyncMechanism>
+PeerReplayer::SyncScheduler::pick_next_syncm_and_mark_unlocked() {
+  // caller holds smq_lock
+  for (auto& syncm : syncm_q) {
+    if (syncm->has_pending_work()) {
+      syncm->inc_in_flight();
+      return syncm;
+    }
+  }
+  return nullptr;
+}
+
+void PeerReplayer::SyncScheduler::mark_and_notify_syncms_to_backoff(int err) {
+  // caller holds the smq_lock
+  ceph_assert(ceph_mutex_is_locked_by_me(smq_lock));
+  for (auto& syncm : syncm_q) {
+    std::unique_lock sdq_lock(syncm->get_sdq_lock());
+    syncm->set_datasync_error_unlocked(err);
+    syncm->mark_backoff_unlocked();
+    if (get_active_datasync_threads() == 1) { //Last thread
+      // To wake up crawler thread whose dataq process is not started
+      syncm->sdq_cv_notify_all_unlocked();
+    }
+  }
+  // To wake up other datasync threads to speed up exit
+  smq_cv.notify_all();
+}
+
+void PeerReplayer::SyncScheduler::mark_all_syncms_to_backoff_unlocked(int err) {
+  // caller holds the smq_lock and sdq_lock
+  ceph_assert(ceph_mutex_is_locked_by_me(smq_lock));
+  for (auto& syncm : syncm_q) {
+    ceph_assert(ceph_mutex_is_locked_by_me(syncm->get_sdq_lock()));
+    syncm->set_datasync_error_unlocked(err);
+    syncm->mark_backoff_unlocked();
+  }
+}
+
+void PeerReplayer::SyncScheduler::notify_all_syncms_to_backoff_unlocked() {
+  // caller holds the smq_lock and sdq_lock
+  ceph_assert(ceph_mutex_is_locked_by_me(smq_lock));
+  if (get_active_datasync_threads() == 1) { //Last thread
+    for (auto& syncm : syncm_q) {
+      ceph_assert(ceph_mutex_is_locked_by_me(syncm->get_sdq_lock()));
+      // To wake up crawler thread
+      syncm->sdq_cv_notify_all_unlocked();
+    }
+  }
+  // To wake up other datasync threads to speed up exit
+  smq_cv.notify_all();
+}
+
+void *PeerReplayer::SnapshotDataSyncThread::entry() {
+  //active thread counter for the scheduler this thread drains
+  SnapshotDataSyncThreadGuard guard(m_scheduler->m_active_datasync_threads);
+  m_peer_replayer->run_datasync(this);
+  return 0;
+}
+
+PriorityMode PeerReplayer::get_directory_priority(const std::string &dir_root) const {
+  // caller holds m_lock
+  auto it = m_dir_priority.find(dir_root);
+  if (it == m_dir_priority.end()) {
+    return PriorityMode::THREAD_SHARED;
+  }
+  return it->second.active;
+}
+
+bool PeerReplayer::_is_per_thread(const std::string &dir_root) const {
+  // caller holds m_lock
+  auto it = m_dir_priority.find(dir_root);
+  return it != m_dir_priority.end() &&
+    it->second.active == PriorityMode::PER_THREAD;
+}
+
+bool PeerReplayer::_can_pick_directory(const std::string &dir_root, const monotime &now,
+                                       uint64_t retry_timo) {
+  // caller holds m_lock
+  auto it = m_snap_sync_stats.find(dir_root);
+  if (it == m_snap_sync_stats.end()) {
+    return false;
+  }
+  auto &sync_stat = it->second;
+  if (sync_stat.failed) {
+    std::chrono::duration<double> d = now - *sync_stat.last_failed;
+    if (d.count() < retry_timo) {
+      return false;
+    }
+  }
+  return !m_registered.count(dir_root);
+}
 
 boost::optional<std::string> PeerReplayer::pick_directory() {
   dout(20) << dendl;
@@ -1180,14 +1348,12 @@ boost::optional<std::string> PeerReplayer::pick_directory() {
 
   boost::optional<std::string> candidate;
   for (auto &dir_root : m_directories) {
-    auto &sync_stat = m_snap_sync_stats.at(dir_root);
-    if (sync_stat.failed) {
-      std::chrono::duration<double> d = now - *sync_stat.last_failed;
-      if (d.count() < retry_timo) {
-        continue;
-      }
+    // a directory running in "per-thread" priority mode is crawled by the
+    // dedicated replayer it owns, never by the shared crawler pool.
+    if (_is_per_thread(dir_root)) {
+      continue;
     }
-    if (!m_registered.count(dir_root)) {
+    if (_can_pick_directory(dir_root, now, retry_timo)) {
       candidate = dir_root;
       break;
     }
@@ -1195,6 +1361,146 @@ boost::optional<std::string> PeerReplayer::pick_directory() {
 
   std::rotate(m_directories.begin(), m_directories.begin() + 1, m_directories.end());
   return candidate;
+}
+
+/* Reconcile the requested priority mode of every tracked directory with the
+ * active one. A directory is only moved between the shared crawler/datasync
+ * pools and a dedicated pool of its own while it is idle (not registered with
+ * any crawler), so an in-progress snapshot synchronization is never aborted by
+ * a priority change. Called from the tick thread with @locker held; the lock is
+ * dropped while retired threads are joined.
+ */
+void PeerReplayer::apply_pending_priorities(std::unique_lock<ceph::mutex> &locker) {
+  // caller holds m_lock
+  if (is_stopping()) {
+    return;
+  }
+
+  std::vector<std::unique_ptr<DedicatedReplayer>> retired;
+  _retire_dedicated_replayers(&retired);
+
+  auto nr_threads = g_ceph_context->_conf.get_val<uint64_t>(
+    "cephfs_mirror_max_datasync_threads_per_directory");
+  for (auto &[dir_root, dir_priority] : m_dir_priority) {
+    if (!dir_priority.has_pending_change() ||
+        dir_priority.desired != PriorityMode::PER_THREAD) {
+      continue;
+    }
+    if (m_registered.count(dir_root) || m_dedicated_replayers.count(dir_root)) {
+      // busy being crawled (or still winding down) -- retry on the next tick
+      dout(20) << ": deferring priority mode change for dir_root=" << dir_root << dendl;
+      continue;
+    }
+    if (std::find(m_directories.begin(), m_directories.end(), dir_root) ==
+        m_directories.end()) {
+      continue;
+    }
+
+    dout(5) << ": dir_root=" << dir_root << " switching to " << dir_priority.desired
+            << " mode with " << nr_threads << " datasync thread(s)" << dendl;
+    auto dedicated = std::make_unique<DedicatedReplayer>(this, dir_root);
+    dedicated->scheduler.spawn_datasync_threads(nr_threads);
+    dedicated->crawler.reset(
+      new SnapshotReplayerThread(this, &dedicated->scheduler, dir_root));
+    std::string name("dd_crawler-" + stringify(m_dedicated_replayer_id++));
+    dedicated->crawler->create(name.c_str());
+    m_dedicated_replayers.emplace(dir_root, std::move(dedicated));
+    dir_priority.active = PriorityMode::PER_THREAD;
+  }
+
+  if (retired.empty()) {
+    return;
+  }
+
+  // joining has to happen without m_lock -- the threads being joined take it.
+  m_cond.notify_all();
+  locker.unlock();
+  for (auto &dedicated : retired) {
+    if (dedicated->crawler) {
+      dedicated->crawler->join();
+      dedicated->crawler.reset();
+    }
+    dedicated->scheduler.stop_datasync_threads();
+    dout(5) << ": retired dedicated replayer for dir_root=" << dedicated->dir_root << dendl;
+  }
+  retired.clear();
+  locker.lock();
+}
+
+/* Detach dedicated replayers whose directory was removed or switched back to
+ * "thread-shared" mode, and forget priority state for directories that are gone
+ * for good. The detached replayers are handed back to the caller to be joined
+ * without m_lock held.
+ */
+void PeerReplayer::_retire_dedicated_replayers(
+    std::vector<std::unique_ptr<DedicatedReplayer>> *retired) {
+  // caller holds m_lock
+  for (auto it = m_dedicated_replayers.begin(); it != m_dedicated_replayers.end();) {
+    const auto &dir_root = it->first;
+    bool tracked = std::find(m_directories.begin(), m_directories.end(), dir_root) !=
+      m_directories.end();
+    auto pit = m_dir_priority.find(dir_root);
+    bool wanted = tracked && pit != m_dir_priority.end() &&
+      pit->second.desired == PriorityMode::PER_THREAD;
+    if (wanted) {
+      ++it;
+      continue;
+    }
+    if (m_registered.count(dir_root)) {
+      // mid-sync -- retire it once the crawl is done
+      dout(20) << ": deferring retirement of dedicated replayer for dir_root="
+               << dir_root << dendl;
+      ++it;
+      continue;
+    }
+
+    dout(5) << ": retiring dedicated replayer for dir_root=" << dir_root << dendl;
+    it->second->scheduler.set_retiring();
+    if (pit != m_dir_priority.end()) {
+      pit->second.active = PriorityMode::THREAD_SHARED;
+    }
+    retired->push_back(std::move(it->second));
+    it = m_dedicated_replayers.erase(it);
+  }
+
+  // drop priority state of directories that are no longer mirrored
+  for (auto it = m_dir_priority.begin(); it != m_dir_priority.end();) {
+    const auto &dir_root = it->first;
+    if (std::find(m_directories.begin(), m_directories.end(), dir_root) ==
+          m_directories.end() &&
+        !m_registered.count(dir_root) &&
+        !m_dedicated_replayers.count(dir_root)) {
+      it = m_dir_priority.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+void PeerReplayer::shutdown_dedicated_replayers() {
+  dout(20) << dendl;
+
+  std::map<std::string, std::unique_ptr<DedicatedReplayer>> dedicated;
+  {
+    std::scoped_lock locker(m_lock);
+    dedicated.swap(m_dedicated_replayers);
+    for (auto &[dir_root, replayer] : dedicated) {
+      replayer->scheduler.set_retiring();
+    }
+    m_cond.notify_all();
+  }
+
+  // data sync threads first -- the crawler parks in wait_for_sync() until they
+  // are done with its queue.
+  for (auto &[dir_root, replayer] : dedicated) {
+    replayer->scheduler.stop_datasync_threads();
+  }
+  for (auto &[dir_root, replayer] : dedicated) {
+    if (replayer->crawler) {
+      replayer->crawler->join();
+      replayer->crawler.reset();
+    }
+  }
 }
 
 int PeerReplayer::register_directory(const std::string &dir_root,
@@ -2304,11 +2610,13 @@ int PeerReplayer::sync_perms(const std::string& path) {
   return 0;
 }
 
-PeerReplayer::SyncMechanism::SyncMechanism(PeerReplayer& peer_replayer, std::string_view dir_root,
+PeerReplayer::SyncMechanism::SyncMechanism(PeerReplayer& peer_replayer, SyncScheduler *scheduler,
+                                           std::string_view dir_root,
                                            MountRef local, MountRef remote, FHandles *fh,
                                            const Peer &peer, const Snapshot &current,
                                            boost::optional<Snapshot> prev)
     : m_peer_replayer(peer_replayer),
+      m_sched(scheduler),
       m_dir_root(dir_root),
       m_local(local),
       m_remote(remote),
@@ -2339,7 +2647,7 @@ void PeerReplayer::SyncMechanism::push_dataq_entry(SyncEntry e) {
 }
 
 bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
-  std::unique_lock smq_lock(m_peer_replayer.get_smq_lock());
+  std::unique_lock smq_lock(m_sched->get_smq_lock());
   std::unique_lock lock(sdq_lock);
   dout(20) << ": snapshot data replayer waiting on m_sync_dataq, syncm=" << this << dendl;
   while (true) {
@@ -2359,7 +2667,7 @@ bool PeerReplayer::SyncMechanism::pop_dataq_entry(SyncEntry &out_entry) {
         set_datasync_error_unlocked(r);
         dout(5) << ": snapshot data replayer, mirroring cancelled for syncm=" << this << dendl;
       } else { //shutdown/blocklist
-        m_peer_replayer.mark_all_syncms_to_backoff_unlocked(r);
+        m_sched->mark_all_syncms_to_backoff_unlocked(r);
       }
       return false;
     }
@@ -2418,8 +2726,8 @@ bool PeerReplayer::SyncMechanism::has_pending_work() const {
 
   // Distribute threads fairly if enabled
   if (m_peer_replayer.get_distribute_datasync_threads()) {
-    int total_threads = m_peer_replayer.m_data_replayers.size();
-    int snapshots_queued = m_peer_replayer.get_num_queued_snapshots_unlocked();
+    int total_threads = m_sched->get_num_datasync_threads();
+    int snapshots_queued = m_sched->get_num_queued_snapshots_unlocked();
     //Cieling division to avoid unused remainder threads and zero allocation
     int fair_share = (total_threads + snapshots_queued - 1) / snapshots_queued;
     if (m_in_flight >= fair_share)
@@ -2471,11 +2779,12 @@ int PeerReplayer::SyncMechanism::get_changed_blocks(const std::string &epath,
   return callback(block.num_blocks, block.b);
 }
 
-PeerReplayer::SnapDiffSync::SnapDiffSync(PeerReplayer& peer_replayer, std::string_view dir_root,
+PeerReplayer::SnapDiffSync::SnapDiffSync(PeerReplayer& peer_replayer, SyncScheduler *scheduler,
+                                         std::string_view dir_root,
                                          MountRef local, MountRef remote, FHandles *fh,
                                          const Peer &peer, const Snapshot &current,
                                          boost::optional<Snapshot> prev)
-  : SyncMechanism(peer_replayer, dir_root, local, remote, fh, peer, current, prev) {
+  : SyncMechanism(peer_replayer, scheduler, dir_root, local, remote, fh, peer, current, prev) {
 }
 
 PeerReplayer::SnapDiffSync::~SnapDiffSync() {
@@ -2814,11 +3123,12 @@ void PeerReplayer::SnapDiffSync::finish_crawl(int ret, double crawl_duration_sec
   mark_crawl_finished(ret, crawl_duration_secs);
 }
 
-PeerReplayer::RemoteSync::RemoteSync(PeerReplayer& peer_replayer, std::string_view dir_root,
+PeerReplayer::RemoteSync::RemoteSync(PeerReplayer& peer_replayer, SyncScheduler *scheduler,
+                                     std::string_view dir_root,
                                      MountRef local, MountRef remote, FHandles *fh,
                                      const Peer &peer, const Snapshot &current,
                                      boost::optional<Snapshot> prev)
-  : SyncMechanism(peer_replayer, dir_root, local, remote, fh, peer, current, prev) {
+  : SyncMechanism(peer_replayer, scheduler, dir_root, local, remote, fh, peer, current, prev) {
 }
 
 PeerReplayer::RemoteSync::~RemoteSync() {
@@ -2967,7 +3277,8 @@ void PeerReplayer::RemoteSync::finish_crawl(int ret, double crawl_duration_secs)
   mark_crawl_finished(ret, crawl_duration_secs);
 }
 
-int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &current,
+int PeerReplayer::do_synchronize(const std::string &dir_root, SyncScheduler *sched,
+                                 const Snapshot &current,
                                  boost::optional<Snapshot> prev) {
   dout(20) << ": dir_root=" << dir_root << ", current=" << current << dendl;
   FHandles fh;
@@ -2992,11 +3303,11 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
 
   std::shared_ptr<SyncMechanism> syncm;
   if (fh.p_mnt == m_local_mount) {
-    syncm = std::make_shared<SnapDiffSync>(*this, dir_root, m_local_mount, m_remote_mount,
+    syncm = std::make_shared<SnapDiffSync>(*this, sched, dir_root, m_local_mount, m_remote_mount,
                                            &fh, m_peer, current, prev);
     set_snapdiff(dir_root, true); //for stats
   } else {
-    syncm = std::make_shared<RemoteSync>(*this, dir_root, m_local_mount, m_remote_mount,
+    syncm = std::make_shared<RemoteSync>(*this, sched, dir_root, m_local_mount, m_remote_mount,
                                          &fh, m_peer, current, boost::none);
     set_snapdiff(dir_root, false); //for stats
   }
@@ -3009,7 +3320,7 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
     return r;
   }
 
-  enqueue_syncm(syncm);
+  sched->enqueue_syncm(syncm);
 
   // starting from this point we shouldn't care about manual closing of fh.c_fd,
   // it will be closed automatically when bound tdirp is closed.
@@ -3093,7 +3404,8 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
   return r;
 }
 
-int PeerReplayer::synchronize(const std::string &dir_root, const Snapshot &current,
+int PeerReplayer::synchronize(const std::string &dir_root, SyncScheduler *sched,
+                              const Snapshot &current,
                               boost::optional<Snapshot> prev) {
   dout(20) << ": dir_root=" << dir_root << ", current=" << current << dendl;
   if (prev) {
@@ -3111,7 +3423,7 @@ int PeerReplayer::synchronize(const std::string &dir_root, const Snapshot &curre
   if (r < 0) {
     dout(5) << ": missing \"ceph.mirror.dirty_snap_id\" xattr on remote -- using"
             << " incremental sync with remote scan" << dendl;
-    r = do_synchronize(dir_root, current);
+    r = do_synchronize(dir_root, sched, current);
   } else {
     size_t xlen = r;
     char *val = (char *)alloca(xlen+1);
@@ -3129,10 +3441,10 @@ int PeerReplayer::synchronize(const std::string &dir_root, const Snapshot &curre
              << "," << (prev ? stringify((*prev).second) : "~") << ")" << dendl;
     if (prev && (dirty_snap_id == (*prev).second || dirty_snap_id == current.second)) {
       dout(5) << ": match -- using incremental sync with local scan" << dendl;
-      r = do_synchronize(dir_root, current, prev);
+      r = do_synchronize(dir_root, sched, current, prev);
     } else {
       dout(5) << ": mismatch -- using incremental sync with remote scan" << dendl;
-      r = do_synchronize(dir_root, current);
+      r = do_synchronize(dir_root, sched, current);
     }
   }
   // snap sync failed -- bail out!
@@ -3172,7 +3484,7 @@ void PeerReplayer::set_changed_mirroring_configurations() {
   }
 }
 
-int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
+int PeerReplayer::do_sync_snaps(const std::string &dir_root, SyncScheduler *sched) {
   dout(20) << ": dir_root=" << dir_root << dendl;
 
   std::map<uint64_t, std::string> local_snap_map;
@@ -3256,7 +3568,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     if (last_snap_id != 0) {
       prev = std::make_pair(last_snap_name, last_snap_id);
     }
-    r = synchronize(dir_root, std::make_pair(it->second, it->first), prev);
+    r = synchronize(dir_root, sched, std::make_pair(it->second, it->first), prev);
     if (r < 0) {
       derr << ": failed to synchronize dir_root=" << dir_root
            << ", snapshot=" << it->second << dendl;
@@ -3291,11 +3603,11 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
   return 0;
 }
 
-int PeerReplayer::sync_snaps(const std::string &dir_root,
+int PeerReplayer::sync_snaps(const std::string &dir_root, SyncScheduler *sched,
                               std::unique_lock<ceph::mutex> &locker) {
   dout(20) << ": dir_root=" << dir_root << dendl;
   locker.unlock();
-  int r = do_sync_snaps(dir_root);
+  int r = do_sync_snaps(dir_root, sched);
   if (r < 0) {
     derr << ": failed to sync snapshots for dir_root=" << dir_root << dendl;
   }
@@ -3330,6 +3642,14 @@ void PeerReplayer::run_tick() {
       break;
     }
 
+    // move directories between the shared pools and dedicated (per-thread)
+    // ones as requested -- only affects directories that are currently idle.
+    apply_pending_priorities(locker);
+    if (is_stopping()) {
+      dout(5) << ": shutting down exiting" << dendl;
+      break;
+    }
+
     // refresh current-sync perf counters for registered directories
     for (const auto &kv : m_registered) {
       refresh_directory_current_sync_perf_counters(kv.first);
@@ -3356,9 +3676,42 @@ void PeerReplayer::run_tick() {
   }
 }
 
+void PeerReplayer::sync_directory(const std::string &dir_root,
+                                  SnapshotReplayerThread *replayer,
+                                  SyncScheduler *sched,
+                                  std::unique_lock<ceph::mutex> &locker) {
+  // caller holds m_lock
+  int r = register_directory(dir_root, replayer);
+  if (r < 0) {
+    return;
+  }
+
+  r = sync_perms(dir_root);
+  if (r == 0) {
+    r = sync_snaps(dir_root, sched, locker);
+    if (r < 0 && m_perf_counters) {
+      m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
+    }
+  } else {
+    _inc_failed_count(dir_root);
+    if (auto *dir_perf = find_directory_perf_counters(dir_root)) {
+      update_directory_current_sync_perf_counters(
+        dir_perf, m_snap_sync_stats.at(dir_root));
+    }
+    locker.unlock();
+    persist_dir_sync_stat(dir_root);
+    locker.lock();
+    if (m_perf_counters) {
+      m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
+    }
+  }
+  unregister_directory(dir_root, locker);
+}
+
 void PeerReplayer::run(SnapshotReplayerThread *replayer) {
   dout(10) << ": snapshot replayer=" << replayer << dendl;
 
+  auto *sched = replayer->get_scheduler();
   monotime last_directory_scan = clock::zero();
   auto scan_interval = g_ceph_context->_conf.get_val<uint64_t>(
     "cephfs_mirror_directory_scan_interval");
@@ -3388,29 +3741,7 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
       auto dir_root = pick_directory();
       if (dir_root) {
         dout(5) << ": picked dir_root=" << *dir_root << dendl;
-        int r = register_directory(*dir_root, replayer);
-        if (r == 0) {
-          r = sync_perms(*dir_root);
-          if (r == 0) {
-            r = sync_snaps(*dir_root, locker);
-            if (r < 0 && m_perf_counters) {
-              m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
-            }
-          } else {
-            _inc_failed_count(*dir_root);
-            if (auto *dir_perf = find_directory_perf_counters(*dir_root)) {
-              update_directory_current_sync_perf_counters(
-                dir_perf, m_snap_sync_stats.at(*dir_root));
-            }
-            locker.unlock();
-            persist_dir_sync_stat(*dir_root);
-            locker.lock();
-            if (m_perf_counters) {
-              m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
-            }
-          }
-          unregister_directory(*dir_root, locker);
-        }
+        sync_directory(*dir_root, replayer, sched, locker);
       }
 
       last_directory_scan = now;
@@ -3418,78 +3749,85 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
   }
 }
 
-bool PeerReplayer::is_syncm_active(const std::shared_ptr<PeerReplayer::SyncMechanism>& syncm_obj) {
-    return std::find(syncm_q.begin(), syncm_q.end(), syncm_obj) != syncm_q.end();
-}
-
-void PeerReplayer::remove_syncm(const std::shared_ptr<PeerReplayer::SyncMechanism>& syncm_obj)
-{
-    // caller holds lock
-    auto it = std::find(syncm_q.begin(), syncm_q.end(), syncm_obj);
-    if (it != syncm_q.end()) {
-        syncm_q.erase(it);
-    }
-}
-
-/* The data sync threads should consume the next syncm job if the present syncm has no
- * pending work. This can evidently happen if the last file being synced in the present
- * syncm job is a large file. In this case, one data sync thread is busy syncing the
- * large file, the rest of data sync threads could start consuming the next syncm job
- * instead of being idle waiting for the last file to be synced from present syncm job.
+/* Crawler for a single directory running in "per-thread" priority mode. Unlike
+ * the shared crawler pool this thread never scans for work -- it only ever
+ * crawls the directory it is bound to, and pushes data sync jobs onto the
+ * private scheduler it owns.
  */
-std::shared_ptr<PeerReplayer::SyncMechanism> PeerReplayer::pick_next_syncm_and_mark() {
-  // caller holds lock
-  for (auto& syncm : syncm_q) {
-    if (syncm->has_pending_work()) {
-      syncm->inc_in_flight();
-      return syncm;
-    }
-  }
-  return nullptr;
-}
+void PeerReplayer::run_dedicated(SnapshotReplayerThread *replayer) {
+  const std::string dir_root = replayer->get_dir_root();
+  auto *sched = replayer->get_scheduler();
+  dout(10) << ": dedicated snapshot replayer=" << replayer << " dir_root="
+           << dir_root << dendl;
 
-void PeerReplayer::mark_and_notify_syncms_to_backoff(int err) {
-  // caller holds the smq_lock
-  ceph_assert(ceph_mutex_is_locked_by_me(smq_lock));
-  for (auto& syncm : syncm_q) {
-    std::unique_lock sdq_lock(syncm->get_sdq_lock());
-    syncm->set_datasync_error_unlocked(err);
-    syncm->mark_backoff_unlocked();
-    if (get_active_datasync_threads() == 1) { //Last thread
-      // To wake up crawler thread whose dataq process is not started
-      syncm->sdq_cv_notify_all_unlocked();
-    }
-  }
-  // To wake up other datasync threads to speed up exit
-  smq_cv.notify_all();
-}
+  monotime last_directory_scan = clock::zero();
+  auto scan_interval = g_ceph_context->_conf.get_val<uint64_t>(
+    "cephfs_mirror_directory_scan_interval");
 
-void PeerReplayer::mark_all_syncms_to_backoff_unlocked(int err) {
-  // caller holds the smq_lock and sdq_lock
-  ceph_assert(ceph_mutex_is_locked_by_me(smq_lock));
-  for (auto& syncm : syncm_q) {
-    ceph_assert(ceph_mutex_is_locked_by_me(syncm->get_sdq_lock()));
-    syncm->set_datasync_error_unlocked(err);
-    syncm->mark_backoff_unlocked();
-  }
-}
-
-void PeerReplayer::notify_all_syncms_to_backoff() {
-  // caller holds the smq_lock and sdq_lock
-  ceph_assert(ceph_mutex_is_locked_by_me(smq_lock));
-  if (get_active_datasync_threads() == 1) { //Last thread
-    for (auto& syncm : syncm_q) {
-      ceph_assert(ceph_mutex_is_locked_by_me(syncm->get_sdq_lock()));
-      // To wake up crawler thread
-      syncm->sdq_cv_notify_all_unlocked();
+  std::unique_lock locker(m_lock);
+  while (true) {
+    // do not check if client is blocklisted under lock
+    m_cond.wait_for(locker, 1s, [this, sched]{
+      return is_stopping() || sched->is_retiring();
+    });
+    if (is_stopping()) {
+      dout(5) << ": exiting, dir_root=" << dir_root << dendl;
+      break;
     }
+    if (sched->is_retiring()) {
+      dout(5) << ": exiting, dir_root=" << dir_root << " no longer runs in "
+              << PriorityMode::PER_THREAD << " mode" << dendl;
+      break;
+    }
+
+    locker.unlock();
+
+    if (m_fs_mirror->is_blocklisted()) {
+      dout(5) << ": exiting as client is blocklisted" << dendl;
+      break;
+    }
+
+    locker.lock();
+
+    /* re-check under m_lock: retirement is flagged with m_lock held, so this
+     * is what keeps this thread from starting a fresh (and possibly long)
+     * snapshot sync that the tick thread would then have to join on.
+     */
+    if (sched->is_retiring()) {
+      dout(5) << ": exiting, dir_root=" << dir_root << " no longer runs in "
+              << PriorityMode::PER_THREAD << " mode" << dendl;
+      break;
+    }
+
+    auto now = clock::now();
+    std::chrono::duration<double> timo = now - last_directory_scan;
+    if (timo.count() < scan_interval) {
+      continue;
+    }
+    last_directory_scan = now;
+
+    // the directory can be released (or be failing, and hence backed off)
+    // while this thread is winding up -- just idle in that case.
+    if (std::find(m_directories.begin(), m_directories.end(), dir_root) ==
+        m_directories.end()) {
+      dout(20) << ": dir_root=" << dir_root << " is no longer mirrored" << dendl;
+      continue;
+    }
+    auto retry_timo = g_ceph_context->_conf.get_val<uint64_t>(
+      "cephfs_mirror_retry_failed_directories_interval");
+    if (!_can_pick_directory(dir_root, now, retry_timo)) {
+      continue;
+    }
+
+    dout(5) << ": picked dir_root=" << dir_root << dendl;
+    sync_directory(dir_root, replayer, sched, locker);
   }
-  // To wake up other datasync threads to speed up exit
-  smq_cv.notify_all();
 }
 
 void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
-  dout(10) << ": snapshot datasync replayer=" << data_replayer << dendl;
+  auto *sched = data_replayer->get_scheduler();
+  dout(10) << ": snapshot datasync replayer=" << data_replayer << " scheduler="
+           << sched->get_name() << dendl;
 
   /* The m_stopping is made atomic and m_lock is no longer required for state
    * change or access. Hence data sync thread can get rid of waiting for is_stopping
@@ -3500,19 +3838,29 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
     bool blocklist = false;
     std::shared_ptr<SyncMechanism> syncm;
     {
-      std::unique_lock lock(smq_lock);
+      std::unique_lock lock(sched->get_smq_lock());
       dout(20) << ": snapshot data replayer waiting for syncm to process" << dendl;
       while (true) {
-        bool ready = smq_cv.wait_for(lock, 2s, [this, &syncm] {
-                syncm = pick_next_syncm_and_mark();
-                return is_stopping() || syncm != nullptr;
+        bool ready = sched->smq_cv.wait_for(lock, 2s, [this, sched, &syncm] {
+                syncm = sched->pick_next_syncm_and_mark_unlocked();
+                return is_stopping() || sched->is_retiring() || syncm != nullptr;
                 });
         // immediate shutdown - predicate is true
         if (is_stopping()) {
           dout(5) << ": exiting snapshot data replayer=" << data_replayer
                   << " as mirroring is shutting down" << dendl;
           shutdown = true;
-          mark_and_notify_syncms_to_backoff(-EINPROGRESS);
+          sched->mark_and_notify_syncms_to_backoff(-EINPROGRESS);
+          break;
+        }
+        /* the directory this (private) scheduler belongs to is no longer
+         * mirrored in "per-thread" priority mode -- the pool is going away.
+         * drain whatever is still queued before exiting.
+         */
+        if (sched->is_retiring() && syncm == nullptr) {
+          dout(5) << ": exiting snapshot data replayer=" << data_replayer
+                  << " as scheduler=" << sched->get_name() << " is retiring" << dendl;
+          shutdown = true;
           break;
         }
         // work available - predicate is true
@@ -3523,7 +3871,7 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
           dout(5) << ": exiting snapshot data replayer=" << data_replayer
                   << " as client is blocklisted" << dendl;
           blocklist = true;
-          mark_and_notify_syncms_to_backoff(-EBLOCKLISTED);
+          sched->mark_and_notify_syncms_to_backoff(-EBLOCKLISTED);
           break;
         }
         // otherwise timeout occured, nothing to do - loop again
@@ -3598,13 +3946,13 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
 
     // Dequeue syncm object after processing
     {
-      std::unique_lock smq_l1(smq_lock);
+      std::unique_lock smq_l1(sched->get_smq_lock());
       std::unique_lock sdq_l1(syncm->get_sdq_lock());
       // backoff ?
       const bool syncm_backoff = syncm->get_backoff_unlocked();
       int syncm_errno = syncm->get_datasync_errno_unlocked();
       if (syncm_backoff && syncm_errno != -ECANCELED) {
-        notify_all_syncms_to_backoff(); //shutdown/blocklist
+        sched->notify_all_syncms_to_backoff_unlocked(); //shutdown/blocklist
         dout(5) << ": exiting snapshot data replayer=" << data_replayer
                 << " as client is blocklisted or mirroring is shutting down, error=" << syncm_errno << dendl;
         break; // exit
@@ -3614,19 +3962,19 @@ void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
       const bool sync_error =
         syncm->get_datasync_error_unlocked() ||
         syncm->get_crawl_error_unlocked();
-      if (!syncm_q.empty() && last_in_flight_syncm && ((crawl_finished && syncm->is_dataq_empty_unlocked()) || sync_error)) {
-        if (sync_error && !is_syncm_active(syncm)){
+      if (!sched->syncm_q.empty() && last_in_flight_syncm && ((crawl_finished && syncm->is_dataq_empty_unlocked()) || sync_error)) {
+        if (sync_error && !sched->is_syncm_active_unlocked(syncm)){
           dout(20) << ": syncm object=" << syncm << " already dequeued" << dendl;
         } else {
           dout(20) << ": Dequeue syncm object=" << syncm << dendl;
           syncm->set_sync_finished_and_notify_unlocked(); // To wake up crawler thread waiting to take snapshot
-          if (syncm_q.front() == syncm) {
-            syncm_q.pop_front();
+          if (sched->syncm_q.front() == syncm) {
+            sched->syncm_q.pop_front();
           } else { // if syncms in the middle finishes first
-            remove_syncm(syncm);
+            sched->remove_syncm_unlocked(syncm);
           }
-          dout(20) << ": syncm_q after removal " << syncm_q << dendl;
-          smq_cv.notify_all();
+          dout(20) << ": syncm_q after removal " << sched->syncm_q << dendl;
+          sched->smq_cv.notify_all();
         }
       }
       // Decrement should be within this locked block where the comparison happens, moving outside faults inc/dec logic
@@ -3877,6 +4225,7 @@ void PeerReplayer::peer_status(Formatter *f) {
     f->open_object_section(dir_root);
     f->open_object_section("peer");
     f->open_object_section(m_peer.uuid);
+    f->dump_string("priority_mode", priority_mode_name(get_directory_priority(dir_root)));
     dump_sync_stat(f, sync_stat);
     f->close_section(); // peer uuid
     f->close_section(); // peer
