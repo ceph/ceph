@@ -893,6 +893,11 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): next->copy_object failed with ret: " << ret << dendl;
       return ret;
     }
+  } else if (dp_factory && dp_factory->need_copy_data()) {
+    // the write cache copies the bytes as they are, so it cannot transform them
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__
+        << "(): the write cache cannot transform object data" << dendl;
+    return -ERR_NOT_IMPLEMENTED;
   }
 
   this->dest_object = dest_object;
