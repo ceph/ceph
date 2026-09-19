@@ -2592,10 +2592,11 @@ KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id,
   const auto end = prefix_range_end(bprefix.view());
   std::string scan_begin;
   if (!continuation_token.empty()) {
-    scan_begin = std::string(make_bucket_key(tenant_id, continuation_token).view());
+    scan_begin = make_bucket_key(tenant_id, continuation_token).view();
   }
   else {
-    scan_begin = std::string(bprefix.view());
+    //scan_begin = std::string(bprefix.view());
+    scan_begin = make_bucket_key(tenant_id, prefix).view();
   }
   bool exclusive_scan = !continuation_token.empty();
   while (true) {
@@ -2620,7 +2621,8 @@ KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id,
       }
       if (!prefix.empty() &&
           parts->bucket_name.compare(0, prefix.size(), prefix) != 0) {
-        continue;
+        // prefix was depleted -> stop the scan
+        return KVRGW_ERR_OK;
       }
       if (out->buckets.size() >= max_buckets) {
         // use last stored bucket_name
@@ -2634,17 +2636,20 @@ KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id,
       break;
     }
     // use last stored bucket_name
-    scan_begin = out->buckets.back().name;
+    scan_begin = rows->back().key;
   }
   return KVRGW_ERR_OK;
 }
 
 //--------------------------------------------------------------------------------
-KvrgwErrorCode KvRgwServiceImpl::list_objects(
-    tenant_id_t tenant_id, std::string_view bucket_name,
-    std::string_view prefix, std::string_view delimiter, uint32_t max_keys,
-    std::string_view continuation_token, std::string_view marker,
-    ListObjectsResult *out)
+KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
+                                              std::string_view bucket_name,
+                                              std::string_view prefix,
+                                              std::string_view delimiter,
+                                              uint32_t max_keys,
+                                              std::string_view continuation_token,
+                                              std::string_view marker,
+                                              ListObjectsResult *out)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kListObjects);
   ops_stats_.inc(OpType::kListObjects);
@@ -2689,13 +2694,13 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(
 
   std::string scan_begin;
   if (!start_after.empty()) {
-    scan_begin = std::string(make_object_key(bucket_id, start_after).view());
+    scan_begin = make_object_key(bucket_id, start_after).view();
   }
   else if (!list_prefix.empty()) {
-    scan_begin = std::string(make_object_key(bucket_id, list_prefix).view());
+    scan_begin = make_object_key(bucket_id, list_prefix).view();
   }
   else {
-    scan_begin = std::string(make_object_prefix(bucket_id).view());
+    scan_begin = make_object_prefix(bucket_id).view();
   }
 
   const std::string scan_end =
@@ -3909,10 +3914,33 @@ std::string delete_marker_detail(const ObjectValue &v)
 //} // namespace
 
 //--------------------------------------------------------------------------------
-KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
-    tenant_id_t tenant_id, const std::string &bucket_name, std::string_view key,
-    std::optional<version_id_t> version_id, bool load_kv_data,
-    ObjectValue *value, std::string *kv_data, std::string *error_detail)
+// on failure read a fresh bucket-state copy, replacing error code if needed
+// should use it for all failures using cached bucket-state
+KvrgwErrorCode KvRgwServiceImpl::resolve_bucket_error(tenant_id_t tenant_id,
+                                                      const std::string &bucket_name,
+                                                      KvrgwErrorCode tentative_err_code)
+{
+  auto state = read_bucket_state(tenant_id, bucket_name);
+  if (!state) {
+    return fdb_to_error(state.error());
+  }
+  if (*state) {
+    return tentative_err_code;
+  }
+  else {
+    return KVRGW_ERR_NO_SUCH_BUCKET;
+  }
+}
+
+//--------------------------------------------------------------------------------
+KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(tenant_id_t tenant_id,
+                                                      const std::string &bucket_name,
+                                                      std::string_view key,
+                                                      std::optional<version_id_t> version_id,
+                                                      bool load_kv_data,
+                                                      ObjectValue *value,
+                                                      std::string *kv_data,
+                                                      std::string *error_detail)
 {
   auto bucket_id_res = get_bucket_id_cached(tenant_id, bucket_name);
   if (!bucket_id_res) {
@@ -3921,9 +3949,8 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
   if (!*bucket_id_res) {
     return KVRGW_ERR_NO_SUCH_BUCKET;
   }
-  if (auto ec =
-          check_access(tenant_id, bucket_name, **bucket_id_res, kDenyRead);
-      ec != KVRGW_ERR_OK) {
+  auto ec = check_access(tenant_id, bucket_name, **bucket_id_res, kDenyRead);
+  if (ec != KVRGW_ERR_OK) {
     return ec;
   }
   const bucket_id_t bucket_id = (**bucket_id_res).bucket_id;
@@ -3934,7 +3961,7 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
       if (error_detail) {
         *error_detail = delete_marker_detail(obj);
       }
-      return KVRGW_ERR_NO_SUCH_KEY;
+      return resolve_bucket_error(tenant_id, bucket_name, KVRGW_ERR_NO_SUCH_KEY);
     }
     *value = std::move(obj);
     if (kv_data) {
@@ -3993,23 +4020,23 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
         const uint8_t st = d_size_tier_from_size(v_obj->hdr.size);
         const uint32_t mtime = v_obj->hdr.last_modified_sec;
         const bucket_id_t d_bucket =
-            (v_obj->hdr.chunk.type == CHUNK_CHILD_D_REF)
-                ? v_obj->chunk_data_bucket_id
-                : bucket_id;
+          (v_obj->hdr.chunk.type == CHUNK_CHILD_D_REF)
+          ? v_obj->chunk_data_bucket_id
+          : bucket_id;
         const std::string_view ref_sv =
-            (v_obj->hdr.chunk.type == CHUNK_CHILD_D_REF)
-                ? std::string_view(
-                      reinterpret_cast<const char *>(v_obj->chunk_data_ref_tag),
-                      12)
-                : std::string_view(
-                      reinterpret_cast<const char *>(v_obj->hdr.ref_tag), 12);
+          (v_obj->hdr.chunk.type == CHUNK_CHILD_D_REF)
+          ? std::string_view(
+            reinterpret_cast<const char *>(v_obj->chunk_data_ref_tag),
+            12)
+          : std::string_view(
+            reinterpret_cast<const char *>(v_obj->hdr.ref_tag), 12);
         const auto d_key = make_d_key(d_bucket, st, ref_sv, mtime);
         auto d_val = tr->kv_get(d_key.view());
         if (!d_val) {
           return fdb_to_error(d_val.error());
         }
         if (!*d_val) {
-          return KVRGW_ERR_NO_SUCH_KEY;
+          return resolve_bucket_error(tenant_id, bucket_name, KVRGW_ERR_NO_SUCH_KEY);
         }
         const auto payload = child_value_payload(**d_val, v_obj->hdr.size);
         if (payload.size() != v_obj->hdr.size) {
@@ -4027,7 +4054,7 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
       return fdb_to_error(result_res.error());
     }
     if (!*result_res) {
-      return KVRGW_ERR_NO_SUCH_KEY;
+      return resolve_bucket_error(tenant_id, bucket_name, KVRGW_ERR_NO_SUCH_KEY);
     }
     return accept(std::move((*result_res)->value),
                   std::move((*result_res)->data));
@@ -4038,7 +4065,7 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(
     return fdb_to_error(object_value.error());
   }
   if (!*object_value) {
-    return KVRGW_ERR_NO_SUCH_KEY;
+    return resolve_bucket_error(tenant_id, bucket_name, KVRGW_ERR_NO_SUCH_KEY);
   }
   return accept(std::move(**object_value), {});
 }

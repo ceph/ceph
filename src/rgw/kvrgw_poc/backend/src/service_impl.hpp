@@ -515,6 +515,10 @@ class KvRgwServiceImpl final {
   void invalidate_tenant_cache(const std::string& tenant_name);
   KvrgwErrorCode tenant_id_for_name(const std::string& tenant_name, tenant_id_t* tenant_id);
 
+  KvrgwErrorCode resolve_bucket_error(tenant_id_t tenant_id,
+                                      const std::string &bucket_name,
+                                      KvrgwErrorCode tentative_err_code);
+
   struct LoadResult {
     ObjectValue value;
     std::string data;
