@@ -29,8 +29,8 @@ tasks:
     host.a:
       # add subvolgroup & subvolumes for test
       - cmd: ceph fs subvolumegroup create cephfs smb
-      - cmd: ceph fs subvolume create cephfs sv1 --group-name=smb --mode=0777
-      - cmd: ceph fs subvolume create cephfs sv2 --group-name=smb --mode=0777
+      - cmd: ceph fs subvolume create cephfs sv1 --group-name=smb --protocols=smb
+      - cmd: ceph fs subvolume create cephfs sv2 --group-name=smb --protocols=smb
       # set up smb cluster and shares
       - cmd: ceph mgr module enable smb
       # TODO: replace sleep with poll of mgr state?
@@ -59,10 +59,13 @@ tasks:
     smb_shares:
       - share1
       - share2
+    params:
+      fs_case:
+        cluster_id: modtest1
     timeout: 1h
     clients:
       client.0:
-        - [default, hosts_access, domain]
+        - [default, domain, fs_case, hosts_access]
 
 - cephadm.shell:
     host.a:
