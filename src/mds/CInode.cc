@@ -1285,9 +1285,14 @@ void CInode::store(MDSContext *fin)
   Context *newfin =
     new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
 		     mdcache->mds->finisher);
+  // Objecter may block in _throttle_op; do not hold mds_lock across that.
+  auto& mds_lock = mdcache->mds->mds_lock;
+  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
+  mds_lock.unlock();
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
 				 ceph::real_clock::now(), 0,
 				 newfin);
+  mds_lock.lock();
 }
 
 void CInode::_stored(int r, version_t v, Context *fin)
@@ -1360,11 +1365,19 @@ void CInode::fetch(MDSContext *fin)
   // Old on-disk format: inode stored in xattr of a dirfrag
   ObjectOperation rd;
   rd.getxattr("inode", &c->bl, NULL);
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, gather.new_sub());
-
-  // Current on-disk format: inode stored in a .inode object
+  Context* sub1 = gather.new_sub();
+  Context* sub2 = gather.new_sub();
   object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");
-  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather.new_sub());
+
+  // Objecter may block in _throttle_op; do not hold mds_lock across that.
+  auto& mds_lock = mdcache->mds->mds_lock;
+  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
+  mds_lock.unlock();
+  mdcache->mds->objecter->read(
+      oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, sub1);
+  // Current on-disk format: inode stored in a .inode object
+  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, sub2);
+  mds_lock.lock();
 
   gather.activate();
 }
@@ -1455,6 +1468,9 @@ void CInode::_commit_ops(int r, C_GatherBuilder &gather_bld,
   SnapContext snapc;
   object_t oid = get_object_name(ino(), frag_t(), "");
 
+  // Caller must not hold mds_lock: Objecter may block in _throttle_op.
+  // store_backtrace() drops the lock around this; BatchCommitBacktrace
+  // already runs unlocked on the finisher.
   for (auto &op : ops_vec) {
     ObjectOperation obj_op;
     object_locator_t oloc(op.get_pool());
@@ -1517,7 +1533,14 @@ void CInode::store_backtrace(MDSContext *fin, int op_prio)
 			 new C_OnFinisher(
 			   new C_IO_Inode_StoredBacktrace(this, version, fin),
 			   mdcache->mds->finisher));
+  // Drop mds_lock across Objecter submit (may block in _throttle_op).
+  // Do not use ceph_mutex_is_locked_by_me() for control flow — in release
+  // builds it is unconditionally true and is only safe in ceph_assert.
+  auto& mds_lock = mdcache->mds->mds_lock;
+  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
+  mds_lock.unlock();
   _commit_ops(0, gather, ops_vec, bt);
+  mds_lock.lock();
   ceph_assert(gather.has_subs());
   gather.activate();
 }

@@ -1817,8 +1817,15 @@ void CDir::_omap_fetch(std::set<string> *keys, MDSContext *c)
     fin->ret3 = -ECANCELED;
   }
 
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, mdcache->mds->finisher));
+  // Objecter may block in _throttle_op. Client request dispatch holds
+  // mds_lock across path_traverse -> fetch; do not keep mds_lock while
+  // waiting on the throttle or the whole MDS stalls (heartbeat/beacon).
+  auto& mds_lock = mdcache->mds->mds_lock;
+  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
+  Context* onfin = new C_OnFinisher(fin, mdcache->mds->finisher);
+  mds_lock.unlock();
+  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, onfin);
+  mds_lock.lock();
 }
 
 void CDir::_omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
@@ -1837,8 +1844,14 @@ void CDir::_omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
 		   &fin->omap_more,
 		   &fin->more,
 		   &fin->ret);
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, mdcache->mds->finisher));
+  // Same as _omap_fetch: IO completion re-takes mds_lock before calling us,
+  // and Objecter may block in _throttle_op.
+  auto& mds_lock = mdcache->mds->mds_lock;
+  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
+  Context* onfin = new C_OnFinisher(fin, mdcache->mds->finisher);
+  mds_lock.unlock();
+  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, onfin);
+  mds_lock.lock();
 }
 
 CDentry *CDir::_load_dentry(
