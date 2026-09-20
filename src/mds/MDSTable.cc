@@ -161,18 +161,19 @@ void MDSTable::save(MDSContext *onfinish, version_t v)
   Context* fin = new C_OnFinisher(
       new C_IO_MT_Save(this, version), mds_table_finisher(mds));
 
-  // Objecter may block in _throttle_op. MDLog::log_trim_upkeep holds
-  // mds_lock across try_expire -> save; do not keep mds_lock while waiting
-  // on the throttle or the whole MDS stalls (dispatch/asok blocked).
-  lock.unlock();
+  // Objecter may block in _throttle_op. Submit on objecter_finisher so
+  // ms_dispatch / trim never wait in the throttle.
   if (g_mds_table_write_hook) {
     g_mds_table_write_hook(fin);
   } else {
     ceph_assert(mds);
-    mds->objecter->write_full(
-        oid, oloc, snapc, bl, ceph::real_clock::now(), 0, fin);
+    mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid, oloc,
+                                           snapc, bl = std::move(bl),
+                                           fin](int) mutable {
+      objecter->write_full(
+          oid, oloc, snapc, bl, ceph::real_clock::now(), 0, fin);
+    }));
   }
-  lock.lock();
 }
 
 void MDSTable::save_2(int r, version_t v)

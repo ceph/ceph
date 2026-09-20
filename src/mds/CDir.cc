@@ -1817,15 +1817,14 @@ void CDir::_omap_fetch(std::set<string> *keys, MDSContext *c)
     fin->ret3 = -ECANCELED;
   }
 
-  // Objecter may block in _throttle_op. Client request dispatch holds
-  // mds_lock across path_traverse -> fetch; do not keep mds_lock while
-  // waiting on the throttle or the whole MDS stalls (heartbeat/beacon).
-  auto& mds_lock = mdcache->mds->mds_lock;
-  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
+  // Objecter may block in _throttle_op. Never submit from ms_dispatch —
+  // OSD replies that free the throttle are handled on that thread.
   Context* onfin = new C_OnFinisher(fin, mdcache->mds->finisher);
-  mds_lock.unlock();
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, onfin);
-  mds_lock.lock();
+  mdcache->mds->queue_objecter(
+      new LambdaContext([objecter = mdcache->mds->objecter, oid, oloc,
+                         rd = std::move(rd), onfin](int) mutable {
+        objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, onfin);
+      }));
 }
 
 void CDir::_omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
@@ -1844,14 +1843,14 @@ void CDir::_omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
 		   &fin->omap_more,
 		   &fin->more,
 		   &fin->ret);
-  // Same as _omap_fetch: IO completion re-takes mds_lock before calling us,
-  // and Objecter may block in _throttle_op.
-  auto& mds_lock = mdcache->mds->mds_lock;
-  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
+  // Same as _omap_fetch: submit on objecter_finisher so ms_dispatch never
+  // blocks in Objecter::_throttle_op.
   Context* onfin = new C_OnFinisher(fin, mdcache->mds->finisher);
-  mds_lock.unlock();
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, onfin);
-  mds_lock.lock();
+  mdcache->mds->queue_objecter(
+      new LambdaContext([objecter = mdcache->mds->objecter, oid, oloc,
+                         rd = std::move(rd), onfin](int) mutable {
+        objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, onfin);
+      }));
 }
 
 CDentry *CDir::_load_dentry(
@@ -2713,7 +2712,8 @@ void CDir::_omap_commit(int op_prio)
   auto c = new C_IO_Dir_Commit_Ops(this, op_prio, std::move(to_set), std::move(dfts),
                                    std::move(to_remove), std::move(stale_items));
   stale_items.clear(); /* in CDir */
-  mdcache->mds->finisher->queue(c);
+  // Runs Objecter::mutate (may block in _throttle_op); keep off completion finisher.
+  mdcache->mds->queue_objecter(c);
 }
 
 void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,

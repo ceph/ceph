@@ -199,8 +199,13 @@ void MDLog::write_head(MDSContext *c)
       waiting_for_expire[expire_pos].push_back(c);
     }
 
+    // Objecter may block in _throttle_op. log_trim_upkeep holds mds_lock
+    // across trim()/write_head; if we submit here, ms_dispatch cannot take
+    // mds_lock to deliver OSD replies that free the throttle → deadlock.
     auto* fin = new C_MDL_WriteHead(this);
-    journaler->write_head(fin);
+    mds->queue_objecter(new LambdaContext([j = journaler, fin](int) {
+      j->write_head(fin);
+    }));
   } else {
     if (c) {
       c->complete(0);
@@ -605,15 +610,19 @@ void MDLog::flush()
   bool do_flush = unflushed > 0;
   unflushed = 0;
   if (!pending_events.empty()) {
+    // Attach flush to the latest pending segment's event list.
     pending_events.rbegin()->second.push_back(PendingEvent(NULL, NULL, true));
-    do_flush = false;
+    submit_cond.notify_all();
+  } else if (do_flush) {
+    // Do not call journaler->flush() on the caller. Objecter may block in
+    // _throttle_op, and flush() is commonly invoked from ms_dispatch while
+    // holding mds_lock — that prevents OSD replies from freeing budget.
+    // Queue a flush-only event onto the submit thread instead.
+    pending_events[event_seq].push_back(PendingEvent(NULL, NULL, true));
     submit_cond.notify_all();
   }
 
   submit_mutex.unlock();
-
-  if (do_flush)
-    journaler->flush();
 }
 
 void MDLog::kick_submitter()

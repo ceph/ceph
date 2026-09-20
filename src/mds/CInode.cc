@@ -1275,7 +1275,6 @@ void CInode::store(MDSContext *fin)
   encode_store(bl, mdcache->mds->mdsmap->get_up_features());
 
   // write it.
-  SnapContext snapc;
   ObjectOperation m;
   m.write_full(bl);
 
@@ -1285,14 +1284,14 @@ void CInode::store(MDSContext *fin)
   Context *newfin =
     new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
 		     mdcache->mds->finisher);
-  // Objecter may block in _throttle_op; do not hold mds_lock across that.
-  auto& mds_lock = mdcache->mds->mds_lock;
-  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
-  mds_lock.unlock();
-  mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
-				 ceph::real_clock::now(), 0,
-				 newfin);
-  mds_lock.lock();
+  // Objecter may block in _throttle_op; submit on objecter_finisher.
+  mdcache->mds->queue_objecter(
+      new LambdaContext([objecter = mdcache->mds->objecter, oid, oloc,
+                         m = std::move(m), newfin](int) mutable {
+        SnapContext snapc;
+        objecter->mutate(
+            oid, oloc, m, snapc, ceph::real_clock::now(), 0, newfin);
+      }));
 }
 
 void CInode::_stored(int r, version_t v, Context *fin)
@@ -1369,15 +1368,13 @@ void CInode::fetch(MDSContext *fin)
   Context* sub2 = gather.new_sub();
   object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");
 
-  // Objecter may block in _throttle_op; do not hold mds_lock across that.
-  auto& mds_lock = mdcache->mds->mds_lock;
-  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
-  mds_lock.unlock();
-  mdcache->mds->objecter->read(
-      oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, sub1);
-  // Current on-disk format: inode stored in a .inode object
-  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, sub2);
-  mds_lock.lock();
+  // Objecter may block in _throttle_op; submit on objecter_finisher.
+  mdcache->mds->queue_objecter(
+      new LambdaContext([objecter = mdcache->mds->objecter, oid, oloc,
+                         rd = std::move(rd), oid2, sub1, sub2, c](int) mutable {
+        objecter->read(oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, sub1);
+        objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, sub2);
+      }));
 
   gather.activate();
 }
@@ -1529,20 +1526,18 @@ void CInode::store_backtrace(MDSContext *fin, int op_prio)
 
   _store_backtrace(ops_vec, bt, op_prio, false);
 
-  C_GatherBuilder gather(g_ceph_context,
-			 new C_OnFinisher(
-			   new C_IO_Inode_StoredBacktrace(this, version, fin),
-			   mdcache->mds->finisher));
-  // Drop mds_lock across Objecter submit (may block in _throttle_op).
-  // Do not use ceph_mutex_is_locked_by_me() for control flow — in release
-  // builds it is unconditionally true and is only safe in ceph_assert.
-  auto& mds_lock = mdcache->mds->mds_lock;
-  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
-  mds_lock.unlock();
-  _commit_ops(0, gather, ops_vec, bt);
-  mds_lock.lock();
-  ceph_assert(gather.has_subs());
-  gather.activate();
+  auto gather = std::make_unique<C_GatherBuilder>(
+      g_ceph_context, new C_OnFinisher(
+                          new C_IO_Inode_StoredBacktrace(this, version, fin),
+                          mdcache->mds->finisher));
+  // Objecter may block in _throttle_op; submit on objecter_finisher.
+  mdcache->mds->queue_objecter(new LambdaContext(
+      [this, gather = std::move(gather), ops_vec = std::move(ops_vec),
+       bt = std::move(bt)](int) mutable {
+        _commit_ops(0, *gather, ops_vec, bt);
+        ceph_assert(gather->has_subs());
+        gather->activate();
+      }));
 }
 
 void CInode::store_backtrace(CInodeCommitOperations &op, int op_prio,

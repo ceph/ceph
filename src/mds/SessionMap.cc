@@ -543,11 +543,12 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
   Context* fin =
       new C_OnFinisher(new C_IO_SM_Save(this, write_version), mds->finisher);
 
-  // Objecter may block in _throttle_op; MDLog::log_trim_upkeep holds mds_lock
-  // across try_expire -> save. Do not keep mds_lock while throttled.
-  mds->mds_lock.unlock();
-  mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
-  mds->mds_lock.lock();
+  // Objecter may block in _throttle_op; submit on objecter_finisher.
+  mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid, oloc,
+                                         op = std::move(op), snapc,
+                                         fin](int) mutable {
+    objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+  }));
 
   apply_blocklist(to_blocklist);
   logger->inc(l_mdssm_metadata_threshold_sessions_evicted, to_blocklist.size());
@@ -1016,11 +1017,12 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       MDSContext *on_safe = gather_bld->new_sub();
       Context* fin =
           new C_OnFinisher(new C_IO_SM_Save_One(this, on_safe), mds->finisher);
-      // Objecter may block in _throttle_op; do not hold mds_lock across that.
-      mds->mds_lock.unlock();
-      mds->objecter->mutate(
-          oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
-      mds->mds_lock.lock();
+      // Objecter may block in _throttle_op; submit on objecter_finisher.
+      mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid,
+                                             oloc, op = std::move(op), snapc,
+                                             fin](int) mutable {
+        objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+      }));
     }
     ++i;
   }

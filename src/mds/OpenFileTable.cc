@@ -347,10 +347,12 @@ void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
     object_t oid = get_object_name(idx);
     for (auto& op : vops) {
       Context* fin = gather.new_sub();
-      mds->mds_lock.unlock();
-      mds->objecter->mutate(
-          oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
-      mds->mds_lock.lock();
+      // Objecter may block in _throttle_op; submit on objecter_finisher.
+      mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid,
+                                             oloc, op = std::move(op), snapc,
+                                             fin](int) mutable {
+        objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+      }));
     }
   }
   gather.activate();
@@ -448,12 +450,12 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
   auto flush_journal_ops = [&]() {
     for (auto& [oid, op] : pending_journal) {
       Context *fin = gather.new_sub();
-      // Objecter may block in _throttle_op. Local OFT state for this commit
-      // is already consistent, so it is safe to drop mds_lock here.
-      mds->mds_lock.unlock();
-      mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0,
-			    fin);
-      mds->mds_lock.lock();
+      // Objecter may block in _throttle_op; submit on objecter_finisher.
+      mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid,
+                                             oloc, op = std::move(op), snapc,
+                                             fin](int) mutable {
+        objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+      }));
     }
     pending_journal.clear();
   };
@@ -497,10 +499,13 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
       object_t oid = get_object_name(idx);
       for (auto& op : vops) {
         Context* fin = gather.new_sub();
-        mds->mds_lock.unlock();
-        mds->objecter->mutate(
-            oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
-        mds->mds_lock.lock();
+        // Objecter may block in _throttle_op; submit on objecter_finisher.
+        mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid,
+                                               oloc, op = std::move(op), snapc,
+                                               fin](int) mutable {
+          objecter->mutate(
+              oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+        }));
       }
     }
     gather.activate();
