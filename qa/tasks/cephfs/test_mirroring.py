@@ -595,10 +595,14 @@ class TestMirroring(CephFSTestCase):
 
     def assert_mirror_log_lacks_pattern(self, pattern):
         log_path = self.get_mirror_daemon_log_path()
-        p = self.mount_a.run_shell(['cat', log_path])
-        self.assertNotRegex(
-            p.stdout.getvalue(), pattern,
-            msg=f'unexpected pattern {pattern!r} in cephfs-mirror log')
+        p = self.mount_a.run_shell(
+            ['grep', '-qE', pattern, log_path], check_status=False)
+        if p.returncode == 0:
+            self.fail(f'found unexpected pattern {pattern!r} in cephfs-mirror log')
+        # grep exits 1 when the pattern is not found, which is what we want.
+        self.assertEqual(
+            p.returncode, 1,
+            f'failed to search cephfs-mirror log {log_path}')
 
     def wait_for_mirror_daemon_recovery(self, fs_name, fs_id, dir_name, peer_uuid):
         # A new rados_inst alone does not mean mirroring is ready: wait until the
