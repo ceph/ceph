@@ -2754,6 +2754,7 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
   }
 
   r = 1;
+  bool callback_invoked = false;
   auto bd_s = clock::now();
   while (true) {
     ceph_file_blockdiff_changedblocks blocks;
@@ -2767,6 +2768,7 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
     if (blocks.num_blocks) {
       auto bd_num_blocks = blocks.num_blocks;
       auto bd_cblock = blocks.b;
+      callback_invoked = true;
       r = callback(blocks.num_blocks, blocks.b);
       if (r < 0) {
         ceph_free_file_blockdiff_buffer(&blocks);
@@ -2786,6 +2788,16 @@ int PeerReplayer::SnapDiffSync::get_changed_blocks(const std::string &epath,
     }
     // else fetch next changed blocks
   }
+
+  // A size-only change can produce no changed data blocks. Still invoke the
+  // callback so copy_to_remote() can update the remote file size.
+  if (r == 0 && !callback_invoked) {
+    r = callback(0, nullptr);
+    if (r < 0) {
+      derr << ": blockdiff callback returned error: r=" << r << dendl;
+    }
+  }
+
   // blockdiff throughput
   auto bd_e = clock::now();
   blockdiff_time = seconds(bd_e - bd_s);
