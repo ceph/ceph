@@ -15,7 +15,6 @@
 
 #pragma once
 
-#include <filesystem>
 #include <memory>
 #include <random>
 #include <sstream>
@@ -105,7 +104,6 @@ protected:
   uint64_t pool_flags = pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS;
   
   std::unique_ptr<MockStore> store;
-  std::string data_dir;
   ObjectStore::CollectionHandle ch;
   coll_t coll;
   
@@ -165,39 +163,20 @@ public:
 
   explicit PGBackendTestFixture(PoolType type = EC) : pool_type(type)
   {
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
-    std::uniform_int_distribution<uint64_t> dis;
-    uint64_t random_num = dis(gen);
-    
-    std::ostringstream oss;
-    oss << "memstore_test_" << std::hex << std::setfill('0') << std::setw(16) << random_num;
-    data_dir = oss.str();
-    
     ceph_assert(stripe_unit % 4096 == 0);
     ceph_assert(stripe_unit != 0);
   }
-  
-  ~PGBackendTestFixture() {
-    // Ensure cleanup happens even if TearDown() wasn't called or failed
-    cleanup_data_dir();
-  }
-  
+
   void SetUp() override {
     ceph::logging::Log::set_prefix_hook(&EventLoop::get_log_prefix);
-    int r = ::mkdir(data_dir.c_str(), 0777);
-    if (r < 0) {
-      r = -errno;
-      std::cerr << __func__ << ": unable to create " << data_dir << ": " << cpp_strerror(r) << std::endl;
-    }
-    ASSERT_EQ(0, r);
-    
+
     // Create MockMemStore - contexts are stolen by MockPGBackendListener, so we don't need manual_finisher
-    store.reset(new MockStore(g_ceph_context, data_dir));
+    // Empty path puts MemStore in in-memory-only mode (no on-disk state).
+    store.reset(new MockStore(g_ceph_context, ""));
     ASSERT_TRUE(store);
     ASSERT_EQ(0, store->mkfs());
     ASSERT_EQ(0, store->mount());
-    
+
     g_conf().set_safe_to_start_threads();
     
     CephContext *cct = g_ceph_context;
@@ -256,14 +235,12 @@ public:
       store.reset();
     }
 
-    cleanup_data_dir();
     ceph::logging::Log::set_prefix_hook(nullptr);
   }
-  
+
 private:
   void setup_ec_pool();
   void setup_replicated_pool();
-  void cleanup_data_dir();
 
 protected:
   void initialize_scrub_infra();
