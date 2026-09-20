@@ -249,7 +249,7 @@ for (const auto& object : objects_to_index) {
   lfdb::set(txn, object.index_key, object.index_record);
 
   if (soft_limit < lfdb::approximate_commit_bytes(txn)) {
-    finish_batch(std::move(txn));
+    finish_batch(txn);
     txn = lfdb::make_transaction(dbh);
   }
 }
