@@ -178,7 +178,7 @@ TEST_P(collection_manager_test_t, update)
        auto t = create_mutate_transaction();
        update(coll_root, *t, iter1->first, iter2->second);
        submit_transaction(std::move(t));
-       iter1->second.split_bits = iter2->second.split_bits;
+       iter1->second = iter2->second;
     }
     replay();
     checking_mappings(coll_root);
