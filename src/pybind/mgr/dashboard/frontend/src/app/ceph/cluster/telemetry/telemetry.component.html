@@ -452,7 +452,7 @@
                       formControlName="licenseAgrmt"
                     />
                     <label
-                      class="custom-control-label"
+                      class="custom-control-label required"
                       for="licenseAgrmt"
                       i18n
                       >I agree to my telemetry data being submitted under the
@@ -461,6 +461,13 @@
                       ></label
                     >
                   </div>
+                  @if (previewForm.showError('licenseAgrmt', frm, 'required')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                      >This field is required.</span
+                    >
+                  }
                 </div>
               </div>
             </div>
