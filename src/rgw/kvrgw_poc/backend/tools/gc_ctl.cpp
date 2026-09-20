@@ -58,20 +58,6 @@ std::string prefix_range_end(std::string_view prefix)
   return std::string("\xFF", 1);
 }
 
-std::string bucket_id_hex(kvrgw::bucket_id_t id)
-{
-  static const char kHex[] = "0123456789abcdef";
-  const uint64_t be = htobe64(id);
-  const auto *p = reinterpret_cast<const unsigned char *>(&be);
-  std::string out;
-  out.reserve(16);
-  for (int i = 0; i < 8; ++i) {
-    out.push_back(kHex[p[i] >> 4]);
-    out.push_back(kHex[p[i] & 0x0F]);
-  }
-  return out;
-}
-
 std::optional<uint64_t> blob_file_size(const kvrgw::DataStore &data_store,
                                        std::string_view ref_tag)
 {
@@ -180,7 +166,7 @@ std::vector<GcEntry> scan_gc_entries(kvrgw::KvStore &store,
     GcEntry entry;
     entry.size_tier = parts->size_tier;
     entry.ref_tag_hex = kvrgw::RefTagGenerator::to_hex(rt_view);
-    entry.bucket_id_hex = bucket_id_hex(parts->bucket_id);
+    entry.bucket_id_hex = parts->bucket_id.to_hex();
     entry.shard_count = parts->shard_count;
     entry.shard_id = parts->shard_id;
 

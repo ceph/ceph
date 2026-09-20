@@ -174,11 +174,14 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
           continue;
         }
         auto r_val = (*tr)->kv_get(r_key.view());
-        if (r_val && *r_val && (*r_val)->size() >= 8) {
+        if (r_val && *r_val) {
           auto rv = parse_r_value(**r_val);
-          if (rv.ref_count > 1) {
+          if (!rv) {
+            continue;
+          }
+          if (rv->ref_count > 1) {
             (*tr)->kv_put(r_key.view(),
-                          write_r_value(rv.ref_count - 1, rv.chunk_descriptor));
+                          write_r_value(rv->ref_count - 1, rv->chunk_descriptor));
             (*tr)->kv_del(row.key);
             (*tr)->commit();
             continue;

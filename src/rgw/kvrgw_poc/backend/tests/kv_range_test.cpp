@@ -127,7 +127,7 @@ int main()
         "range-test-" + run_tag + "-bucket4",
     };
 
-    kvrgw::bucket_id_t bucket_id = 1;
+    kvrgw::bucket_id_t bucket_id(1);
     const int64_t created = now_unix();
 
     for (const auto &name : names) {
@@ -141,7 +141,7 @@ int main()
     assert(rows);
     assert(rows->size() == 4);
 
-    const kvrgw::bucket_id_t unused_bucket_id = 0xFFFFFFFFFFFFFFFEULL;
+    const kvrgw::bucket_id_t unused_bucket_id(0xFFFFFFFFFFFFFFFEULL);
     const auto object_prefix = kvrgw::make_object_prefix(unused_bucket_id);
     const auto object_end = prefix_range_end(object_prefix.view());
     auto empty_objects = store.range_scan(object_prefix.view(), object_end, 1);

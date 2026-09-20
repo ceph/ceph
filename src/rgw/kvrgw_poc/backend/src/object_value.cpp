@@ -33,8 +33,8 @@ void hdr_to_be(ObjectValueHeader &hdr)
   hdr.size = htobe64(hdr.size);
   hdr.last_modified_sec = htonl(hdr.last_modified_sec);
   hdr.last_modified_nsec = htonl(hdr.last_modified_nsec);
-  hdr.version_id = version_id_t{htonl(hdr.version_id.raw())};
-  hdr.next_vid = version_id_t{htonl(hdr.next_vid.raw())};
+  hdr.version_id = hdr.version_id.to_be();
+  hdr.next_vid = hdr.next_vid.to_be();
   hdr.metadata_count = htons(hdr.metadata_count);
 }
 
@@ -45,8 +45,8 @@ void hdr_from_be(ObjectValueHeader &hdr)
   hdr.size = be64toh(hdr.size);
   hdr.last_modified_sec = ntohl(hdr.last_modified_sec);
   hdr.last_modified_nsec = ntohl(hdr.last_modified_nsec);
-  hdr.version_id = version_id_t{ntohl(hdr.version_id.raw())};
-  hdr.next_vid = version_id_t{ntohl(hdr.next_vid.raw())};
+  hdr.version_id = hdr.version_id.from_be();
+  hdr.next_vid = hdr.next_vid.from_be();
   hdr.metadata_count = ntohs(hdr.metadata_count);
 }
 
@@ -75,14 +75,14 @@ size_t object_payload_offset(const ObjectValueHeader &hdr,
 {
   size_t tail_offset = sizeof(ObjectValueHeader) + hdr.content_type_len;
   if (hdr.chunk.type == CHUNK_INLINE && hdr.size > 0) {
-    const size_t available =
-        data.size() > tail_offset ? data.size() - tail_offset : 0;
-    const size_t inline_len =
-        std::min(static_cast<size_t>(hdr.size), available);
-    tail_offset += inline_len;
+    const size_t need = tail_offset + static_cast<size_t>(hdr.size);
+    if (data.size() < need) {
+      return data.size() + 1;
+    }
+    tail_offset = need;
   }
   if (hdr.chunk.type == CHUNK_CHILD_D_REF) {
-    tail_offset += 8 + kRefTagSize;
+    tail_offset += sizeof(bucket_id_t) + kRefTagSize;
   }
   else if (hdr.chunk.type == CHUNK_STORAGE_REF) {
     tail_offset += kRefTagSize;
@@ -146,9 +146,10 @@ std::optional<ObjectValue> parse_object_value(std::string_view data)
   size_t tail_offset = sizeof(ObjectValueHeader) + ct_len;
 
   if (value.hdr.chunk.type == CHUNK_INLINE && value.hdr.size > 0) {
-    const size_t available = data.size() - tail_offset;
-    const size_t inline_len =
-        std::min(static_cast<size_t>(value.hdr.size), available);
+    const size_t inline_len = static_cast<size_t>(value.hdr.size);
+    if (data.size() - tail_offset < inline_len) {
+      return std::nullopt;
+    }
     const auto *p =
         reinterpret_cast<const uint8_t *>(data.data() + tail_offset);
     value.inline_data.assign(p, p + inline_len);
@@ -156,13 +157,12 @@ std::optional<ObjectValue> parse_object_value(std::string_view data)
   }
 
   if (value.hdr.chunk.type == CHUNK_CHILD_D_REF) {
-    if (data.size() < tail_offset + 8 + kRefTagSize) {
+    if (data.size() < tail_offset + sizeof(bucket_id_t) + kRefTagSize) {
       return std::nullopt;
     }
-    uint64_t bid_be;
-    std::memcpy(&bid_be, data.data() + tail_offset, 8);
-    value.chunk_data_bucket_id = be64toh(bid_be);
-    tail_offset += 8;
+    auto p_bid = data.data() + tail_offset;
+    value.chunk_data_bucket_id = bucket_id_t::deserialize(p_bid);
+    tail_offset += sizeof(bucket_id_t);
     std::memcpy(value.chunk_data_ref_tag, data.data() + tail_offset,
                 kRefTagSize);
     tail_offset += kRefTagSize;
@@ -247,8 +247,7 @@ std::string make_bucket_value(bucket_id_t bucket_id, int64_t created_at_unix,
                               std::string_view policy_json)
 {
   BucketValueHeader hdr{};
-  uint64_t bid_be = htobe64(bucket_id);
-  std::memcpy(hdr.bucket_id, &bid_be, sizeof(hdr.bucket_id));
+  bucket_id.serialize(hdr.bucket_id);
   hdr.created_at_unix =
       static_cast<int64_t>(htobe64(static_cast<uint64_t>(created_at_unix)));
   hdr.access_flags = access_flags;
@@ -261,31 +260,20 @@ std::string make_bucket_value(bucket_id_t bucket_id, int64_t created_at_unix,
 
 std::optional<BucketValue> parse_bucket_value(std::string_view data)
 {
-  if (data.size() < 8) {
+  if (data.size() < sizeof(BucketValueHeader)) {
     return std::nullopt;
   }
+  BucketValueHeader hdr{};
+  std::memcpy(&hdr, data.data(), sizeof(hdr));
   BucketValue value;
-  uint64_t be;
-  std::memcpy(&be, data.data(), 8);
-  value.bucket_id = be64toh(be);
-  if (data.size() >= 16) {
-    BucketValueHeader hdr{};
-    std::memcpy(&hdr, data.data(), std::min(data.size(), sizeof(hdr)));
-    value.created_at_unix = static_cast<int64_t>(
-        be64toh(static_cast<uint64_t>(hdr.created_at_unix)));
-    if (data.size() >= 17) {
-      value.access_flags = hdr.access_flags;
-    }
-    if (data.size() >= sizeof(BucketValueHeader)) {
-      value.versioning_state = hdr.versioning_state;
-      if (data.size() > sizeof(BucketValueHeader)) {
-        value.policy_json.assign(data.data() + sizeof(BucketValueHeader),
-                                 data.size() - sizeof(BucketValueHeader));
-      }
-    }
-  }
-  else {
-    value.created_at_unix = 0;
+  value.bucket_id = bucket_id_t::deserialize(hdr.bucket_id);
+  value.created_at_unix = static_cast<int64_t>(
+      be64toh(static_cast<uint64_t>(hdr.created_at_unix)));
+  value.access_flags = hdr.access_flags;
+  value.versioning_state = hdr.versioning_state;
+  if (data.size() > sizeof(BucketValueHeader)) {
+    value.policy_json.assign(data.data() + sizeof(BucketValueHeader),
+                             data.size() - sizeof(BucketValueHeader));
   }
   return value;
 }

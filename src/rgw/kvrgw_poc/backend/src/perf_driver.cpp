@@ -810,7 +810,7 @@ static void put_multi_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     const auto &bucket_name = bucket_names[(seq / batch_size) % num_buckets];
 
     auto cached_bid = service.resolve_bucket_id(tenant_id, bucket_name);
-    if (cached_bid == 0) {
+    if (cached_bid == kNullBucket) {
       result.errors.fetch_add(batch_size, std::memory_order_relaxed);
       continue;
     }
@@ -926,7 +926,7 @@ static void cmd_get(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     }
 
     bucket_id_t bucket_id = service.resolve_bucket_id(tenant_id, bname);
-    if (bucket_id == 0) {
+    if (bucket_id == kNullBucket) {
       continue;
     }
 
@@ -956,7 +956,7 @@ static void cmd_get(KvRgwServiceImpl &service, tenant_id_t tenant_id,
 struct GetRequest {
   int bidx = 0;
   char name[GET_OBJECT_NAME_MAX]{};
-  uint32_t version_raw = 0;
+  version_id_t version{0};
   bool has_version = false;
   bool eof = false;
   std::chrono::steady_clock::time_point creation{};
@@ -1067,8 +1067,8 @@ static bool get_enqueue_one(GetQueue &q, GetRequest r, std::atomic<bool> *stop,
 }
 
 static bool get_enqueue_key(GetQueue &q, int bidx, int thread_id, uint64_t seq,
-                            bool all_versions, uint32_t latest_vid,
-                            int64_t nver, std::atomic<bool> *stop,
+                            bool all_versions, int64_t num_vers,
+                            std::atomic<bool> *stop,
                             std::atomic<int64_t> *remaining,
                             std::atomic<int64_t> *blocked_ns)
 {
@@ -1084,15 +1084,17 @@ static bool get_enqueue_key(GetQueue &q, int bidx, int thread_id, uint64_t seq,
   if (!get_enqueue_one(q, r, stop, remaining, blocked_ns)) {
     return false;
   }
-  if (!all_versions || nver <= 1) {
+  if (!all_versions || num_vers <= 1) {
     return true;
   }
-  for (int64_t ver_i = 1; ver_i < nver; ++ver_i) {
+  version_id_t vid = kFirstVersionId;
+  for (int64_t ver_i = 1; ver_i < num_vers; ++ver_i) {
     r.has_version = true;
-    r.version_raw = latest_vid + static_cast<uint32_t>(ver_i);
+    r.version = vid;
     if (!get_enqueue_one(q, r, stop, remaining, blocked_ns)) {
       return false;
     }
+    vid = vid.next_vid();
   }
   return true;
 }
@@ -1166,8 +1168,7 @@ static bool get_issue_task(GetTask &task, const GetRequest &req,
   }
   task.req = req;
   task.txn = std::move(*tr_res);
-  KeyBuf key = req.has_version ? make_v_key(bucket_id, req.name,
-                                            version_id_t{req.version_raw})
+  KeyBuf key = req.has_version ? make_v_key(bucket_id, req.name, req.version)
                                : make_object_key(bucket_id, req.name);
   task.future = task.txn->kv_async_get(key.view());
   task.occupied = true;
@@ -1190,10 +1191,9 @@ static int get_find_free_slot(GetTask *array, unsigned max_futures)
 static void get_test_producer(
     GetQueue &q, int producer_id, int nprod, int nconsumers, int nthreads,
     int num_buckets, uint64_t seq_end, bool overwrite, int files_per_thread,
-    bool all_versions, uint32_t latest_vid, int64_t nver,
-    std::atomic<bool> *stop, std::atomic<int64_t> *remaining,
-    std::atomic<int> &producers_left, std::atomic<int64_t> &blocked_ns,
-    std::atomic<int64_t> &elapsed_ns)
+    bool all_versions, int64_t num_vers, std::atomic<bool> *stop,
+    std::atomic<int64_t> *remaining, std::atomic<int> &producers_left,
+    std::atomic<int64_t> &blocked_ns, std::atomic<int64_t> &elapsed_ns)
 {
   const auto t0 = std::chrono::steady_clock::now();
   int t0_id = 0;
@@ -1207,7 +1207,7 @@ static void get_test_producer(
           const int file_id = thread_id * files_per_thread + j;
           const int bidx = file_id % num_buckets;
           if (!get_enqueue_key(q, bidx, thread_id, static_cast<uint64_t>(j),
-                               all_versions, latest_vid, nver, stop, remaining,
+                               all_versions, num_vers, stop, remaining,
                                &blocked_ns)) {
             return false;
           }
@@ -1218,8 +1218,8 @@ static void get_test_producer(
       for (int thread_id = t0_id; thread_id < t1_id; ++thread_id) {
         for (int b = 0; b < num_buckets; ++b) {
           for (uint64_t seq = 0; seq < seq_end; ++seq) {
-            if (!get_enqueue_key(q, b, thread_id, seq, all_versions, latest_vid,
-                                 nver, stop, remaining, &blocked_ns)) {
+            if (!get_enqueue_key(q, b, thread_id, seq, all_versions, num_vers,
+                                 stop, remaining, &blocked_ns)) {
               return false;
             }
           }
@@ -1452,26 +1452,23 @@ static void cmd_get_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     return;
   }
 
-  int64_t nver = 1;
-  uint32_t latest_vid = kFirstVersionId.raw();
+  int64_t num_vers = 1;
   if (all_versions && overwrite) {
     if (overwrite_count < 0) {
-      std::cerr
-          << "GET_ERR --all-versions requires overwrite_count in metadata\n";
+      std::cerr << "GET_ERR --all-versions requires overwrite_count in metadata\n";
       return;
     }
     if (overwrite_count > static_cast<int64_t>(kFirstVersionId.raw())) {
       std::cerr << "GET_ERR overwrite_count too large\n";
       return;
     }
-    nver = overwrite_count + 1;
-    latest_vid = kFirstVersionId.raw() - static_cast<uint32_t>(overwrite_count);
+    num_vers = overwrite_count + 1;
   }
 
   const int64_t expected = overwrite
-                               ? static_cast<int64_t>(files_per_thread) * nver
+                               ? static_cast<int64_t>(files_per_thread) * num_vers
                                : static_cast<int64_t>(meta_buckets) *
-                                     static_cast<int64_t>(seq_end) * nver;
+                                     static_cast<int64_t>(seq_end) * num_vers;
   const int64_t expected_inst = expected * threads;
 
   std::vector<bucket_id_t> bucket_ids;
@@ -1480,7 +1477,7 @@ static void cmd_get_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     char bname[AWS_MAX_BUCKET_NAME];
     std::snprintf(bname, sizeof(bname), "perf-bucket-%d", b);
     bool exists = false;
-    bucket_id_t bid = 0;
+    bucket_id_t bid = kNullBucket;
     const auto ec =
         service.bucket_exists_cached(tenant_id, bname, &exists, &bid);
     if (ec != KVRGW_ERR_OK || !exists) {
@@ -1501,7 +1498,7 @@ static void cmd_get_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     std::cout << " max_seq=" << seq_end;
   }
   if (all_versions) {
-    std::cout << " --all-versions nver=" << nver;
+    std::cout << " --all-versions num_vers=" << num_vers;
   }
   if (p.duration > 0) {
     std::cout << " duration=" << p.duration;
@@ -1529,7 +1526,7 @@ static void cmd_get_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     threads_v.emplace_back(
         get_test_producer, std::ref(queue), t, p.producers, p.consumers,
         threads, meta_buckets, seq_end, overwrite, files_per_thread,
-        all_versions, latest_vid, nver, stop, rem, std::ref(producers_left),
+        all_versions, num_vers, stop, rem, std::ref(producers_left),
         std::ref(blocked_ns), std::ref(producer_elapsed_ns));
   }
   for (int t = 0; t < p.consumers; ++t) {
@@ -1835,7 +1832,7 @@ prepare_thread_ranges(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   std::sort(objects.begin(), objects.end());
 
   bucket_id_t bucket_id = service.resolve_bucket_id(tenant_id, bname);
-  if (bucket_id == 0) {
+  if (bucket_id == kNullBucket) {
     std::cerr << "ERROR: cannot resolve bucket_id for " << bname << ".\n";
     return {};
   }
@@ -1996,16 +1993,19 @@ void put_overwrite_versioned_worker(KvRgwServiceImpl &service,
 }
 
 void delete_version_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
-                           const ThreadRange &range, int versions,
+                           const ThreadRange &range, uint32_t versions,
                            int thread_id, BenchResult &result)
 {
+  if (versions == 0) {
+    return;
+  }
   std::mt19937 rng(static_cast<uint32_t>(thread_id));
-  std::uniform_int_distribution<int> dist(0, versions - 1);
+  std::uniform_int_distribution<uint32_t> dist(0, versions - 1);
   for (const auto &key : range.keys) {
-    ScopedRequestLatency _lat(service.latency_stats_,
+    ScopedRequestLatency _lat(service.latency_stats(),
                               OpType::kDeleteObjectVersion);
-    int r = dist(rng);
-    version_id_t vid{0xFFFFFFFE - static_cast<uint32_t>(r)};
+    uint32_t rand_val = dist(rng);
+    version_id_t vid = version_id_t::generate_random_version_id(rand_val, versions);
     const auto ec = service.delete_object_version(tenant_id, range.bucket_name,
                                                   key, vid, nullptr);
     if (ec == KVRGW_ERR_OK) {
@@ -2296,11 +2296,11 @@ static void cmd_delete_version(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   service.latency_stats().reset();
   BenchResult result;
   std::vector<std::thread> threads;
-
+  uint32_t num_versions = static_cast<uint32_t>(p.versions);
   auto t0 = std::chrono::steady_clock::now();
   for (int t = 0; t < p.concurrency; ++t) {
     threads.emplace_back(delete_version_worker, std::ref(service), tenant_id,
-                         std::cref(ranges[t]), p.versions, t, std::ref(result));
+                         std::cref(ranges[t]), num_versions, t, std::ref(result));
   }
   for (auto &th : threads) {
     th.join();
@@ -2637,15 +2637,13 @@ static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     }
   }
 
-  int64_t nver = 1;
-  uint32_t latest_vid = kFirstVersionId.raw();
+  int64_t num_vers = 1;
   if (all_versions && overwrite) {
     if (overwrite_count > static_cast<int64_t>(kFirstVersionId.raw())) {
       std::cerr << "ERROR: overwrite_count too large for version_id space\n";
       return;
     }
-    nver = overwrite_count + 1;
-    latest_vid = kFirstVersionId.raw() - static_cast<uint32_t>(overwrite_count);
+    num_vers = overwrite_count + 1;
   }
 
   std::string prefix(g_key_prefix);
@@ -2665,7 +2663,7 @@ static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     std::cout << " --quiet";
   }
   if (all_versions) {
-    std::cout << " --all-versions nver=" << nver;
+    std::cout << " --all-versions num_vers=" << num_vers;
   }
   std::cout << " --ryw-cache=" << (ryw_cache_enabled ? "enabled" : "disabled");
   if (max_pages > 0) {
@@ -2729,13 +2727,14 @@ static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     if (expected_per_bucket == 0) {
       expected_per_bucket = iter.total_keys();
       if (all_versions) {
-        expected_per_bucket *= static_cast<uint64_t>(nver);
+        expected_per_bucket *= static_cast<uint64_t>(num_vers);
       }
     }
 
     std::string token;
     std::string key_marker;
     version_id_t vid_marker{};
+    version_id_t exp_vid{};
     int64_t ver_i = 0;
 
     while (true) {
@@ -2786,15 +2785,8 @@ static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
               failed = true;
               break;
             }
-            const uint32_t exp_vid = latest_vid + static_cast<uint32_t>(ver_i);
+
             const bool exp_latest = (ver_i == 0);
-            if (obj.version_id.raw() != exp_vid) {
-              std::cerr << "  FAIL: bucket=" << bname << " key=" << obj.key
-                        << " vid=0x" << std::hex << obj.version_id.raw()
-                        << " expected=0x" << exp_vid << std::dec << "\n";
-              failed = true;
-              break;
-            }
             if (obj.is_latest != exp_latest) {
               std::cerr << "  FAIL: bucket=" << bname << " key=" << obj.key
                         << " is_latest=" << obj.is_latest
@@ -2802,10 +2794,27 @@ static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
               failed = true;
               break;
             }
-            ++ver_i;
-            if (ver_i >= nver) {
+            if (ver_i != 0 && obj.version_id != exp_vid) {
+              std::cerr << "  FAIL: bucket=" << bname << " key=" << obj.key
+                        << " vid=0x" << std::hex << obj.version_id
+                        << " expected=0x" << exp_vid << std::dec << "\n";
+              failed = true;
+              break;
+            }
+            if (ver_i + 1 == num_vers) {
+              if (obj.version_id != kFirstVersionId) {
+                std::cerr << "  FAIL: bucket=" << bname << " key=" << obj.key
+                          << " vid=0x" << std::hex << obj.version_id
+                          << " expected oldest=0x" << kFirstVersionId
+                          << std::dec << "\n";
+                failed = true;
+                break;
+              }
               ver_i = 0;
               iter.next();
+            } else {
+              exp_vid = obj.version_id.prev_vid();
+              ++ver_i;
             }
             ++total_keys;
           }

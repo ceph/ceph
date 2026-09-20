@@ -31,7 +31,7 @@ namespace {
 
 void test_bucket_value_endianness()
 {
-  kvrgw::bucket_id_t bucket_id = 1;
+  kvrgw::bucket_id_t bucket_id(1);
 
   const int64_t timestamps[] = {0, 1, 1785926327, 2147483647};
   for (const int64_t ts : timestamps) {
@@ -73,36 +73,25 @@ void test_ref_tag_zero_base64_roundtrip()
   assert(parsed->hdr.chunk.type == kvrgw::CHUNK_STORAGE);
 }
 
-void test_legacy_bucket_value_ten_bytes()
-{
-  std::string legacy(10, '\0');
-  legacy[7] = static_cast<char>(0x01);
-  legacy[8] = static_cast<char>(0x00);
-  legacy[9] = static_cast<char>(0x01);
-
-  const auto parsed = kvrgw::parse_bucket_value(legacy);
-  assert(parsed);
-  assert(parsed->bucket_id == 1);
-  assert(parsed->created_at_unix == 0);
-}
-
 void test_tenant_value_roundtrip()
 {
   const uint32_t tenant_ids[] = {1, 42, 99999};
   for (const uint32_t id : tenant_ids) {
     const int64_t ts = 1785926327;
     const std::string encoded = kvrgw::make_tenant_value(id, ts);
-    assert(encoded.size() == 12);
+    assert(encoded.size() == sizeof(kvrgw::tenant_id_t) + sizeof(int64_t));
     const auto parsed = kvrgw::parse_tenant_value(encoded);
     assert(parsed);
     assert(parsed->tenant_id == id);
     assert(parsed->created_at_unix == ts);
   }
+  assert(!kvrgw::parse_tenant_value(
+      std::string(sizeof(kvrgw::tenant_id_t), '\0')));
 }
 
 void test_bucket_value_versioning_state()
 {
-  kvrgw::bucket_id_t bucket_id = 0x4200000000000000ULL;
+  kvrgw::bucket_id_t bucket_id(0x4200000000000000ULL);
 
   for (uint8_t vs = 0; vs <= 2; ++vs) {
     const std::string encoded = kvrgw::make_bucket_value(
@@ -127,13 +116,16 @@ void test_object_value_header_version_fields()
   value.content_type = "text/html";
 
   const kvrgw::version_id_t vids[] = {
-      kvrgw::version_id_t{0}, kvrgw::version_id_t{1},
-      kvrgw::version_id_t{0xFFFFFFFF}, kvrgw::version_id_t{0xFFFFFFFE},
-      kvrgw::version_id_t{42}};
+    kvrgw::version_id_t{0},
+    kvrgw::version_id_t{1},
+    kvrgw::kNullVersion,
+    kvrgw::kFirstVersionId,
+    kvrgw::version_id_t{42}
+  };
+
   for (kvrgw::version_id_t vid : vids) {
     value.hdr.version_id = vid;
-    value.hdr.next_vid =
-        kvrgw::version_id_t{vid.raw() > 0 ? vid.raw() - 1 : 0xFFFFFFFF};
+    value.hdr.next_vid = vid.next_vid();
 
     kvrgw::OValueBuf buf;
     kvrgw::ObjectValueHeader wire = value.hdr;
@@ -273,13 +265,22 @@ void test_child_d_header_then_data()
   assert(kvrgw::d_data_portion(shared, data.size()) == data);
 }
 
+void test_parse_r_value()
+{
+  assert(!kvrgw::parse_r_value(std::string(sizeof(uint64_t) - 1, '\0')));
+  const auto encoded = kvrgw::write_r_value(3, "desc");
+  const auto parsed = kvrgw::parse_r_value(encoded);
+  assert(parsed);
+  assert(parsed->ref_count == 3);
+  assert(parsed->chunk_descriptor == "desc");
+}
+
 } // namespace
 
 int main()
 {
   test_bucket_value_endianness();
   test_ref_tag_zero_base64_roundtrip();
-  test_legacy_bucket_value_ten_bytes();
   test_tenant_value_roundtrip();
   test_bucket_value_versioning_state();
   test_object_value_header_version_fields();
@@ -288,6 +289,7 @@ int main()
   test_tag_encode_exact_size();
   test_inline_metadata_frame_roundtrip();
   test_child_d_header_then_data();
+  test_parse_r_value();
   std::cout << "object_value_test passed\n";
   return 0;
 }

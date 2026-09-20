@@ -354,12 +354,12 @@ kvrgw_err_t kvrgw_bucket_exists(KvRgwHandle *h, uint32_t tenant_id,
       return KVRGW_ERR_INVALID_ARGUMENT;
     }
     bool exists = false;
-    kvrgw::bucket_id_t id{};
+    kvrgw::bucket_id_t bucket_id{};
     const auto ec =
-        s->bucket_exists(tenant_id, sv(bucket, bucket_len), &exists, &id);
+        s->bucket_exists(tenant_id, sv(bucket, bucket_len), &exists, &bucket_id);
     *out_exists = exists ? 1 : 0;
     if (out_id != nullptr) {
-      *out_id = static_cast<uint64_t>(id);
+      *out_id = bucket_id.raw();
     }
     return ec;
   });
@@ -375,12 +375,12 @@ kvrgw_err_t kvrgw_bucket_exists_cached(KvRgwHandle *h, uint32_t tenant_id,
       return KVRGW_ERR_INVALID_ARGUMENT;
     }
     bool exists = false;
-    kvrgw::bucket_id_t id{};
+    kvrgw::bucket_id_t bucket_id{};
     const auto ec = s->bucket_exists_cached(tenant_id, sv(bucket, bucket_len),
-                                            &exists, &id);
+                                            &exists, &bucket_id);
     *out_exists = exists ? 1 : 0;
     if (out_id != nullptr) {
-      *out_id = static_cast<uint64_t>(id);
+      *out_id = bucket_id.raw();
     }
     return ec;
   });
@@ -767,7 +767,10 @@ kvrgw_err_t kvrgw_delete_multi(KvRgwHandle *h, uint32_t tenant_id,
     for (size_t i = 0; i < objects_count; ++i) {
       kvrgw::KvRgwServiceImpl::DeleteMultiObjectRef r;
       r.key = sv(objects[i].key, objects[i].key_len);
-      r.version_id = sv(objects[i].value, objects[i].value_len);
+      r.version_id = parse_version(objects[i].value, objects[i].value_len);
+      if (r.version_id && r.version_id->is_invalid()) {
+        r.version_id.reset();
+      }
       obj_refs.push_back(r);
     }
     std::vector<kvrgw::KvRgwServiceImpl::DeleteMultiKeyOutcome> outcomes;
@@ -801,7 +804,9 @@ kvrgw_err_t kvrgw_delete_multi(KvRgwHandle *h, uint32_t tenant_id,
           a != KVRGW_ERR_OK) {
         return a;
       }
-      if (auto a = arena_put(arena, arena_cap, &used, o.version_id,
+      const std::string vid_hex =
+          o.version_id.is_valid() ? o.version_id.to_hex() : std::string{};
+      if (auto a = arena_put(arena, arena_cap, &used, vid_hex,
                              &e.version_id_off, &e.version_id_len);
           a != KVRGW_ERR_OK) {
         return a;

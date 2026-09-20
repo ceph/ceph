@@ -637,7 +637,7 @@ TEST(allocate_stops_on_non_retriable_commit)
   auto store = *kvrgw::KvStore::create();
   auto result = store.allocate_rgw_id();
   ASSERT_TRUE(!result);
-  ASSERT_EQ(result.error(), static_cast<fdb_error_t>(2000));
+  ASSERT_EQ(result.error(), kvrgw::KVRGW_ERR_INTERNAL);
   ASSERT_EQ(inject::g_commit_calls, 1);
 }
 
@@ -648,7 +648,7 @@ TEST(allocate_stops_on_non_retriable_get)
   auto store = *kvrgw::KvStore::create();
   auto result = store.allocate_rgw_id();
   ASSERT_TRUE(!result);
-  ASSERT_EQ(result.error(), static_cast<fdb_error_t>(4000));
+  ASSERT_EQ(result.error(), kvrgw::KVRGW_ERR_INTERNAL);
   ASSERT_EQ(inject::g_get_calls, 1);
 }
 
@@ -662,11 +662,11 @@ TEST(allocate_exhausts_retries)
   auto store = *kvrgw::KvStore::create();
   auto result = store.allocate_rgw_id();
   ASSERT_TRUE(!result);
-  ASSERT_EQ(result.error(), static_cast<fdb_error_t>(1020));
+  ASSERT_EQ(result.error(), kvrgw::KVRGW_ERR_MAX_RETRIES_EXCEEDED);
   ASSERT_EQ(inject::g_commit_calls, 10);
 }
 
-TEST(allocate_preserves_error_code_4100)
+TEST(allocate_maps_unknown_fdb_code_to_internal)
 {
   inject::reset();
   inject::push_get_success(false);
@@ -674,7 +674,17 @@ TEST(allocate_preserves_error_code_4100)
   auto store = *kvrgw::KvStore::create();
   auto result = store.allocate_rgw_id();
   ASSERT_TRUE(!result);
-  ASSERT_EQ(result.error(), static_cast<fdb_error_t>(4100));
+  ASSERT_EQ(result.error(), kvrgw::KVRGW_ERR_INTERNAL);
+}
+
+TEST(allocate_fails_on_short_counter)
+{
+  inject::reset();
+  inject::push_get_success(true, std::string(sizeof(uint64_t) - 1, '\0'));
+  auto store = *kvrgw::KvStore::create();
+  auto result = store.allocate_rgw_id();
+  ASSERT_TRUE(!result);
+  ASSERT_EQ(result.error(), kvrgw::KVRGW_ERR_CORRUPT_VALUE);
 }
 
 // ---------------------------------------------------------------------------
@@ -731,7 +741,7 @@ TEST(allocate_stops_begin_txn_non_retriable)
   auto store = *kvrgw::KvStore::create();
   auto result = store.allocate_rgw_id();
   ASSERT_TRUE(!result);
-  ASSERT_EQ(result.error(), static_cast<fdb_error_t>(2000));
+  ASSERT_EQ(result.error(), kvrgw::KVRGW_ERR_INTERNAL);
   ASSERT_EQ(inject::g_create_txn_calls, 1);
 }
 

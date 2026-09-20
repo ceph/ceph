@@ -19,28 +19,11 @@
 #include <arpa/inet.h>
 #include <cassert>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <endian.h>
 
 namespace kvrgw {
-
-namespace {
-
-void encode_bucket_id(bucket_id_t id, void *out)
-{
-  const uint64_t be = htobe64(id);
-  std::memcpy(out, &be, 8);
-}
-
-bucket_id_t decode_bucket_id_bytes(const void *data)
-{
-  uint64_t be;
-  std::memcpy(&be, data, 8);
-  return be64toh(be);
-}
-
-} // namespace
-
 uint8_t size_tier_from_size(uint64_t object_size_bytes)
 {
   if (object_size_bytes == 0) {
@@ -178,8 +161,8 @@ std::optional<BucketKeyParts> parse_bucket_key(std::string_view key)
 
 KeyBuf make_object_key(bucket_id_t bucket_id, std::string_view object_name)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('S', kShardCount, kShardId, bid_be, kCategoryObject);
   key.set_header(hdr);
@@ -189,8 +172,8 @@ KeyBuf make_object_key(bucket_id_t bucket_id, std::string_view object_name)
 
 KeyBuf make_object_prefix(bucket_id_t bucket_id)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('S', kShardCount, kShardId, bid_be, kCategoryObject);
   key.set_header(hdr);
@@ -199,8 +182,8 @@ KeyBuf make_object_prefix(bucket_id_t bucket_id)
 
 KeyBuf make_version_prefix(bucket_id_t bucket_id)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('S', kShardCount, kShardId, bid_be, kCategoryVersion);
   key.set_header(hdr);
@@ -219,7 +202,7 @@ std::optional<ObjectKeyParts> parse_object_key(std::string_view key)
   std::memcpy(&si_net, key.data() + 3, 2);
   parts.shard_count = ntohs(sc_net);
   parts.shard_id = ntohs(si_net);
-  parts.bucket_id = decode_bucket_id_bytes(key.data() + 5);
+  parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
   parts.object_name.assign(key.substr(14));
   if (parts.object_name.empty() || parts.object_name.size() > 1024) {
     return std::nullopt;
@@ -230,8 +213,8 @@ std::optional<ObjectKeyParts> parse_object_key(std::string_view key)
 KeyBuf make_po_key(bucket_id_t bucket_id, std::string_view object_name,
                    std::string_view ref_tag_bytes)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('P', kShardCount, kShardId, bid_be, kOpTypeObject);
   key.set_header(hdr);
@@ -242,8 +225,8 @@ KeyBuf make_po_key(bucket_id_t bucket_id, std::string_view object_name,
 
 KeyBuf make_group_po_key(bucket_id_t bucket_id, std::string_view group_ref_tag)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('P', kShardCount, kShardId, bid_be, kOpTypeGroup);
   key.set_header(hdr);
@@ -265,8 +248,8 @@ KeyBuf make_p_prefix(uint16_t shard_count, uint16_t shard_id)
 
 KeyBuf make_p_bucket_prefix(bucket_id_t bucket_id)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('P', kShardCount, kShardId, bid_be, kOpTypeObject);
   key.set_header(hdr);
@@ -286,7 +269,7 @@ std::optional<PoKeyParts> parse_po_key(std::string_view key)
   std::memcpy(&si_net, key.data() + 3, 2);
   parts.shard_count = ntohs(sc_net);
   parts.shard_id = ntohs(si_net);
-  parts.bucket_id = decode_bucket_id_bytes(key.data() + 5);
+  parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
   parts.object_name.assign(
       key.substr(14, key.size() - 14 - kPoFixedSuffixSize));
   std::memcpy(parts.ref_tag.data(),
@@ -300,8 +283,8 @@ std::optional<PoKeyParts> parse_po_key(std::string_view key)
 KeyBuf make_go_key(const ObjectKeyParts &object_key,
                    std::string_view ref_tag_bytes, uint64_t object_size)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(object_key.bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  object_key.bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderG hdr(size_tier_from_size(object_size), object_key.shard_count,
                  object_key.shard_id, bid_be, kCategoryObject);
@@ -332,7 +315,7 @@ std::optional<GoKeyParts> parse_go_key(std::string_view key)
   std::memcpy(&si_net, key.data() + 4, 2);
   parts.shard_count = ntohs(sc_net);
   parts.shard_id = ntohs(si_net);
-  parts.bucket_id = decode_bucket_id_bytes(key.data() + 6);
+  parts.bucket_id = bucket_id_t::deserialize(key.data() + 6);
   std::memcpy(parts.ref_tag.data(), key.data() + 15, kRefTagSize);
   return parts;
 }
@@ -340,8 +323,8 @@ std::optional<GoKeyParts> parse_go_key(std::string_view key)
 KeyBuf make_d_key(bucket_id_t bucket_id, uint8_t size_tier,
                   std::string_view ref_tag, uint32_t mtime)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderD hdr(kShardCount, kShardId, bid_be, size_tier,
                  d_hash_prefix(ref_tag), mtime, ref_tag.data());
@@ -351,8 +334,8 @@ KeyBuf make_d_key(bucket_id_t bucket_id, uint8_t size_tier,
 
 KeyBuf make_d_bucket_prefix(bucket_id_t bucket_id)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   key.data[0] = static_cast<uint8_t>(kNamespaceData);
   key.len = 1;
@@ -360,7 +343,7 @@ KeyBuf make_d_bucket_prefix(bucket_id_t bucket_id)
   uint16_t si_net = htons(kShardId);
   key.append(&sc_net, 2);
   key.append(&si_net, 2);
-  key.append(bid_be, 8);
+  key.append(bid_be, sizeof(bucket_id_t));
   return key;
 }
 
@@ -383,7 +366,7 @@ std::optional<DKeyParts> parse_d_key(std::string_view key)
   std::memcpy(&si_net, key.data() + 3, 2);
   parts.shard_count = ntohs(sc_net);
   parts.shard_id = ntohs(si_net);
-  parts.bucket_id = decode_bucket_id_bytes(key.data() + 5);
+  parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
   parts.size_tier = static_cast<uint8_t>(key[13]);
   parts.hash_prefix = static_cast<uint8_t>(key[14]);
   uint32_t mt_net{};
@@ -393,49 +376,26 @@ std::optional<DKeyParts> parse_d_key(std::string_view key)
   return parts;
 }
 
-std::optional<bucket_id_t> extract_bucket_id(std::string_view bucket_value)
-{
-  if (bucket_value.size() < 8) {
-    return std::nullopt;
-  }
-  return decode_bucket_id_bytes(bucket_value.data());
-}
-
-uint8_t extract_access_flags(std::string_view bucket_value)
-{
-  if (bucket_value.size() < 17) {
-    return 0;
-  }
-  return static_cast<uint8_t>(bucket_value[16]);
-}
-
-VersioningState extract_versioning_state(std::string_view bucket_value)
-{
-  if (bucket_value.size() < 18) {
-    return VERSIONING_DISABLED;
-  }
-  return static_cast<VersioningState>(bucket_value[17]);
-}
-
 KeyBuf make_v_key(bucket_id_t bucket_id, std::string_view object_name,
                   version_id_t version_id)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('S', kShardCount, kShardId, bid_be, kCategoryVersion);
   key.set_header(hdr);
   key.append(object_name.data(), object_name.size());
   key.append_byte('\0');
-  uint32_t vid_be = htonl(version_id.raw());
-  key.append(&vid_be, 4);
+  char buff[sizeof(version_id_t)];
+  version_id.serialize(buff);
+  key.append(buff, sizeof(buff));
   return key;
 }
 
 KeyBuf make_v_prefix(bucket_id_t bucket_id, std::string_view object_name)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('S', kShardCount, kShardId, bid_be, kCategoryVersion);
   key.set_header(hdr);
@@ -446,21 +406,29 @@ KeyBuf make_v_prefix(bucket_id_t bucket_id, std::string_view object_name)
 
 std::optional<VersionKeyParts> parse_v_key(std::string_view key)
 {
-  if (key.size() < 20 || key[0] != kNamespaceObject ||
-      key[13] != kCategoryVersion) {
+  constexpr size_t kNul = 1;
+  if (key.size() < sizeof(KeyHeaderS) + kNul + sizeof(version_id_t) ||
+      key[0] != kNamespaceObject ||
+      key[offsetof(KeyHeaderS, cat)] != kCategoryVersion) {
+    return std::nullopt;
+  }
+  const size_t vid_off = key.size() - sizeof(version_id_t);
+  if (key[vid_off - 1] != '\0') {
     return std::nullopt;
   }
   VersionKeyParts parts;
   uint16_t sc_net{}, si_net{};
-  std::memcpy(&sc_net, key.data() + 1, 2);
-  std::memcpy(&si_net, key.data() + 3, 2);
+  std::memcpy(&sc_net, key.data() + offsetof(KeyHeaderS, shard_count),
+              sizeof(sc_net));
+  std::memcpy(&si_net, key.data() + offsetof(KeyHeaderS, shard_id),
+              sizeof(si_net));
   parts.shard_count = ntohs(sc_net);
   parts.shard_id = ntohs(si_net);
-  parts.bucket_id = decode_bucket_id_bytes(key.data() + 5);
-  parts.object_name.assign(key.substr(14, key.size() - 14 - 5));
-  uint32_t vid_net{};
-  std::memcpy(&vid_net, key.data() + key.size() - 4, 4);
-  parts.version_id = version_id_t{ntohl(vid_net)};
+  parts.bucket_id =
+      bucket_id_t::deserialize(key.data() + offsetof(KeyHeaderS, bucket_id));
+  parts.object_name.assign(key.data() + sizeof(KeyHeaderS),
+                           vid_off - sizeof(KeyHeaderS) - kNul);
+  parts.version_id = version_id_t::deserialize(key.data() + vid_off);
   return parts;
 }
 
@@ -475,8 +443,8 @@ KeyBuf make_r_key(std::string_view ref_tag)
 
 KeyBuf make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('S', kShardCount, kShardId, bid_be, kCategoryChild);
   key.set_header(hdr);
@@ -488,8 +456,8 @@ KeyBuf make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag)
 
 KeyBuf make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderS hdr('S', kShardCount, kShardId, bid_be, kCategoryChild);
   key.set_header(hdr);
@@ -511,15 +479,15 @@ std::optional<GroupPoKeyParts> parse_group_po_key(std::string_view key)
   std::memcpy(&si_net, key.data() + 3, 2);
   parts.shard_count = ntohs(sc_net);
   parts.shard_id = ntohs(si_net);
-  parts.bucket_id = decode_bucket_id_bytes(key.data() + 5);
+  parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
   std::memcpy(parts.group_ref_tag.data(), key.data() + 14, kRefTagSize);
   return parts;
 }
 
 KeyBuf make_group_go_key(bucket_id_t bucket_id, std::string_view group_ref_tag)
 {
-  uint8_t bid_be[8];
-  encode_bucket_id(bucket_id, bid_be);
+  uint8_t bid_be[sizeof(bucket_id_t)];
+  bucket_id.serialize(bid_be);
   KeyBuf key;
   KeyHeaderG hdr(0, kShardCount, kShardId, bid_be, kOpTypeGroup);
   key.set_header(hdr);
@@ -542,7 +510,7 @@ std::optional<GroupGoKeyParts> parse_group_go_key(std::string_view key)
   std::memcpy(&si_net, key.data() + 4, 2);
   parts.shard_count = ntohs(sc_net);
   parts.shard_id = ntohs(si_net);
-  parts.bucket_id = decode_bucket_id_bytes(key.data() + 6);
+  parts.bucket_id = bucket_id_t::deserialize(key.data() + 6);
   std::memcpy(parts.group_ref_tag.data(), key.data() + 15, kRefTagSize);
   return parts;
 }

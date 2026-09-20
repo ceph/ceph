@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(kv-rgw-backend LANGUAGES C CXX)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12")
+  message(FATAL_ERROR
+    "GCC 12 or later is required for C++23 <format> support.\n"
+    "Source gcc-toolset-12 first:  source /opt/rh/gcc-toolset-12/enable")
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -113,7 +118,7 @@ target_include_directories(object_value_test PRIVATE
 )
 target_link_libraries(object_value_test PRIVATE OpenSSL::Crypto)
 
-add_executable(l_key_test tests/l_key_test.cpp src/keys.cpp)
+add_executable(l_key_test tests/l_key_test.cpp src/keys.cpp src/typed_ids.cpp)
 target_include_directories(l_key_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 
 add_executable(data_store_test tests/data_store_test.cpp src/data_store.cpp src/ref_tag.cpp)
@@ -158,11 +163,13 @@ add_executable(gc_ctl
 target_include_directories(gc_ctl PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
   "${FDB_INCLUDE_DIR}"
+  "${GENERATED_DIR}"
 )
 target_link_directories(gc_ctl PRIVATE "${FDB_LIB_DIR}")
 target_link_libraries(gc_ctl PRIVATE
   "${FDB_LIB_DIR}/libfdb_c.so"
   OpenSSL::Crypto
+  kvrgw_pb
 )
 target_compile_definitions(gc_ctl PRIVATE FDB_API_VERSION=730)
 set_target_properties(gc_ctl PROPERTIES BUILD_RPATH "${FDB_LIB_DIR}")
@@ -175,6 +182,7 @@ add_executable(fdb_error_test
   tests/fdb_error_test.cpp
   src/kv_store.cpp
   src/keys.cpp
+  src/typed_ids.cpp
 )
 target_include_directories(fdb_error_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"

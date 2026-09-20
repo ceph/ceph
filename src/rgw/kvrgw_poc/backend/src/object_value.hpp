@@ -95,7 +95,7 @@ struct PoValueHeader {
 };
 
 struct BucketValueHeader {
-  uint8_t bucket_id[8]{};
+  uint8_t bucket_id[sizeof(bucket_id_t)]{};
   int64_t created_at_unix{};
   uint8_t access_flags{};
   VersioningState versioning_state{};

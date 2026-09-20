@@ -55,7 +55,7 @@ int64_t read_int64_be(std::string_view data, size_t offset)
 std::string make_tenant_value(tenant_id_t tenant_id, int64_t created_at_unix)
 {
   std::string value;
-  value.reserve(12);
+  value.reserve(sizeof(tenant_id_t) + sizeof(int64_t));
   append_uint32_be(value, tenant_id);
   append_int64_be(value, created_at_unix);
   return value;
@@ -63,14 +63,12 @@ std::string make_tenant_value(tenant_id_t tenant_id, int64_t created_at_unix)
 
 std::optional<TenantValue> parse_tenant_value(std::string_view data)
 {
-  if (data.size() < 4) {
+  if (data.size() < sizeof(tenant_id_t) + sizeof(int64_t)) {
     return std::nullopt;
   }
   TenantValue value;
   value.tenant_id = read_uint32_be(data, 0);
-  if (data.size() >= 12) {
-    value.created_at_unix = read_int64_be(data, 4);
-  }
+  value.created_at_unix = read_int64_be(data, sizeof(tenant_id_t));
   return value;
 }
 

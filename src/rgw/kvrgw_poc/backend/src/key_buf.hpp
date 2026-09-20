@@ -66,7 +66,7 @@ struct KeyHeaderS {
   char ns;
   uint16_t shard_count;
   uint16_t shard_id;
-  uint8_t bucket_id[8];
+  uint8_t bucket_id[sizeof(bucket_id_t)];
   char cat;
 
   KeyHeaderS(char ns_, uint16_t sc, uint16_t si, const void* bid, char cat_)
@@ -80,7 +80,7 @@ struct KeyHeaderG {
   uint8_t size_tier;
   uint16_t shard_count;
   uint16_t shard_id;
-  uint8_t bucket_id[8];
+  uint8_t bucket_id[sizeof(bucket_id_t)];
   char cat;
 
   KeyHeaderG(uint8_t tier, uint16_t sc, uint16_t si, const void* bid, char cat_)
@@ -93,7 +93,7 @@ struct KeyHeaderD {
   char ns;
   uint16_t shard_count;
   uint16_t shard_id;
-  uint8_t bucket_id[8];
+  uint8_t bucket_id[sizeof(bucket_id_t)];
   uint8_t size_tier;
   uint8_t hash_prefix;
   uint32_t mtime;

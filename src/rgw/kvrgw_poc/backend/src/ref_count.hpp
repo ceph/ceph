@@ -20,6 +20,7 @@
 #include <cstring>
 #include <endian.h>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -32,21 +33,24 @@ struct RValue {
   std::string chunk_descriptor;
 };
 
-inline RValue parse_r_value(std::string_view raw) {
+inline std::optional<RValue> parse_r_value(std::string_view raw) {
+  if (raw.size() < sizeof(uint64_t)) {
+    return std::nullopt;
+  }
   RValue r;
-  if (raw.size() < 8) return r;
   uint64_t be{};
-  std::memcpy(&be, raw.data(), 8);
+  std::memcpy(&be, raw.data(), sizeof(be));
   r.ref_count = be64toh(be);
-  if (raw.size() > 8) {
-    r.chunk_descriptor.assign(raw.data() + 8, raw.size() - 8);
+  if (raw.size() > sizeof(uint64_t)) {
+    r.chunk_descriptor.assign(raw.data() + sizeof(uint64_t),
+                              raw.size() - sizeof(uint64_t));
   }
   return r;
 }
 
 inline std::string write_r_value(uint64_t count, std::string_view chunk_descriptor) {
   const uint64_t be = htobe64(count);
-  std::string out(reinterpret_cast<const char*>(&be), 8);
+  std::string out(reinterpret_cast<const char*>(&be), sizeof(be));
   out.append(chunk_descriptor);
   return out;
 }

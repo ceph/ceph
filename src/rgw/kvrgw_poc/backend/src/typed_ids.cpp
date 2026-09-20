@@ -71,25 +71,99 @@ etag_t etag_t::from_hex(std::string_view hex)
   return result;
 }
 
-bool version_id_t::is_null() const { return val_ == 0xFFFFFFFF; }
-
-void version_id_t::serialize(uint8_t *out) const
+std::string bucket_id_t::to_hex() const
 {
-  uint32_t be = htobe32(val_);
-  std::memcpy(out, &be, 4);
+  std::ostringstream out;
+  out << std::hex << std::setfill('0') << std::setw(2 * sizeof(val_)) << val_;
+  return out.str();
 }
 
-version_id_t version_id_t::deserialize(const uint8_t *src)
+std::ostream& operator<<(std::ostream& os, const bucket_id_t& v)
+{
+  os << v.val_;
+  return os;
+}
+
+bool version_id_t::is_null() const
+{
+  return *this == kNullVersion;
+}
+
+std::ostream& operator<<(std::ostream& os, const version_id_t& v)
+{
+  os << v.val_;
+  return os;
+}
+
+version_id_t version_id_t::next_vid() const
+{
+  if (this->is_valid()) {
+    return version_id_t(this->val_ - 1);
+  }
+  else {
+    return kNullVersion;
+  }
+}
+
+version_id_t version_id_t::prev_vid() const
+{
+  if (!this->is_null()) {
+    return version_id_t(this->val_ + 1);
+  }
+  else {
+    return kNullVersion;
+  }
+}
+
+version_id_t version_id_t::to_be() const
+{
+  return version_id_t(htobe32(val_));
+}
+
+version_id_t version_id_t::from_be() const
+{
+  return version_id_t(be32toh(val_));
+}
+
+void version_id_t::serialize(char *out) const
+{
+  uint32_t be = htobe32(val_);
+  std::memcpy(out, &be, sizeof(be));
+}
+
+version_id_t version_id_t::deserialize(const char *src)
 {
   uint32_t be;
-  std::memcpy(&be, src, 4);
+  std::memcpy(&be, src, sizeof(be));
   return version_id_t{be32toh(be)};
+}
+
+void bucket_id_t::serialize(void* out) const
+{
+  uint64_t be = htobe64(val_);
+  std::memcpy(out, &be, sizeof(be));
+}
+
+bucket_id_t bucket_id_t::deserialize(const void* src)
+{
+  uint64_t be;
+  std::memcpy(&be, src, sizeof(be));
+  return bucket_id_t{be64toh(be)};
+}
+
+version_id_t version_id_t::generate_random_version_id(uint32_t rand_val,
+                                                      uint32_t num_versions)
+{
+  if (num_versions == 0) {
+    return {};
+  }
+  return version_id_t(kFirstVersionId.raw() - (rand_val % num_versions));
 }
 
 std::string version_id_t::to_hex() const
 {
   std::ostringstream out;
-  out << std::hex << std::setfill('0') << std::setw(8) << val_;
+  out << std::hex << std::setfill('0') << std::setw(2 * sizeof(val_)) << val_;
   return out.str();
 }
 

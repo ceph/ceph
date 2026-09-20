@@ -11,6 +11,15 @@
 #
 #!/bin/bash
 set -euo pipefail
+# Activate gcc-toolset-12 (required for C++23 <format> support)
+GCC_TOOLSET_ENABLE="/opt/rh/gcc-toolset-12/enable"
+if [[ -f "$GCC_TOOLSET_ENABLE" ]]; then
+    source "$GCC_TOOLSET_ENABLE"
+else
+    echo "ERROR: gcc-toolset-12 not found at $GCC_TOOLSET_ENABLE"
+    echo "Install it with:  sudo dnf install gcc-toolset-12"
+    exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

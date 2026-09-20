@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "error_codes.hpp"
 #include "fdb.hpp"
 
 #include <atomic>
@@ -128,7 +129,7 @@ class KvStore {
 
   std::expected<std::unique_ptr<KvTransaction>, fdb_error_t> begin_transaction();
 
-  std::expected<uint32_t, fdb_error_t> allocate_rgw_id();
+  std::expected<uint32_t, KvrgwErrorCode> allocate_rgw_id();
 
   template <typename Fn>
   auto run_transaction(Fn&& fn, TxnRetryPolicy policy = TxnRetryPolicy::kRetry)

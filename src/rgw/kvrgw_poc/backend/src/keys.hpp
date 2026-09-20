@@ -115,10 +115,6 @@ std::optional<DKeyParts> parse_d_key(std::string_view key);
 uint8_t d_size_tier_from_size(uint64_t object_size_bytes);
 uint8_t d_hash_prefix(std::string_view ref_tag);
 
-std::optional<bucket_id_t> extract_bucket_id(std::string_view bucket_value);
-uint8_t extract_access_flags(std::string_view bucket_value);
-VersioningState extract_versioning_state(std::string_view bucket_value);
-
 struct VersionKeyParts {
   uint16_t shard_count{};
   uint16_t shard_id{};

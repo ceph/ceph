@@ -16,13 +16,32 @@
 
 #include <cstdint>
 #include <cstring>
+#include <iosfwd>
 #include <string>
 #include <string_view>
 
 namespace kvrgw {
 
 using tenant_id_t = uint32_t;
-using bucket_id_t = uint64_t;
+
+class __attribute__((packed)) bucket_id_t {
+  uint64_t val_{0};
+
+ public:
+  bucket_id_t() = default;
+  explicit bucket_id_t(uint64_t v) : val_(v) {}
+  uint64_t raw() const { return val_; }
+
+  void serialize(void* out) const;
+  static bucket_id_t deserialize(const void* src);
+  std::string to_hex() const;
+
+  friend std::ostream& operator<<(std::ostream& os, const bucket_id_t& v);
+  bool operator==(const bucket_id_t& o) const { return val_ == o.val_; }
+  bool operator!=(const bucket_id_t& o) const { return val_ != o.val_; }
+};
+static_assert(sizeof(bucket_id_t) == 8);
+inline const bucket_id_t kNullBucket{0x0};
 
 class __attribute__((packed)) etag_t {
   uint8_t bytes_[16]{};
@@ -90,25 +109,33 @@ struct __attribute__((packed)) Condition {
 };
 static_assert(sizeof(Condition) == 32);
 
-class version_id_t {
+class __attribute__((packed)) version_id_t {
   uint32_t val_{0};
 
  public:
   version_id_t() = default;
   explicit version_id_t(uint32_t v) : val_(v) {}
 
+  version_id_t next_vid() const;
+  version_id_t prev_vid() const;
+  version_id_t to_be() const;
+  version_id_t from_be() const;
   uint32_t raw() const { return val_; }
   bool is_null() const;
   bool is_valid() const { return val_ != 0; }
+  bool is_invalid() const { return !is_valid(); }
 
-  void serialize(uint8_t* out) const;
-  static version_id_t deserialize(const uint8_t* src);
+  void serialize(char* out) const;
+  static version_id_t deserialize(const char* src);
   std::string to_hex() const;
   static version_id_t from_hex(std::string_view);
+  static version_id_t generate_random_version_id(uint32_t rand_val, uint32_t num_versions);
 
+  friend std::ostream& operator<<(std::ostream& os, const version_id_t& v);
   bool operator==(const version_id_t& o) const { return val_ == o.val_; }
   bool operator!=(const version_id_t& o) const { return val_ != o.val_; }
   bool operator<(const version_id_t& o) const { return val_ < o.val_; }
+  bool operator<=(const version_id_t& o) const { return val_ <= o.val_; }
 };
 static_assert(sizeof(version_id_t) == 4);
 

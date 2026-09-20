@@ -14,6 +14,7 @@
 
 #include "kvrgw_runtime.hpp"
 
+#include "error_codes.hpp"
 #include "fdb.hpp"
 #include "gc_policy.hpp"
 
@@ -190,7 +191,7 @@ bool KvRgwRuntime::start(const KvRgwStartOptions &opts)
 
   auto rgw_id = store_->allocate_rgw_id();
   if (!rgw_id) {
-    std::cerr << "allocate_rgw_id failed: " << fdb_get_error(rgw_id.error())
+    std::cerr << "allocate_rgw_id failed: " << kvrgw_strerror(rgw_id.error())
               << std::endl;
     stop();
     return false;

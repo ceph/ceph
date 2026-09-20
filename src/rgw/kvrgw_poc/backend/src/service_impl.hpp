@@ -154,7 +154,7 @@ class BatchCommitQueue {
       entry_count = 0;
       storage_entry_count = 0;
       p3_attempt = 0;
-      group_bucket_id = 0;
+      group_bucket_id = kNullBucket;
       txn.reset();
       commit_future = FdbFuture();
     }
@@ -286,7 +286,7 @@ class KvRgwServiceImpl final {
 
   struct DeleteMultiObjectRef {
     std::string_view key;
-    std::string_view version_id;
+    std::optional<version_id_t> version_id;
   };
 
   struct DeleteMultiKeyOutcome {
@@ -294,7 +294,7 @@ class KvRgwServiceImpl final {
     enum class Status { Deleted, Error } status{Status::Deleted};
     std::string error_code;
     std::string error_message;
-    std::string version_id;
+    version_id_t version_id{};
     bool created_dm{false};
     version_id_t dm_version_id{};
   };
@@ -441,7 +441,7 @@ class KvRgwServiceImpl final {
   friend void copy_worker(KvRgwServiceImpl&, tenant_id_t, const struct ThreadRange&, struct BenchResult&);
   friend void put_overwrite_worker(KvRgwServiceImpl&, uint32_t, const struct ThreadRange&, uint64_t, struct BenchResult&);
   friend void put_overwrite_versioned_worker(KvRgwServiceImpl&, uint32_t, const struct ThreadRange&, uint64_t, int, struct BenchResult&);
-  friend void delete_version_worker(KvRgwServiceImpl&, tenant_id_t, const struct ThreadRange&, int, int, struct BenchResult&);
+  friend void delete_version_worker(KvRgwServiceImpl&, tenant_id_t, const struct ThreadRange&, uint32_t, int, struct BenchResult&);
 
  private:
   static constexpr auto kBucketCacheTtl = std::chrono::seconds(3);
