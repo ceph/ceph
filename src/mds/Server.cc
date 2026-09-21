@@ -5247,6 +5247,9 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   // Whether the client may hold dentry leases here at all depends only on
   // the directory, and nothing below changes that, so ask once.
   const bool dir_leasable = mds->locker->can_lease_dentries_in(diri, mdr);
+  const double yield_budget =
+    g_conf().get_val<double>("mds_readdir_yield_budget");
+  const auto yield_start = ceph::mono_clock::now();
   bool end = (it == dir->end());
   for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -5341,6 +5344,21 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 
     // touch dn
     mdcache->lru.lru_touch(dn);
+
+    /* Requests arriving meanwhile wait in the dispatch queue, not on
+     * mds_lock.  Once this page has run for the budget and something has
+     * waited that long, end it: the walker gets at least the budget per
+     * page, and everyone else waits at most about that long behind it. */
+    if (yield_budget > 0 && (numfiles % 16) == 0 &&
+        ceph::mono_clock::now() - yield_start >=
+          ceph::make_timespan(yield_budget)) {
+      if (double age = mds->get_dispatch_queue_max_age(ceph_clock_now());
+          age >= yield_budget) {
+        dout(15) << "yielding readdir page after " << numfiles << " entries, "
+                 << "oldest queued message waited " << age << "s" << dendl;
+        break;
+      }
+    }
   }
   __u16 flags = 0;
   // client only understand END and COMPLETE flags ?
