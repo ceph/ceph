@@ -465,10 +465,10 @@ When OSD data lives on HDDs, placing the BlueStore WAL and DB on a fast SSD or
 NVMe device is an attractive option for accelerating response time. See
 :ref:`bluestore-mixed-device-config`.
 
-.. note:: Partitioning a drive does not change its total throughput or
-   sequential read/write limits. Placing the WAL and DB in a separate partition
-   of the same drive does not improve throughput; place them on a separate,
-   faster physical device instead.
+.. note:: Partitioning an HDD does not change its total throughput or its
+   seek limits. Placing the WAL and DB in a separate partition of the same HDD
+   does not improve performance; place them on a separate SSD or NVMe device
+   instead.
 
 
 Bad Sectors / Fragmented Disk

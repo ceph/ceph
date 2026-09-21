@@ -4,9 +4,9 @@
  BlueStore Migration
 =====================
 
-BlueStore is the only OSD back end in this release. Filestore was deprecated in
-the Reef release and has since been removed: a Filestore OSD cannot start on
-this release, so there is nothing left to migrate on a cluster that runs it.
+Filestore, the OSD back end that preceded BlueStore, was deprecated in the
+Reef release and has since been removed: a Filestore OSD cannot start on this
+release, so there is nothing left to migrate on a cluster that runs it.
 
 If your cluster still contains Filestore OSDs, it is running Quincy or an
 earlier release. Migrate those OSDs to BlueStore *before* you upgrade, by

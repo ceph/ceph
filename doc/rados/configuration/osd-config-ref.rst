@@ -40,10 +40,10 @@ file. For example:
 General Settings
 ================
 
-The following settings provide a Ceph OSD Daemon's ID and determine the path
+The following settings provide a Ceph OSD daemon's ID and determine the path
 to its data. Ceph deployment tools typically generate the UUID automatically.
 
-.. warning:: **DO NOT** change the default data path, as it makes it more
+.. warning:: **DO NOT** change the default data path, as it makes it
              problematic to troubleshoot Ceph later.
 
 .. confval:: osd_uuid
