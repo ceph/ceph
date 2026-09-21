@@ -46,6 +46,7 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
         endif()
 	execute_process(COMMAND nasm -D AS_FEATURE_LEVEL=10 -f ${object_format}
           -i ${CMAKE_SOURCE_DIR}/src/isa-l/include/
+          -i ${CMAKE_SOURCE_DIR}/src/isa-l/crc/
           ${CMAKE_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm
           -o ${nasm_probe_out}
           RESULT_VARIABLE rt

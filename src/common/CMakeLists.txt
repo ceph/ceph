@@ -245,7 +245,9 @@ if(HAVE_INTEL)
   list(APPEND crc32_srcs
     crc32c_intel_fast.c)
   if(HAVE_NASM_X64)
-    set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
+    # since isa-l 2.32 the folding kernels include crc_const_extern.asm
+    # from the crc directory and take their constants from crc_const.asm
+    set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ -i ${PROJECT_SOURCE_DIR}/src/isa-l/crc/ ${CMAKE_ASM_FLAGS}")
     list(APPEND crc32_srcs
       ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_01.asm
       crc32c_intel_fast_zero_asm.s)
@@ -253,6 +255,11 @@ if(HAVE_INTEL)
   if(HAVE_NASM_X64_AVX512_VPCLMUL)
     set(CMAKE_ASM_FLAGS "-DAS_FEATURE_LEVEL=10 ${CMAKE_ASM_FLAGS}")
     list(APPEND crc32_srcs ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm)
+    if(NOT WITH_EC_ISA_PLUGIN)
+      # with the plugin ceph-common links ISAL::ISAL (for crc64nvme),
+      # which already carries the constants
+      list(APPEND crc32_srcs ${PROJECT_SOURCE_DIR}/src/isa-l/crc/crc_const.asm)
+    endif()
   endif(HAVE_NASM_X64_AVX512_VPCLMUL)
 elseif(HAVE_POWER8)
   list(APPEND crc32_srcs
