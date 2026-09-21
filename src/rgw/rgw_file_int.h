@@ -20,6 +20,9 @@
 #include <chrono>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <deque>
 #include <algorithm>
@@ -1048,7 +1051,12 @@ namespace rgw {
       RGWFileHandle& rgw_fh;
 
       explicit StatelessFinalize(RGWFileHandle& _fh) : rgw_fh(_fh) {
-	rgw_fh.get_fs()->ref(&rgw_fh);
+	/* the ledger entry and the reference are taken together, so an
+	 * observer holding stateless_pin_mtx never sees one without the
+	 * other.  only this constructor takes a reference--a copy of the
+	 * event into the timer's storage does not--so the ledger counts
+	 * arm events, which is what balances operator() */
+	pin_stateless(&rgw_fh);
       }
 
       void operator()() {
@@ -1057,7 +1065,7 @@ namespace rgw {
 	 * it, and a later read or write simply reopens.  publishing is
 	 * part of the close when a writer is the last one out */
 	rgw_fh.close_global(RGWFileHandle::FLAG_NONE);
-	rgw_fh.get_fs()->unref(&rgw_fh);
+	unpin_stateless(&rgw_fh);
       }
     };
 
@@ -1149,6 +1157,67 @@ namespace rgw {
       /* release call-path ref */
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
+
+    /* Deterministic control of the stateless-finalize timer, for tests
+     * which assert on handle reference counts.
+     *
+     * The timer's reference cannot be inferred from the handle.
+     * close_global() clears file::stateless_timer_id while the pending
+     * event still holds the reference its constructor took, and only the
+     * event body returns it--so after an explicit close the pin is live
+     * with nothing to read it from.  A test which needs an exact expected
+     * refcount therefore has to be told, which is what the ledger below
+     * is for:  it is maintained at the two points that take and return
+     * the reference, so it is exact in every mode. */
+    enum class StatelessTimerMode : uint8_t {
+      NORMAL,   /* arm as configured */
+      DISARMED, /* arm_stateless_timer() is a no-op;  no event, no ref */
+      HELD,     /* armed at an interval which will not elapse in a test */
+    };
+
+    static std::atomic<StatelessTimerMode> stateless_timer_mode;
+
+    /* interval used in HELD mode:  long enough that no test outlives it */
+    static constexpr std::chrono::seconds stateless_held_interval{86400};
+
+    /* Whether to maintain the ledger below.  Off by default:  a live
+     * gateway has no use for it and should not pay a global mutex on
+     * every stateless open.  Only a test which needs the finalize term
+     * of an expected refcount turns it on, and must do so before the
+     * first open--toggling it with references outstanding would leave
+     * the count unbalanced.  A test running DISARMED needs none of this;
+     * with no timer there is no finalize reference to account for. */
+    static std::atomic<bool> stateless_ledger;
+
+    /* outstanding StatelessFinalize references, by handle */
+    static std::mutex stateless_pin_mtx;
+    static std::condition_variable stateless_pin_cv;
+    static std::unordered_map<const RGWFileHandle*, uint32_t> stateless_pins;
+    static std::unordered_set<uint64_t> stateless_armed_ids;
+
+    static void pin_stateless(RGWFileHandle* fh);
+    static void unpin_stateless(RGWFileHandle* fh);
+
+    /* how many finalize references this handle currently holds.  callers
+     * which also read get_refcnt() should hold stateless_pin_mtx across
+     * both, so the pair is consistent against a firing timer. */
+    static uint32_t stateless_pins_for(const RGWFileHandle* fh);
+
+    /* Fire every armed StatelessFinalize now and wait for the last one to
+     * return its reference;  suppress re-arming first, so the count can
+     * only fall.  Cancelling is not an alternative:  the constructor takes
+     * the reference and only operator() gives it back, so a cancelled
+     * event leaks it--which is why close_global() leaves it to fire. */
+    /* Returns the number of events it advanced.  A caller which asserts
+     * on the barrier wants to know it had something to do:  a quiesce
+     * which advanced nothing proves nothing about the barrier. */
+    static uint64_t quiesce_stateless_timers();
+
+    /* Whole-cache leak sweep at drain;  see ObjUnref in RGWLibFS::close().
+     * Off by default--a live gateway has no use for it, and the count is
+     * only meaningful once the caller has released what it holds. */
+    static bool sweep_on_drain;
+    static std::atomic<uint64_t> sweep_leaks;
 
     int authorize(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver) {
       int ret = driver->get_user_by_access_key(dpp, key.id, null_yield, &user);

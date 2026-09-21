@@ -50,6 +50,85 @@ namespace rgw {
   ceph::timer<ceph::mono_clock> RGWLibFS::write_timer{
     ceph::construct_suspended};
 
+  std::atomic<RGWLibFS::StatelessTimerMode> RGWLibFS::stateless_timer_mode{
+    RGWLibFS::StatelessTimerMode::NORMAL};
+
+  std::atomic<bool> RGWLibFS::stateless_ledger{false};
+  std::mutex RGWLibFS::stateless_pin_mtx;
+  std::condition_variable RGWLibFS::stateless_pin_cv;
+  std::unordered_map<const RGWFileHandle*, uint32_t> RGWLibFS::stateless_pins;
+  std::unordered_set<uint64_t> RGWLibFS::stateless_armed_ids;
+
+  bool RGWLibFS::sweep_on_drain = false;
+  std::atomic<uint64_t> RGWLibFS::sweep_leaks{0};
+
+  void RGWLibFS::pin_stateless(RGWFileHandle* fh)
+  {
+    if (likely(! stateless_ledger.load(std::memory_order_relaxed))) {
+      fh->get_fs()->ref(fh);
+      return;
+    }
+    lock_guard guard(stateless_pin_mtx);
+    ++stateless_pins[fh];
+    fh->get_fs()->ref(fh);
+  } /* RGWLibFS::pin_stateless */
+
+  void RGWLibFS::unpin_stateless(RGWFileHandle* fh)
+  {
+    if (likely(! stateless_ledger.load(std::memory_order_relaxed))) {
+      fh->get_fs()->unref(fh);
+      return;
+    }
+    {
+      lock_guard guard(stateless_pin_mtx);
+      auto it = stateless_pins.find(fh);
+      if (it != stateless_pins.end()) {
+	if (--(it->second) == 0) {
+	  stateless_pins.erase(it);
+	}
+      }
+      /* the unref is inside the lock so that an observer never sees the
+       * ledger fall before the reference does;  it may free the handle,
+       * which is why the ledger entry goes first and the pointer is only
+       * ever used as a key */
+      fh->get_fs()->unref(fh);
+    }
+    stateless_pin_cv.notify_all();
+  } /* RGWLibFS::unpin_stateless */
+
+  uint32_t RGWLibFS::stateless_pins_for(const RGWFileHandle* fh)
+  {
+    auto it = stateless_pins.find(fh);
+    return (it == stateless_pins.end()) ? 0 : it->second;
+  } /* RGWLibFS::stateless_pins_for */
+
+  uint64_t RGWLibFS::quiesce_stateless_timers()
+  {
+    /* suppress re-arming before draining, so the count can only fall */
+    stateless_timer_mode = StatelessTimerMode::DISARMED;
+
+    std::unordered_set<uint64_t> ids;
+    {
+      lock_guard guard(stateless_pin_mtx);
+      ids = stateless_armed_ids;
+    }
+    /* pull each armed event forward to now;  adjust_event() returns false
+     * for one which has already fired or is running, which is harmless--
+     * the wait below is on the ledger, not on this set */
+    uint64_t advanced{0};
+    for (const auto id : ids) {
+      if (write_timer.adjust_event(id, std::chrono::seconds(0))) {
+	++advanced;
+      }
+    }
+
+    unique_lock guard(stateless_pin_mtx);
+    stateless_pin_cv.wait(guard, []() { return stateless_pins.empty(); });
+    /* every recorded id has now fired */
+    stateless_armed_ids.clear();
+    return advanced;
+  } /* RGWLibFS::quiesce_stateless_timers */
+
   inline int valid_fs_bucket_name(const string& name) {
     int rc = valid_s3_bucket_name(name, false /* relaxed */);
     if (rc != 0) {
@@ -1557,6 +1636,30 @@ namespace rgw {
 	  << fh->name
 	  << " before ObjUnref refs=" << fh->get_refcnt()
 	  << dendl;
+	/* Whole-cache leak sweep.  The per-entry checks a test makes only
+	 * cover handles it enumerated;  this sees every handle the cache
+	 * still holds.  At drain the only references left should be the
+	 * sentinel and any finalize event still pending, so anything above
+	 * that was leaked by a path which never gave its reference back.
+	 * Reported, not asserted:  close() runs on the umount path, where
+	 * aborting would lose the rest of the teardown. */
+	/* Files only.  A directory carries one reference per live child
+	 * (lookup_fh() refs the parent), and drain pops the queue in no
+	 * particular order, so a directory's expected count changes as its
+	 * children go and is not knowable here.  A leaked handle is a file
+	 * handle in every case this screens for. */
+	if (sweep_on_drain && (! fh->is_dir())) {
+	  lock_guard guard(stateless_pin_mtx);
+	  const auto refcnt = fh->get_refcnt();
+	  const auto expected = 1 /* sentinel */ + stateless_pins_for(fh);
+	  if (refcnt != expected) {
+	    lsubdout(fs->get_context(), rgw, 0)
+	      << "LEAK " << fh->name
+	      << " refs=" << refcnt << " expected=" << expected
+	      << dendl;
+	    ++sweep_leaks;
+	  }
+	}
 	fs->unref(fh);
       }
     };
@@ -2392,6 +2495,16 @@ namespace rgw {
 	? conf->rgw_nfs_stateless_finalize_versioned_secs
 	: conf->rgw_nfs_stateless_finalize_secs);
 
+    /* tests which assert on reference counts pin the timer's contribution
+     * to a known constant;  see RGWLibFS::StatelessTimerMode */
+    const auto mode = RGWLibFS::stateless_timer_mode.load();
+    if (mode == RGWLibFS::StatelessTimerMode::DISARMED) {
+      return;
+    }
+    if (mode == RGWLibFS::StatelessTimerMode::HELD) {
+      interval = RGWLibFS::stateless_held_interval;
+    }
+
     if (f->stateless_timer_id) {
       RGWLibFS::write_timer.adjust_event(f->stateless_timer_id, interval);
       return;
@@ -2399,6 +2512,18 @@ namespace rgw {
 
     f->stateless_timer_id =
       RGWLibFS::write_timer.add_event(interval, StatelessFinalize(*this));
+    if (RGWLibFS::stateless_ledger.load(std::memory_order_relaxed)) {
+      /* Gated on the ledger, not on the mode:  the barrier's own mode
+       * runs as NORMAL until it fires, so gating on the mode recorded
+       * nothing and left quiesce_stateless_timers() waiting out the real
+       * interval instead of pulling the events forward.  The ledger flag
+       * is the "a test is accounting for these" signal, which is exactly
+       * when the set is wanted--nothing erases an id when its event
+       * fires, so recording them in a live gateway would grow without
+       * bound. */
+      RGWLibFS::lock_guard guard(RGWLibFS::stateless_pin_mtx);
+      RGWLibFS::stateless_armed_ids.insert(f->stateless_timer_id);
+    }
   } /* RGWFileHandle::arm_stateless_timer */
 
   /* Write this handle's unix attrs onto the shadow, immediately before

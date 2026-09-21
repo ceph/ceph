@@ -20,6 +20,8 @@
 #include <fstream>
 #include <stack>
 #include <unordered_set>
+#include <unordered_map>
+#include <mutex>
 
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
@@ -54,6 +56,43 @@ namespace {
 
   uint16_t num_rele = 1;
   uint32_t num_scans = 2;
+
+  /* abort at the first refcount violation (full backtrace and core, which
+   * is the diagnosis for a reference leak), or record every one and fail
+   * the test through gtest at the end of the scan */
+  bool fatal_refcnt = true;
+
+  /* how the stateless-finalize timer is driven;  see the comment on
+   * RGWLibFS::StatelessTimerMode.  the check is exact in any of them--the
+   * mode decides which behaviour the run exercises, not whether the
+   * arithmetic works.  the default is the production one, so an ordinary
+   * run covers what it covered before these modes existed. */
+  std::string timer_mode("normal");
+
+  /* Injected leak, for proving the detector can fail:  every Nth dirent
+   * gets a second lookup(RCB) reference which nothing ever returns--the
+   * shape of the historical CHUNK_SETUP_OBJECTS bug.  0 disables it.
+   * A control which cannot produce the failure it screens for is not a
+   * control, and this is a runtime knob precisely so that demonstrating
+   * it needs no edit to the code under test. */
+  uint32_t leak_every = 0;
+
+  /* Injected leak for the drain sweep, which screens a different
+   * population:  handles still in the FHCache at teardown.  The
+   * per-entry leak above never reaches it, because ChunkCache::drain()
+   * release_evict()s every enumerated handle out of the cache first.
+   * This takes references after the scan, so the handle is cached and
+   * above its sentinel when close() drains.  0 disables it. */
+  uint32_t sweep_leak = 0;
+
+  struct RefViolation
+  {
+    std::string name;
+    uint64_t fh_hk;
+    uint32_t observed;
+    uint32_t expected;
+  };
+  std::vector<RefViolation> refcnt_violations;
 
   uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
 
@@ -104,13 +143,95 @@ namespace {
       return (num_entries >= max_entries);
     }
 
+    /* Live lookup(RCB) references, by handle.  A dirent may sit in more
+     * than one chunk at once--a scan re-enumerating an entry whose
+     * previous chunk has not been reclaimed yet takes a second reference
+     * on the same handle--so the number of live references is a property
+     * of the cache, not a constant.  Counting it here is what lets the
+     * check below be an equality. */
+    inline static std::unordered_map<RGWFileHandle*, uint32_t> live_refs;
+
+    static uint32_t live_refs_for(RGWFileHandle* rgw_fh) {
+      auto it = live_refs.find(rgw_fh);
+      return (it == live_refs.end()) ? 0 : it->second;
+    }
+
+    static void drop_live_ref(RGWFileHandle* rgw_fh) {
+      auto it = live_refs.find(rgw_fh);
+      ceph_assert(it != live_refs.end());
+      if (--(it->second) == 0) {
+	live_refs.erase(it);
+      }
+    }
+
     bool add(obj_rec& obj) {
       if (full()) {
 	return false;
       }
+      if (obj.rgw_fh) {
+	++live_refs[obj.rgw_fh];
+      }
       dirents.emplace_back(std::move(obj));
       ++num_entries;
       return true;
+    }
+
+    /* The exact expected count, checked wherever an entry's reference is
+     * about to be returned.  Both call sites matter:  clear() covers
+     * entries a reclaim passed through, and drain() covers the rest--
+     * below the cache's capacity nothing is ever reclaimed, so without
+     * the drain pass an entire run can go unchecked. */
+    static void check_entry(const obj_rec& obj, uint32_t num_entries,
+			    size_t dirents_size) {
+      /* The exact expected count.  No term here is a tolerance:  each
+       * is a reference somebody is known to hold, so a mismatch of one
+       * is a leak and is reported as one.
+       *
+       *   1                     the FHCache sentinel
+       *   live_refs_for()       this cache's live lookup(RCB) refs--more
+       *                         than one when a dirent sits in two
+       *                         chunks at once, which happens whenever a
+       *                         scan re-enumerates an entry whose
+       *                         previous chunk is not reclaimed yet
+       *   stateless_pins_for()  outstanding StatelessFinalize refs
+       *
+       * The last cannot be read off the handle:  close_global() clears
+       * file::stateless_timer_id while the pending event still holds
+       * its reference, so after an explicit close the pin is live with
+       * nothing to read it from.  RGWLibFS keeps the count at the two
+       * points that take and return it instead.  Both reads are taken
+       * under stateless_pin_mtx so a timer firing between them cannot
+       * make the pair inconsistent. */
+      uint32_t refcnt, expected;
+      {
+        std::lock_guard<std::mutex> pin_guard(RGWLibFS::stateless_pin_mtx);
+        refcnt = obj.rgw_fh->get_refcnt();
+        expected = 1 /* FHCache sentinel */
+          + live_refs_for(obj.rgw_fh)
+          + RGWLibFS::stateless_pins_for(obj.rgw_fh);
+      }
+      if (refcnt != expected) {
+        std::cout << "refcnt=" << refcnt << " expected=" << expected
+                  << " name=" << obj.name
+                  << " fh_hk=" << std::hex
+                  << obj.rgw_fh->get_key().fh_hk.object
+                  << std::dec
+                  << (obj.rgw_fh->is_dir() ? " dir" : " file")
+                  << " chunk_entries=" << num_entries
+                  << " dirents=" << dirents_size
+                  << std::endl;
+        refcnt_violations.push_back(
+          RefViolation{obj.name, obj.rgw_fh->get_key().fh_hk.object,
+                       refcnt, expected});
+        /* fail fast by default:  the backtrace and core name whoever
+         * holds the extra reference, and an unwound gtest failure does
+         * not.  returning from clear() mid-loop would also strand the
+         * refs of every entry after this one.  --fatal_refcnt=0 records
+         * them all instead and CHUNKED_READDIR reports the list. */
+        if (fatal_refcnt) {
+          ceph_assert(refcnt == expected);
+        }
+	}
     }
 
     void clear(bool evict=false) {
@@ -123,65 +244,8 @@ namespace {
            * that a latent crash rather than a no-op. */
           continue;
         }
-        // XXX obj refcnt is sentinel+1 before returning 1 ref */
-        auto refcnt = obj.rgw_fh->get_refcnt();
-        /* What the permitted values mean.  Measured 2026-09-11;  the
-         * account below is the one the numbers actually support, and it is
-         * not the one the original note gave.
-         *
-         * 2 is the steady state:  the FHCache sentinel, plus the one ref
-         * this scan's rgw_lookup(RGW_LOOKUP_FLAG_RCB) returned and which
-         * this loop is about to give back.
-         *
-         * 3 is 2 plus one *pin*, and there are two independent ways to get
-         * one.  Either is legitimate;  neither is a leak.
-         *
-         *   (a) A prior scan's ref, still held because the chunk holding it
-         *       has not been reclaimed yet.  This is what the original note
-         *       described, and it is reachable only when the entry count is
-         *       below the chunk cache's capacity (max_chunks * max_entries,
-         *       5000 as configured) -- above that, the uniform fill order
-         *       does guarantee the prior scan's chunk was reclaimed first,
-         *       and refcnt is then exactly 2.  That part of the original
-         *       claim is confirmed.
-         *
-         *   (b) An armed stateless-finalize timer.  This is the one the
-         *       original note missed, and it is the one that fires in
-         *       practice.  open_global() calls arm_stateless_timer(), which
-         *       registers StatelessFinalize(*this) on RGWLibFS::write_timer;
-         *       the event holds a reference and releases it when it runs.
-         *       close_global() deliberately does not cancel it -- see its
-         *       comment -- so any handle this process opened stays pinned
-         *       for rgw_nfs_stateless_finalize_secs, five minutes by
-         *       default, which outlasts the whole test.
-         *
-         * 4 is 2 plus both pins at once, and is why this check is worth
-         * having:  a run that reaches 4 has something else holding a ref as
-         * well.  It caught exactly that -- CHUNK_SETUP_OBJECTS used to leak
-         * the ref its rgw_lookup() took, which displaced every value up by
-         * one and made 4 the ordinary case.
-         *
-         * To see the floor, shorten the pin:  with
-         * --rgw_nfs_stateless_finalize_secs=1 the timers fire during setup
-         * and every entry here reports exactly 2, at any entry count at or
-         * above capacity.
-         *
-         * Note also that clear() is only ever called from reclaim_chunk(),
-         * so with fewer than max_chunks * max_entries entries this check is
-         * never evaluated at all and a pass proves nothing.  --num_objs must
-         * exceed 5000 for this assertion to mean anything. */
-        if (refcnt != 2) {
-          auto ref_str = to_string(refcnt);
-          std::cout << "refcnt=" << ref_str << " (not the steady-state 2)"
-                    << " name=" << obj.name
-                    << " fh_hk=" << std::hex << obj.rgw_fh->get_key().fh_hk.object
-                    << std::dec
-                    << (obj.rgw_fh->is_dir() ? " dir" : " file")
-                    << " chunk_entries=" << num_entries
-                    << " dirents=" << dirents.size()
-                    << std::endl;
-          ceph_assert((refcnt == 2) || (refcnt == 3));
-	}
+        check_entry(obj, num_entries, dirents.size());
+        drop_live_ref(obj.rgw_fh);
         if (unlikely(evict)) {
 	  static_cast<RGWLibFS*>(fs->fs_private)->release_evict(obj.rgw_fh);
 	} else {
@@ -249,6 +313,21 @@ namespace {
     uint32_t drain() {
       uint32_t drain_cnt{0};
       std::unordered_set<RGWFileHandle*> evicted;
+      /* Check before releasing anything:  release_evict() drops the
+       * sentinel, so once the first pass has run the expected count for
+       * a handle's remaining occurrences no longer holds.  One report
+       * per distinct handle. */
+      {
+	std::unordered_set<RGWFileHandle*> seen;
+	for (auto &chunk : active_chunks) {
+	  for (auto &obj : chunk->dirents) {
+	    if (obj.rgw_fh && seen.insert(obj.rgw_fh).second) {
+	      DirentChunk::check_entry(obj, chunk->num_entries,
+				       chunk->dirents.size());
+	    }
+	  }
+	}
+      }
       for (auto &chunk : active_chunks) {
 	for (auto &obj : chunk->dirents) {
 	  if (! obj.rgw_fh) {
@@ -266,6 +345,8 @@ namespace {
 	drain_cnt++;
       }
       active_chunks.clear();
+      /* every lookup(RCB) ref this cache held has now been returned */
+      DirentChunk::live_refs.clear();
       return drain_cnt;
     }
   }; /* Chunkcache */
@@ -302,6 +383,27 @@ TEST(LibRGW, INIT) {
 }
 
 TEST(LibRGW, MOUNT) {
+  /* before anything opens, so no handle is armed under a mode other than
+   * the one asked for */
+  if (timer_mode == "disarmed") {
+    RGWLibFS::stateless_timer_mode = RGWLibFS::StatelessTimerMode::DISARMED;
+  } else if (timer_mode == "held") {
+    RGWLibFS::stateless_timer_mode = RGWLibFS::StatelessTimerMode::HELD;
+  } else if (timer_mode == "normal" || timer_mode == "quiesce") {
+    RGWLibFS::stateless_timer_mode = RGWLibFS::StatelessTimerMode::NORMAL;
+  } else {
+    std::cout << "unknown --timer_mode " << timer_mode << std::endl;
+    ASSERT_TRUE(false);
+  }
+
+  /* Only the modes which leave a finalize reference outstanding need the
+   * library to account for one.  DISARMED arms no timer, so the expected
+   * count is entirely the harness's own bookkeeping and the library is
+   * left alone. */
+  if (timer_mode != "disarmed") {
+    RGWLibFS::stateless_ledger = true;
+  }
+
   int ret = rgw_mount2(rgw_h, userid.c_str(), access_key.c_str(),
                        secret_key.c_str(), "/", &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
@@ -462,6 +564,14 @@ extern "C" {
 		  << std::endl;
       }
 
+      if (leak_every && ((acc.total_entries % leak_every) == 0)) {
+	/* take a second reference and drop it on the floor */
+	struct rgw_file_handle* leaked_fh{nullptr};
+	int lret = rgw_lookup(fs, marker_fh, obj.name.c_str(), &leaked_fh,
+			      nullptr, 0, RGW_LOOKUP_FLAG_RCB);
+	ceph_assert(lret == 0);
+      }
+
       auto chunk = dirent_cache.get_fill_chunk();
       chunk->add(obj);
 
@@ -484,6 +594,34 @@ extern "C" {
 TEST(LibRGW, CHUNKED_READDIR)
 {
   using std::get;
+
+  if (timer_mode == "quiesce") {
+    /* fire every armed finalize and wait for the last reference back, so
+     * the scan runs against a settled count.  this is the mode which
+     * verifies StatelessFinalize::operator() returns exactly the
+     * reference its constructor took--an imbalance there shows up as a
+     * violation here, and is invisible in every other mode. */
+    const auto t0 = ceph::mono_clock::now();
+    const auto advanced = RGWLibFS::quiesce_stateless_timers();
+    const auto elapsed = ceph::mono_clock::now() - t0;
+
+    /* The barrier must have had events to advance, or this mode has
+     * asserted nothing about it. */
+    EXPECT_GT(advanced, 0UL);
+
+    /* And it must have advanced them rather than waited out the
+     * configured interval.  A timer which does not wake on an earlier
+     * deadline still gets here, just rgw_nfs_stateless_finalize_secs
+     * later -- so without a bound this passes while doing nothing, and
+     * the barrier silently degrades into a sleep. */
+    const auto interval = std::chrono::seconds(
+      cct->_conf->rgw_nfs_stateless_finalize_secs);
+    EXPECT_LT(elapsed, interval / 2);
+    std::cout << "quiesce advanced " << advanced << " events in "
+	      << std::chrono::duration_cast<std::chrono::milliseconds>(
+		   elapsed).count()
+	      << " ms (interval " << interval.count() << "s)" << std::endl;
+  }
 
   uint32_t grand_total_entries{0};
   uint32_t grand_total_readdir_cnt{0};
@@ -516,6 +654,33 @@ TEST(LibRGW, CHUNKED_READDIR)
 
   auto drain_count = dirent_cache.drain();
 
+  /* Report on the test's own thread.  The in-callback ceph_assert is the
+   * diagnosis when it fires;  this is what makes a non-fatal run fail
+   * visibly, with every violation listed rather than only the first. */
+  if (! refcnt_violations.empty()) {
+    std::cout << "refcount violations: " << refcnt_violations.size()
+              << std::endl;
+    for (const auto& v : refcnt_violations) {
+      std::cout << "  name=" << v.name
+                << " fh_hk=" << std::hex << v.fh_hk << std::dec
+                << " observed=" << v.observed
+                << " expected=" << v.expected
+                << std::endl;
+    }
+  }
+  if (leak_every) {
+    /* Control run.  Catching the injected leak is the success case, so
+     * the polarity inverts:  finding nothing means the detector is
+     * broken, and that is what fails here.  Each violation must also be
+     * an excess, never a shortfall. */
+    EXPECT_FALSE(refcnt_violations.empty());
+    for (const auto& v : refcnt_violations) {
+      EXPECT_GT(v.observed, v.expected);
+    }
+  } else {
+    ASSERT_TRUE(refcnt_violations.empty());
+  }
+
   // print totals
   std::cout << " total entries returned: " << grand_total_entries
             << " total readdir invocations: " << grand_total_readdir_cnt
@@ -523,12 +688,78 @@ TEST(LibRGW, CHUNKED_READDIR)
             << " drained chunks: " << drain_count << std::endl;
 }
 
+TEST(LibRGW, SWEEP_LEAK_INJECT) {
+  if (! sweep_leak) {
+    return;
+  }
+  /* look the object back up and keep the reference.  the scan already
+   * evicted it, so this puts it in the cache at sentinel + 1 and leaves
+   * it there for close() to find. */
+  for (uint32_t ix = 0; ix < sweep_leak; ++ix) {
+    struct rgw_file_handle* leaked_fh{nullptr};
+    int ret = rgw_lookup(fs, marker_fh, "f_0", &leaked_fh,
+			 nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  }
+}
+
 TEST(LibRGW, UMOUNT) {
   if (! fs)
     return;
 
+  /* Give back the two handles this suite has held since setup.  The
+   * sweep below counts anything above the sentinel as leaked, and it is
+   * right to:  these were the first thing it found. */
+  if (marker_fh) {
+    (void) rgw_fh_rele(fs, marker_fh, 0);
+    marker_fh = nullptr;
+  }
+  if (bucket_fh) {
+    (void) rgw_fh_rele(fs, bucket_fh, 0);
+    bucket_fh = nullptr;
+  }
+
+  /* Give back the two handles this suite has held since setup.  The
+   * sweep counts anything above the sentinel as leaked, and it is right
+   * to:  these were the first thing it found. */
+  if (marker_fh) {
+    (void) rgw_fh_rele(fs, marker_fh, 0);
+    marker_fh = nullptr;
+  }
+  if (bucket_fh) {
+    (void) rgw_fh_rele(fs, bucket_fh, 0);
+    bucket_fh = nullptr;
+  }
+
+  /* The per-entry check only sees handles a reclaim passed through;  one
+   * the cache still holds at teardown is invisible to it.  The drain
+   * sweep sees every handle, so arm it before the umount which drains. */
+  RGWLibFS::sweep_on_drain = true;
+  RGWLibFS::sweep_leaks = 0;
+
   int ret = rgw_umount(fs, RGW_UMOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
+
+  /* every handle still cached should have been at its sentinel count
+   * plus any finalize event still pending;  above that was leaked by a
+   * path which never gave its reference back */
+  if (sweep_leak) {
+    /* control:  this injection leaves the handle cached above its
+     * sentinel, so the sweep must see it.  finding it is success. */
+    EXPECT_GT(RGWLibFS::sweep_leaks.load(), 0UL);
+  } else if (! leak_every) {
+    EXPECT_EQ(RGWLibFS::sweep_leaks.load(), 0UL);
+  } else {
+    /* --leak_every strands references on handles which may or may not
+     * still be in the cache when close() drains it:  one whose chunk was
+     * reclaimed was released with rgw_fh_rele() and stays cached, one
+     * still in a live chunk is release_evict()ed out of it first.  Which
+     * of those happens depends on the object count, so assert nothing
+     * on the sweep here -- the per-entry check is this injection's
+     * detector, and it has already run. */
+    std::cout << "drain sweep saw " << RGWLibFS::sweep_leaks.load()
+              << " leaked handles" << std::endl;
+  }
 }
 
 TEST(LibRGW, SHUTDOWN) {
@@ -582,6 +813,21 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--num_rele",
 				     (char*) nullptr)) {
       num_rele = std::stoi(val);
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--timer_mode",
+				     (char*) nullptr)) {
+      timer_mode = val;
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--fatal_refcnt",
+				     (char*) nullptr)) {
+      fatal_refcnt = (std::stoi(val) != 0);
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--sweep_leak",
+				     (char*) nullptr)) {
+      sweep_leak = std::stoi(val);
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--leak_every",
+				     (char*) nullptr)) {
+      leak_every = std::stoi(val);
+      /* a control run collects;  fail-fast would abort it at the first
+       * find, which is the thing it is trying to demonstrate */
+      fatal_refcnt = false;
     } else if (ceph_argparse_flag(args, arg_iter, "--verbose",
 					    (char*) nullptr)) {
       verbose = true;

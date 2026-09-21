@@ -80,4 +80,16 @@ ceph_test_librgw_file_chunksim ${K} --create --num_objs=10000 --verbose
 echo "phase 7.2"
 ceph_test_librgw_file_chunksim ${K} --num_objs=10000 --verbose
 
+# chunk cache reference invariants.  7.3 drives the stateless-finalize
+# barrier, which is the only mode that checks the finalize event returns
+# exactly the reference it took.  7.4 and 7.5 inject a leak of each kind
+# the run can detect -- they pass when it is found, so they fail if the
+# detector ever goes blind.
+echo "phase 7.3"
+ceph_test_librgw_file_chunksim ${K} --create --num_objs=1000 --timer_mode=quiesce
+echo "phase 7.4"
+ceph_test_librgw_file_chunksim ${K} --num_objs=10000 --leak_every=2000
+echo "phase 7.5"
+ceph_test_librgw_file_chunksim ${K} --num_objs=10000 --sweep_leak=1
+
 exit 0
