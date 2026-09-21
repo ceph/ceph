@@ -1959,6 +1959,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  verify_nqns: Optional[bool] = True,
                  verify_keys: Optional[bool] = True,
                  verify_listener_ip: Optional[bool] = True,
+                 listener_network_masks: Optional[List[str]] = None,
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
                  ping_spdk_under_lock: Optional[bool] = False,
@@ -2107,6 +2108,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_keys = verify_keys
         #: ``verify_listener_ip`` enables verification of listener IP address
         self.verify_listener_ip = verify_listener_ip
+        #: ``listener_network_masks`` subnets for subsystems using use_conf_listener_network_masks
+        self.listener_network_masks = listener_network_masks
         #: ``abort_on_errors`` abort gateway in case of errors
         self.abort_on_errors = abort_on_errors
         #: ``abort_on_update_error`` abort gateway in case of an error during update
@@ -2463,6 +2466,12 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.verify_nqns, "Verify NQNs")
         verify_boolean(self.verify_keys, "Verify Keys")
         verify_boolean(self.verify_listener_ip, "Verify listener IP address")
+        for subnet in (self.listener_network_masks or []):
+            try:
+                ip_network(subnet, strict=False)
+            except ValueError:
+                raise SpecValidationError(
+                    f'Invalid listener_network_masks: "{subnet}"')
         verify_boolean(self.log_files_enabled, "Log files enabled")
         verify_boolean(self.log_files_rotation_enabled, "Log files rotation enabled")
         verify_boolean(self.verbose_log_messages, "Verbose log messages")

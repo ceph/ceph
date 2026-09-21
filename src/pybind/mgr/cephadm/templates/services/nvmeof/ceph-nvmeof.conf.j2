@@ -26,6 +26,7 @@ prometheus_connection_list_cache_expiration = {{ spec.prometheus_connection_list
 verify_nqns = {{ spec.verify_nqns }}
 verify_keys = {{ spec.verify_keys }}
 verify_listener_ip = {{ spec.verify_listener_ip }}
+listener_network_masks = {{ (spec.listener_network_masks or []) | join(',') }}
 # This is a development flag, do not change it
 abort_on_errors = {{ spec.abort_on_errors }}
 # This is a development flag, do not change it
