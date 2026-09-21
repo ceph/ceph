@@ -309,7 +309,7 @@ int do_purge_snaps(librbd::Image& image, bool no_progress)
         return r;
       } else if (is_protected == true) {
         protect.push_back(it->name.c_str());
-        snaps.erase(it);
+        it = snaps.erase(it);
       } else {
         ++it;
       }
