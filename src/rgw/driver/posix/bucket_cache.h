@@ -293,6 +293,16 @@ static constexpr int FILL_CACHE_FLAG_FIXUP_CURRENT = 0x0001;
 using list_bucket_each_t =
   const fu2::unique_function<bool(const rgw_bucket_dir_entry&) const>;
 
+/* Predicate for remove_entries() and rename_entries():  true selects. */
+using remove_entries_pred_t =
+  const fu2::unique_function<bool(const rgw_bucket_dir_entry&) const>;
+
+/* Applied by rename_entries() to each entry after its name is changed, for a
+ * move that is not a pure rekey -- dropping the instance and FLAG_VER when
+ * the destination bucket does not hold versions, say. */
+using rekey_entry_cb_t =
+  const fu2::unique_function<void(rgw_bucket_dir_entry&) const>;
+
 template <typename D, typename B, typename YP>
 struct BucketCache : public Notifiable
 {
@@ -977,6 +987,257 @@ public:
 
     return 0;
   } /* add_entry */
+
+  /* (de)serialisation of a cache entry, in one place.
+   *
+   * fill() and add_entry() still carry their own copies of this field list;
+   * they predate these helpers and are left alone rather than churned.  New
+   * code should use these so the list does not acquire a fourth copy. */
+  static zpp::bits::errc ser_entry(const rgw_bucket_dir_entry& bde,
+				   std::string& out_data) {
+    zpp::bits::out out(out_data);
+    struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
+    return out(bde.key.name, bde.key.instance,
+	       bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+	       bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+	       bde.meta.owner_display_name, bde.meta.accounted_size,
+	       bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+	       bde.flags);
+  }
+
+  static zpp::bits::errc deser_entry(std::string_view sv,
+				     rgw_bucket_dir_entry& bde) {
+    std::string ser_v{sv};
+    zpp::bits::in in_v(ser_v);
+    struct timespec ts{};
+    auto errc = in_v(bde.key.name, bde.key.instance,
+		     bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+		     bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+		     bde.meta.owner_display_name, bde.meta.accounted_size,
+		     bde.meta.storage_class, bde.meta.appendable, bde.meta.etag,
+		     bde.flags);
+    if (errc.code == std::errc{0}) {
+      bde.meta.mtime = ceph::real_clock::from_timespec(ts);
+    }
+    return errc;
+  }
+
+  /* Walk the entries for one object name, deleting those pred selects.
+   *
+   * Keys sort as name '\0' instance (concat_key), so a name and all of its
+   * versions are contiguous:  a bounded walk, not a bucket scan.
+   *
+   * `limit` caps how many are removed in this pass, 0 meaning no cap.  A
+   * caller which must hold the removed entries in memory needs the cap:  the
+   * version count of a single key is client-controlled and unbounded, so
+   * buffering all of them is not safe.  `taken` may be nullptr when the
+   * caller only wants them gone.
+   *
+   * Deletion happens at the cursor, which is safe mid-walk.  Insertion is
+   * deliberately *not* done here -- putting a key mid-walk risks feeding the
+   * walk its own output, or invalidating the cursor.  Callers that insert do
+   * so after this returns.
+   *
+   * Returns the number removed.
+   */
+  template <typename TxnT>
+  int take_entries(const DoutPrefixProvider* dpp, TxnT& txn,
+		   LMDBSafe::MDBDbi& dbi, const std::string& name,
+		   remove_entries_pred_t& pred, size_t limit,
+		   std::vector<rgw_bucket_dir_entry>* taken) {
+    using namespace LMDBSafe;
+
+    auto cursor = txn->getCursor(dbi);
+    MDBOutVal key, data;
+    int removed = 0;
+
+    std::string start{name};
+    start += '\0';
+    MDBInVal k(start);
+
+    int rc = cursor.lower_bound(k, key, data);
+    while (rc == 0) {
+      if (limit && (size_t) removed >= limit) {
+	break;
+      }
+      std::string_view kv = key.get<std::string_view>();
+      /* out of this name's range:  what bounds the walk */
+      if (kv.size() < name.size() + 1 ||
+	  kv.compare(0, name.size(), name) != 0 ||
+	  kv[name.size()] != '\0') {
+	break;
+      }
+
+      rgw_bucket_dir_entry bde{};
+      auto errc = deser_entry(data.get<std::string_view>(), bde);
+      if (errc.code != std::errc{0}) {
+	/* unreadable:  drop it rather than leave behind something no caller
+	 * can reason about */
+	ldpp_dout(dpp, 0) << "BucketCache: take_entries deserialization error"
+	  << " name=" << name << " errc=" << static_cast<int>(errc.code)
+	  << dendl;
+	cursor.del();
+	++removed;
+      } else if (pred(bde)) {
+	cursor.del();
+	++removed;
+	if (taken) {
+	  taken->push_back(std::move(bde));
+	}
+      }
+      rc = cursor.get(key, data, MDB_NEXT);
+    }
+    return removed;
+  } /* take_entries */
+
+  /* Remove the entries for one object name which pred selects -- its current
+   * entry, its versions, or any subset -- in a single transaction and one
+   * bounded walk, rather than a point delete and a transaction per version.
+   *
+   * Returns the number removed, or a negative errno. */
+  int remove_entries(const DoutPrefixProvider* dpp, std::string bname,
+		     const std::string& name, remove_entries_pred_t&& pred) {
+    using namespace LMDBSafe;
+
+    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B, YP>::FLAG_LOCK);
+    auto [b /* BucketCacheEntry */, flags] = gbr;
+    if (! b) {
+      return 0;
+    }
+    auto unref_guard = make_scope_guard([this, b]{ lru.unref(b, cohort::lru::FLAG_NONE); });
+    unique_lock ulk{b->mtx, std::adopt_lock};
+    ulk.unlock();
+
+    int removed = 0;
+    try {
+      auto txn = b->env->getRWTransaction();
+      /* nullptr:  removal needs no copy of what it removed, so there is
+       * nothing here to grow with the version count */
+      removed = take_entries(dpp, txn, b->dbi, name, pred,
+			     0 /* no limit */, nullptr);
+      txn->commit();
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 0) << "BucketCache: remove_entries failed for "
+	<< bname << "/" << name << ": " << e.what() << dendl;
+      return -EIO;
+    }
+
+    ldpp_dout(dpp, 10) << "BucketCache: remove_entries bucket=" << bname
+      << " name=" << name << " removed=" << removed << dendl;
+    return removed;
+  } /* remove_entries */
+
+  /* Move the entries for one object name to another name, and optionally
+   * another bucket.
+   *
+   * A rename changes an object's key and nothing else, so entries are
+   * *rekeyed*:  taken as they are and reinserted under the new name.  Nothing
+   * is re-read from the store and nothing re-described, so etag, size, mtime,
+   * owner, flags and version ids survive because they are never recomputed.
+   *
+   * Done in chunks.  A key's version count is client-controlled and
+   * unbounded, so the entries cannot all be held in memory;  and they cannot
+   * be reinserted during the walk that removes them.  Each pass therefore
+   * takes at most CHUNK, inserts them, and resumes -- correct without a
+   * carried cursor, because a taken entry is deleted and so the next
+   * lower_bound() lands on the first one left.
+   *
+   * A multi-chunk move is consequently not atomic in the cache.  That is
+   * acceptable here and asymmetric in the safe direction:  each chunk deletes
+   * before it inserts, so an interruption can leave an entry *missing*, which
+   * the next fill restores, but never duplicated, which it would not.
+   *
+   * Returns the number moved, or a negative errno. */
+  int rename_entries(const DoutPrefixProvider* dpp,
+		     std::string src_bname, const std::string& src_name,
+		     std::string dst_bname, const std::string& dst_name,
+		     remove_entries_pred_t&& pred, rekey_entry_cb_t&& xform) {
+    using namespace LMDBSafe;
+
+    constexpr size_t CHUNK = 1024;
+    const bool same_bucket = (src_bname == dst_bname);
+
+    if (same_bucket && src_name == dst_name) {
+      return 0; /* nothing to do, and walking into our own output */
+    }
+
+    GetBucketResult sgbr = get_bucket(dpp, src_bname, BucketCache<D, B, YP>::FLAG_LOCK);
+    auto [sb /* BucketCacheEntry */, sflags] = sgbr;
+    if (! sb) {
+      return 0;
+    }
+    auto sunref = make_scope_guard([this, sb]{ lru.unref(sb, cohort::lru::FLAG_NONE); });
+    {
+      unique_lock ulk{sb->mtx, std::adopt_lock};
+      ulk.unlock();
+    }
+
+    /* the name changes, then the caller's transform has its say */
+    const auto put_rekeyed =
+      [&dst_name, &xform](auto& txn, LMDBSafe::MDBDbi& dbi,
+			  std::vector<rgw_bucket_dir_entry>& chunk) {
+	for (auto& bde : chunk) {
+	  bde.key.name = dst_name;
+	  xform(bde);
+	  std::string ser_data;
+	  if (ser_entry(bde, ser_data).code != std::errc{0}) {
+	    continue;
+	  }
+	  txn->put(dbi, concat_key(bde.key), ser_data);
+	}
+      };
+
+    int moved = 0;
+    for (;;) {
+      std::vector<rgw_bucket_dir_entry> chunk;
+      try {
+	auto txn = sb->env->getRWTransaction();
+	(void) take_entries(dpp, txn, sb->dbi, src_name, pred, CHUNK, &chunk);
+	if (same_bucket) {
+	  put_rekeyed(txn, sb->dbi, chunk);
+	}
+	txn->commit();
+      } catch (const std::exception& e) {
+	ldpp_dout(dpp, 0) << "BucketCache: rename_entries failed for "
+	  << src_bname << "/" << src_name << ": " << e.what() << dendl;
+	return -EIO;
+      }
+
+      if (! same_bucket && ! chunk.empty()) {
+	GetBucketResult dgbr = get_bucket(dpp, dst_bname,
+					  BucketCache<D, B, YP>::FLAG_LOCK);
+	auto [db /* BucketCacheEntry */, dflags] = dgbr;
+	if (db) {
+	  auto dunref = make_scope_guard([this, db]{ lru.unref(db, cohort::lru::FLAG_NONE); });
+	  {
+	    unique_lock ulk{db->mtx, std::adopt_lock};
+	    ulk.unlock();
+	  }
+	  try {
+	    auto txn = db->env->getRWTransaction();
+	    put_rekeyed(txn, db->dbi, chunk);
+	    txn->commit();
+	  } catch (const std::exception& e) {
+	    ldpp_dout(dpp, 0) << "BucketCache: rename_entries destination "
+	      << dst_bname << "/" << dst_name << " failed: " << e.what()
+	      << ";  those entries are gone from the source and the next fill "
+	      << "restores them" << dendl;
+	    return -EIO;
+	  }
+	}
+      }
+
+      moved += (int) chunk.size();
+      if (chunk.size() < CHUNK) {
+	break;
+      }
+    }
+
+    ldpp_dout(dpp, 10) << "BucketCache: rename_entries "
+      << src_bname << "/" << src_name << " -> " << dst_bname << "/" << dst_name
+      << " moved=" << moved << dendl;
+    return moved;
+  } /* rename_entries */
 
   int remove_entry(const DoutPrefixProvider* dpp, std::string bname, cls_rgw_obj_key key) {
     using namespace LMDBSafe;

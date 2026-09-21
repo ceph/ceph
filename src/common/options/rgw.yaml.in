@@ -4697,6 +4697,21 @@ options:
   default: /var/lib/ceph/radosgw
   services:
   - rgw
+- name: rgw_nsfs_enable_rename
+  type: bool
+  level: advanced
+  desc: Move objects by renaming them, rather than copying and deleting.
+  long_desc: When enabled, rgw_rename() on a filesystem-backed namespace moves
+    the object's directory entry and its version history instead of copying the
+    data, so the cost does not scale with object size and the object keeps its
+    inode, etag and version ids. Only strategies which can do this cheaply
+    honour it; GPFS is excluded, and every other backend falls back to
+    copy-and-delete whatever this is set to. Provisional -- the interface is
+    expected to be replaced by a prefix-capable operation.
+  default: true
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_nsfs_cache_max_buckets
   type: int
   level: advanced

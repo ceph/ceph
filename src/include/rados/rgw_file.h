@@ -204,6 +204,12 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   rename object
 */
 #define RGW_RENAME_FLAG_NONE      0x0000
+/* Move only the current version, discarding the object's history.  Needed
+ * to move a versioned object into a bucket which cannot hold versions;
+ * without it such a rename is refused rather than silently losing history.
+ * Intended to be bound as export policy, not requested per operation --
+ * rename(2) has no way to ask for it, so no filesystem client can. */
+#define RGW_RENAME_FLAG_SLICE_VERSIONS 0x0001
 
 int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *olddir, const char* old_name,

@@ -1353,6 +1353,34 @@ public:
                DataProcessorFactory* dp_factory,
                const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
+    /** Move this object to another name, and optionally another bucket,
+     * without copying its data.
+     *
+     * PROVISIONAL.  This is the single-object case, which is the degenerate
+     * form of what the general operation is expected to be:  a
+     * prefix-capable rebinding of names onto objects, which is the shape the
+     * external metadata work is heading for.  Do not build on this
+     * signature -- see src/rgw/driver/nsfs/RENAME_DESIGN.md.
+     *
+     * The contract is atomic from the caller's view;  a driver which cannot
+     * achieve that natively is responsible for making it so, not for
+     * advertising that it cannot.  Backends with no cheap way to move a name
+     * return -ENOTSUP and the caller falls back to copy-and-delete.
+     *
+     * History moves with the object.  A destination bucket which cannot hold
+     * the source's history -- unversioned, when the source has non-current
+     * versions -- is refused unless FLAG_SLICE_VERSIONS is given, in which
+     * case the current version moves and the history is dropped.
+     */
+    static constexpr uint32_t FLAG_RENAME_NONE = 0x0000;
+    static constexpr uint32_t FLAG_SLICE_VERSIONS = 0x0001;
+
+    virtual int rename(const DoutPrefixProvider* dpp, optional_yield y,
+		       Bucket* dest_bucket, const rgw_obj_key& dest_key,
+		       uint32_t flags) {
+      return -ENOTSUP;
+    }
+
     /** return logging subsystem */
     virtual unsigned get_subsys() { return ceph_subsys_rgw; };
     /** Get the ACL for this object */

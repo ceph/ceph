@@ -1373,7 +1373,8 @@ namespace rgw {
 	     size_t* bytes_read, void* buffer, uint32_t flags);
 
     int rename(RGWFileHandle* old_fh, RGWFileHandle* new_fh,
-	       const char *old_name, const char *new_name);
+	       const char *old_name, const char *new_name,
+	       uint32_t flags);
 
     MkObjResult create(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);

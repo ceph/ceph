@@ -542,7 +542,8 @@ namespace rgw {
   } /* RGWLibFS::unlink */
 
   int RGWLibFS::rename(RGWFileHandle* src_fh, RGWFileHandle* dst_fh,
-		       const char *_src_name, const char *_dst_name)
+		       const char *_src_name, const char *_dst_name,
+		       uint32_t flags)
 
   {
     /* XXX initial implementation: try-copy, and delete if copy
@@ -588,14 +589,100 @@ namespace rgw {
 
     t = real_clock::now();
 
+    /* Try a real move first.
+     *
+     * A driver whose namespace is a filesystem can move the name and its
+     * version history without copying data, so the cost does not scale with
+     * object size and the object keeps its inode, etag and version ids.
+     * -ENOTSUP means the driver cannot, and the copy-and-delete below runs
+     * unchanged -- which is the path rados takes.
+     *
+     * This calls the SAL directly rather than through an op, so it does not
+     * run the op layer's verify_permissions() as RGWCopyObjRequest does.
+     * For librgw the mount is authenticated as one user and the export is
+     * the authorization boundary;  noted because it is a real difference
+     * from the fallback path rather than an oversight. */
+    {
+      auto* driver = g_rgwlib->get_driver();
+      const DoutPrefix dp(cct, dout_subsys, "rgw rename: ");
+      std::string src_obj_name =
+	src_fh->format_child_name(src_name, false /* is_dir */);
+      std::string dst_obj_name =
+	dst_fh->format_child_name(dst_name, false /* is_dir */);
+
+      std::unique_ptr<rgw::sal::Bucket> sal_src, sal_dst;
+      int sr = driver->load_bucket(
+	&dp, rgw_bucket(user->get_tenant(), src_fh->bucket_name()),
+	&sal_src, null_yield);
+      if (sr == 0) {
+	sr = driver->load_bucket(
+	  &dp, rgw_bucket(user->get_tenant(), dst_fh->bucket_name()),
+	  &sal_dst, null_yield);
+      }
+      if (sr == 0) {
+	auto sal_obj = sal_src->get_object(rgw_obj_key(src_obj_name));
+	uint32_t sal_flags = rgw::sal::Object::FLAG_RENAME_NONE;
+	if (flags & RGW_RENAME_FLAG_SLICE_VERSIONS) {
+	  sal_flags |= rgw::sal::Object::FLAG_SLICE_VERSIONS;
+	}
+	sr = sal_obj->rename(&dp, null_yield, sal_dst.get(),
+			     rgw_obj_key(dst_obj_name), sal_flags);
+      }
+
+      if (sr == 0) {
+	/* Re-key the handle rather than evict it.  release_evict() would
+	 * surrender the sentinel reference and force a retire cycle;  the
+	 * handle is still live and correct, only its name is wrong, so move
+	 * it.  name and fhk are marked const-by-convention in the class
+	 * because they are the cache key -- this is the exception, and the
+	 * one place it is sanctioned. */
+	fh_key old_fhk = rgw_fh->fhk;
+	fh_key new_fhk = dst_fh->make_fhk(dst_name);
+	fh_cache.remove(old_fhk.fh_hk.object, rgw_fh,
+			RGWFileHandle::FHCache::FLAG_LOCK);
+	rgw_fh->fhk = new_fhk;
+	rgw_fh->name = dst_name;
+	rgw_fh->parent = dst_fh;
+	rgw_fh->bucket = dst_fh->is_bucket() ? dst_fh : dst_fh->bucket;
+	fh_cache.insert(new_fhk.fh_hk.object, rgw_fh,
+			RGWFileHandle::FHCache::FLAG_LOCK);
+
+	/* The client's filehandle is a hash of the old path and now names
+	 * nothing -- re-keying repairs our bookkeeping, not the client's.
+	 * Tell the consumer to drop it. */
+	rgw_fh->invalidate();
+
+	/* both directories changed;  a Linux client watches the change
+	 * attribute to decide when to re-resolve */
+	dst_fh->set_times(t);
+	src_fh->set_times(t);
+
+	ldout(get_context(), 12) << __func__
+	  << " moved " << src_fh->full_object_name() << "/" << src_name
+	  << " -> " << dst_fh->full_object_name() << "/" << dst_name
+	  << dendl;
+	rc = 0;
+	goto unlock;
+      }
+      if (sr != -ENOTSUP) {
+	rc = sr;
+	goto unlock;
+      }
+      /* driver cannot move a name;  fall through */
+    }
+
     for (int ix : {0, 1}) {
       switch (ix) {
       case 0:
       {
 	RGWCopyObjRequest req(cct, user->clone(), src_fh, dst_fh, src_name, dst_name);
-	int rc = g_rgwlib->get_fe()->execute_req(&req);
-	if ((rc != 0) ||
-	    ((rc = req.get_ret()) != 0)) {
+	/* not `rc':  a local of that name here shadowed the function's, so a
+	 * failed copy returned rename()'s initial -EINVAL and the real errno
+	 * was visible only at debug_rgw=1 */
+	int crc = g_rgwlib->get_fe()->execute_req(&req);
+	if ((crc != 0) ||
+	    ((crc = req.get_ret()) != 0)) {
+	  rc = crc;
 	  ldout(get_context(), 1)
 	    << __func__
 	    << " rename step 0 failed src="
@@ -612,7 +699,7 @@ namespace rgw {
 	  << src_fh->full_object_name() << " " << src_name
 	  << " dst=" << dst_fh->full_object_name()
 	  << " " << dst_name
-	  << " rc " << rc
+	  << " rc " << crc
 	  << dendl;
 	/* update dst change id */
 	dst_fh->set_times(t);
@@ -3293,7 +3380,7 @@ int rgw_rename(struct rgw_fs *rgw_fs,
   RGWFileHandle* src_fh = get_rgwfh(src);
   RGWFileHandle* dst_fh = get_rgwfh(dst);
 
-  return fs->rename(src_fh, dst_fh, src_name, dst_name);
+  return fs->rename(src_fh, dst_fh, src_name, dst_name, flags);
 }
 
 /*

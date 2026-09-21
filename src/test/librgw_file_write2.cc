@@ -27,6 +27,7 @@
 #include <tuple>
 #include <iostream>
 #include <vector>
+#include <set>
 #include <cstring>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
@@ -2963,6 +2964,283 @@ TEST(OPEN2, SHADOW_FORK_IS_REFLINKED)
   ASSERT_EQ(o2h->unlink(), 0);
 }
 
+/* ---- rename ------------------------------------------------------------
+ *
+ * rgw_rename() follows the NFS operation.  ceph_test_librgw_file_rename
+ * covers the v1 path but asserts only that the destination resolves, so a
+ * rename which copied and forgot to delete would pass it.  These go through
+ * open2 and assert what actually has to hold:  the source is gone, content
+ * and etag survive, and -- the one that separates a real rename from
+ * copy-then-unlink -- the inode does not change.
+ *
+ * See src/rgw/driver/nsfs/RENAME_DESIGN.md.
+ */
+
+/* per-process, so a re-run does not collide;  see the note on
+ * ver_bucket_name below for why that matters */
+static const std::string rn_bucket2_name{
+  "sorrydave-rn-" + std::to_string(::getpid())};
+static struct rgw_file_handle* rn_bucket2_fh{nullptr};
+
+static sf::path rn_path(const std::string& bkt, const std::string& obj)
+{
+  return nsfs_base() / bkt / obj;
+}
+
+static std::string rn_xattr(const sf::path& p, const char* name)
+{
+  char buf[512];
+  ssize_t len = ::getxattr(p.c_str(), name, buf, sizeof(buf));
+  if (len <= 0) {
+    return {};
+  }
+  return std::string(buf, len);
+}
+
+static ino_t rn_ino(const sf::path& p)
+{
+  struct stat st;
+  if (::stat(p.c_str(), &st) != 0) {
+    return 0;
+  }
+  return st.st_ino;
+}
+
+/* create through the open2 path, with known content */
+static int rn_make(struct rgw_file_handle* bkt, const std::string& name,
+		   const std::string& body)
+{
+  Open2Helper o2h(fs, bkt);
+  if (get<0>(o2h.lookup(name)) != 0) {
+    return -ENOENT;
+  }
+  auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  if (get<0>(ofw) != 0) {
+    return get<0>(ofw);
+  }
+  if (get<0>(o2h.write(get<1>(ofw), body, 0, body.length())) != 0) {
+    return -EIO;
+  }
+  return o2h.close(get<1>(ofw));
+}
+
+static std::string rn_read(struct rgw_file_handle* bkt,
+			   const std::string& name, size_t len)
+{
+  Open2Helper o2h(fs, bkt);
+  if (get<0>(o2h.lookup(name)) != 0) {
+    return {};
+  }
+  auto ofr = o2h.open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  if (get<0>(ofr) != 0) {
+    return {};
+  }
+  auto rr = o2h.read(get<1>(ofr), 0, len);
+  o2h.close(get<1>(ofr));
+  return get<0>(rr) == 0 ? get<1>(rr) : std::string{};
+}
+
+TEST(OPEN2, RENAME_SETUP)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+  struct stat st;
+  st.st_uid = 0; st.st_gid = 0; st.st_mode = 755;
+  int ret = rgw_mkdir(fs, fs->root_fh, rn_bucket2_name.c_str(), &st,
+		      RGW_SETATTR_UID|RGW_SETATTR_GID|RGW_SETATTR_MODE,
+		      &rn_bucket2_fh, RGW_MKDIR_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_NE(rn_bucket2_fh, nullptr);
+}
+
+TEST(OPEN2, RENAME_SOURCE_IS_GONE)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+  const std::string src{"rn-src1"}, dst{"rn-dst1"};
+  ASSERT_EQ(rn_make(bucket_fh, src, "payload one"), 0);
+  ASSERT_TRUE(sf::exists(rn_path(bucket_name, src)));
+
+  ASSERT_EQ(rgw_rename(fs, bucket_fh, src.c_str(),
+		       bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
+
+  /* the destination resolves ... */
+  struct rgw_file_handle* dfh = nullptr;
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, dst.c_str(), &dfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  ASSERT_EQ(rgw_fh_rele(fs, dfh, 0), 0);
+
+  /* ... and the source does not.  Asserted on disk as well as through
+   * lookup:  a handle can be cached, a directory entry cannot. */
+  struct rgw_file_handle* sfh = nullptr;
+  ASSERT_NE(rgw_lookup(fs, bucket_fh, src.c_str(), &sfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0)
+      << "source still resolves after rename";
+  ASSERT_FALSE(sf::exists(rn_path(bucket_name, src)))
+      << "source still on disk after rename";
+}
+
+TEST(OPEN2, RENAME_PRESERVES_CONTENT)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+  const std::string src{"rn-src2"}, dst{"rn-dst2"};
+  const std::string body{"the quick brown fox jumps over the lazy dog"};
+  ASSERT_EQ(rn_make(bucket_fh, src, body), 0);
+
+  ASSERT_EQ(rgw_rename(fs, bucket_fh, src.c_str(),
+		       bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
+
+  ASSERT_EQ(rn_read(bucket_fh, dst, body.length() + 16), body)
+      << "content did not survive the rename";
+}
+
+TEST(OPEN2, RENAME_PRESERVES_ETAG)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+  const std::string src{"rn-src3"}, dst{"rn-dst3"};
+  ASSERT_EQ(rn_make(bucket_fh, src, "etag me"), 0);
+
+  const std::string before = rn_xattr(rn_path(bucket_name, src),
+				      "user.nsfs.rgw.etag");
+  ASSERT_FALSE(before.empty()) << "no etag on the source to compare";
+
+  ASSERT_EQ(rgw_rename(fs, bucket_fh, src.c_str(),
+		       bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
+
+  const std::string after = rn_xattr(rn_path(bucket_name, dst),
+				     "user.nsfs.rgw.etag");
+  ASSERT_EQ(after, before) << "etag changed across the rename";
+}
+
+/* The control that gives the rest of this group meaning.  A rename moves a
+ * directory entry, so the inode is the same file afterwards;  a copy
+ * followed by an unlink produces a new inode with the same bytes and would
+ * satisfy every other assertion here.
+ *
+ * This is the acceptance test for rename being a renameat rather than a
+ * copy.  It is not a general property:  rados cannot do it at all, and a
+ * future metadata-backed rados would satisfy it by rebinding a name rather
+ * than by preserving an inode.  The suite only runs against
+ * filesystem-backed drivers, which is the scope;  when there is a driver
+ * capability for move semantics this should gate on that instead. */
+TEST(OPEN2, RENAME_PRESERVES_INODE)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+  const std::string src{"rn-src4"}, dst{"rn-dst4"};
+  ASSERT_EQ(rn_make(bucket_fh, src, "same inode please"), 0);
+
+  const ino_t before = rn_ino(rn_path(bucket_name, src));
+  ASSERT_NE(before, (ino_t) 0) << "could not stat the source";
+
+  ASSERT_EQ(rgw_rename(fs, bucket_fh, src.c_str(),
+		       bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
+
+  const ino_t after = rn_ino(rn_path(bucket_name, dst));
+  ASSERT_NE(after, (ino_t) 0) << "could not stat the destination";
+  ASSERT_EQ(after, before)
+      << "inode changed:  the object was copied and the original unlinked, "
+	 "not renamed.  Every other assertion in this group passes either "
+	 "way, which is why this one is here";
+}
+
+TEST(OPEN2, RENAME_CROSS_BUCKET)
+{
+  if (! have_fs_layout() || ! rn_bucket2_fh) {
+    GTEST_SKIP() << "second bucket unavailable";
+  }
+  const std::string src{"rn-src5"}, dst{"rn-dst5"};
+  const std::string body{"across a bucket boundary"};
+  ASSERT_EQ(rn_make(bucket_fh, src, body), 0);
+
+  ASSERT_EQ(rgw_rename(fs, bucket_fh, src.c_str(),
+		       rn_bucket2_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
+
+  ASSERT_TRUE(sf::exists(rn_path(rn_bucket2_name, dst)));
+  ASSERT_FALSE(sf::exists(rn_path(bucket_name, src)));
+  ASSERT_EQ(rn_read(rn_bucket2_fh, dst, body.length() + 16), body);
+}
+
+TEST(OPEN2, RENAME_OVER_EXISTING)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+  const std::string src{"rn-src6"}, dst{"rn-dst6"};
+  ASSERT_EQ(rn_make(bucket_fh, src, "winner"), 0);
+  ASSERT_EQ(rn_make(bucket_fh, dst, "loser"), 0);
+
+  ASSERT_EQ(rgw_rename(fs, bucket_fh, src.c_str(),
+		       bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
+
+  ASSERT_EQ(rn_read(bucket_fh, dst, 32), "winner")
+      << "rename over an existing name did not replace it";
+  ASSERT_FALSE(sf::exists(rn_path(bucket_name, src)));
+}
+
+TEST(OPEN2, RENAME_REFUSES_DIRECTORY)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+  struct stat st;
+  st.st_uid = 0; st.st_gid = 0; st.st_mode = 755;
+  struct rgw_file_handle* dfh = nullptr;
+  int ret = rgw_mkdir(fs, bucket_fh, "rn-dir1", &st,
+		      RGW_SETATTR_UID|RGW_SETATTR_GID|RGW_SETATTR_MODE,
+		      &dfh, RGW_MKDIR_FLAG_NONE);
+  if (ret == -EEXIST) {
+    /* left by an earlier run;  the directory only has to exist, not to
+     * have been made here */
+    ret = rgw_lookup(fs, bucket_fh, "rn-dir1", &dfh, nullptr, 0,
+		     RGW_LOOKUP_FLAG_NONE);
+  }
+  ASSERT_EQ(ret, 0);
+
+  /* Refused deliberately -- re-keying every object beneath a prefix is
+   * unbounded work on a driver whose keys are not derived from a path.
+   *
+   * This one *is* a boundary marker rather than a pending assertion:  it
+   * records where the design currently stops.  nsfs could do it in one
+   * renameat, because the keys beneath a directory re-derive
+   * (RENAME_DESIGN.md 2), so when prefix rename lands this test goes red
+   * and should be inverted.  That is the intended signal. */
+  ASSERT_NE(rgw_rename(fs, bucket_fh, "rn-dir1",
+		       bucket_fh, "rn-dir2", RGW_RENAME_FLAG_NONE), 0)
+      << "directory rename is supposed to be refused";
+  ASSERT_EQ(rgw_fh_rele(fs, dfh, 0), 0);
+}
+
+TEST(OPEN2, RENAME_REFUSES_OPEN_FILE)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+  const std::string src{"rn-src7"}, dst{"rn-dst7"};
+  ASSERT_EQ(rn_make(bucket_fh, src, "held open"), 0);
+
+  Open2Helper o2h(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h.lookup(src)), 0);
+  auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw), 0);
+
+  /* refused because the client's filehandle is a hash of the path:  moving
+   * an open object would leave the holder with bits that resolve to
+   * nothing.  See RENAME_DESIGN.md 5.3. */
+  ASSERT_NE(rgw_rename(fs, bucket_fh, src.c_str(),
+		       bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0)
+      << "renaming an open file is supposed to be refused";
+
+  ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+}
+
 /* Per-process name.  A versioned bucket accumulates by design:  each run
  * of this suite adds two more versions of every key the VER_ tests write,
  * so a fixed name makes them pass only against a freshly wiped data root
@@ -3007,6 +3285,387 @@ TEST(OPEN2, VER_SETUP)
 
 /* Writing the same name twice must leave two versions, not one.  If this
  * fails everything below is measuring the wrong thing. */
+/* ---- rename, versioned ------------------------------------------------
+ *
+ * The unversioned cases above exercise one renameat.  These cover the part
+ * that is actually novel:  moving an object's history with it, refusing a
+ * destination that cannot hold history, slicing it off when asked, and
+ * rolling back when a move fails partway.  None of that is reached by the
+ * tests above, so without these the machinery is unexercised.
+ */
+
+/* .versions/ entries belonging to one leaf, counted on disk -- so a partial
+ * move fails rather than passing on the leaf alone */
+static int rn_version_count(const std::string& bkt, const std::string& leaf)
+{
+  std::error_code ec;
+  auto vdir = nsfs_base() / bkt / ".versions";
+  if (! sf::is_directory(vdir, ec)) {
+    return 0;
+  }
+  int n = 0;
+  for (const auto& de : sf::directory_iterator(vdir, ec)) {
+    const std::string nm = de.path().filename().string();
+    if (nm.size() > leaf.size() && nm.compare(0, leaf.size(), leaf) == 0 &&
+	nm[leaf.size()] == '_') {
+      ++n;
+    }
+  }
+  return n;
+}
+
+static std::set<std::string> rn_version_ids(const DoutPrefixProvider* dpp,
+					    const std::string& bkt,
+					    const std::string& key)
+{
+  std::set<std::string> ids;
+  std::vector<rgw_bucket_dir_entry> objs;
+  if (librgw_test::list_bucket(dpp, bkt, true /* versions */, objs) != 0) {
+    return ids;
+  }
+  for (const auto& o : objs) {
+    if (o.key.name == key) {
+      ids.insert(o.key.instance);
+    }
+  }
+  return ids;
+}
+
+static bool rn_intent_present(const std::string& bkt)
+{
+  auto vdir = nsfs_base() / bkt / ".versions";
+  char buf[512];
+  return ::getxattr(vdir.c_str(), "user.nsfs.rename_intent",
+		    buf, sizeof(buf)) > 0;
+}
+
+TEST(OPEN2, RENAME_VERSIONED_MOVES_HISTORY)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string src{"rnv-src1"}, dst{"rnv-dst1"};
+
+  /* two publishes:  one current plus one non-current */
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "first"), 0);
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "second"), 0);
+
+  const int nver = rn_version_count(ver_bucket_name, src);
+  ASSERT_GT(nver, 0) << "no history to move;  this test would prove nothing";
+  const auto ids_before = rn_version_ids(&dp, ver_bucket_name, src);
+  ASSERT_GE(ids_before.size(), 2u);
+
+  ASSERT_EQ(rgw_rename(fs, ver_bucket_fh, src.c_str(),
+		       ver_bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
+
+  EXPECT_EQ(rn_version_count(ver_bucket_name, src), 0)
+      << "history left behind at the old key";
+  EXPECT_EQ(rn_version_count(ver_bucket_name, dst), nver)
+      << "not every version moved";
+
+  /* the ids are mtime-ino, and a rename disturbs neither -- so they must
+   * survive, which is what makes this a move and not a copy */
+  EXPECT_EQ(rn_version_ids(&dp, ver_bucket_name, dst), ids_before)
+      << "version ids did not survive the move";
+
+  EXPECT_FALSE(rn_intent_present(ver_bucket_name))
+      << "intent record not cleared after a successful move";
+}
+
+TEST(OPEN2, RENAME_VERSIONED_INTO_UNVERSIONED_REFUSED)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string src{"rnv-src2"}, dst{"rnv-dst2"};
+
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "first"), 0);
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "second"), 0);
+  const int nver = rn_version_count(ver_bucket_name, src);
+  ASSERT_GT(nver, 0);
+
+  /* bucket_fh is unversioned:  it cannot hold the history, and dropping it
+   * silently would be data loss */
+  EXPECT_NE(rgw_rename(fs, ver_bucket_fh, src.c_str(),
+		       bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0)
+      << "moving history into a bucket that cannot hold it should be refused";
+
+  /* and the refusal must leave the source alone */
+  EXPECT_EQ(rn_version_count(ver_bucket_name, src), nver)
+      << "a refused rename disturbed the source";
+  EXPECT_FALSE(sf::exists(rn_path(bucket_name, dst)))
+      << "a refused rename left something at the destination";
+  EXPECT_FALSE(rn_intent_present(ver_bucket_name));
+}
+
+TEST(OPEN2, RENAME_SLICE_DROPS_HISTORY)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const std::string src{"rnv-src3"}, dst{"rnv-dst3"};
+
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "first"), 0);
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "current"), 0);
+  ASSERT_GT(rn_version_count(ver_bucket_name, src), 0);
+
+  /* asked for explicitly, so the history goes rather than the rename */
+  ASSERT_EQ(rgw_rename(fs, ver_bucket_fh, src.c_str(),
+		       bucket_fh, dst.c_str(),
+		       RGW_RENAME_FLAG_SLICE_VERSIONS), 0);
+
+  EXPECT_TRUE(sf::exists(rn_path(bucket_name, dst)));
+  EXPECT_EQ(rn_read(bucket_fh, dst, 32), "current")
+      << "slicing kept the wrong version";
+  EXPECT_EQ(rn_version_count(ver_bucket_name, src), 0)
+      << "sliced history was left behind, where it lists as versions of an "
+	 "object that is no longer there";
+  EXPECT_FALSE(rn_intent_present(ver_bucket_name));
+}
+
+TEST(OPEN2, RENAME_ROLLBACK_LEAVES_SOURCE_INTACT)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  auto* driver = rgw::g_rgwlib->get_driver();
+  const std::string src{"rnv-src4"}, dst{"rnv-dst4"};
+
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "first"), 0);
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "second"), 0);
+  const int nver = rn_version_count(ver_bucket_name, src);
+  ASSERT_GT(nver, 0);
+  const auto ids_before = rn_version_ids(&dp, ver_bucket_name, src);
+
+  /* fail before anything has moved.  Without injection this path only ever
+   * runs in production:  a test rename either succeeds or fails before it
+   * has touched a version entry. */
+  int ret = driver->driver_hint(&dp, "inject-rename-fail-after",
+				{{"count", "0"}});
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement inject-rename-fail-after";
+  }
+  ASSERT_EQ(ret, 0);
+
+  EXPECT_NE(rgw_rename(fs, ver_bucket_fh, src.c_str(),
+		       ver_bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0)
+      << "injected failure did not fail the rename";
+
+  ASSERT_EQ(driver->driver_hint(&dp, "inject-rename-fail-after",
+				{{"count", "-1"}}), 0);
+
+  /* rolled back:  everything where it started, nothing at the destination,
+   * and no intent record left to block the next attempt */
+  EXPECT_EQ(rn_version_count(ver_bucket_name, src), nver)
+      << "rollback did not restore the source's history";
+  EXPECT_EQ(rn_version_ids(&dp, ver_bucket_name, src), ids_before)
+      << "rollback restored different versions than it moved";
+  EXPECT_EQ(rn_version_count(ver_bucket_name, dst), 0)
+      << "rollback left versions at the destination";
+  EXPECT_FALSE(rn_intent_present(ver_bucket_name))
+      << "intent record survived a completed rollback;  the next rename "
+	 "would refuse with -EBUSY";
+
+  /* and the object is still usable afterwards */
+  EXPECT_EQ(rn_read(ver_bucket_fh, src, 32), "second");
+}
+
+/* ---- recovery from an interrupted move --------------------------------
+ *
+ * A crash between the first version move and the leaf rename leaves an
+ * intent record and the object's history split across two directories.
+ * Recovery derives the direction from where the leaf ended up, and runs at
+ * the next version-lock acquisition on that directory -- so the next write to
+ * *any* object there repairs it.
+ *
+ * These trigger it that way on purpose.  Retrying the same rename would also
+ * pass, and would not distinguish recovery from the retry simply redoing the
+ * work.
+ */
+
+static void rn_inject(const DoutPrefixProvider* dpp, const std::string& count,
+		      const std::string& abandon, int* ret)
+{
+  auto* driver = rgw::g_rgwlib->get_driver();
+  *ret = driver->driver_hint(dpp, "inject-rename-fail-after",
+			     {{"count", count}, {"abandon", abandon}});
+}
+
+TEST(OPEN2, RENAME_RECOVERS_UNCOMMITTED_MOVE)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string src{"rnv-src7"}, dst{"rnv-dst7"}, other{"rnv-other7"};
+
+  /* equal-length bodies:  these are NFS writes at offset 0, which do not
+   * truncate, so a shorter third body would read back with the tail of the
+   * second still attached */
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "first"), 0);
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "secnd"), 0);
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "third"), 0);
+  const int nver = rn_version_count(ver_bucket_name, src);
+  ASSERT_GE(nver, 2) << "need more than one version entry, or stopping after "
+		        "one does not leave a split";
+  const auto ids_before = rn_version_ids(&dp, ver_bucket_name, src);
+
+  /* give up after one version has moved, without rolling back -- what a
+   * crash leaves, and the only way to reach the recovery path */
+  int ret = 0;
+  rn_inject(&dp, "1", "versions", &ret);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement inject-rename-fail-after";
+  }
+  ASSERT_EQ(ret, 0);
+
+  EXPECT_NE(rgw_rename(fs, ver_bucket_fh, src.c_str(),
+		       ver_bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
+
+  rn_inject(&dp, "-1", "none", &ret);
+  ASSERT_EQ(ret, 0);
+
+  /* the delta itself:  history in two places, and a record pointing at it.
+   * Assert it before repairing, or the test cannot tell a recovery from a
+   * move that never broke. */
+  ASSERT_EQ(rn_version_count(ver_bucket_name, dst), 1)
+      << "injection did not leave a version at the destination";
+  ASSERT_EQ(rn_version_count(ver_bucket_name, src), nver - 1)
+      << "injection did not leave the rest at the source";
+  ASSERT_TRUE(rn_intent_present(ver_bucket_name))
+      << "abandoning a move did not leave an intent record;  nothing below "
+	 "is testing recovery";
+
+  /* an unrelated write into the same directory:  it takes the version lock,
+   * which is where recovery runs */
+  ASSERT_EQ(rn_make(ver_bucket_fh, other, "unrelated"), 0);
+
+  EXPECT_FALSE(rn_intent_present(ver_bucket_name))
+      << "a write to the directory did not clear the intent record";
+  EXPECT_EQ(rn_version_count(ver_bucket_name, dst), 0)
+      << "recovery left the stranded version at the destination";
+  EXPECT_EQ(rn_version_count(ver_bucket_name, src), nver)
+      << "recovery did not return the whole history";
+  EXPECT_EQ(rn_version_ids(&dp, ver_bucket_name, src), ids_before)
+      << "recovery returned different versions than the move took";
+  EXPECT_EQ(rn_read(ver_bucket_fh, src, 32), "third")
+      << "the object is not usable after recovery";
+}
+
+TEST(OPEN2, RENAME_RECOVERS_COMMITTED_SLICE)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string src{"rnv-src5"}, dst{"rnv-dst5"}, other{"rnv-other5"};
+
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "first"), 0);
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "current"), 0);
+  ASSERT_GT(rn_version_count(ver_bucket_name, src), 0);
+
+  /* give up after the leaf has landed.  The leaf rename is the commit point,
+   * so recovery has to roll *forward* here -- the opposite of the case above
+   * from an almost identical on-disk state, which is why the record has to
+   * say the move was sliced. */
+  int ret = 0;
+  rn_inject(&dp, "-1", "leaf", &ret);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement inject-rename-fail-after";
+  }
+  ASSERT_EQ(ret, 0);
+
+  EXPECT_NE(rgw_rename(fs, ver_bucket_fh, src.c_str(),
+		       bucket_fh, dst.c_str(),
+		       RGW_RENAME_FLAG_SLICE_VERSIONS), 0);
+
+  rn_inject(&dp, "-1", "none", &ret);
+  ASSERT_EQ(ret, 0);
+
+  ASSERT_TRUE(sf::exists(rn_path(bucket_name, dst)))
+      << "injection did not let the leaf land";
+  ASSERT_FALSE(sf::exists(rn_path(ver_bucket_name, src)))
+      << "the leaf is still at the source, so this is not the committed case";
+  ASSERT_GT(rn_version_count(ver_bucket_name, src), 0)
+      << "injection did not leave the sliced history behind";
+  ASSERT_TRUE(rn_intent_present(ver_bucket_name));
+
+  ASSERT_EQ(rn_make(ver_bucket_fh, other, "unrelated"), 0);
+
+  EXPECT_FALSE(rn_intent_present(ver_bucket_name))
+      << "a write to the directory did not clear the intent record";
+  EXPECT_EQ(rn_version_count(ver_bucket_name, src), 0)
+      << "recovery did not drop the sliced history;  it lists as versions of "
+	 "an object that is no longer there";
+  EXPECT_EQ(rn_read(bucket_fh, dst, 32), "current")
+      << "recovery disturbed the committed leaf";
+}
+
+TEST(OPEN2, RENAME_RECOVERY_REFUSES_WHEN_LEAF_IS_AT_BOTH_KEYS)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  const std::string src{"rnv-src6"}, dst{"rnv-dst6"}, other{"rnv-other6"};
+
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "first"), 0);
+  ASSERT_EQ(rn_make(ver_bucket_fh, src, "current"), 0);
+
+  int ret = 0;
+  rn_inject(&dp, "-1", "leaf", &ret);
+  if (ret == -ENOTSUP || ret == -EINVAL) {
+    GTEST_SKIP() << "driver does not implement inject-rename-fail-after";
+  }
+  ASSERT_EQ(ret, 0);
+  EXPECT_NE(rgw_rename(fs, ver_bucket_fh, src.c_str(),
+		       ver_bucket_fh, dst.c_str(), RGW_RENAME_FLAG_NONE), 0);
+  rn_inject(&dp, "-1", "none", &ret);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(rn_intent_present(ver_bucket_name));
+
+  /* Put something back at the source key behind the driver's back, which is
+   * what a client recreating the key after a crash amounts to.  Recovery can
+   * no longer tell which leaf is the object, and guessing would destroy real
+   * data, so it must refuse and keep the record. */
+  {
+    int fd = ::open(rn_path(ver_bucket_name, src).c_str(),
+		    O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GE(fd, 0);
+    ASSERT_EQ(::write(fd, "interloper", 10), 10);
+    ::close(fd);
+  }
+
+  /* a write to the directory still succeeds:  refusing every write because
+   * one object's move is stuck would be worse than the delta */
+  EXPECT_EQ(rn_make(ver_bucket_fh, other, "unrelated"), 0)
+      << "an unrecoverable record blocked an unrelated write";
+  EXPECT_TRUE(rn_intent_present(ver_bucket_name))
+      << "recovery cleared a record it could not resolve";
+  EXPECT_TRUE(sf::exists(rn_path(ver_bucket_name, src)))
+      << "recovery removed one of the two leaves";
+  EXPECT_TRUE(sf::exists(rn_path(ver_bucket_name, dst)))
+      << "recovery removed one of the two leaves";
+
+  /* a rename out of the directory, by contrast, must refuse:  there is one
+   * record per directory, so writing a new one would lose the only pointer
+   * to the stranded versions */
+  EXPECT_EQ(rgw_rename(fs, ver_bucket_fh, other.c_str(),
+		       ver_bucket_fh, "rnv-dst6b", RGW_RENAME_FLAG_NONE),
+	    -EBUSY)
+      << "rename proceeded over an unrecovered record";
+
+  /* leave the directory usable for anything that runs after this */
+  auto vdir = nsfs_base() / ver_bucket_name / ".versions";
+  ASSERT_EQ(::removexattr(vdir.c_str(), "user.nsfs.rename_intent"), 0);
+  EXPECT_EQ(rgw_rename(fs, ver_bucket_fh, other.c_str(),
+		       ver_bucket_fh, "rnv-dst6b", RGW_RENAME_FLAG_NONE), 0)
+      << "the directory did not become usable once the ambiguity was removed";
+}
+
 TEST(OPEN2, VER_WRITE_TWICE_MAKES_TWO_VERSIONS)
 {
   if (! ver_bucket_fh) {
