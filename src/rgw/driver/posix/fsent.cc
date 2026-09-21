@@ -306,8 +306,6 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 		  STATX_ALL, &stx);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not stat " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
     exist = false;
     return -ret;
   }
@@ -1040,8 +1038,6 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
                   AT_SYMLINK_NOFOLLOW, STATX_ALL, &nstx);
   if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << " in dir "
-                        << get_name() << " : " << cpp_strerror(ret) << dendl;
       return -ret;
   }
   if (S_ISREG(nstx.stx_mode)) {
@@ -1228,13 +1224,22 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
     ret = errno;
     if (ret != EEXIST) {
       if (dpp)
-	ldpp_dout(dpp, 0) << "ERROR: could not create bucket " << get_name() << ": "
-	  << cpp_strerror(ret) << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: could not create multipart directory "
+                          << get_name() << ": " << cpp_strerror(ret) << dendl;
       return -ret;
     } else if (existed != nullptr) {
       *existed = true;
     }
   }
+
+  ret = openat(parent->get_fd(), path.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not open multipart directory " << get_name()
+                      << dendl;
+    return ret;
+  }
+
+  fd = ret;
 
   return 0;
 }
@@ -1296,7 +1301,7 @@ int MPDirectory::stat(const DoutPrefixProvider* dpp, bool force)
   }
 
   uint64_t total_size{0};
-  for_each(dpp, [this, &total_size, &dpp](const char *name) {
+  for_each(dpp, [this, &total_size](const char *name) {
     int ret;
     struct statx stx;
     std::string sname = name;
@@ -1309,8 +1314,6 @@ int MPDirectory::stat(const DoutPrefixProvider* dpp, bool force)
     ret = statx(fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
-                        << cpp_strerror(ret) << dendl;
       return -ret;
     }
 
@@ -1617,7 +1620,7 @@ int VersionedDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_y
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not stat temp file for" << get_name() << ": "
                       << cpp_strerror(ret) << dendl;
-    return ret;
+    return -ret;
   }
 
   ret = cur_version->link_temp_file(dpp, y, temp_fname);

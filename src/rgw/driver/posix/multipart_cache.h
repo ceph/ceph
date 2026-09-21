@@ -280,7 +280,7 @@ struct MultipartCache
       stabilize_fn(std::move(stabilize)),
       max_parts_per_entry(max_parts) {}
 
-  ~MultipartCache() {
+  virtual ~MultipartCache() {
     cache.drain(
       [this](Entry* e) {
 	lru.unref(e, cohort::lru::FLAG_NONE);
@@ -341,7 +341,7 @@ struct MultipartCache
     return result;
   } /* get_entry */
 
-  bool add_part(const MultipartCacheKey& key, MultipartPartInfo&& info) {
+  virtual bool add_part(const MultipartCacheKey& key, MultipartPartInfo&& info) {
     auto [b, rflags] = get_entry(key, FLAG_CREATE | FLAG_LOCK);
     if (!b) {
       return false;
@@ -363,7 +363,7 @@ struct MultipartCache
     return true;
   }
 
-  MultipartListResult list_parts(const MultipartCacheKey& key,
+  virtual MultipartListResult list_parts(const MultipartCacheKey& key,
 				 uint32_t marker, uint32_t max_parts,
 				 const fill_parts_fn_t& fill_fn) {
     MultipartListResult result;
@@ -395,7 +395,7 @@ struct MultipartCache
     return result;
   }
 
-  void remove(const MultipartCacheKey& key) {
+  virtual void remove(const MultipartCacheKey& key) {
     auto [b, rflags] = get_entry(key, FLAG_LOCK);
     if (!b) {
       return;
