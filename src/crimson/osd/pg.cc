@@ -1923,6 +1923,15 @@ bool PG::should_send_op(
      // 2. last_backfill_started has passed "hoid"
      hoid <= peering_state.get_peer_info(peer).last_backfill ||
      (has_backfill_state() && hoid <= get_last_backfill_started()));
+  if (should_send &&
+      hoid > peering_state.get_peer_info(peer).last_backfill &&
+      recovery_backend->is_recovering(hoid)) {
+    // last_backfill_started only marks that a push for "hoid" has been
+    // enqueued, not that it has actually landed on the peer; until
+    // peer_info.last_backfill itself passes "hoid" the push may still
+    // be in flight, so ship an empty op rather than racing ahead of it.
+    should_send = false;
+  }
   if (unlikely(!should_send)) {
     ceph_assert(is_backfill_target(peer));
     logger().debug("{} issue_repop shipping empty opt to osd."
