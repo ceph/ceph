@@ -16,6 +16,7 @@
 #include "test/osd/ECCrushTestFixture.h"
 #include "osd/OSDMap.h"
 #include "crush/CrushWrapper.h"
+#include "crush/crush.h" // for CRUSH_HASH_DEFAULT
 
 void ECCrushTestFixture::pre_peering_hook()
 {
@@ -30,10 +31,14 @@ void ECCrushTestFixture::pre_peering_hook()
   //
   // Multi-zone (num_zones > 1):
   //   We use insert_item() with a location map (the same API that
-  //   build_simple_crush_map itself uses internally) to build:
+  //   build_simple_crush_map itself uses internally) to build one
+  //   single-OSD host per shard, since add_simple_stretch_rule()'s
+  //   CHOOSELEAF step selects k+m distinct hosts within each zone:
   //     root "default"
-  //       ├─ datacenter "zone-0"  →  host "host-0"  →  osd.0 … osd.(k+m-1)
-  //       └─ datacenter "zone-1"  →  host "host-1"  →  osd.(k+m) … osd.(2*(k+m)-1)
+  //       ├─ datacenter "zone-0"  →  host "host-0-0" … "host-0-(k+m-1)"
+  //       │                            (osd.0 … osd.(k+m-1), one per host)
+  //       └─ datacenter "zone-1"  →  host "host-1-0" … "host-1-(k+m-1)"
+  //                                    (osd.(k+m) … osd.(2*(k+m)-1))
   //   and add:  rule "ec_stretch_rule"  via add_simple_stretch_rule()
   //
   // In both cases the pool's crush_rule is updated and the pg_temp from
@@ -57,9 +62,50 @@ void ECCrushTestFixture::pre_peering_hook()
       "indep", pg_pool_t::TYPE_ERASURE, &ss);
     ceph_assert(r >= 0);
   } else {
-    // TODO: Multi-zone CRUSH map setup will be implemented as part of
-    // stretch cluster support.
-    ceph_abort_msg("multi-zone ECCrushTestFixture not yet implemented");
+    // Multi-zone: build the root/datacenter/host/osd hierarchy by hand
+    // (build_simple_crush_map() only knows how to build a flat one), then
+    // add an EC stretch rule that picks k+m OSDs spread across the zones.
+    new_crush.create();
+    new_crush.set_type_name(0, "osd");
+    new_crush.set_type_name(1, "host");
+    new_crush.set_type_name(8, "datacenter");
+    new_crush.set_type_name(11, "root");
+
+    int rootid = 0;
+    int r = new_crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT, 11, 0, NULL, NULL,
+                                 &rootid);
+    ceph_assert(r == 0);
+    new_crush.set_item_name(rootid, "default");
+
+    // add_simple_stretch_rule()'s CHOOSELEAF step picks num_replica_per_zone
+    // (k+m) distinct buckets of the osd failure-domain type ("host") within
+    // each zone, so each zone needs k+m separate one-OSD hosts rather than a
+    // single host holding all of them.
+    const int osds_per_zone = k + m;
+    for (int zone = 0; zone < num_zones; ++zone) {
+      const std::string zone_name = "zone-" + std::to_string(zone);
+      for (int i = 0; i < osds_per_zone; ++i) {
+        const int osd_id = zone * osds_per_zone + i;
+        const std::string osd_name = "osd." + std::to_string(osd_id);
+        const std::string host_name = "host-" + std::to_string(zone) + "-" +
+                                      std::to_string(i);
+        const std::map<std::string, std::string> loc{
+          {"host", host_name},
+          {"datacenter", zone_name},
+          {"root", "default"}
+        };
+        r = new_crush.insert_item(cct, osd_id, 1.0, osd_name, loc);
+        ceph_assert(r == 0);
+      }
+    }
+
+    std::stringstream ss;
+    rule_name = "ec_stretch_rule";
+    r = new_crush.add_simple_stretch_rule(
+      rule_name, "default", "datacenter", "host",
+      num_zones, k + m, "", "indep", pg_pool_t::TYPE_ERASURE,
+      /*force=*/false, &ss);
+    ceph_assert(r >= 0);
   }
 
   const int ec_rule_id = new_crush.get_rule_id(rule_name);
