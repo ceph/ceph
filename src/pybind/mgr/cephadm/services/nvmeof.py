@@ -13,6 +13,10 @@ from orchestrator import (
     DaemonDescriptionStatus,
     HostSpec,
 )
+from ceph.cephadm.constants import (
+    NVMEOF_ENCRYPTION_KEY_CONTAINER_PATH,
+    NVMEOF_ENCRYPTION_KEY_PATH_FILE,
+)
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from .service_registry import register_cephadm_service
 from .. import utils
@@ -146,6 +150,7 @@ class NvmeofService(CephService):
         self.mgr.log.info(f"gateway address: {addr} from {map_addr=} {spec.addr=} {host_ip=}")
         discovery_addr = map_discovery_addr or spec.discovery_addr or host_ip
         self.mgr.log.info(f"discovery address: {discovery_addr} from {map_discovery_addr=} {spec.discovery_addr=} {host_ip=}")
+        encryption_key_path = self._get_encryption_key_path(spec)
         context = {
             'spec': spec,
             'name': name,
@@ -157,7 +162,8 @@ class NvmeofService(CephService):
             'rpc_socket_name': 'spdk.sock',
             'transport_tcp_options': transport_tcp_options,
             'iobuf_options': iobuf_options,
-            'rados_id': rados_id
+            'rados_id': rados_id,
+            'encryption_key_path': encryption_key_path,
         }
         gw_conf = self.mgr.template.render('services/nvmeof/ceph-nvmeof.conf.j2', context)
 
@@ -180,6 +186,9 @@ class NvmeofService(CephService):
 
         if spec.encryption_key:
             daemon_spec.extra_files['encryption_key'] = spec.encryption_key
+
+        if spec.enable_encryption and spec.encryption_key_path:
+            daemon_spec.extra_files[NVMEOF_ENCRYPTION_KEY_PATH_FILE] = spec.encryption_key_path
 
         daemon_spec.final_config, _ = self.generate_config(daemon_spec)
         daemon_spec.deps = self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
@@ -469,3 +478,9 @@ class NvmeofService(CephService):
                 server_key=server_key,
                 ca_cert=ca_cert
             )
+
+    def _get_encryption_key_path(self, spec: NvmeofServiceSpec) -> Optional[str]:
+        if spec.encryption_key_path or spec.encryption_key:
+            return NVMEOF_ENCRYPTION_KEY_CONTAINER_PATH
+
+        return None
