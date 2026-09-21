@@ -1,5 +1,5 @@
 import argparse
-from ceph_volume.util import arg_validators
+from ceph_volume.util import arg_validators, disk
 
 def create_parser(prog: str, description: str) -> argparse.ArgumentParser:
     """
@@ -29,6 +29,14 @@ def create_parser(prog: str, description: str) -> argparse.ArgumentParser:
         '--bluestore',
         action='store_true',
         help='Use BlueStore backend. (DEPRECATED: use --objectstore instead)'
+    )
+    parser.add_argument(
+        '--bluestore-min-alloc-size',
+        type=disk.Size.parse,
+        help='Set bluestore_min_alloc_size for each OSD created, in bytes. '
+             'Applied at mkfs of each individual OSD and immutable for that '
+             "OSD's lifetime. Use for coarse indirection-unit QLC SSDs, whose "
+             'allocation unit is larger than the 4 KiB default.'
     )
     parser.add_argument(
         '--crush-device-class',

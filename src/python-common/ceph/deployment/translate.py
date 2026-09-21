@@ -103,6 +103,9 @@ class to_ceph_volume(object):
                         cmd += " --block.wal {}".format(wal_devices.pop())
                     if d != self.NO_CRUSH:
                         cmd += " --crush-device-class {}".format(d)
+                    if self.spec.min_alloc_size:
+                        cmd += " --bluestore-min-alloc-size {}".format(
+                            self.spec.min_alloc_size)
 
                     cmds.append(cmd)
                     dev_counter += 1
@@ -126,6 +129,10 @@ class to_ceph_volume(object):
 
                 if self.spec.block_db_size:
                     cmd += " --block-db-size {}".format(self.spec.block_db_size)
+
+                if self.spec.min_alloc_size:
+                    cmd += " --bluestore-min-alloc-size {}".format(
+                        self.spec.min_alloc_size)
 
                 if isinstance(self.spec.db_slots, int) and self.spec.db_slots > 1:
                     cmd += " --block-db-slots {}".format(self.spec.db_slots)
