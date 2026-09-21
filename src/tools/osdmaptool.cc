@@ -791,7 +791,10 @@ skip_upmap:
 	pg_t pgid = pg_t(i, p->first);
 
 	vector<int> osds, raw, up, acting;
-	int primary, calced_primary, up_primary, acting_primary;
+	int primary;
+	// --test-random takes the branch that leaves these unset, but the
+	// --test-map-pgs-dump-all block below still reads them
+	int calced_primary = -1, up_primary = -1, acting_primary = -1;
 	if (test_random) {
 	  osds.resize(p->second.size);
 	  for (unsigned i=0; i<osds.size(); ++i) {
