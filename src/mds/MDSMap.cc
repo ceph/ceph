@@ -982,7 +982,7 @@ void MDSMap::decode(bufferlist::const_iterator& p)
       } else {
 	min_compat_client = ceph_release_t{static_cast<uint8_t>(r)};
       }
-    } else if (ev >= 15) {
+    } else { // ev >= 15
       decode(min_compat_client, p);
     }
     if (ev >= 16) {
