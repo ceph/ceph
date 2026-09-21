@@ -242,7 +242,9 @@ test_object() {
 
         if ! cmp $tmp1 $tmp2; then
           echo "**** reencode of $vdir/objects/$type/$f resulted in a different dump ****"
-          diff $tmp1 $tmp2
+          # diff always exits non-zero here; || true keeps set -e from
+          # killing this job before it records its result.
+          diff $tmp1 $tmp2 || true
           failed=$(($failed + 1))
         fi
         numtests=$(($numtests + 1))
