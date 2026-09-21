@@ -210,8 +210,14 @@ namespace rgw {
 	    /* restore attributes */
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
-            rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
-            rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
+	    auto p_etag = req.get_attr(RGW_ATTR_ETAG);
+	    auto p_acl = req.get_attr(RGW_ATTR_ACL);
+	    if (p_etag) {
+	      rgw_fh->set_etag(*p_etag);
+	    }
+	    if (p_acl) {
+	      rgw_fh->set_acls(*p_acl);
+	    }
             if (ux_key && ux_attrs) {
               /* restores unix attrs */
               [[maybe_unused]] DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
@@ -244,8 +250,14 @@ namespace rgw {
 	    /* restore attributes */
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
-            rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
-            rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
+	    auto p_etag = req.get_attr(RGW_ATTR_ETAG);
+	    auto p_acl = req.get_attr(RGW_ATTR_ACL);
+	    if (p_etag) {
+	      rgw_fh->set_etag(*p_etag);
+	    }
+	    if (p_acl) {
+	      rgw_fh->set_acls(*p_acl);
+	    }
             if (ux_key && ux_attrs) {
               /* restores unix attrs */
               [[maybe_unused]] DecodeAttrsResult dar =
@@ -744,8 +756,16 @@ namespace rgw {
         if (st)
 	  (void) rgw_fh->stat(st, RGWFileHandle::FLAG_LOCKED);
 
-        rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
-        rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL))); 
+	{
+	  auto p_etag = req.get_attr(RGW_ATTR_ETAG);
+	  auto p_acl = req.get_attr(RGW_ATTR_ACL);
+	  if (p_etag) {
+	    rgw_fh->set_etag(*p_etag);
+	  }
+	  if (p_acl) {
+	    rgw_fh->set_acls(*p_acl);
+	  }
+	}
 
 	get<0>(mkr) = rgw_fh;
 	rgw_fh->file_ondisk_version = 0; // inital version
@@ -902,6 +922,29 @@ namespace rgw {
       break;
     };
 
+    rgw_fh->create_stat(st, mask);
+
+    /* if FSIO handle is active, write attrs to the shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      rgw_fh->encode_attrs(ux_key, ux_attrs);
+      rgw::sal::Attrs attrs;
+      attrs[RGW_ATTR_UNIX_KEY1] = std::move(ux_key);
+      attrs[RGW_ATTR_UNIX1] = std::move(ux_attrs);
+      if (etag.length()) {
+	attrs[RGW_ATTR_ETAG] = std::move(etag);
+      }
+      if (acls.length()) {
+	attrs[RGW_ATTR_ACL] = std::move(acls);
+      }
+      const DoutPrefix adp(cct, dout_subsys, "rgw setattr: ");
+      rc = f->fsio_hdl->fsetattrs(&adp, attrs, 0);
+      if (rc == 0) {
+	rgw_fh->set_ctime(real_clock::to_timespec(real_clock::now()));
+      }
+      return rc;
+    }
+
     string obj_name{rgw_fh->relative_object_name()};
 
     if (rgw_fh->is_dir() &&
@@ -911,7 +954,6 @@ namespace rgw {
 
     RGWSetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
-    rgw_fh->create_stat(st, mask);
     rgw_fh->encode_attrs(ux_key, ux_attrs);
 
     /* save attrs */
@@ -975,6 +1017,44 @@ namespace rgw {
     if ((rgw_fh->is_bucket()) ||
 	(rgw_fh->is_root()))  {
       return -EINVAL;
+    }
+
+    /* if FSIO handle is active, read xattrs from shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      const DoutPrefix xdp(cct, dout_subsys, "rgw getxattrs: ");
+      for (uint32_t ix = 0; ix < attrs->xattr_cnt; ++ix) {
+	auto& xattr = attrs->xattrs[ix];
+	std::string k = is_exposed_attr(xattr.key)
+	  ? std::string{xattr.key.val, xattr.key.len}
+	  : prefix_xattr_keystr(xattr.key);
+
+	bufferlist bl;
+	int rc = f->fsio_hdl->fgetattr(&xdp, k, bl, 0);
+	if (rc < 0) {
+	  continue;
+	}
+
+	std::string_view svk =
+	  is_exposed_attr(xattr.key)
+	  ? std::string_view{xattr.key.val, xattr.key.len}
+	  : unprefix_xattr_keystr(k);
+
+	if (svk.empty()) {
+	  continue;
+	}
+
+	std::string val = bl.to_str();
+	rgw_xattrstr xattr_k = { const_cast<char*>(svk.data()),
+				  uint32_t(svk.length()) };
+	rgw_xattrstr xattr_v = { const_cast<char*>(val.c_str()),
+				  uint32_t(val.length()) };
+	rgw_xattr xa = { xattr_k, xattr_v };
+	rgw_xattrlist xattrlist = { &xa, 1 };
+
+	cb(&xattrlist, cb_arg, RGW_GETXATTR_FLAG_NONE);
+      }
+      return 0;
     }
 
     int rc, rc2, rc3;
@@ -1060,6 +1140,40 @@ namespace rgw {
       return -EINVAL;
     }
 
+    /* if FSIO handle is active, list xattrs from shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      const DoutPrefix xdp(cct, dout_subsys, "rgw lsxattrs: ");
+      rgw::sal::Attrs shadow_attrs;
+      int rc = f->fsio_hdl->fgetattrs(&xdp, shadow_attrs, 0);
+      if (rc < 0) {
+	return rc;
+      }
+      for (const auto& [k, v] : shadow_attrs) {
+	std::string_view svk =
+	  is_exposed_attr(rgw_xattrstr{const_cast<char*>(k.c_str()),
+				       uint32_t(k.length())})
+	  ? k
+	  : unprefix_xattr_keystr(k);
+
+	if (svk.empty()) {
+	  continue;
+	}
+
+	rgw_xattrstr xattr_k = { const_cast<char*>(svk.data()),
+				  uint32_t(svk.length()) };
+	rgw_xattrstr xattr_v = { nullptr, 0 };
+	rgw_xattr xattr = { xattr_k, xattr_v };
+	rgw_xattrlist xattrlist = { &xattr, 1 };
+
+	auto cbr = cb(&xattrlist, cb_arg, RGW_LSXATTR_FLAG_NONE);
+	if (cbr & RGW_LSXATTR_FLAG_STOP) {
+	  break;
+	}
+      }
+      return 0;
+    }
+
     int rc, rc2, rc3;
     string obj_name{rgw_fh->relative_object_name2()};
 
@@ -1109,6 +1223,29 @@ namespace rgw {
       return -EINVAL;
     }
 
+    /* if FSIO handle is active, write xattrs to shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      const DoutPrefix xdp(cct, dout_subsys, "rgw setxattrs: ");
+      for (uint32_t ix = 0; ix < attrs->xattr_cnt; ++ix) {
+	auto& xattr = attrs->xattrs[ix];
+	if (!(xattr.key.len > 0)) {
+	  continue;
+	}
+	if (is_exposed_attr(xattr.key)) {
+	  continue;
+	}
+	string k = prefix_xattr_keystr(xattr.key);
+	bufferlist bl;
+	bl.append(xattr.val.val, xattr.val.len);
+	int rc = f->fsio_hdl->fsetattr(&xdp, k, bl, 0);
+	if (rc < 0) {
+	  return rc;
+	}
+      }
+      return 0;
+    }
+
     int rc, rc2;
     string obj_name{rgw_fh->relative_object_name2()};
 
@@ -1149,6 +1286,24 @@ namespace rgw {
     if ((rgw_fh->is_bucket()) ||
 	(rgw_fh->is_root()))  {
       return -EINVAL;
+    }
+
+    /* if FSIO handle is active, remove xattrs from shadow */
+    auto* f = std::get_if<RGWFileHandle::file>(&rgw_fh->variant_type);
+    if (f && f->fsio_hdl) {
+      const DoutPrefix xdp(cct, dout_subsys, "rgw rmxattrs: ");
+      for (uint32_t ix = 0; ix < attrs->xattr_cnt; ++ix) {
+	auto& xattr = attrs->xattrs[ix];
+	if (!(xattr.key.len > 0)) {
+	  continue;
+	}
+	string k = prefix_xattr_keystr(xattr.key);
+	int rc = f->fsio_hdl->fremovexattr(&xdp, k, 0);
+	if (rc < 0 && rc != -ENODATA) {
+	  return rc;
+	}
+      }
+      return 0;
     }
 
     int rc, rc2;
@@ -1818,9 +1973,13 @@ namespace rgw {
       auto& object_name = get_name();
 
       if (! f->fsio_hdl) {
-        uint32_t op_flags = ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR))
-          ? RGWOpenRequest::FLAG_WRITE
-          : RGWOpenRequest::FLAG_NONE;
+        uint32_t op_flags = RGWOpenRequest::FLAG_NONE;
+        if ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR)) {
+          op_flags |= RGWOpenRequest::FLAG_WRITE;
+        }
+        if (rgw_openflags & RGW_OPEN_FLAG_CREATE) {
+          op_flags |= RGWOpenRequest::FLAG_CREATE;
+        }
 
         RGWOpenRequest req(
                            cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
@@ -1856,7 +2015,7 @@ namespace rgw {
         }
       } else if (f->fsio_hdl->needs_reclone() &&
                  ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR))) {
-        int rc = f->fsio_hdl->reclone(rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+        int rc = f->fsio_hdl->reclone(&dp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
         if (!!rc) {
           lsubdout(fs->get_context(), rgw, 0)
             << __func__ << " " << object_name
@@ -1945,6 +2104,8 @@ namespace rgw {
   int RGWFileHandle::close2(file::Open* open, uint32_t flags)
   {
     int rc{0};
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw close2: ");
 
     bool read_open = open->is_read_open();
     bool write_open = open->is_write_open();
@@ -1973,7 +2134,7 @@ namespace rgw {
       if (write_open) {
         if (f->write_opens == 0) {
           if (f->fsio_hdl) {
-            rc = f->fsio_hdl->publish(
+            rc = f->fsio_hdl->publish(&dp,
                       rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
             if (!!rc) {
               lsubdout(fs->get_context(), rgw, 0)
@@ -1998,7 +2159,7 @@ namespace rgw {
 
       if (should_close) {
         if (f->fsio_hdl) {
-          rc = f->fsio_hdl->close(close_flags);
+          rc = f->fsio_hdl->close(&dp, close_flags);
           if (!! rc) {
             lsubdout(fs->get_context(), rgw, 0)
               << __func__ << " " << object_name()

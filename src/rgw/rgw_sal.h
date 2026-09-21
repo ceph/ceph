@@ -1166,18 +1166,24 @@ public:
       virtual int pwritev(const struct iovec* iov, int iovcnt,
 			   uint64_t ofs, uint64_t* bytes_written,
 			   uint32_t flags) = 0;
-      virtual int commit(uint32_t flags) = 0;
-      virtual int publish(uint32_t flags) = 0;
-      virtual int reclone(uint32_t flags) = 0;
-      virtual int close(uint32_t flags) = 0;
+      virtual int commit(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      virtual int publish(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      virtual int reclone(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      virtual int close(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
 
       virtual int fstat(struct stat* st, uint32_t flags) = 0;
-      virtual int fgetattr(const std::string& name, bufferlist& dest,
+      virtual int fgetattr(const DoutPrefixProvider* dpp,
+			    const std::string& name, bufferlist& dest,
 			    uint32_t flags) = 0;
-      virtual int fsetattr(const std::string& name, const bufferlist& val,
+      virtual int fsetattr(const DoutPrefixProvider* dpp,
+			    const std::string& name, const bufferlist& val,
 			    uint32_t flags) = 0;
-      virtual int fgetattrs(Attrs& attrs, uint32_t flags) = 0;
-      virtual int fsetattrs(Attrs& attrs, uint32_t flags) = 0;
+      virtual int fgetattrs(const DoutPrefixProvider* dpp,
+			     Attrs& attrs, uint32_t flags) = 0;
+      virtual int fsetattrs(const DoutPrefixProvider* dpp,
+			     Attrs& attrs, uint32_t flags) = 0;
+      virtual int fremovexattr(const DoutPrefixProvider* dpp,
+				const std::string& name, uint32_t flags) = 0;
 
       bool resumed() const { return resumed_existing; }
       bool needs_reclone() const { return published; }

@@ -1146,7 +1146,6 @@ public:
   private:
    NSFSObject* src_obj;
    NSFSDriver* driver;
-   const DoutPrefixProvider* dpp;
    int shadow_fd{-1};
    int shadow_dir_fd{-1};
    int parent_fd{-1};
@@ -1158,9 +1157,8 @@ public:
    friend class NSFSObject;
 
   protected:
-   NSFSFSIOObject(NSFSObject* _obj, NSFSDriver* _drv,
-		   const DoutPrefixProvider* _dpp, bool _ephemeral)
-     : src_obj(_obj), driver(_drv), dpp(_dpp), ephemeral(_ephemeral) {}
+   NSFSFSIOObject(NSFSObject* _obj, NSFSDriver* _drv, bool _ephemeral)
+     : src_obj(_obj), driver(_drv), ephemeral(_ephemeral) {}
 
   public:
     virtual int preadv(const struct iovec* iov, int iovcnt,
@@ -1169,18 +1167,24 @@ public:
     virtual int pwritev(const struct iovec* iov, int iovcnt,
 			uint64_t ofs, uint64_t* bytes_written,
 			uint32_t flags) override;
-    virtual int commit(uint32_t flags) override;
-    virtual int publish(uint32_t flags) override;
-    virtual int reclone(uint32_t flags) override;
-    virtual int close(uint32_t flags) override;
+    virtual int commit(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int publish(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int reclone(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int close(const DoutPrefixProvider* dpp, uint32_t flags) override;
 
     virtual int fstat(struct stat* st, uint32_t flags) override;
-    virtual int fgetattr(const std::string& name, bufferlist& dest,
+    virtual int fgetattr(const DoutPrefixProvider* dpp,
+			  const std::string& name, bufferlist& dest,
 			  uint32_t flags) override;
-    virtual int fsetattr(const std::string& name, const bufferlist& val,
+    virtual int fsetattr(const DoutPrefixProvider* dpp,
+			  const std::string& name, const bufferlist& val,
 			  uint32_t flags) override;
-    virtual int fgetattrs(Attrs& attrs, uint32_t flags) override;
-    virtual int fsetattrs(Attrs& attrs, uint32_t flags) override;
+    virtual int fgetattrs(const DoutPrefixProvider* dpp,
+			   Attrs& attrs, uint32_t flags) override;
+    virtual int fsetattrs(const DoutPrefixProvider* dpp,
+			   Attrs& attrs, uint32_t flags) override;
+    virtual int fremovexattr(const DoutPrefixProvider* dpp,
+			      const std::string& name, uint32_t flags) override;
 
     virtual ~NSFSFSIOObject() override;
   }; /* NSFSFSIOObject */

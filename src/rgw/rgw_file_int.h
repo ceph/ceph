@@ -556,6 +556,20 @@ namespace rgw {
 
       st->st_mode = state.unix_mode;
 
+      /* if an FSIO handle is active, get live size/mtime from shadow */
+      auto* f = get_if<file>(&variant_type);
+      if (f && f->fsio_hdl) {
+	struct stat shadow_st;
+	if (f->fsio_hdl->fstat(&shadow_st, 0) == 0) {
+	  state.size = shadow_st.st_size;
+#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
+	  state.mtime = shadow_st.st_mtimespec;
+#else
+	  state.mtime = shadow_st.st_mtim;
+#endif
+	}
+      }
+
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
 	/* virtual directories are always invalid */
@@ -2233,8 +2247,9 @@ public:
   uint64_t _size;
   uint32_t flags;
 
-  static constexpr uint32_t FLAG_NONE =  0x000;
-  static constexpr uint32_t FLAG_WRITE = 0x001;
+  static constexpr uint32_t FLAG_NONE =   0x000;
+  static constexpr uint32_t FLAG_WRITE =  0x001;
+  static constexpr uint32_t FLAG_CREATE = 0x002;
 
   /* TODO: check args */
   RGWOpenRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
@@ -2242,7 +2257,7 @@ public:
 		 uint32_t _flags)
     : RGWLibRequest(_cct, std::move(_user)), bucket_name(_bname),
       obj_name(_oname), _size(0), flags(_flags) {
-    if (flags & FLAG_WRITE) {
+    if (flags & (FLAG_WRITE | FLAG_CREATE)) {
       write_open = true;
     }
     op = this;
@@ -2253,7 +2268,7 @@ public:
 
   /* getters */
 
-  bool only_bucket() override { return (flags & FLAG_WRITE); }
+  bool only_bucket() override { return (flags & (FLAG_WRITE | FLAG_CREATE)); }
 
   int op_init() override {
     // assign driver, s, and dialect_handler

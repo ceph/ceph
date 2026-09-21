@@ -4591,7 +4591,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   bool ephemeral = (flags & FSIOObject::OPEN_FLAG_EPHEMERAL) != 0;
 
   auto hdl = std::unique_ptr<NSFSFSIOObject>(
-    new NSFSFSIOObject(this, driver, dpp, ephemeral));
+    new NSFSFSIOObject(this, driver, ephemeral));
   hdl->shadow_dir_fd = sdir_fd;
   hdl->shadow_name = leaf;
   hdl->parent_fd = parent_fd;
@@ -4663,6 +4663,20 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     /* new object: create empty file in .shadow/ */
     hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(),
 			      O_RDWR | O_CREAT | O_EXCL, 0644);
+    if (hdl->shadow_fd >= 0) {
+      /* stamp default private ACL (owner with FULL_CONTROL) */
+      RGWAccessControlPolicy policy;
+      ACLOwner acl_owner;
+      acl_owner.id = bucket->get_owner();
+      policy.set_owner(acl_owner);
+      policy.get_acl().create_default(acl_owner.id,
+				      acl_owner.display_name);
+      bufferlist acl_bl;
+      policy.encode(acl_bl);
+      std::string xname = make_xattr_name(RGW_ATTR_ACL);
+      ::fsetxattr(hdl->shadow_fd, xname.c_str(),
+		  acl_bl.c_str(), acl_bl.length(), 0);
+    }
   }
 
   if (hdl->shadow_fd < 0) {
@@ -4709,7 +4723,7 @@ int NSFSObject::NSFSFSIOObject::pwritev(const struct iovec* iov, int iovcnt,
   return 0;
 }
 
-int NSFSObject::NSFSFSIOObject::commit(uint32_t flags)
+int NSFSObject::NSFSFSIOObject::commit(const DoutPrefixProvider* dpp, uint32_t flags)
 {
   if (shadow_fd < 0) {
     return -EBADF;
@@ -4717,7 +4731,7 @@ int NSFSObject::NSFSFSIOObject::commit(uint32_t flags)
   return ::fsync(shadow_fd) < 0 ? -errno : 0;
 }
 
-int NSFSObject::NSFSFSIOObject::publish(uint32_t flags)
+int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t flags)
 {
   if (shadow_fd < 0) {
     return -EBADF;
@@ -4749,11 +4763,16 @@ int NSFSObject::NSFSFSIOObject::publish(uint32_t flags)
     return -errno;
   }
 
+  /* TODO: update bucket listing cache — currently deferred because
+   * the cache may not be fully initialized in all contexts (e.g.,
+   * librgw in-process unit tests). The cache will pick up the
+   * published object on next listing or stat via cache miss. */
+
   published = true;
   return 0;
 }
 
-int NSFSObject::NSFSFSIOObject::reclone(uint32_t flags)
+int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t flags)
 {
   if (!published || shadow_fd < 0) {
     return -EINVAL;
@@ -4808,7 +4827,7 @@ int NSFSObject::NSFSFSIOObject::fstat(struct stat* st, uint32_t flags)
   return 0;
 }
 
-int NSFSObject::NSFSFSIOObject::fgetattr(const std::string& name,
+int NSFSObject::NSFSFSIOObject::fgetattr(const DoutPrefixProvider* dpp, const std::string& name,
 					  bufferlist& dest, uint32_t flags)
 {
   if (shadow_fd < 0) {
@@ -4833,7 +4852,7 @@ int NSFSObject::NSFSFSIOObject::fgetattr(const std::string& name,
   return 0;
 }
 
-int NSFSObject::NSFSFSIOObject::fsetattr(const std::string& name,
+int NSFSObject::NSFSFSIOObject::fsetattr(const DoutPrefixProvider* dpp, const std::string& name,
 					  const bufferlist& val,
 					  uint32_t flags)
 {
@@ -4849,7 +4868,7 @@ int NSFSObject::NSFSFSIOObject::fsetattr(const std::string& name,
   return 0;
 }
 
-int NSFSObject::NSFSFSIOObject::fgetattrs(Attrs& attrs, uint32_t flags)
+int NSFSObject::NSFSFSIOObject::fgetattrs(const DoutPrefixProvider* dpp, Attrs& attrs, uint32_t flags)
 {
   if (shadow_fd < 0) {
     return -EBADF;
@@ -4857,7 +4876,7 @@ int NSFSObject::NSFSFSIOObject::fgetattrs(Attrs& attrs, uint32_t flags)
   return get_x_attrs(null_yield, dpp, shadow_fd, attrs, shadow_name);
 }
 
-int NSFSObject::NSFSFSIOObject::fsetattrs(Attrs& attrs, uint32_t flags)
+int NSFSObject::NSFSFSIOObject::fsetattrs(const DoutPrefixProvider* dpp, Attrs& attrs, uint32_t flags)
 {
   if (shadow_fd < 0) {
     return -EBADF;
@@ -4872,7 +4891,20 @@ int NSFSObject::NSFSFSIOObject::fsetattrs(Attrs& attrs, uint32_t flags)
   return 0;
 }
 
-int NSFSObject::NSFSFSIOObject::close(uint32_t flags)
+int NSFSObject::NSFSFSIOObject::fremovexattr(const DoutPrefixProvider* dpp, const std::string& name,
+					     uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  std::string xname = make_xattr_name(name);
+  if (::fremovexattr(shadow_fd, xname.c_str()) < 0) {
+    return -errno;
+  }
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::close(const DoutPrefixProvider* dpp, uint32_t flags)
 {
   if (shadow_fd < 0 && shadow_dir_fd < 0) {
     return 0;
@@ -4898,7 +4930,7 @@ int NSFSObject::NSFSFSIOObject::close(uint32_t flags)
 
 NSFSObject::NSFSFSIOObject::~NSFSFSIOObject()
 {
-  close(CLOSE_FLAG_DETACH);
+  close(nullptr, CLOSE_FLAG_DETACH);
 }
 
 bool NSFSObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
