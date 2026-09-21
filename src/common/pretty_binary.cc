@@ -29,7 +29,7 @@ std::string pretty_binary_string_reverse(const std::string& pretty)
   if (pretty.empty())
     return bin;
   bin.reserve(pretty.length());
-  bool strmode;
+  bool strmode = false;
   switch (pretty[0]) {
     case '\'':
       ++i;
