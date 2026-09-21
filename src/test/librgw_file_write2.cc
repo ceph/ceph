@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <memory>
 #include <ranges>
+#include <algorithm>
 #include <tuple>
 #include <iostream>
 #include <vector>
@@ -333,6 +334,16 @@ namespace {
     int argc;
     char **argv;
   } saved_args;
+}
+
+extern "C" {
+  static int collect_names_cb(const char* name, void* arg, uint64_t offset,
+			      struct stat* st, uint32_t st_mask,
+			      uint32_t flags) {
+    auto* names = static_cast<std::vector<std::string>*>(arg);
+    names->push_back(std::string(name));
+    return true;
+  }
 }
 
 TEST(OPEN2, INIT) {
@@ -2483,6 +2494,61 @@ TEST(OPEN2, DIR_ATTRS_PERSIST)
 }
 
 /* END ALL TESTS */
+
+TEST(OPEN2, DOTFILE_IS_LISTED)
+{
+  /* Hiding names which begin with '.' is a client convention -- ls
+   * filters them, readdir(3) does not.  A server which drops them from
+   * the listing is a different thing:  the client cannot un-hide what it
+   * was never sent, so `ls -a` shows nothing, `rm -rf` leaves the
+   * directory non-empty, and tar/rsync are silently lossy.
+   *
+   * What must stay suppressed is our own on-disk schema -- .shadow,
+   * .versions, .folder and the fs_strategy temporaries -- which is why
+   * the fix is a reserved-name predicate rather than dropping the skip.
+   *
+   * RED: fails until Directory::fill_cache stops skipping every dot
+   * name (rgw_sal_nsfs.cc:1849). */
+  reset_object(".bashrc");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup(".bashrc")), 0);
+
+  std::string body{"export EDITOR=vi\n"};
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), body, 0, body.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+
+  /* it exists by every other means */
+  struct rgw_file_handle* fh{nullptr};
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, ".bashrc", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  ASSERT_NE(fh, nullptr);
+  struct stat st;
+  ASSERT_EQ(rgw_getattr(fs, fh, &st, RGW_GETATTR_FLAG_NONE), 0);
+  ASSERT_EQ(st.st_size, (off_t) body.length());
+  (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+
+  /* ... but a listing must show it too, or the namespace is incoherent */
+  std::vector<std::string> names;
+  uint64_t offset = 0;
+  bool eof = false;
+  do {
+    ASSERT_EQ(rgw_readdir(fs, bucket_fh, &offset, collect_names_cb, &names,
+			  &eof, RGW_READDIR_FLAG_NONE), 0);
+  } while (! eof);
+
+  ASSERT_NE(std::find(names.begin(), names.end(), ".bashrc"), names.end())
+      << "created dotfile was not listed";
+
+  /* our own schema stays hidden */
+  for (const auto& reserved : {".shadow", ".versions", ".folder"}) {
+    ASSERT_EQ(std::find(names.begin(), names.end(), reserved), names.end())
+	<< "internal name " << reserved << " leaked into the listing";
+  }
+}
 
 TEST(OPEN2, DELETE_BUCKET) {
   if (do_delete) {

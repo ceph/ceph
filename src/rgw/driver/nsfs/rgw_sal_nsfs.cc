@@ -120,6 +120,34 @@ const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 const std::string NSFS_FOLDER_OBJECT_NAME = ".folder";
 
+/* multipart staging:  <bucket>/.multipart_<upload_id>/ holding
+ * part-NNNNN plus .meta and .assembled (see DESIGN.md) */
+static const std::string MP_STAGING_PREFIX = ".multipart_";
+static const std::string MP_META_NAME = ".meta";
+static const std::string MP_ASSEMBLED_NAME = ".assembled";
+static const std::string VERSIONS_LOCK_NAME = ".lock";
+
+/* Names this driver creates on disk which are not objects.  Listing
+ * paths suppress exactly these;  every other dot-prefixed name is an
+ * ordinary object.  Hiding all of them is a client convention -- ls
+ * filters, readdir(3) does not -- and a server which drops them from
+ * the listing leaves a namespace a client cannot see or empty. */
+static bool is_reserved_name(std::string_view name)
+{
+  if ((name == HIDDEN_SHADOW_PATH) ||
+      (name == HIDDEN_VERSIONS_PATH) ||
+      (name == NSFS_FOLDER_OBJECT_NAME) ||
+      (name == MP_META_NAME) ||
+      (name == MP_ASSEMBLED_NAME) ||
+      (name == VERSIONS_LOCK_NAME)) {
+    return true;
+  }
+  return name.starts_with(MP_STAGING_PREFIX) ||
+	 name.starts_with(nsfs::TMP_LINK_PREFIX) ||
+	 name.starts_with(nsfs::UNLINK_TMP_PREFIX) ||
+	 name.starts_with(nsfs::CLONE_PARENT_PREFIX);
+}
+
 /* See posix driver comment — object ownership is now read from the
  * standard RGW_ATTR_ACL attribute, matching rados. The former
  * NSFSOwner xattr could not represent account-owned objects. */
@@ -321,7 +349,9 @@ static void promote_version(int parent_fd, const std::string& leaf,
     if (vdir) {
       struct dirent* de;
       while ((de = readdir(vdir)) != nullptr) {
-        if (de->d_name[0] == '.') { continue; }
+        /* no dot filter:  the key match below rejects ".", ".." and
+         * .lock, and filtering on the dot would hide the versions of
+         * an object whose own name begins with one */
         std::string vn(de->d_name);
         if (vn.size() <= leaf.size() + 1 ||
             vn.compare(0, leaf.size(), leaf) != 0 ||
@@ -1772,8 +1802,7 @@ int Directory::copy(const DoutPrefixProvider *dpp, optional_yield y,
   ret = for_each(dpp, [this, &dest, &dpp, &y](const char* name) {
     std::unique_ptr<FSEnt> sobj;
 
-    if (name[0] == '.') {
-      /* Skip dotfiles */
+    if (is_reserved_name(name)) {
       return 0;
     }
 
@@ -1846,7 +1875,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
   int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix, flags](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
-    if (name[0] == '.' && name != NSFS_FOLDER_OBJECT_NAME) {
+    if (is_reserved_name(name) && name != NSFS_FOLDER_OBJECT_NAME) {
       return 0;
     }
 
@@ -1929,10 +1958,9 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       if (vdir) {
         struct dirent* de;
         while ((de = readdir(vdir)) != nullptr) {
-          if (de->d_name[0] == '.') {
-            continue;
-          }
-
+          /* no dot filter:  the parse below rejects ".", ".." and
+           * .lock, and filtering on the dot would hide the versions of
+           * an object whose own name begins with one */
           std::string vname(de->d_name);
           /* parse "key_version_id" — find the last '_mtime-' or '_null' */
           std::string obj_name;
@@ -3911,8 +3939,7 @@ int NSFSBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 
   // TODO: bucket stats shouldn't have to list all objects
   return dir->for_each(dpp, [this, dpp, y, &main] (const char* name) {
-    if (name[0] == '.') {
-      /* Skip dotfiles */
+    if (is_reserved_name(name)) {
       return 0;
     }
 
@@ -4012,7 +4039,7 @@ int NSFSBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
   return dir->for_each(dpp, [](const char* name) {
     /* for_each filters out "." and "..", so reaching here is not empty */
     std::string_view check_name = name;
-    if (!check_name.starts_with(".multipart")) { // incomplete uploads can be deleted
+    if (!check_name.starts_with(MP_STAGING_PREFIX)) { // incomplete uploads can be deleted
       return -ENOTEMPTY;
     }
     return 0;
@@ -5610,9 +5637,9 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
               std::string max_name;
               struct dirent* de;
               while ((de = readdir(vdir)) != nullptr) {
-                if (de->d_name[0] == '.') {
-                  continue;
-                }
+                /* no dot filter:  the key match below rejects ".", ".."
+                 * and .lock, and filtering on the dot would hide the
+                 * versions of an object whose name begins with one */
                 std::string vname(de->d_name);
                 /* match entries for this key: "leafname_..." */
                 if (vname.size() <= leaf_name.size() + 1 ||
@@ -7044,7 +7071,7 @@ std::unique_ptr<rgw::sal::Object> NSFSMultipartUpload::get_meta_obj()
 
   load(nullptr);
 
-  static const std::string meta_name{".meta"};
+  static const std::string& meta_name = MP_META_NAME;
   if (!shadow) {
     meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
   } else {
@@ -7367,7 +7394,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   int staging_fd = shadow->get_dir()->get_fd();
 
   // assemble parts into a single file via copy_file_range
-  std::string assembled_name = ".assembled";
+  std::string assembled_name = MP_ASSEMBLED_NAME;
   ret = assemble_parts(dpp, staging_fd, total_parts, assembled_name);
   if (ret < 0) {
     return ret;

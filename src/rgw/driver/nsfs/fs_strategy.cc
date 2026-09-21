@@ -68,7 +68,7 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   /* link the O_TMPFILE into the directory under a temp name, then
    * rename to the final name — two-step because linkat(2) cannot
    * atomically replace an existing entry */
-  std::string tmp_name = ".tmp_link_" +
+  std::string tmp_name = std::string(TMP_LINK_PREFIX) +
     std::to_string(getpid()) + "_" + std::to_string(temp_fd);
 
   int ret = ::linkat(AT_FDCWD, temp_file_path,
@@ -122,7 +122,7 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                       uint64_t expected_ino)
 {
   static std::atomic<uint64_t> counter{0};
-  std::string tmp_name = ".unlink_tmp_" +
+  std::string tmp_name = std::string(UNLINK_TMP_PREFIX) +
     std::to_string(getpid()) + "_" + std::to_string(counter.fetch_add(1));
 
   int ret = ::renameat(dir_fd, name.c_str(),
@@ -634,7 +634,7 @@ static std::string fd_path(int dir_fd, const std::string& name)
  * out of bucket listings */
 static std::string clone_parent_name(const std::string& name)
 {
-  return ".clone_parent." + name;
+  return std::string(CLONE_PARENT_PREFIX) + name;
 }
 
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,

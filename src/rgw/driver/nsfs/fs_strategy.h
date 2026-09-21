@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <boost/container/flat_map.hpp>
@@ -29,6 +30,15 @@ class DoutPrefixProvider;
 namespace rgw { namespace sal { namespace nsfs {
 
 using xattr_map_t = boost::container::flat_map<std::string, std::string>;
+
+/* Names the strategy layer creates on disk which are not objects.  They
+ * are declared here rather than inline at their use sites so that the
+ * listing paths can suppress them without duplicating the knowledge --
+ * a name added here and nowhere else would otherwise start appearing in
+ * NFS readdir and S3 LIST. */
+inline constexpr std::string_view TMP_LINK_PREFIX = ".tmp_link_";
+inline constexpr std::string_view UNLINK_TMP_PREFIX = ".unlink_tmp_";
+inline constexpr std::string_view CLONE_PARENT_PREFIX = ".clone_parent.";
 
 enum class SafeResult {
   OK = 0,
