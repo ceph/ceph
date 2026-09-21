@@ -180,8 +180,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
     -Wno-varargs
     -Wno-gnu-designator
     -Wno-missing-braces
-    -Wno-parentheses
-    -Wno-deprecated-register)
+    -Wno-parentheses)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 18)
     add_compile_options(
     -Wno-vla-cxx-extension)
