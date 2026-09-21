@@ -252,6 +252,7 @@ TEST_P(TestClsRbd, get_and_set_id)
 
 TEST_P(TestClsRbd, add_remove_child)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, ioctx.create(oid, true));
 
@@ -294,6 +295,7 @@ TEST_P(TestClsRbd, add_remove_child)
 
 TEST_P(TestClsRbd, directory_methods)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   string id, name;
   string imgname = get_temp_image_name();
@@ -410,6 +412,7 @@ TEST_P(TestClsRbd, directory_methods)
 
 TEST_P(TestClsRbd, create)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   uint64_t size = 20ULL << 30;
   uint64_t features = 0;
@@ -453,6 +456,7 @@ TEST_P(TestClsRbd, create)
 
 TEST_P(TestClsRbd, get_features)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
 
   uint64_t features;
@@ -468,6 +472,7 @@ TEST_P(TestClsRbd, get_features)
 
 TEST_P(TestClsRbd, get_object_prefix)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
 
   string object_prefix;
@@ -481,6 +486,7 @@ TEST_P(TestClsRbd, get_object_prefix)
 
 TEST_P(TestClsRbd, get_create_timestamp)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
@@ -492,6 +498,7 @@ TEST_P(TestClsRbd, get_create_timestamp)
 
 TEST_P(TestClsRbd, get_access_timestamp)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
@@ -502,6 +509,7 @@ TEST_P(TestClsRbd, get_access_timestamp)
 }
 TEST_P(TestClsRbd, get_modify_timestamp)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
@@ -512,6 +520,7 @@ TEST_P(TestClsRbd, get_modify_timestamp)
 }
 TEST_P(TestClsRbd, get_data_pool)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
 
   int64_t data_pool_id;
@@ -528,6 +537,7 @@ TEST_P(TestClsRbd, get_data_pool)
 
 TEST_P(TestClsRbd, get_size)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   uint64_t size;
   uint8_t order;
@@ -550,6 +560,7 @@ TEST_P(TestClsRbd, get_size)
 
 TEST_P(TestClsRbd, set_size)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(-ENOENT, set_size(&ioctx, oid, 5));
 
@@ -574,6 +585,7 @@ TEST_P(TestClsRbd, set_size)
 
 TEST_P(TestClsRbd, protection_status)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   string oid2 = get_temp_image_name();
   uint8_t status = RBD_PROTECTION_STATUS_UNPROTECTED;
@@ -639,6 +651,7 @@ TEST_P(TestClsRbd, protection_status)
 
 TEST_P(TestClsRbd, snapshot_limits)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   librados::ObjectWriteOperation op;
   string oid = get_temp_image_name();
   uint64_t limit;
@@ -669,6 +682,7 @@ TEST_P(TestClsRbd, snapshot_limits)
 
 TEST_P(TestClsRbd, parents_v1)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   cls::rbd::ParentImageSpec pspec;
   uint64_t size;
 
@@ -840,6 +854,7 @@ TEST_P(TestClsRbd, parents_v1)
 
 TEST_P(TestClsRbd, parents_v2)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   std::string oid = get_temp_image_name();
   cls::rbd::ParentImageSpec parent_image_spec;
   std::optional<uint64_t> parent_overlap;
@@ -972,6 +987,7 @@ TEST_P(TestClsRbd, parents_v2)
 
 TEST_P(TestClsRbd, snapshots)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   cls::rbd::SnapshotNamespace userSnapNamespace = cls::rbd::UserSnapshotNamespace();
 
   string oid = get_temp_image_name();
@@ -1121,6 +1137,7 @@ TEST_P(TestClsRbd, snapid_race)
 
 TEST_P(TestClsRbd, stripingv2)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   string oid2 = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 10, 22, 0, oid, -1));
@@ -1347,6 +1364,7 @@ TEST_P(TestClsRbd, object_map_snap_remove)
 
 TEST_P(TestClsRbd, flags)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
@@ -1374,6 +1392,7 @@ TEST_P(TestClsRbd, flags)
 
 TEST_P(TestClsRbd, metadata)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
@@ -1434,6 +1453,7 @@ TEST_P(TestClsRbd, metadata)
 
 TEST_P(TestClsRbd, set_features)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   uint64_t base_features = RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN;
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, base_features, oid, -1));
@@ -1470,6 +1490,7 @@ TEST_P(TestClsRbd, set_features)
 }
 
 TEST_P(TestClsRbd, mirror) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   ioctx.remove(RBD_MIRRORING);
 
   std::vector<cls::rbd::MirrorPeer> peers;
@@ -1607,6 +1628,7 @@ TEST_P(TestClsRbd, mirror) {
 }
 
 TEST_P(TestClsRbd, mirror_image) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   ioctx.remove(RBD_MIRRORING);
 
   std::map<std::string, std::string> mirror_image_ids;
@@ -1673,6 +1695,7 @@ TEST_P(TestClsRbd, mirror_image) {
 }
 
 TEST_P(TestClsRbd, mirror_image_status) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   struct WatchCtx : public librados::WatchCtx2 {
     librados::IoCtx *m_ioctx;
 
@@ -2022,6 +2045,7 @@ TEST_P(TestClsRbd, mirror_image_status) {
 
 TEST_P(TestClsRbd, mirror_image_map)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   ioctx.remove(RBD_MIRROR_LEADER);
 
   std::map<std::string, cls::rbd::MirrorImageMap> image_mapping;
@@ -2080,6 +2104,7 @@ TEST_P(TestClsRbd, mirror_image_map)
 }
 
 TEST_P(TestClsRbd, mirror_instances) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   ioctx.remove(RBD_MIRROR_LEADER);
 
   std::vector<std::string> instance_ids;
@@ -2110,6 +2135,7 @@ TEST_P(TestClsRbd, mirror_instances) {
 }
 
 TEST_P(TestClsRbd, mirror_snapshot) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 10, 22, 0, oid, -1));
 
@@ -2179,6 +2205,7 @@ TEST_P(TestClsRbd, mirror_snapshot) {
 }
 
 TEST_P(TestClsRbd, group_dir_list) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id1 = "cgid1";
   string group_name1 = "cgname1";
   string group_id2 = "cgid2";
@@ -2211,6 +2238,7 @@ void add_group_to_dir(librados::IoCtx ioctx, string group_id, string group_name)
 }
 
 TEST_P(TestClsRbd, group_dir_add) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   ioctx.remove(RBD_GROUP_DIRECTORY);
 
   string group_id = "cgid";
@@ -2219,6 +2247,7 @@ TEST_P(TestClsRbd, group_dir_add) {
 }
 
 TEST_P(TestClsRbd, dir_add_already_existing) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   ioctx.remove(RBD_GROUP_DIRECTORY);
 
   string group_id = "cgidexisting";
@@ -2229,6 +2258,7 @@ TEST_P(TestClsRbd, dir_add_already_existing) {
 }
 
 TEST_P(TestClsRbd, group_dir_rename) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   ioctx.remove(RBD_GROUP_DIRECTORY);
 
   string group_id = "cgid";
@@ -2255,6 +2285,7 @@ TEST_P(TestClsRbd, group_dir_rename) {
 }
 
 TEST_P(TestClsRbd, group_dir_remove) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   ioctx.remove(RBD_GROUP_DIRECTORY);
 
   string group_id = "cgidtodel";
@@ -2269,6 +2300,7 @@ TEST_P(TestClsRbd, group_dir_remove) {
 }
 
 TEST_P(TestClsRbd, group_dir_remove_missing) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   ioctx.remove(RBD_GROUP_DIRECTORY);
 
   string group_id = "cgidtodelmissing";
@@ -2305,6 +2337,7 @@ void test_image_add(librados::IoCtx &ioctx, const string& group_id,
 }
 
 TEST_P(TestClsRbd, group_image_add) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2314,6 +2347,7 @@ TEST_P(TestClsRbd, group_image_add) {
 }
 
 TEST_P(TestClsRbd, group_image_remove) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id1";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2329,6 +2363,7 @@ TEST_P(TestClsRbd, group_image_remove) {
 }
 
 TEST_P(TestClsRbd, group_image_list) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id2";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2352,6 +2387,7 @@ TEST_P(TestClsRbd, group_image_list) {
 }
 
 TEST_P(TestClsRbd, group_image_clean) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id3";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2381,6 +2417,7 @@ TEST_P(TestClsRbd, group_image_clean) {
 }
 
 TEST_P(TestClsRbd, image_group_add) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   int64_t pool_id = ioctx.get_id();
   string image_id = "imageid";
 
@@ -2404,6 +2441,7 @@ TEST_P(TestClsRbd, image_group_add) {
 }
 
 TEST_P(TestClsRbd, image_group_remove) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   int64_t pool_id = ioctx.get_id();
   string image_id = "image_id";
 
@@ -2425,6 +2463,7 @@ TEST_P(TestClsRbd, image_group_remove) {
 }
 
 TEST_P(TestClsRbd, image_group_get) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   int64_t pool_id = ioctx.get_id();
   string image_id = "imageidgroupspec";
 
@@ -2462,6 +2501,7 @@ TEST_P(TestClsRbd, group_snap_set_empty_id) {
 }
 
 TEST_P(TestClsRbd, group_snap_set_duplicate_id) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id_snap_add_duplicate_id";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2474,6 +2514,7 @@ TEST_P(TestClsRbd, group_snap_set_duplicate_id) {
 }
 
 TEST_P(TestClsRbd, group_snap_set_duplicate_name) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id_snap_add_duplicate_name";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2487,6 +2528,7 @@ TEST_P(TestClsRbd, group_snap_set_duplicate_name) {
 }
 
 TEST_P(TestClsRbd, group_snap_set) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id_snap_add";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2505,6 +2547,7 @@ TEST_P(TestClsRbd, group_snap_set) {
 }
 
 TEST_P(TestClsRbd, group_snap_list) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id_snap_list";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2569,6 +2612,7 @@ static std::string hexify(int v) {
 }
 
 TEST_P(TestClsRbd, group_snap_list_max_return) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id_snap_list_max_return";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2599,6 +2643,7 @@ TEST_P(TestClsRbd, group_snap_list_max_return) {
 }
 
 TEST_P(TestClsRbd, group_snap_list_max_read) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id_snap_list_max_read";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2622,6 +2667,7 @@ TEST_P(TestClsRbd, group_snap_list_max_read) {
 }
 
 TEST_P(TestClsRbd, group_snap_remove) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id_snap_remove";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2649,6 +2695,7 @@ TEST_P(TestClsRbd, group_snap_remove) {
 }
 
 TEST_P(TestClsRbd, group_snap_remove_without_order) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id_snap_remove_without_order";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2678,6 +2725,7 @@ TEST_P(TestClsRbd, group_snap_remove_without_order) {
 }
 
 TEST_P(TestClsRbd, group_snap_get_by_id) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string group_id = "group_id_snap_get_by_id";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
@@ -2697,6 +2745,7 @@ TEST_P(TestClsRbd, group_snap_get_by_id) {
 
 TEST_P(TestClsRbd, trash_methods)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string id = "123456789";
   string id2 = "123456780";
 
@@ -2760,6 +2809,7 @@ TEST_P(TestClsRbd, trash_methods)
 
 TEST_P(TestClsRbd, op_features)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
@@ -2808,6 +2858,7 @@ TEST_P(TestClsRbd, op_features)
 
 TEST_P(TestClsRbd, clone_parent)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 123, "user_snap"));
@@ -2886,6 +2937,7 @@ TEST_P(TestClsRbd, clone_parent)
 
 TEST_P(TestClsRbd, clone_parent_ns)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 123, "user_snap"));
@@ -2914,6 +2966,7 @@ TEST_P(TestClsRbd, clone_parent_ns)
 
 TEST_P(TestClsRbd, clone_child)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22,
                             RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN,
@@ -2949,6 +3002,7 @@ TEST_P(TestClsRbd, clone_child)
 
 TEST_P(TestClsRbd, namespace_methods)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string name1 = "123456789";
   string name2 = "123456780";
 
@@ -2981,6 +3035,7 @@ TEST_P(TestClsRbd, namespace_methods)
 
 TEST_P(TestClsRbd, migration)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
@@ -3047,6 +3102,7 @@ TEST_P(TestClsRbd, migration)
 
 TEST_P(TestClsRbd, migration_v1)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   bufferlist header;
   header.append(RBD_HEADER_TEXT, sizeof(RBD_HEADER_TEXT));
   string oid = get_temp_image_name();

@@ -153,6 +153,7 @@ TEST_P(TestClsCmpOmap, cmp_vals_noexist_u64_default)
 
 TEST_P(TestClsCmpOmap, cmp_vals_str)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const std::string key = "key";
   ASSERT_EQ(ioctx.omap_set(oid, {{key, string_buffer("bbb")}}), 0);
@@ -190,6 +191,7 @@ TEST_P(TestClsCmpOmap, cmp_vals_str)
 
 TEST_P(TestClsCmpOmap, cmp_vals_u64)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const std::string key = "key";
   ASSERT_EQ(ioctx.omap_set(oid, {{key, u64_buffer(42)}}), 0);
@@ -273,6 +275,7 @@ TEST_P(TestClsCmpOmap, cmp_vals_u64_empty_default)
 
 TEST_P(TestClsCmpOmap, cmp_vals_u64_invalid_value)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   ASSERT_EQ(ioctx.create(oid, true), 0);
   const std::string key = "key";
@@ -326,6 +329,7 @@ TEST_P(TestClsCmpOmap, cmp_set_vals_noexist_str)
 
 TEST_P(TestClsCmpOmap, cmp_set_vals_noexist_str_default)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const bufferlist value = string_buffer("bbb");
   const bufferlist def;
@@ -365,6 +369,7 @@ TEST_P(TestClsCmpOmap, cmp_set_vals_noexist_u64)
 
 TEST_P(TestClsCmpOmap, cmp_set_vals_noexist_u64_default)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const bufferlist value = u64_buffer(0);
   const bufferlist def = u64_buffer(0);
@@ -388,6 +393,7 @@ TEST_P(TestClsCmpOmap, cmp_set_vals_noexist_u64_default)
 
 TEST_P(TestClsCmpOmap, cmp_set_vals_str)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const bufferlist value1 = string_buffer("bbb");
   const bufferlist value2 = string_buffer("ccc");
@@ -425,6 +431,7 @@ TEST_P(TestClsCmpOmap, cmp_set_vals_str)
 
 TEST_F(TestClsCmpOmap, atomic_omap_set_conditional_match)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const bufferlist value1 = u64_buffer(1);
   const bufferlist value2 = u64_buffer(42);
@@ -449,6 +456,7 @@ TEST_F(TestClsCmpOmap, atomic_omap_set_conditional_match)
 
 TEST_F(TestClsCmpOmap, atomic_omap_set_conditional_mismatch)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const bufferlist value1 = u64_buffer(1);
   const bufferlist value2 = u64_buffer(2);
@@ -474,6 +482,7 @@ TEST_F(TestClsCmpOmap, atomic_omap_set_conditional_mismatch)
 
 TEST_P(TestClsCmpOmap, cmp_set_vals_u64)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const bufferlist value1 = u64_buffer(0);
   const bufferlist value2 = u64_buffer(42);
@@ -511,6 +520,7 @@ TEST_P(TestClsCmpOmap, cmp_set_vals_u64)
 
 TEST_P(TestClsCmpOmap, cmp_set_vals_u64_einval)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const std::string key = "key";
   const bufferlist value1 = u64_buffer(0);
@@ -521,6 +531,7 @@ TEST_P(TestClsCmpOmap, cmp_set_vals_u64_einval)
 
 TEST_P(TestClsCmpOmap, cmp_set_vals_u64_eio)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const std::string key = "key";
   const bufferlist value1 = string_buffer("ccc");
@@ -589,6 +600,7 @@ TEST_P(TestClsCmpOmap, cmp_rm_keys_noexist_u64)
 
 TEST_P(TestClsCmpOmap, cmp_rm_keys_str)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const bufferlist value1 = string_buffer("bbb");
   const bufferlist value2 = string_buffer("ccc");
@@ -625,6 +637,7 @@ TEST_P(TestClsCmpOmap, cmp_rm_keys_str)
 
 TEST_P(TestClsCmpOmap, cmp_rm_keys_u64)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const bufferlist value1 = u64_buffer(0);
   const bufferlist value2 = u64_buffer(42);
@@ -661,6 +674,7 @@ TEST_P(TestClsCmpOmap, cmp_rm_keys_u64)
 
 TEST_P(TestClsCmpOmap, cmp_rm_keys_u64_einval)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const std::string key = "key";
   const bufferlist value1 = u64_buffer(0);
@@ -671,6 +685,7 @@ TEST_P(TestClsCmpOmap, cmp_rm_keys_u64_einval)
 
 TEST_P(TestClsCmpOmap, cmp_rm_keys_u64_eio)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const std::string key = "key";
   const bufferlist value1 = string_buffer("ccc");
@@ -709,6 +724,7 @@ TEST_P(TestClsCmpOmap, cmp_rm_keys_over_max_keys)
 // test upgrades from empty omap values to u64
 TEST_P(TestClsCmpOmap, cmp_rm_keys_u64_empty)
 {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
   const std::string oid = __PRETTY_FUNCTION__;
   const bufferlist value1; // empty buffer
   const bufferlist value2 = u64_buffer(42);

@@ -20,6 +20,7 @@ namespace test {
 // Define static members for PoolTypeTestFixture
 librados::Rados PoolTypeTestFixture::rados;
 std::map<PoolType, std::string> PoolTypeTestFixture::pool_names;
+std::map<PoolType, bool> PoolTypeTestFixture::pool_omap_support;
 
 // Define static members for ECOnlyTestFixture
 librados::Rados ECOnlyTestFixture::rados;
@@ -57,6 +58,30 @@ void PoolTypeTestFixture::cleanup_namespace(librados::Rados& cluster,
   }
 }
 
+int get_pool_supports_omap(librados::Rados& cluster,
+                           const std::string& pool_name,
+                           bool* supports_omap) {
+  bufferlist inbl, outbl;
+  std::ostringstream oss;
+  oss << "{\"prefix\": \"osd pool get\", \"pool\": \"" << pool_name
+      << "\", \"var\": \"supports_omap\", \"format\": \"json\"}";
+  int rc = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
+  if (rc != 0) {
+    return rc;
+  }
+
+  JSONParser p;
+  if (!p.parse(outbl.c_str(), outbl.length())) {
+    return -EINVAL;
+  }
+  try {
+    JSONDecoder::decode_json("supports_omap", *supports_omap, &p, true);
+  } catch (const JSONDecoder::err&) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
 void PoolTypeTestFixture::SetUpTestSuite() {
   ASSERT_EQ("", connect_cluster_pp(rados));
 
@@ -66,6 +91,10 @@ void PoolTypeTestFixture::SetUpTestSuite() {
     ASSERT_EQ("", create_pool_by_type(pname, rados, type));
     after_pool_create(type, pname, rados);
     pool_names[type] = pname;
+
+    bool supports_omap = false;
+    ASSERT_EQ(0, get_pool_supports_omap(rados, pname, &supports_omap));
+    pool_omap_support[type] = supports_omap;
   }
 }
 
@@ -74,6 +103,7 @@ void PoolTypeTestFixture::TearDownTestSuite() {
     ASSERT_EQ(0, destroy_pool_by_type(pname, rados, type));
   }
   pool_names.clear();
+  pool_omap_support.clear();
   rados.shutdown();
 }
 

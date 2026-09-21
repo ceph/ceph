@@ -87,12 +87,25 @@ inline int destroy_pool_by_type(
   }
 }
 
+// Read the supports_omap property of a pool from the monitor
+int get_pool_supports_omap(librados::Rados& cluster,
+                           const std::string& pool_name,
+                           bool* supports_omap);
+
+// Skip a test that writes omap when the pool does not support omap
+// (for example, Fast EC pools on crimson)
+#define SKIP_IF_OMAP_NOT_SUPPORTED()                          \
+  if (!pool_supports_omap()) {                                \
+    GTEST_SKIP() << "Pool does not support omap. Skipped";    \
+  }
+
 // Generic base class for parameterized pool type tests
 // Can be used for any test that needs to run on multiple pool types
 class PoolTypeTestFixture : public ::testing::TestWithParam<PoolType> {
  protected:
   static librados::Rados rados;
   static std::map<PoolType, std::string> pool_names;
+  static std::map<PoolType, bool> pool_omap_support;
   librados::IoCtx ioctx;
   std::string pool_name;
   std::string nspace;
@@ -100,6 +113,13 @@ class PoolTypeTestFixture : public ::testing::TestWithParam<PoolType> {
 
   static std::vector<PoolType> get_supported_pool_types() {
     return {PoolType::REPLICATED, PoolType::FAST_EC};
+  }
+
+  // TEST_F cases on this fixture have no parameter, so pool_type may not name
+  // a pool we queried. Assume omap support in that case and run the test.
+  bool pool_supports_omap() const {
+    auto it = pool_omap_support.find(pool_type);
+    return it == pool_omap_support.end() || it->second;
   }
 
   static std::string pool_name_prefix() {

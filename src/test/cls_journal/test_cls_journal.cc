@@ -51,6 +51,7 @@ protected:
 };
 
 TEST_P(TestClsJournal, Create) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -72,6 +73,7 @@ TEST_P(TestClsJournal, Create) {
 }
 
 TEST_P(TestClsJournal, MinimumSet) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -97,6 +99,7 @@ TEST_P(TestClsJournal, MinimumSet) {
 }
 
 TEST_P(TestClsJournal, MinimumSetStale) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -126,6 +129,7 @@ TEST_P(TestClsJournal, MinimumSetStale) {
 }
 
 TEST_P(TestClsJournal, MinimumSetOrderConstraint) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -146,6 +150,7 @@ TEST_P(TestClsJournal, MinimumSetOrderConstraint) {
 }
 
 TEST_P(TestClsJournal, ActiveSet) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -167,6 +172,7 @@ TEST_P(TestClsJournal, ActiveSet) {
 }
 
 TEST_P(TestClsJournal, ActiveSetStale) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -182,6 +188,7 @@ TEST_P(TestClsJournal, ActiveSetStale) {
 }
 
 TEST_P(TestClsJournal, CreateDuplicate) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -190,6 +197,7 @@ TEST_P(TestClsJournal, CreateDuplicate) {
 }
 
 TEST_P(TestClsJournal, GetClient) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
@@ -207,6 +215,7 @@ TEST_P(TestClsJournal, GetClient) {
 }
 
 TEST_P(TestClsJournal, ClientRegister) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
@@ -221,6 +230,7 @@ TEST_P(TestClsJournal, ClientRegister) {
 }
 
 TEST_P(TestClsJournal, ClientRegisterDuplicate) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
@@ -230,6 +240,7 @@ TEST_P(TestClsJournal, ClientRegisterDuplicate) {
 }
 
 TEST_P(TestClsJournal, ClientUpdateData) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
@@ -250,6 +261,7 @@ TEST_P(TestClsJournal, ClientUpdateData) {
 }
 
 TEST_P(TestClsJournal, ClientUpdateState) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
@@ -273,6 +285,7 @@ TEST_P(TestClsJournal, ClientUpdateState) {
 }
 
 TEST_P(TestClsJournal, ClientUnregister) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
@@ -282,6 +295,7 @@ TEST_P(TestClsJournal, ClientUnregister) {
 }
 
 TEST_P(TestClsJournal, ClientUnregisterDNE) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
   ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
@@ -292,6 +306,7 @@ TEST_P(TestClsJournal, ClientUnregisterDNE) {
 }
 
 TEST_P(TestClsJournal, ClientUnregisterPruneTags) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -325,6 +340,7 @@ TEST_P(TestClsJournal, ClientUnregisterPruneTags) {
 }
 
 TEST_P(TestClsJournal, ClientCommit) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -351,6 +367,7 @@ TEST_P(TestClsJournal, ClientCommit) {
 }
 
 TEST_P(TestClsJournal, ClientCommitInvalid) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -382,6 +399,7 @@ TEST_P(TestClsJournal, ClientCommitDNE) {
 }
 
 TEST_P(TestClsJournal, ClientList) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -411,6 +429,7 @@ TEST_P(TestClsJournal, ClientList) {
 }
 
 TEST_P(TestClsJournal, GetNextTagTid) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -430,6 +449,7 @@ TEST_P(TestClsJournal, GetNextTagTid) {
 }
 
 TEST_P(TestClsJournal, TagCreate) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -460,6 +480,7 @@ TEST_P(TestClsJournal, TagCreate) {
 }
 
 TEST_P(TestClsJournal, TagCreatePrunesTags) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
@@ -487,6 +508,7 @@ TEST_P(TestClsJournal, TagCreatePrunesTags) {
 }
 
 TEST_P(TestClsJournal, TagList) {
+  SKIP_IF_OMAP_NOT_SUPPORTED();
 
   std::string oid = get_temp_image_name();
 
