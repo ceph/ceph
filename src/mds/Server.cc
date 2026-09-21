@@ -5162,6 +5162,21 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   int bytes_left = max_bytes - front_bytes;
   bytes_left -= get_snap_trace(session, realm).length();
 
+  /* The page size is chosen by the client and the whole page is encoded holding
+   * mds_lock, so one client walking a large directory can hold the lock for
+   * milliseconds while every other client waits. Pages are already separate
+   * requests, so clamping the page here simply gives the rank more points at
+   * which to interleave other work, at the cost of more round trips for the
+   * walker. 0 leaves the client's request alone. */
+  if (auto cap = g_conf().get_val<uint64_t>("mds_max_readdir_entries");
+      cap > 0 && (max == 0 || max > cap)) {
+    max = cap;
+  }
+  if (auto cap = g_conf().get_val<uint64_t>("mds_max_readdir_bytes");
+      cap > 0 && bytes_left > (int)cap) {
+    bytes_left = (int)cap;
+  }
+
   // build dir contents
   bufferlist dnbl;
   __u32 numfiles = 0;
