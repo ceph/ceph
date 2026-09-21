@@ -101,6 +101,23 @@ WRITE_CLASS_ENCODER(ObjectType);
 
 class Directory;
 
+/* Attribute write contract.
+ *
+ * REPLACE_ALL is the bucket contract:  bucket attrs are one map (a
+ * single blob on rados), so the incoming set is the complete set and
+ * anything absent from it is removed.  The bucket delete ops in
+ * rgw_op.cc depend on this -- they erase from the map and call
+ * put_info().
+ *
+ * MERGE is the object contract, matching RGWRados::set_attrs():  the
+ * incoming set is added or overwritten, nothing else is touched, and
+ * removals are named explicitly in rmattrs.
+ */
+enum class AttrWriteMode {
+  REPLACE_ALL,
+  MERGE,
+};
+
 class FSEnt {
 protected:
   std::string fname;
@@ -147,7 +164,9 @@ public:
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) = 0;
   virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
   virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) = 0;
-  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs);
+  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
+			  AttrWriteMode mode = AttrWriteMode::REPLACE_ALL,
+			  const std::vector<std::string>* rmattrs = nullptr);
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs);
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
@@ -1151,7 +1170,8 @@ public:
   int open(const DoutPrefixProvider *dpp, bool create = false, bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
-  int write_attrs(const DoutPrefixProvider* dpp, optional_yield y);
+  int write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
+		  const std::vector<std::string>* rmattrs = nullptr);
   int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y);
   std::string gen_temp_fname();
   const std::string get_fname(bool use_version);

@@ -58,6 +58,11 @@ namespace {
   string key1{"black"};
   string val1{"metallic"};
 
+  string key_a{"red"};
+  string val_a{"crimson"};
+  string key_b{"blue"};
+  string val_b{"azure"};
+
   struct rgw_file_handle *bucket_fh = nullptr;
   struct rgw_file_handle *object_fh = nullptr;
 
@@ -343,6 +348,97 @@ TEST(LibRGW, LSXATTR2) {
   ASSERT_TRUE(out_attrmap.find("user.rgw.etag") != out_attrmap.end());
   /* verify deletion */
   ASSERT_TRUE(out_attrmap.find(key1) == out_attrmap.end());
+}
+
+TEST(LibRGW, SETXATTR_EMPTY_PRESERVES) {
+
+  /* An empty value means "leave this attr alone", which is what
+   * RGWRados::set_attrs() has always done -- it skips a zero-length
+   * bufferlist rather than storing it.  nsfs stored it, so an empty
+   * write replaced a good value with one that does not decode;  that is
+   * how an empty ACL became "could not decode policy" and EIO.
+   *
+   * This goes through the legacy (non-FSIO) attr path:  a directory
+   * handle is not a file variant, so RGWLibFS::setxattrs falls through
+   * to RGWSetAttrsRequest -> RGWSetAttrs::execute -> set_obj_attrs().
+   * The librgw layer filters zero-length keys but not zero-length
+   * values, so the empty value does reach the driver. */
+
+  if (!bucket_fh)
+    return;
+
+  auto& dir = ovec[ovec.size()-1];
+
+  /* two attrs, so the empty write has a bystander */
+  {
+    rgw_xattrstr k_a = { const_cast<char*>(key_a.c_str()),
+			 uint32_t(key_a.length()) };
+    rgw_xattrstr v_a = { const_cast<char*>(val_a.c_str()),
+			 uint32_t(val_a.length()) };
+    rgw_xattrstr k_b = { const_cast<char*>(key_b.c_str()),
+			 uint32_t(key_b.length()) };
+    rgw_xattrstr v_b = { const_cast<char*>(val_b.c_str()),
+			 uint32_t(val_b.length()) };
+    rgw_xattr xattrs[2] = { { k_a, v_a }, { k_b, v_b } };
+    rgw_xattrlist xattrlist = { xattrs, 2 };
+
+    int ret = rgw_setxattrs(fs, dir.fh, &xattrlist, RGW_SETXATTR_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  }
+
+  /* overwrite key_a with an empty value */
+  {
+    rgw_xattrstr k_a = { const_cast<char*>(key_a.c_str()),
+			 uint32_t(key_a.length()) };
+    rgw_xattrstr empty = { nullptr, 0 };
+    rgw_xattr xattr = { k_a, empty };
+    rgw_xattrlist xattrlist = { &xattr, 1 };
+
+    int ret = rgw_setxattrs(fs, dir.fh, &xattrlist, RGW_SETXATTR_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  }
+
+  /* read the values back.  rgw_lsxattrs() cannot be used here:  it
+   * lists keys and hands the callback { nullptr, 0 } for every value,
+   * in both its FSIO and legacy branches, which is why LSXATTR1 and
+   * LSXATTR2 assert presence only.  rgw_getxattrs() returns values. */
+  std::string etag_key{"user.rgw.etag"};
+
+  rgw_xattrstr qk_a = { const_cast<char*>(key_a.c_str()),
+			uint32_t(key_a.length()) };
+  rgw_xattrstr qv_a = { nullptr, 0 };
+  rgw_xattrstr qk_b = { const_cast<char*>(key_b.c_str()),
+			uint32_t(key_b.length()) };
+  rgw_xattrstr qv_b = { nullptr, 0 };
+  rgw_xattrstr qk_e = { const_cast<char*>(etag_key.c_str()),
+			uint32_t(etag_key.length()) };
+  rgw_xattrstr qv_e = { nullptr, 0 };
+
+  rgw_xattr query[3] = { { qk_a, qv_a }, { qk_b, qv_b }, { qk_e, qv_e } };
+  rgw_xattrlist querylist = { query, 3 };
+
+  std::map<std::string, std::string> out_attrmap;
+
+  int ret = rgw_getxattrs(fs, dir.fh, &querylist, getattr_cb, &out_attrmap,
+			  RGW_GETXATTR_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  /* the empty write must not have replaced the good value */
+  auto i_a = out_attrmap.find(key_a);
+  ASSERT_TRUE(i_a != out_attrmap.end())
+    << key_a << " was destroyed by an empty write";
+  ASSERT_EQ(i_a->second, val_a);
+
+  /* nor disturbed a bystander */
+  auto i_b = out_attrmap.find(key_b);
+  ASSERT_TRUE(i_b != out_attrmap.end());
+  ASSERT_EQ(i_b->second, val_b);
+
+  /* and a partial write must not prune what it did not mention.  This
+   * assertion passes both before and after the merge-semantics change,
+   * since every reachable caller loads attrs first;  it pins the
+   * contract, it does not prove it. */
+  ASSERT_TRUE(out_attrmap.find(etag_key) != out_attrmap.end());
 }
 
 TEST(LibRGW, CLEANUP) {

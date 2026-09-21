@@ -1055,7 +1055,8 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
   return 0;
 }
 
-int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs)
+int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
+		       AttrWriteMode mode, const std::vector<std::string>* rmattrs)
 {
   int ret = open(dpp);
   if (ret < 0) {
@@ -1070,28 +1071,49 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   type.encode(type_bl);
   attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = type_bl;
 
-  if (fs_strategy) {
-    nsfs::xattr_map_t old_raw;
-    fs_strategy->get_xattrs(dpp, fd, old_raw);
+  /* An empty value means "leave this attr alone", matching
+   * RGWRados::set_attrs().  MERGE only:  under REPLACE_ALL a name absent
+   * from the write set is pruned, so skipping it here would delete the
+   * attr rather than preserve it. */
+  const bool skip_empty = (mode == AttrWriteMode::MERGE);
 
+  if (fs_strategy) {
     nsfs::xattr_map_t to_write;
     if (extra_attrs) {
       for (auto& [key, bl] : *extra_attrs) {
+        if (skip_empty && !bl.length()) {
+          continue;
+        }
         to_write.try_emplace(make_xattr_name(key), bl.to_str());
       }
     }
     for (auto& [key, bl] : attrs) {
+      if (skip_empty && !bl.length()) {
+        continue;
+      }
       to_write.try_emplace(make_xattr_name(key), bl.to_str());
     }
 
     std::vector<std::string> to_remove;
-    for (auto& [disk_name, _] : old_raw) {
-      if (disk_name.compare(0, NSFS_XATTR_PREFIX.size(),
-                            NSFS_XATTR_PREFIX) != 0) {
-        continue;
+    if (mode == AttrWriteMode::REPLACE_ALL) {
+      nsfs::xattr_map_t old_raw;
+      fs_strategy->get_xattrs(dpp, fd, old_raw);
+
+      for (auto& [disk_name, _] : old_raw) {
+        if (disk_name.compare(0, NSFS_XATTR_PREFIX.size(),
+                              NSFS_XATTR_PREFIX) != 0) {
+          continue;
+        }
+        if (to_write.find(disk_name) == to_write.end()) {
+          to_remove.push_back(disk_name);
+        }
       }
-      if (to_write.find(disk_name) == to_write.end()) {
-        to_remove.push_back(disk_name);
+    } else if (rmattrs) {
+      for (auto& key : *rmattrs) {
+        std::string disk_name{make_xattr_name(key)};
+        if (to_write.find(disk_name) == to_write.end()) {
+          to_remove.push_back(std::move(disk_name));
+        }
       }
     }
 
@@ -1106,19 +1128,31 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   }
 
   /* per-attr syscalls */
-  Attrs old_attrs;
-  ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
-  if (ret >= 0) {
-    for (auto& it : old_attrs) {
-      if (attrs.find(it.first) == attrs.end() &&
-          (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
-        remove_x_attr(dpp, y, fd, it.first, get_name());
+  if (mode == AttrWriteMode::REPLACE_ALL) {
+    Attrs old_attrs;
+    ret = get_x_attrs(y, dpp, fd, old_attrs, get_name());
+    if (ret >= 0) {
+      for (auto& it : old_attrs) {
+        if (attrs.find(it.first) == attrs.end() &&
+            (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
+          remove_x_attr(dpp, y, fd, it.first, get_name());
+        }
+      }
+    }
+  } else if (rmattrs) {
+    for (auto& key : *rmattrs) {
+      if (attrs.find(key) == attrs.end() &&
+          (!extra_attrs || extra_attrs->find(key) == extra_attrs->end())) {
+        remove_x_attr(dpp, y, fd, key, get_name());
       }
     }
   }
 
   if (extra_attrs) {
     for (auto &it : *extra_attrs) {
+      if (skip_empty && !it.second.length()) {
+        continue;
+      }
       ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name());
       if (ret < 0) {
         return ret;
@@ -1127,6 +1161,9 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   }
 
   for (auto& it : attrs) {
+    if (skip_empty && !it.second.length()) {
+      continue;
+    }
     ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name());
     if (ret < 0) {
       return ret;
@@ -5170,6 +5207,13 @@ int NSFSObject::NSFSFSIOObject::fsetattr(const DoutPrefixProvider* dpp, const st
   if (shadow_fd < 0) {
     return -EBADF;
   }
+  if (!val.length()) {
+    /* an empty value means "leave this attr alone", as in
+     * RGWRados::set_attrs() and FSEnt::write_attrs()'s MERGE arm.
+     * Writing it would replace a good value with one that does not
+     * decode -- which is how an empty ACL became EIO. */
+    return 0;
+  }
   std::string xname = make_xattr_name(name);
   std::string sval = val.to_str();
   if (::fsetxattr(shadow_fd, xname.c_str(),
@@ -5193,6 +5237,9 @@ int NSFSObject::NSFSFSIOObject::fsetattrs(const DoutPrefixProvider* dpp, Attrs& 
     return -EBADF;
   }
   for (auto& [key, bl] : attrs) {
+    if (!bl.length()) {
+      continue; /* empty value means "leave this attr alone" */
+    }
     std::string xname = make_xattr_name(key);
     if (::fsetxattr(shadow_fd, xname.c_str(),
 		     bl.c_str(), bl.length(), 0) < 0) {
@@ -5305,6 +5352,7 @@ int NSFSObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, 
 int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags)
 {
+  std::vector<std::string> rmattrs;
   if (delattrs) {
     for (auto& it : *delattrs) {
       if (it.first == RGW_NSFS_ATTR_OBJECT_TYPE) {
@@ -5312,6 +5360,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 	continue;
       }
       state.attrset.erase(it.first);
+      rmattrs.push_back(it.first);
     }
   }
   if (setattrs) {
@@ -5324,7 +5373,7 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
     }
   }
 
-  write_attrs(dpp, y);
+  write_attrs(dpp, y, &rmattrs);
   return 0;
 }
 
@@ -5922,9 +5971,11 @@ int NSFSObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp
   return ent->write(ofs, bl, dpp, y);
 }
 
-int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
+int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
+			    const std::vector<std::string>* rmattrs)
 {
-  return ent->write_attrs(dpp, y, state.attrset, nullptr);
+  return ent->write_attrs(dpp, y, state.attrset, nullptr,
+			  AttrWriteMode::MERGE, rmattrs);
 }
 
 int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
