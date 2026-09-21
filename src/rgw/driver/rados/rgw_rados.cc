@@ -25,6 +25,9 @@
 #include "common/async/blocked_completion.h"
 
 #include "rgw_asio_thread.h"
+#ifdef WITH_RADOSGW_CUOBJ
+#include "rgw_cuobj.h"
+#endif
 #include "rgw_cksum.h"
 #include "rgw_sal.h"
 #include "rgw_zone.h"
@@ -8654,17 +8657,77 @@ int get_obj_data::flush_rdma(rgw::AioResultList&& results) {
   }
   // OSDs that pushed wrote straight into client memory (byte counts
   // arrive through the per-stripe delivery out-params); an inline
-  // reply means that OSD could not push - no RDMA support, expired
-  // lease, resent op - and the whole GET must restart in a fallback
-  // mode. Either way the client callback never sees data here.
+  // reply means that OSD could not push - no RDMA support, a lapsed
+  // read or delivery lease, a resent op. A stripe that was declined
+  // outright is written from here instead; anything else makes the
+  // whole GET restart in a fallback mode. Either way the client
+  // callback never sees data here.
   while (!results.empty()) {
     auto& e = results.front();
     if (e.data.length() > 0) {
-      return -EOPNOTSUPP;
+      r = patch_rdma(e.id, e.data);
+      if (r < 0) {
+        return r;
+      }
     }
     results.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
   }
   return 0;
+}
+
+int get_obj_data::patch_rdma(uint64_t obj_ofs, const bufferlist& data) {
+  CephContext* cct = rgwrados->ctx();
+  auto ofs = std::find(rdma_slot_ofs.begin(), rdma_slot_ofs.end(), obj_ofs);
+  if (ofs == rdma_slot_ofs.end()) {
+    return -EOPNOTSUPP;
+  }
+  auto& slot = rdma_slots[ofs - rdma_slot_ofs.begin()];
+  if (slot.bytes != 0 ||
+      (slot.flags & librados::ObjectReadOperation::RDMA_DELIVERY_RESENT)) {
+    // the only attempt replying inline means nothing was, or will be,
+    // pushed for this stripe. Once the op has been resent that no
+    // longer holds: an earlier attempt may have initiated a write this
+    // reply knows nothing about, and only the caller's fence (delivery
+    // lease plus transport drain) makes the window safe to write again
+    ldout(cct, 4) << "rdma passthrough: stripe at " << obj_ofs
+                  << " came back inline from a resent op, falling back"
+                  << dendl;
+    return -EOPNOTSUPP;
+  }
+#ifdef WITH_RADOSGW_CUOBJ
+  auto* cuobj = RGWCuObjServer::get_instance();
+  if (!cuobj || !cuobj->is_available()) {
+    return -EOPNOTSUPP;
+  }
+  const size_t len = data.length();
+  auto* buf = cuobj->acquire_buffer(len);
+  if (!buf) {
+    return -EOPNOTSUPP;
+  }
+  data.begin().copy(len, static_cast<char*>(buf->ptr));
+  const ssize_t w = cuobj->rdma_write_to_client(
+    "patch", buf, obj_ofs - rdma_range_start, len, rdma_token);
+  cuobj->release_buffer(buf);
+  if (w != static_cast<ssize_t>(len)) {
+    ldout(cct, 4) << "rdma passthrough: writing the declined stripe at "
+                  << obj_ofs << " failed (" << w << "), falling back" << dendl;
+    return -EOPNOTSUPP;
+  }
+  slot.bytes = len;
+  slot.ranges.clear();
+  slot.flags = 0;
+  if (rdma_flags & librados::ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64) {
+    slot.crc64 = ceph::crc64nvme(data);
+    slot.flags = librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_VALID |
+                 librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_COMBINABLE;
+  }
+  rdma_patched++;
+  ldout(cct, 10) << "rdma passthrough: wrote declined stripe at " << obj_ofs
+                 << "~" << len << " from here" << dendl;
+  return 0;
+#else
+  return -EOPNOTSUPP;
+#endif
 }
 
 int get_obj_data::flush(rgw::AioResultList&& results) {
@@ -8794,6 +8857,7 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
     // the data inline, which flush_rdma treats as the fallback signal
     op.read(read_ofs, len, nullptr, nullptr);
     d->rdma_slots.emplace_back();
+    d->rdma_slot_ofs.push_back(obj_ofs);
     op.set_rdma_delivery(d->rdma_token,
                          uint64_t(obj_ofs) - d->rdma_range_start,
                          d->rdma_flags, &d->rdma_slots.back());

@@ -169,6 +169,11 @@ struct oob_result_t {
   static constexpr uint32_t FLAG_CRC64_COMBINABLE = 1u << 1;
   /// ranges holds one crc_range_t per contiguous placed extent
   static constexpr uint32_t FLAG_CRC64_RANGES = 1u << 2;
+  /// never sent by an OSD: the client library sets it on the result it
+  /// hands up when the op was sent more than once, so a write initiated
+  /// by an earlier attempt may still be outstanding against the window
+  /// whatever this reply says
+  static constexpr uint32_t FLAG_RESENT = 1u << 3;
 
   uint64_t bytes = 0;
   uint64_t crc64 = 0;

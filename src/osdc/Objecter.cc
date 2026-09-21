@@ -3988,6 +3988,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       }
       *op->rdma_oob_result[i] =
 	i < oob.size() ? oob[i] : ceph::rdma::oob_result_t{};
+      op->rdma_oob_result[i]->flags &= ~ceph::rdma::oob_result_t::FLAG_RESENT;
+      if (op->attempts > 1) {
+	op->rdma_oob_result[i]->flags |= ceph::rdma::oob_result_t::FLAG_RESENT;
+      }
     }
   }
 

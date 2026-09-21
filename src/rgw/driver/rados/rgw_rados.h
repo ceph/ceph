@@ -1803,9 +1803,15 @@ struct get_obj_data {
   double rdma_lease = 0;
   // per-stripe oob results, pushed in logical stripe order (stable addrs)
   std::deque<librados::ObjectReadOperation::rdma_delivery_result> rdma_slots;
+  // each slot's logical object offset, which is also its aio result id
+  std::deque<uint64_t> rdma_slot_ofs;
+  // stripes an OSD declined that were then written from here
+  uint64_t rdma_patched = 0;
 
   int flush(rgw::AioResultList&& results);
   int flush_rdma(rgw::AioResultList&& results);
+  // RDMA-write one stripe an OSD returned inline into the client window
+  int patch_rdma(uint64_t obj_ofs, const bufferlist& data);
 
   void cancel() {
     // wait for all completions to drain and ignore the results

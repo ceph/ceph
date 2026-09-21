@@ -653,6 +653,9 @@ inline namespace v14_2_0 {
     static constexpr uint32_t RDMA_DELIVERY_CRC64_COMBINABLE = 2;
     /// result flag: ranges is populated
     static constexpr uint32_t RDMA_DELIVERY_CRC64_RANGES = 4;
+    /// result flag: the op was sent more than once, so a delivery begun
+    /// by an earlier attempt may still be outstanding against the window
+    static constexpr uint32_t RDMA_DELIVERY_RESENT = 8;
     void set_rdma_delivery(const std::string& token, uint64_t base_offset,
 			   uint32_t flags, rdma_delivery_result *result);
     void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,

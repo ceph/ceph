@@ -240,6 +240,8 @@ void librados::ObjectReadOperation::set_rdma_delivery(
 		ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE);
   static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_RANGES ==
 		ceph::rdma::oob_result_t::FLAG_CRC64_RANGES);
+  static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_RESENT ==
+		ceph::rdma::oob_result_t::FLAG_RESENT);
   o->set_rdma_delivery(token, base_offset, flags,
 		       [result](const ceph::rdma::oob_result_t& r) {
 			 result->bytes = r.bytes;

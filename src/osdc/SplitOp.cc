@@ -586,6 +586,8 @@ void SplitOp::complete() {
             continue;
           }
           const auto& r = sub_read.oob[j];
+          // a sub-read that went out twice taints the whole op
+          agg.flags |= r.flags & ceph::rdma::oob_result_t::FLAG_RESENT;
           if (r.bytes == 0) {
             continue;
           }
