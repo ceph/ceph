@@ -578,11 +578,13 @@ void SetUpMigrationTest(rados_t *cluster,
     ASSERT_EQ(0, rados_wait_for_latest_osdmap(*cluster));
   }
 
-  // Start Migration
-  tgt_pool_name = get_temp_pool_name();
+  // Start Migration (no parameters = same-pool copy, requires --yes-i-really-mean-it).
+  // After migration the pool retains src_pool_name; tgt_pool_name is set to the
+  // same value so callers can open an ioctx on the new target pool by name.
+  tgt_pool_name = src_pool_name;
   {
-    std::string c = "{\"prefix\": \"osd pool create\", \"pool\": \"" + tgt_pool_name +
-      "\", \"migrate_from_pool\": \"" + src_pool_name + "\"}";
+    std::string c = "{\"prefix\": \"osd pool migrate\", \"pool\": \"" + src_pool_name +
+      "\", \"yes_i_really_mean_it\": true}";
     const char *cmd[2] = { c.c_str(), 0 };
     char *outbuf, *outs;
     size_t outbuflen, outslen;
@@ -590,7 +592,7 @@ void SetUpMigrationTest(rados_t *cluster,
     ASSERT_EQ(0, rados_wait_for_latest_osdmap(*cluster));
   }
 
-  // Open Target IO Context & Add "foo2"
+  // Open Target IO Context (same name, now points to the new target pool).
   ASSERT_EQ(0, rados_ioctx_create(*cluster, tgt_pool_name.c_str(), tgt_ioctx));
 }
 
