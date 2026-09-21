@@ -12,12 +12,11 @@
 #include "common/config.h"
 #include "common/dout.h"
 #include "common/rdma_token.h"
+#include "include/scope_guard.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 std::unique_ptr<RGWCuObjServer> RGWCuObjServer::s_instance;
-thread_local uint16_t RGWCuObjServer::tls_channel_id = 0;
-thread_local bool RGWCuObjServer::tls_channel_valid = false;
 
 static constexpr size_t MAX_RDMA_OP_SIZE = 1ULL << 30; // 1 GiB per cuObj API
 
@@ -94,6 +93,23 @@ int RGWCuObjServer::do_init(CephContext* cct)
     return -ECONNREFUSED;
   }
 
+  for (int i = 0; i < num_dcis; i++) {
+    uint16_t id = m_server->allocateChannelId();
+    if (id == invalid_channel) {
+      break;
+    }
+    m_free_channels.push_back(id);
+  }
+  if (m_free_channels.empty()) {
+    lderr(cct) << "rgw_cuobj: ERROR: cuObject channel allocation failed" << dendl;
+    do_shutdown();
+    return -EIO;
+  }
+  if (m_free_channels.size() < static_cast<size_t>(num_dcis)) {
+    lderr(cct) << "rgw_cuobj: WARNING: only " << m_free_channels.size()
+               << " of " << num_dcis << " channels allocated" << dendl;
+  }
+
   m_buf_count = buf_count;
   m_buffer_pool = std::make_unique<RDMABufEntry[]>(buf_count);
   for (size_t i = 0; i < buf_count; i++) {
@@ -137,6 +153,12 @@ void RGWCuObjServer::do_shutdown()
   }
   m_buffer_pool.reset();
   m_buf_count = 0;
+  if (m_server) {
+    for (auto id : m_free_channels) {
+      m_server->freeChannelId(id);
+    }
+  }
+  m_free_channels.clear();
   m_server.reset();
 }
 
@@ -171,23 +193,22 @@ static uint64_t parse_rdma_descriptor_addr(const std::string& rdma_descr)
   return window->addr;
 }
 
-uint16_t RGWCuObjServer::get_channel_id()
+uint16_t RGWCuObjServer::acquire_channel()
 {
-  if (!tls_channel_valid) {
-    tls_channel_id = m_server->allocateChannelId();
-    tls_channel_valid = true;
-  }
-  ldout(m_cct, 21) << "rgw_cuobj: allocated channel ID " << tls_channel_id << dendl;
-  return tls_channel_id;
+  std::unique_lock l{m_channel_lock};
+  m_channel_cond.wait(l, [this] { return !m_free_channels.empty(); });
+  uint16_t channel = m_free_channels.back();
+  m_free_channels.pop_back();
+  return channel;
 }
 
-void RGWCuObjServer::release_channel_id()
+void RGWCuObjServer::release_channel(uint16_t channel)
 {
-  if (tls_channel_valid) {
-    ldout(m_cct, 21) << "rgw_cuobj: releasing channel ID " << tls_channel_id << dendl;
-    m_server->freeChannelId(tls_channel_id);
-    tls_channel_valid = false;
+  {
+    std::lock_guard l{m_channel_lock};
+    m_free_channels.push_back(channel);
   }
+  m_channel_cond.notify_one();
 }
 
 RGWCuObjServer::RDMABufEntry* RGWCuObjServer::acquire_buffer(size_t needed_size)
@@ -222,7 +243,10 @@ ssize_t RGWCuObjServer::rdma_read_from_client(
     size_t size,
     const std::string& rdma_descr)
 {
-  uint16_t channel = get_channel_id();
+  uint16_t channel = acquire_channel();
+  auto put_channel = make_scope_guard([this, channel] {
+    release_channel(channel);
+  });
   uint64_t client_addr = parse_rdma_descriptor_addr(rdma_descr) + remote_offset;
   size_t total_read = 0;
 
@@ -269,7 +293,10 @@ ssize_t RGWCuObjServer::rdma_write_to_client(
     size_t size,
     const std::string& rdma_descr)
 {
-  uint16_t channel = get_channel_id();
+  uint16_t channel = acquire_channel();
+  auto put_channel = make_scope_guard([this, channel] {
+    release_channel(channel);
+  });
   uint64_t client_addr = parse_rdma_descriptor_addr(rdma_descr) + remote_offset;
   size_t total_written = 0;
 
