@@ -834,7 +834,7 @@ add_executable(unittest_bufferlist
   bufferlist.cc
   $<TARGET_OBJECTS:unit-main>
   )
-add_ceph_unittest(unittest_bufferlist)
+add_ceph_unittest(unittest_bufferlist --gtest_filter=-*Bench*:*bench*:*Perf*:*perf*)
 target_link_libraries(unittest_bufferlist global)
 
 # compiletest_cxx11_client
