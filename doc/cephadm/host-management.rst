@@ -502,6 +502,13 @@ connect to remote hosts.  When the cluster is bootstrapped, this SSH
 key is generated automatically and no additional configuration
 is necessary.
 
+The currently stored SSH key can be deleted with:
+
+.. prompt:: bash #
+
+   ceph cephadm clear-key
+
+
 A *new* SSH key can be generated with:
 
 .. prompt:: bash #
@@ -513,12 +520,6 @@ The public portion of the SSH key can be retrieved with:
 .. prompt:: bash #
 
    ceph cephadm get-pub-key
-
-The currently stored SSH key can be deleted with:
-
-.. prompt:: bash #
-
-   ceph cephadm clear-key
 
 You can make use of an existing key by directly importing it with:
 
