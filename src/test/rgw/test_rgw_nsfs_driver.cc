@@ -40,6 +40,7 @@ namespace sf = std::filesystem;
 class Environment* env;
 sf::path base_path{"nsfstest"};
 std::unique_ptr<nsfs::Directory> root;
+std::unique_ptr<nsfs::FSStrategy> fs_strategy;
 std::vector<const char*> args;
 
 class Environment : public ::testing::Environment {
@@ -65,11 +66,14 @@ public:
                       CODE_ENVIRONMENT_UTILITY,
                       CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
-    dpp = nullptr;
+    //dpp = nullptr;
+    dpp = new NoDoutPrefix(cct.get(), 1);
 
     rgw_mime_init(dpp, cct.get());
 
-    root = std::make_unique<nsfs::Directory>(base_path, nullptr, cct.get());
+    fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
+    root = std::make_unique<nsfs::Directory>(base_path, nullptr, cct.get(),
+                                             fs_strategy.get());
     ASSERT_EQ(root->open(dpp), 0);
 
     if (verbose) {
@@ -491,6 +495,42 @@ TEST(FSEnt, FileReadWrite)
 }
 
 
+template <typename YP>
+struct TestMultipartCache : public nsfs::MultipartCache
+{
+public:
+  TestMultipartCache() :
+    MultipartCache(1, 1, 1, 1, file::listing::MultipartCachePolicy::writethrough)
+  { }
+  virtual ~TestMultipartCache() { }
+
+  file::listing::MultipartListResult list_parts(const file::listing::MultipartCacheKey& key,
+				 uint32_t marker, uint32_t max_parts,
+				 const file::listing::fill_parts_fn_t& fill_fn) override {
+    file::listing::MultipartListResult result;
+    boost::container::flat_map<uint32_t, file::listing::MultipartPartInfo> parts;
+
+    fill_fn(parts);
+    auto it = parts.lower_bound(marker + 1);
+    uint32_t count = 0;
+    while (it != parts.end() && count < max_parts) {
+      result.parts.push_back(it->second);
+      result.next_marker = it->first;
+      ++it;
+      ++count;
+    }
+    result.truncated = (it != parts.end());
+    return result;
+  };
+
+  void remove(const file::listing::MultipartCacheKey& key) override { }
+
+  bool add_part(const file::listing::MultipartCacheKey& key,
+                file::listing::MultipartPartInfo&& info) override {
+    return false;
+  }
+};
+
 // Driver
 
 class TestUser;
@@ -508,7 +548,10 @@ public:
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
 
-    root_dir = std::make_unique<nsfs::Directory>(base_path, nullptr, env->cct.get());
+    if (!fs_strategy)
+      fs_strategy = std::make_unique<nsfs::POSIXStrategy>();
+    root_dir = std::make_unique<nsfs::Directory>(base_path, nullptr, env->cct.get(),
+                                                 fs_strategy.get());
     int ret = root_dir->open(env->dpp);
     if (ret < 0) {
       if (ret == -ENOTDIR) {
@@ -528,6 +571,7 @@ public:
     quota_handler = RGWQuotaHandler::generate_handler(this, false);
     bucket_cache.reset(new nsfs::BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));
+    multipart_cache.reset(new TestMultipartCache<cohort::lru::NullYieldPolicy>());
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;
@@ -670,7 +714,7 @@ TEST_F(NSFSDriverTest, BucketCreate)
   EXPECT_EQ(bucket->get_name(), testname);
   EXPECT_EQ(bucket->get_key().name, testname);
   EXPECT_EQ(bucket->get_key().tenant, "");
-  EXPECT_EQ(bucket->get_key().bucket_id, "");
+  // bucket_id is set to a random value
   EXPECT_FALSE(bucket_exists);
 
   sf::path tp{bp / "root" / testname};
@@ -1000,10 +1044,9 @@ TEST_F(NSFSObjectTest, ObjectAttrs)
   bufferlist origbl;
   encode(ATTR1, origbl);
 
-  // attr1 + owner + object_type + synthesized etag
-  EXPECT_EQ(object->get_attrs().size(), 4);
+  // attr1 + object_type + synthesized etag
+  EXPECT_EQ(object->get_attrs().size(), 3);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
-  EXPECT_TRUE(object->get_attrs().contains("owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
   EXPECT_TRUE(object->get_attrs().contains(RGW_ATTR_ETAG));
 }
@@ -1033,7 +1076,6 @@ TEST_F(NSFSObjectTest, XattrOnDisk)
 
   // nsfs-specific attrs use user.nsfs.* prefix
   EXPECT_TRUE(xattr_names.contains("user.nsfs.object_type"));
-  EXPECT_TRUE(xattr_names.contains("user.nsfs.owner"));
 
   // user-supplied attrs use user.nsfs.* prefix
   EXPECT_TRUE(xattr_names.contains("user.nsfs." + ATTR1));

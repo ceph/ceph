@@ -1918,7 +1918,7 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
     ret = errno;
     if (ret != EEXIST) {
       if (dpp)
-	ldpp_dout(dpp, 0) << "ERROR: could not create bucket " << get_name() << ": "
+	ldpp_dout(dpp, 0) << "ERROR: could not create multipart directory " << get_name() << ": "
 	  << cpp_strerror(ret) << dendl;
       return -ret;
     } else if (existed != nullptr) {
@@ -1926,6 +1926,15 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
     }
   }
 
+
+  ret = openat(parent->get_fd(), path.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not open multipart directory " << get_name()
+                      << dendl;
+    return ret;
+  }
+
+  fd = ret;
   return 0;
 }
 
@@ -5063,7 +5072,7 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
     return ret;
   }
 
-  ret = ent->stat(dpp, /*force=*/true);
+  ret = stat(dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 20)
         << "ERROR: NSFSAtomicWriter failed stat after link" << dendl;
