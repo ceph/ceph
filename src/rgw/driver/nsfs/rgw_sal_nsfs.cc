@@ -310,6 +310,24 @@ static bool is_null_version_fd(int fd)
   return std::string_view(buf, len) == NULL_VERSION_ID;
 }
 
+/* The object's own digest, from its etag xattr, or empty if it carries
+ * none.  A listing must prefer this over synthesize_etag():  the token is
+ * what an object gets when nothing ever hashed it, and reporting it for an
+ * object that *was* hashed makes LIST disagree with HEAD.  The token also
+ * contains dashes, which S3 SDKs read as "multipart, do not validate", so
+ * the disagreement silently disables the client's integrity check rather
+ * than merely looking untidy. */
+static std::string etag_from_fd(int fd)
+{
+  char buf[128];
+  std::string xattr = make_xattr_name(RGW_ATTR_ETAG);
+  ssize_t len = ::fgetxattr(fd, xattr.c_str(), buf, sizeof(buf));
+  if (len <= 0) {
+    return {};
+  }
+  return std::string(buf, len);
+}
+
 /* version entry name within .versions/: <leaf>_<version_id> */
 static inline std::string nsfs_ver_entry(const std::string& leaf,
                                          const std::string& vid)
@@ -395,9 +413,22 @@ static int nsfs_lmdb_cmp(const MDB_val *a, const MDB_val *b)
  * (a concurrent writer won), the link fails with EEXIST and we skip.
  * Retries on CAS mismatch (the candidate was moved by another thread).
  */
+/* What promote_version() promoted, for a caller that has to describe the
+ * new current version.  Both fields are free here:  the version id is the
+ * suffix of the .versions/ entry name, and the etag is read from the
+ * descriptor the success path already opens to strip the non-current
+ * timestamp.  Reporting them saves the caller an openat() and an
+ * fgetxattr() it would otherwise repeat. */
+struct PromoteResult {
+  bool promoted{false};
+  std::string version_id;
+  std::string etag;
+};
+
 static void promote_version(int parent_fd, const std::string& leaf,
                             const DoutPrefixProvider* dpp,
-                            FSStrategy* fs_strategy)
+                            FSStrategy* fs_strategy,
+                            PromoteResult* out = nullptr)
 {
   ldpp_dout(dpp, 10) << "promote_version: enter leaf=" << leaf
     << " parent_fd=" << parent_fd << dendl;
@@ -491,7 +522,14 @@ static void promote_version(int parent_fd, const std::string& leaf,
       if (pfd >= 0) {
         std::string ts_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_NON_CURRENT_TS;
         ::fremovexattr(pfd, ts_x.c_str());
+        if (out) {
+          out->etag = etag_from_fd(pfd);
+        }
         ::close(pfd);
+      }
+      if (out) {
+        out->promoted = true;
+        out->version_id = max_name.substr(leaf.size() + 1);
       }
       ::close(vfd);
       return;
@@ -4665,7 +4703,11 @@ int NSFSObject::copy_object(const ACLOwner& owner,
     new_bde.meta.accounted_size = new_stx.stx_size;
     new_bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
     new_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-    new_bde.meta.etag = synthesize_etag(new_stx);
+    /* the source's digest, propagated into attrs above;  a copy preserves
+     * the source etag */
+    auto eit = attrs.find(RGW_ATTR_ETAG);
+    new_bde.meta.etag = (eit != attrs.end())
+      ? eit->second.to_str() : synthesize_etag(new_stx);
     new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                     rgw_bucket_dir_entry::FLAG_CURRENT;
     {
@@ -6510,6 +6552,86 @@ static int check_delete_preconditions(
   return 0;
 }
 
+/*
+ * Publish the freshly-promoted current version into the listing cache.
+ *
+ * promote_version() reports the id and etag when it actually promoted;
+ * both were free there.  When it promoted nothing -- a current version
+ * already existed, so another writer won the race -- describe what is on
+ * disk instead.  An empty instance would make a *distinct* cache key and
+ * add a row beside that writer's rather than overwriting it, which shows
+ * up as a surplus version in the listing.
+ */
+static void cache_promoted_current(NSFSDriver* driver,
+                                   const DoutPrefixProvider* dpp,
+                                   const std::string& bucket_name,
+                                   const std::string& obj_name,
+                                   int parent_fd, const std::string& leaf,
+                                   PromoteResult& promoted,
+                                   const struct statx& pstx)
+{
+  /* One descriptor, one attribute sweep.  get_x_attrs() lists and reads
+   * every xattr on the file, and parse_xattr_name() accepts both the
+   * user.nsfs.rgw. and user.nsfs. prefixes -- so the digest, the version
+   * id and the delete-marker flag all arrive in pattrs, and the separate
+   * fgetxattr() for each is redundant with the sweep. */
+  Attrs pattrs;
+  int fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+  if (fd >= 0) {
+    get_x_attrs(null_yield, dpp, fd, pattrs, leaf);
+    ::close(fd);
+  }
+
+  std::string promoted_ver = promoted.version_id;
+  if (!promoted.promoted) {
+    /* promote_version() promoted nothing -- a current version already
+     * existed, so another writer won -- so describe what is on disk.  An
+     * empty instance would make a *distinct* cache key and add a row
+     * beside that writer's rather than overwriting it, which shows up as
+     * a surplus version in the listing. */
+    auto vit = pattrs.find(RGW_NSFS_ATTR_VERSION_ID);
+    /* absent or empty reads as the null version, matching
+     * is_null_version_fd()'s len <= 0 case */
+    bool is_null = (vit == pattrs.end()) || (vit->second.length() == 0) ||
+                   (vit->second.to_str() == NULL_VERSION_ID);
+    promoted_ver = is_null ? NULL_VERSION_ID
+                           : nsfs_version_id_from_statx(pstx);
+  }
+  if (promoted.etag.empty()) {
+    auto eit = pattrs.find(RGW_ATTR_ETAG);
+    if (eit != pattrs.end()) {
+      promoted.etag = eit->second.to_str();
+    }
+  }
+
+  rgw_bucket_dir_entry bde{};
+  bde.key.name = obj_name;
+  bde.key.instance = promoted_ver;
+  bde.ver.pool = 1;
+  bde.ver.epoch = 1;
+  bde.exists = true;
+  bde.meta.category = RGWObjCategory::Main;
+  bde.meta.size = pstx.stx_size;
+  bde.meta.accounted_size = pstx.stx_size;
+  bde.meta.mtime = from_statx_timestamp(pstx.stx_mtime);
+  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+  bde.meta.etag = promoted.etag.empty()
+    ? synthesize_etag(pstx) : promoted.etag;
+  bde.flags = rgw_bucket_dir_entry::FLAG_VER |
+              rgw_bucket_dir_entry::FLAG_CURRENT;
+  auto dit = pattrs.find(RGW_NSFS_ATTR_DELETE_MARKER);
+  if (dit != pattrs.end() && dit->second.length() > 0) {
+    bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+  }
+  ACLOwner acl_owner;
+  if (decode_acl_owner(pattrs, acl_owner) >= 0) {
+    bde.meta.owner = to_string(acl_owner.id);
+    bde.meta.owner_display_name = acl_owner.display_name;
+  }
+
+  driver->get_bucket_cache()->add_entry(dpp, bucket_name, bde);
+}
+
 int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
@@ -6683,56 +6805,15 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         if (promote_fd >= 0) {
           ldpp_dout(dpp, 10) << "delete_obj: promoting after delete of "
             << promote_leaf << dendl;
+          PromoteResult promoted;
           promote_version(promote_fd, promote_leaf, dpp,
-                          source->driver->get_fs_strategy());
+                          source->driver->get_fs_strategy(), &promoted);
           struct statx pstx;
           if (statx(promote_fd, promote_leaf.c_str(),
                     AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
-            bool promoted_is_null = false;
-            {
-              int chk = ::openat(promote_fd, promote_leaf.c_str(), O_RDONLY);
-              if (chk >= 0) {
-                promoted_is_null = is_null_version_fd(chk);
-                ::close(chk);
-              }
-            }
-            std::string promoted_ver = promoted_is_null
-              ? NULL_VERSION_ID
-              : nsfs_version_id_from_statx(pstx);
-            rgw_bucket_dir_entry bde{};
-            bde.key.name = source->get_key().get_index_key_name();
-            bde.key.instance = promoted_ver;
-            bde.ver.pool = 1;
-            bde.ver.epoch = 1;
-            bde.exists = true;
-            bde.meta.category = RGWObjCategory::Main;
-            bde.meta.size = pstx.stx_size;
-            bde.meta.accounted_size = pstx.stx_size;
-            bde.meta.mtime = from_statx_timestamp(pstx.stx_mtime);
-            bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-            bde.meta.etag = synthesize_etag(pstx);
-            bde.flags = rgw_bucket_dir_entry::FLAG_VER |
-                        rgw_bucket_dir_entry::FLAG_CURRENT;
-            {
-              int afd = ::openat(promote_fd, promote_leaf.c_str(), O_RDONLY);
-              if (afd >= 0) {
-                char dm_buf[8];
-                std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
-                if (::fgetxattr(afd, dm_x.c_str(), dm_buf, sizeof(dm_buf)) > 0) {
-                  bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
-                }
-                Attrs pattrs;
-                get_x_attrs(null_yield, dpp, afd, pattrs, promote_leaf);
-                ACLOwner acl_owner;
-                if (decode_acl_owner(pattrs, acl_owner) >= 0) {
-                  bde.meta.owner = to_string(acl_owner.id);
-                  bde.meta.owner_display_name = acl_owner.display_name;
-                }
-                ::close(afd);
-              }
-            }
-            source->driver->get_bucket_cache()->add_entry(
-              dpp, b->get_name(), bde);
+            cache_promoted_current(source->driver, dpp, b->get_name(),
+                                   source->get_key().get_index_key_name(),
+                                   promote_fd, promote_leaf, promoted, pstx);
           }
           ::close(promote_fd);
         }
@@ -6847,57 +6928,16 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
         /* if we deleted a DM from .versions/ and no current file
          * exists, promote the newest non-DM version */
         if (is_dm && parent_fd >= 0) {
+          PromoteResult promoted;
           promote_version(parent_fd, leaf_name, dpp,
-                          source->driver->get_fs_strategy());
+                          source->driver->get_fs_strategy(), &promoted);
           /* update cache for the promoted version */
           struct statx pstx;
           if (statx(parent_fd, leaf_name.c_str(),
                     AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
-            bool promoted_is_null = false;
-            {
-              int chk = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
-              if (chk >= 0) {
-                promoted_is_null = is_null_version_fd(chk);
-                ::close(chk);
-              }
-            }
-            std::string promoted_ver = promoted_is_null
-              ? NULL_VERSION_ID
-              : nsfs_version_id_from_statx(pstx);
-            rgw_bucket_dir_entry bde{};
-            bde.key.name = source->get_key().get_index_key_name();
-            bde.key.instance = promoted_ver;
-            bde.ver.pool = 1;
-            bde.ver.epoch = 1;
-            bde.exists = true;
-            bde.meta.category = RGWObjCategory::Main;
-            bde.meta.size = pstx.stx_size;
-            bde.meta.accounted_size = pstx.stx_size;
-            bde.meta.mtime = from_statx_timestamp(pstx.stx_mtime);
-            bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-            bde.meta.etag = synthesize_etag(pstx);
-            bde.flags = rgw_bucket_dir_entry::FLAG_VER |
-                        rgw_bucket_dir_entry::FLAG_CURRENT;
-            {
-              int afd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
-              if (afd >= 0) {
-                char dm_buf[8];
-                std::string dm_x = NSFS_XATTR_PREFIX + RGW_NSFS_ATTR_DELETE_MARKER;
-                if (::fgetxattr(afd, dm_x.c_str(), dm_buf, sizeof(dm_buf)) > 0) {
-                  bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
-                }
-                Attrs pattrs;
-                get_x_attrs(null_yield, dpp, afd, pattrs, leaf_name);
-                ACLOwner acl_owner;
-                if (decode_acl_owner(pattrs, acl_owner) >= 0) {
-                  bde.meta.owner = to_string(acl_owner.id);
-                  bde.meta.owner_display_name = acl_owner.display_name;
-                }
-                ::close(afd);
-              }
-            }
-            source->driver->get_bucket_cache()->add_entry(
-              dpp, b->get_name(), bde);
+            cache_promoted_current(source->driver, dpp, b->get_name(),
+                                   source->get_key().get_index_key_name(),
+                                   parent_fd, leaf_name, promoted, pstx);
           }
         }
         return 0;
@@ -7771,7 +7811,12 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       new_bde.meta.accounted_size = new_stx.stx_size;
       new_bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
       new_bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-      new_bde.meta.etag = synthesize_etag(new_stx);
+      /* complete() computed the real <md5-of-md5s>-<parts> etag above and
+       * stored it;  listing the token instead made a completed multipart
+       * object HEAD and LIST differently */
+      auto eit = attrs.find(RGW_ATTR_ETAG);
+      new_bde.meta.etag = (eit != attrs.end())
+	? eit->second.to_str() : synthesize_etag(new_stx);
       new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                       rgw_bucket_dir_entry::FLAG_CURRENT;
       {
@@ -7802,7 +7847,9 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       bde.meta.accounted_size = new_stx.stx_size;
       bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
       bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-      bde.meta.etag = synthesize_etag(new_stx);
+      auto eit2 = attrs.find(RGW_ATTR_ETAG);
+      bde.meta.etag = (eit2 != attrs.end())
+	? eit2->second.to_str() : synthesize_etag(new_stx);
       {
         ACLOwner acl_owner;
         if (decode_acl_owner(target_obj->get_attrs(), acl_owner) >= 0) {
