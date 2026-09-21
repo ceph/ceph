@@ -203,3 +203,10 @@ class CaseInsensitiveCheckPolicy(_StrEnum):
     REQUIRE = 'require'
     # REJECT - possible future addition
     # inverse of require (reject case INsentiive volumes, require case sens)
+
+
+class ACLSupportPolicy(_StrEnum):
+    """Specify how a share should manage ACLs."""
+
+    DEFAULT = 'default'
+    DISABLED = 'disabled'
