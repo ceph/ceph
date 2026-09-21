@@ -4445,7 +4445,8 @@ int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 } /* POSIXObject::list_parts */
 
 Object::FSIOResult POSIXObject::get_fsio_handle(const DoutPrefixProvider* dpp,
-						 uint32_t flags)
+						 uint32_t flags,
+						 const FSIOCreateSpec* spec)
 {
   return FSIOResult{-ENOTSUP, nullptr};
 }

@@ -1414,10 +1414,26 @@ public:
     /** Get the name of this object */
     virtual const std::string &get_name() const = 0;
 
+    /** What a create should apply to a new shadow before it becomes
+     *  visible under its name.
+     *
+     *  Passed in rather than applied by the caller afterwards, so the
+     *  shadow is linked into place only once it is complete.  Nothing can
+     *  then rendezvous onto a half-built view, and a failure leaves
+     *  nothing behind -- which matters because a leftover attribute-less
+     *  shadow would reject every later exclusive create on that name,
+     *  with no mechanism to reap it. */
+    struct FSIOCreateSpec {
+      Attrs* attrs{nullptr};                 /* xattrs to set */
+      const struct timespec* times{nullptr}; /* [2]: atime, mtime */
+      int64_t size{-1};                      /* >= 0 to set */
+    };
+
     /** Get a fsio view on an object or object prototype */
     using FSIOResult = std::tuple<int, std::unique_ptr<FSIOObject>>;
     virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
-				       uint32_t flags = FSIOObject::OPEN_FLAG_NONE) = 0;
+				       uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
+				       const FSIOCreateSpec* spec = nullptr) = 0;
 
     /** Resolve the positional (NFS) view of this name: the active
      *  shadow if one exists, else the published object.  A probe, not

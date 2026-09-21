@@ -453,6 +453,16 @@ protected:
    * 2 after the leaf has landed.  Either leaves the intent record behind,
    * which is the only state recovery can be tested against */
   int inject_rename_abandon{0};
+  /* fail a shadow build, so the cleanup paths run rather than being
+   * reasoned about:  "attrs" fails applying the create spec, "link" fails
+   * the linkat which makes the shadow visible */
+  bool inject_fsio_attrs_fail{false};
+  bool inject_fsio_link_fail{false};
+  /* skip the temp cleanup, so a test can assert that its detector sees a
+   * leak as well as that the code does not produce one.  Same idea as
+   * inject_skip_reclone:  the negative case belongs in the test rather than
+   * in a hand-edited build */
+  bool inject_fsio_skip_cleanup{false};
 
 public:
   NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -792,6 +802,9 @@ public:
   bool skip_reclone_injected() const { return inject_skip_reclone; }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
+  bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }
+  bool fsio_link_fail_injected() const { return inject_fsio_link_fail; }
+  bool fsio_skip_cleanup_injected() const { return inject_fsio_skip_cleanup; }
 
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
@@ -1119,7 +1132,8 @@ public:
 			 optional_yield y) override;
 
   FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
-			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE) override;
+			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
+			     const FSIOCreateSpec* spec = nullptr) override;
 
   int stat_fsio_view(const DoutPrefixProvider* dpp, struct stat* st,
 		     Attrs* attrs, uint32_t flags) override;

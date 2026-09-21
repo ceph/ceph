@@ -1160,7 +1160,8 @@ public:
 			 optional_yield y) override;
 
   FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
-			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE) override;
+			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE,
+			     const FSIOCreateSpec* spec = nullptr) override;
 
   bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
                          const ceph::real_time& obj_mtime) override;
