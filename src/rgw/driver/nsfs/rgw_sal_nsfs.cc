@@ -8181,6 +8181,7 @@ rgw::sal::Driver* newNSFSDriver(CephContext *cct)
   const static std::string tenant = "default_ns";
   if ((ret = driver->get_user_db()->Initialize("", -1)) < 0) {
     ldout(cct, 0) << "DB initialization failed for tenant("<<tenant<<")" << dendl;
+    delete driver;
     return nullptr;
   }
 

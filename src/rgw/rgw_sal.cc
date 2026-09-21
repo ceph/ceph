@@ -205,6 +205,10 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 #ifdef WITH_RADOSGW_POSIX
   else if (cfg.store_name.compare("posix") == 0) {
     driver = newPOSIXDriver(cct);
+    if (driver == nullptr) {
+      ldpp_dout(dpp, 0) << "newPOSIXDriver() failed!" << dendl;
+      return nullptr;
+    }
 
     if (static_cast<rgw::sal::POSIXDriver*>(driver)
             ->set_run_lc_thread(use_lc_thread)
@@ -218,6 +222,10 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 #ifdef WITH_RADOSGW_NSFS
   else if (cfg.store_name.compare("nsfs") == 0) {
     driver = newNSFSDriver(cct);
+    if (driver == nullptr) {
+      ldpp_dout(dpp, 0) << "newNSFSDriver() failed!" << dendl;
+      return nullptr;
+    }
 
     if (static_cast<rgw::sal::NSFSDriver*>(driver)
             ->set_run_lc_thread(use_lc_thread)
