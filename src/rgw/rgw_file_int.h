@@ -2985,40 +2985,6 @@ public:
 /*
  * Send request to get the rados cluster stats
  */
-class RGWGetClusterStatReq : public RGWLibRequest,
-        public RGWGetClusterStat {
-public:
-  struct rados_cluster_stat_t& stats_req;
-  RGWGetClusterStatReq(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user,
-                       rados_cluster_stat_t& _stats):
-  RGWLibRequest(_cct, std::move(_user)), stats_req(_stats){
-    op = this;
-  }
-
-  int op_init() override {
-    // assign driver, s, and dialect_handler
-    // framework promises to call op_init after parent init
-    RGWOp::init(RGWHandler::driver, get_state(), this);
-    op = this; // assign self as op: REQUIRED
-    return 0;
-  }
-
-  int header_init() override {
-    req_state* state = get_state();
-    state->info.method = "GET";
-    state->op = OP_GET;
-    return 0;
-  }
-
-  int get_params(optional_yield) override { return 0; }
-  bool only_bucket() override { return false; }
-  void send_response() override {
-    stats_req.kb = stats_op.kb;
-    stats_req.kb_avail = stats_op.kb_avail;
-    stats_req.kb_used = stats_op.kb_used;
-    stats_req.num_objects = stats_op.num_objects;
-  }
-}; /* RGWGetClusterStatReq */
 
 
 } /* namespace rgw */

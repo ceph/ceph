@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <filesystem>
 #include <sys/xattr.h>
+#include <sys/statvfs.h>
 #include <thread>
 #include <chrono>
 #include <cstdint>
@@ -2314,6 +2315,38 @@ TEST(OPEN2, UNIX_ATTRS_PERSIST)
   ASSERT_EQ(st2.st_gid, gid);
   ASSERT_EQ(st2.st_size, 4);
   (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+}
+
+TEST(OPEN2, STATFS)
+{
+  /* ganesha calls this for get_fs_dynamic_info on every statfs, and a
+   * client uses it to decide whether a write can fit.  cluster_stat()
+   * used to return 0 without touching the struct, which rgw_statfs()
+   * never initialized, so the answer was stack garbage. */
+  struct rgw_statvfs vfs;
+  memset(&vfs, 0xa5, sizeof(vfs));
+
+  ASSERT_EQ(rgw_statfs(fs, fs->root_fh, &vfs, RGW_STATFS_FLAG_NONE), 0);
+
+  /* a filesystem with no blocks at all is not a plausible answer, and
+   * is what an unfilled struct would leave behind */
+  ASSERT_GT(vfs.f_blocks, 0u);
+  ASSERT_GT(vfs.f_bsize, 0u);
+  ASSERT_LE(vfs.f_bavail, vfs.f_blocks);
+  ASSERT_NE(vfs.f_blocks, 0xa5a5a5a5a5a5a5a5ULL);
+
+  if (have_fs_layout()) {
+    /* and it describes the filesystem the namespace is on */
+    struct statvfs sys;
+    ASSERT_EQ(::statvfs(nsfs_base().c_str(), &sys), 0);
+    uint64_t frsize = sys.f_frsize ? sys.f_frsize : sys.f_bsize;
+    uint64_t sys_kb = (sys.f_blocks * frsize) >> 10;
+    uint64_t vfs_kb = (vfs.f_blocks * vfs.f_bsize) >> 10;
+    /* same order of magnitude:  rgw_statfs reports in 1M blocks, and
+     * the two calls are not simultaneous */
+    ASSERT_GT(vfs_kb, sys_kb / 2);
+    ASSERT_LT(vfs_kb, sys_kb * 2);
+  }
 }
 
 /* END ALL TESTS */
