@@ -19,8 +19,46 @@
 #include <cstdint>
 #include <cstdio>
 #include <string_view>
+#include <thread>
 
 namespace kvrgw {
+
+class Stopwatch {
+public:
+  using Clock = std::chrono::steady_clock;
+
+  Stopwatch() noexcept = default;
+
+  void reset() noexcept {
+    start_time_ = Clock::now();
+  }
+
+  [[nodiscard]] auto elapsed() const noexcept {
+    return Clock::now() - start_time_;
+  }
+
+  [[nodiscard]] int64_t elapsed_us() const noexcept {
+    return elapsed() / std::chrono::microseconds(1);
+  }
+
+ 
+  [[nodiscard]] double elapsed_seconds() const noexcept {
+    return elapsed() / std::chrono::duration<double>(1); 
+  }
+
+private:
+  Clock::time_point start_time_{Clock::now()};
+};
+
+
+// Helper definitions
+inline void sleep_for_msec(int64_t ms) noexcept {
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
+
+inline void sleep_for_usec(int64_t us) noexcept {
+    std::this_thread::sleep_for(std::chrono::microseconds(us));
+}
 
 enum class OpType : uint8_t {
   kPutObject,

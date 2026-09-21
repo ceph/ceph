@@ -408,8 +408,7 @@ void BatchCommitQueue::run()
             if (pending_.empty()) {
               goto no_new_work;
             }
-            auto age =
-                std::chrono::steady_clock::now() - pending_.front().enqueued_at;
+            auto age = std::chrono::steady_clock::now() - pending_.front().enqueued_at;
             if (age < timeout) {
               goto no_new_work;
             }
@@ -424,8 +423,7 @@ void BatchCommitQueue::run()
               break;
             }
             if (!pending_.empty()) {
-              auto age = std::chrono::steady_clock::now() -
-                         pending_.front().enqueued_at;
+              auto age = std::chrono::steady_clock::now() - pending_.front().enqueued_at;
               if (age >= timeout) {
                 break;
               }
@@ -486,10 +484,10 @@ void BatchCommitQueue::run()
   no_new_work:
 
     if (!any_progress && active_count == 0) {
-      std::this_thread::sleep_for(std::chrono::microseconds(100));
+      sleep_for_usec(100);
     }
     else if (!any_progress && active_count > 0) {
-      std::this_thread::sleep_for(std::chrono::microseconds(50));
+      sleep_for_usec(50);
     }
   }
 
@@ -556,9 +554,7 @@ void BatchCommitQueue::start_batch(InFlightBatch &ib)
       oldest = ib.entries[i].enqueued_at;
     }
   }
-  int64_t wait_us =
-      std::chrono::duration_cast<std::chrono::microseconds>(now - oldest)
-          .count();
+  int64_t wait_us = std::chrono::duration_cast<std::chrono::microseconds>(now - oldest).count();
   stats_.total_wait_us.fetch_add(wait_us, std::memory_order_relaxed);
   auto wmin = stats_.min_wait_us.load(std::memory_order_relaxed);
   while ((wmin == 0 || wait_us < wmin) &&
@@ -778,9 +774,7 @@ void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)
       oldest = e.enqueued_at;
     }
   }
-  int64_t wait_us =
-      std::chrono::duration_cast<std::chrono::microseconds>(now - oldest)
-          .count();
+  int64_t wait_us = std::chrono::duration_cast<std::chrono::microseconds>(now - oldest).count();
   stats_.total_wait_us.fetch_add(wait_us, std::memory_order_relaxed);
   auto wmin = stats_.min_wait_us.load(std::memory_order_relaxed);
   while ((wmin == 0 || wait_us < wmin) &&
@@ -876,8 +870,7 @@ void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)
       auto ec = fdb_to_error(tr_result.error());
       service_.error_stats_->record(ec);
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       for (auto &e : batch) {
@@ -1011,8 +1004,7 @@ void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)
     if (any_failed) {
       service_.error_stats_->record(fail_ec);
       if (attempt < kMaxRetries - 1 && fail_ec == KVRGW_ERR_INTERNAL) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       for (auto &e : batch) {
@@ -1040,7 +1032,7 @@ void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)
       return;
     }
     service_.latency_stats_.txn_retries.fetch_add(1, std::memory_order_relaxed);
-    std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
+    sleep_for_msec(10 * (attempt + 1));
   }
 
   service_.latency_stats_.txn_max_retries_exceeded.fetch_add(
@@ -1945,8 +1937,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_phase3(
     if (!tr_result) {
       auto ec = fdb_to_error(tr_result.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -1959,8 +1950,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_phase3(
     auto ec = put_object_in_txn(*tr, params, out_versioning_state);
     if (ec != KVRGW_ERR_OK) {
       if (ec == KVRGW_ERR_INTERNAL) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -1975,7 +1965,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_phase3(
     if (!is_retriable(commit_ec)) {
       return commit_ec;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
+    sleep_for_msec(10 * (attempt + 1));
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
@@ -2395,8 +2385,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_single_txn(
       auto ec = fdb_to_error(tr_result.error());
       error_stats_->record(ec);
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -2410,8 +2399,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_single_txn(
     if (ec != KVRGW_ERR_OK) {
       error_stats_->record(ec);
       if (ec == KVRGW_ERR_INTERNAL) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -2429,7 +2417,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_single_txn(
       return commit_ec;
     }
     latency_stats_.txn_retries.fetch_add(1, std::memory_order_relaxed);
-    std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
+    sleep_for_msec(10 * (attempt + 1));
   }
   latency_stats_.txn_max_retries_exceeded.fetch_add(1,
                                                     std::memory_order_relaxed);
@@ -2477,11 +2465,9 @@ KvrgwErrorCode KvRgwServiceImpl::select_storage_tier(
     return fdb_to_error(po_rc.error());
   }
 
-  auto ds_t0 = std::chrono::steady_clock::now();
+  const Stopwatch ds_t0;
   auto write_ec = data_store_.write(ref_tag_view(ref_tag), data);
-  fdb_record_disk(std::chrono::duration_cast<std::chrono::microseconds>(
-                      std::chrono::steady_clock::now() - ds_t0)
-                      .count());
+  fdb_record_disk(ds_t0.elapsed_us());
   if (write_ec) {
     return KVRGW_ERR_INTERNAL;
   }
@@ -2718,15 +2704,11 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
   bool exclusive_scan = !start_after.empty();
   while (!truncated) {
     ++list_iters;
-    const auto scan_t0 = std::chrono::steady_clock::now();
-    auto rows =
-        store_.range_scan(scan_begin, scan_end, batch_limit, exclusive_scan,
-                          listing_disable_ryw_, streamingMode);
+    const Stopwatch scan_t0;
+    auto rows = store_.range_scan(scan_begin, scan_end, batch_limit, exclusive_scan,
+                                  listing_disable_ryw_, streamingMode);
     exclusive_scan = true;
-    latency_stats_.record_list_scan(
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::steady_clock::now() - scan_t0)
-            .count());
+    latency_stats_.record_list_scan(scan_t0.elapsed_us());
     if (!rows) {
       latency_stats_.record_list_call(list_iters);
       return fdb_to_error(rows.error());
@@ -2858,8 +2840,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
     if (!tr_result) {
       auto ec = fdb_to_error(tr_result.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -2876,8 +2857,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
     if (!current_raw) {
       auto ec = fdb_to_error(current_raw.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -2917,8 +2897,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
       if (!v_scan) {
         auto ec = fdb_to_error(v_scan.error());
         if (is_retriable(ec)) {
-          std::this_thread::sleep_for(
-              std::chrono::milliseconds(10 * (attempt + 1)));
+          sleep_for_msec(10 * (attempt + 1));
           continue;
         }
         return ec;
@@ -2969,8 +2948,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
       if (!v_raw) {
         auto ec = fdb_to_error(v_raw.error());
         if (is_retriable(ec)) {
-          std::this_thread::sleep_for(
-              std::chrono::milliseconds(10 * (attempt + 1)));
+          sleep_for_msec(10 * (attempt + 1));
           continue;
         }
         return ec;
@@ -3022,7 +3000,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
     if (!is_retriable(commit_ec)) {
       return commit_ec;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
+    sleep_for_msec(10 * (attempt + 1));
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
@@ -3397,8 +3375,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_bucket_versioning(
     auto commit_ec = fdb_to_error(rc.error());
     if (is_retriable(commit_ec)) {
       // A retriable FDB error poisons that txn -> restart a fresh txn
-      std::this_thread::sleep_for(
-          std::chrono::milliseconds(10 * (attempt + 1)));
+      sleep_for_msec(10 * (attempt + 1));
       continue;
     }
     return commit_ec;
@@ -3467,8 +3444,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     if (!tr_result) {
       auto ec = fdb_to_error(tr_result.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -3487,8 +3463,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     if (!src_o_raw) {
       auto ec = fdb_to_error(src_o_raw.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -3515,8 +3490,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
         if (!v_raw) {
           auto ec = fdb_to_error(v_raw.error());
           if (is_retriable(ec)) {
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(10 * (attempt + 1)));
+            sleep_for_msec(10 * (attempt + 1));
             continue;
           }
           return ec;
@@ -3568,8 +3542,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     if (!dst_o_raw) {
       auto ec = fdb_to_error(dst_o_raw.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -3668,8 +3641,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
             return ec;
           }
         }
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
     }
@@ -3730,8 +3702,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
       if (!d_raw) {
         auto ec = fdb_to_error(d_raw.error());
         if (is_retriable(ec)) {
-          std::this_thread::sleep_for(
-              std::chrono::milliseconds(10 * (attempt + 1)));
+          sleep_for_msec(10 * (attempt + 1));
           continue;
         }
         return ec;
@@ -3782,8 +3753,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
         if (!r_raw) {
           auto ec = fdb_to_error(r_raw.error());
           if (is_retriable(ec)) {
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(10 * (attempt + 1)));
+            sleep_for_msec(10 * (attempt + 1));
             continue;
           }
           return ec;
@@ -3887,7 +3857,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
         return ec;
       }
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
+    sleep_for_msec(10 * (attempt + 1));
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
@@ -4112,34 +4082,27 @@ KvRgwServiceImpl::get_object(tenant_id_t tenant_id,
         return KVRGW_ERR_INVALID_RANGE;
       }
       if (!slice) {
-        auto ds_t0 = std::chrono::steady_clock::now();
+        const Stopwatch ds_t0;
         auto rd_ec = data_store_.read(ref_sv, 0, object_value.hdr.size, &body);
-        fdb_record_disk(std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::steady_clock::now() - ds_t0)
-                            .count());
+        fdb_record_disk(ds_t0.elapsed_us());
         if (rd_ec) {
           return KVRGW_ERR_INTERNAL;
         }
       }
       else {
-        auto ds_t0 = std::chrono::steady_clock::now();
-        auto rd_ec =
-            data_store_.read(ref_sv, static_cast<uint64_t>(slice->start),
-                             static_cast<uint64_t>(slice->length), &body);
-        fdb_record_disk(std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::steady_clock::now() - ds_t0)
-                            .count());
+        const Stopwatch ds_t0;
+        auto rd_ec = data_store_.read(ref_sv, static_cast<uint64_t>(slice->start),
+                                      static_cast<uint64_t>(slice->length), &body);
+        fdb_record_disk(ds_t0.elapsed_us());
         if (rd_ec) {
           return KVRGW_ERR_INTERNAL;
         }
       }
     }
     else {
-      auto ds_t0 = std::chrono::steady_clock::now();
+      const Stopwatch ds_t0;
       auto rd_ec = data_store_.read(ref_sv, 0, object_value.hdr.size, &body);
-      fdb_record_disk(std::chrono::duration_cast<std::chrono::microseconds>(
-                          std::chrono::steady_clock::now() - ds_t0)
-                          .count());
+      fdb_record_disk(ds_t0.elapsed_us());
       if (rd_ec) {
         return KVRGW_ERR_INTERNAL;
       }
@@ -4319,8 +4282,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     if (!cached) {
       auto ec = fdb_to_error(cached.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -4366,8 +4328,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     if (!tr_result) {
       auto ec = fdb_to_error(tr_result.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -4378,8 +4339,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
       if (!ryw) {
         auto ec = fdb_to_error(ryw.error());
         if (is_retriable(ec)) {
-          std::this_thread::sleep_for(
-              std::chrono::milliseconds(10 * (attempt + 1)));
+          sleep_for_msec(10 * (attempt + 1));
           continue;
         }
         return ec;
@@ -4387,7 +4347,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     }
 
     auto f_bkt = issue_bucket_get(*tr, tenant_id, bname);
-    const auto scan_t0 = std::chrono::steady_clock::now();
+    const Stopwatch scan_t0;
     auto f_o = tr->kv_async_get_range(o_begin, !last_o.empty(), o_end, max_keys,
                                       streamingMode);
     auto f_v = tr->kv_async_get_range(v_begin, !last_v.empty(), v_end, max_keys,
@@ -4397,29 +4357,24 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     if (!o_rows) {
       auto ec = fdb_to_error(o_rows.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
     }
-    const auto o_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                          std::chrono::steady_clock::now() - scan_t0)
-                          .count();
+
+    const auto o_us = scan_t0.elapsed_us();
     auto v_rows = tr->kv_wait_range(f_v);
     if (!v_rows) {
       auto ec = fdb_to_error(v_rows.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
     }
-    const auto v_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                          std::chrono::steady_clock::now() - scan_t0)
-                          .count();
 
+    const auto v_us = scan_t0.elapsed_us();
     merge_version_streams(*o_rows, *v_rows, list_prefix, max_keys, &last_o,
                           &last_v, out);
 
@@ -4432,8 +4387,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
         return ec;
       }
       if (ec == KVRGW_ERR_BUCKET_ID_MISMATCH || is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -4471,8 +4425,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,
     if (!tr_result) {
       auto ec = fdb_to_error(tr_result.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -4495,7 +4448,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,
     if (!is_retriable(ec)) {
       return ec;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
+    sleep_for_msec(10 * (attempt + 1));
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
@@ -4528,8 +4481,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
     if (!tr_result) {
       auto ec = fdb_to_error(tr_result.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -4549,8 +4501,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
     if (!existing) {
       auto ec = fdb_to_error(existing.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -4592,7 +4543,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
         return ec;
       }
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
+    sleep_for_msec(10 * (attempt + 1));
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
@@ -4704,8 +4655,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
     if (!tr_result) {
       auto ec = fdb_to_error(tr_result.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -4725,8 +4675,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
     if (!existing) {
       auto ec = fdb_to_error(existing.error());
       if (is_retriable(ec)) {
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds(10 * (attempt + 1)));
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
@@ -4761,7 +4710,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
         return ec;
       }
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10 * (attempt + 1)));
+    sleep_for_msec(10 * (attempt + 1));
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }

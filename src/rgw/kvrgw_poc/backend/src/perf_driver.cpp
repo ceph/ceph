@@ -935,7 +935,7 @@ static void cmd_get(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     std::atomic<int64_t> index{0};
     std::vector<std::thread> threads;
 
-    auto t0 = std::chrono::steady_clock::now();
+    const Stopwatch t0;
     for (int t = 0; t < p.concurrency; ++t) {
       threads.emplace_back(get_worker, std::ref(service), tenant_id,
                            std::cref(bname), std::cref(objects), t,
@@ -944,8 +944,7 @@ static void cmd_get(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     for (auto &th : threads) {
       th.join();
     }
-    auto t1 = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(t1 - t0).count();
+    double elapsed = t0.elapsed_seconds();
 
     std::string label =
         "GET " + bname + " (" + std::to_string(objects.size()) + " objs)";
@@ -1585,7 +1584,7 @@ static void cmd_delete(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     int64_t per_thread = p.count / p.concurrency;
     int64_t remainder = p.count % p.concurrency;
 
-    auto t0 = std::chrono::steady_clock::now();
+    const Stopwatch t0;
     for (int t = 0; t < p.concurrency; ++t) {
       int64_t count_for_thread = per_thread + (t < remainder ? 1 : 0);
       int64_t seq_start = 0;
@@ -1597,9 +1596,8 @@ static void cmd_delete(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     for (auto &th : threads) {
       th.join();
     }
-    auto t1 = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(t1 - t0).count();
 
+    auto elapsed = t0.elapsed_seconds();
     std::string label =
         "DELETE " + bname + " (" + std::to_string(p.count) + " objs, direct)";
     print_results(label.c_str(), result, elapsed, service.latency_stats());
@@ -1625,7 +1623,7 @@ static void cmd_delete(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     std::atomic<int64_t> index{0};
     std::vector<std::thread> threads;
 
-    auto t0 = std::chrono::steady_clock::now();
+    const Stopwatch t0;
     for (int t = 0; t < p.concurrency; ++t) {
       threads.emplace_back(delete_worker, std::ref(service), tenant_id,
                            std::cref(bname), std::cref(objects), t,
@@ -1634,8 +1632,7 @@ static void cmd_delete(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     for (auto &th : threads) {
       th.join();
     }
-    auto t1 = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(t1 - t0).count();
+    double elapsed = t0.elapsed_seconds();
 
     std::string label =
         "DELETE " + bname + " (" + std::to_string(objects.size()) + " objs)";
@@ -1697,7 +1694,7 @@ static void cmd_delete_multi(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     int64_t per_thread = p.count / p.concurrency;
     int64_t remainder = p.count % p.concurrency;
 
-    auto t0 = std::chrono::steady_clock::now();
+    const Stopwatch t0;
     for (int t = 0; t < p.concurrency; ++t) {
       int64_t count_for_thread = per_thread + (t < remainder ? 1 : 0);
       int64_t seq_start = 0;
@@ -1709,8 +1706,7 @@ static void cmd_delete_multi(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     for (auto &th : threads) {
       th.join();
     }
-    auto t1 = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(t1 - t0).count();
+    double elapsed = t0.elapsed_seconds();
 
     std::string label = "DELETE-MULTI " + bname + " (" +
                         std::to_string(p.count) + " objs, direct)";
@@ -1737,7 +1733,7 @@ static void cmd_delete_multi(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     std::atomic<int64_t> index{0};
     std::vector<std::thread> threads;
 
-    auto t0 = std::chrono::steady_clock::now();
+    const Stopwatch t0;
     for (int t = 0; t < p.concurrency; ++t) {
       threads.emplace_back(delete_multi_worker, std::ref(service), tenant_id,
                            std::cref(bname), std::cref(objects),
@@ -1746,8 +1742,7 @@ static void cmd_delete_multi(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     for (auto &th : threads) {
       th.join();
     }
-    auto t1 = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(t1 - t0).count();
+    double elapsed = t0.elapsed_seconds();
 
     std::string label = "DELETE-MULTI " + bname + " (" +
                         std::to_string(objects.size()) + " objs)";
@@ -1778,10 +1773,9 @@ static void cmd_list_buckets(KvRgwServiceImpl &service, tenant_id_t tenant_id,
                              const ParsedParams &p)
 {
   service.latency_stats().reset();
-  auto t0 = std::chrono::steady_clock::now();
+  const Stopwatch t0;
   auto buckets = list_all_buckets(service, tenant_id);
-  auto t1 = std::chrono::steady_clock::now();
-  double elapsed = std::chrono::duration<double>(t1 - t0).count();
+  double elapsed = t0.elapsed_seconds();
   std::cout << "list-buckets: " << buckets.size() << " buckets in "
             << std::fixed << std::setprecision(3) << elapsed << "s\n";
 }
@@ -1797,10 +1791,9 @@ static void cmd_list_objects(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   std::cout << "list-objects: buckets=" << all_buckets.size() << "\n";
 
   for (const auto &bname : all_buckets) {
-    auto t0 = std::chrono::steady_clock::now();
+    const Stopwatch t0;
     auto objects = list_all_objects(service, tenant_id, bname);
-    auto t1 = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(t1 - t0).count();
+    double elapsed = t0.elapsed_seconds();
     std::cout << "  " << bname << ": " << objects.size() << " objects in "
               << std::fixed << std::setprecision(3) << elapsed << "s\n";
   }
@@ -2034,7 +2027,7 @@ static void cmd_copy(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   BenchResult result;
   std::vector<std::thread> threads;
 
-  auto t0 = std::chrono::steady_clock::now();
+  const Stopwatch t0;
   for (int t = 0; t < p.concurrency; ++t) {
     threads.emplace_back(copy_worker, std::ref(service), tenant_id,
                          std::cref(ranges[t]), std::ref(result));
@@ -2042,8 +2035,7 @@ static void cmd_copy(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   for (auto &th : threads) {
     th.join();
   }
-  auto t1 = std::chrono::steady_clock::now();
-  double elapsed = std::chrono::duration<double>(t1 - t0).count();
+  double elapsed = t0.elapsed_seconds();
 
   int64_t total = 0;
   for (const auto &r : ranges) {
@@ -2196,7 +2188,7 @@ static void cmd_put_overwrite(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     BenchResult result;
     std::vector<std::thread> threads;
 
-    auto t0 = std::chrono::steady_clock::now();
+    const Stopwatch t0;
     for (int t = 0; t < p.concurrency; ++t) {
       threads.emplace_back(put_overwrite_worker, std::ref(service), tenant_id,
                            std::cref(ranges[t]), obj_size, std::ref(result));
@@ -2204,8 +2196,7 @@ static void cmd_put_overwrite(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     for (auto &th : threads) {
       th.join();
     }
-    auto t1 = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(t1 - t0).count();
+    double elapsed = t0.elapsed_seconds();
 
     int64_t total = 0;
     for (const auto &r : ranges) {
@@ -2252,7 +2243,7 @@ static void cmd_put_overwrite_versioned(KvRgwServiceImpl &service,
     BenchResult result;
     std::vector<std::thread> threads;
 
-    auto t0 = std::chrono::steady_clock::now();
+    const Stopwatch t0;
     for (int t = 0; t < p.concurrency; ++t) {
       threads.emplace_back(put_overwrite_versioned_worker, std::ref(service),
                            tenant_id, std::cref(ranges[t]), obj_size,
@@ -2261,8 +2252,7 @@ static void cmd_put_overwrite_versioned(KvRgwServiceImpl &service,
     for (auto &th : threads) {
       th.join();
     }
-    auto t1 = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(t1 - t0).count();
+    double elapsed = t0.elapsed_seconds();
 
     int64_t total = 0;
     for (const auto &r : ranges) {
@@ -2297,7 +2287,7 @@ static void cmd_delete_version(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   BenchResult result;
   std::vector<std::thread> threads;
   uint32_t num_versions = static_cast<uint32_t>(p.versions);
-  auto t0 = std::chrono::steady_clock::now();
+  const Stopwatch t0;
   for (int t = 0; t < p.concurrency; ++t) {
     threads.emplace_back(delete_version_worker, std::ref(service), tenant_id,
                          std::cref(ranges[t]), num_versions, t, std::ref(result));
@@ -2305,8 +2295,7 @@ static void cmd_delete_version(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   for (auto &th : threads) {
     th.join();
   }
-  auto t1 = std::chrono::steady_clock::now();
-  double elapsed = std::chrono::duration<double>(t1 - t0).count();
+  double elapsed = t0.elapsed_seconds();
 
   int64_t total = 0;
   for (const auto &r : ranges) {
@@ -2743,7 +2732,7 @@ static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
         break;
       }
 
-      auto t0 = std::chrono::steady_clock::now();
+      const Stopwatch t0;
       KvrgwErrorCode ec;
       bool truncated = false;
       size_t nentries = 0;
@@ -2752,10 +2741,7 @@ static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
         KvRgwServiceImpl::ListObjectVersionsResult out;
         ec = service.list_object_versions(tenant_id, bname, prefix_slash, 1000,
                                           key_marker, vid_marker, &out);
-        auto t1 = std::chrono::steady_clock::now();
-        all_latencies.push_back(
-            std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0)
-                .count());
+        all_latencies.push_back(t0.elapsed_us());
         if (ec != KVRGW_ERR_OK) {
           std::cerr << "  FAIL: bucket=" << bname
                     << " list_object_versions error=" << kvrgw_strerror(ec)
@@ -2833,10 +2819,7 @@ static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
         KvRgwServiceImpl::ListObjectsResult out;
         ec = service.list_objects(tenant_id, bname, prefix_slash, {}, 1000,
                                   token, {}, &out);
-        auto t1 = std::chrono::steady_clock::now();
-        all_latencies.push_back(
-            std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0)
-                .count());
+        all_latencies.push_back(t0.elapsed_us());
         if (ec != KVRGW_ERR_OK) {
           std::cerr << "  FAIL: bucket=" << bname
                     << " list_objects error=" << kvrgw_strerror(ec) << "\n";
