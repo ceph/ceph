@@ -28,6 +28,7 @@ from object_format import ErrorResponseBase
 
 from . import resourcelib, validation
 from .enums import (
+    ACLSupportPolicy,
     AuthMode,
     CaseInsensitiveCheckPolicy,
     CephFSStorageProvider,
@@ -477,6 +478,16 @@ class RemovedShare(_RBase):
         return rc
 
 
+@resourcelib.component()
+class ShareDefaults(_RBase):
+    # IMPORTANT: You have to copy paste these fields between Share and
+    # ShareDefaults and keep them in sync manually.  A little copy paste now vs
+    # trying to do metaclass/dataclass magic and having to battle the type
+    # checker is worth it _for now_.
+
+    acl_support: Optional[ACLSupportPolicy] = None
+
+
 @resourcelib.resource('ceph.smb.share')
 class Share(_RBase):
     """Represents a share that should / currently exists."""
@@ -496,6 +507,8 @@ class Share(_RBase):
     login_control: Optional[List[LoginAccessEntry]] = None
     restrict_access: bool = False
     hosts_access: Optional[List[HostAccessEntry]] = None
+    # common share defaults
+    acl_support: Optional[ACLSupportPolicy] = None
 
     def __post_init__(self) -> None:
         # if name is not given explicitly, take it from the share_id
@@ -961,6 +974,8 @@ class Cluster(_RBase):
     keybridge: Optional[KeyBridge] = None
     # client support mode for client-specific optimizations (macOS, etc.)
     client_compat: Optional[ClientSupportMode] = None
+    # share defaults
+    share_defaults: Optional[ShareDefaults] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
