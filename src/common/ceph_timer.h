@@ -248,7 +248,14 @@ public:
 
     schedule.erase(e);
     e.t = when;
-    schedule.insert(e);
+    auto i = schedule.insert(e);
+
+    /* As in add_event:  if this now sorts first, the timer thread is
+     * asleep on a later deadline and will not otherwise notice.  Without
+     * this, moving an event earlier is honoured only when the original
+     * deadline expires--deferring one worked, advancing one did not. */
+    if (i.first == schedule.begin())
+      cond.notify_one();
 
     return true;
   }

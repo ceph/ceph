@@ -70,6 +70,73 @@ void run_orderly()
   EXPECT_TRUE(first.get() < second.get());
 }
 
+template<typename TC>
+void adjust_advances()
+{
+  ceph::timer<TC> timer;
+
+  /* The negative arm, first, so the failure mode is named and shown to
+   * be reachable:  an event left at its far deadline must not be ready
+   * inside the window the positive arm waits on.  Without this the
+   * positive arm would prove nothing -- an assertion whose negative case
+   * cannot occur says only that the window was long enough. */
+  {
+    std::promise<void> p;
+    auto f = p.get_future();
+    auto e = timer.add_event(100s, [p = std::move(p)]() mutable {
+                                     p.set_value();
+                                   });
+    EXPECT_EQ(std::future_status::timeout, f.wait_for(2s));
+    EXPECT_TRUE(timer.cancel_event(e));
+  }
+
+  /* The positive arm:  same deadline, same instrument, moved to now.
+   * This is what an unnotified timer thread fails -- it stays asleep on
+   * the 100s deadline and the event runs then, not now. */
+  {
+    std::promise<void> p;
+    auto f = p.get_future();
+    auto e = timer.add_event(100s, [p = std::move(p)]() mutable {
+                                     p.set_value();
+                                   });
+    EXPECT_TRUE(timer.adjust_event(e, 0s));
+    EXPECT_EQ(std::future_status::ready, f.wait_for(10s));
+  }
+}
+
+template<typename TC>
+void adjust_defers()
+{
+  ceph::timer<TC> timer;
+  std::promise<void> p;
+  auto f = p.get_future();
+
+  /* the other direction:  an event pushed out must not still run at the
+   * deadline it was given first */
+  auto e = timer.add_event(1s, [p = std::move(p)]() mutable {
+                                 p.set_value();
+                               });
+  EXPECT_TRUE(timer.adjust_event(e, 100s));
+  EXPECT_EQ(std::future_status::timeout, f.wait_for(3s));
+  EXPECT_TRUE(timer.cancel_event(e));
+}
+
+template<typename TC>
+void adjust_unknown()
+{
+  ceph::timer<TC> timer;
+  /* an id which was never issued, and one which has already run */
+  EXPECT_FALSE(timer.adjust_event(0, 1s));
+
+  std::promise<void> p;
+  auto f = p.get_future();
+  auto e = timer.add_event(0s, [p = std::move(p)]() mutable {
+                                 p.set_value();
+                               });
+  f.get();
+  EXPECT_FALSE(timer.adjust_event(e, 1s));
+}
+
 struct Destructo {
   bool armed = true;
   std::promise<void> p;
@@ -186,6 +253,29 @@ TEST(CancelAll, Steady)
 TEST(CancelAll, Wall)
 {
   cancel_all<std::chrono::system_clock>();
+}
+
+TEST(AdjustEvent, AdvanceSteady)
+{
+  adjust_advances<std::chrono::steady_clock>();
+}
+TEST(AdjustEvent, AdvanceWall)
+{
+  adjust_advances<std::chrono::system_clock>();
+}
+
+TEST(AdjustEvent, DeferSteady)
+{
+  adjust_defers<std::chrono::steady_clock>();
+}
+TEST(AdjustEvent, DeferWall)
+{
+  adjust_defers<std::chrono::system_clock>();
+}
+
+TEST(AdjustEvent, UnknownSteady)
+{
+  adjust_unknown<std::chrono::steady_clock>();
 }
 
 TEST(TimerLoopTest, TimerLoop)
