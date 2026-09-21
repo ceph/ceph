@@ -31,9 +31,11 @@ describe('HostFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(HostFormComponent);
     component = fixture.componentInstance;
-    component.ngOnInit();
-    formHelper = new FormHelper(component.hostForm);
     fixture.detectChanges();
+    // formHelper must be assigned after detectChanges() because detectChanges()
+    // triggers ngOnInit, which (re)creates component.hostForm via createForm().
+    // Assigning before detectChanges() would capture a stale reference.
+    formHelper = new FormHelper(component.hostForm);
   });
 
   it('should create', () => {
@@ -161,5 +163,26 @@ describe('HostFormComponent', () => {
       'ceph-rgw-2.lab.com',
       'ceph-rgw-3.lab.com'
     ]);
+  });
+
+  it('should reject a hostname that is already in the cluster', () => {
+    const hostnameControl = component.hostForm.get('hostname');
+
+    // Before hostnames arrive the uniqueName validator cannot fire (hostnames is undefined).
+    hostnameControl.setValue('existing-host.lab.com');
+    // hostnames not yet populated → only required is satisfied → no errors
+    expect(hostnameControl.hasError('uniqueName')).toBeFalsy();
+
+    // Simulate the API response: populate hostnames and re-run validators.
+    component.hostnames = ['existing-host.lab.com', 'other-host.lab.com'];
+    hostnameControl.updateValueAndValidity();
+    formHelper.expectError('hostname', 'uniqueName');
+  });
+
+  it('should accept a hostname that is not in the cluster', () => {
+    const hostnameControl = component.hostForm.get('hostname');
+    component.hostnames = ['existing-host.lab.com'];
+    hostnameControl.setValue('new-host.lab.com');
+    formHelper.expectValid('hostname');
   });
 });
