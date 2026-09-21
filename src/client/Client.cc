@@ -5732,7 +5732,7 @@ void Client::handle_caps(const MConstRef<MClientCaps>& m)
   }
 
   bool do_cap_release = false;
-  Inode *in;
+  Inode *in = nullptr;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
   if (auto it = inode_map.find(vino); it != inode_map.end()) {
     in = it->second;
@@ -19255,7 +19255,7 @@ int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mod
     if (size == 0)
       need_read = false;
 
-    int src;
+    int src = -1;
     if (need_read) {
       src = open(spath, O_RDONLY, perms, mode);
       if (src < 0) {
