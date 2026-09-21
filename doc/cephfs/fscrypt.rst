@@ -190,3 +190,39 @@ lock on any of the three, all three will become locked.
 .. note::
 
        Snapshot names are not encrypted.
+
+Backing up without master key
+-----------------------------
+
+The master key is needed for all normal access to decrypted metatdata and data contents. The master key may only be known to the data owners. This makes it impractical for administrators to backup data contents without the key. This is due to a variety of reasons such as access semantics and non-user visible fields that hold ciphertext. To be able to completely perform backup, certain cephfs config options must be set and fields must be copied along with classical backup steps.
+
+A config option called ``client_fscrypt_as`` which stands for fscrypt access semantics, which is a flag that will allow toggling enforcing fscrypt access semantics. This will allow for view and manipulating data ciphertext.
+
+A config option called ``client_alternate_name_visible`` which allows for the toggling of dirent field, alternate_name <https://docs.ceph.com/en/latest/dev/cephfs-fscrypt/#generating-filenames> to be visible and set via extended attribute ``ceph.alternate_name``. This allow for viewing the ciphertext of long filenames.
+
+If ``client_alternate_name_visible`` is enabled
+
+What is allowed
+
+* Get ``alternate_name`` on existing inodes.
+* Set ``alternate_name`` on an inode (ie destination of backup)
+
+What you will not be able to do
+
+* Overwrite existing alternate_name
+* Delete existing alternate_name
+
+Steps to back up without the key
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Set these config options to the following values
+* ``client_fscrypt_as`` to ``false``
+* ``client_alternate_name_visible`` to ``true``
+
+.. note::
+
+       It is required to use a separate mount for back up purposes.
+
+Copy these extended attributes:
+* ``ceph.fscrypt.auth`` holds the nonce used in per-file keys
+* ``ceph.fscrypt.file`` holds logical size of the file
+* ``ceph.alternate_name`` holds ciphertext of long filenames
