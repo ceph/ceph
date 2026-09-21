@@ -4592,6 +4592,28 @@ void Locker::revoke_client_leases(SimpleLock *lock)
   }
 }
 
+/*
+ * How many bytes encode_lease() below will append.  The readdir paths need
+ * this to decide whether one more entry fits.  They used to use
+ * sizeof(LeaseStat) for it, which is the size of the C++ object -- 48 bytes,
+ * 32 of them the std::string -- and bears no relation to the encoding: it
+ * overestimates a lease with no alternate name, and underestimates every
+ * lease whose alternate name is longer than 28 bytes, which on an
+ * fscrypt-enabled directory is all of them.
+ */
+unsigned Locker::lease_encoded_size(const session_info_t& info,
+				    std::string_view alternate_name)
+{
+  unsigned len = sizeof(__u16)		// mask
+	       + sizeof(__u32)		// duration_ms
+	       + sizeof(__u32);		// seq
+  if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    len += ceph::encoding_detail::struct_header_len();
+    len += sizeof(__u32) + alternate_name.size();	// alternate_name
+  }
+  return len;
+}
+
 void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
 			  const LeaseStatView& ls)
 {

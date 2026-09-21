@@ -213,6 +213,9 @@ public:
   void issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef &mdr, utime_t now, bufferlist &bl);
   void revoke_client_leases(SimpleLock *lock);
   void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStatView& ls);
+  /// the number of bytes encode_lease() will append for this session
+  static unsigned lease_encoded_size(const session_info_t& info,
+				     std::string_view alternate_name);
 
 protected:
   void send_lock_message(SimpleLock *lock, int msg);
