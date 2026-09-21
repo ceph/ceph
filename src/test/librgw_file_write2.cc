@@ -88,7 +88,14 @@ namespace {
   }
 
   sf::path shadow_path(const std::string& obj) {
-    return nsfs_base() / bucket_name / ".shadow" / obj;
+    /* the shadow lives beside its object, so a hierarchical key puts it
+     * in <dirs>/.shadow/<leaf> rather than at the bucket root */
+    auto pos = obj.rfind('/');
+    if (pos == std::string::npos) {
+      return nsfs_base() / bucket_name / ".shadow" / obj;
+    }
+    return nsfs_base() / bucket_name / obj.substr(0, pos)
+	 / ".shadow" / obj.substr(pos + 1);
   }
 
   bool have_fs_layout() {
@@ -99,6 +106,23 @@ namespace {
   /* Tests own their objects, and clean at the start rather than the
    * end:  a failing run leaves its state on disk to be looked at, and
    * the next run is still repeatable. */
+  void reset_object_at(struct rgw_file_handle* parent_fh,
+		       const std::string& leaf,
+		       const std::string& rel_path) {
+    (void) rgw_unlink(fs, parent_fh, leaf.c_str(), RGW_UNLINK_FLAG_NONE);
+
+    if (! have_fs_layout()) {
+      return;
+    }
+
+    std::error_code ec;
+    if (sf::exists(shadow_path(rel_path), ec)) {
+      std::cerr << "WARNING: stale shadow for " << rel_path
+		<< ", removed by reset_object" << std::endl;
+      sf::remove(shadow_path(rel_path), ec);
+    }
+  }
+
   void reset_object(const std::string& name) {
     (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
 
@@ -1885,6 +1909,138 @@ TEST(OPEN2, TRUNCATE_API)
 
   /* a directory is not truncatable */
   ASSERT_EQ(rgw_truncate(fs, bucket_fh, 0, RGW_TRUNCATE_FLAG_NONE), -EISDIR);
+}
+
+TEST(OPEN2, LOOKUP_FINDS_UNPUBLISHED)
+{
+  /* An object which exists only as a shadow is part of the NFS view and
+   * must be findable.  Resolving through a synthesized S3 GET could not
+   * see it -- the shadow is by definition not in the S3 namespace -- so
+   * this is also the assertion which proves the probe is being taken
+   * rather than the fallback. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  reset_object("unpub1");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("unpub1")), 0);
+
+  std::string a4{"AAAA"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a4, 0, a4.length())), 0);
+
+  /* deliberately not closed: the object exists only in .shadow/ */
+  ASSERT_TRUE(sf::exists(shadow_path("unpub1")));
+  ASSERT_FALSE(sf::exists(published_path("unpub1")));
+
+  /* a lookup without CREATE has to find it anyway */
+  struct rgw_file_handle* fh{nullptr};
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, "unpub1", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  ASSERT_NE(fh, nullptr);
+
+  struct stat st;
+  ASSERT_EQ(rgw_getattr(fs, fh, &st, RGW_GETATTR_FLAG_NONE), 0);
+  ASSERT_EQ(st.st_size, (off_t) a4.length());
+
+  (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+
+  /* and once published it is still found, by the same path */
+  ASSERT_TRUE(sf::exists(published_path("unpub1")));
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, "unpub1", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+}
+
+TEST(OPEN2, NESTED_OBJECT)
+{
+  /* Everything else in this suite uses objects at the root of a bucket,
+   * where an object's parent is its bucket.  That is the only case in
+   * which the parent's name and the bucket's name agree, and open2
+   * relied on them agreeing -- a nested object looked its bucket up by
+   * the name of its containing directory. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  st.st_uid = owner_uid;
+  st.st_gid = owner_gid;
+  st.st_mode = 755;
+
+  struct rgw_file_handle* d1{nullptr};
+  int ret = rgw_mkdir(fs, bucket_fh, "ndir1", &st, create_mask, &d1,
+		      RGW_MKDIR_FLAG_NONE);
+  ASSERT_TRUE((ret == 0) || (ret == -EEXIST)) << "ret=" << ret;
+  if (! d1) {
+    ASSERT_EQ(rgw_lookup(fs, bucket_fh, "ndir1", &d1, nullptr, 0,
+			 RGW_LOOKUP_FLAG_NONE), 0);
+  }
+
+  struct rgw_file_handle* d2{nullptr};
+  ret = rgw_mkdir(fs, d1, "ndir2", &st, create_mask, &d2,
+		  RGW_MKDIR_FLAG_NONE);
+  ASSERT_TRUE((ret == 0) || (ret == -EEXIST)) << "ret=" << ret;
+  if (! d2) {
+    ASSERT_EQ(rgw_lookup(fs, d1, "ndir2", &d2, nullptr, 0,
+			 RGW_LOOKUP_FLAG_NONE), 0);
+  }
+
+  const std::string rel{"ndir1/ndir2/nested1"};
+  reset_object_at(d2, "nested1", rel);
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, d2);
+  ASSERT_EQ(get<0>(o2h->lookup("nested1")), 0);
+
+  std::string a8{"NESTEDOK"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0) << "open of a nested object";
+  auto w0 = get<1>(ofw);
+  ASSERT_EQ(get<0>(o2h->write(w0, a8, 0, a8.length())), 0);
+
+  /* the shadow sits beside its object, not at the bucket root */
+  ASSERT_TRUE(sf::exists(shadow_path(rel)));
+  ASSERT_FALSE(sf::exists(published_path(rel)));
+
+  /* and a lookup resolves the hierarchical key while unpublished */
+  struct rgw_file_handle* fh{nullptr};
+  ASSERT_EQ(rgw_lookup(fs, d2, "nested1", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  ASSERT_NE(fh, nullptr);
+  (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+
+  auto rdr = o2h->read(w0, 0, a8.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a8);
+
+  ASSERT_EQ(o2h->close(w0), 0);
+  ASSERT_FALSE(sf::exists(shadow_path(rel)));
+  ASSERT_TRUE(sf::exists(published_path(rel)));
+  ASSERT_EQ(sf::file_size(published_path(rel)), a8.length());
+
+  /* reopen the published nested object, and truncate it through the
+   * path ganesha uses */
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  rdr = o2h->read(get<1>(ofr), 0, a8.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a8);
+  ASSERT_EQ(o2h->close(get<1>(ofr)), 0);
+
+  ASSERT_EQ(rgw_truncate(fs, o2h->object_fh, 6, RGW_TRUNCATE_FLAG_NONE), 0);
+  ASSERT_EQ(sf::file_size(published_path(rel)), 6u);
+
+  (void) rgw_fh_rele(fs, d2, RGW_FH_RELE_FLAG_NONE);
+  (void) rgw_fh_rele(fs, d1, RGW_FH_RELE_FLAG_NONE);
 }
 
 /* END ALL TESTS */

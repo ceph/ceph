@@ -812,6 +812,11 @@ public:
     return next->get_fsio_handle(dpp, flags);
   }
 
+  int stat_fsio_view(const DoutPrefixProvider* dpp, struct stat* st,
+		     Attrs* attrs, uint32_t flags) override {
+    return next->stat_fsio_view(dpp, st, attrs, flags);
+  }
+
   bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
                          const ceph::real_time& obj_mtime) override {
     return next->is_sync_completed(dpp, y, obj_mtime);

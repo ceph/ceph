@@ -1391,6 +1391,26 @@ public:
     virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
 				       uint32_t flags = FSIOObject::OPEN_FLAG_NONE) = 0;
 
+    /** Resolve the positional (NFS) view of this name: the active
+     *  shadow if one exists, else the published object.  A probe, not
+     *  an open--it constructs no FSIOObject, retains no descriptor, and
+     *  never creates a shadow, so it is cheap enough for a lookup which
+     *  runs per dirent.  st->st_mode carries the type, so one call
+     *  disambiguates a file from a directory.
+     *
+     *  Returns -ENOENT when neither view exists, and -ENOTSUP from a
+     *  driver with no positional view;  a caller which gets -ENOTSUP
+     *  falls back to resolving through the S3 op path, which is frozen
+     *  legacy and should not be extended.  A driver which later gains a
+     *  positional view (RADOS is expected to) implements this and its
+     *  callers stop taking the fallback, with no change at the caller.
+     */
+    virtual int stat_fsio_view(const DoutPrefixProvider* dpp,
+			       struct stat* st, Attrs* attrs,
+			       uint32_t flags) {
+      return -ENOTSUP;
+    }
+
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or

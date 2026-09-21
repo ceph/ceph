@@ -372,8 +372,11 @@ TEST(LibRGW, SETUP_DIRS1) {
 	    st.st_mode = 644;
 	    sf.rgw_fh->create_stat(&st, create_mask);
 
-	    /* open handle */
-	    rc = rgw_open(fs, sf.fh, 0 /* posix flags */, 0 /* flags */);
+	    /* open handle;  a write open of a not-yet-existing object
+	     * needs a mode and CREATE--rgw_open() no longer just sets a
+	     * flag, it resolves and binds the positional view */
+	    rc = rgw_open(fs, sf.fh, O_RDWR,
+			  RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
 	    ASSERT_EQ(rc, 0);
 	    ASSERT_TRUE(sf.rgw_fh->is_open());
 	    /* stage seq write */
@@ -444,8 +447,9 @@ TEST(LibRGW, SETATTR) {
 	st.st_mode = 644;
 	sf.rgw_fh->create_stat(&st, create_mask);
 
-	/* open handle */
-	rc = rgw_open(fs, sf.fh, 0 /* posix flags */, 0 /* flags */);
+	/* open handle (see SETUP_DIRS1 for why the mode and CREATE) */
+	rc = rgw_open(fs, sf.fh, O_RDWR,
+		      RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
 	ASSERT_EQ(rc, 0);
 	ASSERT_TRUE(sf.rgw_fh->is_open());
 	/* stage seq write */
@@ -806,7 +810,8 @@ TEST(LibRGW, WRITEF_DIRS1) {
       fobj.sync();
 
       /* begin write transaction */
-      rc = rgw_open(fs, fobj.fh, 0 /* posix flags */, 0 /* flags */);
+      rc = rgw_open(fs, fobj.fh, O_RDWR,
+		    RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
       ASSERT_EQ(rc, 0);
       ASSERT_TRUE(fobj.rgw_fh->is_open());
 
@@ -1014,7 +1019,8 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
       ASSERT_EQ(ret, 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
       // open object--open transaction
-      ret = rgw_open(fs, obj.fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
+      ret = rgw_open(fs, obj.fh, O_RDWR,
+		     RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
       ASSERT_EQ(ret, 0);
       ASSERT_TRUE(obj.rgw_fh->is_open());
       // unstable write data

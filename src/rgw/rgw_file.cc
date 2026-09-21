@@ -180,12 +180,76 @@ namespace rgw {
 
     LookupFHResult fhr{nullptr, 0};
 
+    std::string obj_path = parent->format_child_name(path, false);
+
+    /* Resolve the NFS view directly, when the driver has one.  The
+     * fallback below synthesizes an S3 GET, which cannot see a shadow
+     * and brings a lookup-time s3:GetObject check that is the wrong
+     * permission for a lookup;  it is kept only for drivers with no
+     * positional view, and should not be extended. */
+    {
+      const DoutPrefix dp(cct, dout_subsys, "rgw stat_leaf: ");
+      std::unique_ptr<rgw::sal::Bucket> sal_bucket;
+      int rc = g_rgwlib->get_driver()->load_bucket(
+	&dp, rgw_bucket(user->get_tenant(), parent->bucket_name()),
+	&sal_bucket, null_yield);
+      if (rc == 0) {
+	auto sal_object = sal_bucket->get_object(rgw_obj_key(obj_path));
+	struct stat st;
+	rgw::sal::Attrs attrs;
+	memset(&st, 0, sizeof(st));
+
+	rc = sal_object->stat_fsio_view(&dp, &st, &attrs, 0);
+	if (rc == 0) {
+	  /* st_mode carries the type, so one call disambiguates what
+	   * the fallback needs two round trips for */
+	  bool is_dir = S_ISDIR(st.st_mode);
+	  if (((type == RGW_FS_TYPE_DIRECTORY) && !is_dir) ||
+	      ((type == RGW_FS_TYPE_FILE) && is_dir)) {
+	    return fhr; /* wrong type for the hint given */
+	  }
+
+	  fhr = lookup_fh(parent, path,
+			  is_dir ? RGWFileHandle::FLAG_DIRECTORY
+				 : RGWFileHandle::FLAG_CREATE);
+	  if (get<0>(fhr)) {
+	    RGWFileHandle* rgw_fh = get<0>(fhr);
+	    lock_guard guard(rgw_fh->mtx);
+	    rgw_fh->set_size(st.st_size);
+	    rgw_fh->set_times(st.st_mtim);
+
+	    auto find_attr = [&attrs](const char* k) -> buffer::list* {
+	      auto it = attrs.find(k);
+	      return (it != attrs.end()) ? &(it->second) : nullptr;
+	    };
+	    auto ux_key = find_attr(RGW_ATTR_UNIX_KEY1);
+	    auto ux_attrs = find_attr(RGW_ATTR_UNIX1);
+	    auto p_etag = find_attr(RGW_ATTR_ETAG);
+	    auto p_acl = find_attr(RGW_ATTR_ACL);
+	    if (p_etag) {
+	      rgw_fh->set_etag(*p_etag);
+	    }
+	    if (p_acl) {
+	      rgw_fh->set_acls(*p_acl);
+	    }
+	    if (ux_key && ux_attrs) {
+	      [[maybe_unused]] DecodeAttrsResult dar =
+		rgw_fh->decode_attrs(ux_key, ux_attrs);
+	    }
+	  }
+	  return fhr;
+	}
+	if (rc != -ENOTSUP) {
+	  /* the name does not exist in the NFS view */
+	  return fhr;
+	}
+      }
+    }
+
     /* XXX the need for two round-trip operations to identify file or
      * directory leaf objects is unnecessary--the current proposed
      * mechanism to avoid this is to store leaf object names with an
      * object locator w/o trailing slash */
-
-    std::string obj_path = parent->format_child_name(path, false);
 
     for (auto ix : { 0, 1, 2 }) {
       switch (ix) {
@@ -2010,8 +2074,13 @@ namespace rgw {
 
     auto* driver = g_rgwlib->get_driver(); /* XXXX need to link driver to fs */
     if (driver->have_fsio()) {
-      auto& bucket_name = parent->get_name();
-      auto& object_name = get_name();
+      /* the permission check needs this object's bucket and its full
+       * key, not the immediate parent's name and the leaf--those agree
+       * only for an object at the root of a bucket, which is why this
+       * went unnoticed:  a nested object looked its bucket up by the
+       * name of its containing directory and got NoSuchBucket */
+      const std::string& bkt_name = bucket_name();
+      std::string obj_name = relative_object_name();
 
       if (! f->fsio_hdl) {
         uint32_t op_flags = RGWOpenRequest::FLAG_NONE;
@@ -2024,7 +2093,7 @@ namespace rgw {
 
         RGWOpenRequest req(
                            cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
-                           bucket_name, object_name, op_flags);
+                           bkt_name, obj_name, op_flags);
 
         int rc = g_rgwlib->get_fe()->execute_req(&req);
         if (rc < 0) {
@@ -2051,7 +2120,7 @@ namespace rgw {
           f->fsio_hdl = std::move(get<1>(f_result));
         } else {
           lsubdout(fs->get_context(), rgw, 0)
-            << __func__ << " " << object_name
+            << __func__ << " " << obj_name
             << ": attempt to open FSIO handle failed rc=="
             << std::get<0>(f_result)
             << dendl;
@@ -2067,7 +2136,7 @@ namespace rgw {
         int rc = f->fsio_hdl->reclone(&dp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
         if (!!rc) {
           lsubdout(fs->get_context(), rgw, 0)
-            << __func__ << " " << object_name
+            << __func__ << " " << obj_name
             << " failed to establish shadow for write open" << dendl;
           return rc;
         }
@@ -2081,7 +2150,7 @@ namespace rgw {
         int rc = f->fsio_hdl->ftruncate(&dp, 0, 0);
         if (!!rc) {
           lsubdout(fs->get_context(), rgw, 0)
-            << __func__ << " " << object_name
+            << __func__ << " " << obj_name
             << " failed to truncate shadow" << dendl;
           return rc;
         }

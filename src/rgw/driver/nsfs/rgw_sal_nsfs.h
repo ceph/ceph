@@ -1080,6 +1080,16 @@ public:
   FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
 			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE) override;
 
+  int stat_fsio_view(const DoutPrefixProvider* dpp, struct stat* st,
+		     Attrs* attrs, uint32_t flags) override;
+
+  /* resolve this object's parent directory, opening the chain from the
+   * bucket root;  see the definition for why ent->get_parent() will not
+   * do for a nested key */
+  int resolve_parent_dir(const DoutPrefixProvider* dpp, bool create_dirs,
+			 std::vector<std::unique_ptr<nsfs::Directory>>& chain,
+			 nsfs::Directory*& dir, std::string& leaf);
+
   bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
                          const ceph::real_time& obj_mtime) override;
 

@@ -4542,6 +4542,125 @@ int NSFSObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
   return 0;
 } /* int NSFSObject::list_parts */
 
+/* Directory::open() does openat(parent->get_fd(), ...), so a directory
+ * whose ancestors were never opened yields EBADF.  ent->get_parent()
+ * hands back exactly such a directory for a nested key, which is why
+ * this resolves the chain from the bucket root instead -- the bucket's
+ * own directory is always open.  For a key at the bucket root the walk
+ * is empty and this returns the root, as before. */
+int NSFSObject::resolve_parent_dir(const DoutPrefixProvider* dpp,
+				   bool create_dirs,
+				   std::vector<std::unique_ptr<nsfs::Directory>>& chain,
+				   nsfs::Directory*& dir,
+				   std::string& leaf)
+{
+  auto* root = static_cast<NSFSBucket*>(bucket)->get_dir();
+  if (!root) {
+    return -EINVAL;
+  }
+
+  /* resolve_path() opens each component with openat(parent fd), so the
+   * root has to be open before the walk starts.  a key at the bucket
+   * root hides this: the walk is empty, and the root then opens itself
+   * against AT_FDCWD further down */
+  if (root->get_fd() < 0) {
+    int ret = root->open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  nsfs::Directory* leaf_dir{nullptr};
+  int ret = nsfs::resolve_path(dpp, root,
+    get_fname(/*use_version=*/false),
+    create_dirs,
+    driver->ctx(),
+    chain, leaf_dir, leaf);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!leaf_dir) {
+    return -ENOENT;
+  }
+  dir = leaf_dir;
+  return 0;
+}
+
+int NSFSObject::stat_fsio_view(const DoutPrefixProvider* dpp,
+			       struct stat* st, Attrs* attrs, uint32_t flags)
+{
+  if (!ent) {
+    (void) stat(dpp);
+  }
+
+  nsfs::Directory* dir{nullptr};
+  std::string leaf;
+  std::vector<std::unique_ptr<nsfs::Directory>> resolved_dirs;
+
+  /* a probe must not create anything on the way to an answer */
+  int rret = resolve_parent_dir(dpp, /*create_dirs=*/false,
+			        resolved_dirs, dir, leaf);
+  if (rret < 0) {
+    return rret;
+  }
+
+  int parent_fd = dir->get_fd();
+  if (parent_fd < 0) {
+    dir->open(dpp);
+    parent_fd = dir->get_fd();
+  }
+  if (parent_fd < 0) {
+    return -EBADF;
+  }
+
+  /* the shadow is the NFS view whenever one exists;  otherwise the
+   * published object is.  note the shadow directory is only opened if
+   * one is there, so the common case costs a single fstatat */
+  int dir_fd = parent_fd;
+  int sdir_fd = -1;
+
+  if (::faccessat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), F_OK, 0) == 0) {
+    sdir_fd = ::openat(parent_fd, HIDDEN_SHADOW_PATH.c_str(),
+		       O_RDONLY | O_DIRECTORY);
+    if ((sdir_fd >= 0) &&
+	(::faccessat(sdir_fd, leaf.c_str(), F_OK, 0) == 0)) {
+      dir_fd = sdir_fd;
+    }
+  }
+
+  int ret = 0;
+
+  if (st) {
+    if (::fstatat(dir_fd, leaf.c_str(), st, AT_SYMLINK_NOFOLLOW) < 0) {
+      ret = -errno;
+      goto out;
+    }
+  }
+
+  if (attrs) {
+    /* xattrs need a descriptor;  it is transient, unlike the ones an
+     * FSIO handle retains */
+    int fd = ::openat(dir_fd, leaf.c_str(), O_RDONLY);
+    if (fd < 0) {
+      ret = -errno;
+      goto out;
+    }
+    ret = get_x_attrs(null_yield, dpp, fd, *attrs, leaf);
+    ::close(fd);
+  } else if (!st) {
+    /* existence only */
+    if (::faccessat(dir_fd, leaf.c_str(), F_OK, 0) < 0) {
+      ret = -errno;
+    }
+  }
+
+out:
+  if (sdir_fd >= 0) {
+    ::close(sdir_fd);
+  }
+  return ret;
+}
+
 Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 						uint32_t flags)
 {
@@ -4549,30 +4668,16 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     (void) stat(dpp);
   }
 
-  nsfs::Directory* dir;
+  nsfs::Directory* dir{nullptr};
   std::string leaf;
   std::vector<std::unique_ptr<nsfs::Directory>> resolved_dirs;
-  if (ent) {
-    dir = ent->get_parent();
-    leaf = ent->get_name();
-  } else {
-    /* object doesn't exist on disk — resolve the parent directory
-     * from the key path so the shadow lands in the right place
-     * for hierarchical keys (e.g., photos/vacation/pic.jpg) */
-    nsfs::Directory* leaf_dir{nullptr};
-    int ret = nsfs::resolve_path(dpp,
-      static_cast<NSFSBucket*>(bucket)->get_dir(),
-      get_fname(/*use_version=*/false),
-      /*create_dirs=*/true,
-      driver->ctx(),
-      resolved_dirs, leaf_dir, leaf);
-    if (ret < 0 || !leaf_dir) {
-      return FSIOResult{ret < 0 ? ret : -EINVAL, nullptr};
-    }
-    dir = leaf_dir;
-  }
-  if (!dir) {
-    return FSIOResult{-EINVAL, nullptr};
+
+  /* resolve the parent from the key path so the shadow lands beside its
+   * object for a hierarchical key (e.g. photos/vacation/pic.jpg) */
+  int rret = resolve_parent_dir(dpp, /*create_dirs=*/true,
+			        resolved_dirs, dir, leaf);
+  if (rret < 0) {
+    return FSIOResult{rret, nullptr};
   }
   int parent_fd = dir->get_fd();
   if (parent_fd < 0) {
@@ -4628,15 +4733,10 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     return FSIOResult{0, std::move(hdl)};
   }
 
-  /* check whether source object exists */
-  bool src_exists = false;
-  if (ent) {
-    src_exists = ent->exists();
-    if (!src_exists) {
-      int sr = ent->stat(dpp);
-      src_exists = (sr == 0 && ent->exists());
-    }
-  }
+  /* Ask the resolved parent directly rather than going through ent,
+   * which is null for a hierarchical key even when the object is on
+   * disk.  reclone() already tests it this way. */
+  bool src_exists = (::faccessat(parent_fd, leaf.c_str(), F_OK, 0) == 0);
 
   if (!src_exists && !(flags & FSIOObject::OPEN_FLAG_CREATE)) {
     ::close(sdir_fd);
