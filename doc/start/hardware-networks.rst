@@ -7,9 +7,6 @@
 .. meta::
    :description: Link speeds, replication times, bonding, VLANs, and BMC networking for a Ceph cluster.
    :ceph-page-type: reference
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 For the principles behind these recommendations, see
 :ref:`Networks <hardware-recommendations-networks>`

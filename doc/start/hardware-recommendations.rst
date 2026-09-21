@@ -7,9 +7,6 @@
 .. meta::
    :description: The principles behind choosing CPUs, memory, storage devices, and networks for a Ceph cluster.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 Every hardware choice balances failure domains, cost, and performance. This
 page gives the principles. :ref:`Minimum Hardware per Daemon

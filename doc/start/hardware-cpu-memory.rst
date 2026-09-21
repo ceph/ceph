@@ -7,9 +7,6 @@
 .. meta::
    :description: How much CPU and RAM each Ceph daemon needs, and the settings that control OSD, Monitor, and MDS memory use.
    :ceph-page-type: reference
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 CPU and RAM per daemon. Bare minimums, and what counts as a core with
 hyperthreading, are on :ref:`minimum-hardware`.

@@ -8,9 +8,6 @@ Scalability and High Availability
 .. meta::
    :description: How CRUSH, the cluster map, Monitor quorum, cephx authentication, and intelligent daemons let Ceph scale without a single point of failure.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: rados
 
 In traditional architectures, clients talk to a centralized component. This
 centralized component might be a gateway, a broker, an API, or a facade. A

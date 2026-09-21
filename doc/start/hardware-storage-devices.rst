@@ -7,9 +7,6 @@
 .. meta::
    :description: Drive layout, HDD and SSD selection, controllers, write caches, and benchmarking for Ceph OSD, Monitor, and metadata storage.
    :ceph-page-type: reference
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 Which drives to use for which data, how to connect them, and how to test
 them.

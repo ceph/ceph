@@ -6,9 +6,6 @@ Ceph Object Classes
 .. meta::
    :description: How shared object classes (Ceph Classes) extend the OSD with new object methods.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: rados
 
 You can extend Ceph by creating shared object classes called 'Ceph Classes'.
 Ceph loads ``.so`` classes stored in the ``osd class dir`` directory dynamically

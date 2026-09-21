@@ -6,9 +6,6 @@ Erasure Coding
 .. meta::
    :description: How an erasure coded pool splits objects into data and coding chunks, and how it handles interrupted writes.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: rados
 
 An erasure coded pool stores each object as ``K+M`` chunks. It is divided into
 ``K`` data chunks and ``M`` coding chunks. The pool is configured to have a size

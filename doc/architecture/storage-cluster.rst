@@ -6,9 +6,6 @@ The Ceph Storage Cluster
 .. meta::
    :description: What a Ceph Storage Cluster is, which daemons it consists of, and how it stores data as objects.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: rados
 
 A :term:`Ceph Storage Cluster` is built on :abbr:`RADOS (Reliable Autonomic
 Distributed Object Store)`, a distributed object store in which every node

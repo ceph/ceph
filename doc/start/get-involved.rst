@@ -8,9 +8,6 @@
 .. meta::
    :description: The mailing lists, chat channels, meetings, and trackers of the Ceph community.
    :ceph-page-type: reference
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 The Ceph community talks in these places. Pick the channel that fits
 your question.
