@@ -35,6 +35,8 @@ class Config:
         self.checkpoint_delay = kwargs.get('checkpoint_delay', 5)
         # allow some time for realm reconfiguration after changing master zone
         self.reconfigure_delay = kwargs.get('reconfigure_delay', 5)
+        # wait for runtime configuration changes to reach daemons
+        self.config_propagation_wait = kwargs.get('config_propagation_wait', 20)
         self.tenant = kwargs.get('tenant', '')
 
 @contextlib.contextmanager
