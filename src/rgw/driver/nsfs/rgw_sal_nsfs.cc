@@ -5215,11 +5215,15 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
   auto* bucket = static_cast<NSFSBucket*>(src_obj->get_bucket());
   const auto& binfo = bucket->get_info();
 
+  /* scoped at function level:  the result has to outlive the lock, because
+   * the listing cache below must flip the demoted entry from current to
+   * non-current.  Declared inside the block it was discarded, so nothing
+   * could -- and two NFS writes left two entries flagged current. */
+  DemoteResult demote;
   if (binfo.versioned() && parent_fd >= 0) {
     auto vlock = driver->get_fs_strategy()->version_lock(
       dpp, open_versions_lockfile(parent_fd));
 
-    DemoteResult demote;
     demote_current_version(dpp, driver->get_fs_strategy(),
 			   parent_fd, leaf_name,
 			   binfo.versioning_enabled(), demote);
@@ -5303,6 +5307,29 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 	}
       }
       bcache->add_entry(dpp, bucket->get_name(), bde);
+
+      /* and flip the version this publish demoted from current to
+       * non-current, as NSFSAtomicWriter::complete() does for an S3 PUT.
+       * Without it the previous current entry stays in the cache still
+       * flagged current, so the object lists with two. */
+      if (demote.did_demote) {
+	std::string obj_name = src_obj->get_key().get_index_key_name();
+
+	cls_rgw_obj_key old_key;
+	old_key.name = obj_name;
+	old_key.instance = demote.demoted_ver_id;
+	bcache->remove_entry(dpp, bucket->get_name(), old_key);
+
+	rgw_bucket_dir_entry dem_bde{};
+	dem_bde.key.name = obj_name;
+	dem_bde.key.instance = demote.demoted_ver_id;
+	dem_bde.ver.pool = 1;
+	dem_bde.ver.epoch = 1;
+	dem_bde.exists = true;
+	dem_bde.meta.category = RGWObjCategory::Main;
+	dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+	bcache->add_entry(dpp, bucket->get_name(), dem_bde);
+      }
     }
   }
 

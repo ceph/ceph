@@ -3014,6 +3014,19 @@ TEST(OPEN2, VER_WRITE_TWICE_MAKES_TWO_VERSIONS)
   }
   const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
 
+  /* Fill the cache *before* writing anything, so every entry the publishes
+   * add below arrives incrementally and the listing at the end reads those
+   * adds rather than a rebuild.
+   *
+   * Without this the test relies on being the first thing to list this
+   * bucket, which makes its own listing the fill -- and a fill enumerates the
+   * store and derives FLAG_CURRENT correctly, repairing exactly what the
+   * assertions below are looking for.  It read that way for a long time and
+   * so never checked the incremental path it says it checks;  a
+   * publish() which never removed the demoted entry went unnoticed until
+   * another test happened to list this bucket first. */
+  ASSERT_EQ(librgw_test::warm_listing_cache(&dp, ver_bucket_name), 0);
+
   std::unique_ptr<Open2Helper> o2h =
       std::make_unique<Open2Helper>(fs, ver_bucket_fh);
   ASSERT_EQ(get<0>(o2h->lookup("vtwice")), 0);
