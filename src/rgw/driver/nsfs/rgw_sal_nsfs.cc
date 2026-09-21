@@ -5157,33 +5157,53 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 
   ::fsync(shadow_fd);
 
-  /* fixup pass: compute etag from shadow content and stamp as xattr */
+  /* fixup pass: stamp the etag as an xattr.
+   *
+   * no trailing NUL, in either branch:  RGW_ATTR_ETAG is stored as bare
+   * hex, the way the S3 PUT path stores it (rgw_op.cc), and dump_etag()
+   * emits the attribute verbatim.  A stored NUL reaches the client inside
+   * the quoted ETag header and makes If-Match compare unequal, since
+   * rgw_string_unquote() yields 32 bytes and the attribute is 33. */
   {
-    MD5 hash;
-    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    char buf[65536];
-    off_t off = 0;
-
-    for (;;) {
-      ssize_t nr = ::pread(shadow_fd, buf, sizeof(buf), off);
-      if (nr <= 0) {
-	break;
-      }
-      hash.Update((const unsigned char*)buf, nr);
-      off += nr;
-    }
-    hash.Final(m);
-
     bufferlist etag_bl;
-    /* no trailing NUL:  RGW_ATTR_ETAG is stored as bare hex, the way
-     * the S3 PUT path stores it (rgw_op.cc), and dump_etag() emits the
-     * attribute verbatim.  A stored NUL reaches the client inside the
-     * quoted ETag header and makes If-Match compare unequal, since
-     * rgw_string_unquote() yields 32 bytes and the attribute is 33. */
-    append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2, [&](auto iter) {
-      return buf_to_hex(m, iter);
-    });
+    struct statx estx;
+
+    /* rgw_non_md5_etag reaches this path too.  RGWPutObj::execute()'s
+     * skip covers the S3 writers, but an NFS write never passes through
+     * it, and hashing here is the worst case the option exists to avoid:
+     * a full extra pass over every byte just written, pread back through
+     * a 64 KiB buffer purely to digest it.
+     *
+     * Use the same mtime-ino string nsfs gives version ids.  Setting an
+     * xattr updates ctime, not mtime, and the renameat() below moves the
+     * name rather than the file -- so this is the value the version-id
+     * stamp further down computes as well, and ETag matches versionId
+     * exactly as it does on the S3 path. */
+    if (dpp->get_cct()->_conf->rgw_non_md5_etag &&
+	statx(shadow_fd, "", AT_EMPTY_PATH, STATX_ALL, &estx) == 0) {
+      std::string opaque = nsfs_version_id_from_statx(estx);
+      etag_bl.append(opaque.c_str(), opaque.size());
+    } else {
+      MD5 hash;
+      hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+      unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+      char buf[65536];
+      off_t off = 0;
+
+      for (;;) {
+	ssize_t nr = ::pread(shadow_fd, buf, sizeof(buf), off);
+	if (nr <= 0) {
+	  break;
+	}
+	hash.Update((const unsigned char*)buf, nr);
+	off += nr;
+      }
+      hash.Final(m);
+
+      append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2, [&](auto iter) {
+	return buf_to_hex(m, iter);
+      });
+    }
     fsetattr(dpp, RGW_ATTR_ETAG, etag_bl, 0);
   }
 
@@ -6331,6 +6351,18 @@ int NSFSObject::generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield y
 
 int NSFSObject::generate_etag(const DoutPrefixProvider* dpp, optional_yield y)
 {
+  /* rgw_non_md5_etag reaches this path too.  It runs for a sideloaded
+   * file -- one placed in the namespace outside RGW, so carrying no etag
+   * xattr -- which is precisely the case the option is for, and noobaa's
+   * ordinary case.  Reading the object end to end on first access merely
+   * to digest it is the cost being avoided.
+   *
+   * fd -1: write_attrs() persists the map, so the helper need not set the
+   * xattr itself. */
+  if (ent && nsfs_apply_non_md5_etag(dpp, -1, ent->get_stx(), get_attrs())) {
+    return write_attrs(dpp, y);
+  }
+
   int64_t left = get_size();
   int64_t cur_ofs = 0;
   MD5 hash;
@@ -8070,7 +8102,9 @@ int NSFSMultipartWriter::complete(
   std::string part_etag = etag;
   if (part_file) {
     int sret = part_file->stat(dpp, /*force=*/true);
-    if (sret == 0 && nsfs_apply_non_md5_etag(dpp, part_file->get_fd(),
+    /* fd -1: part_file->write_attrs() below persists this same map, so
+     * the helper's own fsetxattr() would only write the etag twice */
+    if (sret == 0 && nsfs_apply_non_md5_etag(dpp, -1,
                                              part_file->get_stx(), attrs)) {
       bufferlist bl;
       if (get_attr(attrs, RGW_ATTR_ETAG, bl)) {

@@ -815,6 +815,51 @@ TEST(OPEN2, ACL_AFTER_PUBLISH)
   rgw_fh_rele(fs, relookup_fh, RGW_FH_RELE_FLAG_NONE);
 }
 
+/* Assert the shape of a published etag.
+ *
+ * rgw_non_md5_etag selects between two forms, and the test must hold the
+ * driver to whichever one is configured rather than accepting either --
+ * the point of checking at all is that the wrong form reaches an S3
+ * client verbatim.
+ *
+ * Both forms are stored bare, with no trailing NUL:  dump_etag() emits
+ * the attribute into the quoted ETag header as-is, and a stored NUL makes
+ * If-Match compare unequal because rgw_string_unquote() yields one fewer
+ * byte than the attribute holds. */
+static void expect_published_etag_shape(const std::string& etag)
+{
+  ASSERT_EQ(etag.find('\0'), std::string::npos)
+      << "etag carries an embedded NUL: " << ::testing::PrintToString(etag);
+
+  if (g_ceph_context->_conf->rgw_non_md5_etag) {
+    /* mtime-<base36>-ino-<base36>: the same string nsfs gives version
+     * ids.  The dashes are load-bearing -- they are what make an SDK
+     * treat the value as a multipart etag and skip MD5 validation. */
+    ASSERT_EQ(etag.compare(0, 6, "mtime-"), 0)
+        << "not the non-md5 form: " << ::testing::PrintToString(etag);
+    auto ino = etag.find("-ino-");
+    ASSERT_NE(ino, std::string::npos)
+        << "not the non-md5 form: " << ::testing::PrintToString(etag);
+    ASSERT_GT(ino, 6u) << "empty mtime field: "
+                       << ::testing::PrintToString(etag);
+    ASSERT_GT(etag.length(), ino + 5) << "empty ino field: "
+                                      << ::testing::PrintToString(etag);
+    for (char c : etag) {
+      ASSERT_TRUE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') ||
+                  c == '-')
+          << "non-base36 char in " << ::testing::PrintToString(etag);
+    }
+  } else {
+    ASSERT_EQ(etag.length(), 32u)
+        << "etag is " << etag.length() << " bytes, not bare hex: "
+        << ::testing::PrintToString(etag);
+    for (char c : etag) {
+      ASSERT_TRUE(std::isxdigit(static_cast<unsigned char>(c)))
+          << "etag is not hex: " << ::testing::PrintToString(etag);
+    }
+  }
+}
+
 TEST(OPEN2, ETAG_AFTER_PUBLISH)
 {
   /* verify etag is computed at publish time */
@@ -853,11 +898,7 @@ TEST(OPEN2, ETAG_AFTER_PUBLISH)
   if (!etag.empty() && etag.back() == '\0') {
     etag.pop_back();
   }
-  /* etag should be a 32-char hex MD5 digest */
-  ASSERT_EQ(etag.length(), 32u);
-  for (char c : etag) {
-    ASSERT_TRUE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'));
-  }
+  expect_published_etag_shape(etag);
 
   o2h->close(open2);
 }
@@ -2551,7 +2592,7 @@ TEST(OPEN2, DOTFILE_IS_LISTED)
   }
 }
 
-TEST(OPEN2, PUBLISHED_ETAG_IS_BARE_HEX)
+TEST(OPEN2, PUBLISHED_ETAG_IS_BARE)
 {
   /* publish() stamps RGW_ATTR_ETAG from the shadow's content.  It must
    * store bare hex, with no trailing NUL:  dump_etag() emits the
@@ -2600,15 +2641,7 @@ TEST(OPEN2, PUBLISHED_ETAG_IS_BARE_HEX)
   ASSERT_NE(it, attrs.end()) << "publish did not stamp an etag";
 
   std::string stored = it->second.to_str();
-  ASSERT_EQ(stored.length(), 32u)
-      << "etag is " << stored.length() << " bytes, not bare hex: "
-      << ::testing::PrintToString(stored);
-  ASSERT_EQ(stored.find('\0'), std::string::npos)
-      << "etag carries an embedded NUL";
-  for (char c : stored) {
-    ASSERT_TRUE(std::isxdigit(static_cast<unsigned char>(c)))
-	<< "etag is not hex: " << ::testing::PrintToString(stored);
-  }
+  expect_published_etag_shape(stored);
 }
 
 TEST(OPEN2, PUBLISHED_ETAG_MATCHES_LISTING)
@@ -2618,7 +2651,7 @@ TEST(OPEN2, PUBLISHED_ETAG_MATCHES_LISTING)
    * adds must carry the same value -- a listing that reports the
    * synthesized change token while HEAD reports a digest is a LIST/HEAD
    * disagreement, the same class of bug as the trailing NUL that
-   * PUBLISHED_ETAG_IS_BARE_HEX pins down.
+   * PUBLISHED_ETAG_IS_BARE pins down.
    *
    * The bucket listing is cached, and a cold-cache list rebuilds it from
    * disk -- which would repair whatever the incremental add got wrong and
@@ -2785,6 +2818,64 @@ TEST(OPEN2, VER_WRITE_TWICE_MAKES_TWO_VERSIONS)
  * versioned bucket that must not destroy history -- S3 semantics for a
  * delete without a versionId is a delete marker over a retained
  * version, and NFS deletes act immediately on S3. */
+TEST(OPEN2, VER_PUBLISHED_ETAG_TRACKS_VERSION_ID)
+{
+  /* rgw_non_md5_etag's nsfs contract:  the etag is the same
+   * mtime-<base36>-ino-<base36> string as the version id, so on a
+   * versioned bucket ETag equals versionId.
+   *
+   * That is not free -- publish() computes the etag from the shadow
+   * before the renameat(), and the version id is computed after it.  The
+   * two agree only because setting an xattr updates ctime rather than
+   * mtime and a rename moves the name rather than the file.  If either
+   * assumption stops holding the strings drift apart, and nothing else
+   * in the suite would notice.
+   *
+   * With the option off the two must *differ* -- the etag is a digest of
+   * the content and the version id is a change token.  Asserting that
+   * too is what keeps this from being a check that passes either way. */
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, ver_bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("vetagvid")), 0);
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  std::string body{"etag tracks version id"};
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), body, 0, body.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+
+  std::vector<rgw_bucket_dir_entry> objs;
+  ASSERT_EQ(librgw_test::list_bucket(&dp, ver_bucket_name, true, objs), 0);
+
+  int found = 0;
+  for (auto& o : objs) {
+    if (o.key.name != "vetagvid") {
+      continue;
+    }
+    ++found;
+    ASSERT_FALSE(o.key.instance.empty())
+        << "NFS write did not stamp a version id";
+    ASSERT_FALSE(o.meta.etag.empty()) << "NFS write did not stamp an etag";
+    expect_published_etag_shape(o.meta.etag);
+
+    if (g_ceph_context->_conf->rgw_non_md5_etag) {
+      ASSERT_EQ(o.meta.etag, o.key.instance)
+          << "etag and version id disagree; publish() computed them across "
+             "the rename and something moved mtime";
+    } else {
+      ASSERT_NE(o.meta.etag, o.key.instance)
+          << "etag is supposed to be a content digest here, not the "
+             "change token";
+    }
+  }
+  ASSERT_EQ(found, 1) << "expected exactly one version of vetagvid";
+}
+
 TEST(OPEN2, VER_UNLINK_CREATES_DELETE_MARKER)
 {
   if (! ver_bucket_fh) {

@@ -5361,6 +5361,10 @@ void RGWPostObj::execute(optional_yield y)
     return;
   }
 
+  /* rgw_non_md5_etag: skip body MD5 here as RGWPutObj::execute() does, and
+   * return a dashed non-MD5 ETag instead. */
+  const bool non_md5_etag = s->cct->_conf->rgw_non_md5_etag;
+
   /* Start iteration over data fields. It's necessary as Swift's FormPost
    * is capable to handle multiple files in single form. */
   do {
@@ -5461,7 +5465,9 @@ void RGWPostObj::execute(optional_yield y)
       }
 
       /* XXXX we should modernize to use component buffers? */
-      hash.Update((const unsigned char *)data.c_str(), data.length());
+      if (!non_md5_etag) {
+        hash.Update((const unsigned char *)data.c_str(), data.length());
+      }
       op_ret = filter->process(std::move(data), ofs);
       if (op_ret < 0) {
         return;
@@ -5506,12 +5512,23 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
-    hash.Final(m);
-    etag.clear();
-    etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
-    buf_to_hex(m, std::back_inserter(etag));
+    if (non_md5_etag) {
+      const auto ts = ceph::real_clock::to_timespec(ceph::real_clock::now());
+      const uint64_t mtime_ns =
+          static_cast<uint64_t>(ts.tv_sec) * 1000000000ull +
+          static_cast<uint64_t>(ts.tv_nsec);
+      const std::string_view opaque_id = !s->req_id.empty() ?
+          std::string_view(s->req_id) : std::string_view(s->trans_id);
+      etag = rgw_make_opaque_etag(opaque_id, mtime_ns);
+    } else {
+      hash.Final(m);
+      etag.clear();
+      etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+      buf_to_hex(m, std::back_inserter(etag));
+    }
 
-    if (supplied_md5_b64 && etag != supplied_md5) {
+    /* Content-MD5 is not verified when the body was never hashed */
+    if (!non_md5_etag && supplied_md5_b64 && etag != supplied_md5) {
       op_ret = -ERR_BAD_DIGEST;
       return;
     }
@@ -5575,6 +5592,19 @@ void RGWPostObj::execute(optional_yield y)
 				 rctx, rgw::sal::FLAG_LOG_OP);
     if (op_ret < 0) {
       return;
+    }
+
+    /* A driver may replace the non-MD5 ETag with one of its own -- nsfs
+     * substitutes mtime-ino from the object file's inode for the generic
+     * mtime-req form -- so report what was actually stored.  Otherwise the
+     * value handed back here (in the success_action_redirect query string,
+     * among others) names an ETag the object does not have.  Same re-read
+     * RGWPutObj::execute() does after its processor->complete(). */
+    if (non_md5_etag) {
+      auto eit = attrs.find(RGW_ATTR_ETAG);
+      if (eit != attrs.end() && eit->second.length()) {
+        etag.assign(eit->second.c_str(), eit->second.length());
+      }
     }
 
     /* XXX shouldn't we have an op-counter update here? */
@@ -8914,6 +8944,8 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  /* rgw_non_md5_etag: skip body MD5 as RGWPutObj::execute() does */
+  const bool non_md5_etag = s->cct->_conf->rgw_non_md5_etag;
   do {
     ceph::bufferlist data;
     len = body.get_at_most(s->cct->_conf->rgw_max_chunk_size, data);
@@ -8923,7 +8955,9 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
       op_ret = len;
       return op_ret;
     } else if (len > 0) {
-      hash.Update((const unsigned char *)data.c_str(), data.length());
+      if (!non_md5_etag) {
+        hash.Update((const unsigned char *)data.c_str(), data.length());
+      }
       op_ret = filter->process(std::move(data), ofs);
       if (op_ret < 0) {
         ldpp_dout(this, 20) << "filter->process() returned ret=" << op_ret << dendl;
@@ -8954,13 +8988,24 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   }
 
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  hash.Final(m);
   ceph::bufferlist etag_bl;
-  append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1, [&](auto iter) {
-    iter = buf_to_hex(m, iter);
-    *iter++ = '\0';
-    return iter;
-  });
+  if (non_md5_etag) {
+    const auto ts = ceph::real_clock::to_timespec(ceph::real_clock::now());
+    const uint64_t mtime_ns =
+        static_cast<uint64_t>(ts.tv_sec) * 1000000000ull +
+        static_cast<uint64_t>(ts.tv_nsec);
+    const std::string_view opaque_id = !s->req_id.empty() ?
+        std::string_view(s->req_id) : std::string_view(s->trans_id);
+    const std::string oe = rgw_make_opaque_etag(opaque_id, mtime_ns);
+    etag_bl.append(oe.c_str(), oe.size() + 1);
+  } else {
+    hash.Final(m);
+    append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1, [&](auto iter) {
+      iter = buf_to_hex(m, iter);
+      *iter++ = '\0';
+      return iter;
+    });
+  }
 
   /* Create metadata: ETAG. */
   std::map<std::string, ceph::bufferlist> attrs;
