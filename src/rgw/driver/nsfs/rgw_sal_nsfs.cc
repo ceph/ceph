@@ -4658,14 +4658,29 @@ int NSFSObject::stat_fsio_view(const DoutPrefixProvider* dpp,
   }
 
   if (attrs) {
+    /* A directory's attributes live on its .folder sentinel, not on the
+     * directory inode -- get_fname() maps a key ending in '/' to it.
+     * The caller resolves a name without the trailing form, so make the
+     * hop here rather than making every caller know the convention.
+     * A directory created outside RGW has no sentinel;  that is not an
+     * error, it simply carries no attributes. */
+    std::string attr_path{leaf};
+    if (st && S_ISDIR(st->st_mode)) {
+      attr_path += "/";
+      attr_path += NSFS_FOLDER_OBJECT_NAME;
+    }
+
     /* xattrs need a descriptor;  it is transient, unlike the ones an
      * FSIO handle retains */
-    int fd = ::openat(dir_fd, leaf.c_str(), O_RDONLY);
+    int fd = ::openat(dir_fd, attr_path.c_str(), O_RDONLY);
     if (fd < 0) {
+      if ((errno == ENOENT) && (attr_path != leaf)) {
+	goto out; /* no sentinel:  no attributes, not a failure */
+      }
       ret = -errno;
       goto out;
     }
-    ret = get_x_attrs(null_yield, dpp, fd, *attrs, leaf);
+    ret = get_x_attrs(null_yield, dpp, fd, *attrs, attr_path);
     ::close(fd);
   } else if (!st) {
     /* existence only */

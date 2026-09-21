@@ -1542,7 +1542,8 @@ TEST(OPEN2, UNLINK_LEAVES_NO_SHADOW)
 
   ASSERT_EQ(rgw_unlink(fs, bucket_fh, "unlink2", RGW_UNLINK_FLAG_NONE), 0);
 
-  /* name is gone immediately, both in the namespace and in .shadow */
+  /* the name is gone immediately;  on the nsfs/posix drivers that is
+   * observable in both the namespace and .shadow */
   ASSERT_FALSE(sf::exists(published_path("unlink2")));
   ASSERT_FALSE(sf::exists(shadow_path("unlink2")));
 
@@ -1921,8 +1922,10 @@ TEST(OPEN2, LOOKUP_FINDS_UNPUBLISHED)
   /* An object which exists only as a shadow is part of the NFS view and
    * must be findable.  Resolving through a synthesized S3 GET could not
    * see it -- the shadow is by definition not in the S3 namespace -- so
-   * this is also the assertion which proves the probe is being taken
-   * rather than the fallback. */
+   * Note this does not by itself prove the probe is being taken:  the
+   * helper's lookup uses RGW_LOOKUP_FLAG_CREATE, so a handle is already
+   * cached and the lookup below can be answered from it.
+   * SAL_RESOLVES_UNPUBLISHED_SHADOW is the discriminating assertion. */
   if (! have_fs_layout()) {
     GTEST_SKIP() << "not a filesystem-backed driver";
   }
@@ -1939,7 +1942,8 @@ TEST(OPEN2, LOOKUP_FINDS_UNPUBLISHED)
   ASSERT_EQ(get<0>(ofw), 0);
   ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a4, 0, a4.length())), 0);
 
-  /* deliberately not closed: the object exists only in .shadow/ */
+  /* deliberately not closed, so it stays unpublished;  on the
+   * nsfs/posix drivers that means it exists only in .shadow/ */
   ASSERT_TRUE(sf::exists(shadow_path("unpub1")));
   ASSERT_FALSE(sf::exists(published_path("unpub1")));
 
@@ -1961,6 +1965,66 @@ TEST(OPEN2, LOOKUP_FINDS_UNPUBLISHED)
   ASSERT_EQ(rgw_lookup(fs, bucket_fh, "unpub1", &fh, nullptr, 0,
 		       RGW_LOOKUP_FLAG_NONE), 0);
   (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+}
+
+TEST(OPEN2, SAL_RESOLVES_UNPUBLISHED_SHADOW)
+{
+  /* LOOKUP_FINDS_UNPUBLISHED asserts the same property through
+   * rgw_lookup(), but it cannot distinguish resolution from a cache hit:
+   * Open2Helper::lookup() looks the name up with RGW_LOOKUP_FLAG_CREATE
+   * before the object exists, so a handle for it is already cached, and
+   * the later RGW_LOOKUP_FLAG_NONE lookup can be answered from the cache
+   * without anything being read back.
+   *
+   * Ask the SAL directly instead.  A sal::Object obtained from the
+   * bucket carries no RGWFileHandle state, so a hit here can only come
+   * from stat_fsio_view() resolving .shadow/ -- which is what decides
+   * whether the unpublished-shadow gap is actually closed. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  reset_object("unpub2");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("unpub2")), 0);
+
+  std::string a4{"AAAA"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a4, 0, a4.length())), 0);
+
+  /* deliberately not closed:  unpublished, which on the nsfs/posix
+   * drivers means it exists only in .shadow/ */
+  ASSERT_TRUE(sf::exists(shadow_path("unpub2")));
+  ASSERT_FALSE(sf::exists(published_path("unpub2")));
+
+  auto* driver = rgw::g_rgwlib->get_driver();
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  std::unique_ptr<rgw::sal::Bucket> sal_bucket;
+  ASSERT_EQ(driver->load_bucket(&dp, rgw_bucket("", bucket_name),
+			        &sal_bucket, null_yield), 0);
+  auto sal_object = sal_bucket->get_object(rgw_obj_key("unpub2"));
+
+  struct stat st;
+  rgw::sal::Attrs attrs;
+  memset(&st, 0, sizeof(st));
+
+  int rc = sal_object->stat_fsio_view(&dp, &st, &attrs, 0);
+  if (rc == -ENOTSUP) {
+    GTEST_SKIP() << "driver has no positional view";
+  }
+  ASSERT_EQ(rc, 0) << "unpublished shadow did not resolve";
+
+  /* the published object does not exist, so a size which matches what
+   * was written can only have come from the shadow */
+  ASSERT_EQ(st.st_size, (off_t) a4.length());
+
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  ASSERT_TRUE(sf::exists(published_path("unpub2")));
 }
 
 TEST(OPEN2, NESTED_OBJECT)
@@ -2347,6 +2411,75 @@ TEST(OPEN2, STATFS)
     ASSERT_GT(vfs_kb, sys_kb / 2);
     ASSERT_LT(vfs_kb, sys_kb * 2);
   }
+}
+
+TEST(OPEN2, DIR_ATTRS_PERSIST)
+{
+  /* On the nsfs/posix drivers a directory's attributes live on its
+   * .folder sentinel, not on the directory inode.  Nothing in this
+   * suite asserted on directory attributes, which is why a lookup path
+   * that read them from the inode went unnoticed here and only showed
+   * up in nfsns, and there only on a second run against the same root.
+   *
+   * The eviction is what makes this test able to fail: rgw_lookup()
+   * otherwise returns the cached handle, whose state still holds what
+   * rgw_mkdir() put there, and the assertion passes without any of it
+   * having been read back. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  const uint32_t uid = 5150;
+  const uint32_t gid = 5151;
+
+  (void) rgw_unlink(fs, bucket_fh, "attrdir1", RGW_UNLINK_FLAG_NONE);
+
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  st.st_uid = uid;
+  st.st_gid = gid;
+  st.st_mode = 0750;
+
+  struct rgw_file_handle* dfh{nullptr};
+  int ret = rgw_mkdir(fs, bucket_fh, "attrdir1", &st, create_mask, &dfh,
+		      RGW_MKDIR_FLAG_NONE);
+  ASSERT_TRUE((ret == 0) || (ret == -EEXIST)) << "ret=" << ret;
+  if (! dfh) {
+    ASSERT_EQ(rgw_lookup(fs, bucket_fh, "attrdir1", &dfh, nullptr, 0,
+			 RGW_LOOKUP_FLAG_NONE), 0);
+  }
+
+  /* Ask the resolver directly rather than going through rgw_lookup().
+   * A lookup hands back the cached handle, whose state still holds what
+   * rgw_mkdir() put there, so the assertion would pass without any of
+   * it being read back -- which is why this went unnoticed until nfsns
+   * hit it across two runs, with a cold cache. */
+  auto* driver = rgw::g_rgwlib->get_driver();
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  std::unique_ptr<rgw::sal::Bucket> sal_bucket;
+  ASSERT_EQ(driver->load_bucket(&dp, rgw_bucket("", bucket_name),
+			        &sal_bucket, null_yield), 0);
+  auto sal_object = sal_bucket->get_object(rgw_obj_key("attrdir1"));
+
+  struct stat st2;
+  rgw::sal::Attrs attrs;
+  memset(&st2, 0, sizeof(st2));
+
+  int rc = sal_object->stat_fsio_view(&dp, &st2, &attrs, 0);
+  if (rc == -ENOTSUP) {
+    GTEST_SKIP() << "driver has no positional view";
+  }
+  ASSERT_EQ(rc, 0);
+  ASSERT_TRUE(S_ISDIR(st2.st_mode));
+
+  /* on the nsfs/posix drivers these live on the directory's .folder
+   * sentinel, not on the directory inode */
+  ASSERT_NE(attrs.find(RGW_ATTR_UNIX1), attrs.end())
+      << "directory unix attrs were not resolved";
+  ASSERT_NE(attrs.find(RGW_ATTR_UNIX_KEY1), attrs.end());
+
+  (void) rgw_fh_rele(fs, dfh, RGW_FH_RELE_FLAG_NONE);
 }
 
 /* END ALL TESTS */
