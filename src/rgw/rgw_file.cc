@@ -46,7 +46,6 @@ namespace rgw {
   std::atomic<uint32_t> RGWLibFS::fs_inst_counter;
 
   uint32_t RGWLibFS::write_completion_interval_s = 10;
-  uint32_t RGWLibFS::stateless_finalize_interval_s = 300;
 
   ceph::timer<ceph::mono_clock> RGWLibFS::write_timer{
     ceph::construct_suspended};
@@ -2111,17 +2110,16 @@ namespace rgw {
 
     /* an idle timer, not a deadline:  i/o on the stateless open
      * defers it, so a slow but active writer never trips it */
+    auto interval = std::chrono::seconds(
+      fs->get_context()->_conf->rgw_nfs_stateless_finalize_secs);
+
     if (f->stateless_timer_id) {
-      RGWLibFS::write_timer.adjust_event(
-        f->stateless_timer_id,
-        std::chrono::seconds(RGWLibFS::stateless_finalize_interval_s));
+      RGWLibFS::write_timer.adjust_event(f->stateless_timer_id, interval);
       return;
     }
 
     f->stateless_timer_id =
-      RGWLibFS::write_timer.add_event(
-        std::chrono::seconds(RGWLibFS::stateless_finalize_interval_s),
-        StatelessFinalize(*this));
+      RGWLibFS::write_timer.add_event(interval, StatelessFinalize(*this));
   } /* RGWFileHandle::arm_stateless_timer */
 
   void RGWFileHandle::finalize_stateless()
@@ -2467,12 +2465,14 @@ namespace rgw {
         (f->write_opens)--;
       }
 
+      int publish_rc{0};
+
       if (write_open) {
         if (f->write_opens == 0) {
           if (f->fsio_hdl && ! deleted()) {
-            rc = f->fsio_hdl->publish(&dp,
+            publish_rc = f->fsio_hdl->publish(&dp,
                       rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
-            if (!!rc) {
+            if (!!publish_rc) {
               lsubdout(fs->get_context(), rgw, 0)
                 << __func__ << " " << object_name()
                 << " failed to publish fsio handle " << dendl;
@@ -2508,6 +2508,12 @@ namespace rgw {
 
         this->flags &= ~FLAG_OPEN;
         this->flags &= ~FLAG_STATELESS_OPEN;
+      }
+
+      if (!! publish_rc) {
+        /* the caller's data did not reach the namespace;  that matters
+         * more than how the release itself went */
+        rc = publish_rc;
       }
 
       /* remove from opens list */

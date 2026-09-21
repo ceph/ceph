@@ -76,8 +76,6 @@ namespace rgw {
     /* write completion interval */
     RGWLibFS::write_completion_interval_s =
       cct->_conf->rgw_nfs_write_completion_interval_s;
-    RGWLibFS::stateless_finalize_interval_s =
-      cct->_conf->rgw_nfs_stateless_finalize_secs;
 
     /* start write timer */
     RGWLibFS::write_timer.resume();

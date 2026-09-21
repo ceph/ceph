@@ -415,6 +415,9 @@ protected:
   RGWQuotaHandler* quota_handler{nullptr};
   RGWLC* lc{nullptr};
   bool use_lc_thread{false};
+  /* driver hint state (test only)--see driver_hint() */
+  bool inject_fork_race{false};
+  bool inject_skip_reclone{false};
 
 public:
   NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -744,6 +747,14 @@ public:
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
 
   virtual void register_admin_apis(RGWRESTMgr* mgr) override;
+
+  int driver_hint(const DoutPrefixProvider* dpp,
+		  const std::string& hint,
+		  const std::map<std::string, std::string>& params,
+		  std::map<std::string, std::string>* out = nullptr) override;
+
+  bool fork_race_injected() const { return inject_fork_race; }
+  bool skip_reclone_injected() const { return inject_skip_reclone; }
 
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }

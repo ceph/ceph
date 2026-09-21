@@ -734,6 +734,23 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
+
+    /** Send a driver-level hint with optional parameters.
+     *  Hints are string-keyed, extensible commands for debug, testing,
+     *  and administrative operations that don't warrant dedicated SAL
+     *  methods.  Returns 0 on success, -ENOTSUP if unrecognized.
+     *
+     *  If out is non-null the hint may fill it with results, which is
+     *  what lets a hint assert on driver state rather than only act on
+     *  it.  Keeping it symmetric with params (string to string both
+     *  ways) means a caller can serialize the result without any type
+     *  machinery;  a hint needing structure can put JSON in a value. */
+    virtual int driver_hint(const DoutPrefixProvider* dpp,
+                            const std::string& hint,
+                            const std::map<std::string, std::string>& params,
+                            std::map<std::string, std::string>* out = nullptr) {
+      return -ENOTSUP;
+    }
 }; // class Driver
 
 

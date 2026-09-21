@@ -399,6 +399,10 @@ install(TARGETS ceph_test_librgw_file_aw DESTINATION ${CMAKE_INSTALL_BINDIR})
 add_executable(ceph_test_librgw_file_write2
   librgw_file_write2.cc
   )
+target_include_directories(ceph_test_librgw_file_write2
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados")
 target_link_libraries(ceph_test_librgw_file_write2
   rgw
   librados

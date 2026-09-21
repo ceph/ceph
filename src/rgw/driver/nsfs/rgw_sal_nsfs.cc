@@ -4672,6 +4672,19 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
    * clobbering it */
   bool joined{false};
 
+  if (unlikely(driver->fork_race_injected()) && for_write) {
+    /* inject-fork-race: another instance forks first, so the exclusive
+     * clone below loses with EEXIST and joins its shadow */
+    int rfd = ::openat(sdir_fd, leaf.c_str(),
+		       O_RDWR | O_CREAT | O_EXCL, 0644);
+    if (rfd >= 0) {
+      static const char marker[] = "RACEWON";
+      [[maybe_unused]] ssize_t nw =
+	::write(rfd, marker, sizeof(marker) - 1);
+      ::close(rfd);
+    }
+  }
+
   if (src_exists && !(flags & FSIOObject::OPEN_FLAG_TRUNC)) {
     /* COW clone source → .shadow/leaf */
     int ret = driver->get_fs_strategy()->clone_file(
@@ -4884,6 +4897,9 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
   }
   if (binding == Binding::SHADOW) {
     return 0; /* already writable */
+  }
+  if (unlikely(driver->skip_reclone_injected())) {
+    return 0; /* inject-skip-reclone */
   }
 
   if (shadow_dir_fd < 0) {
@@ -7890,6 +7906,47 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
 {
   mgr->register_resource("user", new RGWRESTMgr_User);
   /* TODO: register "bucket" once rgw_rest_bucket is decoupled from rados */
+}
+
+int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
+			    const std::string& hint,
+			    const std::map<std::string, std::string>& params,
+			    std::map<std::string, std::string>* out)
+{
+  ldpp_dout(dpp, 10) << "NSFSDriver::driver_hint: " << hint << dendl;
+
+  if (hint == "inject-fork-race") {
+    /* stand in for another instance which forks a shadow first, so that
+     * the exclusive fork and the join which follows it can be exercised
+     * deterministically from one process */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_fork_race = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_fork_race ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-skip-reclone") {
+    /* make reclone() a no-op, so a write open stays bound to the
+     * published object.  the guards which refuse to mutate or publish
+     * a non-shadow binding are otherwise unreachable--every caller
+     * reclones first */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_skip_reclone = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_skip_reclone ? "true" : "false";
+    }
+    return 0;
+  }
+
+  return -ENOTSUP;
 }
 
 } } // namespace rgw::sal

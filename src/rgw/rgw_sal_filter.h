@@ -503,6 +503,13 @@ public:
   virtual void register_admin_apis(RGWRESTMgr* mgr) override {
       return next->register_admin_apis(mgr);
   }
+
+  int driver_hint(const DoutPrefixProvider* dpp,
+                  const std::string& hint,
+                  const std::map<std::string, std::string>& params,
+                  std::map<std::string, std::string>* out = nullptr) override {
+    return next->driver_hint(dpp, hint, params, out);
+  }
 };
 
 class FilterUser : public User {

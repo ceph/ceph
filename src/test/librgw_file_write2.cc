@@ -16,6 +16,8 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <filesystem>
+#include <thread>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <ranges>
@@ -28,6 +30,7 @@
 
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
+#include "rgw_lib.h" /* driver hints */
 
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
@@ -39,7 +42,7 @@
 using namespace std;
 
 namespace {
-  librgw_t rgw = nullptr;
+  librgw_t rgw_h = nullptr;
   string userid("testuser");
   string access_key("");
   string secret_key("");
@@ -91,6 +94,27 @@ namespace {
   bool have_fs_layout() {
     std::error_code ec;
     return sf::is_directory(nsfs_base() / bucket_name, ec);
+  }
+
+  /* Tests own their objects, and clean at the start rather than the
+   * end:  a failing run leaves its state on disk to be looked at, and
+   * the next run is still repeatable. */
+  void reset_object(const std::string& name) {
+    (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+    if (! have_fs_layout()) {
+      return;
+    }
+
+    /* a shadow which survives the unlink was leaked by an earlier run.
+     * clear it so the suite stays repeatable, but say so--this is how
+     * that class of bug otherwise stays invisible */
+    std::error_code ec;
+    if (sf::exists(shadow_path(name), ec)) {
+      std::cerr << "WARNING: stale shadow for " << name
+		<< ", removed by reset_object" << std::endl;
+      sf::remove(shadow_path(name), ec);
+    }
   }
 
   class Open2Helper {
@@ -283,13 +307,13 @@ namespace {
 }
 
 TEST(OPEN2, INIT) {
-  int ret = librgw_create(&rgw, saved_args.argc, saved_args.argv);
+  int ret = librgw_create(&rgw_h, saved_args.argc, saved_args.argv);
   ASSERT_EQ(ret, 0);
-  ASSERT_NE(rgw, nullptr);
+  ASSERT_NE(rgw_h, nullptr);
 }
 
 TEST(OPEN2, MOUNT) {
-  int ret = rgw_mount2(rgw, userid.c_str(), access_key.c_str(),
+  int ret = rgw_mount2(rgw_h, userid.c_str(), access_key.c_str(),
                        secret_key.c_str(), "/", &fs, RGW_MOUNT_FLAG_NONE);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
@@ -306,7 +330,8 @@ TEST(OPEN2, CREATE_BUCKET) {
 
     int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
 			&fh, RGW_MKDIR_FLAG_NONE);
-    ASSERT_EQ(ret, 0);
+    /* --create is meant to be safe on every run, not only the first */
+    ASSERT_TRUE((ret == 0) || (ret == -EEXIST)) << "ret=" << ret;
   }
 }
 
@@ -386,6 +411,7 @@ TEST(OPEN2, OPEN2_READAFTERWRITE1)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("netbird2");
   auto lfr = o2h->lookup("netbird2");
   ASSERT_EQ(get<0>(lfr), 0);
   ASSERT_NE(get<1>(lfr), nullptr);
@@ -427,6 +453,7 @@ TEST(OPEN2, OPEN2_READAFTERWRITE2)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("tray1");
   auto lfr = o2h->lookup("tray1");
   ASSERT_EQ(get<0>(lfr), 0);
   ASSERT_NE(get<1>(lfr), nullptr);
@@ -459,6 +486,7 @@ TEST(OPEN2, ACC_MODES)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("accthis1");
   auto lfr = o2h->lookup("accthis1");
   ASSERT_EQ(get<0>(lfr), 0);
   ASSERT_NE(get<1>(lfr), nullptr);
@@ -497,6 +525,7 @@ TEST(OPEN2, SETATTR1)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("attrtest1");
   auto lfr = o2h->lookup("attrtest1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -577,6 +606,7 @@ TEST(OPEN2, XATTR_SET_GET)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("xattrtest1");
   auto lfr = o2h->lookup("xattrtest1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -711,6 +741,7 @@ TEST(OPEN2, ACL_AFTER_PUBLISH)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("acltest1");
   auto lfr = o2h->lookup("acltest1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -750,6 +781,7 @@ TEST(OPEN2, ETAG_AFTER_PUBLISH)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("etagtest1");
   auto lfr = o2h->lookup("etagtest1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -798,6 +830,7 @@ TEST(OPEN2, RENDEZVOUS1)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("rendez1");
   auto lfr = o2h->lookup("rendez1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -824,8 +857,8 @@ TEST(OPEN2, RENDEZVOUS1)
 
   /* returning one of two write opens does not publish */
   ASSERT_EQ(o2h->close(w0), 0);
-  auto gr0 = o2h->getxattr("user.rgw.etag" /* RGW_ATTR_ETAG */);
-  ASSERT_TRUE(get<1>(gr0).empty());
+  /* the etag is stamped at publish, so it must not have moved yet */
+  auto etag_mid = get<1>(o2h->getxattr("user.rgw.etag" /* RGW_ATTR_ETAG */));
 
   /* last writer close publishes */
   ASSERT_EQ(o2h->close(w1), 0);
@@ -837,6 +870,7 @@ TEST(OPEN2, RENDEZVOUS1)
   auto gr1 = o2h->getxattr("user.rgw.etag");
   ASSERT_EQ(get<0>(gr1), 0);
   ASSERT_FALSE(get<1>(gr1).empty());
+  ASSERT_NE(get<1>(gr1), etag_mid);
 
   rdr = o2h->read(r1, 0, a4.length() + b4.length());
   ASSERT_EQ(get<0>(rdr), 0);
@@ -872,6 +906,7 @@ TEST(OPEN2, TRUNC1)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("trunc1");
   auto lfr = o2h->lookup("trunc1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -936,6 +971,7 @@ TEST(OPEN2, UNLINK1)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("unlink1");
   auto lfr = o2h->lookup("unlink1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -987,6 +1023,7 @@ TEST(OPEN2, READER_FOLLOWS_WRITER)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("follow1");
   auto lfr = o2h->lookup("follow1");
   ASSERT_EQ(get<0>(lfr), 0);
   ASSERT_NE(get<1>(lfr), nullptr);
@@ -1037,6 +1074,7 @@ TEST(OPEN2, READER_ACROSS_PUBLISH)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("acrosspub1");
   auto lfr = o2h->lookup("acrosspub1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -1085,6 +1123,8 @@ TEST(OPEN2, V3_POSITIONAL)
   /* stateless (NFSv3) open:  no open token is returned to the caller,
    * and writes are positional--the legacy write cycle rejected any
    * non-contiguous write position */
+  reset_object("v3pos1");
+
   struct rgw_file_handle* fh{nullptr};
   int ret = rgw_lookup(fs, bucket_fh, "v3pos1", &fh, nullptr, 0,
 		       RGW_LOOKUP_FLAG_CREATE);
@@ -1133,6 +1173,8 @@ TEST(OPEN2, V3_POSITIONAL)
 TEST(OPEN2, V3_UPGRADE)
 {
   /* a stateless read open is upgraded in place when a write arrives */
+  reset_object("v3up1");
+
   struct rgw_file_handle* fh{nullptr};
   int ret = rgw_lookup(fs, bucket_fh, "v3up1", &fh, nullptr, 0,
 		       RGW_LOOKUP_FLAG_CREATE);
@@ -1189,6 +1231,7 @@ TEST(OPEN2, SETATTR_SIZE)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("size1");
   auto lfr = o2h->lookup("size1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -1279,6 +1322,7 @@ TEST(OPEN2, COMMIT1)
       std::make_unique<Open2Helper>(fs, bucket_fh);
   ASSERT_NE(o2h.get(), nullptr);
 
+  reset_object("commit1");
   auto lfr = o2h->lookup("commit1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -1299,8 +1343,8 @@ TEST(OPEN2, COMMIT1)
   ASSERT_EQ(get<0>(rdr), 0);
   ASSERT_EQ(get<1>(rdr), a4);
 
-  auto gr0 = o2h->getxattr("user.rgw.etag" /* RGW_ATTR_ETAG */);
-  ASSERT_TRUE(get<1>(gr0).empty());
+  /* the etag is stamped at publish, so it must not have moved yet */
+  auto etag_mid = get<1>(o2h->getxattr("user.rgw.etag" /* RGW_ATTR_ETAG */));
 
   /* repeated COMMITs succeed */
   ASSERT_EQ(get<0>(o2h->write(w0, b4, a4.length(), b4.length())), 0);
@@ -1323,6 +1367,7 @@ TEST(OPEN2, COMMIT1)
   auto gr1 = o2h->getxattr("user.rgw.etag");
   ASSERT_EQ(get<0>(gr1), 0);
   ASSERT_FALSE(get<1>(gr1).empty());
+  ASSERT_NE(get<1>(gr1), etag_mid);
 
   rdr = o2h->read(r1, 0, a4.length() + b4.length());
   ASSERT_EQ(get<0>(rdr), 0);
@@ -1348,6 +1393,7 @@ TEST(OPEN2, SHADOW_NOT_CREATED_BY_READER)
 
   std::unique_ptr<Open2Helper> o2h =
       std::make_unique<Open2Helper>(fs, bucket_fh);
+  reset_object("noshadow1");
   auto lfr = o2h->lookup("noshadow1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -1389,6 +1435,7 @@ TEST(OPEN2, RESUME_EXISTING_SHADOW)
 
   std::unique_ptr<Open2Helper> o2h =
       std::make_unique<Open2Helper>(fs, bucket_fh);
+  reset_object("resume1");
   auto lfr = o2h->lookup("resume1");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -1447,6 +1494,7 @@ TEST(OPEN2, UNLINK_LEAVES_NO_SHADOW)
 
   std::unique_ptr<Open2Helper> o2h =
       std::make_unique<Open2Helper>(fs, bucket_fh);
+  reset_object("unlink2");
   auto lfr = o2h->lookup("unlink2");
   ASSERT_EQ(get<0>(lfr), 0);
 
@@ -1479,6 +1527,283 @@ TEST(OPEN2, UNLINK_LEAVES_NO_SHADOW)
   ASSERT_FALSE(sf::exists(shadow_path("unlink2")));
 }
 
+TEST(OPEN2, UNLINK_WITH_READER_ONLY)
+{
+  /* unlink while only a read open is held:  the handle is bound to the
+   * published object, not to a shadow, so discard() has no shadow to
+   * drop--but the open must keep working and nothing may be published */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  reset_object("rdonly1");
+  auto lfr = o2h->lookup("rdonly1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string a4{"AAAA"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  ASSERT_EQ(get<0>(o2h->write(w0, a4, 0, a4.length())), 0);
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+  ASSERT_FALSE(sf::exists(shadow_path("rdonly1")));
+
+  ASSERT_EQ(rgw_unlink(fs, bucket_fh, "rdonly1", RGW_UNLINK_FLAG_NONE), 0);
+  ASSERT_FALSE(sf::exists(published_path("rdonly1")));
+
+  /* the reader's fd holds the unlinked inode */
+  auto rdr = o2h->read(r1, 0, a4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a4);
+
+  ASSERT_EQ(o2h->close(r1), 0);
+  ASSERT_FALSE(sf::exists(published_path("rdonly1")));
+  ASSERT_FALSE(sf::exists(shadow_path("rdonly1")));
+}
+
+TEST(OPEN2, STATELESS_IDLE_FINALIZE)
+{
+  /* the idle finalizer publishes an unclosed stateless writer without
+   * closing it, and a write which follows must re-fork the shadow
+   * rather than mutate the object it just published */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  g_conf().set_val("rgw_nfs_stateless_finalize_secs", "1");
+  g_conf().apply_changes(nullptr);
+
+  reset_object("idle1");
+
+  struct rgw_file_handle* fh{nullptr};
+  int ret = rgw_lookup(fs, bucket_fh, "idle1", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_CREATE);
+  ASSERT_EQ(ret, 0);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+  size_t nbytes{0};
+
+  ret = rgw_open(fs, fh, O_RDWR, RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(ret, 0);
+  ret = rgw_write(fs, fh, 0, a4.length(), &nbytes, (void*) a4.c_str(),
+		  RGW_OPEN_FLAG_V3);
+  ASSERT_EQ(ret, 0);
+
+  ASSERT_TRUE(sf::exists(shadow_path("idle1")));
+  ASSERT_FALSE(sf::exists(published_path("idle1")));
+
+  /* no close;  the idle timer finalizes */
+  std::this_thread::sleep_for(std::chrono::seconds(4));
+
+  ASSERT_TRUE(sf::exists(published_path("idle1")));
+  ASSERT_FALSE(sf::exists(shadow_path("idle1")));
+  ASSERT_EQ(sf::file_size(published_path("idle1")), a4.length());
+
+  /* the open is still live:  a further write must re-fork, not mutate
+   * the published object */
+  ret = rgw_write(fs, fh, a4.length(), b4.length(), &nbytes,
+		  (void*) b4.c_str(), RGW_OPEN_FLAG_V3);
+  ASSERT_EQ(ret, 0);
+
+  ASSERT_TRUE(sf::exists(shadow_path("idle1")));
+  ASSERT_EQ(sf::file_size(published_path("idle1")), a4.length());
+
+  ret = rgw_close(fs, fh, RGW_CLOSE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  ASSERT_FALSE(sf::exists(shadow_path("idle1")));
+  ASSERT_EQ(sf::file_size(published_path("idle1")),
+	    a4.length() + b4.length());
+
+  (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+
+  g_conf().set_val("rgw_nfs_stateless_finalize_secs", "300");
+  g_conf().apply_changes(nullptr);
+}
+
+TEST(OPEN2, FORK_RACE_JOINS_WINNER)
+{
+  /* two instances forking a shadow for the same object:  the fork is
+   * exclusive, so the loser gets EEXIST and joins the winner's shadow
+   * rather than cloning over it.  the race is injected through a driver
+   * hint, so it is deterministic from a single process */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  auto* driver = rgw::g_rgwlib->get_driver();
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  std::map<std::string, std::string> out;
+
+  int ret = driver->driver_hint(&dp, "inject-fork-race",
+				{{"enable", "true"}}, &out);
+  if (ret == -ENOTSUP) {
+    GTEST_SKIP() << "driver does not implement inject-fork-race";
+  }
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(out["enabled"], "true");
+
+  std::string published{"PPPP"};
+  std::string won{"RACEWON"};
+
+  /* (a) creating an object:  the racers take the create arm */
+  {
+    std::unique_ptr<Open2Helper> o2h =
+	std::make_unique<Open2Helper>(fs, bucket_fh);
+    reset_object("racenew1");
+    auto lfr = o2h->lookup("racenew1");
+    ASSERT_EQ(get<0>(lfr), 0);
+
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    auto w0 = get<1>(ofw);
+
+    auto rdr = o2h->read(w0, 0, won.length());
+    ASSERT_EQ(get<0>(rdr), 0);
+    ASSERT_EQ(get<1>(rdr), won);
+
+    ASSERT_TRUE(sf::exists(shadow_path("racenew1")));
+    ASSERT_EQ(o2h->close(w0), 0);
+    ASSERT_FALSE(sf::exists(shadow_path("racenew1")));
+    ASSERT_EQ(sf::file_size(published_path("racenew1")), won.length());
+  }
+
+  /* (b) forking an existing object:  the racers take the COW clone arm,
+   * which is the one clone_file's exclusive create guards */
+  {
+    ASSERT_EQ(driver->driver_hint(&dp, "inject-fork-race",
+				  {{"enable", "false"}}), 0);
+
+    std::unique_ptr<Open2Helper> o2h =
+	std::make_unique<Open2Helper>(fs, bucket_fh);
+    reset_object("race1");
+    auto lfr = o2h->lookup("race1");
+    ASSERT_EQ(get<0>(lfr), 0);
+
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    auto w0 = get<1>(ofw);
+    ASSERT_EQ(get<0>(o2h->write(w0, published, 0, published.length())), 0);
+    ASSERT_EQ(o2h->close(w0), 0);
+    ASSERT_EQ(sf::file_size(published_path("race1")), published.length());
+
+    ASSERT_EQ(driver->driver_hint(&dp, "inject-fork-race",
+				  {{"enable", "true"}}), 0);
+
+    /* we lose the fork:  the content is the winner's shadow, not a
+     * clone of the published object */
+    auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+    ASSERT_EQ(get<0>(ofw1), 0);
+    auto w1 = get<1>(ofw1);
+
+    auto rdr = o2h->read(w1, 0, won.length());
+    ASSERT_EQ(get<0>(rdr), 0);
+    ASSERT_EQ(get<1>(rdr), won);
+
+    ASSERT_TRUE(sf::exists(shadow_path("race1")));
+    ASSERT_EQ(o2h->close(w1), 0);
+    ASSERT_FALSE(sf::exists(shadow_path("race1")));
+    ASSERT_EQ(sf::file_size(published_path("race1")), won.length());
+  }
+
+  ASSERT_EQ(driver->driver_hint(&dp, "inject-fork-race",
+				{{"enable", "false"}}), 0);
+}
+
+TEST(OPEN2, GUARDS_ON_PUBLISHED_BINDING)
+{
+  /* the FSIO guards which refuse to mutate or publish a handle bound to
+   * the published object.  every caller reclones first, so they are
+   * unreachable through the API;  inject-skip-reclone makes reclone() a
+   * no-op so the binding stays PUBLISHED and the guards are reached */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  auto* driver = rgw::g_rgwlib->get_driver();
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  int ret = driver->driver_hint(&dp, "inject-skip-reclone",
+				{{"enable", "false"}});
+  if (ret == -ENOTSUP) {
+    GTEST_SKIP() << "driver does not implement inject-skip-reclone";
+  }
+  ASSERT_EQ(ret, 0);
+
+  std::string a4{"AAAA"};
+
+  /* ftruncate() refuses:  only a shadow is mutable */
+  {
+    std::unique_ptr<Open2Helper> o2h =
+	std::make_unique<Open2Helper>(fs, bucket_fh);
+    reset_object("guard1");
+    ASSERT_EQ(get<0>(o2h->lookup("guard1")), 0);
+
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a4, 0, a4.length())), 0);
+    ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+
+    /* a read open binds the published object and holds the handle, so
+     * the write open below has something to (not) reclone */
+    auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+    ASSERT_EQ(get<0>(ofr), 0);
+
+    ASSERT_EQ(driver->driver_hint(&dp, "inject-skip-reclone",
+				  {{"enable", "true"}}), 0);
+
+    auto ofw1 = o2h->open(O_RDWR|O_TRUNC, RGW_OPEN_FLAG_NONE);
+    ASSERT_EQ(get<0>(ofw1), -EPERM);
+
+    ASSERT_EQ(driver->driver_hint(&dp, "inject-skip-reclone",
+				  {{"enable", "false"}}), 0);
+    ASSERT_EQ(o2h->close(get<1>(ofr)), 0);
+
+    /* the published object was not truncated */
+    ASSERT_EQ(sf::file_size(published_path("guard1")), a4.length());
+  }
+
+  /* publish() refuses, and close2 reports it rather than swallowing it
+   * behind the release result */
+  {
+    std::unique_ptr<Open2Helper> o2h =
+	std::make_unique<Open2Helper>(fs, bucket_fh);
+    reset_object("guard2");
+    ASSERT_EQ(get<0>(o2h->lookup("guard2")), 0);
+
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a4, 0, a4.length())), 0);
+    ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+
+    auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+    ASSERT_EQ(get<0>(ofr), 0);
+
+    ASSERT_EQ(driver->driver_hint(&dp, "inject-skip-reclone",
+				  {{"enable", "true"}}), 0);
+
+    auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+    ASSERT_EQ(get<0>(ofw1), 0);
+    /* last writer close tries to publish a non-shadow binding */
+    ASSERT_EQ(o2h->close(get<1>(ofw1)), -EINVAL);
+
+    ASSERT_EQ(driver->driver_hint(&dp, "inject-skip-reclone",
+				  {{"enable", "false"}}), 0);
+    ASSERT_EQ(o2h->close(get<1>(ofr)), 0);
+
+    ASSERT_EQ(sf::file_size(published_path("guard2")), a4.length());
+    ASSERT_FALSE(sf::exists(shadow_path("guard2")));
+  }
+}
+
 /* END ALL TESTS */
 
 TEST(OPEN2, DELETE_BUCKET) {
@@ -1508,7 +1833,7 @@ TEST(OPEN2, UMOUNT) {
 }
 
 TEST(OPEN2, SHUTDOWN) {
-  librgw_shutdown(rgw);
+  librgw_shutdown(rgw_h);
 }
 
 int main(int argc, char *argv[])
