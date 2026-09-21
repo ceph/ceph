@@ -1397,6 +1397,28 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_max_readdir_entries
+  type: uint
+  level: advanced
+  desc: Cap on entries returned by one readdir request (0 for the client's request)
+  long_desc: A readdir page is encoded while mds_lock is held, so a client asking for
+    a large page blocks every other client for the duration. Pages are already separate
+    requests, so a lower cap gives the rank more points at which to interleave other
+    work, at the cost of more round trips for the walker.
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_max_readdir_bytes
+  type: uint
+  level: advanced
+  desc: Cap on bytes returned by one readdir request (0 for the client's request)
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_verify_backtrace
   type: uint
   level: dev
