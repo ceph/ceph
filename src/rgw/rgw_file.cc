@@ -2945,7 +2945,10 @@ namespace rgw {
     etag.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
     buf_to_hex(m, std::back_inserter(etag));
 
-    bl.append(etag.c_str(), etag.size() + 1);
+    /* bare hex, no trailing NUL:  dump_etag() emits the attribute
+     * verbatim, and a stored NUL makes If-Match compare unequal --
+     * rgw_string_unquote() yields 32 bytes against a 33-byte value */
+    bl.append(etag.c_str(), etag.size());
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
     policy.encode(aclbl);

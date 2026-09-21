@@ -2550,6 +2550,66 @@ TEST(OPEN2, DOTFILE_IS_LISTED)
   }
 }
 
+TEST(OPEN2, PUBLISHED_ETAG_IS_BARE_HEX)
+{
+  /* publish() stamps RGW_ATTR_ETAG from the shadow's content.  It must
+   * store bare hex, with no trailing NUL:  dump_etag() emits the
+   * attribute verbatim, so a stored NUL travels inside the quoted ETag
+   * header, and If-Match then compares unequal for every object we
+   * publish -- rgw_string_unquote() yields 32 bytes against a 33-byte
+   * attribute, and std::string comparison checks length first.
+   *
+   * The S3 side of that cannot be asserted from librgw;  the stored
+   * length is the invariant which produces it. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  reset_object("baretag1");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("baretag1")), 0);
+
+  std::string body{"content for the digest"};
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), body, 0, body.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  ASSERT_TRUE(sf::exists(published_path("baretag1")));
+
+  auto* driver = rgw::g_rgwlib->get_driver();
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  std::unique_ptr<rgw::sal::Bucket> sal_bucket;
+  ASSERT_EQ(driver->load_bucket(&dp, rgw_bucket("", bucket_name),
+			        &sal_bucket, null_yield), 0);
+  auto sal_object = sal_bucket->get_object(rgw_obj_key("baretag1"));
+
+  struct stat st;
+  rgw::sal::Attrs attrs;
+  memset(&st, 0, sizeof(st));
+  int rc = sal_object->stat_fsio_view(&dp, &st, &attrs, 0);
+  if (rc == -ENOTSUP) {
+    GTEST_SKIP() << "driver has no positional view";
+  }
+  ASSERT_EQ(rc, 0);
+
+  auto it = attrs.find(RGW_ATTR_ETAG);
+  ASSERT_NE(it, attrs.end()) << "publish did not stamp an etag";
+
+  std::string stored = it->second.to_str();
+  ASSERT_EQ(stored.length(), 32u)
+      << "etag is " << stored.length() << " bytes, not bare hex: "
+      << ::testing::PrintToString(stored);
+  ASSERT_EQ(stored.find('\0'), std::string::npos)
+      << "etag carries an embedded NUL";
+  for (char c : stored) {
+    ASSERT_TRUE(std::isxdigit(static_cast<unsigned char>(c)))
+	<< "etag is not hex: " << ::testing::PrintToString(stored);
+  }
+}
+
 TEST(OPEN2, DELETE_BUCKET) {
   if (do_delete) {
     int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),

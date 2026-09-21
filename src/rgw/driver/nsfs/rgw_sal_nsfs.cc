@@ -4988,10 +4988,13 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
     hash.Final(m);
 
     bufferlist etag_bl;
-    append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1, [&](auto iter) {
-      iter = buf_to_hex(m, iter);
-      *iter++ = '\0';
-      return iter;
+    /* no trailing NUL:  RGW_ATTR_ETAG is stored as bare hex, the way
+     * the S3 PUT path stores it (rgw_op.cc), and dump_etag() emits the
+     * attribute verbatim.  A stored NUL reaches the client inside the
+     * quoted ETag header and makes If-Match compare unequal, since
+     * rgw_string_unquote() yields 32 bytes and the attribute is 33. */
+    append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2, [&](auto iter) {
+      return buf_to_hex(m, iter);
     });
     fsetattr(dpp, RGW_ATTR_ETAG, etag_bl, 0);
   }
