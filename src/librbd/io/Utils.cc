@@ -95,7 +95,7 @@ void read_parent(I *image_ctx, uint64_t object_no, ReadExtents* read_extents,
   std::shared_lock image_locker{image_ctx->image_lock};
 
   Extents parent_extents;
-  ImageArea area;
+  ImageArea area = ImageArea::DATA;
   uint64_t raw_overlap = 0;
   uint64_t object_overlap = 0;
   image_ctx->get_parent_overlap(snap_id, &raw_overlap);

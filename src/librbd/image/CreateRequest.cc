@@ -409,7 +409,7 @@ template<typename I>
 void CreateRequest<I>::handle_negotiate_features(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
-  uint64_t all_features;
+  uint64_t all_features = 0;
   if (r >= 0) {
     auto it = m_outbl.cbegin();
     r = cls_client::get_all_features_finish(&it, &all_features);
