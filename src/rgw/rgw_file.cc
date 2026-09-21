@@ -2178,6 +2178,22 @@ namespace rgw {
   } /* RGWFileHandle::do_open(...) */
 
   /* mtx must be held */
+  bool RGWFileHandle::resolve_bucket_versioned()
+  {
+    auto* driver = g_rgwlib->get_driver();
+    if (! driver) {
+      return false;
+    }
+    const DoutPrefix dp(get_fs()->get_context(), dout_subsys,
+			"rgw resolve_bucket_versioned: ");
+    std::unique_ptr<rgw::sal::Bucket> b;
+    if (driver->load_bucket(&dp, rgw_bucket("", bucket_name()),
+			    &b, null_yield) < 0) {
+      return false;
+    }
+    return b->get_info().versioned();
+  } /* RGWFileHandle::resolve_bucket_versioned */
+
   void RGWFileHandle::arm_stateless_timer()
   {
     using StatelessFinalize = RGWLibFS::StatelessFinalize;
@@ -2188,9 +2204,21 @@ namespace rgw {
     }
 
     /* an idle timer, not a deadline:  i/o on the stateless open
-     * defers it, so a slow but active writer never trips it */
+     * defers it, so a slow but active writer never trips it.
+     *
+     * Two intervals, because the timer means two different things.  On
+     * an unversioned bucket it is an S3-visibility SLA -- the pause
+     * after which a v3 writer's data becomes visible.  On a versioned
+     * one every publish mints a permanent version, so it is instead the
+     * length of pause treated as still-writing, and wants to exceed
+     * application think-time.  v3 carries no signal that a write has
+     * finished, so quiescence is the only thing to infer it from, and
+     * the interval is the only lever. */
+    auto& conf = fs->get_context()->_conf;
     auto interval = std::chrono::seconds(
-      fs->get_context()->_conf->rgw_nfs_stateless_finalize_secs);
+      f->versioned_bucket
+	? conf->rgw_nfs_stateless_finalize_versioned_secs
+	: conf->rgw_nfs_stateless_finalize_secs);
 
     if (f->stateless_timer_id) {
       RGWLibFS::write_timer.adjust_event(f->stateless_timer_id, interval);
@@ -2381,6 +2409,12 @@ namespace rgw {
     CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
     const DoutPrefix dp(cct, dout_subsys, "rgw open_global: ");
 
+    /* resolved before the lock is taken:  load_bucket() takes locks of
+     * its own and can do i/o, and holding a handle mutex across a driver
+     * call is a hazard we do not need.  Once per open_global(), which is
+     * what the interval selection costs. */
+    bool versioned = resolve_bucket_versioned();
+
     lock_guard guard(mtx);
 
     file* f = get_if<file>(&variant_type);
@@ -2402,6 +2436,7 @@ namespace rgw {
     int rc = do_open(&open, posix_flags, rgw_openflags);
     if (! rc) {
       f->global_open = open;
+      f->versioned_bucket = versioned;
       flags |= FLAG_STATELESS_OPEN;
       /* every stateless open is armed, not just a writer's:  nothing
        * else reclaims one.  v4 tells us when it is done;  v3 does not,

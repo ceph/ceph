@@ -171,6 +171,13 @@ public:
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) = 0;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) = 0;
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
+  /* Build this entry's listing row.  Only Directory::fill_cache()
+   * composes keys from a path prefix as it descends;  every other caller
+   * already knows the object's key and should pass it, rather than
+   * borrowing a prefix-relative walk to produce one row. */
+  int make_dir_entry(const DoutPrefixProvider* dpp, optional_yield y,
+		     const rgw_obj_key& key, uint32_t flags,
+		     rgw_bucket_dir_entry& bde);
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "");
   virtual std::string get_cur_version() { return ""; };
 };

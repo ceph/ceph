@@ -35,6 +35,7 @@
 #include "include/rados/rgw_file.h"
 #include "rgw_lib.h" /* driver hints */
 #include "rgw/rgw_file_int.h" /* the private view: refcounts, handles */
+#include "librgw_sal_fixture.h" /* SAL-level bucket state the C API cannot set */
 
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
@@ -2608,6 +2609,773 @@ TEST(OPEN2, PUBLISHED_ETAG_IS_BARE_HEX)
     ASSERT_TRUE(std::isxdigit(static_cast<unsigned char>(c)))
 	<< "etag is not hex: " << ::testing::PrintToString(stored);
   }
+}
+
+TEST(OPEN2, PUBLISHED_ETAG_MATCHES_LISTING)
+{
+  /* publish() computes a real MD5 from the shadow's content and stamps it
+   * as RGW_ATTR_ETAG, which is what HEAD returns.  The listing entry it
+   * adds must carry the same value -- a listing that reports the
+   * synthesized change token while HEAD reports a digest is a LIST/HEAD
+   * disagreement, the same class of bug as the trailing NUL that
+   * PUBLISHED_ETAG_IS_BARE_HEX pins down.
+   *
+   * The bucket listing is cached, and a cold-cache list rebuilds it from
+   * disk -- which would repair whatever the incremental add got wrong and
+   * hide the defect.  So list once to warm the cache before publishing
+   * the object under test. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  auto* driver = rgw::g_rgwlib->get_driver();
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  std::unique_ptr<rgw::sal::Bucket> sal_bucket;
+  ASSERT_EQ(driver->load_bucket(&dp, rgw_bucket("", bucket_name),
+				&sal_bucket, null_yield), 0);
+
+  /* warm the listing cache */
+  {
+    rgw::sal::Bucket::ListParams params;
+    rgw::sal::Bucket::ListResults results;
+    ASSERT_EQ(sal_bucket->list(&dp, params, 1000, results, null_yield), 0);
+  }
+
+  reset_object("etagpub1");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("etagpub1")), 0);
+
+  std::string body{"etag listing agreement"};
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), body, 0, body.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  ASSERT_TRUE(sf::exists(published_path("etagpub1")));
+
+  /* the object's own etag, as HEAD would report it */
+  auto sal_object = sal_bucket->get_object(rgw_obj_key("etagpub1"));
+  struct stat st;
+  rgw::sal::Attrs attrs;
+  memset(&st, 0, sizeof(st));
+  int rc = sal_object->stat_fsio_view(&dp, &st, &attrs, 0);
+  if (rc == -ENOTSUP) {
+    GTEST_SKIP() << "driver has no positional view";
+  }
+  ASSERT_EQ(rc, 0);
+  auto it = attrs.find(RGW_ATTR_ETAG);
+  ASSERT_NE(it, attrs.end()) << "published object carries no etag";
+  std::string object_etag = it->second.to_str();
+
+  /* the etag the listing reports for the same object */
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(sal_bucket->list(&dp, params, 1000, results, null_yield), 0);
+
+  std::string listed_etag;
+  bool found = false;
+  for (auto& o : results.objs) {
+    if (o.key.name == "etagpub1") {
+      listed_etag = o.meta.etag;
+      found = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(found) << "published object absent from the listing";
+  ASSERT_EQ(listed_etag, object_etag)
+    << "listing etag disagrees with the object's own etag";
+}
+
+/*
+ * ---------------------------------------------------------------------
+ * NFS behaviour in a versioned bucket.
+ *
+ * librgw exposes no way to list or address non-current versions -- that
+ * is a separate piece of work -- but the driver must already behave
+ * correctly for an NFS client operating in a versioned bucket.  These
+ * pin the parts that are observable today.
+ *
+ * The bucket is made versioned through the SAL, since PutBucketVersioning
+ * is an S3 op with no rgw_file equivalent.  See librgw_sal_fixture.h.
+ * ---------------------------------------------------------------------
+ */
+
+static const std::string ver_bucket_name{"sorrydave-ver"};
+static struct rgw_file_handle* ver_bucket_fh{nullptr};
+
+TEST(OPEN2, VER_SETUP)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  struct stat st;
+  st.st_uid = 0; st.st_gid = 0; st.st_mode = 755;
+
+  int rc = rgw_lookup(fs, fs->root_fh, ver_bucket_name.c_str(), &ver_bucket_fh,
+		      nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+  if (rc != 0) {
+    rc = rgw_mkdir(fs, fs->root_fh, ver_bucket_name.c_str(), &st,
+		   RGW_SETATTR_UID|RGW_SETATTR_GID|RGW_SETATTR_MODE,
+		   &ver_bucket_fh, RGW_MKDIR_FLAG_NONE);
+  }
+  ASSERT_EQ(rc, 0);
+  ASSERT_NE(ver_bucket_fh, nullptr);
+
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  ASSERT_EQ(librgw_test::set_bucket_versioning(
+	      &dp, ver_bucket_name, librgw_test::Versioning::Enabled), 0);
+
+  /* assert the fixture took, rather than assuming it did */
+  librgw_test::Versioning got{librgw_test::Versioning::Off};
+  ASSERT_EQ(librgw_test::get_bucket_versioning(&dp, ver_bucket_name, got), 0);
+  ASSERT_EQ(got, librgw_test::Versioning::Enabled)
+    << "versioning fixture did not take effect";
+}
+
+/* Writing the same name twice must leave two versions, not one.  If this
+ * fails everything below is measuring the wrong thing. */
+TEST(OPEN2, VER_WRITE_TWICE_MAKES_TWO_VERSIONS)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, ver_bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("vtwice")), 0);
+
+  for (auto* body : {"first", "second"}) {
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    std::string b{body};
+    ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), b, 0, b.length())), 0);
+    ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  }
+
+  std::vector<rgw_bucket_dir_entry> objs;
+  ASSERT_EQ(librgw_test::list_bucket(&dp, ver_bucket_name, true, objs), 0);
+
+  int n = 0;
+  for (auto& o : objs) {
+    if (o.key.name == "vtwice") {
+      ++n;
+    }
+  }
+  ASSERT_EQ(n, 2) << "two NFS writes did not produce two versions";
+
+  /* and only one of them may be current.  Read from the incremental
+   * cache deliberately -- a rebuild recomputes the flag, so listing
+   * through one would repair a stale FLAG_CURRENT and hide it. */
+  int currents = 0;
+  for (auto& o : objs) {
+    if (o.key.name == "vtwice" &&
+	(o.flags & rgw_bucket_dir_entry::FLAG_CURRENT)) {
+      ++currents;
+    }
+  }
+  ASSERT_EQ(currents, 1)
+    << "publishing a new version left the previous one flagged current";
+}
+
+/* unlink is POSIX from the NFS side:  the name goes away.  In a
+ * versioned bucket that must not destroy history -- S3 semantics for a
+ * delete without a versionId is a delete marker over a retained
+ * version, and NFS deletes act immediately on S3. */
+TEST(OPEN2, VER_UNLINK_CREATES_DELETE_MARKER)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, ver_bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("vdel")), 0);
+
+  std::string body{"to be deleted"};
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), body, 0, body.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+
+  /* exercise the incremental cache path, not a rebuild */
+  ASSERT_EQ(librgw_test::warm_listing_cache(&dp, ver_bucket_name), 0);
+
+  ASSERT_EQ(rgw_unlink(fs, ver_bucket_fh, "vdel", RGW_UNLINK_FLAG_NONE), 0);
+
+  std::vector<rgw_bucket_dir_entry> objs;
+  ASSERT_EQ(librgw_test::list_bucket(&dp, ver_bucket_name, true, objs), 0);
+
+  int versions = 0, markers = 0, current = 0;
+  for (auto& o : objs) {
+    if (o.key.name != "vdel") {
+      continue;
+    }
+    ++versions;
+    if (o.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
+      ++markers;
+    }
+    if (o.flags & rgw_bucket_dir_entry::FLAG_CURRENT) {
+      ++current;
+    }
+  }
+
+  ASSERT_EQ(markers, 1) << "NFS unlink did not leave a delete marker";
+  ASSERT_EQ(versions, 2)
+    << "the deleted version was not retained alongside the marker";
+  ASSERT_EQ(current, 1) << "exactly one entry must be current";
+}
+
+/* the name must be gone from the NFS view even though the data is not */
+TEST(OPEN2, VER_UNLINK_LOOKUP_IS_ENOENT)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  struct rgw_file_handle* fh{nullptr};
+  int rc = rgw_lookup(fs, ver_bucket_fh, "vdel", &fh, nullptr, 0,
+		      RGW_LOOKUP_FLAG_NONE);
+  ASSERT_NE(rc, 0) << "unlinked name still resolves over NFS";
+}
+
+/* the demoted version's data must still be on disk under .versions/ */
+TEST(OPEN2, VER_UNLINK_PRIOR_VERSION_ON_DISK)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  auto vdir = nsfs_base() / ver_bucket_name / ".versions";
+  ASSERT_TRUE(sf::is_directory(vdir)) << "no .versions/ after a versioned unlink";
+
+  int entries = 0;
+  for (auto& de : sf::directory_iterator(vdir)) {
+    if (de.path().filename().string().rfind("vdel", 0) == 0) {
+      ++entries;
+    }
+  }
+  /* the demoted version and the delete marker */
+  ASSERT_GE(entries, 2) << "demoted version missing from .versions/";
+}
+
+/* A non-current version's listed etag must be its own etag, not the
+ * synthesized change token -- the same rule publish() follows.  The
+ * token is for objects that carry no etag, i.e. sideloaded files. */
+TEST(OPEN2, VER_DEMOTED_ETAG_MATCHES_OBJECT)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, ver_bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("vetag")), 0);
+
+  std::string body{"demoted etag body"};
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), body, 0, body.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+
+  /* the etag of the version that is about to be demoted */
+  std::string published_etag;
+  ASSERT_EQ(librgw_test::get_object_attr(&dp, ver_bucket_name,
+					 rgw_obj_key("vetag"),
+					 RGW_ATTR_ETAG, published_etag), 0);
+  ASSERT_FALSE(published_etag.empty());
+
+  ASSERT_EQ(librgw_test::warm_listing_cache(&dp, ver_bucket_name), 0);
+
+  /* unlinking demotes it and adds a delete marker */
+  ASSERT_EQ(rgw_unlink(fs, ver_bucket_fh, "vetag", RGW_UNLINK_FLAG_NONE), 0);
+
+  std::vector<rgw_bucket_dir_entry> objs;
+  ASSERT_EQ(librgw_test::list_bucket(&dp, ver_bucket_name, true, objs), 0);
+
+  bool found = false;
+  for (auto& o : objs) {
+    if (o.key.name != "vetag") {
+      continue;
+    }
+    if (o.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
+      continue; /* a marker has no content and no digest */
+    }
+    found = true;
+    ASSERT_EQ(o.meta.etag, published_etag)
+      << "demoted version listed with an etag that is not its own";
+  }
+  ASSERT_TRUE(found) << "demoted version absent from the version listing";
+}
+
+/*
+ * Dot-prefixed objects in a versioned bucket.
+ *
+ * A version entry is named "<key>_<version_id>", so for a key that
+ * itself begins with a dot every one of its versions does too.  The
+ * scans of .versions/ used to skip any name starting with a dot, which
+ * hid all of them -- from version enumeration, from newest-version
+ * resolution, and from promotion on delete.  That became reachable when
+ * ordinary dotfiles started being listed;  before then the driver hid
+ * them everywhere and was at least consistent.
+ */
+
+TEST(OPEN2, VER_DOTFILE_TWO_VERSIONS)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, ver_bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup(".hidden")), 0);
+
+  for (auto* body : {"dot first", "dot second"}) {
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    std::string b{body};
+    ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), b, 0, b.length())), 0);
+    ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  }
+
+  /* The rows added incrementally as each version was published would
+   * satisfy this on their own.  Drop the cache so the listing has to
+   * rebuild by walking .versions/ -- that walk is the thing under test,
+   * and it is the only path that has to recognise a version entry whose
+   * name begins with a dot. */
+  ASSERT_EQ(librgw_test::invalidate_listing_cache(&dp, ver_bucket_name), 0);
+
+  std::vector<rgw_bucket_dir_entry> objs;
+  ASSERT_EQ(librgw_test::list_bucket(&dp, ver_bucket_name, true, objs), 0);
+
+  int n = 0;
+  for (auto& o : objs) {
+    if (o.key.name == ".hidden") {
+      ++n;
+    }
+  }
+  ASSERT_EQ(n, 2)
+    << "versions of a dot-prefixed key were not enumerated from the store";
+}
+
+/* the version entries must be on disk under their real ids, not hidden
+ * or collapsed -- the listing could in principle be right for the wrong
+ * reason, so check the store directly */
+TEST(OPEN2, VER_DOTFILE_VERSIONS_ON_DISK)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  auto vdir = nsfs_base() / ver_bucket_name / ".versions";
+  ASSERT_TRUE(sf::is_directory(vdir));
+
+  int entries = 0;
+  for (auto& de : sf::directory_iterator(vdir)) {
+    auto fn = de.path().filename().string();
+    if (fn.rfind(".hidden_", 0) == 0) {
+      ++entries;
+      EXPECT_EQ(fn.find("_null"), std::string::npos)
+	<< "dot-prefixed version stored as the null version: " << fn;
+    }
+  }
+  ASSERT_GE(entries, 1)
+    << "no version entry for a dot-prefixed key in .versions/";
+}
+
+/* reading the name back must give the newest content, which is what
+ * newest-version resolution decides */
+TEST(OPEN2, VER_DOTFILE_READS_NEWEST)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, ver_bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup(".hidden")), 0);
+
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto rr = o2h->read(get<1>(ofr), 0, 64);
+  ASSERT_EQ(get<0>(rr), 0);
+  ASSERT_EQ(get<1>(rr), std::string("dot second"))
+    << "a dot-prefixed key did not resolve to its newest version";
+  ASSERT_EQ(o2h->close(get<1>(ofr)), 0);
+}
+
+/* and it must still be listed as an ordinary object -- the reserved-name
+ * predicate suppresses driver names, not every leading dot */
+TEST(OPEN2, VER_DOTFILE_LISTED_AS_OBJECT)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  ASSERT_EQ(librgw_test::invalidate_listing_cache(&dp, ver_bucket_name), 0);
+
+  std::vector<rgw_bucket_dir_entry> objs;
+  ASSERT_EQ(librgw_test::list_bucket(&dp, ver_bucket_name, false, objs), 0);
+
+  bool found = false;
+  for (auto& o : objs) {
+    if (o.key.name == ".hidden") {
+      found = true;
+    }
+    EXPECT_NE(o.key.name, ".versions") << "driver name leaked into a listing";
+    EXPECT_NE(o.key.name, ".shadow") << "driver name leaked into a listing";
+  }
+  ASSERT_TRUE(found) << "dot-prefixed object absent from the ordinary listing";
+}
+
+/* unlink of a dot-prefixed key must behave like any other:  a delete
+ * marker over a retained version */
+TEST(OPEN2, VER_DOTFILE_UNLINK_CREATES_DELETE_MARKER)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  ASSERT_EQ(librgw_test::warm_listing_cache(&dp, ver_bucket_name), 0);
+  ASSERT_EQ(rgw_unlink(fs, ver_bucket_fh, ".hidden", RGW_UNLINK_FLAG_NONE), 0);
+
+  ASSERT_EQ(librgw_test::invalidate_listing_cache(&dp, ver_bucket_name), 0);
+
+  std::vector<rgw_bucket_dir_entry> objs;
+  ASSERT_EQ(librgw_test::list_bucket(&dp, ver_bucket_name, true, objs), 0);
+
+  int versions = 0, markers = 0;
+  for (auto& o : objs) {
+    if (o.key.name != ".hidden") {
+      continue;
+    }
+    ++versions;
+    if (o.flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
+      ++markers;
+    }
+  }
+  ASSERT_EQ(markers, 1)
+    << "unlink of a dot-prefixed key left no delete marker";
+  ASSERT_EQ(versions, 3)
+    << "both prior versions must survive beside the marker";
+
+  struct rgw_file_handle* fh{nullptr};
+  ASSERT_NE(rgw_lookup(fs, ver_bucket_fh, ".hidden", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0)
+    << "unlinked dot-prefixed name still resolves over NFS";
+}
+
+/*
+ * Suspended versioning.
+ *
+ * Suspended is not "off".  The bucket is still versioned() -- versions
+ * made while it was enabled survive untouched -- but it is no longer
+ * versioning_enabled(), and S3 says a write then creates or replaces the
+ * *null* version rather than minting a new one.  It is the one mode in
+ * which a write destroys data:  the previous null version's content is
+ * gone.  So repeated writes must not accumulate versions.
+ *
+ * These run last because they leave the bucket suspended for anything
+ * that follows;  the final test restores it.
+ */
+
+static int ver_count(const DoutPrefixProvider* dp, const std::string& key,
+		     int* nulls = nullptr, int* currents = nullptr)
+{
+  std::vector<rgw_bucket_dir_entry> objs;
+  if (librgw_test::list_bucket(dp, ver_bucket_name, true, objs) != 0) {
+    return -1;
+  }
+  int n = 0;
+  if (nulls) *nulls = 0;
+  if (currents) *currents = 0;
+  for (auto& o : objs) {
+    if (o.key.name != key) {
+      continue;
+    }
+    ++n;
+    if (nulls && o.key.instance == "null") {
+      ++(*nulls);
+    }
+    if (currents && (o.flags & rgw_bucket_dir_entry::FLAG_CURRENT)) {
+      ++(*currents);
+    }
+  }
+  return n;
+}
+
+static void ver_write(const char* key, const std::string& body)
+{
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, ver_bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup(key)), 0);
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), body, 0, body.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+}
+
+TEST(OPEN2, VER_SUSPEND_PRESERVES_ENABLED_VERSIONS)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  /* two versions while enabled */
+  ver_write("vsusp", "enabled one");
+  ver_write("vsusp", "enabled two");
+  ASSERT_EQ(librgw_test::invalidate_listing_cache(&dp, ver_bucket_name), 0);
+  ASSERT_EQ(ver_count(&dp, "vsusp"), 2) << "setup did not produce two versions";
+
+  ASSERT_EQ(librgw_test::set_bucket_versioning(
+	      &dp, ver_bucket_name, librgw_test::Versioning::Suspended), 0);
+  librgw_test::Versioning got{librgw_test::Versioning::Off};
+  ASSERT_EQ(librgw_test::get_bucket_versioning(&dp, ver_bucket_name, got), 0);
+  ASSERT_EQ(got, librgw_test::Versioning::Suspended)
+    << "suspend fixture did not take effect";
+
+  ver_write("vsusp", "suspended one");
+
+  ASSERT_EQ(librgw_test::invalidate_listing_cache(&dp, ver_bucket_name), 0);
+  int nulls = 0;
+  int n = ver_count(&dp, "vsusp", &nulls);
+  ASSERT_EQ(n, 3)
+    << "suspending must retain versions made while enabled";
+  ASSERT_EQ(nulls, 1)
+    << "a write to a suspended bucket must create exactly one null version";
+}
+
+TEST(OPEN2, VER_SUSPEND_WRITES_DO_NOT_ACCUMULATE)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  /* two further writes while suspended:  each replaces the null version
+   * rather than adding one, so the count must not move */
+  ver_write("vsusp", "suspended two");
+  ver_write("vsusp", "suspended three");
+
+  ASSERT_EQ(librgw_test::invalidate_listing_cache(&dp, ver_bucket_name), 0);
+  int nulls = 0;
+  int n = ver_count(&dp, "vsusp", &nulls);
+  ASSERT_EQ(n, 3)
+    << "writes to a suspended bucket accumulated versions";
+  ASSERT_EQ(nulls, 1) << "more than one null version";
+
+  /* and the newest content is what a reader sees */
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, ver_bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("vsusp")), 0);
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto rr = o2h->read(get<1>(ofr), 0, 64);
+  ASSERT_EQ(get<0>(rr), 0);
+  ASSERT_EQ(get<1>(rr), std::string("suspended three"));
+  ASSERT_EQ(o2h->close(get<1>(ofr)), 0);
+}
+
+/* only one version of a key may be current, at any versioning state.
+ * Checked against the incremental cache rather than a rebuild:  a
+ * rebuild recomputes the flag, so it would repair a stale one and hide
+ * it. */
+TEST(OPEN2, VER_SUSPEND_ONE_CURRENT_IN_CACHE)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+
+  ver_write("vsuspcur", "first while suspended");
+  ver_write("vsuspcur", "second while suspended");
+
+  int currents = 0;
+  int n = ver_count(&dp, "vsuspcur", nullptr, &currents);
+  ASSERT_GE(n, 1);
+  ASSERT_EQ(currents, 1)
+    << "the listing cache holds more than one current version";
+}
+
+/* The store is the authority, but note its shape:  the current version
+ * IS the top-level file, and only non-current versions live in
+ * .versions/.  So the null version a suspended write creates is not in
+ * .versions/ at all -- it is the object itself, carrying a version-id
+ * xattr of "null".  Asserting a .versions/<key>_null entry here would be
+ * asserting a model of the store rather than the store. */
+TEST(OPEN2, VER_SUSPEND_ON_DISK)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  auto vdir = nsfs_base() / ver_bucket_name / ".versions";
+  ASSERT_TRUE(sf::is_directory(vdir));
+
+  int nulls = 0, reals = 0;
+  for (auto& de : sf::directory_iterator(vdir)) {
+    auto fn = de.path().filename().string();
+    if (fn.rfind("vsusp_", 0) != 0) {
+      continue;
+    }
+    if (fn == "vsusp_null") {
+      ++nulls;
+    } else {
+      ++reals;
+    }
+  }
+  ASSERT_EQ(reals, 2) << "enabled-era versions did not survive suspension";
+  ASSERT_EQ(nulls, 0)
+    << "the null version is the current object, not a .versions/ entry";
+
+  /* the current object carries the null version id */
+  auto cur = nsfs_base() / ver_bucket_name / "vsusp";
+  ASSERT_TRUE(sf::exists(cur)) << "no current object after a suspended write";
+
+  char buf[64];
+  std::string vid_x = std::string("user.nsfs.") + "version_id";
+  ssize_t len = ::getxattr(cur.c_str(), vid_x.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0) << "current object carries no version id";
+  ASSERT_EQ(std::string(buf, len), std::string("null"))
+    << "a write to a suspended bucket must stamp the null version id";
+}
+
+TEST(OPEN2, VER_SUSPEND_RESTORE)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  ASSERT_EQ(librgw_test::set_bucket_versioning(
+	      &dp, ver_bucket_name, librgw_test::Versioning::Enabled), 0);
+}
+
+/*
+ * The finalize interval means two different things.
+ *
+ * v3 sends no signal that a write has finished, so librgw infers the
+ * close from the writer going quiet.  On an unversioned bucket that
+ * interval is an S3-visibility SLA.  On a versioned one every publish
+ * mints a permanent version, so it is instead the length of pause
+ * treated as still-writing, and has to exceed application think-time --
+ * otherwise a client that dribbles writes to one file mints a version
+ * per pause.
+ */
+
+static sf::path ver_published_path(const std::string& obj)
+{
+  return nsfs_base() / ver_bucket_name / obj;
+}
+
+static sf::path ver_shadow_path(const std::string& obj)
+{
+  return nsfs_base() / ver_bucket_name / ".shadow" / obj;
+}
+
+/* The interval is chosen from a flag resolved once, when the stateless
+ * open is created -- not cached on the bucket handle, which outlives any
+ * versioning change and would keep a mounted export on the wrong
+ * interval indefinitely. */
+TEST(OPEN2, VER_TIMER_FLAG_RESOLVED_PER_OPEN)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+
+  auto stateless_versioned = [](struct rgw_file_handle* fh) -> bool {
+    auto* rgw_fh = rgw::get_rgwfh(fh);
+    auto* f = std::get_if<rgw::RGWFileHandle::file>(&rgw_fh->variant_type);
+    return f && f->versioned_bucket;
+  };
+
+  std::string body{"DDDD"};
+  size_t nbytes{0};
+
+  struct rgw_file_handle* vfh{nullptr};
+  ASSERT_EQ(rgw_lookup(fs, ver_bucket_fh, "vflag", &vfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_CREATE), 0);
+  ASSERT_EQ(rgw_open(fs, vfh, O_RDWR,
+		     RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE), 0);
+  ASSERT_EQ(rgw_write(fs, vfh, 0, body.length(), &nbytes,
+		      (void*) body.c_str(), RGW_OPEN_FLAG_V3), 0);
+  EXPECT_TRUE(stateless_versioned(vfh))
+    << "a stateless open in a versioned bucket did not resolve as versioned";
+  ASSERT_EQ(rgw_close(fs, vfh, RGW_CLOSE_FLAG_NONE), 0);
+
+  reset_object("pflag");
+  struct rgw_file_handle* pfh{nullptr};
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, "pflag", &pfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_CREATE), 0);
+  ASSERT_EQ(rgw_open(fs, pfh, O_RDWR,
+		     RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE), 0);
+  ASSERT_EQ(rgw_write(fs, pfh, 0, body.length(), &nbytes,
+		      (void*) body.c_str(), RGW_OPEN_FLAG_V3), 0);
+  EXPECT_FALSE(stateless_versioned(pfh))
+    << "a stateless open in an unversioned bucket resolved as versioned";
+  ASSERT_EQ(rgw_close(fs, pfh, RGW_CLOSE_FLAG_NONE), 0);
+}
+
+TEST(OPEN2, VER_TIMER_LONGER_IN_VERSIONED_BUCKET)
+{
+  if (! ver_bucket_fh) {
+    GTEST_SKIP() << "versioned bucket unavailable";
+  }
+
+  /* a short SLA and a long still-writing tolerance */
+  g_conf().set_val("rgw_nfs_stateless_finalize_secs", "1");
+  g_conf().set_val("rgw_nfs_stateless_finalize_versioned_secs", "3600");
+  g_conf().apply_changes(nullptr);
+
+  std::string body{"CCCC"};
+  size_t nbytes{0};
+
+  /* control:  the unversioned bucket must finalize inside the window.
+   * Without it a versioned bucket that never publishes for an unrelated
+   * reason would satisfy the assertion below. */
+  reset_object("timerctl");
+  struct rgw_file_handle* pfh{nullptr};
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, "timerctl", &pfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_CREATE), 0);
+  ASSERT_EQ(rgw_open(fs, pfh, O_RDWR,
+		     RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE), 0);
+  ASSERT_EQ(rgw_write(fs, pfh, 0, body.length(), &nbytes,
+		      (void*) body.c_str(), RGW_OPEN_FLAG_V3), 0);
+
+  /* subject:  same shape, in the versioned bucket */
+  struct rgw_file_handle* vfh{nullptr};
+  ASSERT_EQ(rgw_lookup(fs, ver_bucket_fh, "timerver", &vfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_CREATE), 0);
+  ASSERT_EQ(rgw_open(fs, vfh, O_RDWR,
+		     RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE), 0);
+  ASSERT_EQ(rgw_write(fs, vfh, 0, body.length(), &nbytes,
+		      (void*) body.c_str(), RGW_OPEN_FLAG_V3), 0);
+
+  ASSERT_TRUE(sf::exists(ver_shadow_path("timerver")));
+
+  std::this_thread::sleep_for(std::chrono::seconds(4));
+
+  EXPECT_TRUE(sf::exists(published_path("timerctl")))
+    << "control: an unversioned stateless write did not finalize on the "
+       "short interval, so this test cannot distinguish anything";
+
+  EXPECT_FALSE(sf::exists(ver_published_path("timerver")))
+    << "a versioned bucket finalized on the unversioned interval";
+  EXPECT_TRUE(sf::exists(ver_shadow_path("timerver")))
+    << "the versioned write's shadow went away without publishing";
+
+  /* close both:  the versioned one publishes here, on the last write
+   * open being returned, which is the rule the timer only stands in for */
+  ASSERT_EQ(rgw_close(fs, pfh, RGW_CLOSE_FLAG_NONE), 0);
+  ASSERT_EQ(rgw_close(fs, vfh, RGW_CLOSE_FLAG_NONE), 0);
+  ASSERT_TRUE(sf::exists(ver_published_path("timerver")));
+
+  g_conf().set_val("rgw_nfs_stateless_finalize_secs", "300");
+  g_conf().set_val("rgw_nfs_stateless_finalize_versioned_secs", "1800");
+  g_conf().apply_changes(nullptr);
 }
 
 TEST(OPEN2, DELETE_BUCKET) {

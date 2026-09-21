@@ -1441,6 +1441,22 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_nfs_stateless_finalize_versioned_secs
+  type: int
+  level: advanced
+  desc: idle interval before a stateless (NFSv3) write is finalized, in a versioned bucket
+  long_desc: NFSv3 carries no signal that a write has finished, so librgw infers
+    it from the writer going quiet.  Each inferred close publishes, and in a
+    versioned bucket every publish mints a permanent version -- so the interval
+    stops being a visibility SLA and becomes the length of pause treated as
+    still-writing.  It wants to exceed application think-time, which is why it is
+    a separate and longer value;  a client that dribbles writes to one file would
+    otherwise mint a version per pause.  The timer is idle-reset on each write, so
+    a continuous writer at any rate is unaffected either way.
+  default: 30_min
+  services:
+  - rgw
+  with_legacy: true
 # use fast S3 attrs from bucket index--currently assumes NFS mounts are immutable
 - name: rgw_nfs_s3_fast_attrs
   type: bool

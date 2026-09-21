@@ -251,8 +251,16 @@ namespace rgw {
 
       /* the stateless (NFSv3) open, if one is active;  librgw owns
        * its lifetime and never exposes it as an rgw_open_fd */
-      Open* global_open{nullptr};
+    Open* global_open{nullptr};
       uint64_t stateless_timer_id{0};
+
+      /* whether this open's bucket is versioned, resolved once when the
+       * stateless open is created and held for its life.  The finalize
+       * interval differs between versioned and unversioned buckets and
+       * arm_stateless_timer() runs on every writev, so it cannot ask
+       * each time;  resolving per open keeps re-arms free while a new
+       * write session still picks up the bucket's current state. */
+      bool versioned_bucket{false};
 
       /* read_opens counts read-only opens;  an O_RDWR open is
        * counted in write_opens only (cf. Open::is_read_open) */
@@ -765,6 +773,7 @@ namespace rgw {
     /* mtx must be held */
     int do_open(file::Open** /* out */, uint32_t posix_flags,
                 uint32_t rgw_openflags);
+    bool resolve_bucket_versioned();
     void arm_stateless_timer();
     /* mtx must be held */
     void discard_shadow();
@@ -1070,6 +1079,7 @@ namespace rgw {
       size_t size_rounded;
       real_time creation_time;
       uint64_t num_entries;
+      bool versioned{false};
     };
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
@@ -2524,6 +2534,7 @@ public:
     bs.size = stats.size;
     bs.size_rounded = stats.size_rounded;
     bs.creation_time = get_state()->bucket->get_info().creation_time;
+    bs.versioned = get_state()->bucket->get_info().versioned();
     bs.num_entries = stats.num_objects;
     std::swap(attrs, get_state()->bucket_attrs);
   }
