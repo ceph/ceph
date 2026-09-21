@@ -557,10 +557,62 @@ TEST(OPEN2, ACC_MODES)
   o2h->close(open3);
 }
 
+/* The two assertions this test was a placeholder for, plus the lifecycle of
+ * the create intent recorded by lookup.
+ *
+ * rgw_lookup(RGW_LOOKUP_FLAG_CREATE) on an absent object mints a handle and
+ * records FLAG_CREATING on it -- both halves of the caller's intent are known
+ * there and nowhere else.  That intent must be cleared by any *successful*
+ * open and survive a failed one.  It used to be cleared in rgw_open() alone,
+ * so an open2 consumer left it set on the cached handle permanently, and a
+ * later rgw_open() on that handle would infer O_RDWR|CREATE nobody asked
+ * for.  do_open() clears it now, which both APIs funnel through. */
 TEST(OPEN2, CREATE_FLAG)
 {
+  const std::string name{"o2-createflag"};
+
+  /* clean at the start:  lookup records the intent only when the object is
+   * absent, so a leftover from an earlier run makes the whole test vacuous */
+  (void) rgw_unlink(fs, bucket_fh, name.c_str(), RGW_UNLINK_FLAG_NONE);
+
+  Open2Helper o2h(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h.lookup(name)), 0);
+  auto* rgw_fh = o2h.rgw_fh_of();
+  ASSERT_NE(rgw_fh, nullptr);
+  ASSERT_TRUE(rgw_fh->creating())
+      << "lookup(RGW_LOOKUP_FLAG_CREATE) on an absent object did not record "
+	 "the create intent;  nothing below would be testing anything";
+
   /* open non-existing + FLAG_NONE fails (correctly) */
+  auto bad = o2h.open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  EXPECT_NE(get<0>(bad), 0)
+      << "opening an object that does not exist without RGW_OPEN_FLAG_CREATE "
+	 "should fail";
+  EXPECT_TRUE(rgw_fh->creating())
+      << "a failed open cleared the create intent;  the caller still intends "
+	 "to create, and the retry would no longer say so";
+
   /* open non-existing + FLAG_CREATE succeeds */
+  auto ofw = o2h.open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  EXPECT_FALSE(rgw_fh->creating())
+      << "open2 left the create intent set;  a later rgw_open() on this "
+	 "cached handle would infer a create it was not asked for";
+
+  const std::string data{"created through open2"};
+  ASSERT_EQ(get<0>(o2h.write(get<1>(ofw), data, 0, data.length())), 0);
+  ASSERT_EQ(o2h.close(get<1>(ofw)), 0);
+
+  /* and it is really there -- a create flag that produced nothing is the
+   * other half of what this guards */
+  struct rgw_file_handle* rfh = nullptr;
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, name.c_str(), &rfh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0)
+      << "open2 with RGW_OPEN_FLAG_CREATE did not create the object";
+  struct stat st;
+  ASSERT_EQ(rgw_getattr(fs, rfh, &st, RGW_GETATTR_FLAG_NONE), 0);
+  EXPECT_EQ(st.st_size, (off_t) data.length());
+  ASSERT_EQ(rgw_fh_rele(fs, rfh, 0), 0);
 }
 
 TEST(OPEN2, SETATTR1)

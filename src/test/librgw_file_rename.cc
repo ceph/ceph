@@ -165,6 +165,54 @@ int make_object(struct rgw_file_handle* parent_fh, const string& name) {
   return rgw_close(fs, object_fh, 0 /* flags */);
 }
 
+/* The bare v1 create sequence, with none of the flags an FSIO driver needs
+ * spelled out:  rgw_lookup(RGW_LOOKUP_FLAG_CREATE), then rgw_open() with
+ * posix_flags 0 and no RGW_OPEN_FLAG_CREATE, then write, then close.
+ *
+ * This is what a v1 consumer written against the rados behaviour does, and
+ * it has to keep working:  rgw_open() infers write and create intent from
+ * the handle, which rgw_lookup() marked when it found the object absent and
+ * was asked to create it.  make_object() above passes the flags explicitly,
+ * as librgw_file_nfsns.cc does, so without this test nothing would exercise
+ * the inference. */
+TEST(LibRGW, V1_CREATE_INFERS_FLAGS) {
+  const string name{"v1inferred"};
+  struct rgw_file_handle* fh = nullptr;
+
+  int ret = rgw_lookup(fs, bucket1_fh, name.c_str(), &fh,
+		       nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_NE(fh, nullptr);
+
+  /* deliberately the pre-FSIO flags */
+  ret = rgw_open(fs, fh, 0 /* posix flags */, 0 /* flags */);
+  ASSERT_EQ(ret, 0) << "the v1 create sequence must not require flags it "
+		       "never had to pass";
+
+  const string data{"hi mom"};
+  size_t nbytes{0};
+  ret = rgw_write(fs, fh, 0, data.length(), &nbytes,
+		  (void*) data.c_str(), RGW_WRITE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(nbytes, data.length());
+  ASSERT_EQ(rgw_close(fs, fh, 0 /* flags */), 0);
+  ASSERT_EQ(rgw_fh_rele(fs, fh, 0 /* flags */), 0);
+
+  /* and the object is really there, with its content -- a create that
+   * silently produced nothing is exactly the failure this guards */
+  struct rgw_file_handle* rfh = nullptr;
+  ret = rgw_lookup(fs, bucket1_fh, name.c_str(), &rfh,
+		   nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+  ASSERT_EQ(ret, 0) << "object was not created";
+  ASSERT_NE(rfh, nullptr);
+
+  struct stat st;
+  ASSERT_EQ(rgw_getattr(fs, rfh, &st, RGW_GETATTR_FLAG_NONE), 0);
+  ASSERT_EQ(st.st_size, (off_t) data.length());
+
+  ASSERT_EQ(rgw_fh_rele(fs, rfh, 0 /* flags */), 0);
+}
+
 TEST(LibRGW, TOPDIR_RENAME) {
   /* rename a file directly residing at the bucket */
   int ret{0};
