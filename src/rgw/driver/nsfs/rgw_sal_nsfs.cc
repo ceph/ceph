@@ -967,6 +967,9 @@ static inline int copy_dir_fd(int old_fd)
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display)
 {
+  /* large enough for every attribute an object carries in practice;  the
+   * biggest is the encoded ACL at a couple of hundred bytes */
+  enum { INLINE_VALUE_MAX = 1024 };
   char namebuf[64 * 1024]; // Max list size supported on linux
   ssize_t buflen;
   int ret;
@@ -995,22 +998,24 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
       continue;
     }
 
-    vallen = fgetxattr(fd, keyptr, nullptr, 0);
-    if (vallen < 0) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for " << display << ": " << cpp_strerror(ret) << dendl;
-      return -ret;
-    } else if (vallen == 0) {
-      attrs.emplace(std::move(key), bufferlist{});
-      buflen -= keylen;
-      keyptr += keylen;
-      continue;
+    /* Read straight into a stack buffer.  Sizing the value first with a
+     * nullptr call doubles the syscalls on this path, and every attribute
+     * an object actually carries fits well inside INLINE_VALUE_MAX -- the
+     * largest is the encoded ACL, a couple of hundred bytes.  A value that
+     * does not fit falls back to the size-then-read pair. */
+    char valbuf[INLINE_VALUE_MAX];
+    vallen = fgetxattr(fd, keyptr, valbuf, sizeof(valbuf));
+    vp = valbuf;
+
+    if (vallen < 0 && errno == ERANGE) {
+      vallen = fgetxattr(fd, keyptr, nullptr, 0);
+      if (vallen >= 0) {
+	value.resize(vallen);
+	vp = value.data();
+	vallen = fgetxattr(fd, keyptr, vp, vallen);
+      }
     }
 
-    value.reserve(vallen + 1);
-    vp = &value[0];
-
-    vallen = fgetxattr(fd, keyptr, vp, vallen);
     if (vallen < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for " << display << ": " << cpp_strerror(ret) << dendl;
