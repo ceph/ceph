@@ -4556,19 +4556,19 @@ void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr
     now += mdcache->client_lease_durations[pool];
     mdcache->touch_client_lease(l, pool, now);
 
-    LeaseStat lstat;
+    LeaseStatView lstat;
     lstat.mask = CEPH_LEASE_VALID | mask;
     lstat.duration_ms = (uint32_t)(1000 * mdcache->client_lease_durations[pool]);
     lstat.seq = ++l->seq;
-    lstat.alternate_name = std::string(dn->alternate_name);
+    lstat.alternate_name = dn->get_alternate_name();
     encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease seq " << lstat.seq << " dur " << lstat.duration_ms << "ms "
 	     << " on " << *dn << dendl;
   } else {
     // null lease
-    LeaseStat lstat;
+    LeaseStatView lstat;
     lstat.mask = 0;
-    lstat.alternate_name = std::string(dn->alternate_name);
+    lstat.alternate_name = dn->get_alternate_name();
     encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
   }
@@ -4593,7 +4593,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 }
 
 void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
-			  const LeaseStat& ls)
+			  const LeaseStatView& ls)
 {
   if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
     dout(25) << "encode lease reply encoding: " << ls << dendl;
