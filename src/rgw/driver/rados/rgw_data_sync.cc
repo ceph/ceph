@@ -4378,8 +4378,6 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   stringstream error_ss;
 
-  bool error_injection;
-
   RGWDataSyncModule *data_sync_module;
 
   rgw_zone_set_entry source_trace_entry;
@@ -4387,6 +4385,17 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   RGWSyncTraceNodeRef tn;
   std::string zone_name;
+
+  bool maybe_inject_error(int& retcode) const {
+    const auto probability = cct->_conf->rgw_sync_data_inject_err_probability;
+
+    if (probability <= 0 || rand() % 10000 >= probability * 10000.0) {
+      return false;
+    }
+
+    retcode = -EIO;
+    return true;
+  }
 
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncCtx *_sc,
@@ -4417,8 +4426,6 @@ public:
     tn = sync_env->sync_tracer->add_node(_tn_parent, "entry", SSTR(key));
 
     tn->log(20, SSTR("bucket sync single entry (source_zone=" << sc->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state));
-    error_injection = (sync_env->cct->_conf->rgw_sync_data_inject_err_probability > 0);
-
     data_sync_module = sync_env->sync_module->get_data_handler();
 
     source_trace_entry.zone = sc->source_zone.id;
@@ -4451,10 +4458,9 @@ public:
             tn->log(0, "entry with empty obj name, skipping");
             goto done;
           }
-          if (error_injection &&
-              rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
-            tn->log(0, SSTR(": injecting data sync error on key=" << key.name));
-            retcode = -EIO;
+          if (maybe_inject_error(retcode)) {
+            tn->log(0, SSTR(": injecting data sync error on key=" << key.name
+                            << " err=" << retcode));
           } else if (op == CLS_RGW_OP_ADD ||
                      op == CLS_RGW_OP_LINK_OLH) {
             set_status("syncing obj");
