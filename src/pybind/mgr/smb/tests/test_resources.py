@@ -1,3 +1,5 @@
+import dataclasses
+
 import pytest
 
 import smb.resourcelib
@@ -1588,3 +1590,26 @@ intent: removed
     cred = loaded[0]
     assert cred.intent == smb.enums.Intent.REMOVED
     assert cred.rgw_credential_id == 'rgwcred1'
+
+
+def test_share_defaults_share_sync():
+    """Ensure developers keep cluster resource share defaults in sync with
+    fields really on the share.
+    """
+    share_defaults_fields = {
+        f.name: f for f in dataclasses.fields(smb.resources.ShareDefaults)
+    }
+    share_fields = {
+        f.name: f for f in dataclasses.fields(smb.resources.Share)
+    }
+
+    for fname, field in share_defaults_fields.items():
+        if fname not in share_fields:
+            raise KeyError(fname)
+        f2 = share_fields[fname]
+        if (
+            f2.name != field.name
+            or f2.type != field.type
+            or f2.default != field.default
+        ):
+            raise ValueError(fname)
