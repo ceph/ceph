@@ -16,6 +16,7 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <filesystem>
+#include <sys/xattr.h>
 #include <thread>
 #include <chrono>
 #include <cstdint>
@@ -31,6 +32,7 @@
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
 #include "rgw_lib.h" /* driver hints */
+#include "rgw/rgw_file_int.h" /* the private view: refcounts, handles */
 
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
@@ -242,6 +244,8 @@ namespace {
     }
 
     int close(rgw_open_fd fd) { return rgw_close2(fd, RGW_CLOSE_FLAG_NONE); }
+
+    rgw::RGWFileHandle* rgw_fh_of() { return rgw::get_rgwfh(object_fh); }
 
     int setattr(struct stat* st, uint32_t mask)
     {
@@ -2041,6 +2045,275 @@ TEST(OPEN2, NESTED_OBJECT)
 
   (void) rgw_fh_rele(fs, d2, RGW_FH_RELE_FLAG_NONE);
   (void) rgw_fh_rele(fs, d1, RGW_FH_RELE_FLAG_NONE);
+}
+
+TEST(OPEN2, STATELESS_READ_RECLAIMED)
+{
+  /* rgw_read() opens the file handle's stateless open on demand, and a
+   * v3 client never closes.  Nothing but the idle reclaimer returns
+   * that open -- and because the open holds a reference on the handle,
+   * a leak here is self-pinning: the handle can never be evicted, so it
+   * can never be reclaimed either.
+   *
+   * Assert the reference is *returned*, rather than sampling the count
+   * at a moment of our choosing.  A snapshot only says nothing is
+   * outstanding right now, which stops being true as soon as
+   * reclamation is deferred by design;  what matters is that it comes
+   * back. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  g_conf().set_val("rgw_nfs_stateless_finalize_secs", "1");
+  g_conf().apply_changes(nullptr);
+
+  reset_object("rdidle1");
+
+  std::string a4{"AAAA"};
+
+  {
+    std::unique_ptr<Open2Helper> o2h =
+	std::make_unique<Open2Helper>(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h->lookup("rdidle1")), 0);
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a4, 0, a4.length())), 0);
+    ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  }
+
+  struct rgw_file_handle* fh{nullptr};
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, "rdidle1", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  auto* rgw_fh = rgw::get_rgwfh(fh);
+  const uint32_t baseline = rgw_fh->get_refcnt();
+
+  /* a read, with no close, as a v3 client would issue it */
+  char buf[8];
+  size_t nread{0};
+  memset(buf, 0, sizeof(buf));
+  ASSERT_EQ(rgw_read(fs, fh, 0, a4.length(), &nread, buf,
+		     RGW_READ_FLAG_NONE), 0);
+  ASSERT_EQ(std::string(buf, a4.length()), a4);
+
+  /* the open exists, so the wait below is not vacuous */
+  ASSERT_GT(rgw_fh->get_refcnt(), baseline);
+  ASSERT_NE(rgw_fh->get_global_open(), nullptr);
+
+  /* wait for reclamation rather than assuming it is synchronous */
+  bool reclaimed = false;
+  for (int i = 0; i < 60; ++i) {
+    if ((rgw_fh->get_refcnt() == baseline) &&
+	(rgw_fh->get_global_open() == nullptr)) {
+      reclaimed = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+  }
+  ASSERT_TRUE(reclaimed)
+      << "refcnt " << rgw_fh->get_refcnt() << " never returned to "
+      << baseline;
+
+  (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+
+  g_conf().set_val("rgw_nfs_stateless_finalize_secs", "300");
+  g_conf().apply_changes(nullptr);
+}
+
+TEST(OPEN2, REOPEN2)
+{
+  /* NFSv4 reopen: change the access mode of an open the caller already
+   * holds, rather than taking another.  The FSAL reaches this on its
+   * first v4 open which changes share mode. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  reset_object("reopen1");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("reopen1")), 0);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a4, 0, a4.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+
+  /* a read open, bound to the published object */
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+  ASSERT_FALSE(sf::exists(shadow_path("reopen1")));
+
+  /* writing through it is refused while it is read-only */
+  auto nbw = o2h->write(r1, b4, 0, b4.length());
+  ASSERT_EQ(get<0>(nbw), -EBADF);
+
+  /* upgrade in place:  same open, now a writer, and the shadow exists */
+  ASSERT_EQ(rgw_reopen2(r1, O_RDWR, RGW_OPEN_FLAG_NONE), 0);
+  ASSERT_TRUE(sf::exists(shadow_path("reopen1")));
+
+  ASSERT_EQ(get<0>(o2h->write(r1, b4, 0, b4.length())), 0);
+  auto rdr = o2h->read(r1, 0, b4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), b4);
+
+  /* downgrade:  writes are refused again, and because this returned the
+   * last write access it publishes, exactly as closing it would.  the
+   * alternative -- publish only on close -- loses the write, since
+   * close2 keys off the closing open's mode and this open is now a
+   * reader */
+  ASSERT_EQ(rgw_reopen2(r1, O_RDONLY, RGW_OPEN_FLAG_NONE), 0);
+  ASSERT_EQ(get<0>(o2h->write(r1, a4, 0, a4.length())), -EBADF);
+  ASSERT_FALSE(sf::exists(shadow_path("reopen1")));
+
+  /* the reader follows the publish, and sees what was written */
+  rdr = o2h->read(r1, 0, b4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), b4);
+
+  ASSERT_EQ(o2h->close(r1), 0);
+  ASSERT_FALSE(sf::exists(shadow_path("reopen1")));
+
+  auto ofr2 = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr2), 0);
+  rdr = o2h->read(get<1>(ofr2), 0, b4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), b4);
+  ASSERT_EQ(o2h->close(get<1>(ofr2)), 0);
+}
+
+TEST(OPEN2, REOPEN2_MULTI_WRITER)
+{
+  /* A downgrade publishes only when it returns the last write open.
+   * REOPEN2 cannot show that: with a single writer every downgrade
+   * returns the last one, so an implementation which published on every
+   * downgrade passes it identically.  Two writers discriminates, and
+   * it also covers the thing a share-mode change is for -- the other
+   * writer keeps working. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  reset_object("reopen2");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("reopen2")), 0);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+  std::string c4{"CCCC"};
+
+  /* publish "AAAA" so there is a distinct prior content to compare */
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a4, 0, a4.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  ASSERT_EQ(sf::file_size(published_path("reopen2")), a4.length());
+
+  /* two writers on the one shadow */
+  auto ofw0 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw0), 0);
+  auto w0 = get<1>(ofw0);
+  auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  auto w1 = get<1>(ofw1);
+
+  ASSERT_EQ(get<0>(o2h->write(w0, b4, 0, b4.length())), 0);
+  ASSERT_TRUE(sf::exists(shadow_path("reopen2")));
+
+  /* downgrade w0:  a writer remains, so nothing is published */
+  ASSERT_EQ(rgw_reopen2(w0, O_RDONLY, RGW_OPEN_FLAG_NONE), 0);
+  ASSERT_TRUE(sf::exists(shadow_path("reopen2")));
+  ASSERT_EQ(sf::file_size(published_path("reopen2")), a4.length());
+
+  /* w0 may no longer write, w1 still may */
+  ASSERT_EQ(get<0>(o2h->write(w0, c4, 0, c4.length())), -EBADF);
+  ASSERT_EQ(get<0>(o2h->write(w1, c4, b4.length(), c4.length())), 0);
+
+  /* and w0 reads what w1 writes, through the one shadow */
+  auto rdr = o2h->read(w0, 0, b4.length() + c4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), b4 + c4);
+
+  /* closing the remaining writer returns the last write open:  now it
+   * publishes */
+  ASSERT_EQ(o2h->close(w1), 0);
+  ASSERT_FALSE(sf::exists(shadow_path("reopen2")));
+  ASSERT_EQ(sf::file_size(published_path("reopen2")),
+	    b4.length() + c4.length());
+
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  rdr = o2h->read(get<1>(ofr), 0, b4.length() + c4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), b4 + c4);
+  ASSERT_EQ(o2h->close(get<1>(ofr)), 0);
+}
+
+TEST(OPEN2, UNIX_ATTRS_PERSIST)
+{
+  /* A file created through open2/write/close must carry its owner,
+   * group and mode.  The legacy write path stamped these in
+   * RGWWriteRequest::exec_finish(); the FSIO path had no equivalent, so
+   * such a file had uid 0, gid 0 and no mode.
+   *
+   * The lookup on a fresh handle is the part that matters: a handle
+   * which is still live answers getattr from memory and would pass
+   * whether or not anything reached the object. */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  reset_object("uxattr1");
+
+  const uint32_t uid = 4242;
+  const uint32_t gid = 4243;
+
+  {
+    std::unique_ptr<Open2Helper> o2h =
+	std::make_unique<Open2Helper>(fs, bucket_fh);
+    ASSERT_EQ(get<0>(o2h->lookup("uxattr1")), 0);
+
+    struct stat st;
+    memset(&st, 0, sizeof(st));
+    st.st_uid = uid;
+    st.st_gid = gid;
+    st.st_mode = 0640;
+    o2h->rgw_fh_of()->create_stat(&st, create_mask);
+
+    std::string a4{"AAAA"};
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a4, 0, a4.length())), 0);
+    ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  }
+
+  /* On the object, not merely in a handle.  Without this the test
+   * passes vacuously: rgw_lookup() may hand back the cached handle,
+   * whose state still holds what create_stat() set, and decode_attrs()
+   * only overwrites it when the attrs are actually present. */
+  ASSERT_TRUE(sf::exists(published_path("uxattr1")));
+  ASSERT_GE(::getxattr(published_path("uxattr1").c_str(),
+		       "user.nsfs.rgw.unix1", nullptr, 0), 0)
+      << "unix attrs were not written to the object";
+
+  /* and come back on a handle which never saw them set */
+  struct rgw_file_handle* fh{nullptr};
+  ASSERT_EQ(rgw_lookup(fs, bucket_fh, "uxattr1", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE), 0);
+  struct stat st2;
+  ASSERT_EQ(rgw_getattr(fs, fh, &st2, RGW_GETATTR_FLAG_NONE), 0);
+  ASSERT_EQ(st2.st_uid, uid);
+  ASSERT_EQ(st2.st_gid, gid);
+  ASSERT_EQ(st2.st_size, 4);
+  (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
 }
 
 /* END ALL TESTS */

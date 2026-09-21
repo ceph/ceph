@@ -2201,35 +2201,55 @@ namespace rgw {
       RGWLibFS::write_timer.add_event(interval, StatelessFinalize(*this));
   } /* RGWFileHandle::arm_stateless_timer */
 
-  void RGWFileHandle::finalize_stateless()
+  /* Write this handle's unix attrs onto the shadow, immediately before
+   * it is published.  mtx must be held.
+   *
+   * The legacy write path did this in RGWWriteRequest::exec_finish():
+   * it set size and mtime from what it had written, encoded, and
+   * emplaced UNIX_KEY1/UNIX1 as part of finishing the write.  The FSIO
+   * path had no equivalent, so a file created through open2/write/close
+   * carried no owner, group or mode at all.
+   *
+   * Doing it at publish rather than at create also captures a setattr
+   * issued while the open was held.  Size and mtime are refreshed from
+   * the shadow first:  encode_attrs() serializes the whole state, so
+   * stamping the handle's cached values would persist a size which
+   * disagrees with the data, and decode_attrs() would hand that back at
+   * the next lookup. */
+  void RGWFileHandle::stamp_unix_attrs()
   {
-    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
-    const DoutPrefix dp(cct, dout_subsys, "rgw finalize_stateless: ");
-
-    lock_guard guard(mtx);
-
     file* f = get_if<file>(&variant_type);
-    if (! f) {
+    if (! f || ! f->fsio_hdl) {
       return;
     }
 
-    /* the event has run;  a subsequent write re-arms (and reclones) */
-    f->stateless_timer_id = 0;
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw stamp_unix_attrs: ");
 
-    if (! f->global_open || ! f->global_open->is_write_open() ||
-        ! f->fsio_hdl || deleted()) {
-      return;
+    struct stat shadow_st;
+    if (f->fsio_hdl->fstat(&shadow_st, 0) == 0) {
+      state.size = shadow_st.st_size;
+#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
+      state.mtime = shadow_st.st_mtimespec;
+#else
+      state.mtime = shadow_st.st_mtim;
+#endif
     }
 
-    int rc = f->fsio_hdl->publish(
-      &dp, rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
+    ceph::buffer::list ux_key, ux_attrs;
+    encode_attrs(ux_key, ux_attrs);
+
+    rgw::sal::Attrs attrs;
+    attrs[RGW_ATTR_UNIX_KEY1] = std::move(ux_key);
+    attrs[RGW_ATTR_UNIX1] = std::move(ux_attrs);
+
+    int rc = f->fsio_hdl->fsetattrs(&dp, attrs, 0);
     if (!! rc) {
       lsubdout(fs->get_context(), rgw, 0)
         << __func__ << " " << object_name()
-        << " failed to publish idle stateless shadow rc=" << rc
-        << dendl;
+        << " failed to stamp unix attrs rc=" << rc << dendl;
     }
-  } /* RGWFileHandle::finalize_stateless */
+  } /* RGWFileHandle::stamp_unix_attrs */
 
   /* mtx must be held */
   void RGWFileHandle::discard_shadow()
@@ -2249,6 +2269,106 @@ namespace rgw {
         << " failed to discard shadow rc=" << rc << dendl;
     }
   } /* RGWFileHandle::discard_shadow */
+
+  /* Move an existing open between read-only and write access.
+   * mtx must be held.
+   *
+   * An upgrade establishes the shadow, since a reader may be bound to
+   * the published object.  A downgrade publishes if it returns the last
+   * write open:  returning the last write open is what publishes,
+   * whether it is returned by closing or by giving up write intent.
+   * Keeping those two as one rule matters--close2() keys its publish
+   * off the closing open's mode, so a downgraded last writer would
+   * otherwise close through the read arm and leave the write
+   * unpublished with nothing left to publish it.  The cost when a
+   * client upgrades again is one COW fork.
+   *
+   * read_opens counts read-*only* opens;  an O_RDWR open is counted in
+   * write_opens only (cf. Open::is_read_open), so a change of access
+   * moves the open between the two counts rather than adjusting one. */
+  int RGWFileHandle::change_open_mode(file::Open* open, uint32_t posix_flags)
+  {
+    auto* fs = get_fs();
+    CephContext* cct = static_cast<CephContext*>(fs->get_fs()->rgw);
+    const DoutPrefix dp(cct, dout_subsys, "rgw change_open_mode: ");
+
+    file* f = get_if<file>(&variant_type);
+    if (! f) {
+      return -EISDIR;
+    }
+
+    bool want_write = ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR));
+
+    if (want_write == open->is_write_open()) {
+      /* same access class;  O_TRUNC is still honoured for a writer */
+      if (want_write && (posix_flags & O_TRUNC) && f->fsio_hdl) {
+        return f->fsio_hdl->ftruncate(&dp, 0, 0);
+      }
+      return 0;
+    }
+
+    if (want_write) {
+      if (f->fsio_hdl && f->fsio_hdl->needs_shadow()) {
+        int rc = f->fsio_hdl->reclone(
+          &dp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+        if (!! rc) {
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__ << " " << object_name()
+            << " failed to establish shadow for write upgrade" << dendl;
+          return rc;
+        }
+      }
+      if ((posix_flags & O_TRUNC) && f->fsio_hdl) {
+        int rc = f->fsio_hdl->ftruncate(&dp, 0, 0);
+        if (!! rc) {
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__ << " " << object_name()
+            << " failed to truncate shadow on write upgrade" << dendl;
+          return rc;
+        }
+      }
+      (f->read_opens)--;
+      open->posix_flags = (open->posix_flags & ~O_ACCMODE) | O_RDWR;
+      (f->write_opens)++;
+      return 0;
+    }
+
+    /* downgrade */
+    (f->write_opens)--;
+    open->posix_flags = (open->posix_flags & ~O_ACCMODE) | O_RDONLY;
+    (f->read_opens)++;
+
+    if ((f->write_opens == 0) && f->fsio_hdl && ! deleted()) {
+      stamp_unix_attrs();
+      int rc = f->fsio_hdl->publish(
+        &dp, rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
+      if (!! rc) {
+        lsubdout(fs->get_context(), rgw, 0)
+          << __func__ << " " << object_name()
+          << " failed to publish on last writer downgrade" << dendl;
+        return rc;
+      }
+    }
+    return 0;
+  } /* RGWFileHandle::change_open_mode */
+
+  int RGWFileHandle::reopen2(file::Open* open, uint32_t posix_flags)
+  {
+    if (! open) {
+      return -EBADF;
+    }
+
+    lock_guard guard(mtx);
+
+    int rc = change_open_mode(open, posix_flags);
+    if (! rc) {
+      auto f = get_if<file>(&variant_type);
+      if (f && (f->global_open == open)) {
+        arm_stateless_timer();
+      }
+    }
+    return rc;
+  } /* RGWFileHandle::reopen2 */
 
   int RGWFileHandle::open_global(uint32_t posix_flags,
                                  uint32_t rgw_openflags)
@@ -2271,36 +2391,11 @@ namespace rgw {
     bool write_open = ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR));
 
     if (f->global_open) {
-      auto* open = f->global_open;
-      if (write_open && (! open->is_write_open())) {
-        /* upgrade in place:  establish the shadow, then move this
-         * open from the read-only to the write cohort */
-        if (f->fsio_hdl && f->fsio_hdl->needs_shadow()) {
-          int rc = f->fsio_hdl->reclone(
-            &dp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
-          if (!! rc) {
-            lsubdout(fs->get_context(), rgw, 0)
-              << __func__ << " " << object_name()
-              << " failed to establish shadow for write upgrade"
-              << dendl;
-            return rc;
-          }
-        }
-        if ((posix_flags & O_TRUNC) && f->fsio_hdl) {
-          int rc = f->fsio_hdl->ftruncate(&dp, 0, 0);
-          if (!! rc) {
-            lsubdout(fs->get_context(), rgw, 0)
-              << __func__ << " " << object_name()
-              << " failed to truncate shadow on write upgrade" << dendl;
-            return rc;
-          }
-        }
-        (f->read_opens)--;
-        open->posix_flags = (open->posix_flags & ~O_ACCMODE) | O_RDWR;
-        (f->write_opens)++;
+      int rc = change_open_mode(f->global_open, posix_flags);
+      if (! rc) {
         arm_stateless_timer();
       }
-      return 0;
+      return rc;
     }
 
     file::Open* open{nullptr};
@@ -2308,9 +2403,11 @@ namespace rgw {
     if (! rc) {
       f->global_open = open;
       flags |= FLAG_STATELESS_OPEN;
-      if (write_open) {
-        arm_stateless_timer();
-      }
+      /* every stateless open is armed, not just a writer's:  nothing
+       * else reclaims one.  v4 tells us when it is done;  v3 does not,
+       * so we infer the close, and the cost of inferring it is a held
+       * descriptor and a pinned handle until the idle interval */
+      arm_stateless_timer();
     }
     return rc;
   } /* RGWFileHandle::open_global */
@@ -2355,6 +2452,13 @@ namespace rgw {
         return -EINVAL; // or EISDIR
       }
       hdl = f->fsio_hdl;
+      if (f->global_open == open) {
+        /* activity on the stateless open defers reclamation.  the guard
+         * matters:  a stateful open is never the global one, so this
+         * keeps timer events to handles under v3 access rather than
+         * arming one for every read */
+        arm_stateless_timer();
+      }
     }
 
     if (! hdl) {
@@ -2549,6 +2653,7 @@ namespace rgw {
       if (write_open) {
         if (f->write_opens == 0) {
           if (f->fsio_hdl && ! deleted()) {
+            stamp_unix_attrs();
             publish_rc = f->fsio_hdl->publish(&dp,
                       rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
             if (!!publish_rc) {
@@ -3374,6 +3479,19 @@ int rgw_close(struct rgw_fs *rgw_fs,
   }
 
   return rc;
+}
+
+/*
+   change the access mode of an open, without returning it
+*/
+int rgw_reopen2(rgw_open_fd open_fd, uint32_t posix_flags, uint32_t flags)
+{
+  auto open = fd_to_open(open_fd);
+  if (! open) {
+    return -EBADF;
+  }
+
+  return open->fh.reopen2(open, posix_flags);
 }
 
 int rgw_close2(rgw_open_fd open_fd, uint32_t flags)

@@ -15,6 +15,8 @@
 
 #include <stdint.h>
 #include <tuple>
+#include <thread>
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <stack>
@@ -180,6 +182,18 @@ namespace {
 
   dirs1_vec renames_vec;
 
+  /* Poll for an expected refcount, bounded.  Settles immediately when
+   * the reference has already come back. */
+  void wait_refcnt(RGWFileHandle* rgw_fh, uint32_t expected,
+		   int max_ms = 15000) {
+    for (int waited = 0; waited < max_ms; waited += 250) {
+      if (rgw_fh->get_refcnt() == expected) {
+	return;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+  }
+
   struct {
     int argc;
     char **argv;
@@ -214,6 +228,13 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 
   cct = static_cast<RGWLibFS*>(fs->fs_private)->get_context();
+
+  /* A stateless open, such as the one rgw_read() takes on demand, is
+   * returned by the idle reclaimer rather than by the caller--v3 has no
+   * close to give us.  Shorten the interval so tests which check that
+   * references come back do not wait minutes for it. */
+  g_conf().set_val("rgw_nfs_stateless_finalize_secs", "1");
+  g_conf().apply_changes(nullptr);
 }
 
 TEST(LibRGW, SETUP_HIER1)
@@ -870,6 +891,11 @@ TEST(LibRGW, RELEASE_DIRS1) {
 		    << " refs: " << obj.rgw_fh->get_refcnt()
 		    << std::endl;
 	}
+	/* Reclamation of a stateless open is asynchronous, so wait for it
+	 * rather than sampling and assuming it has happened.  This asserts
+	 * more than the bare check did:  not merely that nothing was taken,
+	 * but that what was taken came back. */
+	wait_refcnt(obj.rgw_fh, 2UL);
 	ASSERT_EQ(obj.rgw_fh->get_refcnt(), 2UL);
 	rc = rgw_fh_rele(fs, obj.fh, 0 /* flags */);
 	ASSERT_EQ(rc, 0);

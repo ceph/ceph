@@ -751,6 +751,11 @@ namespace rgw {
     int open_global(uint32_t posix_flags, uint32_t rgw_openflags);
     int close_global(uint32_t flags);
 
+    /* change the access mode of an existing open (NFSv4 reopen) */
+    int reopen2(file::Open* open_hdl, uint32_t posix_flags);
+    /* mtx must be held */
+    int change_open_mode(file::Open* open_hdl, uint32_t posix_flags);
+
     file::Open* get_global_open() {
       lock_guard guard(mtx);
       auto f = std::get_if<file>(&variant_type);
@@ -763,7 +768,8 @@ namespace rgw {
     void arm_stateless_timer();
     /* mtx must be held */
     void discard_shadow();
-    void finalize_stateless();
+    /* mtx must be held */
+    void stamp_unix_attrs();
     int readv(file::Open* open_hdl, const struct iovec* iov, int iov_cnt,
               uint64_t offset, uint64_t* bytes_read, uint32_t flags);
 
@@ -1024,7 +1030,11 @@ namespace rgw {
       }
 
       void operator()() {
-	rgw_fh.finalize_stateless();
+	/* close, not merely publish:  a stateless open has no token held
+	 * anywhere outside librgw, so nothing is invalidated by releasing
+	 * it, and a later read or write simply reopens.  publishing is
+	 * part of the close when a writer is the last one out */
+	rgw_fh.close_global(RGWFileHandle::FLAG_NONE);
 	rgw_fh.get_fs()->unref(&rgw_fh);
       }
     };
