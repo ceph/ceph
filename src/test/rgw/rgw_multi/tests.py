@@ -81,6 +81,18 @@ def get_tenant():
 def get_realm():
     return realm
 
+def get_config_option(cluster, option, default, value_type=str):
+    output, retcode = cluster.ceph_admin(
+        ['config', 'get', 'client', option], check_retcode=False)
+    if retcode == 0:
+        try:
+            return value_type(output.splitlines()[-1].strip())
+        except (IndexError, TypeError, ValueError):
+            pass
+
+    log.warning('failed to read config option %s; using default=%s', option, default)
+    return default
+
 log = logging.getLogger('rgw_multi.tests')
 
 num_buckets = 0
