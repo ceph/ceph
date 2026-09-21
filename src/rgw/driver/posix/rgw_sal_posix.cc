@@ -3555,7 +3555,7 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
       dir->for_each(dpp,
 	[&](const char* name) -> int {
 	  std::string sname(name);
-	  if (!sname.starts_with(MP_OBJ_PART_PFX)) {
+          if (!sname.starts_with(MP_OBJ_PART_PFX)) {
 	    return 0;
 	  }
 	  uint32_t pnum = 0;
