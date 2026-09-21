@@ -1419,6 +1419,19 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_readdir_yield_budget
+  type: float
+  level: advanced
+  desc: Seconds a readdir page may be encoded while other messages wait (0 to disable)
+  long_desc: A readdir page is encoded with mds_lock held, so messages that arrive
+    meanwhile wait in the dispatch queue. The MDS ends a page early once it has been
+    encoding for this long and the oldest queued message has waited this long, which
+    costs the reading client an extra round trip. An idle rank is unaffected.
+  default: 0.0005
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_verify_backtrace
   type: uint
   level: dev
