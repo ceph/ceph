@@ -119,6 +119,14 @@ else()
   )
 endif()
 
+# skip -Wconditional-uninitialized for vendored isa-l sources
+foreach(src IN LISTS zlib_sources)
+  if(src MATCHES "/isa-l/.*\\.c$")
+    set_property(SOURCE ${src} APPEND PROPERTY COMPILE_OPTIONS
+      $<$<C_COMPILER_ID:AppleClang,Clang>:-Wno-conditional-uninitialized>)
+  endif()
+endforeach()
+
 add_library(ceph_zlib SHARED ${zlib_sources})
 target_link_libraries(ceph_zlib ZLIB::ZLIB compressor $<$<PLATFORM_ID:Windows>:ceph-common>)
 if(HAVE_QATZIP AND HAVE_QAT)
