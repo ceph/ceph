@@ -158,7 +158,7 @@ void Estimator::get_regions(std::vector<region_t>& regions)
 {
   constexpr uint32_t unset = std::numeric_limits<uint32_t>::max();
   // walk extents to form continous regions
-  region_t* r;
+  region_t* r = nullptr;
   uint32_t end = unset;
   auto i = extra_recompress.begin();
   while (i != extra_recompress.end()) {
