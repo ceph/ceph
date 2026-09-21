@@ -11442,7 +11442,10 @@ void Server::handle_client_lssnap(const MDRequestRef& mdr)
     mds->locker->encode_lease(dnbl, mdr->session->info, e);
     dout(20) << "encode_infinite_lease" << dendl;
 
-    int r = diri->encode_inodestat(dnbl, mdr->session, realm, p->first, max_bytes - (int)dnbl.length());
+    // we already resolved the SnapInfo for this snapid above; hand it over
+    // rather than have encode_inodestat() walk the realm chain again per snap.
+    int r = diri->encode_inodestat(dnbl, mdr->session, realm, p->first,
+				   max_bytes - (int)dnbl.length(), 0, p->second);
     if (r < 0) {
       bufferlist keep;
       keep.substr_of(dnbl, 0, start_len);
