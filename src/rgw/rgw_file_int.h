@@ -325,7 +325,15 @@ namespace rgw {
     static constexpr uint32_t FLAG_ROOT =    0x0002;
     static constexpr uint32_t FLAG_CREATE =  0x0004;
     static constexpr uint32_t FLAG_CREATING =  0x0008;
-    static constexpr uint32_t FLAG_SYMBOLIC_LINK = 0x0009; // XXXX bug?
+    /* 0x4000, not 0x0009.  It was 0x0009, which is FLAG_OPEN|FLAG_CREATING
+     * rather than a bit of its own -- so every symlink handle was born
+     * reporting is_open() and creating() true, and the type test below is a
+     * mask test which fires on either constituent bit.  Nothing misfired only
+     * because no caller passes those two into lookup_fh();  FLAG_CREATING
+     * becoming live made that a matter of luck rather than design.  The flags
+     * word is in-memory only -- encode_attrs() does not serialise it -- so
+     * moving the bit costs nothing on disk. */
+    static constexpr uint32_t FLAG_SYMBOLIC_LINK = 0x4000;
     static constexpr uint32_t FLAG_DIRECTORY = 0x0010;
     static constexpr uint32_t FLAG_BUCKET = 0x0020;
     static constexpr uint32_t FLAG_LOCK =   0x0040;
@@ -452,7 +460,7 @@ namespace rgw {
 	if (flags & FLAG_DIRECTORY) {
 	  fh.fh_type = RGW_FS_TYPE_DIRECTORY;
 	  variant_type = directory();
-        } else if(flags & FLAG_SYMBOLIC_LINK) {
+        } else if (flags & FLAG_SYMBOLIC_LINK) {
 	  fh.fh_type = RGW_FS_TYPE_SYMBOLIC_LINK;
           variant_type = file();
         } else {
@@ -751,7 +759,8 @@ namespace rgw {
     int write_finish(uint32_t flags = FLAG_NONE);
 
     int open2(file::Open** /* out */, uint32_t posix_flags,
-              uint32_t rgw_openflags);
+              uint32_t rgw_openflags,
+              const struct rgw_open_args* args = nullptr);
 
     /* stateless (NFSv3) open tracking:  at most one Open per file
      * handle, created on demand and reclaimed by close or by the
@@ -772,7 +781,8 @@ namespace rgw {
 
     /* mtx must be held */
     int do_open(file::Open** /* out */, uint32_t posix_flags,
-                uint32_t rgw_openflags);
+                uint32_t rgw_openflags,
+                const struct rgw_open_args* args = nullptr);
     bool resolve_bucket_versioned();
     void arm_stateless_timer();
     /* mtx must be held */
