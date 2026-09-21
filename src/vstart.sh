@@ -1993,6 +1993,29 @@ do_rgw_create_users()
         --secret nopqrstuvwxyzabcdefghijklmnabcdefghijklm \
         --display-name john.doe \
         --email john.doe@example.com -c $conf_fn > /dev/null
+    # the s3tests "[s3 quota]" category.  Declared in s3tests.conf.SAMPLE
+    # and asserted on by get_quota_client(), but nothing created it -- the
+    # quota tests are ignored on nsfs and posix (load_stats is a stub) and
+    # gated behind the rgw_admin feature, so the gap only shows on rados.
+    $CEPH_BIN/radosgw-admin user create \
+        --uid quotauser \
+        --access-key QUOTAACCESSKEY01234Q \
+        --secret quotasecretkey0123456789abcdefghijklm \
+        --display-name 'Quota Tester' \
+        --email quota@example.com -c $conf_fn > /dev/null
+
+    # a user whose permissions nothing else depends on:  the s3tests
+    # "[s3 policy only]" category.  Tests that attach an identity policy
+    # with global reach (Resource arn:aws:s3:::*) use it, because an
+    # explicit deny in such a policy overrides a bucket-policy allow for
+    # every concurrently-running test sharing that identity.
+    $CEPH_BIN/radosgw-admin user create \
+        --uid s3policyonly \
+        --access-key STUVWXYZABCDEFGHIJKL \
+        --secret stuvwxyzabcdefghijklmnopqrstuvwxyzabcdef \
+        --display-name policy.only \
+        --email policy.only@example.com -c $conf_fn > /dev/null
+
     $CEPH_BIN/radosgw-admin user create \
 	--tenant testx \
         --uid 9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
