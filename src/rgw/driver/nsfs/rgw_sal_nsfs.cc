@@ -4742,7 +4742,32 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 
   ::fsync(shadow_fd);
 
-  /* TODO: fixup pass — compute etag + checksums, stamp xattrs */
+  /* fixup pass: compute etag from shadow content and stamp as xattr */
+  {
+    MD5 hash;
+    hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    char buf[65536];
+    off_t off = 0;
+
+    for (;;) {
+      ssize_t nr = ::pread(shadow_fd, buf, sizeof(buf), off);
+      if (nr <= 0) {
+	break;
+      }
+      hash.Update((const unsigned char*)buf, nr);
+      off += nr;
+    }
+    hash.Final(m);
+
+    bufferlist etag_bl;
+    append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1, [&](auto iter) {
+      iter = buf_to_hex(m, iter);
+      *iter++ = '\0';
+      return iter;
+    });
+    fsetattr(dpp, RGW_ATTR_ETAG, etag_bl, 0);
+  }
 
   auto* bucket = static_cast<NSFSBucket*>(src_obj->get_bucket());
   const auto& binfo = bucket->get_info();
@@ -4763,10 +4788,38 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
     return -errno;
   }
 
-  /* TODO: update bucket listing cache — currently deferred because
-   * the cache may not be fully initialized in all contexts (e.g.,
-   * librgw in-process unit tests). The cache will pick up the
-   * published object on next listing or stat via cache miss. */
+  /* update bucket listing cache */
+  auto* bcache = driver->get_bucket_cache();
+  if (bcache) {
+    struct statx pub_stx;
+    if (statx(parent_fd, leaf_name.c_str(),
+	      AT_SYMLINK_NOFOLLOW, STATX_ALL, &pub_stx) == 0) {
+      std::string obj_name =
+	src_obj->get_key().get_index_key_name();
+      rgw_bucket_dir_entry bde{};
+      bde.key.name = obj_name;
+      bde.ver.pool = 1;
+      bde.ver.epoch = 1;
+      bde.exists = true;
+      bde.meta.category = RGWObjCategory::Main;
+      bde.meta.size = pub_stx.stx_size;
+      bde.meta.accounted_size = pub_stx.stx_size;
+      bde.meta.mtime = from_statx_timestamp(pub_stx.stx_mtime);
+      bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+      bde.meta.etag = synthesize_etag(pub_stx);
+      {
+	Attrs shadow_attrs;
+	if (fgetattrs(dpp, shadow_attrs, 0) == 0) {
+	  ACLOwner acl_owner;
+	  if (decode_acl_owner(shadow_attrs, acl_owner) >= 0) {
+	    bde.meta.owner = to_string(acl_owner.id);
+	    bde.meta.owner_display_name = acl_owner.display_name;
+	  }
+	}
+      }
+      bcache->add_entry(dpp, bucket->get_name(), bde);
+    }
+  }
 
   published = true;
   return 0;

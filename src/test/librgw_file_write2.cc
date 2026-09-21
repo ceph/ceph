@@ -715,6 +715,52 @@ TEST(OPEN2, ACL_AFTER_PUBLISH)
   rgw_fh_rele(fs, relookup_fh, RGW_FH_RELE_FLAG_NONE);
 }
 
+TEST(OPEN2, ETAG_AFTER_PUBLISH)
+{
+  /* verify etag is computed at publish time */
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_NE(o2h.get(), nullptr);
+
+  auto lfr = o2h->lookup("etagtest1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  auto ofr = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  auto open1 = std::get<1>(ofr);
+  ASSERT_NE(open1, nullptr);
+
+  std::string data{"etag test content"};
+  auto nbw = o2h->write(open1, data, 0, data.length());
+  ASSERT_EQ(std::get<0>(nbw), 0);
+
+  /* etag should not exist before publish */
+  auto gr0 = o2h->getxattr("user.rgw.etag" /* RGW_ATTR_ETAG */);
+
+  o2h->close(open1);
+  /* published — etag should now be stamped */
+
+  /* reopen to read the etag */
+  auto ofr2 = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  auto open2 = std::get<1>(ofr2);
+  ASSERT_NE(open2, nullptr);
+
+  auto gr1 = o2h->getxattr("user.rgw.etag" /* RGW_ATTR_ETAG */);
+  ASSERT_EQ(std::get<0>(gr1), 0);
+
+  auto etag = std::get<1>(gr1);
+  /* trim trailing null if present (xattr convention) */
+  if (!etag.empty() && etag.back() == '\0') {
+    etag.pop_back();
+  }
+  /* etag should be a 32-char hex MD5 digest */
+  ASSERT_EQ(etag.length(), 32u);
+  for (char c : etag) {
+    ASSERT_TRUE((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'));
+  }
+
+  o2h->close(open2);
+}
+
 TEST(OPEN2, RENDEZVOUS1)
 {
   /* write open rendezvous with active stream (published) */
