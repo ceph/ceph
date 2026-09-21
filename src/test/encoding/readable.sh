@@ -240,9 +240,8 @@ test_object() {
           done
         fi
 
-        if ! cmp $tmp1 $tmp2; then
+        if ! diff $tmp1 $tmp2; then
           echo "**** reencode of $vdir/objects/$type/$f resulted in a different dump ****"
-          diff $tmp1 $tmp2
           failed=$(($failed + 1))
         fi
         numtests=$(($numtests + 1))
