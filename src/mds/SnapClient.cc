@@ -273,18 +273,22 @@ const SnapInfo* SnapClient::get_snap_info(snapid_t snapid) const
   if (it != cached_snaps.end())
     result = &it->second;
 
+  /*
+   * Apply every transaction still in flight, in tid order, the way
+   * get_snap_infos() does for a set of snapids: a later one supersedes an
+   * earlier one.  Stopping at the first match would answer with the state
+   * after only the oldest transaction in flight, so a snapid that is being
+   * created by one tid and destroyed by a later one would still be reported
+   * as present -- and the other way round.
+   */
   for (auto tid : committing_tids) {
     auto q = cached_pending_update.find(tid);
-    if (q != cached_pending_update.end() && q->second.snapid == snapid) {
+    if (q != cached_pending_update.end() && q->second.snapid == snapid)
       result = &q->second;
-      break;
-    }
 
     auto r = cached_pending_destroy.find(tid);
-    if (r != cached_pending_destroy.end() && r->second.first == snapid) {
+    if (r != cached_pending_destroy.end() && r->second.first == snapid)
       result = NULL;
-      break;
-    }
   }
 
   dout(10) << __func__ << " snapid " << snapid << " -> " << result <<  dendl;
