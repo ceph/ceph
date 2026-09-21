@@ -189,6 +189,7 @@ public:
 
     // size = num_zones * (k + m)
     pool.size = num_zones * (k + m);
+    pool.opts.set(pool_opts_t::NUM_ZONES, num_zones);
     
     // For multi-zone configurations, set min_size to allow up to m failures
     // min_size = num_zones * (k+m) - m
