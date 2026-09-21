@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <sys/uio.h>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
@@ -1140,19 +1141,29 @@ public:
    * A handle exposing a posix-like, mutable i/o view on an Object
    */
     class FSIOObject {
-    protected:
-      // XXX object handle?
     public:
-      static constexpr uint32_t FLAG_NONE = 0x0000;
+      static constexpr uint32_t FLAG_NONE =      0x0000;
+      static constexpr uint32_t FLAG_EXCL =      0x0001;
+      static constexpr uint32_t FLAG_TRUNC =     0x0002;
+      static constexpr uint32_t FLAG_EPHEMERAL = 0x0004;
+      static constexpr uint32_t FLAG_DETACH =    0x0008;
+      static constexpr uint32_t FLAG_DISCARD =   0x0010;
 
-      virtual int64_t pread(int64_t ofs, int64_t len, uint32_t flags) = 0;
-      virtual int64_t pwrite(int64_t ofs, int64_t len, uint32_t flags) = 0;
+      virtual int64_t preadv(const struct iovec* iov, int iovcnt,
+			     int64_t ofs, uint32_t flags) = 0;
+      virtual int64_t pwritev(const struct iovec* iov, int iovcnt,
+			      int64_t ofs, uint32_t flags) = 0;
       virtual int commit(uint32_t flags) = 0;
       virtual int close(uint32_t flags) = 0;
 
+      bool resumed() const { return resumed_existing; }
+
       FSIOObject() {}
       virtual ~FSIOObject() {}
-    }; /* FSIOobject */
+
+    protected:
+      bool resumed_existing{false};
+    }; /* FSIOObject */
 
 
     /**
@@ -1302,7 +1313,8 @@ public:
 
     /** Get a fsio view on an object or object prototype */
     using FSIOResult = std::tuple<int, std::unique_ptr<FSIOObject>>;
-    virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp) = 0;
+    virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+				       uint32_t flags = FSIOObject::FLAG_NONE) = 0;
 
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;

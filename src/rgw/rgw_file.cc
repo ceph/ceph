@@ -1828,7 +1828,7 @@ namespace rgw {
         /* Object needs a bucket from this point */
         state->object->set_bucket(state->bucket.get());
         auto f_result = state->object->get_fsio_handle(&dp);
-        if (get<0>(f_result)) {
+        if (!get<0>(f_result)) {
           f->sal_object = state->object->clone();
           f->fsio_hdl = std::move(get<1>(f_result));
         }

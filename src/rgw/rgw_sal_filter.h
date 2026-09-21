@@ -800,8 +800,9 @@ public:
   virtual bool is_compressed() override { return next->is_compressed(); }
   virtual bool is_delete_marker() override { return next->is_delete_marker(); }
 
-  FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp) override {
-    return next->get_fsio_handle(dpp);
+  FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+			     uint32_t flags = FSIOObject::FLAG_NONE) override {
+    return next->get_fsio_handle(dpp, flags);
   }
 
   bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,

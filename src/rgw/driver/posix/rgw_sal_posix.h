@@ -1159,7 +1159,8 @@ public:
 			 bool* truncated, list_parts_each_t&& each_func,
 			 optional_yield y) override;
 
-  FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp) override;
+  FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+			     uint32_t flags = FSIOObject::FLAG_NONE) override;
 
   bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
                          const ceph::real_time& obj_mtime) override;
@@ -1246,8 +1247,10 @@ public:
   protected:
     POSIXFSIOObject() {}
   public:
-    virtual int64_t pread(int64_t ofs, int64_t len, uint32_t flags) override;
-    virtual int64_t pwrite(int64_t ofs, int64_t len, uint32_t flags) override;
+    virtual int64_t preadv(const struct iovec* iov, int iovcnt,
+			   int64_t ofs, uint32_t flags) override;
+    virtual int64_t pwritev(const struct iovec* iov, int iovcnt,
+			    int64_t ofs, uint32_t flags) override;
     virtual int commit(uint32_t flags) override;
     virtual int close(uint32_t flags) override;
 

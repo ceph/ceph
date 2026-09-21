@@ -579,7 +579,8 @@ protected:
       bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
                              const ceph::real_time& obj_mtime) override;
 
-      FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp) override {
+      FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
+				 uint32_t flags = FSIOObject::FLAG_NONE) override {
 	return FSIOResult{-ENOTSUP, nullptr};
       }
 

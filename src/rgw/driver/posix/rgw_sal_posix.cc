@@ -4424,48 +4424,32 @@ int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
   return 0;
 } /* POSIXObject::list_parts */
 
-Object::FSIOResult POSIXObject::get_fsio_handle(const DoutPrefixProvider* dpp)
+Object::FSIOResult POSIXObject::get_fsio_handle(const DoutPrefixProvider* dpp,
+						 uint32_t flags)
 {
-  int ret{0};
-  const auto& dir = ent->get_parent();
-  std::unique_ptr<POSIXFSIOObject> hdl{new POSIXFSIOObject()};
-  hdl->object = clone();
-
-  // TODO: finish :)
-  /* XXX we need handles to a source and target--for now just a target FSEnt
-   * open for writing */
-  std::string target_fname = gen_rand_instance_name();
-
-  hdl->target = std::make_unique<File>(target_fname, dir, driver->ctx());
-  ret = hdl->target->open(dpp);
-
-  return FSIOResult {0, std::move(hdl)};
-} /* get_fsio_handle */
-
-int64_t POSIXObject::POSIXFSIOObject::pread(int64_t ofs, int64_t len, uint32_t flags)
-{
-  int64_t nread{0};
-
-  return nread;
+  return FSIOResult{-ENOTSUP, nullptr};
 }
 
-int64_t POSIXObject::POSIXFSIOObject::pwrite(int64_t ofs, int64_t len, uint32_t flags)
+int64_t POSIXObject::POSIXFSIOObject::preadv(const struct iovec*, int,
+					      int64_t, uint32_t)
 {
-  int64_t nwr{0};
+  return -ENOTSUP;
+}
 
-  return nwr;
+int64_t POSIXObject::POSIXFSIOObject::pwritev(const struct iovec*, int,
+					       int64_t, uint32_t)
+{
+  return -ENOTSUP;
 }
 
 int POSIXObject::POSIXFSIOObject::commit(uint32_t flags)
 {
-  /* TODO: implement */
-  return 0;
+  return -ENOTSUP;
 }
 
 int POSIXObject::POSIXFSIOObject::close(uint32_t flags)
 {
-  /* TODO: implement */
-  return 0;
+  return -ENOTSUP;
 }
 
 bool POSIXObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
