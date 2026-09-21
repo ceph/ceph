@@ -137,23 +137,32 @@ std::list<PurgeItem> PurgeItem::generate_test_instances() {
 // if Objecter has any slow requests, take that as a hint and
 // slow down our rate of purging
 PurgeQueue::PurgeQueue(
-      CephContext *cct_,
-      mds_rank_t rank_,
-      const int64_t metadata_pool_,
-      Objecter *objecter_,
-      Context *on_error_)
-  :
-    cct(cct_),
-    rank(rank_),
-    metadata_pool(metadata_pool_),
-    finisher(cct, "PurgeQueue", "mds-pq-fin"),
-    timer(cct, lock),
-    filer(objecter_, &finisher),
-    objecter(objecter_),
-    journaler("pq", MDS_INO_PURGE_QUEUE + rank, metadata_pool,
-      CEPH_FS_ONDISK_MAGIC, objecter_, nullptr, 0,
+    CephContext* cct_,
+    mds_rank_t rank_,
+    const int64_t metadata_pool_,
+    Objecter* objecter_,
+    Context* on_error_) :
+  cct(cct_),
+  rank(rank_),
+  metadata_pool(metadata_pool_),
+  finisher(cct, "PurgeQueue", "mds-pq-fin"),
+  // safe_callbacks=false: do not hold PurgeQueue::lock across timer
+  // callbacks. Journaler flush/write may block in Objecter::_throttle_op;
+  // MDCache trim holds mds_lock across push(), so blocking with this lock
+  // held deadlocks ms_dispatch (OSD replies never free budget).
+  timer(cct, lock, /*safe_callbacks=*/false),
+  filer(objecter_, &finisher),
+  objecter(objecter_),
+  journaler(
+      "pq",
+      MDS_INO_PURGE_QUEUE + rank,
+      metadata_pool,
+      CEPH_FS_ONDISK_MAGIC,
+      objecter_,
+      nullptr,
+      0,
       &finisher),
-    on_error(on_error_)
+  on_error(on_error_)
 {
   ceph_assert(cct != nullptr);
   ceph_assert(on_error != nullptr);
@@ -334,7 +343,7 @@ void PurgeQueue::_recover()
 void PurgeQueue::create(Context *fin)
 {
   dout(4) << "creating" << dendl;
-  std::lock_guard l(lock);
+  std::unique_lock l(lock);
 
   if (fin)
     waiting_for_recovery.push_back(fin);
@@ -343,15 +352,18 @@ void PurgeQueue::create(Context *fin)
   layout.pool_id = metadata_pool;
   journaler.set_writeable();
   journaler.create(&layout, JOURNAL_FORMAT_RESILIENT);
-  journaler.write_head(new LambdaContext([this](int r) {
-    std::lock_guard l(lock);
+  auto* write_fin = new LambdaContext([this](int r) {
+    std::lock_guard lg(lock);
     if (r) {
       _go_readonly(r);
     } else {
       recovered = true;
       finish_contexts(g_ceph_context, waiting_for_recovery);
     }
-  }));
+  });
+  // write_head may block in Objecter throttle; do not hold PurgeQueue::lock.
+  l.unlock();
+  journaler.write_head(write_fin);
 }
 
 /**
@@ -360,7 +372,7 @@ void PurgeQueue::create(Context *fin)
 void PurgeQueue::push(const PurgeItem &pi, Context *completion)
 {
   dout(4) << "pushing inode " << pi.ino << dendl;
-  std::lock_guard l(lock);
+  std::unique_lock l(lock);
 
   if (readonly) {
     dout(10) << "cannot push inode: PurgeQueue is readonly" << dendl;
@@ -374,8 +386,17 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
   bufferlist bl;
 
   encode(pi, bl);
+  // append_entry may _do_flush → Objecter::_throttle_op. Callers such as
+  // MDCache::trim hold mds_lock across push(); never block here with
+  // PurgeQueue::lock held (SafeTimer shares that lock).
+  l.unlock();
   journaler.append_entry(bl);
   journaler.wait_for_flush(completion);
+  l.lock();
+
+  if (readonly) {
+    return;
+  }
 
   // Maybe go ahead and do something with it right away
   bool could_consume = _consume();
@@ -386,10 +407,22 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
     // we should flush in order to allow MDCache to drop its strays rather
     // than having them wait for purgequeue to progress.
     if (!delayed_flush) {
-      delayed_flush = new LambdaContext([this](int r){
-            delayed_flush = nullptr;
-            journaler.flush();
-          });
+      class C_PQ_DelayedFlush : public Context {
+        PurgeQueue* pq;
+
+      public:
+        explicit C_PQ_DelayedFlush(PurgeQueue* p) :
+          pq(p)
+        {}
+
+        void
+        finish(int r) override
+        {
+          pq->_delayed_flush(this);
+        }
+      };
+
+      delayed_flush = new C_PQ_DelayedFlush(this);
 
       timer.add_event_after(
 	  g_conf()->mds_purge_queue_busy_flush_period,
@@ -469,6 +502,21 @@ void PurgeQueue::_go_readonly(int r)
   on_error = nullptr;
   journaler.set_readonly();
   finish_contexts(g_ceph_context, waiting_for_recovery, r);
+}
+
+void
+PurgeQueue::_delayed_flush(Context* c)
+{
+  {
+    std::lock_guard l(lock);
+    // With safe_callbacks=false a cancelled-but-already-firing callback can
+    // still run after a newer delayed_flush was scheduled; ignore those.
+    if (delayed_flush != c) {
+      return;
+    }
+    delayed_flush = nullptr;
+  }
+  journaler.flush();
 }
 
 bool PurgeQueue::_consume()
@@ -602,28 +650,30 @@ void PurgeQueue::_commit_ops(int r, const std::vector<PurgeItemCommitOp>& ops_ve
   ceph_assert(gather.has_subs());
 
   gather.set_finisher(new C_OnFinisher(
-	              new LambdaContext([this, expire_to](int r) {
-    std::lock_guard l(lock);
+      new LambdaContext([this, expire_to](int r) {
+        std::unique_lock l(lock);
 
-    if (r == -EBLOCKLISTED) {
-      finisher.queue(on_error, r);
-      on_error = nullptr;
-      return;
-    }
+        if (r == -EBLOCKLISTED) {
+          finisher.queue(on_error, r);
+          on_error = nullptr;
+          return;
+        }
 
-    _execute_item_complete(expire_to);
-    _consume();
+        _execute_item_complete(expire_to);
+        _consume();
 
-    // Have we gone idle?  If so, do an extra write_head now instead of
-    // waiting for next flush after journaler_write_head_interval.
-    // Also do this periodically even if not idle, so that the persisted
-    // expire_pos doesn't fall too far behind our progress when consuming
-    // a very long queue.
-    if (!readonly &&
-        (in_flight.empty() || journaler.write_head_needed())) {
-      journaler.write_head(nullptr);
-    }
-  }), &finisher));
+        // Have we gone idle?  If so, do an extra write_head now instead of
+        // waiting for next flush after journaler_write_head_interval.
+        // Also do this periodically even if not idle, so that the persisted
+        // expire_pos doesn't fall too far behind our progress when consuming
+        // a very long queue.
+        if (!readonly && (in_flight.empty() || journaler.write_head_needed())) {
+          // write_head may block in Objecter throttle.
+          l.unlock();
+          journaler.write_head(nullptr);
+        }
+      }),
+      &finisher));
 
   gather.activate();
 }

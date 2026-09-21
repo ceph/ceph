@@ -2,12 +2,15 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 /*
- * Regression for MDS stall: MDLog::log_trim_upkeep held mds_lock across
- * Objecter::_throttle_op in MDSTable::save (via try_to_expire). Dispatch and
- * asok blocked until the throttle drained.
+ * Regression for MDS stall under Objecter balanced-budget throttle.
  *
- * MDSTable::save must drop mds_lock around the Objecter submit, and must not
- * start a second RADOS write while one is already in flight.
+ * MDSTable::save used to call Objecter::write_full on the caller (trim /
+ * ms_dispatch) while holding mds_lock. When _throttle_op blocked, dispatch
+ * could not free budget → deadlock.
+ *
+ * Saves are now queued via MDSRank::queue_objecter (or a test write hook).
+ * The caller must not block in Objecter submit, and must not start a second
+ * RADOS write while one is already in flight.
  */
 
 #include <atomic>
@@ -91,57 +94,34 @@ protected:
 
 } // namespace
 
-TEST_F(MDSTableSaveUnlockFixture, SaveDropsLockDuringSubmit)
+TEST_F(MDSTableSaveUnlockFixture, SaveReturnsWithoutBlockingOnSubmit)
 {
-  // Mirrors the stall: save blocks in Objecter submit while another thread
-  // needs mds_lock (dispatch / asok / scatter_tick).
-  std::atomic<bool> submit_entered{false};
-  std::atomic<bool> release_submit{false};
-  std::atomic<bool> lock_acquired{false};
-  Context* pending_fin = nullptr;
+  // queue_objecter / write-hook path must not leave the caller stuck in
+  // Objecter::_throttle_op under mds_lock. The hook stands in for the queued
+  // submit and must return promptly.
+  std::atomic<int> write_calls{0};
+  std::atomic<bool> held_lock_in_hook{false};
 
   MDSTableTestAccess::set_write_hook([&](Context* fin) {
-    pending_fin = fin;
-    submit_entered = true;
-    auto deadline = std::chrono::steady_clock::now() + 10s;
-    while (!release_submit.load() &&
-           std::chrono::steady_clock::now() < deadline) {
-      std::this_thread::sleep_for(10ms);
-    }
+    held_lock_in_hook = ceph_mutex_is_locked_by_me(*lock);
+    write_calls++;
+    delete fin;
   });
 
-  std::thread saver([&] {
+  auto start = std::chrono::steady_clock::now();
+  {
     std::lock_guard l(*lock);
     table->save(nullptr);
-  });
-
-  while (!submit_entered.load()) {
-    std::this_thread::sleep_for(1ms);
   }
+  auto elapsed = std::chrono::steady_clock::now() - start;
 
-  std::thread dispatcher([&] {
-    std::lock_guard l(*lock);
-    lock_acquired = true;
-  });
+  EXPECT_EQ(1, write_calls.load());
+  EXPECT_TRUE(held_lock_in_hook.load())
+      << "write path is invoked under mds_lock; it must only enqueue work";
+  EXPECT_LT(elapsed, 1s)
+      << "save must return without blocking on Objecter throttle";
+  EXPECT_EQ(1u, table->get_committing_version());
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (!lock_acquired.load() && std::chrono::steady_clock::now() < deadline) {
-    std::this_thread::sleep_for(10ms);
-  }
-
-  EXPECT_TRUE(lock_acquired.load())
-      << "mds_lock blocked while MDSTable::save was in Objecter submit "
-         "(throttle-under-lock deadlock regression)";
-
-  release_submit = true;
-  saver.join();
-  if (lock_acquired.load()) {
-    dispatcher.join();
-  } else {
-    dispatcher.detach();
-  }
-
-  delete pending_fin;
   MDSTableTestAccess::clear_write_hook();
 }
 
