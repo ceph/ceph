@@ -5184,6 +5184,13 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
   dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
   auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+  /* How often to look at the dispatch queue while encoding, and how many
+   * queued messages make it worth cutting the page short. Read once: this is
+   * consulted every yield_entries entries. */
+  const uint64_t yield_entries =
+    g_conf().get_val<uint64_t>("mds_readdir_yield_entries");
+  const uint64_t yield_min_queued =
+    g_conf().get_val<uint64_t>("mds_readdir_yield_min_queued");
   bool end = (it == dir->end());
   for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -5277,6 +5284,30 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 
     // touch dn
     mdcache->lru.lru_touch(dn);
+
+    /* Work is now queued behind us. A page is encoded holding mds_lock and a
+     * client request is dispatched inline under that lock, so anything that
+     * arrived while we were encoding is waiting in the dispatch queue -- not
+     * on mds_lock, whose waiter count sees only the threads that take it
+     * directly. Ending the page here costs the reading client one extra round
+     * trip and lets the queued work run.
+     *
+     * Sampling up front would not catch this: the queue is usually empty when
+     * a walk over an idle rank begins, and fills while the first page is being
+     * encoded.
+     *
+     * The check is only made every yield_entries entries, which both bounds
+     * its cost and guarantees the page carries at least that many entries, so
+     * a rank under sustained load still makes progress rather than replying
+     * with a handful of entries at a time. */
+    if (yield_entries && (numfiles % yield_entries) == 0) {
+      if (auto queued = mds->get_dispatch_queue_len();
+          queued > 0 && (uint64_t)queued >= yield_min_queued) {
+        dout(15) << "yielding readdir page after " << numfiles << " entries, "
+                 << queued << " message(s) queued for dispatch" << dendl;
+        break;
+      }
+    }
   }
   __u16 flags = 0;
   // client only understand END and COMPLETE flags ?

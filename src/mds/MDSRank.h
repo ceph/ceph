@@ -420,6 +420,16 @@ class MDSRank {
 
     Objecter *objecter;
 
+    /**
+     * Number of messages queued for dispatch.
+     *
+     * A client request is handled inline by the dispatch thread while it holds
+     * mds_lock, so requests arriving behind a long-running one wait here
+     * rather than on the lock itself: mds_lock's own waiter count sees only
+     * the threads that take it directly, such as the tick and the finishers.
+     */
+    int get_dispatch_queue_len() const;
+
     // sub systems
     Server *server = nullptr;
     MDCache *mdcache = nullptr;
