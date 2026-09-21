@@ -233,7 +233,9 @@ test_object() {
         if ! $CEPH_DENCODER type $type is_deterministic; then
           echo "  sorting json output for nondeterministic object"
           for tmpfile in $tmp1 $tmp2; do
-            sort $tmpfile | sed 's/,$//' > $tmpfile.new
+            # LC_ALL=C: locale collation ties distinct lines, byte order
+            # does not, so only C gives one canonical order to compare.
+            LC_ALL=C sort $tmpfile | sed 's/,$//' > $tmpfile.new
             mv $tmpfile.new $tmpfile
           done
         fi
