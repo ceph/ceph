@@ -15,6 +15,7 @@
 
 #include <fcntl.h>
 #include <stdint.h>
+#include <filesystem>
 #include <cstdint>
 #include <memory>
 #include <ranges>
@@ -68,6 +69,29 @@ namespace {
 
   struct rgw_file_handle* bucket_fh = nullptr;
   struct rgw_file_handle* object_fh = nullptr;
+
+  namespace sf = std::filesystem;
+
+  /* the nsfs/posix drivers lay the namespace out on a filesystem, so
+   * shadow state can be asserted directly rather than inferred.  the
+   * root is the one the driver itself used (rgw_sal_nsfs.cc reads the
+   * same key), so no path has to be passed in */
+  sf::path nsfs_base() {
+    return sf::path{g_conf().get_val<std::string>("rgw_nsfs_base_path")};
+  }
+
+  sf::path published_path(const std::string& obj) {
+    return nsfs_base() / bucket_name / obj;
+  }
+
+  sf::path shadow_path(const std::string& obj) {
+    return nsfs_base() / bucket_name / ".shadow" / obj;
+  }
+
+  bool have_fs_layout() {
+    std::error_code ec;
+    return sf::is_directory(nsfs_base() / bucket_name, ec);
+  }
 
   class Open2Helper {
   public:
@@ -1312,6 +1336,147 @@ TEST(OPEN2, COMMIT1)
   /* as does one on a directory */
   ret = rgw_commit(fs, bucket_fh, 0, 0, RGW_FSYNC_FLAG_NONE);
   ASSERT_EQ(ret, 0);
+}
+
+TEST(OPEN2, SHADOW_NOT_CREATED_BY_READER)
+{
+  /* direct evidence for the invariant the other tests only imply:  a
+   * read open binds the published object and leaves no shadow behind */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  auto lfr = o2h->lookup("noshadow1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string a4{"AAAA"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  /* while the write open is held the object lives in the shadow */
+  ASSERT_TRUE(sf::exists(shadow_path("noshadow1")));
+  ASSERT_EQ(get<0>(o2h->write(w0, a4, 0, a4.length())), 0);
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  /* published:  shadow gone, object present */
+  ASSERT_FALSE(sf::exists(shadow_path("noshadow1")));
+  ASSERT_TRUE(sf::exists(published_path("noshadow1")));
+
+  /* a reader must not fork one */
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+  auto rdr = o2h->read(r1, 0, a4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a4);
+  ASSERT_FALSE(sf::exists(shadow_path("noshadow1")));
+  ASSERT_EQ(o2h->close(r1), 0);
+  ASSERT_FALSE(sf::exists(shadow_path("noshadow1")));
+}
+
+TEST(OPEN2, RESUME_EXISTING_SHADOW)
+{
+  /* the rendezvous arm of get_fsio_handle:  a shadow which exists with
+   * no handle attached is joined, not cloned over.  reachable in
+   * production only across instances or after a crash, which is also
+   * where the exclusive-fork EEXIST path lands */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  auto lfr = o2h->lookup("resume1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string published{"PPPP"};
+  std::string staged{"SSSSSSSS"};
+
+  /* publish "PPPP" and drop all opens */
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  ASSERT_EQ(get<0>(o2h->write(w0, published, 0, published.length())), 0);
+  ASSERT_EQ(o2h->close(w0), 0);
+  ASSERT_FALSE(sf::exists(shadow_path("resume1")));
+
+  /* stage a shadow out of band, as another instance would have */
+  {
+    std::error_code ec;
+    sf::create_directories(shadow_path("resume1").parent_path(), ec);
+    int sfd = ::open(shadow_path("resume1").c_str(),
+		     O_RDWR | O_CREAT | O_EXCL, 0644);
+    ASSERT_GE(sfd, 0);
+    ASSERT_EQ(::write(sfd, staged.c_str(), staged.length()),
+	      (ssize_t) staged.length());
+    ::close(sfd);
+  }
+
+  /* opening must join that shadow, not clone the published object */
+  auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  auto w1 = get<1>(ofw1);
+
+  auto rdr = o2h->read(w1, 0, staged.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), staged);
+
+  /* and closing publishes what was staged */
+  ASSERT_EQ(o2h->close(w1), 0);
+  ASSERT_FALSE(sf::exists(shadow_path("resume1")));
+
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+  rdr = o2h->read(r1, 0, staged.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), staged);
+  ASSERT_EQ(o2h->close(r1), 0);
+}
+
+TEST(OPEN2, UNLINK_LEAVES_NO_SHADOW)
+{
+  /* direct evidence for UNLINK1:  the doomed shadow loses its name at
+   * unlink and its storage at last close */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  auto lfr = o2h->lookup("unlink2");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string a4{"AAAA"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  ASSERT_EQ(get<0>(o2h->write(w0, a4, 0, a4.length())), 0);
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  auto w1 = get<1>(ofw1);
+  ASSERT_TRUE(sf::exists(shadow_path("unlink2")));
+
+  ASSERT_EQ(rgw_unlink(fs, bucket_fh, "unlink2", RGW_UNLINK_FLAG_NONE), 0);
+
+  /* name is gone immediately, both in the namespace and in .shadow */
+  ASSERT_FALSE(sf::exists(published_path("unlink2")));
+  ASSERT_FALSE(sf::exists(shadow_path("unlink2")));
+
+  /* but the open still works on it */
+  auto rdr = o2h->read(w1, 0, a4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a4);
+
+  ASSERT_EQ(o2h->close(w1), 0);
+  ASSERT_FALSE(sf::exists(published_path("unlink2")));
+  ASSERT_FALSE(sf::exists(shadow_path("unlink2")));
 }
 
 /* END ALL TESTS */

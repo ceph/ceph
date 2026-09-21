@@ -284,7 +284,8 @@ int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
 
 int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
                               int src_dir_fd, const std::string& src_name,
-                              int dst_dir_fd, const std::string& dst_name)
+                              int dst_dir_fd, const std::string& dst_name,
+                              bool excl)
 {
   int src_fd = ::openat(src_dir_fd, src_name.c_str(), O_RDONLY);
   if (src_fd < 0) {
@@ -304,11 +305,15 @@ int POSIXStrategy::clone_file(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(),
-                         O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  int dst_flags = O_WRONLY | O_CREAT | (excl ? O_EXCL : O_TRUNC);
+  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags, 0644);
   if (dst_fd < 0) {
     int err = errno;
     ::close(src_fd);
+    if (excl && (err == EEXIST)) {
+      /* lost the race;  the caller joins the winner's file */
+      return -EEXIST;
+    }
     ldpp_dout(dpp, 0) << "ERROR: clone_file: openat dst=" << dst_name
       << " failed: " << cpp_strerror(err) << dendl;
     return -err;
@@ -634,13 +639,23 @@ static std::string clone_parent_name(const std::string& name)
 
 int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
                              int src_dir_fd, const std::string& src_name,
-                             int dst_dir_fd, const std::string& dst_name)
+                             int dst_dir_fd, const std::string& dst_name,
+                             bool excl)
 {
   if (!has_clone()) {
     ldpp_dout(dpp, 10) << "gpfs clone_file: clone symbols not available, "
       << "falling back to copy" << dendl;
     return POSIXStrategy().clone_file(dpp, src_dir_fd, src_name,
-                                      dst_dir_fd, dst_name);
+                                      dst_dir_fd, dst_name, excl);
+  }
+
+  /* gpfs_clone_copy() has no exclusive-create mode, so the best we can
+   * do here is check first.  this narrows the race, it does not close
+   * it;  the appliance target is a local fs, which takes the POSIX
+   * path above. */
+  if (excl &&
+      (::faccessat(dst_dir_fd, dst_name.c_str(), F_OK, 0) == 0)) {
+    return -EEXIST;
   }
 
   std::string src_path = fd_path(src_dir_fd, src_name);
@@ -681,7 +696,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
       << " failed: " << cpp_strerror(err)
       << ", falling back to copy" << dendl;
     return POSIXStrategy().clone_file(dpp, src_dir_fd, src_name,
-                                      dst_dir_fd, dst_name);
+                                      dst_dir_fd, dst_name, excl);
   }
 
   ret = fn_clone_copy(snap_path.c_str(), dst_path.c_str());
@@ -692,7 +707,7 @@ int GPFSStrategy::clone_file(const DoutPrefixProvider* dpp,
       << ", falling back to copy" << dendl;
     cleanup_clone(dpp, dst_dir_fd, dst_name);
     return POSIXStrategy().clone_file(dpp, src_dir_fd, src_name,
-                                      dst_dir_fd, dst_name);
+                                      dst_dir_fd, dst_name, excl);
   }
 
   ldpp_dout(dpp, 10) << "gpfs clone_file: cloned " << src_name

@@ -82,9 +82,14 @@ public:
    * overwritten.  A GPFS extension for automatic clone-parent
    * garbage collection would eliminate this lifecycle burden; until
    * then, the clone path is experimental. */
+  /* excl: fail with -EEXIST rather than overwrite an existing
+   * destination.  shadow forks pass it so that two instances racing to
+   * fork the same object cannot clobber each other;  the loser joins
+   * the winner's shadow instead. */
   virtual int clone_file(const DoutPrefixProvider* dpp,
                          int src_dir_fd, const std::string& src_name,
-                         int dst_dir_fd, const std::string& dst_name) = 0;
+                         int dst_dir_fd, const std::string& dst_name,
+                         bool excl = false) = 0;
 
   /* clone from an open source fd — used when the source pathname is
    * no longer valid (e.g. versioned self-copy after demote). */
@@ -151,7 +156,8 @@ public:
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
-                 int dst_dir_fd, const std::string& dst_name) override;
+                 int dst_dir_fd, const std::string& dst_name,
+                 bool excl = false) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,
@@ -260,7 +266,8 @@ public:
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
-                 int dst_dir_fd, const std::string& dst_name) override;
+                 int dst_dir_fd, const std::string& dst_name,
+                 bool excl = false) override;
 
   int clone_fd(const DoutPrefixProvider* dpp,
                int src_fd,

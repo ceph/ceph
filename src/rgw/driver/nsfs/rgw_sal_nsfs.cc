@@ -4667,28 +4667,39 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
    * object which does not exist:  there is nothing to bind to, so
    * the shadow is the object's initial content */
 
+  /* another instance may fork the same shadow concurrently;  the fork
+   * is exclusive, and whoever loses joins the winner rather than
+   * clobbering it */
+  bool joined{false};
+
   if (src_exists && !(flags & FSIOObject::OPEN_FLAG_TRUNC)) {
     /* COW clone source → .shadow/leaf */
     int ret = driver->get_fs_strategy()->clone_file(
-      dpp, parent_fd, leaf, sdir_fd, leaf);
-    if (ret < 0) {
+      dpp, parent_fd, leaf, sdir_fd, leaf, true /* excl */);
+    if (ret == -EEXIST) {
+      joined = true;
+    } else if (ret < 0) {
       ::close(sdir_fd);
       return FSIOResult{ret, nullptr};
-    }
-    /* copy xattrs from source to shadow */
-    int src_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
-    if (src_fd >= 0) {
-      int shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
-      if (shadow_fd >= 0) {
-	copy_xattrs_fd(dpp, src_fd, shadow_fd);
-	hdl->shadow_fd = shadow_fd;
+    } else {
+      /* copy xattrs from source to shadow */
+      int src_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+      if (src_fd >= 0) {
+	int shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
+	if (shadow_fd >= 0) {
+	  copy_xattrs_fd(dpp, src_fd, shadow_fd);
+	  hdl->shadow_fd = shadow_fd;
+	}
+	::close(src_fd);
       }
-      ::close(src_fd);
     }
   } else {
     /* new object: create empty file in .shadow/ */
     hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(),
 			      O_RDWR | O_CREAT | O_EXCL, 0644);
+    if ((hdl->shadow_fd < 0) && (errno == EEXIST)) {
+      joined = true;
+    }
     if (hdl->shadow_fd >= 0) {
       /* stamp default private ACL (owner with FULL_CONTROL) */
       RGWAccessControlPolicy policy;
@@ -4705,9 +4716,17 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     }
   }
 
+  if (joined) {
+    /* rendezvous with the shadow the winner created */
+    hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
+    hdl->resumed_existing = true;
+  }
+
   if (hdl->shadow_fd < 0) {
     int ret = -errno;
-    ::unlinkat(sdir_fd, leaf.c_str(), 0);
+    if (! joined) {
+      ::unlinkat(sdir_fd, leaf.c_str(), 0);
+    }
     ::close(sdir_fd);
     return FSIOResult{ret, nullptr};
   }
@@ -4875,25 +4894,37 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
   }
 
   int new_fd{-1};
+  bool joined{false};
   bool src_exists =
     (::faccessat(parent_fd, leaf_name.c_str(), F_OK, 0) == 0);
 
   if (src_exists) {
     int ret = driver->get_fs_strategy()->clone_file(
-      dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name);
-    if (ret < 0) {
+      dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name, true /* excl */);
+    if (ret == -EEXIST) {
+      joined = true;
+    } else if (ret < 0) {
       return ret;
+    } else {
+      new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
     }
-    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
   } else {
     new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(),
 		      O_RDWR | O_CREAT | O_EXCL, 0644);
+    if ((new_fd < 0) && (errno == EEXIST)) {
+      joined = true;
+    }
+  }
+
+  if (joined) {
+    /* another instance re-forked first;  adopt its shadow */
+    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
   }
   if (new_fd < 0) {
     return -errno;
   }
 
-  if (src_exists) {
+  if (src_exists && ! joined) {
     /* copy xattrs from published object to new shadow */
     int src_fd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
     if (src_fd >= 0) {
