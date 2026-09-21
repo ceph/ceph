@@ -162,7 +162,7 @@ MDBRWTransactionImpl::MDBRWTransactionImpl(MDBEnv *parent, MDB_txn *txn)
 
 MDB_txn *MDBRWTransactionImpl::openRWTransaction(MDBEnv *env, MDB_txn *parent, unsigned int flags)
 {
-    MDB_txn *result;
+    MDB_txn *result = nullptr;
     if (env->getRWTX())
         throw LMDBError("Duplicate RW transaction");
 
