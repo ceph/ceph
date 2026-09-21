@@ -340,7 +340,7 @@ def preview_table_osd(data: List) -> str:
 
 def preview_table_services(data: List) -> str:
     table = PrettyTable(header_style='upper', title="SERVICESPEC PREVIEW", border=True)
-    table.field_names = 'SERVICE NAME ADD_TO REMOVE_FROM'.split()
+    table.field_names = 'SERVICE NAME ADD_TO REMOVE_FROM RECONFIG REDEPLOY'.split()
     table.align = 'l'
     table.left_padding_width = 0
     table.right_padding_width = 2
@@ -349,7 +349,7 @@ def preview_table_services(data: List) -> str:
             continue
         if item.get('service_type') != 'osd':
             table.add_row((item.get('service_type'), item.get('service_name'),
-                           " ".join(item.get('add')), " ".join(item.get('remove'))))
+                           " ".join(item.get('add')), " ".join(item.get('remove')), " ".join(item.get('reconfig', [])), " ".join(item.get('redeploy', []))))
     return table.get_string()
 
 
