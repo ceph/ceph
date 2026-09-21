@@ -224,6 +224,37 @@ void SnapRealm::get_snap_info(map<snapid_t, const SnapInfo*>& infomap, snapid_t 
     parent->get_snap_info(infomap, std::max(first, srnode.current_parent_since), last);
 }
 
+/*
+ * The single-snapid case of get_snap_info(), without the intermediate
+ * containers.  get_snap_info() answers a range query by building a map, and
+ * for a range of one that map costs several allocations per call -- once per
+ * realm on the way up.  encode_inodestat() asks this question for every inode
+ * it encodes, and readdir encodes every inode in the directory.
+ *
+ * The lookup order below matches get_snap_info(): a realm's own snaps win over
+ * its past parent snaps, and a child realm wins over its ancestors, because
+ * map::insert() does not overwrite an existing key.
+ */
+const SnapInfo* SnapRealm::find_snap_info(snapid_t snapid)
+{
+  for (SnapRealm *realm = this; realm; realm = realm->parent) {
+    const auto& sr = realm->srnode;
+
+    if (auto it = sr.snaps.find(snapid); it != sr.snaps.end())
+      return &it->second;
+
+    if (sr.past_parent_snaps.count(snapid)) {
+      if (auto* si = mdcache->mds->snapclient->get_snap_info(snapid); si)
+	return si;
+    }
+
+    if (sr.current_parent_since > snapid)
+      break;
+  }
+
+  return nullptr;
+}
+
 std::string_view SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
 {
   auto srnode_snaps_entry = srnode.snaps.find(snapid);
