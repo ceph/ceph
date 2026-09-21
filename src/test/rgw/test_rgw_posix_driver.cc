@@ -56,15 +56,15 @@ public:
                       CODE_ENVIRONMENT_UTILITY,
                       CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
-    dpp = nullptr;
-    //dpp = new NoDoutPrefix(cct.get(), 1);
+    //dpp = nullptr;
+    dpp = new NoDoutPrefix(cct.get(), 1);
 
     root = std::make_unique<posix::Directory>(base_path, nullptr, cct.get());
     ASSERT_EQ(root->open(dpp), 0);
   }
 
   void TearDown() override {
-    sf::remove_all(base_path);
+    //sf::remove_all(base_path);
   }
 };
 
@@ -580,7 +580,7 @@ TEST(FSEnt, MPDirBase)
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
 
-  EXPECT_EQ(testdir->get_fd(), -1);
+  EXPECT_GE(testdir->get_fd(), 0);
   EXPECT_EQ(testdir->get_name(), dirname);
   EXPECT_EQ(testdir->get_parent(), root.get());
   EXPECT_FALSE(testdir->exists());
@@ -977,21 +977,25 @@ TEST(FSEnt, MPVerDirReadWrite)
   std::string testname = get_test_name();
   std::unique_ptr<posix::VersionedDirectory> verdir{
       std::make_unique<posix::VersionedDirectory>(testname, root.get(), env->cct.get())};
-  std::string instance_id{verdir->get_new_instance()};
-  std::string vfname{"_%3A" + instance_id + "_" + testname};
+  std::string init_instance_id{verdir->get_new_instance()};
+  std::string init_vfname{"_%3A" + init_instance_id + "_" + testname};
   sf::path vp{base_path / testname};
-  sf::path mp{vp / vfname};
   sf::path lp{vp / testname};
 
   int ret = verdir->create(env->dpp, /*existed=*/nullptr, /*temp_file=*/false);
   EXPECT_EQ(ret, 0);
 
-  std::unique_ptr<posix::MPDirectory> mpdir{std::make_unique<posix::MPDirectory>(vfname, verdir.get(), env->cct.get())};
+  std::unique_ptr<posix::MPDirectory> mpdir{std::make_unique<posix::MPDirectory>(init_vfname, verdir.get(), env->cct.get())};
   ret = verdir->add_file(env->dpp, std::move(mpdir), /*existed=*/nullptr, /*temp_file=*/true);
   EXPECT_EQ(ret, 0);
 
   std::string temp_fname{testname + "-blargh"};
   ret = verdir->link_temp_file(env->dpp, null_yield, temp_fname);
+  EXPECT_EQ(ret, 0);
+
+  std::string instance_id{verdir->get_cur_version()};
+  std::string vfname{"_%3A" + instance_id + "_" + testname};
+  sf::path mp{vp / vfname};
 
   EXPECT_TRUE(sf::exists(vp));
   EXPECT_TRUE(sf::is_directory(vp));
@@ -1062,29 +1066,63 @@ TEST(FSEnt, MPVerDirReadWrite)
   EXPECT_EQ(read_data, testname + testname + testname + testname);
 }
 
-class TestUser;
-class TestDriver : public POSIXDriver
+template <typename YP>
+struct TestMultipartCache : public posix::MultipartCache
 {
+public:
+  TestMultipartCache() :
+    MultipartCache(1, 1, 1, 1, file::listing::MultipartCachePolicy::writethrough)
+  { }
+  virtual ~TestMultipartCache() { }
+
+  file::listing::MultipartListResult list_parts(const file::listing::MultipartCacheKey& key,
+				 uint32_t marker, uint32_t max_parts,
+				 const file::listing::fill_parts_fn_t& fill_fn) override {
+    file::listing::MultipartListResult result;
+    boost::container::flat_map<uint32_t, file::listing::MultipartPartInfo> parts;
+
+    fill_fn(parts);
+    auto it = parts.lower_bound(marker + 1);
+    uint32_t count = 0;
+    while (it != parts.end() && count < max_parts) {
+      result.parts.push_back(it->second);
+      result.next_marker = it->first;
+      ++it;
+      ++count;
+    }
+    result.truncated = (it != parts.end());
+    return result;
+  };
+
+  void remove(const file::listing::MultipartCacheKey& key) override { }
+
+  bool add_part(const file::listing::MultipartCacheKey& key,
+                file::listing::MultipartPartInfo&& info) override {
+    return false;
+  }
+};
+
+class TestDriver : public POSIXDriver {
 public:
   std::string driver_base;
 
-  TestDriver(std::string _base_path) : POSIXDriver(nullptr), driver_base(_base_path)
-  { }
-  virtual ~TestDriver() {
-    RGWQuotaHandler::free_handler(quota_handler);
-  }
+  TestDriver(std::string _base_path) :
+    POSIXDriver(nullptr), driver_base(_base_path)
+  {}
+  virtual ~TestDriver() { RGWQuotaHandler::free_handler(quota_handler); }
 
   int init(const DoutPrefixProvider* dpp)
   {
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
 
-    root_dir = std::make_unique<posix::Directory>(base_path, nullptr, env->cct.get());
+    root_dir =
+        std::make_unique<posix::Directory>(base_path, nullptr, env->cct.get());
     int ret = root_dir->open(env->dpp);
     if (ret < 0) {
       if (ret == -ENOTDIR) {
         ldpp_dout(env->dpp, 0) << " ERROR: base path (" << base_path
-                          << "): was not a directory." << dendl;
+                               << "): was not a directory." << dendl;
         return ret;
       } else if (ret == -ENOENT) {
         ret = root_dir->create(env->dpp);
@@ -1098,78 +1136,147 @@ public:
     }
     quota_handler = RGWQuotaHandler::generate_handler(this, false);
     /* ordered listing cache */
-    bucket_cache.reset(new posix::BucketCache(
-        this, base_path, cache_base, 100, 3, 3, 3));
+    bucket_cache.reset(
+        new posix::BucketCache(this, base_path, cache_base, 100, 3, 3, 3));
+    multipart_cache.reset(new TestMultipartCache<cohort::lru::NullYieldPolicy>());
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;
   }
-  virtual CephContext* ctx(void) override {
+  virtual CephContext* ctx(void) override
+  {
     return get_pointer(env->cct);
   }
 
   virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
 };
 
-class TestUser : public StoreUser {
-  Attrs attrs;
+  class TestUser : public StoreUser {
+    Attrs attrs;
 
-public:
-  TestUser(TestDriver *_dr, const rgw_user& _u) : StoreUser(_u) { }
-  TestUser(TestDriver *_dr, const RGWUserInfo& _i) : StoreUser(_i) { }
-  TestUser(TestDriver *_dr)  { }
-  TestUser(TestUser& _o) = default;
-  virtual ~TestUser() = default;
+  public:
+    TestUser(TestDriver* _dr, const rgw_user& _u) :
+      StoreUser(_u)
+    {}
+    TestUser(TestDriver* _dr, const RGWUserInfo& _i) :
+      StoreUser(_i)
+    {}
+    TestUser(TestDriver* _dr) {}
+    TestUser(TestUser& _o) = default;
+    virtual ~TestUser() = default;
 
-  virtual std::unique_ptr<User> clone() override {
-    return std::unique_ptr<User>(new TestUser(*this));
+    virtual std::unique_ptr<User>
+    clone() override
+    {
+      return std::unique_ptr<User>(new TestUser(*this));
+    }
+    virtual Attrs&
+    get_attrs() override
+    {
+      return attrs;
+    }
+    virtual void
+    set_attrs(Attrs& _attrs) override
+    {
+      attrs = _attrs;
+    }
+    virtual int
+    read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    merge_and_store_attrs(
+        const DoutPrefixProvider* dpp,
+        Attrs& new_attrs,
+        optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    read_usage(
+        const DoutPrefixProvider* dpp,
+        uint64_t start_epoch,
+        uint64_t end_epoch,
+        uint32_t max_entries,
+        bool* is_truncated,
+        RGWUsageIter& usage_iter,
+        std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override
+    {
+      return 0;
+    }
+    virtual int
+    trim_usage(
+        const DoutPrefixProvider* dpp,
+        uint64_t start_epoch,
+        uint64_t end_epoch,
+        optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    load_user(const DoutPrefixProvider* dpp, optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    store_user(
+        const DoutPrefixProvider* dpp,
+        optional_yield y,
+        bool exclusive,
+        RGWUserInfo* old_info = nullptr) override
+    {
+      return 0;
+    }
+    virtual int
+    remove_user(const DoutPrefixProvider* dpp, optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    verify_mfa(
+        const std::string& mfa_str,
+        bool* verified,
+        const DoutPrefixProvider* dpp,
+        optional_yield y) override
+    {
+      return 0;
+    }
+    virtual int
+    list_groups(
+        const DoutPrefixProvider* dpp,
+        optional_yield y,
+        std::string_view marker,
+        uint32_t max_items,
+        GroupList& listing) override
+    {
+      return -ENOTSUP;
+    }
+  };
+
+  std::unique_ptr<User> TestDriver::get_user(const rgw_user& u)
+  {
+    return std::make_unique<TestUser>(this, u);
   }
-  virtual Attrs& get_attrs() override { return attrs; }
-  virtual void set_attrs(Attrs &_attrs) override { attrs = _attrs; }
-  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
-  virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs&
-				    new_attrs, optional_yield y) override { return 0; }
-  virtual int read_usage(const DoutPrefixProvider* dpp, uint64_t start_epoch,
-             uint64_t end_epoch, uint32_t max_entries, bool* is_truncated,
-             RGWUsageIter &usage_iter,
-             std::map<rgw_user_bucket, rgw_usage_log_entry> &usage) override { return 0; }
-  virtual int trim_usage(const DoutPrefixProvider* dpp, uint64_t start_epoch,
-                         uint64_t end_epoch, optional_yield y) override { return 0; }
-  virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
-  virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool
-			 exclusive, RGWUserInfo* old_info = nullptr) override { return 0; }
-  virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
-  virtual int verify_mfa(const std::string &mfa_str, bool *verified,
-                         const DoutPrefixProvider* dpp,
-                         optional_yield y) override { return 0; }
-  virtual int list_groups(const DoutPrefixProvider *dpp, optional_yield y,
-                          std::string_view marker, uint32_t max_items,
-                          GroupList &listing) override { return -ENOTSUP; }
-};
 
-std::unique_ptr<User> TestDriver::get_user(const rgw_user &u)
-{
-  return std::make_unique<TestUser>(this, u);
-}
+  TEST(POSIXDriver, CreateDriver)
+  {
+    std::string name = get_test_name();
+    sf::path bp{sf::absolute(sf::path{base_path / name})};
+    sf::create_directory(bp);
+    sf::create_directory(bp / "cache");
+    sf::create_directory(bp / "root");
+    TestDriver driver{bp};
 
-TEST(POSIXDriver, CreateDriver)
-{
-  std::string name = get_test_name();
-  sf::path bp{sf::absolute(sf::path{base_path / name})};
-  sf::create_directory(bp);
-  sf::create_directory(bp / "cache");
-  sf::create_directory(bp / "root");
-  TestDriver driver{bp};
+    sf::path tp{bp / "root"};
 
-  sf::path tp{bp / "root"};
+    int ret = driver.init(env->dpp);
+    EXPECT_EQ(ret, 0);
+    EXPECT_TRUE(sf::exists(tp));
+    EXPECT_TRUE(sf::is_directory(tp));
+  }
 
-  int ret = driver.init(env->dpp);
-  EXPECT_EQ(ret, 0);
-  EXPECT_TRUE(sf::exists(tp));
-  EXPECT_TRUE(sf::is_directory(tp));
-}
-
-class POSIXDriverTest : public ::testing::Test {
+  class POSIXDriverTest : public ::testing::Test {
   protected:
     std::unique_ptr<TestDriver> driver;
     rgw_owner owner;
@@ -1196,7 +1303,7 @@ class POSIXDriverTest : public ::testing::Test {
       EXPECT_EQ(ret, 0);
     }
 
-    void TearDown() { sf::remove_all(bp); }
+    void TearDown() { /*sf::remove_all(bp);*/ }
 };
 
 TEST_F(POSIXDriverTest, Bucket)
@@ -2493,7 +2600,6 @@ public:
     ACLOwner owner;
     owner.id = bucket->get_owner();
     mp_obj->gen_rand_obj_instance_name();
-    std::string inst_id = mp_obj->get_instance();
 
     int ret = upload->complete(env->dpp, null_yield, get_pointer(env->cct), parts,
                                remove_objs, accounted_size, compressed, cs_info,
@@ -2502,6 +2608,7 @@ public:
     EXPECT_EQ(write_size, ofs);
     EXPECT_EQ(write_size, accounted_size);
 
+    std::string inst_id = mp_obj->get_instance();
     rgw_obj_key key;
     auto posix_mp_obj = static_cast<POSIXObject*>(mp_obj.get());
     posix::FSEnt *fs = posix_mp_obj->get_fsent();

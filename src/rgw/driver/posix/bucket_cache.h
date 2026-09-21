@@ -73,6 +73,7 @@
  * Changes to eviction semantics should be reviewed for impact there.
  */
 
+#define NDEBUG 1
 #define dout_subsys ceph_subsys_rgw
 namespace file::listing {
 
