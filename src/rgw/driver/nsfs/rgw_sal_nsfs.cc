@@ -4589,6 +4589,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   }
   bool shadow_exists = (::faccessat(sdir_fd, leaf.c_str(), F_OK, 0) == 0);
   bool ephemeral = (flags & FSIOObject::OPEN_FLAG_EPHEMERAL) != 0;
+  bool for_write = (flags & FSIOObject::OPEN_FLAG_WRITE) != 0;
 
   auto hdl = std::unique_ptr<NSFSFSIOObject>(
     new NSFSFSIOObject(this, driver, ephemeral));
@@ -4603,10 +4604,6 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
       ::close(sdir_fd);
       return FSIOResult{-EEXIST, nullptr};
     }
-    if (flags & FSIOObject::OPEN_FLAG_TRUNC) {
-      ::unlinkat(sdir_fd, leaf.c_str(), 0);
-      shadow_exists = false;
-    }
   }
 
   if (shadow_exists) {
@@ -4617,7 +4614,17 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
       ::close(sdir_fd);
       return FSIOResult{ret, nullptr};
     }
+    if (for_write && (flags & FSIOObject::OPEN_FLAG_TRUNC)) {
+      /* truncate the shadow in place;  unlinking it would strand
+       * every client already rendezvoused on it */
+      if (::ftruncate(hdl->shadow_fd, 0) < 0) {
+	int ret = -errno;
+	::close(sdir_fd);
+	return FSIOResult{ret, nullptr};
+      }
+    }
     hdl->resumed_existing = true;
+    hdl->binding = FSIOObject::Binding::SHADOW;
     return FSIOResult{0, std::move(hdl)};
   }
 
@@ -4641,7 +4648,26 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     return FSIOResult{-EEXIST, nullptr};
   }
 
-  if (src_exists) {
+  if (! for_write && src_exists) {
+    /* no shadow exists and the caller is a reader:  bind to the
+     * published object.  readers never construct a shadow--if a
+     * writer creates one, reclone() dup2()s it onto this fd and the
+     * reader follows it */
+    hdl->shadow_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
+    if (hdl->shadow_fd < 0) {
+      int ret = -errno;
+      ::close(sdir_fd);
+      return FSIOResult{ret, nullptr};
+    }
+    hdl->binding = FSIOObject::Binding::PUBLISHED;
+    return FSIOResult{0, std::move(hdl)};
+  }
+
+  /* falling through with !for_write means OPEN_FLAG_CREATE on an
+   * object which does not exist:  there is nothing to bind to, so
+   * the shadow is the object's initial content */
+
+  if (src_exists && !(flags & FSIOObject::OPEN_FLAG_TRUNC)) {
     /* COW clone source → .shadow/leaf */
     int ret = driver->get_fs_strategy()->clone_file(
       dpp, parent_fd, leaf, sdir_fd, leaf);
@@ -4686,6 +4712,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     return FSIOResult{ret, nullptr};
   }
 
+  hdl->binding = FSIOObject::Binding::SHADOW;
   return FSIOResult{0, std::move(hdl)};
 } /* get_fsio_handle */
 
@@ -4736,8 +4763,14 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
   if (shadow_fd < 0) {
     return -EBADF;
   }
-  if (published) {
+  if (doomed) {
+    return -ESTALE; /* object was unlinked;  never publish */
+  }
+  if (binding == Binding::SHADOW_PUBLISHED) {
     return 0;
+  }
+  if (binding != Binding::SHADOW) {
+    return -EINVAL; /* no shadow to publish */
   }
 
   ::fsync(shadow_fd);
@@ -4821,14 +4854,17 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
     }
   }
 
-  published = true;
+  binding = Binding::SHADOW_PUBLISHED;
   return 0;
 }
 
 int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t flags)
 {
-  if (!published || shadow_fd < 0) {
+  if (shadow_fd < 0) {
     return -EINVAL;
+  }
+  if (binding == Binding::SHADOW) {
+    return 0; /* already writable */
   }
 
   if (shadow_dir_fd < 0) {
@@ -4838,22 +4874,32 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
     }
   }
 
-  int ret = driver->get_fs_strategy()->clone_file(
-    dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name);
-  if (ret < 0) {
-    return ret;
-  }
+  int new_fd{-1};
+  bool src_exists =
+    (::faccessat(parent_fd, leaf_name.c_str(), F_OK, 0) == 0);
 
-  int new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
+  if (src_exists) {
+    int ret = driver->get_fs_strategy()->clone_file(
+      dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name);
+    if (ret < 0) {
+      return ret;
+    }
+    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
+  } else {
+    new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(),
+		      O_RDWR | O_CREAT | O_EXCL, 0644);
+  }
   if (new_fd < 0) {
     return -errno;
   }
 
-  /* copy xattrs from published object to new shadow */
-  int src_fd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
-  if (src_fd >= 0) {
-    copy_xattrs_fd(dpp, src_fd, new_fd);
-    ::close(src_fd);
+  if (src_exists) {
+    /* copy xattrs from published object to new shadow */
+    int src_fd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
+    if (src_fd >= 0) {
+      copy_xattrs_fd(dpp, src_fd, new_fd);
+      ::close(src_fd);
+    }
   }
 
   /* atomically swap the fd so readers transition seamlessly */
@@ -4865,7 +4911,7 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
   }
   ::close(new_fd);
 
-  published = false;
+  binding = Binding::SHADOW;
   return 0;
 }
 
@@ -4957,14 +5003,51 @@ int NSFSObject::NSFSFSIOObject::fremovexattr(const DoutPrefixProvider* dpp, cons
   return 0;
 }
 
+int NSFSObject::NSFSFSIOObject::ftruncate(const DoutPrefixProvider* dpp,
+					  uint64_t size, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  if (binding != Binding::SHADOW) {
+    /* only a shadow is mutable--the published object is not */
+    return -EPERM;
+  }
+  return (::ftruncate(shadow_fd, size) < 0) ? -errno : 0;
+}
+
+int NSFSObject::NSFSFSIOObject::discard(const DoutPrefixProvider* dpp,
+					uint32_t flags)
+{
+  if (doomed) {
+    return 0;
+  }
+
+  /* posix unlink:  remove the shadow's name now, but leave the open
+   * descriptors alone--readers and writers continue to operate on it
+   * normally, and the filesystem reclaims the storage when the last
+   * one is closed.  a subsequent open finds no shadow, and so creates
+   * a new one rather than rendezvousing with this (doomed) view */
+  if (binding != Binding::PUBLISHED &&
+      shadow_dir_fd >= 0 && !shadow_name.empty()) {
+    if ((::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0) < 0) &&
+	(errno != ENOENT)) {
+      return -errno;
+    }
+  }
+
+  doomed = true;
+  return 0;
+}
+
 int NSFSObject::NSFSFSIOObject::close(const DoutPrefixProvider* dpp, uint32_t flags)
 {
   if (shadow_fd < 0 && shadow_dir_fd < 0) {
     return 0;
   }
 
-  if (!published && ephemeral &&
-      shadow_dir_fd >= 0 && !shadow_name.empty()) {
+  if (!doomed && binding == Binding::SHADOW && ephemeral &&
+      !resumed_existing && shadow_dir_fd >= 0 && !shadow_name.empty()) {
     ::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0);
   }
 

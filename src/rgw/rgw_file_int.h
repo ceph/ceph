@@ -249,6 +249,13 @@ namespace rgw {
                                          &Open::file_open_hook>>;
       open_list opens;
 
+      /* the stateless (NFSv3) open, if one is active;  librgw owns
+       * its lifetime and never exposes it as an rgw_open_fd */
+      Open* global_open{nullptr};
+      uint64_t stateless_timer_id{0};
+
+      /* read_opens counts read-only opens;  an O_RDWR open is
+       * counted in write_opens only (cf. Open::is_read_open) */
       uint32_t read_opens{0};
       uint32_t write_opens{0};
 
@@ -256,7 +263,8 @@ namespace rgw {
 
       std::unique_ptr<rgw::sal::Bucket> sal_bucket;
       std::unique_ptr<rgw::sal::Object> sal_object;
-      std::unique_ptr<sal::Object::FSIOObject> fsio_hdl;
+      /* shared so that in-flight i/o survives a concurrent close */
+      std::shared_ptr<sal::Object::FSIOObject> fsio_hdl;
       RGWWriteRequest* write_req;
 
       file() : write_req(nullptr) {}
@@ -725,22 +733,37 @@ namespace rgw {
 
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
 
-    int commit(uint64_t offset, uint64_t length, uint32_t flags) {
-      /* NFS3 and NFSv4 COMMIT implementation
-       * the current atomic update strategy doesn't actually permit
-       * clients to read-stable until either CLOSE (NFSv4+) or the
-       * expiration of the active write timer (NFS3).  In the
-       * interim, the client may send an arbitrary number of COMMIT
-       * operations which must return a success result */
-      /* XXXX clients will be able to read-after write consistently
-       * using new open2, close2, ...,  methods */
-      return 0;
-    }
+    /* NFS COMMIT:  make previously written data durable.  this is
+     * fsync, not publish--the shadow is durable and visible to NFS
+     * either way, and finalizing it into the S3 namespace is the
+     * business of close (or the idle finalizer).  a client may send
+     * an arbitrary number of COMMITs, which must all succeed */
+    int commit(uint64_t offset, uint64_t length, uint32_t flags);
 
     int write_finish(uint32_t flags = FLAG_NONE);
 
     int open2(file::Open** /* out */, uint32_t posix_flags,
               uint32_t rgw_openflags);
+
+    /* stateless (NFSv3) open tracking:  at most one Open per file
+     * handle, created on demand and reclaimed by close or by the
+     * idle reaper */
+    int open_global(uint32_t posix_flags, uint32_t rgw_openflags);
+    int close_global(uint32_t flags);
+
+    file::Open* get_global_open() {
+      lock_guard guard(mtx);
+      auto f = std::get_if<file>(&variant_type);
+      return f ? f->global_open : nullptr;
+    }
+
+    /* mtx must be held */
+    int do_open(file::Open** /* out */, uint32_t posix_flags,
+                uint32_t rgw_openflags);
+    void arm_stateless_timer();
+    /* mtx must be held */
+    void discard_shadow();
+    void finalize_stateless();
     int readv(file::Open* open_hdl, const struct iovec* iov, int iov_cnt,
               uint64_t offset, uint64_t* bytes_read, uint32_t flags);
 
@@ -749,6 +772,10 @@ namespace rgw {
 
     int close();
     int close2(file::Open* open_hdl, uint32_t flags);
+
+    /* NFS SETATTR with a size:  a complete write operation, not a
+     * cached attribute */
+    int truncate(uint64_t size);
 
     void open_for_create() {
       lock_guard guard(mtx);
@@ -950,6 +977,7 @@ namespace rgw {
     static std::atomic<uint32_t> fs_inst_counter;
 
     static uint32_t write_completion_interval_s;
+    static uint32_t stateless_finalize_interval_s;
 
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
@@ -980,6 +1008,24 @@ namespace rgw {
 
       void operator()() {
 	rgw_fh.close(); /* will finish in-progress write */
+	rgw_fh.get_fs()->unref(&rgw_fh);
+      }
+    };
+
+    /* backstop for a stateless (NFSv3) writer which never closes:
+     * publish the shadow so the object reaches S3.  the shadow's fds
+     * are left open--releasing them is the ULP's business, and a
+     * writer which resumes simply reclones */
+    struct StatelessFinalize
+    {
+      RGWFileHandle& rgw_fh;
+
+      explicit StatelessFinalize(RGWFileHandle& _fh) : rgw_fh(_fh) {
+	rgw_fh.get_fs()->ref(&rgw_fh);
+      }
+
+      void operator()() {
+	rgw_fh.finalize_stateless();
 	rgw_fh.get_fs()->unref(&rgw_fh);
       }
     };

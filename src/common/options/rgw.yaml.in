@@ -1431,6 +1431,16 @@ options:
   services:
   - rgw
   with_legacy: true
+# how long a stateless (NFSv3) writer may be idle before its shadow is
+# published;  nothing is at risk while we wait--the data is durable and
+# visible to NFS--so this bounds only when the object appears in S3
+- name: rgw_nfs_stateless_finalize_secs
+  type: int
+  level: advanced
+  default: 5_min
+  services:
+  - rgw
+  with_legacy: true
 # use fast S3 attrs from bucket index--currently assumes NFS mounts are immutable
 - name: rgw_nfs_s3_fast_attrs
   type: bool

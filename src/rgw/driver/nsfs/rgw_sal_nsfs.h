@@ -1171,6 +1171,9 @@ public:
     virtual int publish(const DoutPrefixProvider* dpp, uint32_t flags) override;
     virtual int reclone(const DoutPrefixProvider* dpp, uint32_t flags) override;
     virtual int close(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int discard(const DoutPrefixProvider* dpp, uint32_t flags) override;
+    virtual int ftruncate(const DoutPrefixProvider* dpp, uint64_t size,
+			  uint32_t flags) override;
 
     virtual int fstat(struct stat* st, uint32_t flags) override;
     virtual int fgetattr(const DoutPrefixProvider* dpp,

@@ -299,7 +299,11 @@ TEST(OPEN2, LOOKUP_OBJECT) {
 }
 
 TEST(OPEN2, OPEN1) {
-  int ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
+  /* stateless (NFSv3) open of a not-yet-existing object:  a mode and
+   * RGW_OPEN_FLAG_CREATE are required--opening O_RDONLY without
+   * CREATE has nothing to bind to and returns -ENOENT */
+  int ret = rgw_open(fs, object_fh, O_RDWR,
+		     RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
   ASSERT_EQ(ret, 0);
 }
 
@@ -763,13 +767,135 @@ TEST(OPEN2, ETAG_AFTER_PUBLISH)
 
 TEST(OPEN2, RENDEZVOUS1)
 {
-  /* write open rendezvous with active stream (published) */
-  /* write open rendezvous with active stream (unpublished/FLAG_CREATE) */
+  /* several write opens share one shadow, and publish happens once,
+   * at last-writer close--both against an object being created and
+   * against one which is already published */
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_NE(o2h.get(), nullptr);
+
+  auto lfr = o2h->lookup("rendez1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+  std::string d4{"DDDD"};
+
+  /* unpublished:  the object is being created */
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+
+  auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  auto w1 = get<1>(ofw1);
+
+  ASSERT_EQ(get<0>(o2h->write(w0, a4, 0, a4.length())), 0);
+  ASSERT_EQ(get<0>(o2h->write(w1, b4, a4.length(), b4.length())), 0);
+
+  /* one shadow:  each writer sees the other's bytes */
+  auto rdr = o2h->read(w0, 0, a4.length() + b4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a4 + b4);
+
+  /* returning one of two write opens does not publish */
+  ASSERT_EQ(o2h->close(w0), 0);
+  auto gr0 = o2h->getxattr("user.rgw.etag" /* RGW_ATTR_ETAG */);
+  ASSERT_TRUE(get<1>(gr0).empty());
+
+  /* last writer close publishes */
+  ASSERT_EQ(o2h->close(w1), 0);
+
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+
+  auto gr1 = o2h->getxattr("user.rgw.etag");
+  ASSERT_EQ(get<0>(gr1), 0);
+  ASSERT_FALSE(get<1>(gr1).empty());
+
+  rdr = o2h->read(r1, 0, a4.length() + b4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a4 + b4);
+  ASSERT_EQ(o2h->close(r1), 0);
+
+  /* published:  the first write open re-forks the shadow, the second
+   * rendezvouses with it */
+  auto ofw2 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw2), 0);
+  auto w2 = get<1>(ofw2);
+
+  auto ofw3 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw3), 0);
+  auto w3 = get<1>(ofw3);
+
+  ASSERT_EQ(get<0>(o2h->write(w3, d4, 0, d4.length())), 0);
+
+  rdr = o2h->read(w2, 0, a4.length() + b4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), d4 + b4);
+
+  ASSERT_EQ(o2h->close(w2), 0);
+  ASSERT_EQ(o2h->close(w3), 0);
 }
 
 TEST(OPEN2, TRUNC1)
 {
-  /* open handles follow trunc */
+  /* O_TRUNC truncates the shadow in place, so clients already
+   * rendezvoused on it follow the truncation rather than being
+   * stranded on an orphaned view */
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_NE(o2h.get(), nullptr);
+
+  auto lfr = o2h->lookup("trunc1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string a8{"AAAABBBB"};
+  std::string c2{"CC"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  ASSERT_EQ(get<0>(o2h->write(w0, a8, 0, a8.length())), 0);
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  /* reader attaches to the published object */
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+
+  auto rdr = o2h->read(r1, 0, a8.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a8);
+
+  /* a writer forks the shadow and truncates it */
+  auto ofw1 = o2h->open(O_RDWR|O_TRUNC, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  auto w1 = get<1>(ofw1);
+
+  /* the pre-existing reader follows the truncation */
+  rdr = o2h->read(r1, 0, a8.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_TRUE(get<1>(rdr).empty());
+
+  ASSERT_EQ(get<0>(o2h->write(w1, c2, 0, c2.length())), 0);
+
+  rdr = o2h->read(r1, 0, c2.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), c2);
+
+  ASSERT_EQ(o2h->close(w1), 0);
+  ASSERT_EQ(o2h->close(r1), 0);
+
+  /* the published object is the truncated one */
+  auto ofr2 = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr2), 0);
+  auto r2 = get<1>(ofr2);
+  rdr = o2h->read(r2, 0, a8.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), c2);
+  ASSERT_EQ(o2h->close(r2), 0);
 }
 
 TEST(OPEN2, EXCL)
@@ -779,11 +905,414 @@ TEST(OPEN2, EXCL)
 
 TEST(OPEN2, UNLINK1)
 {
-  /* read and write opens after unlink fail */
-  /* read-open or write-open active streams survive unlink, but */
-  /* write-close after unlink discards changes */
+  /* posix unlink:  open descriptors keep operating on the doomed
+   * shadow, which is never published, and whose storage is reclaimed
+   * when the last open is returned */
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_NE(o2h.get(), nullptr);
+
+  auto lfr = o2h->lookup("unlink1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+  std::string c4{"CCCC"};
+
+  /* create and publish "AAAA" */
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  ASSERT_EQ(get<0>(o2h->write(w0, a4, 0, a4.length())), 0);
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  /* reopen (forks a shadow) and extend */
+  auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  auto w1 = get<1>(ofw1);
+  ASSERT_EQ(get<0>(o2h->write(w1, b4, a4.length(), b4.length())), 0);
+
+  int ret = rgw_unlink(fs, bucket_fh, "unlink1", RGW_UNLINK_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  /* the open survives the unlink and continues to work */
+  auto nbw = o2h->write(w1, c4, a4.length() + b4.length(), c4.length());
+  ASSERT_EQ(get<0>(nbw), 0);
+  ASSERT_EQ(get<1>(nbw), c4.length());
+
+  auto rdr = o2h->read(w1, 0, 12);
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a4 + b4 + c4);
+
+  /* last close discards;  nothing is published */
+  ASSERT_EQ(o2h->close(w1), 0);
+
+  struct rgw_file_handle* fh{nullptr};
+  ret = rgw_lookup(fs, bucket_fh, "unlink1", &fh, nullptr, 0,
+		   RGW_LOOKUP_FLAG_NONE);
+  ASSERT_EQ(ret, -ENOENT);
 }
 
+
+TEST(OPEN2, READER_FOLLOWS_WRITER)
+{
+  /* a reader binds to the published object;  when a writer forks the
+   * shadow, the reader follows it on its existing open, without
+   * reopening--no autonomous history for whoever got there first */
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_NE(o2h.get(), nullptr);
+
+  auto lfr = o2h->lookup("follow1");
+  ASSERT_EQ(get<0>(lfr), 0);
+  ASSERT_NE(get<1>(lfr), nullptr);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+
+  /* create and publish "AAAA" */
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  auto nbw = o2h->write(w0, a4, 0, a4.length());
+  ASSERT_EQ(get<0>(nbw), 0);
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  /* reader attaches;  no shadow exists, so it binds the published
+   * object and must not construct one */
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+
+  auto rdr = o2h->read(r1, 0, a4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a4);
+
+  /* a writer arrives on the same handle and forks the shadow */
+  auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  auto w1 = get<1>(ofw1);
+
+  nbw = o2h->write(w1, b4, 0, b4.length());
+  ASSERT_EQ(get<0>(nbw), 0);
+  ASSERT_EQ(get<1>(nbw), b4.length());
+
+  /* the pre-existing reader sees the write */
+  rdr = o2h->read(r1, 0, b4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), b4);
+
+  ASSERT_EQ(o2h->close(w1), 0);
+  ASSERT_EQ(o2h->close(r1), 0);
+}
+
+TEST(OPEN2, READER_ACROSS_PUBLISH)
+{
+  /* a reader holds one open across publish and a subsequent re-fork */
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_NE(o2h.get(), nullptr);
+
+  auto lfr = o2h->lookup("acrosspub1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+  std::string c4{"CCCC"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  ASSERT_EQ(get<0>(o2h->write(w0, a4, 0, a4.length())), 0);
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+
+  auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  auto w1 = get<1>(ofw1);
+  ASSERT_EQ(get<0>(o2h->write(w1, b4, 0, b4.length())), 0);
+
+  /* last writer close publishes;  the reader stays open */
+  ASSERT_EQ(o2h->close(w1), 0);
+
+  auto rdr = o2h->read(r1, 0, b4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), b4);
+
+  /* a new writer re-forks from the published object */
+  auto ofw2 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw2), 0);
+  auto w2 = get<1>(ofw2);
+  ASSERT_EQ(get<0>(o2h->write(w2, c4, 0, c4.length())), 0);
+
+  rdr = o2h->read(r1, 0, c4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), c4);
+
+  ASSERT_EQ(o2h->close(w2), 0);
+  ASSERT_EQ(o2h->close(r1), 0);
+}
+
+TEST(OPEN2, V3_POSITIONAL)
+{
+  /* stateless (NFSv3) open:  no open token is returned to the caller,
+   * and writes are positional--the legacy write cycle rejected any
+   * non-contiguous write position */
+  struct rgw_file_handle* fh{nullptr};
+  int ret = rgw_lookup(fs, bucket_fh, "v3pos1", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_CREATE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_NE(fh, nullptr);
+
+  ret = rgw_open(fs, fh, O_RDWR,
+		 RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(ret, 0);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+  size_t nbytes{0};
+
+  ret = rgw_write(fs, fh, 0, a4.length(), &nbytes, (void*) a4.c_str(),
+		  RGW_OPEN_FLAG_V3);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(nbytes, a4.length());
+
+  ret = rgw_write(fs, fh, 100, b4.length(), &nbytes, (void*) b4.c_str(),
+		  RGW_OPEN_FLAG_V3);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(nbytes, b4.length());
+
+  char buf[8];
+  size_t nread{0};
+  memset(buf, 0, sizeof(buf));
+  ret = rgw_read(fs, fh, 100, b4.length(), &nread, buf,
+		 RGW_READ_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(nread, b4.length());
+  ASSERT_EQ(std::string(buf, b4.length()), b4);
+
+  /* size is taken from the shadow while the open is live */
+  struct stat st;
+  ret = rgw_getattr(fs, fh, &st, RGW_GETATTR_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(st.st_size, 104);
+
+  ret = rgw_close(fs, fh, RGW_CLOSE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+}
+
+TEST(OPEN2, V3_UPGRADE)
+{
+  /* a stateless read open is upgraded in place when a write arrives */
+  struct rgw_file_handle* fh{nullptr};
+  int ret = rgw_lookup(fs, bucket_fh, "v3up1", &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_CREATE);
+  ASSERT_EQ(ret, 0);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+  size_t nbytes{0};
+
+  /* create and publish "AAAA" */
+  ret = rgw_open(fs, fh, O_RDWR,
+		 RGW_OPEN_FLAG_V3|RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(ret, 0);
+  ret = rgw_write(fs, fh, 0, a4.length(), &nbytes, (void*) a4.c_str(),
+		  RGW_OPEN_FLAG_V3);
+  ASSERT_EQ(ret, 0);
+  ret = rgw_close(fs, fh, RGW_CLOSE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  /* read-only stateless open */
+  ret = rgw_open(fs, fh, O_RDONLY, RGW_OPEN_FLAG_V3);
+  ASSERT_EQ(ret, 0);
+
+  char buf[8];
+  size_t nread{0};
+  memset(buf, 0, sizeof(buf));
+  ret = rgw_read(fs, fh, 0, a4.length(), &nread, buf, RGW_READ_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(std::string(buf, a4.length()), a4);
+
+  /* write upgrades the open in place */
+  ret = rgw_write(fs, fh, 0, b4.length(), &nbytes, (void*) b4.c_str(),
+		  RGW_OPEN_FLAG_V3);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(nbytes, b4.length());
+
+  memset(buf, 0, sizeof(buf));
+  ret = rgw_read(fs, fh, 0, b4.length(), &nread, buf, RGW_READ_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(std::string(buf, b4.length()), b4);
+
+  ret = rgw_close(fs, fh, RGW_CLOSE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  (void) rgw_fh_rele(fs, fh, RGW_FH_RELE_FLAG_NONE);
+}
+
+TEST(OPEN2, SETATTR_SIZE)
+{
+  /* NFS SETATTR with a size is a data operation:  it truncates (or
+   * extends) the object, and it is complete when it returns--there is
+   * no open bracketing it */
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_NE(o2h.get(), nullptr);
+
+  auto lfr = o2h->lookup("size1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string a8{"AAAABBBB"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  ASSERT_EQ(get<0>(o2h->write(w0, a8, 0, a8.length())), 0);
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  auto ofr0 = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr0), 0);
+  auto r0 = get<1>(ofr0);
+  auto etag0 = get<1>(o2h->getxattr("user.rgw.etag"));
+  ASSERT_FALSE(etag0.empty());
+  ASSERT_EQ(o2h->close(r0), 0);
+
+  /* truncate with no open held */
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  st.st_size = 4;
+  ASSERT_EQ(o2h->setattr(&st, RGW_SETATTR_SIZE), 0);
+
+  auto sr = o2h->stat();
+  ASSERT_EQ(get<0>(sr), 0);
+  ASSERT_EQ(get<1>(sr).st_size, 4);
+
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+  auto rdr = o2h->read(r1, 0, a8.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), std::string("AAAA"));
+
+  /* the etag tracks the new content, and was not clobbered with the
+   * handle's cached (pre-truncate) value */
+  auto etag1 = get<1>(o2h->getxattr("user.rgw.etag"));
+  ASSERT_FALSE(etag1.empty());
+  ASSERT_NE(etag1, etag0);
+  ASSERT_EQ(o2h->close(r1), 0);
+
+  /* extend */
+  memset(&st, 0, sizeof(st));
+  st.st_size = 12;
+  ASSERT_EQ(o2h->setattr(&st, RGW_SETATTR_SIZE), 0);
+
+  auto ofr2 = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr2), 0);
+  auto r2 = get<1>(ofr2);
+  rdr = o2h->read(r2, 0, 12);
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr).length(), 12u);
+  ASSERT_EQ(get<1>(rdr).substr(0, 4), std::string("AAAA"));
+  ASSERT_EQ(o2h->close(r2), 0);
+
+  /* truncate while a writer holds the shadow:  it applies to the
+   * shared view, and the writer's close publishes it */
+  auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  auto w1 = get<1>(ofw1);
+
+  memset(&st, 0, sizeof(st));
+  st.st_size = 2;
+  ASSERT_EQ(o2h->setattr(&st, RGW_SETATTR_SIZE), 0);
+
+  rdr = o2h->read(w1, 0, 12);
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), std::string("AA"));
+
+  ASSERT_EQ(o2h->close(w1), 0);
+
+  auto ofr3 = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr3), 0);
+  auto r3 = get<1>(ofr3);
+  rdr = o2h->read(r3, 0, 12);
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), std::string("AA"));
+  ASSERT_EQ(o2h->close(r3), 0);
+}
+
+TEST(OPEN2, COMMIT1)
+{
+  /* NFS COMMIT is fsync, not publish:  it makes written data durable
+   * without finalizing the shadow into the S3 namespace, and it must
+   * succeed however many times a client sends it */
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_NE(o2h.get(), nullptr);
+
+  auto lfr = o2h->lookup("commit1");
+  ASSERT_EQ(get<0>(lfr), 0);
+
+  std::string a4{"AAAA"};
+  std::string b4{"BBBB"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  auto w0 = get<1>(ofw);
+  ASSERT_EQ(get<0>(o2h->write(w0, a4, 0, a4.length())), 0);
+
+  int ret = rgw_commit(fs, o2h->object_fh, 0, a4.length(),
+		       RGW_FSYNC_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  /* the data survives the commit, and is still not published */
+  auto rdr = o2h->read(w0, 0, a4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a4);
+
+  auto gr0 = o2h->getxattr("user.rgw.etag" /* RGW_ATTR_ETAG */);
+  ASSERT_TRUE(get<1>(gr0).empty());
+
+  /* repeated COMMITs succeed */
+  ASSERT_EQ(get<0>(o2h->write(w0, b4, a4.length(), b4.length())), 0);
+  ret = rgw_commit(fs, o2h->object_fh, 0, 0, RGW_FSYNC_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+  ret = rgw_commit(fs, o2h->object_fh, 0, 0, RGW_FSYNC_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  /* fsync takes the same path */
+  ret = rgw_fsync(fs, o2h->object_fh, RGW_FSYNC_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  ASSERT_EQ(o2h->close(w0), 0);
+
+  /* close published */
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+  auto r1 = get<1>(ofr);
+
+  auto gr1 = o2h->getxattr("user.rgw.etag");
+  ASSERT_EQ(get<0>(gr1), 0);
+  ASSERT_FALSE(get<1>(gr1).empty());
+
+  rdr = o2h->read(r1, 0, a4.length() + b4.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), a4 + b4);
+  ASSERT_EQ(o2h->close(r1), 0);
+
+  /* a COMMIT with no open attached still succeeds */
+  ret = rgw_commit(fs, o2h->object_fh, 0, 0, RGW_FSYNC_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+
+  /* as does one on a directory */
+  ret = rgw_commit(fs, bucket_fh, 0, 0, RGW_FSYNC_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+}
 
 /* END ALL TESTS */
 

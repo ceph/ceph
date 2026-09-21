@@ -1149,6 +1149,11 @@ public:
       static constexpr uint32_t OPEN_FLAG_EXCL =      0x0002;
       static constexpr uint32_t OPEN_FLAG_TRUNC =     0x0004;
       static constexpr uint32_t OPEN_FLAG_EPHEMERAL = 0x0008;
+      /* the caller intends to write:  a shadow is created if none
+       * exists.  absent it no shadow is ever constructed--a reader
+       * binds to the published object, and follows the shadow if a
+       * writer later creates one */
+      static constexpr uint32_t OPEN_FLAG_WRITE =     0x0010;
 
       /* commit flags */
       static constexpr uint32_t COMMIT_FLAG_NONE =    0x0000;
@@ -1170,6 +1175,18 @@ public:
       virtual int publish(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
       virtual int reclone(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
       virtual int close(const DoutPrefixProvider* dpp, uint32_t flags) = 0;
+      /* the object has been unlinked:  drop the shadow's name now,
+       * refuse to publish it, and let the storage be reclaimed when
+       * the last open descriptor is returned (posix unlink) */
+      virtual int discard(const DoutPrefixProvider* dpp, uint32_t flags) {
+	return -ENOTSUP;
+      }
+      /* truncate the shadow in place;  clients rendezvoused on it
+       * follow, which unlinking and recreating it would defeat */
+      virtual int ftruncate(const DoutPrefixProvider* dpp, uint64_t size,
+			     uint32_t flags) {
+	return -ENOTSUP;
+      }
 
       virtual int fstat(struct stat* st, uint32_t flags) = 0;
       virtual int fgetattr(const DoutPrefixProvider* dpp,
@@ -1185,15 +1202,25 @@ public:
       virtual int fremovexattr(const DoutPrefixProvider* dpp,
 				const std::string& name, uint32_t flags) = 0;
 
+      /* what this handle's i/o fd is currently bound to */
+      enum class Binding : uint8_t {
+        PUBLISHED,        /* no shadow exists;  bound to published object */
+        SHADOW,           /* bound to the active, unpublished shadow */
+        SHADOW_PUBLISHED, /* shadow was published;  a write must re-fork */
+      };
+
       bool resumed() const { return resumed_existing; }
-      bool needs_reclone() const { return published; }
+      /* true when a write requires (re-)establishing a shadow */
+      bool needs_shadow() const { return binding != Binding::SHADOW; }
+      bool is_doomed() const { return doomed; }
 
       FSIOObject() {}
       virtual ~FSIOObject() {}
 
     protected:
       bool resumed_existing{false};
-      bool published{false};
+      bool doomed{false};
+      Binding binding{Binding::SHADOW};
     }; /* FSIOObject */
 
 
