@@ -148,6 +148,84 @@ static bool is_reserved_name(std::string_view name)
 	 name.starts_with(nsfs::CLONE_PARENT_PREFIX);
 }
 
+/* Does an on-disk entry count as *content*, for deciding whether a bucket
+ * or directory is empty?
+ *
+ * Driver scaffolding does not:  the driver creates and removes it and a
+ * client cannot address it.  Everything else does -- including two kinds
+ * of write that are in flight rather than at rest:
+ *
+ *   - an unpublished shadow (.shadow/<leaf>)
+ *   - an incomplete multipart upload (.multipart_*)
+ *
+ * S3 refuses to delete a bucket holding an incomplete multipart upload
+ * even though the bucket lists as empty, and a shadow is the NFS-side
+ * equivalent of one.  Treating either as ignorable does not merely permit
+ * the delete -- delete_directory() then recurses into it, destroying a
+ * write the client believes is still in progress.  The client can see and
+ * abort an upload (ListMultipartUploads) and can close or discard a write,
+ * so refusing costs nothing it cannot resolve.
+ *
+ * .versions/ and .shadow/ are containers:  scaffolding when they hold
+ * nothing of their own, content when they do.  .folder is content -- it
+ * *is* an object.  Bucket directories carry no .folder;  their info is an
+ * xattr.
+ *
+ * NB this deliberately diverges from the posix driver, which exempts
+ * ".multipart" in POSIXBucket::check_empty() (b46ecc1d4f2, "rgw/posix:
+ * Account for incomplete uploads during deletes") and again as `is_mp` in
+ * its delete_directory().  nsfs inherited both and now aligns with S3
+ * instead.  If the posix line wants the same, the exemption there should
+ * become an abort rather than a pass. */
+static bool dir_has_content(int parent_fd, const char* dname,
+			    std::string_view ignore = {})
+{
+  int fd = ::openat(parent_fd, dname, O_RDONLY | O_DIRECTORY);
+  if (fd < 0) {
+    return false;
+  }
+  DIR* d = ::fdopendir(fd);
+  if (!d) {
+    ::close(fd);
+    return false;
+  }
+  bool found = false;
+  struct dirent* de;
+  while ((de = ::readdir(d)) != nullptr) {
+    std::string_view n = de->d_name;
+    if ((n == ".") || (n == "..")) {
+      continue;
+    }
+    if (!ignore.empty() && (n == ignore)) {
+      continue;
+    }
+    found = true;
+    break;
+  }
+  ::closedir(d);
+  return found;
+}
+
+static bool entry_is_content(int parent_fd, std::string_view name)
+{
+  if (name == HIDDEN_VERSIONS_PATH) {
+    /* version entries are user data;  the lock file is ours */
+    return dir_has_content(parent_fd, std::string(name).c_str(),
+			   VERSIONS_LOCK_NAME);
+  }
+  if (name == HIDDEN_SHADOW_PATH) {
+    return dir_has_content(parent_fd, std::string(name).c_str());
+  }
+  if (name == NSFS_FOLDER_OBJECT_NAME) {
+    return true; /* the sentinel of a directory object */
+  }
+  if (name.starts_with(MP_STAGING_PREFIX)) {
+    return true; /* an incomplete upload, as S3 has it */
+  }
+  /* remaining reserved names are scaffolding */
+  return !is_reserved_name(name);
+}
+
 /* See posix driver comment — object ownership is now read from the
  * standard RGW_ATTR_ACL attribute, matching rados. The former
  * NSFSOwner xattr could not represent account-owned objects. */
@@ -966,9 +1044,9 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       continue;
     }
 
-    std::string_view d_name = entry->d_name;
-    bool is_mp = d_name.starts_with("." + mp_ns);
-    if (!is_mp && !delete_children) {
+    /* scaffolding is removed with the directory;  content blocks the
+     * removal unless the caller asked to recurse.  See entry_is_content. */
+    if (entry_is_content(dir_fd, entry->d_name) && !delete_children) {
       closedir(dir);
       return -ENOTEMPTY;
     }
@@ -4085,10 +4163,10 @@ int NSFSBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 
 int NSFSBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return dir->for_each(dpp, [](const char* name) {
-    /* for_each filters out "." and "..", so reaching here is not empty */
-    std::string_view check_name = name;
-    if (!check_name.starts_with(MP_STAGING_PREFIX)) { // incomplete uploads can be deleted
+  int bucket_fd = dir->get_fd();
+  return dir->for_each(dpp, [bucket_fd](const char* name) {
+    /* for_each filters out "." and ".." */
+    if (entry_is_content(bucket_fd, name)) {
       return -ENOTEMPTY;
     }
     return 0;
