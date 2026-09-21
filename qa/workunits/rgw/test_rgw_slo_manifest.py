@@ -121,7 +121,7 @@ def test_single_segment():
     assert 'application/json' in r.headers.get('Content-Type', ''), \
         f'Content-Type not JSON: {r.headers.get("Content-Type")}'
     assert r.headers.get('X-Static-Large-Object', '').lower() == 'true', \
-        f'Missing X-Static-Large-Object on manifest GET'
+        'Missing X-Static-Large-Object on manifest GET'
 
     # 6. Verify JSON body content (raw format: path, etag, size_bytes)
     returned_manifest = r.json()
