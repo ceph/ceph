@@ -2126,6 +2126,10 @@ public:
       rdma_delivery;
     boost::container::small_vector<ceph::rdma::oob_result_t*, osdc_opvec_len>
       rdma_oob_result;
+    /// callback-form result slots taken over from the ObjectOperation:
+    /// rdma_oob_result and the out_handlers point into it, so it must
+    /// live as long as the Op, not the (cleared) ObjectOperation
+    std::unique_ptr<std::deque<ceph::rdma::oob_result_t>> rdma_oob_storage;
     bool has_rdma_delivery() const {
       return std::any_of(rdma_delivery.begin(), rdma_delivery.end(),
 			 [](const auto& d) { return !d.empty(); });
@@ -3230,6 +3234,7 @@ public:
     o->out_ec.swap(op.out_ec);
     o->rdma_delivery.swap(op.rdma_delivery);
     o->rdma_oob_result.swap(op.rdma_oob_result);
+    o->rdma_oob_storage = std::move(op.rdma_oob_storage);
     op.clear();
     return o;
   }
@@ -3271,6 +3276,7 @@ public:
     o->out_ec.swap(op.out_ec);
     o->rdma_delivery.swap(op.rdma_delivery);
     o->rdma_oob_result.swap(op.rdma_oob_result);
+    o->rdma_oob_storage = std::move(op.rdma_oob_storage);
     if (features)
       o->features = features;
     op.clear();
