@@ -33,12 +33,12 @@
  *               └─ osd.0 … osd.(k+m-1)
  *   rule "ec_rule"  type erasure  mode indep  failure_domain osd
  *
- * `num_zones > 1` is not implemented yet: pre_peering_hook() ceph_aborts in
- * that case. The intended multi-zone topology (for the future stretch
- * cluster support this fixture is meant to grow into) is:
+ * For `num_zones > 1`, the topology is (one single-OSD host per shard, since
+ * add_simple_stretch_rule()'s CHOOSELEAF step selects k+m distinct hosts
+ * within each zone):
  *   root "default"
- *     ├─ datacenter "zone-0"  →  host "host-0"  →  local OSDs
- *     └─ datacenter "zone-1"  →  host "host-1"  →  remote OSDs
+ *     ├─ datacenter "zone-0"  →  host "host-0-0" … "host-0-(k+m-1)"  →  local OSDs
+ *     └─ datacenter "zone-1"  →  host "host-1-0" … "host-1-(k+m-1)"  →  remote OSDs
  *   rule "ec_stretch_rule"  type erasure  mode indep
  *
  * The pg_upmap is kept disabled so CRUSH determines placement directly.

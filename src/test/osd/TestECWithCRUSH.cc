@@ -83,6 +83,14 @@ const std::vector<BackendConfig> kECCrushConfigs = {
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, 1, "EC_Jerasure_Opt_k4m2_su16k_CRUSH"},
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 1, "EC_Jerasure_Opt_k2m1_su4k_CRUSH"},
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, 1, "EC_Jerasure_Opt_k8m3_su4k_CRUSH"},
+
+  // 2-zone stretch configurations — CRUSH map has two datacenter buckets
+  // (zone-0, zone-1), each with k+m single-OSD hosts.  The pool uses the
+  // "ec_stretch_rule" built by add_simple_stretch_rule() in pre_peering_hook.
+  {PGBackendTestFixture::EC, "isa",     "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 2, "EC_ISA_Opt_k4m2_su4k_2zone_CRUSH"},
+  {PGBackendTestFixture::EC, "isa",     "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 2, "EC_ISA_Opt_k2m1_su4k_2zone_CRUSH"},
+  {PGBackendTestFixture::EC, "jerasure","reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 2, "EC_Jerasure_Opt_k4m2_su4k_2zone_CRUSH"},
+  {PGBackendTestFixture::EC, "jerasure","reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 2, "EC_Jerasure_Opt_k2m1_su4k_2zone_CRUSH"},
 };
 
 }  // namespace
