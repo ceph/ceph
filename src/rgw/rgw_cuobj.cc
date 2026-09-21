@@ -80,7 +80,13 @@ int RGWCuObjServer::do_init(CephContext* cct)
   }
 
   cuObjServer::setupTelemetry(false, &std::cerr);
+#ifdef CUOBJ_SERVER_MAJOR_VERSION
+  // cuObject 2.x split op logging into a second flags argument
+  cuObjServer::setTelemFlags(CUOBJ_LOG_PATH_INFO | CUOBJ_LOG_PATH_DEBUG | CUOBJ_LOG_PATH_ERROR,
+                             CUOBJ_LOG_OP_GET | CUOBJ_LOG_OP_PUT);
+#else
   cuObjServer::setTelemFlags(CUOBJ_LOG_PATH_INFO | CUOBJ_LOG_PATH_DEBUG | CUOBJ_LOG_PATH_ERROR);
+#endif
 
   if (!m_server->isConnected()) {
     lderr(cct) << "rgw_cuobj: ERROR: cuObjServer failed to connect" << dendl;
