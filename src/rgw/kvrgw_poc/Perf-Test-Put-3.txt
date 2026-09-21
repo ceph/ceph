@@ -2,8 +2,8 @@ instances: 3
 mode: perf
 clean: yes
 prefix_len: 16
-suffix_len: 0
-tag_count: 4
+suffix_len: 8
+tag_count: 2
 tag_name_base: mytag
 tag_data_size: 200
 workload: put
@@ -11,7 +11,7 @@ batch_size: 10
 batch_timeout_us: 1000
 batch_threads: 8
 concurrency: 128
-buckets: 1
+buckets: 4
 burst: 5 
 duration: 180
 tiers:  8192

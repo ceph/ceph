@@ -145,18 +145,32 @@ KeyBuf make_tenant_key(std::string_view tenant_name)
 
 std::optional<BucketKeyParts> parse_bucket_key(std::string_view key)
 {
-  if (key.size() < 6 || key[0] != kNamespaceBucket) {
+  constexpr size_t kMinSize = sizeof(KeyHeaderB) + AWS_MinBucketNameLen;
+  if (key.size() < kMinSize || key[0] != kNamespaceBucket) [[unlikely]] {
     return std::nullopt;
   }
   BucketKeyParts parts;
   uint32_t net{};
-  std::memcpy(&net, key.data() + 1, 4);
-  parts.tenant_id = ntohl(net);
-  parts.bucket_name.assign(key.substr(5));
-  if (parts.bucket_name.empty() || parts.bucket_name.size() > 63) {
+  std::memcpy(&net, key.data() + offsetof(KeyHeaderB, tenant_id), sizeof(net));
+  parts.tenant_id = be32toh(net);
+  parts.bucket_name.assign(key.substr(sizeof(KeyHeaderB)));
+  if (parts.bucket_name.size() > AWS_MaxBucketNameLen) [[unlikely]] {
     return std::nullopt;
   }
   return parts;
+}
+
+std::optional<std::string_view> parse_bucket_key_view(std::string_view key)
+{
+  constexpr size_t kMinSize = sizeof(KeyHeaderB) + AWS_MinBucketNameLen;
+  if (key.size() < kMinSize || key[0] != kNamespaceBucket) [[unlikely]] {
+    return std::nullopt;
+  }
+  const std::string_view name = key.substr(sizeof(KeyHeaderB));
+  if (name.size() > AWS_MaxBucketNameLen) [[unlikely]] {
+    return std::nullopt;
+  }
+  return name;
 }
 
 KeyBuf make_object_key(bucket_id_t bucket_id, std::string_view object_name)
@@ -192,22 +206,37 @@ KeyBuf make_version_prefix(bucket_id_t bucket_id)
 
 std::optional<ObjectKeyParts> parse_object_key(std::string_view key)
 {
-  if (key.size() < 15 || key[0] != kNamespaceObject ||
-      key[13] != kCategoryObject) {
+  constexpr size_t kHdrSize = sizeof(KeyHeaderS);
+  if (key.size() < kHdrSize + 1 || key[0] != kNamespaceObject ||
+      key[offsetof(KeyHeaderS, cat)] != kCategoryObject) [[unlikely]] {
     return std::nullopt;
   }
   ObjectKeyParts parts;
   uint16_t sc_net{}, si_net{};
-  std::memcpy(&sc_net, key.data() + 1, 2);
-  std::memcpy(&si_net, key.data() + 3, 2);
-  parts.shard_count = ntohs(sc_net);
-  parts.shard_id = ntohs(si_net);
-  parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
-  parts.object_name.assign(key.substr(14));
-  if (parts.object_name.empty() || parts.object_name.size() > 1024) {
+  std::memcpy(&sc_net, key.data() + offsetof(KeyHeaderS, shard_count), sizeof(sc_net));
+  std::memcpy(&si_net, key.data() + offsetof(KeyHeaderS, shard_id), sizeof(si_net));
+  parts.shard_count = be16toh(sc_net);
+  parts.shard_id = be16toh(si_net);
+  parts.bucket_id = bucket_id_t::deserialize(key.data() + offsetof(KeyHeaderS, bucket_id));
+  parts.object_name.assign(key.substr(kHdrSize));
+  if (parts.object_name.empty() || parts.object_name.size() > AWS_MaxObjectNameLen) {
     return std::nullopt;
   }
   return parts;
+}
+
+std::optional<std::string_view> parse_object_key_view(std::string_view key)
+{
+  constexpr size_t kHdrSize = sizeof(KeyHeaderS);
+  if (key.size() < kHdrSize + 1 || key[0] != kNamespaceObject ||
+      key[offsetof(KeyHeaderS, cat)] != kCategoryObject) [[unlikely]] {
+    return std::nullopt;
+  }
+  const std::string_view name = key.substr(kHdrSize);
+  if (name.size() > AWS_MaxObjectNameLen) {
+    return std::nullopt;
+  }
+  return name;
 }
 
 KeyBuf make_po_key(bucket_id_t bucket_id, std::string_view object_name,
@@ -260,15 +289,15 @@ std::optional<PoKeyParts> parse_po_key(std::string_view key)
 {
   constexpr size_t kPoFixedSuffixSize = 12;
   if (key.size() < 14 + kPoFixedSuffixSize || key[0] != kNamespacePending ||
-      key[13] != kOpTypeObject) {
+      key[13] != kOpTypeObject) [[unlikely]] {
     return std::nullopt;
   }
   PoKeyParts parts;
   uint16_t sc_net{}, si_net{};
   std::memcpy(&sc_net, key.data() + 1, 2);
   std::memcpy(&si_net, key.data() + 3, 2);
-  parts.shard_count = ntohs(sc_net);
-  parts.shard_id = ntohs(si_net);
+  parts.shard_count = be16toh(sc_net);
+  parts.shard_id = be16toh(si_net);
   parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
   parts.object_name.assign(
       key.substr(14, key.size() - 14 - kPoFixedSuffixSize));
@@ -305,7 +334,7 @@ std::optional<GoKeyParts> parse_go_key(std::string_view key)
 {
   constexpr size_t kGoFixedKeySize = 27;
   if (key.size() != kGoFixedKeySize || key[0] != kNamespaceGc ||
-      key[14] != kCategoryObject) {
+      key[14] != kCategoryObject) [[unlikely]] {
     return std::nullopt;
   }
   GoKeyParts parts;
@@ -313,8 +342,8 @@ std::optional<GoKeyParts> parse_go_key(std::string_view key)
   uint16_t sc_net{}, si_net{};
   std::memcpy(&sc_net, key.data() + 2, 2);
   std::memcpy(&si_net, key.data() + 4, 2);
-  parts.shard_count = ntohs(sc_net);
-  parts.shard_id = ntohs(si_net);
+  parts.shard_count = be16toh(sc_net);
+  parts.shard_id = be16toh(si_net);
   parts.bucket_id = bucket_id_t::deserialize(key.data() + 6);
   std::memcpy(parts.ref_tag.data(), key.data() + 15, kRefTagSize);
   return parts;
@@ -357,21 +386,21 @@ KeyBuf make_d_bucket_tier_prefix(bucket_id_t bucket_id, uint8_t size_tier)
 std::optional<DKeyParts> parse_d_key(std::string_view key)
 {
   constexpr size_t kDKeySize = 31;
-  if (key.size() != kDKeySize || key[0] != kNamespaceData) {
+  if (key.size() != kDKeySize || key[0] != kNamespaceData) [[unlikely]] {
     return std::nullopt;
   }
   DKeyParts parts;
   uint16_t sc_net{}, si_net{};
   std::memcpy(&sc_net, key.data() + 1, 2);
   std::memcpy(&si_net, key.data() + 3, 2);
-  parts.shard_count = ntohs(sc_net);
-  parts.shard_id = ntohs(si_net);
+  parts.shard_count = be16toh(sc_net);
+  parts.shard_id = be16toh(si_net);
   parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
   parts.size_tier = static_cast<uint8_t>(key[13]);
   parts.hash_prefix = static_cast<uint8_t>(key[14]);
   uint32_t mt_net{};
   std::memcpy(&mt_net, key.data() + 15, 4);
-  parts.mtime = ntohl(mt_net);
+  parts.mtime = be32toh(mt_net);
   std::memcpy(parts.ref_tag.data(), key.data() + 19, kRefTagSize);
   return parts;
 }
@@ -409,27 +438,45 @@ std::optional<VersionKeyParts> parse_v_key(std::string_view key)
   constexpr size_t kNul = 1;
   if (key.size() < sizeof(KeyHeaderS) + kNul + sizeof(version_id_t) ||
       key[0] != kNamespaceObject ||
-      key[offsetof(KeyHeaderS, cat)] != kCategoryVersion) {
+      key[offsetof(KeyHeaderS, cat)] != kCategoryVersion) [[unlikely]] {
     return std::nullopt;
   }
   const size_t vid_off = key.size() - sizeof(version_id_t);
-  if (key[vid_off - 1] != '\0') {
+  if (key[vid_off - 1] != '\0') [[unlikely]] {
     return std::nullopt;
   }
   VersionKeyParts parts;
   uint16_t sc_net{}, si_net{};
-  std::memcpy(&sc_net, key.data() + offsetof(KeyHeaderS, shard_count),
-              sizeof(sc_net));
-  std::memcpy(&si_net, key.data() + offsetof(KeyHeaderS, shard_id),
-              sizeof(si_net));
-  parts.shard_count = ntohs(sc_net);
-  parts.shard_id = ntohs(si_net);
-  parts.bucket_id =
-      bucket_id_t::deserialize(key.data() + offsetof(KeyHeaderS, bucket_id));
+  std::memcpy(&sc_net, key.data() + offsetof(KeyHeaderS, shard_count), sizeof(sc_net));
+  std::memcpy(&si_net, key.data() + offsetof(KeyHeaderS, shard_id), sizeof(si_net));
+  parts.shard_count = be16toh(sc_net);
+  parts.shard_id = be16toh(si_net);
+  parts.bucket_id = bucket_id_t::deserialize(key.data() +
+                                             offsetof(KeyHeaderS, bucket_id));
   parts.object_name.assign(key.data() + sizeof(KeyHeaderS),
                            vid_off - sizeof(KeyHeaderS) - kNul);
   parts.version_id = version_id_t::deserialize(key.data() + vid_off);
   return parts;
+}
+
+std::optional<std::string_view> parse_v_key_view(std::string_view key)
+{
+  constexpr size_t kNul = 1;
+  constexpr size_t kMinSize = sizeof(KeyHeaderS) + kNul + sizeof(version_id_t);
+  if (key.size() < kMinSize || key[0] != kNamespaceObject ||
+      key[offsetof(KeyHeaderS, cat)] != kCategoryVersion) [[unlikely]] {
+    return std::nullopt;
+  }
+  const size_t vid_off  = key.size() - sizeof(version_id_t);
+  if (key[vid_off - 1] != '\0') [[unlikely]] {
+    return std::nullopt;
+  }
+  const size_t name_off = sizeof(KeyHeaderS);
+  const size_t name_len = vid_off - name_off - kNul;
+  if (name_len == 0 || name_len > AWS_MaxObjectNameLen) [[unlikely]] {
+    return std::nullopt;
+  }
+  return key.substr(name_off, name_len);
 }
 
 KeyBuf make_r_key(std::string_view ref_tag)
@@ -470,15 +517,15 @@ std::optional<GroupPoKeyParts> parse_group_po_key(std::string_view key)
   constexpr size_t kGroupPoKeySize =
       14 + kRefTagSize; // header(14) + group_ref_tag(12)
   if (key.size() != kGroupPoKeySize || key[0] != kNamespacePending ||
-      key[13] != kOpTypeGroup) {
+      key[13] != kOpTypeGroup) [[unlikely]] {
     return std::nullopt;
   }
   GroupPoKeyParts parts;
   uint16_t sc_net{}, si_net{};
   std::memcpy(&sc_net, key.data() + 1, 2);
   std::memcpy(&si_net, key.data() + 3, 2);
-  parts.shard_count = ntohs(sc_net);
-  parts.shard_id = ntohs(si_net);
+  parts.shard_count = be16toh(sc_net);
+  parts.shard_id = be16toh(si_net);
   parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
   std::memcpy(parts.group_ref_tag.data(), key.data() + 14, kRefTagSize);
   return parts;
@@ -500,7 +547,7 @@ std::optional<GroupGoKeyParts> parse_group_go_key(std::string_view key)
   constexpr size_t kGroupGoKeySize =
       15 + kRefTagSize; // header(15) + group_ref_tag(12)
   if (key.size() != kGroupGoKeySize || key[0] != kNamespaceGc ||
-      key[14] != kOpTypeGroup) {
+      key[14] != kOpTypeGroup) [[unlikely]] {
     return std::nullopt;
   }
   GroupGoKeyParts parts;
@@ -508,8 +555,8 @@ std::optional<GroupGoKeyParts> parse_group_go_key(std::string_view key)
   uint16_t sc_net{}, si_net{};
   std::memcpy(&sc_net, key.data() + 2, 2);
   std::memcpy(&si_net, key.data() + 4, 2);
-  parts.shard_count = ntohs(sc_net);
-  parts.shard_id = ntohs(si_net);
+  parts.shard_count = be16toh(sc_net);
+  parts.shard_id = be16toh(si_net);
   parts.bucket_id = bucket_id_t::deserialize(key.data() + 6);
   std::memcpy(parts.group_ref_tag.data(), key.data() + 15, kRefTagSize);
   return parts;

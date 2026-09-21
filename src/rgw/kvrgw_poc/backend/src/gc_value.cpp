@@ -35,7 +35,7 @@ void gc_hdr_to_be(GcValueHeader &hdr)
 void gc_hdr_from_be(GcValueHeader &hdr)
 {
   hdr.object_size = be64toh(hdr.object_size);
-  hdr.mtime = ntohl(hdr.mtime);
+  hdr.mtime = be32toh(hdr.mtime);
 }
 
 void po_hdr_to_be(PoValueHeader &hdr)
@@ -47,7 +47,7 @@ void po_hdr_to_be(PoValueHeader &hdr)
 void po_hdr_from_be(PoValueHeader &hdr)
 {
   hdr.estimated_size = be64toh(hdr.estimated_size);
-  hdr.created_at_unix = ntohl(hdr.created_at_unix);
+  hdr.created_at_unix = be32toh(hdr.created_at_unix);
 }
 
 } // namespace
@@ -124,7 +124,7 @@ std::optional<GroupPoValue> parse_group_po_value(std::string_view data)
   }
   uint16_t count_be{};
   std::memcpy(&count_be, data.data(), 2);
-  const uint16_t count = ntohs(count_be);
+  const uint16_t count = be16toh(count_be);
   if (count == 0 || count > kMaxBatchSize) {
     return std::nullopt;
   }
@@ -145,7 +145,7 @@ std::optional<GroupPoValue> parse_group_po_value(std::string_view data)
   }
   uint32_t ts_be{};
   std::memcpy(&ts_be, data.data() + data.size() - 4, 4);
-  val.created_at_unix = ntohl(ts_be);
+  val.created_at_unix = be32toh(ts_be);
   return val;
 }
 
@@ -173,7 +173,7 @@ std::optional<GroupGcValue> parse_group_gc_value(std::string_view data)
   }
   uint16_t count_be{};
   std::memcpy(&count_be, data.data(), 2);
-  const uint16_t count = ntohs(count_be);
+  const uint16_t count = be16toh(count_be);
   if (count == 0 || count > kMaxBatchSize) {
     return std::nullopt;
   }

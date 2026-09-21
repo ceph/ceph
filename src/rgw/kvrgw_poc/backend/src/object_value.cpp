@@ -40,14 +40,19 @@ void hdr_to_be(ObjectValueHeader &hdr)
 
 void hdr_from_be(ObjectValueHeader &hdr)
 {
-  hdr.etag_part_count = ntohs(hdr.etag_part_count);
-  hdr.annotations_count = ntohs(hdr.annotations_count);
+  hdr.etag_part_count = be16toh(hdr.etag_part_count);
+  hdr.annotations_count = be16toh(hdr.annotations_count);
   hdr.size = be64toh(hdr.size);
-  hdr.last_modified_sec = ntohl(hdr.last_modified_sec);
-  hdr.last_modified_nsec = ntohl(hdr.last_modified_nsec);
+  hdr.last_modified_sec = be32toh(hdr.last_modified_sec);
+  hdr.last_modified_nsec = be32toh(hdr.last_modified_nsec);
   hdr.version_id = hdr.version_id.from_be();
   hdr.next_vid = hdr.next_vid.from_be();
-  hdr.metadata_count = ntohs(hdr.metadata_count);
+  hdr.metadata_count = be16toh(hdr.metadata_count);
+}
+
+bool ObjectValueHeader::is_delete_marker() const
+{
+  return (flags & ObjectValue::kFlagFenced) != 0;
 }
 
 namespace {
@@ -67,6 +72,11 @@ std::string etag_to_hex(const uint8_t *etag, size_t len)
 } // namespace
 
 std::string ObjectValue::etag_display() const { return get_etag().to_hex(); }
+
+std::string ovh_etag_display(const ObjectValueHeader* h)
+{
+  return etag_t::to_hex(h->etag, be16toh(h->etag_part_count));
+}
 
 namespace {
 
@@ -117,6 +127,21 @@ std::span<const uint8_t> object_inline_metadata_bytes(std::string_view data)
     return {};
   }
   return {rest.data(), frame_size};
+}
+
+bool parse_object_value_hdr(std::string_view data, ObjectValueHeader &hdr)
+{
+  if (data.size() < sizeof(ObjectValueHeader)) {
+    return false;
+  }
+  std::memcpy(&hdr, data.data(), sizeof(ObjectValueHeader));
+  hdr_from_be(hdr);
+  const auto ct = hdr.chunk.type;
+  if (ct != CHUNK_INLINE && ct != CHUNK_CHILD_D && ct != CHUNK_CHILD_D_REF &&
+      ct != CHUNK_STORAGE && ct != CHUNK_STORAGE_REF) {
+    return false;
+  }
+  return true;
 }
 
 std::optional<ObjectValue> parse_object_value(std::string_view data)
@@ -201,7 +226,7 @@ void child_hdr_to_be(ChildValueHeader &hdr)
 
 void child_hdr_from_be(ChildValueHeader &hdr)
 {
-  hdr.ref_count = ntohl(hdr.ref_count);
+  hdr.ref_count = be32toh(hdr.ref_count);
 }
 
 std::string make_child_value(ChildValueHeader hdr, std::string_view payload)

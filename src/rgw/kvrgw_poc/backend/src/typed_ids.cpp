@@ -14,23 +14,33 @@
 
 #include "typed_ids.hpp"
 
+#include <cstdio>
 #include <endian.h>
 #include <iomanip>
 #include <sstream>
 
 namespace kvrgw {
 
+std::string etag_t::to_hex(const uint8_t* bytes, uint16_t part_count)
+{
+  static constexpr char kHex[] = "0123456789abcdef";
+  // 32 hex digits + optional "-65535" (6 chars) + NUL
+  char buf[40];
+  char *p = buf;
+  for (int i = 0; i < 16; ++i) {
+    *p++ = kHex[bytes[i] >> 4];
+    *p++ = kHex[bytes[i] & 0xf];
+  }
+  if (part_count > 0) {
+    p += std::snprintf(p, buf + sizeof(buf) - p, "-%u",
+                       static_cast<unsigned>(part_count));
+  }
+  return std::string(buf, static_cast<size_t>(p - buf));
+}
+
 std::string etag_t::to_hex() const
 {
-  std::ostringstream out;
-  out << std::hex << std::setfill('0');
-  for (int i = 0; i < 16; ++i) {
-    out << std::setw(2) << static_cast<int>(bytes_[i]);
-  }
-  if (part_count_ > 0) {
-    out << '-' << std::dec << part_count_;
-  }
-  return out.str();
+  return to_hex(bytes_, part_count_);
 }
 
 etag_t etag_t::from_hex(std::string_view hex)

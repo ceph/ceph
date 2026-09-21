@@ -54,6 +54,8 @@ class __attribute__((packed)) etag_t {
   void deserialize(const uint8_t* src) { std::memcpy(bytes_, src, 16); }
 
   std::string to_hex() const;
+  // Operate directly on any 16-byte buffer — no etag_t construction needed.
+  static std::string to_hex(const uint8_t* bytes, uint16_t part_count);
   static etag_t from_hex(std::string_view hex);
 
   const uint8_t* data() const { return bytes_; }

@@ -39,7 +39,7 @@ uint32_t read_uint32_be(std::string_view data, size_t offset)
   assert(data.size() >= offset + sizeof(uint32_t));
   uint32_t net{};
   std::memcpy(&net, data.data() + offset, sizeof(net));
-  return ntohl(net);
+  return be32toh(net);
 }
 
 int64_t read_int64_be(std::string_view data, size_t offset)

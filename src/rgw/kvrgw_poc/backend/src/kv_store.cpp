@@ -19,6 +19,7 @@
 #include "keys.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <cstring>
 
@@ -335,6 +336,31 @@ FdbFuture KvTransaction::kv_async_get_range(std::string_view start,
 {
   return fdb_issue_get_range(impl_->tr, start, exclusive_begin, 1, end, limit,
                              mode);
+}
+
+//---------------------------------------------------------------------------------
+fdb_error_t FdbRangeHolder::wait() noexcept
+{
+  if (fdb_error_t err = fdb_future_block_until_ready(f_.raw())) {
+    return err;
+  }
+  fdb_bool_t more = 0;
+  if (fdb_error_t err = fdb_future_get_keyvalue_array(
+          f_.raw(), &kv_, &count_, &more)) {
+    return err;
+  }
+  more_ = more != 0;
+  ready_ = true;
+  return 0;
+}
+
+//---------------------------------------------------------------------------------
+FdbRangeHolder KvTransaction::kv_async_get_range_holder(
+    std::string_view start, bool exclusive_begin, std::string_view end,
+    int limit, FDBStreamingMode mode)
+{
+  return FdbRangeHolder(
+      fdb_issue_get_range(impl_->tr, start, exclusive_begin, 1, end, limit, mode));
 }
 
 //---------------------------------------------------------------------------------

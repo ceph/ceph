@@ -17,8 +17,10 @@
 #include "constants.hpp"
 #include "typed_ids.hpp"
 
+#include <arpa/inet.h>
 #include <cstdint>
 #include <cstring>
+#include <endian.h>
 #include <optional>
 #include <span>
 #include <string>
@@ -60,7 +62,9 @@ struct ChunkDescriptor {
   ChunkType type{CHUNK_STORAGE};
 };
 
+struct ObjectValue;
 struct ObjectValueHeader {
+  bool is_delete_marker() const;
   uint8_t ref_tag[kRefTagSize]{};
   uint16_t etag_part_count{};
   uint16_t annotations_count{};
@@ -196,6 +200,48 @@ struct BucketValue {
 };
 
 std::optional<ObjectValue> parse_object_value(std::string_view data);
+
+// Lightweight header-only parse for listing hot path.
+// Populates hdr fields only; no heap allocations.
+// Returns false if data is too short or chunk type is invalid.
+bool parse_object_value_hdr(std::string_view data, ObjectValueHeader &hdr);
+
+// Zero-copy: validate and return a pointer directly into the FDB buffer.
+// Returns nullptr if data is too short or chunk type is invalid.
+// The pointer is valid for the lifetime of `data`.
+// All multi-byte fields are still big-endian — use the ovh_* accessors below.
+inline const ObjectValueHeader* ovh_ptr(std::string_view data)
+{
+  if (data.size() < sizeof(ObjectValueHeader)) {
+    return nullptr;
+  }
+  const auto* hdr = reinterpret_cast<const ObjectValueHeader*>(data.data());
+  const auto ct = hdr->chunk.type;
+  if (ct != CHUNK_INLINE && ct != CHUNK_CHILD_D && ct != CHUNK_CHILD_D_REF &&
+      ct != CHUNK_STORAGE && ct != CHUNK_STORAGE_REF) {
+    return nullptr;
+  }
+  return hdr;
+}
+
+// Accessors that apply byte-swap on the raw big-endian header pointer.
+inline bool ovh_is_delete_marker(const ObjectValueHeader* h)
+{
+  return (h->flags & ObjectValue::kFlagFenced) != 0;
+}
+inline uint64_t ovh_size(const ObjectValueHeader* h)
+{
+  return be64toh(h->size);
+}
+inline int64_t ovh_last_modified_sec(const ObjectValueHeader* h)
+{
+  return static_cast<int64_t>(be32toh(h->last_modified_sec));
+}
+inline version_id_t ovh_version_id(const ObjectValueHeader* h)
+{
+  return h->version_id.from_be();
+}
+std::string ovh_etag_display(const ObjectValueHeader* h);
 std::span<const uint8_t> object_inline_metadata_bytes(std::string_view data);
 
 void child_hdr_to_be(ChildValueHeader& hdr);
@@ -213,6 +259,21 @@ std::string make_bucket_value(bucket_id_t bucket_id, int64_t created_at_unix,
                               uint8_t access_flags = 0, VersioningState versioning_state = VERSIONING_DISABLED,
                               std::string_view policy_json = "");
 std::optional<BucketValue> parse_bucket_value(std::string_view data);
+
+// Zero-copy: validate and return a pointer directly into the FDB buffer.
+// Returns nullptr if data is too short.
+inline const BucketValueHeader* bvh_ptr(std::string_view data)
+{
+  if (data.size() < sizeof(BucketValueHeader)) [[unlikely]] {
+    return nullptr;
+  }
+  return reinterpret_cast<const BucketValueHeader*>(data.data());
+}
+
+inline int64_t bvh_created_at_unix(const BucketValueHeader* h)
+{
+  return static_cast<int64_t>(be64toh(static_cast<uint64_t>(h->created_at_unix)));
+}
 
 void hdr_to_be(ObjectValueHeader& hdr);
 void hdr_from_be(ObjectValueHeader& hdr);

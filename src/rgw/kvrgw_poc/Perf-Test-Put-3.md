@@ -1,7 +1,7 @@
 # Perf Test Configuration
 
 Generated from: Perf-Test-Put-3.txt
-Generated at: 2026-09-10T17:15:37Z
+Generated at: 2026-09-21T20:50:06Z
 
 ## Test Parameters
 
@@ -12,7 +12,7 @@ Generated at: 2026-09-10T17:15:37Z
 | clean | yes |
 | workload | put |
 | concurrency | 128 |
-| buckets | 1 |
+| buckets | 4 |
 | burst | 5 |
 | tiers | 8192 |
 | duration | 180 |
@@ -20,8 +20,8 @@ Generated at: 2026-09-10T17:15:37Z
 | max_inline | 256 |
 | max_kv_store | 4096 |
 | prefix_len | 16 |
-| suffix_len | 0 |
-| tag_count | 4 |
+| suffix_len | 8 |
+| tag_count | 2 |
 | tag_name_base | mytag |
 | tag_data_size | 200 |
 
@@ -88,6 +88,6 @@ Per-process CPU/IO (pidstat), disk utilization (iostat), process memory
 Per instance:
 ```
 set-batch size=10 timeout=1000 threads=8
-create-buckets buckets=1 mode=versioned
+create-buckets buckets=4 mode=versioned
 put c=128 tiers=8192 duration=180 burst=5
 ```

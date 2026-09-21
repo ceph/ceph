@@ -76,11 +76,13 @@ KeyBuf make_bucket_key(tenant_id_t tenant_id, std::string_view bucket_name);
 KeyBuf make_bucket_prefix(tenant_id_t tenant_id);
 KeyBuf make_tenant_key(std::string_view tenant_name);
 std::optional<BucketKeyParts> parse_bucket_key(std::string_view key);
+std::optional<std::string_view> parse_bucket_key_view(std::string_view key);
 
 KeyBuf make_object_key(bucket_id_t bucket_id, std::string_view object_name);
 KeyBuf make_object_prefix(bucket_id_t bucket_id);
 KeyBuf make_version_prefix(bucket_id_t bucket_id);
 std::optional<ObjectKeyParts> parse_object_key(std::string_view key);
+std::optional<std::string_view> parse_object_key_view(std::string_view key);
 
 KeyBuf make_po_key(
     bucket_id_t bucket_id,
@@ -126,6 +128,7 @@ struct VersionKeyParts {
 KeyBuf make_v_key(bucket_id_t bucket_id, std::string_view object_name, version_id_t version_id);
 KeyBuf make_v_prefix(bucket_id_t bucket_id, std::string_view object_name);
 std::optional<VersionKeyParts> parse_v_key(std::string_view key);
+std::optional<std::string_view> parse_v_key_view(std::string_view key);
 
 KeyBuf make_r_key(std::string_view ref_tag);
 

@@ -595,7 +595,7 @@ void BatchCommitQueue::start_batch(InFlightBatch &ib)
 
 bool BatchCommitQueue::do_phase3_work(InFlightBatch &ib)
 {
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   auto tr_result = service_.store_.begin_transaction();
   if (!tr_result) {
     auto ec = fdb_to_error(tr_result.error());
@@ -752,7 +752,7 @@ bool BatchCommitQueue::do_phase3_work(InFlightBatch &ib)
 
 void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)
 {
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
 
   auto now = std::chrono::steady_clock::now();
   int64_t bs = static_cast<int64_t>(batch.size());
@@ -1286,7 +1286,7 @@ KvrgwErrorCode KvRgwServiceImpl::add_tenant(std::string_view tenant_name,
                                             tenant_id_t *out_id)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kOther);
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   if (tenant_name.empty()) {
     return KVRGW_ERR_INVALID_ARGUMENT;
   }
@@ -1929,7 +1929,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_phase3(
     VersioningState *out_versioning_state, std::span<const uint8_t> tags,
     std::span<const uint8_t> metadata)
 {
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   static const std::string empty_data;
 
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
@@ -1976,7 +1976,7 @@ KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kCreateBucket);
   ops_stats_.inc(OpType::kCreateBucket);
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   if (!is_valid_bucket_name(bucket_name)) {
     return KVRGW_ERR_INVALID_BUCKET_NAME;
   }
@@ -2368,7 +2368,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_single_txn(
     VersioningState *out_versioning_state, const PutCondition *cond,
     std::span<const uint8_t> tags, std::span<const uint8_t> metadata)
 {
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
 
   auto cached_bid = get_bucket_id_cached(tenant_id, bucket_name);
   if (!cached_bid) {
@@ -2583,54 +2583,69 @@ KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id,
   max_buckets = std::min(max_buckets, AWS_MaxBuckets);
 
   const auto bprefix = make_bucket_prefix(tenant_id);
-  const auto end = prefix_range_end(bprefix.view());
+  const std::string scan_end = prefix_range_end(bprefix.view());
   std::string scan_begin;
   if (!continuation_token.empty()) {
     scan_begin = make_bucket_key(tenant_id, continuation_token).view();
   }
   else {
-    //scan_begin = std::string(bprefix.view());
     scan_begin = make_bucket_key(tenant_id, prefix).view();
   }
   bool exclusive_scan = !continuation_token.empty();
+
   while (true) {
-    auto rows = store_.range_scan(scan_begin, end, kListBucketsFdbPage,
-                                  exclusive_scan, listing_disable_ryw_, streamingMode);
-    exclusive_scan = true;
-    if (!rows) {
-      return fdb_to_error(rows.error());
+    auto tr_result = store_.begin_transaction();
+    if (!tr_result) {
+      return fdb_to_error(tr_result.error());
     }
-    if (rows->empty()) {
+    auto &tr = *tr_result;
+
+    if (listing_disable_ryw_) {
+      // best effort, don't fail on this
+      tr->disable_ryw();
+    }
+
+    FdbRangeHolder holder(tr->kv_async_get_range_holder(
+                            scan_begin, exclusive_scan, scan_end, kListBucketsFdbPage, streamingMode));
+    exclusive_scan = true;
+
+    const fdb_error_t wait_err = holder.wait();
+    if (wait_err) {
+      return fdb_to_error(wait_err);
+    }
+    if (holder.count() == 0) {
       break;
     }
 
-    for (auto it = rows->begin(); it != rows->end(); ++it) {
-      const auto parts = parse_bucket_key(it->key);
-      if (!parts) {
+    size_t rsv = std::min(out->buckets.size() + static_cast<size_t>(holder.count()),
+                          static_cast<size_t>(max_buckets));
+    out->buckets.reserve(rsv);
+
+    for (const auto& [key, val] : holder) {
+      const auto bucket_name = parse_bucket_key_view(key);
+      if (!bucket_name) [[unlikely]] {
         continue;
       }
-      const auto bucket_value = parse_bucket_value(it->value);
-      if (!bucket_value) {
+      const BucketValueHeader* bvh = bvh_ptr(val);
+      if (!bvh) [[unlikely]] {
         continue;
       }
-      if (!prefix.empty() &&
-          parts->bucket_name.compare(0, prefix.size(), prefix) != 0) {
+      if (!prefix.empty() && !starts_with(*bucket_name, prefix)) {
         // prefix was depleted -> stop the scan
         return KVRGW_ERR_OK;
       }
       if (out->buckets.size() >= max_buckets) {
-        // use last stored bucket_name
         out->continuation_token = out->buckets.back().name;
         return KVRGW_ERR_OK;
       }
-      out->buckets.push_back(BucketListEntry{parts->bucket_name, bucket_value->created_at_unix});
+      out->buckets.emplace_back(BucketListEntry{
+          std::string(*bucket_name), bvh_created_at_unix(bvh)});
     }
 
-    if (static_cast<int>(rows->size()) < kListBucketsFdbPage) {
+    if (!holder.more()) {
       break;
     }
-    // use last stored bucket_name
-    scan_begin = rows->back().key;
+    scan_begin.assign(holder.back().key);
   }
   return KVRGW_ERR_OK;
 }
@@ -2649,18 +2664,6 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
   ops_stats_.inc(OpType::kListObjects);
   *out = {};
   const std::string bname(bucket_name);
-  auto bucket_state = read_bucket_state(tenant_id, bname);
-  if (!bucket_state) {
-    return fdb_to_error(bucket_state.error());
-  }
-  if (!*bucket_state) {
-    return KVRGW_ERR_NO_SUCH_BUCKET;
-  }
-  if ((*bucket_state)->access_flags & kDenyList) {
-    return KVRGW_ERR_ACCESS_DENIED;
-  }
-  const auto bucket_id = (*bucket_state)->bucket_id;
-
   const std::string list_prefix(prefix);
   const std::string delim(delimiter);
   const bool use_delimiter = !delim.empty();
@@ -2674,144 +2677,203 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
     start_after = std::string(continuation_token);
   }
 
-  std::string scan_begin;
-  if (!start_after.empty()) {
-    scan_begin = make_object_key(bucket_id, start_after).view();
-  }
-  else if (!list_prefix.empty()) {
-    scan_begin = make_object_key(bucket_id, list_prefix).view();
-  }
-  else {
-    scan_begin = make_object_prefix(bucket_id).view();
-  }
+  constexpr int kMaxRetries = 3;
+  for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
+    *out = {};
 
-  const std::string scan_end =
-      list_prefix.empty()
-          ? prefix_range_end(make_object_prefix(bucket_id).view())
-          : prefix_range_end(make_object_key(bucket_id, list_prefix).view());
-
-  const int batch_limit = max_keys + 1;
-
-  int budget = 0;
-  int list_iters = 0;
-  std::string last_common_prefix;
-  std::string last_scanned;
-  std::string last_returned;
-  bool truncated = false;
-  bool truncated_on_common_prefix = false;
-  bool need_prefix_skip = false;
-  std::string prefix_skip_target;
-  bool exclusive_scan = !start_after.empty();
-  while (!truncated) {
-    ++list_iters;
-    const Stopwatch scan_t0;
-    auto rows = store_.range_scan(scan_begin, scan_end, batch_limit, exclusive_scan,
-                                  listing_disable_ryw_, streamingMode);
-    exclusive_scan = true;
-    latency_stats_.record_list_scan(scan_t0.elapsed_us());
-    if (!rows) {
-      latency_stats_.record_list_call(list_iters);
-      return fdb_to_error(rows.error());
+    auto cached = get_bucket_id_cached(tenant_id, bname);
+    if (!cached) {
+      auto ec = fdb_to_error(cached.error());
+      if (is_retriable(ec)) {
+        sleep_for_msec(10 * (attempt + 1));
+        continue;
+      }
+      return ec;
     }
-    if (rows->empty()) {
-      break;
+    if (!*cached) {
+      return KVRGW_ERR_NO_SUCH_BUCKET;
+    }
+    if ((*cached)->access_flags & kDenyList) {
+      return KVRGW_ERR_ACCESS_DENIED;
+    }
+    const auto bucket_id = (*cached)->bucket_id;
+
+    std::string scan_begin;
+    if (!start_after.empty()) {
+      scan_begin = make_object_key(bucket_id, start_after).view();
+    }
+    else if (!list_prefix.empty()) {
+      scan_begin = make_object_key(bucket_id, list_prefix).view();
+    }
+    else {
+      scan_begin = make_object_prefix(bucket_id).view();
     }
 
-    need_prefix_skip = false;
+    const std::string scan_end = list_prefix.empty() ?
+      prefix_range_end(make_object_prefix(bucket_id).view()) :
+      prefix_range_end(make_object_key(bucket_id, list_prefix).view());
 
-    for (const auto &row : *rows) {
-      const auto parts = parse_object_key(row.key);
-      if (!parts) {
-        continue;
-      }
-      const std::string &object_name = parts->object_name;
-      last_scanned = object_name;
+    const int batch_limit = max_keys + 1;
 
-      if (!list_prefix.empty() && !starts_with(object_name, list_prefix)) {
-        continue;
-      }
+    int budget = 0;
+    int list_iters = 0;
+    std::string last_common_prefix;
+    std::string last_scanned;
+    std::string last_returned;
+    bool truncated = false;
+    bool truncated_on_common_prefix = false;
+    bool need_prefix_skip = false;
+    std::string prefix_skip_target;
+    bool exclusive_scan = !start_after.empty();
+    KvrgwErrorCode iter_ec = KVRGW_ERR_OK;
 
-      const auto object_value = parse_object_value(row.value);
-      if (!object_value) {
-        continue;
-      }
-      if (object_value->is_delete_marker()) {
-        continue;
-      }
+    while (!truncated) {
+      ++list_iters;
 
-      if (use_delimiter) {
-        const std::string relative =
-            list_prefix.empty() ? object_name
-                                : object_name.substr(list_prefix.size());
-        const auto delim_pos = relative.find(delim);
-        if (delim_pos != std::string::npos) {
-          const std::string common =
-              list_prefix + relative.substr(0, delim_pos + delim.size());
-          if (common != last_common_prefix) {
-            if (budget >= max_keys) {
-              truncated = true;
-              truncated_on_common_prefix = true;
-              break;
-            }
-            out->common_prefixes.push_back(common);
-            last_common_prefix = common;
-            ++budget;
-          }
-          prefix_skip_target = std::string(
-              make_object_key(bucket_id, prefix_range_end(common)).view());
-          need_prefix_skip = true;
-          break;
-        }
+      auto tr_result = store_.begin_transaction();
+      if (!tr_result) {
+        iter_ec = fdb_to_error(tr_result.error());
+        break;
+      }
+      auto &tr = *tr_result;
+
+      if (listing_disable_ryw_) {
+        // best effort, don't fail on this
+        tr->disable_ryw();
       }
 
-      if (budget >= max_keys) {
-        truncated = true;
+      const Stopwatch scan_t0;
+      FdbRangeHolder holder(tr->kv_async_get_range_holder(scan_begin, exclusive_scan,
+                                                          scan_end, batch_limit, streamingMode));
+      exclusive_scan = true;
+      const fdb_error_t wait_err = holder.wait();
+      latency_stats_.record_list_scan(scan_t0.elapsed_us());
+
+      if (wait_err) {
+        iter_ec = fdb_to_error(wait_err);
+        break;
+      }
+      if (holder.count() == 0) {
+        // we could check here if bucket-id is legal and retry on change
         break;
       }
 
-      out->objects.push_back(ObjectListEntry{
-          object_name, object_value->hdr.size, object_value->etag_display(),
-          object_value->hdr.last_modified_sec});
-      last_returned = object_name;
-      ++budget;
+      need_prefix_skip = false;
+
+      out->objects.reserve(out->objects.size() +
+                           static_cast<size_t>(holder.count()));
+      for (const auto& [key, val] : holder) {
+        const auto object_name = parse_object_key_view(key);
+        if (!object_name) {
+          continue;
+        }
+        last_scanned = *object_name;
+
+        if (!list_prefix.empty() && !starts_with(*object_name, list_prefix)) {
+          continue;
+        }
+
+        const ObjectValueHeader* hdr = ovh_ptr(val);
+        if (!hdr) {
+          continue;
+        }
+
+        if (ovh_is_delete_marker(hdr)) {
+          continue;
+        }
+
+        if (use_delimiter) {
+          const std::string_view relative =
+            list_prefix.empty() ? *object_name
+            : object_name->substr(list_prefix.size());
+          const auto delim_pos = relative.find(delim);
+          if (delim_pos != std::string::npos) {
+            const std::string common =
+              list_prefix + std::string(relative.substr(0, delim_pos + delim.size()));
+            if (common != last_common_prefix) {
+              if (budget >= max_keys) {
+                truncated = true;
+                truncated_on_common_prefix = true;
+                break;
+              }
+              out->common_prefixes.push_back(common);
+              last_common_prefix = common;
+              ++budget;
+            }
+            prefix_skip_target = std::string(
+              make_object_key(bucket_id, prefix_range_end(common)).view());
+            need_prefix_skip = true;
+            break;
+          }
+        }
+
+        if (budget >= max_keys) {
+          truncated = true;
+          break;
+        }
+
+        last_returned = *object_name;
+        out->objects.emplace_back(ObjectListEntry{
+            std::string(*object_name), ovh_size(hdr),
+            ovh_etag_display(hdr), ovh_last_modified_sec(hdr)});
+        ++budget;
+      }
+
+      if (need_prefix_skip) {
+        scan_begin = prefix_skip_target;
+        exclusive_scan = false;
+        continue;
+      }
+
+      if (out->objects.size() == static_cast<size_t>(max_keys)) {
+        truncated = true;
+      }
+
+      if (truncated || !holder.more()) {
+        break;
+      }
+
+      // copy only the last key for the next page — one alloc per page
+      scan_begin.assign(holder.back().key);
     }
 
-    if (need_prefix_skip) {
-      scan_begin = prefix_skip_target;
-      exclusive_scan = false;
-      continue;
+    latency_stats_.record_list_call(list_iters);
+
+    if (iter_ec != KVRGW_ERR_OK) {
+      if (is_retriable(iter_ec)) {
+        sleep_for_msec(10 * (attempt + 1));
+        continue;
+      }
+      // clear out buffer before reporting an error
+      *out = {};
+      return iter_ec;
     }
 
-    if (out->objects.size() == max_keys) {
-      truncated = true;
+    out->is_truncated = truncated;
+    if (truncated) {
+      std::string continuation;
+      if (truncated_on_common_prefix && !last_scanned.empty()) {
+        continuation = last_scanned;
+      }
+      else if (!last_returned.empty()) {
+        continuation = last_returned;
+      }
+      else if (!last_scanned.empty()) {
+        continuation = last_scanned;
+      }
+      if (!continuation.empty()) {
+        out->next_continuation_token = continuation;
+      }
     }
-
-    if (truncated || static_cast<int>(rows->size()) < batch_limit) {
-      break;
+    if (!out->objects.empty() || !out->common_prefixes.empty()) {
+      return KVRGW_ERR_OK;
     }
-
-    scan_begin = rows->back().key;
+    else {
+      // make sure empty listing was not caused by a bucket removal
+      return resolve_bucket_error(tenant_id, bname, KVRGW_ERR_OK);
+    }
   }
-
-  latency_stats_.record_list_call(list_iters);
-
-  out->is_truncated = truncated;
-  if (truncated) {
-    std::string continuation;
-    if (truncated_on_common_prefix && !last_scanned.empty()) {
-      continuation = last_scanned;
-    }
-    else if (!last_returned.empty()) {
-      continuation = last_returned;
-    }
-    else if (!last_scanned.empty()) {
-      continuation = last_scanned;
-    }
-    if (!continuation.empty()) {
-      out->next_continuation_token = continuation;
-    }
-  }
-  return KVRGW_ERR_OK;
+  return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
 
 //--------------------------------------------------------------------------------
@@ -2834,7 +2896,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
   const auto bucket_id = (**bucket_id_res).bucket_id;
   const version_id_t target_vid = version_id;
 
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     auto tr_result = store_.begin_transaction();
     if (!tr_result) {
@@ -3104,7 +3166,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_bucket(tenant_id_t tenant_id,
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kDeleteBucket);
   ops_stats_.inc(OpType::kDeleteBucket);
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   // generate key to the bucket entry
   const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
   const std::string name(bucket_name);
@@ -3326,7 +3388,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_bucket_versioning(
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kPutBucketVersioning);
   ops_stats_.inc(OpType::kPutBucketVersioning);
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
   const std::string name(bucket_name);
 
@@ -3438,7 +3500,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     dst_bucket_id = (**dst_cached).bucket_id;
   }
 
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     auto tr_result = store_.begin_transaction();
     if (!tr_result) {
@@ -4133,11 +4195,11 @@ constexpr std::string_view kLovTok{"lov1."};
 
 void append_version_entry(KvRgwServiceImpl::ListObjectVersionsResult *out,
                           std::string_view name, version_id_t vid,
-                          bool is_latest, const ObjectValue &obj)
+                          bool is_latest, const ObjectValueHeader *hdr)
 {
-  out->versions.push_back(KvRgwServiceImpl::ObjectVersionEntry{
-      std::string(name), vid, is_latest, obj.is_delete_marker(), obj.hdr.size,
-      obj.etag_display(), static_cast<int64_t>(obj.hdr.last_modified_sec)});
+  out->versions.emplace_back(KvRgwServiceImpl::ObjectVersionEntry{
+      std::string(name), vid, is_latest, ovh_is_delete_marker(hdr),
+      ovh_size(hdr), ovh_etag_display(hdr), ovh_last_modified_sec(hdr)});
 }
 
 std::string encode_lov_cursors(std::string_view last_o, std::string_view last_v)
@@ -4184,80 +4246,102 @@ bool decode_lov_cursors(std::string_view marker, std::string *last_o,
   return true;
 }
 
-void merge_version_streams(const std::vector<RangeScanResult> &o_rows,
-                           const std::vector<RangeScanResult> &v_rows,
+//--------------------------------------------------------------------------------
+void merge_version_streams(const FdbRangeHolder &o_holder,
+                           const FdbRangeHolder &v_holder,
                            std::string_view list_prefix, int limit,
                            std::string *last_o, std::string *last_v,
                            KvRgwServiceImpl::ListObjectVersionsResult *out)
 {
+  out->versions.reserve(static_cast<size_t>(limit));
+
   int remaining = limit;
-  size_t oi = 0;
-  size_t vj = 0;
-  std::optional<ObjectKeyParts> o_parts;
-  std::optional<VersionKeyParts> v_parts;
-  std::optional<ObjectValue> o_val;
-  std::optional<ObjectValue> v_val;
+  auto oit = o_holder.begin();
+  auto vit = v_holder.begin();
+
+  // Track last key seen per stream as string_view — no alloc per row.
+  // Copied to *last_o / *last_v once at the end.
+  std::string_view last_o_sv;
+  std::string_view last_v_sv;
+
+  // current decoded row for each stream; nullptr = not yet loaded / exhausted
+  std::optional<std::string_view>  o_name;
+  const ObjectValueHeader*         o_hdr{nullptr};
+  std::optional<std::string_view>  v_name;
+  const ObjectValueHeader*         v_hdr{nullptr};
 
   auto load_o = [&]() -> bool {
-    while (oi < o_rows.size()) {
-      o_parts = parse_object_key(o_rows[oi].key);
-      o_val = parse_object_value(o_rows[oi].value);
-      if (o_parts && o_val &&
-          (list_prefix.empty() ||
-           starts_with(o_parts->object_name, list_prefix))) {
-        return true;
+    while (oit != o_holder.end()) {
+      const auto [key, val] = *oit;
+      last_o_sv = key;
+      o_name = parse_object_key_view(key);
+      if (o_name) {
+        const ObjectValueHeader* h = ovh_ptr(val);
+        if (h && (list_prefix.empty() || starts_with(*o_name, list_prefix))) {
+          o_hdr = h;
+          return true;
+        }
       }
-      *last_o = o_rows[oi].key;
-      ++oi;
+      ++oit;
     }
     return false;
   };
   auto load_v = [&]() -> bool {
-    while (vj < v_rows.size()) {
-      v_parts = parse_v_key(v_rows[vj].key);
-      v_val = parse_object_value(v_rows[vj].value);
-      if (v_parts && v_val &&
-          (list_prefix.empty() ||
-           starts_with(v_parts->object_name, list_prefix))) {
-        return true;
+    while (vit != v_holder.end()) {
+      const auto [key, val] = *vit;
+      last_v_sv = key;
+      v_name = parse_v_key_view(key);
+      if (v_name) {
+        const ObjectValueHeader* h = ovh_ptr(val);
+        if (h && (list_prefix.empty() || starts_with(*v_name, list_prefix))) {
+          v_hdr = h;
+          return true;
+        }
       }
-      *last_v = v_rows[vj].key;
-      ++vj;
+      ++vit;
     }
     return false;
   };
 
-  while (remaining > 0) {
-    const bool o_ok = load_o();
-    const bool v_ok = load_v();
-    if (!o_ok && !v_ok) {
-      break;
-    }
-    const bool take_o =
-        o_ok && (!v_ok || o_parts->object_name <= v_parts->object_name);
+  // Initial load of both streams before entering the merge loop.
+  bool o_ok = load_o();
+  bool v_ok = load_v();
+
+  while (remaining > 0 && (o_ok || v_ok)) {
+    const bool take_o = o_ok && (!v_ok || *o_name <= *v_name);
     if (take_o) {
-      append_version_entry(out, o_parts->object_name, o_val->hdr.version_id,
-                           true, *o_val);
-      out->next_version_id_marker = o_val->hdr.version_id;
-      *last_o = o_rows[oi].key;
-      ++oi;
+      last_o_sv = (*oit).key;
+      const version_id_t vid = ovh_version_id(o_hdr);
+      append_version_entry(out, *o_name, vid, true, o_hdr);
+      out->next_version_id_marker = vid;
+      ++oit;
+      o_name.reset();
+      o_hdr = nullptr;
+      o_ok = load_o();
     }
     else {
-      append_version_entry(out, v_parts->object_name, v_parts->version_id,
-                           false, *v_val);
-      out->next_version_id_marker = v_parts->version_id;
-      *last_v = v_rows[vj].key;
-      ++vj;
+      last_v_sv = (*vit).key;
+      const version_id_t vid = ovh_version_id(v_hdr);
+      append_version_entry(out, *v_name, vid, false, v_hdr);
+      out->next_version_id_marker = vid;
+      ++vit;
+      v_name.reset();
+      v_hdr = nullptr;
+      v_ok = load_v();
     }
     --remaining;
   }
 
-  const bool o_full = static_cast<int>(o_rows.size()) == limit;
-  const bool v_full = static_cast<int>(v_rows.size()) == limit;
-  const bool o_unread = oi < o_rows.size();
-  const bool v_unread = vj < v_rows.size();
+  const bool o_full = o_holder.count() == limit;
+  const bool v_full = v_holder.count() == limit;
+  const bool o_unread = oit != o_holder.end();
+  const bool v_unread = vit != v_holder.end();
   const bool more = o_unread || v_unread || o_full || v_full;
   out->is_truncated = more && (remaining == 0 || o_full || v_full);
+
+  // Single copy per stream — only the last key seen, deferred from the loop.
+  if (!last_o_sv.empty()) { last_o->assign(last_o_sv); }
+  if (!last_v_sv.empty()) { last_v->assign(last_v_sv); }
 }
 
 } // namespace
@@ -4275,7 +4359,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
   const std::string list_prefix(prefix);
   max_keys = std::min((max_keys > 0 ? max_keys : AWS_MaxKeys), AWS_MaxKeys);
 
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     *out = {};
     auto cached = get_bucket_id_cached(tenant_id, bname);
@@ -4294,11 +4378,9 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
 
     std::string last_o;
     std::string last_v;
-    if (!key_marker.empty() &&
-        !decode_lov_cursors(key_marker, &last_o, &last_v)) {
+    if (!key_marker.empty() && !decode_lov_cursors(key_marker, &last_o, &last_v)) {
       last_o = std::string(make_object_key(bucket_id, key_marker).view());
-      last_v = std::string(
-          make_v_key(bucket_id, key_marker, version_id_marker).view());
+      last_v = std::string(make_v_key(bucket_id, key_marker, version_id_marker).view());
     }
 
     std::string o_begin;
@@ -4311,10 +4393,9 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     else {
       o_begin = std::string(make_object_prefix(bucket_id).view());
     }
-    const std::string o_end =
-        list_prefix.empty()
-            ? prefix_range_end(make_object_prefix(bucket_id).view())
-            : prefix_range_end(make_object_key(bucket_id, list_prefix).view());
+    const std::string o_end = list_prefix.empty() ?
+      prefix_range_end(make_object_prefix(bucket_id).view()) :
+      prefix_range_end(make_object_key(bucket_id, list_prefix).view());
 
     KeyBuf v_dom = make_version_prefix(bucket_id);
     if (!list_prefix.empty()) {
@@ -4335,38 +4416,21 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     }
     auto &tr = *tr_result;
     if (listing_disable_ryw_) {
-      auto ryw = tr->disable_ryw();
-      if (!ryw) {
-        auto ec = fdb_to_error(ryw.error());
-        if (is_retriable(ec)) {
-          sleep_for_msec(10 * (attempt + 1));
-          continue;
-        }
-        return ec;
-      }
+      // best effort, don't fail on this
+      tr->disable_ryw();
     }
 
     auto f_bkt = issue_bucket_get(*tr, tenant_id, bname);
     const Stopwatch scan_t0;
-    auto f_o = tr->kv_async_get_range(o_begin, !last_o.empty(), o_end, max_keys,
-                                      streamingMode);
-    auto f_v = tr->kv_async_get_range(v_begin, !last_v.empty(), v_end, max_keys,
-                                      streamingMode);
+    FdbRangeHolder o_holder(tr->kv_async_get_range_holder(
+        o_begin, !last_o.empty(), o_end, max_keys, streamingMode));
+    FdbRangeHolder v_holder(tr->kv_async_get_range_holder(
+        v_begin, !last_v.empty(), v_end, max_keys, streamingMode));
 
-    auto o_rows = tr->kv_wait_range(f_o);
-    if (!o_rows) {
-      auto ec = fdb_to_error(o_rows.error());
-      if (is_retriable(ec)) {
-        sleep_for_msec(10 * (attempt + 1));
-        continue;
-      }
-      return ec;
-    }
-
+    const fdb_error_t o_err = o_holder.wait();
     const auto o_us = scan_t0.elapsed_us();
-    auto v_rows = tr->kv_wait_range(f_v);
-    if (!v_rows) {
-      auto ec = fdb_to_error(v_rows.error());
+    if (o_err) {
+      auto ec = fdb_to_error(o_err);
       if (is_retriable(ec)) {
         sleep_for_msec(10 * (attempt + 1));
         continue;
@@ -4374,8 +4438,18 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
       return ec;
     }
 
+    const fdb_error_t v_err = v_holder.wait();
     const auto v_us = scan_t0.elapsed_us();
-    merge_version_streams(*o_rows, *v_rows, list_prefix, max_keys, &last_o,
+    if (v_err) {
+      auto ec = fdb_to_error(v_err);
+      if (is_retriable(ec)) {
+        sleep_for_msec(10 * (attempt + 1));
+        continue;
+      }
+      return ec;
+    }
+
+    merge_version_streams(o_holder, v_holder, list_prefix, max_keys, &last_o,
                           &last_v, out);
 
     auto vb = resolve_bucket_verify(*tr, f_bkt, tenant_id, bname, bucket_id,
@@ -4419,7 +4493,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,
   ops_stats_.inc(OpType::kDeleteObject);
   const std::string bname(bucket_name);
   const std::string object_name(key);
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     auto tr_result = store_.begin_transaction();
     if (!tr_result) {
@@ -4475,7 +4549,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
   const auto bucket_id = (**cached).bucket_id;
   const auto object_key = make_object_key(bucket_id, key);
 
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     auto tr_result = store_.begin_transaction();
     if (!tr_result) {
@@ -4649,7 +4723,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
   const auto bucket_id = (**cached).bucket_id;
   const auto object_key = make_object_key(bucket_id, key);
 
-  constexpr int kMaxRetries = 10;
+  constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     auto tr_result = store_.begin_transaction();
     if (!tr_result) {

@@ -18,6 +18,7 @@
 #include "fdb.hpp"
 
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -62,6 +63,77 @@ class FdbFuture {
 struct RangeScanResult {
   std::string key;
   std::string value;
+};
+
+struct KVEntry {
+  std::string_view key;
+  std::string_view value;
+};
+
+// Zero-copy, non-movable, non-copyable holder for an FDB range future.
+// Owns the future; exposes the FDB buffer directly via range-for.
+// Must call wait() before iterating.
+class FdbRangeHolder {
+public:
+  explicit FdbRangeHolder(FdbFuture&& f) noexcept : f_(std::move(f)) {}
+  ~FdbRangeHolder() = default;
+
+  FdbRangeHolder(const FdbRangeHolder&) = delete;
+  FdbRangeHolder& operator=(const FdbRangeHolder&) = delete;
+  FdbRangeHolder(FdbRangeHolder&&) = delete;
+  FdbRangeHolder& operator=(FdbRangeHolder&&) = delete;
+
+  // Block until ready and populate internal buffer pointers.
+  // Returns 0 on success, non-zero FDB error code on failure.
+  fdb_error_t wait() noexcept;
+
+  bool is_ready() const noexcept { return f_.is_ready(); }
+  bool more()     const noexcept { return more_; }
+  int  count()    const noexcept { return count_; }
+
+  // Returns the last entry — valid after wait() with count() > 0.
+  KVEntry back() const noexcept {
+    assert(ready_ && count_ > 0);
+    return {
+      std::string_view(reinterpret_cast<const char*>(kv_[count_-1].key),
+                       static_cast<size_t>(kv_[count_-1].key_length)),
+      std::string_view(reinterpret_cast<const char*>(kv_[count_-1].value),
+                       static_cast<size_t>(kv_[count_-1].value_length))
+    };
+  }
+
+  class iterator {
+  public:
+    KVEntry operator*() const noexcept {
+      return {
+        std::string_view(reinterpret_cast<const char*>(kv_[i_].key),
+                         static_cast<size_t>(kv_[i_].key_length)),
+        std::string_view(reinterpret_cast<const char*>(kv_[i_].value),
+                         static_cast<size_t>(kv_[i_].value_length))
+      };
+    }
+    iterator& operator++() noexcept { ++i_; return *this; }
+    bool operator!=(const iterator& o) const noexcept { return i_ != o.i_; }
+
+  private:
+    friend class FdbRangeHolder;
+    iterator(const FDBKeyValue* kv, int i) noexcept : kv_(kv), i_(i) {}
+    const FDBKeyValue* kv_;
+    int i_;
+  };
+
+  iterator begin() const noexcept {
+    assert(ready_ && "FdbRangeHolder::wait() must be called before iterating");
+    return {kv_, 0};
+  }
+  iterator end() const noexcept { return {kv_, count_}; }
+
+private:
+  FdbFuture          f_;
+  const FDBKeyValue* kv_{nullptr};
+  int                count_{0};
+  bool               more_{false};
+  bool               ready_{false};
 };
 
 struct TxnStats {
@@ -165,6 +237,13 @@ class KvTransaction {
                                FDBStreamingMode mode = FDB_STREAMING_MODE_EXACT);
   std::expected<std::vector<RangeScanResult>, fdb_error_t> kv_wait_range(
       FdbFuture& f, bool* more = nullptr);
+
+  // Zero-copy variant: returns an FdbRangeHolder that must have wait() called
+  // before iterating. The holder owns the future and the FDB buffer.
+  FdbRangeHolder kv_async_get_range_holder(
+      std::string_view start, bool exclusive_begin,
+      std::string_view end, int limit,
+      FDBStreamingMode mode = FDB_STREAMING_MODE_EXACT);
 
   void kv_put(std::string_view key, std::string_view value);
   void kv_del(std::string_view key);
