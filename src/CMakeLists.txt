@@ -175,6 +175,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-address-of-packed-member>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-warning-option>)
   add_compile_options(
+    -Wconditional-uninitialized
     -Wno-unused-function
     -Wno-unused-local-typedef
     -Wno-varargs
