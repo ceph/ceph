@@ -313,6 +313,7 @@ add_dependencies(ceph_test_librgw_file
   ceph_test_librgw_file_gp
   ceph_test_librgw_file_cpref
   ceph_test_librgw_file_rename
+  ceph_test_librgw_file_fhcache
   ceph_test_librgw_file_nfsns
   ceph_test_librgw_file_aw
   ceph_test_librgw_file_write2
@@ -470,6 +471,24 @@ target_link_libraries(ceph_test_librgw_file_xattr
   ${ALLOC_LIBS}
   )
 target_link_libraries(ceph_test_librgw_file_xattr Boost::context)
+
+# ceph_test_librgw_file_fhcache (filehandle resolution + lifetime)
+add_executable(ceph_test_librgw_file_fhcache
+  librgw_file_fhcache.cc)
+target_include_directories(ceph_test_librgw_file_fhcache
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados")
+target_link_libraries(ceph_test_librgw_file_fhcache
+  rgw
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${LUA_LIBRARIES}
+  ${ALLOC_LIBS}
+  )
+target_link_libraries(ceph_test_librgw_file_fhcache Boost::context)
 
 # ceph_test_librgw_file_rename (mv/rename tests)
 add_executable(ceph_test_librgw_file_rename

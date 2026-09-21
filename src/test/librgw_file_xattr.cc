@@ -140,10 +140,14 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 }
 
+/* A probe, not an assertion.  CREATE_BUCKET below runs only "if (! bucket_fh)"
+ * -- it exists precisely to handle the lookup having failed -- so asserting
+ * success here contradicted the next test's own logic, and the suite could
+ * not pass against a data root where the bucket did not already exist.  The
+ * postcondition is asserted after the create instead. */
 TEST(LibRGW, LOOKUP_BUCKET) {
-  int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		       nullptr, 0, RGW_LOOKUP_FLAG_NONE);
-  ASSERT_EQ(ret, 0);
+  (void) rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
+		    nullptr, 0, RGW_LOOKUP_FLAG_NONE);
 }
 
 TEST(LibRGW, CREATE_BUCKET) {
@@ -158,6 +162,11 @@ TEST(LibRGW, CREATE_BUCKET) {
 			&bucket_fh, RGW_MKDIR_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
+  /* Whichever way it got here, the bucket has to exist:  every test below
+   * returns silently when bucket_fh is null, so without this a setup failure
+   * reports as a clean run. */
+  ASSERT_NE(bucket_fh, nullptr)
+      << "no bucket:  lookup found none and --create was not given";
 }
 
 TEST(LibRGW, CREATE_PATH) {
@@ -181,7 +190,10 @@ TEST(LibRGW, CREATE_PATH) {
     if (do_create) {
       ret = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), &st, create_mask,
 		      &dir.fh, RGW_MKDIR_FLAG_NONE);
-    } else {
+    }
+    if (! do_create || ret == -EEXIST) {
+      /* nothing here removes the path, so on every run after the first the
+       * mkdir can only return -EEXIST */
       ret = rgw_lookup(fs, dir.parent_fh, dir.name.c_str(), &dir.fh,
 		       nullptr, 0, RGW_LOOKUP_FLAG_NONE);
     }
@@ -220,8 +232,11 @@ TEST(LibRGW, CHECK_PATH_REFS) {
 
 TEST(LibRGW, SETXATTR1) {
 
-  if (!bucket_fh)
-    return;
+  /* bucket_fh is not the precondition here -- ovec is.  A CREATE_PATH
+   * failure returns from that test with ovec empty, and ovec[-1] then reads
+   * ovec[SIZE_MAX] and aborts:  a setup failure presenting as a core dump
+   * six tests later.  Assert rather than return, so it reports as itself. */
+  ASSERT_FALSE(ovec.empty()) << "CREATE_PATH did not populate the path";
 
   auto& dir = ovec[ovec.size()-1];
   rgw_xattrstr xattr_k = { const_cast<char*>(key1.c_str()),
@@ -258,8 +273,8 @@ extern "C" {
 
 TEST(LibRGW, GETXATTR1) {
 
-  if (!bucket_fh)
-    return;
+  /* ovec is the precondition, not bucket_fh -- see SETXATTR1 */
+  ASSERT_FALSE(ovec.empty()) << "CREATE_PATH did not populate the path";
 
   using std::get;
   auto& dir = ovec[ovec.size()-1];
@@ -292,8 +307,8 @@ TEST(LibRGW, GETXATTR1) {
 
 TEST(LibRGW, LSXATTR1) {
 
-  if (!bucket_fh)
-    return;
+  /* ovec is the precondition, not bucket_fh -- see SETXATTR1 */
+  ASSERT_FALSE(ovec.empty()) << "CREATE_PATH did not populate the path";
 
   using std::get;
   auto& dir = ovec[ovec.size()-1];
@@ -312,8 +327,8 @@ TEST(LibRGW, LSXATTR1) {
 
 TEST(LibRGW, RMXATTR1) {
 
-  if (!bucket_fh)
-    return;
+  /* ovec is the precondition, not bucket_fh -- see SETXATTR1 */
+  ASSERT_FALSE(ovec.empty()) << "CREATE_PATH did not populate the path";
 
   using std::get;
   auto& dir = ovec[ovec.size()-1];
@@ -331,8 +346,8 @@ TEST(LibRGW, RMXATTR1) {
 
 TEST(LibRGW, LSXATTR2) {
 
-  if (!bucket_fh)
-    return;
+  /* ovec is the precondition, not bucket_fh -- see SETXATTR1 */
+  ASSERT_FALSE(ovec.empty()) << "CREATE_PATH did not populate the path";
 
   using std::get;
   auto& dir = ovec[ovec.size()-1];
@@ -364,8 +379,11 @@ TEST(LibRGW, SETXATTR_EMPTY_PRESERVES) {
    * The librgw layer filters zero-length keys but not zero-length
    * values, so the empty value does reach the driver. */
 
-  if (!bucket_fh)
-    return;
+  /* bucket_fh is not the precondition here -- ovec is.  A CREATE_PATH
+   * failure returns from that test with ovec empty, and ovec[-1] then reads
+   * ovec[SIZE_MAX] and aborts:  a setup failure presenting as a core dump
+   * six tests later.  Assert rather than return, so it reports as itself. */
+  ASSERT_FALSE(ovec.empty()) << "CREATE_PATH did not populate the path";
 
   auto& dir = ovec[ovec.size()-1];
 

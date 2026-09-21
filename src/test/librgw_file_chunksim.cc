@@ -117,25 +117,69 @@ namespace {
       // release all entries and set num_entries := 0
       [[maybe_unused]] auto ret{0};
       for (auto &obj : dirents) {
+        if (! obj.rgw_fh) {
+          /* a placeholder with no handle -- CHUNK_CACHE adds one.  Nothing to
+           * check and nothing to release;  dereferencing it here is what made
+           * that a latent crash rather than a no-op. */
+          continue;
+        }
         // XXX obj refcnt is sentinel+1 before returning 1 ref */
         auto refcnt = obj.rgw_fh->get_refcnt();
-        /* XXX the following assertion permits entry refcnt to be
-         * 2 /or/ 3 for the following reason:
-         * if the number of directory entries is >= to the total
-         * capacity of the chunk cache, the uniform fill order is
-         * sufficient to guarantee that no handle instance from a
-         * prior scan remains in the cache when it is re-added by
-         * the next scan.  this would permit a strict assertion that
-         * refcnt==2 at this location.  however, if the test were
-         * changed to allow the number of entries to vary to smaller
-         * counts, then assert(refcnt==2) would fail (because refcnt
-         * could rise to 3), probably causing concern.  It is in fact
-         * provable that given current workflow, refcnt can never
-         * exceed 3 at this location, for all values of num_scans
-	 * irrespective of entry count */
+        /* What the permitted values mean.  Measured 2026-09-11;  the
+         * account below is the one the numbers actually support, and it is
+         * not the one the original note gave.
+         *
+         * 2 is the steady state:  the FHCache sentinel, plus the one ref
+         * this scan's rgw_lookup(RGW_LOOKUP_FLAG_RCB) returned and which
+         * this loop is about to give back.
+         *
+         * 3 is 2 plus one *pin*, and there are two independent ways to get
+         * one.  Either is legitimate;  neither is a leak.
+         *
+         *   (a) A prior scan's ref, still held because the chunk holding it
+         *       has not been reclaimed yet.  This is what the original note
+         *       described, and it is reachable only when the entry count is
+         *       below the chunk cache's capacity (max_chunks * max_entries,
+         *       5000 as configured) -- above that, the uniform fill order
+         *       does guarantee the prior scan's chunk was reclaimed first,
+         *       and refcnt is then exactly 2.  That part of the original
+         *       claim is confirmed.
+         *
+         *   (b) An armed stateless-finalize timer.  This is the one the
+         *       original note missed, and it is the one that fires in
+         *       practice.  open_global() calls arm_stateless_timer(), which
+         *       registers StatelessFinalize(*this) on RGWLibFS::write_timer;
+         *       the event holds a reference and releases it when it runs.
+         *       close_global() deliberately does not cancel it -- see its
+         *       comment -- so any handle this process opened stays pinned
+         *       for rgw_nfs_stateless_finalize_secs, five minutes by
+         *       default, which outlasts the whole test.
+         *
+         * 4 is 2 plus both pins at once, and is why this check is worth
+         * having:  a run that reaches 4 has something else holding a ref as
+         * well.  It caught exactly that -- CHUNK_SETUP_OBJECTS used to leak
+         * the ref its rgw_lookup() took, which displaced every value up by
+         * one and made 4 the ordinary case.
+         *
+         * To see the floor, shorten the pin:  with
+         * --rgw_nfs_stateless_finalize_secs=1 the timers fire during setup
+         * and every entry here reports exactly 2, at any entry count at or
+         * above capacity.
+         *
+         * Note also that clear() is only ever called from reclaim_chunk(),
+         * so with fewer than max_chunks * max_entries entries this check is
+         * never evaluated at all and a pass proves nothing.  --num_objs must
+         * exceed 5000 for this assertion to mean anything. */
         if (refcnt != 2) {
           auto ref_str = to_string(refcnt);
-          std::cout << "trapped on refcnt=" << ref_str << std::endl;
+          std::cout << "refcnt=" << ref_str << " (not the steady-state 2)"
+                    << " name=" << obj.name
+                    << " fh_hk=" << std::hex << obj.rgw_fh->get_key().fh_hk.object
+                    << std::dec
+                    << (obj.rgw_fh->is_dir() ? " dir" : " file")
+                    << " chunk_entries=" << num_entries
+                    << " dirents=" << dirents.size()
+                    << std::endl;
           ceph_assert((refcnt == 2) || (refcnt == 3));
 	}
         if (unlikely(evict)) {
@@ -143,7 +187,8 @@ namespace {
 	} else {
           ret = rgw_fh_rele(fs, obj.fh, 0);
           if (unlikely(num_rele > 1)) {
-	    for (uint16_t ix = 1; ix < num_rele; ++num_rele) {
+	    /* ++ix, not ++num_rele:  incrementing the bound never reaches it */
+	    for (uint16_t ix = 1; ix < num_rele; ++ix) {
               ret = rgw_fh_rele(fs, obj.fh, 0);
 	    }
 	  }
@@ -206,6 +251,9 @@ namespace {
       std::unordered_set<RGWFileHandle*> evicted;
       for (auto &chunk : active_chunks) {
 	for (auto &obj : chunk->dirents) {
+	  if (! obj.rgw_fh) {
+	    continue;
+	  }
 	  if (evicted.insert(obj.rgw_fh).second) {
 	    static_cast<RGWLibFS*>(fs->fs_private)->release_evict(obj.rgw_fh);
 	  } else {
@@ -231,6 +279,7 @@ namespace {
   struct rgw_file_handle *bucket_fh = nullptr;
   struct rgw_file_handle *marker_fh;
   uint32_t chunkdir_nobjs = 200000;
+  uint32_t cur_scan{0}; /* refcount tracing only */
 
   using dirent_t = std::tuple<std::string, uint64_t>;
   struct dirent_vec
@@ -317,9 +366,18 @@ TEST(LibRGW, CHUNK_SETUP_OBJECTS)
 		       nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
       ASSERT_EQ(ret, 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
+      const bool trace = verbose && (ix == 0);
+      if (trace) {
+	std::cout << "TRACE setup " << obj.name << " after lookup(CREATE): "
+		  << obj.rgw_fh->get_refcnt() << std::endl;
+      }
       // open object--open transaction
       ret = rgw_open(fs, obj.fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
       ASSERT_EQ(ret, 0);
+      if (trace) {
+	std::cout << "TRACE setup " << obj.name << " after open: "
+		  << obj.rgw_fh->get_refcnt() << std::endl;
+      }
       ASSERT_TRUE(obj.rgw_fh->is_open());
 
       // unstable write data
@@ -330,10 +388,31 @@ TEST(LibRGW, CHUNK_SETUP_OBJECTS)
 			  (void*) data.c_str(), RGW_WRITE_FLAG_NONE);
       ASSERT_EQ(ret, 0);
       ASSERT_EQ(nbytes, data.length());
+      if (trace) {
+	std::cout << "TRACE setup " << obj.name << " after write: "
+		  << obj.rgw_fh->get_refcnt() << std::endl;
+      }
 
       // commit transaction (write on close)
       ret = rgw_close(fs, obj.fh, 0 /* flags */);
       ASSERT_EQ(ret, 0);
+
+      /* release the ref rgw_lookup() took.  rgw_close() ends the write
+       * transaction;  it does not drop the handle reference, and obj_rec has
+       * no destructor that does -- so without this every object created here
+       * carried a leaked ref for the life of the process, and CHUNKED_READDIR
+       * below saw refcounts one higher than the range it checks for. */
+      if (trace) {
+	std::cout << "TRACE setup " << obj.name << " after close: "
+		  << obj.rgw_fh->get_refcnt() << std::endl;
+      }
+      ret = rgw_fh_rele(fs, obj.fh, 0);
+      ASSERT_EQ(ret, 0);
+      if (trace) {
+	std::cout << "TRACE setup " << obj.name << " after rele: "
+		  << obj.rgw_fh->get_refcnt() << std::endl;
+      }
+
       if (verbose) {
 	/* XXX std:cout fragged...did it get /0 in the stream
 	 * somewhere? */
@@ -348,6 +427,11 @@ TEST(LibRGW, CHUNK_CACHE) {
   auto chunk = cache.get_fill_chunk();
   obj_rec obj{"dummy0", nullptr, nullptr, nullptr};
   chunk->add(obj);
+  /* Clear and drain it.  Without this the cache went out of scope with the
+   * entry still in it, so the handle-less placeholder never reached clear()
+   * and the null dereference there stayed latent -- and the chunk leaked. */
+  chunk->clear();
+  ASSERT_EQ(cache.drain(), 1u);
 }
 
 struct ReaddirArg {
@@ -372,6 +456,11 @@ extern "C" {
 			   nullptr, 0, RGW_LOOKUP_FLAG_RCB);
       ceph_assert(ret == 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
+      if (verbose && (name_str == "f_0")) {
+	std::cout << "TRACE scan " << cur_scan << " " << name_str
+		  << " after lookup(RCB): " << obj.rgw_fh->get_refcnt()
+		  << std::endl;
+      }
 
       auto chunk = dirent_cache.get_fill_chunk();
       chunk->add(obj);
@@ -401,6 +490,7 @@ TEST(LibRGW, CHUNKED_READDIR)
   bool eof = false;
 
   for (uint32_t scan_ix = 0; scan_ix < num_scans; ++scan_ix) {
+    cur_scan = scan_ix;
     uint32_t readdir_count{0};
     std::string marker{""}; // starting offset==0
     ReaddirArg arg;

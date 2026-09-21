@@ -27,6 +27,10 @@
 #include <tuple>
 #include <iostream>
 #include <vector>
+#include <cstring>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
+#include <linux/fiemap.h>
 #include <map>
 #include <random>
 #include "xxhash.h"
@@ -2735,7 +2739,188 @@ TEST(OPEN2, PUBLISHED_ETAG_MATCHES_LISTING)
  * ---------------------------------------------------------------------
  */
 
-static const std::string ver_bucket_name{"sorrydave-ver"};
+
+/* ---- reflink detection -------------------------------------------------
+ *
+ * POSIXStrategy::clone_file() forks the shadow with copy_file_range(),
+ * which reflinks on a filesystem that supports it and otherwise copies
+ * every byte.  copy_file_data() then degrades again, to a 64 KiB
+ * read/write loop, on EXDEV/ENOSYS/EOPNOTSUPP.  All three tiers succeed,
+ * so a COW fork silently becomes O(size) with no signal anywhere.  These
+ * helpers make the difference observable.
+ */
+
+/* How many of a file's extents the filesystem reports as shared with
+ * another file.  Negative is the errno from the ioctl.
+ *
+ * FIEMAP_FLAG_SYNC forces writeback first, so the map describes what is
+ * on disk rather than what is still dirty in page cache. */
+static int shared_extent_count(const sf::path& p)
+{
+  int fd = ::open(p.c_str(), O_RDONLY);
+  if (fd < 0) {
+    return -errno;
+  }
+  enum { MAX_EXTENTS = 512 };
+  std::vector<char> buf(sizeof(struct fiemap) +
+			MAX_EXTENTS * sizeof(struct fiemap_extent), 0);
+  auto* fm = reinterpret_cast<struct fiemap*>(buf.data());
+  fm->fm_start = 0;
+  fm->fm_length = FIEMAP_MAX_OFFSET;
+  fm->fm_flags = FIEMAP_FLAG_SYNC;
+  fm->fm_extent_count = MAX_EXTENTS;
+
+  if (::ioctl(fd, FS_IOC_FIEMAP, fm) < 0) {
+    int err = -errno;
+    ::close(fd);
+    return err;
+  }
+  int shared = 0;
+  for (uint32_t i = 0; i < fm->fm_mapped_extents; ++i) {
+    if (fm->fm_extents[i].fe_flags & FIEMAP_EXTENT_SHARED) {
+      ++shared;
+    }
+  }
+  ::close(fd);
+  return shared;
+}
+
+/* Whether this filesystem can reflink at all.
+ *
+ * FICLONE is a poor choice for the driver's own copy precisely because it
+ * fails outright where reflink is unsupported, rather than falling back --
+ * which is exactly what makes it an oracle here.  Without it a negative
+ * result below is ambiguous between "this filesystem does not do reflink"
+ * and "the driver stopped reflinking", and only the second is a bug. */
+static bool fs_supports_reflink(const sf::path& dir)
+{
+  sf::path src = dir / ".reflink-probe-src";
+  sf::path dst = dir / ".reflink-probe-dst";
+  bool ok = false;
+
+  int sfd = ::open(src.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  if (sfd >= 0) {
+    /* cloning an empty file can succeed without exercising sharing */
+    std::vector<char> blk(1 << 20, 'r');
+    [[maybe_unused]] ssize_t nw = ::write(sfd, blk.data(), blk.size());
+    ::fsync(sfd);
+    int dfd = ::open(dst.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+    if (dfd >= 0) {
+      ok = (::ioctl(dfd, FICLONE, sfd) == 0);
+      ::close(dfd);
+    }
+    ::close(sfd);
+  }
+  std::error_code ec;
+  sf::remove(src, ec);
+  sf::remove(dst, ec);
+  return ok;
+}
+
+TEST(OPEN2, SHADOW_FORK_IS_REFLINKED)
+{
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+  /* scratch lives beside the namespace root, on the same filesystem but
+   * outside any bucket, so it cannot be mistaken for an object */
+  const sf::path scratch = nsfs_base().parent_path();
+  if (! fs_supports_reflink(scratch)) {
+    GTEST_SKIP() << "filesystem does not support reflink";
+  }
+
+  const std::string name{"reflink1"};
+  const size_t chunk = 1 << 20;
+  const int chunks = 4;
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup(name)), 0);
+
+  /* xfs keeps a small file inline in the inode, where there are no
+   * extents to share, so write enough to force real allocation */
+  {
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    std::string body(chunk, 'z');
+    for (int i = 0; i < chunks; ++i) {
+      ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), body, i * chunk, chunk)), 0);
+    }
+    ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  }
+  ASSERT_TRUE(sf::exists(published_path(name)));
+
+  /* Control, taken before any fork:  a copy this test makes itself, byte
+   * by byte, must report no shared extents.
+   *
+   * It has to be written here rather than delegated.  cp(1) defaults to
+   * --reflink=auto and would share, and copy_file_range() is the very
+   * call under test;  either would make the control unable to fail, and
+   * a control that cannot fail proves nothing about the subject. */
+  const sf::path control = scratch / ".reflink-control";
+  {
+    int rfd = ::open(published_path(name).c_str(), O_RDONLY);
+    ASSERT_GE(rfd, 0);
+    int wfd = ::open(control.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+    ASSERT_GE(wfd, 0);
+    std::vector<char> buf(65536);
+    off_t off = 0;
+    for (;;) {
+      ssize_t nr = ::pread(rfd, buf.data(), buf.size(), off);
+      ASSERT_GE(nr, 0);
+      if (nr == 0) {
+	break;
+      }
+      ASSERT_EQ(::pwrite(wfd, buf.data(), nr, off), nr);
+      off += nr;
+    }
+    ::fsync(wfd);
+    ::close(wfd);
+    ::close(rfd);
+    ASSERT_EQ(off, (off_t)(chunk * chunks)) << "control copy is short";
+  }
+  const int control_shared = shared_extent_count(control);
+  ASSERT_GE(control_shared, 0)
+      << "FIEMAP on the control failed: " << cpp_strerror(-control_shared);
+  ASSERT_EQ(control_shared, 0)
+      << "a byte-by-byte copy reported shared extents;  the detector "
+	 "cannot distinguish a reflink from a copy, so this test proves "
+	 "nothing";
+
+  /* Subject:  reopening an existing object for write, without TRUNC,
+   * COW-forks it into .shadow/ via clone_file(). */
+  {
+    auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+    ASSERT_EQ(get<0>(ofw), 0);
+    ASSERT_TRUE(sf::exists(shadow_path(name))) << "no shadow was forked";
+
+    const int shadow_shared = shared_extent_count(shadow_path(name));
+    ASSERT_GE(shadow_shared, 0)
+	<< "FIEMAP on the shadow failed: " << cpp_strerror(-shadow_shared);
+    EXPECT_GT(shadow_shared, 0)
+	<< "the shadow shares no extents with its object:  clone_file() "
+	   "copied " << (chunk * chunks) << " bytes instead of reflinking "
+	   "them, so the COW fork is O(size).  copy_file_range() degrades "
+	   "silently, so nothing else would report this";
+
+    ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  }
+
+  std::error_code ec;
+  sf::remove(control, ec);
+  ASSERT_EQ(o2h->unlink(), 0);
+}
+
+/* Per-process name.  A versioned bucket accumulates by design:  each run
+ * of this suite adds two more versions of every key the VER_ tests write,
+ * so a fixed name makes them pass only against a freshly wiped data root
+ * and fail on every re-run -- "n which is: 12, 2" after six runs.  A fresh
+ * bucket per process restores the clean-root behaviour without the fixture
+ * having to delete versions itself, which would couple setup to the very
+ * operations these tests exercise:  a regression in version delete would
+ * then break setup and fail all ten at once, hiding the cause. */
+static const std::string ver_bucket_name{
+  "sorrydave-ver-" + std::to_string(::getpid())};
 static struct rgw_file_handle* ver_bucket_fh{nullptr};
 
 TEST(OPEN2, VER_SETUP)

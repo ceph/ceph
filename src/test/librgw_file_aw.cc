@@ -50,7 +50,11 @@ namespace {
   bool do_verify = false;
   bool do_hexdump = false;
 
-  string bucket_name = "sorrydave";
+  /* private to this suite.  It used to be "sorrydave", which
+   * librgw_file_cd.cc and librgw_file_write2.cc also use -- so whichever ran
+   * first left the bucket behind and CREATE_BUCKET below could only return
+   * -EEXIST. */
+  string bucket_name = "awtest";
   string object_name = "jocaml";
 
   struct rgw_file_handle *bucket_fh = nullptr;
@@ -165,8 +169,14 @@ TEST(LibRGW, CREATE_BUCKET) {
     st.st_gid = owner_gid;
     st.st_mode = 755;
 
+    /* tolerate the bucket this suite left behind last time:  nothing here
+     * removes it, so asserting on a bare mkdir makes the second run fail */
     int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
 			&fh, RGW_MKDIR_FLAG_NONE);
+    if (ret == -EEXIST) {
+      ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &fh, nullptr, 0,
+		       RGW_LOOKUP_FLAG_NONE);
+    }
     ASSERT_EQ(ret, 0);
   }
 }
