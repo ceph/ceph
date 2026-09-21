@@ -3,7 +3,13 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ReactiveFormsModule } from '@angular/forms';
-import { ButtonModule, InputModule, ModalModule } from 'carbon-components-angular';
+import {
+  ButtonModule,
+  InputModule,
+  ModalModule,
+  RadioModule,
+  SelectModule
+} from 'carbon-components-angular';
 
 import { RgwAccountRoleFormComponent } from './rgw-account-role-form.component';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -68,7 +74,7 @@ describe('RgwAccountRoleFormComponent', () => {
   });
 
   it('should ignore empty permission policy rows on submit', () => {
-    component.addPermissionPolicy();
+    component.addPermissionPolicy('', '', 'custom');
     component.form.patchValue({
       role_name: 'newRole',
       role_path: '/',

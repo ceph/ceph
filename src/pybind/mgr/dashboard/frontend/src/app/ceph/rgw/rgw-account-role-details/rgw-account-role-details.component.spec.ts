@@ -46,19 +46,44 @@ describe('RgwAccountRoleDetailsComponent', () => {
   });
 
   it('should load policies on init', () => {
-    const policies = ['policy1', 'policy2'];
-    spyOn(rgwRoleService, 'listPolicies').and.returnValue(of(policies));
+    const inlinePolicies = ['policy1'];
+    spyOn(rgwRoleService, 'listPolicies').and.returnValue(of(inlinePolicies));
+
     component.loadPolicies();
+
     expect(rgwRoleService.listPolicies).toHaveBeenCalledWith('test-role', 'test-account');
     component.policies$.subscribe((res) => {
-      expect(res).toEqual([{ name: 'policy1' }, { name: 'policy2' }]);
+      expect(res).toEqual([{ name: 'policy1', type: 'inline' }]);
     });
   });
 
-  it('should delete a policy and show notification', () => {
+  it('should detach a managed policy and show notification', () => {
+    spyOn(rgwRoleService, 'detachRolePolicy').and.returnValue(of(null));
+    spyOn(component, 'loadPolicies');
+    spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake((_componentClass, config) => {
+      config.submitActionObservable().subscribe();
+      return null;
+    });
+
+    component.deletePolicy({
+      name: 'AmazonS3ReadOnlyAccess',
+      arn: 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess',
+      type: 'managed'
+    });
+
+    expect(rgwRoleService.detachRolePolicy).toHaveBeenCalledWith(
+      'test-role',
+      'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess',
+      'test-account'
+    );
+    expect(notificationService.show).toHaveBeenCalled();
+    expect(component.loadPolicies).toHaveBeenCalled();
+  });
+
+  it('should delete an inline policy and show notification', () => {
     spyOn(rgwRoleService, 'deletePolicy').and.returnValue(of(null));
     spyOn(component, 'loadPolicies');
-    component.policySelection.selected = [{ name: 'test-policy' }];
+    component.policySelection.selected = [{ name: 'test-policy', type: 'inline' }];
     spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake((_componentClass, config) => {
       config.submitActionObservable().subscribe();
       return null;

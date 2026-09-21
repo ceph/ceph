@@ -63,4 +63,21 @@ export class RgwRoleService {
   deletePolicy(roleName: string, policyName: string, accountId: string): Observable<any> {
     return this.http.delete(`${this.getUrl(accountId)}/${roleName}/policy/${policyName}`);
   }
+
+  attachRolePolicy(roleName: string, policyArn: string, accountId: string): Observable<any> {
+    return this.http.post<any>(`${this.getUrl(accountId)}/${roleName}/attached-policy`, {
+      role_name: roleName,
+      policy_arn: policyArn
+    });
+  }
+
+  detachRolePolicy(roleName: string, policyArn: string, accountId: string): Observable<any> {
+    return this.http.delete(
+      `${this.getUrl(accountId)}/${roleName}/attached-policy/${encodeURIComponent(policyArn)}`
+    );
+  }
+
+  listAttachedRolePolicies(roleName: string, accountId: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.getUrl(accountId)}/${roleName}/attached-policy`);
+  }
 }

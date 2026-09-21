@@ -3,6 +3,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { of } from 'rxjs';
+import { InputModule, ModalModule, RadioModule, SelectModule } from 'carbon-components-angular';
 
 import { RgwAccountRolePolicyFormComponent } from './rgw-account-role-policy-form.component';
 import { RgwRoleService } from '~/app/shared/api/rgw-role.service';
@@ -17,7 +18,16 @@ describe('RgwAccountRolePolicyFormComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, ReactiveFormsModule],
+      imports: [
+        HttpClientTestingModule,
+        RouterTestingModule,
+        SharedModule,
+        ReactiveFormsModule,
+        RadioModule,
+        SelectModule,
+        InputModule,
+        ModalModule
+      ],
       declarations: [RgwAccountRolePolicyFormComponent]
     }).compileComponents();
 
@@ -35,10 +45,27 @@ describe('RgwAccountRolePolicyFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should attach policy when form is submitted', () => {
+  it('should attach predefined policy template by default when form is submitted', () => {
     spyOn(rgwRoleService, 'putPolicy').and.returnValue(of(null));
     spyOn(component, 'closeModal');
 
+    component.onSubmit();
+
+    expect(rgwRoleService.putPolicy).toHaveBeenCalledWith(
+      'test-role',
+      'AmazonS3ReadOnlyAccess',
+      jasmine.any(String),
+      'test-account'
+    );
+    expect(notificationService.show).toHaveBeenCalled();
+    expect(component.closeModal).toHaveBeenCalled();
+  });
+
+  it('should attach custom policy when policy type is custom', () => {
+    spyOn(rgwRoleService, 'putPolicy').and.returnValue(of(null));
+    spyOn(component, 'closeModal');
+
+    component.onPolicyTypeChange('custom');
     component.form.patchValue({
       policy_name: 'test-policy',
       policy_doc: '{"Statement":[]}'

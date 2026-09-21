@@ -89,4 +89,34 @@ describe('RgwRoleService', () => {
     );
     expect(req.request.method).toBe('DELETE');
   });
+
+  it('should call attachRolePolicy', () => {
+    service.attachRolePolicy('test-role', 'arn:aws:iam:::policy/Test', 'test-account').subscribe();
+    const req = httpTesting.expectOne(
+      'api/rgw/accounts/test-account/roles/test-role/attached-policy'
+    );
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      role_name: 'test-role',
+      policy_arn: 'arn:aws:iam:::policy/Test'
+    });
+  });
+
+  it('should call detachRolePolicy', () => {
+    service.detachRolePolicy('test-role', 'arn:aws:iam:::policy/Test', 'test-account').subscribe();
+    const req = httpTesting.expectOne(
+      `api/rgw/accounts/test-account/roles/test-role/attached-policy/${encodeURIComponent(
+        'arn:aws:iam:::policy/Test'
+      )}`
+    );
+    expect(req.request.method).toBe('DELETE');
+  });
+
+  it('should call listAttachedRolePolicies', () => {
+    service.listAttachedRolePolicies('test-role', 'test-account').subscribe();
+    const req = httpTesting.expectOne(
+      'api/rgw/accounts/test-account/roles/test-role/attached-policy'
+    );
+    expect(req.request.method).toBe('GET');
+  });
 });

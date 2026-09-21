@@ -11,7 +11,7 @@ import { RgwAccountRolePolicyFormComponent } from '../rgw-account-role-policy-fo
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { Observable, Subscriber, of } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
@@ -159,9 +159,8 @@ export class RgwAccountRoleDetailsComponent implements OnInit, OnChanges {
     }
 
     this.policies$ = this.rgwRoleService.listPolicies(roleName, this.accountId).pipe(
-      map((policies: string[]) => {
-        return (policies || []).map((name) => ({ name }));
-      })
+      map((policies: string[]) => (policies || []).map((name) => ({ name, type: 'inline' }))),
+      catchError(() => of([]))
     );
   }
 
@@ -194,25 +193,33 @@ export class RgwAccountRoleDetailsComponent implements OnInit, OnChanges {
     modalRef?.close?.subscribe(() => this.loadPolicies());
   }
 
-  deletePolicy(policyName?: string): void {
-    const name =
-      policyName || (this.policySelection.hasSelection ? this.policySelection.first().name : '');
-    if (!name) {
+  deletePolicy(policy?: any): void {
+    const item =
+      policy || (this.policySelection.hasSelection ? this.policySelection.first() : null);
+    if (!item) {
       return;
     }
+
+    const isManaged = item.type === 'managed';
+    const policyName = item.name;
+    const policyArn = item.arn || item.name;
     const roleName = this.roleName;
 
+    const actionObs = isManaged
+      ? this.rgwRoleService.detachRolePolicy(roleName, policyArn, this.accountId)
+      : this.rgwRoleService.deletePolicy(roleName, policyName, this.accountId);
+
     this.modalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: $localize`Permission policy`,
-      itemNames: [name],
+      itemDescription: isManaged ? $localize`Managed policy` : $localize`Permission policy`,
+      itemNames: [policyName],
       submitActionObservable: () => {
         return new Observable((observer: Subscriber<any>) => {
-          this.rgwRoleService.deletePolicy(roleName, name, this.accountId).subscribe({
+          actionObs.subscribe({
             next: () => {
               this.notificationService.show(
                 NotificationType.success,
                 $localize`Policy detached successfully`,
-                $localize`Policy "${name}" detached from role "${roleName}".`
+                $localize`Policy "${policyName}" detached from role "${roleName}".`
               );
               this.loadPolicies();
               observer.next();

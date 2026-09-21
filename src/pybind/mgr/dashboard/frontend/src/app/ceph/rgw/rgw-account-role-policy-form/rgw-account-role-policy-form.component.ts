@@ -1,5 +1,5 @@
 import { Component, Inject, OnInit, Optional } from '@angular/core';
-import { Validators } from '@angular/forms';
+import { FormControl, Validators } from '@angular/forms';
 import { BaseModal } from 'carbon-components-angular';
 import { Observable, Subscriber } from 'rxjs';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -12,6 +12,7 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { RgwRoleService } from '~/app/shared/api/rgw-role.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { PREDEFINED_POLICY_TEMPLATES } from '../utils/constants';
 
 @Component({
   selector: 'cd-rgw-account-role-policy-form',
@@ -23,6 +24,20 @@ export class RgwAccountRolePolicyFormComponent extends BaseModal implements OnIn
   form: CdFormGroup;
   action: string;
   icons = Icons;
+
+  policyTypeControl = new FormControl<'predefined' | 'custom'>('predefined');
+
+  predefinedTemplates = PREDEFINED_POLICY_TEMPLATES;
+  selectedTemplateControl = new FormControl<string>(PREDEFINED_POLICY_TEMPLATES[0].name);
+  attachedPolicies: string[] = [];
+
+  get allPredefinedAttached(): boolean {
+    return this.predefinedTemplates.every((t) => this.isTemplateAttached(t.name));
+  }
+
+  isTemplateAttached(templateName: string): boolean {
+    return this.attachedPolicies.includes(templateName);
+  }
 
   constructor(
     @Optional() @Inject('accountId') public accountId: string,
@@ -40,16 +55,93 @@ export class RgwAccountRolePolicyFormComponent extends BaseModal implements OnIn
 
   ngOnInit(): void {
     this.action = this.isEdit ? this.actionLabels.EDIT : $localize`Attach`;
+    if (this.isEdit) {
+      this.policyTypeControl.setValue('custom');
+    }
     this.createForm();
     if (this.isEdit && this.policyName) {
       this.loadPolicy();
+    } else if (!this.isEdit && this.roleName && this.accountId) {
+      this.loadAttachedPolicies();
+    }
+  }
+
+  private loadAttachedPolicies(): void {
+    this.rgwRoleService.listPolicies(this.roleName, this.accountId).subscribe({
+      next: (policies: string[]) => {
+        this.attachedPolicies = policies || [];
+        // If the currently selected template is already attached, pick the first available unattached one
+        if (this.isTemplateAttached(this.selectedTemplateControl.value)) {
+          const available = this.predefinedTemplates.find((t) => !this.isTemplateAttached(t.name));
+          if (available) {
+            this.selectedTemplateControl.setValue(available.name);
+            this.applyTemplate(available.name);
+          } else {
+            // All templates attached, leave on Select a policy template... and clear form
+            this.selectedTemplateControl.setValue('');
+            this.applyTemplate('');
+          }
+        }
+      },
+      error: () => {
+        this.attachedPolicies = [];
+      }
+    });
+  }
+
+  onPolicyTypeChange(event: any): void {
+    const selectedType = event?.value || event;
+    this.policyTypeControl.setValue(selectedType);
+
+    if (selectedType === 'predefined') {
+      this.applyTemplate(this.selectedTemplateControl.value);
+    } else if (!this.isEdit) {
+      this.form.patchValue({
+        policy_name: '',
+        policy_doc: ''
+      });
+    }
+  }
+
+  onTemplateChange(event: any): void {
+    const templateName = event?.target?.value || event?.value || event;
+    this.selectedTemplateControl.setValue(templateName);
+    this.applyTemplate(templateName);
+  }
+
+  private applyTemplate(templateName: string): void {
+    if (!templateName) {
+      this.form?.patchValue({
+        policy_name: '',
+        policy_doc: ''
+      });
+      return;
+    }
+    const tpl = this.predefinedTemplates.find((t) => t.name === templateName);
+    if (tpl) {
+      this.form.patchValue({
+        policy_name: tpl.name,
+        policy_doc: tpl.policy_doc
+      });
     }
   }
 
   private createForm() {
+    const isPredefined = !this.isEdit && this.policyTypeControl.value === 'predefined';
+    const initialTpl = this.predefinedTemplates.find((t) => !this.isTemplateAttached(t.name));
+
     this.form = this.formBuilder.group({
-      policy_name: [{ value: this.policyName || '', disabled: this.isEdit }, [Validators.required]],
-      policy_doc: ['', [Validators.required, CdValidators.json()]]
+      policy_name: [
+        {
+          value: isPredefined && initialTpl ? initialTpl.name : this.policyName || '',
+          disabled: this.isEdit
+        },
+        [Validators.required]
+      ],
+      policy_doc: [
+        isPredefined && initialTpl ? initialTpl.policy_doc : '',
+        [Validators.required, CdValidators.json()]
+      ]
     });
   }
 

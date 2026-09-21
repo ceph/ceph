@@ -13,6 +13,8 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwRole } from '../models/rgw-role';
 
+import { PREDEFINED_POLICY_TEMPLATES, PredefinedPolicyTemplate } from '../utils/constants';
+
 @Component({
   selector: 'cd-rgw-account-role-form',
   templateUrl: './rgw-account-role-form.component.html',
@@ -25,6 +27,8 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
   isSubmitLoading = false;
   formSubmitted = false;
   icons = Icons;
+
+  readonly predefinedTemplates: PredefinedPolicyTemplate[] = PREDEFINED_POLICY_TEMPLATES;
 
   readonly steps = [{ label: $localize`Role details`, invalid: false }];
   title: string;
@@ -83,13 +87,57 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     return this.form.get('permission_policies') as FormArray;
   }
 
-  addPermissionPolicy(name = '', doc = ''): void {
+  addPermissionPolicy(
+    name = '',
+    doc = '',
+    policyMode: 'predefined' | 'custom' = name || doc ? 'custom' : 'predefined'
+  ): void {
+    const isPredefined = policyMode === 'predefined';
+    const defaultTemplate = this.predefinedTemplates[0];
+    const initialName = isPredefined ? defaultTemplate.name : name;
+    const initialDoc = isPredefined ? defaultTemplate.policy_doc : doc;
+
     this.permissionPolicies.push(
       this.formBuilder.group({
-        policy_name: [name, [Validators.required]],
-        policy_doc: [doc, [Validators.required, CdValidators.json()]]
+        policy_mode: [policyMode],
+        selected_template: [isPredefined ? defaultTemplate.name : name],
+        policy_name: [initialName, [Validators.required]],
+        policy_doc: [initialDoc, [Validators.required, CdValidators.json()]]
       })
     );
+  }
+
+  onRolePolicyModeChange(index: number, mode: 'predefined' | 'custom'): void {
+    const group = this.permissionPolicies.at(index);
+    group.get('policy_mode')?.setValue(mode);
+    if (mode === 'predefined') {
+      const currentTpl = group.get('selected_template')?.value || this.predefinedTemplates[0].name;
+      this.onRoleTemplateSelect(index, currentTpl);
+    } else {
+      group.patchValue({
+        policy_name: '',
+        policy_doc: ''
+      });
+    }
+  }
+
+  onRoleTemplateSelect(index: number, templateName: string): void {
+    const group = this.permissionPolicies.at(index);
+    group.get('selected_template')?.setValue(templateName);
+    if (!templateName) {
+      group.patchValue({
+        policy_name: '',
+        policy_doc: ''
+      });
+      return;
+    }
+    const tpl = this.predefinedTemplates.find((t) => t.name === templateName);
+    if (tpl) {
+      group.patchValue({
+        policy_name: tpl.name,
+        policy_doc: tpl.policy_doc
+      });
+    }
   }
 
   removePermissionPolicy(index: number): void {
@@ -102,7 +150,11 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
       const group = this.permissionPolicies.at(i);
       const name = (group.get('policy_name')?.value ?? '').trim();
       const doc = (group.get('policy_doc')?.value ?? '').trim();
+      const mode = group.get('policy_mode')?.value;
+      const tpl = group.get('selected_template')?.value;
       if (!name && !doc) {
+        this.permissionPolicies.removeAt(i);
+      } else if (mode === 'predefined' && !tpl) {
         this.permissionPolicies.removeAt(i);
       }
     }
@@ -131,11 +183,7 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
 
   isFieldInvalid(controlName: string): boolean {
     const control = this.form.get(controlName);
-    return (
-      !!control &&
-      control.invalid &&
-      (control.dirty || control.touched || this.formSubmitted)
-    );
+    return !!control && control.invalid && (control.dirty || control.touched || this.formSubmitted);
   }
 
   showFieldError(controlName: string, errorName?: string): boolean {
