@@ -1998,6 +1998,16 @@ namespace rgw {
 
     bool write_open = ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR));
 
+    if (write_open) {
+      /* content may change from here, so the etag cached at lookup can
+       * no longer be stamped onto the object--publish() computes the
+       * authoritative one, and stat_leaf repopulates this at the next
+       * lookup.  ganesha issues a truncate and a setattr as two calls,
+       * so without this the second would put the pre-truncate etag back
+       * over the one the first just published */
+      etag.clear();
+    }
+
     auto* driver = g_rgwlib->get_driver(); /* XXXX need to link driver to fs */
     if (driver->have_fsio()) {
       auto& bucket_name = parent->get_name();
@@ -3228,7 +3238,13 @@ int rgw_setattr(struct rgw_fs *rgw_fs,
 int rgw_truncate(struct rgw_fs *rgw_fs,
 		 struct rgw_file_handle *fh, uint64_t size, uint32_t flags)
 {
-  return 0;
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  if (! rgw_fh->is_file()) {
+    return -EISDIR;
+  }
+
+  return rgw_fh->truncate(size);
 }
 
 /*

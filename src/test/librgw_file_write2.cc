@@ -1804,6 +1804,89 @@ TEST(OPEN2, GUARDS_ON_PUBLISHED_BINDING)
   }
 }
 
+TEST(OPEN2, TRUNCATE_API)
+{
+  /* rgw_truncate is the path ganesha takes for a size change:  setattr2
+   * calls it directly and then rgw_setattr for the remaining attrs, so
+   * the RGW_SETATTR_SIZE route which SETATTR_SIZE covers is never used
+   * by the FSAL */
+  if (! have_fs_layout()) {
+    GTEST_SKIP() << "not a filesystem-backed driver";
+  }
+
+  reset_object("trunc2");
+
+  std::unique_ptr<Open2Helper> o2h =
+      std::make_unique<Open2Helper>(fs, bucket_fh);
+  ASSERT_EQ(get<0>(o2h->lookup("trunc2")), 0);
+
+  std::string a8{"AAAABBBB"};
+
+  auto ofw = o2h->open(O_RDWR, RGW_OPEN_FLAG_CREATE);
+  ASSERT_EQ(get<0>(ofw), 0);
+  ASSERT_EQ(get<0>(o2h->write(get<1>(ofw), a8, 0, a8.length())), 0);
+  ASSERT_EQ(o2h->close(get<1>(ofw)), 0);
+  ASSERT_EQ(sf::file_size(published_path("trunc2")), a8.length());
+
+  /* Look the object up again now that it exists.  stat_leaf stamps its
+   * etag onto the handle, and that cached value is precisely what a
+   * later setattr would write back over the truncated object's etag.
+   * Without this step the handle holds no etag--reset_object unlinked
+   * the object before the first lookup--and the assertion below could
+   * not observe the regression it exists for. */
+  ASSERT_EQ(get<0>(o2h->lookup("trunc2")), 0);
+
+  auto ofr0 = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr0), 0);
+  auto etag_stale = get<1>(o2h->getxattr("user.rgw.etag"));
+  ASSERT_FALSE(etag_stale.empty());
+  ASSERT_EQ(o2h->close(get<1>(ofr0)), 0);
+
+  /* shrink, with no open held */
+  ASSERT_EQ(rgw_truncate(fs, o2h->object_fh, 4, RGW_TRUNCATE_FLAG_NONE), 0);
+  ASSERT_EQ(sf::file_size(published_path("trunc2")), 4u);
+
+  auto sr = o2h->stat();
+  ASSERT_EQ(get<0>(sr), 0);
+  ASSERT_EQ(get<1>(sr).st_size, 4);
+
+  /* the setattr ganesha issues next, for the attrs which are not size */
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  st.st_mode = 0644;
+  ASSERT_EQ(o2h->setattr(&st, RGW_SETATTR_MODE), 0);
+
+  auto ofr = o2h->open(O_RDONLY, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofr), 0);
+
+  /* the object's etag is the truncated content's, not the one cached
+   * before it */
+  auto etag_now = get<1>(o2h->getxattr("user.rgw.etag"));
+  ASSERT_FALSE(etag_now.empty());
+  ASSERT_NE(etag_now, etag_stale);
+
+  auto rdr = o2h->read(get<1>(ofr), 0, a8.length());
+  ASSERT_EQ(get<0>(rdr), 0);
+  ASSERT_EQ(get<1>(rdr), std::string("AAAA"));
+  ASSERT_EQ(o2h->close(get<1>(ofr)), 0);
+
+  /* extend */
+  ASSERT_EQ(rgw_truncate(fs, o2h->object_fh, 12, RGW_TRUNCATE_FLAG_NONE), 0);
+  ASSERT_EQ(sf::file_size(published_path("trunc2")), 12u);
+
+  /* while a writer holds the shadow it applies there, and the writer's
+   * close publishes it */
+  auto ofw1 = o2h->open(O_RDWR, RGW_OPEN_FLAG_NONE);
+  ASSERT_EQ(get<0>(ofw1), 0);
+  ASSERT_EQ(rgw_truncate(fs, o2h->object_fh, 2, RGW_TRUNCATE_FLAG_NONE), 0);
+  ASSERT_EQ(sf::file_size(published_path("trunc2")), 12u);
+  ASSERT_EQ(o2h->close(get<1>(ofw1)), 0);
+  ASSERT_EQ(sf::file_size(published_path("trunc2")), 2u);
+
+  /* a directory is not truncatable */
+  ASSERT_EQ(rgw_truncate(fs, bucket_fh, 0, RGW_TRUNCATE_FLAG_NONE), -EISDIR);
+}
+
 /* END ALL TESTS */
 
 TEST(OPEN2, DELETE_BUCKET) {
