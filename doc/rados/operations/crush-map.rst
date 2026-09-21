@@ -527,6 +527,54 @@ run a command of the following form:
 
    ceph osd crush rename-bucket {oldname} {newname}
 
+Swapping Buckets
+----------------
+
+To exchange the positions of two buckets in the CRUSH hierarchy in a single
+step, run a command of the following form:
+
+.. prompt:: bash $
+
+   ceph osd crush swap-bucket {source-bucket} {dest-bucket} [--yes-i-really-mean-it]
+
+The two buckets trade places: the name, contents, and weight of each bucket
+move to the other bucket's position in the hierarchy. Bucket IDs do not
+change. Because the swap is a single CRUSH map update, data moves once, from
+the OSDs that were under ``{dest-bucket}`` to the OSDs that were under
+``{source-bucket}``.
+
+The usual use is to replace a set of OSDs with new ones without draining the
+old OSDs to the rest of the cluster first. Add the new host (or rack) as a
+bucket that is not attached to the hierarchy, provision its OSDs, and then
+swap it with the bucket that it replaces. The new OSDs take over the old
+bucket's position, and the old OSDs are left in an unattached bucket from which
+they can be removed once the data has migrated:
+
+.. prompt:: bash $
+
+   ceph osd crush add-bucket newhost host
+   ceph osd crush swap-bucket newhost oldhost
+
+By default, the Monitor refuses the swap unless ``{source-bucket}`` is an
+orphan (that is, it has no parent in the hierarchy) and both buckets use the
+same bucket algorithm. Pass ``--yes-i-really-mean-it`` to override either
+check. Neither bucket may be an ancestor of the other, and both arguments must
+be buckets, not OSDs.
+
+For details on this command's parameters, see the following:
+
+``source-bucket``
+   :Description: The bucket whose contents take over the position of ``dest-bucket``. Normally an orphan bucket.
+   :Type: String
+   :Required: Yes
+   :Example: ``newhost``
+
+``dest-bucket``
+   :Description: The bucket that ``source-bucket`` replaces in the hierarchy.
+   :Type: String
+   :Required: Yes
+   :Example: ``oldhost``
+
 Removing a Bucket
 -----------------
 
