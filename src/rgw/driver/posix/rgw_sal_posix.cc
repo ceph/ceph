@@ -5578,6 +5578,10 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
 	});
     });
 
+  /* each call returns one page;  callers such as complete() sum
+   * parts.size() across pages, so the map must turn over */
+  parts.clear();
+
   for (auto& pi : result.parts) {
     auto part = std::make_unique<POSIXMultipartPart>(this);
     auto* ppart = static_cast<POSIXMultipartPart*>(part.get());
