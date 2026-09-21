@@ -1067,7 +1067,7 @@ public:
 			 optional_yield y) override;
 
   FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
-			     uint32_t flags = FSIOObject::FLAG_NONE) override;
+			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE) override;
 
   bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
                          const ceph::real_time& obj_mtime) override;
@@ -1149,9 +1149,11 @@ public:
    const DoutPrefixProvider* dpp;
    int shadow_fd{-1};
    int shadow_dir_fd{-1};
+   int parent_fd{-1};
    std::string shadow_name;
-   bool published{false};
+   std::string leaf_name;
    bool ephemeral{false};
+   std::vector<std::unique_ptr<nsfs::Directory>> dir_chain;
 
    friend class NSFSObject;
 
@@ -1161,12 +1163,24 @@ public:
      : src_obj(_obj), driver(_drv), dpp(_dpp), ephemeral(_ephemeral) {}
 
   public:
-    virtual int64_t preadv(const struct iovec* iov, int iovcnt,
-			   int64_t ofs, uint32_t flags) override;
-    virtual int64_t pwritev(const struct iovec* iov, int iovcnt,
-			    int64_t ofs, uint32_t flags) override;
+    virtual int preadv(const struct iovec* iov, int iovcnt,
+		       uint64_t ofs, uint64_t* bytes_read,
+		       uint32_t flags) override;
+    virtual int pwritev(const struct iovec* iov, int iovcnt,
+			uint64_t ofs, uint64_t* bytes_written,
+			uint32_t flags) override;
     virtual int commit(uint32_t flags) override;
+    virtual int publish(uint32_t flags) override;
+    virtual int reclone(uint32_t flags) override;
     virtual int close(uint32_t flags) override;
+
+    virtual int fstat(struct stat* st, uint32_t flags) override;
+    virtual int fgetattr(const std::string& name, bufferlist& dest,
+			  uint32_t flags) override;
+    virtual int fsetattr(const std::string& name, const bufferlist& val,
+			  uint32_t flags) override;
+    virtual int fgetattrs(Attrs& attrs, uint32_t flags) override;
+    virtual int fsetattrs(Attrs& attrs, uint32_t flags) override;
 
     virtual ~NSFSFSIOObject() override;
   }; /* NSFSFSIOObject */

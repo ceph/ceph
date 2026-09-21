@@ -4,6 +4,7 @@
 #include "include/compat.h"
 #include "include/rados/rgw_file.h"
 
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -31,6 +32,7 @@
 #include "services/svc_zone.h"
 
 #include <atomic>
+#include <cstdint>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1780,8 +1782,9 @@ namespace rgw {
     return -EPERM;
   } /*  RGWFileHandle::open */
 
-  int RGWFileHandle::open2(uint32_t posix_flags,
-                           uint32_t rgw_openflags) {
+  int RGWFileHandle::open2(file::Open** out, uint32_t posix_flags,
+                           uint32_t rgw_openflags)
+  {
 
     /*
      * posixflags
@@ -1790,13 +1793,11 @@ namespace rgw {
      * O_RDONLY
      * O_WRONLY
      * O_TRUNC
+     * O_EXCL
      *
      */
 
-    /* XXXX this isn't handling multiple open2 instances--see epilogue! */
-
     if (!is_file()) {
-      /* XXXX I don't think we open directories? */
       return -EINVAL;
     }
 
@@ -1816,43 +1817,118 @@ namespace rgw {
       auto& bucket_name = parent->get_name();
       auto& object_name = get_name();
 
-      RGWOpenRequest req(
-                         cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
-                         bucket_name, object_name, 0 /* flags */);
+      if (! f->fsio_hdl) {
+        uint32_t op_flags = ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR))
+          ? RGWOpenRequest::FLAG_WRITE
+          : RGWOpenRequest::FLAG_NONE;
 
-      int rc = g_rgwlib->get_fe()->execute_req(&req);
-      if (!rc) {
-        /* XXX and now what? */
-      } else {
-        req_state* state = req.get_state();
-        /* Object needs a bucket from this point */
-        state->object->set_bucket(state->bucket.get());
-        auto f_result = state->object->get_fsio_handle(&dp);
-        if (!get<0>(f_result)) {
-          f->sal_object = state->object->clone();
-          f->fsio_hdl = std::move(get<1>(f_result));
+        RGWOpenRequest req(
+                           cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
+                           bucket_name, object_name, op_flags);
+
+        int rc = g_rgwlib->get_fe()->execute_req(&req);
+        if (rc < 0) {
+          return rc;
         }
-      }
+
+        uint32_t hopen_flags = sal::Object::FSIOObject::OPEN_FLAG_NONE;
+        if (rgw_openflags & RGW_OPEN_FLAG_CREATE) {
+          hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_CREATE;
+        }
+        if (posix_flags & O_TRUNC) {
+          hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_TRUNC;
+        }
+        if (posix_flags & O_EXCL) {
+          hopen_flags |= sal::Object::FSIOObject::OPEN_FLAG_EXCL;
+        }
+        auto f_result = req.sal_object->get_fsio_handle(&dp, hopen_flags);
+        if (!get<0>(f_result)) {
+          f->sal_bucket = std::move(req.sal_bucket);
+          f->sal_object = std::move(req.sal_object);
+          f->fsio_hdl = std::move(get<1>(f_result));
+        } else {
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__ << " " << object_name
+            << ": attempt to open FSIO handle failed rc=="
+            << std::get<0>(f_result)
+            << dendl;
+          return std::get<0>(f_result);
+        }
+      } else if (f->fsio_hdl->needs_reclone() &&
+                 ((posix_flags & O_WRONLY) || (posix_flags & O_RDWR))) {
+        int rc = f->fsio_hdl->reclone(rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+        if (!!rc) {
+          lsubdout(fs->get_context(), rgw, 0)
+            << __func__ << " " << object_name
+            << " failed to reclone for new write open" << dendl;
+          return rc;
+        }
+      } 
     } /* have fsio */
+
+    /* save on open list */
+    auto open = new file::Open(*this, posix_flags);
+    f->opens.push_back(*open);
+    *out = open;
 
     if (rgw_openflags & RGW_OPEN_FLAG_V3) {
       flags |= FLAG_STATELESS_OPEN;
     }
 
-    if (posix_flags & O_RDONLY) {
+    if (open->is_read_open()) {
       (f->read_opens)++;
     }
-    if ((posix_flags & O_WRONLY) ||
-        (posix_flags & O_RDWR)) {
+    if (open->is_write_open()) {
       (f->write_opens)++;
     }
 
     flags |= FLAG_OPEN;
     return 0;
-
-    return -EPERM;
-
   } /* RGWFileHandle::open2(...) */
+
+  int RGWFileHandle::readv(file::Open* open,
+                           const struct iovec* iov, int iov_cnt,
+                           uint64_t offset,
+                           uint64_t* bytes_read,
+                           uint32_t flags)
+  {
+    if (open->posix_flags & O_WRONLY) {
+      return -EBADF;
+    }
+
+    auto f = get_if<file>(&variant_type);
+    if (unlikely(! f)) {
+      return -EINVAL; // or EISDIR
+    }
+
+    if (f->fsio_hdl) {
+      return f->fsio_hdl->preadv(iov, iov_cnt, offset, bytes_read, flags);
+    }
+
+    return -EBADF;
+  } /* readv */
+
+  int RGWFileHandle::writev(file::Open* open,
+                            const struct iovec* iov, int iov_cnt,
+                            uint64_t offset,
+                            uint64_t* bytes_written,
+                            uint32_t flags)
+  {
+    if (! open->is_write_open()) {
+      return -EBADF;
+    }
+
+    auto f = get_if<file>(&variant_type);
+    if (unlikely(! f)) {
+      return -EINVAL; // or EISDIR
+    }
+
+    if (f->fsio_hdl) {
+      return f->fsio_hdl->pwritev(iov, iov_cnt, offset, bytes_written, flags);
+    }
+
+    return -EBADF;
+  } /* writev */
 
   int RGWFileHandle::close()
   {
@@ -1865,6 +1941,97 @@ namespace rgw {
 
     return rc;
   } /* RGWFileHandle::close */
+
+  int RGWFileHandle::close2(file::Open* open, uint32_t flags)
+  {
+    int rc{0};
+
+    bool read_open = open->is_read_open();
+    bool write_open = open->is_write_open();
+
+    uint32_t close_flags{rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE};
+
+    if (unlikely(flags & RGW_CLOSE_FLAG_DETACH)) {
+      close_flags |= rgw::sal::Object::FSIOObject::CLOSE_FLAG_DETACH;
+    }
+
+    lock_guard guard(mtx); // XXX needed? probably
+
+    auto f = std::get_if<file>(&variant_type);
+    if (f) {
+      /* publish when the last write open is
+       * returned, close when all opens returned */
+      bool should_close{false};
+
+      if (read_open) {
+        (f->read_opens)--;
+      }
+      if (write_open) {
+        (f->write_opens)--;
+      }
+
+      if (write_open) {
+        if (f->write_opens == 0) {
+          if (f->fsio_hdl) {
+            rc = f->fsio_hdl->publish(
+                      rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE);
+            if (!!rc) {
+              lsubdout(fs->get_context(), rgw, 0)
+                << __func__ << " " << object_name()
+                << " failed to publish fsio handle " << dendl;
+            }
+          }
+          if (f->read_opens == 0) {
+            /* last open is returned */
+            should_close = true;
+          }
+        } /* write_opens == 0 */
+      } else {
+        /* read_open */
+        if (f->read_opens == 0) {
+          /* there is no general action to take here? */
+          if (f->write_opens == 0) {
+            should_close = true;
+          }
+        }
+      }
+
+      if (should_close) {
+        if (f->fsio_hdl) {
+          rc = f->fsio_hdl->close(close_flags);
+          if (!! rc) {
+            lsubdout(fs->get_context(), rgw, 0)
+              << __func__ << " " << object_name()
+              << " failed to close via fsio handle " << dendl;
+          }
+          /* reset fsio handles so re-opens see correct state */
+          f->fsio_hdl.reset();
+          f->sal_object.reset();
+        }
+
+        this->flags &= ~FLAG_OPEN;
+        this->flags &= ~FLAG_STATELESS_OPEN;
+      }
+
+      /* remove from opens list */
+      auto it = file::open_list::s_iterator_to(*open);
+      f->opens.erase(it);
+      delete(open);
+    }
+
+    return rc;
+  } /* RGWFileHandle::close2 */
+
+  RGWFileHandle::file::Open::Open(RGWFileHandle& _fh, uint32_t _posix_flags)
+    : fh(_fh), posix_flags(_posix_flags)
+  {
+    fh.get_fs()->ref(&fh);
+  }
+
+  RGWFileHandle::file::Open::~Open()
+  {
+    fh.get_fs()->unref(&fh);
+  }
 
   RGWFileHandle::file::~file()
   {
@@ -2586,19 +2753,19 @@ int rgw_open(struct rgw_fs *rgw_fs,
 /*
    open file, tracking open file handles
 */
-int
-rgw_open2(
-    struct rgw_fs* rgw_fs,
-    struct rgw_file_handle* fh,
-    uint32_t posix_flags,
-    uint32_t flags)
+int rgw_open2(struct rgw_fs* rgw_fs, struct rgw_file_handle* fh,
+              rgw_open_fd* open_fd /* OUT */, uint32_t posix_flags,
+              uint32_t flags)
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  if (! rgw_fh->is_file())
+  if (!rgw_fh->is_file())
     return -EISDIR;
 
-  return rgw_fh->open2(posix_flags, flags);
+  RGWFileHandle::file::Open* open{nullptr};
+  auto rc = rgw_fh->open2(&open, posix_flags, flags);
+  *open_fd = open_to_fd(open);
+  return rc;
 }
 
 /*
@@ -2607,13 +2774,29 @@ rgw_open2(
 int rgw_close(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint32_t flags)
 {
-  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
   int rc = rgw_fh->close(/* XXX */);
 
-  if (flags & RGW_CLOSE_FLAG_RELE)
+  if (flags & RGW_CLOSE_FLAG_RELE) {
+    auto fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
     fs->unref(rgw_fh);
+  }
 
+  return rc;
+}
+
+int rgw_close2(rgw_open_fd open_fd, uint32_t flags)
+{
+  auto open = fd_to_open(open_fd);
+
+  auto& rgw_fh = open->fh;
+  auto fs = rgw_fh.get_fs();
+
+  int rc = rgw_fh.close2(open, flags);
+
+  if (flags & RGW_CLOSE_FLAG_RELE) {
+    fs->unref(&rgw_fh);
+  }
   return rc;
 }
 
@@ -2702,6 +2885,15 @@ int rgw_read(struct rgw_fs *rgw_fs,
   return fs->read(rgw_fh, offset, length, bytes_read, buffer, flags);
 }
 
+int rgw_readv(rgw_open_fd open_fd,
+              const struct iovec* iov, int iov_cnt,
+              uint64_t offset, uint64_t* bytes_read,    
+              uint32_t flags)
+{
+  auto open = rgw::fd_to_open(open_fd);
+  return open->fh.readv(open, iov, iov_cnt, offset, bytes_read, flags);
+}
+
 /*
    read symbolic link
 */
@@ -2744,124 +2936,35 @@ int rgw_write(struct rgw_fs *rgw_fs,
   rc = rgw_fh->write(offset, length, bytes_written, buffer);
 
   return rc;
-}
+} /* rgw_write */
 
-/*
-   read data from file (vector)
-*/
-class RGWReadV
+int rgw_writev(rgw_open_fd open_fd,
+               const struct iovec* iov, int iov_cnt,
+               uint64_t offset, uint64_t* bytes_written,
+               uint32_t flags)
 {
-  buffer::list bl;
-  struct rgw_vio* vio;
+  auto open = fd_to_open(open_fd);
+  auto rgw_fh = &(open->fh);
+  int rc{0};
 
-public:
-  RGWReadV(buffer::list& _bl, rgw_vio* _vio) : vio(_vio) {
-    bl = std::move(_bl);
-  }
-
-  struct rgw_vio* get_vio() { return vio; }
-
-  const auto& buffers() { return bl.buffers(); }
-
-  unsigned /* XXX */ length() { return bl.length(); }
-
-};
-
-void rgw_readv_rele(struct rgw_uio *uio, uint32_t flags)
-{
-  RGWReadV* rdv = static_cast<RGWReadV*>(uio->uio_p1);
-  rdv->~RGWReadV();
-  ::operator delete(rdv);
-}
-
-int rgw_readv(struct rgw_fs *rgw_fs,
-	      struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags)
-{
-#if 0 /* XXX */
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
-  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
-  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+  *bytes_written = 0;
 
   if (! rgw_fh->is_file())
-    return -EINVAL;
+    return -EISDIR;
 
-  int rc = 0;
-
-  buffer::list bl;
-  RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
-		      rgw_fh->object_name(), uio->uio_offset, uio->uio_resid,
-		      bl);
-  req.do_hexdump = false;
-
-  rc = g_rgwlib->get_fe()->execute_req(&req);
-
-  if (! rc) {
-    RGWReadV* rdv = static_cast<RGWReadV*>(
-      ::operator new(sizeof(RGWReadV) +
-		    (bl.buffers().size() * sizeof(struct rgw_vio))));
-
-    (void) new (rdv)
-      RGWReadV(bl, reinterpret_cast<rgw_vio*>(rdv+sizeof(RGWReadV)));
-
-    uio->uio_p1 = rdv;
-    uio->uio_cnt = rdv->buffers().size();
-    uio->uio_resid = rdv->length();
-    uio->uio_vio = rdv->get_vio();
-    uio->uio_rele = rgw_readv_rele;
-
-    int ix = 0;
-    auto& buffers = rdv->buffers();
-    for (auto& bp : buffers) {
-      rgw_vio *vio = &(uio->uio_vio[ix]);
-      vio->vio_base = const_cast<char*>(bp.c_str());
-      vio->vio_len = bp.length();
-      vio->vio_u1 = nullptr;
-      vio->vio_p1 = nullptr;
-      ++ix;
-    }
+  if (! rgw_fh->is_open()) {
+    if (flags & RGW_OPEN_FLAG_V3) {
+      rc = rgw_fh->open(flags); // XXXX won't work!
+      if (!! rc)
+	return rc;
+    } else
+      return -EPERM;
   }
 
-  return rc;
-#else
-  return 0;
-#endif
+  return rgw_fh->writev(open, iov, iov_cnt, offset, bytes_written, flags);
 }
 
-/*
-   write data to file (vector)
-*/
-int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-	      rgw_uio *uio, uint32_t flags)
-{
 
-  // not supported - rest of function is ignored
-  return -ENOTSUP;
-
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
-  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
-  RGWFileHandle* rgw_fh = get_rgwfh(fh);
-
-  if (! rgw_fh->is_file())
-    return -EINVAL;
-
-  buffer::list bl;
-  for (unsigned int ix = 0; ix < uio->uio_cnt; ++ix) {
-    rgw_vio *vio = &(uio->uio_vio[ix]);
-    bl.push_back(
-      buffer::create_static(vio->vio_len,
-			    static_cast<char*>(vio->vio_base)));
-  }
-
-  std::string oname = rgw_fh->relative_object_name();
-  RGWPutObjRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
-		       rgw_fh->bucket_name(), oname, bl);
-
-  int rc = g_rgwlib->get_fe()->execute_req(&req);
-
-  /* XXX update size (in request) */
-
-  return rc;
-}
 
 /*
    sync written data

@@ -801,7 +801,7 @@ public:
   virtual bool is_delete_marker() override { return next->is_delete_marker(); }
 
   FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
-			     uint32_t flags = FSIOObject::FLAG_NONE) override {
+			     uint32_t flags = FSIOObject::OPEN_FLAG_NONE) override {
     return next->get_fsio_handle(dpp, flags);
   }
 

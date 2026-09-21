@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <sys/stat.h>
 #include <sys/uio.h>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
@@ -1142,27 +1143,51 @@ public:
    */
     class FSIOObject {
     public:
-      static constexpr uint32_t FLAG_NONE =      0x0000;
-      static constexpr uint32_t FLAG_EXCL =      0x0001;
-      static constexpr uint32_t FLAG_TRUNC =     0x0002;
-      static constexpr uint32_t FLAG_EPHEMERAL = 0x0004;
-      static constexpr uint32_t FLAG_DETACH =    0x0008;
-      static constexpr uint32_t FLAG_DISCARD =   0x0010;
+      /* get_fsio_handle flags */
+      static constexpr uint32_t OPEN_FLAG_NONE =      0x0000;
+      static constexpr uint32_t OPEN_FLAG_CREATE =    0x0001;
+      static constexpr uint32_t OPEN_FLAG_EXCL =      0x0002;
+      static constexpr uint32_t OPEN_FLAG_TRUNC =     0x0004;
+      static constexpr uint32_t OPEN_FLAG_EPHEMERAL = 0x0008;
 
-      virtual int64_t preadv(const struct iovec* iov, int iovcnt,
-			     int64_t ofs, uint32_t flags) = 0;
-      virtual int64_t pwritev(const struct iovec* iov, int iovcnt,
-			      int64_t ofs, uint32_t flags) = 0;
+      /* commit flags */
+      static constexpr uint32_t COMMIT_FLAG_NONE =    0x0000;
+
+      /* publish flags */
+      static constexpr uint32_t PUBLISH_FLAG_NONE =   0x0000;
+
+      /* close flags */
+      static constexpr uint32_t CLOSE_FLAG_NONE =     0x0000;
+      static constexpr uint32_t CLOSE_FLAG_DETACH =   0x0001;
+
+      virtual int preadv(const struct iovec* iov, int iovcnt,
+			  uint64_t ofs, uint64_t* bytes_read,
+			  uint32_t flags) = 0;
+      virtual int pwritev(const struct iovec* iov, int iovcnt,
+			   uint64_t ofs, uint64_t* bytes_written,
+			   uint32_t flags) = 0;
       virtual int commit(uint32_t flags) = 0;
+      virtual int publish(uint32_t flags) = 0;
+      virtual int reclone(uint32_t flags) = 0;
       virtual int close(uint32_t flags) = 0;
 
+      virtual int fstat(struct stat* st, uint32_t flags) = 0;
+      virtual int fgetattr(const std::string& name, bufferlist& dest,
+			    uint32_t flags) = 0;
+      virtual int fsetattr(const std::string& name, const bufferlist& val,
+			    uint32_t flags) = 0;
+      virtual int fgetattrs(Attrs& attrs, uint32_t flags) = 0;
+      virtual int fsetattrs(Attrs& attrs, uint32_t flags) = 0;
+
       bool resumed() const { return resumed_existing; }
+      bool needs_reclone() const { return published; }
 
       FSIOObject() {}
       virtual ~FSIOObject() {}
 
     protected:
       bool resumed_existing{false};
+      bool published{false};
     }; /* FSIOObject */
 
 
@@ -1314,7 +1339,7 @@ public:
     /** Get a fsio view on an object or object prototype */
     using FSIOResult = std::tuple<int, std::unique_ptr<FSIOObject>>;
     virtual FSIOResult get_fsio_handle(const DoutPrefixProvider* dpp,
-				       uint32_t flags = FSIOObject::FLAG_NONE) = 0;
+				       uint32_t flags = FSIOObject::OPEN_FLAG_NONE) = 0;
 
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;

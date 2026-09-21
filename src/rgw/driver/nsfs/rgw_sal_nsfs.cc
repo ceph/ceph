@@ -4545,7 +4545,35 @@ int NSFSObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 						uint32_t flags)
 {
-  auto* dir = ent->get_parent();
+  if (!ent) {
+    (void) stat(dpp);
+  }
+
+  nsfs::Directory* dir;
+  std::string leaf;
+  std::vector<std::unique_ptr<nsfs::Directory>> resolved_dirs;
+  if (ent) {
+    dir = ent->get_parent();
+    leaf = ent->get_name();
+  } else {
+    /* object doesn't exist on disk — resolve the parent directory
+     * from the key path so the shadow lands in the right place
+     * for hierarchical keys (e.g., photos/vacation/pic.jpg) */
+    nsfs::Directory* leaf_dir{nullptr};
+    int ret = nsfs::resolve_path(dpp,
+      static_cast<NSFSBucket*>(bucket)->get_dir(),
+      get_fname(/*use_version=*/false),
+      /*create_dirs=*/true,
+      driver->ctx(),
+      resolved_dirs, leaf_dir, leaf);
+    if (ret < 0 || !leaf_dir) {
+      return FSIOResult{ret < 0 ? ret : -EINVAL, nullptr};
+    }
+    dir = leaf_dir;
+  }
+  if (!dir) {
+    return FSIOResult{-EINVAL, nullptr};
+  }
   int parent_fd = dir->get_fd();
   if (parent_fd < 0) {
     dir->open(dpp);
@@ -4559,22 +4587,23 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   if (sdir_fd < 0) {
     return FSIOResult{sdir_fd, nullptr};
   }
-
-  const std::string& leaf = ent->get_name();
   bool shadow_exists = (::faccessat(sdir_fd, leaf.c_str(), F_OK, 0) == 0);
-  bool ephemeral = (flags & FSIOObject::FLAG_EPHEMERAL) != 0;
+  bool ephemeral = (flags & FSIOObject::OPEN_FLAG_EPHEMERAL) != 0;
 
   auto hdl = std::unique_ptr<NSFSFSIOObject>(
     new NSFSFSIOObject(this, driver, dpp, ephemeral));
   hdl->shadow_dir_fd = sdir_fd;
   hdl->shadow_name = leaf;
+  hdl->parent_fd = parent_fd;
+  hdl->leaf_name = leaf;
+  hdl->dir_chain = std::move(resolved_dirs);
 
   if (shadow_exists) {
-    if (flags & FSIOObject::FLAG_EXCL) {
+    if (flags & FSIOObject::OPEN_FLAG_EXCL) {
       ::close(sdir_fd);
       return FSIOResult{-EEXIST, nullptr};
     }
-    if (flags & FSIOObject::FLAG_TRUNC) {
+    if (flags & FSIOObject::OPEN_FLAG_TRUNC) {
       ::unlinkat(sdir_fd, leaf.c_str(), 0);
       shadow_exists = false;
     }
@@ -4593,10 +4622,23 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   }
 
   /* check whether source object exists */
-  bool src_exists = ent->exists();
-  if (!src_exists) {
-    int sr = ent->stat(dpp);
-    src_exists = (sr == 0 && ent->exists());
+  bool src_exists = false;
+  if (ent) {
+    src_exists = ent->exists();
+    if (!src_exists) {
+      int sr = ent->stat(dpp);
+      src_exists = (sr == 0 && ent->exists());
+    }
+  }
+
+  if (!src_exists && !(flags & FSIOObject::OPEN_FLAG_CREATE)) {
+    ::close(sdir_fd);
+    return FSIOResult{-ENOENT, nullptr};
+  }
+
+  if (src_exists && (flags & FSIOObject::OPEN_FLAG_EXCL)) {
+    ::close(sdir_fd);
+    return FSIOResult{-EEXIST, nullptr};
   }
 
   if (src_exists) {
@@ -4633,22 +4675,38 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   return FSIOResult{0, std::move(hdl)};
 } /* get_fsio_handle */
 
-int64_t NSFSObject::NSFSFSIOObject::preadv(const struct iovec* iov, int iovcnt,
-					    int64_t ofs, uint32_t flags)
+int NSFSObject::NSFSFSIOObject::preadv(const struct iovec* iov, int iovcnt,
+				       uint64_t ofs, uint64_t* bytes_read,
+				       uint32_t flags)
 {
   if (shadow_fd < 0) {
     return -EBADF;
   }
-  return ::preadv(shadow_fd, iov, iovcnt, ofs);
+  ssize_t ret = ::preadv(shadow_fd, iov, iovcnt, ofs);
+  if (ret < 0) {
+    return -errno;
+  }
+  if (bytes_read) {
+    *bytes_read = ret;
+  }
+  return 0;
 }
 
-int64_t NSFSObject::NSFSFSIOObject::pwritev(const struct iovec* iov, int iovcnt,
-					     int64_t ofs, uint32_t flags)
+int NSFSObject::NSFSFSIOObject::pwritev(const struct iovec* iov, int iovcnt,
+					uint64_t ofs, uint64_t* bytes_written,
+					uint32_t flags)
 {
   if (shadow_fd < 0) {
     return -EBADF;
   }
-  return ::pwritev(shadow_fd, iov, iovcnt, ofs);
+  ssize_t ret = ::pwritev(shadow_fd, iov, iovcnt, ofs);
+  if (ret < 0) {
+    return -errno;
+  }
+  if (bytes_written) {
+    *bytes_written = ret;
+  }
+  return 0;
 }
 
 int NSFSObject::NSFSFSIOObject::commit(uint32_t flags)
@@ -4659,46 +4717,168 @@ int NSFSObject::NSFSFSIOObject::commit(uint32_t flags)
   return ::fsync(shadow_fd) < 0 ? -errno : 0;
 }
 
+int NSFSObject::NSFSFSIOObject::publish(uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  if (published) {
+    return 0;
+  }
+
+  ::fsync(shadow_fd);
+
+  /* TODO: fixup pass — compute etag + checksums, stamp xattrs */
+
+  auto* bucket = static_cast<NSFSBucket*>(src_obj->get_bucket());
+  const auto& binfo = bucket->get_info();
+
+  if (binfo.versioned() && parent_fd >= 0) {
+    auto vlock = driver->get_fs_strategy()->version_lock(
+      dpp, open_versions_lockfile(parent_fd));
+
+    DemoteResult demote;
+    demote_current_version(dpp, driver->get_fs_strategy(),
+			   parent_fd, leaf_name,
+			   binfo.versioning_enabled(), demote);
+  }
+
+  int ret = ::renameat(shadow_dir_fd, shadow_name.c_str(),
+		       parent_fd, leaf_name.c_str());
+  if (ret < 0) {
+    return -errno;
+  }
+
+  published = true;
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::reclone(uint32_t flags)
+{
+  if (!published || shadow_fd < 0) {
+    return -EINVAL;
+  }
+
+  if (shadow_dir_fd < 0) {
+    shadow_dir_fd = open_shadow_dir(parent_fd);
+    if (shadow_dir_fd < 0) {
+      return shadow_dir_fd;
+    }
+  }
+
+  int ret = driver->get_fs_strategy()->clone_file(
+    dpp, parent_fd, leaf_name, shadow_dir_fd, leaf_name);
+  if (ret < 0) {
+    return ret;
+  }
+
+  int new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(), O_RDWR);
+  if (new_fd < 0) {
+    return -errno;
+  }
+
+  /* copy xattrs from published object to new shadow */
+  int src_fd = ::openat(parent_fd, leaf_name.c_str(), O_RDONLY);
+  if (src_fd >= 0) {
+    copy_xattrs_fd(dpp, src_fd, new_fd);
+    ::close(src_fd);
+  }
+
+  /* atomically swap the fd so readers transition seamlessly */
+  if (::dup2(new_fd, shadow_fd) < 0) {
+    int err = -errno;
+    ::close(new_fd);
+    ::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0);
+    return err;
+  }
+  ::close(new_fd);
+
+  published = false;
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::fstat(struct stat* st, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  if (::fstat(shadow_fd, st) < 0) {
+    return -errno;
+  }
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::fgetattr(const std::string& name,
+					  bufferlist& dest, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  std::string xname = make_xattr_name(name);
+  ssize_t len = ::fgetxattr(shadow_fd, xname.c_str(), nullptr, 0);
+  if (len < 0) {
+    return -errno;
+  }
+  if (len == 0) {
+    dest.clear();
+    return 0;
+  }
+  bufferptr bp(len);
+  len = ::fgetxattr(shadow_fd, xname.c_str(), bp.c_str(), len);
+  if (len < 0) {
+    return -errno;
+  }
+  bp.set_length(len);
+  dest.push_back(std::move(bp));
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::fsetattr(const std::string& name,
+					  const bufferlist& val,
+					  uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  std::string xname = make_xattr_name(name);
+  std::string sval = val.to_str();
+  if (::fsetxattr(shadow_fd, xname.c_str(),
+		   sval.c_str(), sval.length(), 0) < 0) {
+    return -errno;
+  }
+  return 0;
+}
+
+int NSFSObject::NSFSFSIOObject::fgetattrs(Attrs& attrs, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  return get_x_attrs(null_yield, dpp, shadow_fd, attrs, shadow_name);
+}
+
+int NSFSObject::NSFSFSIOObject::fsetattrs(Attrs& attrs, uint32_t flags)
+{
+  if (shadow_fd < 0) {
+    return -EBADF;
+  }
+  for (auto& [key, bl] : attrs) {
+    std::string xname = make_xattr_name(key);
+    if (::fsetxattr(shadow_fd, xname.c_str(),
+		     bl.c_str(), bl.length(), 0) < 0) {
+      return -errno;
+    }
+  }
+  return 0;
+}
+
 int NSFSObject::NSFSFSIOObject::close(uint32_t flags)
 {
   if (shadow_fd < 0 && shadow_dir_fd < 0) {
     return 0;
   }
 
-  bool detach = (flags & FLAG_DETACH) != 0;
-  bool discard = (flags & FLAG_DISCARD) != 0;
-
-  if (!detach && !discard && !published && shadow_fd >= 0) {
-    auto* dir = src_obj->get_fsent()->get_parent();
-    int parent_fd = dir->get_fd();
-    const std::string& leaf = src_obj->get_fsent()->get_name();
-
-    ::fsync(shadow_fd);
-
-    auto* bucket = static_cast<NSFSBucket*>(src_obj->get_bucket());
-    const auto& binfo = bucket->get_info();
-
-    if (binfo.versioned() && parent_fd >= 0) {
-      auto vlock = driver->get_fs_strategy()->version_lock(
-	dpp, open_versions_lockfile(parent_fd));
-
-      DemoteResult demote;
-      demote_current_version(dpp, driver->get_fs_strategy(),
-			     parent_fd, leaf,
-			     binfo.versioning_enabled(), demote);
-    }
-
-    int ret = ::renameat(shadow_dir_fd, shadow_name.c_str(),
-			 parent_fd, leaf.c_str());
-    if (ret < 0) {
-      ret = -errno;
-      /* fall through to fd cleanup */
-    } else {
-      published = true;
-    }
-  } /* publish */
-
-  if (!published && (discard || (detach && ephemeral)) &&
+  if (!published && ephemeral &&
       shadow_dir_fd >= 0 && !shadow_name.empty()) {
     ::unlinkat(shadow_dir_fd, shadow_name.c_str(), 0);
   }
@@ -4718,7 +4898,7 @@ int NSFSObject::NSFSFSIOObject::close(uint32_t flags)
 
 NSFSObject::NSFSFSIOObject::~NSFSFSIOObject()
 {
-  close(ephemeral ? FLAG_DISCARD : FLAG_DETACH);
+  close(CLOSE_FLAG_DETACH);
 }
 
 bool NSFSObject::is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,

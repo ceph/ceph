@@ -3010,7 +3010,7 @@ int RGWOpen::verify_permission(optional_yield y) {
 } /* RGWOpen::verify_permission */
 
 void RGWOpen::execute(optional_yield y) {
-  /* TODO: implement */
+  /* NOOP -- we require only a result from verify_permission() */
 } /* RGWOpen::execute */
 
 int RGWListBuckets::verify_permission(optional_yield y)

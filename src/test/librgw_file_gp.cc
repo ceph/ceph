@@ -43,8 +43,6 @@ namespace {
   bool do_pre_list = false;
   bool do_put = false;
   bool do_bulk = false;
-  bool do_writev = false;
-  bool do_readv = false;
   bool do_verify = false;
   bool do_get = false;
   bool do_create = false;
@@ -116,34 +114,6 @@ namespace {
       }
       return true;
     }
-
-    bool operator==(const rgw_uio* uio) {
-      uint64_t cksum;
-      int vix = 0, off = 0;
-      rgw_vio* vio = &uio->uio_vio[vix];
-      int vio_len = vio->vio_len;
-      char *data;
-
-      for (int ix = 0; ix < iovcnt; ++ix) {
-	ZPage* p1 = pages[ix];
-	data = static_cast<char*>(vio->vio_base) + off;
-	cksum = XXH64(data, page_size, seed);
-
-	if (p1->cksum != cksum) {
-	  int r = memcmp(data, p1->data, page_size);
-	  std::cout << "problem at ix " << ix << " r " << r<< std::endl;
-	  return false;
-	}
-
-	off += page_size;
-	if (off >= vio_len) {
-	  vio = &uio->uio_vio[++vix];
-	  vio_len = vio->vio_len;
-	  off = 0;
-	}
-      }
-      return true;
-    }
     
     void cksum() {
       int n = size();
@@ -170,7 +140,6 @@ namespace {
     }
   }; /* ZPageSet */
 
-  rgw_uio uio[1];
   ZPageSet zp_set1{iovcnt}; // 1M random data in 16 64K pages
 
   struct {
@@ -243,7 +212,7 @@ TEST(LibRGW, LIST_OBJECTS) {
 }
 
 TEST(LibRGW, LOOKUP_OBJECT) {
-  if (do_get || do_stat || do_put || do_bulk || do_readv || do_writev) {
+  if (do_get || do_stat || do_put || do_bulk) {
     int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
 			 nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
     ASSERT_EQ(ret, 0);
@@ -251,7 +220,7 @@ TEST(LibRGW, LOOKUP_OBJECT) {
 }
 
 TEST(LibRGW, OBJ_OPEN) {
-  if (do_get || do_put || do_readv || do_writev) {
+  if (do_get || do_put) {
     int ret = rgw_open(fs, object_fh, 0 /* posix flags */, 0 /* flags */);
     ASSERT_EQ(ret, 0);
     object_open = true;
@@ -319,76 +288,6 @@ TEST(LibRGW, WRITE_READ_VERIFY)
   }
 }
 
-/* "functions that call alloca are not inlined"
- * --alexandre oliva
- * http://gcc.gnu.org/ml/gcc-help/2004-04/msg00158.html
- */
-#define alloca_uio()				\
-  do {\
-    int uiosz = sizeof(rgw_uio) + iovcnt*sizeof(rgw_vio);		\
-    uio = static_cast<rgw_uio*>(alloca(uiosz));				\
-    memset(uio, 0, uiosz);						\
-    uio->uio_vio = reinterpret_cast<rgw_vio*>(uio+sizeof(rgw_uio));	\
-  } while (0);								\
-
-TEST(LibRGW, WRITEV)
-{
-  if (do_writev) {
-    rgw_uio* uio;
-    struct iovec *iovs = zp_set1.get_iovs();
-    alloca_uio();
-    ASSERT_NE(uio, nullptr);
-
-    for (int ix = 0; ix < iovcnt; ++ix) {
-      struct iovec *iov = &iovs[ix];
-      rgw_vio *vio = &(uio->uio_vio[ix]);
-      vio->vio_base = iov->iov_base;
-      vio->vio_len = iov->iov_len;
-      vio->vio_u1 = iov; // private data
-    }
-    uio->uio_cnt = iovcnt;
-    uio->uio_offset = iovcnt * page_size;
-
-    int ret = rgw_writev(fs, object_fh, uio, RGW_WRITE_FLAG_NONE);
-    ASSERT_EQ(ret, 0);
-  }
-}
-
-TEST(LibRGW, READV)
-{
-  if (do_readv) {
-    memset(uio, 0, sizeof(rgw_uio));
-    uio->uio_offset = 0; // ok, it was already 0
-    uio->uio_resid = UINT64_MAX;
-    int ret = rgw_readv(fs, object_fh, uio, RGW_READ_FLAG_NONE);
-    ASSERT_EQ(ret, 0);
-    buffer::list bl;
-    for (unsigned int ix = 0; ix < uio->uio_cnt; ++ix) {
-      rgw_vio *vio = &(uio->uio_vio[ix]);
-      bl.push_back(
-	buffer::create_static(vio->vio_len,
-			      static_cast<char*>(vio->vio_base)));
-    }
-
-    /* length check */
-    ASSERT_EQ(uint32_t{bl.length()}, uint32_t{iovcnt*page_size});
-
-    if (do_hexdump) {
-      dout(15) << "";
-      bl.hexdump(*_dout);
-      *_dout << dendl;
-    }
-  }
-}
-
-TEST(LibRGW, READV_AFTER_WRITEV)
-{
-  /* checksum data */
-  if (do_readv && do_writev && do_verify) {
-    ASSERT_TRUE(zp_set1 == uio);
-  }
-}
-
 TEST(LibRGW, DELETE_OBJECT) {
   if (do_delete) {
     int ret = rgw_unlink(fs, bucket_fh, object_name.c_str(),
@@ -406,13 +305,6 @@ TEST(LibRGW, DELETE_BUCKET) {
 }
 
 TEST(LibRGW, CLEANUP) {
-  if (do_readv) {
-    // release resources
-    ASSERT_NE(uio->uio_rele, nullptr);
-    if (uio->uio_rele) {
-      uio->uio_rele(uio, RGW_UIO_NONE);
-    }
-  }
   int ret;
   if (object_open) {
     ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
@@ -479,12 +371,6 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--bulk",
 					    (char*) nullptr)) {
       do_bulk = true;
-    } else if (ceph_argparse_flag(args, arg_iter, "--writev",
-					    (char*) nullptr)) {
-      do_writev = true;
-    } else if (ceph_argparse_flag(args, arg_iter, "--readv",
-					    (char*) nullptr)) {
-      do_readv = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--verify",
 					    (char*) nullptr)) {
       do_verify = true;

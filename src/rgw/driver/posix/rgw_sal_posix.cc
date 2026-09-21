@@ -4430,14 +4430,14 @@ Object::FSIOResult POSIXObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   return FSIOResult{-ENOTSUP, nullptr};
 }
 
-int64_t POSIXObject::POSIXFSIOObject::preadv(const struct iovec*, int,
-					      int64_t, uint32_t)
+int POSIXObject::POSIXFSIOObject::preadv(const struct iovec*, int,
+					 uint64_t, uint64_t*, uint32_t)
 {
   return -ENOTSUP;
 }
 
-int64_t POSIXObject::POSIXFSIOObject::pwritev(const struct iovec*, int,
-					       int64_t, uint32_t)
+int POSIXObject::POSIXFSIOObject::pwritev(const struct iovec*, int,
+					   uint64_t, uint64_t*, uint32_t)
 {
   return -ENOTSUP;
 }
@@ -4447,7 +4447,44 @@ int POSIXObject::POSIXFSIOObject::commit(uint32_t flags)
   return -ENOTSUP;
 }
 
+int POSIXObject::POSIXFSIOObject::publish(uint32_t flags)
+{
+  return -ENOTSUP;
+}
+
+int POSIXObject::POSIXFSIOObject::reclone(uint32_t flags)
+{
+  return -ENOTSUP;
+}
+
 int POSIXObject::POSIXFSIOObject::close(uint32_t flags)
+{
+  return -ENOTSUP;
+}
+
+int POSIXObject::POSIXFSIOObject::fstat(struct stat*, uint32_t)
+{
+  return -ENOTSUP;
+}
+
+int POSIXObject::POSIXFSIOObject::fgetattr(const std::string&, bufferlist&,
+					    uint32_t)
+{
+  return -ENOTSUP;
+}
+
+int POSIXObject::POSIXFSIOObject::fsetattr(const std::string&,
+					    const bufferlist&, uint32_t)
+{
+  return -ENOTSUP;
+}
+
+int POSIXObject::POSIXFSIOObject::fgetattrs(Attrs&, uint32_t)
+{
+  return -ENOTSUP;
+}
+
+int POSIXObject::POSIXFSIOObject::fsetattrs(Attrs&, uint32_t)
 {
   return -ENOTSUP;
 }

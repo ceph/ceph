@@ -108,34 +108,6 @@ namespace {
       }
       return true;
     }
-
-    bool operator==(const rgw_uio* uio) {
-      uint64_t cksum;
-      int vix = 0, off = 0;
-      rgw_vio* vio = &uio->uio_vio[vix];
-      int vio_len = vio->vio_len;
-      char *data;
-
-      for (int ix = 0; ix < iovcnt; ++ix) {
-	ZPage* p1 = pages[ix];
-	data = static_cast<char*>(vio->vio_base) + off;
-	cksum = XXH64(data, page_size, seed);
-
-	if (p1->cksum != cksum) {
-	  int r = memcmp(data, p1->data, page_size);
-	  std::cout << "problem at ix " << ix << " r " << r<< std::endl;
-	  return false;
-	}
-
-	off += page_size;
-	if (off >= vio_len) {
-	  vio = &uio->uio_vio[++vix];
-	  vio_len = vio->vio_len;
-	  off = 0;
-	}
-      }
-      return true;
-    }
     
     void cksum() {
       int n = size();
