@@ -2898,6 +2898,8 @@ options:
   default: 0
   services:
   - rgw
+  flags:
+  - runtime
   with_legacy: true
 - name: rgw_sync_meta_inject_err_probability
   type: float
