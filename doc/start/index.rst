@@ -7,9 +7,6 @@
 .. meta::
    :description: The starting point for readers who are new to Ceph: what to read, what to try, and where to look things up.
    :ceph-page-type: assembly
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 Read the Learn pages, then deploy a test cluster under Set Up. The Look Up
 pages hold the numbers you need while you plan.

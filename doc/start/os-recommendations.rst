@@ -7,9 +7,6 @@
 .. meta::
    :description: The operating systems, kernels, and container hosts that each Ceph release is built and tested on.
    :ceph-page-type: reference
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 The Linux distributions, kernels, and container hosts that each Ceph release
 is built and tested on.

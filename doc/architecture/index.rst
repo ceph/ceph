@@ -7,9 +7,6 @@
 .. meta::
    :description: How Ceph works: the storage cluster, data placement, high availability, erasure coding, and client interfaces.
    :ceph-page-type: assembly
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: rados
 
 These pages explain how Ceph stores data, keeps it available when hardware
 fails, and serves it to clients.

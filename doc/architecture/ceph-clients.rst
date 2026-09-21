@@ -8,9 +8,6 @@ Ceph Clients
 .. meta::
    :description: The service interfaces that Ceph clients use: object storage, block devices, and the file system.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: rados
 
 Ceph Clients include a number of service interfaces. These include:
 

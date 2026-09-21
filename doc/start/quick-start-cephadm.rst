@@ -7,17 +7,11 @@
 .. meta::
    :description: Deploy a Ceph cluster on one machine with cephadm, for learning and testing.
    :ceph-page-type: procedure
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: cephadm
 
 This procedure creates a working Ceph cluster on one machine. Use it to learn
 Ceph or to test a change. A single-host cluster is not suitable for production
 because the loss of the host means the loss of the data. To deploy a production
 cluster, follow :ref:`cephadm_deploying_new_cluster`.
-
-:Applies to: Squid, Tentacle
-:Last reviewed: September 2026
 
 Prerequisites
 =============

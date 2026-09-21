@@ -5,9 +5,6 @@
 .. meta::
    :description: Ceph documentation. Ceph delivers object, block, and file storage in one unified system.
    :ceph-page-type: assembly
-   :ceph-applies-to: all releases
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 Ceph delivers **object, block, and file storage in one unified system**. It
 runs on ordinary servers, keeps redundant copies of your data, and has no

@@ -5,9 +5,6 @@
 .. meta::
    :description: A plain-language explanation of what Ceph is and what its components do.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 Ceph is software that stores data on several servers and keeps extra copies of
 it over the network. In a cluster set up as recommended, the loss of one disk

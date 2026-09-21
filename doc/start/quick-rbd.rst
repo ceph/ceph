@@ -7,16 +7,10 @@
 .. meta::
    :description: Create a Ceph block device image, map it on a client, and mount a file system on it.
    :ceph-page-type: procedure
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: rbd
 
 This procedure creates a :term:`Ceph Block Device` (RBD) image, maps it on a
 Linux client, and mounts a file system on it. Use it to try block storage on a
 new cluster. For day-to-day image management, see :ref:`ceph_block_device`.
-
-:Applies to: Squid, Tentacle
-:Last reviewed: September 2026
 
 Prerequisites
 =============

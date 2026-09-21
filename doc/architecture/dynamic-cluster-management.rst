@@ -4,9 +4,6 @@ Dynamic Cluster Management
 .. meta::
    :description: How pools, placement groups, peering, rebalancing, and scrubbing let a Ceph cluster place data and heal itself.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: rados
 
 This page explains how a Ceph cluster manages itself: how pools and
 placement groups organize data, how :term:`CRUSH` maps placement groups to

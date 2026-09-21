@@ -7,9 +7,6 @@
 .. meta::
    :description: The daemons that make up a Ceph cluster, what each one does, and how many of each a cluster needs.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: docs
 
 A Ceph cluster is a set of daemons (background programs) that run on one or
 more hosts. Three kinds

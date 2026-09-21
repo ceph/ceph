@@ -6,9 +6,6 @@ Ceph Protocol
 .. meta::
    :description: How clients talk to the cluster with the native protocol and librados, including watch/notify and data striping.
    :ceph-page-type: concept
-   :ceph-applies-to: squid, tentacle
-   :ceph-reviewed: 2026-09
-   :ceph-owner: rados
 
 Ceph Clients use the native protocol for interacting with the Ceph Storage
 Cluster. Ceph packages this functionality into the ``librados`` library so that
