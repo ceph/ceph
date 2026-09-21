@@ -9,6 +9,7 @@
 #include "common/Throttle.h"
 #include "common/errno.h"
 #include "common/perf_counters_key.h"
+#include "common/split.h"
 
 #include "rgw_common.h"
 #include "rgw_zone.h"
@@ -39,6 +40,7 @@
 #include "include/timegm.h"
 
 #include <boost/asio/yield.hpp>
+#include <charconv>
 #include <shared_mutex> // for std::shared_lock
 #include <string_view>
 
@@ -4393,8 +4395,31 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
       return false;
     }
 
-    retcode = -EIO;
-    return true;
+    // default to EIO if no specific error is listed
+    const std::string_view error_list = cct->_conf->rgw_sync_data_inject_err_list;
+    if (error_list.empty()) {
+      retcode = -EIO;
+      return true;
+    }
+
+    for (const std::string_view entry : ceph::split(error_list, ",")) {
+      const auto separator = entry.find('=');
+      if (separator == entry.npos ||
+          entry.substr(0, separator) != key.name) {
+        continue;
+      }
+
+      const auto value = entry.substr(separator + 1);
+      int error_code = 0;
+      const auto [end, parse_error] =
+          std::from_chars(value.begin(), value.end(), error_code);
+      if (parse_error == std::errc{} &&
+          end == value.end() && error_code > 0) {
+        retcode = -error_code;
+        return true;
+      }
+    }
+    return false;
   }
 
 public:
