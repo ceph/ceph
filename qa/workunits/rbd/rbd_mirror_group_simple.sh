@@ -3441,7 +3441,7 @@ test_group_snap_sync_after_user_snap_removal()
   test_group_snap_sync_incomplete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
   # snapshot sync can be completed only after removal of user snapshot
-  check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group0}" "${snap}"
+  wait_for_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group0}" "${snap}"
 
   mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
   group_remove "${primary_cluster}" "${pool}/${group0}"
