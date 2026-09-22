@@ -28,6 +28,9 @@ admins and members of the `ceph/security <https://github.com/orgs/ceph/teams/sec
 GitHub Team. Again, if you do not have access to see the cve-pipeline
 job, ask Sage or Gabriella for access.
 
+The `ceph-jenkins <https://github.com/ceph-jenkins>`_ GitHub account must also be
+added as a Collaborator to the Advisory.
+
 A note about terminology
 ------------------------
 
