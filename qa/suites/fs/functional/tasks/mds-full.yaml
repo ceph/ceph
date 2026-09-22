@@ -1,8 +1,11 @@
 overrides:
   ceph:
     cephfs:
-      ec_profile:
-        - disabled
+      pool_types:
+        data_pool:
+          - type=replicated
+        metadata_pool:
+          - type=replicated
     log-ignorelist:
       - OSD full dropping all updates
       - OSD near full

@@ -156,7 +156,7 @@ class TestAdminCommands(CephFSTestCase):
             'osd', 'pool', 'application', 'get', pool, app, key)
         self.assertEqual(str(output.strip()), value)
 
-    def setup_ec_pools(self, n, metadata=True, overwrites=True):
+    def setup_ec_pools(self, n, metadata=True, overwrites=True, optimized=False):
         if metadata:
             self.run_ceph_cmd('osd', 'pool', 'create', n+"-meta", "8")
         cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2", "crush-failure-domain=osd"]
@@ -164,6 +164,19 @@ class TestAdminCommands(CephFSTestCase):
         self.run_ceph_cmd('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
         if overwrites:
             self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
+        if optimized:
+            self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_optimizations', 'true')
+
+    def setup_ec_metadata_pool(self, n):
+        """Create an EC metadata pool (with omap support) and an EC data pool."""
+        cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2", "crush-failure-domain=osd"]
+        self.run_ceph_cmd(cmd)
+        self.run_ceph_cmd('osd', 'pool', 'create', n+"-meta", "8", "erasure", n+"-profile")
+        self.run_ceph_cmd('osd', 'pool', 'set', n+"-meta", 'allow_ec_overwrites', 'true')
+        self.run_ceph_cmd('osd', 'pool', 'set', n+"-meta", 'allow_ec_optimizations', 'true')
+        self.run_ceph_cmd('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
+        self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
+        self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_optimizations', 'true')
 
     def gen_health_warn_mds_cache_oversized(self, mds_id=None, fs=None, path='.'):
         health_warn = 'MDS_CACHE_OVERSIZED'
@@ -425,12 +438,73 @@ class TestAddDataPool(TestAdminCommands):
 
     def test_add_data_pool_ec(self):
         """
-        That a new EC data pool can be added.
+        That a new EC data pool can be added with --force when the existing
+        data pools are all replicated.
         """
 
         n = "test_add_data_pool_ec"
         self.setup_ec_pools(n, metadata=False)
-        self.fs.add_data_pool(n+"-data", create=False)
+        self.fs.add_data_pool(n+"-data", create=False, force=True)
+
+    def test_add_data_pool_ec_requires_force(self):
+        """
+        That adding an EC data pool to a filesystem with only replicated data
+        pools is rejected without --force.
+        """
+        n = "test_add_data_pool_ec_requires_force"
+        self.setup_ec_pools(n, metadata=False)
+        try:
+            self.fs.add_data_pool(n+"-data", create=False)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL: adding EC pool to replicated-only FS requires --force")
+
+    def test_add_data_pool_replicated_to_ec_only_requires_force(self):
+        """
+        That adding a replicated data pool to a filesystem whose only existing
+        data pool is EC is rejected without --force.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_add_data_pool_replicated_to_ec_only"
+        self.setup_ec_pools(n, optimized=True)
+        self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+        # Create a replicated pool to add
+        repl_pool = n + "-repl"
+        self.run_ceph_cmd('osd', 'pool', 'create', repl_pool, "8")
+        try:
+            self.run_ceph_cmd('fs', 'add_data_pool', n, repl_pool)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL: adding replicated pool to EC-only FS requires --force")
+        # Succeeds with --force
+        self.run_ceph_cmd('fs', 'add_data_pool', n, repl_pool, "--force")
+
+    def test_add_data_pool_mixed_no_force_needed(self):
+        """
+        That adding any pool type to a filesystem that already has both EC and
+        replicated data pools succeeds without --force.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_add_data_pool_mixed_no_force"
+        self.setup_ec_pools(n, optimized=True)
+        self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+        # Add a replicated pool with --force to create a mixed-type FS
+        repl_pool = n + "-repl"
+        self.run_ceph_cmd('osd', 'pool', 'create', repl_pool, "8")
+        self.run_ceph_cmd('fs', 'add_data_pool', n, repl_pool, "--force")
+        # Now the FS has both EC and replicated pools; a second EC pool needs no --force
+        n2 = n + "2"
+        cmd = ['osd', 'erasure-code-profile', 'set', n2+"-profile", "m=2", "k=2",
+               "crush-failure-domain=osd"]
+        self.run_ceph_cmd(cmd)
+        ec_pool2 = n2 + "-data"
+        self.run_ceph_cmd('osd', 'pool', 'create', ec_pool2, "8", "erasure", n2+"-profile")
+        self.run_ceph_cmd('osd', 'pool', 'set', ec_pool2, 'allow_ec_overwrites', 'true')
+        self.run_ceph_cmd('fs', 'add_data_pool', n, ec_pool2)
 
     def test_add_already_in_use_data_pool(self):
         """
@@ -522,13 +596,13 @@ class TestFsNew(TestAdminCommands):
 
     def test_new_default_ec(self):
         """
-        That a new file system warns/fails with an EC default data pool.
+        That a new file system warns/fails with an EC default data pool without OMAP support.
         """
 
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec"
-        self.setup_ec_pools(n)
+        self.setup_ec_pools(n, optimized=False)
         try:
             self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
@@ -541,13 +615,13 @@ class TestFsNew(TestAdminCommands):
 
     def test_new_default_ec_force(self):
         """
-        That a new file system succeeds with an EC default data pool with --force.
+        That a new file system succeeds with an EC default data pool without OMAP support when using --force.
         """
 
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_force"
-        self.setup_ec_pools(n)
+        self.setup_ec_pools(n, optimized=False)
         self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
 
     def test_new_default_ec_no_overwrite(self):
@@ -578,6 +652,96 @@ class TestFsNew(TestAdminCommands):
                 raise
         else:
             raise RuntimeError("expected failure")
+
+    def test_new_default_ec_with_omap(self):
+        """
+        That a new file system succeeds with an EC default data pool that has OMAP support enabled.
+        EC data pools still require --force regardless of optimizations support.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_default_ec_with_omap"
+        self.setup_ec_pools(n, optimized=True)
+        # EC default data pools always require --force
+        self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+
+    def test_new_ec_metadata_with_omap(self):
+        """
+        That a new file system with an EC metadata pool (omap-enabled) and an EC data pool
+        succeeds with --force.  Both pools must have allow_ec_overwrites and
+        allow_ec_optimizations set so that they pass _check_pool.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_ec_metadata_with_omap"
+        self.setup_ec_metadata_pool(n)
+        # EC metadata + EC data: requires --force (both pools are EC)
+        self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+
+    def test_new_ec_metadata_without_force(self):
+        """
+        That a new file system with an EC metadata pool is rejected without --force,
+        even when EC optimizations (omap support) are enabled.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_ec_metadata_without_force"
+        self.setup_ec_metadata_pool(n)
+        try:
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data")
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL: EC metadata pool requires --force")
+
+    def test_new_ec_metadata_replicated_data_requires_strong_flag(self):
+        """
+        That a new file system with an EC metadata pool and a replicated data pool
+        is rejected without --yes-i-really-really-mean-it, even when --force is given.
+        This combination is unsupported: EC metadata requires omap which is only
+        meaningful with EC data; a replicated data pool alongside an EC metadata
+        pool is a misconfiguration.
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_ec_metadata_replicated_data_requires_strong_flag"
+        # EC metadata pool with omap support
+        cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2",
+               "crush-failure-domain=osd"]
+        self.run_ceph_cmd(cmd)
+        self.run_ceph_cmd('osd', 'pool', 'create', n+"-meta", "8", "erasure", n+"-profile")
+        self.run_ceph_cmd('osd', 'pool', 'set', n+"-meta", 'allow_ec_overwrites', 'true')
+        self.run_ceph_cmd('osd', 'pool', 'set', n+"-meta", 'allow_ec_optimizations', 'true')
+        # Replicated data pool
+        self.run_ceph_cmd('osd', 'pool', 'create', n+"-data", "8")
+
+        # --force alone is not enough for EC metadata + replicated data
+        try:
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+        else:
+            self.fail("Expected EINVAL: EC metadata + replicated data requires "
+                      "--yes-i-really-really-mean-it, not just --force")
+
+    def test_new_ec_metadata_replicated_data_with_strong_flag(self):
+        """
+        That a new file system with an EC metadata pool and a replicated data pool
+        succeeds when --yes-i-really-really-mean-it is given (along with --force
+        which is required by _check_pool for the EC metadata pool).
+        """
+        self.mount_a.umount_wait(require_clean=True)
+        self.mds_cluster.delete_all_filesystems()
+        n = "test_new_ec_metadata_replicated_data_with_strong_flag"
+        cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2",
+               "crush-failure-domain=osd"]
+        self.run_ceph_cmd(cmd)
+        self.run_ceph_cmd('osd', 'pool', 'create', n+"-meta", "8", "erasure", n+"-profile")
+        self.run_ceph_cmd('osd', 'pool', 'set', n+"-meta", 'allow_ec_overwrites', 'true')
+        self.run_ceph_cmd('osd', 'pool', 'set', n+"-meta", 'allow_ec_optimizations', 'true')
+        self.run_ceph_cmd('osd', 'pool', 'create', n+"-data", "8")
+        self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data",
+                          "--force", "--yes-i-really-really-mean-it")
 
     def test_fs_new_pool_application_metadata(self):
         """
