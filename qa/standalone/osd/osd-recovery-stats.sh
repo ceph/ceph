@@ -721,9 +721,13 @@ function TEST_recovery_last_degraded_undersized() {
     kill_daemons $dir || return 1
 }
 
-# Verify that the rebuild perf counters on the primary OSD increment after a
-# real EC shard recovery, AND that a same-primary peering-interval restart
-# occurring mid-rebuild does not truncate or drop the recorded duration.
+# A forced, deterministic two-handover chain within ONE continuous
+# vulnerability episode: confirms the true onset survives both handovers
+# via pg_history_t::merge() (each new primary inherits it rather than
+# opening a fresh window of its own) and that the whole episode is
+# recorded exactly once, by whichever OSD is primary when the PG finally
+# reaches clean. Softly observes (without asserting either way) whether
+# the returning OSDs show any activity of their own once brought back.
 #
 # Sequence:
 #  1. Kill one non-primary OSD so the PG goes degraded (1st interval restart)
@@ -1026,6 +1030,19 @@ function TEST_rebuild_perf_multihop_handover() {
       return 1
     }
 
+    # osd.${primary_a} died at the same moment the PG degraded, so it never
+    # got a chance to self-latch -- osd.${primary_b} is genuinely the first
+    # to observe the vulnerable state and is therefore the true onset for
+    # this whole episode. Capture it via `ceph pg query`'s info.history
+    # section (the source of truth, not the pg_stat_t mirror) so later hops
+    # can be checked against it directly.
+    local original_onset
+    original_onset=$(ceph pg $PG query | jq -r '.info.history.last_degraded')
+    test -n "$original_onset" -a "$original_onset" != "null" || {
+      echo "FAIL: couldn't read info.history.last_degraded from osd.${primary_b}"
+      return 1
+    }
+
     for i in $(seq 6 10)
     do
       rados -p $poolname put obj$i /etc/hostname || return 1
@@ -1048,18 +1065,28 @@ function TEST_rebuild_perf_multihop_handover() {
     }
     local log_c=$dir/osd.${primary_c}.log
 
-    local latched_c=0
+    # osd.${primary_c} must inherit osd.${primary_b}'s already-latched onset
+    # via pg_history_t::merge() during peering, not open a fresh window of
+    # its own -- poll info.history.last_degraded until it settles, then
+    # confirm it matches the original onset exactly.
+    local inherited_onset=""
     for i in $(seq 1 30)
     do
       flush_pg_stats || return 1
-      grep -q "rebuild-stats: vulnerability window opened for ${PG} " $log_c && {
-        latched_c=1
-        break
-      }
+      inherited_onset=$(ceph pg $PG query 2>/dev/null | jq -r '.info.history.last_degraded')
+      test "$inherited_onset" = "$original_onset" && break
       sleep 1
     done
-    test "$latched_c" = 1 || {
-      echo "FAIL: osd.${primary_c} never opened a window after taking over"
+    test "$inherited_onset" = "$original_onset" || {
+      echo "FAIL: osd.${primary_c}'s info.history.last_degraded" \
+           "(${inherited_onset}) does not match the original onset" \
+           "(${original_onset}) -- the true onset did not survive the" \
+           "second handover"
+      return 1
+    }
+    grep -q "rebuild-stats: vulnerability window opened for ${PG} " $log_c && {
+      echo "FAIL: osd.${primary_c} opened its own fresh window instead of" \
+           "inheriting osd.${primary_b}'s onset"
       return 1
     }
 
@@ -1068,21 +1095,32 @@ function TEST_rebuild_perf_multihop_handover() {
     wait_for_clean || return 1
     flush_pg_stats || return 1
 
-    # The window is recorded exactly ONCE for this episode -- by whichever
-    # OSD is primary when the PG finally reaches clean -- and since the true
-    # onset survived both handovers above, the recorded duration spans the
-    # whole episode, not just the last primary's own tenure.
-    local total_recorded
-    total_recorded=$(grep -h "rebuild-stats: recorded vulnerability window for ${PG} " \
+    # The handover chain's own episode (identified by its onset, not just by
+    # text match) is recorded exactly ONCE -- by whichever OSD is primary
+    # when it finally gets recorded -- and since the true onset survived
+    # both handovers above, the recorded duration spans the whole episode,
+    # not just the last primary's own tenure. Deliberately NOT a bare count
+    # of every "recorded" line across all four OSDs: osd.${primary_a} (the
+    # original primary) rejoining can legitimately reclaim primacy and, if
+    # it missed writes while down, open and close its own short, unrelated
+    # catch-up episode -- a separate, correct recording this test has no
+    # reason to care about. Matching on onset isolates the one episode this
+    # test actually targets.
+    local chain_recorded
+    chain_recorded=$(grep -h "rebuild-stats: recorded vulnerability window for ${PG} onset=${original_onset} " \
       $dir/osd.*.log | wc -l)
-    test "$total_recorded" = 1 || {
+    test "$chain_recorded" = 1 || {
       echo "FAIL: expected exactly 1 'recorded vulnerability window' line for" \
-           "${PG} across all four OSDs, got $total_recorded"
+           "${PG} with the handover chain's onset (${original_onset}) across" \
+           "all four OSDs, got $chain_recorded"
       return 1
     }
 
-    # Cross-check against the OSD-wide perf counter: summed avgcount across
-    # all four OSDs must also be exactly 1.
+    # Cross-check against the OSD-wide perf counter: the chain's own episode
+    # must be reflected in the summed avgcount too. Not an exact-match check
+    # against 1 for the same reason as above -- pg_vulnerability_duration is
+    # an OSD-wide aggregate with no per-episode identity, so a legitimate,
+    # unrelated catch-up episode on a rejoining OSD would also bump it.
     local total_avgcount=0
     for osd in 0 1 2 3
     do
@@ -1094,8 +1132,8 @@ function TEST_rebuild_perf_multihop_handover() {
       total_avgcount=$(expr $total_avgcount + ${c:-0})
     done
 
-    test "$total_avgcount" = 1 || {
-      echo "FAIL: expected summed pg_vulnerability_duration.avgcount=1 across" \
+    test "$total_avgcount" -ge 1 || {
+      echo "FAIL: expected summed pg_vulnerability_duration.avgcount>=1 across" \
            "all OSDs, got $total_avgcount"
       return 1
     }
