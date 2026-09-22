@@ -1,0 +1,7 @@
+tls_server_config:
+  cert_file: pushgateway.crt
+  key_file: pushgateway.key
+{% if enable_mtls %}
+  client_auth_type: RequireAndVerifyClientCert
+  client_ca_file: root_cert.pem
+{% endif %}

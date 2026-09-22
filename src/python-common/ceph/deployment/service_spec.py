@@ -878,6 +878,7 @@ class ServiceSpec(object):
         'osd',
         'prometheus',
         'promtail',
+        'pushgateway',
         'alloy',
         'rbd-mirror',
         'rgw',
@@ -919,6 +920,7 @@ class ServiceSpec(object):
         'alertmanager': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
         'ceph-exporter': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
         'node-exporter': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
+        'pushgateway': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
         'node-proxy': {'user_cert_allowed': False, 'scope': 'host', 'requires_ca_cert': False},
         # 'loki'        : {'user_cert_allowed': False, 'scope': 'host'},
         # 'promtail'    : {'user_cert_allowed': False, 'scope': 'host'},
@@ -953,6 +955,7 @@ class ServiceSpec(object):
             'loki': MonitoringSpec,
             'promtail': MonitoringSpec,
             'alloy': MonitoringSpec,
+            'pushgateway': MonitoringSpec,
             'snmp-gateway': SNMPGatewaySpec,
             'elasticsearch': TracingSpec,
             'jaeger-agent': TracingSpec,
@@ -3260,7 +3263,7 @@ class MonitoringSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager',
-                                'loki', 'alloy', 'promtail']
+                                'loki', 'alloy', 'promtail', 'pushgateway']
 
         super(MonitoringSpec, self).__init__(
             service_type, service_id,
@@ -3289,7 +3292,8 @@ class MonitoringSpec(ServiceSpec):
                     'grafana': 3000,
                     'loki': 3100,
                     'alloy': 9080,
-                    'promtail': 9080}[self.service_type]
+                    'promtail': 9080,
+                    'pushgateway': 9091}[self.service_type]
 
 
 yaml.add_representer(MonitoringSpec, ServiceSpec.yaml_representer)

@@ -192,6 +192,7 @@ class ServiceType(enum.Enum):
     loki = 'loki'
     promtail = 'promtail'
     alloy = 'alloy'
+    pushgateway = 'pushgateway'
     mds = 'mds'
     rgw = 'rgw'
     nfs = 'nfs'
