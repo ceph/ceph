@@ -21,6 +21,7 @@
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
 
+#include "test/librados/crimson_utils.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/test_pool_types.h"
 #include "gtest/gtest.h"
@@ -71,7 +72,48 @@ void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_
 
 class TestClsLock : public ceph::test::ClsTestFixture {
   // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
+ protected:
+  static void SetUpTestSuite();
+  static void TearDownTestSuite();
+
+  void SetUp() override {
+    // cls_lock's xattr-based state is not yet reliably supported on
+    // Crimson's FastEC pools. Skip FastEC tests on Crimson until that
+    // support is added.
+    if (is_crimson_cluster() && GetParam() == ceph::test::PoolType::FAST_EC) {
+      GTEST_SKIP() << "FastEC not supported by crimson yet. Skipped";
+    }
+    ceph::test::ClsTestFixture::SetUp();
+  }
 };
+
+void TestClsLock::SetUpTestSuite()
+{
+  if (is_crimson_cluster()) {
+    ASSERT_EQ("", connect_cluster_pp(rados));
+    std::string pname = get_temp_pool_name(
+      pool_name_prefix() + pool_type_name(PoolType::REPLICATED) + "_");
+    ASSERT_EQ("", create_pool_by_type(pname, rados, PoolType::REPLICATED));
+    after_pool_create(PoolType::REPLICATED, pname, rados);
+    pool_names[PoolType::REPLICATED] = pname;
+    return;
+  }
+  PoolTypeTestFixture::SetUpTestSuite();
+}
+
+void TestClsLock::TearDownTestSuite()
+{
+  if (is_crimson_cluster()) {
+    auto it = pool_names.find(PoolType::REPLICATED);
+    if (it != pool_names.end()) {
+      ASSERT_EQ(0, destroy_pool_by_type(it->second, rados, PoolType::REPLICATED));
+    }
+    pool_names.clear();
+    rados.shutdown();
+    return;
+  }
+  PoolTypeTestFixture::TearDownTestSuite();
+}
 
 TEST_P(TestClsLock, TestMultiLocking) {
   ClsLockType lock_type_shared = ClsLockType::SHARED;
