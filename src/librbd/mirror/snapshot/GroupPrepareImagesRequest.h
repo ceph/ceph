@@ -34,6 +34,7 @@ public:
     OP_DEMOTE          = 3,
     OP_ADD_IMAGE       = 4,
     OP_CREATE_PRIMARY  = 5,
+    OP_REMOVE_IMAGE = 6,
   };
   static GroupPrepareImagesRequest *create(
       librados::IoCtx& group_ioctx, const std::string& group_id,

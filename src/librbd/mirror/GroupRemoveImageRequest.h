@@ -4,6 +4,8 @@
 #ifndef CEPH_LIBRBD_MIRROR_GROUP_REMOVE_IMAGE_REQUEST_H
 #define CEPH_LIBRBD_MIRROR_GROUP_REMOVE_IMAGE_REQUEST_H
 
+#include <set>
+#include "include/buffer.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_types.h"
@@ -41,27 +43,32 @@ private:
  *               v
  *         GET_MIRROR_INFO
  *               |
- *      +--------+--------------------------------+
- *      |                                         |
- *  is_primary = false                        is_primary = true
- *      |                                         |
- *      v                                         |
- *  PROMOTE_IMAGE                                 |
- *      |                                         |
- *      v                                         |
- *  SET_MIRROR_IMAGE_DISABLING  ------------------+
- *      |
- *      v
+ *      +--------+-----------------------+
+ *      |                                |
+ *  not mirrored                       mirrored
+ *      |                                |
+ *      |                                v
+ *      |                    SET_MIRROR_IMAGE_DISABLING
+ *      |                                |
+ *      |                                v
+ *      |                      GET_MIRROR_PEER_LIST
+ *      |                                |
+ *      |                                v
+ *      |                    UNLINK_GROUP_SNAPSHOTS
+ *      |                                |
+ *      +----------------<---------------+
+ *               |
+ *               v
  *  REMOVE_GROUP_REF_FROM_IMAGE
- *      |
- *      v
+ *               |
+ *               v
  *  REMOVE_GLOBAL_MIRROR_IMAGE_ENTRY
- *      |
- *      v
- *  CLOSE_IMAGE
- *      |
- *      v
- *  <finish>
+ *               |
+ *               v
+ *           <finish>
+ *
+ *  Fatal operation errors terminate at <finish>. The caller owns the image
+ *  context, so this request deliberately leaves it open.
  *
  * @endverbatim
  */
@@ -70,6 +77,17 @@ private:
   std::string m_group_id;
   librados::IoCtx& m_group_io_ctx;
   Context* m_on_finish;
+
+  // mirror peer handling
+  std::set<std::string> m_mirror_peer_uuids;
+
+  // rados read buffer
+  bufferlist m_out_bl;
+
+  // ioctx for default namespace (peer listing requires this)
+  librados::IoCtx m_default_ns_ioctx;
+
+  std::vector<ImageCtx*> m_image_ctxs_single;
 
   CephContext* m_cct;
 
@@ -83,6 +101,12 @@ private:
 
   void set_mirror_image_disabling();
   void handle_set_mirror_image_disabling(int r);
+
+  void get_mirror_peer_list();
+  void handle_get_mirror_peer_list(int r);
+
+  void unlink_group_snapshots();
+  void handle_unlink_group_snapshots(int r);
 
   void promote_image();
   void handle_promote_image(int r);
