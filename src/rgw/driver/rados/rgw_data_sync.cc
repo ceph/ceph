@@ -4345,8 +4345,6 @@ static bool ignore_sync_error(int err) {
   switch (err) {
     case -ENOENT:
     case -EPERM:
-    case -EBUSY:
-    case -EAGAIN:
       return true;
     default:
       break;
@@ -4517,7 +4515,9 @@ public:
             << " retcode=" << retcode
             << " (" << cpp_strerror(-retcode) << ")"));
         if (!ignore_sync_error(retcode)) {
-          error_ss << bucket_shard_str{bs} << "/" << key.name;
+          if (retcode != -EBUSY && retcode != -EAGAIN) {
+            error_ss << bucket_shard_str{bs} << "/" << key.name;
+          }
           sync_status = retcode;
         }
       }
