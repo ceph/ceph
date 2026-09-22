@@ -2072,3 +2072,164 @@ def test_generate_config_default_compat(thandler):
     share_vfs = cfg['shares']['DefaultShare']['options']['vfs objects']
     assert 'fruit' not in share_vfs
     assert 'streams_xattr' not in share_vfs
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        ({}, True),
+        ({'shares.foo.s1': 'default'}, True),
+        ({'clusters.foo': 'default'}, True),
+        ({'shares.foo.s1': 'disabled'}, False),
+        ({'clusters.foo': 'disabled'}, False),
+        ({'clusters.foo': 'disabled', 'shares.foo.s1': 'default'}, True),
+        ({'clusters.foo': 'disabled', 'shares.foo.s1': 'disabled'}, False),
+        ({'clusters.foo': 'default', 'shares.foo.s1': 'default'}, True),
+        ({'clusters.foo': 'default', 'shares.foo.s1': 'disabled'}, False),
+    ],
+)
+def test_generate_config_acl_support(thandler, params):
+    """Test combinations of the acl_support option for cluster and share."""
+    customize, expect_xattr = params
+    internal_config = {
+        'clusters.foo': {
+            'resource_type': 'ceph.smb.cluster',
+            'cluster_id': 'foo',
+            'auth_mode': 'user',
+            'intent': 'present',
+            'user_group_settings': [
+                {
+                    'source_type': 'empty',
+                }
+            ],
+        },
+        'shares.foo.s1': {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': 'foo',
+            'share_id': 's1',
+            'intent': 'present',
+            'readonly': False,
+            'browseable': True,
+            'cephfs': {
+                'volume': 'cephfs',
+                'path': '/',
+                'provider': 'samba-vfs',
+            },
+        },
+    }
+    for key, value in customize.items():
+        sub = internal_config[key]
+        if key.startswith('clusters.'):
+            sd = sub.setdefault('share_defaults', {})
+            sd['acl_support'] = value
+        elif key.startswith('shares.'):
+            sub['acl_support'] = value
+        else:
+            raise KeyError(key)
+
+    thandler.internal_store.overwrite(internal_config)
+
+    thandler._sync_clusters(['foo'])
+    cfg = thandler.public_store['foo', 'config.smb'].get()
+    assert cfg
+    share_opts = cfg['shares']['s1']['options']
+    if expect_xattr:
+        assert 'acl_xattr' in share_opts['vfs objects']
+        assert 'acl_xattr:security_acl_name' in share_opts
+        assert share_opts['acl_xattr:security_acl_name'] == 'user.NTACL'
+    else:
+        assert 'acl_xattr' not in share_opts['vfs objects']
+        assert 'acl_xattr:security_acl_name' not in share_opts
+
+
+def test_acl_support_no_modify(thandler):
+    internal_config = {
+        'clusters.foo': {
+            'resource_type': 'ceph.smb.cluster',
+            'cluster_id': 'foo',
+            'auth_mode': 'user',
+            'intent': 'present',
+            'user_group_settings': [
+                {
+                    'source_type': 'empty',
+                }
+            ],
+        },
+        'shares.foo.s1': {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': 'foo',
+            'share_id': 's1',
+            'intent': 'present',
+            'readonly': False,
+            'browseable': True,
+            'cephfs': {
+                'volume': 'cephfs',
+                'path': '/',
+                'provider': 'samba-vfs',
+            },
+        },
+    }
+
+    thandler.internal_store.overwrite(internal_config)
+    share2 = smb.resources.Share(
+        cluster_id='foo',
+        share_id='s1',
+        readonly=False,
+        browseable=True,
+        acl_support=smb.enums.ACLSupportPolicy.DISABLED,  # changed
+        cephfs=_cephfs(
+            volume='cephfs',
+            provider=smb.enums.CephFSStorageProvider.SAMBA_VFS,
+        ),
+    )
+    rg = thandler.apply([share2])
+    assert not rg.success, rg.to_simplified()
+    rs = rg.to_simplified()
+    assert rs['results'][0]['msg'] == 'acl_support value may not be changed'
+
+
+def test_acl_support_no_modify_cluster(thandler):
+    internal_config = {
+        'clusters.foo': {
+            'resource_type': 'ceph.smb.cluster',
+            'cluster_id': 'foo',
+            'auth_mode': 'user',
+            'intent': 'present',
+            'user_group_settings': [
+                {
+                    'source_type': 'empty',
+                }
+            ],
+        },
+        'shares.foo.s1': {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': 'foo',
+            'share_id': 's1',
+            'intent': 'present',
+            'readonly': False,
+            'browseable': True,
+            'cephfs': {
+                'volume': 'cephfs',
+                'path': '/',
+                'provider': 'samba-vfs',
+            },
+        },
+    }
+
+    thandler.internal_store.overwrite(internal_config)
+    share2 = smb.resources.Cluster(
+        cluster_id='foo',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+        share_defaults=smb.resources.ShareDefaults(
+            acl_support=smb.enums.ACLSupportPolicy.DISABLED,  # changed
+        ),
+    )
+    rg = thandler.apply([share2])
+    assert not rg.success, rg.to_simplified()
+    rs = rg.to_simplified()
+    assert rs['results'][0]['msg'] == 'acl_support value may not be changed'
