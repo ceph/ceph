@@ -2197,28 +2197,23 @@ TEST_F(PeeringStateTest, Issue74218) {
 //
 // These exercise the vulnerability-window tracking in
 // prepare_stats_for_publish() that feeds rs_pg_vulnerability_duration
-// (avgcount/sum/avgtime). The window is bracketed by the pg_stat_t
-// timestamps last_degraded (onset, latched once) and last_clean
-// (resolution); one degraded/undersized/misplaced -> clean episode is
-// recorded exactly once, by whichever OSD is primary when the window
-// closes, then last_degraded is collapsed up to last_clean so it is never
-// re-recorded.
+// (avgcount/sum/avgtime). The window is bracketed by three pg_history_t
+// fields -- last_degraded (onset, latched once and never moved again),
+// last_clean (resolution), and vuln_window_reported (the "recorded up to"
+// marker) -- and is genuinely merged across peers on every peering info
+// exchange, so it is recorded exactly once, by whichever OSD is primary
+// when the window closes, regardless of how many primaries held it along
+// the way. pg_stat_t.last_degraded/last_clean mirror these fields on every
+// publish, purely for external reporting.
 // Design notes:
 //   - call_prepare_stats(osd) passes nullopt so the publish branch always
 //     runs, which is what drives the window logic even when stats are
 //     otherwise unchanged.
 //   - A 10 ms sleep between opening the window and reaching clean ensures
 //     (last_clean - last_degraded).to_msec() > 0 so the record commits.
-//   - get_ps(osd)->get_info().stats.{last_degraded,last_clean} are read
-//     directly to check the latch/collapse invariant.
-//
-// NOTE: (current scope): pg_stat_t is not synced to non-primary peers, so a
-// vulnerability window is currently attributed only from the point the
-// *recording* primary took over -- a mid-window primary handover loses the
-// pre-handover exposure time (see VulnerabilityWindowHandover /
-// ...MultiHopHandover below, which pin the current behavior). Moving
-// the onset into pg_history_t in the persistence phase makes the final
-// primary record the full episode; those two tests change then.
+//   - get_ps(osd)->get_info().stats.{last_degraded,last_clean} (the mirror)
+//     and get_ps(osd)->get_info().history.* (the source of truth) are read
+//     directly to check the latch/record/inheritance invariants.
 // ============================================================================
 
 // One complete failure+recovery cycle does the following:
@@ -2233,7 +2228,8 @@ TEST_F(PeeringStateTest, Issue74218) {
 
 // ============================================================================
 // Test 1: the primary records the vulnerability-window duration exactly once
-// on recovery, and collapses last_degraded up to last_clean afterward.
+// on recovery. last_degraded stays pinned at the true onset afterward;
+// vuln_window_reported is what marks the episode as recorded.
 // ============================================================================
 TEST_F(PeeringStateTest, VulnerabilityWindowRecordedOnce) {
   dout(0) << "== VulnerabilityWindowRecordedOnce ==" << dendl;
@@ -2260,6 +2256,7 @@ TEST_F(PeeringStateTest, VulnerabilityWindowRecordedOnce) {
   // Open the window: first prepare_stats call while vulnerable latches
   // last_degraded to last_change.
   call_prepare_stats(acting_primary);
+  const utime_t onset = get_ps(acting_primary)->get_info().stats.last_degraded;
   {
     const auto &st = get_ps(acting_primary)->get_info().stats;
     EXPECT_GT(st.last_degraded, st.last_clean)
@@ -2276,7 +2273,7 @@ TEST_F(PeeringStateTest, VulnerabilityWindowRecordedOnce) {
   test_event_all_replicas_recovered();
   verify_all_active_clean(v, eversion_t());
 
-  // Close the window: prepare_stats while clean records and collapses.
+  // Close the window: prepare_stats while clean records it.
   call_prepare_stats(acting_primary);
   auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_vulnerability_duration);
   EXPECT_EQ(count, 1u);
@@ -2291,8 +2288,14 @@ TEST_F(PeeringStateTest, VulnerabilityWindowRecordedOnce) {
   EXPECT_EQ(min_ns, sum_ns);
 
   const auto &st = get_ps(acting_primary)->get_info().stats;
-  EXPECT_EQ(st.last_degraded, st.last_clean)
-      << "last_degraded must be collapsed up to last_clean after recording";
+  EXPECT_EQ(st.last_degraded, onset)
+      << "last_degraded stays pinned at the true onset after recording";
+  EXPECT_LT(st.last_degraded, st.last_clean)
+      << "last_clean has advanced past the (unmoved) onset once closed";
+  EXPECT_EQ(get_ps(acting_primary)->get_info().history.vuln_window_reported,
+            st.last_clean)
+      << "vuln_window_reported, not last_degraded, marks this episode as "
+         "recorded";
 }
 
 // ============================================================================
@@ -2548,19 +2551,14 @@ TEST_F(PeeringStateTest, VulnerabilityWindowSurvivesSamePrimaryIntervalRestart) 
 }
 
 // ============================================================================
-// Test 6 (test behavior without peering): after a mid-window primary handover,
-// the departing primary records nothing and the new primary records a single
-// window measured from its own takeover -- the pre-handover exposure time is
-// not attributed, because pg_stat_t.last_degraded is not synced to peers.
-//
-// This is a known limitation which will be overcome in subsequent commits. This
-// is weaker than the interim mitigation (which recorded a truncated segment per
-// primary). The persistence phase moves the onset into pg_history_t; this test
-// then changes to assert the new primary records the FULL episode duration.
-// It's kept meanwhile so the behavior is pinned, not silent.
+// Test 6: after a mid-window primary handover, the departing primary (which
+// never observes the close) still records nothing, but the new primary
+// inherits the TRUE original onset via pg_history_t::merge() -- not a fresh
+// one from its own takeover point -- so the whole episode is recorded once,
+// on the final primary, with the full duration.
 // ============================================================================
-TEST_F(PeeringStateTest, VulnerabilityWindowHandover) {
-  dout(0) << "== VulnerabilityWindowHandover ==" << dendl;
+TEST_F(PeeringStateTest, VulnerabilityWindowSurvivesHandover) {
+  dout(0) << "== VulnerabilityWindowSurvivesHandover ==" << dendl;
   test_create_peering_state();
   test_init();
   test_event_initialize();
@@ -2580,8 +2578,8 @@ TEST_F(PeeringStateTest, VulnerabilityWindowHandover) {
   PerfCounters *perf_osd0 = get_listener(0)->recoverystate_perf;
 
   call_prepare_stats(acting_primary);        // OSD 0 opens the window
-  ASSERT_GT(get_ps(0)->get_info().stats.last_degraded,
-            get_ps(0)->get_info().stats.last_clean);
+  const utime_t original_onset = get_ps(0)->get_info().stats.last_degraded;
+  ASSERT_GT(original_onset, get_ps(0)->get_info().stats.last_clean);
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
   // --- Handover: swap acting[0] OSD 0 -> OSD 7 before recovery completes. ---
@@ -2594,17 +2592,18 @@ TEST_F(PeeringStateTest, VulnerabilityWindowHandover) {
   test_event_advance_map();
   test_peering();   // OSD 7 activates as the new primary
 
-  // OSD 0 recorded nothing (Phase 2: no departing-primary segment).
+  // OSD 0 never observes the close, so it still records nothing.
   {
     auto [sum_ns, count] =
       perf_osd0->get_tavg_ns(rs_pg_vulnerability_duration);
     EXPECT_EQ(count, 0u);
   }
 
-  // OSD 7 opens its own window from the handover point.
+  // OSD 7 inherits the TRUE original onset via pg_history_t::merge(),
+  // not a fresh one from its own takeover point.
   call_prepare_stats(acting_primary);
-  ASSERT_GT(get_ps(7)->get_info().stats.last_degraded,
-            get_ps(7)->get_info().stats.last_clean);
+  EXPECT_EQ(get_ps(7)->get_info().stats.last_degraded, original_onset)
+      << "the new primary must inherit the true onset across a handover";
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
   test_recover_got(7, v);
@@ -2619,18 +2618,19 @@ TEST_F(PeeringStateTest, VulnerabilityWindowHandover) {
   auto [sum_ns, count] =
     get_listener(7)->recoverystate_perf->get_tavg_ns(
       rs_pg_vulnerability_duration);
-  EXPECT_EQ(count, 1u) << "the final primary records exactly one window";
+  EXPECT_EQ(count, 1u)
+      << "the whole episode -- across the handover -- is recorded once";
   EXPECT_GT(sum_ns, 0u);
 }
 
 // ============================================================================
-// Test 7 ((test behavior without peering)): a two-handover chain (0 -> 7 -> 8)
-// records a single window, on the final primary only, measured from its
-// takeover. Same known limitation as Test 6; the persistence phase changes
-// this to a single full-episode record on the final primary.
+// Test 7: a two-handover chain (0 -> 7 -> 8) records a single window, on the
+// final primary only, spanning the TRUE original onset -- each intermediate
+// primary inherits it via pg_history_t::merge() rather than opening its own
+// fresh window, same mechanism as Test 6, exercised across two hops.
 // ============================================================================
-TEST_F(PeeringStateTest, VulnerabilityWindowMultiHopHandover) {
-  dout(0) << "== VulnerabilityWindowMultiHopHandover ==" << dendl;
+TEST_F(PeeringStateTest, VulnerabilityWindowiSurvivesMultiHopHandover) {
+  dout(0) << "== VulnerabilityWindowiSurvivesMultiHopHandover ==" << dendl;
   test_create_peering_state();
   test_init();
   test_event_initialize();
@@ -2649,6 +2649,7 @@ TEST_F(PeeringStateTest, VulnerabilityWindowMultiHopHandover) {
   PerfCounters *perf_osd0 = get_listener(0)->recoverystate_perf;
 
   call_prepare_stats(acting_primary);
+  const utime_t original_onset = get_ps(0)->get_info().stats.last_degraded;
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
   // --- Hop 1: OSD 0 -> OSD 7. ---
@@ -2669,6 +2670,8 @@ TEST_F(PeeringStateTest, VulnerabilityWindowMultiHopHandover) {
 
   PerfCounters *perf_osd7 = get_listener(7)->recoverystate_perf;
   call_prepare_stats(acting_primary);
+  EXPECT_EQ(get_ps(7)->get_info().stats.last_degraded, original_onset)
+      << "the intermediate primary must inherit the true onset";
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
   // --- Hop 2: OSD 7 -> OSD 8. ---
@@ -2688,6 +2691,9 @@ TEST_F(PeeringStateTest, VulnerabilityWindowMultiHopHandover) {
   }
 
   call_prepare_stats(acting_primary);
+  EXPECT_EQ(get_ps(8)->get_info().stats.last_degraded, original_onset)
+      << "the final primary must still carry the ORIGINAL onset across "
+         "both hops, not either intermediate primary's own takeover point";
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
   // --- Recover to completion under OSD 8. ---
@@ -2704,31 +2710,23 @@ TEST_F(PeeringStateTest, VulnerabilityWindowMultiHopHandover) {
     get_listener(8)->recoverystate_perf->get_tavg_ns(
     rs_pg_vulnerability_duration);
   EXPECT_EQ(count, 1u)
-      << "only the final primary records, and only its own tenure";
+      << "the whole episode -- across both hops -- is recorded exactly once";
   EXPECT_GT(sum_ns, 0u);
 }
 
 // ============================================================================
 // Test 8: a brand-new, empty replica joining WHILE a window is already open
-// must not inherit that open, unrecorded window as its own.
-//
-// A replica's very first info+log exchange with the primary is a
-// "restart backfill" (the replica is DNE, so Stray::react(MLogRec) does a
-// wholesale `ps->info = msg->info;`, PeeringState.cc). If the primary's own
-// window is open-but-not-yet-recorded at that moment, the replica's local
-// info.stats -- including last_degraded/last_clean -- is bit-for-bit replaced
-// with the primary's, so the replica would believe it has an open window it
-// never observed opening itself. The replica would then be permanently stuck
-// the next time it becomes primary in which case it would,
-//  - be unable to correctly open its own fresh window (silently, if it never
-//    reaches clean while primary), or,
-//  - record a wildly inflated duration spanning back to the original if it
-//    does become primary.
-// See discard_inherited_vulnerability_window()'s comment in PeeringState.h for
-// the full list of sites that needed the same guard.
+// correctly inherits that open, unrecorded window as part of the wholesale
+// pg_info_t copy in Stray::react(MLogRec)'s "restart backfill" branch (the
+// replica is DNE, so last_backfill is unset, and `ps->info = msg->info;`
+// copies info.history along with everything else). Unlike pg_stat_t, which
+// is only ever wholesale-copied and never merged, pg_history_t is a genuine
+// coordinated-merge structure -- so if this replica later becomes primary,
+// it correctly records the whole episode rather than losing or truncating
+// it, and inheriting the onset here is the intended behavior, not a bug.
 // ============================================================================
-TEST_F(PeeringStateTest, VulnerabilityWindowNewReplicaDoesNotInheritOpenWindow) {
-  dout(0) << "== VulnerabilityWindowNewReplicaDoesNotInheritOpenWindow ==" << dendl;
+TEST_F(PeeringStateTest, VulnerabilityWindowNewReplicaInheritsOpenWindow) {
+  dout(0) << "== VulnerabilityWindowNewReplicaInheritsOpenWindow ==" << dendl;
   test_create_peering_state();
   test_init();
   test_event_initialize();
@@ -2746,24 +2744,25 @@ TEST_F(PeeringStateTest, VulnerabilityWindowNewReplicaDoesNotInheritOpenWindow) 
   test_peering();
 
   call_prepare_stats(acting_primary);        // window opens
-  ASSERT_GT(get_ps(0)->get_info().stats.last_degraded,
-            get_ps(0)->get_info().stats.last_clean);
+  const utime_t onset = get_ps(0)->get_info().stats.last_degraded;
+  ASSERT_GT(onset, get_ps(0)->get_info().stats.last_clean);
 
   // --- A brand-new, empty replica (OSD 8) joins WHILE the window is still
   // open. Its very first log+info exchange goes through
   // Stray::react(MLogRec)'s "restart backfill" branch (it is DNE, so
   // last_backfill is unset), which fully-copies OSD 0's current
-  // info.stats -- including the currently-open last_degraded/last_clean. ---
+  // pg_info_t -- including the still-open info.history. ---
   modify_up_acting(2, 8);
   test_create_peering_state(8, 2);
   test_init(8);
   test_event_initialize(8);
   test_peering();
 
-  EXPECT_EQ(get_ps(8)->get_info().stats.last_degraded,
-            get_ps(8)->get_info().stats.last_clean)
-      << "OSD 8 must not inherit OSD 0's open, unrecorded vulnerability "
-         "window from the restart-backfill info exchange";
+  // OSD 8 genuinely carries the SAME true onset -- correct, since
+  // pg_history_t is a coordinated-merge structure, not a wholesale-copy-
+  // only one.
+  EXPECT_EQ(get_ps(8)->get_info().history.last_degraded, onset)
+      << "a new replica joining mid-window must inherit the true onset";
 
   // --- Recover the episode normally under OSD 0, to confirm the new
   // replica's join didn't disturb the primary's own bookkeeping either. ---
@@ -2863,6 +2862,70 @@ TEST_F(PeeringStateTest, DispatchGuardCoversAdvanceAndActivateMap) {
          "observed is_dispatching_peering_event() == false";
   EXPECT_FALSE(get_ps(acting_primary)->is_dispatching_peering_event())
       << "the guard must be cleared once advance_map() returns";
+}
+
+// ============================================================================
+// Test 10: info.history is only durably written when dirty_info/dirty_big_info
+// is set AND some transaction carrying that flag gets committed --
+// prepare_stats_for_publish() is called from many contexts (op/repop
+// completions included) that don't always have a transaction in flight,
+// so it must mark info dirty itself on both the arm and the close
+// transition, rather than leaving persistence to whatever unrelated
+// write happens to come along next.
+// ============================================================================
+TEST_F(PeeringStateTest, VulnerabilityWindowMarksInfoDirty) {
+  dout(0) << "== VulnerabilityWindowMarksInfoDirty ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  call_prepare_stats(acting_primary);
+
+  // Introduce a missing replica: swap acting[1] from OSD 1 to OSD 9.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+  // PG is now active+recovering+degraded on the primary.
+
+  // Drain whatever unrelated dirty state peering itself left behind, so
+  // the arm transition below is checked against a clean baseline.
+  {
+    ObjectStore::Transaction t;
+    get_ps(acting_primary)->write_if_dirty(t);
+  }
+  ASSERT_FALSE(get_ps(acting_primary)->debug_has_dirty_state());
+
+  // Arm: the first publish while vulnerable must mark info dirty.
+  call_prepare_stats(acting_primary);
+  EXPECT_TRUE(get_ps(acting_primary)->debug_has_dirty_state())
+      << "arming the vulnerability-window latch must mark info dirty for "
+         "a prompt write";
+
+  {
+    ObjectStore::Transaction t;
+    get_ps(acting_primary)->write_if_dirty(t);
+  }
+  ASSERT_FALSE(get_ps(acting_primary)->debug_has_dirty_state());
+
+  // Drive the PG back to active+clean.
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+
+  // Close: the publish that records the episode must also mark info
+  // dirty.
+  call_prepare_stats(acting_primary);
+  EXPECT_TRUE(get_ps(acting_primary)->debug_has_dirty_state())
+      << "recording a closed vulnerability window must mark info dirty "
+         "for a prompt write";
 }
 
 // ============================================================================

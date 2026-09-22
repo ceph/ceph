@@ -853,25 +853,26 @@ function TEST_divergent_3() {
 # ============================================================================
 # A replica whose PG log is genuinely AHEAD of what the current primary
 # describes rejoins via PeeringState::Stray::react(MInfoRec)'s "rewind
-# divergent log entries" branch (PeeringState.cc). This test exercises this
-# patch that discards the inherited vulnerability window.
+# the primary's pg_stat_t (last_degraded/last_clean included) onto the
+# rejoining replica's own info.stats -- but never touches info.history.
+# Since pg_stat_t.last_degraded/last_clean are only ever a mirror re-derived
+# from info.history on the next publish, whatever this copy puts in them is
+# overwritten again before it can matter; the vulnerability-window latch
+# itself never sees a value it didn't compute from its own info.history.
+# This test confirms that directly: forcing primary role onto the
+# once-divergent replica afterward must not surface the primary's
+# pre-rejoin episode as its own.
 #
-# Real log divergence is built exactly the way TEST_divergent above does it:
-# blackhole the replicas that will come back FIRST, let the soon-to-be-
-# divergent OSD accept one more write alone (which the client abandons
-# before it can ever be acked, since min_size can't be met with both other
-# replicas blackholed), then kill everyone and revive the blackholed
-# replicas before the divergent one. The test only cares that the rejoining
-# OSD's log is genuinely ahead when it processes its first MInfoRec back as
-# a Stray.
-#
-# Once the PG is back to active+clean, this forces PRIMARY role onto that
-# same OSD via `ceph osd primary-affinity` (not a kill -- all three OSDs
-# stay up+in throughout, so this introduces no NEW degradation on its own)
-# and checks its own local pg_vulnerability_duration counter. With the
-# discard fix, last_degraded was already collapsed to last_clean at rewind time,
-# so nothing closes and nothing is recorded (short of a legitimate, correctly-
-# small transient blip -- see the duration-bound check below).
+# The rewind's effect on the rejoining OSD's own info.stats is silent (no
+# log line), so it can't be observed directly. Instead, once the PG is back
+# to active+clean, this forces PRIMARY role onto that same OSD via
+# `ceph osd primary-affinity` (not a kill -- all three OSDs stay up+in
+# throughout, so this introduces no NEW degradation on its own) and checks
+# its own local pg_vulnerability_duration counter. A wildly inflated
+# duration reaching back to the primary's pre-rejoin episode would mean the
+# wholesale-copied info.stats was trusted directly instead of being
+# re-derived; a small, correctly-bounded duration (or none at all) confirms
+# it wasn't -- see the duration-bound check below.
 # ============================================================================
 function TEST_divergent_vulnerability_window() {
     local dir=$1
@@ -1116,9 +1117,10 @@ function TEST_divergent_vulnerability_window() {
       awk -v d="$divergent_duration" 'BEGIN { exit !(d < 40) }' || {
         echo "FAIL: osd.${divergent} recorded a vulnerability window of" \
              "${divergent_duration}s right after becoming primary -- this" \
-             "reaches back into the ORIGINAL pre-rejoin episode, meaning it" \
-             "inherited osd.${current_primary}'s open-but-unrecorded window" \
-             "via the Stray::react(MInfoRec) rewind instead of discarding it"
+             "reaches back into the ORIGINAL pre-rejoin episode, meaning the" \
+             "wholesale-copied info.stats from the Stray::react(MInfoRec)" \
+             "rewind was trusted directly instead of being re-derived from" \
+             "info.history"
         return 1
       }
     fi
