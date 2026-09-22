@@ -2976,6 +2976,18 @@ struct pg_history_t {
   /// upper bound on how long prior interval readable (relative to encode time)
   ceph::timespan prior_readable_until_ub = ceph::timespan::zero();
 
+  /**
+   * PG vulnerability-window onset, merged across peers (unlike pg_stat_t's
+   * same-named fields, which are only ever wholesale-copied, never merged
+   * -- see merge() below). last_degraded stays pinned at the true onset
+   * once latched; vuln_window_reported is a separate "recorded up to"
+   * marker (tied to last_clean's own advance) that gates re-recording, so
+   * last_degraded itself never needs to be artificially moved.
+   */
+  utime_t last_degraded;
+  utime_t last_clean;
+  utime_t vuln_window_reported;
+
   friend bool operator==(const pg_history_t& l, const pg_history_t& r) {
     return
       l.epoch_created == r.epoch_created &&
@@ -2994,7 +3006,10 @@ struct pg_history_t {
       l.last_scrub_stamp == r.last_scrub_stamp &&
       l.last_deep_scrub_stamp == r.last_deep_scrub_stamp &&
       l.last_clean_scrub_stamp == r.last_clean_scrub_stamp &&
-      l.prior_readable_until_ub == r.prior_readable_until_ub;
+      l.prior_readable_until_ub == r.prior_readable_until_ub &&
+      l.last_degraded == r.last_degraded &&
+      l.last_clean == r.last_clean &&
+      l.vuln_window_reported == r.vuln_window_reported;
   }
 
   pg_history_t() {}
@@ -3072,6 +3087,46 @@ struct pg_history_t {
     }
     if (other.last_clean_scrub_stamp > last_clean_scrub_stamp) {
       last_clean_scrub_stamp = other.last_clean_scrub_stamp;
+      modified = true;
+    }
+
+    // PG vulnerability-window onset. last_clean is a normal monotonic
+    // field (like everything above) and is merged first. Whether either
+    // side's last_degraded still describes a currently-open window depends on
+    // the MERGED clean point. last_degraded itself is not monotonic: the
+    // correct merged onset is the EARLIEST still-open candidate, not the
+    // latest, since the true onset is whoever detected the transition first.
+    if (other.last_clean > last_clean) {
+      last_clean = other.last_clean;
+      modified = true;
+    }
+    {
+      const bool mine_open = last_degraded > last_clean;
+      const bool other_open = other.last_degraded > last_clean;
+      utime_t merged_last_degraded;
+      if (mine_open && other_open) {
+        merged_last_degraded = std::min(last_degraded, other.last_degraded);
+      } else if (mine_open) {
+        merged_last_degraded = last_degraded;
+      } else if (other_open) {
+        merged_last_degraded = other.last_degraded;
+      } else {
+        // Neither side shows a currently-open window, so last_degraded is
+        // just a stale marker from a past (already-closed) episode on each
+        // side -- treat it as an ordinary monotonic value here and take the
+        // max, exactly like vuln_window_reported below.
+        merged_last_degraded = std::max(last_degraded, other.last_degraded);
+      }
+      if (merged_last_degraded != last_degraded) {
+        last_degraded = merged_last_degraded;
+        modified = true;
+      }
+    }
+    // vuln_window_reported is a genuine monotonic marker (only ever
+    // advances, tied 1:1 to last_clean's own advance), so a plain max-merge
+    // is correct here, same as every other field in this function.
+    if (other.vuln_window_reported > vuln_window_reported) {
+      vuln_window_reported = other.vuln_window_reported;
       modified = true;
     }
     return modified;
