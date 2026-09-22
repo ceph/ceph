@@ -80,7 +80,6 @@ download_boost() {
         --exclude="$boost_version_underscore/libs/*/doc" \
         --exclude="$boost_version_underscore/libs/*/example" \
         --exclude="$boost_version_underscore/libs/*/examples" \
-        --exclude="$boost_version_underscore/libs/*/meta" \
         --exclude="$boost_version_underscore/libs/*/test" \
         --exclude="$boost_version_underscore/tools/boostbook" \
         --exclude="$boost_version_underscore/tools/quickbook" \
