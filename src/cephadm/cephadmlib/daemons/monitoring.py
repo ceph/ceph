@@ -39,6 +39,7 @@ class Monitoring(ContainerDaemonForm):
         'loki': [3100],
         'promtail': [9080],
         'alloy': [9080],
+        'pushgateway': [9091],
     }
 
     components = {
@@ -114,6 +115,12 @@ class Monitoring(ContainerDaemonForm):
                 'peers',
             ],
         },
+        'pushgateway': {
+            'image': DefaultImages.PUSHGATEWAY.image_ref,
+            'cpus': '1',
+            'memory': '1GB',
+            'args': [],
+        },
     }  # type: ignore
 
     @classmethod
@@ -124,7 +131,7 @@ class Monitoring(ContainerDaemonForm):
     def get_version(ctx, container_id, daemon_type):
         # type: (CephadmContext, str, str) -> str
         """
-        :param: daemon_type Either "prometheus", "alertmanager", "loki", "alloy" or "node-exporter"
+        :param: daemon_type Either "prometheus", "alertmanager", "loki", "alloy", "pushgateway" or "node-exporter"
         """
         assert daemon_type in (
             'prometheus',
@@ -133,6 +140,7 @@ class Monitoring(ContainerDaemonForm):
             'loki',
             'promtail',
             'alloy',
+            'pushgateway',
         )
         cmd = daemon_type.replace('-', '_')
         code = -1
@@ -194,6 +202,9 @@ class Monitoring(ContainerDaemonForm):
             uid, gid = extract_uid_gid(
                 ctx, file_path=['/etc/alertmanager', '/etc/prometheus']
             )
+        elif daemon_type == 'pushgateway':
+            # pushgateway runs as nobody, similar to node-exporter
+            uid, gid = UID_NOBODY, GID_NOGROUP
         else:
             raise Error('{} not implemented yet'.format(daemon_type))
         return uid, gid
@@ -268,7 +279,7 @@ class Monitoring(ContainerDaemonForm):
                 if 'ports' in meta and meta['ports']:
                     port = meta['ports'][0]
             config = fetch_configs(ctx)
-            if daemon_type in ['prometheus', 'alertmanager']:
+            if daemon_type in ['prometheus', 'alertmanager', 'pushgateway']:
                 ip_to_bind_to = config.get('ip_to_bind_to', '')
                 if ip_to_bind_to:
                     ip = ip_to_bind_to
@@ -332,6 +343,13 @@ class Monitoring(ContainerDaemonForm):
                 '--path.sysfs=/host/sys',
                 '--path.rootfs=/rootfs',
             ]
+        if daemon_type == 'pushgateway':
+            try:
+                r += [f'--web.config.file={config["web_config"]}']
+            except KeyError:
+                pass
+            # persist pushed metrics across restarts
+            r += ['--persistence.file=/pushgateway/metrics']
         return r
 
     def _get_container_mounts(self, data_dir: str) -> Dict[str, str]:
@@ -382,6 +400,11 @@ class Monitoring(ContainerDaemonForm):
             mounts[
                 os.path.join(data_dir, 'etc/alertmanager')
             ] = '/etc/alertmanager:Z'
+        elif daemon_type == 'pushgateway':
+            mounts[
+                os.path.join(data_dir, 'etc/pushgateway')
+            ] = '/etc/pushgateway:Z'
+            mounts[os.path.join(data_dir, 'data')] = '/pushgateway:Z'
         return mounts
 
     def customize_container_mounts(
