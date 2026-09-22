@@ -29,6 +29,10 @@ def task(ctx, config):
         size: write size to use
         concurrency: max number of outstanding writes (16)
         objectsize: object size to use
+        max_objects: stop a write run once this many objects have been
+                     written, i.e. cap it at max_objects * objectsize bytes.
+                     Applies on top of 'time', whichever comes first.
+                     0 (the default) means no limit.
         unique_pool: use a unique pool, defaults to False
         ec_pool: create an ec pool, defaults to False
         create_pool: create pool, defaults to True
@@ -114,14 +118,22 @@ def task(ctx, config):
             f'--concurrent-ios={concurrency}',
         ]
 
+        # rados bench only accepts these on a write run; a seq/rand run picks
+        # the sizes up from the benchmark metadata written by the write run.
+        size_args = []
+        osize = config.get('objectsize', 65536)
+        if osize > 0:
+            size_args.append(f'--object-size={osize}')
+        size = config.get('size', 65536)
+        if size > 0:
+            size_args.append(f'--block-size={size}')
+        max_objects = config.get('max_objects', 0)
+        if max_objects > 0:
+            size_args.append(f'--max-objects={max_objects}')
+
         # If doing a reading run then populate data
         if runtype == "write":
-            osize = config.get('objectsize', 65536)
-            if osize > 0:
-                bench_args.append(f'--object-size={osize}')
-            size = config.get('size', 65536)
-            if size > 0:
-                bench_args.append(f'--block-size={size}')
+            bench_args += size_args
         else:
             proc = remote.run(
                 args=[
@@ -129,6 +141,7 @@ def task(ctx, config):
                     " ".join([*cmd,
                               *extra_args,
                               *bench_args,
+                              *size_args,
                               str(60),
                               "write",
                               "--no-cleanup"
