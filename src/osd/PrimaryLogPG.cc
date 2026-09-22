@@ -10795,6 +10795,21 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
       for (auto it = ctx->new_snapset.clones.begin();
            it != ctx->new_snapset.clones.end(); ) {
         snapid_t clone = *it;
+        // Only remove a clone that is not already present on the target.
+        // If an earlier migration attempt already copied the clone, then
+        // dropping it from the rebuilt snapset would result in a clone object
+        // on disk but missing from the snapset. Leave it in the snapset for the
+        // target pool's snaptrim.
+        hobject_t clone_oid = ctx->new_obs.oi.soid;
+        clone_oid.snap = clone;
+        int r = pgbackend->objects_get_attr(clone_oid, OI_ATTR, nullptr);
+        if (is_missing_object(clone_oid) || r != -ENOENT) {
+          dout(10) << __func__ << " clone " << clone
+                   << " already present (or unverifiable) on target, keeping in snapset"
+                   << dendl;
+          ++it;
+          continue;
+        }
         auto cs_it = ctx->new_snapset.clone_snaps.find(clone);
         if (cs_it != ctx->new_snapset.clone_snaps.end()) {
           // clone_snaps values are stored in descending order; filter out
