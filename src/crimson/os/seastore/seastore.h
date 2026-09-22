@@ -434,6 +434,8 @@ public:
 
     struct {
       std::array<seastar::metrics::histogram, LAT_MAX> op_lat;
+      uint64_t oi_inline = 0;          // OI stored in the onode's inline slot
+      uint64_t oi_overflow = 0;        // OI too large, stored in the xattr omap tree
     } stats;
 
     seastar::metrics::histogram& get_latency(
