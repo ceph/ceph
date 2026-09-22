@@ -327,6 +327,21 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   sm::description("transactions waiting to get "
 		        "through seastore's throttler"),
   {sm::label_instance("shard_store_index", std::to_string(store_index))}
+      ),
+      sm::make_counter(
+        "attr_inline",
+        [this] { return stats.oi_inline; },
+        sm::description("attributes stored in the onode's inline slot"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index)),
+         sm::label_instance("attr", "oi")}
+      ),
+      sm::make_counter(
+        "attr_overflow",
+        [this] { return stats.oi_overflow; },
+        sm::description("attributes too large for the inline slot, "
+                        "stored in the xattr omap tree"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index)),
+         sm::label_instance("attr", "oi")}
       )
     }
   );
@@ -2783,7 +2798,7 @@ SeaStore::Shard::_setattrs(
   if (auto it = aset.find(OI_ATTR); it != aset.end()) {
     auto& val = it->second;
     if (likely(val.length() <= onode_layout_t::MAX_OI_LENGTH)) {
-
+      ++stats.oi_inline;
       if (!layout.oi_size) {
 	// if oi was not in the layout, it probably exists in the omap,
 	// need to remove it first
@@ -2797,6 +2812,7 @@ SeaStore::Shard::_setattrs(
       aset.erase(it);
       DEBUGT("set oi in onode layout", *ctx.transaction);
     } else {
+      ++stats.oi_overflow;
       onode.clear_object_info(*ctx.transaction);
     }
   }
