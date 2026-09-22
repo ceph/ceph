@@ -261,6 +261,32 @@ describe('NvmeofGatewayGroupComponent', () => {
     });
   });
 
+  it('should show unstarted placement hosts in the Gateways column after scale-up', (done) => {
+    nvmeofService.listGatewayGroups.mockReturnValue(
+      of([
+        [
+          {
+            spec: { group: 'group1' },
+            placement: { hosts: ['gw1', 'gw2', 'gw3'] },
+            status: { running: 2, size: 2, created: new Date() }
+          }
+        ]
+      ])
+    );
+    nvmeofService.listSubsystems.mockReturnValue(of([]));
+
+    component.gatewayGroup$.subscribe((groups) => {
+      if (!groups.length) {
+        return;
+      }
+      expect(groups[0].name).toBe('group1');
+      expect(groups[0].gateWayNode).toBe(3);
+      expect(groups[0].statusCount).toEqual({ running: 2, error: 1 });
+      done();
+    });
+    component.fetchData();
+  });
+
   describe('View details action', () => {
     it('should use routerLink and navigate to the resource page for the selected group', () => {
       component.selection.first = jest.fn().mockReturnValue({ name: 'default' });
