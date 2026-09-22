@@ -1487,6 +1487,13 @@ public:
 
   bool should_block_io_on_clean() const final {
     assert(background_callback->is_ready());
+    // Hard floor: once spare empty segments drop to the reserved minimum,
+    // block unconditionally. This must be checked before the reclaimable
+    // shortcut below, otherwise admission keeps being granted right up to
+    // the point allocate_segment() finds no empty segment left and aborts.
+    if (segments.get_num_empty() <= min_reserved_empty_segments) {
+      return true;
+    }
     if (get_segments_reclaimable() == 0) {
       // No CLOSED segments to reclaim
       return false;
@@ -1742,6 +1749,34 @@ private:
   // Adaptive state: peak open segments observed since last adjust.
   std::size_t peak_open_segments_window = 0;
   seastar::lowres_clock::time_point adaptive_last_time;
+
+  // Safety floors: the operator-configured thresholds at construction time.
+  // The adaptive algorithm may only raise these (e.g. for larger clusters
+  // with a bigger architectural floor); it must never lower them below the
+  // vetted-safe configured values, or the cleaner can be starved of empty
+  // segments and abort with "seastore device size setting is too small".
+  const double initial_hard_limit;
+  const double initial_gc_max;
+
+  // Bare structural minimum of segments this cleaner's named writers (DATA
+  // and METADATA writers per owned rewrite generation, plus the journal on
+  // the main tier) can hold open simultaneously. See
+  // calc_named_writer_segments().
+  std::size_t calc_named_writer_segments() const;
+  std::size_t named_writer_segments = 1;
+
+  // Extra spare segments reserved above named_writer_segments to absorb the
+  // backlog of transactions already admitted at the moment
+  // should_block_io_on_clean() starts blocking new admission -- that backlog
+  // keeps consuming empty segments even after blocking begins, so the floor
+  // needs real headroom, not just the bare structural minimum.
+  static constexpr std::size_t backlog_headroom_segments = 8;
+
+  // Minimum number of empty segments that must remain available before
+  // admission is blocked outright, regardless of ratio/reclaimability state.
+  // Guarantees allocate_segment() always has room for in-flight named
+  // writers plus headroom for the already-admitted backlog.
+  std::size_t min_reserved_empty_segments = 1;
 
   // Peak projected_used with slow exponential decay per adjust cycle. Decay
   // 0.5% per 30s window = half-life ~1 hour: long enough not to forget peaks

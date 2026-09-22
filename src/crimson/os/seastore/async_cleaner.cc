@@ -929,6 +929,8 @@ SegmentCleaner::SegmentCleaner(
     detailed(detailed),
     is_cold(is_cold),
     config(config),
+    initial_hard_limit(config.available_ratio_hard_limit),
+    initial_gc_max(config.available_ratio_gc_max),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
     ool_segment_seq_allocator(segment_seq_allocator),
@@ -948,6 +950,36 @@ SegmentCleaner::SegmentCleaner(
     gc_formula = gc_formula_t::BENEFIT;
   }
   config.validate();
+
+  // named_writer_segments is the bare structural minimum of concurrently
+  // open segments this cleaner instance can be asked to hold: each rewrite
+  // generation this tier owns gets an independent DATA writer and an
+  // independent METADATA writer (see ExtentPlacementManager::init()), and
+  // the journal itself only ever lives on the main/hot tier.
+  named_writer_segments = calc_named_writer_segments();
+  // Reserve real headroom above that bare minimum: should_block_io_on_clean()
+  // only prevents *new* work from being admitted -- it cannot un-admit the
+  // backlog of transactions already in flight when the floor is crossed.
+  // Without slack above the structural minimum, that backlog alone can drive
+  // the empty-segment count to 0 before the cleaner catches up, aborting the
+  // OSD with "seastore device size setting is too small" (observed in
+  // crimson-rados/perf radosbench_4M_write on a small segmented device).
+  min_reserved_empty_segments =
+      named_writer_segments + backlog_headroom_segments;
+}
+
+std::size_t SegmentCleaner::calc_named_writer_segments() const
+{
+  std::size_t num_gens = is_cold ?
+    crimson::common::get_conf<uint64_t>("seastore_cold_tier_generations") :
+    crimson::common::get_conf<uint64_t>("seastore_hot_tier_generations");
+  // Each generation has an independent DATA writer and METADATA writer.
+  std::size_t writers = 2 * num_gens;
+  if (!is_cold) {
+    // The journal only lives on the main/hot tier.
+    writers += 1;
+  }
+  return writers;
 }
 
 void SegmentCleaner::register_metrics()
@@ -1154,12 +1186,9 @@ void SegmentCleaner::maybe_adjust_thresholds()
   double old_hard_limit = config.available_ratio_hard_limit;
   double old_gc_max = config.available_ratio_gc_max;
 
-  // Architectural floor: named writers (journal + hot/cold gens + metadata).
-  auto hot = crimson::common::get_conf<uint64_t>(
-      "seastore_hot_tier_generations");
-  auto cold = crimson::common::get_conf<uint64_t>(
-      "seastore_cold_tier_generations");
-  std::size_t named_writers = hot + cold + 2;
+  // Architectural floor: named writers this tier owns (see
+  // calc_named_writer_segments()).
+  std::size_t named_writers = named_writer_segments;
   std::size_t seg_size = segments.get_segment_size();
   std::size_t total_bytes = segments.get_total_bytes();
   if (total_bytes == 0 || seg_size == 0) {
@@ -1181,6 +1210,10 @@ void SegmentCleaner::maybe_adjust_thresholds()
       static_cast<double>(named_writers) * segment_ratio;
   crash_floor = std::min(crash_floor, 0.95);
   new_hard_limit = std::min(std::max(new_hard_limit, crash_floor), 0.95);
+  // Never relax below the operator-configured floor: the architectural
+  // (named_writers) floor alone was observed to still starve the cleaner
+  // under bursty workloads, aborting the OSD.
+  new_hard_limit = std::max(new_hard_limit, initial_hard_limit);
 
   // Apply lazy decay covering elapsed time (allows gc_max to gradually fall
   // when workload eases) so peaks fade even when the background process was
@@ -1197,6 +1230,11 @@ void SegmentCleaner::maybe_adjust_thresholds()
   double decayed_gc_max =
       (config.available_ratio_gc_max + target_gc_max) / 2.0;
   config.available_ratio_gc_max = std::max(decayed_gc_max, target_gc_max);
+  // As with hard_limit, gc_max must never decay below its configured floor:
+  // doing so shrinks the proactive-cleaning window until it collapses to
+  // nearly nothing, leaving no time to reclaim before IO must hard-block.
+  config.available_ratio_gc_max =
+      std::max(config.available_ratio_gc_max, initial_gc_max);
   if (config.available_ratio_gc_max <= new_hard_limit) {
     config.available_ratio_gc_max = new_hard_limit + segment_ratio;
   }
