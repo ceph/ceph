@@ -201,7 +201,7 @@ ReplicatedBackend::submit_transaction(
     }
     // wait for all peers to ack (ReplicatedBackend::got_rep_op_reply)
     return peers->all_committed.get_shared_future();
-  }).then_interruptible([pending_txn, this, _new_clone, &hoid,
+  }).then_interruptible([pending_txn, this, _new_clone, hoid,
 			to_push_delete=std::move(to_push_delete),
 			to_push_clone=std::move(to_push_clone)] {
     auto acked_peers = std::move(pending_txn->second.acked_peers);
