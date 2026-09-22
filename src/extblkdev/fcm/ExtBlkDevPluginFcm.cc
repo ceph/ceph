@@ -61,7 +61,8 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
   class fcm_dev{
     int fd = -1; //! file descriptor for underlying device, used for issueing log queries
     std::string fcm_devname; //! name of the underlying fcm device
-    uint64_t log[4]; //! utilization queried from device log page
+    uint64_t log[4]; //! utilization queried from device log page (0xCA)
+    uint64_t dedup_log[4]; //! dedup stats queried from device log page (0xE0): [NAS, NML, NLO, SPU]
 
   public:
     fcm_dev(const std::string& name):fcm_devname(name){}
@@ -96,6 +97,30 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
 	return -errno;
       return 0;
     }
+    int query_dedup_log()
+    {
+      // fetch 4 dedup counters from log page 0xE0: NAS, NML, NLO, SPU
+      unsigned log_size = sizeof(dedup_log);
+      uint32_t num_dw   = (log_size >> 2) - 1;
+
+      struct nvme_passthru_cmd cmd = {
+        .opcode     = 2,            // get admin log page
+        .nsid       = 0xffffffff,   // nsid == all
+        .addr       = (__u64)(uintptr_t)dedup_log,
+        .data_len   = log_size,
+        .cdw10      = 0xE0 | ((num_dw & 0xffff) << 16), // log page 0xE0 (dedup stats)
+        .cdw11      = num_dw >> 16,
+        .cdw12      = 0,            // NAS/NML/NLO/SPU start at offset 0
+        .cdw13      = 0,
+        .cdw14      = 0,
+        .timeout_ms = 0,
+      };
+
+      int rc = ioctl(fd, NVME_IOCTL_ADMIN_CMD, &cmd);
+      if (rc < 0)
+        return -errno;
+      return 0;
+    }
     int open(CephContext *cct){
       // open file descriptor of underlying hardware device for state queries
       std::string path = std::string("/dev/") + fcm_devname;
@@ -116,6 +141,12 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
     uint64_t get_device_logical_avail() const {
       int64_t avail=get_device_logical_size()-get_device_logical_util();
       return avail<0 ? 0 : avail;}
+    // dedup log accessors (log page 0xE0)
+    // NAS and NML are in units of DSS (Drive Slot Size = 16 kB, multiply by 16384 for bytes)
+    uint64_t get_device_dedup_nas() const { return dedup_log[0]; } // active slots (DSS units, 16 kB)
+    uint64_t get_device_dedup_nml() const { return dedup_log[1]; } // mapped LBAs (DSS units, 16 kB)
+    uint64_t get_device_dedup_nlo() const { return dedup_log[2]; } // LBAs overwritten (monotonic counter)
+    uint64_t get_device_dedup_spu() const { return dedup_log[3]; } // NAND bytes used by dedup (bytes)
   };
 
   std::vector<fcm_dev> fcm_devices;
@@ -124,6 +155,16 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
   uint64_t psize=0; // total number of physical bytes of logical volume
   uint64_t pavail=0; // total number of physical available bytes of logical volume
   struct timespec last_access = {0};
+  // Dedup stats are raw whole-device hardware totals (not partition-apportioned).
+  // Note: These should not be summed across multiple OSDs sharing the same physical FCM drive,
+  // or they will multi-count the device-level statistics.
+  // NAS and NML are in units of DSS (Drive Slot Size = 16 kB; multiply by 16384 to convert to bytes).
+  // SPU is already reported in bytes.
+  uint64_t dedup_nas = 0; // NAS: number of active deduplicated slots (16 kB DSS units)
+  uint64_t dedup_nml = 0; // NML: number of LBAs mapped to slots (16 kB DSS units)
+  uint64_t dedup_nlo = 0; // NLO: LBAs overwritten (monotonic hardware counter)
+  uint64_t dedup_spu = 0; // SPU: NAND bytes used by dedup engine (bytes)
+  struct timespec last_dedup_access = {0};
   PerfCounters *perfc = nullptr;
 
   bool error_accessing_log = false;
@@ -160,6 +201,26 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
     for (auto& d : fcm_devices) {
       sum += d.get_device_logical_util();
     }
+    return sum;
+  }
+  uint64_t get_device_dedup_nas() const {
+    uint64_t sum=0;
+    for (auto& d : fcm_devices) sum += d.get_device_dedup_nas();
+    return sum;
+  }
+  uint64_t get_device_dedup_nml() const {
+    uint64_t sum=0;
+    for (auto& d : fcm_devices) sum += d.get_device_dedup_nml();
+    return sum;
+  }
+  uint64_t get_device_dedup_nlo() const {
+    uint64_t sum=0;
+    for (auto& d : fcm_devices) sum += d.get_device_dedup_nlo();
+    return sum;
+  }
+  uint64_t get_device_dedup_spu() const {
+    uint64_t sum=0;
+    for (auto& d : fcm_devices) sum += d.get_device_dedup_spu();
     return sum;
   }
 
@@ -255,6 +316,55 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
     lavail = sum_la*frac;
     last_access = tnow;
 
+    return 0;
+  }
+
+  int get_fcm_dedup_core()
+  {
+    struct timespec tnow;
+    clock_gettime(CLOCK_MONOTONIC_COARSE, &tnow);
+    // have we retrieved dedup log in past 15 seconds?
+    if (tnow.tv_sec < last_dedup_access.tv_sec + 15)
+      return 1; // cached
+
+    // set SYS_ADMIN capability in effective set, needed for NVME ioctl
+    int was_set = set_cap(CAP_SET);
+    if (was_set < 0)
+      return was_set;
+
+    uint64_t sum_nas=0, sum_nml=0, sum_nlo=0, sum_spu=0;
+    for (auto& dev : fcm_devices) {
+      int rc = dev.query_dedup_log();
+      if (rc < 0) {
+        // dedup log page not supported by this firmware — soft failure, leave at 0
+        dout(5) << __func__ << " FCM dedup log page 0xE0 query failed: " << rc << dendl;
+        if (!was_set) set_cap(CAP_CLEAR);
+        return rc;
+      }
+      sum_nas += dev.get_device_dedup_nas();
+      sum_nml += dev.get_device_dedup_nml();
+      sum_nlo += dev.get_device_dedup_nlo();
+      sum_spu += dev.get_device_dedup_spu();
+    }
+
+    // restore effective capability set if we changed it
+    if (!was_set) {
+      int rc = set_cap(CAP_CLEAR);
+      if (rc < 0) return rc;
+    }
+
+    dedup_nas = sum_nas;
+    dedup_nml = sum_nml;
+    dedup_nlo = sum_nlo;
+    dedup_spu = sum_spu;
+    last_dedup_access = tnow;
+    return 0;
+  }
+
+  int get_fcm_dedup()
+  {
+    // best-effort: dedup log page may not be present on all firmware versions
+    get_fcm_dedup_core();
     return 0;
   }
 
@@ -381,6 +491,10 @@ public:
     l_part_log_size,
     l_part_phy_avail,
     l_part_log_avail,
+    l_dev_dedup_nas,  // NAS: active deduplicated slots (16 kB DSS units)
+    l_dev_dedup_nml,  // NML: mapped LBAs (16 kB DSS units)
+    l_dev_dedup_nlo,  // NLO: LBAs overwritten (monotonic counter)
+    l_dev_dedup_spu,  // SPU: NAND bytes used by dedup engine (bytes)
     l_last
   };
 
@@ -400,6 +514,10 @@ public:
     b.add_u64(l_part_log_size, "part_log_size", "FCM partition logical size", "", useful, ubytes);
     b.add_u64(l_part_phy_avail, "part_phy_avail", "FCM partition physical avail", "", useful, ubytes);
     b.add_u64(l_part_log_avail, "part_log_avail", "FCM partition logical avail", "", useful, ubytes);
+    b.add_u64(l_dev_dedup_nas, "dev_dedup_nas", "FCM dedup active slots (NAS, 16 kB DSS units)", "", useful, unone);
+    b.add_u64(l_dev_dedup_nml, "dev_dedup_nml", "FCM dedup mapped LBAs (NML, 16 kB DSS units)", "", useful, unone);
+    b.add_u64_counter(l_dev_dedup_nlo, "dev_dedup_nlo", "FCM dedup LBAs overwritten (NLO)", "", useful, unone);
+    b.add_u64(l_dev_dedup_spu, "dev_dedup_spu", "FCM dedup NAND bytes used (SPU)", "", useful, ubytes);
 
     perfc = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfc);
@@ -470,6 +588,13 @@ public:
     perfc->set(l_part_log_size, get_partition_logical_size());
     perfc->set(l_part_phy_avail, get_partition_physical_avail());
     perfc->set(l_part_log_avail, get_partition_logical_avail());
+
+    // dedup stats from log page 0xE0 — best-effort, stale values acceptable
+    get_fcm_dedup();
+    perfc->set(l_dev_dedup_nas, dedup_nas);
+    perfc->set(l_dev_dedup_nml, dedup_nml);
+    perfc->set(l_dev_dedup_nlo, dedup_nlo);
+    perfc->set(l_dev_dedup_spu, dedup_spu);
 
     return 0;
   }
