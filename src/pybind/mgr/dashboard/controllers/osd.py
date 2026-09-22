@@ -155,15 +155,28 @@ class Osd(RESTController):
 
         # Extending by osd node information
         nodes = mgr.get('osd_map_tree')['nodes']
+        nodes_by_id = {node['id']: node for node in nodes}
         for node in nodes:
             if node['type'] == 'osd' and node['id'] in osds:
                 osds[node['id']]['tree'] = node
 
         # Extending by osd parent node information
         for host in [n for n in nodes if n['type'] == 'host']:
-            for osd_id in host['children']:
-                if osd_id >= 0 and osd_id in osds:
-                    osds[osd_id]['host'] = host
+            descendants = list(host.get('children', []))
+            visited_buckets = set()
+            while descendants:
+                child_id = descendants.pop()
+                if child_id >= 0:
+                    if child_id in osds:
+                        osds[child_id]['host'] = host
+                    continue
+
+                if child_id in visited_buckets:
+                    continue
+                visited_buckets.add(child_id)
+                child = nodes_by_id.get(child_id)
+                if child:
+                    descendants.extend(child.get('children', []))
 
         removing_osd_ids = self.get_removing_osds()
 

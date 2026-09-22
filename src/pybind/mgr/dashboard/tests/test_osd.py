@@ -283,6 +283,49 @@ class OsdTest(ControllerTestCase):
             self.assertEqual(len(self.json_body()), 2, 'It should display two OSDs without failure')
             self.assertStatus(200)
 
+    def test_osd_list_host_with_intermediate_crush_bucket(self):
+        osd_ids = [0, 1]
+        tree_nodes = [
+            OsdHelper._gen_osdmap_tree_node(-1, 'root', [-3]),
+            {
+                'id': -3,
+                'name': 'ceph-1',
+                'type': 'host',
+                'type_id': 2,
+                'pool_weights': {},
+                'children': [-4]
+            },
+            {
+                'id': -4,
+                'name': 'ceph-1-dg1',
+                'type': 'diskgroup',
+                'type_id': 1,
+                'pool_weights': {},
+                'children': osd_ids
+            },
+        ] + [
+            OsdHelper._gen_osdmap_tree_node(osd_id, 'osd')
+            for osd_id in osd_ids
+        ]
+
+        osd_map = {
+            osd_id: OsdHelper._gen_osd_map_osd(osd_id)
+            for osd_id in osd_ids
+        }
+        with mock.patch.object(OsdHelper, 'gen_osdmap', return_value=osd_map), \
+                mock.patch.object(OsdHelper, 'gen_osdmap_tree_nodes',
+                                  return_value=tree_nodes):
+            with self._mock_osd_list(osd_stat_ids=osd_ids,
+                                     osdmap_tree_node_ids=osd_ids,
+                                     osdmap_ids=osd_ids):
+                self._get('/api/osd', version=APIVersion(1, 1))
+                self.assertStatus(200)
+                result = self.json_body()
+                self.assertEqual(len(result), len(osd_ids))
+                for osd in result:
+                    self.assertEqual(osd['host']['id'], -3)
+                    self.assertEqual(osd['host']['name'], 'ceph-1')
+
     @mock.patch('dashboard.controllers.osd.CephService')
     def test_osd_scrub(self, ceph_service):
         self._task_post('/api/osd/1/scrub', {'deep': True})
