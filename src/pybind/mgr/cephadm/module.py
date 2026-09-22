@@ -2279,6 +2279,11 @@ Then run the following:
             # wrong address so future operations use a fresh connection.
             if addr_changed:
                 self.ssh.reset_con(spec.hostname)
+            # The SSH failure in _check_valid_addr may have added the hostname
+            # to offline_hosts. Only undo that for hosts we never registered.
+            # An existing inventory host that just failed SSH should stay offline.
+            if spec.hostname not in self.inventory:
+                self.offline_hosts_remove(spec.hostname)
             raise
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr

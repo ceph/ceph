@@ -15,7 +15,7 @@ from cephadm.upgrade import (
 )
 from cephadm.ssh import HostConnectionError
 from cephadm.utils import ContainerInspectInfo
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription, HostSpec
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
 
@@ -82,6 +82,44 @@ def test_upgrade_start_offline_hosts(cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test2'):
             cephadm_module.offline_hosts = set(['test2'])
             with pytest.raises(OrchestratorError, match=r"Upgrade aborted - Some host\(s\) are currently offline: {'test2'}"):
+                cephadm_module.upgrade_start('image_id', None)
+            cephadm_module.offline_hosts = set([])  # so remove_host doesn't fail when leaving the with_host block
+
+
+def _fail_check_valid_addr_and_mark_offline(cephadm_module: CephadmOrchestrator):
+    """Simulate SSH failure in _check_valid_addr that poisons offline_hosts."""
+    def fail_check(host: str, addr: str) -> str:
+        cephadm_module.offline_hosts.add(host)
+        raise OrchestratorError(f"Can't communicate with remote host `{addr}`")
+    return fail_check
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_not_blocked_by_phantom_offline_host_from_failed_add(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                with mock.patch.object(cephadm_module, '_check_valid_addr',
+                                       side_effect=_fail_check_valid_addr_and_mark_offline(cephadm_module)):
+                    with pytest.raises(OrchestratorError, match=r"Can't communicate with remote host"):
+                        cephadm_module._add_host(HostSpec('phantom-node', '192.168.110.113'))
+                assert 'phantom-node' not in cephadm_module.inventory
+                assert 'phantom-node' not in cephadm_module.offline_hosts
+                assert wait(cephadm_module, cephadm_module.upgrade_start(
+                    'image_id', None)) == 'Initiating upgrade to image_id'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_still_blocked_when_existing_host_add_fails(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with mock.patch.object(cephadm_module, '_check_valid_addr',
+                                   side_effect=_fail_check_valid_addr_and_mark_offline(cephadm_module)):
+                with pytest.raises(OrchestratorError, match=r"Can't communicate with remote host"):
+                    cephadm_module._add_host(HostSpec('test2', '1::4'))
+            assert 'test2' in cephadm_module.inventory
+            assert 'test2' in cephadm_module.offline_hosts
+            with pytest.raises(OrchestratorError, match=r"Upgrade aborted - Some host\(s\) are currently offline:"):
                 cephadm_module.upgrade_start('image_id', None)
             cephadm_module.offline_hosts = set([])  # so remove_host doesn't fail when leaving the with_host block
 
