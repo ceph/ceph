@@ -2866,9 +2866,9 @@ cdef class Group(object):
         Remove an image from a group.
 
         :param image_ioctx: determines which RADOS pool the image belongs to.
-        :type ioctx: :class:`rados.Ioctx`
-        :param name: the name of the image to remove
-        :type name: str
+        :type image_ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image to remove
+        :type image_name: str
 
         :raises: :class:`ObjectNotFound`
         :raises: :class:`InvalidArgument`

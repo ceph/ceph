@@ -31,6 +31,7 @@
 #include "librbd/mirror/GroupDisableRequest.h"
 #include "librbd/mirror/GroupPromoteRequest.h"
 #include "librbd/mirror/GroupDemoteRequest.h"
+#include "librbd/mirror/GroupDetachImageRequest.h"
 #include "librbd/mirror/GroupGetInfoRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
@@ -2505,6 +2506,59 @@ int Mirror<I>::group_image_add(IoCtx &group_ioctx,
   }
 
   return 0;
+}
+
+template <typename I>
+int Mirror<I>::group_image_remove(librados::IoCtx &group_ioctx,
+                                  const std::string &group_id,
+                                  librados::IoCtx &image_ioctx,
+                                  const std::string &image_id) {
+  CephContext *cct = reinterpret_cast<CephContext *>(group_ioctx.cct());
+
+  ldout(cct, 20) << "group_ioctx=" << &group_ioctx << ", group_id=" << group_id
+                 << ", image_ioctx=" << &image_ioctx
+                 << ", image_id=" << image_id << dendl;
+
+  cls::rbd::MirrorGroup mirror_group;
+  int r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_group);
+  if (r == -ENOENT) {
+    ldout(cct, 10) << "group is not enabled for mirroring" << dendl;
+    return 0;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve mirror group metadata: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (mirror_group.mirror_image_mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    lderr(cct) << "invalid group mirroring mode" << dendl;
+    return -EINVAL;
+  }
+
+  if (mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED) {
+    lderr(cct) << "mirroring on group is not enabled: " << mirror_group.state
+               << dendl;
+    return -EINVAL;
+  }
+
+  uint64_t internal_flags;
+  r = librbd::util::snap_create_flags_api_to_internal(cct,
+    librbd::util::get_default_snap_create_flags(group_ioctx), &internal_flags);
+  if (r < 0) {
+    return r;
+  }
+
+  C_SaferCond ctx;
+  auto req = mirror::GroupDetachImageRequest<I>::create(group_ioctx, group_id,
+    image_ioctx, image_id, internal_flags, mirror_group, &ctx);
+  req->send();
+
+  r = ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to detach image from mirror group: "
+               << cpp_strerror(r) << dendl;
+  }
+  return r;
 }
 
 template <typename I>
