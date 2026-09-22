@@ -3871,21 +3871,32 @@ Then run the following:
     def _check_pool_supports_omap(self, pool: str, service_name: str) -> None:
         osd_map = self.get('osd_map')
         pools = osd_map.get('pools', []) if isinstance(osd_map, dict) else []
+        pool_info = None
         for p in pools:
-            if p['pool_name'] == pool:
-                if p.get('type') == 1:
-                    return
-                flags_names = p.get('flags_names', '')
-                if 'supports_omap' in flags_names:
-                    return
-                raise OrchestratorError(
-                    f'Pool "{pool}" does not support OMAP. '
-                    f'Service "{service_name}" requires a pool with OMAP support '
-                    f'because it uses OMAP objects for gateway state. '
-                    f'Use a replicated pool, or enable OMAP support on the '
-                    f'erasure-coded pool with '
-                    f'"ceph osd pool set {pool} allow_ec_optimizations true".'
-                )
+            if p.get('pool_name') == pool:
+                pool_info = p
+                break
+        if pool_info is None:
+            raise OrchestratorError(
+                f'Pool "{pool}" was not found in the OSD map. '
+                f'Cannot verify OMAP support for service "{service_name}".'
+            )
+        if pool_info.get('type') == 1:
+            return
+        flags_names = pool_info.get('flags_names', '')
+        flags_set = set(f.strip() for f in flags_names.split(',') if f.strip())
+        if 'supports_omap' in flags_set:
+            return
+        raise OrchestratorError(
+            f'Pool "{pool}" does not support OMAP. '
+            f'Service "{service_name}" requires a pool with OMAP support '
+            f'because it uses OMAP objects for gateway state. '
+            f'Use a replicated pool, or enable OMAP support on the '
+            f'erasure-coded pool with '
+            f'"ceph osd pool set {pool} allow_ec_optimizations true" '
+            f'(requires all OSDs to be running Umbrella or later; '
+            f'Crimson-backed EC pools do not support OMAP).'
+        )
 
     def _add_daemon(self,
                     daemon_type: str,
