@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 #pragma once
-
+#include <cstdint>
 #include <string>
 #include <vector>
 #include "rgw_inventory_s3.h"
@@ -18,17 +18,23 @@ struct Manifest {
   std::string source_bucket;
   std::string destination_bucket_arn;
   std::string version{"2016-11-30"};
-  std::string creation_timestamp_ms;  // epoch millis as string
+  int64_t     creation_timestamp_ms{0};  // epoch millis; caller must set
   std::string file_format{"Parquet"};
   std::string file_schema;            // Parquet message DSL string
   std::vector<ManifestFile> files;
 
-  // Serialise to JSON string (manifest.json content)
+  // Serialise to JSON string (manifest.json content).
+  // Uses creation_timestamp_ms as-is; caller is responsible for
+  // setting it (e.g. via current_time_millis()) before calling this,
+  // so the value is deterministic and testable, and so the manifest
+  // and its checksum are always computed from the same fixed content.
   std::string to_json() const;
 };
 
+// Current wall-clock time in epoch milliseconds, UTC.
+int64_t current_time_millis();
+
 // Build the Parquet message DSL schema string matching AWS format
-// e.g. "message s3.inventory { required binary bucket (STRING); ... }"
 std::string build_file_schema(const FieldSelection& sel);
 
 // Compute MD5 hex digest of a file on disk

@@ -109,6 +109,13 @@ int Configuration::validate(std::string* err) const
     if (err) *err = "Id must be 1-64 characters";
     return -EINVAL;
   }
+  // Id is embedded directly into destination key paths
+  // (inventory_data_key, inventory_manifest_key) as a path segment.
+  // Reject characters that would corrupt that structure.
+  if (id.find_first_of("/\\") != std::string::npos) {
+    if (err) *err = "Id must not contain '/' or '\\'";
+    return -EINVAL;
+  }
   if (included_object_versions != "All" &&
       included_object_versions != "Current") {
     if (err) *err = "IncludedObjectVersions must be All or Current";

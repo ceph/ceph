@@ -5,6 +5,7 @@
 #include "common/ceph_crypto.h"
 #include "include/uuid.h"
 
+#include <openssl/evp.h>
 #include <fstream>
 #include <sstream>
 #include <iomanip>
@@ -54,10 +55,20 @@ std::string build_file_schema(const FieldSelection& sel)
   return s;
 }
 
+static std::string hex_digest(const unsigned char* digest, size_t len)
+{
+  std::ostringstream oss;
+  for (size_t i = 0; i < len; ++i)
+    oss << std::hex << std::setw(2) << std::setfill('0')
+        << static_cast<int>(digest[i]);
+  return oss.str();
+}
+
 std::string md5_of_file(const std::string& path)
 {
   std::ifstream f(path, std::ios::binary);
   if (!f) return "";
+
   MD5 hash;
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   char buf[65536];
@@ -66,11 +77,7 @@ std::string md5_of_file(const std::string& path)
   }
   unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
   hash.Final(digest);
-  std::ostringstream oss;
-  for (int i = 0; i < CEPH_CRYPTO_MD5_DIGESTSIZE; ++i)
-    oss << std::hex << std::setw(2) << std::setfill('0')
-        << static_cast<int>(digest[i]);
-  return oss.str();
+  return hex_digest(digest, CEPH_CRYPTO_MD5_DIGESTSIZE);
 }
 
 std::string md5_of_string(const std::string& s)
@@ -80,20 +87,24 @@ std::string md5_of_string(const std::string& s)
   hash.Update(reinterpret_cast<const unsigned char*>(s.data()), s.size());
   unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
   hash.Final(digest);
-  std::ostringstream oss;
-  for (int i = 0; i < CEPH_CRYPTO_MD5_DIGESTSIZE; ++i)
-    oss << std::hex << std::setw(2) << std::setfill('0')
-        << static_cast<int>(digest[i]);
-  return oss.str();
+  return hex_digest(digest, CEPH_CRYPTO_MD5_DIGESTSIZE);
+}
+
+int64_t current_time_millis()
+{
+  auto now = std::chrono::system_clock::now();
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+      now.time_since_epoch()).count();
 }
 
 std::string inventory_run_timestamp()
 {
   auto now = std::chrono::system_clock::now();
   std::time_t t = std::chrono::system_clock::to_time_t(now);
-  std::tm* tm = std::gmtime(&t);
+  std::tm tm_buf{};
+  gmtime_r(&t, &tm_buf);
   char buf[32];
-  std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H-%MZ", tm);
+  std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H-%MZ", &tm_buf);
   return std::string(buf);
 }
 
@@ -119,25 +130,27 @@ std::string inventory_manifest_key(const std::string& prefix,
 
 std::string inventory_checksum_key(const std::string& manifest_key)
 {
+  static constexpr std::string_view kManifestJson = "manifest.json";
   std::string key = manifest_key;
-  auto pos = key.rfind("manifest.json");
+  auto pos = key.rfind(kManifestJson);
   if (pos != std::string::npos) {
-    key.replace(pos, 13, "manifest.checksum");
+    key.replace(pos, kManifestJson.size(), "manifest.checksum");
   }
   return key;
 }
 
 std::string Manifest::to_json() const
 {
-  auto now = std::chrono::system_clock::now();
-  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      now.time_since_epoch()).count();
+  // Uses the caller-supplied creation_timestamp_ms rather than
+  // recomputing now() here, so the manifest content is deterministic:
+  // callers that hash this output (md5_of_string) get a checksum that
+  // matches the exact bytes, and the value is testable/reproducible.
   std::ostringstream o;
   o << "{\n";
   o << "  \"sourceBucket\": \"" << source_bucket << "\",\n";
   o << "  \"destinationBucket\": \"" << destination_bucket_arn << "\",\n";
   o << "  \"version\": \"" << version << "\",\n";
-  o << "  \"creationTimestamp\": \"" << ms << "\",\n";
+  o << "  \"creationTimestamp\": \"" << creation_timestamp_ms << "\",\n";
   o << "  \"fileFormat\": \"" << file_format << "\",\n";
   o << "  \"fileSchema\": \"" << file_schema << "\",\n";
   o << "  \"files\": [\n";

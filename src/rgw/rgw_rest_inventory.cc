@@ -111,11 +111,39 @@ void RGWPutBucketInventory_ObjStore_S3::execute(optional_yield y)
     return;
   }
 
-  // validate config contents
+  // validate config contents (schema-level: required fields, enums,
+  // optional-field names)
   std::string err;
   op_ret = config.validate(&err);
   if (op_ret < 0) {
     s->err.message = err;
+    return;
+  }
+
+  // Reject a destination that is the same bucket as the source —
+  // otherwise inventory output would recursively inventory itself,
+  // growing the bucket unboundedly on every run.
+  const std::string dest_bucket_name = config.destination.s3.bucket_name();
+  if (dest_bucket_name == s->bucket->get_name()) {
+    s->err.message = "Destination bucket must not be the same as the "
+                     "source bucket";
+    op_ret = -EINVAL;
+    return;
+  }
+
+  // Confirm the destination bucket actually exists in this cluster
+  // (v1 scope: same-cluster delivery only). Surfacing this now, at
+  // config time, rather than at run time in the background runner,
+  // means misconfiguration is caught immediately instead of silently
+  // failing on the first scheduled run.
+  
+  std::unique_ptr<rgw::sal::Bucket> dest_bucket;
+  int dest_ret = driver->load_bucket(this, rgw_bucket("", dest_bucket_name),
+                                     &dest_bucket, y);
+  if (dest_ret < 0) {
+    s->err.message = "Destination bucket '" + dest_bucket_name +
+                     "' does not exist in this cluster";
+    op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
 
