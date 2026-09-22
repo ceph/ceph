@@ -4,6 +4,7 @@
 #include "cls/journal/cls_journal_client.h"
 #include "include/stringify.h"
 #include "common/Cond.h"
+#include "test/librados/crimson_utils.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/test_pool_types.h"
 #include "gtest/gtest.h"
@@ -42,13 +43,54 @@ static bool is_sparse_read_supported(librados::IoCtx &ioctx,
 class TestClsJournal : public ceph::test::ClsTestFixture {
   // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
 protected:
+  static void SetUpTestSuite();
+  static void TearDownTestSuite();
+
   uint64_t _image_number = 0;
+
+  void SetUp() override {
+    // cls_journal's metadata is omap-based, which Crimson's FastEC pools
+    // do not yet support. Skip FastEC tests on Crimson until that support
+    // is added.
+    if (is_crimson_cluster() && GetParam() == ceph::test::PoolType::FAST_EC) {
+      GTEST_SKIP() << "FastEC not supported by crimson yet. Skipped";
+    }
+    ceph::test::ClsTestFixture::SetUp();
+  }
 
   std::string get_temp_image_name() {
     ++_image_number;
     return "image" + stringify(_image_number);
   }
 };
+
+void TestClsJournal::SetUpTestSuite()
+{
+  if (is_crimson_cluster()) {
+    ASSERT_EQ("", connect_cluster_pp(rados));
+    std::string pname = get_temp_pool_name(
+      pool_name_prefix() + pool_type_name(PoolType::REPLICATED) + "_");
+    ASSERT_EQ("", create_pool_by_type(pname, rados, PoolType::REPLICATED));
+    after_pool_create(PoolType::REPLICATED, pname, rados);
+    pool_names[PoolType::REPLICATED] = pname;
+    return;
+  }
+  PoolTypeTestFixture::SetUpTestSuite();
+}
+
+void TestClsJournal::TearDownTestSuite()
+{
+  if (is_crimson_cluster()) {
+    auto it = pool_names.find(PoolType::REPLICATED);
+    if (it != pool_names.end()) {
+      ASSERT_EQ(0, destroy_pool_by_type(it->second, rados, PoolType::REPLICATED));
+    }
+    pool_names.clear();
+    rados.shutdown();
+    return;
+  }
+  PoolTypeTestFixture::TearDownTestSuite();
+}
 
 TEST_P(TestClsJournal, Create) {
 
