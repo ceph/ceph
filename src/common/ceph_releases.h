@@ -33,6 +33,7 @@ enum class ceph_release_t : std::uint8_t {
   squid,
   tentacle,
   umbrella,
+  vampire,
   max,
 };
 

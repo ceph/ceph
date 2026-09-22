@@ -119,6 +119,8 @@ const char *ceph_release_name(int r)
 		return "tentacle";
 	case CEPH_RELEASE_UMBRELLA:
 		return "umbrella";
+        case CEPH_RELEASE_VAMPIRE:
+                return "vampire";
 	default:
 		if (r < 0)
 			return "unspecified";
