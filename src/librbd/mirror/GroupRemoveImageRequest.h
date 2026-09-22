@@ -41,7 +41,7 @@ private:
  *               v
  *         GET_MIRROR_INFO
  *               |
- *      +--------+--------------------------------+
+ *      + -------+------------------------------- +
  *      |                                         |
  *  is_primary = false                        is_primary = true
  *      |                                         |
@@ -49,7 +49,7 @@ private:
  *  PROMOTE_IMAGE                                 |
  *      |                                         |
  *      v                                         |
- *  SET_MIRROR_IMAGE_DISABLING  ------------------+
+ *  SET_MIRROR_IMAGE_DISABLING <----------------- +
  *      |
  *      v
  *  REMOVE_GROUP_REF_FROM_IMAGE
