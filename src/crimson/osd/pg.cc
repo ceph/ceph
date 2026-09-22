@@ -1473,6 +1473,9 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
   decode(log_entries, p);
   update_stats(req->pg_stats);
 
+  const eversion_t last_log_version =
+    log_entries.empty() ? eversion_t{} : log_entries.rbegin()->version;
+
   co_await update_snap_map(
     log_entries,
     txn);
@@ -1491,7 +1494,13 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
     crimson::os::with_store_do_transaction(
       shard_services.get_store(store_index),
       coll_ref, std::move(txn))
-  );
+  ).then_interruptible([this, last_log_version] {
+    // Only now is the write actually durable in the local object store;
+    // safe to let a waiting scrub chunk scan proceed.
+    if (last_log_version != eversion_t{}) {
+      scrubber.on_log_update(last_log_version);
+    }
+  });
 
   const auto &lcod = peering_state.get_info().last_complete;
   peering_state.update_last_complete_ondisk(lcod);
@@ -1552,9 +1561,14 @@ void PG::log_operation(
     DEBUGDPP("on replica, clearing obc", *this);
     clear_repop_obc(logv);
   }
-  if (!logv.empty()) {
-    scrubber.on_log_update(logv.rbegin()->version);
-  }
+  /* Note: scrubber.on_log_update() must NOT be called here.  At this point
+   * the log entries have only been appended to the in-memory pg log / the
+   * transaction has not yet been submitted to the object store.  Signalling
+   * the scrubber here would let a concurrent scrub chunk scan proceed and
+   * read the collection before this write is actually durable, causing the
+   * scrubber to see a missing/incomplete object.  Callers are responsible
+   * for invoking scrubber.on_log_update() themselves once the transaction
+   * has committed. */
   peering_state.append_log(std::move(logv),
                            trim_to,
                            roll_forward_to,

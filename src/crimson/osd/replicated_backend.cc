@@ -192,6 +192,9 @@ ReplicatedBackend::submit_transaction(
       ERRORDPP("peers is null, this should be impossible", dpp);
       assert(0 == "impossible");
     }
+    // Only now is the write actually durable in our local object store;
+    // safe to let a waiting scrub chunk scan proceed against it.
+    pg.scrubber.on_log_update(peers->at_version);
     if (--peers->pending == 0) {
       // no peers other than me, replication size is 1
       pg.complete_write(peers->at_version, peers->last_complete);
