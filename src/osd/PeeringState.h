@@ -2379,24 +2379,6 @@ public:
   void state_clear(uint64_t m) { state &= ~m; }
 
   /**
-   * Vulnerability-window tracking (last_degraded/last_clean in info.stats)
-   * is gated by is_primary(): only the primary ever advances it, so a replica
-   * has no way to correctly finish (record) a window it did not open
-   * itself. Call this right after any code path that adopts a peer's
-   * pg_stat_t wholesale -- if the inherited info.stats carried an
-   * open-but-unrecorded window (last_degraded > last_clean), collapse it so
-   * this OSD's local copy always reads "no window open". Without this, a
-   * replica silently inherits a stuck, already resolved onset from whichever
-   * primary sent the info, and permanently fails to track its own vulnerability
-   * the next time it becomes primary.
-   */
-  void discard_inherited_vulnerability_window() {
-    if (info.stats.last_degraded > info.stats.last_clean) {
-      info.stats.last_degraded = info.stats.last_clean;
-    }
-  }
-
-  /**
    * active-rebuild span (rs_pg_rebuild_duration), the subset of a
    * vulnerability window where this PG was actually in Recovering or
    * Backfilling -- as opposed to rs_pg_vulnerability_duration, which spans
