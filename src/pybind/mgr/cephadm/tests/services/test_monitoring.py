@@ -1959,3 +1959,82 @@ spec:
         svc.generate_config(daemon_spec)
 
         cephadm_module.check_mon_command.assert_not_called()
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("mgr_module.MgrModule.get")
+    @patch("socket.getfqdn")
+    def test_pushgateway_config_without_mgmt_gw(
+        self,
+        mock_getfqdn,
+        mock_get,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
+        mock_getfqdn.return_value = 'host1.test'
+
+        with with_host(cephadm_module, "test"):
+            with with_service(cephadm_module, MonitoringSpec('pushgateway')):
+                _run_cephadm.assert_called_with(
+                    'test',
+                    ANY,
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=ANY,
+                    error_ok=True,
+                    use_current_daemon_image=False,
+                )
+                last_call = _run_cephadm.call_args
+                deploy_data = json.loads(last_call.kwargs.get('stdin', last_call[1][4] if len(last_call[1]) > 4 else '{}'))
+                assert deploy_data['name'].startswith('pushgateway.test')
+                assert deploy_data['params']['tcp_ports'] == [9091]
+                assert deploy_data['meta']['service_name'] == 'pushgateway'
+                assert deploy_data['meta']['ports'] == [9091]
+                assert deploy_data['config_blobs'] == {}
+
+    @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
+           lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("socket.getfqdn")
+    def test_pushgateway_config_with_mgmt_gw(
+        self,
+        mock_getfqdn,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
+        mock_getfqdn.return_value = 'host1.test'
+
+        y = dedent("""
+        tls_server_config:
+          cert_file: pushgateway.crt
+          key_file: pushgateway.key
+          client_auth_type: RequireAndVerifyClientCert
+          client_ca_file: root_cert.pem
+        """).lstrip()
+
+        with with_host(cephadm_module, "test"):
+            with with_service(cephadm_module, MgmtGatewaySpec("mgmt-gateway")) as _, \
+                 with_service(cephadm_module, MonitoringSpec('pushgateway')):
+                _run_cephadm.assert_called_with(
+                    'test',
+                    ANY,
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=ANY,
+                    error_ok=True,
+                    use_current_daemon_image=False,
+                )
+                last_call = _run_cephadm.call_args
+                deploy_data = json.loads(last_call.kwargs.get('stdin', last_call[1][4] if len(last_call[1]) > 4 else '{}'))
+                assert deploy_data['name'].startswith('pushgateway.test')
+                assert deploy_data['params']['tcp_ports'] == [9091]
+                assert deploy_data['meta']['service_name'] == 'pushgateway'
+                assert deploy_data['meta']['ports'] == [9091]
+                config_blobs = deploy_data['config_blobs']
+                assert config_blobs['files']['web.yml'] == y
+                assert config_blobs['files']['root_cert.pem'] == cephadm_root_ca
+                assert config_blobs['files']['pushgateway.crt'] == ceph_generated_cert
+                assert config_blobs['files']['pushgateway.key'] == ceph_generated_key
+                assert config_blobs['web_config'] == '/etc/pushgateway/web.yml'

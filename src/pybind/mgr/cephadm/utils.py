@@ -38,7 +38,8 @@ CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw',
               'rbd-mirror', 'cephfs-mirror', 'ceph-exporter']
 GATEWAY_TYPES = ['iscsi', 'nfs', 'nvmeof', 'smb']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus',
-                          'alertmanager', 'grafana', 'loki', 'promtail', 'alloy']
+                          'alertmanager', 'grafana', 'loki', 'promtail', 'alloy',
+                          'pushgateway']
 MGMT_GATEWAY_STACK_TYPES = ['mgmt-gateway', 'oauth2-proxy']
 RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs', 'keepalived']
 
