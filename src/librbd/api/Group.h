@@ -71,8 +71,7 @@ struct Group {
   static int group_image_remove(librados::IoCtx& group_ioctx,
                                 const std::string& group_id,
                                 librados::IoCtx& image_ioctx,
-                                const std::string& image_id,
-                                group_image_remove_mode_t mode);
+                                const std::string& image_id);
 
   static int snap_get_mirror_namespace(librados::IoCtx& group_ioctx,
                                        const char *group_name, const char *snap_id,
