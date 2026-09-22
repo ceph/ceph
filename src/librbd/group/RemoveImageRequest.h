@@ -49,12 +49,18 @@ private:
    *    |
    *    v
    *  PRE_UNLINK
+   *    | error
+   *    +------> <finish>
    *    |
    *    v
    *  REMOVE_GROUP
+   *    | error
+   *    +------> RESTORE_GROUP_IMAGE --> <finish>
    *    |
    *    v
    *  POST_UNLINK
+   *    | error
+   *    +------> RESTORE_IMAGE_GROUP --> RESTORE_GROUP_IMAGE --> <finish>
    *    |
    *    v
    *  <finish>
@@ -67,6 +73,7 @@ private:
   librados::IoCtx &m_image_io_ctx;
   const std::string m_image_id;
   Context *m_on_finish;
+  int m_ret_val = 0;
 
   void pre_unlink();
   void handle_pre_unlink(int r);
@@ -76,6 +83,12 @@ private:
 
   void post_unlink();
   void handle_post_unlink(int r);
+
+  void restore_image_group();
+  void handle_restore_image_group(int r);
+
+  void restore_group_image();
+  void handle_restore_group_image(int r);
 
   void finish(int r);
 };
