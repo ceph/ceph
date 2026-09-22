@@ -27,9 +27,11 @@ public:
       const std::string& image_id,
       cls::rbd::MirrorImageState mirror_image_state,
       const cls::rbd::MirrorImage& mirror_image,
-      Context* on_finish) {
+      Context* on_finish,
+      bool force_update = false) {
     return new ImageStateUpdateRequest(
-      io_ctx, image_id, mirror_image_state, mirror_image, on_finish);
+      io_ctx, image_id, mirror_image_state, mirror_image, on_finish,
+      force_update);
   }
 
   ImageStateUpdateRequest(
@@ -37,7 +39,8 @@ public:
       const std::string& image_id,
       cls::rbd::MirrorImageState mirror_image_state,
       const cls::rbd::MirrorImage& mirror_image,
-      Context* on_finish);
+      Context* on_finish,
+      bool force_update = false);
 
   void send();
 
@@ -67,6 +70,7 @@ private:
   cls::rbd::MirrorImageState m_mirror_image_state;
   cls::rbd::MirrorImage m_mirror_image;
   Context* m_on_finish;
+  bool m_force_update;
 
   CephContext* m_cct;
   bufferlist m_out_bl;

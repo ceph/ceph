@@ -467,7 +467,7 @@ void GroupPrepareImagesRequest<I>::handle_get_images_mirror_info(int r) {
     return;
   }
 
-  if (m_operation == OP_CREATE_PRIMARY) {
+  if (m_operation == OP_CREATE_PRIMARY || m_operation == OP_REMOVE_IMAGE) {
     finish(0);
   } else if (m_operation == OP_DISABLE) {
     check_images_child_mirroring();
