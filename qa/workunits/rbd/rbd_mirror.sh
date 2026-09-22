@@ -909,6 +909,12 @@ fi
 if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
   if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
     testlog "TEST: test partially synced demote snapshot sync after daemon restart"
+    # Test sequence:
+    # 1. Create a 10 GiB image and interrupt its demotion snapshot copy.
+    # 2. Restart the replayer and wait for the complete snapshot.
+    # 3. Compare both images by streaming checksums before reversing direction.
+    # Expected result: restart completes every object without storing two large
+    # exports in the temporary directory.
     demote_image=test_demote_image
     create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${demote_image} ${RBD_MIRROR_MODE} 10G
     write_image ${CLUSTER2} ${POOL} ${demote_image} 100
@@ -928,7 +934,7 @@ if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
     wait_for_snapshot_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${demote_image}
     wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${demote_image} 'up+unknown'
     wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${demote_image} 'up+unknown'
-    compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${demote_image}
+    compare_images_by_checksum ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${demote_image}
     promote_image ${CLUSTER1} ${POOL} ${demote_image}
     wait_for_image_replay_started ${CLUSTER2} ${POOL} ${demote_image}
     wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${demote_image} 'up+stopped'
