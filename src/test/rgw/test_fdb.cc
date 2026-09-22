@@ -641,6 +641,29 @@ TEST_CASE("version stamps", "[fdb]") {
   CHECK_FALSE(stamp.is_resolved());
  }
 
+ SECTION("replay reset discards abandoned versionstamps") {
+  constexpr fdb_error_t not_committed = 1020;
+  REQUIRE(0 != fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, not_committed));
+
+  const auto abandoned_key = test_key("versionstamp/replay/abandoned");
+  const auto committed_key = test_key("versionstamp/replay/committed");
+  auto txn = lfdb::make_transaction(dbh);
+
+  lfdb::versionstamp abandoned_stamp;
+  lfdb::set(txn, abandoned_key, lfdb::versioned("", abandoned_stamp));
+
+  lfdb::reset_for_replay(txn, not_committed);
+
+  lfdb::versionstamp committed_stamp;
+  lfdb::set(txn, committed_key, lfdb::versioned("", committed_stamp));
+  REQUIRE(lfdb::commit(txn));
+
+  CHECK_FALSE(abandoned_stamp.is_resolved());
+  CHECK(committed_stamp.is_resolved());
+  CHECK_FALSE(lfdb::key_exists(dbh, abandoned_key));
+  CHECK(lfdb::key_exists(dbh, committed_key));
+ }
+
  SECTION("resolved versionstamp cannot be reused for commit") {
   const auto first_key = test_key("versionstamp/reuse/first");
   const auto second_key = test_key("versionstamp/reuse/second");
@@ -1636,6 +1659,24 @@ TEST_CASE("query algebra examples execute against fdb", "[fdb][query][example]")
   CHECK_THAT(keys_from_blocks(active_cache),
              Catch::Matchers::RangeEquals(active_cache_keys));
 
+  const auto reverse_active_cache = lq::with_options(
+    active_cache,
+    lq::query_options {
+     .result_limit = 2,
+     .reverse_order = true
+    });
+  auto reverse_active_cache_keys = active_cache_keys;
+  std::ranges::reverse(reverse_active_cache_keys);
+
+  CHECK_THAT(keys_in(reverse_active_cache),
+             Catch::Matchers::RangeEquals(reverse_active_cache_keys));
+  CHECK_THAT(keys_from_transaction_scan(reverse_active_cache),
+             Catch::Matchers::RangeEquals(reverse_active_cache_keys));
+  CHECK_THAT(keys_from_managed_scan(reverse_active_cache),
+             Catch::Matchers::RangeEquals(reverse_active_cache_keys));
+  CHECK_THAT(keys_from_blocks(reverse_active_cache),
+             Catch::Matchers::RangeEquals(reverse_active_cache_keys));
+
   const auto visible_hot =
    lq::difference(lq::prefix(test_key("cache/hot/")),
                   lq::prefix(test_key("cache/hot/private/")));
@@ -1761,7 +1802,7 @@ TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  lfdb::set(lfdb::make_transaction(j), key, n, lfdb::commit_after_op::commit);
  lfdb::get(lfdb::make_transaction(j), key, o, lfdb::commit_after_op::no_commit);
 
- REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
  // vector<uint8_t> -> vector<uint8_t>
@@ -1816,7 +1857,101 @@ TEST_CASE("fdb conversions (functions)", "[fdb][rgw]")
   }));
 
   CAPTURE(n);
-  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+ REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+ }
+}
+
+TEST_CASE("managed reads distinguish FDB failures from callback failures", "[fdb]")
+{
+ janitor dbh;
+
+ // FoundationDB's transaction_not_committed error is retryable:
+ constexpr fdb_error_t not_committed = 1020;
+ REQUIRE(fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, not_committed));
+
+ SECTION("successful reads do not commit") {
+  const auto key = test_key("managed-read-no-commit");
+
+  lfdb::detail::in_read_transaction(dbh, [&key](auto& txn) {
+   lfdb::set(txn, key, "discarded", lfdb::commit_after_op::no_commit);
+  });
+
+  CHECK_FALSE(lfdb::key_exists(dbh, key));
+ }
+
+ SECTION("retryable read failures replay the operation") {
+  std::size_t attempts = 0;
+
+  const auto result = lfdb::detail::in_read_transaction(
+   dbh, [&attempts](auto&) {
+    if (1 == ++attempts) {
+     throw lfdb::libfdb_exception(not_committed);
+    }
+
+    return 42;
+   });
+
+  CHECK(42 == result);
+  CHECK(2 == attempts);
+ }
+
+ SECTION("callback failures are never classified as FDB read failures") {
+  const auto key = test_key("managed-read-callback-error");
+  std::size_t calls = 0;
+
+  lfdb::set(dbh, key, "value");
+
+  try {
+   std::ignore = lfdb::get(
+    dbh, key, [&calls](std::span<const std::uint8_t>) {
+     ++calls;
+     throw lfdb::libfdb_exception(not_committed);
+    });
+   FAIL("expected callback failure");
+  } catch (const lfdb::libfdb_exception& e) {
+   CHECK(not_committed == e.fdb_error_value);
+  }
+
+  CHECK(1 == calls);
+ }
+
+ SECTION("for_each callback failures are never replayed") {
+  const auto key = test_key("managed-read-for-each-error");
+  std::size_t calls = 0;
+
+  lfdb::set(dbh, key, "value");
+
+  try {
+   lfdb::for_each(dbh, lfdb::select {key}, [&calls](auto&&) {
+    ++calls;
+    throw lfdb::libfdb_exception(not_committed);
+   });
+   FAIL("expected callback failure");
+  } catch (const lfdb::libfdb_exception& e) {
+   CHECK(not_committed == e.fdb_error_value);
+  }
+
+  CHECK(1 == calls);
+ }
+
+ SECTION("transform callback failures are never replayed") {
+  const auto key = test_key("managed-read-transform-error");
+  std::size_t calls = 0;
+
+  lfdb::set(dbh, key, "value");
+
+  try {
+   std::ignore = lfdb::transform(
+    dbh, lfdb::select {key}, [&calls](auto&&) -> std::string {
+     ++calls;
+     throw lfdb::libfdb_exception(not_committed);
+    });
+   FAIL("expected callback failure");
+  } catch (const lfdb::libfdb_exception& e) {
+   CHECK(not_committed == e.fdb_error_value);
+  }
+
+  CHECK(1 == calls);
  }
 }
 
@@ -2796,6 +2931,67 @@ TEST_CASE("generators honor selector endpoints", "[fdb]") {
  const auto reverse_keys = std::vector { make_key(6, prefix), make_key(5, prefix), make_key(4, prefix) };
  CHECK_THAT(collect_pair_keys(selector), Catch::Matchers::RangeEquals(reverse_keys));
  CHECK_THAT(collect_block_keys(selector), Catch::Matchers::RangeEquals(reverse_keys));
+}
+
+TEST_CASE("split ranges follow selector direction", "[fdb]")
+{
+ const std::array keys {"a"s, "b"s, "c"s, "d"s};
+ auto make_fdb_key = [](const std::string& key) {
+  const auto bytes = lfdb::detail::as_fdb_span(key);
+
+  return FDBKey {bytes.data(), static_cast<int>(std::size(bytes))};
+ };
+ const std::array split_points {
+  make_fdb_key(keys[0]), make_fdb_key(keys[1]),
+  make_fdb_key(keys[2]), make_fdb_key(keys[3])
+ };
+ auto selector = lfdb::select {
+  lfdb::exclusive(keys.front()), lfdb::inclusive(keys.back())
+ };
+ selector.options = {
+  .result_limit = 17,
+  .target_bytes = 4'096,
+  .streaming_mode = FDB_STREAMING_MODE_WANT_ALL
+ };
+
+ CHECK(std::empty(lfdb::detail::as_select_seq(
+   std::span<const FDBKey> {}, selector)));
+ CHECK(std::empty(lfdb::detail::as_select_seq(
+   std::span {split_points}.first<1>(), selector)));
+
+ const auto forward = lfdb::detail::as_select_seq(split_points, selector);
+
+ REQUIRE(3 == std::size(forward));
+ CHECK("a" == forward[0].begin_key);
+ CHECK("b" == forward[1].begin_key);
+ CHECK("c" == forward[2].begin_key);
+ CHECK_FALSE(forward.front().begin_inclusive);
+ CHECK_FALSE(forward.front().end_inclusive);
+ CHECK(forward[1].begin_inclusive);
+ CHECK_FALSE(forward[1].end_inclusive);
+ CHECK(forward.back().begin_inclusive);
+ CHECK(forward.back().end_inclusive);
+ CHECK(std::ranges::all_of(forward, [&selector](const auto& range) {
+  return selector.options == range.options;
+ }));
+
+ selector.options.reverse_order = true;
+
+ const auto reverse = lfdb::detail::as_select_seq(split_points, selector);
+
+ REQUIRE(3 == std::size(reverse));
+ CHECK("c" == reverse[0].begin_key);
+ CHECK("b" == reverse[1].begin_key);
+ CHECK("a" == reverse[2].begin_key);
+ CHECK(reverse.front().end_inclusive);
+ CHECK(reverse.front().begin_inclusive);
+ CHECK_FALSE(reverse[1].end_inclusive);
+ CHECK(reverse[1].begin_inclusive);
+ CHECK_FALSE(reverse.back().begin_inclusive);
+ CHECK_FALSE(reverse.back().end_inclusive);
+ CHECK(std::ranges::all_of(reverse, [&selector](const auto& range) {
+  return selector.options == range.options;
+ }));
 }
 
 TEMPLATE_PRODUCT_TEST_CASE("associative data", "[fdb][rgw]",

@@ -29,18 +29,23 @@ namespace ceph::libfdb::layer::content {
 
 namespace detail {
 
-// Includes the segment terminator and embedded-NUL escape bytes.
+// Includes the Tuple byte-string type code, segment terminator, and embedded-NUL
+// escape bytes.
 constexpr std::size_t encoded_string_segment_size(const std::string_view segment)
 {
  const auto embedded_nuls =
   static_cast<std::size_t>(std::ranges::count(segment, '\0'));
 
- return std::size(segment) + embedded_nuls + 1;
+ return std::size(segment) + embedded_nuls + 2;
 }
 
 constexpr void append_encoded_string_segment(std::string& out,
                                              const std::string_view segment)
 {
+ // FoundationDB's Tuple-layer byte-string type code makes the NUL-FF escape
+ // distinguishable from a segment terminator followed by an FF byte:
+ out.push_back('\x01');
+
  // User-readable key segments take the common bulk-append path.
  if (!segment.contains('\0')) {
   out.append(segment);
@@ -63,10 +68,6 @@ constexpr void require_valid_keyspace_root(const std::string_view segment)
 {
  if (segment.empty()) {
   throw ::ceph::libfdb::libfdb_exception("content key assembly requires a non-empty keyspace root");
- }
-
- if (static_cast<char>(0xFF) == segment.front()) {
-  throw ::ceph::libfdb::libfdb_exception("content keyspace root must not start with 0xFF");
  }
 }
 
