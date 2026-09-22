@@ -2976,6 +2976,43 @@ struct pg_history_t {
   /// upper bound on how long prior interval readable (relative to encode time)
   ceph::timespan prior_readable_until_ub = ceph::timespan::zero();
 
+  /**
+   * PG vulnerability-window onset, merged across peers (unlike pg_stat_t's
+   * same-named fields, which are only ever wholesale-copied, never merged
+   * -- see merge() below). last_degraded stays pinned at the true onset
+   * once latched; vuln_window_reported is a separate "recorded up to"
+   * marker (tied to last_clean's own advance) that gates re-recording, so
+   * last_degraded itself never needs to be artificially moved.
+   */
+  utime_t last_degraded;
+  utime_t last_clean;
+  utime_t vuln_window_reported;
+
+  /**
+   * Active-rebuild span onset (pg_rebuild_duration's counterpart to
+   * last_degraded above), merged across peers the same way -- see merge()
+   * below. Unlike last_degraded, which closes against last_clean, a
+   * rebuild span closes whenever Recovering/Backfilling simply ends,
+   * independent of whether the PG ever reaches clean, so it has no
+   * external field to anchor against: rebuild_span_reported is this
+   * field's own "recorded up to" marker, serving the same role last_clean
+   * serves for last_degraded.
+   */
+  utime_t last_rebuild_active_start;
+  utime_t rebuild_span_reported;
+
+  /**
+   * Active-rebuild time accrued by the current episode's already-
+   * paused spans (each one folded in by PeeringState::
+   * pause_rebuild_span()), excluding any still-armed span. Means
+   * nothing on its own -- only relative to last_rebuild_active_start,
+   * so it travels with whichever side's onset wins in merge() below,
+   * rather than being merged independently. Recorded, together with
+   * that still-armed span, by PeeringState::close_rebuild_span();
+   * zeroed after recording.
+   */
+  utime_t rebuild_active_accum;
+
   friend bool operator==(const pg_history_t& l, const pg_history_t& r) {
     return
       l.epoch_created == r.epoch_created &&
@@ -2994,7 +3031,13 @@ struct pg_history_t {
       l.last_scrub_stamp == r.last_scrub_stamp &&
       l.last_deep_scrub_stamp == r.last_deep_scrub_stamp &&
       l.last_clean_scrub_stamp == r.last_clean_scrub_stamp &&
-      l.prior_readable_until_ub == r.prior_readable_until_ub;
+      l.prior_readable_until_ub == r.prior_readable_until_ub &&
+      l.last_degraded == r.last_degraded &&
+      l.last_clean == r.last_clean &&
+      l.vuln_window_reported == r.vuln_window_reported &&
+      l.last_rebuild_active_start == r.last_rebuild_active_start &&
+      l.rebuild_span_reported == r.rebuild_span_reported &&
+      l.rebuild_active_accum == r.rebuild_active_accum;
   }
 
   pg_history_t() {}
@@ -3073,6 +3116,81 @@ struct pg_history_t {
     if (other.last_clean_scrub_stamp > last_clean_scrub_stamp) {
       last_clean_scrub_stamp = other.last_clean_scrub_stamp;
       modified = true;
+    }
+
+    // Vulnerability-window onset: not monotonic, so take the EARLIEST
+    // still-open onset (whoever noticed the transition first), anchored
+    // against the merged last_clean. If neither side is open, both
+    // onsets are just stale leftovers, so fall back to a plain max.
+    if (other.last_clean > last_clean) {
+      last_clean = other.last_clean;
+      modified = true;
+    }
+    {
+      const bool mine_open = last_degraded > last_clean;
+      const bool other_open = other.last_degraded > last_clean;
+      utime_t merged_last_degraded;
+      if (mine_open && other_open) {
+        merged_last_degraded = std::min(last_degraded, other.last_degraded);
+      } else if (mine_open) {
+        merged_last_degraded = last_degraded;
+      } else if (other_open) {
+        merged_last_degraded = other.last_degraded;
+      } else {
+        // Neither side shows a currently-open window, so last_degraded is
+        // just a stale marker from a past (already-closed) episode on each
+        // side -- treat it as an ordinary monotonic value here and take the
+        // max, exactly like vuln_window_reported below.
+        merged_last_degraded = std::max(last_degraded, other.last_degraded);
+      }
+      if (merged_last_degraded != last_degraded) {
+        last_degraded = merged_last_degraded;
+        modified = true;
+      }
+    }
+    // vuln_window_reported only ever advances, so a plain max-merge.
+    if (other.vuln_window_reported > vuln_window_reported) {
+      vuln_window_reported = other.vuln_window_reported;
+      modified = true;
+    }
+
+    // Active-rebuild span onset + its pause accumulator
+    // (rebuild_active_accum). Like last_degraded, non-monotonic, but
+    // there's no "clean" field to anchor against -- a span closes on a
+    // pause OR a genuine finish alike (pause_rebuild_span()/
+    // close_rebuild_span()). So rebuild_span_reported instead marks
+    // "this side's most recent transition of either kind": whichever
+    // side's is strictly newer simply has newer information and its
+    // onset+accum pair wins outright -- the two always travel together,
+    // since accum only means anything relative to the onset it was
+    // accrued against. Equal reported values (the ordinary case right
+    // after a handover) fall back to the earliest-open-onset rule above.
+    if (other.rebuild_span_reported > rebuild_span_reported) {
+      rebuild_span_reported = other.rebuild_span_reported;
+      last_rebuild_active_start = other.last_rebuild_active_start;
+      rebuild_active_accum = other.rebuild_active_accum;
+      modified = true;
+    } else if (other.rebuild_span_reported == rebuild_span_reported) {
+      const bool mine_open = last_rebuild_active_start > rebuild_span_reported;
+      const bool other_open = other.last_rebuild_active_start > rebuild_span_reported;
+      // Adopt other's onset+accum if it has something open that this
+      // side doesn't, or started earlier (earliest open onset wins).
+      utime_t merged_onset = last_rebuild_active_start;
+      utime_t merged_accum = rebuild_active_accum;
+      bool adopt_other = other_open &&
+        (!mine_open || other.last_rebuild_active_start < last_rebuild_active_start);
+      if (adopt_other) {
+        merged_onset = other.last_rebuild_active_start;
+        merged_accum = other.rebuild_active_accum;
+      }
+      if (merged_onset != last_rebuild_active_start) {
+        last_rebuild_active_start = merged_onset;
+        modified = true;
+      }
+      if (merged_accum != rebuild_active_accum) {
+        rebuild_active_accum = merged_accum;
+        modified = true;
+      }
     }
     return modified;
   }
