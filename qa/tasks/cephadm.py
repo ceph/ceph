@@ -2218,12 +2218,15 @@ def task(ctx, config):
                                 ctx,
                                 cluster_name,
                                 ctx.ceph[cluster_name].bootstrap_remote,
-                                ['ceph', 'orch', 'ps', '--daemon_type', 'agent', '-f', 'json'],
+                                ['ceph', 'orch', 'ps', '--daemon_type', 'agent', '--refresh', '-f', 'json'],
                                 stdout=StringIO(),
                                 check_status=False,
                             )
+                            if r.exitstatus:
+                                log.warning("'ceph orch ps' command failed with error code {}. Stopping test...".format(r))
+                                return
                             try:
-                                daemons = json.loads(r.stdout.getvalue()) if r.stdout else []
+                                daemons = json.loads(r.stdout.getvalue())
                                 if not daemons:
                                     log.info('All agent daemons successfully removed.')
                                     break
