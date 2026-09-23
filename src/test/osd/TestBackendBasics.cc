@@ -38,6 +38,8 @@
  *                       read with EC reconstruction.
  */
 
+#include <atomic>
+
 #include <gtest/gtest.h>
 #include "test/osd/PGBackendTestFixture.h"
 #include "test/osd/TestCommon.h"
@@ -45,6 +47,35 @@
 #include "messages/MOSDECSubOpWrite.h"
 
 using namespace std;
+
+namespace {
+
+// Counts how many genuinely single-zone (num_zones <= 1) parameter
+// instances of MultiZoneWriteThenRead proceed past that test's "is this a
+// multi-zone config?" skip guard. A correct guard keeps this at zero for
+// the whole run; a nonzero count means the guard let ordinary single-zone
+// configs through, so the test silently duplicated WriteThenRead instead
+// of exercising multi-zone behaviour.
+std::atomic<int> g_multizone_wrongly_ran{0};
+
+// TearDown() runs once after every selected test has finished, regardless
+// of suite registration order, so asserting here doesn't depend on test
+// ordering the way a check inside a single TEST_P body would.
+class MultiZoneGuardCheckEnvironment : public ::testing::Environment {
+public:
+  void TearDown() override {
+    ASSERT_EQ(g_multizone_wrongly_ran.load(), 0)
+      << "MultiZoneWriteThenRead's zone guard let "
+      << g_multizone_wrongly_ran.load()
+      << " single-zone parameter instance(s) run as if they were "
+         "multi-zone";
+  }
+};
+
+::testing::Environment* const g_multizone_guard_check_env =
+  ::testing::AddGlobalTestEnvironment(new MultiZoneGuardCheckEnvironment());
+
+}  // namespace
 
 // ---------------------------------------------------------------------------
 // TestBackendBasics fixture
@@ -849,6 +880,14 @@ TEST_P(TestBackendBasics, MultiZoneWriteThenRead) {
   // Skip test if zones are not configured
   if (backend_config.num_zones == 0) {
     GTEST_SKIP() << "MultiZoneWriteThenRead test requires num_zones > 0";
+  }
+
+  // Demonstrates the defect in the guard above: it should have rejected
+  // every genuinely single-zone (num_zones <= 1) parameter instance, the
+  // same way MultiZoneFailover's guard below does. Count any that get
+  // this far anyway; MultiZoneGuardCheckEnvironment asserts this stays 0.
+  if (backend_config.num_zones <= 1) {
+    g_multizone_wrongly_ran++;
   }
 
   std::string test_data(param.size, param.fill);
