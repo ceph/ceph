@@ -7904,15 +7904,13 @@ int BlueStore::_open_db_and_around(
   bool read_only,
   bool to_repair,
   alloc_recovery_policy_t policy,
-  bool apply_deferred,
-  bool remove_deferred)
+  bool replay_deferred)
 {
   dout(5) << __func__ << "read_only=" << read_only
           << ", to_repair=" << to_repair
-          << ", deferred=" << (apply_deferred?"apply;":"noapply;")
-          << (remove_deferred?"remove":"noremove") << dendl;
-  ceph_assert(remove_deferred == false || apply_deferred == true);
-  ceph_assert(read_only == false || remove_deferred == false);
+          << ", deferred=" << (replay_deferred?"apply,remove":"no action")
+          << dendl;
+  ceph_assert(read_only == false || replay_deferred == false);
   std::vector<std::string> keys_to_remove;
   alloc_recovery_policy = policy;
   alloc_recovery_skipped_onodes = 0;
@@ -7977,8 +7975,8 @@ int BlueStore::_open_db_and_around(
   }
   // This is the place where we can apply deferred writes
   // without risk of some interaction with RocksDB allocating.
-  if (apply_deferred) {
-    _deferred_replay(remove_deferred ? &keys_to_remove : nullptr);
+  if (replay_deferred) {
+    _deferred_replay(&keys_to_remove);
   }
 
   // Re-open in the proper mode(s).
@@ -7997,7 +7995,7 @@ int BlueStore::_open_db_and_around(
     _post_init_alloc();
   }
 
-  if (remove_deferred && !keys_to_remove.empty()) {
+  if (replay_deferred && !keys_to_remove.empty()) {
     KeyValueDB::Transaction deferred_keys_remove_txn = db->get_transaction();
     for (auto& s : keys_to_remove) {
       deferred_keys_remove_txn->rm_single_key(PREFIX_DEFERRED, s);
@@ -9403,13 +9401,6 @@ int BlueStore::mount_readonly()
     }
   });
 
-  _kv_start();
-  auto stop_kv = make_scope_guard([&] {
-    if (!mounted) {
-      _kv_stop();
-    }
-  });
-
   r = _deferred_replay(nullptr);
   if (r < 0) {
     return r;
@@ -9464,6 +9455,8 @@ int BlueStore::_mount_readonly()
   if (r < 0) {
     goto out_db;
   }
+  // replay pending deferred, but do not prepare keys for removal
+  _deferred_replay(nullptr);
   return 0;
 
 out_db:
@@ -9486,8 +9479,6 @@ int BlueStore::umount_readonly()
 
   if (!_kv_only) {
     mempool_thread.shutdown();
-    dout(20) << __func__ << " stopping kv thread" << dendl;
-    _kv_stop();
     // skip cache cleanup step on fast shutdown
     if (likely(!m_fast_shutdown)) {
       _shutdown_cache();
@@ -9553,7 +9544,7 @@ int BlueStore::_mount()
     return -EINVAL;
   }
 
-  int r = _open_db_and_around(false, false, alloc_recovery_policy_t::strict, true, true);
+  int r = _open_db_and_around(false, false, alloc_recovery_policy_t::strict, true);
   if (r < 0) {
     return r;
   }
@@ -10958,7 +10949,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
     read_only, false,
     read_only ? alloc_recovery_policy_t::tolerate_corrupt_onodes
               : alloc_recovery_policy_t::strict,
-    !read_only, !read_only);
+    !read_only);
   if (r < 0) {
     return r;
   }
