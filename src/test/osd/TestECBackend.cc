@@ -1706,6 +1706,76 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_mixed_availability) {
   ASSERT_GT(remote_count, 0) << "Should use remote shards when local insufficient";
 }
 
+TEST(ECCommon, get_min_avail_to_read_shards_zones_prefers_local_over_low_osd_remote) {
+  // get_all_avail_shards() walks get_parent()->get_acting_shards(), which is a
+  // plain std::set<pg_shard_t> ordered by OSD id (pg_shard_t's operator<=>
+  // compares osd before shard) - it has no notion of zone. In the
+  // allow_remote_zone fallback path, whichever physical copy of a relative
+  // shard is visited FIRST wins, regardless of which zone it is in. If a
+  // remote-zone OSD happens to have a lower id than the local-zone OSD
+  // holding the same relative shard, the remote copy wins even though the
+  // local copy was fully available - breaking "prefer local zone".
+  //
+  // Here the local zone (zone 0) only has relative shards 0 and 1, on
+  // deliberately HIGH osd ids (100, 101). The remote zone (zone 1) has
+  // relative shards 0-3, on deliberately LOW osd ids (1-4). Reading data
+  // shards 0-3 forces the local-only pass to fail (only 2 of 4 needed
+  // shards are local), triggering the allow_remote_zone fallback. Since
+  // relative shards 0 and 1 are available locally, the fallback must still
+  // prefer those local copies over the lower-osd-id remote ones.
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones with k+m shards each
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Local zone (zone 0): only relative shards 0 and 1, on high osd ids.
+  listenerStub.acting_shards.insert(pg_shard_t(100, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(101, shard_id_t(1)));
+  // Remote zone (zone 1): relative shards 0-3, on low osd ids.
+  listenerStub.acting_shards.insert(pg_shard_t(1, shard_id_t(6)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(7)));
+  listenerStub.acting_shards.insert(pg_shard_t(3, shard_id_t(8)));
+  listenerStub.acting_shards.insert(pg_shard_t(4, shard_id_t(9)));
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  // Request reads from all k data shards.
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Relative shards 0 and 1 are available locally (zone 0) and must resolve
+  // to their local pg_shard (absolute shard id < 6), not to the remote copy
+  // that merely happens to have a lower osd id.
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (int(shard_id) == 0 || int(shard_id) == 1) {
+      ASSERT_LT(int(shard_read.pg_shard.shard), 6)
+        << "relative shard " << shard_id
+        << " has a local copy available and should not fall back to the "
+        << "remote zone just because a remote osd id is lower; got pg_shard "
+        << shard_read.pg_shard;
+    }
+  }
+}
+
 // Test for the fix in 9a9c55e: get_readable_writable_shard_id_sets() must return
 // relative shard IDs (zone-local), not absolute IDs, so that downstream consumers
 // such as WritePlanObj::intersect with get_parity_shards() produce correct results
