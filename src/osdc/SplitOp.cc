@@ -655,9 +655,20 @@ void SplitOp::init(OSDOp &op, int ops_index) {
 #define dout_prefix *_dout << " SplitOp::"
 
 namespace {
-std::pair<bool, bool> is_single_chunk(const pg_pool_t *pi, uint64_t offset, uint64_t len) {
+/**
+ * Work out which shard serves a read.
+ *
+ * @param pi The pool the read is against
+ * @param offset Object offset of the read
+ * @param len Length of the read
+ * @return the raw shard holding the whole read, or nullopt if no single shard
+ *         does. A read that crosses a chunk boundary involves more than one
+ *         shard, so it has no containing shard and returns nullopt. So does any
+ *         read against a pool that is not erasure coded.
+ */
+std::optional<raw_shard_id_t> containing_shard(const pg_pool_t *pi, uint64_t offset, uint64_t len) {
   if (!pi->is_erasure()) {
-    return {false, false};
+    return std::nullopt;
   }
 
   uint64_t stripe_width = pi->get_stripe_width();
@@ -667,14 +678,14 @@ std::pair<bool, bool> is_single_chunk(const pg_pool_t *pi, uint64_t offset, uint
   // chunk_size = stripe_width / k <= stripe_width / 2. This early check avoids
   // the more expensive division operation (stripe_width / data_chunk_count) below.
   if (len > stripe_width / 2) {
-    return {false, false};
+    return std::nullopt;
   }
   uint64_t data_chunk_count = pi->get_ec_data_shard_count();
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
 
   // Chunk_size should never be zero, so this is paranoia.
   if (len > chunk_size || chunk_size == 0) {
-    return {false, false};
+    return std::nullopt;
   }
 
   uint64_t offset_to_end_of_chunk;
@@ -687,10 +698,10 @@ std::pair<bool, bool> is_single_chunk(const pg_pool_t *pi, uint64_t offset, uint
   }
 
   if (len > offset_to_end_of_chunk) {
-    return {false, false};
+    return std::nullopt;
   }
 
-  return {true, offset % stripe_width < chunk_size};
+  return raw_shard_id_t(offset / chunk_size % data_chunk_count);
 }
 
 /**
@@ -746,8 +757,9 @@ bool validate_flags(const pg_pool_t *pi, Objecter::Op *op, CephContext *cct) {
 bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
                         uint64_t replica_min_read_size, CephContext *cct,
                         bool &has_primary_ops, bool &single_direct_op) {
-  bool is_first_chunk = true;
   bool suitable_read_found = false;
+
+  std::optional<raw_shard_id_t> target_shard;
 
   for (auto &o : op->ops) {
     switch (o.op.op) {
@@ -765,9 +777,12 @@ bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
           suitable_read_found = true;
         }
         if (single_direct_op) {
-          auto [single_chunk, first_chunk] = is_single_chunk(pi, o.op.extent.offset, o.op.extent.length);
-          is_first_chunk = is_first_chunk && first_chunk;
-          single_direct_op = single_direct_op && single_chunk;
+          std::optional<raw_shard_id_t> read_shard
+            = containing_shard(pi, o.op.extent.offset, length);
+          if (!target_shard && read_shard) {
+            target_shard = read_shard;
+          }
+          single_direct_op = read_shard.has_value() && read_shard == target_shard;
         }
         break;
       }
@@ -788,7 +803,7 @@ bool validate_operations(Objecter::Op *op, const pg_pool_t *pi, bool is_erasure,
   }
 
   if (single_direct_op && has_primary_ops) {
-    single_direct_op = is_first_chunk;
+    single_direct_op = target_shard == raw_shard_id_t(0);
   }
 
   return suitable_read_found;
