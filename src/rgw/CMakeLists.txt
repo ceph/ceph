@@ -433,7 +433,7 @@ if(WITH_OPENLDAP)
 endif()
 if(WITH_RADOSGW_LUA_PACKAGES)
   target_link_libraries(rgw_common
-    PRIVATE Boost::filesystem StdFilesystem::filesystem)
+    PRIVATE Boost::filesystem)
 endif()
 
 if(WITH_LTTNG)
@@ -546,7 +546,7 @@ if(WITH_RADOSGW_STANDALONE)
   endif()
   if(WITH_RADOSGW_LUA_PACKAGES)
     target_link_libraries(rgw_common_standalone
-      PRIVATE Boost::filesystem StdFilesystem::filesystem)
+      PRIVATE Boost::filesystem)
   endif()
 
   if(WITH_JAEGER)
