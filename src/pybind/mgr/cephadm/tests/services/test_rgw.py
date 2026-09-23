@@ -103,6 +103,25 @@ class TestRGWService:
 
         return cm, svc_name, spec, daemon, mock_spec_store
 
+    @patch("cephadm.services.cephadmservice.CephadmService.get_keyring_with_caps")
+    def test_rgw_keyring_caps(self, get_keyring_with_caps, cephadm_module: CephadmOrchestrator):
+        get_keyring_with_caps.return_value = ''
+        rgw_svc = service_registry.get_service('rgw')
+
+        rgw_svc.get_keyring('foo.bar')
+        assert get_keyring_with_caps.call_args[0][1] == ['mon', 'profile rgw',
+                                                         'mgr', 'profile rgw',
+                                                         'osd', 'profile rgw']
+
+        cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+            'osds': [],
+            'require_osd_release': 'tentacle',
+        })
+        rgw_svc.get_keyring('foo.bar')
+        assert get_keyring_with_caps.call_args[0][1] == ['mon', 'allow *',
+                                                         'mgr', 'allow rw',
+                                                         'osd', 'allow rwx tag rgw *=*']
+
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_post_remove_no_op_when_requires_certificates_is_false(
             self, cephadm_module: CephadmOrchestrator):
