@@ -232,6 +232,7 @@ Server-side encryption Settings
 ===============================
 
 .. confval:: rgw_crypt_s3_kms_backend
+.. confval:: rgw_crypt_sse_algorithm
 
 Barbican Settings
 =================
