@@ -2886,8 +2886,7 @@ private:
     bool read_only,
     bool to_repair = false,
     alloc_recovery_policy_t policy = alloc_recovery_policy_t::strict,
-    bool apply_deferred = false,
-    bool remove_deferred = false);
+    bool replay_deferred = false);
   void _close_db_and_around();
   void _close_around_db();
 
