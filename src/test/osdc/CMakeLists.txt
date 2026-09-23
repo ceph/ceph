@@ -25,11 +25,11 @@ target_link_libraries(ceph_test_objectcacher_misc
 install(TARGETS ceph_test_objectcacher_misc
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-# unittest_split_ops_ut
+# unittest_splitop
 # SplitOp.cc is compiled into libcommon (see src/CMakeLists.txt), which global
 # pulls in, so this needs no further libraries.
-add_executable(unittest_split_ops_ut
+add_executable(unittest_splitop
   test_splitop.cc
   )
-add_ceph_unittest(unittest_split_ops_ut)
-target_link_libraries(unittest_split_ops_ut global ${BLKID_LIBRARIES})
+add_ceph_unittest(unittest_splitop)
+target_link_libraries(unittest_splitop global ${BLKID_LIBRARIES})

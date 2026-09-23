@@ -881,6 +881,16 @@ void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct
 }
 }
 
+#ifdef UNIT_TESTS_BUILT
+bool test_validate_operations(Objecter::Op *op, const pg_pool_t *pi,
+                              bool is_erasure, uint64_t replica_min_read_size,
+                              CephContext *cct, bool &has_primary_ops,
+                              bool &single_direct_op) {
+  return validate_operations(op, pi, is_erasure, replica_min_read_size, cct,
+                             has_primary_ops, single_direct_op);
+}
+#endif
+
 /**
  * @brief Prepare a single-chunk operation for direct execution.
  *
