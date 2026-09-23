@@ -196,6 +196,8 @@ public:
     pool.min_size = num_zones * (k + m) - m;
     pool.crush_rule = 0;
     pool.erasure_code_profile = "default";
+    pool.ec_data_shard_count = k;
+    pool.ec_coding_shard_count = m;
     pool.stripe_width = stripe_width;
 
     // pg_num/pgp_num must be non-zero: raw_pg_to_pps() uses

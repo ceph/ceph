@@ -137,6 +137,8 @@ protected:
     };
     new_osdmap->set_erasure_code_profile("default", erasure_code_profile);
     pool_info.erasure_code_profile = "default";
+    pool_info.ec_data_shard_count = 2;
+    pool_info.ec_coding_shard_count = 1;
 
     pool_info.peering_crush_bucket_barrier = 9;
     pool_info.peering_crush_bucket_target  = 2;
@@ -148,10 +150,42 @@ protected:
 
     update_osdmap_with_peering(new_osdmap);
   }
+
+  void add_info(map<pg_shard_t, pg_info_t> &all_info, int osd, int shard,
+                eversion_t last_update, eversion_t log_tail = eversion_t()) {
+    pg_info_t info(spg_t(pg_t(1, pool_id), shard_id_t(shard)));
+    info.history.epoch_created = 1;
+    info.history.same_interval_since = 1;
+    info.last_update = last_update;
+    info.last_complete = last_update;
+    info.log_tail = log_tail;
+    all_info[pg_shard_t(osd, shard_id_t(shard))] = info;
+  }
+
+  void calc(const vector<int> &up, const vector<int> &acting,
+            const map<pg_shard_t, pg_info_t> &all_info, pg_shard_t auth,
+            bool restrict_to_up_acting, vector<int> *want,
+            set<pg_shard_t> *backfill, set<pg_shard_t> *acting_backfill,
+            ostringstream &ss) {
+    const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+    ASSERT_NE(pool, nullptr);
+    PGPool pgpool(osdmap, pool_id, *pool, "test_ec_pool");
+    auto auth_it = all_info.find(auth);
+    ASSERT_NE(auth_it, all_info.end());
+    PeeringState::calc_ec_acting_stretch(
+      auth_it, pool->size, acting, up, all_info, restrict_to_up_acting,
+      want, backfill, acting_backfill, osdmap, pgpool, ss);
+    ASSERT_EQ(want->size(), pool->size);
+  }
+
+  int dc_of(int osd) {
+    return osdmap->crush->get_parent_of_type(
+      osd, 9, osdmap->get_pg_pool(pool_id)->crush_rule);
+  }
 };
 
 
-// calc_ec_acting_stretch Tests 
+// calc_ec_acting_stretch Tests
 /**
  * Test: Zone isolation - up set respects zone boundaries
  *
@@ -1275,6 +1309,8 @@ protected:
     };
     new_osdmap->set_erasure_code_profile("default", ec_profile);
     pool_info.erasure_code_profile = "default";
+    pool_info.ec_data_shard_count = 2;
+    pool_info.ec_coding_shard_count = 1;
 
     pool_info.peering_crush_bucket_barrier = 9; // datacenter type
     pool_info.peering_crush_bucket_target  = 3; // 3 datacenters
@@ -1513,3 +1549,239 @@ const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
   EXPECT_NE(z0, z1) << "dc0 and dc1 must differ\n" << ss.str();
 }
 
+
+/*
+ * The two tests below demonstrate defects in calc_ec_acting_stretch() and are
+ * expected to FAIL until it is fixed.  Both stem from expected_zone only ever
+ * being derived from the up set: when an entire zone's block of positions is
+ * CRUSH_ITEM_NONE, shard_zone_to_crush_zone holds no entry for that zone, so
+ * expected_zone is CRUSH_ITEM_NONE and the guards that depend on it stop
+ * guarding anything.
+ */
+
+/**
+ * Test: a stray from the wrong zone must not fill a position in a zone whose
+ * up entries are all missing.
+ *
+ * Pool is 2 zones x 3 shards, dc0 = OSDs 0,1,2,6 and dc1 = OSDs 3,4,5,7, so
+ * positions 0-2 belong to dc0 and positions 3-5 to dc1.  Take the whole of
+ * dc1 out of the up set and offer OSD 6 - which lives in dc0 - as a stray
+ * holding shard 3.  Shard 3 belongs to zone 1, so placing it on a dc0 OSD
+ * would put two copies of relative shard 0 in one datacenter.
+ *
+ * This passes today, but not because the zone check works: with the whole of
+ * dc1 absent from the up set there is no expected_zone for positions 3-5, so
+ * the "wrong zone" test in the stray search is skipped entirely.  What saves
+ * it is bucket_max, which equals zone_size for a two-zone pool, so once dc0
+ * has filled its own three positions it cannot supply a fourth.  The test is
+ * kept as a regression guard: it would start failing if a quota ever exceeded
+ * a zone's own position count, or with three or more zones where a surviving
+ * zone still has quota left while a middle zone's block is down.
+ */
+TEST_F(TestECActingStretch, StrayFromWrongZoneRejectedWhenZoneBlockDown) {
+  const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
+  ASSERT_NE(pool, nullptr);
+  PGPool pgpool(osdmap, pool_id, *pool, "test_ec_pool");
+
+  // All of dc1 is gone from the up set.
+  vector<int> up = {0, 1, 2, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE};
+  vector<int> acting = up;
+
+  map<pg_shard_t, pg_info_t> all_info;
+  pg_history_t history;
+  history.epoch_created = 1;
+  history.same_interval_since = 1;
+
+  auto add_info = [&](int osd, int shard) {
+    pg_shard_t s(osd, shard_id_t(shard));
+    pg_info_t info(spg_t(pg_t(1, pool_id), shard_id_t(shard)));
+    info.history = history;
+    info.last_update = eversion_t(1, shard);
+    all_info[s] = info;
+  };
+
+  // The surviving dc0 shards, plus a stray copy of shard 3 that also sits in
+  // dc0 - the only candidate offered for position 3.
+  add_info(0, 0);
+  add_info(1, 1);
+  add_info(2, 2);
+  add_info(6, 3);
+
+  auto auth_log_shard = all_info.find(pg_shard_t(0, shard_id_t(0)));
+  ASSERT_NE(auth_log_shard, all_info.end());
+
+  vector<int> want;
+  set<pg_shard_t> backfill;
+  set<pg_shard_t> acting_backfill;
+  ostringstream ss;
+
+  PeeringState::calc_ec_acting_stretch(
+    auth_log_shard, pool->size, acting, up, all_info,
+    false /* restrict_to_up_acting */,
+    &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+
+  ASSERT_EQ(want.size(), 6u);
+
+  const int dc_of_position_0 =
+    osdmap->crush->get_parent_of_type(want[0], 9, pool->crush_rule);
+
+  // Position 3 carries a zone 1 shard, so it must not be served from the same
+  // datacenter as position 0, and must not be served by OSD 6 at all.
+  if (want[3] != CRUSH_ITEM_NONE) {
+    const int dc_of_position_3 =
+      osdmap->crush->get_parent_of_type(want[3], 9, pool->crush_rule);
+    EXPECT_NE(dc_of_position_3, dc_of_position_0)
+      << "position 3 holds a zone 1 shard but was filled from the same "
+      << "datacenter as position 0 (osd." << want[3] << ")\n" << ss.str();
+  }
+  EXPECT_NE(want[3], 6)
+    << "osd.6 lives in dc0 and cannot hold a zone 1 shard\n" << ss.str();
+}
+
+/**
+ * Test: no OSD may appear twice in the want vector.
+ *
+ * Nothing in calc_ec_acting_stretch() records that an OSD has already been
+ * placed, so the stray search can hand the same OSD to a second position.  The
+ * bucket_max check normally hides this, because a zone that has supplied its
+ * full quota is refused - so this leaves one dc0 position unfilled to keep dc0
+ * below its quota while the zone 1 positions go looking for strays.
+ *
+ * Positions 3, 4 and 5 have no up entry, hence no expected_zone, so they fall
+ * through to the stray search and the only candidate for position 3 (relative
+ * shard 0) is OSD 0, which is already serving position 0.  The resulting
+ * acting set names osd.0 twice.
+ */
+TEST_F(TestECActingStretch, NoOsdAppearsTwiceInWant) {
+  const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
+  ASSERT_NE(pool, nullptr);
+  PGPool pgpool(osdmap, pool_id, *pool, "test_ec_pool");
+
+  // Two dc0 shards up, everything else missing.  Position 2 is deliberately
+  // left without any candidate so dc0 stays below bucket_max.
+  vector<int> up = {0, 1, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE,
+                    CRUSH_ITEM_NONE};
+  vector<int> acting = up;
+
+  map<pg_shard_t, pg_info_t> all_info;
+  pg_history_t history;
+  history.epoch_created = 1;
+  history.same_interval_since = 1;
+
+  for (int shard : {0, 1}) {
+    pg_shard_t s(shard, shard_id_t(shard));
+    pg_info_t info(spg_t(pg_t(1, pool_id), shard_id_t(shard)));
+    info.history = history;
+    info.last_update = eversion_t(1, shard);
+    all_info[s] = info;
+  }
+
+  auto auth_log_shard = all_info.find(pg_shard_t(0, shard_id_t(0)));
+  ASSERT_NE(auth_log_shard, all_info.end());
+
+  vector<int> want;
+  set<pg_shard_t> backfill;
+  set<pg_shard_t> acting_backfill;
+  ostringstream ss;
+
+  PeeringState::calc_ec_acting_stretch(
+    auth_log_shard, pool->size, acting, up, all_info,
+    false /* restrict_to_up_acting */,
+    &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+
+  ASSERT_EQ(want.size(), 6u);
+
+  std::set<int> seen;
+  for (unsigned i = 0; i < want.size(); ++i) {
+    if (want[i] == CRUSH_ITEM_NONE) {
+      continue;
+    }
+    EXPECT_TRUE(seen.insert(want[i]).second)
+      << "osd." << want[i] << " appears more than once in want, at position "
+      << i << "\n" << ss.str();
+  }
+}
+
+// restrict_to_up_acting keeps a current same-zone stray out of want.
+TEST_F(TestECActingStretch, RestrictToUpActing_NoStrays) {
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> up = {0, N, 2, 3, 4, 5};
+  vector<int> acting = up;
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i : {0, 2, 3, 4, 5}) {
+    add_info(all_info, i, i, eversion_t(1, 10));
+  }
+  add_info(all_info, 6, 1, eversion_t(1, 10));
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), true,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, (vector<int>{0, N, 2, 3, 4, 5})) << ss.str();
+  EXPECT_TRUE(backfill.empty()) << ss.str();
+  EXPECT_FALSE(acting_backfill.count(pg_shard_t(6, shard_id_t(1)))) << ss.str();
+
+  want.clear();
+  backfill.clear();
+  acting_backfill.clear();
+  ostringstream ss2;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss2);
+  EXPECT_EQ(want, (vector<int>{0, 6, 2, 3, 4, 5})) << ss2.str();
+}
+
+// restrict_to_up_acting still falls back to acting[i] when up[i] is behind.
+TEST_F(TestECActingStretch, RestrictToUpActing_ActingFallbackStillUsed) {
+  vector<int> up = {0, 6, 2, 3, 4, 5};
+  vector<int> acting = {0, 1, 2, 3, 4, 5};
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i = 0; i < 6; ++i) {
+    add_info(all_info, i, i, eversion_t(1, 10), eversion_t(1, 5));
+  }
+  add_info(all_info, 6, 1, eversion_t(1, 2));
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), true,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, (vector<int>{0, 1, 2, 3, 4, 5})) << ss.str();
+  EXPECT_EQ(backfill, (set<pg_shard_t>{pg_shard_t(6, shard_id_t(1))})) << ss.str();
+  EXPECT_TRUE(acting_backfill.count(pg_shard_t(6, shard_id_t(1)))) << ss.str();
+}
+
+// Auth log in zone 1 with all of zone 0 behind its tail: zone 0 is refilled
+// only from a same-zone stray holding the same absolute shard.
+TEST_F(TestECActingStretch, Zone1Auth_Zone0BehindLogTail) {
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> up = {0, 1, 2, 3, 4, 5};
+  vector<int> acting = up;
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i : {0, 1, 2}) {
+    add_info(all_info, i, i, eversion_t(1, 5));
+  }
+  for (int i : {3, 4, 5}) {
+    add_info(all_info, i, i, eversion_t(1, 12), eversion_t(1, 10));
+  }
+  add_info(all_info, 6, 0, eversion_t(1, 12));
+  add_info(all_info, 7, 3, eversion_t(1, 12));
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(4, shard_id_t(4)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, (vector<int>{6, N, N, 3, 4, 5})) << ss.str();
+  EXPECT_EQ(backfill, (set<pg_shard_t>{pg_shard_t(0, shard_id_t(0)),
+                                       pg_shard_t(1, shard_id_t(1)),
+                                       pg_shard_t(2, shard_id_t(2))}))
+    << ss.str();
+  set<pg_shard_t> expected_ab = backfill;
+  for (unsigned i = 0; i < want.size(); ++i) {
+    if (want[i] != N) {
+      expected_ab.insert(pg_shard_t(want[i], shard_id_t(i)));
+    }
+  }
+  EXPECT_EQ(acting_backfill, expected_ab) << ss.str();
+}
