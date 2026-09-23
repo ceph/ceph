@@ -396,6 +396,7 @@ struct ThreadIoUringState {
 thread_local ThreadIoUringState thread_uring_state;
 
 struct IoSlot {
+  std::shared_ptr<void> file_owner;
   CqeDispatch disp;
   bufferptr buf;
   bufferlist hold; /* keep PUT payload alive until CQE */
@@ -578,15 +579,16 @@ struct UringReadWindow::Impl {
   unsigned qd;
   int64_t chunk_size;
   bool direct_io;
+  ResolveRead resolve;
   std::deque<std::unique_ptr<IoSlot>> inflight;
   unsigned pending_sqes = 0;
 
   Impl(const DoutPrefixProvider* dpp, optional_yield y, int fd, unsigned qd,
-       int64_t chunk_size, bool direct_io)
+       int64_t chunk_size, bool direct_io, ResolveRead resolve)
     : dpp(dpp), y(y), fd(fd),
       qd(std::clamp(qd, 1u, POSIX_URING_MAX_IODEPTH)),
       chunk_size(chunk_size > 0 ? chunk_size : 128 * 1024),
-      direct_io(direct_io) {}
+      direct_io(direct_io), resolve(std::move(resolve)) {}
 
   int flush_submit() {
     unsigned spin = 0;
@@ -617,10 +619,27 @@ struct UringReadWindow::Impl {
     return 0;
   }
 
-  int submit_one(int64_t ofs, int64_t len) {
+  int submit_one(int64_t ofs, int64_t& len) {
+    ReadExtent extent{fd, ofs, len, {}};
+    if (resolve) {
+      int r = resolve(ofs, len, extent);
+      if (r < 0) {
+        return r;
+      }
+      if (extent.len < 0 || extent.len > len || extent.ofs < 0 ||
+          (extent.len > 0 && extent.fd < 0)) {
+        return -EINVAL;
+      }
+      len = extent.len;
+      if (len == 0) {
+        return 0;
+      }
+    }
+    ofs = extent.ofs;
     unsigned spin = 0;
     for (;;) {
       auto slot = std::make_unique<IoSlot>();
+      slot->file_owner = extent.owner;
       slot->user_ofs = ofs;
       slot->user_len = len;
       if (direct_io) {
@@ -633,7 +652,7 @@ struct UringReadWindow::Impl {
       }
       slot->buf = bufferptr(
           buffer::create_small_page_aligned(slot->aligned_len));
-      int r = prep_rw(dpp, *slot, fd, /*write=*/false);
+      int r = prep_rw(dpp, *slot, extent.fd, /*write=*/false);
       if (r == -EAGAIN && y) {
         const bool had_pending = pending_sqes > 0;
         r = flush_submit();
@@ -708,8 +727,10 @@ struct UringReadWindow::Impl {
 
 UringReadWindow::UringReadWindow(const DoutPrefixProvider* dpp,
                                  optional_yield y, int fd, unsigned qd,
-                                 int64_t chunk_size, bool direct_io)
-  : impl(std::make_unique<Impl>(dpp, y, fd, qd, chunk_size, direct_io))
+                                 int64_t chunk_size, bool direct_io,
+                                 ResolveRead resolve)
+  : impl(std::make_unique<Impl>(dpp, y, fd, qd, chunk_size, direct_io,
+                                std::move(resolve)))
 {}
 
 UringReadWindow::~UringReadWindow()
@@ -735,6 +756,10 @@ int UringReadWindow::iterate(int64_t ofs, int64_t left,
       if (r < 0) {
         impl->flush_submit();
         return uring_err(dpp, r, "iterate submit_one");
+      }
+      if (n == 0) {
+        submit_left = 0;
+        break;
       }
       submit_ofs += n;
       submit_left -= n;
@@ -1016,10 +1041,12 @@ struct UringWriteWindow::Impl {};
 
 UringReadWindow::UringReadWindow(const DoutPrefixProvider* dpp,
                                  optional_yield y, int fd, unsigned qd,
-                                 int64_t chunk_size, bool direct_io)
+                                 int64_t chunk_size, bool direct_io,
+                                 ResolveRead resolve)
   : impl(std::make_unique<Impl>())
 {
   (void)dpp; (void)y; (void)fd; (void)qd; (void)chunk_size; (void)direct_io;
+  (void)resolve;
 }
 
 UringReadWindow::~UringReadWindow() = default;
