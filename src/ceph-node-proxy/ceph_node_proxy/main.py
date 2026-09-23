@@ -210,7 +210,10 @@ def handler(signum: Any, frame: Any, t_mgr: "NodeProxyManager") -> None:
         and t_mgr.system.client is not None
     ):
         t_mgr.log.info("Logging out from RedFish API")
-        t_mgr.system.client.logout()
+        try:
+            t_mgr.system.client.logout()
+        except Exception as e:
+            t_mgr.log.error("Can't log out from RedFish API: %s", e)
     raise SystemExit(0)
 
 
