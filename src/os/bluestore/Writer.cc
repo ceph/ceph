@@ -35,36 +35,6 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Writer::blob_data_p
   return out;
 }
 
-/// Signals that a range [offset~length] is no longer used.
-/// Collects allocation units that became unused into *released_disk.
-/// Returns:
-///   disk space size to release
-uint32_t bluestore::Blob::put_ref_accumulate(
-  BlueStore::Collection* coll, //FIXME: redundant
-  uint32_t offset,
-  uint32_t length,
-  PExtentVector *released_disk)
-{
-  ceph_assert(length > 0);
-  uint32_t res = 0;
-  auto [in_blob_offset, in_blob_length] = used_in_blob.put_simple(offset, length);
-  if (in_blob_length != 0) {
-    bluestore_blob_t& b = dirty_blob();
-    res = b.release_extents(in_blob_offset, in_blob_length, released_disk);
-    return res;
-  }
-  return res;
-}
-
-inline void bluestore::Blob::add_tail(
-  uint32_t new_blob_size,
-  uint32_t min_release_size)
-{
-  ceph_assert(p2phase(new_blob_size, min_release_size) == 0);
-  dirty_blob().add_tail(new_blob_size);
-  used_in_blob.add_tail(new_blob_size, min_release_size);
-}
-
 inline void bluestore_blob_use_tracker_t::init_and_ref(
   uint32_t full_length,
   uint32_t tracked_chunk)

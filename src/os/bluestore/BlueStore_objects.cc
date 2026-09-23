@@ -446,6 +446,27 @@ bool bluestore::Blob::put_ref(
   return b.release_extents(empty, logical, r);
 }
 
+/// Signals that a range [offset~length] is no longer used.
+/// Collects allocation units that became unused into *released_disk.
+/// Returns:
+///   disk space size to release
+uint32_t bluestore::Blob::put_ref_accumulate(
+  BlueStore::Collection* coll, //FIXME: redundant
+  uint32_t offset,
+  uint32_t length,
+  PExtentVector* released_disk)
+{
+  ceph_assert(length > 0);
+  uint32_t res = 0;
+  auto [in_blob_offset, in_blob_length] = used_in_blob.put_simple(offset, length);
+  if (in_blob_length != 0) {
+    bluestore_blob_t& b = dirty_blob();
+    res = b.release_extents(in_blob_offset, in_blob_length, released_disk);
+    return res;
+  }
+  return res;
+}
+
 bool bluestore::Blob::can_reuse_blob(uint32_t min_alloc_size,
                 		     uint32_t target_blob_size,
 		                     uint32_t b_offset,
