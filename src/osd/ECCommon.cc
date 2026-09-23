@@ -522,30 +522,42 @@ int ECCommon::ReadPipeline::ensure_primary_shard_for_omap(
     }
   }
 
-  // No suitable shard exists in shard_reads, need to add one
-  shard_id_set have;
-  shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
-  get_all_avail_shards(hoid, have, pg_shards, for_recovery, 0, 0, error_shards);
-  for (auto shard : have) {
-    if (!sinfo.is_nonprimary_shard(shard)) {
-      // Check if this shard has clean omap
-      if (for_recovery) {
-        const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shards[shard]);
-        auto miter = missing.get_items().find(hoid);
-        if (miter != missing.get_items().end() && miter->second.clean_regions.omap_is_dirty()) {
-          dout(20) << __func__ << ": skipping shard " << shard
-                   << " for " << hoid << " due to dirty omap" << dendl;
-          continue;
+  // No suitable shard exists in shard_reads, need to add one. Mirror the
+  // local-zone-first, remote-zone-fallback pattern used by
+  // select_shards_for_read()/get_min_avail_to_read_shards(): try the
+  // primary's own zone first, and only if that has no primary-capable
+  // shard with clean omap, retry allowing remote zones.
+  const int local_zone = sinfo.get_shard_zone(get_parent()->whoami_shard().shard);
+  for (bool allow_remote_zone : {false, true}) {
+    if (allow_remote_zone && sinfo.get_num_zones() <= 1) {
+      // No remote zones to fall back to.
+      break;
+    }
+    shard_id_set have;
+    shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
+    get_all_avail_shards(hoid, have, pg_shards, for_recovery, local_zone,
+                          allow_remote_zone, error_shards);
+    for (auto shard : have) {
+      if (!sinfo.is_nonprimary_shard(shard)) {
+        // Check if this shard has clean omap
+        if (for_recovery) {
+          const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shards[shard]);
+          auto miter = missing.get_items().find(hoid);
+          if (miter != missing.get_items().end() && miter->second.clean_regions.omap_is_dirty()) {
+            dout(20) << __func__ << ": skipping shard " << shard
+                     << " for " << hoid << " due to dirty omap" << dendl;
+            continue;
+          }
         }
+
+        // Found a suitable shard, add it to shard_reads
+        shard_read_t shard_read;
+        shard_read.pg_shard = pg_shards[shard];
+        read_request.shard_reads.insert(shard, shard_read);
+        dout(20) << __func__ << ": added shard " << shard
+                 << " for omap read of " << hoid << dendl;
+        return 0;
       }
-      
-      // Found a suitable shard, add it to shard_reads
-      shard_read_t shard_read;
-      shard_read.pg_shard = pg_shards[shard];
-      read_request.shard_reads.insert(shard, shard_read);
-      dout(20) << __func__ << ": added shard " << shard
-               << " for omap read of " << hoid << dendl;
-      return 0;
     }
   }
 
