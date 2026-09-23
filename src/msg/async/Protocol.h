@@ -5,6 +5,7 @@
 #define _MSG_ASYNC_PROTOCOL_
 
 #include "auth/Auth.h"
+#include "common/ceph_time.h"
 #include "include/buffer.h"
 #include "include/msgr.h"
 #include "msg/MessageRef.h"
@@ -135,6 +136,11 @@ public:
   virtual bool is_queued() = 0;
 
   virtual bool sent_queue_empty() const = 0;
+  // true if messages are awaiting acknowledgement and none has been
+  // acknowledged for longer than `limit`
+  virtual bool is_stalled(ceph::coarse_mono_time now, ceph::timespan limit) {
+    return false;
+  }
 
   virtual void dump(Formatter *f) = 0;
 

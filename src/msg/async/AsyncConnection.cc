@@ -17,6 +17,7 @@
 
 #include "AsyncConnection.h"
 
+#include <atomic>
 #include <fmt/core.h>
 
 #include <unistd.h>
@@ -133,6 +134,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     last_active(ceph::coarse_mono_clock::now()),
     connect_timeout_us(cct->_conf->ms_connection_ready_timeout*1000*1000),
     inactive_timeout_us(cct->_conf->ms_connection_idle_timeout*1000*1000),
+    stall_timeout_us(cct->_conf->ms_connection_stall_timeout*1000*1000),
     msgr2(m2), state_offset(0),
     worker(w), center(&w->center),read_buffer(nullptr)
 {
@@ -293,6 +295,9 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
 ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
 {
   ssize_t nread;
+  if (unlikely(inject_blackhole())) {
+    return 0;  // as if nothing had arrived
+  }
  again:
   nread = cs.read(buf, len);
   if (nread < 0) {
@@ -343,7 +348,7 @@ ssize_t AsyncConnection::_try_send(bool more)
   // network block would make ::send return EAGAIN, that would make here looks
   // like do not call cs.send() and r = 0
   ssize_t r = 0;
-  if (likely(!inject_network_congestion())) {
+  if (likely(!inject_network_congestion() && !inject_blackhole())) {
     r = cs.send(outgoing_bl, more);
   }
   if (r < 0) {
@@ -385,6 +390,30 @@ bool AsyncConnection::inject_network_congestion() const {
 	  rand() % async_msgr->cct->_conf->ms_inject_network_congestion != 0);
 }
 
+// Freeze the next lossless OSD connection that does I/O once the option is
+// set: it stays open but reads and writes nothing, like a stalled TCP flow.
+// Only one connection per process is frozen until the option is cleared, so
+// the reconnect that follows a reset works normally.
+static std::atomic<bool> blackhole_claimed{false};
+
+bool AsyncConnection::inject_blackhole() {
+  if (blackholed) {
+    return true;
+  }
+  if (!async_msgr->cct->_conf->ms_inject_blackhole_lossless) {
+    blackhole_claimed = false;
+    return false;
+  }
+  if (policy.lossy || get_peer_type() != CEPH_ENTITY_TYPE_OSD ||
+      !is_connected() || blackhole_claimed.exchange(true)) {
+    return false;
+  }
+  ldout(async_msgr->cct, 0) << __func__ << " freezing connection to "
+                            << get_peer_addrs() << dendl;
+  blackholed = true;
+  return true;
+}
+
 void AsyncConnection::process() {
   std::lock_guard<std::mutex> l(lock);
   last_active = ceph::coarse_mono_clock::now();
@@ -416,6 +445,7 @@ void AsyncConnection::process() {
         center->delete_file_event(cs.fd(), EVENT_READABLE | EVENT_WRITABLE);
         cs.close();
       }
+      blackholed = false;
 
       SocketOptions opts;
       opts.priority = async_msgr->get_socket_priority();
@@ -539,6 +569,7 @@ void AsyncConnection::accept(ConnectedSocket socket,
 
   std::lock_guard<std::mutex> l(lock);
   cs = std::move(socket);
+  blackholed = false;
   socket_addr = listen_addr;
   target_addr = peer_addr; // until we know better
   state = STATE_ACCEPTING;
@@ -877,8 +908,17 @@ void AsyncConnection::tick(uint64_t id)
                                 << dendl;
       protocol->fault();
       labeled_logger->inc(l_msgr_connection_idle_timeouts);
+    } else if (stall_timeout_us &&
+               protocol->is_stalled(now,
+                                    std::chrono::microseconds(stall_timeout_us))) {
+      ldout(async_msgr->cct, 0) << __func__ << " no message acknowledged for "
+                                << "more than " << stall_timeout_us
+                                << " us with messages outstanding, fault"
+                                << dendl;
+      protocol->fault();
+      labeled_logger->inc(l_msgr_connection_stall_timeouts);
     } else {
-      last_tick_id = center->create_time_event(inactive_timeout_us, tick_handler);
+      last_tick_id = center->create_time_event(tick_interval_us(), tick_handler);
     }
   }
 }
