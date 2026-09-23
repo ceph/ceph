@@ -7,7 +7,7 @@ from cephadm.module import CephadmOrchestrator
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from ceph.deployment.service_spec import PlacementSpec
 
 _SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:devbuilds-centos-any'
@@ -193,11 +193,11 @@ class TestSMB:
 
             with with_service(cephadm_module, smb_spec):
                 smb_conf, _ = service_registry.get_service('smb').generate_config(
-                    CephadmDaemonDeploySpec(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
                         host='test',
                         daemon_id='foo.test.0',
                         service_name=service_name,
-                    )
+                    ))
                 )
                 files = smb_conf.get('files', {})
                 assert files.get('remote_control.ssl.crt') == ceph_generated_cert
@@ -233,9 +233,9 @@ def test_smb_get_dependencies(cephadm_module):
 
     deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
     assert deps == [
-        'smb+meta:ceph_cluster_config.exo=sha256:859b001f76df4d184b858b9c3e323ca8ff85a311414d0405f4484d17aa481ef3',
         'smb+field:features=domain',
         'smb+field:rgw_creds_uri=rados:mon-config-key:smb/config/foxtrot/config.smb.rgw',
+        'smb+meta:ceph_cluster_config.exo=sha256:859b001f76df4d184b858b9c3e323ca8ff85a311414d0405f4484d17aa481ef3',
     ]
 
 

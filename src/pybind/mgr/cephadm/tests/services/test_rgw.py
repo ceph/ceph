@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 from orchestrator import OrchestratorError
 
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import RGWSpec, CertificateSource, PlacementSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm
@@ -74,14 +74,14 @@ class TestRGWService:
             )
             with with_service(cephadm_module, s) as _:
                 daemon_spec = service_registry.get_service('rgw').prepare_create(
-                    CephadmDaemonDeploySpec(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
                         host='host1',
                         daemon_type='rgw',
                         daemon_id='foo.host1.0',
                         service_name=s.service_name(),
                         ports=[port],
                         ip=ip,
-                    ))
+                    )))
                 assert daemon_spec.port_ips == {str(port): ip}
                 _, f, _ = cephadm_module.check_mon_command({
                     'prefix': 'config get',
@@ -742,3 +742,19 @@ class TestRGWService:
                         assert kwargs == {
                             'custom_sans': ['s3.example.com', '*.s3.example.com'],
                         }
+
+
+def test_rgw_dependencies_include_legacy_frontend_certificate_hash():
+    from cephadm import utils
+    from cephadm.services.cephadmservice import RgwService
+
+    spec = RGWSpec(
+        service_id='foo',
+        rgw_frontend_ssl_certificate=['CERT', 'CHAIN'],
+    )
+
+    cert = "CERT\nCHAIN"
+
+    assert RgwService.get_dependencies(MagicMock(), spec, 'rgw') == [
+        f'ssl-cert:{utils.config_hash(cert)}'
+    ]
