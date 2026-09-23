@@ -567,6 +567,7 @@ TEST_P(KVTest, RocksDB_estimate_size) {
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout));
 
+  srand(0);
   for(int test = 0; test < 20; test++)
   {
     KeyValueDB::Transaction t = db->get_transaction();
@@ -600,6 +601,7 @@ TEST_P(KVTest, RocksDB_estimate_size_column_family) {
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
 
+  srand(0);
   for(int test = 0; test < 20; test++)
   {
     KeyValueDB::Transaction t = db->get_transaction();
