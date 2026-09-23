@@ -11,8 +11,11 @@
 #include <thread>
 
 #include "common/ceph_context.h"
+#include "common/ceph_mutex.h"
+#include "common/ceph_time.h"
 #include "common/Clock.h"
 #include "common/config.h"
+#include "common/crc64nvme.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/rdma_token.h"
@@ -27,7 +30,14 @@ thread_local bool OSDCuObj::tls_channel_valid = false;
 
 // per-call limit of the cuObj API
 static constexpr size_t MAX_RDMA_OP_SIZE = 1ULL << 30;
-
+// the library caps poll() at 16 events and documents no larger
+// per-channel bound, so never have more than that outstanding on one
+static constexpr int POLL_BATCH = 16;
+// a transfer that has not completed by then is reported failed
+static constexpr int PLAN_TIMEOUT = 60;
+// a payload in more pieces than this is copied rather than registered
+// piecemeal
+static constexpr uint64_t IN_PLACE_MAX_SEGMENTS = 64;
 OSDCuObj::OSDCuObj(CephContext *cct, const std::string& rdma_ip,
 		   uint16_t rdma_port)
   : m_cct(cct)
@@ -74,6 +84,8 @@ int OSDCuObj::do_init(const std::string& rdma_ip, uint16_t rdma_port)
     return -ECONNREFUSED;
   }
 
+  m_register_in_place =
+    m_cct->_conf.get_val<bool>("osd_cuobj_register_in_place");
   m_buf_size = buf_size;
   m_pool = std::make_unique<BufEntry[]>(buf_count);
   for (size_t i = 0; i < buf_count; i++) {
@@ -195,6 +207,96 @@ void OSDCuObj::release_buffer(BufEntry* buf, bool transient)
   }
 }
 
+bool OSDCuObj::stage_payload(const ceph::buffer::list& data,
+			     staged_payload* st)
+{
+  const uint64_t nbufs = data.get_num_buffers();
+  m_payload_segments += nbufs;
+  if (m_register_in_place && nbufs <= IN_PLACE_MAX_SEGMENTS) {
+    const auto start = ceph::mono_clock::now();
+    uint64_t ofs = 0;
+    for (const auto& b : data.buffers()) {
+      auto handle = m_server->registerBuffer(
+	const_cast<char*>(b.c_str()), b.length());
+      if (!handle) {
+	break;
+      }
+      st->segments.push_back({ofs, b.length(), handle});
+      ofs += b.length();
+    }
+    m_register_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(
+      ceph::mono_clock::now() - start).count();
+    if (st->segments.size() == nbufs) {
+      m_plans_in_place++;
+      return true;
+    }
+    dout(10) << "in-place registration failed at buffer "
+	     << st->segments.size() << " of " << nbufs
+	     << ", staging a copy" << dendl;
+    release_payload(*st);
+  }
+  st->copy = acquire_buffer(data.length(), &st->transient);
+  if (!st->copy) {
+    return false;
+  }
+  auto it = data.begin();
+  it.copy(data.length(), static_cast<char*>(st->copy->ptr));
+  st->segments.push_back({0, data.length(), st->copy->handle});
+  m_plans_copied++;
+  return true;
+}
+
+void OSDCuObj::release_payload(staged_payload& st)
+{
+  if (st.copy) {
+    release_buffer(st.copy, st.transient);
+    st.copy = nullptr;
+  } else {
+    for (auto& seg : st.segments) {
+      m_server->deRegisterBuffer(seg.handle);
+    }
+  }
+  st.segments.clear();
+}
+
+int OSDCuObj::plan_xfers(const std::string& key,
+			 const ceph::osd::oob::placement_plan& plan,
+			 uint64_t window_size, uint64_t data_len,
+			 const staged_payload& st,
+			 std::vector<xfer>* out, uint64_t* total)
+{
+  for (const auto& t : plan) {
+    if (t.len == 0) {
+      continue;
+    }
+    if (t.client_ofs > window_size || t.len > window_size - t.client_ofs ||
+	t.local_ofs > data_len || t.len > data_len - t.local_ofs) {
+      dout(5) << "placement triple " << t.local_ofs << "/" << t.client_ofs
+	      << "~" << t.len << " outside window (" << window_size
+	      << ") or data (" << data_len << ") for " << key << dendl;
+      return -EINVAL;
+    }
+    // the segments are ascending, so find the first one the triple
+    // touches and walk on from there
+    auto seg = std::upper_bound(
+      st.segments.begin(), st.segments.end(), t.local_ofs,
+      [](uint64_t ofs, const auto& s) { return ofs < s.ofs + s.len; });
+    for (uint64_t done = 0; done < t.len; ) {
+      ceph_assert(seg != st.segments.end());
+      const uint64_t at = t.local_ofs + done;
+      const uint64_t n = std::min({t.len - done, seg->ofs + seg->len - at,
+				   uint64_t(MAX_RDMA_OP_SIZE)});
+      out->push_back({seg->handle, at - seg->ofs, t.client_ofs + done, n});
+      done += n;
+      if (at + n == seg->ofs + seg->len) {
+	++seg;
+      }
+    }
+    *total += t.len;
+  }
+  return 0;
+}
+
 ssize_t OSDCuObj::rdma_write(const std::string& key,
 			     const ceph::buffer::list& bl,
 			     const std::string& token,
@@ -276,50 +378,26 @@ ssize_t OSDCuObj::execute_plan(const std::string& key,
     dout(5) << "malformed RDMA token for " << key << dendl;
     return -EINVAL;
   }
-  // expand triples into <=1 GiB work items, validating up front
-  struct work_item {
-    uint64_t local_ofs;   // offset into the staged buffer
-    uint64_t remote_ofs;  // offset into the client window
-    uint64_t len;
-  };
-  std::vector<work_item> items;
-  uint64_t total = 0;
-  for (const auto& t : plan) {
-    if (t.len == 0) {
-      continue;
-    }
-    if (t.client_ofs > window->size || t.len > window->size - t.client_ofs ||
-	t.local_ofs > data.length() ||
-	t.len > data.length() - t.local_ofs) {
-      dout(5) << "placement triple " << t.local_ofs << "/" << t.client_ofs
-	      << "~" << t.len << " outside window (" << window->size
-	      << ") or data (" << data.length() << ") for " << key << dendl;
-      return -EINVAL;
-    }
-    for (uint64_t done = 0; done < t.len; ) {
-      const uint64_t chunk = std::min(t.len - done, MAX_RDMA_OP_SIZE);
-      items.push_back({t.local_ofs + done, t.client_ofs + done, chunk});
-      done += chunk;
-    }
-    total += t.len;
-  }
-  if (items.empty()) {
+  if (std::all_of(plan.begin(), plan.end(),
+		  [](const auto& t) { return t.len == 0; })) {
     return 0;
   }
   uint16_t channel = get_channel_id();
   if (channel == invalid_channel) {
     return -EIO;
   }
-  bool transient = false;
-  BufEntry* buf = acquire_buffer(data.length(), &transient);
-  if (!buf) {
+  staged_payload staged;
+  if (!stage_payload(data, &staged)) {
     derr << "ERROR: no RDMA buffer available for " << data.length()
 	 << " bytes" << dendl;
     return -ENOMEM;
   }
-  {
-    auto it = data.begin();
-    it.copy(data.length(), static_cast<char*>(buf->ptr));
+  std::vector<xfer> items;
+  uint64_t total = 0;
+  if (int r = plan_xfers(key, plan, window->size, data.length(), staged,
+			 &items, &total); r < 0) {
+    release_payload(staged);
+    return r;
   }
 
   m_plans_started++;
@@ -327,10 +405,8 @@ ssize_t OSDCuObj::execute_plan(const std::string& key,
 	   << " writes, " << total << " bytes, channel " << channel << dendl;
 
   // batched async submission: at most POLL_BATCH outstanding, polled
-  // to completion on the same channel (the library caps poll() at 16
-  // events and documents no larger per-channel bound)
-  constexpr int POLL_BATCH = 16;
-  const utime_t deadline = ceph_clock_now() + utime_t(60, 0);
+  // to completion on the same channel
+  const utime_t deadline = ceph_clock_now() + utime_t(PLAN_TIMEOUT, 0);
   size_t next = 0;
   size_t outstanding = 0;
   size_t completed = 0;
@@ -339,7 +415,7 @@ ssize_t OSDCuObj::execute_plan(const std::string& key,
     while (err == 0 && next < items.size() && outstanding < POLL_BATCH) {
       auto& w = items[next];
       ssize_t r = m_server->handleGetObject(
-	key, buf->handle, window->addr + w.remote_ofs, w.len, token, channel,
+	key, w.handle, window->addr + w.remote_ofs, w.len, token, channel,
 	w.local_ofs, nullptr, /*async_handle=*/&items[next]);
       if (r < 0) {
 	derr << "ERROR: async handleGetObject submission failed for " << key
@@ -416,7 +492,7 @@ ssize_t OSDCuObj::execute_plan(const std::string& key,
       return -ETIMEDOUT;
     }
   }
-  release_buffer(buf, transient);
+  release_payload(staged);
   if (err < 0) {
     m_plans_failed++;
     return err == -EOPNOTSUPP ? -EIO : err;
@@ -436,4 +512,8 @@ void OSDCuObj::dump_stats(ceph::Formatter* f) const
   f->dump_unsigned("bytes_pushed", m_bytes_pushed.load());
   f->dump_unsigned("writes_inflight", m_writes_inflight.load());
   f->dump_unsigned("buffers_leaked", m_buffers_leaked.load());
+  f->dump_unsigned("payload_segments", m_payload_segments.load());
+  f->dump_unsigned("plans_in_place", m_plans_in_place.load());
+  f->dump_unsigned("plans_copied", m_plans_copied.load());
+  f->dump_unsigned("register_in_place_ns", m_register_ns.load());
 }

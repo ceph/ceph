@@ -1687,6 +1687,17 @@ options:
   - osd
   flags:
   - startup
+- name: osd_cuobj_register_in_place
+  type: bool
+  level: advanced
+  desc: Register a contiguous read payload for RDMA where it lies instead of
+    copying it into a pre-registered staging buffer; trades a per-read memory
+    registration for two passes over the memory bus
+  default: false
+  services:
+  - osd
+  flags:
+  - startup
 - name: osd_cuobj_dc_key
   type: uint
   level: advanced

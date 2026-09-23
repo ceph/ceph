@@ -7,7 +7,9 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "common/rdma_token.h"
 #include "include/buffer.h"
 #include "include/common_fwd.h"
 #include "osd/oob_placement.h"
@@ -26,10 +28,10 @@ class cuObjServer;
  * when osd_cuobj_enabled is set; PrimaryLogPG reaches it through
  * OSDService::cuobj.
  *
- * Thread safety: rdma_write() may be called concurrently from any
- * number of op worker threads. Each thread lazily allocates its own
- * cuObject channel (DCI); buffer-pool slots are claimed with atomic
- * compare-exchange.
+ * Thread safety: rdma_write() and execute_plan() may be called
+ * concurrently from any number of op worker threads. Each thread lazily
+ * allocates its own cuObject channel (DCI); buffer-pool slots are
+ * claimed with atomic compare-exchange.
  */
 class OSDCuObj {
 public:
@@ -84,6 +86,42 @@ private:
   /// transient one when the pool is exhausted or too small
   BufEntry* acquire_buffer(size_t needed, bool* transient);
   void release_buffer(BufEntry* buf, bool transient);
+  /// a read payload made addressable by the NIC
+  struct staged_payload {
+    struct segment {
+      uint64_t ofs;  ///< where it starts in the payload
+      uint64_t len;
+      struct rdma_buffer* handle;
+    };
+    /// ascending and covering the payload: the pooled copy, or each of
+    /// the payload's own buffers registered where it lies
+    std::vector<segment> segments;
+    BufEntry* copy = nullptr;
+    bool transient = false;
+  };
+  /// one RDMA write: a payload range that lies within one segment
+  struct xfer {
+    struct rdma_buffer* handle;
+    uint64_t local_ofs;   ///< offset into handle's registration
+    uint64_t remote_ofs;  ///< offset into the client window
+    uint64_t len;
+  };
+  /**
+   * Make data addressable by the NIC. With osd_cuobj_register_in_place
+   * each of the payload's buffers is registered where it lies (data
+   * must then outlive release_payload()), which keeps the payload off
+   * the memory bus; otherwise, or if that fails or the payload is too
+   * fragmented, it is copied into a pooled buffer.
+   */
+  bool stage_payload(const ceph::buffer::list& data, staged_payload* st);
+  void release_payload(staged_payload& st);
+  /// validate plan against the window and the payload and expand it
+  /// into writes of at most 1 GiB that each stay within one segment
+  int plan_xfers(const std::string& key,
+		 const ceph::osd::oob::placement_plan& plan,
+		 uint64_t window_size, uint64_t data_len,
+		 const staged_payload& st,
+		 std::vector<xfer>* out, uint64_t* total);
 
   /// lazily allocated per-thread channel (DCI); returns
   /// invalid_channel on allocation failure
@@ -102,6 +140,11 @@ private:
   std::atomic<uint64_t> m_bytes_pushed{0};
   std::atomic<uint32_t> m_writes_inflight{0};
   std::atomic<uint64_t> m_buffers_leaked{0};
+  std::atomic<uint64_t> m_plans_in_place{0};
+  std::atomic<uint64_t> m_plans_copied{0};
+  std::atomic<uint64_t> m_register_ns{0};   ///< spent registering in place
+  std::atomic<uint64_t> m_payload_segments{0};
+  bool m_register_in_place = false;
 
   static thread_local uint16_t tls_channel_id;
   static thread_local bool tls_channel_valid;
