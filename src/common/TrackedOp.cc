@@ -90,6 +90,10 @@ OpHistory::OpHistory(CephContext *c) : cct(c), opsvc(this) {
 
   b.add_u64_counter(l_trackedop_slow_op_count, "slow_ops_count",
 					       "Number of operations taking over ten seconds");
+  b.add_u64_counter(l_trackedop_slow_op_traced, "slow_op_traces",
+		    "Number of slow operations exported as traces");
+  b.add_u64_counter(l_trackedop_slow_op_trace_dropped, "slow_op_traces_dropped",
+		    "Number of slow operations not traced because of the rate limit");
 
   logger.reset(b.create_perf_counters());
   cct->get_perfcounters_collection()->add(logger.get());
@@ -122,12 +126,46 @@ void OpHistory::on_shutdown()
   slow_op.clear();
 }
 
+void OpHistory::maybe_trace(const utime_t& now, TrackedOp& op, double opduration)
+{
+  const float threshold = trace_slow_threshold.load();
+  if (threshold <= 0 || opduration < threshold) {
+    return;
+  }
+  // token bucket: refill at max_per_sec, hold at most one second's worth
+  const double rate = trace_max_per_sec.load();
+  trace_tokens = std::min(rate, trace_tokens + (now - trace_tokens_stamp) * rate);
+  trace_tokens_stamp = now;
+  if (trace_tokens < 1) {
+    logger->inc(l_trackedop_slow_op_trace_dropped);
+    return;
+  }
+  slow_op_tracer_t tracer;
+  {
+    std::lock_guard history_lock(ops_history_lock);
+    tracer = slow_op_tracer;
+  }
+  if (!tracer) {
+    return;
+  }
+  trace_tokens -= 1;
+  op.trace_id = tracer(op);
+  if (!op.trace_id.empty()) {
+    logger->inc(l_trackedop_slow_op_traced);
+  }
+}
+
 void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
 {
+  double opduration = op->get_duration();
+  // trace before the op is visible in the history, so dumps see its trace id
+  // and the export does not hold ops_history_lock
+  if (!shutdown) {
+    maybe_trace(now, *op, opduration);
+  }
   std::lock_guard history_lock(ops_history_lock);
   if (shutdown)
     return;
-  double opduration = op->get_duration();
   duration.insert(make_pair(opduration, op));
   arrived.insert(make_pair(op->get_initiated(), op));
   if (opduration >= history_slow_op_threshold.load()) {
@@ -637,6 +675,9 @@ void TrackedOp::dump(utime_t now, Formatter *f, OpTracker::dumper lambda) const
   f->dump_float("age", now - get_initiated());
   f->dump_float("duration", get_duration());
   f->dump_bool("continuous", is_continuous());
+  if (!trace_id.empty()) {
+    f->dump_string("trace_id", trace_id);
+  }
   {
     f->open_object_section("type_data");
     lambda(*this, f);

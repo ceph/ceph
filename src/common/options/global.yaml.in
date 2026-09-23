@@ -3455,6 +3455,32 @@ options:
   level: advanced
   default: 10
   with_legacy: true
+- name: osd_op_trace_slow_threshold
+  type: float
+  level: advanced
+  desc: Export a trace for every op that takes at least this many seconds (0 disables)
+  long_desc: The trace is built after the op completes, from the events the op
+    tracker already recorded, so ops faster than the threshold cost nothing extra.
+    Traces go to the configured Jaeger agent, independently of jaeger_tracing_enable.
+  default: 0
+  services:
+  - osd
+  see_also:
+  - osd_op_trace_max_per_sec
+  - osd_enable_op_tracker
+  with_legacy: true
+- name: osd_op_trace_max_per_sec
+  type: uint
+  level: advanced
+  desc: Maximum number of slow-op traces exported per second
+  long_desc: Slow ops beyond this rate are not traced, and are counted in the
+    trackedop slow_op_traces_dropped perf counter.
+  default: 10
+  services:
+  - osd
+  see_also:
+  - osd_op_trace_slow_threshold
+  with_legacy: true
 # to adjust various transactions that batch smaller items
 - name: osd_target_transaction_size
   type: uint

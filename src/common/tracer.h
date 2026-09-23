@@ -5,6 +5,27 @@
 
 #include "acconfig.h"
 #include "include/encoding.h"
+#include "include/utime.h"
+
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace tracing {
+
+// The timeline of an operation that has already happened, as recorded by the
+// op tracker. Tracer::record_op() turns it into a trace after the fact, so
+// building it costs nothing on the I/O path.
+struct OpTimeline {
+  std::string name;
+  utime_t start;
+  utime_t end;
+  bool complete = true;  // false: the op is still in flight at `end`
+  std::vector<std::pair<utime_t, std::string>> events;
+  std::vector<std::pair<std::string, std::string>> attributes;
+};
+
+} // namespace tracing
 
 #ifdef HAVE_JAEGER
 #include "opentelemetry/trace/provider.h"
@@ -50,6 +71,11 @@ class Tracer {
   // parent_ctx contains the required information of the trace.
   jspan_ptr add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx);
 
+  // exports `timeline` as a trace with its recorded timestamps: one span for
+  // the op, a child span for each phase that took a noticeable share of it.
+  // `parent` may be invalid. Works whether or not jaeger_tracing_enable is set.
+  // returns the trace id as hex, or an empty string if nothing was exported.
+  std::string record_op(const OpTimeline& timeline, const jspan_context& parent);
 };
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
@@ -150,6 +176,7 @@ struct Tracer {
   jspan_ptr start_trace(std::string_view, bool enabled = true) { return {}; }
   jspan_ptr add_span(std::string_view, const jspan_ptr&) { return {}; }
   jspan_ptr add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
+  std::string record_op(const OpTimeline&, const jspan_context&) { return {}; }
 };
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {

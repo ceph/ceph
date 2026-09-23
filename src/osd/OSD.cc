@@ -2478,6 +2478,8 @@ OSD::OSD(CephContext *cct_,
                                            cct->_conf->osd_op_history_duration);
   op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
                                                     cct->_conf->osd_op_history_slow_op_threshold);
+  op_tracker.set_trace_threshold_and_rate(cct->_conf->osd_op_trace_slow_threshold,
+                                          cct->_conf->osd_op_trace_max_per_sec);
   ObjectCleanRegions::set_max_num_intervals(cct->_conf->osd_object_clean_region_max_num_intervals);
 #ifdef WITH_BLKIN
   std::stringstream ss;
@@ -3676,6 +3678,9 @@ int OSD::init()
   if (is_stopping())
     return 0;
   tracing::osd::tracer.init(cct, "osd");
+  op_tracker.set_slow_op_tracer([whoami = whoami](TrackedOp& op) {
+    return tracing::osd::trace_slow_op(op, whoami);
+  });
   tick_timer.init();
   tick_timer_without_osd_lock.init();
   service.recovery_request_timer.init();
@@ -10093,6 +10098,8 @@ std::vector<std::string> OSD::get_tracked_keys() const noexcept
     "osd_op_history_duration"s,
     "osd_op_history_slow_op_size"s,
     "osd_op_history_slow_op_threshold"s,
+    "osd_op_trace_slow_threshold"s,
+    "osd_op_trace_max_per_sec"s,
     "osd_enable_op_tracker"s,
     "osd_map_cache_size"s,
     "osd_pg_epoch_max_lag_factor"s,
@@ -10208,6 +10215,11 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_op_history_slow_op_threshold")) {
     op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
                                                       cct->_conf->osd_op_history_slow_op_threshold);
+  }
+  if (changed.count("osd_op_trace_slow_threshold") ||
+      changed.count("osd_op_trace_max_per_sec")) {
+    op_tracker.set_trace_threshold_and_rate(cct->_conf->osd_op_trace_slow_threshold,
+                                            cct->_conf->osd_op_trace_max_per_sec);
   }
   if (changed.count("osd_enable_op_tracker")) {
       op_tracker.set_tracking(cct->_conf->osd_enable_op_tracker);

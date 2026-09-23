@@ -65,8 +65,13 @@ public:
 enum {
   l_trackedop_slow_op_first = 1000,
   l_trackedop_slow_op_count,
+  l_trackedop_slow_op_traced,
+  l_trackedop_slow_op_trace_dropped,
   l_trackedop_slow_op_last,
 };
+
+/// exports a trace for a completed op; returns its trace id, or "" if none
+using slow_op_tracer_t = std::function<std::string(TrackedOp&)>;
 
 class OpHistory {
   CephContext* cct = nullptr;
@@ -83,6 +88,14 @@ class OpHistory {
   OpHistoryServiceThread opsvc;
   friend class OpHistoryServiceThread;
   std::unique_ptr<PerfCounters> logger;
+
+  // slow-op tracing; the token bucket is only touched by the service thread
+  std::atomic<float> trace_slow_threshold{0};
+  std::atomic_uint32_t trace_max_per_sec{0};
+  slow_op_tracer_t slow_op_tracer;  ///< protected by ops_history_lock
+  double trace_tokens = 0;
+  utime_t trace_tokens_stamp;
+  void maybe_trace(const utime_t& now, TrackedOp& op, double opduration);
 
 public:
   OpHistory(CephContext *c);
@@ -106,6 +119,14 @@ public:
   void set_slow_op_size_and_threshold(size_t new_size, float new_threshold) {
     history_slow_op_size = new_size;
     history_slow_op_threshold = new_threshold;
+  }
+  void set_slow_op_tracer(slow_op_tracer_t tracer) {
+    std::lock_guard history_lock(ops_history_lock);
+    slow_op_tracer = std::move(tracer);
+  }
+  void set_trace_threshold_and_rate(float threshold, uint32_t max_per_sec) {
+    trace_slow_threshold = threshold;
+    trace_max_per_sec = max_per_sec;
   }
 };
 
@@ -136,6 +157,14 @@ public:
   }
   void set_history_slow_op_size_and_threshold(uint32_t new_size, float new_threshold) {
     history.set_slow_op_size_and_threshold(new_size, new_threshold);
+  }
+  void set_slow_op_tracer(slow_op_tracer_t tracer) {
+    history.set_slow_op_tracer(std::move(tracer));
+  }
+  /// export a trace for each op slower than `threshold` seconds (0: never),
+  /// at most `max_per_sec` a second
+  void set_trace_threshold_and_rate(float threshold, uint32_t max_per_sec) {
+    history.set_trace_threshold_and_rate(threshold, max_per_sec);
   }
   bool is_tracking() const {
     return tracking_enabled;
@@ -285,6 +314,8 @@ protected:
   };
   std::atomic<int> state = {STATE_UNTRACKED};
   uint64_t flags = 0;
+  /// set once by OpHistory before the op enters the history, if it was traced
+  std::string trace_id;
 
   void mark_continuous() {
     flags |= FLAG_CONTINUOUS;
@@ -353,6 +384,17 @@ public:
   }
 
   void mark_event(std::string_view event, utime_t stamp=ceph_clock_now());
+
+  /// a copy of the recorded events, in order
+  std::vector<std::pair<utime_t, std::string>> get_events() const {
+    std::lock_guard l(lock);
+    std::vector<std::pair<utime_t, std::string>> ret;
+    ret.reserve(events.size());
+    for (const auto& e : events) {
+      ret.emplace_back(e.stamp, e.str);
+    }
+    return ret;
+  }
 
   void mark_nowarn() {
     warn_interval_multiplier = 0;

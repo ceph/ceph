@@ -84,6 +84,87 @@ bool Tracer::is_enabled() const {
   return cct->_conf->jaeger_tracing_enable;
 }
 
+// phases shorter than this share of the op are kept as span events only
+static constexpr double min_phase_share = 0.01;
+
+std::string Tracer::record_op(const OpTimeline& t, const jspan_context& parent) {
+  if (!tracer) {
+    return {};
+  }
+  namespace otel_common = opentelemetry::common;
+  namespace otel_trace = opentelemetry::trace;
+  // the timeline is in wall-clock time; the SDK measures durations with the
+  // steady clock, so map each stamp onto it relative to now
+  const auto sys_now = std::chrono::system_clock::now();
+  const auto steady_now = std::chrono::steady_clock::now();
+  auto sys_time = [](utime_t u) {
+    return std::chrono::system_clock::time_point(
+      std::chrono::duration_cast<std::chrono::system_clock::duration>(
+        std::chrono::nanoseconds(u.to_nsec())));
+  };
+  auto steady_time = [&](utime_t u) {
+    return otel_common::SteadyTimestamp(steady_now - (sys_now - sys_time(u)));
+  };
+  auto start_opts = [&](utime_t u) {
+    otel_trace::StartSpanOptions opts;
+    opts.start_system_time = otel_common::SystemTimestamp(sys_time(u));
+    opts.start_steady_time = steady_time(u);
+    return opts;
+  };
+  auto end_opts = [&](utime_t u) {
+    otel_trace::EndSpanOptions opts;
+    opts.end_steady_time = steady_time(u);
+    return opts;
+  };
+
+  auto opts = start_opts(t.start);
+  if (parent.IsValid()) {
+    opts.parent = parent;
+  }
+  auto span = tracer->StartSpan(t.name, opts);
+  for (const auto& [key, value] : t.attributes) {
+    span->SetAttribute(key, opentelemetry::nostd::string_view(value));
+  }
+  const double total = t.end - t.start;
+  span->SetAttribute("duration_s", total);
+  if (!t.complete) {
+    span->SetAttribute("in_flight", true);
+  }
+  // the time between two consecutive events is a phase, named after both, as
+  // "waiting for subops from 1,2 -> sub_op_commit_rec from osd.1". Events
+  // stamped outside the op's lifetime are skipped: some stamps can be unset.
+  const std::pair<utime_t, std::string>* prev = nullptr;
+  for (const auto& event : t.events) {
+    const auto& [stamp, name] = event;
+    if (stamp < t.start || stamp > t.end) {
+      continue;
+    }
+    span->AddEvent(name, otel_common::SystemTimestamp(sys_time(stamp)));
+    if (prev) {
+      const double length = stamp - prev->first;
+      if (length > 0 && length >= total * min_phase_share) {
+        auto phase_opts = start_opts(prev->first);
+        phase_opts.parent = span->GetContext();
+        tracer->StartSpan(prev->second + " -> " + name, phase_opts)->End(end_opts(stamp));
+      }
+    }
+    prev = &event;
+  }
+  if (prev && !t.complete && t.end - prev->first >= total * min_phase_share) {
+    // an op still in flight is stuck in the phase after its last event
+    auto phase_opts = start_opts(prev->first);
+    phase_opts.parent = span->GetContext();
+    tracer->StartSpan(prev->second + " -> (in flight)", phase_opts)->End(end_opts(t.end));
+  }
+  span->End(end_opts(t.end));
+
+  char trace_id[2 * TraceIdkSize];
+  span->GetContext().trace_id().ToLowerBase16(trace_id);
+  ldout(cct, 10) << "recorded op trace " << std::string_view(trace_id, sizeof(trace_id))
+                 << " for " << t.name << " lasting " << total << "s" << dendl;
+  return std::string(trace_id, sizeof(trace_id));
+}
+
 } // namespace tracing
 
 #endif // HAVE_JAEGER
