@@ -36,20 +36,25 @@ export interface FilterRules {
 }
 
 export const events: ComboBoxItem[] = [
-  { content: 's3:ObjectCreated:*', name: 's3:ObjectCreated:*' },
-  { content: 's3:ObjectCreated:Put', name: 's3:ObjectCreated:Put' },
-  { content: 's3:ObjectCreated:Copy', name: 's3:ObjectCreated:Copy' },
+  { content: 's3:ObjectCreated:*', name: 's3:ObjectCreated:*', selected: false },
+  { content: 's3:ObjectCreated:Put', name: 's3:ObjectCreated:Put', selected: false },
+  { content: 's3:ObjectCreated:Copy', name: 's3:ObjectCreated:Copy', selected: false },
   {
     content: 's3:ObjectCreated:CompleteMultipartUpload',
-    name: 's3:ObjectCreated:CompleteMultipartUpload'
+    name: 's3:ObjectCreated:CompleteMultipartUpload',
+    selected: false
   },
-  { content: 's3:ObjectRemoved:*', name: 's3:ObjectRemoved:*' },
-  { content: 's3:ObjectRestore:*', name: 's3:ObjectRestore:*' },
-  { content: 's3:ObjectRestore:Post', name: 's3:ObjectRestore:Post' },
-  { content: 's3:ObjectRestore:Completed', name: 's3:ObjectRestore:Completed' },
-  { content: 's3:ObjectRestore:Delete', name: 's3:ObjectRestore:Delete' },
-  { content: 's3:ObjectRemoved:Delete', name: 's3:ObjectRemoved:Delete' },
-  { content: 's3:ObjectRemoved:DeleteMarkerCreated', name: 's3:ObjectRemoved:DeleteMarkerCreated' }
+  { content: 's3:ObjectRemoved:*', name: 's3:ObjectRemoved:*', selected: false },
+  { content: 's3:ObjectRestore:*', name: 's3:ObjectRestore:*', selected: false },
+  { content: 's3:ObjectRestore:Post', name: 's3:ObjectRestore:Post', selected: false },
+  { content: 's3:ObjectRestore:Completed', name: 's3:ObjectRestore:Completed', selected: false },
+  { content: 's3:ObjectRestore:Delete', name: 's3:ObjectRestore:Delete', selected: false },
+  { content: 's3:ObjectRemoved:Delete', name: 's3:ObjectRemoved:Delete', selected: false },
+  {
+    content: 's3:ObjectRemoved:DeleteMarkerCreated',
+    name: 's3:ObjectRemoved:DeleteMarkerCreated',
+    selected: false
+  }
 ];
 
 export enum s3KeyFilter {

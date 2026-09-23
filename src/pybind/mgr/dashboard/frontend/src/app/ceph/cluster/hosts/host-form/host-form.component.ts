@@ -72,7 +72,7 @@ export class HostFormComponent extends CdForm implements OnInit {
     this.hostService.getLabels().subscribe((resp: string[]) => {
       const uniqueLabels = new Set(resp.concat(this.hostService.predefinedLabels));
       this.labelsOption = Array.from(uniqueLabels).map((label) => {
-        return { name: label, content: label };
+        return { name: label, content: label, selected: false };
       });
     });
   }
