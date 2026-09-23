@@ -628,6 +628,18 @@ def test_vector_bucket_session_cache_stats():
                         f'{cache_name}: {before[cache_name]} -> {after[cache_name]}'
             before = after
 
+        # the other vector operations are served from the caches as well
+        result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=10)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['vec-1'])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        after = _session_cache_stats(bucket_name)
+        assert after['metadata_cache']['hits'] > before['metadata_cache']['hits'], \
+            f"metadata_cache: {before['metadata_cache']} -> {after['metadata_cache']}"
+        assert after['metadata_cache']['misses'] == before['metadata_cache']['misses'], \
+            f"metadata_cache: {before['metadata_cache']} -> {after['metadata_cache']}"
+        before = after
+
         # the session created for the next operation after a deletion starts
         # with empty caches
         delete_vector_bucket_session(bucket_name)
