@@ -251,6 +251,17 @@ options:
   level: advanced
   desc: Asserts that no clone-objects were added to a snap after we start trimming it
   default: false
+- name: osd_debug_drop_pg_lease_acks_pool
+  type: int
+  level: dev
+  desc: Drop PG lease acks for PGs in this pool, -1 to disable (testing only)
+  long_desc: Replicas do not answer MOSDPGLease for PGs in this pool, so they
+    stay laggy, as when a cluster network connection hangs
+    (https://tracker.ceph.com/issues/79893).
+  default: -1
+  flags:
+  - runtime
+  with_legacy: true
 - name: osd_scrub_begin_hour
   type: int
   level: advanced
