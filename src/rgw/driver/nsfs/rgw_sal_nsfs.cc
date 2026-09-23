@@ -5354,7 +5354,6 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 {
   int64_t left;
   int64_t cur_ofs = ofs + part_ofs;
-  end += part_ofs;
 
   if (end < 0)
     left = 0;
