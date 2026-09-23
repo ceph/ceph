@@ -25,6 +25,14 @@ this stuff will probably require us to store some server state in the account, b
 
 a config option like rgw_dns_recovery_name could resolve 3 and 4
 
+## reify account root user
+
+rgw differs from aws in that each account may have multiple account root users. `radosgw-admin user modify --account-root` just sets `RGWUserInfo::type` to `TYPE_ROOT`, and nothing prevents this from applying to several users in the account
+
+even if the account has several root users, this recovery logic would rely on the account having one designated root user for recovery purposes. that root user's id could be stored in `RGWAccountInfo::root_uid` and set by the admin with `radosgw-admin account modify --root-user=<uid>` to opt into the recovery feature
+
+we might also want an option like `radosgw-admin account create --root-user` that would automatically create and attach this root user during account creation
+
 ## rest apis
 
 ### /account/welcome
