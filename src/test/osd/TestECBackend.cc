@@ -1907,3 +1907,68 @@ TEST(ECCommon, ensure_primary_shard_for_omap_zone1_primary_zone0_down) {
   EXPECT_EQ(read_request.shard_reads[shard_id_t(0)].pg_shard,
             pg_shard_t(6, shard_id_t(6)));
 }
+// get_all_avail_shards()'s acting/backfill passes guard have.insert(rel_shard)
+// with "if (have.contains(rel_shard)) { ceph_assert(allow_remote_zone); ... }"
+// because, for THOSE two containers, a collision on the same relative shard
+// can only legitimately happen by crossing zones (within one zone,
+// get_rel_shard_and_zone() is a bijection over the container's distinct
+// shard ids). The missing_loc pass looks almost identical and also guards
+// have.insert() with an "already have this shard" skip - but it must NOT
+// carry that same ceph_assert(allow_remote_zone), because
+// get_missing_loc_shards() has a different invariant: PG peering/recovery
+// routinely lists more than one historical candidate OSD for the very same
+// EC shard slot (e.g. an old and a new owner of the same shard id) for a
+// single hoid, entirely within one zone. This is normal, single-zone,
+// zone-unaware behaviour that predates zones altogether.
+//
+// This regression test locks in that the current code tolerates such a
+// same-zone, same-relative-shard collision in missing_loc without
+// asserting. It exists because the "obvious" consistency fix - making the
+// missing_loc pass assert allow_remote_zone just like the acting/backfill
+// passes above it - is actually wrong and crashes on exactly this scenario;
+// see this commit's message for how that was demonstrated (ceph_assert
+// added, test run, seen to abort, then reverted) before writing this test
+// against the unmodified code.
+TEST(ECCommon, get_all_avail_shards_missing_loc_same_zone_duplicate_shard) {
+  const unsigned int k = 2;
+  const unsigned int m = 1;
+  const uint64_t swidth = 4096 * k;
+
+  pg_pool_t pool;
+  pool.size = k + m; // single zone (NUM_ZONES defaults to 1)
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Shards 0 and 2 are acting and available; shard 1 is deliberately left
+  // out of acting_shards, as if it were currently missing/down.
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(2)));
+
+  hobject_t hoid;
+  // Two different, still-in-zone-0 OSDs (5 and 9) are both listed as
+  // candidate locations for shard 1 of this object - a routine situation
+  // when an EC shard slot has changed owning OSD across intervals and the
+  // old owner has not yet been ruled out.
+  listenerStub.missing_loc_shards[hoid].insert(pg_shard_t(5, shard_id_t(1)));
+  listenerStub.missing_loc_shards[hoid].insert(pg_shard_t(9, shard_id_t(1)));
+
+  shard_id_set have;
+  shard_id_map<pg_shard_t> shards(s.get_k_plus_m());
+
+  // for_recovery=true is required to reach the missing_loc pass;
+  // local_zone=0, allow_remote_zone=false: a single-zone pool has no
+  // remote zone to fall back to, so this must not depend on it.
+  pipeline.get_all_avail_shards(hoid, have, shards, /*for_recovery=*/true,
+                                 /*local_zone=*/0, /*allow_remote_zone=*/false);
+
+  ASSERT_TRUE(have.contains(shard_id_t(1)))
+      << "shard 1 has two candidate locations in missing_loc; one of them "
+         "should have been picked up";
+  // Whichever candidate is picked, exactly one must win - the duplicate
+  // must be silently skipped rather than overwriting or asserting.
+  EXPECT_TRUE(shards[shard_id_t(1)] == pg_shard_t(5, shard_id_t(1)) ||
+              shards[shard_id_t(1)] == pg_shard_t(9, shard_id_t(1)));
+}
