@@ -37,7 +37,6 @@ private:
   shard_id_set backfill_shard_id_set;
   map<pg_shard_t, pg_missing_t> shard_missing;
   pg_missing_set<false> shard_not_missing_const;
-  set<pg_shard_t> acting_recovery_backfill_shards;
   map<pg_shard_t, pg_info_t> shard_info;
   PGLog pg_log;
   pg_info_t shard_pg_info;
@@ -51,6 +50,10 @@ public:
   // pg_missing_loc lists more than one candidate pg_shard for the same
   // hoid (e.g. several historical owners of the same EC shard slot).
   map<hobject_t, set<pg_shard_t>> missing_loc_shards;
+  // Settable pg_shard_t set backing get_acting_recovery_backfill_shards();
+  // tests that drive RMWPipeline::cache_ready() directly need this (the
+  // full pg_shard_t set), not just the shard_id_set below.
+  set<pg_shard_t> acting_recovery_backfill_shards;
   // Settable pool used by get_pool(); tests can set flags (e.g. FLAG_OMAP)
   // and nonprimary_shards on it directly.
   pg_pool_t pg_pool;
@@ -227,8 +230,12 @@ public:
     return acting_recovery_backfill_shard_id_set;
   }
 
+  // Settable result for should_send_op(); defaults to false to preserve
+  // the stub's original hard-coded behaviour for existing tests.
+  bool should_send_op_result = false;
+
   bool should_send_op(pg_shard_t peer, const hobject_t &hoid) override {
-    return false;
+    return should_send_op_result;
   }
 
   const map<pg_shard_t, pg_info_t> &get_shard_info() const override {
