@@ -455,7 +455,7 @@ class ECSplitOp : public SplitOp{
  public:
   ECSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count,
             bool localize)
-    : SplitOp(op, objecter, cct, count), localize(localize) {}
+    : SplitOp(op, objecter, cct, count), localize(localize), data_shards(count) {}
 
   /**
    * @brief Initialize reference_sub_read to primary shard.
@@ -501,6 +501,46 @@ class ECSplitOp : public SplitOp{
   void init_read(OSDOp &op, bool sparse, int ops_index) override;
 
   /**
+   * @brief Decide which zone init_read() should target.
+   *
+   * Pure, side-effect-free extraction of the zone-selection logic used by
+   * init_read(): when @p localize is set, delegate to
+   * local_zone_for_acting_set() to pick the CRUSH-nearest zone; otherwise
+   * pick a zone at random (BALANCE_READS semantics) when there is more than
+   * one zone, or zone 0 by default.
+   *
+   * Exposed as a static helper - like local_zone_for_acting_set() - purely
+   * so tests can exercise the localize/non-localize branching directly,
+   * without needing a live Objecter/Messenger/MonClient to construct a real
+   * ECSplitOp and call init_read().
+   */
+  static int choose_local_zone_index(
+      bool localize,
+      const std::vector<int>& acting,
+      int num_zone,
+      int zone_size,
+      CrushWrapper* crush,
+      CephContext* cct,
+      const std::multimap<std::string, std::string>& crush_location);
+
+  /**
+   * @brief Choose the absolute shard to read data shard @p shard from.
+   *
+   * LOCALIZE_READS reads from the nearest zone, which is looked up on first
+   * use and kept in @p local_zone. BALANCE_READS picks a zone at random from
+   * those with an OSD for the shard.
+   *
+   * @return the absolute shard, or NO_SHARD if there is no OSD to read from
+   */
+  static shard_id_t choose_read_shard(
+      Objecter &objecter,
+      CephContext *cct,
+      const Objecter::op_target_t &target,
+      bool localize,
+      shard_id_t shard,
+      std::optional<int> &local_zone);
+
+  /**
    * @brief Check for version mismatches across EC shards.
    *
    * Compares the internal versions returned by each shard to ensure all
@@ -525,10 +565,9 @@ class ECSplitOp : public SplitOp{
   /// mark sub-reads that are dispatched to non-local zones.
   const bool localize;
 
-  /// The zone index selected by init_read() for this operation.
-  /// Set once on the first init_read() call and reused by init() for
-  /// non-read ops (stat, getxattr, etc.) that also target reference_sub_read.
-  int local_zone_index = 0;
+  /// Absolute shard that each relative data shard is read from; sub_reads
+  /// is keyed by absolute shard.
+  shard_id_map<shard_id_t> data_shards;
 };
 
 /**
