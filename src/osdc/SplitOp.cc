@@ -181,13 +181,9 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 
   int zone_size = pi->get_zone_size();
   int num_zone = pi->get_num_zone();
-  if (localize) {
-    local_zone_index = local_zone_for_acting_set(
-        target.acting, num_zone, zone_size,
-        objecter.osdmap->crush.get(), cct, objecter.crush_location);
-  } else if (num_zone > 1) {
-    local_zone_index = rand() % num_zone;
-  }
+  local_zone_index = choose_local_zone_index(
+      localize, target.acting, num_zone, zone_size,
+      objecter.osdmap->crush.get(), cct, objecter.crush_location);
 
   uint64_t offset = op.op.extent.offset;
   uint64_t length = op.op.extent.length;
@@ -300,6 +296,24 @@ int SplitOp::local_zone_for_acting_set(
     }
   }
   return best_zone;
+}
+
+int ECSplitOp::choose_local_zone_index(
+    bool localize,
+    const std::vector<int>& acting,
+    int num_zone,
+    int zone_size,
+    CrushWrapper* crush,
+    CephContext* cct,
+    const std::multimap<std::string, std::string>& crush_location)
+{
+  if (localize) {
+    return local_zone_for_acting_set(
+        acting, num_zone, zone_size, crush, cct, crush_location);
+  } else if (num_zone > 1) {
+    return rand() % num_zone;
+  }
+  return 0;
 }
 
 #undef dout_prefix
