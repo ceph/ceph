@@ -53,15 +53,19 @@ const jspan_ptr Tracer::noop_span = noop_tracer->StartSpan("noop");
 
 using bufferlist = ceph::buffer::list;
 
-// the exporter selected by trace_exporter
+// the exporter selected by trace_exporter. The exporters are created with new
+// and owned through SpanExporter: make_unique<JaegerExporter> would instantiate
+// JaegerExporter's implicit destructor here, where the ThriftSender it owns is
+// an incomplete type
 static std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> make_exporter(CephContext* cct) {
+  using exporter_ptr = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>;
   if (cct->_conf.get_val<std::string>("trace_exporter") == "otlp") {
 #ifdef HAVE_OTLP
     opentelemetry::exporter::otlp::OtlpHttpExporterOptions options;
     options.url = cct->_conf.get_val<std::string>("trace_otlp_endpoint");
     options.content_type = opentelemetry::exporter::otlp::HttpRequestContentType::kBinary;
     ldout(cct, 1) << "exporting spans over OTLP/HTTP to " << options.url << dendl;
-    return std::make_unique<opentelemetry::exporter::otlp::OtlpHttpExporter>(options);
+    return exporter_ptr(new opentelemetry::exporter::otlp::OtlpHttpExporter(options));
 #else
     lderr(cct) << "trace_exporter is otlp, but this build has no OTLP support;"
                << " exporting over Jaeger UDP instead" << dendl;
@@ -72,7 +76,7 @@ static std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> make_exporter(Ce
   options.server_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
   ldout(cct, 1) << "exporting spans to " << options.endpoint << ":"
                 << options.server_port << dendl;
-  return std::make_unique<opentelemetry::exporter::jaeger::JaegerExporter>(options);
+  return exporter_ptr(new opentelemetry::exporter::jaeger::JaegerExporter(options));
 }
 
 Tracer::tracer_ptr Tracer::make_tracer() {
