@@ -147,7 +147,7 @@
           @if (accountusers !== null) {
             <option value="">-- Select a user --</option>
           }
-          @for (user of accountUsers; track user) {
+          @for (user of accountUsers; track user.uid) {
             <option [value]="user.uid">
               {{ user.uid }}
             </option>
@@ -190,7 +190,7 @@
           @if (owners !== null) {
             <option value="">-- Select a user --</option>
           }
-          @for (owner of owners; track owner) {
+          @for (owner of owners; track owner.uid) {
             <option [value]="owner.uid">
               {{ owner.uid }}
             </option>
@@ -218,6 +218,7 @@
           >
             Versioning
           </legend>
+
           <cds-checkbox
             name="versioning"
             formControlName="versioning"
@@ -244,6 +245,7 @@
           >
             Multi-Factor Authentication
           </legend>
+
           <cds-checkbox
             name="mfa-delete"
             formControlName="mfa-delete"
@@ -358,6 +360,7 @@
             </cd-help-text>
           </cds-checkbox>
         </div>
+
         <!-- Object Locking mode -->
         @if (bucketForm.getValue('lock_enabled')) {
           <div class="form-item">
@@ -396,9 +399,9 @@
               name="lock_retention_period_days"
               formControlName="lock_retention_period_days"
               id="lock_retention_period_days"
-              min="1"
+              min="0"
               label="Retention period (days)"
-              helperText="The number of days that you want to specify for the default retention period that will be applied to new objects placed in this bucket."
+              helperText="The number of days for the default retention period applied to new objects."
               [invalid]="
                 bucketForm.controls.lock_retention_period_days.invalid &&
                 bucketForm.controls.lock_retention_period_days.dirty
@@ -413,14 +416,14 @@
                 <span
                   class="invalid-feedback"
                   i18n
-                  >The entered value must be a positive integer.</span
+                  >The entered value must be a non-negative integer.</span
                 >
               }
               @if (bucketForm.showError('lock_retention_period_days', frm, 'lockDays')) {
                 <span
                   class="invalid-feedback"
                   i18n
-                  >Retention Days must be a positive integer.</span
+                  >Retention Days must be a non-negative integer.</span
                 >
               }
             </ng-template>
@@ -431,7 +434,7 @@
           <cd-alert-panel
             type="info"
             class="me-1"
-            i18n-alertTitle
+            i18n
           >
             Bucket Versioning can't be disabled when Object Locking is enabled.
           </cd-alert-panel>
@@ -493,6 +496,7 @@
               >
             </cds-radio-group>
           </div>
+
           @if (bucketForm.getValue('encryption_type') === 'aws:kms') {
             <div>
               <div class="form-item">
@@ -532,6 +536,7 @@
                   }
                 </ng-template>
               </div>
+
               <div class="form-item">
                 <cds-text-label
                   for="keyId"
@@ -573,13 +578,9 @@
         >
           Replication
         </legend>
-        @if (
-          {
-            status: multisiteStatus$ | async,
-            isDefaultZg: isDefaultZoneGroup$ | async
-          };
-          as multisiteStatus
-        ) {
+        @let multisiteStatus =
+          { status: multisiteStatus$ | async, isDefaultZg: isDefaultZoneGroup$ | async };
+        @if (multisiteStatus) {
           <cds-checkbox
             name="replication"
             formControlName="replication"
@@ -596,6 +597,7 @@
             >Enable
             <cd-help-text>Enables replication for the objects in the bucket.</cd-help-text>
           </cds-checkbox>
+
           @if (!editing) {
             <cd-alert-panel
               type="info"
@@ -932,7 +934,7 @@
             @if (placementTargets !== null) {
               <option [ngValue]="null">-- Select a placement target --</option>
             }
-            @for (placementTarget of placementTargets; track placementTarget) {
+            @for (placementTarget of placementTargets; track placementTarget.name) {
               <option [value]="placementTarget.name">
                 {{ placementTarget.description }}
               </option>
@@ -966,7 +968,7 @@
   let-index="index"
 >
   <div class="form-item form-item-append">
-    @for (config of tagConfig; track config) {
+    @for (config of tagConfig; track config.attribute) {
       <input
         type="text"
         id="tag-{{ config.attribute }}-{{ index }}"
