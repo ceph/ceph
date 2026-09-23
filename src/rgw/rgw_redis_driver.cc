@@ -456,9 +456,9 @@ int RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key,
       return -ec.value();
     }
 
-    if (std::get<0>(resp).value().value().empty()) {
+    if (!std::get<0>(resp).value().has_value()) {
       ldpp_dout(dpp, 0) << "RedisDriver::" << __func__ << "(): No value returned." << dendl;
-      return -ENOENT;
+      return 0;
     }
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "RedisDriver::" << __func__ << "(): ERROR: " << e.what() << dendl;
