@@ -1871,11 +1871,17 @@ TEST(ECUtil, subtask4_absent_shard_no_fae)
   ASSERT_EQ(0u, data.length());
 }
 
-TEST(ECUtil, subtask4_absent_shard_full_fae)
+TEST(ECUtil, subtask4_decoded_zero_shard_full_fae)
 {
   int k = 2, m = 1, chunk_size = 4096;
   stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
   shard_extent_map_t sem(&sinfo);
+
+  // Decoded extent for shard 0: all zeros (what decode() produces for a
+  // sparse-hole shard).
+  bufferlist decoded_zeros;
+  decoded_zeros.append_zero(chunk_size);
+  sem.insert_in_shard(shard_id_t(0), 0, decoded_zeros);
 
   interval_set<uint64_t> force_alloc;
   force_alloc.insert(0, (uint64_t)chunk_size);
@@ -1894,11 +1900,16 @@ TEST(ECUtil, subtask4_absent_shard_full_fae)
   ASSERT_TRUE(data.contents_equal(expected));
 }
 
-TEST(ECUtil, subtask4_absent_shard_sparse_fae)
+TEST(ECUtil, subtask4_decoded_zero_shard_sparse_fae)
 {
   int k = 2, m = 1, chunk_size = 4096;
   stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
   shard_extent_map_t sem(&sinfo);
+
+  // Decoded extent covers the full three-chunk window, all zeros.
+  bufferlist decoded_zeros;
+  decoded_zeros.append_zero(3 * chunk_size);
+  sem.insert_in_shard(shard_id_t(0), 0, decoded_zeros);
 
   interval_set<uint64_t> force_alloc;
   force_alloc.insert(0, (uint64_t)chunk_size);
@@ -1909,27 +1920,41 @@ TEST(ECUtil, subtask4_absent_shard_sparse_fae)
   ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &force_alloc, data, iset);
 
   ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  ASSERT_FALSE(iset.intersects((uint64_t)chunk_size, (uint64_t)chunk_size));
   ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
   ASSERT_EQ(2u, iset.num_intervals());
   ASSERT_EQ(data.length(), iset.size());
   ASSERT_EQ((uint64_t)(2 * chunk_size), data.length());
 }
 
-TEST(ECUtil, subtask4_partial_data_plus_fae)
+// When the shard is genuinely absent from returned_data (no decoded extent at
+// all — e.g. zero-sized object or empty recovery window), no output is produced
+// regardless of what shard_fae says.
+TEST(ECUtil, subtask4_absent_shard_full_fae)
 {
   int k = 2, m = 1, chunk_size = 4096;
   stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
-  shard_extent_map_t sem(&sinfo);
+  shard_extent_map_t sem(&sinfo);   // shard 0 absent from extent_maps
 
-  // Insert non-zero real data at [0, chunk_size) for shard 0.
-  bufferlist real_data;
-  real_data.append(std::string(chunk_size, 'A'));
-  sem.insert_in_shard(shard_id_t(0), 0, real_data);
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(0, (uint64_t)chunk_size);
 
-  // FAE covers [0, chunk_size) AND [2*chunk_size, 3*chunk_size).
-  // [0, chunk_size) is non-zero so the scan includes it directly.
-  // [2*chunk_size, 3*chunk_size) has no decoded extent; the FAE synthesis
-  // path appends zeros for it.
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &force_alloc, data, iset);
+
+  // Absent shard → no decoded window → nothing to push.
+  ASSERT_TRUE(iset.empty());
+  ASSERT_EQ(0u, data.length());
+}
+
+// Same no-op guarantee when FAE has multiple intervals and shard is absent.
+TEST(ECUtil, subtask4_absent_shard_sparse_fae)
+{
+  int k = 2, m = 1, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);   // shard 0 absent from extent_maps
+
   interval_set<uint64_t> force_alloc;
   force_alloc.insert(0, (uint64_t)chunk_size);
   force_alloc.insert((uint64_t)(2 * chunk_size), (uint64_t)chunk_size);
@@ -1938,11 +1963,41 @@ TEST(ECUtil, subtask4_partial_data_plus_fae)
   interval_set<uint64_t> iset;
   ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &force_alloc, data, iset);
 
+  // Absent shard → no decoded window → nothing to push.
+  ASSERT_TRUE(iset.empty());
+  ASSERT_EQ(0u, data.length());
+}
+
+// returned_data holds only chunk 0 (non-zero); shard_fae covers chunk 0 and
+// chunk 2.  Chunk 2 has no decoded extent in returned_data — it belongs to a
+// future recovery window and must NOT be synthesised in this push.
+// After the fix: only chunk 0 (scanned non-zero, also FAE-covered) appears.
+TEST(ECUtil, subtask4_partial_data_plus_fae)
+{
+  int k = 2, m = 1, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // Only chunk 0 has a decoded extent (non-zero real data).
+  bufferlist real_data;
+  real_data.append(std::string(chunk_size, 'A'));
+  sem.insert_in_shard(shard_id_t(0), 0, real_data);
+
+  // FAE covers chunk 0 (present in window) and chunk 2 (outside window).
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(0, (uint64_t)chunk_size);
+  force_alloc.insert((uint64_t)(2 * chunk_size), (uint64_t)chunk_size);
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &force_alloc, data, iset);
+
+  // Only chunk 0 — chunk 2 is outside decoded_range.
+  ASSERT_EQ(1u, iset.num_intervals());
   ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
-  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
-  ASSERT_EQ(2u, iset.num_intervals());
+  ASSERT_FALSE(iset.intersects((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
   ASSERT_EQ(data.length(), iset.size());
-  ASSERT_EQ((uint64_t)(2 * chunk_size), data.length());
 }
 
 TEST(ECUtil, subtask4_fae_fully_covered_by_data)
@@ -2148,10 +2203,6 @@ TEST(ECUtil, recovery_push_zero_at_0_fae_data_at_2)
   ASSERT_EQ(data.length(), iset.size());
 }
 
-// chunk 0 has real data, chunk 2 has decoded-zero content (in FAE);
-// FAE also covers chunk 1 which has no decoded extent at all.
-// Expected: chunk 0 (real data) + chunk 1 (synthesised zeros, absent from
-//           extent_map) + chunk 2 (zero data from extent_map, FAE-covered).
 TEST(ECUtil, recovery_push_data_at_0_fae_at_1_and_2_zeros_at_2)
 {
   int k = 4, m = 2, chunk_size = 4096;
@@ -2163,7 +2214,7 @@ TEST(ECUtil, recovery_push_data_at_0_fae_at_1_and_2_zeros_at_2)
   z2.append_zero(chunk_size);
   sem.insert_in_shard(shard_id_t(0), 0, d0);
   sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, z2);
-  // chunk 1 has no entry in sem at all.
+  // chunk 1 has no decoded extent in this window.
 
   interval_set<uint64_t> fae;
   fae.insert((uint64_t)chunk_size, (uint64_t)chunk_size);       // chunk 1
@@ -2173,19 +2224,26 @@ TEST(ECUtil, recovery_push_data_at_0_fae_at_1_and_2_zeros_at_2)
   interval_set<uint64_t> iset;
   ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
 
-  // All three adjacent chunks merge into a single contiguous interval.
-  ASSERT_TRUE(iset.contains(0, (uint64_t)(3 * chunk_size)));
-  ASSERT_EQ((uint64_t)(3 * chunk_size), iset.size());
-  ASSERT_EQ((uint64_t)(3 * chunk_size), data.length());
+  // Chunk 0 (non-zero, scanned) + chunk 2 (zero, FAE-forced by scan path).
+  // Chunk 1 absent: no decoded extent → not in decoded_range → not synthesised.
+  ASSERT_EQ(2u, iset.num_intervals());
+  ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  ASSERT_FALSE(iset.intersects((uint64_t)chunk_size, (uint64_t)chunk_size));
+  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)(2 * chunk_size), data.length());
+  ASSERT_EQ(data.length(), iset.size());
 }
 
-// FAE covers chunk 1 but no data exists anywhere in the shard.
-// Expected: only chunk 1 (synthesised zeros), chunks 0 and 2 absent.
-TEST(ECUtil, recovery_push_absent_shard_fae_middle_chunk_only)
+TEST(ECUtil, recovery_push_decoded_zero_shard_fae_middle_chunk_only)
 {
   int k = 4, m = 2, chunk_size = 4096;
   stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
   shard_extent_map_t sem(&sinfo);
+
+  // Decoded extent: full three-chunk window, all zeros.
+  bufferlist decoded_zeros;
+  decoded_zeros.append_zero(3 * chunk_size);
+  sem.insert_in_shard(shard_id_t(0), 0, decoded_zeros);
 
   interval_set<uint64_t> fae;
   fae.insert((uint64_t)chunk_size, (uint64_t)chunk_size);  // chunk 1 only
@@ -2200,6 +2258,185 @@ TEST(ECUtil, recovery_push_absent_shard_fae_middle_chunk_only)
   ASSERT_FALSE(iset.intersects((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
   ASSERT_EQ((uint64_t)chunk_size, data.length());
   ASSERT_EQ(data.length(), iset.size());
+  bufferlist expected;
+  expected.append_zero(chunk_size);
+  ASSERT_TRUE(data.contents_equal(expected));
+}
+
+// When the shard has no decoded extent at all (genuinely absent from
+// returned_data), FAE produces no output regardless of which chunks it covers.
+TEST(ECUtil, recovery_push_absent_shard_fae_middle_chunk_only)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);   // shard 0 absent
+
+  interval_set<uint64_t> fae;
+  fae.insert((uint64_t)chunk_size, (uint64_t)chunk_size);  // chunk 1 only
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  // Absent shard → no decoded window → nothing to push.
+  ASSERT_TRUE(iset.empty());
+  ASSERT_EQ(0u, data.length());
+}
+
+TEST(ECUtil, recovery_push_fae_below_data_ordering)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // Only chunk 2 has a decoded extent (non-zero).
+  bufferlist d2;
+  d2.append(std::string(chunk_size, 'D'));
+  sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, d2);
+
+  // FAE covers chunk 0 — which has no decoded extent in this window.
+  interval_set<uint64_t> fae;
+  fae.insert(0, (uint64_t)chunk_size);
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  // After fix: chunk 0 is outside the decoded window; must NOT be synthesised.
+  // Only chunk 2 (non-zero, scanned) must appear.
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_FALSE(iset.intersects(0, (uint64_t)chunk_size))
+    << "chunk 0 has no decoded extent in this window; must not be synthesised";
+  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+
+  bufferlist expected;
+  expected.append(std::string(chunk_size, 'D'));
+  ASSERT_TRUE(data.contents_equal(expected));
+}
+
+TEST(ECUtil, recovery_push_fae_below_data_two_fae_before_data)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // Only chunk 2 has a decoded extent.
+  bufferlist d2;
+  d2.append(std::string(chunk_size, 'Z'));
+  sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, d2);
+
+  // FAE covers chunks 0 and 1 — neither has a decoded extent in this window.
+  interval_set<uint64_t> fae;
+  fae.insert(0, (uint64_t)(2 * chunk_size));
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  // After fix: chunks 0 and 1 are outside the decoded window; only chunk 2.
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_FALSE(iset.intersects(0, (uint64_t)(2 * chunk_size)))
+    << "chunks 0 and 1 have no decoded extents in this window; must not be synthesised";
+  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+
+  bufferlist expected;
+  expected.append(std::string(chunk_size, 'Z'));
+  ASSERT_TRUE(data.contents_equal(expected));
+}
+
+TEST(ECUtil, recovery_push_fae_outside_window_future_chunk)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // returned_data for this round: only chunk 0.
+  bufferlist d0;
+  d0.append(std::string(chunk_size, 'A'));
+  sem.insert_in_shard(shard_id_t(0), 0, d0);
+
+  // shard_fae spans the entire object (chunks 0 and 2); chunk 2 belongs to a
+  // future recovery round and must NOT be synthesised in this push.
+  interval_set<uint64_t> fae;
+  fae.insert(0, (uint64_t)chunk_size);                             // chunk 0
+  fae.insert((uint64_t)(2 * chunk_size), (uint64_t)chunk_size);   // chunk 2
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  // Only chunk 0 must be in the output — chunk 2 is outside the window.
+  ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  ASSERT_FALSE(iset.intersects((uint64_t)(2 * chunk_size), (uint64_t)chunk_size))
+    << "chunk 2 is outside the current recovery window and must not be pushed";
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+}
+
+TEST(ECUtil, recovery_push_fae_outside_window__past_and_future_chunks)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // returned_data for this round: only chunk 1.
+  bufferlist d1;
+  d1.append(std::string(chunk_size, 'B'));
+  sem.insert_in_shard(shard_id_t(0), chunk_size, d1);
+
+  // shard_fae covers all three chunks; only chunk 1 is in the window.
+  interval_set<uint64_t> fae;
+  fae.insert(0, (uint64_t)(3 * chunk_size));
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  // Only chunk 1 must appear; chunks 0 and 2 are outside the window.
+  ASSERT_TRUE(iset.contains((uint64_t)chunk_size, (uint64_t)chunk_size));
+  ASSERT_FALSE(iset.intersects(0, (uint64_t)chunk_size))
+    << "chunk 0 is outside the current recovery window (past round)";
+  ASSERT_FALSE(iset.intersects((uint64_t)(2 * chunk_size), (uint64_t)chunk_size))
+    << "chunk 2 is outside the current recovery window (future round)";
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+}
+
+TEST(ECUtil, recovery_push_fae_outside_window__zero_decoded_in_window)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // returned_data: chunk 1 decoded as zeros (sparse hole content).
+  bufferlist z1;
+  z1.append_zero(chunk_size);
+  sem.insert_in_shard(shard_id_t(0), chunk_size, z1);
+
+  // shard_fae covers all three chunks.
+  interval_set<uint64_t> fae;
+  fae.insert(0, (uint64_t)(3 * chunk_size));
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  // Only chunk 1 — FAE forces it allocated even though it is zero.
+  ASSERT_TRUE(iset.contains((uint64_t)chunk_size, (uint64_t)chunk_size));
+  ASSERT_FALSE(iset.intersects(0, (uint64_t)chunk_size))
+    << "chunk 0 outside window must not be pushed";
+  ASSERT_FALSE(iset.intersects((uint64_t)(2 * chunk_size), (uint64_t)chunk_size))
+    << "chunk 2 outside window must not be pushed";
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+
   bufferlist expected;
   expected.append_zero(chunk_size);
   ASSERT_TRUE(data.contents_equal(expected));
@@ -2284,19 +2521,27 @@ TEST(ECUtil, recovery_push_large_chunk_zero_then_data_no_fae)
   ASSERT_TRUE(data.contents_equal(expected));
 }
 
-// chunk_size = 8 KiB; absent shard (no extent_map), FAE covers only second
-// sub-block of chunk 0.
-// Expected: only [FAE_BLOCK_SIZE, 2*FAE_BLOCK_SIZE) synthesised as zeros.
-TEST(ECUtil, recovery_push_large_chunk_absent_shard_fae_second_half)
+// chunk_size = 8 KiB; the shard decoded to all-zeros for the full chunk;
+// FAE covers only the second 4 KiB sub-block.
+// The scan loop visits both sub-blocks: first sub-block is zero with no FAE
+// → excluded; second sub-block is zero but FAE-covered → included via the
+// intersect path.
+// Expected: only [FAE_BLOCK_SIZE, 2*FAE_BLOCK_SIZE) in output, content = zeros.
+TEST(ECUtil, recovery_push_large_chunk_decoded_zero_fae_second_half)
 {
-  const uint64_t fae = FAE_BLOCK_SIZE;
-  const uint64_t chunk_size = 2 * fae;
+  const uint64_t fae_bs = FAE_BLOCK_SIZE;
+  const uint64_t chunk_size = 2 * fae_bs;
   int k = 2, m = 1;
   stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
-  shard_extent_map_t sem(&sinfo);  // shard absent from sem
+  shard_extent_map_t sem(&sinfo);
+
+  // Decoded extent: full chunk, all zeros.
+  bufferlist decoded_zeros;
+  decoded_zeros.append_zero(chunk_size);
+  sem.insert_in_shard(shard_id_t(0), 0, decoded_zeros);
 
   interval_set<uint64_t> force_alloc;
-  force_alloc.insert(fae, fae);   // second sub-block only
+  force_alloc.insert(fae_bs, fae_bs);  // second sub-block only
 
   bufferlist data;
   interval_set<uint64_t> iset;
@@ -2304,13 +2549,36 @@ TEST(ECUtil, recovery_push_large_chunk_absent_shard_fae_second_half)
                                          &force_alloc, data, iset);
 
   ASSERT_EQ(1u, iset.num_intervals());
-  ASSERT_FALSE(iset.intersects(0, fae));
-  ASSERT_TRUE(iset.contains(fae, fae));
-  ASSERT_EQ(fae, data.length());
+  ASSERT_FALSE(iset.intersects(0, fae_bs));
+  ASSERT_TRUE(iset.contains(fae_bs, fae_bs));
+  ASSERT_EQ(fae_bs, data.length());
   ASSERT_EQ(data.length(), iset.size());
   bufferlist expected;
-  expected.append_zero(fae);
+  expected.append_zero(fae_bs);
   ASSERT_TRUE(data.contents_equal(expected));
+}
+
+// chunk_size = 8 KiB; shard genuinely absent from returned_data; FAE covers
+// second sub-block only.  After fix: absent shard → no output.
+TEST(ECUtil, recovery_push_large_chunk_absent_shard_fae_second_half)
+{
+  const uint64_t fae_bs = FAE_BLOCK_SIZE;
+  const uint64_t chunk_size = 2 * fae_bs;
+  int k = 2, m = 1;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);  // shard absent from sem
+
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(fae_bs, fae_bs);  // second sub-block only
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size,
+                                         &force_alloc, data, iset);
+
+  // Absent shard → no decoded window → nothing to push.
+  ASSERT_TRUE(iset.empty());
+  ASSERT_EQ(0u, data.length());
 }
 
 TEST(ECUtil, ro_intervals_to_shard_intervals_empty)
@@ -2453,6 +2721,48 @@ TEST(ECUtil, ro_intervals_to_shard_intervals_cross_stripe_boundary)
   auto s2 = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(2));
   ASSERT_EQ(1u, s2.num_intervals());
   ASSERT_TRUE(s2.contains(0, chunk_size)); // [0, 4096)
+}
+
+TEST(ECUtil, ro_intervals_to_shard_intervals_multi_stripe_disjoint_chunks)
+{
+  // 3 data shards (k=3), 2 parity shards (m=2), chunk_size = 4096.
+  // stripe_width = 3 * 4096 = 12288.
+  stripe_info_t sinfo(3, 2, 3 * 4096, vector<shard_id_t>(0));
+  const uint64_t chunk_size = 4096;
+
+  // RO interval spanning 2 full stripes: [0, 24576)
+  // Shard 0 owns: stripe 0 chunk [0, 4096) and stripe 1 chunk [4096, 8192) in shard space.
+  // Shard 1 owns: stripe 0 chunk [0, 4096) and stripe 1 chunk [4096, 8192) in shard space.
+  // Shard 2 owns: stripe 0 chunk [0, 4096) and stripe 1 chunk [4096, 8192) in shard space.
+  interval_set<uint64_t> ro;
+  ro.insert(0, 2 * 3 * chunk_size); // [0, 24576)
+
+  for (int s = 0; s < 3; ++s) {
+    auto shard_iset = sinfo.ro_intervals_to_shard_intervals(ro, shard_id_t(s));
+    ASSERT_EQ(1u, shard_iset.num_intervals());
+    ASSERT_TRUE(shard_iset.contains(0, 2 * chunk_size))
+        << "Shard " << s << " should contain [0, 8192)";
+  }
+
+  // RO interval with partial stripes: [4096, 20480)
+  // Covers: Shard 1 (stripe 0), Shard 2 (stripe 0), Shard 0 (stripe 1), Shard 1 (stripe 1)
+  interval_set<uint64_t> ro_partial;
+  ro_partial.insert(4096, 16384); // [4096, 20480)
+
+  // Shard 0: only in stripe 1 -> shard space [4096, 8192)
+  auto s0 = sinfo.ro_intervals_to_shard_intervals(ro_partial, shard_id_t(0));
+  ASSERT_EQ(1u, s0.num_intervals());
+  ASSERT_TRUE(s0.contains(chunk_size, chunk_size));
+
+  // Shard 1: in stripe 0 [0, 4096) AND stripe 1 [4096, 8192) -> [0, 8192)
+  auto s1 = sinfo.ro_intervals_to_shard_intervals(ro_partial, shard_id_t(1));
+  ASSERT_EQ(1u, s1.num_intervals());
+  ASSERT_TRUE(s1.contains(0, 2 * chunk_size));
+
+  // Shard 2: only in stripe 0 -> shard space [0, 4096)
+  auto s2 = sinfo.ro_intervals_to_shard_intervals(ro_partial, shard_id_t(2));
+  ASSERT_EQ(1u, s2.num_intervals());
+  ASSERT_TRUE(s2.contains(0, chunk_size));
 }
 
 TEST(ECUtil, ro_intervals_to_shard_intervals_parity_shard)
