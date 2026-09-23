@@ -589,3 +589,42 @@ class RgwSyncMetricsTest(TestCase):
         # No new data-sync-from-zone.* key should appear for non-sync metrics
         sync_keys = [k for k in self.module.metrics if k.startswith('data-sync-from-zone')]
         self.assertEqual(sync_keys, [])
+
+
+class PoolRepairedObjectsTest(TestCase):
+    """Tests for how get_pool_repaired_objects() sources its data.
+
+    Every self.get() miss costs a full C++ dump of the requested structure
+    into Python objects with the GIL held, so which key is asked for matters
+    as much as how the result is used.
+    """
+
+    def setUp(self):
+        from prometheus.module import Module
+        self.module = mock.MagicMock(spec=Module)
+        self.module.log = mock.MagicMock()
+        self.module.get_pool_repaired_objects = \
+            Module.get_pool_repaired_objects.__get__(self.module)
+        self.module.metrics = {
+            'pool_objects_repaired': Metric(
+                'counter', 'pool_objects_repaired', '', ('pool_id',)),
+        }
+
+    def test_uses_pool_stats_not_pg_dump(self):
+        """'pg_dump' embeds every PG in the cluster; 'pool_stats' does not."""
+        self.module.get.return_value = {'pool_stats': []}
+        self.module.get_pool_repaired_objects()
+        self.module.get.assert_called_once_with('pool_stats')
+
+    def test_reads_counter_per_pool(self):
+        self.module.get.return_value = {
+            'pool_stats': [
+                {'poolid': 1, 'stat_sum': {'num_objects_repaired': 7}},
+                {'poolid': 2, 'stat_sum': {'num_objects_repaired': 0}},
+            ],
+        }
+        self.module.get_pool_repaired_objects()
+        self.assertEqual(
+            self.module.metrics['pool_objects_repaired'].value,
+            {(1,): 7, (2,): 0},
+        )
