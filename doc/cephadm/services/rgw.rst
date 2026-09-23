@@ -148,13 +148,14 @@ HTTPS certificates, all managed through the cephadm Certificate Manager (certmgr
   signs a certificate for the RGW service automatically.
 
 - **inline:**
-  Users can set the ``certificate_source`` to ``inline`` in the spec and
-  embed the certificate and private key directly in the spec using
-  the ``ssl_cert`` and ``ssl_key`` fields.
+  Users can set ``certificate_source`` to ``inline`` and embed the certificate
+  and private key directly in the spec using ``ssl_cert`` and ``ssl_key``.
+  ``ssl_cert`` may contain a certificate chain: leaf certificate followed by
+  optional intermediate CA certificates.
 
 - **reference:**
-  Users can register their own certificate and key with certmgr and
-  set the ``certificate_source`` to ``reference`` in the spec.
+  Users can register their own certificate and key with certmgr and set
+  ``certificate_source`` to ``reference`` in the spec.
 
 **Option 1: Inline certificate and key**
 
@@ -167,7 +168,10 @@ HTTPS certificates, all managed through the cephadm Certificate Manager (certmgr
     certificate_source: inline
     ssl_cert: |
       -----BEGIN CERTIFICATE-----
-      (PEM cert contents here)
+      (PEM leaf cert contents here)
+      -----END CERTIFICATE-----
+      -----BEGIN CERTIFICATE-----
+      (optional PEM intermediate cert contents here)
       -----END CERTIFICATE-----
     ssl_key: |
       -----BEGIN PRIVATE KEY-----
@@ -183,8 +187,12 @@ Apply the spec:
 .. note::
 
    The older ``rgw_frontend_ssl_certificate`` field is still supported
-   for backward compatibility, but it is deprecated.
-   New deployments should use ``ssl_cert`` / ``ssl_key`` instead.
+   for backward compatibility, but it is deprecated.  New deployments
+   should use ``ssl_cert`` / ``ssl_key`` instead.  If used,
+   ``rgw_frontend_ssl_certificate`` must contain a combined PEM bundle:
+   unencrypted private key, leaf certificate, and optional intermediate CA
+   certificates.  A certificate chain without the private key is not valid
+   for this field.
 
 **Option 2: Reference to a registered certificate/key**
 
@@ -192,8 +200,8 @@ First, register the certificate and key with certmgr:
 
 .. prompt:: bash #
 
-  ceph orch certmgr cert set --cert-name rgw_ssl_cert --service-name rgw.<service_id> -i $PWD/server_cert.pem
-  ceph orch certmgr key set --key-name rgw_ssl_key  --service-name rgw.<service_id> -i $PWD/server_key
+  ceph orch certmgr cert set rgw_ssl_cert --service-name rgw.<service_id> -i $PWD/server_cert.pem
+  ceph orch certmgr key set rgw_ssl_key --service-name rgw.<service_id> -i $PWD/server_key.pem
 
 Then use ``reference`` source in the RGW spec:
 
