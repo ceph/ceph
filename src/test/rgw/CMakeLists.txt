@@ -33,10 +33,6 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   endif()
 endif()
 
-if(WITH_RADOSGW_LUA_PACKAGES)
-  list(APPEND rgw_libs Boost::filesystem)
-endif()
-
 if(WITH_JAEGER)
   list(APPEND rgw_libs ${jaeger_base})
 endif()
