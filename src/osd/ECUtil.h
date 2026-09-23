@@ -711,16 +711,12 @@ public:
     return k + m;
   }
 
-  unsigned int get_pool_size() const {
-    ceph_assert(pool);
-    return pool->size;
-  }
-
   unsigned int get_num_zones() const {
     ceph_assert(pool);
-    int64_t num_zones = 0;
+    int64_t num_zones = 1;  // default: single-zone pool, matches
+                            // pg_pool_t::get_num_zone()
     pool->opts.get(pool_opts_t::NUM_ZONES, &num_zones);
-    return num_zones > 0 ? num_zones : 0;
+    return num_zones > 0 ? num_zones : 1;
   }
 
   const shard_id_t get_shard(const raw_shard_id_t raw_shard) const {
@@ -782,19 +778,6 @@ public:
   /* Return a "span" - which can be iterated over */
   auto get_data_shards() const {
     return data_shards;
-  }
-
-  /* Return data shards repeated across all zones */
-  shard_id_set get_data_shards_all_zones() const {
-    shard_id_set result = data_shards;
-
-    // Repeat data_shards every k+m shards across all zones
-    for (unsigned int zone = 1; zone < get_num_zones(); ++zone) {
-      result <<= get_k_plus_m();
-      result.insert(data_shards);
-    }
-
-    return result;
   }
 
   auto get_parity_shards() const {
