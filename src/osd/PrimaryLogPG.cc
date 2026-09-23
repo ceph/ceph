@@ -18125,7 +18125,9 @@ bool PrimaryLogPG::SnapTrimmer::permit_trim() {
     !pg->is_scrub_queued_or_active() &&
     !pg->snap_trimq.empty() &&
     !pg->state_test(PG_STATE_MIGRATION_WAIT) &&
-    !pg->state_test(PG_STATE_MIGRATION_TOOFULL);
+    !pg->state_test(PG_STATE_MIGRATION_TOOFULL) &&
+    (!pg->pool.info.is_migration_src() ||
+     pg->pool.info.has_pg_migrated(pg->info.pgid.pgid));
 }
 
 /*---SnapTrimmer states---*/
@@ -18158,7 +18160,9 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
   if (!pg->is_clean() ||
       pg->snap_trimq.empty() ||
       pg->state_test(PG_STATE_MIGRATION_WAIT) ||
-      pg->state_test(PG_STATE_MIGRATION_TOOFULL)) {
+      pg->state_test(PG_STATE_MIGRATION_TOOFULL) ||
+      (pg->pool.info.is_migration_src() &&
+       !pg->pool.info.has_pg_migrated(pg->info.pgid.pgid))) {
     ldout(pg->cct, 10) << "NotTrimming not permitted to trim" << dendl;
     return discard_event();
   }
