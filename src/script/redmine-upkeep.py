@@ -757,6 +757,16 @@ class RedmineUpkeep:
         issue_update.logger.debug(f"Last PR ID change: {last_pr_id_change}, Last Merge Commit set: {last_merge_commit_set}")
 
         if last_pr_id_change > last_merge_commit_set:
+            recorded_commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
+            if recorded_commit:
+                current_merge = self._get_merge_commit(issue_update)
+                if current_merge and str(current_merge).lower() == str(recorded_commit).lower():
+                    issue_update.logger.info(
+                        f"Recorded merge commit ({recorded_commit}) matches current PR merge commit. "
+                        "Skipping stale clear."
+                    )
+                    return False
+
             issue_update.logger.info("The 'Pull Request ID' was changed after the 'Merge Commit SHA' was set. Clearing the stale merge commit.")
             # Clear the merge commit field and also the 'Fixed In' field which depends on it.
             changed = False
