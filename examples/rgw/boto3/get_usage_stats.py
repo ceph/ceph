@@ -12,6 +12,7 @@ secret_key='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
 client = boto3.client('s3',
         endpoint_url=endpoint,
         aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key)
+        aws_secret_access_key=secret_key,
+        region_name='us-east-1')
 
 print(json.dumps(client.get_usage_stats(), indent=2))
