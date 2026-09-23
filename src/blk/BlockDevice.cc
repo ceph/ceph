@@ -226,5 +226,26 @@ void BlockDevice::collect_alerts(osd_alert_list_t& alerts, const std::string& de
       alerts.emplace(device_name + "_DEVICE_STALLED_READ_ALERT", ss.str());
     }
   }
+  if (support_discard && cct->_conf->bdev_enable_discard) {
+    size_t current_discarded_bytes = discard_queue_bytes.load();
+    uint64_t current_discard_queue_items = discard_queue_length.load();
+
+    size_t discard_bytes_warn_threshold = static_cast<size_t>(0.8 * cct->_conf->bdev_discard_max_bytes);
+    uint64_t discard_items_warn_threshold =
+      static_cast<uint64_t>(0.8 * cct->_conf->bdev_async_discard_max_pending);
+
+    bool discard_queue_overload =
+      (current_discarded_bytes >= discard_bytes_warn_threshold) ||
+      (cct->_conf->bdev_async_discard_max_pending > 0 &&
+       current_discard_queue_items >= discard_items_warn_threshold);
+
+    if (discard_queue_overload) {
+      std::ostringstream ss;
+      ss << "Slow discard on " << device_name
+         << ", queue: " << current_discard_queue_items
+	 << " items " << byte_u_t(current_discarded_bytes);
+      alerts.emplace(device_name + "_DEVICE_DISCARD_QUEUE", ss.str());
+    }
+  }
 }
 
