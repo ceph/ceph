@@ -308,8 +308,15 @@ namespace bluestore {
 			uint32_t b_offset,
 			uint32_t *length0);
 
+    inline void add_tail(uint32_t new_blob_size,
+                         uint32_t min_release_size) {
+      ceph_assert(p2phase(new_blob_size, min_release_size) == 0);
+      dirty_blob().add_tail(new_blob_size);
+      used_in_blob.add_tail(new_blob_size, min_release_size);
+    }
+
+
     void dup(Blob& o);
-    void add_tail(uint32_t new_blob_size, uint32_t min_release_size);
     void dup(const Blob& from, bool copy_used_in_blob);
     void copy_from(const Blob& from,
 		   uint32_t min_release_size, uint32_t start, uint32_t len);
