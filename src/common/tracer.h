@@ -28,6 +28,8 @@ struct OpTimeline {
 } // namespace tracing
 
 #ifdef HAVE_JAEGER
+#include <shared_mutex>
+
 #include "opentelemetry/trace/provider.h"
 
 using jspan = opentelemetry::trace::Span;
@@ -44,16 +46,29 @@ static_assert(SpanIdkSize == opentelemetry::trace::SpanId::kSize);
 
 class Tracer {
  private:
-  const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
+  using tracer_ptr = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer>;
+  const static tracer_ptr noop_tracer;
   const static jspan_ptr noop_span;
   CephContext* cct = nullptr;;
-  opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
+  std::string service_name;
+  mutable std::shared_mutex tracer_lock;  ///< protects tracer, which reconfigure() replaces
+  tracer_ptr tracer;
+
+  // a tracer exporting to the currently configured jaeger_agent_host/port
+  tracer_ptr make_tracer();
+  tracer_ptr get_tracer() const {
+    std::shared_lock l(tracer_lock);
+    return tracer;
+  }
 
  public:
 
   Tracer() = default;
 
   void init(CephContext* _cct, opentelemetry::nostd::string_view service_name);
+  // re-create the exporter after jaeger_agent_host or jaeger_agent_port
+  // changed; spans already started still go to the previous exporter
+  void reconfigure();
 
   bool is_enabled() const;
   // creates and returns a new span with `trace_name`
@@ -172,6 +187,7 @@ namespace tracing {
 
 struct Tracer {
   void init(CephContext* _cct, std::string_view service_name) {}
+  void reconfigure() {}
   bool is_enabled() const { return false; }
   jspan_ptr start_trace(std::string_view, bool enabled = true) { return {}; }
   jspan_ptr add_span(std::string_view, const jspan_ptr&) { return {}; }

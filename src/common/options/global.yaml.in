@@ -7223,14 +7223,31 @@ options:
   - rgw
   - osd
   with_legacy: true
+- name: jaeger_agent_host
+  type: str
+  level: advanced
+  desc: Host that spans are sent to
+  long_desc: A Jaeger agent on each host, or one Jaeger collector for the whole
+    cluster; Jaeger v2 accepts spans directly on UDP port 6831. OSDs pick up a
+    change without restarting.
+  default: localhost
+  services:
+  - rgw
+  - osd
+  see_also:
+  - jaeger_agent_port
 - name: jaeger_agent_port
   type: int
   level: advanced
-  desc: TCP port number of the Jaeger agent
+  desc: UDP port that spans are sent to
+  long_desc: 6799 matches the Jaeger agent that cephadm deploys; Jaeger v2
+    listens on 6831. OSDs pick up a change without restarting.
   default: 6799
   services:
   - rgw
   - osd
+  see_also:
+  - jaeger_agent_host
 - name: objectstore_debug_throw_on_failed_txc
   type: bool
   level: dev

@@ -10100,6 +10100,8 @@ std::vector<std::string> OSD::get_tracked_keys() const noexcept
     "osd_op_history_slow_op_threshold"s,
     "osd_op_trace_slow_threshold"s,
     "osd_op_trace_max_per_sec"s,
+    "jaeger_agent_host"s,
+    "jaeger_agent_port"s,
     "osd_enable_op_tracker"s,
     "osd_map_cache_size"s,
     "osd_pg_epoch_max_lag_factor"s,
@@ -10220,6 +10222,9 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_op_trace_max_per_sec")) {
     op_tracker.set_trace_threshold_and_rate(cct->_conf->osd_op_trace_slow_threshold,
                                             cct->_conf->osd_op_trace_max_per_sec);
+  }
+  if (changed.count("jaeger_agent_host") || changed.count("jaeger_agent_port")) {
+    tracing::osd::tracer.reconfigure();
   }
   if (changed.count("osd_enable_op_tracker")) {
       op_tracker.set_tracking(cct->_conf->osd_enable_op_tracker);

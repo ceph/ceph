@@ -21,29 +21,49 @@ const jspan_ptr Tracer::noop_span = noop_tracer->StartSpan("noop");
 
 using bufferlist = ceph::buffer::list;
 
-void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view service_name) {
+Tracer::tracer_ptr Tracer::make_tracer() {
+  opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
+  exporter_options.endpoint = cct->_conf.get_val<std::string>("jaeger_agent_host");
+  exporter_options.server_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
+  ldout(cct, 1) << "exporting spans to " << exporter_options.endpoint << ":"
+                << exporter_options.server_port << dendl;
+  const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
+  const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
+  auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
+  auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(new opentelemetry::sdk::trace::BatchSpanProcessor(std::move(jaeger_exporter), processor_options));
+  const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
+  opentelemetry::trace::Provider::SetTracerProvider(provider);
+  return provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
+}
+
+void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view _service_name) {
   ceph_assert(_cct);
   cct = _cct;
+  std::unique_lock l(tracer_lock);
   if (!tracer) {
     ldout(cct, 3) << "tracer was not loaded, initializing tracing" << dendl;
-    opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
-    exporter_options.server_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
-    const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
-    const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
-    auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
-    auto processor = std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor>(new opentelemetry::sdk::trace::BatchSpanProcessor(std::move(jaeger_exporter), processor_options));
-    const auto provider = opentelemetry::nostd::shared_ptr<opentelemetry::trace::TracerProvider>(new opentelemetry::sdk::trace::TracerProvider(std::move(processor), jaeger_resource));
-    opentelemetry::trace::Provider::SetTracerProvider(provider);
-    tracer = provider->GetTracer(service_name, OPENTELEMETRY_SDK_VERSION);
+    service_name = std::string(_service_name);
+    tracer = make_tracer();
   }
+}
+
+void Tracer::reconfigure() {
+  if (!cct || !get_tracer()) {
+    return;  // not initialized; init() will read the new settings
+  }
+  // the previous provider flushes its pending spans when its last span ends
+  auto t = make_tracer();
+  std::unique_lock l(tracer_lock);
+  tracer = std::move(t);
 }
 
 jspan_ptr Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
   ceph_assert(cct);
   if (is_enabled()) {
-    ceph_assert(tracer);
+    auto t = get_tracer();
+    ceph_assert(t);
     ldout(cct, 20) << "start trace for " << trace_name << " " << dendl;
-    return tracer->StartSpan(trace_name);
+    return t->StartSpan(trace_name);
   }
   return noop_span;
 }
@@ -52,9 +72,10 @@ jspan_ptr Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool
   ceph_assert(cct);
   ldout(cct, 20) << "start trace enabled " << trace_is_enabled << " " << dendl;
   if (trace_is_enabled) {
-    ceph_assert(tracer);
+    auto t = get_tracer();
+    ceph_assert(t);
     ldout(cct, 20) << "start trace for " << trace_name << " " << dendl;
-    return tracer->StartSpan(trace_name);
+    return t->StartSpan(trace_name);
   }
   return noop_tracer->StartSpan(trace_name);
 }
@@ -64,18 +85,19 @@ jspan_ptr Tracer::add_span(opentelemetry::nostd::string_view span_name, const js
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_span->GetContext();
     ldout(cct, 20) << "adding span " << span_name << " " << dendl;
-    return tracer->StartSpan(span_name, span_opts);
+    return get_tracer()->StartSpan(span_name, span_opts);
   }
   return noop_span;
 }
 
 jspan_ptr Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx) {
   if (parent_ctx.IsValid()) {
-    ceph_assert(tracer);
+    auto t = get_tracer();
+    ceph_assert(t);
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_ctx;
     ldout(cct, 20) << "adding span " << span_name << " " << dendl;
-    return tracer->StartSpan(span_name, span_opts);
+    return t->StartSpan(span_name, span_opts);
   }
   return noop_span;
 }
@@ -88,6 +110,7 @@ bool Tracer::is_enabled() const {
 static constexpr double min_phase_share = 0.01;
 
 std::string Tracer::record_op(const OpTimeline& t, const jspan_context& parent) {
+  auto tracer = get_tracer();
   if (!tracer) {
     return {};
   }
