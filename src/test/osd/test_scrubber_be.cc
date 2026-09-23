@@ -12,6 +12,7 @@
 
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
+#include "crush/CrushWrapper.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "mon/MonClient.h"
@@ -65,11 +66,16 @@ class TestScrubBackend : public ScrubBackend {
   bool get_m_repair() const { return m_repair; }
   bool get_is_replicated() const { return m_is_replicated; }
   auto get_omap_stats() const { return m_omap_stats; }
+  using ScrubBackend::get_error_counts;
 
   const std::vector<pg_shard_t>& all_but_me() const { return m_acting_but_me; }
 
   /// populate the scrub-maps set for the 'chunk' being scrubbed
   void insert_faked_smap(pg_shard_t shard, const ScrubMap& smap);
+
+  ScrubMap& faked_smap(pg_shard_t shard) {
+    return this_chunk->received_maps.at(shard);
+  }
 };
 
 // mocking the PG
@@ -180,8 +186,16 @@ class TestPg : public PgScrubBeListener {
   };
 
   bool get_ec_supports_crc_encode_decode() const final {
-    return get_is_ec_optimized();
+    // ReplicatedBackend aborts if asked
+    if (get_pgpool().info.is_replicated()) {
+      ADD_FAILURE() << "get_ec_supports_crc_encode_decode() for a replicated pool";
+      return false;
+    }
+    return get_is_ec_optimized() && ec_crc_encode_decode;
   }
+  // whether the plugin can encode and decode CRCs, as jerasure's FastEC
+  // technique cannot
+  bool ec_crc_encode_decode = true;
 
   ECUtil::stripe_info_t get_ec_sinfo() const final { return *m_sinfo; }
 
@@ -502,6 +516,9 @@ OSDMapRef TestTScrubberBe::setup_map(int num_osds,
   auto osdmap = std::make_shared<OSDMap>();
   uuid_d fsid;
   osdmap->build_simple(g_ceph_context, 0, fsid, num_osds);
+  // The flat map needs more than the default 50 tries to place every shard
+  // of a pool as wide as the map (three-zone EC pools reach 45).
+  osdmap->crush->set_choose_total_tries(400);
   OSDMap::Incremental pending_inc(osdmap->get_epoch() + 1);
   pending_inc.fsid = osdmap->get_fsid();
   entity_addrvec_t sample_addrs;
@@ -872,6 +889,16 @@ class TestTScrubberBeECCorruptShards : public TestTScrubberBe {
   {
     test_pg->set_stripe_info(k, m, k * m_chunk_size, &test_pg->m_pool->info);
   }
+
+  void use_k_m(int8_t new_k, int8_t new_m) {
+    k = new_k;
+    m = new_m;
+    ec_profile.erasure_code_profile["k"] = fmt::format("{}", k);
+    ec_profile.erasure_code_profile["m"] = fmt::format("{}", m);
+    pl.size = k + m;
+    pl.min_size = k + 1;
+    pl.erasure_code_profile = ec_profile;
+  }
 };
 
 class TestTScrubberBeECNoCorruptShards : public TestTScrubberBeECCorruptShards {
@@ -942,6 +969,151 @@ TEST_F(TestTScrubberBeECCorruptParityShard, ec_parity_inconsistency) {
   auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
 
   EXPECT_EQ(incons.size(), 1);
+}
+
+// EC stretch pool with two zones, so each relative shard has one copy per zone.
+class TestTScrubberBeECStretch : public TestTScrubberBeECCorruptShards {
+ protected:
+  int num_zones = 2;
+
+ public:
+  TestTScrubberBeParams inject_params() override {
+    TestTScrubberBeParams params =
+        TestTScrubberBeECCorruptShards::inject_params();
+    params.pool_conf.size = num_zones * (k + m);
+    params.objs_conf =
+        ScrubGenerator::make_erasure_code_configuration(k, m, num_zones);
+    params.num_osds = num_zones * (k + m);
+    return params;
+  }
+
+  void ec_set_stripe_info() override {
+    test_pg->m_pool->info.num_zones = num_zones;
+    TestTScrubberBeECCorruptShards::ec_set_stripe_info();
+  }
+
+  pg_shard_t pg_shard_of(shard_id_t shard) const {
+    auto it = std::find_if(acting_shards.begin(), acting_shards.end(),
+                           [shard](pg_shard_t s) { return s.shard == shard; });
+    ceph_assert(it != acting_shards.end());
+    return *it;
+  }
+
+  void corrupt_digest(pg_shard_t pg_shard) {
+    for (auto& [ho, obj] : sbe->faked_smap(pg_shard).objects) {
+      obj.digest += 1;
+    }
+  }
+
+  // One inconsistent object, whose only shard error is on the corrupt copy;
+  // deep errors count the object and that copy.
+  void expect_only_copy_inconsistent(pg_shard_t corrupt) {
+    logger.set_expected_err_count(1);
+    auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+    ASSERT_EQ(1u, incons.size()) << "corrupted " << corrupt;
+    const auto& obj = std::get<inconsistent_obj_wrapper>(incons.front());
+    for (const auto& [osd_shard, shard] : obj.shards) {
+      EXPECT_EQ(osd_shard.osd == corrupt.osd, shard.has_ec_hash_error())
+          << "osd " << osd_shard.osd << ", corrupted " << corrupt;
+    }
+    EXPECT_EQ(2, sbe->get_error_counts().deep_errors);
+  }
+};
+
+// Both zones hold identical shards: a deep scrub is clean.
+TEST_F(TestTScrubberBeECStretch, no_corruption) {
+  ASSERT_EQ(2u * (k + m), acting_shards.size());
+  logger.set_expected_err_count(0);
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+  EXPECT_EQ(0u, incons.size());
+}
+
+// The copy of a data shard that the scrub compares first is corrupt.
+TEST_F(TestTScrubberBeECStretch, corrupt_first_seen_zone_copy) {
+  pg_shard_t first = std::min(pg_shard_of(shard_id_t(0)),
+                              pg_shard_of(shard_id_t(k + m)));
+  corrupt_digest(first);
+  expect_only_copy_inconsistent(first);
+}
+
+// Only the copy of a data shard that the scrub compares second is corrupt:
+// the cross-zone CRC mismatch must still be reported.
+TEST_F(TestTScrubberBeECStretch, corrupt_second_seen_zone_copy) {
+  pg_shard_t second = std::max(pg_shard_of(shard_id_t(0)),
+                               pg_shard_of(shard_id_t(k + m)));
+  corrupt_digest(second);
+  expect_only_copy_inconsistent(second);
+}
+
+class TestTScrubberBeECStretchM2 : public TestTScrubberBeECStretch {
+ public:
+  TestTScrubberBeECStretchM2() { use_k_m(2, 2); }
+};
+
+// The zone-0 copy of the last parity shard is corrupt. The CRC check of a
+// zone's stripe covers only the first parity shard, so both zones look
+// consistent and neither copy can be trusted: both are reported, so that
+// repair rebuilds them from the data shards rather than copying zone 0's.
+TEST_F(TestTScrubberBeECStretchM2, corrupt_last_parity_copy_in_first_zone) {
+  const pg_shard_t corrupt = pg_shard_of(shard_id_t(k + m - 1));
+  const pg_shard_t good = pg_shard_of(shard_id_t(2 * (k + m) - 1));
+  corrupt_digest(corrupt);
+  logger.set_expected_err_count(1);
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+  ASSERT_EQ(1u, incons.size());
+  const auto& obj = std::get<inconsistent_obj_wrapper>(incons.front());
+  for (const auto& [osd_shard, shard] : obj.shards) {
+    EXPECT_EQ(osd_shard.osd == corrupt.osd || osd_shard.osd == good.osd,
+              shard.has_ec_hash_error())
+        << "osd " << osd_shard.osd << ", corrupted " << corrupt;
+  }
+}
+
+// A plugin that cannot encode and decode CRCs, as jerasure's FastEC
+// technique cannot, gives no coding check of a zone's stripe, but the copies
+// of a shard in the two zones must still match.
+class TestTScrubberBeECStretchNoCrc : public TestTScrubberBeECStretch {
+ public:
+  void ec_set_stripe_info() override {
+    test_pg->ec_crc_encode_decode = false;
+    TestTScrubberBeECStretch::ec_set_stripe_info();
+  }
+};
+
+TEST_F(TestTScrubberBeECStretchNoCrc, no_corruption) {
+  logger.set_expected_err_count(0);
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+  EXPECT_EQ(0u, incons.size());
+}
+
+// Nothing shows which copy is good, so both copies are reported and repair
+// rebuilds both.
+TEST_F(TestTScrubberBeECStretchNoCrc, corrupt_zone_copy) {
+  const pg_shard_t corrupt = pg_shard_of(shard_id_t(0));
+  const pg_shard_t other = pg_shard_of(shard_id_t(k + m));
+  corrupt_digest(corrupt);
+  logger.set_expected_err_count(1);
+  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+  ASSERT_EQ(1u, incons.size());
+  const auto& obj = std::get<inconsistent_obj_wrapper>(incons.front());
+  for (const auto& [osd_shard, shard] : obj.shards) {
+    EXPECT_EQ(osd_shard.osd == corrupt.osd || osd_shard.osd == other.osd,
+              shard.has_ec_hash_error())
+        << "osd " << osd_shard.osd << ", corrupted " << corrupt;
+  }
+}
+
+class TestTScrubberBeECStretch3 : public TestTScrubberBeECStretch {
+ public:
+  TestTScrubberBeECStretch3() { num_zones = 3; }
+};
+
+// The zone-0 copy of the last parity shard is corrupt. With m >= 2 the decode
+// check never uses that shard, so only the other zones' copies can show it.
+TEST_F(TestTScrubberBeECStretch3, corrupt_parity_copy_in_first_zone) {
+  pg_shard_t corrupt = pg_shard_of(shard_id_t(k + m - 1));
+  corrupt_digest(corrupt);
+  expect_only_copy_inconsistent(corrupt);
 }
 
 // ///////////////////////////////////////////////////////////////////////////

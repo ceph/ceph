@@ -1586,9 +1586,10 @@ int ECBackend::be_deep_scrub(
     return -EINPROGRESS;
   }
 
-  if (sinfo.supports_encode_decode_crcs()) {
+  if (sinfo.supports_encode_decode_crcs() || sinfo.get_num_zones() > 1) {
     // We pass the calculated digest here
-    // This will be used along with the plugin to verify data consistency
+    // This will be used along with the plugin to verify data consistency,
+    // and to compare the copies of a shard in different zones
     o.digest = pos.data_hash.digest();
   }
   else
