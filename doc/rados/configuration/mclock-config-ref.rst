@@ -4,22 +4,6 @@
 
 .. index:: mclock; configuration
 
-.. warning:: On large clusters with erasure-coded pools, operators may
-   observe slow ops during recovery or backfill (for example, when an
-   OSD is drained out). Under mClock, EC sub-operation reads issued
-   during recovery are currently routed through the ``immediate``
-   high-priority queue and bypass mClock throttling. When many OSDs
-   read concurrently from a single source OSD, this can saturate that
-   OSD's high-priority queue and starve client and background work.
-   As an interim measure, such deployments are advised to switch to
-   the ``WeightedPriorityQueue`` (``wpq``) scheduler. The change can
-   be applied cluster-wide and takes effect after each OSD is
-   restarted:
-
-   .. prompt:: bash #
-
-     ceph config set osd osd_op_queue wpq
-
 QoS support in Ceph is implemented using a queuing scheduler based on `the
 dmClock algorithm`_. See :ref:`dmclock-qos` section for more details.
 
@@ -128,7 +112,7 @@ built-in profiles may be enabled by following the steps mentioned in next sectio
 +------------------------+-------------+--------+-------+
 | background recovery    | 50%         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
-| background best-effort | MIN         | 1      | 90%   |
+| background best-effort |  5%         | 2      | 90%   |
 +------------------------+-------------+--------+-------+
 
 high_client_ops
@@ -147,7 +131,7 @@ the resource control parameters set by the profile:
 +------------------------+-------------+--------+-------+
 | background recovery    | 40%         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
-| background best-effort | MIN         | 1      | 70%   |
+| background best-effort |  5%         | 4      | 70%   |
 +------------------------+-------------+--------+-------+
 
 high_recovery_ops
@@ -165,7 +149,7 @@ parameters set by the profile:
 +------------------------+-------------+--------+-------+
 | background recovery    | 70%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
-| background best-effort | MIN         | 1      | MAX   |
+| background best-effort |  5%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
 
 .. note:: Across the built-in profiles, internal background best-effort clients
