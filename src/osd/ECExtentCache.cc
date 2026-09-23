@@ -341,6 +341,14 @@ bool ECExtentCache::idle() const {
   return active_ios == 0;
 }
 
+void ECExtentCache::assert_idle() const {
+  // The LRU is deliberately not checked: it is a bounded cache of recently
+  // written data and is allowed to outlive the I/O that populated it.
+  ceph_assert(objects.empty());
+  ceph_assert(waiting_ops.empty());
+  ceph_assert(active_ios == 0);
+}
+
 list<ECExtentCache::LRU::Key>::iterator ECExtentCache::LRU::erase(
     const list<Key>::iterator &it,
     bool do_update_mempool) {

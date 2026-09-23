@@ -151,6 +151,17 @@ void ECOmapJournal::clear_all() {
   object_state_map.clear();
 }
 
+void ECOmapJournal::assert_idle() const {
+  ceph_assert(entries.empty());
+  ceph_assert(key_map.empty());
+  ceph_assert(removed_ranges_map.empty());
+  ceph_assert(header_map.empty());
+  // object_state_map is deliberately not checked: it records the versions
+  // of outstanding deletes and is only released by trim_delete() when the
+  // pg log is trimmed, so it is bounded by the pg log rather than by
+  // in-flight I/O.
+}
+
 std::size_t ECOmapJournal::entries_size(const hobject_t &hoid) const {
   if (const auto entries_it = entries.find(hoid);
     entries_it != entries.end()) {
