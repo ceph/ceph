@@ -403,7 +403,7 @@ def _clean_s3_objects_for_vector_bucket(bucket_name):
     artifacts left by the background process, so that the subsequent
     delete_vector_bucket call finds an empty bucket and succeeds.
     """
-    if not is_s3_backend():
+    if not has_backing_bucket():
         return
     s3conn = connection('s3')
     try:

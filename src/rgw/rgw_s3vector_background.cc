@@ -808,7 +808,6 @@ private:
     vec_config.max_iterations = -1;    // default
     vec_config.sample_rate = 0.0f;     // default
     vec_config.distance_type = distance_type;
-    vec_config.accelerator = nullptr;  // CPU
     vec_config.replace = 1;            // replace existing index
 
     const auto index_type_str = cct->_conf.get_val<std::string>("rgw_s3vector_index_type");
@@ -886,16 +885,21 @@ private:
     }
 
     // step 3: open table
-    LanceDBConnection* conn = s3vector::connect(this, driver, nullptr, nullptr, bucket_name);
+    int connect_result = 0;
+    LanceDBConnection* conn = s3vector::connect(this, driver, nullptr, bucket_name, connect_result);
     if (!conn) {
       ldpp_dout(this, 5) << "WARNING: cannot connect to database for "
           << bucket_name << ", skipping" << dendl;
       return -EIO;
     }
-    LanceDBTable* table = lancedb_connection_open_table(conn, index_name.c_str());
-    if (!table) {
+    LanceDBTable* table = nullptr;
+    char* open_error_message = nullptr;
+    if (const LanceDBError oerr = lancedb_connection_open_table(conn, index_name.c_str(), &table, &open_error_message);
+        oerr != LANCEDB_SUCCESS || !table) {
       ldpp_dout(this, 5) << "WARNING: cannot open table "
-          << bucket_name << "." << index_name << ", may have been deleted" << dendl;
+          << bucket_name << "." << index_name << ", may have been deleted, error: "
+          << (open_error_message ? open_error_message : "unknown") << dendl;
+      lancedb_free_string(open_error_message);
       lancedb_connection_free(conn);
       return -ENOENT;
     }

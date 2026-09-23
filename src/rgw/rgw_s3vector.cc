@@ -1183,9 +1183,10 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  int get_index_stats(const get_index_stats_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply) {
+  int get_index_stats(const get_index_stats_t& configuration, rgw::sal::Driver* driver, [[maybe_unused]] const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply) {
     log_configuration(dpp, "GetIndexStats", configuration);
-    auto table_handle = open_table_with_session_handle(dpp, driver, user, tenant, configuration.vector_bucket_name, configuration.index_name);
+    int open_result = 0;
+    auto table_handle = open_table_with_session_handle(dpp, driver, tenant, configuration.vector_bucket_name, configuration.index_name, open_result);
     if (!table_handle) {
       return -ENOENT;
     }

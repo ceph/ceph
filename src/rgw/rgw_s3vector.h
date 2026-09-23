@@ -569,6 +569,7 @@ struct validation_error_t {
 // underscore, which is why a metadata key name may not start with one
 inline constexpr const char* key_field = "_key";
 inline constexpr const char* data_field = "_data";
+inline constexpr const char* vector_index_name = "_data_idx";
 inline constexpr const char* metadata_field = "_metadata";
 inline constexpr const char* distance_field = "_distance";
 
@@ -656,13 +657,9 @@ int get_vector_bucket_policy(const get_vector_bucket_policy_t& configuration, Do
 int delete_vectors(const delete_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y);
 int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors);
 
-// table field names
-inline constexpr const char* data_field = "data";
-inline constexpr const char* key_field = "key";
-inline constexpr const char* vector_index_name = "data_idx";
 
 // utility functions used by the background manager
-LanceDBConnection* connect(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, const std::string& vector_bucket_name);
+LanceDBConnection* connect(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const std::string* tenant, const std::string& vector_bucket_name, int& result);
 LanceDBTable* open_table(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, const std::string& vector_bucket_name, const std::string& index_name);
 DistanceMetric get_distance_metric(const LanceDBTable* table, DoutPrefixProvider* dpp);
 LanceDBDistanceType to_lancedb_distance(DistanceMetric metric);
