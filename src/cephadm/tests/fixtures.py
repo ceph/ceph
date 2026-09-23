@@ -172,6 +172,10 @@ def with_cephadm_ctx(
         stack.enter_context(mock.patch('cephadmlib.exe_utils.find_executable', return_value='foo'))
         stack.enter_context(mock.patch('cephadmlib.container_lookup.get_container_info', return_value=None))
         stack.enter_context(mock.patch('cephadm.is_available', return_value=True))
+        # wait_for_mgr_modules_loaded() polls `tell mgr mgr_status` with real
+        # 2s sleeps (45 tries); the mocked cli returns '' so it would spin
+        # for the full 90s per module on every bootstrap test.
+        stack.enter_context(mock.patch('cephadm.wait_for_mgr_modules_loaded'))
         stack.enter_context(mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}))
         stack.enter_context(mock.patch('cephadm.logger'))
         stack.enter_context(mock.patch('cephadm.FileLock'))
