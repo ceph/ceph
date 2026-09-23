@@ -1044,7 +1044,8 @@ int PGBackendTestFixture::read_object(
   uint64_t offset,
   uint64_t length,
   bufferlist& out_data,
-  uint64_t object_size)
+  uint64_t object_size,
+  bool fast_read)
 {
   hobject_t hoid = make_test_object(obj_name);
 
@@ -1076,7 +1077,7 @@ int PGBackendTestFixture::read_object(
       object_size,
       to_read,
       on_complete,
-      false
+      fast_read
     );
 
     event_loop->run_until_idle();
@@ -1627,6 +1628,7 @@ void PGBackendTestFixture::scrub_all_objects()
 
 bool PGBackendTestFixture::scrub_object(const std::string& obj_name, bool skip_verify)
 {
+  ++scrub_object_call_count;
   hobject_t hoid = make_test_object(obj_name);
 
   // Get the acting set from the OSDMap to know which OSDs to scrub
