@@ -3567,6 +3567,12 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
     target_placement.inherit_from(tier_ctx.bucket_info.placement_rule);
     target_placement.storage_class = tier->get_storage_class();
 
+    // the tier manifest has one part; preserve the source decryption boundaries
+    ret = fixup_manifest_to_parts_len(dpp, get_attrs());
+    if (ret < 0) {
+      return ret;
+    }
+
     ret = write_cloud_tier(dpp, y, tier_ctx.o.versioned_epoch,
 			   tier, tier_ctx.is_multipart_upload,
 			   target_placement, tier_ctx.obj);

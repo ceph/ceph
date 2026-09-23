@@ -6,6 +6,12 @@
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
 
+* RGW: Cloud transitions now preserve the original part lengths of
+  encrypted objects created with S3 Multipart Upload. Earlier releases
+  could discard those lengths during transition, so restored objects
+  returned corrupted data (AES-CBC) or failed to decrypt (AES-GCM).
+  Already-transitioned objects with missing lengths remain affected.
+
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
