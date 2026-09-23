@@ -156,111 +156,139 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
     int local_zone,
     bool allow_remote_zone,
     const std::optional<set<pg_shard_t>> &error_shards) {
-  for (auto &&pg_shard: get_parent()->get_acting_shards()) {
-    const auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(pg_shard.shard);
-    if (!allow_remote_zone && zone != local_zone) {
-      dout(10) << __func__ << ": skipping acting " << pg_shard
-               << " (rel_shard=" << rel_shard << ") - wrong zone " << zone
-               << " (local=" << local_zone << ")" << dendl;
-      continue;
+  // get_parent()->get_acting_shards() (and the backfill/missing_loc
+  // containers below) are ordered purely by OSD id, with no zone
+  // weighting. To make sure a locally-available copy of a relative shard
+  // is never displaced by a remote copy that merely happens to have a
+  // lower OSD id, each of the three passes below is split into two
+  // sub-passes: local-zone candidates are considered to completion first,
+  // and only then - and only when allow_remote_zone is set - do remote-zone
+  // candidates get a chance to fill relative shards that are still missing.
+  // A remote sub-pass therefore only ever fills a genuine gap; it can never
+  // pre-empt a local copy it hasn't been given the chance to see yet.
+  for (bool remote_pass : {false, true}) {
+    if (remote_pass && !allow_remote_zone) {
+      break;
     }
-    dout(10) << __func__ << ": checking acting " << pg_shard
-             << " (rel_shard=" << rel_shard << ")" << dendl;
-    const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
-    if (error_shards && error_shards->contains(pg_shard)) {
-      dout(10) << __func__ << ": skipping acting " << pg_shard
-               << " (rel_shard=" << rel_shard << ") - in error_shards" << dendl;
-      continue;
-    }
-#ifndef WITH_CRIMSON
-    if (cct->_conf->bluestore_debug_inject_read_err &&
-      ECInject::test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, rel_shard))) {
-      dout(0) << __func__ << " Error inject - Missing shard " << rel_shard << dendl;
-      continue;
-    }
-#endif
-    if (!missing.is_missing(hoid)) {
-      if (have.contains(rel_shard)) {
-        ceph_assert(allow_remote_zone);
-        // With zones, multiple pg_shards can map to the same relative shard
-        // Skip if we already have this relative shard
-        dout(10) << __func__ << ": skipping acting " << pg_shard
-                 << " (rel_shard=" << rel_shard << ") - already have this shard" << dendl;
+    for (auto &&pg_shard: get_parent()->get_acting_shards()) {
+      const auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(pg_shard.shard);
+      const bool is_local = zone == local_zone;
+      if (remote_pass == is_local) {
+        // First sub-pass only considers local-zone shards; second
+        // sub-pass (remote_pass) only considers remote-zone ones.
         continue;
       }
-      dout(10) << __func__ << ": adding acting " << pg_shard
-               << " (rel_shard=" << rel_shard << ") - object not missing" << dendl;
-      have.insert(rel_shard);
-      ceph_assert(!shards.contains(rel_shard));
-      shards.insert(rel_shard, pg_shard);
-    } else {
-      dout(10) << __func__ << ": skipping acting " << pg_shard
-               << " (rel_shard=" << rel_shard << ") - object is missing" << dendl;
+      dout(10) << __func__ << ": checking acting " << pg_shard
+               << " (rel_shard=" << rel_shard << ")" << dendl;
+      const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
+      if (error_shards && error_shards->contains(pg_shard)) {
+        dout(10) << __func__ << ": skipping acting " << pg_shard
+                 << " (rel_shard=" << rel_shard << ") - in error_shards" << dendl;
+        continue;
+      }
+#ifndef WITH_CRIMSON
+      if (cct->_conf->bluestore_debug_inject_read_err &&
+        ECInject::test_read_error1(ghobject_t(hoid, ghobject_t::NO_GEN, rel_shard))) {
+        dout(0) << __func__ << " Error inject - Missing shard " << rel_shard << dendl;
+        continue;
+      }
+#endif
+      if (!missing.is_missing(hoid)) {
+        if (have.contains(rel_shard)) {
+          ceph_assert(allow_remote_zone);
+          // With zones, multiple pg_shards can map to the same relative
+          // shard. Skip if we already have this relative shard (either
+          // from the local sub-pass, or from an earlier remote candidate
+          // in this same sub-pass).
+          dout(10) << __func__ << ": skipping acting " << pg_shard
+                   << " (rel_shard=" << rel_shard << ") - already have this shard" << dendl;
+          continue;
+        }
+        dout(10) << __func__ << ": adding acting " << pg_shard
+                 << " (rel_shard=" << rel_shard << ") - object not missing" << dendl;
+        have.insert(rel_shard);
+        ceph_assert(!shards.contains(rel_shard));
+        shards.insert(rel_shard, pg_shard);
+      } else {
+        dout(10) << __func__ << ": skipping acting " << pg_shard
+                 << " (rel_shard=" << rel_shard << ") - object is missing" << dendl;
+      }
     }
   }
 
   if (for_recovery) {
-    for (auto &&pg_shard: get_parent()->get_backfill_shards()) {
-      if (error_shards && error_shards->contains(pg_shard)) {
-        dout(10) << __func__ << ": skipping backfill " << pg_shard
-                 << " - in error_shards" << dendl;
-        continue;
+    for (bool remote_pass : {false, true}) {
+      if (remote_pass && !allow_remote_zone) {
+        break;
       }
-      const auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(pg_shard.shard);
-      if (!allow_remote_zone && zone != local_zone) {
-        dout(10) << __func__ << ": skipping backfill " << pg_shard
-                 << " (rel_shard=" << rel_shard << ") - wrong zone " << zone
-                 << " (local=" << local_zone << ")" << dendl;
-        continue;
-      }
-      if (have.contains(rel_shard)) {
-        ceph_assert(shards.contains(rel_shard));
-        dout(10) << __func__ << ": skipping backfill " << pg_shard
-                 << " (rel_shard=" << rel_shard << ") - already have this shard" << dendl;
-        continue;
-      }
-      dout(10) << __func__ << ": checking backfill " << pg_shard
-               << " (rel_shard=" << rel_shard << ")" << dendl;
-      ceph_assert(!shards.count(rel_shard));
-      const pg_info_t &info = get_parent()->get_shard_info(pg_shard);
-      if (hoid < info.last_backfill &&
-        !get_parent()->get_shard_missing(pg_shard).is_missing(hoid)) {
-        dout(10) << __func__ << ": adding backfill " << pg_shard
-                 << " (rel_shard=" << rel_shard << ") - hoid < last_backfill and not missing" << dendl;
-        have.insert(rel_shard);
-        shards.insert(rel_shard, pg_shard);
-      } else {
-        dout(10) << __func__ << ": skipping backfill " << pg_shard
-                 << " (rel_shard=" << rel_shard << ") - hoid=" << hoid
-                 << " last_backfill=" << info.last_backfill
-                 << " is_missing=" << get_parent()->get_shard_missing(pg_shard).is_missing(hoid) << dendl;
+      for (auto &&pg_shard: get_parent()->get_backfill_shards()) {
+        if (error_shards && error_shards->contains(pg_shard)) {
+          dout(10) << __func__ << ": skipping backfill " << pg_shard
+                   << " - in error_shards" << dendl;
+          continue;
+        }
+        const auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(pg_shard.shard);
+        const bool is_local = zone == local_zone;
+        if (remote_pass == is_local) {
+          continue;
+        }
+        if (have.contains(rel_shard)) {
+          ceph_assert(shards.contains(rel_shard));
+          dout(10) << __func__ << ": skipping backfill " << pg_shard
+                   << " (rel_shard=" << rel_shard << ") - already have this shard" << dendl;
+          continue;
+        }
+        dout(10) << __func__ << ": checking backfill " << pg_shard
+                 << " (rel_shard=" << rel_shard << ")" << dendl;
+        ceph_assert(!shards.count(rel_shard));
+        const pg_info_t &info = get_parent()->get_shard_info(pg_shard);
+        if (hoid < info.last_backfill &&
+          !get_parent()->get_shard_missing(pg_shard).is_missing(hoid)) {
+          dout(10) << __func__ << ": adding backfill " << pg_shard
+                   << " (rel_shard=" << rel_shard << ") - hoid < last_backfill and not missing" << dendl;
+          have.insert(rel_shard);
+          shards.insert(rel_shard, pg_shard);
+        } else {
+          dout(10) << __func__ << ": skipping backfill " << pg_shard
+                   << " (rel_shard=" << rel_shard << ") - hoid=" << hoid
+                   << " last_backfill=" << info.last_backfill
+                   << " is_missing=" << get_parent()->get_shard_missing(pg_shard).is_missing(hoid) << dendl;
+        }
       }
     }
 
     auto miter = get_parent()->get_missing_loc_shards().find(hoid);
     if (miter != get_parent()->get_missing_loc_shards().end()) {
-      for (auto &&pg_shard: miter->second) {
+      for (bool remote_pass : {false, true}) {
+        if (remote_pass && !allow_remote_zone) {
+          break;
+        }
+        for (auto &&pg_shard: miter->second) {
 
-        dout(10) << __func__ << ": checking missing_loc " << pg_shard << dendl;
-        if (const auto m = get_parent()->maybe_get_shard_missing(pg_shard)) {
-          ceph_assert(!m->is_missing(hoid));
+          dout(10) << __func__ << ": checking missing_loc " << pg_shard << dendl;
+          if (const auto m = get_parent()->maybe_get_shard_missing(pg_shard)) {
+            ceph_assert(!m->is_missing(hoid));
+          }
+          if (error_shards && error_shards->contains(pg_shard)) {
+            dout(10) << __func__ << ": skipping missing_loc " << pg_shard
+                     << " - in error_shards" << dendl;
+            continue;
+          }
+          const auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(pg_shard.shard);
+          const bool is_local = zone == local_zone;
+          if (remote_pass == is_local) {
+            continue;
+          }
+          if (have.contains(rel_shard)) {
+            dout(10) << __func__ << ": skipping missing_loc " << pg_shard
+                     << " (rel_shard=" << rel_shard << ") - already have this shard" << dendl;
+            continue;
+          }
+          dout(10) << __func__ << ": adding missing_loc " << pg_shard
+                   << " (rel_shard=" << rel_shard << ")" << dendl;
+          have.insert(rel_shard);
+          shards.insert(rel_shard, pg_shard);
         }
-        if (error_shards && error_shards->contains(pg_shard)) {
-          dout(10) << __func__ << ": skipping missing_loc " << pg_shard
-                   << " - in error_shards" << dendl;
-          continue;
-        }
-        const auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(pg_shard.shard);
-        if (!allow_remote_zone && zone != local_zone) {
-          dout(10) << __func__ << ": skipping missing_loc " << pg_shard
-                   << " (rel_shard=" << rel_shard << ") - wrong zone " << zone
-                   << " (local=" << local_zone << ")" << dendl;
-          continue;
-        }
-        dout(10) << __func__ << ": adding missing_loc " << pg_shard
-                 << " (rel_shard=" << rel_shard << ")" << dendl;
-        have.insert(rel_shard);
-        shards.insert(rel_shard, pg_shard);
       }
     }
   }
