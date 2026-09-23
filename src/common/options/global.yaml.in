@@ -7223,6 +7223,35 @@ options:
   - rgw
   - osd
   with_legacy: true
+- name: trace_exporter
+  type: str
+  level: advanced
+  desc: Protocol used to export spans
+  long_desc: otlp sends spans over OTLP/HTTP to trace_otlp_endpoint, which
+    Jaeger v2, Grafana Tempo, the OpenTelemetry Collector and most tracing
+    backends accept. jaeger sends them over UDP to jaeger_agent_host and
+    jaeger_agent_port, the older Jaeger-only protocol. OSDs pick up a change
+    without restarting.
+  default: jaeger
+  enum_values:
+  - jaeger
+  - otlp
+  services:
+  - rgw
+  - osd
+  see_also:
+  - trace_otlp_endpoint
+  - jaeger_agent_host
+- name: trace_otlp_endpoint
+  type: str
+  level: advanced
+  desc: URL that spans are posted to when trace_exporter is otlp
+  default: http://localhost:4318/v1/traces
+  services:
+  - rgw
+  - osd
+  see_also:
+  - trace_exporter
 - name: jaeger_agent_host
   type: str
   level: advanced

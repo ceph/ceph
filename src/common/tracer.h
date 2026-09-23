@@ -70,7 +70,7 @@ class Tracer {
   mutable std::shared_mutex tracer_lock;  ///< protects tracer, which reconfigure() replaces
   tracer_ptr tracer;
 
-  // a tracer exporting to the currently configured jaeger_agent_host/port
+  // a tracer exporting as trace_exporter and its options currently say
   tracer_ptr make_tracer();
   tracer_ptr get_tracer() const {
     std::shared_lock l(tracer_lock);
@@ -82,7 +82,7 @@ class Tracer {
   Tracer() = default;
 
   void init(CephContext* _cct, opentelemetry::nostd::string_view service_name);
-  // re-create the exporter after jaeger_agent_host or jaeger_agent_port
+  // re-create the exporter after trace_exporter or one of its options
   // changed; spans already started still go to the previous exporter
   void reconfigure();
 

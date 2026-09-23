@@ -32,6 +32,32 @@ function(build_opentelemetry)
                          opentelemetry_exporter_jaeger_trace http_client_curl
 			 ${CURL_LIBRARIES})
 
+  if(WITH_OTLP)
+    # the OTLP/HTTP exporter; gRPC is not needed
+    find_package(Protobuf REQUIRED)
+    list(APPEND opentelemetry_cpp_targets opentelemetry_exporter_otlp_http)
+    list(APPEND opentelemetry_CMAKE_ARGS -DWITH_OTLP=ON
+                                         -DWITH_OTLP_HTTP=ON
+                                         -DWITH_OTLP_GRPC=OFF)
+    set(otlp_libs
+        exporters/otlp/libopentelemetry_exporter_otlp_http.a
+        exporters/otlp/libopentelemetry_exporter_otlp_http_client.a
+        exporters/otlp/libopentelemetry_otlp_recordable.a
+        libopentelemetry_proto.a)
+    foreach(lib ${otlp_libs})
+      list(APPEND opentelemetry_libs ${opentelemetry_BINARY_DIR}/${lib})
+    endforeach()
+    list(APPEND opentelemetry_include_dir
+         ${opentelemetry_SOURCE_DIR}/exporters/otlp/include/
+         ${opentelemetry_BINARY_DIR}/generated/third_party/opentelemetry-proto/)
+    # listed before the SDK libraries they depend on
+    list(PREPEND opentelemetry_deps opentelemetry_exporter_otlp_http
+                                    opentelemetry_exporter_otlp_http_client
+                                    opentelemetry_otlp_recordable
+                                    opentelemetry_proto)
+    list(APPEND opentelemetry_deps protobuf::libprotobuf)
+  endif()
+
   if(CMAKE_MAKE_PROGRAM MATCHES "make")
     # try to inherit command line arguments passed by parent "make" job
     set(make_cmd $(MAKE) ${opentelemetry_cpp_targets})
@@ -82,6 +108,15 @@ function(build_opentelemetry)
                 "exporters/jaeger/libopentelemetry_exporter_jaeger_trace.a")
   target_create("http_client_curl"
                 "ext/src/http/client/curl/libopentelemetry_http_client_curl.a")
+  if(WITH_OTLP)
+    target_create("opentelemetry_exporter_otlp_http"
+                  "exporters/otlp/libopentelemetry_exporter_otlp_http.a")
+    target_create("opentelemetry_exporter_otlp_http_client"
+                  "exporters/otlp/libopentelemetry_exporter_otlp_http_client.a")
+    target_create("opentelemetry_otlp_recordable"
+                  "exporters/otlp/libopentelemetry_otlp_recordable.a")
+    target_create("opentelemetry_proto" "libopentelemetry_proto.a")
+  endif()
 
   # will do all linking and path setting fake include path for
   # interface_include_directories since this happens at build time

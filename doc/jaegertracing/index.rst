@@ -40,16 +40,16 @@ it directly, and it needs no agents on other hosts and no separate database.
 
       podman run -d --name jaeger --network host jaegertracing/jaeger:latest
 
-   Jaeger v2 accepts spans on UDP port 6831 and serves its UI on port 16686.
-   By default it keeps traces in memory, so they are lost when the container
-   restarts.
+   Jaeger v2 accepts spans over OTLP/HTTP on port 4318 and serves its UI on
+   port 16686. By default it keeps traces in memory, so they are lost when
+   the container restarts.
 
 #. Point the OSDs at it. This takes effect without restarting the OSDs:
 
    .. prompt:: bash $
 
-      ceph config set osd jaeger_agent_host <jaeger host>
-      ceph config set osd jaeger_agent_port 6831
+      ceph config set osd trace_exporter otlp
+      ceph config set osd trace_otlp_endpoint http://<jaeger host>:4318/v1/traces
 
 #. Trace operations slower than half a second:
 
@@ -146,21 +146,35 @@ If no traces appear
    ``osd_op_trace_max_per_sec``.
 #. Check where the OSD sends them. The OSD log records every change of
    destination at debug level 1 of the ``trace`` subsystem, for example
-   ``otel_tracing: exporting spans to 10.0.0.5:6831``.
-#. Spans are sent over UDP, so a firewall between the OSD hosts and Jaeger
-   silently drops them. Allow UDP port 6831 to the Jaeger host.
+   ``otel_tracing: exporting spans over OTLP/HTTP to
+   http://10.0.0.5:4318/v1/traces``.
+#. Check that the OSD hosts can reach that address: TCP port 4318 for OTLP.
+   With the ``jaeger`` exporter, spans travel over UDP, so a firewall drops
+   them without any error; allow UDP port 6831 (or 6799 for a cephadm agent).
 
 Where spans are sent
 ====================
 
+.. confval:: trace_exporter
+.. confval:: trace_otlp_endpoint
 .. confval:: jaeger_agent_host
 .. confval:: jaeger_agent_port
 
-The defaults, ``localhost`` and port 6799, match a Jaeger agent on every host
-as deployed by cephadm (see below). To send spans to a single Jaeger instead,
-set ``jaeger_agent_host`` to its address and ``jaeger_agent_port`` to 6831, the
-port Jaeger v2 listens on. OSDs apply a change of either option without
-restarting; RGW reads them when it starts.
+Ceph can export spans with either of two protocols:
+
+* ``otlp`` posts them over HTTP to ``trace_otlp_endpoint``. OTLP is the
+  OpenTelemetry protocol, so the same setting works with Jaeger v2, Grafana
+  Tempo, the OpenTelemetry Collector and most commercial tracing services.
+  Delivery is acknowledged, so spans are not silently lost on the network.
+  This is the recommended exporter.
+* ``jaeger`` (the default, for compatibility) sends them over UDP to
+  ``jaeger_agent_host`` and ``jaeger_agent_port``. The defaults, ``localhost``
+  and port 6799, match a Jaeger agent on every host as deployed by cephadm
+  (see below). Jaeger v2 still accepts this protocol on UDP port 6831, but it
+  is Jaeger-specific and deprecated by OpenTelemetry.
+
+OSDs apply a change to any of these options without restarting; RGW reads them
+when it starts. Export happens on a background thread, never in the I/O path.
 
 .. _jaegertracing-enable:
 

@@ -11,10 +11,14 @@
   operations cost nothing extra; ``osd_op_trace_max_per_sec`` limits the rate.
   Traced operations show a ``trace_id`` in ``dump_historic_ops``. Disabled by
   default. See the tracing documentation.
-* OSD, RGW: The new ``jaeger_agent_host`` option sets where spans are sent, so
-  all daemons can send them to one Jaeger (Jaeger v2 accepts them on UDP port
-  6831) instead of to an agent on every host. OSDs apply changes to
-  ``jaeger_agent_host`` and ``jaeger_agent_port`` without restarting.
+* OSD, RGW: Spans can now be exported over OTLP/HTTP, the OpenTelemetry
+  protocol accepted by Jaeger v2, Grafana Tempo, the OpenTelemetry Collector
+  and most tracing backends: set ``trace_exporter`` to ``otlp`` and
+  ``trace_otlp_endpoint`` to the backend's URL. The default remains the Jaeger
+  UDP exporter, whose destination host is now configurable with
+  ``jaeger_agent_host``, so all daemons can send to one Jaeger instead of an
+  agent on every host. OSDs apply changes to these options without restarting.
+  Builds with tracing now require protobuf (``WITH_OTLP``, on by default).
 * OSD: The op tracker event ``sub_op_commit_rec`` is now
   ``sub_op_commit_rec from osd.N``, naming the replica that acknowledged.
   Scripts that match the exact event name need updating.
