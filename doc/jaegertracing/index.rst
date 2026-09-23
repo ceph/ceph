@@ -1,134 +1,214 @@
 .. _jaegertracing:
 
-JAEGER- DISTRIBUTED TRACING
-===========================
+===================
+Distributed tracing
+===================
 
-Jaeger provides ready-to-use tracing services for distributed systems. 
+Ceph daemons can export traces in the OpenTelemetry format to a Jaeger
+backend, where each trace shows what one request did and where its time
+went. Ceph offers two kinds of traces:
 
-BASIC ARCHITECTURE AND TERMINOLOGY
-----------------------------------
+* **Slow-op traces** (OSD): only operations slower than a threshold are
+  traced. The trace is built after the operation completes, from the event
+  timeline that the op tracker records for every operation anyway, so
+  operations faster than the threshold cost nothing extra. This is the kind to
+  leave on in production.
+* **Tracing of every request** (OSD and RGW): every request is traced as it
+  runs. This shows the complete request flow between RGW and the OSDs, but it
+  adds measurable CPU and latency to every operation, so enable it only while
+  investigating.
 
-* TRACE: A trace shows the data/execution path through a system.
-* SPAN: A single unit of a trace. A data structure that stores information such
-  as the operation name, timestamps, and the ordering within a trace.
-* JAEGER CLIENT: Language-specific implementations of the OpenTracing API.
-* JAEGER AGENT: A daemon that listens for spans sent over User Datagram
-  Protocol. The agent is meant to be placed on the same host as the
-  instrumented application. (The Jaeger agent acts like a sidecar listener.)
-* JAEGER COLLECTOR: A daemon that receives spans sent by the Jaeger agent. The
-  Jaeger collector then stitches the spans together to form a trace. (A database
-  can be enabled to persist these traces).
-* JAEGER QUERY AND CONSOLE FRONTEND: The UI-based frontend that presents
-  reports of the jaeger traces. Accessible at  http://<jaeger frontend host>:16686.
+Terminology
+===========
 
-Read more about jaeger tracing:.
+* **Trace**: the path of one request through the system.
+* **Span**: one timed unit of work in a trace, with a name, a start and end
+  time, attributes, and timestamped events. Spans nest: a slow-op trace has
+  one span for the operation and one child span for each phase of it.
+* **Jaeger**: the tracing backend that receives, stores and displays traces.
+  Its web UI listens on port 16686.
 
-  https://www.jaegertracing.io/docs/
+Quick start
+===========
 
-JAEGER DEPLOYMENT
------------------
+A single Jaeger v2 container is enough: every Ceph daemon can send spans to
+it directly, and it needs no agents on other hosts and no separate database.
 
-Jaeger can be deployed using cephadm, or manually.
+#. Start Jaeger on a host that the OSDs can reach:
 
-CEPHADM BASED DEPLOYMENT AS A SERVICE
+   .. prompt:: bash $
+
+      podman run -d --name jaeger --network host jaegertracing/jaeger:latest
+
+   Jaeger v2 accepts spans on UDP port 6831 and serves its UI on port 16686.
+   By default it keeps traces in memory, so they are lost when the container
+   restarts.
+
+#. Point the OSDs at it. This takes effect without restarting the OSDs:
+
+   .. prompt:: bash $
+
+      ceph config set osd jaeger_agent_host <jaeger host>
+      ceph config set osd jaeger_agent_port 6831
+
+#. Trace operations slower than half a second:
+
+   .. prompt:: bash $
+
+      ceph config set osd osd_op_trace_slow_threshold 0.5
+
+#. Open ``http://<jaeger host>:16686`` and select the ``osd`` service.
+
+.. _slow-op-traces:
+
+Slow-op traces
+==============
+
+Every operation that takes at least ``osd_op_trace_slow_threshold`` seconds
+is exported as a trace when it completes. The default of ``0`` disables slow-op
+traces. They are independent of ``jaeger_tracing_enable``, which may stay
+``false``.
+
+.. confval:: osd_op_trace_slow_threshold
+.. confval:: osd_op_trace_max_per_sec
+
+What a slow-op trace contains
+-----------------------------
+
+* **One span for the operation**, named after its message type (for example
+  ``osd_op`` for a client request, ``osd_repop`` for a replicated write on a
+  replica). It starts when the operation arrived and ends when it completed.
+* **Every op tracker event** as a span event, with its original timestamp.
+  These are the same events that ``ceph tell osd.N dump_historic_ops`` shows,
+  such as ``queued_for_pg``, ``reached_pg``, ``waiting for rw locks``,
+  ``started`` and ``commit_sent``.
+* **A child span for each phase** that took at least 1% of the operation. A
+  phase is the time between two consecutive events and is named after both,
+  so the long child spans show directly what the operation waited for.
+  For example, in a replicated write where one replica was slow::
+
+    osd_op                                                          0.296 s
+      sub_op_commit_rec from osd.2 -> sub_op_commit_rec from osd.1  0.290 s
+
+  The primary had the acknowledgement of ``osd.2`` and then waited 0.29 s for
+  ``osd.1``.
+* **Attributes**: ``description`` (the operation, as in the op tracker),
+  ``osd``, ``source`` (the sender), ``reqid`` and ``duration_s``.
+
+If a client sent its own trace context with the request, as RGW does when
+tracing every request, the slow-op trace becomes part of the client's trace.
+
+Finding the trace of a slow operation
 -------------------------------------
 
-`Cephadm Jaeger Services Deployment <../cephadm/services/tracing/>`_
-
-
-MANUAL TEST DEPLOYMENT FOR JAEGER OPENTELEMETRY ALL IN ONE CONTAINER
---------------------------------------------------------------------
-
-For single node testing Jaeger opentelemetry can be deployed using:
+A traced operation shows its ``trace_id`` in the op history. The slowest
+recent operations are listed first by:
 
 .. prompt:: bash $
 
-   docker run -d --name jaeger \
-  -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 \
-  -e COLLECTOR_OTLP_ENABLED=true \
-  -p 6799:6799/udp \
-  -p 6832:6832/udp \
-  -p 5778:5778 \
-  -p 16686:16686 \
-  -p 4317:4317 \
-  -p 4318:4318 \
-  -p 14250:14250 \
-  -p 14268:14268 \
-  -p 14269:14269 \
-  -p 9411:9411 \
-  jaegertracing/all-in-one:latest --processor.jaeger-compact.server-host-port=6799
+   ceph tell osd.0 dump_historic_ops_by_duration
 
+Search for that ID in the Jaeger UI to open the trace. The history keeps
+``osd_op_history_size`` operations from the last ``osd_op_history_duration``
+seconds; ``dump_historic_slow_ops`` keeps only operations slower than
+``osd_op_history_slow_op_threshold`` (10 seconds by default).
 
-`Jaeger Deployment <https://www.jaegertracing.io/docs/1.25/deployment/>`_
+Rate limit
+----------
 
-`Jaeger Performance Tuning <https://www.jaegertracing.io/docs/1.25/performance-tuning/>`_
+When a cluster has trouble, many operations become slow at once. Each OSD
+exports at most ``osd_op_trace_max_per_sec`` slow-op traces per second
+(default 10) and skips the rest. The ``trackedop`` perf counters count both:
 
-.. note::
+.. prompt:: bash $
 
-  The Jaeger agent must be running on each host (and not running in all-in-one
-  mode). This is because spans are sent to the local Jaeger agent. Spans of
-  hosts that do not have active Jaeger agents will be lost.
+   ceph tell osd.0 perf dump trackedop
 
-  The default configured port for Jaeger agent differs from the official default
-  6831, since Ceph tracers are configured to send tracers to agents that listen
-  to port the configured 6799. Use the option "--processor.jaeger-compact.server-host-port=6799" for manual Jaeger
-  deployments.
+* ``slow_op_traces``: operations exported as traces
+* ``slow_op_traces_dropped``: slow operations skipped because of the rate limit
+
+Cost
+----
+
+The decision to trace, and the building of the trace, happen after the
+operation completed, on the op tracker's history thread rather than in the
+I/O path. An operation faster than the threshold costs nothing beyond what the
+op tracker already does. Slow-op traces therefore need the op tracker
+(``osd_enable_op_tracker``, enabled by default).
+
+If no traces appear
+-------------------
+
+#. Check that ``osd_op_trace_slow_threshold`` is set and that some operations
+   are slower than it: ``ceph tell osd.N dump_historic_ops_by_duration``.
+#. Check the counters above. If ``slow_op_traces`` rises, the OSD exports
+   traces; if ``slow_op_traces_dropped`` rises, raise
+   ``osd_op_trace_max_per_sec``.
+#. Check where the OSD sends them. The OSD log records every change of
+   destination at debug level 1 of the ``trace`` subsystem, for example
+   ``otel_tracing: exporting spans to 10.0.0.5:6831``.
+#. Spans are sent over UDP, so a firewall between the OSD hosts and Jaeger
+   silently drops them. Allow UDP port 6831 to the Jaeger host.
+
+Where spans are sent
+====================
+
+.. confval:: jaeger_agent_host
+.. confval:: jaeger_agent_port
+
+The defaults, ``localhost`` and port 6799, match a Jaeger agent on every host
+as deployed by cephadm (see below). To send spans to a single Jaeger instead,
+set ``jaeger_agent_host`` to its address and ``jaeger_agent_port`` to 6831, the
+port Jaeger v2 listens on. OSDs apply a change of either option without
+restarting; RGW reads them when it starts.
 
 .. _jaegertracing-enable:
 
-HOW TO ENABLE TRACING IN CEPH
------------------------------
+Tracing every request
+=====================
 
-Tracing in Ceph is disabled by default.
-
-Tracing can be enabled globally, and tracing can also be enabled separately for
-each entity (for example, for rgw).
-
-Enable tracing globally:
+Tracing of every request is disabled by default. It can be enabled for all
+daemons or for one daemon type at a time:
 
 .. prompt:: bash $
 
    ceph config set global jaeger_tracing_enable true
-
-
-Enable tracing for each entity:
-
-.. prompt:: bash $
-
    ceph config set <entity> jaeger_tracing_enable true
 
+.. warning::
 
-TRACES IN RGW
+   Every request then creates spans in the I/O path. On an OSD, expect a
+   noticeable rise in CPU per operation and in latency. For operations that
+   matter most, prefer :ref:`slow-op traces <slow-op-traces>`.
+
+Traces in RGW
 -------------
 
-Traces run on RGW can be found under the Service `rgw` in the Jaeger Frontend.
+Traces from RGW are listed under the ``rgw`` service in the Jaeger UI.
 
-REQUESTS
-^^^^^^^^
-Every user request is traced. Each trace contains tags for `Operation name`,
-`User id`, `Object name` and `Bucket name`.
+Every user request is traced. Each trace carries the ``Operation name``,
+``User id``, ``Object name`` and ``Bucket name`` tags, and multipart uploads
+also carry ``Upload id``. Request traces are named ``<command> <transaction
+id>``.
 
-There is also an `Upload id` tag for Multipart upload operations.
+A multipart upload also gets a trace of its own, with a span for each request
+that belongs to the upload, including every ``Put Object`` request. These
+traces are named ``multipart_upload <upload id>``.
 
-The names of request traces have the following format: `<command> <transaction
-id>`.
-
-MULTIPART UPLOAD
-^^^^^^^^^^^^^^^^
-There is a kind of trace that consists of a span for each request made by a
-multipart upload, and it includes all `Put Object` requests.
-
-The names of multipart traces have the following format: `multipart_upload
-<upload id>`.
-
-
-rgw service in Jaeger Frontend:
+rgw service in the Jaeger UI:
 
 .. image:: ./rgw_jaeger.png
   :width: 400
 
-
-osd service in Jaeger Frontend:
+osd service in the Jaeger UI:
 
 .. image:: ./osd_jaeger.png
   :width: 400
+
+Deploying Jaeger with cephadm
+=============================
+
+cephadm can deploy Jaeger as a set of services, with a Jaeger agent on every
+host. See :ref:`Cephadm Jaeger services deployment <cephadm-tracing>`.
+
+Further reading: `Jaeger documentation <https://www.jaegertracing.io/docs/>`_.

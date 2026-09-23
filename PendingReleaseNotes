@@ -5,6 +5,19 @@
   hold the lock, instead of an empty list. Callers should check the
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
+* OSD: Operations slower than ``osd_op_trace_slow_threshold`` seconds can now
+  be exported as traces to Jaeger. A trace is built after the operation
+  completes, from the events the op tracker already records, so faster
+  operations cost nothing extra; ``osd_op_trace_max_per_sec`` limits the rate.
+  Traced operations show a ``trace_id`` in ``dump_historic_ops``. Disabled by
+  default. See the tracing documentation.
+* OSD, RGW: The new ``jaeger_agent_host`` option sets where spans are sent, so
+  all daemons can send them to one Jaeger (Jaeger v2 accepts them on UDP port
+  6831) instead of to an agent on every host. OSDs apply changes to
+  ``jaeger_agent_host`` and ``jaeger_agent_port`` without restarting.
+* OSD: The op tracker event ``sub_op_commit_rec`` is now
+  ``sub_op_commit_rec from osd.N``, naming the replica that acknowledged.
+  Scripts that match the exact event name need updating.
 
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
