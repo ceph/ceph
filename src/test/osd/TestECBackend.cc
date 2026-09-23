@@ -19,6 +19,7 @@
 #include <signal.h>
 #include "osd/ECCommon.h"
 #include "osd/ECBackend.h"
+#include "osd/ECMsgTypes.h"
 #include "gtest/gtest.h"
 #include "osd/osd_types.h"
 #include "common/ceph_argparse.h"
@@ -281,6 +282,172 @@ public:
     return 0;
   }
 };
+
+namespace {
+
+struct TestDpp : public DoutPrefixProvider {
+  std::ostream &gen_prefix(std::ostream &out) const override {
+    return out << "TestRMWPipeline";
+  }
+  CephContext *get_cct() const override { return g_ceph_context; }
+  unsigned get_subsys() const override { return ceph_subsys_osd; }
+};
+
+// Minimal concrete ECCommon so a test can directly construct a real
+// ECCommon::RMWPipeline (which needs an ECCommon& to hand write completions
+// to). Only handle_sub_write() is exercised by the tests below (a write
+// routed to "ourself" via ECListenerStub::whoami); the read paths are never
+// reached because the tests call RMWPipeline::cache_ready() directly instead
+// of going through start_rmw()/the extent cache, so ADD_FAILURE() there is
+// a trip-wire, not a real implementation.
+struct FakeECBackendForRMW : public ECCommon {
+  explicit FakeECBackendForRMW(const DoutPrefixProvider &dpp) : ECCommon(dpp) {}
+
+  // Captured from the sub-write, for inspection once cache_ready() returns.
+  int sub_writes_seen = 0;
+  ObjectStore::Transaction last_sub_write_t;
+
+  void handle_sub_write(pg_shard_t from, OpRequestRef msg, ECSubWrite &op,
+                         const ZTracer::Trace &trace,
+                         ECListener &eclistener) override {
+    ++sub_writes_seen;
+    last_sub_write_t = op.t;
+  }
+
+  void objects_read_and_reconstruct(
+      const std::map<hobject_t, std::list<ec_align_t>> &reads,
+      bool fast_read, uint64_t object_size,
+      GenContextURef<ec_extents_t &&> &&func) override {
+    ADD_FAILURE() << "not used by this test";
+  }
+
+  void objects_read_and_reconstruct_for_rmw(
+      std::map<hobject_t, read_request_t> &&to_read,
+      GenContextURef<ec_extents_t &&> &&func) override {
+    ADD_FAILURE() << "not used by this test";
+  }
+
+#ifdef WITH_CRIMSON
+  void handle_sub_read_n_reply(pg_shard_t from, ECSubRead &op,
+                                const ZTracer::Trace &trace) override {
+    ADD_FAILURE() << "not used by this test";
+  }
+#endif
+};
+
+// An Op whose generate_transactions() populates relative shard 0's
+// Transaction with real content (touch + setattr, so Transaction's
+// coll_index/object_index std::map members are non-empty and an extra copy
+// of them is actually observable), mirroring the existing ECDummyOp defined
+// in ECCommon.cc but with a non-trivial transaction instead of a no-op.
+struct ECShard0WriteTestOp final : ECCommon::RMWPipeline::Op {
+  explicit ECShard0WriteTestOp(ECCommon::RMWPipeline &rmw_pipeline)
+    : Op(rmw_pipeline) {
+  }
+
+  void generate_transactions(
+      ceph::ErasureCodeInterfaceRef &ec_impl,
+      pg_t pgid,
+      const ECUtil::stripe_info_t &sinfo,
+      map<hobject_t, ECUtil::shard_extent_map_t> *written,
+      shard_id_map<ObjectStore::Transaction> *transactions,
+      DoutPrefixProvider *dpp,
+      const OSDMapRef &osdmap,
+      bool &first_write_in_interval,
+      ECOmapJournal &ec_omap_journal) override {
+    const shard_id_t rel_shard(0);
+    ObjectStore::Transaction &t = transactions->at(rel_shard);
+    coll_t coll(spg_t(pgid, rel_shard));
+    ghobject_t obj(hoid, ghobject_t::NO_GEN, rel_shard);
+    t.touch(coll, obj);
+    bufferlist bl;
+    bl.append("x");
+    t.setattr(coll, obj, "_test", bl);
+  }
+
+  bool skip_transaction(
+      std::set<shard_id_t> &pending_roll_forward,
+      shard_id_t shard,
+      ObjectStore::Transaction &transaction) override {
+    return false;
+  }
+};
+
+} // namespace
+
+// For a multi-zone pool, RMWPipeline::cache_ready() has to get a non-zone-0
+// shard's Transaction into its sub-write remapped from the shard's relative
+// id to its absolute one. It does that by handing ECSubWrite's constructor an
+// empty transaction and swapping the remapped content in immediately after,
+// which avoids a redundant second deep copy of the transaction. This test
+// pins down the observable half of that: the sub-write must still come out
+// carrying the shard's real content, addressed to the absolute shard. If the
+// swap were dropped the sub-write would go out empty; if the remap were
+// dropped it would be addressed to the wrong shard. Either would be silent
+// data loss, so it is worth a test even though the copy count itself is not
+// observable from here.
+TEST(ECCommon, cache_ready_remaps_transaction_into_sub_write_for_remapped_shard)
+{
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t swidth = EC_ALIGN_SIZE * k;
+
+  pg_pool_t pool;
+  pool.size = 2 * (k + m); // 2 zones, k+m shards each
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  ECUtil::stripe_info_t sinfo(k, m, swidth, &pool);
+
+  // Relative shard 0 of zone 1: absolute id k+m, which get_rel_shard() maps
+  // back down to relative id 0 -- this is exactly the abs_shard != rel_shard
+  // case the defect is in.
+  const shard_id_t abs_shard(k + m);
+  const pg_shard_t pg_shard(101, abs_shard);
+
+  ECListenerStub listenerStub;
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(abs_shard);
+  listenerStub.acting_recovery_backfill_shards.insert(pg_shard);
+  // Route the write through the "local write" branch (handle_sub_write)
+  // rather than the "send an OSD message" branch: the redundant copy under
+  // test happens before that split, and the local branch avoids needing to
+  // construct/send a real MOSDECSubOpWrite message.
+  listenerStub.whoami = pg_shard;
+  listenerStub.should_send_op_result = true;
+
+  MockErasureCode *ecode = new MockErasureCode(k, k + m);
+  ErasureCodeInterfaceRef ec_impl(ecode);
+
+  TestDpp dpp;
+  FakeECBackendForRMW ec_backend(dpp);
+  ECExtentCache::LRU lru(0);
+  ECCommon::RMWPipeline pipeline(
+    g_ceph_context, ec_impl, sinfo, &listenerStub, ec_backend, lru);
+
+  auto op = std::make_shared<ECShard0WriteTestOp>(pipeline);
+  op->hoid = hobject_t(sobject_t("double-transaction-copy-test", CEPH_NOSNAP));
+
+  // Call cache_ready() directly (rather than going through start_rmw() and
+  // the extent cache) since this write needs no reads: it exercises exactly
+  // the code path under test with no further scaffolding required.
+  pipeline.cache_ready(*op);
+
+  ASSERT_EQ(ec_backend.sub_writes_seen, 1);
+  EXPECT_FALSE(ec_backend.last_sub_write_t.empty())
+    << "the remapped shard's sub-write went out with an empty transaction";
+
+  // generate_transactions() above put a touch and a setattr on relative
+  // shard 0; both must now be addressed to the absolute shard.
+  size_t ops_seen = 0;
+  auto i = ec_backend.last_sub_write_t.begin();
+  while (i.have_op()) {
+    const ObjectStore::Transaction::Op *t_op = i.decode_op();
+    ++ops_seen;
+    spg_t pgid;
+    ASSERT_TRUE(i.get_cid(t_op->cid).is_pg(&pgid));
+    EXPECT_EQ(pgid.shard, abs_shard);
+    EXPECT_EQ(i.get_oid(t_op->oid).shard_id, abs_shard);
+  }
+  EXPECT_EQ(ops_seen, 2u);
+}
 
 TEST(ECCommon, get_min_want_to_read_shards)
 {
