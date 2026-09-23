@@ -137,7 +137,7 @@ TEST_P(TestECWithCRUSH, BasicWriteVerify)
 }
 
 // ===========================================================================
-// ECSplitOp::local_zone_for_acting_set() tests
+// SplitOp::local_zone_for_acting_set() tests
 //
 // Tests zone resolution: one arbitrary OSD per zone is picked as a
 // representative, its CRUSH distance to the client is computed, and the zone
@@ -220,7 +220,7 @@ TEST_F(TestLocalZoneForActingSet, ClientInZone0ReturnsZero)
 {
   auto loc = make_loc(0);
   auto acting = make_acting();
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
 }
 
@@ -228,7 +228,7 @@ TEST_F(TestLocalZoneForActingSet, ClientInZone1ReturnsOne)
 {
   auto loc = make_loc(1);
   auto acting = make_acting();
-  EXPECT_EQ(1, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(1, SplitOp::local_zone_for_acting_set(
     acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
 }
 
@@ -236,7 +236,7 @@ TEST_F(TestLocalZoneForActingSet, NoCrushLocationReturnsZero)
 {
   std::multimap<std::string, std::string> empty_loc;
   auto acting = make_acting();
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, empty_loc));
 }
 
@@ -250,7 +250,7 @@ TEST_F(TestLocalZoneForActingSet, AllZone0OsdsDownFallsBackToZero)
   // (different datacenter, no higher-level match in loc).
   // Result: neither zone scores → returns 0 (default; falls back to zone 0).
   for (int i = 0; i < zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
 }
 
@@ -265,37 +265,51 @@ TEST_F(TestLocalZoneForActingSet, AllZone0OsdsDownWithRootLocPrefersZone1)
   loc.emplace("root", "default");
   auto acting = make_acting();
   for (int i = 0; i < zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
-  EXPECT_EQ(1, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(1, SplitOp::local_zone_for_acting_set(
     acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
 }
 
-TEST_F(TestLocalZoneForActingSet, SingleZoneReturnsZero)
-{
-  auto loc = make_loc(0);
-  auto acting = make_acting();
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
-    acting, /*num_zones=*/1, zone_size, osdmap->crush.get(), g_ceph_context, loc));
-}
-
-TEST_F(TestLocalZoneForActingSet, ActingTooSmallReturnsZero)
-{
-  auto loc = make_loc(0);
-  std::vector<int> short_acting = {0, 1, 2};
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
-    short_acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
-}
+// NOTE: num_zones<2 and acting-too-small guard cases are intentionally not
+// duplicated here - they are already covered, without needing a real CRUSH
+// map, by TestLocalZoneGuards.SingleZoneReturnsZero and
+// TestLocalZoneGuards.ActingTooSmallReturnsZero in TestSplitOpsUT.cc (see
+// the comment on that fixture: guard-path cases belong there, CRUSH-
+// dependent cases belong here).
 
 TEST_F(TestLocalZoneForActingSet, LocalizeReadsPicksNearestZone)
 {
+  // Exercise the actual localize/non-localize branch that init_read() uses
+  // (via the choose_local_zone_index() extraction), not just the
+  // localize-agnostic local_zone_for_acting_set() helper by itself - the
+  // previous version of this test called only the latter, so it could not
+  // tell whether the `localize` flag did anything at all.
   auto acting = make_acting();
-  // Client in zone-0 → zone 0 nearest.
   auto loc0 = make_loc(0);
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
-    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc0));
-  // Client in zone-1 → zone 1 nearest.
   auto loc1 = make_loc(1);
-  EXPECT_EQ(1, ECSplitOp::local_zone_for_acting_set(
-    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc1));
+
+  // localize=true: zone selection tracks the client's CRUSH location, same
+  // as calling local_zone_for_acting_set() directly.
+  EXPECT_EQ(0, ECSplitOp::choose_local_zone_index(
+    /*localize=*/true, acting, num_zones, zone_size,
+    osdmap->crush.get(), g_ceph_context, loc0));
+  EXPECT_EQ(1, ECSplitOp::choose_local_zone_index(
+    /*localize=*/true, acting, num_zones, zone_size,
+    osdmap->crush.get(), g_ceph_context, loc1));
+
+  // localize=false: BALANCE_READS semantics - the result must NOT depend on
+  // the client's crush_location at all.  Reset rand()'s seed before each
+  // call so both calls draw the same "random" value; if the location were
+  // consulted (e.g. a regression that inverted the localize check), loc0
+  // and loc1 would disagree the same way the localize=true calls above do.
+  srand(1);
+  int non_localized_zone0_loc = ECSplitOp::choose_local_zone_index(
+    /*localize=*/false, acting, num_zones, zone_size,
+    osdmap->crush.get(), g_ceph_context, loc0);
+  srand(1);
+  int non_localized_zone1_loc = ECSplitOp::choose_local_zone_index(
+    /*localize=*/false, acting, num_zones, zone_size,
+    osdmap->crush.get(), g_ceph_context, loc1);
+  EXPECT_EQ(non_localized_zone0_loc, non_localized_zone1_loc);
 }
 
 TEST_F(TestLocalZoneForActingSet, BalanceReadsPicksZoneFromActingSet)
@@ -303,31 +317,39 @@ TEST_F(TestLocalZoneForActingSet, BalanceReadsPicksZoneFromActingSet)
   auto acting = make_acting();
   // With crush_location in zone-0, function returns 0.
   auto loc = make_loc(0);
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
   // Remove zone-0 OSDs from acting set; function falls back to 0 (default).
   for (int i = 0; i < zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
 }
 
-TEST_F(TestLocalZoneForActingSet, NonFastECBypassesZoneRouting)
+TEST_F(TestLocalZoneForActingSet, ValidateFlagsAcceptsLocalizeReadsRegardlessOfECOptimizations)
 {
-  // A pool without FLAG_EC_OPTIMIZATIONS should not pass validate_flags
-  // for LOCALIZE_READS when FLAG_CLIENT_SPLIT_READS is also absent.
-  // Here we test the validate_flags logic directly: it accepts LOCALIZE_READS
-  // regardless of EC_OPTIMIZATIONS (that guard is in init_read), but the
-  // create() function rejects pools without FLAG_CLIENT_SPLIT_READS.
+  // The previous version of this test ("NonFastECBypassesZoneRouting")
+  // claimed to check that non-fast-EC pools bypass zone routing, but its
+  // only assertions were ASSERT_FALSE on the flags of a just-constructed
+  // pg_pool_t - true for any default pool, and true regardless of what
+  // validate_flags() or zone routing actually do.  Its comment also
+  // asserted a "guard...in init_read" for FLAG_EC_OPTIMIZATIONS that does
+  // not exist: grep over SplitOp.cc finds no reference to
+  // FLAG_EC_OPTIMIZATIONS at all, and get_num_zone() (osd_types.h), which
+  // drives zone routing in ECSplitOp::init_read(), is unconditional on that
+  // flag. So "non-fast-EC pools bypass zone routing" is not a property this
+  // module implements today, and cannot honestly be tested here.
+  //
+  // What IS real and testable is that SplitOp::validate_flags() accepts
+  // LOCALIZE_READS independently of FLAG_EC_OPTIMIZATIONS - assert that
+  // directly, with the flag both absent and present, rather than asserting
+  // facts about a pool that was never passed to validate_flags().
   pg_pool_t pool;
   pool.type = pg_pool_t::TYPE_ERASURE;
-  // No FLAG_EC_OPTIMIZATIONS, no FLAG_CLIENT_SPLIT_READS
-  ASSERT_FALSE(pool.has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS));
-  ASSERT_FALSE(pool.has_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS));
-  // validate_flags accepts LOCALIZE_READS (flag check only)
+
   EXPECT_TRUE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_LOCALIZE_READS, g_ceph_context));
-  // But without FLAG_CLIENT_SPLIT_READS, create() would return false
-  // (tested here by checking the pool flag that create() gates on)
-  EXPECT_FALSE(pool.has_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS));
+
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  EXPECT_TRUE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_LOCALIZE_READS, g_ceph_context));
 }
 
 TEST_F(TestLocalZoneForActingSet, FastECLocalizeBothFlagsAccepted)

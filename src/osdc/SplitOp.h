@@ -546,12 +546,6 @@ class ECSplitOp : public SplitOp{
     complete();
   }
 
-  // local_zone_for_acting_set() is now on the SplitOp base class so that
-  // ReplicaSplitOp can also use it without a cross-class dependency.
-  // ECSplitOp callers still use ECSplitOp::local_zone_for_acting_set() for
-  // backwards compatibility with existing unit-test call sites.
-  using SplitOp::local_zone_for_acting_set;
-
   /// Set to true when LOCALIZE_READS was requested; used by init_read() to
   /// mark sub-reads that are dispatched to non-local zones.
   const bool localize;

@@ -21,7 +21,7 @@
  *
  *  1. SplitOp::validate_flags()   — flag-combination acceptance/rejection
  *  2. ECStripeIterator / ECStripeView — stripe-traversal geometry
- *  3. ECSplitOp::local_zone_for_acting_set() — zone selection edge cases
+ *  3. SplitOp::local_zone_for_acting_set() — zone selection edge cases
  *
  * The tests use a minimal pg_pool_t built inline (no OSDMap, no peering).
  * For ECStripeIterator, a thin helper subclass exposes the protected types.
@@ -375,7 +375,7 @@ TEST_F(TestECStripeIterator, K2FullStripe)
 }
 
 // ===========================================================================
-// Section 3: ECSplitOp::local_zone_for_acting_set() — parameter guard cases
+// Section 3: SplitOp::local_zone_for_acting_set() — parameter guard cases
 //
 // The edge-case guard paths (fewer than 2 zones, empty crush_location, too-
 // small acting set, null crush pointer) all return 0 and do not require a
@@ -408,7 +408,7 @@ TEST_F(TestLocalZoneGuards, SingleZoneReturnsZero)
   auto acting = make_acting(6);
   auto loc    = make_loc("dc0");
   // crush pointer is null — but the guard fires on num_zones first.
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, /*num_zones=*/1, /*zone_size=*/6,
     /*crush=*/nullptr, cct, loc));
 }
@@ -418,7 +418,7 @@ TEST_F(TestLocalZoneGuards, ZeroZoneSizeReturnsZero)
 {
   auto acting = make_acting(6);
   auto loc    = make_loc("dc0");
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, /*num_zones=*/2, /*zone_size=*/0,
     /*crush=*/nullptr, cct, loc));
 }
@@ -428,7 +428,7 @@ TEST_F(TestLocalZoneGuards, NullCrushReturnsZero)
 {
   auto acting = make_acting(12);
   auto loc    = make_loc("dc0");
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, /*num_zones=*/2, /*zone_size=*/6,
     /*crush=*/nullptr, cct, loc));
 }
@@ -438,7 +438,7 @@ TEST_F(TestLocalZoneGuards, EmptyCrushLocationReturnsZero)
 {
   auto acting = make_acting(12);
   std::multimap<std::string, std::string> empty_loc;
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, /*num_zones=*/2, /*zone_size=*/6,
     /*crush=*/nullptr, cct, empty_loc));
 }
@@ -448,7 +448,7 @@ TEST_F(TestLocalZoneGuards, ActingTooSmallReturnsZero)
 {
   auto acting = make_acting(3);  // needs 12 (2 zones × 6)
   auto loc    = make_loc("dc0");
-  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
     acting, /*num_zones=*/2, /*zone_size=*/6,
     /*crush=*/nullptr, cct, loc));
 }
