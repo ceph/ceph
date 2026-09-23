@@ -1,6 +1,7 @@
 import contextlib
 import logging
 import json
+import uuid
 
 from io import StringIO
 from teuthology import misc as teuthology
@@ -15,7 +16,6 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def task(ctx, config):
     log.info('Setting up nvme_loop on scratch devices...')
-    host = 'hostnqn'
     port = '1'
     devs_by_remote = {}
     old_scratch_by_remote = {}
@@ -30,15 +30,16 @@ def task(ctx, config):
                 'grep', '^nvme_loop', '/proc/modules', run.Raw('||'),
                 'sudo', 'modprobe', 'nvme_loop',
                 run.Raw('&&'),
-                'sudo', 'mkdir', '-p', f'{base}/hosts/{host}',
-                run.Raw('&&'),
                 'sudo', 'mkdir', '-p', f'{base}/ports/{port}',
                 run.Raw('&&'),
                 'echo', 'loop', run.Raw('|'),
                 'sudo', 'tee', f'{base}/ports/{port}/addr_trtype',
             ]
         )
-        provide_hostname = True
+        host_id = str(uuid.uuid4())
+        host_nqn = f'nqn.2014-08.org.nvmexpress:uuid:{host_id}'
+        remote.sudo_write_file('/etc/nvme/hostnqn', host_nqn + '\n', mkdir=True)
+        remote.sudo_write_file('/etc/nvme/hostid', host_id + '\n', mkdir=True)
         for dev in devs:
             short = dev.split('/')[-1]
             log.info(f'Connecting nvme_loop {remote.shortname}:{dev}...')
@@ -59,18 +60,9 @@ def task(ctx, config):
                 'sudo', 'ln', '-s', f'{base}/subsystems/{short}',
                 f'{base}/ports/{port}/subsystems/{short}',
                 run.Raw('&&'),
-                'sudo', 'nvme', 'connect', '-t', 'loop', '-n', short
+                'sudo', 'nvme', 'connect', '-t', 'loop', '-n', short,
             ]
-            if provide_hostname:
-                nvme_connect_args.extend(['-q', host])
-            try:
-                remote.run(args=nvme_connect_args)
-            except Exception:
-                if provide_hostname:
-                    provide_hostname = False
-                    remote.run(args=['sudo', 'nvme', 'connect', '-t', 'loop', '-n', short])
-                else:
-                    raise
+            remote.run(args=nvme_connect_args)
 
         # identify nvme_loops devices
         old_scratch_by_remote[remote] = remote.read_file('/scratch_devs')
