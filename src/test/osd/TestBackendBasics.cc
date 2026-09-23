@@ -877,15 +877,18 @@ TEST_P(TestBackendBasics, MultiZoneWriteThenRead) {
     GTEST_SKIP() << "MultiZoneWriteThenRead test only applies to EC backends";
   }
 
-  // Skip test if zones are not configured
-  if (backend_config.num_zones == 0) {
-    GTEST_SKIP() << "MultiZoneWriteThenRead test requires num_zones > 0";
+  // Skip test if only a single zone is configured, mirroring the
+  // MultiZoneFailover guard below.
+  if (backend_config.num_zones <= 1) {
+    GTEST_SKIP() << "MultiZoneWriteThenRead test requires num_zones > 1";
   }
 
-  // Demonstrates the defect in the guard above: it should have rejected
-  // every genuinely single-zone (num_zones <= 1) parameter instance, the
-  // same way MultiZoneFailover's guard below does. Count any that get
-  // this far anyway; MultiZoneGuardCheckEnvironment asserts this stays 0.
+  // Independent regression canary for the guard-inversion bug this test
+  // once had (a "num_zones == 0" guard that never fired): kept separate
+  // from the skip check above on purpose, so that if the skip guard's
+  // condition ever regresses without this line being touched too, the
+  // suite-wide assertion in MultiZoneGuardCheckEnvironment::TearDown()
+  // still catches it.
   if (backend_config.num_zones <= 1) {
     g_multizone_wrongly_ran++;
   }
@@ -1032,6 +1035,8 @@ const std::vector<BackendConfig> kBackendConfigs = {
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 1, "EC_ISA_Opt_k2m1_su4k"},
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, 1, "EC_ISA_Opt_k8m3_su4k"},
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES, 4096,  4, 2, 1, "EC_ISA_NonOpt_k4m2_su4k"},
+  // Test configuration with num_zones set to 2 (size will be 2 * (4+2) = 12)
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 2, "EC_ISA_Opt_k4m2_zones2"},
 #endif
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 1, "EC_Jerasure_Opt_k4m2_su4k"},
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, 1, "EC_Jerasure_Opt_k4m2_su8k"},
@@ -1039,8 +1044,6 @@ const std::vector<BackendConfig> kBackendConfigs = {
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 1, "EC_Jerasure_Opt_k2m1_su4k"},
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, 1, "EC_Jerasure_Opt_k8m3_su4k"},
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES, 4096,  4, 2, 1, "EC_Jerasure_NonOpt_k4m2_su4k"},
-  // Test configuration with num_zones set to 2 (size will be 2 * (4+2) = 12)
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 2, "EC_ISA_Opt_k4m2_zones2"},
 };
 
 const std::vector<WriteReadParam> kSizeParams = {
