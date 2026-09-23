@@ -1754,3 +1754,82 @@ TEST(ECCommon, get_readable_writable_shard_id_sets_returns_relative_shards) {
   EXPECT_FALSE(readable.contains(shard_id_t(4)));
   EXPECT_FALSE(readable.contains(shard_id_t(5)));
 }
+
+// Reproduces a bug in ECCommon::ReadPipeline::ensure_primary_shard_for_omap():
+// it looks for a primary-capable shard to satisfy an omap read by calling
+// get_all_avail_shards() with a hard-coded local_zone of 0 and a literal 0
+// (rather than a bool) for allow_remote_zone, and never retries with a
+// remote-zone fallback the way get_min_avail_to_read_shards()/
+// select_shards_for_read() do a few lines earlier. If the primary itself
+// lives in a non-zero zone and zone 0 is entirely down, the hard-coded scan
+// of zone 0 finds nothing, even though the primary's own zone has a
+// perfectly good primary-capable shard.
+TEST(ECCommon, ensure_primary_shard_for_omap_zone1_primary_zone0_down) {
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64 * align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones of k+m=6 shards each
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  // Only relative shard 0 is primary-capable in each zone; relative
+  // shards 1-5 cannot become primary.
+  pool.nonprimary_shards.insert(shard_id_t(1));
+  pool.nonprimary_shards.insert(shard_id_t(2));
+  pool.nonprimary_shards.insert(shard_id_t(3));
+  pool.nonprimary_shards.insert(shard_id_t(4));
+  pool.nonprimary_shards.insert(shard_id_t(5));
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  // get_parent()->get_pool() must independently report supports_omap();
+  // set the same nonprimary_shards on it as get_pool() is a separate
+  // pg_pool_t instance from the one stripe_info_t was built from.
+  listenerStub.pg_pool.size = 12;
+  listenerStub.pg_pool.set_flag(pg_pool_t::FLAG_OMAP);
+
+  MockErasureCode *ecode = new MockErasureCode(k, k + m);
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // The primary is relative shard 0 of zone 1, i.e. absolute shard 6.
+  listenerStub.whoami = pg_shard_t(6, shard_id_t(6));
+
+  // Zone 1 (absolute shards 6-11) is fully up. Zone 0 (absolute shards
+  // 0-5) is entirely down - none of its shards appear in acting_shards.
+  for (int i = 6; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t want_to_read(s.get_k_plus_m());
+  // Want only non-primary-capable data shards, so nothing in shard_reads
+  // will already be able to serve the omap read.
+  want_to_read[shard_id_t(1)].insert(0, align_size);
+  want_to_read[shard_id_t(2)].insert(0, align_size);
+  want_to_read[shard_id_t(3)].insert(0, align_size);
+
+  ECCommon::read_request_t read_request(
+      want_to_read, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::Yes,
+      ECCommon::WantOmapKeys::Yes, "", 0, object_size);
+  ECCommon::read_result_t read_result(&s);
+
+  int r = pipeline.get_remaining_shards(
+      hoid, read_result, read_request, /*for_recovery=*/false,
+      /*want_attrs=*/false, /*want_omap_header=*/true,
+      /*want_omap_keys=*/true);
+
+  ASSERT_EQ(r, 0)
+      << "omap read should succeed using the primary's own (zone 1) "
+         "primary-capable shard, even though zone 0 is entirely down";
+
+  // shard_reads should contain relative shard 0 (primary-capable),
+  // mapped to the zone-1 primary's own pg_shard (absolute shard 6).
+  ASSERT_TRUE(read_request.shard_reads.contains(shard_id_t(0)))
+      << "expected a primary-capable shard to have been added for the "
+         "omap read";
+  EXPECT_EQ(read_request.shard_reads[shard_id_t(0)].pg_shard,
+            pg_shard_t(6, shard_id_t(6)));
+}
