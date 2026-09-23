@@ -1200,6 +1200,36 @@ To disable this alert, run the following command:
 
    ceph config set global bluestore_warn_on_no_per_pg_omap false
 
+BLUESTORE_NO_DB_SHARDING
+________________________
+
+One or more OSDs have a RocksDB database that does not use column family
+sharding. OSDs created prior to the Pacific release store all of their
+key-value data in a single RocksDB column family, whereas OSDs created in
+Pacific or later releases shard the data across several column families,
+which improves caching and compaction efficiency and reduces the disk space
+that is temporarily required during compaction. See
+:ref:`bluestore-rocksdb-sharding` for more information.
+
+The OSDs can be updated to use sharding by stopping each OSD and resharding
+its RocksDB database. For example, to reshard ``osd.123``, run the following
+commands:
+
+.. prompt:: bash #
+
+   systemctl stop ceph-osd@123
+   ceph-bluestore-tool \
+    --path /var/lib/ceph/osd/ceph-123 \
+    --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
+    reshard
+   systemctl start ceph-osd@123
+
+To disable this alert, run the following command:
+
+.. prompt:: bash #
+
+   ceph config set global bluestore_warn_on_no_db_sharding false
+
 
 BLUESTORE_DISK_SIZE_MISMATCH
 ____________________________

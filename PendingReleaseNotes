@@ -1084,3 +1084,8 @@ can be configured using the `rgw` option `rgw_bucket_persistent_notif_num_shards
   https://docs.ceph.com/en/latest/radosgw/notifications/
 
 Relevant tracker: https://tracker.ceph.com/issues/71677
+* RADOS: A new ``BLUESTORE_NO_DB_SHARDING`` health warning reports OSDs whose
+  RocksDB database does not use column family sharding, i.e. OSDs created
+  prior to Pacific that have not been resharded yet with
+  ``ceph-bluestore-tool reshard``. This warning can be disabled with the new
+  ``bluestore_warn_on_no_db_sharding`` option.
