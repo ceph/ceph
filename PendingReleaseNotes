@@ -21,6 +21,23 @@
   ``jaeger_agent_host``, so all daemons can send to one Jaeger instead of an
   agent on every host. OSDs apply changes to these options without restarting.
   Builds with tracing now require protobuf (``WITH_OTLP``, on by default).
+* RGW, OSD: Slow S3 and Swift requests can now be traced end to end, from the
+  request in RGW to the primary OSD's operation and the replicas'
+  sub-operations, in one trace. With ``rgw_trace_slow_threshold`` set, RGW
+  passes a trace context (IDs only, marked not sampled) to the OSDs with every
+  request, and exports the request's span only if the request was slow; the
+  OSDs place their slow operations under it. The primary forwards the context
+  to the replicas: ``MOSDRepOp`` and ``MOSDRepOpReply`` gain a field, ignored
+  by older OSDs. OSDs no longer create live spans for a context they receive
+  unless ``jaeger_tracing_enable`` is set on the OSD and the context is
+  sampled.
+* OSD: Slow-op traces are smaller. Phases that took less than 5% of the
+  operation no longer get a span, nor does a phase that covers 90% of it; the
+  primary no longer exports replicas' acknowledgements (``osd_repop_reply``)
+  as spans. The new option ``osd_op_trace_slow_require_context`` makes the
+  OSDs trace only operations that carry a trace context, such as those from
+  RGW with ``rgw_trace_slow_threshold`` set, which leaves out RGW's background
+  work and clients that pass no context.
 * OSD: The op tracker event ``sub_op_commit_rec`` is now
   ``sub_op_commit_rec from osd.N``, naming the replica that acknowledged.
   Scripts that match the exact event name need updating.

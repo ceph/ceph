@@ -82,16 +82,23 @@ What a slow-op trace contains
   These are the same events that ``ceph tell osd.N dump_historic_ops`` shows,
   such as ``queued_for_pg``, ``reached_pg``, ``waiting for rw locks``,
   ``started`` and ``commit_sent``.
-* **A child span for each phase** that took at least 1% of the operation. A
-  phase is the time between two consecutive events and is named after both,
-  so the long child spans show directly what the operation waited for.
-  For example, in a replicated write where one replica was slow::
+* **A child span for each phase** that took at least 5% of the operation,
+  named after what the operation was doing: ``receive``, ``queued for PG``,
+  the reason it was delayed (for example ``waiting for rw locks``),
+  ``execute``, ``local commit`` and ``reply``. While a write waits for its
+  replicas, each replica gets its own phase, ``replica osd.N``, all starting
+  when the sub-operations were sent, so the slowest replica is the longest
+  bar. For example, in a replicated write where one replica was slow::
 
-    osd_op                                                          0.296 s
-      sub_op_commit_rec from osd.2 -> sub_op_commit_rec from osd.1  0.290 s
+    osd_op                    649 ms
+      queued for PG            41 ms
+      replica osd.1           170 ms
+      replica osd.2           570 ms
 
-  The primary had the acknowledgement of ``osd.2`` and then waited 0.29 s for
-  ``osd.1``.
+  Events the phase names do not cover keep names made of the two events
+  around them, as ``<event> -> <next event>``. An operation that spent at
+  least 90% of its time in one phase gets no child spans; its span and
+  events already say where the time went.
 * **Attributes** that Jaeger can search on, for example ``pool_name=rbd``
   or ``role=replica``:
 
@@ -110,23 +117,86 @@ What a slow-op trace contains
 One trace per request
 ---------------------
 
-A replicated write shows up as an ``osd_op`` on the primary, an
-``osd_repop`` on each replica and an ``osd_repop_reply`` on the primary for
-each acknowledgement. Every OSD derives the trace ID from the request ID
-(``reqid``) and the cluster fsid, so all of these that were slow land in the
-same trace, with no extra data sent between OSDs. That puts the primary's
-wait for ``osd.1`` next to what ``osd.1`` was doing with the sub-op at the
-time. The operations hang off a shared root span that no OSD exports, so
-Jaeger may warn about a missing parent span; that is expected.
+A replicated write shows up as an ``osd_op`` on the primary and an
+``osd_repop`` on each replica. They land in one trace: the replicas'
+sub-operations hang off the primary's ``osd_op``, which puts the primary's
+wait for ``osd.2`` next to what ``osd.2`` was doing with the sub-operation at
+the time. Every OSD derives the IDs involved from the request ID
+(``reqid``) and the cluster fsid, so this needs no extra data between OSDs.
+The primary does not export the replicas' acknowledgements
+(``osd_repop_reply``) as spans of their own: the ``replica osd.N`` phases of
+its ``osd_op`` already show when each one arrived.
+A request that no client traced hangs off a root span that no OSD exports,
+so Jaeger may warn about a missing parent span; that is expected.
 
 Only slow operations are traced, and each OSD applies its own rate limit, so
 a trace holds the operations that crossed ``osd_op_trace_slow_threshold`` on
-their own OSD, not necessarily all of them.
+their own OSD, not necessarily all of them. If a replica's sub-operation was
+slow but the primary's operation was not, the sub-operation's parent is
+missing from the trace.
 
-If a client sent its own trace context with the request, as RGW does when
-tracing every request, the primary's operation becomes part of the client's
-trace instead, with a link to the request's trace. Replicas do not receive
-the client's context, so their operations stay in the request's trace.
+.. _slow-request-traces:
+
+End to end: RGW and the OSDs
+----------------------------
+
+RGW can trace slow S3 and Swift requests in the same way, and the OSDs then
+place their slow operations under the request::
+
+  rgw  put_obj                     712 ms
+    osd.0  osd_op                  649 ms
+      queued for PG                 41 ms
+      replica osd.1                170 ms
+      replica osd.2                570 ms
+      osd.2  osd_repop             560 ms
+        ...
+
+.. confval:: rgw_trace_slow_threshold
+.. confval:: rgw_trace_max_per_sec
+.. confval:: osd_op_trace_slow_require_context
+
+With ``rgw_trace_slow_threshold`` set, every request that is not traced live
+carries a trace context to the OSDs: a trace ID and the ID of the request's
+span, but no span. RGW exports the request's span only if the request took
+at least ``rgw_trace_slow_threshold``, after it completes, and the OSDs export
+their slow operations under it. The primary OSD forwards the context to the
+replicas with each sub-operation, so their sub-operations join the same
+trace. Set ``osd_op_trace_slow_threshold`` to the same value or lower, so
+that the OSD side of a slow request is traced too.
+
+The cost for requests that are not slow is 24 random bytes per request in
+RGW, and about 25 bytes more per message from RGW to the primary and from
+the primary to each replica. The context is marked as not sampled, so no OSD
+creates live spans because of it.
+
+Requests traced live (``jaeger_tracing_enable``) pass their own, sampled
+context instead, and the OSDs' slow operations join those traces the same
+way. RGW passes a context with the data writes of an object and with the
+bucket index updates around them, so a PUT that was slow because of its
+bucket index shows that too. Operations that reach the OSDs without a
+context form a trace of their own, as above.
+
+Much of what RGW sends to the OSDs is its own background work: locks,
+watches and log trimming on the zone's log and control pools (for example
+``default.rgw.log`` and ``default.rgw.control``).
+These operations carry no context, and on a busy gateway they make up most
+of the slow operations the OSDs trace, and use up their rate limit. With
+``osd_op_trace_slow_require_context`` set, the OSDs trace only operations
+that arrive with a context. Clients that pass none, such as RBD and CephFS,
+are then not traced either, so set it only on clusters where RGW is the
+client that matters.
+
+To trace slow S3 requests end to end:
+
+.. prompt:: bash $
+
+   ceph config set global rgw_trace_slow_threshold 1
+   ceph config set osd osd_op_trace_slow_threshold 0.5
+   ceph config set osd osd_op_trace_slow_require_context true
+
+On a small test cluster, S3 PUT latency with these settings did not differ
+from latency with tracing off: over eight rounds each, the median and the
+99th percentile were within the variation from one round to the next.
 
 Finding the trace of a slow operation
 -------------------------------------
@@ -148,7 +218,9 @@ Rate limit
 
 When a cluster has trouble, many operations become slow at once. Each OSD
 exports at most ``osd_op_trace_max_per_sec`` slow-op traces per second
-(default 10) and skips the rest. The ``trackedop`` perf counters count both:
+(default 10) and skips the rest. Operations that are not traced for another
+reason, such as ``osd_op_trace_slow_require_context``, do not count
+against the limit. The ``trackedop`` perf counters count both:
 
 .. prompt:: bash $
 
