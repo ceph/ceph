@@ -105,6 +105,7 @@ class NvmeofService(CephService):
             spec,
             curr_deps,
             last_deps,
+            daemon,
         )
 
         if step.action is utils.Action.RECONFIG:
