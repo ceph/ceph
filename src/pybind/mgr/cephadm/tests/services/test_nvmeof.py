@@ -6,6 +6,7 @@ from ceph.utils import datetime_now
 
 from cephadm.services.nvmeof import NvmeofService, NVMEOF_CLIENT_CERT_LABEL
 from cephadm.module import CephadmOrchestrator
+from cephadm import utils
 from ceph.deployment.service_spec import NvmeofServiceSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 from orchestrator import OrchestratorError
@@ -797,6 +798,16 @@ timeout = 1.0
             spec.validate()
 
         assert expected_error in str(e.value)
+    def test_nvmeof_encryption_key_change_requires_redeploy(self):
+        step = self.nvmeof_service.choose_next_action(
+            utils.Action.RECONFIG,
+            'nvmeof',
+            self.nvmeof_spec,
+            [],
+            ['encryption_key:12345678'],
+        )
+
+        assert step.action is utils.Action.REDEPLOY
 
 
 class TestNvmeofTLSBundle:
