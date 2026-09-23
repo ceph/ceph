@@ -3173,20 +3173,50 @@ std::string POSIXObject::gen_temp_fname()
   return temp_fname;
 }
 
+static posix::FSEnt* posix_data_ent(posix::FSEnt* ent)
+{
+  if (ent && ent->get_type() == posix::ObjectType::VERSIONED) {
+    auto* vdir = static_cast<posix::VersionedDirectory*>(ent);
+    return vdir->get_cur_version_ent();
+  }
+  return ent;
+}
+
 static int posix_data_file_fd(posix::FSEnt* ent)
 {
-  if (!ent) {
-    return -1;
-  }
-  if (ent->get_type() == posix::ObjectType::FILE) {
-    return ent->get_fd();
-  }
-  if (ent->get_type() == posix::ObjectType::VERSIONED) {
-    auto* vdir = static_cast<posix::VersionedDirectory*>(ent);
-    posix::FSEnt* cur = vdir->get_cur_version_ent();
-    return cur ? cur->get_fd() : -1;
-  }
-  return -1;
+  ent = posix_data_ent(ent);
+  return ent && ent->get_type() == posix::ObjectType::FILE ? ent->get_fd() : -1;
+}
+
+static UringReadWindow::ResolveRead posix_multipart_read(
+    posix::MPDirectory* mpdir, const DoutPrefixProvider* dpp)
+{
+  // Read submissions advance in object order. Keep only the current part here;
+  // each outstanding read owns its part until completion, even across yields.
+  return [mpdir, dpp, part = mpdir->get_parts().begin(), start = int64_t{0},
+          file = std::shared_ptr<posix::File>{}]
+      (int64_t ofs, int64_t len, UringReadWindow::ReadExtent& extent) mutable {
+    const auto end = mpdir->get_parts().end();
+    while (part != end && ofs - start >= part->second) {
+      start += part->second;
+      ++part;
+      file.reset();
+    }
+    if (part == end) {
+      extent.len = 0;
+      return 0;
+    }
+    if (!file) {
+      file = std::make_shared<posix::File>(part->first, mpdir, dpp->get_cct());
+      int r = file->open(dpp);
+      if (r < 0) {
+        return r;
+      }
+    }
+    extent = {file->get_fd(), ofs - start,
+              std::min(len, part->second - (ofs - start)), file};
+    return 0;
+  };
 }
 
 int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
@@ -3194,7 +3224,6 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 {
   int64_t left;
   int64_t cur_ofs = ofs + part_ofs;
-  end += part_ofs;
 
   if (end < 0)
     left = 0;
@@ -3202,8 +3231,13 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
     left = end - ofs + 1;
 
   if (posix_try_use_uring(dpp, y, /*nsfs=*/false)) {
-    int fd = posix_data_file_fd(source->get_fsent());
-    if (fd >= 0) {
+    auto* ent = posix_data_ent(source->get_fsent());
+    int fd = posix_data_file_fd(ent);
+    UringReadWindow::ResolveRead resolve;
+    if (ent && ent->get_type() == posix::ObjectType::MULTIPART) {
+      resolve = posix_multipart_read(static_cast<posix::MPDirectory*>(ent), dpp);
+    }
+    if (fd >= 0 || resolve) {
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_get_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
       int64_t chunk = dpp->get_cct()->_conf.get_val<Option::size_t>(
@@ -3211,7 +3245,7 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
       if (chunk <= 0) {
         chunk = READ_SIZE;
       }
-      UringReadWindow win(dpp, y, fd, qd, chunk, dio);
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio, std::move(resolve));
       int r = win.iterate(cur_ofs, left,
           [dpp, cb, source = source](bufferlist& bl, int len) {
             int ret = cb->handle_data(bl, 0, len);
