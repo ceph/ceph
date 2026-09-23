@@ -501,29 +501,6 @@ class ECSplitOp : public SplitOp{
   void init_read(OSDOp &op, bool sparse, int ops_index) override;
 
   /**
-   * @brief Decide which zone init_read() should target.
-   *
-   * Pure, side-effect-free extraction of the zone-selection logic used by
-   * init_read(): when @p localize is set, delegate to
-   * local_zone_for_acting_set() to pick the CRUSH-nearest zone; otherwise
-   * pick a zone at random (BALANCE_READS semantics) when there is more than
-   * one zone, or zone 0 by default.
-   *
-   * Exposed as a static helper - like local_zone_for_acting_set() - purely
-   * so tests can exercise the localize/non-localize branching directly,
-   * without needing a live Objecter/Messenger/MonClient to construct a real
-   * ECSplitOp and call init_read().
-   */
-  static int choose_local_zone_index(
-      bool localize,
-      const std::vector<int>& acting,
-      int num_zone,
-      int zone_size,
-      CrushWrapper* crush,
-      CephContext* cct,
-      const std::multimap<std::string, std::string>& crush_location);
-
-  /**
    * @brief Choose the absolute shard to read data shard @p shard from.
    *
    * LOCALIZE_READS reads from the nearest zone, which is looked up on first
@@ -554,12 +531,6 @@ class ECSplitOp : public SplitOp{
   ~ECSplitOp() {
     complete();
   }
-
-  // local_zone_for_acting_set() is now on the SplitOp base class so that
-  // ReplicaSplitOp can also use it without a cross-class dependency.
-  // ECSplitOp callers still use ECSplitOp::local_zone_for_acting_set() for
-  // backwards compatibility with existing unit-test call sites.
-  using SplitOp::local_zone_for_acting_set;
 
   /// Set to true when LOCALIZE_READS was requested; used by init_read() to
   /// mark sub-reads that are dispatched to non-local zones.

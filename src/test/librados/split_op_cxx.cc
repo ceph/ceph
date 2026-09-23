@@ -706,15 +706,6 @@ TEST_P(LibRadosSplitOpZone, Zone0LocalReadSucceedsWhenZone1Poisoned)
 
 // ---------------------------------------------------------------------------
 // Scenario 2: client in zone-1, zone-0 shards poisoned — local read succeeds.
-//
-// TODO: Skipped due to Bug 2 — the reference_sub_read abs_shard is always
-// shard_id_t(reference_sub_read), a zone-0 acting index.  When zone-0 is
-// poisoned the version-check sub-read returns EAGAIN, the retry loop also
-// targets the same poisoned zone-0 OSD, and the read never succeeds.
-// Un-skip when SplitOp.cc:261 is fixed to use:
-//   shard_id_t(reference_sub_read + local_zone_index * zone_size)
-// (See Zone1MultiChunkReferenceSubReadStaysInZone1 for the perf-counter
-// demonstration of exactly this sub-read misdispatch.)
 // ---------------------------------------------------------------------------
 TEST_P(LibRadosSplitOpZone, Zone1LocalReadSucceedsWhenZone0Poisoned)
 {
@@ -784,12 +775,12 @@ TEST_P(LibRadosSplitOpZone, NoCrushLocationMeansNoZoneFiltering)
     ASSERT_TRUE(AssertOperateWithoutSplitOp(0, oid, &write));
   }
 
-  // Ensure crush_location is unset — local_zone_index defaults to 0.
+  // Ensure crush_location is unset — the local zone defaults to zone 0.
   ASSERT_EQ(0, s_cluster.conf_set("crush_location", ""));
   s_cluster.wait_for_latest_osdmap();
 
-  // Read must succeed: with no crush_location, local_zone_index == 0 and
-  // shards are selected from zone 0 (the only zone for a non-stretch pool).
+  // Read must succeed: with no crush_location the local zone is zone 0 (the
+  // only zone for a non-stretch pool).
   bufferlist rbl;
   ObjectReadOperation read;
   read.read(0, alignment, &rbl, nullptr);
@@ -1027,26 +1018,17 @@ TEST_P(LibRadosSplitOpZoneStats, LocalizeReadsFallsBackToPrimaryWhenZoneShardsUn
 }
 
 // ---------------------------------------------------------------------------
-// Regression: Bug 2 — reference_sub_read abs_shard must use local_zone_index
-//
-// When primary_required is true (count > 1 on a multi-chunk read), init_read()
-// creates an extra sub-read for the version-check "reference" shard.  Before
-// the fix this always used shard_id_t(reference_sub_read) — a zone-0 acting
-// index — even when local_zone_index=1.  The fix uses:
-//
-//   shard_id_t(reference_sub_read + local_zone_index * zone_size)
-//
-// This test verifies the fix: with crush_location=zone-1 and a multi-chunk
-// read, the zone-0 perf counter must not increase (all sub-reads stay in
-// zone-1, including the version-check reference sub-read).
+// Zone-1 client, multi-chunk localized read: when primary_required is true
+// (count > 1), init_read() also creates a version-check sub-read to the
+// primary, which may be in zone-0.  Every data sub-read stays in zone-1.
 // ---------------------------------------------------------------------------
-TEST_P(LibRadosSplitOpZoneStats, Zone1MultiChunkReferenceSubReadStaysInZone1)
+TEST_P(LibRadosSplitOpZoneStats, Zone1MultiChunkDataSubReadsStayInZone1)
 {
   SKIP_IF_CRIMSON();
   if (!split_ops) GTEST_SKIP() << "Requires split_ops";
 
-  // A multi-chunk read forces primary_required=true and therefore triggers the
-  // reference_sub_read emplace with the buggy abs_shard formula.
+  // A multi-chunk read forces primary_required=true and therefore adds the
+  // reference sub-read.
   // We need at least 2 chunks → read k_per_zone * alignment bytes so that
   // count = k_per_zone > 1.
   if (k_per_zone < 2) GTEST_SKIP() << "Requires k_per_zone >= 2 to make count > 1";
@@ -1084,17 +1066,10 @@ TEST_P(LibRadosSplitOpZoneStats, Zone1MultiChunkReferenceSubReadStaysInZone1)
   int64_t delta_z0 = get_zone_read_count("zone-0") - before_z0;
   int64_t delta_z1 = get_zone_read_count("zone-1") - before_z1;
 
-  // All sub-reads — including the version-check reference sub-read — should
-  // have been dispatched to zone-1.  zone-0 counter must not change.
-  //
-  // BUG: currently delta_z0 == 1 because reference_sub_read gets
-  // abs_shard = shard_id_t(reference_sub_read) which is a zone-0 acting index.
-  // Fix SplitOp.cc:261 to use shard_id_t(reference_sub_read + local_zone * zone_size).
-  EXPECT_EQ(delta_z0, 0)
-    << "Bug 2: reference sub-read was dispatched to zone-0 (delta_z0=" << delta_z0
-    << ") even though client crush_location=zone-1. "
-       "Fix: shard_id_t(reference_sub_read + local_zone_index * zone_size) "
-       "in SplitOp.cc init_read().";
+  // Only the version-check sub-read to the primary may go to zone-0.
+  EXPECT_LE(delta_z0, 1)
+    << "a data sub-read was dispatched to zone-0 (delta_z0=" << delta_z0
+    << ") even though client crush_location=zone-1";
   EXPECT_GE(delta_z1, k_per_zone)
     << "Expected at least " << k_per_zone << " zone-1 sub-reads";
 

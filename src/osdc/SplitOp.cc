@@ -181,9 +181,7 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
 
-  int zone = choose_local_zone_index(
-      localize, target.acting, pi->get_num_zone(), pi->get_zone_size(),
-      objecter.osdmap->crush.get(), cct, objecter.crush_location);
+  std::optional<int> local_zone;
 
   uint64_t offset = op.op.extent.offset;
   uint64_t length = op.op.extent.length;
@@ -228,15 +226,17 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
       return;
     }
     if (!data_shards.contains(shard)) {
-      data_shards.emplace(shard, pi->get_abs_shard(shard, zone));
+      shard_id_t abs_shard = choose_read_shard(objecter, cct, target, localize,
+                                               shard, local_zone);
+      if (abs_shard == shard_id_t::NO_SHARD) {
+        ldout(cct, DBG_LVL) << __func__ << " ABORT: no available OSD for "
+                            << "shard=" << shard << dendl;
+        abort = true;
+        return;
+      }
+      data_shards.emplace(shard, abs_shard);
     }
     shard_id_t abs_shard = data_shards.at(shard);
-    if (!objecter.osdmap->exists(target.acting[(int)abs_shard])) {
-      ldout(cct, DBG_LVL) << __func__ << " ABORT: no available OSD for "
-                          << "abs_shard=" << abs_shard << dendl;
-      abort = true;
-      return;
-    }
     if (!sub_reads.contains((int)abs_shard)) {
       sub_reads.emplace((int)abs_shard, orig_op->ops.size() + 1, abs_shard);
     }
@@ -293,24 +293,6 @@ int SplitOp::local_zone_for_acting_set(
     }
   }
   return best_zone;
-}
-
-int ECSplitOp::choose_local_zone_index(
-    bool localize,
-    const std::vector<int>& acting,
-    int num_zone,
-    int zone_size,
-    CrushWrapper* crush,
-    CephContext* cct,
-    const std::multimap<std::string, std::string>& crush_location)
-{
-  if (localize) {
-    return local_zone_for_acting_set(
-        acting, num_zone, zone_size, crush, cct, crush_location);
-  } else if (num_zone > 1) {
-    return rand() % num_zone;
-  }
-  return 0;
 }
 
 shard_id_t ECSplitOp::choose_read_shard(

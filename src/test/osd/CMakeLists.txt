@@ -191,6 +191,7 @@ add_dependencies(unittest_ec_with_crush ${EC_ISA_LIB} ec_jerasure)
 # unittest_split_ops_ut
 add_executable(unittest_split_ops_ut
   TestSplitOpsUT.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_split_ops_ut)
 target_link_libraries(unittest_split_ops_ut osd global ${BLKID_LIBRARIES})
