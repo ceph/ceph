@@ -1,6 +1,8 @@
-Project governance is defined in
+Project governance is defined by the `Technical Charter`_ and, under it, by
 
 `Governance`_
+
+which is part of this CONTRIBUTING file for the purposes of the Charter.
 
 For the general process of submitting patches to Ceph, read the below
 
@@ -21,3 +23,4 @@ primarily because it can cause problems when rebasing and backporting.
 .. _Submitting Patches: SubmittingPatches.rst
 .. _Documenting Ceph:  doc/start/documenting-ceph.rst
 .. _Governance:  doc/governance.rst
+.. _Technical Charter:  doc/technical-charter.rst
