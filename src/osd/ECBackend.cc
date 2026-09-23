@@ -1416,7 +1416,9 @@ int ECBackend::objects_readv_sync(const hobject_t &hoid,
   auto r = switcher->store->readv(switcher->ch, ghobject_t(hoid, ghobject_t::NO_GEN, shard), im, *bl, op_flags);
   if (r >= 0) {
     uint64_t chunk_size = sinfo.get_chunk_size();
-    for (auto [off, len] : im) {
+    for (auto [start_off, total_len] : im) {
+      uint64_t off = start_off;
+      uint64_t len = total_len;
       uint64_t ro_offset = sinfo.shard_offset_to_ro_offset(shard, off);
       uint64_t to_next_chunk = ((off / chunk_size) + 1) * chunk_size - off;
       uint64_t ro_len = std::min(to_next_chunk, len);
@@ -1424,6 +1426,7 @@ int ECBackend::objects_readv_sync(const hobject_t &hoid,
         dout(20) << __func__ << " shard=" << shard << " extent=" << off << "~" << len <<  ">" << ro_offset << "~" << ro_len << dendl;
         m.emplace(ro_offset, ro_len);
         len -= ro_len;
+        off += ro_len;
         ro_offset += ro_len + sinfo.get_stripe_width() - chunk_size;
         ro_len = std::min(len, chunk_size);
       }
