@@ -68,6 +68,11 @@ public:
 		       const ceph::buffer::list& data,
 		       const ceph::osd::oob::placement_plan& plan);
 
+  /// account where a placed range's CRC64 came from
+  void note_crc_source(bool from_metadata) {
+    (from_metadata ? m_crc_from_metadata : m_crc_computed)++;
+  }
+
   /// asok/debug counters
   void dump_stats(ceph::Formatter* f) const;
 
@@ -140,6 +145,8 @@ private:
   std::atomic<uint64_t> m_bytes_pushed{0};
   std::atomic<uint32_t> m_writes_inflight{0};
   std::atomic<uint64_t> m_buffers_leaked{0};
+  std::atomic<uint64_t> m_crc_from_metadata{0};
+  std::atomic<uint64_t> m_crc_computed{0};
   std::atomic<uint64_t> m_plans_in_place{0};
   std::atomic<uint64_t> m_plans_copied{0};
   std::atomic<uint64_t> m_register_ns{0};   ///< spent registering in place

@@ -9420,8 +9420,10 @@ bool PrimaryLogPG::plan_op_oob(OpContext *ctx, OSDOp& op,
 			       const ceph::rdma::delivery_t& d,
 			       ceph::osd::oob::placement_plan& plan,
 			       bufferlist& payload,
-			       std::map<uint64_t, uint64_t>& sparse_extents)
+			       std::map<uint64_t, uint64_t>& sparse_extents,
+			       std::optional<uint64_t>& store_ofs)
 {
+  store_ofs.reset();
   if (d.flags & ~ceph::rdma::delivery_t::KNOWN_FLAGS) {
     // flag bits we do not implement: deliver inline so future
     // semantics degrade safely
@@ -9478,12 +9480,47 @@ bool PrimaryLogPG::plan_op_oob(OpContext *ctx, OSDOp& op,
 	static_cast<int>(sinfo.get_raw_shard(pg_whoami.shard))),
       data_op->outdata.length());
     payload = data_op->outdata;
+    // objects_read_local() read this shard from the start of the first
+    // chunk the range touches (or mid-chunk, for a range inside one)
+    const uint64_t off = data_op->op.extent.offset;
+    const uint64_t len = data_op->op.extent.length;
+    const auto raw_shard = sinfo.get_raw_shard(pg_whoami.shard);
+    if (len && off / sinfo.get_chunk_size() ==
+	       (off + len - 1) / sinfo.get_chunk_size()) {
+      store_ofs = sinfo.ro_offset_to_shard_offset(off, raw_shard);
+    } else if (len) {
+      ECUtil::shard_extent_set_t extents(sinfo.get_k_plus_m());
+      sinfo.ro_range_to_shard_extent_set(off, len, extents);
+      if (extents.contains(pg_whoami.shard)) {
+	store_ofs = extents[pg_whoami.shard].range_start();
+      }
+    }
   } else {
     plan = ceph::osd::oob::linear_plan(d.base_offset,
 				       data_op->outdata.length());
     payload = data_op->outdata;
+    if (!pool.info.is_erasure()) {
+      store_ofs = data_op->op.extent.offset;
+    }
   }
   return !plan.empty();
+}
+
+std::optional<uint64_t> PrimaryLogPG::oob_range_crc64_from_store(
+  const hobject_t& soid, const std::optional<uint64_t>& store_ofs,
+  uint64_t local_ofs, uint64_t len)
+{
+  if (!store_ofs || !len) {
+    return std::nullopt;
+  }
+  uint64_t crc = 0;
+  int r = osd->store->read_range_checksum(
+    ch, ghobject_t(soid, ghobject_t::NO_GEN, pg_whoami.shard),
+    *store_ofs + local_ofs, len, Checksummer::CSUM_CRC64NVME, &crc);
+  if (r != 0) {
+    return std::nullopt;
+  }
+  return crc;
 }
 
 // strip the delivered data from the reply; sparse reads keep their
@@ -9507,7 +9544,8 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
   ceph::osd::oob::placement_plan plan;
   bufferlist payload;  // the bytes the plan indexes
   std::map<uint64_t, uint64_t> sparse_extents;
-  if (!plan_op_oob(ctx, op, d, plan, payload, sparse_extents)) {
+  std::optional<uint64_t> store_ofs;
+  if (!plan_op_oob(ctx, op, d, plan, payload, sparse_extents, store_ofs)) {
     return false;
   }
 
@@ -9521,19 +9559,28 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
   strip_oob_delivered(*data_op, sparse_extents);
   res.bytes = static_cast<uint64_t>(pushed);
   if (d.flags & ceph::rdma::delivery_t::FLAG_CRC64NVME) {
-    // checksum each placed range at the storage node, after it
-    // crossed the fabric. Every triple is one contiguous logical
-    // extent, so a caller holding all of a window's ranges can fold
-    // them in offset order however they were interleaved across
-    // shards; the whole-payload value comes from the same pass, since
-    // the builders emit triples contiguous and ascending in payload
-    // order.
+    // checksum each placed range at the storage node: folded from the
+    // store's own checksum metadata where it keeps crc64nvme values
+    // (the read just verified the bytes against them), else hashed
+    // here. Every triple is one contiguous logical extent, so a caller
+    // holding all of a window's ranges can fold them in offset order
+    // however they were interleaved across shards; the whole-payload
+    // value comes from the same pass, since the builders emit triples
+    // contiguous and ascending in payload order.
     res.ranges.reserve(plan.size());
     uint64_t whole = 0;
     for (const auto& t : plan) {
-      bufferlist part;
-      part.substr_of(payload, t.local_ofs, t.len);
-      const uint64_t crc = ceph::crc64nvme(part);
+      auto stored = oob_range_crc64_from_store(m->get_hobj(), store_ofs,
+					       t.local_ofs, t.len);
+      osd->cuobj->note_crc_source(stored.has_value());
+      uint64_t crc;
+      if (stored) {
+	crc = *stored;
+      } else {
+	bufferlist part;
+	part.substr_of(payload, t.local_ofs, t.len);
+	crc = ceph::crc64nvme(part);
+      }
       res.ranges.push_back({t.client_ofs, t.len, crc});
       whole = res.ranges.size() == 1 ? crc
 	    : ceph::crc64nvme_combine(whole, crc, t.len);

@@ -1341,11 +1341,24 @@ protected:
   bool oob_delivery_allowed(OpContext *ctx, size_t num_ops);
   /// build the placement plan and the payload it indexes for one op;
   /// false leaves the op inline
+  /// store_ofs is set when the payload is one contiguous run of the
+  /// local (shard) object, to the offset that run starts at
   bool plan_op_oob(OpContext *ctx, OSDOp& op,
 		   const ceph::rdma::delivery_t& d,
 		   ceph::osd::oob::placement_plan& plan,
 		   ceph::buffer::list& payload,
-		   std::map<uint64_t, uint64_t>& sparse_extents);
+		   std::map<uint64_t, uint64_t>& sparse_extents,
+		   std::optional<uint64_t>& store_ofs);
+  /**
+   * CRC-64/NVME of payload[local_ofs, local_ofs + len) when the store
+   * can derive it from its checksum metadata alone (a crc64nvme
+   * csum_type, whole csum blocks): the read already verified those
+   * bytes against the very values being folded, so no second pass over
+   * the data is needed. nullopt means the caller must hash the bytes.
+   */
+  std::optional<uint64_t> oob_range_crc64_from_store(
+    const hobject_t& soid, const std::optional<uint64_t>& store_ofs,
+    uint64_t local_ofs, uint64_t len);
 #endif
 
   // pg on-disk content

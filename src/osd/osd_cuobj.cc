@@ -513,6 +513,8 @@ void OSDCuObj::dump_stats(ceph::Formatter* f) const
   f->dump_unsigned("writes_inflight", m_writes_inflight.load());
   f->dump_unsigned("buffers_leaked", m_buffers_leaked.load());
   f->dump_unsigned("payload_segments", m_payload_segments.load());
+  f->dump_unsigned("crc64_from_metadata", m_crc_from_metadata.load());
+  f->dump_unsigned("crc64_computed", m_crc_computed.load());
   f->dump_unsigned("plans_in_place", m_plans_in_place.load());
   f->dump_unsigned("plans_copied", m_plans_copied.load());
   f->dump_unsigned("register_in_place_ns", m_register_ns.load());
