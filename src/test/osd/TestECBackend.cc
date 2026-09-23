@@ -1528,6 +1528,63 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_local_zone_available) {
   }
 }
 
+// Every other get_min_avail_to_read_shards_zones_* test above leaves
+// ECListenerStub::whoami at its default (a zone-0 shard), so "local" has
+// only ever meant zone 0 in this suite. select_shards_for_read() picks its
+// local zone purely from get_parent()->whoami_shard() (see
+// ECCommon.cc select_shards_for_read: `sinfo.get_shard_zone(whoami_shard().shard)`),
+// so a primary actually living in zone 1 -- exactly the configuration in
+// which the zone-1 parity bug and the handle_sub_write relative-shard bug
+// lived -- was never exercised through this path. Set whoami to a zone-1
+// shard and confirm "local" correctly shifts to zone 1.
+TEST(ECCommon, get_min_avail_to_read_shards_zones_primary_in_zone1) {
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones with k+m shards each
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  // The primary (whoami) is osd 6, absolute shard 6 -- relative shard 0 of
+  // zone 1 -- not the zone-0 default every other test in this file uses.
+  listenerStub.whoami = pg_shard_t(6, shard_id_t(6));
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Both zones fully available: 0-5 in zone 0, 6-11 in zone 1.
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // With a zone-1 primary, "local" is zone 1: every shard picked should be
+  // the zone-1 absolute copy (id >= k+m == 6), not the zone-0 one, even
+  // though both are fully available.
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_GE(int(shard_read.pg_shard.shard), k + m)
+      << "relative shard " << shard_id << ": primary is in zone 1, so the "
+      << "zone-1 copy should be preferred, not the zone-0 one";
+  }
+}
+
 TEST(ECCommon, get_min_avail_to_read_shards_zones_fallback_to_remote) {
   // Test that when local zone shards are missing, remote zone shards are used
   const uint64_t align_size = EC_ALIGN_SIZE;
@@ -1575,6 +1632,18 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_fallback_to_remote) {
     }
   }
   ASSERT_TRUE(has_remote_shard) << "Should use remote zone shards when local unavailable";
+
+  // Relative shards 1-3 have no local-zone copy at all, so the check above
+  // is trivially satisfied by them alone. Relative shard 0, however, DOES
+  // have a local copy (pg_shard_t(0, shard_id_t(0))) as well as a same-
+  // relative-shard remote duplicate (pg_shard_t(6, shard_id_t(6))): this is
+  // exactly the collision get_all_avail_shards() must resolve in favour of
+  // the local copy. Assert that specifically, so a regression that lets the
+  // remote duplicate win the collision is actually caught here.
+  ASSERT_EQ(read_request.shard_reads.at(shard_id_t(0)).pg_shard,
+            pg_shard_t(0, shard_id_t(0)))
+    << "Relative shard 0 has a local copy available and must not fall back "
+    << "to its remote-zone duplicate";
 }
 
 TEST(ECCommon, get_min_avail_to_read_shards_zones_missing_shard_local) {
@@ -1882,6 +1951,19 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_mixed_availability) {
 
   // Should have used some remote shards since local doesn't have enough
   ASSERT_GT(remote_count, 0) << "Should use remote shards when local insufficient";
+
+  // The above only proves that relative shards 1 and 3 (which have NO
+  // local-zone copy at all) went remote -- that is trivially true and
+  // would hold even if local preference were completely broken. Pin down
+  // the shards that DO have a local copy (relative shards 0 and 2, from
+  // pg_shard_t(0,0) and pg_shard_t(2,2)) and assert those specific local
+  // copies were the ones actually selected, not merely "a mix" of shards.
+  ASSERT_EQ(read_request.shard_reads.at(shard_id_t(0)).pg_shard,
+            pg_shard_t(0, shard_id_t(0)))
+    << "Relative shard 0 has a local copy and should use it";
+  ASSERT_EQ(read_request.shard_reads.at(shard_id_t(2)).pg_shard,
+            pg_shard_t(2, shard_id_t(2)))
+    << "Relative shard 2 has a local copy and should use it";
 }
 
 TEST(ECCommon, get_min_avail_to_read_shards_zones_prefers_local_over_low_osd_remote) {
