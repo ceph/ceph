@@ -21,6 +21,9 @@
   for reshard on or off while not affecting resharding itself until the
   next realm reload. Now changes to ``rgw_dynamic_resharding`` require a
   restart. Running RGWs will ignore the change.
+* RGW: Encrypted objects are skipped during cloud-s3 lifecycle transitions
+  when ``retain_head_object`` is false, preserving their encryption attributes.
+
 * RGW: Cloud transitions now preserve the original part lengths of
   encrypted objects created with S3 Multipart Upload. Earlier releases
   could discard those lengths during transition, so restored objects

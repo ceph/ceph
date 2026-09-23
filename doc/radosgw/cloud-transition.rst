@@ -397,6 +397,10 @@ lifecycle rules, the cloud storage class should be specified
 last among all the storage classes the object transitions to.
 Subsequent rules (if any) do not apply post-transition to the cloud.
 
+Encrypted objects are uploaded as stored, with their encryption attributes
+kept only on the retained source stub, so they are not transitioned when
+``retain_head_object`` is false.
+
 Due to API limitations, there is no way to preserve the original object
 modification time and ETag, which are stored as metadata attributes
 on the destination objects, as shown below::
@@ -404,6 +408,7 @@ on the destination objects, as shown below::
   x-amz-meta-rgwx-source: rgw
   x-amz-meta-rgwx-source-etag: ed076287532e86365e841e92bfc50d8c
   x-amz-meta-rgwx-source-key: lc.txt
+  x-amz-meta-rgwx-source-encrypted: true (encrypted objects only)
   x-amz-meta-rgwx-source-mtime: 1608546349.757100363
   x-amz-meta-rgwx-versioned-epoch: 0
 
