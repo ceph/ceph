@@ -1,0 +1,33 @@
+diff --git a/exporters/otlp/src/otlp_http_client.cc b/exporters/otlp/src/otlp_http_client.cc
+index e3e1a8c4..ae3819a3 100644
+--- a/exporters/otlp/src/otlp_http_client.cc
++++ b/exporters/otlp/src/otlp_http_client.cc
+@@ -18,12 +18,26 @@
+ #include "google/protobuf/message.h"
+ #include "google/protobuf/reflection.h"
+ #include "google/protobuf/stubs/common.h"
+-#include "google/protobuf/stubs/stringpiece.h"
+ #include "nlohmann/json.hpp"
+ 
+-#if defined(GOOGLE_PROTOBUF_VERSION) && GOOGLE_PROTOBUF_VERSION >= 3007000
++#if defined(GOOGLE_PROTOBUF_VERSION) && GOOGLE_PROTOBUF_VERSION >= 4022000
++// protobuf 22 removed its string utilities in favour of abseil's
++#  include "absl/strings/escaping.h"
++namespace google
++{
++namespace protobuf
++{
++inline void Base64Escape(absl::string_view src, std::string *dest)
++{
++  *dest = absl::Base64Escape(src);
++}
++}  // namespace protobuf
++}  // namespace google
++#elif defined(GOOGLE_PROTOBUF_VERSION) && GOOGLE_PROTOBUF_VERSION >= 3007000
++#  include "google/protobuf/stubs/stringpiece.h"
+ #  include "google/protobuf/stubs/strutil.h"
+ #else
++#  include "google/protobuf/stubs/stringpiece.h"
+ #  include "google/protobuf/stubs/port.h"
+ namespace google
+ {

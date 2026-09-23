@@ -33,12 +33,37 @@ function(build_opentelemetry)
 			 ${CURL_LIBRARIES})
 
   if(WITH_OTLP)
-    # the OTLP/HTTP exporter; gRPC is not needed
-    find_package(Protobuf REQUIRED)
+    # the OTLP/HTTP exporter; gRPC is not needed. Prefer protobuf's own
+    # config: since protobuf 22 its target carries the abseil libraries
+    find_package(Protobuf CONFIG QUIET)
+    if(NOT Protobuf_FOUND)
+      find_package(Protobuf REQUIRED)
+    endif()
     list(APPEND opentelemetry_cpp_targets opentelemetry_exporter_otlp_http)
+    # abseil, which protobuf 22 and later includes, needs C++17
     list(APPEND opentelemetry_CMAKE_ARGS -DWITH_OTLP=ON
                                          -DWITH_OTLP_HTTP=ON
-                                         -DWITH_OTLP_GRPC=OFF)
+                                         -DWITH_OTLP_GRPC=OFF
+                                         -DCMAKE_CXX_STANDARD=17)
+    find_package(absl CONFIG QUIET)
+    if(absl_FOUND)
+      # opentelemetry-cpp bundles its own copy of abseil, which collides with
+      # the system abseil that protobuf brings wherever both are included.
+      # Build it against the system abseil instead. HAVE_ABSEIL changes the
+      # types in opentelemetry's headers, and tracer.h reaches nearly every
+      # source through Message.h, so all of Ceph is compiled with it.
+      list(APPEND opentelemetry_CMAKE_ARGS -DWITH_ABSEIL=ON -Dabsl_DIR=${absl_DIR})
+      add_compile_definitions(HAVE_ABSEIL)
+      # last in the include path: with Homebrew it is /opt/homebrew/include,
+      # whose fmt would otherwise shadow the fmt that Ceph bundles. Not when it
+      # is a compiler default such as /usr/include: -isystem on that breaks
+      # the #include_next in libstdc++'s <cstdlib>.
+      get_target_property(absl_include_dir absl::base INTERFACE_INCLUDE_DIRECTORIES)
+      list(REMOVE_ITEM absl_include_dir ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+      set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
+          ${CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES} ${absl_include_dir} PARENT_SCOPE)
+      set(otlp_absl_deps absl::bad_variant_access absl::any absl::base absl::bits absl::city)
+    endif()
     set(otlp_libs
         exporters/otlp/libopentelemetry_exporter_otlp_http.a
         exporters/otlp/libopentelemetry_exporter_otlp_http_client.a
@@ -55,7 +80,7 @@ function(build_opentelemetry)
                                     opentelemetry_exporter_otlp_http_client
                                     opentelemetry_otlp_recordable
                                     opentelemetry_proto)
-    list(APPEND opentelemetry_deps protobuf::libprotobuf)
+    list(APPEND opentelemetry_deps protobuf::libprotobuf ${otlp_absl_deps})
   endif()
 
   if(CMAKE_MAKE_PROGRAM MATCHES "make")
@@ -84,9 +109,19 @@ function(build_opentelemetry)
   endif()
 
   include(ExternalProject)
+  set(patch_cmd "")
+  if(WITH_OTLP)
+    # the OTLP/HTTP client of this opentelemetry-cpp release does not build
+    # with protobuf 22 or later; applied once, whether or not it already is
+    set(otel_patch ${PROJECT_SOURCE_DIR}/src/jaegertracing/opentelemetry-cpp-protobuf-22.patch)
+    set(patch_cmd PATCH_COMMAND sh -c
+      "git apply --reverse --check ${otel_patch} 2>/dev/null || git apply ${otel_patch}")
+  endif()
+
   ExternalProject_Add(opentelemetry-cpp
     SOURCE_DIR ${opentelemetry_SOURCE_DIR}
     PREFIX "opentelemetry-cpp"
+    ${patch_cmd}
     CMAKE_ARGS ${opentelemetry_CMAKE_ARGS}
     BUILD_COMMAND ${make_cmd}
     BINARY_DIR ${opentelemetry_BINARY_DIR}
