@@ -357,7 +357,7 @@ command parameter is of format ``filesystem-name@filesystem-id peer-uuid``::
             "id": 120,
             "name": "snap1",
             "sync_duration": 3,
-            "sync_time_stamp": "274900.558797s",
+            "sync_time_stamp": "2026-07-15T12:00:00.558797+0530",
             "sync_bytes": 52428800
         },
         "snaps_synced": 2,
@@ -391,7 +391,7 @@ When a directory is currently being synchronized, the mirror daemon marks it as 
             "id": 120,
             "name": "snap1",
             "sync_duration": 3,
-            "sync_time_stamp": "274900.558797s",
+            "sync_time_stamp": "2026-07-15T12:00:00.558797+0530",
             "sync_bytes": 52428800
         },
         "snaps_synced": 2,
@@ -420,7 +420,7 @@ E.g., adding a regular file for synchronization would result in failed status::
             "id": 121,
             "name": "snap2",
             "sync_duration": 5,
-            "sync_time_stamp": "500900.600797s",
+            "sync_time_stamp": "2026-07-15T12:05:33.600797+0530",
             "sync_bytes": 78643200
         },
         "snaps_synced": 3,
@@ -456,7 +456,7 @@ In the remote filesystem::
             "id": 120,
             "name": "snap1",
             "sync_duration": 3,
-            "sync_time_stamp": "274900.558797s"
+            "sync_time_stamp": "2026-07-15T12:00:00.558797+0530"
         },
         "snaps_synced": 2,
         "snaps_deleted": 0,
