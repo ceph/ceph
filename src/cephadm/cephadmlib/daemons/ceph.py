@@ -550,21 +550,15 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
         )
         # The OSD may take some time to shutdown fully and make the device
         # available for the key rotation
-        for i in [2, 5, 10, 30, 0]:
-            if not i:
-                break
+        ret = 1
+        out = err = ''
+        for i in [2, 5, 10, 30]:
             out, err, ret = call(
                 ctx,
                 bluestore_tool_container.run_cmd(),
                 verbosity=CallVerbosity.VERBOSE,
             )
             if ret:
-                if not i:
-                    raise Error(
-                        'Got error rotating osd keyring using ceph-bluestore-tool\n'
-                        f'Out:{out}\n'
-                        f'Err:{err}'
-                    )
                 logger.info(
                     f'Got issue rotating osd keyring using ceph-bluestore-tool:\n{out}\n{err}\nRetrying in {i} seconds'
                 )
@@ -574,6 +568,13 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     f'Successfully rotated osd.{self.identity.daemon_id} keyring'
                 )
                 break
+
+        if ret:
+            raise Error(
+                'Got error rotating osd keyring using ceph-bluestore-tool\n'
+                f'Out:{out}\n'
+                f'Err:{err}'
+            )
 
         if encrypted:
             cryptsetup_close_container = CephContainer(
