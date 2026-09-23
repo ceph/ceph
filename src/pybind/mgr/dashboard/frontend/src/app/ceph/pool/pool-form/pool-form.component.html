@@ -552,7 +552,8 @@
                 <cd-table-key-value
                   [renderObjects]="true"
                   [hideKeys]="['name']"
-                  [data]="selectedEcp"
+                  [data]="getEcpProfileDetails()"
+                  [preserveOrder]="true"
                   [autoReload]="false"
                 >
                 </cd-table-key-value>
