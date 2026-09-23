@@ -1642,6 +1642,17 @@ TEST_P(seastore_test_t, zero)
 }
 
 #include "crimson/os/seastore/omap_manager/log/log_node.h"
+TEST_P(seastore_test_t, repeated_set_alloc_hint_log_is_idempotent)
+{
+  run_async([this] {
+    auto &obj = get_object(make_oid(2001));
+    obj.touch(*sharded_seastore);
+    obj.set_log_object(*sharded_seastore);
+    obj.set_log_object(*sharded_seastore);
+    obj.set_log_object(*sharded_seastore);
+  });
+}
+
 TEST_P(seastore_test_t, pgmeta_io)
 {
   run_async([this] {
