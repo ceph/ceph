@@ -50,11 +50,6 @@ void hdr_from_be(ObjectValueHeader &hdr)
   hdr.metadata_count = be16toh(hdr.metadata_count);
 }
 
-bool ObjectValueHeader::is_delete_marker() const
-{
-  return (flags & ObjectValue::kFlagFenced) != 0;
-}
-
 namespace {
 
 std::string etag_to_hex(const uint8_t *etag, size_t len)
@@ -127,21 +122,6 @@ std::span<const uint8_t> object_inline_metadata_bytes(std::string_view data)
     return {};
   }
   return {rest.data(), frame_size};
-}
-
-bool parse_object_value_hdr(std::string_view data, ObjectValueHeader &hdr)
-{
-  if (data.size() < sizeof(ObjectValueHeader)) {
-    return false;
-  }
-  std::memcpy(&hdr, data.data(), sizeof(ObjectValueHeader));
-  hdr_from_be(hdr);
-  const auto ct = hdr.chunk.type;
-  if (ct != CHUNK_INLINE && ct != CHUNK_CHILD_D && ct != CHUNK_CHILD_D_REF &&
-      ct != CHUNK_STORAGE && ct != CHUNK_STORAGE_REF) {
-    return false;
-  }
-  return true;
 }
 
 std::optional<ObjectValue> parse_object_value(std::string_view data)

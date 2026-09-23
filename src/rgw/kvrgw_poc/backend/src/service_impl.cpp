@@ -2584,70 +2584,89 @@ KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id,
 
   const auto bprefix = make_bucket_prefix(tenant_id);
   const std::string scan_end = prefix_range_end(bprefix.view());
-  std::string scan_begin;
-  if (!continuation_token.empty()) {
-    scan_begin = make_bucket_key(tenant_id, continuation_token).view();
+
+  constexpr int kMaxRetries = 3;
+  for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
+    *out = {};
+
+    std::string scan_begin;
+    if (!continuation_token.empty()) {
+      scan_begin = make_bucket_key(tenant_id, continuation_token).view();
+    }
+    else {
+      scan_begin = make_bucket_key(tenant_id, prefix).view();
+    }
+    bool exclusive_scan = !continuation_token.empty();
+
+    KvrgwErrorCode iter_ec = KVRGW_ERR_OK;
+    while (true) {
+      auto tr_result = store_.begin_transaction();
+      if (!tr_result) {
+        iter_ec = fdb_to_error(tr_result.error());
+        break;
+      }
+      auto &tr = *tr_result;
+
+      if (listing_disable_ryw_) {
+        // best effort, don't fail on this
+        tr->disable_ryw();
+      }
+
+      FdbRangeHolder holder(tr->kv_async_get_range_holder(scan_begin, exclusive_scan,
+                                                          scan_end, kListBucketsFdbPage, streamingMode));
+      exclusive_scan = true;
+
+      const fdb_error_t wait_err = holder.wait();
+      if (wait_err) {
+        iter_ec = fdb_to_error(wait_err);
+        break;
+      }
+      if (holder.count() == 0) {
+        break;
+      }
+
+      size_t rsv = std::min(out->buckets.size() + static_cast<size_t>(holder.count()),
+                            static_cast<size_t>(max_buckets));
+      out->buckets.reserve(rsv);
+
+      for (const auto& [key, val] : holder) {
+        const auto bucket_name = parse_bucket_key_view(key);
+        if (!bucket_name) [[unlikely]] {
+          continue;
+        }
+        const BucketValueHeader* bvh = bvh_ptr(val);
+        if (!bvh) [[unlikely]] {
+          continue;
+        }
+        if (!prefix.empty() && !starts_with(*bucket_name, prefix)) {
+          // prefix was depleted -> stop the scan
+          return KVRGW_ERR_OK;
+        }
+        if (out->buckets.size() >= max_buckets) {
+          out->continuation_token = out->buckets.back().name;
+          return KVRGW_ERR_OK;
+        }
+        out->buckets.emplace_back(BucketListEntry{
+            std::string(*bucket_name), bvh_created_at_unix(bvh)});
+      }
+
+      if (!holder.more()) {
+        break;
+      }
+      scan_begin.assign(holder.back().key);
+    }
+
+    if (iter_ec == KVRGW_ERR_OK) {
+      return KVRGW_ERR_OK;
+    }
+    if (is_retriable(iter_ec)) {
+      sleep_for_msec(10 * (attempt + 1));
+      continue;
+    }
+    *out = {};
+    return iter_ec;
   }
-  else {
-    scan_begin = make_bucket_key(tenant_id, prefix).view();
-  }
-  bool exclusive_scan = !continuation_token.empty();
-
-  while (true) {
-    auto tr_result = store_.begin_transaction();
-    if (!tr_result) {
-      return fdb_to_error(tr_result.error());
-    }
-    auto &tr = *tr_result;
-
-    if (listing_disable_ryw_) {
-      // best effort, don't fail on this
-      tr->disable_ryw();
-    }
-
-    FdbRangeHolder holder(tr->kv_async_get_range_holder(
-                            scan_begin, exclusive_scan, scan_end, kListBucketsFdbPage, streamingMode));
-    exclusive_scan = true;
-
-    const fdb_error_t wait_err = holder.wait();
-    if (wait_err) {
-      return fdb_to_error(wait_err);
-    }
-    if (holder.count() == 0) {
-      break;
-    }
-
-    size_t rsv = std::min(out->buckets.size() + static_cast<size_t>(holder.count()),
-                          static_cast<size_t>(max_buckets));
-    out->buckets.reserve(rsv);
-
-    for (const auto& [key, val] : holder) {
-      const auto bucket_name = parse_bucket_key_view(key);
-      if (!bucket_name) [[unlikely]] {
-        continue;
-      }
-      const BucketValueHeader* bvh = bvh_ptr(val);
-      if (!bvh) [[unlikely]] {
-        continue;
-      }
-      if (!prefix.empty() && !starts_with(*bucket_name, prefix)) {
-        // prefix was depleted -> stop the scan
-        return KVRGW_ERR_OK;
-      }
-      if (out->buckets.size() >= max_buckets) {
-        out->continuation_token = out->buckets.back().name;
-        return KVRGW_ERR_OK;
-      }
-      out->buckets.emplace_back(BucketListEntry{
-          std::string(*bucket_name), bvh_created_at_unix(bvh)});
-    }
-
-    if (!holder.more()) {
-      break;
-    }
-    scan_begin.assign(holder.back().key);
-  }
-  return KVRGW_ERR_OK;
+  return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
 
 //--------------------------------------------------------------------------------
@@ -2726,12 +2745,13 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
     std::string prefix_skip_target;
     bool exclusive_scan = !start_after.empty();
     KvrgwErrorCode iter_ec = KVRGW_ERR_OK;
+    bool restart_attempt = false;
 
     while (!truncated) {
       ++list_iters;
 
       auto tr_result = store_.begin_transaction();
-      if (!tr_result) {
+      if (!tr_result) [[unlikely]] {
         iter_ec = fdb_to_error(tr_result.error());
         break;
       }
@@ -2742,6 +2762,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
         tr->disable_ryw();
       }
 
+      auto f_bkt = issue_bucket_get(*tr, tenant_id, bname);
       const Stopwatch scan_t0;
       FdbRangeHolder holder(tr->kv_async_get_range_holder(scan_begin, exclusive_scan,
                                                           scan_end, batch_limit, streamingMode));
@@ -2749,7 +2770,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
       const fdb_error_t wait_err = holder.wait();
       latency_stats_.record_list_scan(scan_t0.elapsed_us());
 
-      if (wait_err) {
+      if (wait_err) [[unlikely]] {
         iter_ec = fdb_to_error(wait_err);
         break;
       }
@@ -2759,9 +2780,9 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
       }
 
       need_prefix_skip = false;
-
-      out->objects.reserve(out->objects.size() +
-                           static_cast<size_t>(holder.count()));
+      size_t rsv = std::min(out->objects.size() + static_cast<size_t>(holder.count()),
+                            static_cast<size_t>(max_keys));
+      out->objects.reserve(rsv);
       for (const auto& [key, val] : holder) {
         const auto object_name = parse_object_key_view(key);
         if (!object_name) {
@@ -2819,6 +2840,20 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
         ++budget;
       }
 
+      // check bucket future now (no latency added)
+      auto vb = resolve_bucket_verify(*tr, f_bkt, tenant_id, bname, bucket_id,
+                                      kDenyList);
+      if (!vb) [[unlikely]] {
+        iter_ec = vb.error();
+        if (iter_ec == KVRGW_ERR_BUCKET_ID_MISMATCH) {
+          // bucket was overwritten -> restart scan clean
+          restart_attempt = true;
+          break;
+        }
+        // otherwise fall through to common error handler
+        break;
+      }
+
       if (need_prefix_skip) {
         scan_begin = prefix_skip_target;
         exclusive_scan = false;
@@ -2839,7 +2874,12 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
 
     latency_stats_.record_list_call(list_iters);
 
-    if (iter_ec != KVRGW_ERR_OK) {
+    if (restart_attempt) [[unlikely]] {
+      *out = {};
+      continue;
+    }
+
+    if (iter_ec != KVRGW_ERR_OK) [[unlikely]] {
       if (is_retriable(iter_ec)) {
         sleep_for_msec(10 * (attempt + 1));
         continue;
@@ -2865,13 +2905,8 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
         out->next_continuation_token = continuation;
       }
     }
-    if (!out->objects.empty() || !out->common_prefixes.empty()) {
-      return KVRGW_ERR_OK;
-    }
-    else {
-      // make sure empty listing was not caused by a bucket removal
-      return resolve_bucket_error(tenant_id, bname, KVRGW_ERR_OK);
-    }
+
+    return KVRGW_ERR_OK;
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
@@ -4253,7 +4288,9 @@ void merge_version_streams(const FdbRangeHolder &o_holder,
                            std::string *last_o, std::string *last_v,
                            KvRgwServiceImpl::ListObjectVersionsResult *out)
 {
-  out->versions.reserve(static_cast<size_t>(limit));
+  size_t new_cnt = static_cast<size_t>(o_holder.count() + v_holder.count());
+  size_t rsv = std::min(out->versions.size() + new_cnt, static_cast<size_t>(limit));
+  out->versions.reserve(rsv);
 
   int remaining = limit;
   auto oit = o_holder.begin();
@@ -4363,7 +4400,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     *out = {};
     auto cached = get_bucket_id_cached(tenant_id, bname);
-    if (!cached) {
+    if (!cached) [[unlikely]] {
       auto ec = fdb_to_error(cached.error());
       if (is_retriable(ec)) {
         sleep_for_msec(10 * (attempt + 1));
@@ -4373,6 +4410,9 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     }
     if (!*cached) {
       return KVRGW_ERR_NO_SUCH_BUCKET;
+    }
+    if ((*cached)->access_flags & kDenyList) {
+      return KVRGW_ERR_ACCESS_DENIED;
     }
     const auto bucket_id = (*cached)->bucket_id;
 
@@ -4406,7 +4446,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     const std::string v_begin = last_v.empty() ? v_domain : last_v;
 
     auto tr_result = store_.begin_transaction();
-    if (!tr_result) {
+    if (!tr_result) [[unlikely]] {
       auto ec = fdb_to_error(tr_result.error());
       if (is_retriable(ec)) {
         sleep_for_msec(10 * (attempt + 1));
@@ -4429,7 +4469,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
 
     const fdb_error_t o_err = o_holder.wait();
     const auto o_us = scan_t0.elapsed_us();
-    if (o_err) {
+    if (o_err) [[unlikely]] {
       auto ec = fdb_to_error(o_err);
       if (is_retriable(ec)) {
         sleep_for_msec(10 * (attempt + 1));
@@ -4440,7 +4480,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
 
     const fdb_error_t v_err = v_holder.wait();
     const auto v_us = scan_t0.elapsed_us();
-    if (v_err) {
+    if (v_err) [[unlikely]] {
       auto ec = fdb_to_error(v_err);
       if (is_retriable(ec)) {
         sleep_for_msec(10 * (attempt + 1));
@@ -4454,16 +4494,18 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
 
     auto vb = resolve_bucket_verify(*tr, f_bkt, tenant_id, bname, bucket_id,
                                     kDenyList);
-    if (!vb) {
-      *out = {};
+    if (!vb) [[unlikely]] {
       const auto ec = vb.error();
-      if (ec == KVRGW_ERR_NO_SUCH_BUCKET || ec == KVRGW_ERR_ACCESS_DENIED) {
-        return ec;
+      if (ec == KVRGW_ERR_BUCKET_ID_MISMATCH) {
+        // bucket was overwritten -> restart scan clean
+        *out = {};
+        continue;
       }
-      if (ec == KVRGW_ERR_BUCKET_ID_MISMATCH || is_retriable(ec)) {
+      if (is_retriable(ec)) {
         sleep_for_msec(10 * (attempt + 1));
         continue;
       }
+      *out = {};
       return ec;
     }
 

@@ -64,7 +64,6 @@ struct ChunkDescriptor {
 
 struct ObjectValue;
 struct ObjectValueHeader {
-  bool is_delete_marker() const;
   uint8_t ref_tag[kRefTagSize]{};
   uint16_t etag_part_count{};
   uint16_t annotations_count{};
@@ -200,11 +199,6 @@ struct BucketValue {
 };
 
 std::optional<ObjectValue> parse_object_value(std::string_view data);
-
-// Lightweight header-only parse for listing hot path.
-// Populates hdr fields only; no heap allocations.
-// Returns false if data is too short or chunk type is invalid.
-bool parse_object_value_hdr(std::string_view data, ObjectValueHeader &hdr);
 
 // Zero-copy: validate and return a pointer directly into the FDB buffer.
 // Returns nullptr if data is too short or chunk type is invalid.
