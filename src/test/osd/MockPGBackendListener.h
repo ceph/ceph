@@ -551,8 +551,11 @@ public:
     ObjectStore::Transaction &t,
     bool async = false) override {
     // If we have a PeeringState, append the log entries to it
-    // This creates proper integration between backend operations and peering state
-    if (peering_state && !logv.empty()) {
+    // This creates proper integration between backend operations and peering state.
+    // Call it even when logv is empty: the roll-forward op that EC issues once
+    // the pipeline goes idle carries no log entries, only roll_forward_to, and
+    // PrimaryLogPG::log_operation() passes it through unconditionally.
+    if (peering_state) {
       peering_state->append_log(
         std::move(logv),
         trim_to,
