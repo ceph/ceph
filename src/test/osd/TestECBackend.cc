@@ -35,7 +35,6 @@ private:
   pg_info_t pg_info;
   set<pg_shard_t> backfill_shards;
   shard_id_set backfill_shard_id_set;
-  map<hobject_t, set<pg_shard_t>> missing_loc_shards;
   map<pg_shard_t, pg_missing_t> shard_missing;
   pg_missing_set<false> shard_not_missing_const;
   set<pg_shard_t> acting_recovery_backfill_shards;
@@ -47,6 +46,11 @@ private:
 public:
   set<pg_shard_t> acting_shards;
   shard_id_set acting_recovery_backfill_shard_id_set;
+  // Settable candidate-location map used by get_missing_loc_shards();
+  // tests can populate this directly to simulate an object whose
+  // pg_missing_loc lists more than one candidate pg_shard for the same
+  // hoid (e.g. several historical owners of the same EC shard slot).
+  map<hobject_t, set<pg_shard_t>> missing_loc_shards;
   // Settable pool used by get_pool(); tests can set flags (e.g. FLAG_OMAP)
   // and nonprimary_shards on it directly.
   pg_pool_t pg_pool;
