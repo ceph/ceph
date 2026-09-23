@@ -6,6 +6,8 @@
 
 #include "rgw_common.h"
 
+class RGWOp;
+
 namespace tracing {
 namespace rgw {
 
@@ -20,6 +22,15 @@ const auto TRANS_ID = "trans_id";
 const auto HOST_ID = "host_id";
 
 extern tracing::Tracer tracer;
+
+// whether requests that are not traced live should carry a context_span(), so
+// that slow requests can be traced after the fact and the OSDs can place their
+// slow ops under them
+bool trace_slow_requests(CephContext* cct);
+
+// exports a request that carried a context_span() as a span with that span's
+// ids, if it took rgw_trace_slow_threshold or longer; call when it is done
+void trace_slow_request(const req_state* s, const ::RGWOp* op, ::rgw::sal::Driver* driver);
 
 } // namespace rgw
 } // namespace tracing

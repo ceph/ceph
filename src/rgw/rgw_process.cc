@@ -451,6 +451,11 @@ int process_request(const RGWProcessEnv& penv,
     }
   }
     s->trace = tracing::rgw::tracer.start_trace(op->name(), s->trace_enabled);
+    if (!s->trace_enabled && tracing::rgw::trace_slow_requests(s->cct)) {
+      // no live spans, just ids that reach the OSDs, so that a slow request
+      // and its slow ops can be traced together after the fact
+      s->trace = tracing::rgw::tracer.context_span();
+    }
     s->trace->SetAttribute(tracing::rgw::TRANS_ID, s->trans_id);
 
     ret = rgw_process_authenticated(handler, op, req, s, yield, driver);
@@ -507,6 +512,9 @@ done:
             << e.what() << dendl;
     perfcounter->inc(l_rgw_qlen, -1);
     perfcounter->inc(l_rgw_qactive, -1);
+  }
+  if (op && !s->trace_enabled) {
+    tracing::rgw::trace_slow_request(s, op, driver);
   }
   if (should_log) {
     rgw_log_op(rest, s, op, penv.olog.get());
