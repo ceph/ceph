@@ -1385,7 +1385,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
   // discard pool migration watermarks for PGs that have finished migrating
   std::erase_if(pool_migration_watermarks, [&](const auto& item) {
     auto const& [pg, watermark] = item;
-    return !(osdmap->get_pg_pool(pg.pool())->is_pg_migrating(pg));
+    auto p = osdmap->get_pg_pool(pg.pool());
+    return !p || !p->is_pg_migrating(pg);
   });
 
   // make sure need_resend targets reflect latest map
