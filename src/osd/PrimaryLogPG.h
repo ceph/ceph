@@ -31,6 +31,9 @@
 #include "common/intrusive_timer.h"
 #include "common/sharedptr_registry.hpp"
 #include "common/shared_cache.hpp"
+#ifdef WITH_OSD_CUOBJ
+#include "osd/oob_placement.h"
+#endif
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
 #include "cls/cas/cls_cas_ops.h"
@@ -1333,6 +1336,16 @@ protected:
   bool deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
 		      const ceph::rdma::delivery_t& d,
 		      ceph::rdma::oob_result_t& res);
+  /// whether this read may be delivered out of band at all (descriptor
+  /// shape, retries, read lease, delivery lease)
+  bool oob_delivery_allowed(OpContext *ctx, size_t num_ops);
+  /// build the placement plan and the payload it indexes for one op;
+  /// false leaves the op inline
+  bool plan_op_oob(OpContext *ctx, OSDOp& op,
+		   const ceph::rdma::delivery_t& d,
+		   ceph::osd::oob::placement_plan& plan,
+		   ceph::buffer::list& payload,
+		   std::map<uint64_t, uint64_t>& sparse_extents);
 #endif
 
   // pg on-disk content

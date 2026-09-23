@@ -9350,17 +9350,15 @@ void PrimaryLogPG::apply_stats(
 }
 
 #ifdef WITH_OSD_CUOBJ
-bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
-			       std::vector<ceph::rdma::oob_result_t>& oob)
+bool PrimaryLogPG::oob_delivery_allowed(OpContext *ctx, size_t num_ops)
 {
   auto m = ctx->op->get_req<MOSDOp>();
   const auto& deliveries = m->get_rdma_deliveries();
-  ceph_assert(oob.size() == rops.size());
-  if (deliveries.size() != rops.size()) {
+  if (deliveries.size() != num_ops) {
     // the descriptor vector must mirror the ops; anything else is
     // malformed and everything stays inline
     dout(10) << __func__ << " " << deliveries.size()
-	     << " delivery descriptors for " << rops.size()
+	     << " delivery descriptors for " << num_ops
 	     << " ops, delivering inline" << dendl;
     return false;
   }
@@ -9394,6 +9392,18 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
 	     << "s), delivering inline" << dendl;
     return false;
   }
+  return true;
+}
+
+bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
+			       std::vector<ceph::rdma::oob_result_t>& oob)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  const auto& deliveries = m->get_rdma_deliveries();
+  ceph_assert(oob.size() == rops.size());
+  if (!oob_delivery_allowed(ctx, rops.size())) {
+    return false;
+  }
   bool any = false;
   for (size_t i = 0; i < rops.size(); i++) {
     if (deliveries[i].empty()) {
@@ -9406,11 +9416,12 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
   return any;
 }
 
-bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
-				  const ceph::rdma::delivery_t& d,
-				  ceph::rdma::oob_result_t& res)
+bool PrimaryLogPG::plan_op_oob(OpContext *ctx, OSDOp& op,
+			       const ceph::rdma::delivery_t& d,
+			       ceph::osd::oob::placement_plan& plan,
+			       bufferlist& payload,
+			       std::map<uint64_t, uint64_t>& sparse_extents)
 {
-  auto m = ctx->op->get_req<MOSDOp>();
   if (d.flags & ~ceph::rdma::delivery_t::KNOWN_FLAGS) {
     // flag bits we do not implement: deliver inline so future
     // semantics degrade safely
@@ -9432,9 +9443,6 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
   }
 
   const bool ec_direct = ctx->op->ec_direct_read();
-  ceph::osd::oob::placement_plan plan;
-  bufferlist payload;  // the bytes the plan indexes
-  std::map<uint64_t, uint64_t> sparse_extents;
   if (data_op->op.op == CEPH_OSD_OP_SPARSE_READ) {
     if (ec_direct) {
       // the fiemap extent map is in shard-offset space; interleaving
@@ -9475,7 +9483,31 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
 				       data_op->outdata.length());
     payload = data_op->outdata;
   }
-  if (plan.empty()) {
+  return !plan.empty();
+}
+
+// strip the delivered data from the reply; sparse reads keep their
+// extent map inline with an empty data blob
+static void strip_oob_delivered(OSDOp& op,
+				const std::map<uint64_t, uint64_t>& sparse_extents)
+{
+  op.outdata.clear();
+  if (op.op.op == CEPH_OSD_OP_SPARSE_READ) {
+    encode(sparse_extents, op.outdata);
+    encode(bufferlist(), op.outdata);
+  }
+}
+
+bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
+				  const ceph::rdma::delivery_t& d,
+				  ceph::rdma::oob_result_t& res)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  OSDOp* data_op = &op;
+  ceph::osd::oob::placement_plan plan;
+  bufferlist payload;  // the bytes the plan indexes
+  std::map<uint64_t, uint64_t> sparse_extents;
+  if (!plan_op_oob(ctx, op, d, plan, payload, sparse_extents)) {
     return false;
   }
 
@@ -9486,13 +9518,7 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
 	     << pushed << "), delivering inline" << dendl;
     return false;
   }
-  // strip the delivered data from the reply; sparse reads keep their
-  // extent map inline with an empty data blob
-  data_op->outdata.clear();
-  if (data_op->op.op == CEPH_OSD_OP_SPARSE_READ) {
-    encode(sparse_extents, data_op->outdata);
-    encode(bufferlist(), data_op->outdata);
-  }
+  strip_oob_delivered(*data_op, sparse_extents);
   res.bytes = static_cast<uint64_t>(pushed);
   if (d.flags & ceph::rdma::delivery_t::FLAG_CRC64NVME) {
     // checksum each placed range at the storage node, after it
