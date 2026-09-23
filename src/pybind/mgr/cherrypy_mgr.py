@@ -33,6 +33,9 @@ Usage:
 """
 import logging
 import cherrypy
+import re
+import threading
+import time
 from cherrypy.process.servers import ServerAdapter
 from cheroot.wsgi import Server as WSGIServer
 from cheroot.ssl.builtin import BuiltinSSLAdapter
@@ -40,6 +43,42 @@ from cherrypy._cptree import Tree
 from typing import Any, Tuple, Optional, Dict
 
 logger = logging.getLogger(__name__)
+
+
+class CherryPyAccessFilter(logging.Filter):
+    """Rate-limits access log to one entry per endpoint per 300 s.
+    Non-200 responses always pass through."""
+    _PATH_RE = re.compile(r'"[A-Z]+\s+(/[^\s]*)')
+
+    def __init__(self, interval: float = 300.0) -> None:
+        super().__init__()
+        self.interval = interval
+        self._last: Dict[str, float] = {}
+        self._calls = 0
+        self._lock = threading.Lock()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not record.name.startswith('cherrypy.access'):
+            return True
+        msg = record.getMessage()
+        if '" 200 ' not in msg:
+            return True
+        m = self._PATH_RE.search(msg)
+        key = m.group(1) if m else msg
+        now = time.monotonic()
+        with self._lock:
+            self._calls += 1
+            if self._calls % 500 == 0:
+                cutoff = now - self.interval
+                self._last = {
+                    path: ts for path, ts in self._last.items()
+                    if ts >= cutoff
+                }
+            last = self._last.get(key)
+            if last is not None and now - last < self.interval:
+                return False
+            self._last[key] = now
+        return True
 
 
 class CherryPyErrorFilter(logging.Filter):
@@ -128,7 +167,7 @@ class CherryPyMgr:
 
     @staticmethod
     def configure_logging() -> None:
-        cherrypy.log.access_log.propagate = False
+        cherrypy.log.access_log.propagate = True
         cherrypy.log.error_log.propagate = False
 
         error_log = logging.getLogger('cherrypy.error')
@@ -137,6 +176,14 @@ class CherryPyMgr:
         has_filter = any(isinstance(f, CherryPyErrorFilter) for f in error_log.filters)
         if not has_filter:
             error_log.addFilter(CherryPyErrorFilter())
+
+        access_filter = CherryPyAccessFilter()
+
+        root_log = logging.getLogger()
+
+        for handler in root_log.handlers:
+            if not any(isinstance(f, CherryPyAccessFilter) for f in handler.filters):
+                handler.addFilter(access_filter)
 
     @staticmethod
     def create_adapter(
