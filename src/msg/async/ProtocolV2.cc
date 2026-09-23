@@ -632,6 +632,9 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
                    << " >= " << m->get_seq() << " on " << m << " " << *m
                    << dendl;
   }
+  if (i > 0) {
+    last_ack_progress = ceph::coarse_mono_clock::now();
+  }
 
   if (unlikely(shutting_down) && sent_queue_empty()) {
     connection->center->dispatch_event_external(connection->write_handler);
@@ -685,6 +688,9 @@ void ProtocolV2::write_event() {
 
       if (!connection->policy.lossy) {
         // put on sent list
+        if (sent.empty()) {
+          last_ack_progress = ceph::coarse_mono_clock::now();
+        }
         sent.push_back(out_entry.m);
       }
       more = !out_queue.empty();
@@ -771,6 +777,12 @@ void ProtocolV2::write_event() {
     connection->write_lock.unlock();
     connection->lock.unlock();
   }
+}
+
+bool ProtocolV2::is_stalled(ceph::coarse_mono_time now,
+                            ceph::timespan limit) {
+  std::lock_guard l(connection->write_lock);
+  return !sent.empty() && now - last_ack_progress > limit;
 }
 
 bool ProtocolV2::is_queued() {
@@ -1346,7 +1358,7 @@ CtPtr ProtocolV2::ready() {
     connection->center->delete_time_event(connection->last_tick_id);
   }
   connection->last_tick_id = connection->center->create_time_event(
-      connection->inactive_timeout_us, connection->tick_handler);
+      connection->tick_interval_us(), connection->tick_handler);
 
   {
     std::lock_guard<std::mutex> l(connection->write_lock);
@@ -2906,6 +2918,7 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
           if (exproto->state == NONE) {
             existing->shutdown_socket();
             existing->cs = std::move(cs);
+            existing->blackholed = false;
             existing->worker->references--;
             new_worker->references++;
             existing->logger = new_worker->get_perf_counter();
