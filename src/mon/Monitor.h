@@ -1155,6 +1155,7 @@ private:
 #define CEPH_MON_FEATURE_INCOMPAT_SQUID CompatSet::Feature(16, "squid ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_TENTACLE CompatSet::Feature(17, "tentacle ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_UMBRELLA CompatSet::Feature(18, "umbrella ondisk layout")
+#define CEPH_MON_FEATURE_INCOMPAT_VAMPIRE CompatSet::Feature(19, "vampire ondisk layout")
 
 // Release-independent features
 #define CEPH_MON_FEATURE_INCOMPAT_CEPHX_AUTH_AES256K CompatSet::Feature(31, "cephx auth aes256k")
