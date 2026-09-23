@@ -6,6 +6,9 @@
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
 
+* RGW: Encrypted objects are skipped during cloud-s3 lifecycle transitions
+  when ``retain_head_object`` is false, preserving their encryption attributes.
+
 * RGW: Cloud transitions now preserve the original part lengths of
   encrypted objects created with S3 Multipart Upload. Earlier releases
   could discard those lengths during transition, so restored objects

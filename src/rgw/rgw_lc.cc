@@ -1701,6 +1701,13 @@ public:
         return 0;
       }
 
+      if (!oc.tier->retain_head_object() && attrset.count(RGW_ATTR_CRYPT_MODE)) {
+        ldpp_dout(oc.dpp, 10) << "Object(key:" << oc.o.key << ") is encrypted "
+            "and retain_head_object is false. Skipping transition to cloud-s3 "
+            "tier: " << target_placement.storage_class << dendl;
+        return 0;
+      }
+
       r = transition_obj_to_cloud(oc, y);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj(key:" << oc.o.key << ") to cloud (r=" << r << ")"
