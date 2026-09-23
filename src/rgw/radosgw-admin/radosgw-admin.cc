@@ -8630,7 +8630,10 @@ next:
     bool is_truncated;
     const auto& index = bucket->get_info().layout.current_index;
     const int max_shards = rgw::num_shards(index);
-    if (max_entries < 0) {
+
+    if (max_entries_specified) {
+      max_entries = std::max(1, max_entries); // sanity
+    } else {
       max_entries = 1000;
     }
 
@@ -8641,8 +8644,11 @@ next:
     formatter->open_array_section("entries");
 
     auto rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
+    int64_t entry_count = 0; // track number of entries displayed
+    bool done = false;       // true once reached max_entries
+
     int i = (specified_shard_id ? shard_id : 0);
-    for (; i < max_shards; i++) {
+    for (; i < max_shards && !done; i++) {
       ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": starting shard=" <<
 	i << dendl;
       marker.clear();
@@ -8670,6 +8676,14 @@ next:
 	for (const auto& entry : entries) {
           encode_json("entry", entry, formatter.get());
           marker = entry.idx;
+
+          if (++entry_count >= max_entries) {
+            done = true;
+            ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
+              ": bi_list() stopped outputting entries after " << entry_count <<
+              " entries given that max_entries=" << max_entries << dendl;
+            break;
+          }
         }
         formatter->flush(cout);
 
@@ -8677,14 +8691,14 @@ next:
 	  ": bi_list() returned without error; entries.size()=" <<
 	  entries.size() << ", is_truncated=" << is_truncated <<
 	  ", next_marker=" << marker << dendl;
-      } while (is_truncated);
+      } while (is_truncated && !done);
 
       formatter->flush(cout);
 
       if (specified_shard_id) {
         break;
       }
-    }
+    } // shard loop
     ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": done" << dendl;
 
     formatter->close_section();
