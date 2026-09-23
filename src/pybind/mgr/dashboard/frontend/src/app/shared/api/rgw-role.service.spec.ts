@@ -56,4 +56,43 @@ describe('RgwRoleService', () => {
     const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/test-role');
     expect(req.request.method).toBe('DELETE');
   });
+
+  it('should call exists and return true when role is found', () => {
+    service.exists('test-role', 'test-account').subscribe((exists) => {
+      expect(exists).toBe(true);
+    });
+    const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/test-role');
+    expect(req.request.method).toBe('GET');
+    req.flush({ RoleName: 'test-role' });
+  });
+
+  it('should call exists and return false when role is missing', () => {
+    service.exists('missing-role', 'test-account').subscribe((exists) => {
+      expect(exists).toBe(false);
+    });
+    const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/missing-role');
+    expect(req.request.method).toBe('GET');
+    req.flush({ status: 404, statusText: 'Not Found' }, { status: 404, statusText: 'Not Found' });
+  });
+
+  it('should call attachPolicy', () => {
+    service
+      .attachPolicy('test-role', 'test-policy', '{"Statement":[]}', 'test-account')
+      .subscribe();
+    const req = httpTesting.expectOne('api/rgw/accounts/test-account/roles/test-role/policy');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      role_name: 'test-role',
+      policy_name: 'test-policy',
+      policy_doc: '{"Statement":[]}'
+    });
+  });
+
+  it('should call deletePolicy', () => {
+    service.deletePolicy('test-role', 'test-policy', 'test-account').subscribe();
+    const req = httpTesting.expectOne(
+      'api/rgw/accounts/test-account/roles/test-role/policy/test-policy'
+    );
+    expect(req.request.method).toBe('DELETE');
+  });
 });
