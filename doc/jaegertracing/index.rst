@@ -92,11 +92,41 @@ What a slow-op trace contains
 
   The primary had the acknowledgement of ``osd.2`` and then waited 0.29 s for
   ``osd.1``.
-* **Attributes**: ``description`` (the operation, as in the op tracker),
-  ``osd``, ``source`` (the sender), ``reqid`` and ``duration_s``.
+* **Attributes** that Jaeger can search on, for example ``pool_name=rbd``
+  or ``role=replica``:
+
+  - ``description``: the operation, as in the op tracker
+  - ``osd``, ``source`` (the sender), ``reqid`` and ``duration_s``
+  - ``role``: ``primary`` or ``replica``, the part this OSD played in the
+    request. A reply from a replica is handled by the primary.
+  - ``pool``, ``pool_name``, ``pg`` and ``osdmap_epoch`` (the epoch the
+    sender used)
+  - ``object``, and ``namespace`` if it is not the default one
+  - for client requests: ``op_type`` (``read``, ``write`` or
+    ``read-write``), ``ops`` (for example ``writefull,setxattr``) and
+    ``bytes`` (written, or requested for reads)
+  - ``msg_bytes``: the size of the message as received
+
+One trace per request
+---------------------
+
+A replicated write shows up as an ``osd_op`` on the primary, an
+``osd_repop`` on each replica and an ``osd_repop_reply`` on the primary for
+each acknowledgement. Every OSD derives the trace ID from the request ID
+(``reqid``) and the cluster fsid, so all of these that were slow land in the
+same trace, with no extra data sent between OSDs. That puts the primary's
+wait for ``osd.1`` next to what ``osd.1`` was doing with the sub-op at the
+time. The operations hang off a shared root span that no OSD exports, so
+Jaeger may warn about a missing parent span; that is expected.
+
+Only slow operations are traced, and each OSD applies its own rate limit, so
+a trace holds the operations that crossed ``osd_op_trace_slow_threshold`` on
+their own OSD, not necessarily all of them.
 
 If a client sent its own trace context with the request, as RGW does when
-tracing every request, the slow-op trace becomes part of the client's trace.
+tracing every request, the primary's operation becomes part of the client's
+trace instead, with a link to the request's trace. Replicas do not receive
+the client's context, so their operations stay in the request's trace.
 
 Finding the trace of a slow operation
 -------------------------------------

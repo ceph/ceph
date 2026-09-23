@@ -7,6 +7,44 @@
 
 namespace tracing {
 
+// splitmix64's finalizer: a fixed, well-mixing hash of 64 bits, the same on
+// every OSD whatever its build, which std::hash does not promise
+static uint64_t mix64(uint64_t x) {
+  x += 0x9e3779b97f4a7c15ull;
+  x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
+  x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
+  return x ^ (x >> 31);
+}
+
+RequestTrace request_trace(uint64_t cluster, uint8_t name_type, int64_t name_num,
+                           int32_t inc, uint64_t tid) {
+  auto hash = [&](uint64_t seed) {
+    uint64_t h = mix64(seed ^ cluster);
+    h = mix64(h ^ name_type);
+    h = mix64(h ^ static_cast<uint64_t>(name_num));
+    h = mix64(h ^ static_cast<uint32_t>(inc));
+    return mix64(h ^ tid);
+  };
+  const uint64_t words[] = {hash(1), hash(2), hash(3)};
+  RequestTrace r;
+  auto put = [](uint8_t* out, uint64_t v) {  // big-endian, as the ids print
+    for (int i = 7; i >= 0; --i, v >>= 8) {
+      out[i] = v & 0xff;
+    }
+  };
+  put(r.trace_id.data(), words[0]);
+  put(r.trace_id.data() + 8, words[1]);
+  put(r.root_span_id.data(), words[2]);
+  // all-zero ids are invalid; vanishingly unlikely, but cheap to rule out
+  if (words[0] == 0 && words[1] == 0) {
+    r.trace_id[15] = 1;
+  }
+  if (words[2] == 0) {
+    r.root_span_id[7] = 1;
+  }
+  return r;
+}
+
 std::vector<OpPhase> op_phases(const OpTimeline& t, double min_share) {
   std::vector<OpPhase> phases;
   const double total = t.end - t.start;
@@ -35,6 +73,9 @@ std::vector<OpPhase> op_phases(const OpTimeline& t, double min_share) {
 } // namespace tracing
 
 #ifdef HAVE_JAEGER
+#include <map>
+#include <optional>
+
 #include "opentelemetry/sdk/trace/batch_span_processor.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
 #include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
@@ -193,12 +234,38 @@ std::string Tracer::record_op(const OpTimeline& t, const jspan_context& parent) 
   };
 
   auto opts = start_opts(t.start);
-  if (parent.IsValid()) {
-    opts.parent = parent;
+  namespace nostd = opentelemetry::nostd;
+  // a remote parent that exists only as ids; sampled, so the SDK's default
+  // parent-based sampler keeps the op
+  std::optional<otel_trace::SpanContext> request_root;
+  if (t.request) {
+    const auto& ids = *t.request;
+    request_root.emplace(
+      otel_trace::TraceId(nostd::span<const uint8_t, TraceIdkSize>(
+        ids.trace_id.data(), TraceIdkSize)),
+      otel_trace::SpanId(nostd::span<const uint8_t, SpanIdkSize>(
+        ids.root_span_id.data(), SpanIdkSize)),
+      otel_trace::TraceFlags(otel_trace::TraceFlags::kIsSampled),
+      true);
   }
-  auto span = tracer->StartSpan(t.name, opts);
+  using attrs_t = std::map<std::string, otel_common::AttributeValue>;
+  std::vector<std::pair<otel_trace::SpanContext, attrs_t>> links;
+  if (parent.IsValid()) {
+    // the client traced the request itself: stay in its trace, and link to
+    // the request's trace, where this op's sub-ops on other OSDs are
+    opts.parent = parent;
+    if (request_root) {
+      links.emplace_back(*request_root, attrs_t{});
+    }
+  } else if (request_root) {
+    opts.parent = *request_root;
+  }
+  auto span = tracer->StartSpan(t.name, attrs_t{}, links, opts);
   for (const auto& [key, value] : t.attributes) {
     span->SetAttribute(key, opentelemetry::nostd::string_view(value));
+  }
+  for (const auto& [key, value] : t.int_attributes) {
+    span->SetAttribute(key, value);
   }
   const double total = t.end - t.start;
   span->SetAttribute("duration_s", total);

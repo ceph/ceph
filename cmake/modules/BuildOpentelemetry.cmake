@@ -1,10 +1,3 @@
-function(target_create _target _lib)
-  add_library(${_target} STATIC IMPORTED)
-  set_target_properties(
-    ${_target} PROPERTIES IMPORTED_LOCATION
-                          "${opentelemetry_BINARY_DIR}/${_lib}")
-endfunction()
-
 function(build_opentelemetry)
   set(opentelemetry_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/jaegertracing/opentelemetry-cpp")
   set(opentelemetry_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/opentelemetry-cpp")
@@ -16,21 +9,19 @@ function(build_opentelemetry)
                                -DWITH_EXAMPLES=OFF)
   list(APPEND opentelemetry_CMAKE_ARGS ${CEPH_EXTERNAL_PROJECT_CMAKE_ARGS})
 
+  # static libraries, relative to the build dir, each listed before the
+  # libraries it depends on
   set(opentelemetry_libs
-      ${opentelemetry_BINARY_DIR}/sdk/src/trace/libopentelemetry_trace.a
-      ${opentelemetry_BINARY_DIR}/sdk/src/resource/libopentelemetry_resources.a
-      ${opentelemetry_BINARY_DIR}/sdk/src/common/libopentelemetry_common.a
-      ${opentelemetry_BINARY_DIR}/exporters/jaeger/libopentelemetry_exporter_jaeger_trace.a
-      ${opentelemetry_BINARY_DIR}/ext/src/http/client/curl/libopentelemetry_http_client_curl.a
-  )
-  set(opentelemetry_include_dir ${opentelemetry_SOURCE_DIR}/api/include/
-                                ${opentelemetry_SOURCE_DIR}/exporters/jaeger/include/
-                                ${opentelemetry_SOURCE_DIR}/ext/include/
-                                ${opentelemetry_SOURCE_DIR}/sdk/include/)
-  # TODO: add target based propogation
-  set(opentelemetry_deps opentelemetry_trace opentelemetry_resources opentelemetry_common
-                         opentelemetry_exporter_jaeger_trace http_client_curl
-			 ${CURL_LIBRARIES})
+      exporters/jaeger/libopentelemetry_exporter_jaeger_trace.a
+      ext/src/http/client/curl/libopentelemetry_http_client_curl.a
+      sdk/src/trace/libopentelemetry_trace.a
+      sdk/src/resource/libopentelemetry_resources.a
+      sdk/src/common/libopentelemetry_common.a)
+  set(opentelemetry_include_dir api/include
+                                exporters/jaeger/include
+                                ext/include
+                                sdk/include)
+  set(opentelemetry_system_libs ${CURL_LIBRARIES})
 
   if(WITH_OTLP)
     # the OTLP/HTTP exporter; gRPC is not needed. Prefer protobuf's own
@@ -45,6 +36,13 @@ function(build_opentelemetry)
                                          -DWITH_OTLP_HTTP=ON
                                          -DWITH_OTLP_GRPC=OFF
                                          -DCMAKE_CXX_STANDARD=17)
+    list(PREPEND opentelemetry_libs
+         exporters/otlp/libopentelemetry_exporter_otlp_http.a
+         exporters/otlp/libopentelemetry_exporter_otlp_http_client.a
+         exporters/otlp/libopentelemetry_otlp_recordable.a
+         libopentelemetry_proto.a)
+    list(APPEND opentelemetry_include_dir exporters/otlp/include)
+    list(APPEND opentelemetry_system_libs protobuf::libprotobuf)
     find_package(absl CONFIG QUIET)
     if(absl_FOUND)
       # opentelemetry-cpp bundles its own copy of abseil, which collides with
@@ -62,25 +60,17 @@ function(build_opentelemetry)
       list(REMOVE_ITEM absl_include_dir ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
       set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
           ${CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES} ${absl_include_dir} PARENT_SCOPE)
-      set(otlp_absl_deps absl::bad_variant_access absl::any absl::base absl::bits absl::city)
+      list(APPEND opentelemetry_system_libs
+           absl::bad_variant_access absl::any absl::base absl::bits absl::city)
     endif()
-    set(otlp_libs
-        exporters/otlp/libopentelemetry_exporter_otlp_http.a
-        exporters/otlp/libopentelemetry_exporter_otlp_http_client.a
-        exporters/otlp/libopentelemetry_otlp_recordable.a
-        libopentelemetry_proto.a)
-    foreach(lib ${otlp_libs})
-      list(APPEND opentelemetry_libs ${opentelemetry_BINARY_DIR}/${lib})
-    endforeach()
+  endif()
+
+  list(TRANSFORM opentelemetry_libs PREPEND "${opentelemetry_BINARY_DIR}/")
+  list(TRANSFORM opentelemetry_include_dir PREPEND "${opentelemetry_SOURCE_DIR}/")
+  if(WITH_OTLP)
+    # headers generated from the .proto files
     list(APPEND opentelemetry_include_dir
-         ${opentelemetry_SOURCE_DIR}/exporters/otlp/include/
-         ${opentelemetry_BINARY_DIR}/generated/third_party/opentelemetry-proto/)
-    # listed before the SDK libraries they depend on
-    list(PREPEND opentelemetry_deps opentelemetry_exporter_otlp_http
-                                    opentelemetry_exporter_otlp_http_client
-                                    opentelemetry_otlp_recordable
-                                    opentelemetry_proto)
-    list(APPEND opentelemetry_deps protobuf::libprotobuf ${otlp_absl_deps})
+         ${opentelemetry_BINARY_DIR}/generated/third_party/opentelemetry-proto)
   endif()
 
   if(CMAKE_MAKE_PROGRAM MATCHES "make")
@@ -131,37 +121,16 @@ function(build_opentelemetry)
     LIST_SEPARATOR !
     LOG_BUILD ON)
 
-  # CMake doesn't allow to add a list of libraries to the import property, hence
-  # we create individual targets and link their libraries which finally
-  # interfaces to opentelemetry target
-  target_create("opentelemetry_trace" "sdk/src/trace/libopentelemetry_trace.a")
-  target_create("opentelemetry_resources"
-                "sdk/src/resource/libopentelemetry_resources.a")
-  target_create("opentelemetry_common"
-                "sdk/src/common/libopentelemetry_common.a")
-  target_create("opentelemetry_exporter_jaeger_trace"
-                "exporters/jaeger/libopentelemetry_exporter_jaeger_trace.a")
-  target_create("http_client_curl"
-                "ext/src/http/client/curl/libopentelemetry_http_client_curl.a")
-  if(WITH_OTLP)
-    target_create("opentelemetry_exporter_otlp_http"
-                  "exporters/otlp/libopentelemetry_exporter_otlp_http.a")
-    target_create("opentelemetry_exporter_otlp_http_client"
-                  "exporters/otlp/libopentelemetry_exporter_otlp_http_client.a")
-    target_create("opentelemetry_otlp_recordable"
-                  "exporters/otlp/libopentelemetry_otlp_recordable.a")
-    target_create("opentelemetry_proto" "libopentelemetry_proto.a")
-  endif()
-
-  # will do all linking and path setting fake include path for
-  # interface_include_directories since this happens at build time
+  # the libraries only exist once opentelemetry-cpp is built, so link them by
+  # path and make the include dirs up front for
+  # INTERFACE_INCLUDE_DIRECTORIES
   file(MAKE_DIRECTORY ${opentelemetry_include_dir})
   add_library(opentelemetry::libopentelemetry INTERFACE IMPORTED)
   add_dependencies(opentelemetry::libopentelemetry opentelemetry-cpp)
   set_target_properties(
     opentelemetry::libopentelemetry
     PROPERTIES
-      INTERFACE_LINK_LIBRARIES "${opentelemetry_deps}"
+      INTERFACE_LINK_LIBRARIES "${opentelemetry_libs};${opentelemetry_system_libs}"
       INTERFACE_INCLUDE_DIRECTORIES "${opentelemetry_include_dir}")
   include_directories(SYSTEM "${opentelemetry_include_dir}")
 endfunction()

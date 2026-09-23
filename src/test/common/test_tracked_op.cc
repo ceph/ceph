@@ -1,11 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <sstream>
 #include <thread>
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "common/JSONFormatter.h"
@@ -109,6 +111,55 @@ TEST(OpPhases, InFlightOpEndsInOpenPhase) {
 TEST(OpPhases, NoEvents) {
   EXPECT_TRUE(op_phases(timeline({}, 1.0), 0.01).empty());
   EXPECT_TRUE(op_phases(timeline({{0, "initiated"}}, 1.0), 0.01).empty());
+}
+
+// --- request_trace: one trace per request, derived from its reqid
+
+TEST(RequestTrace, SameRequestSameIds) {
+  auto a = tracing::request_trace(7, 8, 4135, 1, 42);
+  auto b = tracing::request_trace(7, 8, 4135, 1, 42);
+  EXPECT_EQ(a.trace_id, b.trace_id);
+  EXPECT_EQ(a.root_span_id, b.root_span_id);
+}
+
+TEST(RequestTrace, EveryFieldMatters) {
+  const auto base = tracing::request_trace(7, 8, 4135, 1, 42);
+  for (const auto& other : {
+         tracing::request_trace(8, 8, 4135, 1, 42),  // another cluster
+         tracing::request_trace(7, 4, 4135, 1, 42),  // another entity type
+         tracing::request_trace(7, 8, 4136, 1, 42),  // another client
+         tracing::request_trace(7, 8, 4135, 2, 42),  // another incarnation
+         tracing::request_trace(7, 8, 4135, 1, 43),  // another request
+       }) {
+    EXPECT_NE(base.trace_id, other.trace_id);
+    EXPECT_NE(base.root_span_id, other.root_span_id);
+  }
+}
+
+TEST(RequestTrace, StableAcrossReleases) {
+  // OSDs of different versions must derive the same ids, or a request's
+  // spans split across traces during an upgrade: never change these
+  auto r = tracing::request_trace(7, 8, 4135, 1, 42);
+  auto hex = [](const auto& bytes) {
+    std::string s;
+    for (uint8_t b : bytes) {
+      s += fmt::format("{:02x}", b);
+    }
+    return s;
+  };
+  EXPECT_EQ(hex(r.trace_id), "e2f12c19c42f121018e834d1f436e17e");
+  EXPECT_EQ(hex(r.root_span_id), "4fef91d5752ea8dc");
+}
+
+TEST(RequestTrace, IdsAreValid) {
+  // OpenTelemetry treats all-zero ids as invalid, and would drop the parent
+  const std::array<uint8_t, 16> zero_trace{};
+  const std::array<uint8_t, 8> zero_span{};
+  for (uint64_t tid = 0; tid < 1000; ++tid) {
+    auto r = tracing::request_trace(0, 0, 0, 0, tid);
+    EXPECT_NE(r.trace_id, zero_trace);
+    EXPECT_NE(r.root_span_id, zero_span);
+  }
 }
 
 // --- OpHistory: tracing slow ops after they complete

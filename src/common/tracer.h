@@ -7,11 +7,30 @@
 #include "include/encoding.h"
 #include "include/utime.h"
 
+#include <array>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace tracing {
+
+// A trace id and a root span id derived from a request id. Every OSD that
+// handles the same request derives the same ids, so the primary's op, the
+// replicas' sub-ops and the replies land in one trace without sending anything
+// new on the wire. The root span itself is never exported; the ops hang off it
+// as siblings.
+struct RequestTrace {
+  std::array<uint8_t, 16> trace_id;
+  std::array<uint8_t, 8> root_span_id;
+};
+
+// `cluster` is a hash of the cluster fsid, so that clusters sharing one
+// tracing backend do not mix up requests that happen to have the same id;
+// the other arguments are the fields of the osd_reqid_t.
+RequestTrace request_trace(uint64_t cluster, uint8_t name_type, int64_t name_num,
+                           int32_t inc, uint64_t tid);
 
 // The timeline of an operation that has already happened, as recorded by the
 // op tracker. Tracer::record_op() turns it into a trace after the fact, so
@@ -23,6 +42,9 @@ struct OpTimeline {
   bool complete = true;  // false: the op is still in flight at `end`
   std::vector<std::pair<utime_t, std::string>> events;
   std::vector<std::pair<std::string, std::string>> attributes;
+  std::vector<std::pair<std::string, int64_t>> int_attributes;
+  // the request the op belongs to, if known; see RequestTrace
+  std::optional<RequestTrace> request;
 
   // some stamps can be unset (zero), so events outside the lifetime are ignored
   bool in_lifetime(utime_t stamp) const {
@@ -104,7 +126,9 @@ class Tracer {
 
   // exports `timeline` as a trace with its recorded timestamps: one span for
   // the op, a child span for each phase that took a noticeable share of it.
-  // `parent` may be invalid. Works whether or not jaeger_tracing_enable is set.
+  // The op span's parent is `parent` if valid (the client's own trace), with
+  // a link to the request's trace; otherwise the request's root span, if the
+  // request is known. Works whether or not jaeger_tracing_enable is set.
   // returns the trace id as hex, or an empty string if nothing was exported.
   std::string record_op(const OpTimeline& timeline, const jspan_context& parent);
 };

@@ -5,6 +5,7 @@
 
 #include "common/tracer.h"
 
+class OSDMap;
 class TrackedOp;
 
 namespace tracing {
@@ -12,8 +13,10 @@ namespace osd {
 
 extern tracing::Tracer tracer;
 
-// exports a completed OpRequest as a trace; returns its trace id or ""
-std::string trace_slow_op(TrackedOp& op, int whoami);
+// exports a completed OpRequest as a trace; returns its trace id or "".
+// `osdmap`, the OSD's current map, may be null; without it the trace has no
+// pool name and is not joined with the request's other ops.
+std::string trace_slow_op(TrackedOp& op, int whoami, const OSDMap* osdmap);
 
 } // namespace osd
 } // namespace tracing

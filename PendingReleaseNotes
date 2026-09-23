@@ -9,8 +9,10 @@
   be exported as traces to Jaeger. A trace is built after the operation
   completes, from the events the op tracker already records, so faster
   operations cost nothing extra; ``osd_op_trace_max_per_sec`` limits the rate.
-  Traced operations show a ``trace_id`` in ``dump_historic_ops``. Disabled by
-  default. See the tracing documentation.
+  Traced operations show a ``trace_id`` in ``dump_historic_ops``. The
+  primary's and the replicas' operations for one request share a trace, and
+  carry searchable attributes such as pool, PG, object, op type and role.
+  Disabled by default. See the tracing documentation.
 * OSD, RGW: Spans can now be exported over OTLP/HTTP, the OpenTelemetry
   protocol accepted by Jaeger v2, Grafana Tempo, the OpenTelemetry Collector
   and most tracing backends: set ``trace_exporter`` to ``otlp`` and

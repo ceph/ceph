@@ -3678,8 +3678,11 @@ int OSD::init()
   if (is_stopping())
     return 0;
   tracing::osd::tracer.init(cct, "osd");
-  op_tracker.set_slow_op_tracer([whoami = whoami](TrackedOp& op) {
-    return tracing::osd::trace_slow_op(op, whoami);
+  // runs on the op history thread, which op_tracker.on_shutdown() joins
+  // before the OSD goes away
+  op_tracker.set_slow_op_tracer([this](TrackedOp& op) {
+    auto osdmap = service.get_osdmap();
+    return tracing::osd::trace_slow_op(op, whoami, osdmap.get());
   });
   tick_timer.init();
   tick_timer_without_osd_lock.init();
