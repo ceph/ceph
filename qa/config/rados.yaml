@@ -1,4 +1,13 @@
 overrides:
+  workunit:
+    # Register workunits with the DaemonWatchdog, so that a bark tears the
+    # workunit down instead of leaving it to run against a cluster that has
+    # already been declared dead. Without this, bark() only SIGTERMs the
+    # daemons; the workunit keeps issuing ops that nothing will ever serve
+    # until the job hits its own 3h limit, and the failure is then reported
+    # against the workunit rather than against the daemon that failed.
+    # See WorkunitProcess in qa/tasks/workunit.py.
+    watchdog: true
   ceph:
     conf:
       osd:
