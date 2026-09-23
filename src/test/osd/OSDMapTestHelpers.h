@@ -18,6 +18,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "crush/CrushWrapper.h"
+#include "crush/crush.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 
@@ -191,8 +193,7 @@ public:
     pool.size = num_zones * (k + m);
     pool.opts.set(pool_opts_t::NUM_ZONES, num_zones);
     
-    // For multi-zone configurations, set min_size to allow up to m failures
-    // min_size = num_zones * (k+m) - m
+    // num_zones > 1 pools get the monitor's value from make_stretch_pool().
     pool.min_size = num_zones * (k + m) - m;
     pool.crush_rule = 0;
     pool.erasure_code_profile = "default";
@@ -227,7 +228,150 @@ public:
     
     return pool;
   }
-  
+
+  static std::string stretch_zone_name(int zone)
+  {
+    return "zone-" + std::to_string(zone);
+  }
+
+  static void insert_stretch_osd(
+    CephContext* cct,
+    CrushWrapper& crush,
+    int osd,
+    int zone)
+  {
+    const std::map<std::string, std::string> loc{
+      {"root", "default"},
+      {"datacenter", stretch_zone_name(zone)},
+      {"host", "host-" + std::to_string(osd)}};
+    int r = crush.insert_item(cct, osd, 1.0, "osd." + std::to_string(osd), loc);
+    ceph_assert(r == 0);
+  }
+
+  // What the monitor does when creating a num_zones > 1 EC pool: one
+  // datacenter per zone holding a single-OSD host per OSD (osd N in zone
+  // N / zone_size), the rule ErasureCode::create_rule() generates, and
+  // OSDMonitor::try_enable_stretch_mode(). Returns the rule id.
+  static int enable_stretch_mode(
+    CephContext* cct,
+    OSDMap& osdmap,
+    int zone_size,
+    int num_zones)
+  {
+    CrushWrapper crush;
+    crush.create();
+    OSDMap::_build_crush_types(crush);
+    int root = 0;
+    int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                             crush.get_type_id("root"), 0, nullptr, nullptr,
+                             &root);
+    ceph_assert(r == 0);
+    crush.set_item_name(root, "default");
+    for (int osd = 0; osd < zone_size * num_zones; ++osd) {
+      insert_stretch_osd(cct, crush, osd, osd / zone_size);
+    }
+    int rule = crush.add_simple_stretch_rule(
+      "stretch_ec_rule", "default", "datacenter", "host", num_zones,
+      zone_size, "", "indep", pg_pool_t::TYPE_ERASURE, false);
+    ceph_assert(rule >= 0);
+    crush.finalize();
+
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    crush.encode(inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    inc.change_stretch_mode = true;
+    inc.stretch_mode_enabled = true;
+    inc.new_stretch_bucket_count = num_zones;
+    inc.new_degraded_stretch_mode = 0;
+    inc.new_recovering_stretch_mode = 0;
+    inc.new_stretch_mode_bucket = crush.get_type_id("datacenter");
+    osdmap.apply_incremental(inc);
+    return rule;
+  }
+
+  // OSDMonitor::prepare_new_pool() for a num_zones > 1 EC pool, including
+  // the per-zone min_size from OSDMonitor::prepare_pool_size().
+  static void make_stretch_pool(
+    const OSDMap& osdmap,
+    pg_pool_t& pool,
+    int rule,
+    int k,
+    int m)
+  {
+    pool.crush_rule = rule;
+    pool.min_size = k + std::min(1, m - 1);
+    pool.peering_crush_bucket_count = osdmap.stretch_bucket_count;
+    pool.peering_crush_bucket_target = osdmap.stretch_bucket_count;
+    pool.peering_crush_bucket_barrier = osdmap.stretch_mode_bucket;
+    pool.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+  }
+
+  // Map-wide part of the OSDMonitor stretch mode transitions; the returned
+  // incremental also carries a copy of every stretch pool with its ops
+  // forced to resend.
+  static OSDMap::Incremental stretch_mode_inc(
+    const OSDMap& osdmap,
+    uint32_t degraded,
+    uint32_t recovering)
+  {
+    ceph_assert(osdmap.stretch_mode_enabled);
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    inc.change_stretch_mode = true;
+    inc.stretch_mode_enabled = true;
+    inc.new_stretch_bucket_count = osdmap.stretch_bucket_count;
+    inc.new_degraded_stretch_mode = degraded;
+    inc.new_recovering_stretch_mode = recovering;
+    inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
+    for (const auto& [id, pool] : osdmap.get_pools()) {
+      if (pool.is_stretch_pool()) {
+        inc.new_pools[id] = pool;
+        inc.new_pools[id].set_last_force_op_resend(inc.epoch);
+      }
+    }
+    return inc;
+  }
+
+  // OSDMonitor::trigger_degraded_stretch_mode(), which is only taken once
+  // every OSD outside surviving_zone is down. EC pools keep their min_size.
+  static void set_degraded_stretch_mode(OSDMap& osdmap, int surviving_zone)
+  {
+    ceph_assert(!osdmap.degraded_stretch_mode);
+    const int live = osdmap.crush->get_item_id(stretch_zone_name(surviving_zone));
+    std::vector<int> zones;
+    osdmap.crush->get_subtree_of_type(osdmap.stretch_mode_bucket, &zones);
+    std::set<int> down_cache;
+    for (int zone : zones) {
+      ceph_assert(zone == live || osdmap.subtree_is_down(zone, &down_cache));
+    }
+    OSDMap::Incremental inc = stretch_mode_inc(osdmap, 1, 0);
+    for (auto& [id, pool] : inc.new_pools) {
+      pool.peering_crush_bucket_count = 1;
+      pool.peering_crush_mandatory_member = live;
+    }
+    osdmap.apply_incremental(inc);
+  }
+
+  // OSDMonitor::trigger_recovery_stretch_mode()
+  static void set_recovery_stretch_mode(OSDMap& osdmap)
+  {
+    ceph_assert(osdmap.degraded_stretch_mode && !osdmap.recovering_stretch_mode);
+    osdmap.apply_incremental(
+      stretch_mode_inc(osdmap, osdmap.degraded_stretch_mode, 1));
+  }
+
+  // OSDMonitor::trigger_healthy_stretch_mode()
+  static void set_healthy_stretch_mode(OSDMap& osdmap)
+  {
+    ceph_assert(osdmap.recovering_stretch_mode);
+    OSDMap::Incremental inc = stretch_mode_inc(osdmap, 0, 0);
+    for (auto& [id, pool] : inc.new_pools) {
+      pool.peering_crush_bucket_count = osdmap.stretch_bucket_count;
+      pool.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    }
+    osdmap.apply_incremental(inc);
+  }
+
   static pg_pool_t create_replicated_pool(
     int size,
     int min_size,
@@ -343,8 +487,7 @@ public:
     OSDMap::Incremental inc(osdmap.get_epoch() + 1);
     inc.fsid = osdmap.get_fsid();
 
-    // Mark OSD as existing but down initially
-    inc.new_state[osd_id] = CEPH_OSD_EXISTS;
+    // An in weight also makes the OSD exist (OSDMap::set_weight()), down
     inc.new_weight[osd_id] = CEPH_OSD_IN;
 
     // Set default xinfo features for new OSD. mark_osd_up()/mark_osd_down()
@@ -462,16 +605,7 @@ public:
    */
   static void mark_osd_down(OSDMap& osdmap, int osd_id)
   {
-    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
-    inc.fsid = osdmap.get_fsid();
-    inc.new_state[osd_id] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
-
-    // Preserve xinfo features when marking OSD down
-    // This is critical for peering to work correctly with feature checks
-    const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
-    inc.new_xinfo[osd_id] = existing_xinfo;
-
-    osdmap.apply_incremental(inc);
+    mark_osds_down(osdmap, {osd_id});
   }
   
   static void mark_osd_down(std::shared_ptr<OSDMap> osdmap, int osd_id)
@@ -488,15 +622,13 @@ public:
    */
   static void mark_osd_up(OSDMap& osdmap, int osd_id)
   {
+    ceph_assert(osdmap.exists(osd_id) && osdmap.is_down(osd_id));
     OSDMap::Incremental inc(osdmap.get_epoch() + 1);
     inc.fsid = osdmap.get_fsid();
-    inc.new_state[osd_id] = CEPH_OSD_EXISTS | CEPH_OSD_UP;
-
-    // Preserve xinfo features when marking OSD up
-    // This is critical for peering to work correctly with feature checks
-    const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
-    inc.new_xinfo[osd_id] = existing_xinfo;
-
+    // As OSDMonitor boots an OSD, which also sets up_from
+    inc.new_up_client[osd_id] = osdmap.get_addrs(osd_id);
+    inc.new_hb_back_up[osd_id] = osdmap.get_hb_back_addrs(osd_id);
+    inc.new_hb_front_up[osd_id] = osdmap.get_hb_front_addrs(osd_id);
     osdmap.apply_incremental(inc);
   }
   
@@ -517,12 +649,10 @@ public:
     OSDMap::Incremental inc(osdmap.get_epoch() + 1);
     inc.fsid = osdmap.get_fsid();
     for (int osd_id : osd_ids) {
-      inc.new_state[osd_id] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
-
-      // Preserve xinfo features when marking OSD down
-      // This is critical for peering to work correctly with feature checks
-      const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
-      inc.new_xinfo[osd_id] = existing_xinfo;
+      ceph_assert(osdmap.is_up(osd_id));
+      // new_state is XORed into the OSD's state: CEPH_OSD_EXISTS would
+      // destroy the OSD
+      inc.new_state[osd_id] = CEPH_OSD_UP;
     }
     osdmap.apply_incremental(inc);
   }

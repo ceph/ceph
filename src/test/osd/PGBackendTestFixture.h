@@ -653,7 +653,8 @@ public:
    * write-shaped public entry point (create_and_write, write,
    * truncate_and_write, create_snapshot, rollback, delete_object,
    * write_attribute): look up the primary TestPG (returning -EINVAL if
-   * there isn't one), allocate the heap-backed result cell that `body`
+   * there isn't one, or -EAGAIN while it is peering and not active),
+   * allocate the heap-backed result cell that `body`
    * writes into via its completion, schedule `body` on the primary OSD,
    * optionally drain the event loop, and return the outcome.
    *

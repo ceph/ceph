@@ -26,6 +26,13 @@
 #include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDPGPull.h"
 
+// PrimaryLogPG holds client ops until a peering PG is active.
+static bool holds_client_ops(TestPG* primary)
+{
+  return primary && primary->has_peering_state() &&
+         !primary->get_peering_state()->is_active();
+}
+
 void PGBackendTestFixture::initialize_scrub_infra()
 {
   scrub_listener = TestScrubBackend::create_scrub_listener(spgid, osdmap);
@@ -71,6 +78,10 @@ void PGBackendTestFixture::setup_ec_pool()
   osdmap->apply_incremental(inc);
 
   pg_pool_t pool = OSDMapTestHelpers::create_ec_pool(k, m, stripe_unit * k, pool_flags, pool_id, num_zones);
+  if (num_zones > 1) {
+    int rule = OSDMapTestHelpers::enable_stretch_mode(cct, *osdmap, k + m, num_zones);
+    OSDMapTestHelpers::make_stretch_pool(*osdmap, pool, rule, k, m);
+  }
   OSDMapTestHelpers::add_pool(osdmap, pool_id, pool);
 
   pgid = pg_t(0, pool_id);
@@ -420,6 +431,10 @@ int PGBackendTestFixture::run_primary_op(
   TestPG* primary_test_pg = get_primary_test_pg();
   if (!primary_test_pg) {
     return -EINVAL;
+  }
+
+  if (holds_client_ops(primary_test_pg)) {
+    return -EAGAIN;
   }
 
   int primary_osd = primary_test_pg->pg_whoami.osd;
@@ -1054,6 +1069,9 @@ int PGBackendTestFixture::read_object(
   hobject_t hoid = make_test_object(obj_name);
 
   if (pool_type == EC) {
+    if (holds_client_ops(get_primary_test_pg())) {
+      return -EAGAIN;
+    }
     bool completed = false;
     int completion_result = -1;
 

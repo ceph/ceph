@@ -21,10 +21,10 @@
  * ECCrushTestFixture - EC test fixture with a proper CRUSH map and a real
  * EC rule attached to the pool.
  *
- * ECPeeringTestFixture uses a minimal CRUSH map (item names only, no bucket
- * hierarchy, crush_rule = 0 which is unset) and overrides placement with a
- * pg_upmap. This fixture replaces that with a complete CRUSH hierarchy and
- * updates the pool to use the resulting rule.
+ * For single-zone pools ECPeeringTestFixture uses a minimal CRUSH map (item
+ * names only, no bucket hierarchy, crush_rule = 0 which is unset) and
+ * overrides placement with a pg_upmap. This fixture replaces that with a
+ * complete CRUSH hierarchy and updates the pool to use the resulting rule.
  *
  * For `num_zones == 1`, the topology is:
  *   root "default"
@@ -33,13 +33,12 @@
  *               └─ osd.0 … osd.(k+m-1)
  *   rule "ec_rule"  type erasure  mode indep  failure_domain osd
  *
- * For `num_zones > 1`, the topology is (one single-OSD host per shard, since
- * add_simple_stretch_rule()'s CHOOSELEAF step selects k+m distinct hosts
- * within each zone):
+ * For `num_zones > 1`, the pool is the real stretch pool setup_ec_pool()
+ * creates (see OSDMapTestHelpers::enable_stretch_mode()):
  *   root "default"
- *     ├─ datacenter "zone-0"  →  host "host-0-0" … "host-0-(k+m-1)"  →  local OSDs
- *     └─ datacenter "zone-1"  →  host "host-1-0" … "host-1-(k+m-1)"  →  remote OSDs
- *   rule "ec_stretch_rule"  type erasure  mode indep
+ *     ├─ datacenter "zone-0"  →  host "host-0" … "host-(k+m-1)"  →  one OSD each
+ *     └─ datacenter "zone-1"  →  host "host-(k+m)" …             →  one OSD each
+ *   rule "stretch_ec_rule"  type erasure  mode indep
  *
  * The pg_upmap is kept disabled so CRUSH determines placement directly.
  * Tests that inherit from this fixture exercise the real CRUSH rule
