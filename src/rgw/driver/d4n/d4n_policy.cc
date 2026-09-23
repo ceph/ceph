@@ -1,8 +1,9 @@
 #include "d4n_policy.h"
 
 #include "../../../common/async/yield_context.h"
-#include "common/async/blocked_completion.h"
 #include "common/split.h"
+
+#include "yield_completion.h"
 #include "rgw_perf_counters.h"
 
 namespace rgw { namespace d4n {
@@ -35,19 +36,6 @@ auto async_exec(std::shared_ptr<connection> conn,
       initiate_exec{std::move(conn)}, token, req, resp);
 }
 
-template <typename... Types>
-static inline void redis_exec(std::shared_ptr<connection> conn,
-                boost::system::error_code& ec,
-                const boost::redis::request& req,
-                boost::redis::response<Types...>& resp, optional_yield y)
-{
-  if (y) {
-    auto yield = y.get_yield_context();
-    async_exec(std::move(conn), req, resp, yield[ec]);
-  } else {
-    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
-  }
-}
 
 int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver* _driver) {
   response<int, int, int, int> resp;
@@ -90,7 +78,7 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
     req.push("HSETNX", "lfuda", "age", age); /* Only set maximum age if it doesn't exist */
     req.push("EXEC");
   
-    redis_exec(conn, ec, req, resp, y);
+    async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 
     if (ec) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -115,7 +103,7 @@ int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
     request req;
     req.push("HGET", "lfuda", "age");
       
-    redis_exec(conn, ec, req, resp, y);
+    async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 
     if (ec) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -132,7 +120,7 @@ int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
       request req;
       req.push("HSET", "lfuda", "age", age);
 
-      redis_exec(conn, ec, req, ret, y);
+      async_exec(conn, req, ret, rgw::maybe_yield(dpp, y, ec));
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -157,7 +145,7 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
       request req;
       req.push("HMGET", "lfuda", "minLocalWeights_sum", "minLocalWeights_size");
 	
-      redis_exec(conn, ec, req, resp, y);
+      async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -181,7 +169,7 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
                   "minLocalWeights_size", std::to_string(entries_map.size()), 
                   "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
 
-	redis_exec(conn, ec, req, resp, y);
+	async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 
 	if (ec) {
 	  ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -203,7 +191,7 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
     req.push("HSET", dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, "avgLocalWeight_sum", std::to_string(weightSum), 
               "avgLocalWeight_size", std::to_string(entries_map.size()));
 
-    redis_exec(conn, ec, req, resp, y);
+    async_exec(conn, req, resp, rgw::maybe_yield(dpp, y, ec));
 
     if (ec) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
