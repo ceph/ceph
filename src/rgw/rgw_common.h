@@ -1970,6 +1970,18 @@ extern void calc_hash_sha256_update_stream(ceph::crypto::SHA256* hash,
 extern std::string calc_hash_sha256_close_stream(ceph::crypto::SHA256** phash);
 extern std::string calc_hash_sha256_restart_stream(ceph::crypto::SHA256** phash);
 
+// Generic non-MD5 ETag (non-nsfs backends) when rgw_non_md5_etag is set:
+// "mtime-<unix-ns>-req-<req-id>". The nsfs driver substitutes
+// mtime-<base36>-ino-<inode-base36> from the object file's stat.
+std::string rgw_make_opaque_etag(std::string_view req_id, uint64_t mtime_ns);
+
+// Decode an ETag into 16 bytes for composite (MPU/append) hashing.
+// - 32 hex digits, or "32hex-N": same as hex_to_buf() of the hex prefix
+//   (callers used to ignore hex_to_buf -EINVAL on the "-N" suffix).
+// - otherwise (non-MD5 ETag): MD5 of the ETag string, not the body.
+void rgw_part_etag_to_digest(std::string_view etag,
+                             char out[CEPH_CRYPTO_MD5_DIGESTSIZE]);
+
 extern int rgw_parse_op_type_list(const std::string& str, uint32_t *perm);
 
 static constexpr uint32_t MATCH_POLICY_ACTION = 0x01;

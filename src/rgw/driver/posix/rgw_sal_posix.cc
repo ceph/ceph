@@ -15,6 +15,7 @@
 
 #include "rgw_sal_posix.h"
 #include "rgw_rest_user.h"
+#include "sync_policy.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
@@ -22,6 +23,7 @@
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
+#include "common/async/spawn_throttle.h"
 #include "common/errno.h"
 #include "rgw_lc.h"
 
@@ -183,6 +185,59 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
       g_conf().get_val<bool>("rgw_posix_inotify")));
 
+  /* multipart upload cache */
+  {
+    auto mp_max = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max");
+    auto mp_lanes = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes");
+    auto mp_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions");
+    auto mp_max_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts");
+    auto mp_pol_str = g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
+
+    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
+    if (mp_pol_str == "writeback") {
+      mp_policy = file::listing::MultipartCachePolicy::writeback;
+    } else if (mp_pol_str == "volatile") {
+      mp_policy = file::listing::MultipartCachePolicy::volatile_;
+    }
+
+    file::listing::stabilize_fn_t stabilize;
+    if (mp_policy == file::listing::MultipartCachePolicy::writeback) {
+      stabilize = [this](const file::listing::MultipartCacheKey& key,
+	  const boost::container::flat_map<uint32_t,
+	    file::listing::MultipartPartInfo>& parts) {
+	std::optional<std::string> ns{mp_ns};
+	auto staging_name = bucket_fname(key.upload_meta, ns);
+	int dir_fd = ::openat(root_fd, (key.bucket_name + "/" +
+	  staging_name).c_str(), O_RDONLY | O_DIRECTORY);
+	if (dir_fd < 0) {
+	  return;
+	}
+	for (auto& [num, pi] : parts) {
+	  auto fname = MP_OBJ_PART_PFX + fmt::format("{:0>5}", num);
+	  int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR);
+	  if (pfd < 0) continue;
+	  POSIXUploadPartInfo upi;
+	  upi.num = pi.num;
+	  upi.size = pi.size;
+	  upi.etag = pi.etag;
+	  upi.mtime = pi.mtime;
+	  upi.cksum = pi.cksum;
+	  bufferlist bl;
+	  encode(upi, bl);
+	  std::string xn = "user.rgw." + std::string(RGW_POSIX_ATTR_MPUPLOAD);
+	  ::fsetxattr(pfd, xn.c_str(), bl.c_str(), bl.length(), 0);
+	  ::close(pfd);
+	}
+	::close(dir_fd);
+      };
+    }
+
+    multipart_cache.reset(
+      new posix::MultipartCache(
+	mp_max, mp_lanes, mp_parts, mp_max_parts,
+	mp_policy, std::move(stabilize)));
+  }
+
   /* user info cache */
   user_cache.set_max_size(dpp, g_conf().get_val<uint64_t>("rgw_posix_cache_max_users"));
 
@@ -218,6 +273,20 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
   quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
 
+  auto policy = rgw::posix::parse_sync_policy(
+    cct->_conf.get_val<std::string>("rgw_posix_sync_policy"));
+  if (policy == rgw::posix::SyncPolicy::RELAXED) {
+    uint64_t interval_ms = cct->_conf.get_val<uint64_t>("rgw_posix_sync_interval_ms");
+    syncfs_thread = std::make_unique<rgw::posix::SyncFsThread>(
+      root_dir->get_fd(), interval_ms);
+    syncfs_thread->start();
+    ldpp_dout(dpp, 1) << "sync policy: relaxed (syncfs every "
+      << interval_ms << "ms)" << dendl;
+  } else {
+    ldpp_dout(dpp, 1) << "sync policy: "
+      << cct->_conf.get_val<std::string>("rgw_posix_sync_policy") << dendl;
+  }
+
   if (!RGWPubSubEndpoint::init_all(cct)) {
     ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
   }
@@ -228,6 +297,9 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
 void POSIXDriver::finalize()
 {
+  if (syncfs_thread) {
+    syncfs_thread->shutdown();
+  }
   RGWPubSubEndpoint::shutdown_all();
   RGWQuotaHandler::free_handler(quota_handler);
 }
@@ -3098,6 +3170,22 @@ std::string POSIXObject::gen_temp_fname()
   return temp_fname;
 }
 
+static int posix_data_file_fd(posix::FSEnt* ent)
+{
+  if (!ent) {
+    return -1;
+  }
+  if (ent->get_type() == posix::ObjectType::FILE) {
+    return ent->get_fd();
+  }
+  if (ent->get_type() == posix::ObjectType::VERSIONED) {
+    auto* vdir = static_cast<posix::VersionedDirectory*>(ent);
+    posix::FSEnt* cur = vdir->get_cur_version_ent();
+    return cur ? cur->get_fd() : -1;
+  }
+  return -1;
+}
+
 int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
@@ -3110,30 +3198,110 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
   else
     left = end - ofs + 1;
 
+  if (posix_try_use_uring(dpp, y, /*nsfs=*/false)) {
+    int fd = posix_data_file_fd(source->get_fsent());
+    if (fd >= 0) {
+      unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_get_iodepth");
+      bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
+      int64_t chunk = dpp->get_cct()->_conf.get_val<Option::size_t>(
+          "rgw_posix_read_chunk_size");
+      if (chunk <= 0) {
+        chunk = READ_SIZE;
+      }
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio);
+      int r = win.iterate(cur_ofs, left,
+          [dpp, cb, source = source](bufferlist& bl, int len) {
+            int ret = cb->handle_data(bl, 0, len);
+            if (ret < 0) {
+              ldpp_dout(dpp, 0) << " ERROR: callback failed on "
+                                << source->get_name() << ": " << ret << dendl;
+            }
+            return ret;
+          });
+      if (r < 0) {
+        ldpp_dout(dpp, 1) << "URING: ERROR: POSIXReadOp::iterate failed: "
+                          << cpp_strerror(-r) << " (" << r << ")" << dendl;
+      }
+      return r;
+    }
+  }
+
+  /* QD2 read-ahead: while handle_data() yields in the beast frontend's
+   * async_write, spawn the next File::read() on the same executor so the
+   * disk fetch of chunk N+1 overlaps the network send of chunk N.  One
+   * prefetch at a time, in order.  Without a yield_context there is
+   * nothing to overlap with, so the loop stays sequential. */
+  std::optional<ceph::async::spawn_throttle> throttle;
+  unsigned iodepth = posix_sync_clamp_iodepth(
+      dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_get_iodepth"),
+      "rgw_posix_get_iodepth");
+  if (y && iodepth >= 2) {
+    throttle.emplace(y.get_yield_context(), 1);
+  }
+
+  bufferlist slots[2];
+  int cur = 0;
+  int prefetch_len = 0;
+  bool prefetch_pending = false;
+
+  auto drain_prefetch = [&]() {
+    if (prefetch_pending) {
+      prefetch_pending = false;
+      throttle->wait();
+    }
+  };
+  auto drain_guard = make_scope_guard([&] {
+    if (prefetch_pending) {
+      prefetch_pending = false;
+      try {
+        throttle->wait();
+      } catch (...) {}
+    }
+  });
+
   while (left > 0) {
-    bufferlist bl;
-    int len = source->read(cur_ofs, left, bl, dpp, y);
+    int len;
+    if (prefetch_pending) {
+      drain_prefetch();
+      cur = 1 - cur;
+      len = prefetch_len;
+    } else {
+      slots[cur].clear();
+      len = source->read(cur_ofs, left, slots[cur], dpp, y);
+    }
     if (len < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: could not read " << source->get_name() <<
+      ldpp_dout(dpp, 0) << " ERROR: could not read " << source->get_name() <<
 	  " ofs: " << cur_ofs << " error: " << cpp_strerror(len) << dendl;
-	return len;
+      drain_prefetch();
+      return len;
     } else if (len == 0) {
       /* Done */
       break;
     }
 
-    /* Read some */
-    int ret = cb->handle_data(bl, 0, len);
-    if (ret < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: callback failed on " << source->get_name() << ": " << ret << dendl;
-	return ret;
-    }
-
     left -= len;
     cur_ofs += len;
+
+    if (left > 0 && throttle) {
+      const int next = 1 - cur;
+      const int64_t pofs = cur_ofs;
+      const int64_t pleft = left;
+      slots[next].clear();
+      throttle->spawn([source = source, dpp, next, pofs, pleft, &slots, &prefetch_len]
+                      (boost::asio::yield_context /* child */) {
+        prefetch_len = source->read(pofs, pleft, slots[next], dpp, null_yield);
+      });
+      prefetch_pending = true;
+    }
+
+    int ret = cb->handle_data(slots[cur], 0, len);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << " ERROR: callback failed on " << source->get_name() << ": " << ret << dendl;
+      drain_prefetch();
+      return ret;
+    }
   }
 
-  /* Doesn't seem to be anything needed from params */
   return 0;
 }
 
@@ -3363,55 +3531,78 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
 				      int *next_marker, bool *truncated, optional_yield y,
 				      bool assume_unsorted)
 {
-  int ret;
-  int last_num = 0;
-
-  ret = load(dpp);
+  int ret = load(dpp);
   if (ret < 0) {
     return ret;
   }
 
-  rgw::sal::Bucket::ListParams params;
-  rgw::sal::Bucket::ListResults results;
-
-  params.prefix = MP_OBJ_PART_PFX;
-  params.marker = MP_OBJ_PART_PFX + fmt::format("{:0>5}", marker);
-  params.marker.ns = mp_ns;
-  params.ns = mp_ns;
-
-  ret = shadow->list(dpp, params, num_parts + 1, results, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: list_parts: shadow->list failed ret="
-      << ret << " upload=" << get_upload_id() << dendl;
-    return ret;
+  auto* mc = driver->get_multipart_cache();
+  if (!mc) {
+    return -ENOENT;
   }
-  if (results.objs.empty()) {
-    ldpp_dout(dpp, 0) << "WARNING: list_parts: 0 results for upload="
-      << get_upload_id() << " shadow=" << shadow->get_name()
-      << " marker=" << params.marker.name << dendl;
-  }
-  for (rgw_bucket_dir_entry& ent : results.objs) {
-    std::unique_ptr<MultipartPart> part = std::make_unique<POSIXMultipartPart>(this);
-    POSIXMultipartPart* ppart = static_cast<POSIXMultipartPart*>(part.get());
 
-    rgw_obj_key key(ent.key);
-    // Parts are namespaced in the bucket listing
-    key.ns.clear();
-    ret = ppart->load(dpp, y, driver, key);
-    if (ret == 0) {
-      /* Skip anything that's not a part */
-      last_num = part->get_num();
-      parts[part->get_num()] = std::move(part);
-    }
-    if (parts.size() == (ulong)num_parts)
-      break;
+  file::listing::MultipartCacheKey cache_key{
+    bucket->get_name(), mp_obj.meta};
+
+  auto result = mc->list_parts(
+    cache_key, marker, num_parts,
+    [this, dpp, y](
+      boost::container::flat_map<uint32_t, file::listing::MultipartPartInfo>& pm) {
+      auto* dir = shadow->get_dir();
+      dir->for_each(dpp,
+	[&](const char* name) -> int {
+	  std::string sname(name);
+          if (!sname.starts_with(MP_OBJ_PART_PFX)) {
+	    return 0;
+	  }
+	  uint32_t pnum = 0;
+	  try {
+	    pnum = std::stoul(sname.substr(MP_OBJ_PART_PFX.length()));
+	  } catch (...) {
+	    return 0;
+	  }
+	  if (pm.contains(pnum)) {
+	    return 0;
+	  }
+	  auto pf = std::make_unique<posix::File>(sname, dir, driver->ctx());
+	  if (pf->stat(dpp, y) < 0) {
+	    return 0;
+	  }
+	  file::listing::MultipartPartInfo pi;
+	  pi.num = pnum;
+	  pi.size = pf->get_size();
+
+	  Attrs attrs;
+	  if (pf->read_attrs(dpp, y, attrs) == 0) {
+	    POSIXUploadPartInfo upi;
+	    if (posix::decode_attr(attrs, RGW_POSIX_ATTR_MPUPLOAD, upi)) {
+	      pi.etag = std::move(upi.etag);
+	      pi.mtime = upi.mtime;
+	      pi.cksum = std::move(upi.cksum);
+	      if (upi.size) pi.size = upi.size;
+	    }
+	  }
+	  pm[pnum] = std::move(pi);
+	  return 0;
+	});
+    });
+
+  for (auto& pi : result.parts) {
+    auto part = std::make_unique<POSIXMultipartPart>(this);
+    auto* ppart = static_cast<POSIXMultipartPart*>(part.get());
+    ppart->info.num = pi.num;
+    ppart->info.size = pi.size;
+    ppart->info.etag = std::move(pi.etag);
+    ppart->info.mtime = pi.mtime;
+    ppart->info.cksum = std::move(pi.cksum);
+    parts[pi.num] = std::move(part);
   }
 
   if (truncated)
-    *truncated = results.is_truncated;
+    *truncated = result.truncated;
 
   if (next_marker)
-    *next_marker = last_num;
+    *next_marker = result.next_marker;
 
   return 0;
 }
@@ -3427,7 +3618,9 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
     return ret;
   }
 
-  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow->get_name(), true);
+  if (auto* mc = driver->get_multipart_cache()) {
+    mc->remove({bucket->get_name(), mp_obj.meta});
+  }
   shadow->remove(dpp, true, y);
 
   return 0;
@@ -3508,8 +3701,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
         return ret;
       }
 
-      hex_to_buf(part->get_etag().c_str(), petag,
-		CEPH_CRYPTO_MD5_DIGESTSIZE);
+      rgw_part_etag_to_digest(part->get_etag(), petag);
       hash.Update((const unsigned char *)petag, sizeof(petag));
 
       // Compression is not supported yet
@@ -3654,8 +3846,11 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
-  // remove staging directory listing cache entry (frees LMDB DBI slot)
-  driver->get_bucket_cache()->invalidate_bucket(dpp, shadow_cache_name, true);
+  // remove multipart cache entry
+  if (auto* mc = driver->get_multipart_cache()) {
+    mc->remove({bucket->get_name(), mp_obj.meta});
+  }
+
   to->stat(dpp);
   to->fill_cache( nullptr, null_yield,
       [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
@@ -3754,9 +3949,13 @@ std::unique_ptr<Writer> POSIXMultipartUpload::get_writer(
 
   load(dpp);
 
+  file::listing::MultipartCacheKey cache_key{
+    bucket->get_name(), mp_obj.meta};
+
   return std::make_unique<POSIXMultipartWriter>(dpp, y, shadow.get(), part_key,
                                                 driver, owner,
-                                                ptail_placement_rule, part_num);
+                                                ptail_placement_rule, part_num,
+						std::move(cache_key));
 }
 
 int POSIXMultipartWriter::prepare(optional_yield y)
@@ -3771,7 +3970,30 @@ int POSIXMultipartWriter::prepare(optional_yield y)
 
 int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
-  return part_file->write(offset, data, dpp, null_yield);
+  if (posix_try_use_uring(dpp, yield, /*nsfs=*/false) && part_file &&
+      part_file->get_fd() >= 0) {
+    if (!uring_write) {
+      unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
+      bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
+      uring_write = std::make_unique<UringWriteWindow>(
+          dpp, yield, part_file->get_fd(), qd, dio);
+      part_file->set_sync_on_close(true);
+    }
+    int r = uring_write->process(std::move(data), offset);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: POSIXMultipartWriter::process failed: "
+                        << cpp_strerror(-r) << " (" << r << ")" << dendl;
+    }
+    return r;
+  }
+  unsigned iodepth = posix_sync_clamp_iodepth(
+      dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth"),
+      "rgw_posix_put_iodepth");
+  bool pipeline = iodepth >= 2;
+  return pending_write.process(std::move(data), offset, pipeline,
+      [this](uint64_t ofs, bufferlist& bl) {
+        return part_file->write(ofs, bl, dpp, null_yield);
+      });
 }
 
 int POSIXMultipartWriter::complete(
@@ -3787,7 +4009,20 @@ int POSIXMultipartWriter::complete(
                        const req_context& rctx,
                        uint32_t flags)
 {
-  int ret;
+  int ret = 0;
+  if (uring_write) {
+    ret = uring_write->drain();
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: POSIXMultipartWriter::complete drain failed: "
+                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
+      return ret;
+    }
+  } else {
+    ret = pending_write.drain();
+    if (ret < 0) {
+      return ret;
+    }
+  }
   POSIXUploadPartInfo info;
 
   if (if_match) {
@@ -3818,16 +4053,23 @@ int POSIXMultipartWriter::complete(
   info.cksum = cksum;
   info.mtime = set_mtime;
 
-  bufferlist bl;
-  encode(info, bl);
-  attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
+  auto* mc = driver->get_multipart_cache();
+  bool added = mc ? mc->add_part(mp_cache_key,
+    {static_cast<uint32_t>(part_num), accounted_size, etag, set_mtime, cksum}) : false;
 
-  ret = part_file->write_attrs(rctx.dpp, rctx.y, attrs, /*extra_attrs=*/nullptr);
-  if (ret < 0) {
-    ldpp_dout(rctx.dpp, 20) << "ERROR: failed writing attrs for " << part_file->get_name() << dendl;
-    return ret;
+  if (!added || mc->policy == file::listing::MultipartCachePolicy::writethrough) {
+    bufferlist bl;
+    encode(info, bl);
+    attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
+
+    ret = part_file->write_attrs(rctx.dpp, rctx.y, attrs, /*extra_attrs=*/nullptr);
+    if (ret < 0) {
+      ldpp_dout(rctx.dpp, 20) << "ERROR: failed writing attrs for " << part_file->get_name() << dendl;
+      return ret;
+    }
   }
 
+  part_file->set_sync_on_close(false);
   ret = part_file->close();
   if (ret < 0) {
     ldpp_dout(rctx.dpp, 20) << "ERROR: failed closing file" << dendl;
@@ -3856,7 +4098,31 @@ int POSIXAtomicWriter::prepare(optional_yield y)
 
 int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
 {
-  return obj->write(offset, data, dpp, null_yield);
+  int fd = posix_data_file_fd(obj->get_fsent());
+  if (posix_try_use_uring(dpp, yield, /*nsfs=*/false) && fd >= 0) {
+    if (!uring_write) {
+      unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
+      bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
+      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio);
+      if (obj->get_fsent()) {
+        obj->get_fsent()->set_sync_on_close(true);
+      }
+    }
+    int r = uring_write->process(std::move(data), offset);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: POSIXAtomicWriter::process failed: "
+                        << cpp_strerror(-r) << " (" << r << ")" << dendl;
+    }
+    return r;
+  }
+  unsigned iodepth = posix_sync_clamp_iodepth(
+      dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth"),
+      "rgw_posix_put_iodepth");
+  bool pipeline = iodepth >= 2;
+  return pending_write.process(std::move(data), offset, pipeline,
+      [this](uint64_t ofs, bufferlist& bl) {
+        return obj->write(ofs, bl, dpp, null_yield);
+      });
 }
 
 int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
@@ -3870,7 +4136,20 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  int ret;
+  int ret = 0;
+  if (uring_write) {
+    ret = uring_write->drain();
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: POSIXAtomicWriter::complete drain failed: "
+                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
+      return ret;
+    }
+  } else {
+    ret = pending_write.drain();
+    if (ret < 0) {
+      return ret;
+    }
+  }
   uint64_t orig_size = 0;
 
   auto exists = obj->check_exists(dpp);

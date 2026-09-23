@@ -29,6 +29,12 @@
 #                       (for sideloaded file detection; off by default)
 #   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
 #                       (eliminates I/O latency for test runs)
+#   --data-root DIR     Redirect data root and LMDB cache to DIR
+#                       (e.g. --data-root /mnt/nvme for fast storage)
+#   --perf              Performance tuning: NUMA pinning, tcmalloc
+#                       thread cache, tcp_nodelay, no request timeout
+#   -o 'key=value'      Pass extra config option through to vstart.sh
+#                       (e.g. -o 'rgw_posix_sync_policy=relaxed')
 #   --profile           Start without debug logging (no -d to vstart.sh)
 #                       for performance profiling; sets all debug to 0
 #   --foreground        Print the radosgw command instead of running it;
@@ -50,10 +56,13 @@ VAULT=false
 LIFECYCLE=false
 INOTIFY=false
 RAMDISK=false
+DATA_ROOT=""
+PERF=false
 PROFILE=false
 GPFS_ROOT=/mnt/rgw/nsfs
 DEBUG_RGW=20
 FOREGROUND=false
+EXTRA_OPTS=()
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -68,10 +77,13 @@ while [[ $# -gt 0 ]]; do
 		--with-lifecycle) LIFECYCLE=true; shift ;;
 		--with-inotify) INOTIFY=true; shift ;;
 		--ramdisk) RAMDISK=true; shift ;;
+		--data-root) DATA_ROOT="$2"; shift 2 ;;
+		--perf) PERF=true; shift ;;
 		--profile) PROFILE=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
 		--debug-rgw)  DEBUG_RGW="$2"; shift 2 ;;
 		--foreground) FOREGROUND=true; shift ;;
+		-o) EXTRA_OPTS+=(-o "$2"); shift 2 ;;
 		*) echo "unknown option: $1" >&2; exit 1 ;;
 	esac
 done
@@ -142,6 +154,21 @@ if $RAMDISK; then
 		ln -sfn "$RAMDISK_BASE/$sub" "$RAMDISK_DIR/$sub"
 	done
 	echo "==> ramdisk: data on $RAMDISK_BASE/{root,lmdb}"
+fi
+
+if [[ -n "$DATA_ROOT" ]]; then
+	if [[ ! -d "$DATA_ROOT" ]]; then
+		echo "error: --data-root $DATA_ROOT does not exist" >&2
+		exit 1
+	fi
+	mkdir -p "$DATA_ROOT"/{root,lmdb}
+	DATA_DIR="$BUILD_DIR/dev/rgw/$STORE"
+	mkdir -p "$DATA_DIR"
+	for sub in root lmdb; do
+		rm -rf "$DATA_DIR/$sub"
+		ln -sfn "$DATA_ROOT/$sub" "$DATA_DIR/$sub"
+	done
+	echo "==> data-root: data on $DATA_ROOT/{root,lmdb}"
 fi
 
 if $GPFS; then
@@ -216,7 +243,8 @@ fi
 MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
 	"$SRC_DIR/src/vstart.sh" "${VSTART_FLAGS[@]}" \
 	--rgw_store "$STORE" \
-	"${VSTART_OPTS[@]}"
+	"${VSTART_OPTS[@]}" \
+	${EXTRA_OPTS[@]+"${EXTRA_OPTS[@]}"}
 
 # --- for non-GPFS, vstart already started the daemon ---
 
@@ -226,12 +254,12 @@ if $GPFS; then
 	DATA_DIR="$GPFS_ROOT/root"
 fi
 
-if ! $GPFS; then
-	# non-GPFS: vstart already started the daemon, skip to common tail
+if ! $GPFS && ! $PERF; then
+	# plain non-GPFS: vstart already started the daemon with defaults
 	true
 else
 
-# --- GPFS: kill vstart daemon, patch ceph.conf, restart ---
+# --- kill vstart daemon, patch ceph.conf if needed, restart ---
 #
 # vstart.sh bootstraps test users into the config DB and userdb under
 # the build directory, then starts a daemon pointing at build-dir
@@ -246,11 +274,19 @@ else
 # users.
 
 echo "==> killing vstart-spawned daemon"
-kill "$(cat "$PID")" 2>/dev/null || true
-sleep 1
+VSTART_PID="$(cat "$PID" 2>/dev/null)"
+if [[ -n "$VSTART_PID" ]]; then
+	kill "$VSTART_PID" 2>/dev/null || true
+	for i in $(seq 1 15); do
+		kill -0 "$VSTART_PID" 2>/dev/null || break
+		sleep 1
+	done
+fi
 
-echo "==> patching ceph.conf for GPFS base path"
-sed -i "s|rgw nsfs base path = .*|rgw nsfs base path = $GPFS_ROOT/root|" "$CONF"
+if $GPFS; then
+	echo "==> patching ceph.conf for GPFS base path"
+	sed -i "s|rgw nsfs base path = .*|rgw nsfs base path = $GPFS_ROOT/root|" "$CONF"
+fi
 
 patch_conf_bool() {
 	local key="$1" val="$2"
@@ -272,7 +308,20 @@ fi
 
 # --- build the radosgw command line ---
 
+BEAST_OPTS="beast port=8000"
+RGW_PREFIX=()
+
+if $PERF; then
+	BEAST_OPTS="beast port=8000 request_timeout_ms=0 tcp_nodelay=1"
+	RGW_PREFIX=(
+		numactl -N 0 -m 0 --
+		env TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728
+	)
+	echo "==> perf: NUMA node 0, tcmalloc 128M thread cache, tcp_nodelay"
+fi
+
 RGW_CMD=(
+	${RGW_PREFIX[@]+"${RGW_PREFIX[@]}"}
 	"$BUILD_DIR/bin/radosgw"
 	-c "$CONF"
 	--log-file="$BUILD_DIR/out/radosgw.8000.log"
@@ -282,7 +331,7 @@ RGW_CMD=(
 	--debug-rgw="$DEBUG_RGW"
 	--debug-ms=0
 	-n client.rgw.8000
-	--rgw_frontends='beast port=8000'
+	--rgw_frontends="$BEAST_OPTS"
 )
 
 if $FOREGROUND; then

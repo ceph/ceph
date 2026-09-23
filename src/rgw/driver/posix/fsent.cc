@@ -14,6 +14,8 @@
  */
 
 #include "fsent.h"
+#include "driver/posix/sync_policy.h"
+#include "posix_io_uring.h"
 #include <dirent.h>
 #include "include/random.h"
 
@@ -24,6 +26,8 @@ const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 const int64_t READ_SIZE = 128 * 1024;
+// required alignment for O_DIRECT reads/writes (rgw_posix_direct_io)
+const int64_t DIRECT_IO_ALIGN = 4096;
 
 
 namespace posix {
@@ -302,8 +306,6 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
 		  STATX_ALL, &stx);
   if (ret < 0) {
     ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not stat " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
     exist = false;
     return -ret;
   }
@@ -455,6 +457,11 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
     path = get_name();
   }
 
+  direct_io = ctx->_conf.get_val<bool>("rgw_posix_direct_io");
+  if (direct_io) {
+    flags |= O_DIRECT;
+  }
+
   ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW, S_IRWXU);
   if (ret < 0) {
     ret = errno;
@@ -478,7 +485,10 @@ int File::open(const DoutPrefixProvider* dpp)
     return 0;
   }
 
-  int ret = openat(parent->get_fd(), fname.c_str(), O_RDWR, S_IRWXU);
+  direct_io = ctx->_conf.get_val<bool>("rgw_posix_direct_io");
+  int flags = O_RDWR | (direct_io ? O_DIRECT : 0);
+
+  int ret = openat(parent->get_fd(), fname.c_str(), flags, S_IRWXU);
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name() << ": "
@@ -487,6 +497,15 @@ int File::open(const DoutPrefixProvider* dpp)
     }
 
   fd = ret;
+
+  if (!direct_io) {
+    /* fadvise only tunes buffered-read readahead; O_DIRECT bypasses the
+     * page cache entirely, so the hint would be a no-op syscall. */
+    int read_fadvise = ctx->_conf.get_val<int64_t>("rgw_posix_read_fadvise");
+    if (read_fadvise != POSIX_FADV_NORMAL) {
+      ::posix_fadvise(fd, 0, 0, read_fadvise);
+    }
+  }
 
   return 0;
 }
@@ -498,9 +517,18 @@ int File::close()
   }
 
   if (need_fsync) {
-    int ret = ::fsync(fd);
-    if (ret < 0) {
-      return ret;
+    auto policy = rgw::posix::parse_sync_policy(
+      ctx->_conf.get_val<std::string>("rgw_posix_sync_policy"));
+    if (policy == rgw::posix::SyncPolicy::ALWAYS ||
+        policy == rgw::posix::SyncPolicy::COMPLETE) {
+      int ret = ::fdatasync(fd);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+    int write_fadvise = ctx->_conf.get_val<int64_t>("rgw_posix_write_fadvise");
+    if (write_fadvise != POSIX_FADV_NORMAL) {
+      ::posix_fadvise(fd, 0, 0, write_fadvise);
     }
     need_fsync = false;
   }
@@ -535,8 +563,9 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
 		       optional_yield y)
 {
   need_fsync = true;
+  int64_t write_chunk_size =
+    ctx->_conf.get_val<Option::size_t>("rgw_posix_write_chunk_size");
   int64_t left = bl.length();
-  char* curp = bl.c_str();
   ssize_t ret;
 
   ret = fchmod(fd, S_IRUSR|S_IWUSR);
@@ -546,17 +575,38 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  if (direct_io) {
+    /* Never fcntl-off O_DIRECT on a shared fd; pad or RMW instead. */
+    ret = posix_direct_write(fd, ofs, bl, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: File::write posix_direct_write failed: "
+                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
+    }
+    return ret;
+  }
 
-  ret = lseek(fd, ofs, SEEK_SET);
-  if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
-      << ofs << " :" << cpp_strerror(ret) << dendl;
-    return -ret;
+  char* curp = bl.c_str();
+  const bool positioned =
+    ctx->_conf.get_val<uint64_t>("rgw_posix_put_iodepth") >= 2;
+  int64_t woff = ofs;
+
+  if (!positioned) {
+    ret = lseek(fd, ofs, SEEK_SET);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
+        << ofs << " :" << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
   }
 
   while (left > 0) {
-    ret = ::write(fd, curp, left);
+    int64_t want = (write_chunk_size > 0) ? std::min(left, write_chunk_size) : left;
+    if (positioned) {
+      ret = ::pwrite(fd, curp, want, woff);
+    } else {
+      ret = ::write(fd, curp, want);
+    }
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not write object " << get_name() << ": "
@@ -565,6 +615,7 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     }
 
     curp += ret;
+    woff += ret;
     left -= ret;
   }
 
@@ -574,19 +625,26 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
 int File::read(int64_t ofs, int64_t left, bufferlist& bl,
 		      const DoutPrefixProvider* dpp, optional_yield y)
 {
-  int64_t len = std::min(left, READ_SIZE);
+  int64_t read_chunk_size =
+    ctx->_conf.get_val<Option::size_t>("rgw_posix_read_chunk_size");
+  if (read_chunk_size <= 0) {
+    read_chunk_size = READ_SIZE;
+  }
+  int64_t len = std::min(left, read_chunk_size);
   ssize_t ret;
 
-  ret = lseek(fd, ofs, SEEK_SET);
-  if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
-                      << ofs << " :" << cpp_strerror(ret) << dendl;
-    return -ret;
-    }
+  if (direct_io) {
+    /* O_DIRECT requires the read offset, length, and buffer address to be
+     * aligned to the filesystem block size.  Round the requested window
+     * out to DIRECT_IO_ALIGN and slice the exact bytes back out of the
+     * aligned buffer, so callers can keep passing arbitrary ranges. */
+    int64_t aligned_ofs = ofs & ~(DIRECT_IO_ALIGN - 1);
+    int64_t front = ofs - aligned_ofs;
+    int64_t aligned_len = ((front + len + DIRECT_IO_ALIGN - 1) /
+                           DIRECT_IO_ALIGN) * DIRECT_IO_ALIGN;
 
-    char read_buf[READ_SIZE];
-    ret = ::read(fd, read_buf, len);
+    bufferptr bp(buffer::create_small_page_aligned(aligned_len));
+    ret = ::pread(fd, bp.c_str(), aligned_len, aligned_ofs);
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
@@ -594,9 +652,36 @@ int File::read(int64_t ofs, int64_t left, bufferlist& bl,
       return -ret;
     }
 
-    bl.append(read_buf, ret);
+    int64_t got = std::min<int64_t>(std::max<int64_t>(ret - front, 0), len);
+    if (got > 0) {
+      bl.append(bp, front, got);
+    }
+    return got;
+  }
 
-    return ret;
+  bufferptr bp(len);
+  if (ctx->_conf.get_val<uint64_t>("rgw_posix_get_iodepth") >= 2) {
+    ret = ::pread(fd, bp.c_str(), len, ofs);
+  } else {
+    ret = lseek(fd, ofs, SEEK_SET);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
+                        << ofs << " :" << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+    ret = ::read(fd, bp.c_str(), len);
+  }
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  bl.append(bp, 0, ret);
+
+  return ret;
 }
 
 int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
@@ -953,8 +1038,6 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
                   AT_SYMLINK_NOFOLLOW, STATX_ALL, &nstx);
   if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << " in dir "
-                        << get_name() << " : " << cpp_strerror(ret) << dendl;
       return -ret;
   }
   if (S_ISREG(nstx.stx_mode)) {
@@ -1141,13 +1224,22 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
     ret = errno;
     if (ret != EEXIST) {
       if (dpp)
-	ldpp_dout(dpp, 0) << "ERROR: could not create bucket " << get_name() << ": "
-	  << cpp_strerror(ret) << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: could not create multipart directory "
+                          << get_name() << ": " << cpp_strerror(ret) << dendl;
       return -ret;
     } else if (existed != nullptr) {
       *existed = true;
     }
   }
+
+  ret = openat(parent->get_fd(), path.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not open multipart directory " << get_name()
+                      << dendl;
+    return ret;
+  }
+
+  fd = ret;
 
   return 0;
 }
@@ -1209,7 +1301,7 @@ int MPDirectory::stat(const DoutPrefixProvider* dpp, bool force)
   }
 
   uint64_t total_size{0};
-  for_each(dpp, [this, &total_size, &dpp](const char *name) {
+  for_each(dpp, [this, &total_size](const char *name) {
     int ret;
     struct statx stx;
     std::string sname = name;
@@ -1222,8 +1314,6 @@ int MPDirectory::stat(const DoutPrefixProvider* dpp, bool force)
     ret = statx(fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
-                        << cpp_strerror(ret) << dendl;
       return -ret;
     }
 
@@ -1530,7 +1620,7 @@ int VersionedDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_y
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not stat temp file for" << get_name() << ": "
                       << cpp_strerror(ret) << dendl;
-    return ret;
+    return -ret;
   }
 
   ret = cur_version->link_temp_file(dpp, y, temp_fname);

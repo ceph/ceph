@@ -16,6 +16,7 @@
 #pragma once
 #include "rgw_sal.h"
 #include "bucket_cache.h"
+#include "multipart_cache.h"
 #include "common/errno.h"
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -41,6 +42,7 @@ extern const std::string ATTR_PREFIX;
 extern const std::string mp_ns;
 extern const std::string MP_OBJ_PART_PFX;
 extern const std::string MP_OBJ_HEAD_NAME;
+extern const int64_t READ_SIZE;
 
 /* integration w/bucket listing cache */
 using fill_cache_cb_t = file::listing::fill_cache_cb_t;
@@ -69,6 +71,7 @@ static inline std::string gen_rand_instance_name()
 namespace posix {
 
 using BucketCache = file::listing::BucketCache<POSIXDriver, POSIXBucket>;
+using MultipartCache = file::listing::MultipartCache<>;
 
 static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
 {
@@ -256,6 +259,7 @@ public:
   virtual ~FSEnt() { }
 
   int get_fd() { return fd; };
+  void set_sync_on_close(bool sync) { need_fsync = sync; }
   std::string& get_name() { return fname; }
   void set_name(const std::string& name) { fname = name; }
   Directory* get_parent() { return parent; }
@@ -282,6 +286,7 @@ public:
 
 class File : public FSEnt {
 protected:
+  bool direct_io{false};
 
 public:
   File(std::string _name, Directory* _parent, CephContext* _ctx) : FSEnt(_name, _parent, _ctx)
@@ -365,7 +370,20 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
     return ret;
   }
 
-  dir = fdopendir(fd);
+  /* fdopendir() takes ownership of its fd and closedir() closes it.
+   * Callbacks (get_ent/fill_cache/statx/openat) also use Directory::fd, so
+   * iterate on a dup'd descriptor and leave this->fd alone.  Using the same
+   * fd for readdir and openat corrupts the directory stream and can skip
+   * entries (e.g. multipart parts → InvalidPart on complete). */
+  int dir_fd = ::dup(fd);
+  if (dir_fd < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not dup dir fd " << get_name() << ": "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  dir = fdopendir(dir_fd);
   if (dir == NULL) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open dir " << get_name() << " for listing: "
@@ -394,12 +412,7 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
     ret = 0;
   }
 
-  closedir(dir);
-  // closedir() closes the fd, so we need to invalidate it
-  fd = -1;
-  // closedir() closes fd, but succeeding calls might assume that fd is still valid.
-  // so let's reopen it.
-  open(dpp);
+  closedir(dir); /* closes dir_fd only; Directory::fd remains valid */
   return ret;
 }
 
