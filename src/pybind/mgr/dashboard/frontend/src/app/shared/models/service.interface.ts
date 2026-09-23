@@ -111,6 +111,7 @@ export interface CephServiceAdditionalSpec {
   client_secret: string;
   oidc_issuer_url: string;
   enable_auth: boolean;
+  encryption_key?: string;
   qat: QatSepcs;
 }
 

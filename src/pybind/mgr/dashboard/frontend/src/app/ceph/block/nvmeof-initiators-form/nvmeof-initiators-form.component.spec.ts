@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 
@@ -10,7 +10,7 @@ import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { HOST_TYPE } from '~/app/shared/models/nvmeof';
+import { ALLOW_ALL_HOST, HOST_TYPE } from '~/app/shared/models/nvmeof';
 
 import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form.component';
 
@@ -31,7 +31,7 @@ describe('NvmeofInitiatorsFormComponent', () => {
         {
           provide: ActivatedRoute,
           useValue: {
-            queryParams: of({ group: 'test-group' }),
+            queryParamMap: of(convertToParamMap({ group: 'test-group' })),
             params: of({ subsystem_nqn: 'nqn.test' }),
             parent: {
               params: of({ subsystem_nqn: 'nqn.test' })
@@ -59,6 +59,22 @@ describe('NvmeofInitiatorsFormComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should set allowAllHosts to true when disableAllowAll is not set', () => {
+    const router = TestBed.inject(Router);
+    spyOn(router, 'getCurrentNavigation').and.returnValue(null);
+    component.ngOnInit();
+    expect(component.allowAllHosts).toBe(true);
+  });
+
+  it('should set allowAllHosts to false when disableAllowAll is true in navigation state', () => {
+    const router = TestBed.inject(Router);
+    spyOn(router, 'getCurrentNavigation').and.returnValue({
+      extras: { state: { disableAllowAll: true } }
+    } as any);
+    component.ngOnInit();
+    expect(component.allowAllHosts).toBe(false);
+  });
+
   it('should initialize with two steps (Host access control + Authentication optional)', () => {
     expect(component.steps.length).toBe(2);
     expect(component.steps[0].label).toBe('Host access control');
@@ -76,6 +92,7 @@ describe('NvmeofInitiatorsFormComponent', () => {
     beforeEach(() => {
       nvmeofService = TestBed.inject(NvmeofService);
       spyOn(nvmeofService, 'addSubsystemInitiators').and.returnValue(of({}));
+      spyOn(nvmeofService, 'removeInitiators').and.returnValue(of({}));
     });
 
     it('should be creating request correctly', () => {
@@ -130,6 +147,30 @@ describe('NvmeofInitiatorsFormComponent', () => {
 
       expect(nvmeofService.addSubsystemInitiators).not.toHaveBeenCalled();
       expect(component.isSubmitLoading).toBe(false);
+    });
+
+    it('should remove wildcard host before adding specific hosts', () => {
+      const subsystemNQN = 'nqn.test';
+      component.subsystemNQN = subsystemNQN;
+      component.group = 'test-group';
+      component.existingHosts = [ALLOW_ALL_HOST];
+
+      const payload: any = {
+        hostType: HOST_TYPE.SPECIFIC,
+        addedHosts: ['host3']
+      };
+
+      component.onSubmit(payload);
+
+      expect(nvmeofService.removeInitiators).toHaveBeenCalledWith(subsystemNQN, {
+        host_nqn: ALLOW_ALL_HOST,
+        gw_group: 'test-group'
+      });
+      expect(nvmeofService.addSubsystemInitiators).toHaveBeenCalledWith(subsystemNQN, {
+        allow_all: false,
+        gw_group: 'test-group',
+        hosts: [{ dhchap_key: '', host_nqn: 'host3' }]
+      });
     });
   });
 });

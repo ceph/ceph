@@ -70,3 +70,7 @@ Using `color` in css and seyting svg will fill="currentColor does not work.
 .arrowDown-icon {
   fill: theme.$support-error !important;
 }
+
+.edit-icon {
+  fill: var(--cds-link-primary) !important;
+}

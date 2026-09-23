@@ -241,3 +241,18 @@ input:-webkit-autofill:active {
 .popover {
   --bs-popover-zindex: 9999;
 }
+
+// Remove bottom border from NVMeoF gateway group filter combobox
+.nvmeof-gateway-group-filter__combo {
+  .cds--combo-box,
+  .cds--text-input,
+  .cds--list-box,
+  input[role='combobox'],
+  input {
+    border-bottom: none !important;
+  }
+
+  .cds--text-input__field-wrapper {
+    border-bottom: none !important;
+  }
+}
