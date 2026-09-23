@@ -164,6 +164,17 @@ std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap)
   // the OSD's op tracker only tracks OpRequests
   auto& op = static_cast<OpRequest&>(tracked);
   const Message* m = op.get_req();
+  switch (m->get_type()) {
+  case MSG_OSD_REPOPREPLY:
+  case MSG_OSD_EC_WRITE_REPLY:
+  case MSG_OSD_EC_READ_REPLY:
+    // the primary's op already has a "replica osd.N" phase for each reply
+    return {};
+  }
+  if (!m->otel_trace.IsValid() &&
+      g_conf().get_val<bool>("osd_op_trace_slow_require_context")) {
+    return {};
+  }
 
   OpTimeline t;
   t.name = m->get_type_name();

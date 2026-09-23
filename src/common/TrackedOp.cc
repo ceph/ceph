@@ -148,9 +148,10 @@ void OpHistory::maybe_trace(const utime_t& now, TrackedOp& op, double opduration
   if (!tracer) {
     return;
   }
-  trace_tokens -= 1;
+  // ops the tracer skips do not use up the budget
   op.trace_id = tracer(op);
   if (!op.trace_id.empty()) {
+    trace_tokens -= 1;
     logger->inc(l_trackedop_slow_op_traced);
   }
 }

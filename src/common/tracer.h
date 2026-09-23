@@ -81,6 +81,11 @@ std::vector<OpPhase> op_phases(const OpTimeline& t, double min_share);
 // "<event> -> <next event>" names.
 std::vector<OpPhase> named_phases(const OpTimeline& t, double min_share);
 
+// the named phases worth a child span each: those of at least 5% of the op,
+// and none when a single phase covers 90% of it, since that span would only
+// repeat the op's own; the op span keeps every event either way
+std::vector<OpPhase> exported_phases(const OpTimeline& t);
+
 } // namespace tracing
 
 #ifdef HAVE_JAEGER

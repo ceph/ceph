@@ -202,6 +202,36 @@ TEST(NamedPhases, InFlight) {
   EXPECT_EQ(phases["waiting for subops from 1,2 -> (in flight)"].end, at(1.0));
 }
 
+// --- exported_phases: the phases that get a child span of their own
+
+TEST(ExportedPhases, OnlyTheLongOnes) {
+  // at 5% of 611 ms only the two replica waits are left; the rest stay on
+  // the op span as events
+  auto phases = by_name(tracing::exported_phases(primary_write()));
+  EXPECT_TRUE(phases.count("replica osd.1"));
+  EXPECT_TRUE(phases.count("replica osd.2"));
+  EXPECT_FALSE(phases.count("receive"));
+  EXPECT_FALSE(phases.count("dispatch"));
+  EXPECT_FALSE(phases.count("queued for PG"));
+  EXPECT_FALSE(phases.count("reply"));
+  EXPECT_EQ(phases.size(), 2u);
+}
+
+TEST(ExportedPhases, NoneWhenOnePhaseIsTheWholeOp) {
+  // a replica's sub-op that spent its time waiting for the message to arrive
+  auto t = timeline({{0, "initiated"}, {0.149, "queued_for_pg"},
+                     {0.1492, "reached_pg"}, {0.1493, "done"}}, 0.1493);
+  EXPECT_TRUE(tracing::exported_phases(t).empty());
+}
+
+TEST(ExportedPhases, KeptWhenTheOpSplits) {
+  auto t = timeline({{0, "initiated"}, {0.05, "queued_for_pg"},
+                     {0.15, "reached_pg"}, {0.16, "done"}}, 0.16);
+  auto phases = by_name(tracing::exported_phases(t));
+  EXPECT_TRUE(phases.count("receive"));
+  EXPECT_TRUE(phases.count("queued for PG"));
+}
+
 // --- request_trace: one trace per request, derived from its reqid
 
 TEST(RequestTrace, SameRequestSameIds) {

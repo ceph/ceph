@@ -174,6 +174,15 @@ std::vector<OpPhase> named_phases(const OpTimeline& t, double min_share) {
   return phases;
 }
 
+std::vector<OpPhase> exported_phases(const OpTimeline& t) {
+  auto phases = named_phases(t, 0.05);
+  if (phases.size() == 1 &&
+      phases.front().end - phases.front().start >= 0.9 * (t.end - t.start)) {
+    phases.clear();
+  }
+  return phases;
+}
+
 } // namespace tracing
 
 #ifdef HAVE_JAEGER
@@ -349,9 +358,6 @@ bool Tracer::is_enabled() const {
   return cct->_conf->jaeger_tracing_enable;
 }
 
-// phases shorter than this share of the op are kept as span events only
-static constexpr double min_phase_share = 0.01;
-
 jspan_ptr Tracer::context_span() {
   // not the SDK's generator: these ids need not be secret, only unique, and
   // this runs for every request
@@ -440,7 +446,7 @@ std::string Tracer::record_op(const OpTimeline& t) {
     }
   }
   // e.g. "queued for PG", "replica osd.2"
-  for (const auto& phase : named_phases(t, min_phase_share)) {
+  for (const auto& phase : exported_phases(t)) {
     auto phase_opts = start_opts(phase.start);
     phase_opts.parent = span->GetContext();
     tracer->StartSpan(phase.name, phase_opts)->End(end_opts(phase.end));
