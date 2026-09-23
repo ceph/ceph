@@ -10291,6 +10291,69 @@ def test_lifecycle_noncur_cloud_transition():
             expire1_key1_str = prefix + 'test1/a' + "-" + k['VersionId']
             verify_object(cloud_client, target_path, expire1_key1_str, None, target_sc)
 
+def _restore_permanent(client, bucket, key, expected):
+    client.restore_object(Bucket=bucket, Key=key, RestoreRequest={})
+    deadline = time.monotonic() + 3*get_restore_processor_period()
+    while client.head_object(Bucket=bucket, Key=key).get('StorageClass', 'STANDARD') != 'STANDARD':
+        assert time.monotonic() < deadline, 'permanent restore did not complete'
+        time.sleep(1)
+    assert client.get_object(Bucket=bucket, Key=key)['Body'].read() == expected
+
+# The test harness for lifecycle is configured to treat days as 10 second intervals.
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_transition
+@pytest.mark.cloud_transition
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+@pytest.mark.cloud_restore
+def test_lifecycle_cloud_transition_sse_kms():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    client = get_client()
+    bucket = get_new_bucket()
+    kms_key = get_main_kms_keyid()
+    data = b'encrypted cloud transition'
+    client.put_object(Bucket=bucket, Key='single', Body=data,
+                      ServerSideEncryption='aws:kms', SSEKMSKeyId=kms_key)
+    headers = {'x-amz-server-side-encryption': 'aws:kms',
+               'x-amz-server-side-encryption-aws-kms-key-id': kms_key}
+    upload_id, multipart_data, parts = _multipart_upload_enc(
+        client, bucket, 'multipart', 34*1024*1024, part_size=17*1024*1024,
+        init_headers=headers, part_headers={}, metadata=None, resend_parts=[])
+    client.complete_multipart_upload(Bucket=bucket, Key='multipart',
+                                     UploadId=upload_id, MultipartUpload={'Parts': parts})
+    keys = [('single', data, 'STANDARD'),
+            ('multipart', multipart_data.encode(), 'STANDARD')]
+    client.put_object(Bucket=bucket, Key='plain', Body=data,
+                      Metadata={'rgwx-source-encrypted': 'true'})
+    rules = [{'ID': 'cloud', 'Prefix': '', 'Status': 'Enabled',
+              'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}]}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+    time.sleep(24*get_lc_debug_interval())
+
+    cloud_client = get_cloud_client()
+    target_path = get_cloud_target_path() or 'rgwx-default-' + cloud_sc.lower() + '-cloud-bucket'
+    response = cloud_client.get_object(Bucket=target_path, Key=bucket + '/plain')
+    assert 'rgwx-source-encrypted' not in response['Metadata']
+    assert response['Body'].read() == data
+    if get_cloud_retain_head_object() != 'true':
+        classes = list_bucket_storage_class(client, bucket)
+        for key, expected, storage_class in keys:
+            assert key in [obj['Key'] for obj in classes[storage_class]]
+            error = assert_raises(ClientError, cloud_client.head_object,
+                                  Bucket=target_path, Key=bucket + '/' + key)
+            assert error.response['ResponseMetadata']['HTTPStatusCode'] == 404
+        return
+
+    client.delete_bucket_lifecycle(Bucket=bucket)
+    for key, expected, storage_class in keys:
+        response = cloud_client.get_object(Bucket=target_path, Key=bucket + '/' + key)
+        assert response['Metadata']['rgwx-source-encrypted'] == 'true'
+        assert response['Body'].read() != expected
+        _restore_permanent(client, bucket, key, expected)
+
 # The test harness for lifecycle is configured to treat days as 10 second intervals.
 @pytest.mark.lifecycle
 @pytest.mark.lifecycle_transition
