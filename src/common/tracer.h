@@ -23,7 +23,23 @@ struct OpTimeline {
   bool complete = true;  // false: the op is still in flight at `end`
   std::vector<std::pair<utime_t, std::string>> events;
   std::vector<std::pair<std::string, std::string>> attributes;
+
+  // some stamps can be unset (zero), so events outside the lifetime are ignored
+  bool in_lifetime(utime_t stamp) const {
+    return stamp >= start && stamp <= end;
+  }
 };
+
+// the time between two consecutive events of an OpTimeline
+struct OpPhase {
+  std::string name;  // "<event> -> <next event>"
+  utime_t start;
+  utime_t end;
+};
+
+// the phases of `t` that took at least `min_share` of the op, in order. An op
+// still in flight ends with a "<last event> -> (in flight)" phase.
+std::vector<OpPhase> op_phases(const OpTimeline& t, double min_share);
 
 } // namespace tracing
 

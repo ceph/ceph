@@ -5,6 +5,35 @@
 #include "tracer.h"
 #include "common/debug.h"
 
+namespace tracing {
+
+std::vector<OpPhase> op_phases(const OpTimeline& t, double min_share) {
+  std::vector<OpPhase> phases;
+  const double total = t.end - t.start;
+  auto add = [&](utime_t start, utime_t end, std::string name) {
+    const double length = end - start;
+    if (length > 0 && length >= total * min_share) {
+      phases.push_back({std::move(name), start, end});
+    }
+  };
+  const std::pair<utime_t, std::string>* prev = nullptr;
+  for (const auto& event : t.events) {
+    if (!t.in_lifetime(event.first)) {
+      continue;
+    }
+    if (prev) {
+      add(prev->first, event.first, prev->second + " -> " + event.second);
+    }
+    prev = &event;
+  }
+  if (prev && !t.complete) {
+    add(prev->first, t.end, prev->second + " -> (in flight)");
+  }
+  return phases;
+}
+
+} // namespace tracing
+
 #ifdef HAVE_JAEGER
 #include "opentelemetry/sdk/trace/batch_span_processor.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
@@ -153,31 +182,16 @@ std::string Tracer::record_op(const OpTimeline& t, const jspan_context& parent) 
   if (!t.complete) {
     span->SetAttribute("in_flight", true);
   }
-  // the time between two consecutive events is a phase, named after both, as
-  // "waiting for subops from 1,2 -> sub_op_commit_rec from osd.1". Events
-  // stamped outside the op's lifetime are skipped: some stamps can be unset.
-  const std::pair<utime_t, std::string>* prev = nullptr;
-  for (const auto& event : t.events) {
-    const auto& [stamp, name] = event;
-    if (stamp < t.start || stamp > t.end) {
-      continue;
+  for (const auto& [stamp, name] : t.events) {
+    if (t.in_lifetime(stamp)) {
+      span->AddEvent(name, otel_common::SystemTimestamp(sys_time(stamp)));
     }
-    span->AddEvent(name, otel_common::SystemTimestamp(sys_time(stamp)));
-    if (prev) {
-      const double length = stamp - prev->first;
-      if (length > 0 && length >= total * min_phase_share) {
-        auto phase_opts = start_opts(prev->first);
-        phase_opts.parent = span->GetContext();
-        tracer->StartSpan(prev->second + " -> " + name, phase_opts)->End(end_opts(stamp));
-      }
-    }
-    prev = &event;
   }
-  if (prev && !t.complete && t.end - prev->first >= total * min_phase_share) {
-    // an op still in flight is stuck in the phase after its last event
-    auto phase_opts = start_opts(prev->first);
+  // e.g. "waiting for subops from 1,2 -> sub_op_commit_rec from osd.1"
+  for (const auto& phase : op_phases(t, min_phase_share)) {
+    auto phase_opts = start_opts(phase.start);
     phase_opts.parent = span->GetContext();
-    tracer->StartSpan(prev->second + " -> (in flight)", phase_opts)->End(end_opts(t.end));
+    tracer->StartSpan(phase.name, phase_opts)->End(end_opts(phase.end));
   }
   span->End(end_opts(t.end));
 
