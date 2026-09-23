@@ -1107,6 +1107,10 @@ uint64_t PgScrubber::get_scrub_cost(uint64_t num_chunk_objects)
 
 bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
 {
+  if (!is_queued_or_active()) {
+    return false;
+  }
+
   if (soid < m_start || soid >= m_end) {
     return false;
   }
