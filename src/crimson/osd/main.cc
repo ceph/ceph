@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <limits>
 #include <random>
 
 #include <seastar/core/app-template.hh>
@@ -106,13 +107,7 @@ int main(int argc, const char* argv[])
     ("debug", "enable debug output on all loggers")
     ("trace", "enable trace output on all loggers")
     ("osdspec-affinity", bpo::value<std::string>()->default_value(std::string{}),
-     "set affinity to an osdspec")
-    ("prometheus_port", bpo::value<uint16_t>()->default_value(0),
-     "Prometheus port. Set to zero to disable")
-    ("prometheus_address", bpo::value<std::string>()->default_value("0.0.0.0"),
-     "Prometheus listening address")
-    ("prometheus_prefix", bpo::value<std::string>()->default_value("osd"),
-     "Prometheus metrics prefix");
+     "set affinity to an osdspec");
 
   try {
     INFO("entering seastar runtime");
@@ -191,27 +186,10 @@ int main(int argc, const char* argv[])
           // handled by S* must be blocked for alien threads (see AlienStore).
           seastar::handle_signal(SIGHUP, [] {});
 
-          // start prometheus API server
+          // Declared here so the socket stays up through osd.stop(). The
+          // listen itself happens after the monitor config is applied.
           seastar::httpd::http_server_control prom_server;
           std::any stop_prometheus;
-          if (uint16_t prom_port = config["prometheus_port"].as<uint16_t>();
-              prom_port != 0) {
-
-            DEBUG("starting prometheus server on port {}", prom_port);
-            prom_server.start("prometheus").get();
-            stop_prometheus = seastar::make_shared(seastar::deferred_stop(prom_server));
-
-            seastar::prometheus::config prom_config;
-            prom_config.prefix = config["prometheus_prefix"].as<std::string>();
-            seastar::prometheus::start(prom_server, prom_config).get();
-            seastar::net::inet_address prom_addr(config["prometheus_address"].as<std::string>());
-            prom_server.listen(seastar::socket_address{prom_addr, prom_port})
-              .handle_exception([=] (auto ep) {
-              std::cerr << seastar::format("Could not start Prometheus API server on {}:{}: {}\n",
-                                           prom_addr, prom_port, ep);
-              return seastar::make_exception_future(ep);
-            }).get();
-          }
 
           DEBUG("creating messengers");
           const int whoami = std::stoi(local_conf()->name.get_id());
@@ -284,6 +262,48 @@ int main(int argc, const char* argv[])
             DEBUG("exiting, mkkey {}, mkfs {}", config.count("mkkey"), config.count("mkfs"));
             return EXIT_SUCCESS;
           } else {
+            const uint64_t prom_base = local_conf().get_val<uint64_t>(
+              "crimson_prometheus_port_base");
+            if (prom_base != 0) {
+              if (whoami < 0) {
+                ERROR("osd id {} must be non-negative to bind the Prometheus endpoint",
+                      whoami);
+                ceph_abort_msg(
+                  "osd id must be non-negative to bind the Prometheus endpoint");
+              }
+              const uint64_t prom_port64 =
+                prom_base + static_cast<uint64_t>(whoami);
+              if (prom_port64 > std::numeric_limits<uint16_t>::max()) {
+                ERROR("crimson_prometheus_port_base {} + osd id {} exceeds 65535",
+                      prom_base, whoami);
+                ceph_abort_msg(fmt::format(
+                  "crimson_prometheus_port_base {} + osd id {} exceeds 65535",
+                  prom_base, whoami));
+              }
+              const uint16_t prom_port = static_cast<uint16_t>(prom_port64);
+              const auto prom_addr_str = local_conf().get_val<std::string>(
+                "crimson_prometheus_address");
+              seastar::net::inet_address prom_addr(prom_addr_str);
+              INFO("starting prometheus server on {}:{} "
+                   "(crimson_prometheus_port_base {} + osd id {})",
+                   prom_addr_str, prom_port, prom_base, whoami);
+              prom_server.start("prometheus").get();
+              stop_prometheus = seastar::make_shared(
+                seastar::deferred_stop(prom_server));
+
+              seastar::prometheus::config prom_config;
+              prom_config.prefix = local_conf().get_val<std::string>(
+                "crimson_prometheus_prefix");
+              seastar::prometheus::start(prom_server, prom_config).get();
+              prom_server.listen(seastar::socket_address{prom_addr, prom_port})
+                .handle_exception([=] (auto ep) {
+                std::cerr << seastar::format(
+                  "Could not start Prometheus API server on {}:{}: {}\n",
+                  prom_addr, prom_port, ep);
+                return seastar::make_exception_future(ep);
+              }).get();
+            }
+
             DEBUG("starting OSD services");
             osd.start().get();
           }
