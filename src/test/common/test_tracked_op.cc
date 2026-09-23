@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <map>
 #include <sstream>
 #include <thread>
 
@@ -113,6 +114,94 @@ TEST(OpPhases, NoEvents) {
   EXPECT_TRUE(op_phases(timeline({{0, "initiated"}}, 1.0), 0.01).empty());
 }
 
+// --- named_phases: what the op was doing, for the events the OSD records
+
+using tracing::named_phases;
+
+// the events of a replicated write on its primary; osd.2 is the slow replica
+OpTimeline primary_write() {
+  return timeline({{0, "initiated"}, {0, "header_read"}, {0.001, "throttled"},
+                   {0.002, "all_read"}, {0.003, "dispatched"},
+                   {0.004, "queued_for_pg"}, {0.020, "reached_pg"},
+                   {0.021, "started"}, {0.030, "waiting for subops from 1,2"},
+                   {0.040, "op_commit"}, {0.200, "sub_op_commit_rec from osd.1"},
+                   {0.600, "sub_op_commit_rec from osd.2"},
+                   {0.610, "commit_sent"}, {0.611, "done"}}, 0.611);
+}
+
+std::map<std::string, OpPhase> by_name(const std::vector<OpPhase>& phases) {
+  std::map<std::string, OpPhase> m;
+  for (const auto& p : phases) {
+    EXPECT_TRUE(m.emplace(p.name, p).second) << "duplicate phase " << p.name;
+  }
+  return m;
+}
+
+TEST(NamedPhases, PrimaryWrite) {
+  auto phases = by_name(named_phases(primary_write(), 0));
+  std::vector<std::string> names;
+  for (const auto& [name, _] : phases) {
+    names.push_back(name);
+  }
+  EXPECT_EQ(names, (std::vector<std::string>{
+    "dispatch", "execute", "finish", "in PG", "local commit", "queued for PG",
+    "receive", "replica osd.1", "replica osd.2", "reply"}));
+  // the replica phases run in parallel from sending the sub-ops
+  EXPECT_EQ(phases["replica osd.1"].start, at(0.030));
+  EXPECT_EQ(phases["replica osd.1"].end, at(0.200));
+  EXPECT_EQ(phases["replica osd.2"].start, at(0.030));
+  EXPECT_EQ(phases["replica osd.2"].end, at(0.600));
+  EXPECT_EQ(phases["local commit"].end, at(0.040));
+  // the receive events merge into one phase
+  EXPECT_EQ(phases["receive"].start, at(0));
+  EXPECT_EQ(phases["receive"].end, at(0.003));
+  // execution ends when the sub-ops are sent; the reply follows the last ack
+  EXPECT_EQ(phases["execute"].end, at(0.030));
+  EXPECT_EQ(phases["reply"].start, at(0.600));
+  EXPECT_EQ(phases["reply"].end, at(0.610));
+}
+
+TEST(NamedPhases, OrderedByStart) {
+  auto phases = named_phases(primary_write(), 0);
+  for (size_t i = 1; i < phases.size(); ++i) {
+    EXPECT_LE(phases[i - 1].start, phases[i].start);
+  }
+}
+
+TEST(NamedPhases, ShortPhasesDropped) {
+  // at a 1% share only the long waits of a 611 ms op are left
+  auto phases = by_name(named_phases(primary_write(), 0.01));
+  EXPECT_TRUE(phases.count("replica osd.2"));
+  EXPECT_TRUE(phases.count("replica osd.1"));
+  EXPECT_TRUE(phases.count("reply"));
+  EXPECT_FALSE(phases.count("receive"));
+  EXPECT_FALSE(phases.count("in PG"));
+}
+
+TEST(NamedPhases, DelayReasons) {
+  auto phases = by_name(named_phases(
+    timeline({{0, "queued_for_pg"}, {0.1, "reached_pg"},
+              {0.1, "waiting for rw locks"}, {0.8, "reached_pg"},
+              {0.8, "started"}, {1.0, "done"}}, 1.0), 0));
+  EXPECT_EQ(phases["waiting for rw locks"].start, at(0.1));
+  EXPECT_EQ(phases["waiting for rw locks"].end, at(0.8));
+  EXPECT_EQ(phases["queued for PG"].end, at(0.1));
+  EXPECT_EQ(phases["execute"].end, at(1.0));
+}
+
+TEST(NamedPhases, UnknownEventsKeepGenericNames) {
+  auto phases = by_name(named_phases(
+    timeline({{0, "initiated"}, {0.5, "something new"}, {1.0, "done"}}, 1.0), 0));
+  EXPECT_TRUE(phases.count("receive"));
+  EXPECT_TRUE(phases.count("something new -> done"));
+}
+
+TEST(NamedPhases, InFlight) {
+  auto phases = by_name(named_phases(
+    timeline({{0, "initiated"}, {0.2, "waiting for subops from 1,2"}}, 1.0, false), 0));
+  EXPECT_EQ(phases["waiting for subops from 1,2 -> (in flight)"].end, at(1.0));
+}
+
 // --- request_trace: one trace per request, derived from its reqid
 
 TEST(RequestTrace, SameRequestSameIds) {
@@ -133,7 +222,9 @@ TEST(RequestTrace, EveryFieldMatters) {
        }) {
     EXPECT_NE(base.trace_id, other.trace_id);
     EXPECT_NE(base.root_span_id, other.root_span_id);
+    EXPECT_NE(base.primary_span_id, other.primary_span_id);
   }
+  EXPECT_NE(base.root_span_id, base.primary_span_id);
 }
 
 TEST(RequestTrace, StableAcrossReleases) {
@@ -149,6 +240,7 @@ TEST(RequestTrace, StableAcrossReleases) {
   };
   EXPECT_EQ(hex(r.trace_id), "e2f12c19c42f121018e834d1f436e17e");
   EXPECT_EQ(hex(r.root_span_id), "4fef91d5752ea8dc");
+  EXPECT_EQ(hex(r.primary_span_id), "e8b68dbd8c0cf9d9");
 }
 
 TEST(RequestTrace, IdsAreValid) {
@@ -159,6 +251,7 @@ TEST(RequestTrace, IdsAreValid) {
     auto r = tracing::request_trace(0, 0, 0, 0, tid);
     EXPECT_NE(r.trace_id, zero_trace);
     EXPECT_NE(r.root_span_id, zero_span);
+    EXPECT_NE(r.primary_span_id, zero_span);
   }
 }
 

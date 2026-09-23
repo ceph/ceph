@@ -110,6 +110,53 @@ void add_client_op_attributes(const OpRequest& op, const MOSDOp* m, OpTimeline& 
   t.int_attributes.emplace_back("bytes", bytes);
 }
 
+// Where an op's span goes. The trace is the client's, when it sent a context
+// (RGW does; the primary forwards it to the replicas), or else the request's
+// own, derived from its reqid. In the client's trace the primary's op hangs off
+// the client's span; in the request's own, off its never-exported root. The
+// primary's op span takes the id derived from the reqid, which every OSD can
+// compute, so the replicas' sub-ops and the replies hang off it without it
+// being sent anywhere.
+void place_op(const Message* m, const std::optional<RequestTrace>& request, OpTimeline& t)
+{
+  trace_id_t ctx_trace;
+  span_id_t ctx_span;
+  const bool has_ctx = context_ids(m->otel_trace, &ctx_trace, &ctx_span);
+  if (has_ctx) {
+    t.trace_id = ctx_trace;
+  } else if (request) {
+    t.trace_id = request->trace_id;
+  } else {
+    return;  // a new trace of its own
+  }
+  switch (m->get_type()) {
+  case CEPH_MSG_OSD_OP:
+    t.parent_span_id = has_ctx ? ctx_span : request->root_span_id;
+    if (request) {
+      t.span_id = request->primary_span_id;
+    }
+    break;
+  case MSG_OSD_REPOP:
+  case MSG_OSD_REPOPREPLY:
+  case MSG_OSD_EC_WRITE:
+  case MSG_OSD_EC_WRITE_REPLY:
+  case MSG_OSD_EC_READ:
+  case MSG_OSD_EC_READ_REPLY:
+    if (request) {
+      t.parent_span_id = request->primary_span_id;
+    } else {
+      t.parent_span_id = ctx_span;
+    }
+    break;
+  default:
+    if (has_ctx) {
+      t.parent_span_id = ctx_span;
+    } else {
+      t.parent_span_id = request->root_span_id;
+    }
+  }
+}
+
 } // anonymous namespace
 
 std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap)
@@ -158,6 +205,7 @@ std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap)
       "object", static_cast<const MOSDECSubOpWrite*>(m)->op.soid.oid.name);
   }
 
+  std::optional<RequestTrace> request;
   if (const osd_reqid_t reqid = op_reqid(op); reqid != osd_reqid_t()) {
     t.attributes.emplace_back("reqid", stringify(reqid));
     // the fsid keeps clusters that share a tracing backend apart
@@ -166,12 +214,12 @@ std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap)
       uint64_t lo, hi;
       memcpy(&lo, fsid, sizeof(lo));
       memcpy(&hi, fsid + sizeof(lo), sizeof(hi));
-      t.request = request_trace(lo ^ hi, reqid.name.type(), reqid.name.num(),
-                                reqid.inc, reqid.tid);
+      request = request_trace(lo ^ hi, reqid.name.type(), reqid.name.num(),
+                              reqid.inc, reqid.tid);
     }
   }
-  // attach to the client's trace when it sent one
-  return tracer.record_op(t, m->otel_trace);
+  place_op(m, request, t);
+  return tracer.record_op(t);
 }
 
 } // namespace osd

@@ -1261,6 +1261,10 @@ void ReplicatedBackend::issue_op(
 	  pinfo);
       if (op->op && op->op->pg_trace)
 	wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
+      if (op->op) {
+	// so a slow sub-op's trace joins the client's trace
+	wr->otel_trace = op->op->get_req()->otel_trace;
+      }
       get_parent()->send_message_osd_cluster(
 	  shard.osd, wr, get_osdmap_epoch());
     }
@@ -1394,6 +1398,7 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   reply->set_last_complete_ondisk(rm->last_complete);
   reply->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
   reply->trace = rm->op->pg_trace;
+  reply->otel_trace = m->otel_trace;
   get_parent()->send_message_osd_cluster(
     rm->ackerosd, reply, get_osdmap_epoch());
 

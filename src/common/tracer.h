@@ -16,14 +16,19 @@
 
 namespace tracing {
 
-// A trace id and a root span id derived from a request id. Every OSD that
-// handles the same request derives the same ids, so the primary's op, the
-// replicas' sub-ops and the replies land in one trace without sending anything
-// new on the wire. The root span itself is never exported; the ops hang off it
-// as siblings.
+using trace_id_t = std::array<uint8_t, 16>;
+using span_id_t = std::array<uint8_t, 8>;
+
+// Ids derived from a request id. Every OSD that handles the same request
+// derives the same ids, without sending anything new on the wire:
+// - trace_id and root_span_id place a request that no client traced: its ops
+//   hang off the root span, which is never exported.
+// - primary_span_id is the span id of the request's op on the primary, which
+//   the replicas' sub-ops and the replies take as their parent.
 struct RequestTrace {
-  std::array<uint8_t, 16> trace_id;
-  std::array<uint8_t, 8> root_span_id;
+  trace_id_t trace_id;
+  span_id_t root_span_id;
+  span_id_t primary_span_id;
 };
 
 // `cluster` is a hash of the cluster fsid, so that clusters sharing one
@@ -43,8 +48,13 @@ struct OpTimeline {
   std::vector<std::pair<utime_t, std::string>> events;
   std::vector<std::pair<std::string, std::string>> attributes;
   std::vector<std::pair<std::string, int64_t>> int_attributes;
-  // the request the op belongs to, if known; see RequestTrace
-  std::optional<RequestTrace> request;
+  // where the op's span goes. With trace_id and parent_span_id, it is a child
+  // of that span, which may never be exported; with neither, it starts a new
+  // trace, with trace_id if given. span_id, if given, is the span's own id,
+  // which spans on other daemons may already refer to.
+  std::optional<trace_id_t> trace_id;
+  std::optional<span_id_t> parent_span_id;
+  std::optional<span_id_t> span_id;
 
   // some stamps can be unset (zero), so events outside the lifetime are ignored
   bool in_lifetime(utime_t stamp) const {
@@ -62,6 +72,14 @@ struct OpPhase {
 // the phases of `t` that took at least `min_share` of the op, in order. An op
 // still in flight ends with a "<last event> -> (in flight)" phase.
 std::vector<OpPhase> op_phases(const OpTimeline& t, double min_share);
+
+// like op_phases(), but named after what the op was doing, for the events the
+// OSD records: "receive", "queued for PG", "waiting for rw locks", "execute",
+// "local commit", "reply". Waiting for replicas becomes one phase per replica,
+// "replica osd.N", all starting when the sub-ops were sent, so the slowest
+// replica is the longest bar. Phases may overlap. Unknown events keep the
+// "<event> -> <next event>" names.
+std::vector<OpPhase> named_phases(const OpTimeline& t, double min_share);
 
 } // namespace tracing
 
@@ -117,21 +135,41 @@ class Tracer {
   // if false is given to `trace_is_enabled` param, noop span will be returned
   jspan_ptr start_trace(opentelemetry::nostd::string_view trace_name, bool trace_is_enabled);
 
-  // creates and returns a new span with `span_name` which parent span is `parent_span'
+  // creates and returns a new span with `span_name` which parent span is `parent_span'.
+  // Without tracing, returns `parent_span` itself, so that the context it may
+  // carry (see context_span()) stays in place for code that swaps spans.
   jspan_ptr add_span(opentelemetry::nostd::string_view span_name, const jspan_ptr& parent_span);
   // creates and return a new span with `span_name`
   // the span is added to the trace which it's context is `parent_ctx`.
-  // parent_ctx contains the required information of the trace.
+  // parent_ctx contains the required information of the trace. Only if this
+  // daemon traces and the sender sampled the trace: a context that a client
+  // passes along just to place slow-op traces must not cost live spans.
   jspan_ptr add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx);
 
+  // a span that records nothing but carries new trace and span ids, marked
+  // not sampled, for passing a trace context along without the cost of live
+  // spans; record_op() can later export a span with those ids
+  jspan_ptr context_span();
+
   // exports `timeline` as a trace with its recorded timestamps: one span for
-  // the op, a child span for each phase that took a noticeable share of it.
-  // The op span's parent is `parent` if valid (the client's own trace), with
-  // a link to the request's trace; otherwise the request's root span, if the
-  // request is known. Works whether or not jaeger_tracing_enable is set.
-  // returns the trace id as hex, or an empty string if nothing was exported.
-  std::string record_op(const OpTimeline& timeline, const jspan_context& parent);
+  // the op, placed as its trace_id, parent_span_id and span_id say, and a
+  // child span for each phase that took a noticeable share of it. Works
+  // whether or not jaeger_tracing_enable is set. Returns the trace id as hex,
+  // or an empty string if nothing was exported.
+  std::string record_op(const OpTimeline& timeline);
 };
+
+// the ids of a valid context
+inline bool context_ids(const jspan_context& ctx, trace_id_t* trace_id, span_id_t* span_id) {
+  if (!ctx.IsValid()) {
+    return false;
+  }
+  auto t = ctx.trace_id().Id();
+  auto s = ctx.span_id().Id();
+  std::copy(t.begin(), t.end(), trace_id->begin());
+  std::copy(s.begin(), s.end(), span_id->begin());
+  return true;
+}
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
   ENCODE_START(1, 1, bl);
@@ -232,8 +270,13 @@ struct Tracer {
   jspan_ptr start_trace(std::string_view, bool enabled = true) { return {}; }
   jspan_ptr add_span(std::string_view, const jspan_ptr&) { return {}; }
   jspan_ptr add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
-  std::string record_op(const OpTimeline&, const jspan_context&) { return {}; }
+  jspan_ptr context_span() { return {}; }
+  std::string record_op(const OpTimeline&) { return {}; }
 };
+
+inline bool context_ids(const jspan_context&, trace_id_t*, span_id_t*) {
+  return false;
+}
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
   ENCODE_START(1, 1, bl);
