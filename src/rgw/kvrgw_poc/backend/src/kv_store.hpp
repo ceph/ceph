@@ -70,6 +70,42 @@ struct KVEntry {
   std::string_view value;
 };
 
+// Zero-copy, non-movable, non-copyable holder for an FDB single-key GET future.
+// Owns the future; exposes the value directly as string_view into the FDB buffer.
+// Must call wait() before accessing value().
+class FdbGetHolder {
+public:
+  explicit FdbGetHolder(FdbFuture&& f) noexcept : f_(std::move(f)) {}
+  ~FdbGetHolder() = default;
+
+  FdbGetHolder(const FdbGetHolder&) = delete;
+  FdbGetHolder& operator=(const FdbGetHolder&) = delete;
+  FdbGetHolder(FdbGetHolder&&) = delete;
+  FdbGetHolder& operator=(FdbGetHolder&&) = delete;
+
+  // Block until ready and populate internal buffer pointer.
+  // Returns 0 on success, non-zero FDB error code on failure.
+  fdb_error_t wait() noexcept;
+
+  bool is_ready()  const noexcept { return f_.is_ready(); }
+  bool present()   const noexcept { assert(ready_); return present_; }
+
+  // Valid only if present() — string_view into FDB-owned buffer.
+  // Lifetime tied to this holder.
+  std::string_view value() const noexcept {
+    assert(ready_ && present_);
+    return {reinterpret_cast<const char*>(data_),
+            static_cast<size_t>(len_)};
+  }
+
+private:
+  FdbFuture       f_;
+  const uint8_t*  data_{nullptr};
+  int             len_{0};
+  bool            present_{false};
+  bool            ready_{false};
+};
+
 // Zero-copy, non-movable, non-copyable holder for an FDB range future.
 // Owns the future; exposes the FDB buffer directly via range-for.
 // Must call wait() before iterating.
@@ -237,6 +273,10 @@ class KvTransaction {
                                FDBStreamingMode mode = FDB_STREAMING_MODE_EXACT);
   std::expected<std::vector<RangeScanResult>, fdb_error_t> kv_wait_range(
       FdbFuture& f, bool* more = nullptr);
+
+  // Zero-copy variant: returns an FdbGetHolder that must have wait() called
+  // before accessing value(). The holder owns the future and the FDB buffer.
+  FdbGetHolder kv_async_get_holder(std::string_view key);
 
   // Zero-copy variant: returns an FdbRangeHolder that must have wait() called
   // before iterating. The holder owns the future and the FDB buffer.

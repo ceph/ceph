@@ -252,7 +252,7 @@ std::string make_bucket_value(bucket_id_t bucket_id, int64_t created_at_unix,
                               std::string_view policy_json)
 {
   BucketValueHeader hdr{};
-  bucket_id.serialize(hdr.bucket_id);
+  hdr.bucket_id = bucket_id_t{htobe64(bucket_id.raw())};
   hdr.created_at_unix =
       static_cast<int64_t>(htobe64(static_cast<uint64_t>(created_at_unix)));
   hdr.access_flags = access_flags;
@@ -271,7 +271,7 @@ std::optional<BucketValue> parse_bucket_value(std::string_view data)
   BucketValueHeader hdr{};
   std::memcpy(&hdr, data.data(), sizeof(hdr));
   BucketValue value;
-  value.bucket_id = bucket_id_t::deserialize(hdr.bucket_id);
+  value.bucket_id = bucket_id_t{be64toh(hdr.bucket_id.raw())};
   value.created_at_unix = static_cast<int64_t>(
       be64toh(static_cast<uint64_t>(hdr.created_at_unix)));
   value.access_flags = hdr.access_flags;

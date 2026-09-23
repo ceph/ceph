@@ -1058,6 +1058,7 @@ KvRgwServiceImpl::KvRgwServiceImpl(KvStore &store, DataStore &data_store,
   }
 }
 
+//--------------------------------------------------------------------------------
 void KvRgwServiceImpl::put_bucket_cache(tenant_id_t tenant_id,
                                         const std::string &bucket_name,
                                         bucket_id_t bucket_id,
@@ -1069,6 +1070,7 @@ void KvRgwServiceImpl::put_bucket_cache(tenant_id_t tenant_id,
                        std::chrono::steady_clock::now()};
 }
 
+//--------------------------------------------------------------------------------
 void KvRgwServiceImpl::invalidate_bucket_cache(tenant_id_t tenant_id,
                                                const std::string &bucket_name)
 {
@@ -1076,6 +1078,7 @@ void KvRgwServiceImpl::invalidate_bucket_cache(tenant_id_t tenant_id,
   bucket_cache_.erase(BucketCacheKey{tenant_id, bucket_name});
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::check_access(tenant_id_t tenant_id,
                                               const std::string &bucket_name,
                                               const BucketState &cached,
@@ -1084,6 +1087,8 @@ KvrgwErrorCode KvRgwServiceImpl::check_access(tenant_id_t tenant_id,
   if (!(cached.access_flags & deny_mask)) {
     return KVRGW_ERR_OK;
   }
+
+  // Before denying access -> get a fresh copy of bucket state and double check
   auto fresh = read_bucket_state(tenant_id, bucket_name);
   if (!fresh) {
     return fdb_to_error(fresh.error());
@@ -1098,45 +1103,46 @@ KvrgwErrorCode KvRgwServiceImpl::check_access(tenant_id_t tenant_id,
 }
 
 //--------------------------------------------------------------------------------
-FdbFuture KvRgwServiceImpl::issue_bucket_get(KvTransaction &tr,
-                                             tenant_id_t tenant_id,
-                                             const std::string &bucket_name)
+FdbGetHolder KvRgwServiceImpl::issue_bucket_get(KvTransaction &tr,
+                                                tenant_id_t tenant_id,
+                                                const std::string &bucket_name)
 {
   const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
-  return tr.kv_async_get(bucket_key.view());
+  return tr.kv_async_get_holder(bucket_key.view());
 }
 
 //--------------------------------------------------------------------------------
 std::expected<KvRgwServiceImpl::BktVerifyResult, KvrgwErrorCode>
-KvRgwServiceImpl::resolve_bucket_verify(KvTransaction &tr, FdbFuture &f,
-                                        tenant_id_t tenant_id,
+KvRgwServiceImpl::resolve_bucket_verify(tenant_id_t tenant_id,
                                         const std::string &bucket_name,
+                                        FdbGetHolder &holder,
                                         bucket_id_t expected_bucket_id,
                                         uint8_t deny_mask)
 {
-  auto bkt = tr.kv_wait_get(f);
-  if (!bkt) {
-    return std::unexpected(fdb_to_error(bkt.error()));
+  const fdb_error_t err = holder.wait();
+  if (err) [[unlikely]] {
+    return std::unexpected(fdb_to_error(err));
   }
-  if (!*bkt) {
+  if (!holder.present()) [[unlikely]] {
     invalidate_bucket_cache(tenant_id, bucket_name);
     return std::unexpected(KVRGW_ERR_NO_SUCH_BUCKET);
   }
-  auto bv = parse_bucket_value(**bkt);
-  if (!bv) {
+  const BucketValueHeader* bvh = bvh_ptr(holder.value());
+  if (!bvh) [[unlikely]] {
     invalidate_bucket_cache(tenant_id, bucket_name);
     return std::unexpected(KVRGW_ERR_CORRUPT_VALUE);
   }
-  if (bv->bucket_id != expected_bucket_id) {
+  bucket_id_t bucket_id = bvh_bucket_id(bvh);
+  if (bucket_id != expected_bucket_id) [[unlikely]] {
     invalidate_bucket_cache(tenant_id, bucket_name);
     return std::unexpected(KVRGW_ERR_BUCKET_ID_MISMATCH);
   }
-  if (deny_mask != 0 && (bv->access_flags & deny_mask)) {
+  if (deny_mask != 0 && (bvh_access_flags(bvh) & deny_mask)) [[unlikely]] {
     return std::unexpected(KVRGW_ERR_ACCESS_DENIED);
   }
   BktVerifyResult vb;
-  vb.bucket_id = bv->bucket_id;
-  vb.versioning_state = bv->versioning_state;
+  vb.bucket_id = bucket_id;
+  vb.versioning_state = bvh_versioning_state(bvh);
   return vb;
 }
 
@@ -1147,8 +1153,9 @@ KvRgwServiceImpl::verify_bucket_in_txn(KvTransaction &tr, tenant_id_t tenant_id,
                                        bucket_id_t expected_bucket_id,
                                        uint8_t deny_mask)
 {
-  auto f = issue_bucket_get(tr, tenant_id, bucket_name);
-  return resolve_bucket_verify(tr, f, tenant_id, bucket_name,
+  // TBD: consider removing this function!!!
+  auto holder = issue_bucket_get(tr, tenant_id, bucket_name);
+  return resolve_bucket_verify(tenant_id, bucket_name, holder,
                                expected_bucket_id, deny_mask);
 }
 
@@ -1203,6 +1210,7 @@ KvRgwServiceImpl::read_bucket_state(tenant_id_t tenant_id,
 bucket_id_t KvRgwServiceImpl::resolve_bucket_id(tenant_id_t tenant_id,
                                                 const std::string &bucket_name)
 {
+  // TBD: consider removing this function!!!
   auto state = read_bucket_state(tenant_id, bucket_name);
   if (state && *state) {
     return (*state)->bucket_id;
@@ -1210,6 +1218,7 @@ bucket_id_t KvRgwServiceImpl::resolve_bucket_id(tenant_id_t tenant_id,
   return kNullBucket;
 }
 
+//--------------------------------------------------------------------------------
 void KvRgwServiceImpl::put_tenant_cache(std::string_view tenant_name,
                                         tenant_id_t tenant_id)
 {
@@ -1217,12 +1226,14 @@ void KvRgwServiceImpl::put_tenant_cache(std::string_view tenant_name,
   tenant_cache_.insert_or_assign(std::string(tenant_name), tenant_id);
 }
 
+//--------------------------------------------------------------------------------
 void KvRgwServiceImpl::invalidate_tenant_cache(const std::string &tenant_name)
 {
   std::lock_guard lock(cache_mu_);
   tenant_cache_.erase(tenant_name);
 }
 
+//--------------------------------------------------------------------------------
 std::expected<std::optional<tenant_id_t>, fdb_error_t>
 KvRgwServiceImpl::resolve_tenant_id(std::string_view tenant_name)
 {
@@ -1249,6 +1260,7 @@ KvRgwServiceImpl::resolve_tenant_id(std::string_view tenant_name)
   return std::optional<tenant_id_t>(tenant_value->tenant_id);
 }
 
+//--------------------------------------------------------------------------------
 KvrgwErrorCode
 KvRgwServiceImpl::tenant_id_for_name(const std::string &tenant_name,
                                      tenant_id_t *tenant_id)
@@ -2113,7 +2125,8 @@ KvRgwServiceImpl::put_prepare(KvTransaction &tr, PutInTxnParams &params,
   ctx.is_storage_tier = params.is_storage_tier;
 
   if (need_bucket) {
-    ctx.f_bkt = issue_bucket_get(tr, params.tenant_id, params.bucket_name);
+    const auto bucket_key = make_bucket_key(params.tenant_id, params.bucket_name);
+    ctx.f_bkt = tr.kv_async_get(bucket_key.view());
     ctx.has_bucket_future = true;
   }
 
@@ -2134,12 +2147,12 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
                                int &verified_count,
                                VersioningState *out_versioning_state)
 {
-
   VersioningState vs = VERSIONING_DISABLED;
   if (ctx.has_bucket_future) {
-    auto vb =
-        resolve_bucket_verify(tr, ctx.f_bkt, params.tenant_id,
-                              params.bucket_name, params.bucket_id, kDenyWrite);
+    FdbGetHolder holder(std::move(ctx.f_bkt));
+    ctx.has_bucket_future = false;
+    auto vb = resolve_bucket_verify(params.tenant_id, params.bucket_name, holder,
+                                    params.bucket_id, kDenyWrite);
     if (!vb) {
       return vb.error();
     }
@@ -2160,6 +2173,7 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
       }
     }
     if (!found) {
+      // TBD: why are we doing blocking get ???
       auto vb = verify_bucket_in_txn(tr, params.tenant_id, params.bucket_name,
                                      params.bucket_id, kDenyWrite);
       if (!vb) {
@@ -2841,7 +2855,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_objects(tenant_id_t tenant_id,
       }
 
       // check bucket future now (no latency added)
-      auto vb = resolve_bucket_verify(*tr, f_bkt, tenant_id, bname, bucket_id,
+      auto vb = resolve_bucket_verify(tenant_id, bname, f_bkt, bucket_id,
                                       kDenyList);
       if (!vb) [[unlikely]] {
         iter_ec = vb.error();
@@ -3680,7 +3694,7 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     auto resolve_bkt_once =
         [&]() -> std::expected<BktVerifyResult, KvrgwErrorCode> {
       if (!vb_resolved) {
-        auto vb = resolve_bucket_verify(*tr, f_dst_bkt, tenant_id, dst_bucket,
+        auto vb = resolve_bucket_verify(tenant_id, dst_bucket, f_dst_bkt,
                                         dst_bucket_id);
         if (!vb) {
           return vb;
@@ -4492,7 +4506,7 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     merge_version_streams(o_holder, v_holder, list_prefix, max_keys, &last_o,
                           &last_v, out);
 
-    auto vb = resolve_bucket_verify(*tr, f_bkt, tenant_id, bname, bucket_id,
+    auto vb = resolve_bucket_verify(tenant_id, bname, f_bkt, bucket_id,
                                     kDenyList);
     if (!vb) [[unlikely]] {
       const auto ec = vb.error();
@@ -4607,7 +4621,7 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
     auto f_bkt = issue_bucket_get(*tr, tenant_id, bname);
     auto f_obj = tr->kv_async_get(object_key.view());
 
-    auto vb = resolve_bucket_verify(*tr, f_bkt, tenant_id, bname, bucket_id,
+    auto vb = resolve_bucket_verify(tenant_id, bname, f_bkt, bucket_id,
                                     kDenyWrite);
     if (!vb) {
       return vb.error();
@@ -4781,7 +4795,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
     auto f_bkt = issue_bucket_get(*tr, tenant_id, bname);
     auto f_obj = tr->kv_async_get(object_key.view());
 
-    auto vb = resolve_bucket_verify(*tr, f_bkt, tenant_id, bname, bucket_id,
+    auto vb = resolve_bucket_verify(tenant_id, bname, f_bkt, bucket_id,
                                     kDenyWrite);
     if (!vb) {
       return vb.error();

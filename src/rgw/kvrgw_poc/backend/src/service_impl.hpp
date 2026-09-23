@@ -656,17 +656,16 @@ class KvRgwServiceImpl final {
       uint8_t deny_mask = 0);
 
   // Pipelined: issue the B: get without blocking, resolve later.
-  FdbFuture issue_bucket_get(
+  FdbGetHolder issue_bucket_get(
       KvTransaction& tr,
       tenant_id_t tenant_id,
       const std::string& bucket_name);
 
   std::expected<BktVerifyResult, KvrgwErrorCode>
   resolve_bucket_verify(
-      KvTransaction& tr,
-      FdbFuture& f,
       tenant_id_t tenant_id,
       const std::string& bucket_name,
+      FdbGetHolder& holder,
       bucket_id_t expected_bucket_id,
       uint8_t deny_mask = 0);
 

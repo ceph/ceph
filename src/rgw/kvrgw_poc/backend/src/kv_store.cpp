@@ -339,6 +339,27 @@ FdbFuture KvTransaction::kv_async_get_range(std::string_view start,
 }
 
 //---------------------------------------------------------------------------------
+fdb_error_t FdbGetHolder::wait() noexcept
+{
+  if (fdb_error_t err = fdb_future_block_until_ready(f_.raw())) {
+    return err;
+  }
+  fdb_bool_t present = 0;
+  if (fdb_error_t err = fdb_future_get_value(f_.raw(), &present, &data_, &len_)) {
+    return err;
+  }
+  present_ = present != 0 && data_ != nullptr;
+  ready_ = true;
+  return 0;
+}
+
+//---------------------------------------------------------------------------------
+FdbGetHolder KvTransaction::kv_async_get_holder(std::string_view key)
+{
+  return FdbGetHolder(kv_async_get(key));
+}
+
+//---------------------------------------------------------------------------------
 fdb_error_t FdbRangeHolder::wait() noexcept
 {
   if (fdb_error_t err = fdb_future_block_until_ready(f_.raw())) {
@@ -359,8 +380,8 @@ FdbRangeHolder KvTransaction::kv_async_get_range_holder(
     std::string_view start, bool exclusive_begin, std::string_view end,
     int limit, FDBStreamingMode mode)
 {
-  return FdbRangeHolder(
-      fdb_issue_get_range(impl_->tr, start, exclusive_begin, 1, end, limit, mode));
+  return FdbRangeHolder(fdb_issue_get_range(impl_->tr, start, exclusive_begin, 1,
+                                            end, limit, mode));
 }
 
 //---------------------------------------------------------------------------------

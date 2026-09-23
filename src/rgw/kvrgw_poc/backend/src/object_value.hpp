@@ -98,7 +98,7 @@ struct PoValueHeader {
 };
 
 struct BucketValueHeader {
-  uint8_t bucket_id[sizeof(bucket_id_t)]{};
+  bucket_id_t bucket_id{};
   int64_t created_at_unix{};
   uint8_t access_flags{};
   VersioningState versioning_state{};
@@ -267,6 +267,18 @@ inline const BucketValueHeader* bvh_ptr(std::string_view data)
 inline int64_t bvh_created_at_unix(const BucketValueHeader* h)
 {
   return static_cast<int64_t>(be64toh(static_cast<uint64_t>(h->created_at_unix)));
+}
+inline bucket_id_t bvh_bucket_id(const BucketValueHeader* h)
+{
+  return bucket_id_t{be64toh(h->bucket_id.raw())};
+}
+inline uint8_t bvh_access_flags(const BucketValueHeader* h)
+{
+  return h->access_flags;
+}
+inline VersioningState bvh_versioning_state(const BucketValueHeader* h)
+{
+  return h->versioning_state;
 }
 
 void hdr_to_be(ObjectValueHeader& hdr);
