@@ -134,7 +134,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         return false;
       }
       const lockDays = Number(self.bucketForm.getValue('lock_retention_period_days'));
-      return !Number.isInteger(lockDays) || lockDays === 0;
+      return !Number.isInteger(lockDays) || lockDays < 0;
     });
     this.bucketForm = this.formBuilder.group({
       id: [null],
@@ -179,7 +179,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         ]
       ],
       lock_mode: ['COMPLIANCE'],
-      lock_retention_period_days: [10, [CdValidators.number(false), lockDaysValidator]],
+      lock_retention_period_days: [0, [CdValidators.number(false), lockDaysValidator]],
       bucket_policy: ['{}', CdValidators.json()],
       lifecycle: ['{}', CdValidators.jsonOrXml()],
       grantee: [Grantee.Owner, [Validators.required]],
