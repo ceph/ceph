@@ -15,7 +15,7 @@
 #
 # Disabled because it does not build: BlueStore, which needs libaio or
 # io_uring and the Linux block layer.
-set -e
+set -e -o pipefail
 
 BUILD_DIR=${BUILD_DIR:-build}
 BREW=$(brew --prefix)
@@ -28,6 +28,18 @@ if [ ! -x "$PYTHON" ]; then
     echo "no python at $PYTHON -- run: uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python cython pyyaml" >&2
     exit 1
 fi
+# ISA-L is built from its submodule with autotools. Without either, cmake or
+# the isal_ext step fails with a message that does not name the cause.
+if [ ! -f "$SRC_DIR/src/isa-l/autogen.sh" ]; then
+    echo "src/isa-l is not checked out -- run: git submodule update --init src/isa-l" >&2
+    exit 1
+fi
+for tool in autoreconf automake glibtoolize; do
+    if ! command -v $tool >/dev/null; then
+        echo "$tool not found -- run: brew install autoconf automake libtool" >&2
+        exit 1
+    fi
+done
 PYTHON_VERSION=$("$PYTHON" -c 'import sys; print("%d.%d" % sys.version_info[:2])')
 
 # Homebrew keg-only packages are not on the default search path.
