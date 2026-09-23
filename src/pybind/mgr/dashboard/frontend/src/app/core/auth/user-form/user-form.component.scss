@@ -1,0 +1,7 @@
+.roles-clear-disabled {
+  cds-combo-box .cds--list-box__selection--multi {
+    pointer-events: none;
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
