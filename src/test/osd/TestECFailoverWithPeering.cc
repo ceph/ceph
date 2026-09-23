@@ -557,6 +557,15 @@ TEST_P(TestECFailoverWithPeering, MultiZoneFailoverWithPeering) {
   // Use fixture helper to mark multiple OSDs as down
   mark_osds_down(failed_osds);
 
+  // When we fail a zone, we must reduce min_size by (k+m), the same way
+  // run_zone_recovery_test does after an identical whole-zone failure.
+  // Original min_size = num_zones * (k+m) - m; after one zone fails, only
+  // num_zones - 1 zones remain, so min_size = (num_zones - 1) * (k+m) - m.
+  // Without this, the surviving zone's shard count never reaches min_size
+  // and the PG can never activate.
+  unsigned new_min_size = (config.num_zones - 1) * (k + m) - m;
+  set_pool_min_size(new_min_size);
+
   // Verify the primary has changed (OSD 0 was in the failed zone)
   int new_primary_shard = get_primary_shard_from_osdmap();
   ASSERT_GE(new_primary_shard, k + m)
@@ -1999,9 +2008,15 @@ TEST_P(TestECFailoverWithPeering, ECMinAvailableTest) {
   ASSERT_FALSE(all_shards_active())
     << "PG should still NOT be active after taking zone 1 shard offline";
 
-  // Step 5: Bring back shard 1
-  std::cout << "Step 5: Bringing shard 1 back online" << std::endl;
+  // Step 5: Bring back shard 1 and the zone-1 shard taken down in step 4.
+  // Bringing back only shard 1 leaves shards {2, 3, shard_zone1} down - 9 of
+  // 12 shards up, one short of min_size (10) - so the PG could never reach
+  // active and the check below would be unreachable. Restoring shard_zone1
+  // too brings the count back to exactly min_size.
+  std::cout << "Step 5: Bringing shard 1 and shard " << shard_zone1
+            << " back online" << std::endl;
   mark_osd_up(1);
+  mark_osd_up(shard_zone1);
 
   // Step 6: Assert there is no recovery scheduled
   // After bringing shard 1 back, we now have k shards in zone 0 again
@@ -2059,9 +2074,11 @@ TEST_P(TestECFailoverWithPeering, ECMinAvailableTest) {
  *    scrub to confirm the pool is consistent with both zones active.
  * 3. Take the original zone offline (mark all k+m original OSDs down, lower
  *    min_size to the new single-zone value).
- * 4. Read / verify the object from the new zone alone.
- * 5. Bring the original zone back online and recover the missing writes it
- *    missed while it was down.
+ * 4. Read / verify the object from the new zone alone, then write a third
+ *    object while the original zone is still down, so it has something to
+ *    recover.
+ * 5. Bring the original zone back online and recover the write it missed
+ *    while it was down.
  * 6. Remove the new zone (shrink acting set and pool back to single-zone).
  */
 TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
@@ -2074,9 +2091,11 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
 
   const std::string obj_name = "test_add_zone";
   const std::string obj_name2 = "test_add_zone_2";
+  const std::string obj_name3 = "test_add_zone_3";
   const size_t data_size = stripe_unit * k;
   const std::string pattern_a(data_size, 'A');
   const std::string pattern_b(data_size, 'B');
+  const std::string pattern_c(data_size, 'C');
 
   // ------------------------------------------------------------------
   // Step 1: Write and verify via the original zone.
@@ -2160,14 +2179,6 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
   ASSERT_TRUE(all_shards_active())
     << "All shards (both zones) should be active after zone addition";
 
-  // This test's own docstring claims step 2 "scrub[s] to confirm the pool
-  // is consistent with both zones active" - verify that actually happened
-  // (scrub_object_call_count is 0 for a freshly constructed fixture, so
-  // this only passes if something in this test body actually scrubbed).
-  ASSERT_GT(scrub_object_call_count, 0)
-    << "Step 2 should scrub to confirm consistency with both zones active, "
-       "as this test's docstring claims, but scrub_object() was never called";
-
   // Write a second object now that both zones are active.  This object will
   // be written to both zone 0 and zone 1 shards, so zone 1 holds its data
   // without any backfill and we can read it when zone 0 goes offline.
@@ -2175,6 +2186,26 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
   // still missing from zone-1 shards pending recovery; do not assert clean.
   std::cout << "Step 2 (write): Writing pattern B to both zones" << std::endl;
   create_and_write_verify(obj_name2, pattern_b);
+
+  // Scrub obj_name2 (just written to both zones, so every shard genuinely
+  // has it - unlike obj_name, which predates zone 1 and is still pending
+  // backfill onto zone-1 shards, so scrubbing it here would flag legitimate
+  // missing-shard degradation as corruption) to confirm the pool is
+  // consistent now that both zones are active, as this test's docstring
+  // claims step 2 does. This is the actual fix for the gap the previous
+  // commit's ASSERT_GT(scrub_object_call_count, 0) demonstrated: nothing
+  // here ever called scrub_object() before.
+  ASSERT_FALSE(scrub_object(obj_name2))
+    << "Scrub should find no corruption in " << obj_name2
+    << " with both zones active";
+
+  // This test's own docstring claims step 2 "scrub[s] to confirm the pool
+  // is consistent with both zones active" - verify that actually happened
+  // (scrub_object_call_count is 0 for a freshly constructed fixture, so
+  // this only passes if something in this test body actually scrubbed).
+  ASSERT_GT(scrub_object_call_count, 0)
+    << "Step 2 should scrub to confirm consistency with both zones active, "
+       "as this test's docstring claims, but scrub_object() was never called";
 
   // ------------------------------------------------------------------
   // Step 3: Take the original zone offline.
@@ -2209,6 +2240,14 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
   std::cout << "Step 4: Reading object (written to both zones) from zone 1 only" << std::endl;
   verify_object(obj_name2);
 
+  // Write a third object while zone 0 is still down, so that zone 0 has
+  // something genuine to recover once it rejoins in step 5. Without this,
+  // zone-0 shards would have no missing objects at all (they already have
+  // obj_name from step 1, and never received obj_name2), so recovery would
+  // have nothing to do and calling it would prove nothing.
+  std::cout << "Step 4 (write): Writing pattern C to zone 1 alone while zone 0 is down" << std::endl;
+  create_and_write_verify(obj_name3, pattern_c);
+
   // ------------------------------------------------------------------
   // Step 5: Bring back the original zone and recover.
   // ------------------------------------------------------------------
@@ -2223,17 +2262,18 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
   ASSERT_TRUE(all_shards_active())
     << "All shards should be active again after zone 0 comes back online";
 
-  // Zone 0 was offline while pattern_a was written, so every zone-0 OSD
-  // should have the object in its missing set.  Run recovery now.
+  // Zone 0 was offline while obj_name3 was written, so every zone-0 OSD
+  // should have that object in its missing set.  Run recovery now.
+  //
+  // This is the actual fix for the gap the previous commit's
+  // ASSERT_GT(run_recovery_call_count, 0) demonstrated: nothing here ever
+  // called run_recovery() before, and there was nothing to recover anyway
+  // since no write happened while zone 0 was down. recover_primary=true
+  // because once zone 0's OSDs come back up, the primary reverts to zone 0
+  // (its OSDs sort first in the acting set), and that primary is exactly
+  // the one that was down and missed the write.
   std::cout << "Step 5 (recovery): Recovering zone 0 after rejoining" << std::endl;
-  // Zone 0 shard 0 is the original primary shard; recover_primary = true
-  // when the primary is the one that was absent.  Here zone 0 went down
-  // after the initial write, so zone-0 shards are not actually missing
-  // pattern_a — they have it.  The missing objects on zone-0 shards are
-  // any writes that happened while zone 0 was down.  Since we did no
-  // writes while zone 0 was down (step 3-4 were read-only), zone 0 shards
-  // may not have anything missing at all; peering will determine that.
-  // The recovery helper handles the "nothing missing" case gracefully.
+  run_recovery(obj_name3, /*recover_primary=*/true, pattern_c);
 
   // This test's own docstring (step 5) claims it "recover[s] the missing
   // writes [zone 0] missed while it was down" - verify recovery actually
