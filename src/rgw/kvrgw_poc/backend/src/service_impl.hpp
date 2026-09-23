@@ -559,7 +559,6 @@ class KvRgwServiceImpl final {
     FdbFuture f_obj;
     FdbFuture f_bkt;
     std::string object_key;
-    std::string bucket_raw;
     bucket_id_t bucket_id{};
     tenant_id_t tenant_id{};
     std::string bucket_name;
@@ -570,13 +569,11 @@ class KvRgwServiceImpl final {
       tenant_id_t tenant_id,
       const std::string& bucket_name,
       const std::string& object_name,
-      bool need_bucket);
+      bool need_bucket,
+      bucket_id_t bucket_id = kNullBucket);
 
   std::expected<BucketState, KvrgwErrorCode>
-  delete_verify_bucket(
-      KvTransaction& tr,
-      DeleteContext& ctx,
-      bool need_bucket);
+  delete_verify_bucket(DeleteContext& ctx);
 
   std::expected<DeleteResult, KvrgwErrorCode>
   delete_apply(
@@ -642,12 +639,7 @@ class KvRgwServiceImpl final {
       std::span<const uint8_t> tags = {},
       std::span<const uint8_t> metadata = {});
 
-  struct BktVerifyResult {
-    bucket_id_t bucket_id{};
-    VersioningState versioning_state{};
-  };
-
-  std::expected<BktVerifyResult, KvrgwErrorCode>
+  std::expected<BucketState, KvrgwErrorCode>
   verify_bucket_in_txn(
       KvTransaction& tr,
       tenant_id_t tenant_id,
@@ -661,7 +653,7 @@ class KvRgwServiceImpl final {
       tenant_id_t tenant_id,
       const std::string& bucket_name);
 
-  std::expected<BktVerifyResult, KvrgwErrorCode>
+  std::expected<BucketState, KvrgwErrorCode>
   resolve_bucket_verify(
       tenant_id_t tenant_id,
       const std::string& bucket_name,
