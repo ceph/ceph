@@ -296,7 +296,7 @@ list(APPEND librgw_dbstore_srcs
   driver/dbstore/sqlite/sqliteDB.cc
 )
 list(APPEND librgw_daos_srcs
-  driver/motr/rgw_sal_daos.cc
+  driver/daos/rgw_sal_daos.cc
 )
 list(APPEND librgw_posix_srcs
   driver/posix/rgw_sal_posix.cc
