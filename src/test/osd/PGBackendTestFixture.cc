@@ -1627,6 +1627,7 @@ void PGBackendTestFixture::scrub_all_objects()
 
 bool PGBackendTestFixture::scrub_object(const std::string& obj_name, bool skip_verify)
 {
+  ++scrub_object_call_count;
   hobject_t hoid = make_test_object(obj_name);
 
   // Get the acting set from the OSDMap to know which OSDs to scrub

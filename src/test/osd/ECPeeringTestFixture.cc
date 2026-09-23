@@ -1267,6 +1267,8 @@ void ECPeeringTestFixture::run_parallel_recovery(
   bool recover_primary,
   const std::vector<std::string>& expected_data)
 {
+  ++run_recovery_call_count;
+
   // Verify we have matching sizes
   ASSERT_EQ(obj_names.size(), expected_data.size())
     << "obj_names and expected_data must have the same size";

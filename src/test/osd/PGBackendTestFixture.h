@@ -929,6 +929,16 @@ public:
   bool scrub_object(const std::string& obj_name, bool skip_verify = false);
 
   /**
+   * Counts calls to scrub_object() made since this fixture instance was
+   * constructed (i.e. since the start of the current TEST_P). Lets a test
+   * assert that it actually invoked an inline scrub at a given point in its
+   * own body, as distinct from the unconditional consistency scrub TearDown()
+   * runs afterwards (see scrub_all_objects()), which checks only final state
+   * and would not catch a claimed mid-test scrub that never happened.
+   */
+  int scrub_object_call_count = 0;
+
+  /**
    * Corrupt the data for a specific shard of an object.
    *
    * This utility method directly writes zeros to the stored data for a given
