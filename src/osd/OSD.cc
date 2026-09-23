@@ -9061,7 +9061,9 @@ bool OSD::advance_pg(
 	  if (pg->is_primary()) {
 	    pg->release_pg_backoffs();
 	  }
-	  pg->on_shutdown();
+          // passing merge_source_teardown=true: gives on_shutdown() one last
+          // chance to record a vulnerability-window episode (if recovered).
+	  pg->on_shutdown(true);
 	  OSDShard *sdata = pg->osd_shard;
 	  {
 	    std::lock_guard l(sdata->shard_lock);

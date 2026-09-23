@@ -697,7 +697,17 @@ public:
   void with_heartbeat_peers(std::function<void(int)>&& f);
 
   void shutdown();
-  virtual void on_shutdown() = 0;
+  /**
+   *  @param merge_source_teardown: true only when this PG is being torn down
+   *  as a PG merge source (see OSD::advance_pg's is_merge_source handling).
+   *
+   * Lets the implementation publish (and thus close/record) any pending
+   * stats, e.g., a vulnerability-window episode that finished but
+   * hadn't yet been reported, before that state is lost for good. The
+   * source PG identity ceases to exist once merged away, so this is the
+   * last opportunity to do so.
+   */
+  virtual void on_shutdown(bool merge_source_teardown = false) = 0;
 
   Scrub::schedule_result_t start_scrubbing(
     const Scrub::SchedEntry& candidate,
