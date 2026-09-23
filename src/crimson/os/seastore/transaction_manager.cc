@@ -1611,9 +1611,16 @@ TransactionManager::rewrite_extents_ret TransactionManager::rewrite_extents(
           return rewrite_extent_iertr::now();
         }
         extent = updated;
-        ceph_assert(!extent->is_pending_io());
       }
-
+      // the extent may be concurrently being loaded/written by another
+      // transaction, wait for that IO to complete before rewriting it
+      // to avoid racing with it
+      return trans_intr::make_interruptible(
+        extent->wait_io()
+      ).then_interruptible(
+        [this, &t, target_generation, modify_time, FNAME,
+        &paddr_hint, &next_laddr, hint, &extent]() mutable
+        -> rewrite_extent_iertr::future<> {
       assert(extent->is_valid() && !extent->is_initial_pending());
       if (extent->is_stable_dirty()) {
         if (epm->can_inplace_rewrite(t, extent)) {
@@ -1662,6 +1669,7 @@ TransactionManager::rewrite_extents_ret TransactionManager::rewrite_extents(
         DEBUGT("rewriting physical extent -- {}", t, *extent);
         return lba_manager->rewrite_extent(t, extent);
       }
+      });
     });
   });
 }
