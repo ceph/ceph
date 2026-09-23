@@ -227,6 +227,8 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     // allow the Telemetry module to gather heap and mempool metrics
     profile_grants.push_back(MonCapGrant("heap"));
     profile_grants.push_back(MonCapGrant("dump_mempools"));
+    // alow getpoolstats for mgr modules
+    profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon" ||
       profile == "mgr") {
