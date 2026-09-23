@@ -80,6 +80,10 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
   @Input() submitButtonLabel: string;
   @Input() submitButtonLoadingLabel: string;
   @Input() previousButtonLabel: string;
+  /** Optional footer action (e.g. Delete) shown before the primary submit. */
+  @Input() secondaryButtonLabel: string;
+  /** Optional Carbon icon name for the secondary button (e.g. trash-can). */
+  @Input() secondaryButtonIcon: string;
   @Input() isSubmitLoading: boolean = false;
   /** When set, applies `overflow` on the tearsheet content area; omit to use stylesheet defaults. */
   @Input() overflowScroll?: TearsheetOverflowScroll;
@@ -89,6 +93,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
 
   /** Merged step form values for consumers that bind `(submitRequested)="onSubmit($event)"`. */
   @Output() submitRequested = new EventEmitter<Record<string, unknown>>();
+  @Output() secondaryRequested = new EventEmitter<void>();
   @Output() closeRequested = new EventEmitter<void>();
   @Output() stepChanged = new EventEmitter<{ current: number }>();
   @Output() validateStep = new EventEmitter<{ step: number }>();

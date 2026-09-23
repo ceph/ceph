@@ -118,11 +118,7 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
 
   isFieldInvalid(controlName: string): boolean {
     const control = this.form.get(controlName);
-    return (
-      !!control &&
-      control.invalid &&
-      (control.dirty || this.formSubmitted)
-    );
+    return !!control && control.invalid && (control.dirty || this.formSubmitted);
   }
 
   showFieldError(controlName: string, errorName?: string): boolean {
