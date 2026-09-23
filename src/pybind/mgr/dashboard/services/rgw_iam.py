@@ -1,5 +1,6 @@
+import json
 from subprocess import SubprocessError
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from .. import mgr
 from ..exceptions import DashboardException
@@ -7,12 +8,16 @@ from ..exceptions import DashboardException
 
 class RgwAccounts:
     @classmethod
-    def send_rgw_cmd(cls, command: List[str]):
+    def send_rgw_cmd(cls, command: List[str], error_msg: Optional[str] = None,
+                     stdout_as_json: bool = True):
         try:
-            exit_code, out, err = mgr.send_rgwadmin_command(command)
+            exit_code, out, err = mgr.send_rgwadmin_command(
+                command, stdout_as_json=stdout_as_json)
 
             if exit_code != 0:
-                raise DashboardException(msg=err,
+                msg = (error_msg.format(code=exit_code, err=err)
+                       if error_msg else err)
+                raise DashboardException(msg=msg,
                                          http_status_code=500,
                                          component='rgw')
             return out
@@ -97,3 +102,59 @@ class RgwAccounts:
         """Return the number of users currently in the given account."""
         out = cls.send_rgw_cmd(['user', 'list', '--account-id', account_id])
         return len(out) if isinstance(out, list) else 0
+
+    @classmethod
+    def _append_account_flag(cls, cmd: list, account_id: Optional[str]):
+        if account_id:
+            cmd.extend(['--account-id', account_id])
+
+    @classmethod
+    def list_role_policies(cls, role_name: str,
+                           account_id: Optional[str] = None) -> List[str]:
+        cmd = ['role', 'policy', 'list', '--role-name', role_name]
+        cls._append_account_flag(cmd, account_id)
+        res = cls.send_rgw_cmd(
+            cmd,
+            error_msg='Error listing role policies with code {code}: {err}')
+        if isinstance(res, list):
+            return res
+        if isinstance(res, dict) and 'PolicyNames' in res:
+            return res['PolicyNames']
+        return []
+
+    @classmethod
+    def get_role_policy(cls, role_name: str, policy_name: str,
+                        account_id: Optional[str] = None) -> Dict[str, Any]:
+        cmd = ['role', 'policy', 'get', '--role-name', role_name,
+               '--policy-name', policy_name]
+        cls._append_account_flag(cmd, account_id)
+        return cls.send_rgw_cmd(
+            cmd,
+            error_msg='Error getting role policy with code {code}: {err}')
+
+    @classmethod
+    def put_role_policy(cls, role_name: str, policy_name: str, policy_doc: str,
+                        account_id: Optional[str] = None) -> None:
+        try:
+            json.loads(policy_doc)
+        except json.JSONDecodeError:
+            raise DashboardException('Policy document is not a valid json')
+
+        cmd = ['role', 'policy', 'put', '--role-name', role_name,
+               '--policy-name', policy_name, '--policy-doc', f'{policy_doc}']
+        cls._append_account_flag(cmd, account_id)
+        cls.send_rgw_cmd(
+            cmd,
+            error_msg='Error putting role policy with code {code}: {err}',
+            stdout_as_json=False)
+
+    @classmethod
+    def delete_role_policy(cls, role_name: str, policy_name: str,
+                           account_id: Optional[str] = None) -> None:
+        cmd = ['role', 'policy', 'delete', '--role-name', role_name,
+               '--policy-name', policy_name]
+        cls._append_account_flag(cmd, account_id)
+        cls.send_rgw_cmd(
+            cmd,
+            error_msg='Error deleting role policy with code {code}: {err}',
+            stdout_as_json=False)
