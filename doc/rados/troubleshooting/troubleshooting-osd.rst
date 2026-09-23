@@ -806,8 +806,9 @@ Walk it to find the longest-duration event and diagnose bottleneck
 
 - ``waiting for subops from [X,Y]``: sub-ops sent to replica OSDs X and
   Y. Waiting for commit ACKs. Long duration = slow replicas.
-- ``sub_op_commit_rec``: commit acknowledgment received from one replica.
-  Appears once per replica.
+- ``sub_op_commit_rec from osd.N``: commit acknowledgment received from
+  replica ``osd.N``. Appears once per replica; the last one to arrive is the
+  replica the op waited for.
 - ``op_commit``: all replicas committed. Op is durable but client not yet
   notified.
 

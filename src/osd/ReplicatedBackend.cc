@@ -739,7 +739,11 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ceph_assert(ip_op.waiting_for_commit.count(from));
       ip_op.waiting_for_commit.erase(from);
       if (ip_op.op) {
-	ip_op.op->mark_event("sub_op_commit_rec");
+	// name the replica, so a slow op's timeline shows which one it waited for
+	char event[48];
+	auto r = fmt::format_to_n(event, sizeof(event),
+				  "sub_op_commit_rec from osd.{}", from.osd);
+	ip_op.op->mark_event(std::string_view(event, std::min(r.size, sizeof(event))));
 	ip_op.op->pg_trace.event("sub_op_commit_rec");
       }
     } else {
