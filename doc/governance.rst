@@ -83,10 +83,10 @@ Responsibilities
 Membership
 ----------
 
-The CSC's voting members are determined as follows, rather than being the
-project's Maintainers (Charter section 2.b):
+The CSC chooses its own voting members as described below.  This is the
+alternative to Maintainer-based membership allowed by Charter section 2.b.
 
- * Developers, users, community members
+ * Members may be developers, users, or other community members
  * Members can be nominated and added/removed by existing members via a
    supermajority vote
  * Anyone may attend steering committee meetings as a non-voting participant
