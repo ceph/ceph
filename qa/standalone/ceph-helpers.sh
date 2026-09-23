@@ -33,6 +33,10 @@ if [ `uname` = FreeBSD ]; then
 else
     SED=sed
     AWK=awk
+    if [ `uname` = Darwin ]; then
+        # macOS awk can't parse the comparisons calc() evaluates
+        command -v gawk >/dev/null && AWK=gawk
+    fi
     termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
     if [ -n "$termwidth" -a "$termwidth" != "0" ]; then
         termwidth="-W ${termwidth}"
