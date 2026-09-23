@@ -38,7 +38,6 @@ private:
   map<hobject_t, set<pg_shard_t>> missing_loc_shards;
   map<pg_shard_t, pg_missing_t> shard_missing;
   pg_missing_set<false> shard_not_missing_const;
-  pg_pool_t pg_pool;
   set<pg_shard_t> acting_recovery_backfill_shards;
   map<pg_shard_t, pg_info_t> shard_info;
   PGLog pg_log;
@@ -48,6 +47,14 @@ private:
 public:
   set<pg_shard_t> acting_shards;
   shard_id_set acting_recovery_backfill_shard_id_set;
+  // Settable pool used by get_pool(); tests can set flags (e.g. FLAG_OMAP)
+  // and nonprimary_shards on it directly.
+  pg_pool_t pg_pool;
+  // Settable "self" shard used by whoami_shard(); defaults to the old
+  // hard-coded pg_shard_t() (relative shard NO_SHARD, zone 0) so existing
+  // tests are unaffected. Tests that need to simulate a primary living in
+  // a non-zero zone can set this before constructing/using a ReadPipeline.
+  pg_shard_t whoami = pg_shard_t();
 
   ECListenerStub()
     : pg_log(NULL) {}
@@ -188,7 +195,7 @@ public:
   }
 
   pg_shard_t whoami_shard() const override {
-    return pg_shard_t();
+    return whoami;
   }
 
   void send_message_osd_cluster(vector<std::pair<int, Message *>> &messages, epoch_t from_epoch) override {
