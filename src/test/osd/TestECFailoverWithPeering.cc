@@ -569,11 +569,9 @@ TEST_P(TestECFailoverWithPeering, MultiZoneFailoverWithPeering) {
       << "Failed OSD " << failed_osd << " should not be in acting set";
   }
 
-  std::string primary_state = get_state_name(new_primary_shard);
-  ASSERT_TRUE(primary_state.find("Peering") != std::string::npos ||
-              primary_state.find("Active") != std::string::npos ||
-              primary_state.find("Recovery") != std::string::npos)
-    << "New primary should be operational, got: " << primary_state;
+  ASSERT_TRUE(all_shards_active())
+    << "Surviving zone should be fully active after zone failover, primary state: "
+    << get_state_name(new_primary_shard);
 
   // Perform degraded read after failover
   // With 2 zones of k=4,m=2 each, losing one zone (6 OSDs) leaves us with
@@ -2018,34 +2016,33 @@ TEST_P(TestECFailoverWithPeering, ECMinAvailableTest) {
 
   auto primary_ps = get_primary_test_pg()->get_peering_state();
 
-  // The PG might be active now with k shards available
-  // But we need to check if recovery is scheduled
-  if (primary_ps->is_active()) {
-    std::cout << "  PG is active" << std::endl;
+  // The headline assertion this test exists for: after bringing shard 1
+  // back, the PG must actually be active, or none of the peer_missing
+  // checking below means anything.
+  ASSERT_TRUE(primary_ps->is_active())
+    << "PG should be active after bringing shard 1 back online. State: "
+    << primary_ps->get_current_state();
 
-    // Check peer_missing to see if shard 1 has missing objects
-    const auto& peer_missing_map = primary_ps->get_peer_missing();
+  // Check peer_missing to see if shard 1 has missing objects
+  const auto& peer_missing_map = primary_ps->get_peer_missing();
 
-    hobject_t hoid = make_test_object(obj_name);
-    pg_shard_t shard1(1, shard_id_t(1));
+  hobject_t hoid = make_test_object(obj_name);
+  pg_shard_t shard1(1, shard_id_t(1));
 
-    auto peer_missing_it = peer_missing_map.find(shard1);
-    if (peer_missing_it != peer_missing_map.end()) {
-      const pg_missing_t& peer_missing = peer_missing_it->second;
-      bool is_missing = peer_missing.is_missing(hoid);
+  auto peer_missing_it = peer_missing_map.find(shard1);
+  if (peer_missing_it != peer_missing_map.end()) {
+    const pg_missing_t& peer_missing = peer_missing_it->second;
+    bool is_missing = peer_missing.is_missing(hoid);
 
-      std::cout << "  Shard 1 missing status for object: " << (is_missing ? "MISSING" : "NOT MISSING") << std::endl;
+    std::cout << "  Shard 1 missing status for object: " << (is_missing ? "MISSING" : "NOT MISSING") << std::endl;
 
-      // Since shard 1 was down when we wrote the object, it should NOT be missing
-      // because we never successfully wrote to it in the first place
-      // Recovery should not be scheduled for objects that were never written
-      ASSERT_FALSE(is_missing)
-        << "Shard 1 should not have the object marked as missing since it was down during write";
-    } else {
-      std::cout << "  Shard 1 not in peer_missing_map (no recovery needed)" << std::endl;
-    }
+    // Since shard 1 was down when we wrote the object, it should NOT be missing
+    // because we never successfully wrote to it in the first place
+    // Recovery should not be scheduled for objects that were never written
+    ASSERT_FALSE(is_missing)
+      << "Shard 1 should not have the object marked as missing since it was down during write";
   } else {
-    std::cout << "  PG is not active yet" << std::endl;
+    std::cout << "  Shard 1 not in peer_missing_map (no recovery needed)" << std::endl;
   }
 
   std::cout << "=== ECMinAvailableTest completed successfully ===" << std::endl;
@@ -2163,6 +2160,14 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
   ASSERT_TRUE(all_shards_active())
     << "All shards (both zones) should be active after zone addition";
 
+  // This test's own docstring claims step 2 "scrub[s] to confirm the pool
+  // is consistent with both zones active" - verify that actually happened
+  // (scrub_object_call_count is 0 for a freshly constructed fixture, so
+  // this only passes if something in this test body actually scrubbed).
+  ASSERT_GT(scrub_object_call_count, 0)
+    << "Step 2 should scrub to confirm consistency with both zones active, "
+       "as this test's docstring claims, but scrub_object() was never called";
+
   // Write a second object now that both zones are active.  This object will
   // be written to both zone 0 and zone 1 shards, so zone 1 holds its data
   // without any backfill and we can read it when zone 0 goes offline.
@@ -2229,6 +2234,15 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
   // writes while zone 0 was down (step 3-4 were read-only), zone 0 shards
   // may not have anything missing at all; peering will determine that.
   // The recovery helper handles the "nothing missing" case gracefully.
+
+  // This test's own docstring (step 5) claims it "recover[s] the missing
+  // writes [zone 0] missed while it was down" - verify recovery actually
+  // ran (run_recovery_call_count is 0 for a freshly constructed fixture,
+  // so this only passes if something in this test body actually recovered).
+  ASSERT_GT(run_recovery_call_count, 0)
+    << "Step 5 should recover zone 0's missed writes, as this test's "
+       "docstring claims, but run_recovery()/run_parallel_recovery() was "
+       "never called";
 
   // ------------------------------------------------------------------
   // Step 6: Remove (delete) the new zone.
