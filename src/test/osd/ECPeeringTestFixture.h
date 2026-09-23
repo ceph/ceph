@@ -253,6 +253,15 @@ public:
     bool recover_primary,
     const std::vector<std::string>& expected_data);
 
+  /**
+   * Counts calls to run_parallel_recovery() (and therefore run_recovery(),
+   * which delegates to it) made since this fixture instance was constructed
+   * (i.e. since the start of the current TEST_P). Lets a test assert that it
+   * actually ran recovery at a given point in its own body, rather than just
+   * bringing OSDs back up and asserting activation.
+   */
+  int run_recovery_call_count = 0;
+
 private:
   void do_run_parallel_recovery_impl(
     const std::vector<std::string>& obj_names,

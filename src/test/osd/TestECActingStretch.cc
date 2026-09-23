@@ -166,8 +166,9 @@ protected:
             const map<pg_shard_t, pg_info_t> &all_info, pg_shard_t auth,
             bool restrict_to_up_acting, vector<int> *want,
             set<pg_shard_t> *backfill, set<pg_shard_t> *acting_backfill,
-            ostringstream &ss) {
-    const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+            ostringstream &ss, const pg_pool_t *pool_info = nullptr) {
+    const pg_pool_t *pool =
+      pool_info ? pool_info : osdmap->get_pg_pool(pool_id);
     ASSERT_NE(pool, nullptr);
     PGPool pgpool(osdmap, pool_id, *pool, "test_ec_pool");
     auto auth_it = all_info.find(auth);
@@ -349,8 +350,9 @@ TEST_F(TestECActingStretch, ZoneIsolation_SingleOSDDown) {
 /**
  * Test: CRUSH rehash - osds change shard zone (location in vector)
  *
- * Scenario: up set OSDs are flip zones from acting - expect OSDs to not mix zones
- * Expected: want set should be the same as up (OSDs do not mix zones)
+ * Scenario: up set OSDs are flip zones from acting; they only hold the shards
+ * of their old positions.
+ * Expected: acting is kept and every up OSD is backfilled for its new shard.
  */
 TEST_F(TestECActingStretch, CRUSH_rehash) {
   const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
@@ -408,25 +410,20 @@ TEST_F(TestECActingStretch, CRUSH_rehash) {
     int dc1 = osdmap->crush->get_parent_of_type(i + 3, 9, pool->crush_rule);
     EXPECT_NE(dc0, dc1) << "dc0 and dc1 should be different buckets";
   }
-    // Verify want contains all 6 OSDs
-  EXPECT_EQ(want.size(), 6);
-  EXPECT_EQ(want[0], 3);
-  EXPECT_EQ(want[1], 4);
-  EXPECT_EQ(want[2], 5);
-  EXPECT_EQ(want[3], 0);
-  EXPECT_EQ(want[4], 1);
-  EXPECT_EQ(want[5], 2);
-  
-  // Verify no backfill needed
-  EXPECT_FALSE(backfill.empty());
+  EXPECT_EQ(want, acting);
+  EXPECT_EQ(backfill, (set<pg_shard_t>{
+    pg_shard_t(3, shard_id_t(0)), pg_shard_t(4, shard_id_t(1)),
+    pg_shard_t(5, shard_id_t(2)), pg_shard_t(0, shard_id_t(3)),
+    pg_shard_t(1, shard_id_t(4)), pg_shard_t(2, shard_id_t(5))}));
 }
 
 
 /**
  * Test: CRUSH rehash degraded - osds change shard zone (location in vector)
  *
- * Scenario: up set OSDs are flip zones from acting - expect OSDs to not mix zones
- * Expected: want set should be the same as up (OSDs do not mix zones)
+ * Scenario: the surviving zone's OSDs move from zone block 0 in acting to
+ * zone block 1 in up, holding only their block 0 shards.
+ * Expected: they keep serving block 0 and are backfilled for block 1.
  */
 TEST_F(TestECActingStretch, CRUSH_rehash_degraded) {
   const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
@@ -483,20 +480,13 @@ TEST_F(TestECActingStretch, CRUSH_rehash_degraded) {
     int dc1 = osdmap->crush->get_parent_of_type(i + 3, 9, pool->crush_rule);
     EXPECT_NE(dc0, dc1) << "dc0 and dc1 should be different buckets";
   }
-    // Verify want contains all 6 OSDs
-  EXPECT_EQ(want.size(), 6);
-  EXPECT_EQ(want[0], CRUSH_ITEM_NONE);
-  EXPECT_EQ(want[1], CRUSH_ITEM_NONE);
-  EXPECT_EQ(want[2], CRUSH_ITEM_NONE);
-  EXPECT_EQ(want[3], 5);
-  EXPECT_EQ(want[4], 4);
-  EXPECT_EQ(want[5], 3);
-  
-  // Verify no backfill needed
-  EXPECT_FALSE(backfill.empty());
+  EXPECT_EQ(want, acting);
+  EXPECT_EQ(backfill, (set<pg_shard_t>{
+    pg_shard_t(5, shard_id_t(3)), pg_shard_t(4, shard_id_t(4)),
+    pg_shard_t(3, shard_id_t(5))}));
 }
 /**
- * Test: Stray selected from correct zone via all_info_by_rel_shard
+ * Test: Stray selected only from the zone serving its block
  *
  * Scenario: up[1] is CRUSH_ITEM_NONE (OSD 1 down, no CRUSH remap available),
  * acting[1] = 1 (also absent from all_info). A stray OSD 6 (dc0) holds
@@ -664,8 +654,8 @@ TEST_F(TestECActingStretch, UpBehindLog_ActingFallbackWins) {
  * Scenario: up[1] = OSD 6 (dc0, shard 1) is behind the auth log tail —
  * added to backfill. acting[1] = OSD 1 is fully absent from all_info
  * (completely gone). The stray search then runs for the same position.
- * OSD 6 is also present in all_info_by_rel_shard as a stray with the same
- * shard but is behind — so it too fails the log_tail check.
+ * OSD 6 is also a stray for the same shard but is behind — so it too fails
+ * the log_tail check.
  * OSD 7 (dc1, shard 4 = rel-shard 1) is current but in the wrong zone.
  * A second stray, OSD 6 at shard 1, cannot fill want (it's behind).
  * Result: position 1 must be CRUSH_ITEM_NONE.
@@ -835,14 +825,12 @@ TEST_F(TestECActingStretch, UpNone_ActingAbsent_StrayFills) {
 }
 
 /**
- * Test: CRUSH_ITEM_NONE in up — expected_zone derived from zone block, not up[i]
+ * Test: CRUSH_ITEM_NONE in up — the zone comes from the whole block, not up[i]
  *
  * Scenario: up[0] is CRUSH_ITEM_NONE but up[1] and up[2] are valid dc0 OSDs.
- * The expected_zone for position 0 must still be dc0 (derived from
- * positions in the same zone block). A stray OSD (dc0) holding shard 0
- * should be selected; a stray from dc1 must not be.
- *
- * Expected: Scans the zone block for the first non-NONE OSD rather than relying on up[i] directly.
+ * Zone block 0 is served from dc0, which holds most of its shards, so a
+ * stray OSD (dc0) holding shard 0 should be selected; a stray from dc1 must
+ * not be.
  */
 TEST_F(TestECActingStretch, ZoneFromBlock_UpPositionNone) {
   const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
@@ -1053,7 +1041,7 @@ TEST_F(TestECActingStretch, ActingFallback_RelativeShardStride) {
  * entirely down). bucket_max = 3. Positions 0, 1, 2 should be filled from
  * dc0; position 3 must be CRUSH_ITEM_NONE (dc0 is at max, dc1 has no OSDs).
  *
- * This tests that zone_at_max() correctly caps selection per zone.
+ * This tests that bucket_max caps selection per zone.
  */
 TEST_F(TestECActingStretch, BucketMax_ZoneCapEnforced) {
   const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
@@ -1119,6 +1107,11 @@ TEST_F(TestECActingStretch, BucketMax_ZoneCapEnforced) {
  *
  *   acting = [0, 1, 2, 3, 4, 5]   previous epoch
  *   up = {3, 4, 5, NONE, NONE, 2}
+ *
+ * The up OSDs hold none of their new shards, so each zone block stays in the
+ * zone holding its data: block 0 in dc0 (acting OSD 2 and stray OSD 6) and
+ * block 1 in dc1 (acting OSDs 3-5).  Backfilling up would not change that,
+ * as block 1 would have only OSD 2 in dc0, so nothing is backfilled.
  */
 TEST_F(TestECActingStretch, Rehash_AllThreePaths) {
   const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
@@ -1130,7 +1123,6 @@ TEST_F(TestECActingStretch, Rehash_AllThreePaths) {
   eversion_t behind(1, 2);
 
   // Zones are swapped vs acting. Positions 3 and 4 have no CRUSH remap.
-  // Block 1's zone is inferred from up[5]=OSD2 (dc0), the only non-NONE in block 1.
   vector<int> up     = {3, 4, 5,  CRUSH_ITEM_NONE, CRUSH_ITEM_NONE, 2};
   vector<int> acting = {0, 1, 2,  3, 4, 5};
 
@@ -1174,26 +1166,9 @@ TEST_F(TestECActingStretch, Rehash_AllThreePaths) {
 
   ASSERT_EQ((int)want.size(), 6) << ss.str();
 
-  // pos 0-2: UP wins (rehashed dc1 block)
-  EXPECT_EQ(want[0], 3) << "pos 0: up OSD3 (dc1) wins\n"              << ss.str();
-  EXPECT_EQ(want[1], 4) << "pos 1: up OSD4 (dc1) wins\n"              << ss.str();
-  EXPECT_EQ(want[2], 5) << "pos 2: up OSD5 (dc1) wins\n"              << ss.str();
-
-  // pos 3: up=NONE, stray fallback picks OSD0 (dc6, rel=0, j=0)
-  EXPECT_EQ(want[3], 6) << "pos 3: acting fallback OSD0 (dc6) wins\n" << ss.str();
-
-  EXPECT_EQ(want[4], CRUSH_ITEM_NONE) << "dc1 position 4 must be NONE\n" << ss.str();
-
-  // pos 5: UP wins (dc0 OSD2 at shard 5)
-  EXPECT_EQ(want[5], 2) << "pos 5: up OSD2 (dc0) wins\n"              << ss.str();
-
-  // No backfill — no OSD was in up and behind the log
-  EXPECT_FALSE(backfill.empty()) << "Backfill expected\n"            << ss.str();
-
-  // Zone isolation: block 0 (pos 0-2) all dc1; block 1 (pos 3-5) all dc0
-  int z_dc1 = osdmap->crush->get_parent_of_type(3, 9, pool->crush_rule);
-  int z_dc0 = osdmap->crush->get_parent_of_type(0, 9, pool->crush_rule);
-  EXPECT_NE(z_dc0, z_dc1);
+  // pos 0: stray OSD 6 (dc0) holds shard 0; nobody holds shard 1.
+  EXPECT_EQ(want, (vector<int>{6, CRUSH_ITEM_NONE, 2, 3, 4, 5})) << ss.str();
+  EXPECT_TRUE(backfill.empty()) << ss.str();
 }
 
 /**
@@ -1445,20 +1420,13 @@ TEST_F(TestECActingStretch3Zone, CRUSH_rehash_ThreeZones) {
     ss);
   
   std::cerr << ss.str();
-    // Verify want contains all 9 OSDs
-  EXPECT_EQ(want.size(), 9);
-  EXPECT_EQ(want[0], 3);
-  EXPECT_EQ(want[1], 4);
-  EXPECT_EQ(want[2], 5);
-  EXPECT_EQ(want[3], 6);
-  EXPECT_EQ(want[4], 7);
-  EXPECT_EQ(want[5], 8);
-  EXPECT_EQ(want[6], 0);
-  EXPECT_EQ(want[7], 1);  
-  EXPECT_EQ(want[8], 2);
-  
-  // Verify backfill needed
-  EXPECT_TRUE(!backfill.empty());
+  // The up OSDs only hold their old shards: keep acting, backfill up.
+  EXPECT_EQ(want, acting);
+  set<pg_shard_t> expected_backfill;
+  for (unsigned i = 0; i < up.size(); ++i) {
+    expected_backfill.insert(pg_shard_t(up[i], shard_id_t(i)));
+  }
+  EXPECT_EQ(backfill, expected_backfill);
 
   int z0 = osdmap->crush->get_parent_of_type(want[0], 9, pool->crush_rule);
   int z1 = osdmap->crush->get_parent_of_type(want[3], 9, pool->crush_rule);
@@ -1483,14 +1451,18 @@ TEST_F(TestECActingStretch3Zone, CRUSH_rehash_ThreeZones) {
  * New epoch (2-zone):  pool.size=6, up = [3,4,5, 0,1,2]
  *   CRUSH now only maps 2 datacenters: dc1 (shards 0-2) and dc0 (shards 3-5).
  *
- * Expected: all 6 positions filled via the up-path (OSDs 0-5 are healthy and
- *           have matching all_info entries). No backfill needed.
+ * Expected: OSDs 0-5 keep serving the shards they hold (their old
+ *           positions) and are backfilled for their new ones.
  *           dc2 OSDs (6,7,8) must not appear in want.
  */
 TEST_F(TestECActingStretch3Zone, ZoneTransition_ThreeToTwo) {
-const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
-  ASSERT_NE(pool, nullptr);
-  PGPool pgpool(osdmap, pool_id, *pool, "test_ec_pool_3z");
+  pg_pool_t two_zone = *osdmap->get_pg_pool(pool_id);
+  two_zone.size = 6;
+  two_zone.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(2));
+  two_zone.peering_crush_bucket_target = 2;
+  two_zone.peering_crush_bucket_count = 2;
+  const pg_pool_t* pool = &two_zone;
+  PGPool pgpool(osdmap, pool_id, two_zone, "test_ec_pool_3z");
 
   vector<int> up     = {3,4,5, 0,1,2};
   vector<int> acting = {0,1,2, 3,4,5, 6,7,8};
@@ -1532,17 +1504,11 @@ const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
     ss);
   
   std::cerr << ss.str();
-    // Verify want contains all 9 OSDs
-  EXPECT_EQ(want.size(), 9);
-  EXPECT_EQ(want[0], 3);
-  EXPECT_EQ(want[1], 4);
-  EXPECT_EQ(want[2], 5);
-  EXPECT_EQ(want[3], 0);
-  EXPECT_EQ(want[4], 1);  
-  EXPECT_EQ(want[5], 2);
-  
-  // Verify backfill needed
-  EXPECT_TRUE(!backfill.empty());
+  EXPECT_EQ(want, (vector<int>{0, 1, 2, 3, 4, 5}));
+  EXPECT_EQ(backfill, (set<pg_shard_t>{
+    pg_shard_t(3, shard_id_t(0)), pg_shard_t(4, shard_id_t(1)),
+    pg_shard_t(5, shard_id_t(2)), pg_shard_t(0, shard_id_t(3)),
+    pg_shard_t(1, shard_id_t(4)), pg_shard_t(2, shard_id_t(5))}));
 
   int z0 = osdmap->crush->get_parent_of_type(want[0], 9, pool->crush_rule);
   int z1 = osdmap->crush->get_parent_of_type(want[3], 9, pool->crush_rule);
@@ -1551,12 +1517,8 @@ const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
 
 
 /*
- * The two tests below demonstrate defects in calc_ec_acting_stretch() and are
- * expected to FAIL until it is fixed.  Both stem from expected_zone only ever
- * being derived from the up set: when an entire zone's block of positions is
- * CRUSH_ITEM_NONE, shard_zone_to_crush_zone holds no entry for that zone, so
- * expected_zone is CRUSH_ITEM_NONE and the guards that depend on it stop
- * guarding anything.
+ * The two tests below cover a zone whose whole block of up positions is
+ * CRUSH_ITEM_NONE, so its zone cannot be taken from up.
  */
 
 /**
@@ -1569,14 +1531,8 @@ const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
  * holding shard 3.  Shard 3 belongs to zone 1, so placing it on a dc0 OSD
  * would put two copies of relative shard 0 in one datacenter.
  *
- * This passes today, but not because the zone check works: with the whole of
- * dc1 absent from the up set there is no expected_zone for positions 3-5, so
- * the "wrong zone" test in the stray search is skipped entirely.  What saves
- * it is bucket_max, which equals zone_size for a two-zone pool, so once dc0
- * has filled its own three positions it cannot supply a fourth.  The test is
- * kept as a regression guard: it would start failing if a quota ever exceeded
- * a zone's own position count, or with three or more zones where a surviving
- * zone still has quota left while a middle zone's block is down.
+ * dc0 already serves zone block 0, so zone block 1 cannot be served from it
+ * and position 3 stays empty.
  */
 TEST_F(TestECActingStretch, StrayFromWrongZoneRejectedWhenZoneBlockDown) {
   const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
@@ -1641,16 +1597,8 @@ TEST_F(TestECActingStretch, StrayFromWrongZoneRejectedWhenZoneBlockDown) {
 /**
  * Test: no OSD may appear twice in the want vector.
  *
- * Nothing in calc_ec_acting_stretch() records that an OSD has already been
- * placed, so the stray search can hand the same OSD to a second position.  The
- * bucket_max check normally hides this, because a zone that has supplied its
- * full quota is refused - so this leaves one dc0 position unfilled to keep dc0
- * below its quota while the zone 1 positions go looking for strays.
- *
- * Positions 3, 4 and 5 have no up entry, hence no expected_zone, so they fall
- * through to the stray search and the only candidate for position 3 (relative
- * shard 0) is OSD 0, which is already serving position 0.  The resulting
- * acting set names osd.0 twice.
+ * Positions 3, 4 and 5 have no up entry.  OSD 0 holds relative shard 0, but
+ * only as absolute shard 0, so it must not also be placed at position 3.
  */
 TEST_F(TestECActingStretch, NoOsdAppearsTwiceInWant) {
   const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
@@ -1784,4 +1732,318 @@ TEST_F(TestECActingStretch, Zone1Auth_Zone0BehindLogTail) {
     }
   }
   EXPECT_EQ(acting_backfill, expected_ab) << ss.str();
+}
+
+// Zone blocks swapped in up with a trimmed log: the up OSDs only have the
+// empty info returned for a shard they do not hold.  choose_acting asserts
+// that want == up implies no backfill.
+TEST_F(TestECActingStretch, ZoneBlockSwap_WantEqualsUpImpliesNoBackfill) {
+  vector<int> up = {3, 4, 5, 0, 1, 2};
+  vector<int> acting = {0, 1, 2, 3, 4, 5};
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i = 0; i < 6; ++i) {
+    add_info(all_info, i, i, eversion_t(1, 10), eversion_t(1, 5));
+    add_info(all_info, up[i], i, eversion_t());
+  }
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_FALSE(want == up && !backfill.empty())
+    << "want " << want << " == up with backfill " << backfill << "\n"
+    << ss.str();
+}
+
+// All of dc1 marked out but still up: CRUSH leaves the zone 1 block of up
+// empty, yet acting[3..5] are up with current data and should be kept.
+TEST_F(TestECActingStretch, UpZoneBlockAllNone_CurrentActingZoneKept) {
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> up = {0, 1, 2, N, N, N};
+  vector<int> acting = {0, 1, 2, 3, 4, 5};
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i = 0; i < 6; ++i) {
+    add_info(all_info, i, i, eversion_t(1, 10), eversion_t(1, 5));
+  }
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, (vector<int>{0, 1, 2, 3, 4, 5})) << ss.str();
+}
+
+// An OSD picked for position i on the strength of its info for another
+// absolute shard j (same relative shard) holds no data for shard i, so it
+// must either have a usable info for shard i or be backfilled.
+TEST_F(TestECActingStretch, OtherAbsoluteShardPick_IsBackfilled) {
+  const int N = CRUSH_ITEM_NONE;
+  auto check = [&](const vector<int> &up, const vector<int> &acting,
+                   const map<pg_shard_t, pg_info_t> &all_info,
+                   bool restrict_to_up_acting) {
+    vector<int> want;
+    set<pg_shard_t> backfill, acting_backfill;
+    ostringstream ss;
+    calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)),
+         restrict_to_up_acting, &want, &backfill, &acting_backfill, ss);
+    const eversion_t log_tail =
+      all_info.at(pg_shard_t(0, shard_id_t(0))).log_tail;
+    for (unsigned i = 0; i < want.size(); ++i) {
+      if (want[i] == N) {
+        continue;
+      }
+      pg_shard_t s(want[i], shard_id_t(i));
+      auto it = all_info.find(s);
+      bool usable = it != all_info.end() && !it->second.is_incomplete() &&
+                    it->second.last_update >= log_tail;
+      EXPECT_TRUE(usable || backfill.count(s))
+        << "want[" << i << "]=osd." << want[i] << " has no info for shard "
+        << i << " and is not backfilled\n" << ss.str();
+    }
+  };
+
+  // Stray path: osd.7 (dc1) has current relative shard 1 as absolute shard 1.
+  {
+    vector<int> up = {0, 1, 2, 3, N, 5};
+    map<pg_shard_t, pg_info_t> all_info;
+    for (int i : {0, 1, 2, 3, 5}) {
+      add_info(all_info, i, i, eversion_t(1, 10), eversion_t(1, 5));
+    }
+    add_info(all_info, 7, 1, eversion_t(1, 10));
+    check(up, up, all_info, false);
+  }
+
+  // Acting path: osd.7 (dc1) sits at acting[1] and is taken for position 4.
+  {
+    vector<int> up = {0, 1, 2, 3, N, 5};
+    vector<int> acting = {0, 7, 2, 3, N, 5};
+    map<pg_shard_t, pg_info_t> all_info;
+    for (int i : {0, 1, 2, 3, 5}) {
+      add_info(all_info, i, i, eversion_t(1, 10), eversion_t(1, 5));
+    }
+    add_info(all_info, 7, 1, eversion_t(1, 10));
+    check(up, acting, all_info, true);
+  }
+}
+
+// Strays picked for zone 0 must count toward dc0's bucket_max, so a
+// cross-zone up entry (legal pg-upmap-items 3->6) cannot push dc0 past it.
+TEST_F(TestECActingStretch, StrayPick_CountsTowardZoneBucketMax) {
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> up = {0, N, N, 6, N, N};
+  vector<int> acting = up;
+  map<pg_shard_t, pg_info_t> all_info;
+  add_info(all_info, 0, 0, eversion_t(1, 10));
+  add_info(all_info, 1, 1, eversion_t(1, 10));
+  add_info(all_info, 2, 2, eversion_t(1, 10));
+  add_info(all_info, 6, 3, eversion_t(1, 10));
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss);
+  const unsigned bucket_max = 3;
+  map<int, unsigned> per_dc;
+  for (int osd : want) {
+    if (osd != N) {
+      ++per_dc[dc_of(osd)];
+    }
+  }
+  for (auto &[dc, count] : per_dc) {
+    EXPECT_LE(count, bucket_max)
+      << "dc " << dc << " supplies " << count << " OSDs, want " << want
+      << "\n" << ss.str();
+  }
+}
+
+// A single cross-zone up entry (pg-upmap-items 3->6) must not cost the
+// rest of the healthy zone 1 block.  osd.6 is not backfilled: block 1 stays
+// in dc1, so once complete it would be skipped and Recovered's
+// choose_acting would assert that the backfill targets are unchanged.
+TEST_F(TestECActingStretch, SingleCrossZoneUpEntry_KeepsRestOfZoneBlock) {
+  vector<int> up = {0, 1, 2, 6, 4, 5};
+  vector<int> acting = {0, 1, 2, 3, 4, 5};
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i = 0; i < 6; ++i) {
+    add_info(all_info, i, i, eversion_t(1, 10), eversion_t(1, 5));
+  }
+  add_info(all_info, 6, 3, eversion_t());
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want[3], 3) << ss.str();
+  EXPECT_EQ(want[4], 4) << ss.str();
+  EXPECT_EQ(want[5], 5) << ss.str();
+  EXPECT_TRUE(backfill.empty()) << ss.str();
+}
+
+// up has moved zone block 0 to dc1, which holds it, but block 1 has not been
+// backfilled into dc0.  Only the acting layout serves every position.  The
+// dc1 holders of block 0 are backfilled with the rest of up: otherwise they
+// get no writes, and if the log is trimmed past osd.3 before Recovered,
+// block 0 stays in dc0 and choose_acting asserts that the backfill targets
+// are unchanged.
+TEST_F(TestECActingStretch, PartialZoneBlockSwap_KeepsCompleteActing) {
+  vector<int> up = {3, 4, 5, 0, 1, 2};
+  vector<int> acting = {0, 1, 2, 3, 4, 5};
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i = 0; i < 6; ++i) {
+    add_info(all_info, i, i, eversion_t(1, 10), eversion_t(1, 5));
+  }
+  for (int i = 0; i < 3; ++i) {
+    add_info(all_info, up[i], i, eversion_t(1, 10), eversion_t(1, 5));
+  }
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, acting) << ss.str();
+  EXPECT_EQ(backfill, (set<pg_shard_t>{
+    pg_shard_t(3, shard_id_t(0)), pg_shard_t(4, shard_id_t(1)),
+    pg_shard_t(5, shard_id_t(2)), pg_shard_t(0, shard_id_t(3)),
+    pg_shard_t(1, shard_id_t(4)), pg_shard_t(2, shard_id_t(5))})) << ss.str();
+
+  add_info(all_info, 3, 0, eversion_t(1, 4));
+  for (const auto &t : backfill) {
+    add_info(all_info, t.osd, t.shard.id, eversion_t(1, 10), eversion_t(1, 5));
+  }
+  want.clear();
+  backfill.clear();
+  acting_backfill.clear();
+  ostringstream ss2;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), true,
+       &want, &backfill, &acting_backfill, ss2);
+  EXPECT_EQ(want, up) << ss2.str();
+  EXPECT_TRUE(backfill.empty()) << ss2.str();
+}
+
+// Both zones hold every shard and up is empty: keep serving from acting
+// rather than swapping the zone blocks onto strays.
+TEST_F(TestECActingStretch, EqualHoldersNoUp_PrefersActing) {
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> up(6, N);
+  vector<int> acting = {0, 1, 2, 3, 4, 5};
+  vector<int> swapped = {3, 4, 5, 0, 1, 2};
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i = 0; i < 6; ++i) {
+    add_info(all_info, acting[i], i, eversion_t(1, 10), eversion_t(1, 5));
+    add_info(all_info, swapped[i], i, eversion_t(1, 10), eversion_t(1, 5));
+  }
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, acting) << ss.str();
+}
+
+// No zone holds k shards of either block.  acting keeps one shard of each
+// block, which is recoverable; serving block 0 from up[0]'s zone would
+// leave only one shard.
+TEST_F(TestECActingStretch, NoZoneWithKShards_KeepsMostShards) {
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> up = {3, N, N, N, N, N};
+  vector<int> acting = {0, N, N, N, 4, N};
+  map<pg_shard_t, pg_info_t> all_info;
+  add_info(all_info, 0, 0, eversion_t(1, 10), eversion_t(1, 5));
+  add_info(all_info, 4, 4, eversion_t(1, 10), eversion_t(1, 5));
+  add_info(all_info, 3, 0, eversion_t(1, 10), eversion_t(1, 5));
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, acting) << ss.str();
+}
+
+// No zone holds k shards of either block, and each zone holds one shard of
+// each.  acting keeps relative shards 2 and 0, which is recoverable; up
+// points at relative shard 1 in both zones, which is not.
+TEST_F(TestECActingStretch, NoZoneWithKShards_UpDoesNotCostRecoverability) {
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> up = {N, 3, N, N, 0, N};
+  vector<int> acting = {N, N, 0, 3, N, N};
+  map<pg_shard_t, pg_info_t> all_info;
+  add_info(all_info, 0, 2, eversion_t(1, 10), eversion_t(1, 5));
+  add_info(all_info, 0, 4, eversion_t(1, 10), eversion_t(1, 5));
+  add_info(all_info, 3, 1, eversion_t(1, 10), eversion_t(1, 5));
+  add_info(all_info, 3, 3, eversion_t(1, 10), eversion_t(1, 5));
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(2)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, acting) << ss.str();
+}
+
+// A single-zone stretch EC pool whose rule spreads the shards over both
+// datacenters (bucket_max 3) keeps every up OSD.
+TEST_F(TestECActingStretch, SingleZoneStretchPool_KeepsUpAcrossDatacenters) {
+  pg_pool_t single_zone = *osdmap->get_pg_pool(pool_id);
+  single_zone.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(1));
+  single_zone.peering_crush_bucket_count = 1;
+  vector<int> up = {0, 1, 2, 3, 4, 5};
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i = 0; i < 6; ++i) {
+    add_info(all_info, i, i, eversion_t(1, 10), eversion_t(1, 5));
+  }
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, up, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss, &single_zone);
+  EXPECT_EQ(want, up) << ss.str();
+  EXPECT_TRUE(backfill.empty()) << ss.str();
+}
+
+// up moves zone block 1 onto the dc0 OSDs serving block 0, and acting keeps
+// block 0 there with a lone shard 3 in dc1.  Once the up OSDs are
+// backfilled, Recovered's choose_acting must move to up: with want ==
+// acting it asserts that the backfill targets are unchanged.
+TEST_F(TestECActingStretch, BackfilledUpZoneBlock_JoinsWant) {
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> up = {N, N, N, 1, 0, 2};
+  vector<int> acting = {0, 1, 2, 3, N, N};
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i = 0; i < 4; ++i) {
+    add_info(all_info, acting[i], i, eversion_t(1, 10), eversion_t(1, 5));
+  }
+  for (int i = 3; i < 6; ++i) {
+    add_info(all_info, up[i], i, eversion_t());
+  }
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, acting) << ss.str();
+  const set<pg_shard_t> targets = {pg_shard_t(1, shard_id_t(3)),
+                                   pg_shard_t(0, shard_id_t(4)),
+                                   pg_shard_t(2, shard_id_t(5))};
+  ASSERT_EQ(backfill, targets) << ss.str();
+
+  for (const auto &t : targets) {
+    add_info(all_info, t.osd, t.shard.id, eversion_t(1, 10), eversion_t(1, 5));
+  }
+  want.clear();
+  backfill.clear();
+  acting_backfill.clear();
+  ostringstream ss2;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), true,
+       &want, &backfill, &acting_backfill, ss2);
+  EXPECT_EQ(want, up) << ss2.str();
+  EXPECT_TRUE(backfill.empty()) << ss2.str();
 }

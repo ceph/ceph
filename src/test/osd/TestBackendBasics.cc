@@ -113,57 +113,6 @@ public:
     PGBackendTestFixture::SetUp();
     initialize_scrub_infra();
   }
-
-  /**
-   * Simulate failure of multiple OSDs by marking them down in the OSDMap.
-   * This is similar to TestECFailover::simulate_osd_failure but handles
-   * multiple failures at once.
-   */
-  void simulate_multiple_osd_failures(const std::set<int>& failed_osds) {
-    auto new_osdmap = std::make_shared<OSDMap>();
-    new_osdmap->deepish_copy_from(*osdmap);
-
-    // Build new acting set with failed OSDs replaced by CRUSH_ITEM_NONE
-    std::vector<int> new_acting;
-    int total_osds = num_zones * (k + m);
-
-    for (int i = 0; i < total_osds; i++) {
-      bool is_failed = failed_osds.contains(i);
-      new_acting.push_back(is_failed ? CRUSH_ITEM_NONE : i);
-    }
-    
-    // Get the pool to use pgtemp_primaryfirst transformation
-    const pg_pool_t* pool = new_osdmap->get_pg_pool(pgid.pool());
-    ceph_assert(pool != nullptr);
-    
-    // For EC pools with optimizations, pgtemp_primaryfirst reorders the acting set
-    std::vector<int> transformed_acting = new_osdmap->pgtemp_primaryfirst(*pool, new_acting);
-    
-    // Use OSDMap::Incremental to set pg_temp and mark OSDs as down
-    OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
-    inc.fsid = new_osdmap->get_fsid();
-    
-    for (int failed_osd : failed_osds) {
-      inc.new_state[failed_osd] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
-    }
-    
-    // Convert to mempool vector for pg_temp
-    mempool::osdmap::vector<int> pg_temp_vec(transformed_acting.begin(), transformed_acting.end());
-    inc.new_pg_temp[pgid] = pg_temp_vec;
-
-    new_osdmap->apply_incremental(inc);
-    
-    // Finalize the CRUSH map
-    new_osdmap->crush->finalize();
-
-    // Update listener shardsets to remove failed shards
-    for (int failed_osd : failed_osds) {
-      remove_shard_from_all_listeners(pg_shard_t(failed_osd, shard_id_t(failed_osd)));
-    }
-
-    // update_osdmap will query the OSDMap to determine the primary
-    update_osdmap(new_osdmap);
-  }
 };
 
 // ---------------------------------------------------------------------------
@@ -1263,3 +1212,120 @@ INSTANTIATE_TEST_SUITE_P(
     return info.param.label;
   }
 );
+
+// ---------------------------------------------------------------------------
+// TestECStretchBackend: two-zone EC pool (k=4, m=2, 12 OSDs, abs shard == osd)
+// ---------------------------------------------------------------------------
+
+class TestECStretchBackend : public PGBackendTestFixture {
+public:
+  TestECStretchBackend() : PGBackendTestFixture(PGBackendTestFixture::EC) {
+    ec_plugin = "jerasure";
+    num_zones = 2;
+  }
+
+  void SetUp() override {
+    PGBackendTestFixture::SetUp();
+    initialize_scrub_infra();
+  }
+
+  std::set<int> ec_read_destinations() {
+    std::set<int> osds;
+    for (auto& [osd, msg] : get_primary_listener()->sent_messages_with_dest) {
+      if (msg->get_type() == MSG_OSD_EC_READ) {
+        osds.insert(osd);
+      }
+    }
+    return osds;
+  }
+};
+
+// A fast read on a zone-0 primary with every local shard up must be served
+// entirely from zone 0.
+TEST_F(TestECStretchBackend, FastReadZone0PrimaryStaysLocal) {
+  const std::string obj = "fast_read_zone0";
+  const std::string data(4 * stripe_unit, 'A');
+  create_and_write_verify(obj, data);
+  get_primary_listener()->sent_messages_with_dest.clear();
+
+  bufferlist out;
+  ASSERT_GE(read_object(obj, 0, data.size(), out, data.size(), true), 0);
+  ASSERT_EQ(out.to_str(), data);
+
+  auto osds = ec_read_destinations();
+  ASSERT_EQ(osds.size(), size_t(k + m));
+  for (int osd : osds) {
+    EXPECT_LT(osd, k + m) << "fast read went to remote-zone osd " << osd;
+  }
+}
+
+// Direct (sync) reads on zone-1 data shards: full stripe and sub-chunk.
+TEST_F(TestECStretchBackend, DirectReadZone1DataShards) {
+  const std::string obj = "direct_read_zone1";
+  std::string data;
+  for (int rel = 0; rel < k; rel++) {
+    data += std::string(stripe_unit, 'A' + rel);
+  }
+  create_and_write_verify(obj, data);
+  hobject_t hoid = make_test_object(obj);
+
+  for (int osd = k + m; osd < k + m + k; osd++) {
+    const int rel = osd - (k + m);
+    auto* ec_switch = dynamic_cast<ECSwitch*>(get_test_pg(osd, osd)->get_backend());
+    ASSERT_NE(ec_switch, nullptr);
+
+    bufferlist full;
+    EXPECT_GE(ec_switch->objects_read_local(hoid, 0, get_stripe_width(),
+                CEPH_OSD_RMW_FLAG_EC_DIRECT_READ, &full), 0);
+    EXPECT_EQ(full.to_str(), std::string(stripe_unit, 'A' + rel)) << "osd " << osd;
+
+    bufferlist part;
+    EXPECT_GE(ec_switch->objects_read_local(hoid, rel * stripe_unit + 512, 512,
+                CEPH_OSD_RMW_FLAG_EC_DIRECT_READ, &part), 0);
+    EXPECT_EQ(part.to_str(), std::string(512, 'A' + rel)) << "osd " << osd;
+  }
+}
+
+// EIO from a local shard when the local zone has exactly k shards: the
+// retry must fetch that relative shard from its zone-1 copy.
+TEST_F(TestECStretchBackend, SubReadErrorRetriesFromRemoteZone) {
+  const std::string obj = "read_error_zone";
+  const std::string data(4 * stripe_unit, 'A');
+  create_and_write_verify(obj, data);
+  simulate_multiple_osd_failures({2, 3});
+  ASSERT_EQ(get_primary_listener()->whoami_shard().osd, 0);
+
+  hobject_t hoid = make_test_object(obj);
+  get_osd_fixture(1)->store->inject_read_error(
+    ghobject_t(hoid, ghobject_t::NO_GEN, shard_id_t(1)), -EIO);
+  get_primary_listener()->sent_messages_with_dest.clear();
+
+  bufferlist out;
+  ASSERT_GE(read_object(obj, 0, data.size(), out, data.size()), 0);
+  ASSERT_EQ(out.to_str(), data);
+
+  int reads_to_osd1 = 0;
+  bool read_from_zone1 = false;
+  for (auto& [osd, msg] : get_primary_listener()->sent_messages_with_dest) {
+    if (msg->get_type() == MSG_OSD_EC_READ) {
+      reads_to_osd1 += osd == 1;
+      read_from_zone1 |= osd >= k + m;
+    }
+  }
+  EXPECT_EQ(reads_to_osd1, 1);
+  EXPECT_TRUE(read_from_zone1);
+}
+
+// Fast read on a zone-1 primary: the op completes after k replies while
+// redundant reads to other zone-1 shards are still in flight.
+TEST_F(TestECStretchBackend, FastReadZone1PrimaryWithReadsInFlight) {
+  const std::string obj = "fast_read_zone1";
+  const std::string data(4 * stripe_unit, 'A');
+  create_and_write_verify(obj, data);
+  simulate_multiple_osd_failures({0, 1, 2, 3, 4, 5});
+  ASSERT_GE(int(get_primary_listener()->whoami_shard().shard), k + m);
+
+  bufferlist out;
+  ASSERT_GE(read_object(obj, 0, data.size(), out, data.size(), true), 0);
+  ASSERT_EQ(out.to_str(), data);
+}
