@@ -132,6 +132,13 @@ void ECCommon::ReadPipeline::on_change() {
   in_progress_client_reads.clear();
 }
 
+void ECCommon::ReadPipeline::assert_idle() const {
+  // shard_to_read_map is not checked: it keeps an (often empty) set per
+  // shard, so it is bounded by the number of shards, not by I/O.
+  ceph_assert(tid_to_read_map.empty());
+  ceph_assert(in_progress_client_reads.empty());
+}
+
 std::pair<const shard_id_set, const shard_id_set>
 ECCommon::ReadPipeline::get_readable_writable_shard_id_sets() {
   shard_id_set readable;
@@ -1192,6 +1199,14 @@ void ECCommon::RMWPipeline::on_change2() {
   extent_cache.on_change2();
 }
 
+void ECCommon::RMWPipeline::assert_idle() const {
+  // pending_roll_forward is not checked: it is a set of shard ids, bounded
+  // by k+m, and legitimately carries over between writes.
+  ceph_assert(tid_to_op_map.empty());
+  ceph_assert(waiting_commit.empty());
+  extent_cache.assert_idle();
+}
+
 void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
   next_write_all_shards = true;
   extent_cache.add_on_write(std::move(cb));
@@ -1210,6 +1225,10 @@ ECCommon::RecoveryBackend::RecoveryBackend(
     sinfo(sinfo),
     read_pipeline(read_pipeline),
     parent(parent) {}
+
+void ECCommon::RecoveryBackend::assert_idle() const {
+  ceph_assert(recovery_ops.empty());
+}
 
 void ECCommon::RecoveryBackend::_failed_push(const hobject_t &hoid,
                                              ECCommon::read_result_t &res) {
