@@ -10,6 +10,7 @@
 
 #include "gtest/gtest.h"
 #include "mon/OSDMonitor.h"
+#include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "crush/CrushWrapper.h"
 #include "common/ceph_context.h"
@@ -389,6 +390,33 @@ TEST_F(OSDMonitorStretchTest, EmptyPoolSetSuccess) {
   EXPECT_EQ(errcode, 0);
 }
 
+// num_zones=1 was added to the default EC profile string in
+// global.yaml.in (commit "mon: Add num_zones into EC profile.") under an
+// old design where the erasure-code layer read num_zones back out of the
+// ErasureCodeProfile map. That design was superseded: every real consumer
+// of num_zones (ErasureCode::create_rule, OSDMonitor's crush_rule_create_*
+// helpers, pool_opts_t::NUM_ZONES) now takes it as an explicit function
+// parameter or a separate pool option, never a profile-map lookup. Nothing
+// reads "num_zones" back out of a profile map any more, so the key is dead
+// weight that still leaks into every default/created EC profile and shows
+// up in `ceph osd erasure-code-profile get`.
+//
+// get_erasure_code_profile_default() is exactly the function both the
+// mkfs bootstrap path and OSDMonitor::prepare_new_pool's auto-profile path
+// use to materialize that default profile map.
+TEST_F(OSDMonitorStretchTest, DefaultProfileHasNoDeadNumZonesKey) {
+  OSDMap osdmap;
+  map<string,string> profile_map;
+  stringstream ss;
+
+  int r = osdmap.get_erasure_code_profile_default(cct.get(), profile_map, &ss);
+
+  ASSERT_EQ(r, 0) << ss.str();
+  EXPECT_EQ(profile_map.count("num_zones"), 0u)
+    << "default EC profile still carries a dead 'num_zones' key that no "
+    << "code reads back out of a profile map";
+}
+
 TEST_F(OSDMonitorValidateStretchModeNewPoolTest, RejectsRuleWithWrongBarrierType) {
   int r = validate_stretch_mode_new_pool(stretch_replica_rule, 2, crush.get_type_id(zone_failure_domain_name), "datacenter", &ss);
 
@@ -417,6 +445,68 @@ TEST_F(OSDMonitorValidateStretchModeNewPoolTest, RejectsRuleWithWrongNumberOfSit
     << "RejectsRuleWithWrongNumberOfSites: " << ss.str();
   EXPECT_NE(ss.str().find("stretch mode requires exactly 3"), string::npos)
     << "RejectsRuleWithWrongNumberOfSites: " << ss.str();
+}
+
+// A stretch rule over the configured zones is accepted, with or without a device class.
+TEST_F(OSDMonitorValidateStretchModeNewPoolTest, AcceptsRuleOverConfiguredZones) {
+  int zone_type = crush.get_type_id(zone_failure_domain_name);
+  pg_pool_t existing;
+  existing.type = pg_pool_t::TYPE_REPLICATED;
+  existing.crush_rule = stretch_replica_rule;
+  existing.peering_crush_bucket_count = 2;
+  existing.peering_crush_bucket_barrier = zone_type;
+  pools[1] = existing;
+
+  EXPECT_EQ(0, validate_stretch_mode_new_pool(stretch_ec_rule, 2, zone_type,
+                                              zone_failure_domain_name, &ss))
+    << ss.str();
+
+  for (int i = 0; i < 12; i++) {
+    ASSERT_GE(crush.update_device_class(i, "ssd", "osd." + std::to_string(i), &ss), 0);
+  }
+  int ssd_rule = crush.add_simple_stretch_rule("stretch_ec_ssd_rule", root_name,
+    zone_failure_domain_name, osd_failure_domain_name, 2, 6, "ssd", "indep",
+    pg_pool_t::TYPE_ERASURE, force, &ss);
+  ASSERT_GE(ssd_rule, 0) << ss.str();
+  EXPECT_EQ(0, validate_stretch_mode_new_pool(ssd_rule, 2, zone_type,
+                                              zone_failure_domain_name, &ss))
+    << ss.str();
+}
+
+// Rules over other zone buckets than existing stretch pools, or unknown types, are rejected.
+TEST_F(OSDMonitorValidateStretchModeNewPoolTest, RejectsDifferentZonesAndUnknownType) {
+  int zone_type = crush.get_type_id(zone_failure_domain_name);
+  pg_pool_t existing;
+  existing.type = pg_pool_t::TYPE_REPLICATED;
+  existing.crush_rule = stretch_replica_rule;
+  existing.peering_crush_bucket_count = 2;
+  existing.peering_crush_bucket_barrier = zone_type;
+  pools[1] = existing;
+
+  int other_root = 0;
+  crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+                   10, 0, NULL, NULL, &other_root);
+  crush.set_item_name(other_root, "other");
+  crush.set_max_devices(20);
+  for (int osd = 12; osd < 20; osd++) {
+    string zone = osd < 16 ? "zone3" : "zone4";
+    crush.insert_item(g_ceph_context, osd, 1.0, "osd." + std::to_string(osd),
+      map<string, string>{{"host", "other-host" + std::to_string(osd)},
+                          {"zone", zone}, {"root", "other"}});
+  }
+  int other_rule = crush.add_simple_stretch_rule("other_stretch_rule", "other",
+    zone_failure_domain_name, osd_failure_domain_name, 2, 2, "", mode,
+    pg_pool_t::TYPE_REPLICATED, force, &ss);
+  ASSERT_GE(other_rule, 0) << ss.str();
+
+  EXPECT_EQ(-EINVAL, validate_stretch_mode_new_pool(other_rule, 2, zone_type,
+                                                    zone_failure_domain_name, &ss));
+  EXPECT_NE(ss.str().find("uses different"), string::npos) << ss.str();
+
+  stringstream ss2;
+  EXPECT_EQ(-EINVAL, validate_stretch_mode_new_pool(stretch_ec_rule, 2, zone_type,
+                                                    "nosuchtype", &ss2));
+  EXPECT_NE(ss2.str().find("does not exist"), string::npos) << ss2.str();
 }
 
 int main(int argc, char **argv) {
