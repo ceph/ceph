@@ -474,6 +474,10 @@ void RGWHTTPClient::_set_write_paused(bool pause)
   ceph_assert(ceph_mutex_is_locked(req_data->lock));
   
   RGWHTTPManager *mgr = req_data->mgr;
+  if (!mgr) {
+    // request already finished; nothing to pause/resume
+    return;
+  }
   if (pause == req_data->write_paused) {
     return;
   }
@@ -489,6 +493,10 @@ void RGWHTTPClient::_set_read_paused(bool pause)
   ceph_assert(ceph_mutex_is_locked(req_data->lock));
   
   RGWHTTPManager *mgr = req_data->mgr;
+  if (!mgr) {
+    // request already finished; nothing to pause/resume
+    return;
+  }
   if (pause == req_data->read_paused) {
     return;
   }
