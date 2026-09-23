@@ -1670,3 +1670,22 @@ TEST(ECUtil, get_shard_zone_consistency_with_get_rel_shard)
     ASSERT_EQ(shard_id, reconstructed);
   }
 }
+
+// stripe_info_t::get_num_zones() and pg_pool_t::get_num_zone() are two
+// near-identically named helpers answering the same question ("how many
+// zones does this pool have?") for the same unset-option case, and they
+// must not silently disagree on the default. A default pg_pool_t leaves
+// pool_opts_t::NUM_ZONES unset, which is exactly the "no zones configured"
+// case both helpers claim to handle.
+TEST(ECUtil, get_num_zones_matches_pg_pool_t_get_num_zone_default)
+{
+  pg_pool_t pool;
+  stripe_info_t sinfo(2, 1, 4096 * 2, &pool);
+
+  // pg_pool_t treats "unset" as a single-zone pool.
+  ASSERT_EQ(1, pool.get_num_zone());
+
+  // stripe_info_t must agree with pg_pool_t on the very same question,
+  // for the very same pool.
+  ASSERT_EQ(pool.get_num_zone(), (int)sinfo.get_num_zones());
+}
