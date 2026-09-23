@@ -91,6 +91,9 @@ bool ECOmapJournal::remove_entry(const hobject_t &hoid, const ECOmapJournalEntry
         ldpp_dout(&dpp, 20) << __func__ << ": hoid=" << hoid
                             << " version=" << entry.version << " found_unprocessed=true" << dendl;
         entry_list.erase(it);
+        if (entry_list.empty()) {
+          entries.erase(it_map);
+        }
         if (const auto header_it = header_map.find(hoid);
           header_it != header_map.end() &&
             header_it->second.version == entry.version) {
@@ -115,6 +118,9 @@ bool ECOmapJournal::remove_entry_by_version(const hobject_t &hoid, const eversio
     for (auto it = entry_list.begin(); it != entry_list.end(); ++it) {
       if (it->version == version) {
         entry_list.erase(it);
+        if (entry_list.empty()) {
+          entries.erase(it_map);
+        }
         if (const auto header_it = header_map.find(hoid);
           header_it != header_map.end() &&
             header_it->second.version == version) {
@@ -184,25 +190,12 @@ bool ECOmapJournal::has_omap_updates(const hobject_t &hoid) const {
   return false;
 }
 
-// Function to get specific object's entries, if not present, creates an empty list
-std::list<ECOmapJournalEntry>& ECOmapJournal::get_entries(const hobject_t &hoid) {
-  return entries[hoid];
-}
-
 std::list<ECOmapJournalEntry> ECOmapJournal::snapshot_entries(const hobject_t &hoid) const {
   if (const auto it = entries.find(hoid);
     it != entries.end()) {
     return it->second;
   }
   return {};
-}
-
-ECOmapJournal::const_iterator ECOmapJournal::begin_entries(const hobject_t &hoid) const {
-  return entries.at(hoid).begin();
-}
-
-ECOmapJournal::const_iterator ECOmapJournal::end_entries(const hobject_t &hoid) const {
-  return entries.at(hoid).end();
 }
 
 std::optional<ceph::buffer::list> ECOmapJournal::get_updated_header(const hobject_t &hoid) {
@@ -220,23 +213,26 @@ ECOmapJournal::get_value_updates(const hobject_t &hoid) {
 }
 
 void ECOmapJournal::process_entries(const hobject_t &hoid) {
-  if (!has_unprocessed_entries(hoid)) {
+  const auto it_map = entries.find(hoid);
+  if (it_map == entries.end()) {
     ldpp_dout(&dpp, 20) << __func__ << ": hoid=" << hoid
                         << " no unprocessed entries" << dendl;
     return;
   }
   ldpp_dout(&dpp, 20) << __func__ << ": hoid=" << hoid
-                      << " processing " << entries_size(hoid) << " entries" << dendl;
+                      << " processing " << it_map->second.size() << " entries" << dendl;
 
-  for (auto entry_iter = begin_entries(hoid);
-        entry_iter != end_entries(hoid); ++entry_iter) {
+  for (auto entry_iter = it_map->second.cbegin();
+        entry_iter != it_map->second.cend(); ++entry_iter) {
     ECOmapRemovedRanges removed_ranges(entry_iter->version);
 
     // Clear omap if specified
     if (entry_iter->clear_omap) {
       // Mark all keys as removed
-      for (auto &[_, value] : key_map[hoid]) {
-        value.update_value(entry_iter->version, std::nullopt);
+      if (const auto km_it = key_map.find(hoid); km_it != key_map.end()) {
+        for (auto &[_, value] : km_it->second) {
+          value.update_value(entry_iter->version, std::nullopt);
+        }
       }
 
       // Mark entire range as removed
@@ -263,70 +259,69 @@ void ECOmapJournal::process_entries(const hobject_t &hoid) {
     }
 
     // Process key updates
-    auto &obj_map = key_map[hoid];
-    for (const auto & [type, update] : entry_iter->omap_updates) {
-      auto iter = update.cbegin();
-      switch (type) {
-        case OmapUpdateType::Insert: {
-          std::map<std::string, ceph::buffer::list> vals;
-          decode(vals, iter);
-          // Insert key value pairs into update_map
-          for (auto it = vals.begin(); it != vals.end(); ++it) {
-            const auto &key = it->first;
-            const auto &val = it->second;
-            
-            // Check if key already exists in key map
-            auto entry_it = obj_map.find(key);
-            if (entry_it != obj_map.end()) {
-              // Update existing value
-              entry_it->second.update_value(entry_iter->version, val);
-            } else {
-              // Insert new value
-              obj_map.emplace(key, ECOmapValue(entry_iter->version, val));
+    if (!entry_iter->omap_updates.empty()) {
+      auto &obj_map = key_map[hoid];
+      for (const auto & [type, update] : entry_iter->omap_updates) {
+        auto iter = update.cbegin();
+        switch (type) {
+          case OmapUpdateType::Insert: {
+            std::map<std::string, ceph::buffer::list> vals;
+            decode(vals, iter);
+            // Insert key value pairs into update_map
+            for (auto it = vals.begin(); it != vals.end(); ++it) {
+              const auto &key = it->first;
+              const auto &val = it->second;
+              // Check if key already exists in key map
+              auto entry_it = obj_map.find(key);
+              if (entry_it != obj_map.end()) {
+                // Update existing value
+                entry_it->second.update_value(entry_iter->version, val);
+              } else {
+                // Insert new value
+                obj_map.emplace(key, ECOmapValue(entry_iter->version, val));
+              }
             }
+            break;
           }
-          break;
-        }
-        case OmapUpdateType::Remove: {
-          std::set<std::string> keys;
-          decode(keys, iter);
-          // Mark keys in key_map as removed
-          for (const auto &key : keys) {
-            // Check if key already exists in key map
-            if (auto entry_it = obj_map.find(key);
-              entry_it != obj_map.end()) {
-              // Update existing value to null
-              entry_it->second.update_value(entry_iter->version, std::nullopt);
-            } else {
-              // Insert new null value
-              obj_map.emplace(key, ECOmapValue(entry_iter->version, std::nullopt));
+          case OmapUpdateType::Remove: {
+            std::set<std::string> keys;
+            decode(keys, iter);
+            // Mark keys in key_map as removed
+            for (const auto &key : keys) {
+              // Check if key already exists in key map
+              if (auto entry_it = obj_map.find(key);
+                entry_it != obj_map.end()) {
+                // Update existing value to null
+                entry_it->second.update_value(entry_iter->version, std::nullopt);
+              } else {
+                // Insert new null value
+                obj_map.emplace(key, ECOmapValue(entry_iter->version, std::nullopt));
+              }
             }
+            break;
           }
-          break;
-        }
-        case OmapUpdateType::RemoveRange: {
-          std::string key_begin, key_end;
-          decode(key_begin, iter);
-          decode(key_end, iter);
-          
-          // Add removed range
-          std::string start = key_begin;
-          std::optional<std::string> end = key_end;
-          removed_ranges.add_range(start, end);
-
-          // Mark keys in key_map as removed that fall within the removed range
-          auto map_it = obj_map.lower_bound(key_begin);
-          while (map_it != obj_map.end()) {
-            if (map_it->first >= key_end) {
-              break;
+          case OmapUpdateType::RemoveRange: {
+            std::string key_begin, key_end;
+            decode(key_begin, iter);
+            decode(key_end, iter);
+            // Add removed range
+            std::string start = key_begin;
+            std::optional<std::string> end = key_end;
+            removed_ranges.add_range(start, end);
+            // Mark keys in key_map as removed that fall within the removed range
+            auto map_it = obj_map.lower_bound(key_begin);
+            while (map_it != obj_map.end()) {
+              if (map_it->first >= key_end) {
+                break;
+              }
+              map_it->second.update_value(entry_iter->version, std::nullopt);
+              ++map_it;
             }
-            map_it->second.update_value(entry_iter->version, std::nullopt);
-            ++map_it;
+            break;
           }
-          break;
+          default:
+            ceph_abort_msg("Unknown OmapUpdateType");
         }
-        default:
-          ceph_abort_msg("Unknown OmapUpdateType");
       }
     }
     if (!removed_ranges.ranges.empty()) {
@@ -395,6 +390,10 @@ bool ECOmapJournal::remove_processed_entry(const hobject_t &hoid, const ECOmapJo
       }
     }
   }
+  // Do not keep a node per object once nothing is left for it.
+  if (obj_map.empty()) {
+    key_map.erase(hoid);
+  }
 
   // Remove removed ranges if version matches
   if (const auto removed_ranges_it = removed_ranges_map.find(hoid);
@@ -405,6 +404,9 @@ bool ECOmapJournal::remove_processed_entry(const hobject_t &hoid, const ECOmapJo
         removed_ranges_list.erase(rr_it);
         break;
       }
+    }
+    if (removed_ranges_list.empty()) {
+      removed_ranges_map.erase(removed_ranges_it);
     }
   } else {
     return false;
@@ -430,6 +432,9 @@ bool ECOmapJournal::remove_processed_entry_by_version(const hobject_t &hoid, con
         ++it;
       }
     }
+    if (key_map_it->second.empty()) {
+      key_map.erase(key_map_it);
+    }
   }
 
   // Remove removed ranges if version matches
@@ -441,6 +446,9 @@ bool ECOmapJournal::remove_processed_entry_by_version(const hobject_t &hoid, con
         removed_ranges_list.erase(rr_it);
         break;
       }
+    }
+    if (removed_ranges_list.empty()) {
+      removed_ranges_map.erase(removed_ranges_it);
     }
   } else {
     return false;
