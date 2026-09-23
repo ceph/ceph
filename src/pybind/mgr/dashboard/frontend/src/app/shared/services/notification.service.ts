@@ -197,9 +197,9 @@ export class NotificationService {
   private _showQueued() {
     this._getUnifiedTitleQueue().forEach((config) => {
       const notification = new CdNotification(config);
-
-      if (!notification.isFinishedTask) {
-        this.save(notification);
+      if (!notification.isFinishedTask || notification.type === NotificationType.error) {
+        const storedId = this.save(notification);
+        notification.id = storedId;
       }
       this._showToasty(notification);
     });

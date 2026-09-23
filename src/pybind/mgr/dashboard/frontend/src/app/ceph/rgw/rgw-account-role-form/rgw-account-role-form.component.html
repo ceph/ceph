@@ -1,4 +1,8 @@
-<cds-modal size="md" [open]="open" [hasScrollingContent]="false" (overlaySelected)="closeModal()">
+<cds-modal
+  size="md"
+  [open]="open"
+  (overlaySelected)="closeModal()"
+>
   <cds-modal-header (closeSelect)="closeModal()">
     @if (isEdit) {
       <h4 cdsModalHeaderLabel class="cds--type-label-01" i18n>Role</h4>
@@ -15,8 +19,12 @@
     }
   </cds-modal-header>
 
-  <form class="form" #formDir="ngForm" [formGroup]="form">
-    <div cdsModalContent>
+  <section cdsModalContent>
+    <form
+      class="form"
+      #formDir="ngForm"
+      [formGroup]="form"
+    >
       @if (!isEdit) {
       <!-- Account -->
       <div class="form-item">
@@ -171,13 +179,13 @@
         </ng-template>
       </div>
       }
-    </div>
+    </form>
+  </section>
 
-    <cd-form-button-panel
-      (submitActionEvent)="onSubmit()"
-      [form]="form"
-      [submitText]="isEdit ? 'Save' : 'Create'"
-      [modalForm]="true"
-    ></cd-form-button-panel>
-  </form>
+  <cd-form-button-panel
+    (submitActionEvent)="onSubmit()"
+    [form]="form"
+    [submitText]="isEdit ? 'Save' : 'Create'"
+    [modalForm]="true"
+  ></cd-form-button-panel>
 </cds-modal>
