@@ -565,36 +565,101 @@ def get_credits(session, pr, pr_req):
 
     return "\n".join(credits), new_new_contributors
 
-def format_parity_row(left_sha, left_msg, right_sha, right_msg, is_missing=False, is_extra=False, right_prefix=""):
+def align_bp_src_commits(bp_commits, src_commits):
+    """
+    bp_commits: list of dicts {'sha', 'summary', 'orig_sha'}
+    src_commits: list of dicts {'sha', 'summary'}
+    Returns list of tuples: (bp_dict or None, src_dict or None, rtype)
+    where rtype is one of: 'matched', 'ooo_src_slot', 'ooo_bp_slot', 'missing', 'extra'
+    """
+    src_shas = [s['sha'] for s in src_commits]
+    all_bp_orig_shas = set(b['orig_sha'] for b in bp_commits if b.get('orig_sha'))
+
+    bp_keys = []
+    for i, b in enumerate(bp_commits):
+        o_sha = b.get('orig_sha')
+        if o_sha and o_sha in src_shas:
+            bp_keys.append(o_sha)
+        else:
+            bp_keys.append(f"bp_extra_{i}_{b['sha']}")
+
+    matcher = difflib.SequenceMatcher(None, bp_keys, src_shas)
+
+    rows = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':
+            for b_idx, s_idx in zip(range(i1, i2), range(j1, j2)):
+                rows.append((bp_commits[b_idx], src_commits[s_idx], 'matched'))
+        elif tag in ('replace', 'delete', 'insert'):
+            bp_sub = bp_commits[i1:i2]
+            src_sub = src_commits[j1:j2]
+
+            for s in src_sub:
+                if s['sha'] in all_bp_orig_shas:
+                    rows.append((None, s, 'ooo_src_slot'))
+                else:
+                    rows.append((None, s, 'missing'))
+
+            for b in bp_sub:
+                o_sha = b.get('orig_sha')
+                if o_sha and o_sha in src_shas:
+                    rows.append((b, None, 'ooo_bp_slot'))
+                else:
+                    rows.append((b, None, 'extra'))
+
+    return rows
+
+def format_parity_row(left_sha, left_msg, right_sha, right_msg, is_missing=False, is_extra=False, is_ooo_src=False, is_ooo_bp=False, right_prefix=""):
     """Helper to format visualizer rows."""
     if is_missing:
         left_col = "\033[91m<<<< MISSING IN BACKPORT >>>>\033[0m"
         visible_left_len = 29
-    else:
+    elif is_ooo_src:
+        left_col = "\033[91m<<<< OUT OF ORDER >>>>\033[0m"
+        visible_left_len = 19
+    elif left_sha and left_msg:
         l_msg = (left_msg[:25] + '...') if len(left_msg) > 28 else left_msg
-        left_col = f"[ {left_sha[:8]} ] {l_msg}"
-        visible_left_len = len(left_col)
+        if is_ooo_bp:
+            left_col = f"\033[91m[ {left_sha[:8]} ] {l_msg}\033[0m"
+        else:
+            left_col = f"[ {left_sha[:8]} ] {l_msg}"
+        visible_left_len = len(f"[ {left_sha[:8]} ] {l_msg}")
+    else:
+        left_col = ""
+        visible_left_len = 0
 
     if is_extra:
-        right_col = "\033[93m<<<< EXTRA IN BACKPORT >>>>\033[0m"
-    else:
+        right_col = f"{right_prefix}\033[93m<<<< EXTRA IN BACKPORT >>>>\033[0m"
+    elif is_ooo_bp:
+        right_col = f"{right_prefix}\033[91m<<<< OUT OF ORDER >>>>\033[0m"
+    elif right_sha and right_msg:
         r_msg = (right_msg[:20] + '...') if len(right_msg) > 23 else right_msg
         right_col = f"{right_prefix}[ {right_sha[:8]} ] {r_msg}"
+    else:
+        right_col = ""
 
     padding = max(1, 47 - visible_left_len)
     return f"{left_col}{' ' * padding}{right_col}"
 
-def format_parity_row_md(left_sha, left_msg, right_sha, right_msg, is_missing=False, is_extra=False, right_prefix=""):
+def format_parity_row_md(left_sha, left_msg, right_sha, right_msg, is_missing=False, is_extra=False, is_ooo_src=False, is_ooo_bp=False, right_prefix=""):
     """Helper to format visualizer rows for Markdown tables without truncation."""
     if is_missing:
         left_col = "**<<<< MISSING IN BACKPORT >>>>**"
-    else:
+    elif is_ooo_src:
+        left_col = "**<<<< OUT OF ORDER >>>>**"
+    elif left_sha and left_msg:
         left_col = f"{left_sha} {left_msg}"
+    else:
+        left_col = ""
 
     if is_extra:
         right_col = "**<<<< EXTRA IN BACKPORT >>>>**"
-    else:
+    elif is_ooo_bp:
+        right_col = "**<<<< OUT OF ORDER >>>>**"
+    elif right_sha and right_msg:
         right_col = f"{right_sha} {right_msg}"
+    else:
+        right_col = ""
 
     source_pr = f"**{right_prefix.strip()}**" if right_prefix.strip() else ""
 
@@ -805,8 +870,7 @@ class CommitParityCheck(BaseAuditCheck):
                         if merge_sha not in analyzed_merges:
                             analyzed_merges.add(merge_sha)
                             # Extract the original PR commits using merge parents (merge^1..merge^2)
-                            orig_pr_commits = G.git.rev_list(f"{merge_sha}^1..{merge_sha}^2").splitlines()
-                            orig_pr_commits.reverse() # chronological
+                            orig_pr_commits = G.git.rev_list(f"{merge_sha}^1..{merge_sha}^2", "--topo-order", "--reverse").splitlines()
 
                             merge_msg = G.commit(merge_sha).summary
                             m_pr = re.search(r'(?:Merge PR|Merge pull request) #(\d+)', merge_msg, re.IGNORECASE)
@@ -869,50 +933,81 @@ class CommitParityCheck(BaseAuditCheck):
 
             visualizer_lines.append(f"BACKPORT PR #{pr}".ljust(47) + "SOURCE PR / STATUS")
             visualizer_lines.append("-" * 80)
-            
-            bp_commits_mapped = set()
-            bp_to_source = {}
+
+            all_mapped_bp_shas = set()
             for pr_name, commit_list in pr_mapping.items():
                 for item in commit_list:
                     if item.get('bp_commit'):
-                        bp_to_source[item['bp_commit'].hexsha] = (str(pr_name), item)
-                        bp_commits_mapped.add(item['bp_commit'].hexsha)
+                        all_mapped_bp_shas.add(item['bp_commit'].hexsha)
 
             ordered_prs = []
             for bp_c in pr_commits:
-                if bp_c.hexsha in bp_to_source:
-                    p_name = bp_to_source[bp_c.hexsha]
+                for pr_name, commit_list in pr_mapping.items():
+                    p_name = str(pr_name)
                     if p_name not in ordered_prs:
-                        ordered_prs.append(p_name)
+                        if any(item.get('bp_commit') and item['bp_commit'].hexsha == bp_c.hexsha for item in commit_list):
+                            ordered_prs.append(p_name)
             for pr_name in sorted(list(pr_mapping.keys()), key=lambda x: str(x)):
                 p_name = str(pr_name)
                 if p_name not in ordered_prs:
                     ordered_prs.append(p_name)
-            
+
             first_pr_block = True
             for pr_name_str in ordered_prs:
                 dict_key = next((k for k in pr_mapping.keys() if str(k) == pr_name_str), None)
                 if dict_key is None:
                     continue
-                
+
                 if not first_pr_block:
                     visualizer_lines.append("")
                 first_pr_block = False
 
+                src_commits = [
+                    {'sha': item['o_sha'], 'summary': item['o_summary']}
+                    for item in pr_mapping[dict_key]
+                ]
+
+                bp_commits_for_pr = []
+                for bp_c in pr_commits:
+                    m_item = next((item for item in pr_mapping[dict_key] if item.get('bp_commit') and item['bp_commit'].hexsha == bp_c.hexsha), None)
+                    if m_item:
+                        bp_commits_for_pr.append({
+                            'sha': bp_c.hexsha,
+                            'summary': bp_c.summary,
+                            'orig_sha': m_item['o_sha']
+                        })
+
+                aligned_rows = align_bp_src_commits(bp_commits_for_pr, src_commits)
+
                 first_commit_in_pr = True
-                for item in pr_mapping[dict_key]:
+                for b, s, rtype in aligned_rows:
                     prefix = f"{pr_name_str} " if first_commit_in_pr else " " * (len(pr_name_str) + 1)
                     first_commit_in_pr = False
 
-                    bp_c = item.get('bp_commit')
-                    if bp_c:
-                        visualizer_lines.append(format_parity_row(bp_c.hexsha, bp_c.summary, item['o_sha'], item['o_summary'], right_prefix=prefix))
-                        visualizer_md_lines.append(format_parity_row_md(bp_c.hexsha, bp_c.summary, item['o_sha'], item['o_summary'], right_prefix=prefix))
-                    else:
-                        visualizer_lines.append(format_parity_row(None, None, item['o_sha'], item['o_summary'], is_missing=True, right_prefix=prefix))
-                        visualizer_md_lines.append(format_parity_row_md(None, None, item['o_sha'], item['o_summary'], is_missing=True, right_prefix=prefix))
+                    b_sha = b['sha'] if b else None
+                    b_msg = b['summary'] if b else None
+                    s_sha = s['sha'] if s else None
+                    s_msg = s['summary'] if s else None
 
-            extra_commits = [c for c in pr_commits if c.hexsha not in bp_commits_mapped]
+                    is_missing = (rtype == 'missing')
+                    is_extra = (rtype == 'extra')
+                    is_ooo_src = (rtype == 'ooo_src_slot')
+                    is_ooo_bp = (rtype == 'ooo_bp_slot')
+
+                    visualizer_lines.append(format_parity_row(
+                        b_sha, b_msg, s_sha, s_msg,
+                        is_missing=is_missing, is_extra=is_extra,
+                        is_ooo_src=is_ooo_src, is_ooo_bp=is_ooo_bp,
+                        right_prefix=prefix
+                    ))
+                    visualizer_md_lines.append(format_parity_row_md(
+                        b_sha, b_msg, s_sha, s_msg,
+                        is_missing=is_missing, is_extra=is_extra,
+                        is_ooo_src=is_ooo_src, is_ooo_bp=is_ooo_bp,
+                        right_prefix=prefix
+                    ))
+
+            extra_commits = [c for c in pr_commits if c.hexsha not in all_mapped_bp_shas]
             if extra_commits:
                 if not first_pr_block:
                     visualizer_lines.append("")
@@ -1084,7 +1179,7 @@ class CommitParityCheck(BaseAuditCheck):
         if vis_md:
             ctx.report.set_visualizer(vis_md)
 
-        # Check for scrambled commits relative to the original PR chronological sequences
+        # Check for scrambled commits relative to the original PR topological sequences
         bp_to_source = {}
         for pr_name, commit_list in mapping['pr_mapping'].items():
             for item in commit_list:
@@ -1115,14 +1210,14 @@ class CommitParityCheck(BaseAuditCheck):
                 pr_bp_indices = [idx for name, idx in mapped_sequence if name == pr_name_str]
                 if pr_bp_indices != sorted(pr_bp_indices):
                     is_scrambled = True
-                    scramble_reasons.append(f"Commits from {pr_name_str} are applied out of their original chronological order.")
+                    scramble_reasons.append(f"Commits from {pr_name_str} are applied out of their original topological order.")
 
         if is_scrambled:
             scramble_msg = "### Automated Backport Parity Review - Scrambled Commits Detected\n\n"
             scramble_msg += "The backport contains commits that are scrambled or out of order relative to the original PR(s).\n\n"
             for reason in scramble_reasons:
                 scramble_msg += f"* {reason}\n"
-            scramble_msg += "\nBackports should apply cherry-picks in the exact same chronological order as they were merged into the main branch to ensure clean history and avoid subtle regression risks.\n"
+            scramble_msg += "\nBackports should apply cherry-picks in the exact same topological order as they were merged into the main branch to ensure clean history and avoid subtle regression risks.\n"
 
             if ctx.args.ci_mode:
                 ctx.report.add("Scrambled Commits", scramble_msg)
@@ -2277,8 +2372,8 @@ def build_branch(args):
 
         qa_tracker_description.append(get_pr_tracker_string(session, pr, response))
         message = "Merge PR #%d into %s\n\n* %s:\n" % (pr, merge_branch_name, remote_ref)
-        pr_commits = list(G.iter_commits(rev="HEAD.."+str(tip)))
-        pr_commits.reverse() # chronological order for simulation
+        pr_commits = list(G.iter_commits(rev="HEAD.."+str(tip), topo_order=True))
+        pr_commits.reverse() # topological order for simulation
 
         audit_passed = True
         if args.final_merge or args.audit:
@@ -2299,7 +2394,7 @@ def build_branch(args):
             # Skip merge
             continue
 
-        for commit in reversed(pr_commits): # back to reverse-chronological for the message
+        for commit in reversed(pr_commits): # back to reverse-topological for the message
             message = message + ("\t%s\n" % commit.summary)
             # Get tracker issues / bzs cited so the PTL can do updates
             short = commit.hexsha[:8]
