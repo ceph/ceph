@@ -45,12 +45,26 @@ unsigned posix_sync_clamp_iodepth(const DoutPrefixProvider* dpp, unsigned qd,
 bool posix_uring_ensure_ring(const DoutPrefixProvider* dpp);
 
 class UringReadWindow {
+public:
+  struct ReadExtent {
+    int fd;
+    int64_t ofs;
+    int64_t len;
+    // Keep a multipart file open until its read completes.
+    std::shared_ptr<void> owner;
+  };
+  // Map an object offset to a file extent, bounded by the requested length.
+  // Return a negative error, or zero with len == 0 at EOF.
+  using ResolveRead = std::function<int(int64_t, int64_t, ReadExtent&)>;
+
+private:
   struct Impl;
   std::unique_ptr<Impl> impl;
 
 public:
   UringReadWindow(const DoutPrefixProvider* dpp, optional_yield y,
-                  int fd, unsigned qd, int64_t chunk_size, bool direct_io);
+                  int fd, unsigned qd, int64_t chunk_size, bool direct_io,
+                  ResolveRead resolve = {});
   ~UringReadWindow();
   UringReadWindow(const UringReadWindow&) = delete;
   UringReadWindow& operator=(const UringReadWindow&) = delete;
