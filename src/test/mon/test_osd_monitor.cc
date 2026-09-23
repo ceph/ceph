@@ -10,6 +10,7 @@
 
 #include "gtest/gtest.h"
 #include "mon/OSDMonitor.h"
+#include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "crush/CrushWrapper.h"
 #include "common/ceph_context.h"
@@ -387,6 +388,33 @@ TEST_F(OSDMonitorStretchTest, EmptyPoolSetSuccess) {
   
   EXPECT_TRUE(okay) << "Empty pool set should succeed: " << ss.str();
   EXPECT_EQ(errcode, 0);
+}
+
+// num_zones=1 was added to the default EC profile string in
+// global.yaml.in (commit "mon: Add num_zones into EC profile.") under an
+// old design where the erasure-code layer read num_zones back out of the
+// ErasureCodeProfile map. That design was superseded: every real consumer
+// of num_zones (ErasureCode::create_rule, OSDMonitor's crush_rule_create_*
+// helpers, pool_opts_t::NUM_ZONES) now takes it as an explicit function
+// parameter or a separate pool option, never a profile-map lookup. Nothing
+// reads "num_zones" back out of a profile map any more, so the key is dead
+// weight that still leaks into every default/created EC profile and shows
+// up in `ceph osd erasure-code-profile get`.
+//
+// get_erasure_code_profile_default() is exactly the function both the
+// mkfs bootstrap path and OSDMonitor::prepare_new_pool's auto-profile path
+// use to materialize that default profile map.
+TEST_F(OSDMonitorStretchTest, DefaultProfileHasNoDeadNumZonesKey) {
+  OSDMap osdmap;
+  map<string,string> profile_map;
+  stringstream ss;
+
+  int r = osdmap.get_erasure_code_profile_default(cct.get(), profile_map, &ss);
+
+  ASSERT_EQ(r, 0) << ss.str();
+  EXPECT_EQ(profile_map.count("num_zones"), 0u)
+    << "default EC profile still carries a dead 'num_zones' key that no "
+    << "code reads back out of a profile map";
 }
 
 TEST_F(OSDMonitorValidateStretchModeNewPoolTest, RejectsRuleWithWrongBarrierType) {
