@@ -3,6 +3,7 @@ pub mod cleanup;
 pub mod client;
 pub mod config;
 pub mod error;
+pub mod features;
 pub mod fixtures;
 pub mod http;
 pub mod policy;
