@@ -543,8 +543,7 @@ TEST_P(OmapTest, OmapPreservedAfterTruncateToZero) {
   }
 }
 
-
-TEST_P(OmapTest, OmapRecovery) {
+TEST_P(OmapTest, OmapRecoveryDoesErrorInject) {
   SKIP_IF_CRIMSON();
   turn_balancing_off();
   bufferlist bl_write, omap_val_bl, xattr_val_bl;
@@ -602,7 +601,7 @@ TEST_P(OmapTest, OmapRecovery) {
   turn_balancing_on();
 }
 
-TEST_P(OmapTest, NoOmapRecovery) {
+TEST_P(OmapTest, NoOmapRecoveryDoesErrorInject) {
   SKIP_IF_CRIMSON();
   turn_balancing_off();
   bufferlist bl_write;
@@ -650,7 +649,7 @@ TEST_P(OmapTest, NoOmapRecovery) {
   turn_balancing_on();
 }
 
-TEST_P(OmapTest, LargeOmapRecovery) {
+TEST_P(OmapTest, LargeOmapRecoveryDoesErrorInject) {
   SKIP_IF_CRIMSON();
   turn_balancing_off();
 
@@ -1735,7 +1734,7 @@ TEST_P(OmapTest, OmapCopyFromOverwritesTarget) {
   }
 }
 
-TEST_P(OmapTest, GenerationalObjectRecovery) {
+TEST_P(OmapTest, GenerationalObjectRecoveryDoesErrorInject) {
   SKIP_IF_CRIMSON();
   turn_balancing_off();
   

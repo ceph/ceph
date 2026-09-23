@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdlib>
 #include <string_view>
 
 #include "gtest/gtest.h"
@@ -94,7 +95,9 @@ protected:
   void ensure_log_committed(const char* oid, uint64_t offset, uint64_t length);
 
   template<typename... Args>
-  ::testing::AssertionResult AssertOperateSplitOp(int split_ios, int rc, Args... args)
+  ::testing::AssertionResult AssertOperateSplitOp(int split_ios, int rc,
+                                                  bool relax_split_check,
+                                                  Args... args)
   {
     auto split_op_stat =  "objecter.split_op_reads"sv;
     auto op_reply_stat =  "objecter.op_reply"sv;
@@ -106,6 +109,13 @@ protected:
     if (ret != rc) {
       return ::testing::AssertionFailure()
              << "ioctx.operate() Incorrect rc " << rc << " != " << ret;
+    }
+
+    // When external error injection is active, split-op counter deltas are
+    // non-deterministic (OSD retries skew the counts). Skip counter checks
+    // for AssertOperateWithSplitOp callers.
+    if (relax_split_check && std::getenv("CEPH_TEST_EXTERNAL_ERROR_INJECT")) {
+      return ::testing::AssertionSuccess();
     }
 
     int64_t actual_count = get_perf_counter_by_path(split_op_stat) - before_count;
@@ -136,15 +146,15 @@ protected:
 
   template<typename... Args>
   ::testing::AssertionResult AssertOperateWithSplitOp(int rc, Args... args) {
-    return AssertOperateSplitOp(1, rc, std::forward<Args>(args)...);
+    return AssertOperateSplitOp(1, rc, true, std::forward<Args>(args)...);
   }
   template<typename... Args>
   ::testing::AssertionResult AssertOperateWithSplitOp(int rc, int split_ios, Args... args) {
-    return AssertOperateSplitOp(split_ios, rc, std::forward<Args>(args)...);
+    return AssertOperateSplitOp(split_ios, rc, true, std::forward<Args>(args)...);
   }
   template<typename... Args>
   ::testing::AssertionResult AssertOperateWithoutSplitOp(int rc, Args... args) {
-    return AssertOperateSplitOp(0, rc, std::forward<Args>(args)...);
+    return AssertOperateSplitOp(0, rc, false, std::forward<Args>(args)...);
   }
 };
 

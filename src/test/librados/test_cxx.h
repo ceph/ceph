@@ -20,7 +20,8 @@ std::string create_ec_pool_pp(
   librados::Rados &cluster,
   bool fast_ec = false);
 std::string create_pool_pp(const std::string &pool_name,
-                            librados::Rados &cluster);
+                            librados::Rados &cluster,
+                            int size = 0);
 std::string set_allow_ec_overwrites_pp(const std::string &pool_name,
 				       librados::Rados &cluster, bool allow);
 std::string connect_cluster_pp(librados::Rados &cluster);
