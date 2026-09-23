@@ -463,6 +463,36 @@ class ScrubBackend {
                                       inconsistent_obj_wrapper& obj_result,
                                       std::stringstream& errstream);
 
+  /// Deep-scrub CRC of each EC shard, one map per zone, keyed by relative
+  /// shard.
+  std::vector<shard_id_map<bufferlist>> collect_ec_zone_digests(
+      const hobject_t& ho,
+      const auth_selection_t& auth_sel);
+
+  /// Copies of a relative shard whose CRC differs from the copy in the first
+  /// zone whose stripe decodes consistently, mapped to that copy's absolute
+  /// shard. zone_digests gets that copy's CRC in their place.
+  std::map<shard_id_t, shard_id_t> find_corrupt_zone_copies(
+      const hobject_t& ho,
+      const auth_selection_t& auth_sel,
+      std::vector<shard_id_map<bufferlist>>& zone_digests);
+
+  /// Data shards whose CRC does not decode from the rest of one zone's
+  /// stripe, or nullopt if it cannot be decoded. Unseeds the digests.
+  std::optional<std::set<shard_id_t>> ec_stripe_mismatches(
+      const hobject_t& ho,
+      const auth_selection_t& auth_sel,
+      shard_id_map<bufferlist>& digests);
+
+  /// Coding CRC check of one zone's stripe; digests are keyed by relative
+  /// shard.
+  void check_ec_stripe_digests(const hobject_t& ho,
+                               const auth_selection_t& auth_sel,
+                               int zone,
+                               shard_id_map<bufferlist>& digests,
+                               inconsistent_obj_wrapper& obj_result,
+                               std::stringstream& errstream);
+
   // returns: true if a discrepancy was found
   bool compare_obj_details(pg_shard_t auth_shard,
                            const ScrubMap::object& auth,
