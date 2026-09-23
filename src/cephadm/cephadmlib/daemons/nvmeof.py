@@ -210,9 +210,8 @@ class CephNvmeof(ContainerDaemonForm):
         configfs_dir = os.path.join(data_dir, 'configfs')
         makedirs(configfs_dir, uid, gid, 0o755)
 
-        encryption_key_path = os.path.join(data_dir, 'encryption_key')
         if 'encryption_key' not in self.files:
-            Path(encryption_key_path).unlink(missing_ok=True)
+            (Path(data_dir) / 'encryption_key').unlink(missing_ok=True)
 
         # populate files from the config-json
         populate_files(data_dir, self.files, uid, gid)
