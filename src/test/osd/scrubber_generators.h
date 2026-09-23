@@ -239,7 +239,8 @@ struct RealObjsConf {
   std::vector<RealObj> objs;
 };
 
-RealObjsConf make_erasure_code_configuration(int8_t k, int8_t m);
+RealObjsConf make_erasure_code_configuration(int8_t k, int8_t m,
+                                             int num_zones = 1);
 
 CorruptFuncList make_erasure_code_hash_corruption_functions(int num_osds);
 

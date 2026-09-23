@@ -1922,6 +1922,12 @@ public:
     return shard_id_t(shard.id % get_zone_size());
   }
 
+  int get_shard_zone(const shard_id_t shard) const {
+    if (std::cmp_less(shard.id, get_zone_size())) {
+      return 0;
+    }
+    return shard.id / get_zone_size();
+  }
   /// EC multi-zone: inverse of get_relative_shard() for the given zone
   shard_id_t get_abs_shard(const shard_id_t rel_shard, int zone) const {
     return shard_id_t(rel_shard.id + zone * get_zone_size());

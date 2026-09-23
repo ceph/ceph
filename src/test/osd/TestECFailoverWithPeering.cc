@@ -1130,7 +1130,8 @@ TEST_P(TestECFailoverWithPeering, ScrubDetectsCorruption) {
                 << ", supports_crc=" << (supports_crc ? "true" : "false")
                 << ")" << std::endl;
 
-      if (supports_crc) {
+      // over zones the copies of a shard are compared with any plugin
+      if (supports_crc || num_zones > 1) {
         EXPECT_TRUE(corruption_detected)
           << "scrub_object() should detect corruption for object " << obj_name
           << " during zone iteration " << zone
@@ -1207,7 +1208,8 @@ TEST_P(TestECFailoverWithPeering, ObjectTrackerDetectsCorruption) {
   bool corruption_after = scrub_object(obj_name, /*skip_verify=*/true);
 
   const bool supports_crc = (ec_plugin == "isa");
-  if (supports_crc) {
+  // over zones the copies of a shard are compared with any plugin
+  if (supports_crc || num_zones > 1) {
     EXPECT_TRUE(corruption_after)
       << "Scrub should detect corruption after we corrupted the object";
   } else {
