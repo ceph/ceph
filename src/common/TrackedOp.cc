@@ -109,13 +109,17 @@ OpHistory::~OpHistory() {
 
 void OpHistory::on_shutdown()
 {
+  if (shutdown.exchange(true)) {   // idempotent; join is reached exactly once
+    return;
+  }
   opsvc.break_thread();
-  opsvc.join();
+  if (opsvc.is_started()) {
+    opsvc.join();
+  }
   std::lock_guard history_lock(ops_history_lock);
   arrived.clear();
   duration.clear();
   slow_op.clear();
-  shutdown = true;
 }
 
 void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
@@ -211,6 +215,13 @@ OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
 }
 
 OpTracker::~OpTracker() {
+  // NOTE: on_shutdown() must be called before OpTracker destruction.
+  // This ensures the OpHistory service thread is stopped and all tracked
+  // operations are properly cleared before the OpTracker is destroyed.
+  // See usages in OSD::shutdown(), Monitor::shutdown(), MDSRank::~MDSRank(),
+  // and DaemonServer::~DaemonServer() for examples. This addition is a failsafe
+  history.on_shutdown();
+
   while (!sharded_in_flight_list.empty()) {
     ShardedTrackingData* sdata = sharded_in_flight_list.back();
     ceph_assert(NULL != sdata);
