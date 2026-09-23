@@ -59,7 +59,10 @@ protected:
       inc.fsid = new_osdmap->get_fsid();
       new_osdmap->set_max_osd(8);
       for (int i = 0; i < 8; ++i) {
-        inc.new_state[i]  = CEPH_OSD_EXISTS | CEPH_OSD_UP;
+        if (!new_osdmap->is_up(i)) {
+          // The in weight below makes a new OSD exist
+          inc.new_state[i] = CEPH_OSD_UP;
+        }
         inc.new_weight[i] = CEPH_OSD_IN;
         inc.new_up_thru[i] = 100;
         osd_xinfo_t xinfo;
@@ -1204,7 +1207,10 @@ protected:
       inc.fsid = new_osdmap->get_fsid();
       new_osdmap->set_max_osd(12);
       for (int i = 0; i < 12; ++i) {
-        inc.new_state[i]   = CEPH_OSD_EXISTS | CEPH_OSD_UP;
+        if (!new_osdmap->is_up(i)) {
+          // The in weight below makes a new OSD exist
+          inc.new_state[i] = CEPH_OSD_UP;
+        }
         inc.new_weight[i]  = CEPH_OSD_IN;
         inc.new_up_thru[i] = 100;
         osd_xinfo_t xinfo;

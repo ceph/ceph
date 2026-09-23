@@ -191,6 +191,12 @@ public:
    * @param new_min_size The new min_size value
    */
   void set_pool_min_size(unsigned new_min_size);
+
+  // Stretch mode transitions the monitor makes for a num_zones > 1 pool
+  // (see OSDMapTestHelpers). Each creates a new epoch and triggers peering.
+  void enter_degraded_stretch_mode(int surviving_zone);
+  void enter_recovery_stretch_mode();
+  void enter_healthy_stretch_mode();
   /**
    * Advance to a new epoch without changing OSD states.
    * Useful for testing re-peering scenarios.

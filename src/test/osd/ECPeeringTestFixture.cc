@@ -1048,6 +1048,33 @@ void ECPeeringTestFixture::set_pool_min_size(unsigned new_min_size)
   update_osdmap_with_peering(new_osdmap);
 }
 
+void ECPeeringTestFixture::enter_degraded_stretch_mode(int surviving_zone)
+{
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMapTestHelpers::set_degraded_stretch_mode(*new_osdmap, surviving_zone);
+
+  update_osdmap_with_peering(new_osdmap);
+}
+
+void ECPeeringTestFixture::enter_recovery_stretch_mode()
+{
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMapTestHelpers::set_recovery_stretch_mode(*new_osdmap);
+
+  update_osdmap_with_peering(new_osdmap);
+}
+
+void ECPeeringTestFixture::enter_healthy_stretch_mode()
+{
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMapTestHelpers::set_healthy_stretch_mode(*new_osdmap);
+
+  update_osdmap_with_peering(new_osdmap);
+}
+
 void ECPeeringTestFixture::advance_epoch()
 {
   auto new_osdmap = std::make_shared<OSDMap>();
