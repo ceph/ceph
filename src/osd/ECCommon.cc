@@ -1100,9 +1100,14 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       continue;
     }
 
-    // For the common single-zone case (abs == rel) use a reference to avoid
-    // copying the transaction's std::map index structures on every write.
-    // For multi-zone pools abs != rel so we need a copy to call remap_shard().
+    // ECSubWrite's constructor always copies its Transaction argument (once),
+    // deep-copying the transaction's std::map index structures -- that one
+    // copy is unavoidable. For the common single-zone case (abs == rel) we
+    // use a reference here so that is the only copy made. For multi-zone
+    // pools abs != rel, so we first need our own copy to call remap_shard()
+    // on; below, we avoid paying for that copy a second time by swapping it
+    // into sop.t instead of also passing it through ECSubWrite's copying
+    // constructor.
     std::optional<ObjectStore::Transaction> transaction_copy;
     ObjectStore::Transaction *transaction_ptr;
     if (abs_shard != rel_shard) {
@@ -1149,13 +1154,20 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
           ? get_info().stats
           : get_parent()->get_shard_info().find(pg_shard)->second.stats;
 
+    // transaction_copy, when present, is a private, single-use local (it is
+    // never read again after this point in this iteration) and trans.at()
+    // for the abs_shard == rel_shard case is a live reference that may still
+    // be read by other zones' iterations later in this same loop, so only
+    // the former is safe to move from. Feed ECSubWrite's constructor the
+    // cheap "empty" transaction in that case and swap the real content in
+    // immediately after, instead of paying for a second copy of it.
     ECSubWrite sop(
       get_parent()->whoami_shard(),
       op.tid,
       op.reqid,
       op.hoid,
       stats,
-      should_send ? transaction : empty,
+      (should_send && !transaction_copy) ? transaction : empty,
       op.version,
       op.trim_to,
       op.pg_committed_to,
@@ -1164,6 +1176,11 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       op.temp_added,
       op.temp_cleared,
       !should_send);
+    if (should_send && transaction_copy) {
+      // Swap (not copy) the real content into sop.t now: transaction_copy
+      // is never used again after this point.
+      sop.t.swap(*transaction_copy);
+    }
 
     ZTracer::Trace trace;
     if (op.trace) {
