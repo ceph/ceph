@@ -167,15 +167,21 @@ class MetadataManager(object):
         key, value = to_str(key, value)
         self.update_section(MetadataManager.GLOBAL_SECTION, key, value)
 
-    def get_option(self, section, key):
-        if not self.config.has_section(section):
-            raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
-        if not self.config.has_option(section, key):
-            raise MetadataMgrException(-errno.ENOENT, "no config '{0}' in section '{1}'".format(key, section))
-        return self.config.get(section, key)
+    def get_option(self, sec, key, def_val=''):
+        if not self.config.has_section(sec):
+            raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(sec))
 
-    def get_global_option(self, key):
-        return self.get_option(MetadataManager.GLOBAL_SECTION, key)
+        if self.config.has_option(sec, key):
+            return self.config.get(sec, key)
+        else:
+            if def_val == '':
+                raise MetadataMgrException(-errno.ENOENT, f'no conf opt {key} '
+                                           f'in section {sec}')
+            else:
+                return def_val
+
+    def get_global_option(self, key, def_val=''):
+        return self.get_option(MetadataManager.GLOBAL_SECTION, key, def_val)
 
     def list_all_options_from_section(self, section):
         metadata_dict = {}
