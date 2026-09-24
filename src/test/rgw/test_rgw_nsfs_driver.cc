@@ -525,7 +525,7 @@ public:
         }
       }
     }
-    quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
+    quota_handler = RGWQuotaHandler::generate_handler(this, false);
     bucket_cache.reset(new nsfs::BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));
 
@@ -1903,7 +1903,7 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
 
   auto obj = bucket->get_object(rgw_obj_key("dir1/file.txt"));
   TestUser user(driver.get());
-  int ret = obj->chown(user, env->dpp, null_yield);
+  int ret = obj->chown(env->dpp, user.get_id(), user.get_display_name(), null_yield);
   // chown to uid/gid 0 requires root; EPERM is expected for non-root
   EXPECT_TRUE(ret == 0 || ret == -EPERM);
 }
