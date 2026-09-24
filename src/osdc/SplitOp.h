@@ -303,10 +303,10 @@ class SplitOp {
   int assemble_rc() const;
   virtual std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) const = 0;
   virtual void assemble_buffer_read(bufferlist &bl_out, int ops_index) const = 0;
-  virtual void init_read(OSDOp &op, bool sparse, int ops_index) = 0;
+  virtual void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) = 0;
   virtual bool version_mismatch() const = 0;
   virtual void init_reference_sub_read() = 0;
-  void init(OSDOp &op, int ops_index);
+  void init(OSDOp &op, int ops_index, bool single_op);
 
   Objecter::Op *orig_op;
   Objecter &objecter;
@@ -473,7 +473,7 @@ class ECSplitOp : public SplitOp{
    * @param sparse Whether this is a sparse read
    * @param ops_index Index of the operation in the operation list
    */
-  void init_read(OSDOp &op, bool sparse, int ops_index) override;
+  void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) override;
   
   /**
    * @brief Check for version mismatches across EC shards.
@@ -545,7 +545,7 @@ class ReplicaSplitOp : public SplitOp {
    * @param sparse Whether this is a sparse read
    * @param ops_index Index of the operation in the operation list
    */
-  void init_read(OSDOp &op, bool sparse, int ops_index) override;
+  void init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) override;
   
   /**
    * @brief Check for version mismatches across replicas.
