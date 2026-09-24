@@ -277,3 +277,29 @@ def create_base_dir(fs, path, mode):
             fs.mkdirs(path, mode)
         else:
             raise VolumeException(-e.args[0], e.args[1])
+
+
+def statx(fs, path, fields):
+    '''
+    Convenient wrapper around libcephfs's statx().
+    '''
+    mask = 0
+    if 'uid' in fields:
+        mask = cephfs.CEPH_STATX_UID
+    if 'gid' in fields:
+        mask = mask | cephfs.CEPH_STATX_GID
+    if 'mode' in fields:
+        mask = mask | cephfs.CEPH_STATX_MODE
+
+    # sxb = statx buffer
+    sxb = fs.statx(path, mask, cephfs.AT_STATX_SYNC_AS_STAT)
+
+    sxb_fields = []
+     if 'uid' in fields:
+        sxb_fields.append(int(sxb['uid']))
+     if 'gid' in fields:
+        sxb_fields.append(int(sxb['gid']))
+    if 'mode' in fields:
+        sxb_fields.append(int(sxb['mode']))
+
+    return sxb_fields
