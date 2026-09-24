@@ -144,11 +144,14 @@ def is_inherited_snap(snapname):
     """
     return snapname.startswith("_")
 
-def listsnaps(fs, volspec, snapdirpath, filter_inherited_snaps=False):
+
+def list_snaps(fs, vol_spec, snapdirpath, filter_inherited_snaps=True):
     """
     Get the snap names from a given snap directory path
+
+    :returns: list of snap names
     """
-    if os.path.basename(snapdirpath) != volspec.snapshot_prefix.encode('utf-8'):
+    if os.path.basename(snapdirpath) != vol_spec.snap_base_dir.encode('utf-8'):
         raise VolumeException(-errno.EINVAL, "Not a snap directory: {0}".format(snapdirpath))
     snaps = []
     try:
@@ -165,6 +168,7 @@ def listsnaps(fs, volspec, snapdirpath, filter_inherited_snaps=False):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
     return snaps
+
 
 def list_one_entry_at_a_time(fs, dirpath):
     """

@@ -9,7 +9,8 @@ from .snapshot_util import mksnap, rmsnap
 from .charmap_util import charmap_get, charmap_set, charmap_rm
 from .pin_util import pin
 from .template import GroupTemplate
-from ..fs_util import listdir, listsnaps, get_ancestor_xattr, create_base_dir, has_subdir
+from ..fs_util import (listdir, list_snaps, get_ancestor_xattr, create_base_dir,
+                       has_subdir)
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
@@ -108,7 +109,7 @@ class Group(GroupTemplate):
         try:
             dirpath = os.path.join(self.path,
                                    self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
-            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
+            return list_snaps(self.fs, self.vol_spec, dirpath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []

@@ -19,7 +19,7 @@ from ..template import SubvolumeTemplate
 from ..snapshot_util import mksnap, rmsnap
 from ..access import allow_access, deny_access
 from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException, EvictionError
-from ...fs_util import listsnaps, is_inherited_snap, create_base_dir
+from ...fs_util import list_snaps, is_inherited_snap, create_base_dir
 from ..template import SubvolumeOpType
 from ..group import Group
 from ..rankevicter import RankEvicter
@@ -860,7 +860,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate, V3Compat):
     def list_snapshots(self):
         try:
             dirpath = self.snapshot_base_path()
-            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
+            return list_snaps(self.fs, self.vol_spec, dirpath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []
