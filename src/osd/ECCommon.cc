@@ -1100,6 +1100,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
   OSDCuObjGather *pull_gather =
     cct->_conf.get_val<bool>("osd_cuobj_pull_writes")
       ? get_parent()->get_rdma_gather() : nullptr;
+  const bool pull_direct = pull_gather &&
+    cct->_conf.get_val<bool>("osd_cuobj_pull_writes_direct");
   struct pull_holder final : Op::pull_holder_base {
     OSDCuObjGather *g;
     std::unique_ptr<OSDCuObjGather::source> s;
@@ -1121,8 +1123,25 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     st.txn = txn;
     st.stats = stats;
     std::map<const char*, uint32_t> idx_for_raw;
+    std::map<std::string, uint32_t> idx_for_client;
     for (const auto &b : aligned.buffers()) {
       const char *raw = b.raw_c_str();
+      if (pull_direct) {
+        // a view of memory we pulled out of the client: the peer reads
+        // the same bytes from the client itself, and we are not a hop.
+        // Parity and padding are ours and keep going through the arena
+        if (auto cb = pull_gather->client_backing_of(b.c_str()); cb) {
+          auto [it, fresh] = idx_for_client.try_emplace(
+            cb->token, sop.rdma_tokens.size());
+          if (fresh) {
+            sop.rdma_tokens.push_back(cb->token);
+          }
+          sop.rdma_pull.emplace_back(it->second, cb->remote_ofs,
+                                     uint64_t(b.length()));
+          pull_gather->note_direct_pull(b.length());
+          continue;
+        }
+      }
       auto idx = idx_for_raw.find(raw);
       if (idx == idx_for_raw.end()) {
         auto src = pull_sources.find(raw);

@@ -9534,6 +9534,8 @@ int PrimaryLogPG::pull_write_payloads(OpContext *ctx)
 		<< d.base_offset + done << " failed: " << r << dendl;
 	return r < 0 ? int(r) : -EIO;
       }
+      // peers may read their share of this straight from the client
+      gather->set_client_backing(s, d.token, d.base_offset + done);
       bl.push_back(ceph::buffer::claim_buffer(
 	n, slot->ptr, make_deleter([holder]() mutable { holder.reset(); })));
       done += n;

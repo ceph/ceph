@@ -119,6 +119,7 @@ int OSDCuObjGather::do_init()
   m_put_token = m_put_token_raw;
 
   m_free.reserve(m_slot_count);
+  m_backing.assign(m_slot_count, std::nullopt);
   for (uint32_t i = m_slot_count; i > 0; --i) {
     m_free.push_back(i - 1);
   }
@@ -292,12 +293,41 @@ void OSDCuObjGather::release(const slot& s, bool quarantine)
   m_in_use--;
 
   std::lock_guard l(m_lock);
+  m_backing[idx].reset();
   if (quarantine && m_quarantine.count() > 0) {
     m_quarantines++;
     m_quarantined.push_back({idx, ceph::coarse_mono_clock::now() + m_quarantine});
   } else {
     m_free.push_back(idx);
   }
+}
+
+void OSDCuObjGather::set_client_backing(const slot& s, const std::string& token,
+                                        uint64_t remote_ofs)
+{
+  const uint32_t idx = s.ofs / m_slot_size;
+  ceph_assert(idx < m_slot_count);
+  std::lock_guard l(m_lock);
+  m_backing[idx] = client_backing{token, remote_ofs};
+}
+
+std::optional<OSDCuObjGather::client_backing>
+OSDCuObjGather::client_backing_of(const void* ptr) const
+{
+  const char* p = static_cast<const char*>(ptr);
+  if (!contains(p, 1)) {
+    return std::nullopt;
+  }
+  const uint32_t idx = (p - m_arena) / m_slot_size;
+  auto& self = const_cast<OSDCuObjGather&>(*this);
+  std::lock_guard l(self.m_lock);
+  const auto& b = m_backing[idx];
+  if (!b) {
+    return std::nullopt;
+  }
+  client_backing r = *b;
+  r.remote_ofs += p - (m_arena + uint64_t(idx) * m_slot_size);
+  return r;
 }
 
 void OSDCuObjGather::dump_stats(ceph::Formatter* f) const
@@ -317,6 +347,8 @@ void OSDCuObjGather::dump_stats(ceph::Formatter* f) const
     std::lock_guard l(self.m_lock);
     f->dump_unsigned("slots_quarantined", m_quarantined.size());
   }
+  f->dump_unsigned("direct_pull_pieces", m_direct_pieces.load());
+  f->dump_unsigned("direct_pull_bytes", m_direct_bytes.load());
   f->dump_unsigned("sources_registered", m_sources.load());
   f->dump_unsigned("source_failures", m_source_failures.load());
   f->dump_unsigned("source_quarantines", m_source_quarantines.load());

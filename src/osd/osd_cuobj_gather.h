@@ -120,6 +120,27 @@ public:
    */
   void release_source(std::unique_ptr<source> s, bool quarantine);
 
+  /**
+   * A slot filled by RDMA-reading a client's memory (the primary pulling
+   * a write payload) remembers where the bytes came from. A peer that
+   * needs the same bytes can then read them from the client itself
+   * instead of through this arena, taking the primary off the data
+   * path for the data shards (osd_cuobj_pull_writes_direct). The
+   * record dies with the slot's release.
+   */
+  struct client_backing {
+    std::string token;
+    uint64_t remote_ofs = 0;  ///< client offset of the queried address
+  };
+  void set_client_backing(const slot& s, const std::string& token,
+                          uint64_t remote_ofs);
+  /// the client-side location of an address inside a backed slot
+  std::optional<client_backing> client_backing_of(const void* ptr) const;
+  void note_direct_pull(uint64_t bytes) {
+    m_direct_pieces++;
+    m_direct_bytes += bytes;
+  }
+
   /// asok/debug counters
   void dump_stats(ceph::Formatter* f) const;
 
@@ -151,6 +172,7 @@ private:
     ceph::coarse_mono_clock::time_point until;
   };
   std::deque<held> m_quarantined; ///< ascending by until
+  std::vector<std::optional<client_backing>> m_backing; ///< per slot
 
   std::mutex m_client_lock;       ///< the library serializes badly on its own
   struct held_source {
@@ -166,5 +188,7 @@ private:
   std::atomic<uint64_t> m_exhausted{0};
   std::atomic<uint64_t> m_oversized{0};
   std::atomic<uint64_t> m_quarantines{0};
+  std::atomic<uint64_t> m_direct_pieces{0};
+  std::atomic<uint64_t> m_direct_bytes{0};
   std::atomic<uint32_t> m_in_use{0};
 };

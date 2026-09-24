@@ -1761,6 +1761,17 @@ options:
   default: false
   services:
   - osd
+- name: osd_cuobj_pull_writes_direct
+  type: bool
+  level: advanced
+  desc: With osd_cuobj_pull_writes, when the primary itself pulled the write
+    payload out of the client (RGW PUT passthrough), let the data-shard peers
+    read their share from the client directly rather than from the primary;
+    the primary still reads everything to encode and stays the source for
+    the parity shards
+  default: false
+  services:
+  - osd
 - name: osd_cuobj_fanout_delivery
   type: bool
   level: advanced
