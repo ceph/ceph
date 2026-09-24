@@ -303,6 +303,7 @@ void Filer::_probe(Probe *probe, Probe::unique_lock& pl)
     ObjectOperation change_attr_op;
     change_attr_op.getxattr(CHANGE_ATTR_NAME, &c->change_attr_bl,
                             &c->change_attr_retval);
+    change_attr_op.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
     objecter->stat(i->oid, i->oloc, probe->snapid, &c->size, &c->mtime,
 		   probe->flags | CEPH_OSD_FLAG_RWORDERED,
 		   new C_OnFinisher(c, finisher), NULL, &change_attr_op);
