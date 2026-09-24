@@ -143,7 +143,7 @@ describe('NotificationAreaComponent', () => {
 
     const closeIcons = fixture.debugElement.queryAll(By.css('.notification-close cd-icon'));
     expect(closeIcons.length).toBe(2);
-    expect(closeIcons[0].attributes['ng-reflect-type']).toBe('destroy');
+    expect(closeIcons[0].componentInstance.type).toBe('destroy');
   });
 
   it('should render notification content with proper structure', () => {
