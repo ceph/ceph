@@ -7,6 +7,7 @@ import re
 
 import cephfs
 
+from ...utils import to_str
 from ...exception import MetadataMgrException
 
 log = logging.getLogger(__name__)
@@ -69,6 +70,17 @@ class MetadataManager(object):
         self.mode = mode
         self.config_path = config_path
         self.config = configparser.ConfigParser()
+
+    def __str__(self):
+        rv = ''
+        for sec in self.config.sections():
+            rv += f'[{sec}]'
+            for opt, val in self.config.items(sec):
+                rv += f'{opt} = {val}\n'
+            rv += '\n'
+
+        rv += f'meta path = {self.config_path}. meta content - {rv}'
+        return rv
 
     def refresh(self):
         fd = None
@@ -152,17 +164,28 @@ class MetadataManager(object):
             self.config.set(section, key, str(value))
 
     def update_global_section(self, key, value):
-        self.update_section(MetadataManager.GLOBAL_SECTION, key, str(value))
+        key, value = to_str(key, value)
+        self.update_section(MetadataManager.GLOBAL_SECTION, key, value)
 
-    def get_option(self, section, key):
-        if not self.config.has_section(section):
-            raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
-        if not self.config.has_option(section, key):
-            raise MetadataMgrException(-errno.ENOENT, "no config '{0}' in section '{1}'".format(key, section))
-        return self.config.get(section, key)
+    def remove_global_option(self, key):
+        key = to_str(key)
+        self.remove_option(self.GLOBAL_SECTION, key)
 
-    def get_global_option(self, key):
-        return self.get_option(MetadataManager.GLOBAL_SECTION, key)
+    def get_option(self, sec, key, def_val=''):
+        if not self.config.has_section(sec):
+            raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(sec))
+
+        if self.config.has_option(sec, key):
+            return self.config.get(sec, key)
+        else:
+            if def_val == '':
+                raise MetadataMgrException(-errno.ENOENT, f'no conf opt {key} '
+                                           f'in section {sec}')
+            else:
+                return def_val
+
+    def get_global_option(self, key, def_val=''):
+        return self.get_option(MetadataManager.GLOBAL_SECTION, key, def_val)
 
     def list_all_options_from_section(self, section):
         metadata_dict = {}

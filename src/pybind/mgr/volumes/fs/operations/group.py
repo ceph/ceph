@@ -9,7 +9,8 @@ from .snapshot_util import mksnap, rmsnap
 from .charmap_util import charmap_get, charmap_set, charmap_rm
 from .pin_util import pin
 from .template import GroupTemplate
-from ..fs_util import listdir, listsnaps, get_ancestor_xattr, create_base_dir, has_subdir
+from ..fs_util import (listdir, listsnaps, get_ancestor_xattr, create_base_dir,
+                       has_subdir)
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
@@ -29,7 +30,11 @@ class Group(GroupTemplate):
         self.user_id = None
         self.group_id = None
         self.vol_spec = vol_spec
-        self.groupname = groupname if groupname else Group.NO_GROUP_NAME
+        self.name = groupname if groupname else Group.NO_GROUP_NAME
+
+    @property
+    def groupname(self):
+        return self.name
 
     @property
     def path(self):
