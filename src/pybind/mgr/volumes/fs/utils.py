@@ -10,6 +10,8 @@ log = getLogger(__name__)
 
 
 def gen_uuid():
+    # TODO,v3: remove
+    return b'4f50c332-30a6-4871-b69d-9edd2ea529c0'
     return to_utf8(str(uuid4()))
 
 
