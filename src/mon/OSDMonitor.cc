@@ -690,16 +690,16 @@ void OSDMonitor::create_initial()
   if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
 
   // new cluster should require latest by default
-  if (g_conf().get_val<bool>("mon_debug_no_require_umbrella")) {
-    if (g_conf().get_val<bool>("mon_debug_no_require_tentacle")) {
-      derr << __func__ << " mon_debug_no_require_umbrella and tentacle=true" << dendl;
-      newmap.require_osd_release = ceph_release_t::squid;
-    } else {
-      derr << __func__ << " mon_debug_no_require_umbrella=true" << dendl;
+  if (g_conf().get_val<bool>("mon_debug_no_require_vampire")) {
+    if (g_conf().get_val<bool>("mon_debug_no_require_umbrella")) {
+      derr << __func__ << " mon_debug_no_require_vampire and umbrella=true" << dendl;
       newmap.require_osd_release = ceph_release_t::tentacle;
+    } else {
+      derr << __func__ << " mon_debug_no_require_vampire=true" << dendl;
+      newmap.require_osd_release = ceph_release_t::umbrella;
     }
   } else {
-    newmap.require_osd_release = ceph_release_t::umbrella;
+    newmap.require_osd_release = ceph_release_t::vampire;
   }
 
   ceph_release_t r = ceph_release_from_name(g_conf()->mon_osd_initial_require_min_compat_client);
@@ -3555,26 +3555,25 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   ceph_assert(m->get_orig_source_inst().name.is_osd());
 
   // lower bound of N-2
-  if (!HAVE_FEATURE(m->osd_features, SERVER_SQUID)) {
+  if (!HAVE_FEATURE(m->osd_features, SERVER_TENTACLE)) {
     mon.clog->info() << "disallowing boot of OSD "
 		     << m->get_orig_source_inst()
-		     << " because the osd lacks CEPH_FEATURE_SERVER_SQUID";
+		     << " because the osd lacks CEPH_FEATURE_SERVER_TENTACLE";
     goto ignore;
   }
 
-  // make sure osd versions do not span more than 3 releases
-  if (HAVE_FEATURE(m->osd_features, SERVER_TENTACLE) &&
-      osdmap.require_osd_release < ceph_release_t::reef) {
-    mon.clog->info() << "disallowing boot of tentacle+ OSD "
-		      << m->get_orig_source_inst()
-		      << " because require_osd_release < reef";
-    goto ignore;
-  }
   if (HAVE_FEATURE(m->osd_features, SERVER_UMBRELLA) &&
     osdmap.require_osd_release < ceph_release_t::squid) {
     mon.clog->info() << "disallowing boot of umbrella+ OSD "
                       << m->get_orig_source_inst()
                       << " because require_osd_release < squid";
+    goto ignore;
+  }
+  if (HAVE_FEATURE(m->osd_features, SERVER_VAMPIRE) &&
+    osdmap.require_osd_release < ceph_release_t::tentacle) {
+    mon.clog->info() << "disallowing boot of umbrella+ OSD "
+                      << m->get_orig_source_inst()
+                      << " because require_osd_release < tentacle";
     goto ignore;
   }
 
@@ -12493,7 +12492,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply_no_propose;
     }
-    if (osdmap.require_osd_release < ceph_release_t::squid && !sure) {
+    if (osdmap.require_osd_release < ceph_release_t::tentacle && !sure) {
       ss << "Not advisable to continue since current 'require_osd_release' "
          << "refers to a very old Ceph release. Pass "
 	 << "--yes-i-really-mean-it if you really wish to continue.";
@@ -12542,6 +12541,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_UMBRELLA))
            && !sure) {
         ss << "not all up OSDs have CEPH_FEATURE_SERVER_UMBRELLA feature";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+    } else if (rel == ceph_release_t::vampire) {
+      if (!mon.monmap->get_required_features().contains_all(
+            ceph::features::mon::FEATURE_VAMPIRE)) {
+        ss << "not all mons are vampire";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_VAMPIRE))
+           && !sure) {
+        ss << "not all up OSDs have CEPH_FEATURE_SERVER_VAMPIRE feature";
         err = -EPERM;
         goto reply_no_propose;
       }
