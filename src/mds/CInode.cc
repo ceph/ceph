@@ -4010,12 +4010,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // file
   const mempool_inode *file_i = pfile ? pi:oi;
-  file_layout_t layout;
-  if (is_dir()) {
-    layout = (ppolicy ? pi : oi)->layout;
-  } else {
-    layout = file_i->layout;
-  }
+  // A reference, not a copy: file_layout_t carries the pool namespace as a
+  // std::string, and this runs for every inode a readdir encodes.
+  const file_layout_t& layout = is_dir() ? (ppolicy ? pi : oi)->layout
+                                         : file_i->layout;
 
   // max_size is min of projected, actual
   uint64_t max_size =
