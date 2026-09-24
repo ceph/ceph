@@ -210,7 +210,7 @@ void NamespaceReplayer<I>::handle_update(const std::string &mirror_uuid,
       m_remote_pool_watcher->get_image_count());
   }
 
-  m_image_map->update_images(mirror_uuid, std::move(added_entities),
+  m_image_map->update_entities(mirror_uuid, std::move(added_entities),
                              std::move(removed_entities));
 }
 

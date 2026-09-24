@@ -110,7 +110,7 @@ void ImageMap<I>::handle_update_request(
 }
 
 template <typename I>
-void ImageMap<I>::update_image_mapping(Updates &&map_updates,
+void ImageMap<I>::update_entity_mapping(Updates &&map_updates,
                                        GlobalIds &&map_removals) {
   if (map_updates.empty() && map_removals.empty()) {
     return;
@@ -199,8 +199,8 @@ void ImageMap<I>::process_updates() {
   // notify listener (acquire, release) and update on-disk map. note
   // that its safe to process this outside m_lock as we still hold
   // timer lock.
-  notify_listener_acquire_release_images(acquire_updates, release_updates);
-  update_image_mapping(std::move(map_updates), std::move(map_removals));
+  notify_listener_acquire_release_entities(acquire_updates, release_updates);
+  update_entity_mapping(std::move(map_updates), std::move(map_removals));
 }
 
 template <typename I>
@@ -309,7 +309,7 @@ void ImageMap<I>::schedule_action(const GlobalId &global_id) {
 }
 
 template <typename I>
-void ImageMap<I>::notify_listener_acquire_release_images(
+void ImageMap<I>::notify_listener_acquire_release_entities(
     const Updates &acquire, const Updates &release) {
   if (acquire.empty() && release.empty()) {
     return;
@@ -360,7 +360,7 @@ void ImageMap<I>::notify_listener_acquire_release_images(
 }
 
 template <typename I>
-void ImageMap<I>::notify_listener_remove_images(const std::string &mirror_uuid,
+void ImageMap<I>::notify_listener_remove_entities(const std::string &mirror_uuid,
                                                 const Updates &remove) {
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "remove=[" << remove << "]" << dendl;
@@ -420,9 +420,10 @@ void ImageMap<I>::handle_peer_ack_remove(const GlobalId &global_id, int r) {
 }
 
 template <typename I>
-void ImageMap<I>::update_images_added(
+void ImageMap<I>::update_entities_added(
     const std::string &mirror_uuid,
     const MirrorEntities &entities) {
+  // Add images or groups after mirroring is enabled or discovered.
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "entities={ " << entities << " }" << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
@@ -439,9 +440,10 @@ void ImageMap<I>::update_images_added(
 }
 
 template <typename I>
-void ImageMap<I>::update_images_removed(
+void ImageMap<I>::update_entities_removed(
     const std::string &mirror_uuid,
     const MirrorEntities &entities) {
+  // Remove images or groups after mirroring is disabled or deleted.
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "entities={ " << entities << " }" << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
@@ -477,7 +479,7 @@ void ImageMap<I>::update_images_removed(
   if (!to_remove.empty()) {
     // removal notification will be notified instantly. this is safe
     // even after scheduling action for images as we still hold m_lock
-    notify_listener_remove_images(mirror_uuid, to_remove);
+    notify_listener_remove_entities(mirror_uuid, to_remove);
   }
 }
 
@@ -538,7 +540,7 @@ void ImageMap<I>::update_instances_removed(
 }
 
 template <typename I>
-void ImageMap<I>::update_images(const std::string &mirror_uuid,
+void ImageMap<I>::update_entities(const std::string &mirror_uuid,
                                 MirrorEntities &&added_entities,
                                 MirrorEntities &&removed_entities) {
   dout(5) << "mirror_uuid=" << mirror_uuid << ", " << "added_count="
@@ -552,10 +554,10 @@ void ImageMap<I>::update_images(const std::string &mirror_uuid,
     }
 
     if (!removed_entities.empty()) {
-      update_images_removed(mirror_uuid, removed_entities);
+      update_entities_removed(mirror_uuid, removed_entities);
     }
     if (!added_entities.empty()) {
-      update_images_added(mirror_uuid, added_entities);
+      update_entities_added(mirror_uuid, added_entities);
     }
   }
 
