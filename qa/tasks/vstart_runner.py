@@ -1353,6 +1353,7 @@ def exec_test():
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
     modules = [a for a in args if not a.startswith("-")]
+
     for f in flags:
         if f == '-':
             # using `-` here as a module name for the --config-mode
@@ -1360,22 +1361,32 @@ def exec_test():
             # and `-` means reading the config from stdin
             # This won't mean much for the unit test mode, but it will fail quickly.
             modules.append("-")
-        elif f == "--interactive":
-            opt_interactive_on_error = True
-        elif f == "--create":
+        elif f in ('--create', '-c'):
             opt_create_cluster = True
+        elif f in ('--teardown', '-t'):
+            opt_teardown_cluster = True
+        elif f in ('--interactive' '-i'):
+            opt_interactive_on_error = True
+        elif f in ('--debug', '-d'):
+            logging.root.setLevel(logging.DEBUG)
+        elif f == "--kclient":
+            use_kernel_client = True
+        elif f == '--run-all-tests':
+            opt_exit_on_test_failure = False
+        elif f == '--clear-old-log':
+            clear_old_log()
+        elif f == '--rotate-logs':
+            opt_rotate_logs = True
+        elif f == '--log-ps-output':
+            opt_log_ps_output = True
         elif f == "--create-cluster-only":
             opt_create_cluster_only = True
         elif f == "--ignore-missing-binaries":
             opt_ignore_missing_binaries = True
-        elif f == '--teardown':
-            opt_teardown_cluster = True
-        elif f == '--log-ps-output':
-            opt_log_ps_output = True
-        elif f == '--clear-old-log':
-            clear_old_log()
-        elif f == "--kclient":
-            use_kernel_client = True
+        elif '--no-verbose' == f:
+            opt_verbose = False
+        elif f == '--config-mode':
+            mode = Mode.config
         elif f == '--usens':
             opt_use_ns = True
         elif '--brxnet' in f:
@@ -1390,16 +1401,6 @@ def exec_test():
             except Exception as e:
                 log.error("Invalid ip '{0}' {1}".format(opt_brxnet, e))
                 sys.exit(-1)
-        elif '--no-verbose' == f:
-            opt_verbose = False
-        elif f == '--rotate-logs':
-            opt_rotate_logs = True
-        elif f == '--run-all-tests':
-            opt_exit_on_test_failure = False
-        elif f == '--debug':
-            logging.root.setLevel(logging.DEBUG)
-        elif f == '--config-mode':
-            mode = Mode.config
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
