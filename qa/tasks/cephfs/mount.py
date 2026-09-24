@@ -751,7 +751,7 @@ class CephFSMountBase(object):
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        write_file(self.client_remote, path, data, **kwargs)
+        self.client_remote.write_file(path, data, **kwargs)
 
         if perms:
             self.run_shell(args=f'chmod {perms} {path}')
