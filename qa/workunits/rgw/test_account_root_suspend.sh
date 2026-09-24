@@ -1,7 +1,8 @@
 #!/bin/bash
 #
-# Verify that suspending an account root user also suspends account-owned
-# buckets (BUCKET_SUSPENDED), while suspending a non-root account user does not.
+# Verify account suspend/enable and per-user suspend behavior for account
+# members. Account-owned buckets are frozen by account suspend, not by
+# user suspend of the account root.
 #
 # To run with vstart:
 #   PATH=~/ceph/build/bin/:$PATH AWS_ENDPOINT_URL=http://localhost:8000 \
@@ -16,7 +17,14 @@ then
 	export AWS_ENDPOINT_URL=$url
 fi
 
-BUCKET_SUSPENDED=1
+bucket_suspended() {
+	radosgw-admin bucket stats --bucket "$1" | jq -r .suspended
+}
+
+account_suspended() {
+	radosgw-admin account get --account-id="$1" \
+		| jq -r '.AccountInfo.suspended // .suspended'
+}
 
 python3 -m venv account-root-suspend-virtualenv
 source account-root-suspend-virtualenv/bin/activate
@@ -26,8 +34,10 @@ pip install --upgrade pip awscli
 userinfo=$(radosgw-admin user create --uid test-account-root-suspend \
 	--display-name "AccountRootSuspend" \
 	--email accountrootsuspend@example.com)
-export AWS_ACCESS_KEY_ID=$(echo $userinfo | jq -r .keys[0].access_key)
-export AWS_SECRET_ACCESS_KEY=$(echo $userinfo | jq -r .keys[0].secret_key)
+ROOT_ACCESS_KEY=$(echo $userinfo | jq -r .keys[0].access_key)
+ROOT_SECRET_KEY=$(echo $userinfo | jq -r .keys[0].secret_key)
+export AWS_ACCESS_KEY_ID=$ROOT_ACCESS_KEY
+export AWS_SECRET_ACCESS_KEY=$ROOT_SECRET_KEY
 
 aws s3 mb s3://test-account-root-suspend
 aws s3api put-object --bucket test-account-root-suspend --key obj
@@ -45,56 +55,63 @@ IAM_SECRET_KEY=$(echo $iaminfo | jq -r .keys[0].secret_key)
 aws iam attach-user-policy --region us-east-1 --user-name AccountMemberSuspend \
 	--policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
 
-flags=$(radosgw-admin bucket stats --bucket test-account-root-suspend | jq -r .flags)
-test $((flags & BUCKET_SUSPENDED)) -eq 0
+test "$(bucket_suspended test-account-root-suspend)" = "false"
 
-# suspending account root must suspend account-owned buckets
+# suspending the account root blocks that user, not account-owned buckets
 radosgw-admin user suspend --uid test-account-root-suspend
-flags=$(radosgw-admin bucket stats --bucket test-account-root-suspend | jq -r .flags)
-test $((flags & BUCKET_SUSPENDED)) -eq $BUCKET_SUSPENDED
+test "$(bucket_suspended test-account-root-suspend)" = "false"
 
-# non-root member is also blocked via BUCKET_SUSPENDED
 set +e
+AWS_ACCESS_KEY_ID=$ROOT_ACCESS_KEY AWS_SECRET_ACCESS_KEY=$ROOT_SECRET_KEY \
+	aws s3api head-object --bucket test-account-root-suspend --key obj
+root_rc=$?
 AWS_ACCESS_KEY_ID=$IAM_ACCESS_KEY AWS_SECRET_ACCESS_KEY=$IAM_SECRET_KEY \
 	aws s3api head-object --bucket test-account-root-suspend --key obj
-rc=$?
+member_rc=$?
 set -e
-test $rc -ne 0
+test $root_rc -ne 0
+test $member_rc -eq 0
 
-# re-enable account root restores buckets
+# re-enable account root restores root access
 radosgw-admin user enable --uid test-account-root-suspend
-flags=$(radosgw-admin bucket stats --bucket test-account-root-suspend | jq -r .flags)
-test $((flags & BUCKET_SUSPENDED)) -eq 0
-AWS_ACCESS_KEY_ID=$IAM_ACCESS_KEY AWS_SECRET_ACCESS_KEY=$IAM_SECRET_KEY \
+test "$(bucket_suspended test-account-root-suspend)" = "false"
+AWS_ACCESS_KEY_ID=$ROOT_ACCESS_KEY AWS_SECRET_ACCESS_KEY=$ROOT_SECRET_KEY \
 	aws s3api head-object --bucket test-account-root-suspend --key obj
 
 # suspending a non-root account member must not suspend account buckets
 radosgw-admin user suspend --uid test-account-member-suspend
-flags=$(radosgw-admin bucket stats --bucket test-account-root-suspend | jq -r .flags)
-test $((flags & BUCKET_SUSPENDED)) -eq 0
-# root can still access
-aws s3api head-object --bucket test-account-root-suspend --key obj
+test "$(bucket_suspended test-account-root-suspend)" = "false"
+AWS_ACCESS_KEY_ID=$ROOT_ACCESS_KEY AWS_SECRET_ACCESS_KEY=$ROOT_SECRET_KEY \
+	aws s3api head-object --bucket test-account-root-suspend --key obj
+set +e
+AWS_ACCESS_KEY_ID=$IAM_ACCESS_KEY AWS_SECRET_ACCESS_KEY=$IAM_SECRET_KEY \
+	aws s3api head-object --bucket test-account-root-suspend --key obj
+member_rc=$?
+set -e
+test $member_rc -ne 0
 
 radosgw-admin user enable --uid test-account-member-suspend
 
-# account suspend freezes account-owned buckets and blocks members
+# account suspend freezes account-owned buckets and blocks all members
 radosgw-admin account suspend --account-id=$accountid
-suspended=$(radosgw-admin account get --account-id=$accountid | jq -r '.AccountInfo.suspended // .suspended')
-test "$suspended" = "1"
-flags=$(radosgw-admin bucket stats --bucket test-account-root-suspend | jq -r .flags)
-test $((flags & BUCKET_SUSPENDED)) -eq $BUCKET_SUSPENDED
+test "$(account_suspended "$accountid")" = "1"
+test "$(bucket_suspended test-account-root-suspend)" = "true"
 set +e
-aws s3api head-object --bucket test-account-root-suspend --key obj
-rc=$?
+AWS_ACCESS_KEY_ID=$ROOT_ACCESS_KEY AWS_SECRET_ACCESS_KEY=$ROOT_SECRET_KEY \
+	aws s3api head-object --bucket test-account-root-suspend --key obj
+root_rc=$?
+AWS_ACCESS_KEY_ID=$IAM_ACCESS_KEY AWS_SECRET_ACCESS_KEY=$IAM_SECRET_KEY \
+	aws s3api head-object --bucket test-account-root-suspend --key obj
+member_rc=$?
 set -e
-test $rc -ne 0
+test $root_rc -ne 0
+test $member_rc -ne 0
 
 radosgw-admin account enable --account-id=$accountid
-suspended=$(radosgw-admin account get --account-id=$accountid | jq -r '.AccountInfo.suspended // .suspended')
-test "$suspended" = "0"
-flags=$(radosgw-admin bucket stats --bucket test-account-root-suspend | jq -r .flags)
-test $((flags & BUCKET_SUSPENDED)) -eq 0
-aws s3api head-object --bucket test-account-root-suspend --key obj
+test "$(account_suspended "$accountid")" = "0"
+test "$(bucket_suspended test-account-root-suspend)" = "false"
+AWS_ACCESS_KEY_ID=$ROOT_ACCESS_KEY AWS_SECRET_ACCESS_KEY=$ROOT_SECRET_KEY \
+	aws s3api head-object --bucket test-account-root-suspend --key obj
 
 # clean up
 radosgw-admin bucket rm --bucket test-account-root-suspend --purge-objects
