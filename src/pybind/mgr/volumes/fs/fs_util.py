@@ -99,6 +99,24 @@ def listdir(fs, dirpath, filter_entries=None, filter_files=True):
     return entries
 
 
+def list_files(fs, path):
+    return listdir(fs, path, filter_files=False)
+
+
+def is_dir_empty(fs, path):
+    try:
+        with fs.opendir(path) as dir_handle:
+            d = fs.readdir(dir_handle)
+            while d:
+                if not d.d_name in (b'.', b'..'):
+                    return False
+                d = fs.readdir(dir_handle)
+    except cephfs.Error as e:
+        raise VolumeException(exception=e)
+
+    return True
+
+
 def has_subdir(fs, dirpath, filter_entries=None):
     """
     Check the presence of directory (only dirs) for a given path
