@@ -21,14 +21,15 @@ DEBUGFS_META_DIR = 'meta'
 
 class KernelMountBase(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote,
-                 client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
-                 client_config={}):
-        super(KernelMountBase, self).__init__(ctx=ctx, test_dir=test_dir,
-            client_id=client_id, client_remote=client_remote,
+                 client_keyring=None, client_keyring_path=None,
+                 hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
+                 client_config={}, brxnet=None):
+        super(KernelMountBase, self).__init__(
+            ctx=ctx, test_dir=test_dir, client_id=client_id,
+            client_remote=client_remote, client_keyring=client_keyring,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
-            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet,
-            client_config=client_config)
+            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt,
+            client_config=client_config, brxnet=brxnet)
 
         if client_config.get('debug', False):
             self.client_remote.run(args=["sudo", "bash", "-c", "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"])
