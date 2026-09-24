@@ -5255,6 +5255,15 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   // Whether the client may hold dentry leases here at all depends only on
   // the directory, and nothing below changes that, so ask once.
   const bool dir_leasable = mds->locker->can_lease_dentries_in(diri, mdr);
+  /* Past the cache limit, trimming cannot keep up, and every cap handed out
+   * pins an inode it could otherwise expire. Optionally stop a walker from
+   * making it worse: its client still gets the entries and their leases, but
+   * no caps on inodes it does not already hold. */
+  const bool new_caps =
+    !(g_conf().get_val<bool>("mds_readdir_withhold_caps_over_limit") &&
+      mdcache->cache_size() > mdcache->cache_limit_memory());
+  if (!new_caps)
+    dout(10) << " cache over its limit, issuing no new caps" << dendl;
   bool end = (it == dir->end());
   for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -5338,7 +5347,8 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 
     // inode
     dout(12) << "including inode in " << *in << " snap " << snapid << dendl;
-    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid, bytes_left - (int)dnbl.length());
+    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid,
+				 bytes_left - (int)dnbl.length(), 0, new_caps);
     if (r < 0) {
       // chop off dn->name, lease
       dout(10) << " ran out of room, stopping at " << start_len << " < " << bytes_left << dendl;
