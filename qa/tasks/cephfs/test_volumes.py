@@ -216,7 +216,7 @@ class TestVolumesHelper(CephFSTestCase):
             return name + random_num
 
         name = name + random_num
-        return [f'{name}{i}' for i in range(n)]
+        return [f'{name}_{i}' for i in range(n)]
 
     def _gen_vol_name(self, n=1):
         return self._gen_name('vol', n)
