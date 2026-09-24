@@ -40,6 +40,8 @@ public:
 
   /// map an auth method name to its CEPH_AUTH_* value, or CEPH_AUTH_UNKNOWN
   static __u32 parse_method(std::string_view name);
+  /// validator for the auth_*_required options
+  static int validate_method_list(std::string *value, std::string *error);
 };
 
 

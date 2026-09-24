@@ -33,6 +33,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
 #  - and the template parameter of lock_policy is SINGLE
 add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/auth/Auth.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthMethodList.cc
   ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket_client.cc
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
