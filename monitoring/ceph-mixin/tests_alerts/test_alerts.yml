@@ -1521,33 +1521,22 @@ tests:
           description: Reads from an OSD have used a secondary PG to return data to the client, indicating a potential failing drive.
 
 # Pools
-   # trigger percent full prediction on pools 1 and 2 only
+   # Percent used is a fraction, not a 0-100 percentage. Only the fast-growing
+   # pool should cross the 95% forecast; flat and slow pools are controls.
  - interval: 12h
    input_series:
-    - series: 'ceph_pool_percent_used{pool_id="1", instance="9090", cluster="mycluster"}'
-      values: '1 1 1 1 1'
     - series: 'ceph_pool_percent_used{pool_id="1", instance="8090", cluster="mycluster"}'
-      values: '78 89 79 98 78'
-    - series: 'ceph_pool_percent_used{pool_id="2", instance="9090", cluster="mycluster"}'
-      values: '1 1 1 1 1'
+      values: '0.30 0.40 0.50 0.60 0.70'
     - series: 'ceph_pool_percent_used{pool_id="2", instance="8090", cluster="mycluster"}'
-      values: '22 22 23 23 24'
-    - series: 'ceph_pool_metadata{pool_id="1" , instance="9090" ,name="rbd",type="replicated", cluster="mycluster"}'
+      values: '0.20 0.20 0.20 0.20 0.20'
+    - series: 'ceph_pool_percent_used{pool_id="3", instance="8090", cluster="mycluster"}'
+      values: '0.20 0.205 0.21 0.215 0.22'
+    - series: 'ceph_pool_metadata{pool_id="1", instance="8090", name="default.rgw.index", type="replicated", cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'ceph_pool_metadata{pool_id="1", instance="8090",name="default.rgw.index",type="replicated", cluster="mycluster"}'
+    - series: 'ceph_pool_metadata{pool_id="2", instance="8090", name="rbd", type="replicated", cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'ceph_pool_metadata{pool_id="2" , instance="9090" ,name="rbd",type="replicated", cluster="mycluster"}'
+    - series: 'ceph_pool_metadata{pool_id="3", instance="8090", name="slow", type="replicated", cluster="mycluster"}'
       values: '1 1 1 1 1'
-    - series: 'ceph_pool_metadata{pool_id="2", instance="8090",name="default.rgw.index",type="replicated", cluster="mycluster"}'
-      values: '1 1 1 1 1'
-   promql_expr_test:
-     - expr: |
-         (predict_linear(ceph_pool_percent_used[2d], 3600 * 24 * 5) * on(cluster, pool_id, instance)
-              group_right() ceph_pool_metadata) >= 95
-       eval_time: 36h
-       exp_samples:
-         - labels: '{instance="8090",name="default.rgw.index",pool_id="1",type="replicated", cluster="mycluster"}'
-           value: 1.435E+02 # 142%
    alert_rule_test:
     - eval_time: 48h
       alertname: CephPoolGrowthWarning
