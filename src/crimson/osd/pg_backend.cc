@@ -289,6 +289,36 @@ PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
   logger().trace("sparse_read: {} {}~{}",
                  os.oi.soid, (uint64_t)op.extent.offset, (uint64_t)op.extent.length);
 
+  if (is_erasure()) {
+    // TODO: implement sparse read properly for EC pools with direct reads.
+    if (!adjusted_length) {
+      std::map<uint64_t, uint64_t> extents;
+      ceph::encode(extents, osd_op.outdata);
+      ceph::encode(ceph::bufferlist{}, osd_op.outdata);
+      osd_op.op.extent.length = 0;
+      return read_errorator::now();
+    }
+    return _read(os.oi.soid, os.oi.size, offset, adjusted_length, op.flags
+    ).safe_then_interruptible_tuple(
+      [&delta_stats, &os, &osd_op, offset](auto&& bl) -> read_errorator::future<> {
+      if (!_read_verify_data(os.oi, bl)) {
+        return crimson::ct_error::object_corrupted::make();
+      }
+      osd_op.op.extent.length = bl.length();
+      std::map<uint64_t, uint64_t> extents = {{offset, bl.length()}};
+      ceph::encode(extents, osd_op.outdata);
+      encode_destructively(bl, osd_op.outdata);
+      logger().trace("sparse_read got {} bytes from object {}",
+                     (uint64_t)osd_op.op.extent.length, os.oi.soid);
+      delta_stats.num_rd++;
+      delta_stats.num_rd_kb += shift_round_up(osd_op.op.extent.length, 10);
+      return read_errorator::make_ready_future<>();
+    }, crimson::ct_error::input_output_error::handle([] {
+      return read_errorator::future<>{crimson::ct_error::object_corrupted::make()};
+    }),
+    read_errorator::pass_further{});
+  }
+
   return interruptor::make_interruptible(
     crimson::os::with_store<&crimson::os::FuturizedStore::Shard::fiemap>(
     store, coll, ghobject_t{os.oi.soid},
