@@ -115,10 +115,14 @@ string DeviceState::get_life_expectancy_str(utime_t now) const
     return "now";
   }
   utime_t min = life_expectancy.first - now;
-  utime_t max = life_expectancy.second - now;
-  if (life_expectancy.second == utime_t()) {
+  // No upper bound, or an inverted range (max <= min) from any source (CLI,
+  // a config-key reload, or a future writer): report only the lower bound and
+  // avoid the unsigned utime_t underflow of computing max.
+  if (life_expectancy.second == utime_t() ||
+      life_expectancy.second <= life_expectancy.first) {
     return string(">") + timespan_str(make_timespan(min));
   }
+  utime_t max = life_expectancy.second - now;
   string a = timespan_str(make_timespan(min));
   string b = timespan_str(make_timespan(max));
   if (a == b) {
