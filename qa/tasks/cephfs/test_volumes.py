@@ -203,9 +203,20 @@ class TestVolumesHelper(CephFSTestCase):
         self._verify_clone_root(path1, path2, clone, clone_group, clone_pool)
         self._verify_clone_attrs(path1, path2)
 
-    def _gen_name(self, name, n):
-        names = [f'{name}{random.randrange(0, 9999)}{i}' for i in range(n)]
-        return names[0] if n == 1 else names
+    def _gen_name(self, name, n=1):
+        random_num = random.randrange(0, 999)
+        if random_num < 10:
+            random_num = '00' + str(random_num)
+        elif random_num < 100:
+            random_num = '0' + str(random_num)
+        else:
+            random_num = str(random_num)
+
+        if n == 1:
+            return name + random_num
+
+        name = name + random_num
+        return [f'{name}{i}' for i in range(n)]
 
     def _gen_vol_name(self, n=1):
         return self._gen_name('vol', n)
