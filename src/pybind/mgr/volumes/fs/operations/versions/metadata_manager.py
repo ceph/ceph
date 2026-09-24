@@ -7,6 +7,7 @@ import re
 
 import cephfs
 
+from ...utils import to_str
 from ...exception import MetadataMgrException
 
 log = logging.getLogger(__name__)
@@ -152,7 +153,8 @@ class MetadataManager(object):
             self.config.set(section, key, str(value))
 
     def update_global_section(self, key, value):
-        self.update_section(MetadataManager.GLOBAL_SECTION, key, str(value))
+        key, value = to_str(key, value)
+        self.update_section(MetadataManager.GLOBAL_SECTION, key, value)
 
     def get_option(self, section, key):
         if not self.config.has_section(section):
