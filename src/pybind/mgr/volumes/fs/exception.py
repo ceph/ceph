@@ -11,11 +11,12 @@ class VolumeException(Exception):
     Generic exception for CephFS volumes plugin.
     '''
 
-    def __init__(self, errno=None, errmsg=None):
-        assert errno or errmsg
+    def __init__(self, errno=None, errmsg=None, exception=None):
+        assert (errno and errmsg) or exception
 
         self.errno = errno
         self.errsmg = errmsg
+        self.exception = exception
 
         if self.errno:
             self.errcode = errorcode.get(abs(self.errno), 'UNKNOWN_ERROR')
@@ -34,7 +35,8 @@ class VolumeException(Exception):
 
     def __str__(self):
         return (f'{self.__class__.__name__}: self.errno = {self.errno}, '
-                f'self.errcode = {self.errcode}, self.errmsg = {self.errmsg}')
+                f'self.errcode = {self.errcode}, self.errmsg = {self.errmsg}, '
+                f'self.exception = {self.exception}')
 
 
 class MetadataMgrException(VolumeException):
