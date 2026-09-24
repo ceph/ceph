@@ -172,8 +172,9 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
  * @param op Operation descriptor containing offset and length
  * @param sparse Whether this is a sparse read operation
  * @param ops_index Index of the operation in the operation list
+ * @param single_op True if the whole op will be sent as a single op
  */
-void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
+void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) {
   auto &target = orig_op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
   ceph_assert(pi);
@@ -206,7 +207,7 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
       break;
     }
   }
-  bool primary_required = count > 1 || orig_op->objver || has_non_read_ops;
+  bool primary_required = !single_op || orig_op->objver || has_non_read_ops;
 
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
@@ -325,8 +326,9 @@ void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) con
  * @param op Operation descriptor containing offset and length
  * @param sparse Whether this is a sparse read operation
  * @param ops_index Index of the operation in the operation list
+ * @param single_op True if the whole op will be sent as a single op
  */
-void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
+void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index, bool single_op) {
 
   auto &target = orig_op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(target.base_oloc.pool);
@@ -628,14 +630,14 @@ void SplitOp::protect_torn_reads() {
   }
 }
 
-void SplitOp::init(OSDOp &op, int ops_index) {
+void SplitOp::init(OSDOp &op, int ops_index, bool single_op) {
   switch (op.op.op) {
   case CEPH_OSD_OP_SPARSE_READ: {
-    init_read(op, true, ops_index);
+    init_read(op, true, ops_index, single_op);
     break;
   }
   case CEPH_OSD_OP_READ: {
-    init_read(op, false, ops_index);
+    init_read(op, false, ops_index, single_op);
     break;
   }
   default: {
@@ -1028,7 +1030,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   // STAGE 4: Initialize sub-operations (may set abort if problems detected)
   for (unsigned i = 0; i < op->ops.size(); ++i) {
-    split_read->init( op->ops[i], i);
+    split_read->init( op->ops[i], i, single_op);
     if (split_read->abort) {
       break;
     }
