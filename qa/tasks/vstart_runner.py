@@ -1204,9 +1204,9 @@ class LogStream(object):
         self.buffer = ''
 
     def flush(self):
-        pass
+        self._write()
 
-    def __del__(self):
+    def __exit__(self):
         self._write()
 
 
@@ -1613,11 +1613,11 @@ def exec_test():
         for test, failure in result.failures:
             bad_tests.append(str(test))
 
-        log.info('vstart_runner.py finished running, exiting with 1')
+        log.info('vstart_runner.py finished running, with exit status 1')
         log.info('\n'*10)
         sys.exit(-1)
     else:
-        log.info('vstart_runner.py finished running, exiting with 0')
+        log.info('vstart_runner.py finished running, with exit status 0')
         log.info('\n'*10)
         sys.exit(0)
 
