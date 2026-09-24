@@ -4981,6 +4981,14 @@ void PeeringState::append_log(
     // write can result in trim_to being ahead of crt
     trim_to = pg_log.get_can_rollback_to();
   }
+  // trim_to is computed by the primary from the acting set's reported
+  // progress and broadcast verbatim to every replica; a replica that is
+  // still catching up (e.g. a backfill/async-recovery target) must never
+  // trim past its own head, or log.tail would end up ahead of entries it
+  // appends once it catches up, violating the log's tail invariant.
+  if (trim_to > pg_log.get_head()) {
+    trim_to = pg_log.get_head();
+  }
   pg_log.trim(trim_to, info, transaction_applied, async);
 
   // update the local pg, pg log
