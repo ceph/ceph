@@ -501,3 +501,91 @@ class TestBasic(VolumesHelper):
         v3.remove_snap()
         v3.remove()
         self._wait_for_trash_empty()
+
+
+class TestWithIoLoad(VolumesHelper):
+    '''
+    Test subvol upgrade from v2 to v3 while IO is being performed on the subvol.
+    '''
+
+    CLIENTS_REQUIRED = 2
+
+    def test_regular_basic_subvol_with_workload_via_fs_client(self):
+        '''
+        Test subvol upgrade from v2 to v3 when subvol is located in the
+        default subvol group and the subvol is under IO load.
+        '''
+        v2 = SubvolV2Helper(tco=self)
+        v2.custom_create()
+        v2.sanity_test_subvol()
+
+        v2.gen_io_load_via_fs_client()
+        log.info('giving 60 seconds for background threads for writing...')
+        time_sleep(20)
+
+        v3 = self.cause_auto_upgrade(v2)
+        msg = ('thread writing on subvol via client crashed while subvol '
+               f'{v3.name} was being upgraded from v2 to v3')
+        # XXX writer threads shouldn't die or be affected due to upgrade
+        self.assertEqual(v3.writer.is_alive(), True, msg)
+
+        v3.verify_meta_file()
+        v3.sanity_test_subvol()
+
+        # upgrade was successful, stopping client workload
+        v3.writer.stop()
+        # avoids unnecessary failure in case writer threads takes some time to
+        # stop
+        time_sleep(5)
+        msg = ('upgrade was successful but writer thread didnt stop despite '
+               'signaling stop')
+        self.assertEqual(v3.writer.is_alive(), False, msg)
+
+        # verifying if files were actually being written on the subvol
+        v3.writer.verify_num_of_files_written()
+
+        v3.remove()
+        self._wait_for_trash_empty()
+
+    def test_regular_basic_subvol(self):
+        '''
+        Test subvol upgrade from v2 to v3 when subvol is located in the
+        default subvol group and the subvol is under IO load.
+        '''
+        v2 = SubvolV2Helper(tco=self)
+        v2.custom_create()
+        v2.sanity_test_subvol()
+
+        v2.gen_io_load_via_subvol_client(v2.uuid_path)
+        log.info('giving 60 seconds for background threads for writing...')
+        time_sleep(5)
+
+        # will trigger subvol auto-upgrade
+        v3_sv_path = v2.getpath()
+        v3 = SubvolV3Helper(v2=v2)
+        msg = (f'subvol upgrade for {v2.name} from v2 to v3 passed (because '
+               'there was no crash) but output of getpath cmd is incorrect')
+        self.assertEqual(v3_sv_path, f'/{v3.mnt_path}', msg)
+
+        # XXX writer threads shouldn't die or be affected due to upgrade
+        msg = ('thread writing on subvol via client crashed while subvol '
+               f'{v3.name} was being upgraded from v2 to v3')
+        self.assertEqual(v3.writer.is_alive(), True, msg)
+
+        v3.verify_meta_file()
+        v3.sanity_test_subvol()
+
+        # upgrade was successful, stopping client workload
+        v3.writer.stop()
+        # avoids unnecessary failure in case writer threads takes some time to
+        # stop
+        time_sleep(5)
+        msg = ('upgrade was successful but writer thread didnt stop despite '
+               'signaling stop')
+        self.assertEqual(v3.writer.is_alive(), False, msg)
+
+        # verifying if files were actually being written on the subvol
+        v3.writer.verify_num_of_files_written()
+
+        v3.remove()
+        self._wait_for_trash_empty()
