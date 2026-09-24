@@ -1,6 +1,8 @@
 from errno import *
 from os.path import basename, dirname
 from logging import getLogger
+from json import loads
+from time import sleep as time_sleep
 
 from cephfs import Error, InvalidValue
 
@@ -9,7 +11,7 @@ from .subvolume_attrs import SubvolumeStates
 from .metadata_manager import MetadataManager
 from .auth_metadata import AuthMetadataManager
 from ..trash import create_trashcan, open_trashcan
-from ...utils import gen_uuid, validate_uuid, safe_join, to_bytes
+from ...utils import gen_uuid, validate_uuid, safe_join, to_bytes, to_str
 from ...fs_util import (listdir, list_snaps, statx, get_all_xattrs,
                         set_all_xattrs, path_exists, is_dir_empty)
 from ...exception import (VolumeException, MetadataMgrException,
@@ -625,6 +627,58 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
     # ----- methods for subvol auto-upgrade from v2 -----
 
 
+    def get_caps(self, client_name):
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'auth get',
+            'entity': client_name,
+            'format': 'json-pretty'})
+        if ret != 0:
+            msg = f'ret = {ret} out = {out} err = {err}'
+            log.info(msg)
+            raise SubvolUpgradeError(EPERM,
+                                     f'"auth get" cmd failed for client '
+                                     f'{client_name} ')
+        output = loads(out)
+        assert client_name == output[0]['entity']
+        mon_caps = output[0]['caps']['mon']
+        osd_caps = output[0]['caps']['osd']
+        mds_caps = output[0]['caps']['mds']
+
+        return mon_caps, osd_caps, mds_caps
+
+    def update_caps(self, client_name, mon_caps, osd_caps, mds_caps):
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'auth caps',
+            'entity': client_name,
+            'caps': ['mon', mon_caps, 'osd', osd_caps, 'mds', mds_caps],
+            'format': 'json-pretty'})
+        if ret != 0:
+            msg = f'ret = {ret} out = {out} err = {err}'
+            log.info(msg)
+            raise SubvolUpgradeError(EPERM,
+                                     f'"auth caps" cmd failed for client '
+                                     f'{client_name}')
+        output = loads(out)
+        assert client_name == output[0]['entity']
+        assert mon_caps == output[0]['caps']['mon']
+        assert osd_caps == output[0]['caps']['osd']
+        assert mds_caps == output[0]['caps']['mds']
+
+    def add_v3_caps_to_client_keyring(self):
+        volname = 'cephfs'
+        client_name = 'client.x1'
+
+        mon_caps, osd_caps, mds_caps = self.get_caps(client_name)
+
+        mnt_path = to_str(self.get_incar_mnt_path())
+        mds_caps += (f', allow rw fsname={volname}  path={mnt_path}')
+        self.update_caps(client_name, mon_caps, osd_caps, mds_caps)
+
+        time_sleep(10)
+
+    def rm_v2_caps_from_client_keyring(self):
+        pass
+
     def _upgrade_v2_to_v3_layout(self):
         log.info(f'upgrading subvol {self.name} from v2 to v3, '
                  'upgrading its layout...')
@@ -686,6 +740,8 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
         if self.v2.has_snap():
             self.uuid = gen_uuid()
 
+        self.add_v3_caps_to_client_keyring()
+
         self._upgrade_v2_to_v3_layout()
         self._define_md_attrs()
         self._update_v2_to_v3_meta()
@@ -694,3 +750,4 @@ class SubvolumeV3(SubvolHelper, PreV3Helper, SubvolumeV2):
         if self.uuid == self.v2.uuid:
             self.v2 = self._get_v2_helper(False)
         self.clean_stale_snapshot_metadata()
+        self.rm_v2_caps_from_client_keyring()

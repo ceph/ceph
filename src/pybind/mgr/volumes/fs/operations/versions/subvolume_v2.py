@@ -10,7 +10,6 @@ from .metadata_manager import MetadataManager
 from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeFeatures
 from .op_sm import SubvolumeOpSm
 from .subvolume_v1 import SubvolumeV1
-from ...utils import safe_join
 from ...exception import OpSmException, VolumeException, MetadataMgrException
 from ...utils import safe_join, gen_uuid
 from ...fs_util import listdir, create_base_dir
