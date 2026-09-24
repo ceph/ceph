@@ -4,6 +4,7 @@
 #include "DataGenerator.h"
 
 #include <chrono>
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 
@@ -246,11 +247,11 @@ bool HeaderedSeededRandomGenerator::validate_block(uint64_t block_offset,
   // We validate the block matches what we generate byte for byte
   // however we ignore the time section of the header
   ceph::bufferptr bufferptr = generate_block(block_offset);
-  bool valid = strncmp(bufferptr.c_str(), buffer_start, timeStart()) == 0;
-  valid = valid
-              ? strncmp(bufferptr.c_str() + timeEnd(), buffer_start + timeEnd(),
-                        m_model.get_block_size() - timeEnd()) == 0
-              : valid;
+  bool valid = std::memcmp(bufferptr.c_str(), buffer_start, timeStart()) == 0;
+  valid = valid ? std::memcmp(bufferptr.c_str() + timeEnd(),
+                              buffer_start + timeEnd(),
+                              m_model.get_block_size() - timeEnd()) == 0
+                : valid;
   return valid;
 }
 
@@ -269,11 +270,11 @@ HeaderedSeededRandomGenerator::getErrorTypeForBlock(
       return ErrorType::SEED_MISMATCH;
     }
 
-    if (std::strncmp(&bufferlist[((block_offset - read_offset) *
-                                  m_model.get_block_size()) +
-                                 bodyStart()],
-                     generate_block(block_offset).c_str() + bodyStart(),
-                     m_model.get_block_size() - bodyStart()) != 0) {
+    if (std::memcmp(&bufferlist[((block_offset - read_offset) *
+                                 m_model.get_block_size()) +
+                                bodyStart()],
+                    generate_block(block_offset).c_str() + bodyStart(),
+                    m_model.get_block_size() - bodyStart()) != 0) {
       return ErrorType::DATA_MISMATCH;
     }
   } catch (const std::exception& e) {
