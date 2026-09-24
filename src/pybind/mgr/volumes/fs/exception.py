@@ -15,6 +15,10 @@ class VolumeException(Exception):
         self.errno = errno
         self.errsmg = errmsg
 
+        # since error numbers are always negative.
+        if self.errno > 0:
+            self.errno = -self.errno
+
         log.info(self)
 
     def to_tuple(self):
