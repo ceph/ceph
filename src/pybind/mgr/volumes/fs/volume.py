@@ -312,7 +312,7 @@ class VolumeClient(CephfsClient["Module"]):
                     self.purge_queue.queue_job(volname)
         except VolumeException as ve:
             if ve.errno == -errno.EAGAIN and not force:
-                ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
+                ve = VolumeException(ve.errno, ve.errmsg + " (use --force to override)")
                 ret = self.volume_exception_to_retval(ve)
             elif not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)

@@ -489,8 +489,8 @@ class SubvolumeBase(object):
                 raise MetadataMgrException(-errno.ENOENT, 'fabricated .meta')
         except MetadataMgrException as me:
             if me.errno in (-errno.ENOENT, -errno.EINVAL) and not self.legacy_mode:
-                log.warn("subvolume '{0}', {1}, "
-                          "assuming legacy_mode".format(self.subvolname, me.error_str))
+                log.warn(f'assuming legacy mode for subvol {self.name} since '
+                         f'an exception has been caught: {me.errmsg}')
                 self.legacy_mode = True
                 self.load_config()
                 self.discover()
