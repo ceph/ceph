@@ -158,6 +158,21 @@ from a primary read.
 Configuration
 =============
 
+Cluster (every daemon with an RDMA endpoint):
+
+* ``rdma_network`` — the RDMA network, in the same
+  ``{ip-address}/{netmask} [, {ip-address}/{netmask}]`` form as
+  ``public_network``. A gateway or OSD whose own address option
+  (``rgw_cuobj_rdma_ip``, ``osd_cuobj_rdma_ip``) is unset binds its
+  endpoint to a local address in one of these subnets, so one
+  ``ceph config set global rdma_network <subnets>`` covers the whole
+  cluster. On a rail-optimized fabric, list one subnet per rail. An
+  OSD on a host with addresses on several rails prefers the interface
+  on its object store's NUMA node (``osd_numa_prefer_iface``), and
+  otherwise takes the first matching interface. An OSD with
+  ``rdma_network`` set but no local address in it runs without its
+  RDMA endpoint and delivers every read inline.
+
 Gateway (staged mode and protocol handling):
 
 * ``rgw_cuobj_enabled``, ``rgw_cuobj_rdma_ip``, ``rgw_cuobj_rdma_port``,
@@ -198,8 +213,9 @@ Pool (enforced by the OSDs, read by the gateway from the OSDMap):
 OSD (passthrough execution):
 
 * ``osd_cuobj_enabled`` — instantiate the OSD's cuObject endpoint.
-* ``osd_cuobj_rdma_ip`` — RDMA interface address; defaults to the
-  OSD's public address. **Must** be set explicitly when the RDMA NIC
+* ``osd_cuobj_rdma_ip`` — RDMA interface address; overrides
+  ``rdma_network`` for one OSD. With neither set, the OSD uses its
+  public address, so one of the two **must** be set when the RDMA NIC
   is not the public-network interface.
 * ``osd_cuobj_rdma_port`` — local ``rdma_cm`` binding; ``0`` (the
   default) lets the library choose. Clients never connect to this
@@ -241,10 +257,12 @@ Locked memory must be raised
   ``ulimit -l unlimited`` for a vstart cluster.
 
 The RDMA address must belong to the RDMA device
-  ``osd_cuobj_rdma_ip`` has to name an address the RDMA device actually
+  The address an OSD binds (``osd_cuobj_rdma_ip``, or the one it picks
+  from ``rdma_network``) has to be one the RDMA device actually
   carries. Where the ConnectX ports are bonded and tenant traffic is
   VLAN-tagged, that is the address on the VLAN above the bond, which is
-  typically not the public address. ``ibv_devinfo`` and the GID table
+  typically not the public address, so ``rdma_network`` names the VLAN's
+  subnet. ``ibv_devinfo`` and the GID table
   under ``/sys/class/infiniband/<device>/ports/1/gids`` show which
   addresses the device carries; a RoCE v2 entry whose GID ends in the
   IPv4-mapped form of the address confirms the pairing.

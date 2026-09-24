@@ -60,6 +60,21 @@ int pick_addresses(CephContext *cct, unsigned flags, struct ifaddrs *ifa,
 std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network);
 
 /**
+ * Pick the local address an RDMA endpoint binds to from rdma_network.
+ *
+ * rdma_network is a list of ip/prefix pairs, like public_network; a
+ * rail-optimized fabric lists one subnet per rail. Among the local
+ * addresses in any of them, one on an interface that is up and, when
+ * numa_node >= 0, on that NUMA node is preferred.
+ *
+ * @return the address, or an empty string when rdma_network is unset,
+ *         does not parse, or holds no local address
+ */
+std::string pick_rdma_addr(CephContext *cct, int numa_node = -1);
+std::string pick_rdma_addr(CephContext *cct, const struct ifaddrs *ifa,
+			   int numa_node = -1);
+
+/**
  * check for a locally configured address
  *
  * check if any of the listed addresses is configured on the local host.

@@ -16,6 +16,7 @@
 #include "common/config.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/pick_address.h"
 #include "common/rdma_token.h"
 #include "include/scope_guard.h"
 
@@ -59,7 +60,11 @@ int RGWCuObjServer::do_init(CephContext* cct)
 
   auto rdma_ip = cct->_conf.get_val<std::string>("rgw_cuobj_rdma_ip");
   if (rdma_ip.empty()) {
-    lderr(cct) << "rgw_cuobj: ERROR: rgw_cuobj_rdma_ip not configured" << dendl;
+    rdma_ip = pick_rdma_addr(cct);
+  }
+  if (rdma_ip.empty()) {
+    lderr(cct) << "rgw_cuobj: ERROR: neither rgw_cuobj_rdma_ip nor a local "
+               << "address in rdma_network is configured" << dendl;
     return -EINVAL;
   }
 

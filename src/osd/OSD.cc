@@ -4092,25 +4092,45 @@ int OSD::init()
 #ifdef WITH_OSD_CUOBJ
   if (cct->_conf.get_val<bool>("osd_cuobj_enabled")) {
     std::string cuobj_ip = cct->_conf.get_val<std::string>("osd_cuobj_rdma_ip");
-    if (cuobj_ip.empty()) {
+    const auto rdma_network = cct->_conf.get_val<std::string>("rdma_network");
+    if (cuobj_ip.empty() && !rdma_network.empty()) {
+      // as with the public address, prefer the interface (on a
+      // multi-rail host, the rail) on the object store's numa node
+      int numa_node = -1;
+      if (cct->_conf.get_val<bool>("osd_numa_prefer_iface") &&
+	  store->get_numa_node(&numa_node, nullptr, nullptr) < 0) {
+	numa_node = -1;
+      }
+      cuobj_ip = pick_rdma_addr(cct, numa_node);
+      if (!cuobj_ip.empty()) {
+	dout(1) << "cuObject RDMA address " << cuobj_ip << " from rdma_network "
+		<< rdma_network << dendl;
+      }
+    } else if (cuobj_ip.empty()) {
       // default to the public-network address; deployments whose RDMA
-      // NIC is a different interface must set osd_cuobj_rdma_ip
+      // NIC is a different interface must set rdma_network or
+      // osd_cuobj_rdma_ip
       cuobj_ip = client_messenger->get_myaddrs().front().ip_only_to_str();
     }
-    auto cuobj_port = static_cast<uint16_t>(
-      cct->_conf.get_val<uint64_t>("osd_cuobj_rdma_port"));
-    auto cuobj = std::make_unique<OSDCuObj>(cct, cuobj_ip, cuobj_port);
-    if (cuobj->is_available()) {
-      // read results alias this block where peers delivered the data
-      // themselves; registered so staging never has to
-      if (auto *zeros = ceph::osd::oob::zero_buffer()) {
-	cuobj->add_registered_region(const_cast<char*>(zeros),
-				     ceph::osd::oob::ZERO_BUFFER_LEN);
-      }
-      service.cuobj = cuobj.release();
+    if (cuobj_ip.empty()) {
+      derr << "WARNING: no local address in rdma_network " << rdma_network
+	   << " (cuObject RDMA disabled on this osd)" << dendl;
     } else {
-      derr << "WARNING: cuObject RDMA init failed on " << cuobj_ip
-	   << " (READ_RDMA disabled on this osd)" << dendl;
+      auto cuobj_port = static_cast<uint16_t>(
+	cct->_conf.get_val<uint64_t>("osd_cuobj_rdma_port"));
+      auto cuobj = std::make_unique<OSDCuObj>(cct, cuobj_ip, cuobj_port);
+      if (cuobj->is_available()) {
+	// read results alias this block where peers delivered the data
+	// themselves; registered so staging never has to
+	if (auto *zeros = ceph::osd::oob::zero_buffer()) {
+	  cuobj->add_registered_region(const_cast<char*>(zeros),
+				       ceph::osd::oob::ZERO_BUFFER_LEN);
+	}
+	service.cuobj = cuobj.release();
+      } else {
+	derr << "WARNING: cuObject RDMA init failed on " << cuobj_ip
+	     << " (READ_RDMA disabled on this osd)" << dendl;
+      }
     }
   }
 #endif

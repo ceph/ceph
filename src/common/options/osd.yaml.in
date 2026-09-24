@@ -1639,11 +1639,13 @@ options:
 - name: osd_cuobj_rdma_ip
   type: str
   level: advanced
-  desc: IP address of the RDMA-capable network interface; defaults to the OSD's
-    public address when empty
+  desc: IP address of the RDMA-capable network interface; when empty, an
+    address in rdma_network, or the OSD's public address if that is unset
   default:
   services:
   - osd
+  see_also:
+  - rdma_network
   flags:
   - startup
 - name: osd_cuobj_rdma_port

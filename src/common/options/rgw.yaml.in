@@ -4664,10 +4664,13 @@ options:
 - name: rgw_cuobj_rdma_ip
   type: str
   level: advanced
-  desc: IP address of the RDMA-capable network interface
+  desc: IP address of the RDMA-capable network interface; when empty, an
+    address in rdma_network
   default:
   services:
   - rgw
+  see_also:
+  - rdma_network
   flags:
   - startup
 - name: rgw_cuobj_rdma_port

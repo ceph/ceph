@@ -519,6 +519,47 @@ int pick_addresses(
   return r;
 }
 
+std::string pick_rdma_addr(CephContext *cct, const struct ifaddrs *ifa,
+			   int numa_node)
+{
+  const auto networks = cct->_conf.get_val<std::string>("rdma_network");
+  if (networks.empty()) {
+    return {};
+  }
+  // unlike public_network, nothing needs the RDMA endpoint to run, so a
+  // bad entry costs the daemon that endpoint rather than exiting it
+  for (const auto& net : get_str_list(networks)) {
+    struct sockaddr_storage ss;
+    unsigned int prefix_len;
+    if (!parse_network(net.c_str(), &ss, &prefix_len)) {
+      lderr(cct) << "unable to parse rdma_network entry '" << net << "'"
+		 << dendl;
+      return {};
+    }
+  }
+  auto addr = get_one_address(cct, ifa,
+			      CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6,
+			      networks, "", numa_node);
+  return addr ? addr->ip_only_to_str() : std::string{};
+}
+
+std::string pick_rdma_addr(CephContext *cct, int numa_node)
+{
+  if (cct->_conf.get_val<std::string>("rdma_network").empty()) {
+    return {};
+  }
+  struct ifaddrs *ifa;
+  if (getifaddrs(&ifa) < 0) {
+    int r = -errno;
+    lderr(cct) << "unable to fetch interfaces and addresses: "
+	       << cpp_strerror(r) << dendl;
+    return {};
+  }
+  auto addr = pick_rdma_addr(cct, ifa, numa_node);
+  freeifaddrs(ifa);
+  return addr;
+}
+
 std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
 {
   struct ifaddrs *ifa;

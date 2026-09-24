@@ -148,6 +148,31 @@ options:
   - cluster_network
   flags:
   - startup
+- name: rdma_network
+  type: str
+  level: advanced
+  desc: Network(s) from which to choose the address an RDMA endpoint binds to
+  long_desc: A daemon whose own RDMA address (osd_cuobj_rdma_ip,
+    rgw_cuobj_rdma_ip) is unset binds its cuObject RDMA endpoint to a local
+    address in one of these networks, so one setting covers the cluster. List
+    one subnet per rail on a rail-optimized fabric; an OSD with addresses on
+    several rails prefers the interface on its object store's NUMA node (see
+    osd_numa_prefer_iface).
+  fmt_desc: The IP address and netmask of the RDMA network (e.g.,
+   ``10.10.0.0/24``). Set in ``[global]``. You may specify comma-separated
+   subnets, such as one per rail. The format of it looks like
+   ``{ip-address}/{netmask} [, {ip-address}/{netmask}]``
+  tags:
+  - network
+  services:
+  - osd
+  - rgw
+  see_also:
+  - osd_cuobj_rdma_ip
+  - rgw_cuobj_rdma_ip
+  - osd_numa_prefer_iface
+  flags:
+  - startup
 - name: monmap
   type: str
   level: advanced

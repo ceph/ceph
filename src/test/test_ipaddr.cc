@@ -1150,3 +1150,66 @@ TEST(is_addr_in_subnet, invalid_subnets)
   ASSERT_FALSE(is_addr_in_subnet(cct.get(), public_network_2, addr)); // Invalid subnet string
 }
 
+
+TEST(pick_address, rdma_network)
+{
+  // a host on two rails of a four-rail fabric, each rail its own /24,
+  // plus a public interface and an IPv6 rail address
+  static char eth2[] = "eth2";
+  static char eth3[] = "eth3";
+  struct ifaddrs one{}, two{}, three{}, four{};
+  struct sockaddr_in a_one, a_two, a_three;
+  struct sockaddr_in6 a_four;
+
+  one.ifa_next = &two;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+  one.ifa_name = eth0;
+  one.ifa_flags = IFF_UP;
+
+  two.ifa_next = &three;
+  two.ifa_addr = (struct sockaddr*)&a_two;
+  two.ifa_name = eth1;
+  two.ifa_flags = IFF_UP;
+
+  three.ifa_next = &four;
+  three.ifa_addr = (struct sockaddr*)&a_three;
+  three.ifa_name = eth2;
+  three.ifa_flags = IFF_UP;
+
+  four.ifa_next = nullptr;
+  four.ifa_addr = (struct sockaddr*)&a_four;
+  four.ifa_name = eth3;
+  four.ifa_flags = IFF_UP;
+
+  ipv4(&a_one, "10.1.1.2");
+  ipv4(&a_two, "10.64.2.7");
+  ipv4(&a_three, "10.64.3.7");
+  ipv6(&a_four, "2001:db8:3::5");
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+
+  // unset: the caller keeps its own default
+  cct->_conf.set_val("rdma_network", "");
+  ASSERT_EQ("", pick_rdma_addr(cct.get(), &one));
+
+  // one subnet per rail: the first interface on any of them
+  cct->_conf.set_val("rdma_network",
+		     "10.64.0.0/24, 10.64.1.0/24, 10.64.2.0/24, 10.64.3.0/24");
+  ASSERT_EQ("10.64.2.7", pick_rdma_addr(cct.get(), &one));
+
+  cct->_conf.set_val("rdma_network", "10.64.3.0/24");
+  ASSERT_EQ("10.64.3.7", pick_rdma_addr(cct.get(), &one));
+
+  cct->_conf.set_val("rdma_network", "2001:db8:3::/64");
+  ASSERT_EQ("2001:db8:3::5", pick_rdma_addr(cct.get(), &one));
+
+  // no local address on any listed rail
+  cct->_conf.set_val("rdma_network", "10.64.0.0/24,10.64.1.0/24");
+  ASSERT_EQ("", pick_rdma_addr(cct.get(), &one));
+
+  // an entry that does not parse disables the endpoint instead of
+  // exiting the daemon, even when another entry would have matched
+  cct->_conf.set_val("rdma_network", "10.64.2.0/24,rail3");
+  ASSERT_EQ("", pick_rdma_addr(cct.get(), &one));
+}
