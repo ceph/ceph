@@ -51,6 +51,20 @@ class OpSmException(VolumeException):
     pass
 
 
+class InvalidUuidError(VolumeException):
+    def __init__(self, errno, errmsg):
+        super(InvalidUuidError, self).__init__(errno, errmsg)
+
+
+class SubvolUpgradeError(VolumeException):
+    '''
+    Raised when subvolume can't be auto-upgraded.
+    '''
+
+    def __init__(self, errno, errmsg):
+        super(SubvolUpgradeError, self).__init__(errno, errmsg)
+
+
 class EvictionError(VolumeException):
     pass
 
