@@ -398,6 +398,43 @@ def _(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("node", help="Node number of destination")
 
 
+@commands.register("clusterlevel-show")
+def clusterlevel_show(ctx: Context) -> None:
+    """Show the cluster's active Cluster Functional Level."""
+    result = ctx.client().get_active_cluster_level()
+    write_result_json(result)
+
+
+@commands.register("clusterlevel-showall")
+def clusterlevel_showall(ctx: Context) -> None:
+    """Show Cluster Functional Level details for every node."""
+    result = ctx.client().get_cluster_level_details()
+    write_result_json(result)
+
+
+@commands.register("clusterlevel-upgrade")
+def clusterlevel_upgrade(ctx: Context) -> None:
+    """Upgrade the cluster's active Cluster Functional Level."""
+    result = ctx.client().upgrade_cluster_level(apply=ctx.cli.apply)
+    write_result_json(result)
+
+
+@clusterlevel_upgrade.cli_arguments
+def _(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually commit the upgrade (default is a dry run)",
+    )
+
+
+@commands.register("clusterlevel-features")
+def clusterlevel_features(ctx: Context) -> None:
+    """Show this node's own Cluster Functional Level support."""
+    result = ctx.client().get_cluster_level_features()
+    write_result_json(result)
+
+
 def _cli_config_source(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "source",
