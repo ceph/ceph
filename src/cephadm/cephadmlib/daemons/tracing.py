@@ -1,16 +1,17 @@
 import logging
+import os
 
 from typing import Any, Dict, List, Tuple
 
 from ceph.cephadm.images import DefaultImages
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer
+from ..container_types import CephContainer, extract_uid_gid
 from ..context import CephadmContext
 from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
-from ..constants import UID_NOBODY, GID_NOGROUP
+from ..file_utils import makedirs, populate_files
 
 
 logger = logging.getLogger()
@@ -25,14 +26,8 @@ class Tracing(ContainerDaemonForm):
             'image': DefaultImages.ELASTICSEARCH.image_ref,
             'envs': ['discovery.type=single-node'],
         },
-        'jaeger-agent': {
-            'image': DefaultImages.JAEGER_AGENT.image_ref,
-        },
-        'jaeger-collector': {
-            'image': DefaultImages.JAEGER_COLLECTOR.image_ref,
-        },
-        'jaeger-query': {
-            'image': DefaultImages.JAEGER_QUERY.image_ref,
+        'jaeger': {
+            'image': DefaultImages.JAEGER.image_ref,
         },
     }  # type: ignore
 
@@ -40,39 +35,13 @@ class Tracing(ContainerDaemonForm):
     def for_daemon_type(cls, daemon_type: str) -> bool:
         return daemon_type in cls.components
 
-    @staticmethod
-    def set_configuration(config: Dict[str, str], daemon_type: str) -> None:
-        if daemon_type in ['jaeger-collector', 'jaeger-query']:
-            assert 'elasticsearch_nodes' in config
-            Tracing.components[daemon_type]['envs'] = [
-                'SPAN_STORAGE_TYPE=elasticsearch',
-                f'ES_SERVER_URLS={config["elasticsearch_nodes"]}',
-            ]
-        if daemon_type == 'jaeger-agent':
-            assert 'collector_nodes' in config
-            Tracing.components[daemon_type]['daemon_args'] = [
-                f'--reporter.grpc.host-port={config["collector_nodes"]}',
-                '--processor.jaeger-compact.server-host-port=6799',
-            ]
-
-    def __init__(self, ident: DaemonIdentity) -> None:
+    def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:
+        self._ctx = ctx
         self._identity = ident
-        self._configured = False
-
-    def _configure(self, ctx: CephadmContext) -> None:
-        if self._configured:
-            return
-        config = fetch_configs(ctx)
-        # Currently, this method side-effects the class attribute, and that
-        # is unpleasant. In the future it would be nice to move all of
-        # set_configuration into _confiure and only modify each classes data
-        # independently
-        self.set_configuration(config, self.identity.daemon_type)
-        self._configured = True
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Tracing':
-        return cls(ident)
+        return cls(ctx, ident)
 
     @property
     def identity(self) -> DaemonIdentity:
@@ -83,30 +52,48 @@ class Tracing(ContainerDaemonForm):
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
-        return UID_NOBODY, GID_NOGROUP
+        # jaeger image (quay.io/jaegertracing/jaeger) sets USER 10001 in its
+        # Dockerfile but owns all filesystem paths as root, so there is no path
+        # to probe with extract_uid_gid — use the known value directly.
+        return [10001,10001]
 
     def get_daemon_args(self) -> List[str]:
+        if self.identity.daemon_type == 'jaeger':
+            return ['--config', '/etc/jaeger/config.yaml']
         return self.components[self.identity.daemon_type].get(
             'daemon_args', []
         )
 
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        if self.identity.daemon_type == 'jaeger':
+            data_dir = self.identity.data_dir(ctx.data_dir)
+            mounts[
+                os.path.join(data_dir, 'etc/jaeger/config.yaml')
+            ] = '/etc/jaeger/config.yaml:Z'
+
     def customize_process_args(
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
-        self._configure(ctx)
-        # earlier code did an explicit check if the daemon type was jaeger-agent
-        # and would only call get_daemon_args if that was true. However, since
-        # the function only returns a non-empty list in the case of jaeger-agent
-        # that check is unnecessary and is not brought over.
         args.extend(self.get_daemon_args())
 
     def customize_container_envs(
         self, ctx: CephadmContext, envs: List[str]
     ) -> None:
-        self._configure(ctx)
         envs.extend(
             self.components[self.identity.daemon_type].get('envs', [])
         )
 
     def default_entrypoint(self) -> str:
         return ''
+
+    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
+        """Write config.yaml for the jaeger daemon into its data directory."""
+        config: Dict[str, Any] = fetch_configs(self._ctx)
+        files: Dict[str, Any] = config.get('files', {})
+        if not files:
+            return
+        config_dir = os.path.join(data_dir, 'etc/jaeger')
+        makedirs(config_dir, uid, gid, 0o755)
+        populate_files(config_dir, files, uid, gid)
