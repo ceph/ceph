@@ -335,6 +335,12 @@
   state and a subsequent redundancy loss occurs. Used in conjunction with
   ``last_clean``, the ``last_degraded`` timestamp enables the calculation of
   data vulnerability and durability scores.
+* Two new perf counters, ``pg_vulnerability_duration`` and
+  ``pg_rebuild_duration`` (each with a companion ``_min`` gauge and a
+  ``max_inc``), track how long PGs spend at reduced redundancy and how
+  much of that time was active data movement. See
+  :ref:`rados_operations_monitoring_pg_vulnerability_rebuild_duration`
+  for details and example PromQL queries.
 * RBD: It's possible to specify source cluster's ``mon_host`` and ``key`` for
   ``native`` format migration via the migration spec now.  This eliminates the
   dependency on ``<cluster-name>.conf`` file in a known location which is
