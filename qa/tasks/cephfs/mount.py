@@ -804,6 +804,27 @@ class CephFSMountBase(object):
         p.wait()
         return p.stdout.getvalue().strip()
 
+    def run_libcephfs_pybind_code(self, code):
+        final_code = dedent("""
+        import cephfs as libcephfs
+
+        global cephfs
+        cephfs = libcephfs.LibCephFS(conffile='')
+        cephfs.mount()
+        """)
+
+        # appending separately so that dedent() has intended effect regardless
+        # of indentation present in "code".
+        final_code += dedent(f"""
+        {code}
+        """)
+
+        final_code += dedent("""
+        cephfs.shutdown()
+        """)
+
+        self.run_python(final_code)
+
     def run_shell(self, args, **kwargs):
         kwargs.setdefault('cwd', self.mountpoint)
         kwargs.setdefault('omit_sudo', False)
