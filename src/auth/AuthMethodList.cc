@@ -32,20 +32,28 @@ AuthMethodList::AuthMethodList(CephContext *cct, std::string str)
   }
   for (auto iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
     ldout(cct, 5) << "adding auth protocol: " << *iter << dendl;
-    if (iter->compare("cephx") == 0) {
-      auth_supported.push_back(CEPH_AUTH_CEPHX);
-    } else if (iter->compare("none") == 0) {
-      auth_supported.push_back(CEPH_AUTH_NONE);
-    } else if (iter->compare("gss") == 0) {
-      auth_supported.push_back(CEPH_AUTH_GSS);
-    } else {
-      auth_supported.push_back(CEPH_AUTH_UNKNOWN);
+    auto method = parse_method(*iter);
+    if (method == CEPH_AUTH_UNKNOWN) {
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
+    auth_supported.push_back(method);
   }
   if (auth_supported.empty()) {
     lderr(cct) << "WARNING: no auth protocol defined, use 'cephx' by default" << dendl;
     auth_supported.push_back(CEPH_AUTH_CEPHX);
+  }
+}
+
+__u32 AuthMethodList::parse_method(std::string_view name)
+{
+  if (name == "cephx") {
+    return CEPH_AUTH_CEPHX;
+  } else if (name == "none") {
+    return CEPH_AUTH_NONE;
+  } else if (name == "gss") {
+    return CEPH_AUTH_GSS;
+  } else {
+    return CEPH_AUTH_UNKNOWN;
   }
 }
 
