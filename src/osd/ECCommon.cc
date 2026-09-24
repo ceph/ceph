@@ -1096,9 +1096,13 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
 #ifdef WITH_OSD_CUOBJ_GATHER
   // RDMA pull: peers read their write payload out of our memory. The
   // data shards are views of one client buffer, so each underlying
-  // allocation is registered once and shared by every peer's descriptor
+  // allocation is registered once and shared by every peer's descriptor.
+  // A peer from before the pull decodes straight past rdma_pull and would
+  // apply a transaction whose data we took out, so only pull once every
+  // OSD in the cluster is new enough to decline one it cannot serve.
   OSDCuObjGather *pull_gather =
-    cct->_conf.get_val<bool>("osd_cuobj_pull_writes")
+    cct->_conf.get_val<bool>("osd_cuobj_pull_writes") &&
+    get_osdmap()->require_osd_release >= ceph_release_t::umbrella
       ? get_parent()->get_rdma_gather() : nullptr;
   const bool pull_direct = pull_gather &&
     cct->_conf.get_val<bool>("osd_cuobj_pull_writes_direct");

@@ -274,7 +274,6 @@ bool ECBackend::_handle_message(
     // not conflict with ECSubWrite's operator<<.
     MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(
       _op->get_nonconst_req());
-#ifdef WITH_OSD_CUOBJ_GATHER
     if (!pull_pending.empty()) {
       if (pull_pending.contains(op->op.tid) && op->op.rdma_pull.empty()) {
         // the inline resend we asked for
@@ -287,11 +286,9 @@ bool ECBackend::_handle_message(
         return true;
       }
     }
-#endif
     parent->maybe_preempt_replica_scrub(op->op.soid);
     handle_sub_write(op->op.from, _op, op->op, _op->pg_trace,
                      *get_parent()->get_eclistener());
-#ifdef WITH_OSD_CUOBJ_GATHER
     if (pull_pending.empty() && !pull_held.empty()) {
       std::list<OpRequestRef> ls;
       ls.swap(pull_held);
@@ -299,7 +296,6 @@ bool ECBackend::_handle_message(
                << " held sub-write(s)" << dendl;
       get_parent()->requeue_held_ops(ls);
     }
-#endif
     return true;
   }
   case MSG_OSD_EC_WRITE_REPLY: {
@@ -475,6 +471,7 @@ int ECBackend::pull_sub_write_payload(ECSubWrite &op, double age_secs,
   op.t.set_aligned_data(std::move(bl));
   return 0;
 }
+#endif
 
 void ECBackend::send_pull_failed(const ECSubWrite &op,
                                  const ZTracer::Trace &trace) {
@@ -493,7 +490,6 @@ void ECBackend::send_pull_failed(const ECSubWrite &op,
   get_parent()->send_message_osd_cluster(
     get_parent()->primary_shard().osd, r, switcher->get_osdmap_epoch());
 }
-#endif
 
 void ECBackend::handle_sub_write(
   pg_shard_t from,
@@ -510,13 +506,17 @@ void ECBackend::handle_sub_write(
     ECInject::test_write_error3(op.soid)) {
     ceph_abort_msg("Error inject - OSD down");
   }
-#ifdef WITH_OSD_CUOBJ_GATHER
   if (!op.rdma_pull.empty()) {
     // the payload is in the primary's memory: read it before anything
-    // else, or ask for it inline
+    // else, or ask for it inline. A build that cannot pull must still
+    // ask, since t arrived without its data
+#ifdef WITH_OSD_CUOBJ_GATHER
     const double age = msg ?
       double(ceph_clock_now() - msg->get_req()->get_recv_stamp()) : 0.0;
     int r = pull_sub_write_payload(op, age, eclistener);
+#else
+    int r = -EOPNOTSUPP;
+#endif
     if (r < 0) {
       dout(5) << __func__ << " cannot pull the payload of " << op.soid
               << " (" << cpp_strerror(r) << "), asking for it inline" << dendl;
@@ -525,7 +525,6 @@ void ECBackend::handle_sub_write(
       return;
     }
   }
-#endif
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction localt;
@@ -1434,12 +1433,10 @@ void ECBackend::on_change() {
   read_pipeline.on_change();
   rmw_pipeline.on_change2();
   clear_recovery_state();
-#ifdef WITH_OSD_CUOBJ_GATHER
   // sub-writes of the old interval: the primary re-drives the client
   // ops in the new one, so these go the way a lost message would
   pull_pending.clear();
   pull_held.clear();
-#endif
 }
 
 void ECBackend::clear_recovery_state() {
