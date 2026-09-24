@@ -33,6 +33,7 @@
 #include "common/ceph_crypto.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/deleter.h"
 #include "common/perf_counters.h"
 #include "common/scrub_types.h"
 #include "include/compat.h"
@@ -2584,6 +2585,20 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     ctx->ignore_cache = true;
   }
 
+#ifdef WITH_OSD_CUOBJ_GATHER
+  if (op->may_write() && m->has_rdma_delivery() && osd->cuobj &&
+      osd->cuobj_gather) {
+    // the payload lives in the client's memory: fetch it first
+    int pr = pull_write_payloads(ctx);
+    if (pr < 0) {
+      dout(5) << __func__ << " pulling the write payload failed: "
+	      << cpp_strerror(pr) << dendl;
+      reply_ctx(ctx, pr);
+      return;
+    }
+  }
+#endif
+
   if ((op->may_read()) && (obc->obs.oi.is_lost())) {
     // This object is lost. Reading from it returns an error.
     dout(20) << __func__ << ": object " << obc->obs.oi.soid
@@ -4448,6 +4463,13 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 			       ignore_out_data);
   dout(20) << __func__ << " alloc reply " << ctx->reply
 	   << " result " << result << dendl;
+#ifdef WITH_OSD_CUOBJ_GATHER
+  if (!ctx->rdma_pull_results.empty()) {
+    // what was read out of the client for this write, and its checksum
+    ctx->reply->set_oob_results(
+      std::vector<ceph::rdma::oob_result_t>(ctx->rdma_pull_results));
+  }
+#endif
 
   // read or error?
   if ((ctx->op_t->empty() || result < 0) && !ctx->update_log_only) {
@@ -9459,6 +9481,86 @@ bool PrimaryLogPG::rdma_gather_push_allowed(double age_secs)
 OSDCuObjGather *PrimaryLogPG::get_rdma_gather()
 {
   return osd->cuobj_gather;
+}
+
+int PrimaryLogPG::pull_write_payloads(OpContext *ctx)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  const auto& dels = m->get_rdma_deliveries();
+  if (dels.size() != ctx->ops->size()) {
+    return -EINVAL;
+  }
+  OSDCuObjGather *gather = osd->cuobj_gather;
+  for (size_t i = 0; i < ctx->ops->size(); i++) {
+    const auto& d = dels[i];
+    OSDOp& osd_op = (*ctx->ops)[i];
+    if (d.empty() || !(d.flags & ceph::rdma::delivery_t::FLAG_SOURCE)) {
+      continue;
+    }
+    if (d.flags & ~ceph::rdma::delivery_t::KNOWN_FLAGS) {
+      return -EOPNOTSUPP;
+    }
+    if (osd_op.op.op != CEPH_OSD_OP_WRITE &&
+	osd_op.op.op != CEPH_OSD_OP_WRITEFULL) {
+      return -EOPNOTSUPP;
+    }
+    if (osd_op.indata.length()) {
+      continue; // the payload came along after all
+    }
+    const uint64_t len = osd_op.op.extent.length;
+    bufferlist bl;
+    for (uint64_t done = 0; done < len; ) {
+      const size_t n = std::min<uint64_t>(len - done, gather->slot_size());
+      auto slot = gather->acquire(n);
+      if (!slot) {
+	dout(5) << __func__ << " no gather slot for " << n << " bytes" << dendl;
+	return -EAGAIN;
+      }
+      // the buffer keeps the slot until the store is done with it and
+      // every peer has pulled its share; a failed read may still land
+      // late, so quarantine then
+      auto *quarantine = new std::atomic<bool>(false);
+      const auto s = *slot;
+      std::shared_ptr<void> holder(quarantine, [gather, s](void *q) {
+	auto *flag = static_cast<std::atomic<bool>*>(q);
+	gather->release(s, flag->load());
+	delete flag;
+      });
+      ssize_t r = osd->cuobj->pull_into(m->get_hobj().oid.name, d.token,
+					d.base_offset + done, slot->ptr, n);
+      if (r != static_cast<ssize_t>(n)) {
+	quarantine->store(true);
+	dout(5) << __func__ << " pull of " << n << " bytes at "
+		<< d.base_offset + done << " failed: " << r << dendl;
+	return r < 0 ? int(r) : -EIO;
+      }
+      bl.push_back(ceph::buffer::claim_buffer(
+	n, slot->ptr, make_deleter([holder]() mutable { holder.reset(); })));
+      done += n;
+    }
+    ceph::rdma::oob_result_t res;
+    res.bytes = len;
+    if (d.flags & (ceph::rdma::delivery_t::FLAG_CRC64NVME |
+		   ceph::rdma::delivery_t::FLAG_VERIFY_CRC64)) {
+      res.crc64 = ceph::crc64nvme(bl);
+      res.flags = ceph::rdma::oob_result_t::FLAG_CRC64NVME |
+		  ceph::rdma::oob_result_t::FLAG_CRC64_COMBINABLE;
+      osd->cuobj->note_crc_source(false);
+      if ((d.flags & ceph::rdma::delivery_t::FLAG_VERIFY_CRC64) &&
+	  res.crc64 != d.expected_crc64) {
+	dout(5) << __func__ << " payload crc64nvme " << std::hex << res.crc64
+		<< " != expected " << d.expected_crc64 << std::dec
+		<< ", refusing the write" << dendl;
+	return -EBADMSG;
+      }
+    }
+    osd_op.indata = std::move(bl);
+    if (ctx->rdma_pull_results.empty()) {
+      ctx->rdma_pull_results.resize(ctx->ops->size());
+    }
+    ctx->rdma_pull_results[i] = res;
+  }
+  return 0;
 }
 #endif
 

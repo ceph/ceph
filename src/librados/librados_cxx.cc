@@ -255,6 +255,42 @@ void librados::ObjectReadOperation::set_rdma_delivery(
 		       });
 }
 
+void librados::ObjectWriteOperation::set_rdma_source(
+    const std::string& token, uint64_t base_offset, uint32_t flags,
+    uint64_t expected_crc64, rdma_delivery_result *result)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  static_assert(librados::ObjectWriteOperation::RDMA_SOURCE_WANT_CRC64 ==
+		ceph::rdma::delivery_t::FLAG_CRC64NVME);
+  static_assert(librados::ObjectWriteOperation::RDMA_SOURCE_VERIFY_CRC64 ==
+		ceph::rdma::delivery_t::FLAG_VERIFY_CRC64);
+  const uint32_t wire = (flags & (RDMA_SOURCE_WANT_CRC64 | RDMA_SOURCE_VERIFY_CRC64)) |
+    ceph::rdma::delivery_t::FLAG_SOURCE;
+  if (!result) {
+    o->set_rdma_delivery(token, base_offset, wire, nullptr, expected_crc64);
+    return;
+  }
+  auto& slot = [o]() -> ceph::rdma::oob_result_t& {
+    if (!o->rdma_oob_storage) {
+      o->rdma_oob_storage =
+	std::make_unique<std::deque<ceph::rdma::oob_result_t>>();
+    }
+    return o->rdma_oob_storage->emplace_back();
+  }();
+  o->set_rdma_delivery(token, base_offset, wire, &slot, expected_crc64);
+  o->set_handler([&slot, result](boost::system::error_code, int,
+				 const ceph::buffer::list&) {
+    result->bytes = slot.bytes;
+    result->crc64 = slot.crc64;
+    result->flags = slot.flags;
+    result->ranges.clear();
+    for (const auto& x : slot.ranges) {
+      result->ranges.push_back({x.ofs, x.len, x.crc64});
+    }
+  });
+}
+
 void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,
 					     const bufferlist &init_value_bl,
 					     uint64_t off, size_t len,

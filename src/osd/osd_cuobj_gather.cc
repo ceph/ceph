@@ -108,6 +108,15 @@ int OSDCuObjGather::do_init()
     return -EIO;
   }
   m_token = m_token_raw;
+  // and as a source, for peers that read a write payload out of it
+  if (m_client->cuMemObjGetRDMAToken(m_arena, m_arena_size, 0, CUOBJ_PUT,
+                                     &m_put_token_raw) != CU_OBJ_SUCCESS ||
+      !m_put_token_raw) {
+    derr << "gather PUT token mint failed" << dendl;
+    m_put_token_raw = nullptr;
+    return -EIO;
+  }
+  m_put_token = m_put_token_raw;
 
   m_free.reserve(m_slot_count);
   for (uint32_t i = m_slot_count; i > 0; --i) {
@@ -154,14 +163,29 @@ OSDCuObjGather::register_source(void* ptr, size_t len, ceph::buffer::list keep)
   return s;
 }
 
+std::unique_ptr<OSDCuObjGather::source>
+OSDCuObjGather::arena_source(ceph::buffer::list keep)
+{
+  if (!m_available || m_put_token.empty()) {
+    return nullptr;
+  }
+  auto s = std::make_unique<source>();
+  s->ptr = m_arena;
+  s->len = m_arena_size;
+  s->token = m_put_token;
+  s->keep = std::move(keep);
+  return s;
+}
+
 void OSDCuObjGather::drop_source(source& s)
 {
-  // called with m_client_lock held
+  // called with m_client_lock held; an arena source holds no
+  // registration of its own
   if (s.token_raw) {
     m_client->cuMemObjPutRDMAToken(s.token_raw);
     s.token_raw = nullptr;
+    m_client->cuMemObjPutDescriptor(s.ptr);
   }
-  m_client->cuMemObjPutDescriptor(s.ptr);
   s.keep.clear();
 }
 
@@ -201,6 +225,10 @@ void OSDCuObjGather::do_shutdown()
     m_quarantined_sources.clear();
   }
   if (m_client) {
+    if (m_put_token_raw) {
+      m_client->cuMemObjPutRDMAToken(m_put_token_raw);
+      m_put_token_raw = nullptr;
+    }
     if (m_token_raw) {
       m_client->cuMemObjPutRDMAToken(m_token_raw);
       m_token_raw = nullptr;

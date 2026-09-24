@@ -403,6 +403,11 @@ int AtomicObjectProcessor::complete(
 
   RGWRados::Object::Write obj_op(&op_target);
   obj_op.meta.data = &first_chunk;
+  if (!rdma_source.empty()) {
+    obj_op.meta.rdma_source = &rdma_source;
+    obj_op.meta.rdma_flags = rdma_flags;
+    obj_op.meta.rdma_expected_crc64 = rdma_expected_crc64;
+  }
   obj_op.meta.manifest = &manifest;
   obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
   obj_op.meta.if_match = if_match;

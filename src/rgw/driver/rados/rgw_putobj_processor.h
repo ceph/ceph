@@ -171,9 +171,19 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   const std::optional<uint64_t> olh_epoch;
   const std::string unique_tag;
   bufferlist first_chunk; // written with the head in complete()
+  // the payload the head write pulls out of the client instead
+  std::string rdma_source;
+  uint32_t rdma_flags = 0;
+  uint64_t rdma_expected_crc64 = 0;
 
   int process_first_chunk(bufferlist&& data, rgw::sal::DataProcessor **processor) override;
  public:
+  void set_rdma_source(const std::string& token, uint32_t flags,
+                       uint64_t expected_crc64) {
+    rdma_source = token;
+    rdma_flags = flags;
+    rdma_expected_crc64 = expected_crc64;
+  }
   AtomicObjectProcessor(Aio *aio, RGWRados* store,
                         RGWBucketInfo& bucket_info,
                         const rgw_placement_rule *ptail_placement_rule,

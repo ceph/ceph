@@ -1110,6 +1110,11 @@ public:
   {}
   ~RadosAtomicWriter() = default;
 
+  void set_rdma_source(const std::string& token, uint32_t flags,
+                       uint64_t expected_crc64) override {
+    processor.set_rdma_source(token, flags, expected_crc64);
+  }
+
   // prepare to start processing object data
   virtual int prepare(optional_yield y) override;
 

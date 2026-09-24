@@ -4723,6 +4723,18 @@ options:
   default: 3000
   services:
   - rgw
+- name: rgw_cuobj_put_passthrough
+  type: bool
+  level: advanced
+  desc: Serve S3-over-RDMA PUTs by forwarding the client RDMA token to the
+    primary OSD, which reads the payload out of client memory itself and,
+    when the request carries x-amz-checksum-crc64nvme, verifies it before
+    writing; radosgw never touches the data. Applies to plain objects that
+    fit the head object (no compression, encryption, Lua or Content-MD5);
+    anything else uses the staged path
+  default: false
+  services:
+  - rgw
 - name: rgw_cuobj_osd_push
   type: bool
   level: advanced

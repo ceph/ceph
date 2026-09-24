@@ -847,6 +847,12 @@ public:
         bool keep_tail;
         bool completeMultipart;
         bool appendable;
+        /// PUT passthrough: the primary OSD pulls the head payload from
+        /// this client-side RDMA token; *data is a placeholder of the
+        /// right length
+        const std::string *rdma_source{nullptr};
+        uint32_t rdma_flags{0};
+        uint64_t rdma_expected_crc64{0};
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),

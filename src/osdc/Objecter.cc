@@ -3593,6 +3593,15 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
     ceph_assert(op->rdma_delivery.size() == op->ops.size());
     m->set_rdma_deliveries(std::vector<ceph::rdma::delivery_t>(
       op->rdma_delivery.begin(), op->rdma_delivery.end()));
+    // an op the OSD reads from the window carries no payload; the
+    // placeholder the caller wrote stays in op->ops for the OSD's length
+    // checks alone (extent.length), never on the wire - on a resend too,
+    // since a pull, unlike a push, is harmless to repeat
+    for (unsigned i = 0; i < m->ops.size(); i++) {
+      if (op->rdma_delivery[i].flags & ceph::rdma::delivery_t::FLAG_SOURCE) {
+	m->ops[i].indata.clear();
+      }
+    }
   }
 
   logger->inc(l_osdc_op_send);

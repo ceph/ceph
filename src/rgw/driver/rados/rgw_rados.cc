@@ -3398,6 +3398,12 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     /* if we want to overwrite the data, we also want to overwrite the
        xattrs, so just remove the object */
     op.write_full(*meta.data);
+    if (meta.rdma_source) {
+      // the OSD pulls the payload out of the client; the placeholder
+      // above only sets the length
+      op.set_rdma_source(*meta.rdma_source, 0, meta.rdma_flags,
+                         meta.rdma_expected_crc64, nullptr);
+    }
     if (state->compressed) {
       uint32_t alloc_hint_flags = librados::ALLOC_HINT_FLAG_INCOMPRESSIBLE;
       op.set_alloc_hint2(0, 0, alloc_hint_flags);

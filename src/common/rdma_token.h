@@ -79,12 +79,22 @@ struct delivery_t {
   /// FLAG_CRC64_COMBINABLE, else fold the per-range values under
   /// FLAG_CRC64_RANGES)
   static constexpr uint32_t FLAG_CRC64NVME = 1u << 0;
+  /// the window is the SOURCE of the op's payload: the op carries no
+  /// data and the OSD RDMA-reads extent.length bytes from base_offset
+  /// before executing it (a write). The oob result reports bytes and,
+  /// with FLAG_CRC64NVME, the CRC-64/NVME of what was read.
+  static constexpr uint32_t FLAG_SOURCE = 1u << 1;
+  /// with FLAG_SOURCE: fail the op (-EBADMSG) unless the payload's
+  /// CRC-64/NVME equals expected_crc64, before anything is written
+  static constexpr uint32_t FLAG_VERIFY_CRC64 = 1u << 2;
   /// flag bits the OSD understands; unknown bits deliver inline
-  static constexpr uint32_t KNOWN_FLAGS = FLAG_CRC64NVME;
+  static constexpr uint32_t KNOWN_FLAGS =
+    FLAG_CRC64NVME | FLAG_SOURCE | FLAG_VERIFY_CRC64;
 
   std::string token;      ///< opaque cuObject RDMA descriptor
   uint64_t base_offset = 0; ///< client-window offset for the op's first byte
   uint32_t flags = 0;     ///< FLAG_* above; OSDs deliver inline on unknown bits
+  uint64_t expected_crc64 = 0; ///< with FLAG_VERIFY_CRC64
 
   /// true when no delivery is requested for this op
   bool empty() const {
@@ -92,17 +102,23 @@ struct delivery_t {
   }
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ceph::encode(token, bl);
     ceph::encode(base_offset, bl);
     ceph::encode(flags, bl);
+    ceph::encode(expected_crc64, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(1, p);
+    DECODE_START(2, p);
     ceph::decode(token, p);
     ceph::decode(base_offset, p);
     ceph::decode(flags, p);
+    if (struct_v >= 2) {
+      ceph::decode(expected_crc64, p);
+    } else {
+      expected_crc64 = 0;
+    }
     DECODE_FINISH(p);
   }
 };

@@ -264,6 +264,12 @@ bool RGWCuObjServer::is_available() const
   return m_server && m_server->isConnected();
 }
 
+const char* RGWCuObjServer::zero_buffer()
+{
+  static const char* zeros = static_cast<const char*>(calloc(1, ZERO_BUFFER_LEN));
+  return zeros;
+}
+
 // descriptor token: leading "addr:size:" hex fields, remainder opaque;
 // see common/rdma_token.h
 size_t RGWCuObjServer::parse_rdma_descriptor_size(const std::string& rdma_descr)

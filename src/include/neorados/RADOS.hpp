@@ -433,7 +433,7 @@ public:
   friend std::ostream& operator <<(std::ostream& m, const Op& o);
 protected:
   Op();
-  static constexpr std::size_t impl_size = 85 * 8;
+  static constexpr std::size_t impl_size = 86 * 8;
   detail::aligned_storage<impl_size> impl;
 };
 

@@ -1842,6 +1842,17 @@ public:
   virtual int prepare(optional_yield y) = 0;
 
   /**
+   * The object's payload lives in the client's RDMA window described by
+   * token: the buffers passed to process() are placeholders that set the
+   * length, and the storage nodes read the bytes themselves (flags and
+   * expected_crc64 as librados::ObjectWriteOperation::set_rdma_source).
+   * A store that cannot do this ignores the call and stores the
+   * placeholders, so callers only use it on stores that support it.
+   */
+  virtual void set_rdma_source(const std::string& token, uint32_t flags,
+                               uint64_t expected_crc64) {}
+
+  /**
    * Process a buffer. Called multiple times to write different buffers.
    * data.length() == 0 indicates the last call and may be used to flush
    * the data buffers.

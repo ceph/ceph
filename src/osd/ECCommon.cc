@@ -1127,12 +1127,20 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       if (idx == idx_for_raw.end()) {
         auto src = pull_sources.find(raw);
         if (src == pull_sources.end()) {
-          // register the whole allocation, page-aligned as the library
-          // requires; the holder pins the buffers it covers
-          const uintptr_t start = reinterpret_cast<uintptr_t>(raw) & ~uintptr_t(4095);
+          // a payload that was itself pulled into our slots is already
+          // in the arena: address it through the arena's own token.
+          // Otherwise register the whole allocation, page-aligned as the
+          // library requires; the holder pins the buffers it covers
+          uintptr_t start = reinterpret_cast<uintptr_t>(raw) & ~uintptr_t(4095);
           const uintptr_t end = (reinterpret_cast<uintptr_t>(raw) + b.raw_length() + 4095) & ~uintptr_t(4095);
-          auto s = pull_gather->register_source(
-            reinterpret_cast<void*>(start), end - start, aligned);
+          std::unique_ptr<OSDCuObjGather::source> s;
+          if (pull_gather->contains(raw, b.raw_length())) {
+            s = pull_gather->arena_source(aligned);
+            start = reinterpret_cast<uintptr_t>(pull_gather->arena());
+          } else {
+            s = pull_gather->register_source(
+              reinterpret_cast<void*>(start), end - start, aligned);
+          }
           if (!s) {
             dout(10) << __func__ << " pull source registration failed for "
                      << peer << ", sending inline" << dendl;

@@ -148,11 +148,13 @@ struct ObjectOperation {
 
   /// request out-of-band delivery for the most recently added op
   void set_rdma_delivery(std::string_view token, uint64_t base_offset,
-			 uint32_t flags, ceph::rdma::oob_result_t* result) {
+			 uint32_t flags, ceph::rdma::oob_result_t* result,
+			 uint64_t expected_crc64 = 0) {
     ceph_assert(!ops.empty());
     ceph_assert(rdma_delivery.size() == ops.size());
     rdma_delivery.back() = ceph::rdma::delivery_t{std::string(token),
-						  base_offset, flags};
+						  base_offset, flags,
+						  expected_crc64};
     rdma_oob_result.back() = result;
   }
   /// as above, but hand the result to on_result when the reply is
@@ -3174,6 +3176,9 @@ public:
     o->out_bl.swap(op.out_bl);
     o->out_handler.swap(op.out_handler);
     o->out_ec.swap(op.out_ec);
+    o->rdma_delivery.swap(op.rdma_delivery);
+    o->rdma_oob_result.swap(op.rdma_oob_result);
+    o->rdma_oob_storage = std::move(op.rdma_oob_storage);
     o->reqid = reqid;
     op.clear();
     return o;
@@ -3207,6 +3212,9 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
+    o->rdma_delivery.swap(op.rdma_delivery);
+    o->rdma_oob_result.swap(op.rdma_oob_result);
+    o->rdma_oob_storage = std::move(op.rdma_oob_storage);
     o->reqid = reqid;
     op.clear();
     op_submit(o);

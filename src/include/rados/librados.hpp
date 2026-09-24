@@ -322,6 +322,34 @@ inline namespace v14_2_0 {
     ObjectOperation();
     virtual ~ObjectOperation();
 
+    // out-of-band RDMA delivery (reads) and sourcing (writes) share
+    // one result shape; see ObjectReadOperation::set_rdma_delivery and
+    // ObjectWriteOperation::set_rdma_source
+    struct rdma_delivery_range {
+      uint64_t ofs = 0;     ///< client-window offset (token base relative)
+      uint64_t len = 0;
+      uint64_t crc64 = 0;   ///< canonical CRC-64/NVME of that range
+    };
+    struct rdma_delivery_result {
+      uint64_t bytes = 0;   ///< bytes delivered out of band
+      uint64_t crc64 = 0;   ///< canonical CRC-64/NVME of those bytes
+      uint32_t flags = 0;   ///< RDMA_DELIVERY_CRC64_* below
+      /// one entry per contiguous placed range, with
+      /// RDMA_DELIVERY_CRC64_RANGES
+      std::vector<rdma_delivery_range> ranges;
+    };
+    static constexpr uint32_t RDMA_DELIVERY_WANT_CRC64 = 1;  // request flag
+    static constexpr uint32_t RDMA_DELIVERY_CRC64_VALID = 1; // result flag
+    /// result flag: crc64 covers one contiguous logical extent and so
+    /// may be concatenate-combined with adjacent results
+    static constexpr uint32_t RDMA_DELIVERY_CRC64_COMBINABLE = 2;
+    /// result flag: ranges is populated
+    static constexpr uint32_t RDMA_DELIVERY_CRC64_RANGES = 4;
+    /// result flag: the op was sent more than once, so a delivery begun
+    /// by an earlier attempt may still be outstanding against the window
+    static constexpr uint32_t RDMA_DELIVERY_RESENT = 8;
+
+
     ObjectOperation(const ObjectOperation&) = delete;
     ObjectOperation& operator=(const ObjectOperation&) = delete;
 
@@ -436,6 +464,21 @@ inline namespace v14_2_0 {
     void writesame(uint64_t off, uint64_t write_len,
 		   const bufferlist& bl);
     void append(const bufferlist& bl);
+    /**
+     * Have the OSD read the most recently added write's payload out of
+     * the client memory window described by token, at base_offset,
+     * instead of carrying it in the request: the bufferlist given to
+     * write()/write_full() only sets the length and never goes on the
+     * wire. With RDMA_SOURCE_VERIFY_CRC64 the OSD refuses the write
+     * (-EBADMSG) unless the payload's CRC-64/NVME is expected_crc64;
+     * with RDMA_SOURCE_WANT_CRC64 it reports the CRC in *result. The
+     * window must stay registered until the write is acknowledged.
+     */
+    static constexpr uint32_t RDMA_SOURCE_WANT_CRC64 = 1;
+    static constexpr uint32_t RDMA_SOURCE_VERIFY_CRC64 = 4;
+    void set_rdma_source(const std::string& token, uint64_t base_offset,
+			 uint32_t flags, uint64_t expected_crc64,
+			 rdma_delivery_result *result);
     void remove();
     void truncate(uint64_t off);
     void zero(uint64_t off, uint64_t len);
@@ -633,29 +676,6 @@ inline namespace v14_2_0 {
      * is set; a caller holding every range of a window can fold them
      * in offset order regardless of how the OSDs interleaved them.
      */
-    struct rdma_delivery_range {
-      uint64_t ofs = 0;     ///< client-window offset (token base relative)
-      uint64_t len = 0;
-      uint64_t crc64 = 0;   ///< canonical CRC-64/NVME of that range
-    };
-    struct rdma_delivery_result {
-      uint64_t bytes = 0;   ///< bytes delivered out of band
-      uint64_t crc64 = 0;   ///< canonical CRC-64/NVME of those bytes
-      uint32_t flags = 0;   ///< RDMA_DELIVERY_CRC64_* below
-      /// one entry per contiguous placed range, with
-      /// RDMA_DELIVERY_CRC64_RANGES
-      std::vector<rdma_delivery_range> ranges;
-    };
-    static constexpr uint32_t RDMA_DELIVERY_WANT_CRC64 = 1;  // request flag
-    static constexpr uint32_t RDMA_DELIVERY_CRC64_VALID = 1; // result flag
-    /// result flag: crc64 covers one contiguous logical extent and so
-    /// may be concatenate-combined with adjacent results
-    static constexpr uint32_t RDMA_DELIVERY_CRC64_COMBINABLE = 2;
-    /// result flag: ranges is populated
-    static constexpr uint32_t RDMA_DELIVERY_CRC64_RANGES = 4;
-    /// result flag: the op was sent more than once, so a delivery begun
-    /// by an earlier attempt may still be outstanding against the window
-    static constexpr uint32_t RDMA_DELIVERY_RESENT = 8;
     void set_rdma_delivery(const std::string& token, uint64_t base_offset,
 			   uint32_t flags, rdma_delivery_result *result);
     void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,

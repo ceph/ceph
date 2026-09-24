@@ -64,6 +64,13 @@ public:
 
   /// descriptor of the whole arena, as sent to peers in ECSubRead
   const std::string& token() const { return m_token; }
+  /// the same window as a source peers RDMA-read from
+  const std::string& put_token() const { return m_put_token; }
+  /// true if [ptr, ptr+len) lies inside the arena
+  bool contains(const void* ptr, size_t len) const {
+    const char* p = static_cast<const char*>(ptr);
+    return p >= m_arena && p + len <= m_arena + m_arena_size;
+  }
 
   size_t slot_size() const { return m_slot_size; }
   /// the whole registered window, for registering it with the server
@@ -103,6 +110,9 @@ public:
    */
   std::unique_ptr<source> register_source(void* ptr, size_t len,
                                           ceph::buffer::list keep);
+  /// a source for memory already inside the arena: no registration,
+  /// the arena's own PUT token; keep pins the slots under it
+  std::unique_ptr<source> arena_source(ceph::buffer::list keep);
   /**
    * Drop a source. With quarantine set the registration and the memory
    * stay alive for the quarantine period first, for a source a peer
@@ -130,6 +140,8 @@ private:
   size_t m_slot_count = 0;
   std::string m_token;
   char* m_token_raw = nullptr;   ///< owned by the library
+  std::string m_put_token;
+  char* m_put_token_raw = nullptr;
   std::chrono::milliseconds m_quarantine{0};
 
   std::mutex m_lock;

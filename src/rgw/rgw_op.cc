@@ -5229,6 +5229,8 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
+  bool rdma_pulled = false;          // the OSD read the payload itself
+  std::optional<rgw::cksum::Cksum> rdma_pull_cksum; // the header, OSD-verified
   if (rdma_put) {
     size_t total = RGWCuObjServer::parse_rdma_descriptor_size(rdma_descr);
     if (total == 0) {
@@ -5238,6 +5240,80 @@ void RGWPutObj::execute(optional_yield y)
     }
     ldpp_dout(this, 20) << "rgw_cuobj: RDMA PUT size=" << total
                         << " from descriptor" << dendl;
+    // PUT passthrough: the primary OSD reads the payload out of the client
+    // and verifies the client's checksum before writing; this gateway feeds
+    // its pipeline placeholders of the right length and never sees a byte.
+    // Only for plain objects that fit the head object, and only when the
+    // checksum, if any, is one the OSD can verify (crc64nvme).
+    const uint64_t head_max = std::min<uint64_t>(
+      s->cct->_conf.get_val<Option::size_t>("rgw_max_chunk_size"),
+      s->cct->_conf.get_val<Option::size_t>("rgw_obj_stripe_size"));
+    const bool plain_chain =
+      filter == (cksum_filter ? static_cast<rgw::sal::DataProcessor*>(&*cksum_filter)
+                              : processor.get());
+    if (s->cct->_conf.get_val<bool>("rgw_cuobj_put_passthrough") &&
+        plain_chain && !supplied_md5_b64 && !obj_legal_hold && !obj_retention &&
+        total <= head_max) {
+      uint32_t flags = librados::ObjectWriteOperation::RDMA_SOURCE_WANT_CRC64;
+      uint64_t expected = 0;
+      bool eligible = true;
+      if (cksum_filter) {
+        const char* armored = cksum_filter->expected(*s->info.env);
+        if (cksum_filter->type() == rgw::cksum::Type::crc64nvme && armored) {
+          const std::string raw = rgw::from_base64(std::string_view(armored));
+          if (raw.size() == 8) {
+            for (unsigned char c : raw) {
+              expected = (expected << 8) | c;
+            }
+            flags |= librados::ObjectWriteOperation::RDMA_SOURCE_VERIFY_CRC64;
+            rdma_pull_cksum = rgw::cksum::Cksum(rgw::cksum::Type::crc64nvme,
+                                                raw.data(),
+                                                rgw::cksum::Cksum::CtorStyle::raw);
+          } else {
+            eligible = false;
+          }
+        } else {
+          eligible = false; // a checksum only this gateway could compute
+        }
+      }
+      if (eligible) {
+        processor->set_rdma_source(rdma_descr, flags, expected);
+        const char* zeros = RGWCuObjServer::zero_buffer();
+        const uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+        tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
+        for (uint64_t data_ofs = 0; data_ofs < total; ) {
+          const size_t clen = std::min<uint64_t>(chunk_size, total - data_ofs);
+          bufferlist data;
+          for (size_t z = 0; z < clen; ) {
+            const size_t n = std::min(clen - z, RGWCuObjServer::ZERO_BUFFER_LEN);
+            data.push_back(ceph::buffer::create_static(n, const_cast<char*>(zeros)));
+            z += n;
+          }
+          op_ret = processor->process(std::move(data), ofs);
+          if (op_ret < 0) {
+            ldpp_dout(this, 0) << "rgw_cuobj: ERROR: processor->process() returned ret=" << op_ret << dendl;
+            return;
+          }
+          ofs += clen;
+          data_ofs += clen;
+        }
+        tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
+        op_ret = processor->process({}, ofs);
+        if (op_ret < 0) {
+          return;
+        }
+        s->obj_size = ofs;
+        s->rdma_bytes_transferred = ofs;
+        s->object->set_obj_size(ofs);
+        rdma_pulled = true;
+        ldpp_dout(this, 20) << "rgw_cuobj: PUT passthrough, " << total
+                            << " bytes to be pulled by the OSD"
+                            << (expected ? " and verified" : "") << dendl;
+      }
+    }
+  }
+  if (rdma_put && !rdma_pulled) {
+    size_t total = RGWCuObjServer::parse_rdma_descriptor_size(rdma_descr);
     auto* rbuf = cuobj_srv->acquire_buffer(total);
     if (!rbuf) {
       ldpp_dout(this, 0) << "rgw_cuobj: ERROR: no RDMA buffer available for "
@@ -5288,7 +5364,7 @@ void RGWPutObj::execute(optional_yield y)
     s->rdma_bytes_transferred = ofs;
     s->object->set_obj_size(ofs);
   }
-  else
+  if (!rdma_put)
 #endif
   {
     tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
@@ -5403,6 +5479,13 @@ void RGWPutObj::execute(optional_yield y)
   buf_to_hex(m, std::back_inserter(calc_md5));
 
   etag = calc_md5;
+#ifdef WITH_RADOSGW_CUOBJ
+  if (rdma_pulled) {
+    // no bytes passed through here to hash: the ETag is the verified
+    // CRC64-NVME when there is one, else the request id
+    etag = rdma_pull_cksum ? rdma_pull_cksum->hex() : s->req_id;
+  }
+#endif
 
   if (supplied_md5_b64 && (calc_md5 != supplied_md5)) {
     op_ret = -ERR_BAD_DIGEST;
@@ -5446,6 +5529,17 @@ void RGWPutObj::execute(optional_yield y)
   bl.append(etag.c_str(), etag.size());
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
+#ifdef WITH_RADOSGW_CUOBJ
+  if (rdma_pulled) {
+    // the OSD verified the payload against the header before writing
+    if (rdma_pull_cksum) {
+      buffer::list cksum_bl;
+      rdma_pull_cksum->encode(cksum_bl);
+      emplace_attr(RGW_ATTR_CKSUM, std::move(cksum_bl));
+      cksum = rdma_pull_cksum;
+    }
+  } else
+#endif
   if (cksum_filter) {
     const auto& hdr = cksum_filter->header();
 
@@ -5531,6 +5625,12 @@ void RGWPutObj::execute(optional_yield y)
 			(user_data.empty() ? nullptr : &user_data),
 			nullptr, nullptr, rctx, complete_flags);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
+  if (op_ret == -EBADMSG) {
+    // the OSD found the payload it read out of the client does not match
+    // the checksum the client sent: nothing was written
+    ldpp_dout(this, 4) << "rgw_cuobj: PUT passthrough checksum mismatch at the OSD" << dendl;
+    op_ret = -ERR_BAD_DIGEST;
+  }
   if (op_ret < 0) {
     return;
   }

@@ -797,6 +797,9 @@ public:
     /// op's read straight into the client's window; records what they
     /// delivered so the reply can place the rest and account for all
     std::optional<ceph::osd::ec_client_delivery_result_t> ec_client_delivery;
+    /// per-op results of payloads this OSD RDMA-read out of the client
+    /// (delivery_t::FLAG_SOURCE); empty when none, else ops-aligned
+    std::vector<ceph::rdma::oob_result_t> rdma_pull_results;
     void start_async_reads(PrimaryLogPG *pg);
     void finish_read(PrimaryLogPG *pg);
     bool async_reads_complete() {
@@ -1353,6 +1356,12 @@ protected:
   /// whether this read may be delivered out of band at all (descriptor
   /// shape, retries, read lease, delivery lease)
   bool oob_delivery_allowed(OpContext *ctx, size_t num_ops);
+#ifdef WITH_OSD_CUOBJ_GATHER
+  /// RDMA-read the payload of every op whose descriptor names the client
+  /// window as its source into gather slots, verifying it if asked;
+  /// 0 or -errno (the op then fails without touching the store)
+  int pull_write_payloads(OpContext *ctx);
+#endif
   /// build the placement plan and the payload it indexes for one op;
   /// false leaves the op inline
   /// store_ofs is set when the payload is one contiguous run of the

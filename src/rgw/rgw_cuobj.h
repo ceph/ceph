@@ -54,6 +54,10 @@ public:
 
   static size_t parse_rdma_descriptor_size(const std::string& rdma_descr);
 
+  /// a read-only block of zeros for placeholder payloads (PUT passthrough)
+  static constexpr size_t ZERO_BUFFER_LEN = 4u << 20;
+  static const char* zero_buffer();
+
   ssize_t rdma_read_from_client(const std::string& key,
                                 RDMABufEntry* buf,
                                 uint64_t remote_offset,
