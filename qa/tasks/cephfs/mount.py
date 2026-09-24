@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from textwrap import dedent
 
 from teuthology.contextutil import safe_while
-from teuthology.misc import get_file, write_file
+from teuthology.misc import get_file
 from teuthology.orchestra import run
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
@@ -32,14 +32,16 @@ class DirectoryNotEmptyError(SystemError):
 class OperationNotPermittedError(SystemError):
     pass
 
+
 class CephFSMountBase(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
-                 client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
-                 client_config=None):
+                 client_keyring=None, client_keyring_path=None,
+                 hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
+                 client_config=None, brxnet=None):
         """
         :param test_dir: Global teuthology test dir
         :param client_id: Client ID, the 'foo' in client.foo
+        :param client_keyring: keyring of given client_id as str
         :param client_keyring_path: path to keyring for given client_id
         :param client_remote: Remote instance for the host where client will
                               run
@@ -62,8 +64,12 @@ class CephFSMountBase(object):
         self.client_config = client_config
 
         self.cephfs_name = cephfs_name
+
         self.client_id = client_id
+        self.client_keyring = client_keyring
         self.client_keyring_path = client_keyring_path
+        self.handle_client_keyring_attr()
+
         self.client_remote = client_remote
         self.cluster_name = 'ceph' # TODO: use config['cluster']
         self.fs = None
@@ -95,6 +101,21 @@ class CephFSMountBase(object):
         self.test_files = ['a', 'b', 'c']
 
         self.background_procs = []
+
+    def handle_client_keyring_attr(self):
+        '''
+        Write keyirng to a remote machine where mount point is/will be.
+        '''
+        # don't pass both
+        assert not (self.client_keyring and self.client_keyring_path)
+
+        if not self.client_keyring:
+            return
+
+        self.client_keyring_path = self.client_remote.mktemp(
+            suffix=f'ceph.client.{self.client_id}.keyring',
+            data=self.client_keyring)
+        self.client_keyring = None
 
     # This will cleanup the stale netnses, which are from the
     # last failed test cases.
@@ -567,6 +588,10 @@ class CephFSMountBase(object):
                                    f'or None. {k} - {v}')
 
     def update_attrs(self, **kwargs):
+        self.client_keyring = kwargs.get('client_keyring', None)
+        self.client_keyring_path = kwargs.get('client_keyring_path', None)
+        self.handle_client_keyring_attr()
+
         verify_keys = [
           'client_id',
           'client_keyring_path',
@@ -751,7 +776,7 @@ class CephFSMountBase(object):
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        write_file(self.client_remote, path, data, **kwargs)
+        self.client_remote.write_file(path, data, **kwargs)
 
         if perms:
             self.run_shell(args=f'chmod {perms} {path}')
@@ -775,6 +800,21 @@ class CephFSMountBase(object):
             args.append(f'count={length}')
 
         return self.run_shell(args=args, omit_sudo=False).stdout.getvalue().strip()
+
+    def verify_path_is_reg(self, path):
+        file_type = self.get_shell_stdout(f'stat -c "%F" ./{path}').strip()
+        assert file_type == 'regular file', \
+            f'file_type = {file_type}, path = {path}'
+
+    def verify_path_is_dir(self, path):
+        file_type = self.get_shell_stdout(f'stat -c "%F" ./{path}').strip()
+        assert file_type == 'directory', \
+            f'file_type = {file_type}, path = {path}'
+
+    def verify_path_is_symlink(self, path):
+        file_type = self.get_shell_stdout(f'stat -c "%F" ./{path}').strip()
+        assert file_type == 'symbolic link', \
+            f'file_type = {file_type}, path = {path}'
 
     def create_destroy(self):
         assert(self.is_mounted())
@@ -803,6 +843,27 @@ class CephFSMountBase(object):
         p = self._run_python(pyscript, py_version, sudo=sudo, timeout=timeout)
         p.wait()
         return p.stdout.getvalue().strip()
+
+    def run_libcephfs_pybind_code(self, code):
+        final_code = dedent("""
+        import cephfs as libcephfs
+
+        global cephfs
+        cephfs = libcephfs.LibCephFS(conffile='')
+        cephfs.mount()
+        """)
+
+        # appending separately so that dedent() has intended effect regardless
+        # of indentation present in "code".
+        final_code += dedent(f"""
+        {code}
+        """)
+
+        final_code += dedent("""
+        cephfs.shutdown()
+        """)
+
+        self.run_python(final_code)
 
     def run_shell(self, args, **kwargs):
         kwargs.setdefault('cwd', self.mountpoint)
