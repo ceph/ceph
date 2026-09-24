@@ -1413,6 +1413,23 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_readdir_withhold_caps_over_limit
+  type: bool
+  level: advanced
+  desc: Issue no new caps in readdir replies while the cache is over its limit
+  long_desc: Every cap a client holds pins an inode in the MDS cache, and a client
+    walking a large tree acquires caps on every inode it is sent, faster than the
+    per-session cap acquisition throttle reacts, so a few walkers can push the
+    cache past mds_cache_memory_limit. With this set, while the cache is over
+    mds_cache_memory_limit, a readdir reply still carries the entries and their
+    dentry leases, but no cap on an inode the client does not already hold, and
+    such inodes can be trimmed. A client that then stats one of them needs an
+    extra getattr round trip.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_verify_backtrace
   type: uint
   level: dev
