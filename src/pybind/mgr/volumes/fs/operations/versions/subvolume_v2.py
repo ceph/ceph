@@ -38,10 +38,6 @@ class SubvolumeV2(SubvolumeV1):
     """
     VERSION = 2
 
-    @staticmethod
-    def version():
-        return SubvolumeV2.VERSION
-
     @property
     def features(self):
         return [SubvolumeFeatures.FEATURE_SNAPSHOT_CLONE.value,
@@ -189,7 +185,7 @@ class SubvolumeV2(SubvolumeV1):
                 self._set_incarnation_metadata(subvolume_type, qpath, initial_state)
                 self.metadata_mgr.flush()
             else:
-                self.init_config(SubvolumeV2.VERSION, subvolume_type, qpath, initial_state)
+                self.init_config(self.VERSION, subvolume_type, qpath, initial_state)
 
             # Create the subvolume metadata file which manages auth-ids if it doesn't exist
             self.auth_mdata_mgr.create_subvolume_metadata_file(self.group.groupname, self.subvolname)
