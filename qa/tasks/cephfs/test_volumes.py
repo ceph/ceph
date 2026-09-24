@@ -20,7 +20,7 @@ from teuthology.exceptions import CommandFailedError, MaxWhileTries
 log = logging.getLogger(__name__)
 
 
-class TestVolumesHelper(CephFSTestCase):
+class VolumesHelper(CephFSTestCase):
     """Helper class for testing FS volume, subvolume group and subvolume operations."""
     TEST_FILE_NAME_PREFIX="subvolume_file"
 
@@ -602,7 +602,7 @@ class TestVolumesHelper(CephFSTestCase):
         self.assertEqual(bool_map.get(get_val), value)
 
     def setUp(self):
-        super(TestVolumesHelper, self).setUp()
+        super(VolumesHelper, self).setUp()
         self.volname = None
         self.vol_created = False
         self._enable_multi_fs()
@@ -612,10 +612,10 @@ class TestVolumesHelper(CephFSTestCase):
     def tearDown(self):
         if self.vol_created:
             self._delete_test_volume()
-        super(TestVolumesHelper, self).tearDown()
+        super(VolumesHelper, self).tearDown()
 
 
-class TestVolumes(TestVolumesHelper):
+class TestVolumes(VolumesHelper):
     """Tests for FS volume operations."""
     def test_volume_ls(self):
         """
@@ -815,7 +815,7 @@ class TestVolumes(TestVolumesHelper):
                          " of subvolumegroup")
 
 
-class TestVolumeCreate(TestVolumesHelper):
+class TestVolumeCreate(VolumesHelper):
     '''
     Contains test for "ceph fs volume create" command.
     '''
@@ -994,7 +994,7 @@ class TestVolumeCreate(TestVolumesHelper):
         self.assertIn(data_pool, o)
         self.assertNotIn(non_existent_meta_pool, o)
 
-class TestRenameCmd(TestVolumesHelper):
+class TestRenameCmd(VolumesHelper):
 
     def test_volume_rename(self):
         """
@@ -1117,7 +1117,7 @@ class TestRenameCmd(TestVolumesHelper):
                       "`ceph fs set`."),
             retval=errno.EPERM)
 
-class TestSubvolumeGroups(TestVolumesHelper):
+class TestSubvolumeGroups(VolumesHelper):
     """Tests for FS subvolume group operations."""
     def test_default_uid_gid_subvolume_group(self):
         group = self._gen_subvol_grp_name()
@@ -2393,7 +2393,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
         self._wait_for_trash_empty()
 
 
-class TestSubvolumes(TestVolumesHelper):
+class TestSubvolumes(VolumesHelper):
     """Tests for FS subvolume operations, except snapshot and snapshot clone."""
     def test_async_subvolume_rm(self):
         subvolumes = self._gen_subvol_name(100)
@@ -5135,7 +5135,7 @@ class TestSubvolumes(TestVolumesHelper):
             errmsgs='Error ENAMETOOLONG: use shorter group or subvol name, '
                     'combination of both should be less than 249 characters')
 
-class TestPausePurging(TestVolumesHelper):
+class TestPausePurging(VolumesHelper):
     '''
     Tests related to config "mgr/volumes/pause_purging".
     '''
@@ -5306,7 +5306,7 @@ class TestPausePurging(TestVolumesHelper):
         self._wait_for_trash_empty()
 
 
-class TestPauseCloning(TestVolumesHelper):
+class TestPauseCloning(VolumesHelper):
     '''
     Tests related to config "mgr/volumes/pause_cloning".
     '''
@@ -5442,7 +5442,7 @@ class TestPauseCloning(TestVolumesHelper):
                     break
 
 
-class TestSubvolumeGroupSnapshots(TestVolumesHelper):
+class TestSubvolumeGroupSnapshots(VolumesHelper):
     """Tests for FS subvolume group snapshot operations."""
     @unittest.skip("skipping subvolumegroup snapshot tests")
     def test_nonexistent_subvolume_group_snapshot_rm(self):
@@ -5590,7 +5590,7 @@ class TestSubvolumeGroupSnapshots(TestVolumesHelper):
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
 
-class TestSubvolumeSnapshots(TestVolumesHelper):
+class TestSubvolumeSnapshots(VolumesHelper):
     """Tests for FS subvolume snapshot operations."""
     def test_nonexistent_subvolume_snapshot_rm(self):
         subvolume = self._gen_subvol_name()
@@ -7016,7 +7016,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         self._cleanup_subvolumes_and_snapshots(group, subvolname, snapshot, True)
 
 
-class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
+class TestSubvolumeSnapshotGetpath(VolumesHelper):
 
     def get_subvol_uuid(self, subvol_name, group_name=None):
         '''
@@ -7252,7 +7252,7 @@ class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
         self.assertEqual(snap_path, exp_snap_path)
 
 
-class TestSubvolumeSnapshotClones(TestVolumesHelper):
+class TestSubvolumeSnapshotClones(VolumesHelper):
     """ Tests for FS subvolume snapshot clone operations."""
     def test_clone_subvolume_info(self):
         # tests the 'fs subvolume info' command for a clone
@@ -9211,7 +9211,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._wait_for_trash_empty()
 
 
-class TestSubvolumeSnapshotVisibilityBasic(TestVolumesHelper):
+class TestSubvolumeSnapshotVisibilityBasic(VolumesHelper):
     """
     Some basic testing around the snapshot_visibility flag and it's underlying
     vxattr ceph.dir.subvolume.snaps.visible
@@ -9355,7 +9355,7 @@ class TestSubvolumeSnapshotVisibilityBasic(TestVolumesHelper):
         self._wait_for_trash_empty()
 
 
-class TestSubvolumeSnapshotVisibility(TestVolumesHelper):
+class TestSubvolumeSnapshotVisibility(VolumesHelper):
     """
     Test accessing or modifying .snap dir of a subvolume path based on client
     config client_respect_subvolume_snapshot_visibility and subvolume flag
@@ -9787,7 +9787,7 @@ class TestSubvolumeSnapshotVisibility(TestVolumesHelper):
         self._test_modifying_snapdir_multiple_client(grouped=True)
 
 
-class TestSubvolumeSnapshotVisibilityMgr(TestVolumesHelper):
+class TestSubvolumeSnapshotVisibilityMgr(VolumesHelper):
     """
     ceph-mgr is a privileged CephFS client, subvolume APIs should not be
     impacted by the subvolume flag snapshot_visibility and client config
@@ -10193,7 +10193,7 @@ class TestSubvolumeSnapshotVisibilityMgr(TestVolumesHelper):
         self.set_client_snapshot_visbility_flag("client", "false")
 
 
-class TestMisc(TestVolumesHelper):
+class TestMisc(VolumesHelper):
     """Miscellaneous tests related to FS volume, subvolume group, and subvolume operations."""
     def test_connection_expiration(self):
         # unmount any cephfs mounts
@@ -10768,7 +10768,7 @@ class TestMisc(TestVolumesHelper):
         self._wait_for_trash_empty()
 
 
-class TestPerModuleFinsherThread(TestVolumesHelper):
+class TestPerModuleFinsherThread(VolumesHelper):
     """
     Per module finisher thread tests related to mgr/volume cmds.
     This is used in conjuction with check_counter with min val being 4
@@ -10794,7 +10794,7 @@ class TestPerModuleFinsherThread(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-class TestCorruptedSubvolumes(TestVolumesHelper):
+class TestCorruptedSubvolumes(VolumesHelper):
     '''
     Test that certain cases like subvolume deletion and clone cancellations and
     deletions are handled well on a corrupted subvolume as well.
@@ -10859,7 +10859,7 @@ class TestCorruptedSubvolumes(TestVolumesHelper):
         self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
 
 
-class TestSubvolumeV2(TestVolumesHelper):
+class TestSubvolumeV2(VolumesHelper):
     '''
     Test feature specific to subvolume v2.
     '''
