@@ -428,7 +428,7 @@ ceph-coverage() {
         # XXX: should sudo be omitted/allowed by default in cases similar to
         # that of "exec sudo" as well?
         if 'sudo' in args:
-            for x in ('passwd', 'chown'):
+            for x in ('passwd', 'chown', 'dd'):
                 if x == first_arg or x == last_arg or f' {x} ' in args:
                     omit_sudo = False
 
