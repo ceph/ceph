@@ -1,17 +1,28 @@
+from logging import getLogger
+
+
+log = getLogger(__name__)
+
+
 class VolumeException(Exception):
+    '''
+    Generic exception for CephFS volumes plugin.
+    '''
+
     def __init__(self, errno=None, errmsg=None):
         assert errno or errmsg
 
         self.errno = errno
         self.errsmg = errmsg
 
-        log.info(f'{self.__class__.__name__}: {str(self)}')
+        log.info(self)
 
     def to_tuple(self):
         return self.errno, "", self.errmsg
 
     def __str__(self):
-        return f'errno: {self.errno}, errmsg: {self.errmsg}'
+        return (f'{self.__class__.__name__}: self.errno = {self.errno}, '
+                f'self.errmsg: {self.errmsg}')
 
 
 class MetadataMgrException(VolumeException):
@@ -51,6 +62,8 @@ class ClusterError(Exception):
         self._result_code = result_code
         self._result_str = result_str
 
+        log.info(self)
+
     def __str__(self):
-        return "Error {0} (\"{1}\") while {2}".format(
-            self._result_code, self._result_str, self._action)
+        return (f'{self.__class__.__name__}: {self._result_code} '
+                f'"{self._result_str}" while {self._action}')
