@@ -89,6 +89,14 @@ class ECBackend : public ECCommon {
       const ZTracer::Trace &trace,
       double age_secs = 0
     );
+#ifdef WITH_OSD_CUOBJ_GATHER
+  /// RDMA-read a sub-write's payload out of the primary's memory into
+  /// gather slots and install it in the transaction; 0 or -errno
+  int pull_sub_write_payload(ECSubWrite &op, double age_secs,
+                             ECListener &eclistener);
+  /// tell the primary to resend the transaction whole
+  void send_pull_failed(const ECSubWrite &op, const ZTracer::Trace &trace);
+#endif
   void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
@@ -276,6 +284,13 @@ public:
   PGBackend::Listener *parent;
   CephContext *cct;
   ECSwitch *switcher;
+#ifdef WITH_OSD_CUOBJ_GATHER
+  /// sub-writes whose payload we could not pull and asked to have
+  /// resent inline; sub-writes that arrive behind one are held so the
+  /// log stays in order, and requeued when the resend has been applied
+  std::set<ceph_tid_t> pull_pending;
+  std::list<OpRequestRef> pull_held;
+#endif
   ReadPipeline read_pipeline;
   RMWPipeline rmw_pipeline;
   ECRecoveryBackend recovery_backend;

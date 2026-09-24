@@ -1011,10 +1011,13 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     op.hoid,
     op.delta_stats);
 
+  // the aligned transaction format keeps each shard's page-aligned write
+  // payload as one headless stream, which is what a peer pulls over RDMA
+  const uint64_t txn_features = get_parent()->min_peer_features();
   shard_id_map<ObjectStore::Transaction> trans(sinfo.get_k_plus_m());
   for (auto &&shard: get_parent()->
        get_acting_recovery_backfill_shard_id_set()) {
-    trans[shard];
+    trans.emplace(shard, ObjectStore::Transaction(txn_features));
   }
 
   op.trace.event("start ec write");
@@ -1036,6 +1039,69 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
   ObjectStore::Transaction empty;
   bool should_write_local = false;
   ECSubWrite local_write_op;
+#ifdef WITH_OSD_CUOBJ_GATHER
+  // RDMA pull: peers read their write payload out of our memory. The
+  // data shards are views of one client buffer, so each underlying
+  // allocation is registered once and shared by every peer's descriptor
+  OSDCuObjGather *pull_gather =
+    cct->_conf.get_val<bool>("osd_cuobj_pull_writes")
+      ? get_parent()->get_rdma_gather() : nullptr;
+  struct pull_holder final : Op::pull_holder_base {
+    OSDCuObjGather *g;
+    std::unique_ptr<OSDCuObjGather::source> s;
+    const char *base;
+    pull_holder(OSDCuObjGather *g, std::unique_ptr<OSDCuObjGather::source> s,
+                const char *base) : g(g), s(std::move(s)), base(base) {}
+    ~pull_holder() override { g->release_source(std::move(s), quarantine.load()); }
+  };
+  std::map<const char*, std::shared_ptr<pull_holder>> pull_sources;
+  auto prepare_pull = [&](ECSubWrite &sop, const ObjectStore::Transaction &txn,
+                          const pg_stat_t &stats, pg_shard_t peer) {
+    constexpr uint64_t MIN_PULL_BYTES = 64 << 10;
+    bufferlist aligned = sop.t.take_aligned_data();
+    if (aligned.length() < MIN_PULL_BYTES) {
+      sop.t.set_aligned_data(std::move(aligned));
+      return;
+    }
+    Op::pull_state_t st;
+    st.txn = txn;
+    st.stats = stats;
+    std::map<const char*, uint32_t> idx_for_raw;
+    for (const auto &b : aligned.buffers()) {
+      const char *raw = b.raw_c_str();
+      auto idx = idx_for_raw.find(raw);
+      if (idx == idx_for_raw.end()) {
+        auto src = pull_sources.find(raw);
+        if (src == pull_sources.end()) {
+          // register the whole allocation, page-aligned as the library
+          // requires; the holder pins the buffers it covers
+          const uintptr_t start = reinterpret_cast<uintptr_t>(raw) & ~uintptr_t(4095);
+          const uintptr_t end = (reinterpret_cast<uintptr_t>(raw) + b.raw_length() + 4095) & ~uintptr_t(4095);
+          auto s = pull_gather->register_source(
+            reinterpret_cast<void*>(start), end - start, aligned);
+          if (!s) {
+            dout(10) << __func__ << " pull source registration failed for "
+                     << peer << ", sending inline" << dendl;
+            sop.rdma_tokens.clear();
+            sop.rdma_pull.clear();
+            sop.t.set_aligned_data(std::move(aligned));
+            return;
+          }
+          src = pull_sources.emplace(
+            raw, std::make_shared<pull_holder>(pull_gather, std::move(s),
+                                               reinterpret_cast<const char*>(start))).first;
+        }
+        idx = idx_for_raw.emplace(raw, sop.rdma_tokens.size()).first;
+        sop.rdma_tokens.push_back(src->second->s->token);
+        st.sources.push_back(src->second);
+      }
+      const char *base = pull_sources.at(raw)->base;
+      sop.rdma_pull.emplace_back(idx->second, uint64_t(b.c_str() - base),
+                                 uint64_t(b.length()));
+    }
+    op.pulls[peer] = std::move(st);
+  };
+#endif
   std::vector<std::pair<int, Message*>> messages;
   messages.reserve(get_parent()->get_acting_recovery_backfill_shards().size());
   set<pg_shard_t> backfill_shards = get_parent()->get_backfill_shards();
@@ -1120,6 +1186,11 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
           pg_shard.shard << dendl;
 #endif
     } else {
+#ifdef WITH_OSD_CUOBJ_GATHER
+      if (pull_gather && should_send) {
+        prepare_pull(sop, transaction, stats, pg_shard);
+      }
+#endif
       auto *r = new MOSDECSubOpWrite(sop);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, pg_shard.shard);
       r->map_epoch = get_osdmap_epoch();

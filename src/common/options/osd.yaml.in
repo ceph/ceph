@@ -1751,6 +1751,16 @@ options:
   - osd
   flags:
   - startup
+- name: osd_cuobj_pull_writes
+  type: bool
+  level: advanced
+  desc: Let peers RDMA-read their share of an erasure-coded write out of the
+    primary's memory instead of receiving it over the messenger; requires
+    osd_cuobj_gather_enabled on every OSD of the pool. A peer that cannot pull
+    asks for the data inline
+  default: false
+  services:
+  - osd
 - name: osd_cuobj_gather_config
   type: str
   level: advanced

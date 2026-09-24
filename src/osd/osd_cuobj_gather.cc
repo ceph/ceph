@@ -120,9 +120,86 @@ int OSDCuObjGather::do_init()
   return 0;
 }
 
+std::unique_ptr<OSDCuObjGather::source>
+OSDCuObjGather::register_source(void* ptr, size_t len, ceph::buffer::list keep)
+{
+  if (!m_available || !len) {
+    return nullptr;
+  }
+  auto s = std::make_unique<source>();
+  s->ptr = ptr;
+  s->len = len;
+  s->keep = std::move(keep);
+  {
+    std::lock_guard l(m_client_lock);
+    reap_sources(ceph::coarse_mono_clock::now());
+    if (m_client->cuMemObjGetDescriptor(ptr, len) != CU_OBJ_SUCCESS) {
+      m_source_failures++;
+      dout(10) << "source registration of " << len << " bytes at " << ptr
+               << " failed" << dendl;
+      return nullptr;
+    }
+    if (m_client->cuMemObjGetRDMAToken(ptr, len, 0, CUOBJ_PUT,
+                                       &s->token_raw) != CU_OBJ_SUCCESS ||
+        !s->token_raw) {
+      s->token_raw = nullptr;
+      m_client->cuMemObjPutDescriptor(ptr);
+      m_source_failures++;
+      dout(10) << "source token mint for " << ptr << " failed" << dendl;
+      return nullptr;
+    }
+  }
+  s->token = s->token_raw;
+  m_sources++;
+  return s;
+}
+
+void OSDCuObjGather::drop_source(source& s)
+{
+  // called with m_client_lock held
+  if (s.token_raw) {
+    m_client->cuMemObjPutRDMAToken(s.token_raw);
+    s.token_raw = nullptr;
+  }
+  m_client->cuMemObjPutDescriptor(s.ptr);
+  s.keep.clear();
+}
+
+void OSDCuObjGather::reap_sources(ceph::coarse_mono_clock::time_point now)
+{
+  // called with m_client_lock held
+  while (!m_quarantined_sources.empty() &&
+         m_quarantined_sources.front().until <= now) {
+    drop_source(*m_quarantined_sources.front().s);
+    m_quarantined_sources.pop_front();
+  }
+}
+
+void OSDCuObjGather::release_source(std::unique_ptr<source> s, bool quarantine)
+{
+  if (!s || !m_client) {
+    return;
+  }
+  std::lock_guard l(m_client_lock);
+  const auto now = ceph::coarse_mono_clock::now();
+  reap_sources(now);
+  if (quarantine && m_quarantine.count() > 0) {
+    m_source_quarantines++;
+    m_quarantined_sources.push_back({std::move(s), now + m_quarantine});
+  } else {
+    drop_source(*s);
+  }
+}
+
 void OSDCuObjGather::do_shutdown()
 {
   // the library's lifetime rules: token before registration before client
+  if (m_client) {
+    for (auto& h : m_quarantined_sources) {
+      drop_source(*h.s);
+    }
+    m_quarantined_sources.clear();
+  }
   if (m_client) {
     if (m_token_raw) {
       m_client->cuMemObjPutRDMAToken(m_token_raw);
@@ -212,5 +289,8 @@ void OSDCuObjGather::dump_stats(ceph::Formatter* f) const
     std::lock_guard l(self.m_lock);
     f->dump_unsigned("slots_quarantined", m_quarantined.size());
   }
+  f->dump_unsigned("sources_registered", m_sources.load());
+  f->dump_unsigned("source_failures", m_source_failures.load());
+  f->dump_unsigned("source_quarantines", m_source_quarantines.load());
   f->close_section();
 }

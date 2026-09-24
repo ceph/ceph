@@ -38,6 +38,16 @@ struct ECSubWrite {
   std::set<hobject_t> temp_removed;
   std::optional<pg_hit_set_history_t> updated_hit_set_history;
   bool backfill_or_async_recovery = false;
+  /**
+   * RDMA pull (v6): the transaction's page-aligned write payload was
+   * left out of t. The recipient RDMA-reads it from the sender's memory
+   * and installs it before applying: rdma_pull lists, in stream order,
+   * (index into rdma_tokens, offset within that window, length). A
+   * recipient that cannot pull replies with pull_failed and the sender
+   * resends the transaction whole.
+   */
+  std::vector<std::string> rdma_tokens;
+  std::vector<boost::tuple<uint32_t, uint64_t, uint64_t>> rdma_pull;
   ECSubWrite() : tid(0) {}
   ECSubWrite(
     pg_shard_t from,
@@ -79,6 +89,8 @@ struct ECSubWrite {
     temp_removed.swap(other.temp_removed);
     updated_hit_set_history = other.updated_hit_set_history;
     backfill_or_async_recovery = other.backfill_or_async_recovery;
+    rdma_tokens.swap(other.rdma_tokens);
+    rdma_pull.swap(other.rdma_pull);
   }
   void encode(ceph::buffer::list &bl) const;
   void encode(ceph::buffer::list &p_bl,
@@ -103,6 +115,9 @@ struct ECSubWriteReply {
   eversion_t last_complete;
   bool committed;
   bool applied;
+  /// (v2) the recipient could not RDMA-pull the write payload; the
+  /// sender resends the transaction whole
+  bool pull_failed = false;
   ECSubWriteReply() : tid(0), committed(false), applied(false) {}
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);

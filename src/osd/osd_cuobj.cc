@@ -232,6 +232,63 @@ int OSDCuObj::add_registered_region(void* ptr, size_t len)
   return 0;
 }
 
+ssize_t OSDCuObj::pull_into(const std::string& key, const std::string& token,
+			    uint64_t remote_ofs, void* dst, size_t len)
+{
+  if (!is_available()) {
+    return -EOPNOTSUPP;
+  }
+  auto window = ceph::rdma::parse_rdma_token(token);
+  if (!window) {
+    return -EINVAL;
+  }
+  if (remote_ofs > window->size || len > window->size - remote_ofs) {
+    dout(5) << "pull " << remote_ofs << "~" << len << " outside window ("
+	    << window->size << ") for " << key << dendl;
+    return -EINVAL;
+  }
+  const region* reg = nullptr;
+  const char* p = static_cast<const char*>(dst);
+  for (const auto& r : m_regions) {
+    if (p >= r.ptr && p + len <= r.ptr + r.len) {
+      reg = &r;
+      break;
+    }
+  }
+  if (!reg) {
+    return -EINVAL;
+  }
+  uint16_t channel = get_channel_id();
+  if (channel == invalid_channel) {
+    return -EIO;
+  }
+  m_pulls++;
+  size_t total = 0;
+  while (total < len) {
+    const size_t chunk = std::min(len - total, size_t(MAX_RDMA_OP_SIZE));
+    ibv_wc_status wc_status = IBV_WC_SUCCESS;
+    ssize_t r = m_server->handlePutObject(
+      key, reg->handle, window->addr + remote_ofs + total, chunk, token,
+      channel, (p - reg->ptr) + total, &wc_status);
+    if (r < 0) {
+      derr << "ERROR: handlePutObject failed for " << key << ": " << r
+	   << " wc_status=" << wc_status << dendl;
+      m_pulls_failed++;
+      return r;
+    }
+    total += r;
+    if (static_cast<size_t>(r) < chunk) {
+      break;
+    }
+  }
+  if (total != len) {
+    m_pulls_failed++;
+    return -EIO;
+  }
+  m_bytes_pulled += total;
+  return static_cast<ssize_t>(total);
+}
+
 bool OSDCuObj::stage_payload(const ceph::buffer::list& data,
 			     staged_payload* st)
 {
@@ -588,5 +645,8 @@ void OSDCuObj::dump_stats(ceph::Formatter* f) const
   f->dump_unsigned("plans_copied", m_plans_copied.load());
   f->dump_unsigned("segments_in_region", m_segments_in_region.load());
   f->dump_unsigned("registrations", m_registrations.load());
+  f->dump_unsigned("pulls", m_pulls.load());
+  f->dump_unsigned("pulls_failed", m_pulls_failed.load());
+  f->dump_unsigned("bytes_pulled", m_bytes_pulled.load());
   f->dump_unsigned("register_in_place_ns", m_register_ns.load());
 }

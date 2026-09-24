@@ -395,6 +395,23 @@ public:
 
   uint64_t get_data_features() const { return data_features; }
 
+  /**
+   * The page-aligned OP_WRITE payload stream of the aligned format,
+   * which ops consume positionally. A sender may take it out to move
+   * those bytes by another means (an RDMA pull by the recipient) and
+   * the recipient installs the same bytes, in the same order, before
+   * the transaction is applied.
+   */
+  ceph::buffer::list take_aligned_data() {
+    ceph::buffer::list bl;
+    bl.swap(data_aligned_bl);
+    return bl;
+  }
+  void set_aligned_data(ceph::buffer::list&& bl) {
+    data_aligned_bl = std::move(bl);
+  }
+  uint64_t get_aligned_data_length() const { return data_aligned_bl.length(); }
+
   void swap(Transaction& other) noexcept {
     std::swap(data, other.data);
     std::swap(on_applied, other.on_applied);

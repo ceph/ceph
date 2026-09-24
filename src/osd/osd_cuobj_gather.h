@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "common/ceph_time.h"
+#include "include/buffer.h"
 #include "include/common_fwd.h"
 
 namespace ceph { class Formatter; }
@@ -84,6 +85,30 @@ public:
    */
   void release(const slot& s, bool quarantine);
 
+  /**
+   * Memory of this OSD that peers RDMA-read (the write payload a peer
+   * pulls): registered with the client library and described by a PUT
+   * token. keep pins the buffers the registration covers.
+   */
+  struct source {
+    void* ptr = nullptr;
+    size_t len = 0;
+    std::string token;
+    char* token_raw = nullptr;
+    ceph::buffer::list keep;
+  };
+  /**
+   * Register [ptr, ptr+len) - page-aligned - as a pull source. Returns
+   * null when the registration or the token mint fails.
+   */
+  std::unique_ptr<source> register_source(void* ptr, size_t len,
+                                          ceph::buffer::list keep);
+  /**
+   * Drop a source. With quarantine set the registration and the memory
+   * stay alive for the quarantine period first, for a source a peer
+   * might still be reading (its reply never came).
+   */
+  void release_source(std::unique_ptr<source> s, bool quarantine);
 
   /// asok/debug counters
   void dump_stats(ceph::Formatter* f) const;
@@ -92,6 +117,8 @@ private:
   int do_init();
   void do_shutdown();
   void reap_quarantine(ceph::coarse_mono_clock::time_point now);
+  void reap_sources(ceph::coarse_mono_clock::time_point now);
+  void drop_source(source& s);
 
   CephContext* m_cct;
   std::unique_ptr<cuObjClient> m_client;
@@ -113,6 +140,16 @@ private:
   };
   std::deque<held> m_quarantined; ///< ascending by until
 
+  std::mutex m_client_lock;       ///< the library serializes badly on its own
+  struct held_source {
+    std::unique_ptr<source> s;
+    ceph::coarse_mono_clock::time_point until;
+  };
+  std::deque<held_source> m_quarantined_sources; ///< ascending by until
+
+  std::atomic<uint64_t> m_sources{0};
+  std::atomic<uint64_t> m_source_failures{0};
+  std::atomic<uint64_t> m_source_quarantines{0};
   std::atomic<uint64_t> m_acquired{0};
   std::atomic<uint64_t> m_exhausted{0};
   std::atomic<uint64_t> m_oversized{0};

@@ -284,6 +284,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
       */
      virtual OSDCuObj *get_cuobj() { return nullptr; }
      virtual bool rdma_gather_push_allowed(double age_secs) { return false; }
+     /// put ops back at the front of the PG's queue, in order (a peer
+     /// that must wait for a sub-write's inline resend holds the ones
+     /// behind it)
+     virtual void requeue_held_ops(std::list<OpRequestRef> &ls) {}
 
      virtual pg_shard_t whoami_shard() const = 0;
      int whoami() const {

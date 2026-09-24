@@ -15,7 +15,9 @@
 
 #pragma once
 
+#include <atomic>
 #include <boost/intrusive/list.hpp>
+#include <memory>
 #include <utility>
 #include <fmt/format.h>
 
@@ -600,6 +602,25 @@ struct ECCommon {
 
       /// In progress write state.
       int pending_commits = 0;
+      /**
+       * RDMA pull: a peer reads its write payload out of our memory
+       * instead of receiving it. A holder keeps a registration (and the
+       * buffers under it) alive; the last holder dropped releases it,
+       * quarantined if a peer may still be reading (see ~Op). txn keeps
+       * the peer's whole transaction for an inline resend when it
+       * cannot pull.
+       */
+      struct pull_holder_base {
+        std::atomic<bool> quarantine{false};
+        virtual ~pull_holder_base() = default;
+      };
+      struct pull_state_t {
+        std::vector<std::shared_ptr<pull_holder_base>> sources;
+        ceph::os::Transaction txn;
+        pg_stat_t stats;
+        bool acked = false;
+      };
+      std::map<pg_shard_t, pull_state_t> pulls;
 
       bool write_in_progress() const {
         return pending_commits != 0;
@@ -622,6 +643,15 @@ struct ECCommon {
 
       virtual ~Op() {
         delete on_all_commit;
+        // a peer that never confirmed may still be reading: keep its
+        // sources registered (and their memory pinned) for the fence
+        for (auto &[peer, st] : pulls) {
+          if (!st.acked) {
+            for (auto &h : st.sources) {
+              h->quarantine.store(true);
+            }
+          }
+        }
       }
 
       virtual void generate_transactions(

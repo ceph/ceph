@@ -80,6 +80,13 @@ public:
    */
   int add_registered_region(void* ptr, size_t len);
 
+  /**
+   * RDMA-read len bytes from token's window at remote_ofs into dst,
+   * which must lie inside a registered region. Blocks until the
+   * transfer completes. Returns bytes read or a negative errno.
+   */
+  ssize_t pull_into(const std::string& key, const std::string& token,
+		    uint64_t remote_ofs, void* dst, size_t len);
 
   /// asok/debug counters
   void dump_stats(ceph::Formatter* f) const;
@@ -172,6 +179,9 @@ private:
   std::atomic<uint64_t> m_plans_copied{0};
   std::atomic<uint64_t> m_segments_in_region{0};  ///< needed no registration
   std::atomic<uint64_t> m_registrations{0};       ///< per-payload registrations made
+  std::atomic<uint64_t> m_pulls{0};
+  std::atomic<uint64_t> m_pulls_failed{0};
+  std::atomic<uint64_t> m_bytes_pulled{0};
   std::atomic<uint64_t> m_register_ns{0};   ///< spent registering in place
   std::atomic<uint64_t> m_payload_segments{0};
   bool m_register_in_place = false;

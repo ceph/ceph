@@ -318,6 +318,9 @@ public:
 #ifdef WITH_OSD_CUOBJ
   OSDCuObj *get_cuobj() override;
   bool rdma_gather_push_allowed(double age_secs) override;
+  void requeue_held_ops(std::list<OpRequestRef> &ls) override {
+    requeue_ops(ls);
+  }
 #endif
 #ifdef WITH_OSD_CUOBJ_GATHER
   OSDCuObjGather *get_rdma_gather() override;

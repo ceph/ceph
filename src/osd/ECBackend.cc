@@ -33,6 +33,8 @@
 #include "ECTypes.h"
 #include "oob_placement.h"
 #include "osd_cuobj.h"
+#include "osd_cuobj_gather.h"
+#include "common/errno.h"
 #include "ECSwitch.h"
 
 #include "PrimaryLogPG.h"
@@ -270,9 +272,32 @@ bool ECBackend::_handle_message(
     // not conflict with ECSubWrite's operator<<.
     MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(
       _op->get_nonconst_req());
+#ifdef WITH_OSD_CUOBJ_GATHER
+    if (!pull_pending.empty()) {
+      if (pull_pending.contains(op->op.tid) && op->op.rdma_pull.empty()) {
+        // the inline resend we asked for
+        pull_pending.erase(op->op.tid);
+      } else {
+        // behind a sub-write we are still waiting for: keep the order
+        dout(10) << __func__ << " holding " << *op << " behind "
+                 << pull_pending.size() << " pending inline resend(s)" << dendl;
+        pull_held.push_back(_op);
+        return true;
+      }
+    }
+#endif
     parent->maybe_preempt_replica_scrub(op->op.soid);
     handle_sub_write(op->op.from, _op, op->op, _op->pg_trace,
                      *get_parent()->get_eclistener());
+#ifdef WITH_OSD_CUOBJ_GATHER
+    if (pull_pending.empty() && !pull_held.empty()) {
+      std::list<OpRequestRef> ls;
+      ls.swap(pull_held);
+      dout(10) << __func__ << " requeueing " << ls.size()
+               << " held sub-write(s)" << dendl;
+      get_parent()->requeue_held_ops(ls);
+    }
+#endif
     return true;
   }
   case MSG_OSD_EC_WRITE_REPLY: {
@@ -391,12 +416,89 @@ void ECBackend::sub_write_committed(
   }
 }
 
+#ifdef WITH_OSD_CUOBJ_GATHER
+int ECBackend::pull_sub_write_payload(ECSubWrite &op, double age_secs,
+                                      ECListener &eclistener) {
+  OSDCuObj *cuobj = get_parent()->get_cuobj();
+  OSDCuObjGather *gather = eclistener.get_rdma_gather();
+  if (!cuobj || !gather) {
+    return -EOPNOTSUPP;
+  }
+  // The read-lease fences of a push do not apply to a pull: the
+  // primary keeps the source registered until we confirm, and
+  // quarantines it for osd_cuobj_gather_quarantine when it gives up on
+  // us, so only a pull started late enough to outlive that could read
+  // reused memory.
+  const double bound =
+    cct->_conf.get_val<double>("osd_cuobj_gather_quarantine") / 2.0;
+  if (age_secs > bound) {
+    return -EAGAIN;
+  }
+  bufferlist bl;
+  for (const auto &piece : op.rdma_pull) {
+    const uint32_t idx = boost::get<0>(piece);
+    const uint64_t ofs = boost::get<1>(piece);
+    const uint64_t len = boost::get<2>(piece);
+    if (idx >= op.rdma_tokens.size()) {
+      return -EINVAL;
+    }
+    for (uint64_t done = 0; done < len; ) {
+      const size_t n = std::min<uint64_t>(len - done, gather->slot_size());
+      auto slot = gather->acquire(n);
+      if (!slot) {
+        return -ENOMEM;
+      }
+      // the buffer keeps the slot until the store is done with it; a
+      // failed read may still complete late, so quarantine then
+      auto *quarantine = new std::atomic<bool>(false);
+      const auto s = *slot;
+      std::shared_ptr<void> holder(quarantine, [gather, s](void *q) {
+        auto *flag = static_cast<std::atomic<bool>*>(q);
+        gather->release(s, flag->load());
+        delete flag;
+      });
+      ssize_t r = cuobj->pull_into(op.soid.oid.name, op.rdma_tokens[idx],
+                                   ofs + done, slot->ptr, n);
+      if (r != static_cast<ssize_t>(n)) {
+        quarantine->store(true);
+        dout(5) << __func__ << " pull of " << op.soid << " piece " << idx
+                << "+" << ofs + done << "~" << n << " failed: " << r << dendl;
+        return r < 0 ? int(r) : -EIO;
+      }
+      bl.push_back(ceph::buffer::claim_buffer(
+        n, slot->ptr, make_deleter([holder]() mutable { holder.reset(); })));
+      done += n;
+    }
+  }
+  op.t.set_aligned_data(std::move(bl));
+  return 0;
+}
+
+void ECBackend::send_pull_failed(const ECSubWrite &op,
+                                 const ZTracer::Trace &trace) {
+  MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
+  r->pgid = get_parent()->primary_spg_t();
+  r->map_epoch = switcher->get_osdmap_epoch();
+  r->min_epoch = get_parent()->get_interval_start_epoch();
+  r->op.tid = op.tid;
+  r->op.last_complete = get_parent()->get_info().last_complete;
+  r->op.committed = false;
+  r->op.applied = false;
+  r->op.pull_failed = true;
+  r->op.from = get_parent()->whoami_shard();
+  r->set_priority(CEPH_MSG_PRIO_HIGH);
+  r->trace = trace;
+  get_parent()->send_message_osd_cluster(
+    get_parent()->primary_shard().osd, r, switcher->get_osdmap_epoch());
+}
+#endif
+
 void ECBackend::handle_sub_write(
   pg_shard_t from,
   OpRequestRef msg,
   ECSubWrite &op,
   const ZTracer::Trace &trace,
-  ECListener &) {
+  ECListener &eclistener) {
   if (msg) {
     msg->mark_event("sub_op_started");
   }
@@ -406,6 +508,22 @@ void ECBackend::handle_sub_write(
     ECInject::test_write_error3(op.soid)) {
     ceph_abort_msg("Error inject - OSD down");
   }
+#ifdef WITH_OSD_CUOBJ_GATHER
+  if (!op.rdma_pull.empty()) {
+    // the payload is in the primary's memory: read it before anything
+    // else, or ask for it inline
+    const double age = msg ?
+      double(ceph_clock_now() - msg->get_req()->get_recv_stamp()) : 0.0;
+    int r = pull_sub_write_payload(op, age, eclistener);
+    if (r < 0) {
+      dout(5) << __func__ << " cannot pull the payload of " << op.soid
+              << " (" << cpp_strerror(r) << "), asking for it inline" << dendl;
+      pull_pending.insert(op.tid);
+      send_pull_failed(op, trace);
+      return;
+    }
+  }
+#endif
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction localt;
@@ -799,7 +917,39 @@ void ECBackend::handle_sub_write_reply(
   pg_shard_t from,
   const ECSubWriteReply &ec_write_reply_op,
   const ZTracer::Trace &trace) {
-  RMWPipeline::OpRef &op = rmw_pipeline.tid_to_op_map.at(ec_write_reply_op.tid);
+  auto op_it = rmw_pipeline.tid_to_op_map.find(ec_write_reply_op.tid);
+  if (op_it == rmw_pipeline.tid_to_op_map.end()) {
+    // a late reply to an op the interval change already dropped
+    dout(10) << __func__ << " dropping reply for unknown tid "
+             << ec_write_reply_op.tid << dendl;
+    return;
+  }
+  RMWPipeline::OpRef &op = op_it->second;
+  if (ec_write_reply_op.pull_failed) {
+    // the peer could not read its payload out of our memory: send the
+    // transaction whole, as it would have gone without the pull
+    auto st = op->pulls.find(from);
+    if (st == op->pulls.end()) {
+      derr << __func__ << " pull_failed from " << from
+           << " but no pull was offered" << dendl;
+      return;
+    }
+    dout(5) << __func__ << " resending " << op->hoid << " to " << from
+            << " inline after a failed pull" << dendl;
+    ECSubWrite sop(
+      get_parent()->whoami_shard(), op->tid, op->reqid, op->hoid,
+      st->second.stats, st->second.txn, op->version, op->trim_to,
+      op->pg_committed_to, op->log_entries, op->updated_hit_set_history,
+      op->temp_added, op->temp_cleared, false);
+    auto *r = new MOSDECSubOpWrite(sop);
+    r->pgid = spg_t(get_parent()->primary_spg_t().pgid, from.shard);
+    r->map_epoch = switcher->get_osdmap_epoch();
+    r->min_epoch = get_parent()->get_interval_start_epoch();
+    r->trace = trace;
+    get_parent()->send_message_osd_cluster(from.osd, r,
+                                           switcher->get_osdmap_epoch());
+    return;
+  }
   if (ec_write_reply_op.committed) {
     trace.event("sub write committed");
     ceph_assert(op->pending_commits > 0);
@@ -807,6 +957,11 @@ void ECBackend::handle_sub_write_reply(
     if (from != get_parent()->whoami_shard()) {
       get_parent()->update_peer_last_complete_ondisk(
         from, ec_write_reply_op.last_complete);
+    }
+    if (auto st = op->pulls.find(from); st != op->pulls.end()) {
+      // the peer is done reading; its registrations may go
+      st->second.acked = true;
+      st->second.sources.clear();
     }
   }
 
@@ -1171,6 +1326,12 @@ void ECBackend::on_change() {
   read_pipeline.on_change();
   rmw_pipeline.on_change2();
   clear_recovery_state();
+#ifdef WITH_OSD_CUOBJ_GATHER
+  // sub-writes of the old interval: the primary re-drives the client
+  // ops in the new one, so these go the way a lost message would
+  pull_pending.clear();
+  pull_held.clear();
+#endif
 }
 
 void ECBackend::clear_recovery_state() {
