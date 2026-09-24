@@ -429,6 +429,40 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   string expires = get_s3_expiration_header(s, lastmod);
 
+#ifdef WITH_RADOSGW_CUOBJ
+  if (rdma_mode == RdmaMode::STAGED && get_data && !op_ret && !sent_header) {
+    // The response has no body, so its header is the client's signal
+    // that the data is in its memory; nothing may go out on the wire
+    // before the RDMA write has landed. Stage each chunk as it arrives
+    // and do the write on the final (empty) call, then fall through to
+    // the header - which reports the write's failure if it failed.
+    auto* entry = static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf);
+    if (bl_len > 0) {
+      if (!entry || rdma_buf_offset + bl_len > entry->size) {
+        ldpp_dout(this, 0) << "rgw_cuobj: ERROR: staging buffer overflow at "
+                           << rdma_buf_offset << "+" << bl_len << dendl;
+        return -EIO;
+      }
+      memcpy(static_cast<char*>(entry->ptr) + rdma_buf_offset, bl.c_str() + bl_ofs, bl_len);
+      rdma_buf_offset += bl_len;
+      return 0;
+    }
+    if (entry && rdma_buf_offset > 0) {
+      auto* cuobj = RGWCuObjServer::get_instance();
+      ssize_t ret = cuobj->rdma_write_to_client(
+          s->object->get_name(), entry, 0, rdma_buf_offset, rdma_token);
+      cuobj->release_buffer(entry);
+      rdma_buf = nullptr;
+      if (ret < 0) {
+        ldout(s->cct, 0) << "rgw_cuobj: ERROR: failed to write to client via RDMA: " << cpp_strerror(ret) << dendl;
+        op_ret = ret;
+      } else {
+        s->rdma_bytes_transferred = rdma_buf_offset;
+      }
+    }
+  }
+#endif
+
   if (sent_header)
     goto send_data;
 
@@ -831,29 +865,12 @@ send_data:
     }
 #ifdef WITH_RADOSGW_CUOBJ
     if (rdma_mode == RdmaMode::STAGED) {
-      // the staging buffer was reserved in select_rdma_mode(), before
-      // the response headers were committed
-      auto* entry = static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf);
+      // staged and written before the header went out (see above);
+      // nothing is streamed
       if (bl_len > 0) {
-        if (!entry || rdma_buf_offset + bl_len > entry->size) {
-          ldpp_dout(this, 0) << "rgw_cuobj: ERROR: staging buffer overflow at "
-                             << rdma_buf_offset << "+" << bl_len << dendl;
-          return -EIO;
-        }
-        memcpy(static_cast<char*>(entry->ptr) + rdma_buf_offset, bl.c_str() + bl_ofs, bl_len);
-        rdma_buf_offset += bl_len;
-      } else if (entry && rdma_buf_offset > 0) {
-        auto* cuobj = RGWCuObjServer::get_instance();
-        ssize_t ret = cuobj->rdma_write_to_client(
-            s->object->get_name(), entry, 0,
-            rdma_buf_offset, rdma_token);
-        cuobj->release_buffer(entry);
-        rdma_buf = nullptr;
-        if (ret < 0) {
-          ldout(s->cct, 0) << "rgw_cuobj: ERROR: failed to write to client via RDMA: " << cpp_strerror(ret) << dendl;
-          return ret;
-        }
-        s->rdma_bytes_transferred = rdma_buf_offset;
+        ldpp_dout(this, 0) << "rgw_cuobj: ERROR: data after the staged RDMA "
+                           << "write completed" << dendl;
+        return -EIO;
       }
       return 0;
     }
