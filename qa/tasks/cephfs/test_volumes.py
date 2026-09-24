@@ -219,19 +219,19 @@ class TestVolumesHelper(CephFSTestCase):
         return [f'{name}_{i}' for i in range(n)]
 
     def _gen_vol_name(self, n=1):
-        return self._gen_name('vol', n)
+        return self._gen_name('vol_', n)
 
     def _gen_subvol_name(self, n=1):
-        return self._gen_name('subvol', n)
+        return self._gen_name('subvol_', n)
 
     def _gen_subvol_grp_name(self, n=1):
-        return self._gen_name('subvol_grp', n)
+        return self._gen_name('subvol_grp_', n)
 
     def _gen_subvol_snap_name(self, n=1):
-        return self._gen_name('subvol_snap', n)
+        return self._gen_name('subvol_snap_', n)
 
     def _gen_subvol_clone_name(self, n=1):
-        return self._gen_name('subvol_clone', n)
+        return self._gen_name('subvol_clone_', n)
 
     def _enable_multi_fs(self):
         self._fs_cmd("flag", "set", "enable_multiple", "true", "--yes-i-really-mean-it")
