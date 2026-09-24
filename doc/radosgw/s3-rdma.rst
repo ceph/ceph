@@ -172,6 +172,9 @@ Cluster (every daemon with an RDMA endpoint):
   otherwise takes the first matching interface. An OSD with
   ``rdma_network`` set but no local address in it runs without its
   RDMA endpoint and delivers every read inline.
+* ``rdma_network_interface`` — interface name(s) to choose among within
+  ``rdma_network``, as ``public_network_interface`` does for
+  ``public_network``; ``rdma_network`` must also be set.
 
 Gateway (staged mode and protocol handling):
 

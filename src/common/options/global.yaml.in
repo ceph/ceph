@@ -171,6 +171,21 @@ options:
   - osd_cuobj_rdma_ip
   - rgw_cuobj_rdma_ip
   - osd_numa_prefer_iface
+  - rdma_network_interface
+  flags:
+  - startup
+- name: rdma_network_interface
+  type: str
+  level: advanced
+  desc: Interface name(s) from which to choose an address from a ``rdma_network`` to
+    bind to; ``rdma_network`` must also be specified.
+  tags:
+  - network
+  services:
+  - osd
+  - rgw
+  see_also:
+  - rdma_network
   flags:
   - startup
 - name: monmap

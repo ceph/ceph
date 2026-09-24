@@ -1212,4 +1212,14 @@ TEST(pick_address, rdma_network)
   // exiting the daemon, even when another entry would have matched
   cct->_conf.set_val("rdma_network", "10.64.2.0/24,rail3");
   ASSERT_EQ("", pick_rdma_addr(cct.get(), &one));
+
+  // rdma_network_interface narrows the candidates to named interfaces
+  cct->_conf.set_val("rdma_network", "10.64.0.0/16");
+  cct->_conf.set_val("rdma_network_interface", "eth2");
+  ASSERT_EQ("10.64.3.7", pick_rdma_addr(cct.get(), &one));
+
+  // and, as with public_network_interface, needs rdma_network, though
+  // here without exiting the daemon when it is missing
+  cct->_conf.set_val("rdma_network", "");
+  ASSERT_EQ("", pick_rdma_addr(cct.get(), &one));
 }

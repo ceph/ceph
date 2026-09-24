@@ -523,11 +523,17 @@ std::string pick_rdma_addr(CephContext *cct, const struct ifaddrs *ifa,
 			   int numa_node)
 {
   const auto networks = cct->_conf.get_val<std::string>("rdma_network");
+  const auto interfaces =
+    cct->_conf.get_val<std::string>("rdma_network_interface");
+  // unlike public_network, nothing needs the RDMA endpoint to run, so a
+  // bad setting costs the daemon that endpoint rather than exiting it
   if (networks.empty()) {
+    if (!interfaces.empty()) {
+      lderr(cct) << "rdma_network_interface is set but rdma_network is not"
+		 << dendl;
+    }
     return {};
   }
-  // unlike public_network, nothing needs the RDMA endpoint to run, so a
-  // bad entry costs the daemon that endpoint rather than exiting it
   for (const auto& net : get_str_list(networks)) {
     struct sockaddr_storage ss;
     unsigned int prefix_len;
@@ -539,7 +545,7 @@ std::string pick_rdma_addr(CephContext *cct, const struct ifaddrs *ifa,
   }
   auto addr = get_one_address(cct, ifa,
 			      CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6,
-			      networks, "", numa_node);
+			      networks, interfaces, numa_node);
   return addr ? addr->ip_only_to_str() : std::string{};
 }
 
