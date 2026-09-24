@@ -3077,6 +3077,10 @@ bool DaemonServer::_handle_command(
       ss << "unable to parse datetime '" << to_str << "'";
       r = -EINVAL;
       cmdctx->reply(r, ss);
+    } else if (to != utime_t() && from > to) {
+      ss << "'from' time " << from << " is after 'to' time " << to;
+      r = -EINVAL;
+      cmdctx->reply(r, ss);
     } else {
       std::map<string,string> meta;
       daemon_state.with_device_create(
