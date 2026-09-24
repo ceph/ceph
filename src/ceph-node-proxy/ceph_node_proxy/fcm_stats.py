@@ -99,11 +99,21 @@ def read_sysfs_block(device: str, attribute: str) -> str:
     return read_sysfs(os.path.join(SYSFS_BLOCK, device, attribute))
 
 
+def is_nvme_namespace_block_device(device: str) -> bool:
+    """True if device is a whole NVMe namespace with a live /dev node."""
+    sysdir = os.path.join(SYSFS_BLOCK, device)
+    if os.path.exists(os.path.join(sysdir, "partition")):
+        return False
+    return os.path.exists(os.path.join(sysdir, "dev")) and os.path.exists(
+        f"/dev/{device}"
+    )
+
+
 def list_nvme_namespace_names() -> list[str]:
     return sorted(
         os.path.basename(path)
         for path in glob.glob(f"{SYSFS_BLOCK}/nvme*")
-        if "c" not in os.path.basename(path)
+        if is_nvme_namespace_block_device(os.path.basename(path))
     )
 
 
@@ -129,7 +139,15 @@ def query_nvme_log_page(device: str) -> Optional[bytes]:
     command.cdw12 = FCM_LOG_PAGE_OFFSET & 0xFFFFFFFF
     command.cdw13 = (FCM_LOG_PAGE_OFFSET >> 32) & 0xFFFFFFFF
 
-    fd = os.open(device_path, os.O_RDONLY)
+    try:
+        fd = os.open(device_path, os.O_RDONLY)
+    except OSError as exc:
+        logger.debug(
+            "NVMe log page 0xCA open failed for device %s: %s",
+            device,
+            exc,
+        )
+        return None
     try:
         fcntl.ioctl(fd, NVME_IOCTL_ADMIN64_CMD, command)
     except OSError as exc:
@@ -280,5 +298,12 @@ def collect_fcm_stats() -> dict[str, FCMStatsData]:
     for device in list_nvme_namespace_names():
         if not is_fcm_device(device):
             continue
-        stats[device] = read_fcm_stats(device)
+        try:
+            stats[device] = read_fcm_stats(device)
+        except OSError as exc:
+            logger.warning(
+                "Failed to collect FCM stats for device %s: %s",
+                device,
+                exc,
+            )
     return stats
