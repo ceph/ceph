@@ -321,6 +321,14 @@ describe('TableComponent', () => {
       expect(component.stagedCustomFilters[1]).toEqual({ id: 2, key: '', value: '' });
     });
 
+    it('should empty the textboxes when removing last item', () => {
+      component.addCustomFilter();
+      component.stagedCustomFilters[0] = { id: 0, key: 'foo', value: 'bar' };
+
+      component.removeCustomFilter(0);
+      expect(component.stagedCustomFilters[0]).toEqual({ id: 0, key: '', value: '' });
+    });
+
     it('should emit custom filters on submit', () => {
       component.addCustomFilter();
       component.stagedCustomFilters[0] = { id: 0, key: 'foo', value: 'bar' };
@@ -328,6 +336,30 @@ describe('TableComponent', () => {
       expect(component.customFilterChange.emit).toHaveBeenCalledWith([
         { id: 0, key: 'foo', value: 'bar' }
       ]);
+    });
+
+    it('should emit custom filters on clearing all filters', () => {
+      component.addCustomFilter();
+      component.stagedCustomFilters[0] = { id: 0, key: 'foo', value: 'bar' };
+      component.onClearFilters();
+      expect(component.customFilterChange.emit).toHaveBeenCalledWith([]);
+    });
+
+    it('should disable the apply button if any of the staged filters are invalid', () => {
+      component.addCustomFilter();
+      component.stagedCustomFilters[0] = { id: 0, key: 'foo', value: '' };
+      expect(component.isApplyFilterDisabled).toBe(true);
+    });
+
+    it('should not disable the apply button if all of the staged filters are valid or empty', () => {
+      component.addCustomFilter();
+      component.stagedCustomFilters[0] = { id: 0, key: 'foo', value: 'bar' };
+      expect(component.isApplyFilterDisabled).toBe(false);
+
+      component.removeCustomFilter(0);
+      component.addCustomFilter();
+      component.stagedCustomFilters[0] = { id: 0, key: '', value: '' };
+      expect(component.isApplyFilterDisabled).toBe(false);
     });
   });
 

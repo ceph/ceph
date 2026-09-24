@@ -494,7 +494,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   get isApplyFilterDisabled(): boolean {
-    return this.stagedCustomFilters.some((filter) => !filter.key.trim() || !filter.value.trim());
+    return this.stagedCustomFilters.some((filter) => {
+      const hasKey = !!filter.key?.trim();
+      const hasValue = !!filter.value?.trim();
+
+      // disable only if row is half-filled
+      return hasKey !== hasValue;
+    });
   }
 
   constructor(
@@ -830,6 +836,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   addCustomFilter() {
+    if (this.stagedCustomFilters.length === 0) this.nextFilterId = 0;
     this.stagedCustomFilters = [
       ...this.stagedCustomFilters,
       { id: this.nextFilterId++, key: '', value: '' }
@@ -840,6 +847,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.stagedCustomFilters = this.stagedCustomFilters.filter(
       (filter) => filter.id !== idToRemove
     );
+
+    if (this.stagedCustomFilters.length === 0) {
+      this.addCustomFilter();
+    }
   }
 
   initColumnFilters() {
@@ -1550,6 +1561,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
     if (this.customFilter) {
       this.addCustomFilter();
+      this.customFilterChange.emit(this.customFilters);
     }
 
     this.updateFilter();
