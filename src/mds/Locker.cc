@@ -4598,9 +4598,17 @@ void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
   if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
     dout(25) << "encode lease reply encoding: " << ls << dendl;
     ENCODE_START(2, 1, bl);
-    encode(ls.mask, bl);
-    encode(ls.duration_ms, bl);
-    encode(ls.seq, bl);
+    // The fixed-size fields in one append rather than three: readdir encodes
+    // a lease for every entry it returns.
+    struct __attribute__((packed)) {
+      ceph_le16 mask;
+      ceph_le32 duration_ms;
+      ceph_le32 seq;
+    } fixed;
+    fixed.mask = ls.mask;
+    fixed.duration_ms = ls.duration_ms;
+    fixed.seq = ls.seq;
+    bl.append(reinterpret_cast<const char*>(&fixed), sizeof(fixed));
     encode(ls.alternate_name, bl);
     ENCODE_FINISH(bl);
   }
