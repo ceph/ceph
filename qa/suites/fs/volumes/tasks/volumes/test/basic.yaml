@@ -10,3 +10,4 @@ tasks:
         - tasks.cephfs.test_subvolume.TestSubvolume
         - tasks.cephfs.test_subvolume.TestSubvolumeReplicated
         - tasks.cephfs.test_subvolume.TestSubvolumeV2
+        - tasks.cephfs.volumes.upgrades
