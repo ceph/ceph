@@ -19,6 +19,7 @@
 #include "include/str_list.h"
 
 #include <algorithm> // for std::find()
+#include <cerrno>
 
 const static int dout_subsys = ceph_subsys_auth;
 
@@ -55,6 +56,24 @@ __u32 AuthMethodList::parse_method(std::string_view name)
   } else {
     return CEPH_AUTH_UNKNOWN;
   }
+}
+
+int AuthMethodList::validate_method_list(std::string *value, std::string *error)
+{
+  std::list<std::string> methods;
+  get_str_list(*value, methods);
+  if (methods.empty()) {
+    *error = "at least one auth method is required: cephx, none or gss";
+    return -EINVAL;
+  }
+  for (const auto& method : methods) {
+    if (parse_method(method) == CEPH_AUTH_UNKNOWN) {
+      *error = "unknown auth method '" + method +
+               "', expected cephx, none or gss";
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 bool AuthMethodList::is_supported_auth(int auth_type)
