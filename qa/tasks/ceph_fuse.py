@@ -73,6 +73,13 @@ def task(ctx, config):
               mount_timeout: 120 # default is 30, give up if /sys/ is not populated
         - interactive:
 
+    Example that force-unmounts after upgrade (avoids hung ceph-fuse teardown):
+
+        tasks:
+        - ceph-fuse:
+            client.0:
+              umount_force: true
+
     Example that creates and mounts a subvol:
 
         overrides:
@@ -183,7 +190,8 @@ def task(ctx, config):
     for client_id in set(all_mounts.keys()) - set(mounted_by_me.keys()) - set(skipped.keys()):
         mount = all_mounts[client_id]
         if mount.is_mounted():
-            mount.umount_wait()
+            force = mount.client_config.get('umount_force', False)
+            mount.umount_wait(force=force)
 
     for remote in remotes:
         FuseMount.cleanup_stale_netnses_and_bridge(remote)
@@ -245,6 +253,7 @@ def task(ctx, config):
             # Conditional because an inner context might have umounted it
             mount = info["mount"]
             if mount.is_mounted():
-                mount.umount_wait()
+                force = info["config"].get("umount_force", False)
+                mount.umount_wait(force=force)
         for remote in remotes:
             FuseMount.cleanup_stale_netnses_and_bridge(remote)

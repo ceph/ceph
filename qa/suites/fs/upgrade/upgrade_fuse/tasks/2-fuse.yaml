@@ -1,3 +1,5 @@
 tasks:
 - ceph-fuse:
+    client.0:
+      umount_force: true
 - print: "**** done client"

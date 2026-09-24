@@ -1,0 +1,7 @@
+# Unmount ceph-fuse before the orch upgrade. A fuse client left mounted across
+# release upgrades often hangs on job teardown (tracker #64502).
+tasks:
+- ceph-fuse:
+    client.0:
+      mounted: false
+      umount_force: true

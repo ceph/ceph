@@ -404,6 +404,11 @@ class FuseMountBase(CephFSMountBase):
         except MaxWhileTries:
             log.error("process failed to terminate after unmount. This probably"
                       " indicates a bug within ceph-fuse.")
+            if force:
+                log.warning("umount_force: killing ceph-fuse and continuing")
+                self.teardown()
+                self.cleanup()
+                return
             raise
         except CommandFailedError:
             if require_clean:
