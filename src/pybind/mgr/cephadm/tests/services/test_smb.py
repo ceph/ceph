@@ -3,11 +3,12 @@ from unittest.mock import patch
 
 from ceph.smb.constants import REMOTE_CONTROL
 from cephadm.services.smb import SMBSpec, SMBExternalCephCluster
+from cephadm import utils
 from cephadm.module import CephadmOrchestrator
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from ceph.deployment.service_spec import PlacementSpec
 
 _SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:devbuilds-centos-any'
@@ -193,11 +194,11 @@ class TestSMB:
 
             with with_service(cephadm_module, smb_spec):
                 smb_conf, _ = service_registry.get_service('smb').generate_config(
-                    CephadmDaemonDeploySpec(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(
                         host='test',
                         daemon_id='foo.test.0',
                         service_name=service_name,
-                    )
+                    ))
                 )
                 files = smb_conf.get('files', {})
                 assert files.get('remote_control.ssl.crt') == ceph_generated_cert
@@ -233,10 +234,175 @@ def test_smb_get_dependencies(cephadm_module):
 
     deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
     assert deps == [
-        'smb+meta:ceph_cluster_config.exo=sha256:859b001f76df4d184b858b9c3e323ca8ff85a311414d0405f4484d17aa481ef3',
         'smb+field:features=domain',
         'smb+field:rgw_creds_uri=rados:mon-config-key:smb/config/foxtrot/config.smb.rgw',
+        'smb+meta:ceph_cluster_config.exo=sha256:859b001f76df4d184b858b9c3e323ca8ff85a311414d0405f4484d17aa481ef3',
     ]
+
+
+def test_smb_tls_feature_dependencies(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    spec = SMBSpec(
+        cluster_id='foxtrot',
+        config_uri='rados://.smb/foxtrot/config2.json',
+        ssl_certificates={
+            'remote_control': {
+                'enabled': True,
+                'certificate_source': 'inline',
+                'ssl_cert': 'REMOTE-CERT',
+                'ssl_key': 'REMOTE-KEY',
+                'ssl_ca_cert': 'REMOTE-CA',
+            },
+            'keybridge': {
+                'enabled': True,
+                'certificate_source': 'inline',
+                'ssl_cert': 'KEYBRIDGE-CERT',
+                'ssl_key': 'KEYBRIDGE-KEY',
+                'ssl_ca_cert': 'KEYBRIDGE-CA',
+            },
+        },
+    )
+
+    deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
+
+    assert (
+        'smb+field:ssl_certificates.remote_control.certificate_source=inline'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.remote_control.ssl_cert='
+        f'{utils.config_hash("REMOTE-CERT")}'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.remote_control.ssl_key='
+        f'{utils.config_hash("REMOTE-KEY")}'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.remote_control.ssl_ca_cert='
+        f'{utils.config_hash("REMOTE-CA")}'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.keybridge.certificate_source=inline'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.keybridge.ssl_cert='
+        f'{utils.config_hash("KEYBRIDGE-CERT")}'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.keybridge.ssl_key='
+        f'{utils.config_hash("KEYBRIDGE-KEY")}'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.keybridge.ssl_ca_cert='
+        f'{utils.config_hash("KEYBRIDGE-CA")}'
+        in deps
+    )
+
+
+def test_smb_tls_feature_rotation_changes_dependencies(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    spec = SMBSpec(
+        cluster_id='foxtrot',
+        config_uri='rados://.smb/foxtrot/config2.json',
+        ssl_certificates={
+            'remote_control': {
+                'enabled': True,
+                'certificate_source': 'inline',
+                'ssl_cert': 'CERT-1',
+                'ssl_key': 'KEY-1',
+                'ssl_ca_cert': 'CA-1',
+            },
+        },
+    )
+    deps_before = SMBService.get_dependencies(
+        cephadm_module, spec, spec.service_type
+    )
+
+    spec.ssl_certificates['remote_control'].ssl_cert = 'CERT-2'
+    deps_after = SMBService.get_dependencies(
+        cephadm_module, spec, spec.service_type
+    )
+
+    assert deps_before != deps_after
+    assert (
+        'smb+field:ssl_certificates.remote_control.ssl_cert='
+        f'{utils.config_hash("CERT-1")}'
+        in deps_before
+    )
+    assert (
+        'smb+field:ssl_certificates.remote_control.ssl_cert='
+        f'{utils.config_hash("CERT-2")}'
+        in deps_after
+    )
+
+
+def test_smb_tls_feature_flat_field_fallback_dependencies(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    spec = SMBSpec(
+        cluster_id='foxtrot',
+        config_uri='rados://.smb/foxtrot/config2.json',
+        ssl_certificates={
+            'remote_control': {
+                'enabled': True,
+                'certificate_source': 'reference',
+            },
+        },
+        remote_control_ssl_cert='LEGACY-CERT',
+        remote_control_ssl_key='LEGACY-KEY',
+        remote_control_ca_cert='LEGACY-CA',
+    )
+
+    deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
+
+    assert (
+        'smb+field:ssl_certificates.remote_control.certificate_source=reference'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.remote_control.ssl_cert='
+        f'{utils.config_hash("LEGACY-CERT")}'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.remote_control.ssl_key='
+        f'{utils.config_hash("LEGACY-KEY")}'
+        in deps
+    )
+    assert (
+        'smb+field:ssl_certificates.remote_control.ssl_ca_cert='
+        f'{utils.config_hash("LEGACY-CA")}'
+        in deps
+    )
+
+
+def test_smb_disabled_tls_feature_not_in_dependencies(cephadm_module):
+    from cephadm.services.smb import SMBService
+
+    spec = SMBSpec(
+        cluster_id='foxtrot',
+        config_uri='rados://.smb/foxtrot/config2.json',
+        ssl_certificates={
+            'remote_control': {
+                'enabled': False,
+                'certificate_source': 'inline',
+                'ssl_cert': 'IGNORED-CERT',
+                'ssl_key': 'IGNORED-KEY',
+            },
+        },
+    )
+
+    deps = SMBService.get_dependencies(cephadm_module, spec, spec.service_type)
+
+    assert not any('ssl_certificates.remote_control' in dep for dep in deps)
 
 
 def test_pool_caps_from_uri(cephadm_module):

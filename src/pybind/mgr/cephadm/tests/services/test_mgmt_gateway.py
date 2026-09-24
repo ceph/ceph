@@ -13,7 +13,10 @@ from ceph.deployment.service_spec import (
     MgmtGatewaySpec,
     OAuth2ProxySpec,
 )
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import (
+    CephadmDaemonDeploySpec,
+    DaemonDeployContext,
+)
 from cephadm.services.service_registry import service_registry
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 from cephadm.tlsobject_types import TLSCredentials
@@ -875,7 +878,10 @@ class TestMgmtGateway:
                     daemon_type=service_type,
                 )
 
-                _, generated_deps = service.generate_config(daemon_spec)
+                _, generated_deps = service.generate_config(
+                    DaemonDeployContext(daemon_spec, svc_spec)
+                )
+
                 expected_deps = service.sorted_dependencies(
                     cephadm_module,
                     svc_spec,
@@ -910,3 +916,54 @@ class TestMgmtGateway:
                 assert 'tcp_ports' in deployed['params']
                 assert deployed['params']['tcp_ports'] == [HTTPS_PORT]
                 assert deployed['meta']['ports'] == [HTTPS_PORT]
+
+
+def test_mgmt_gateway_get_dependencies():
+    from unittest.mock import MagicMock
+    from cephadm.services.mgmt_gateway import MgmtGatewayService
+
+    mgr = MagicMock()
+
+    def daemon(name, ports=None):
+        dd = MagicMock()
+        dd.name.return_value = name
+        dd.ports = ports or []
+        return dd
+
+    def by_service(service_name):
+        return {
+            'prometheus': [daemon('prometheus.a', [9095])],
+            'alertmanager': [daemon('alertmanager.a')],
+            'grafana': [daemon('grafana.a', [3000])],
+            'oauth2-proxy': [daemon('oauth2-proxy.a', [4180])],
+            'mgr': [daemon('mgr.a')],
+        }.get(service_name, [])
+
+    mgr.cache.get_daemons_by_service.side_effect = by_service
+
+    assert MgmtGatewayService.get_dependencies(mgr) == sorted([
+        'prometheus.a:9095',
+        'alertmanager.a',
+        'grafana.a:3000',
+        'oauth2-proxy.a:4180',
+        'mgr.a',
+    ])
+
+
+def test_oauth2_proxy_get_dependencies():
+    from unittest.mock import MagicMock
+    from cephadm.services.oauth2_proxy import OAuth2ProxyService
+
+    mgr = MagicMock()
+    gateway_a = MagicMock()
+    gateway_a.name.return_value = 'mgmt-gateway.a'
+    gateway_a.ports = [29443]
+    gateway_b = MagicMock()
+    gateway_b.name.return_value = 'mgmt-gateway.b'
+    gateway_b.ports = []
+    mgr.cache.get_daemons_by_service.return_value = [gateway_a, gateway_b]
+
+    assert OAuth2ProxyService.get_dependencies(mgr) == [
+        'mgmt-gateway.a:29443',
+        'mgmt-gateway.b',
+    ]

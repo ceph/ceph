@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 from cephadm.services.service_registry import service_registry
 from cephadm.services.monitoring import GrafanaService
+from cephadm.services.cephadmservice import CephadmService, CephService, DaemonDeployContext
 from orchestrator import OrchestratorError
 
 
@@ -49,7 +50,99 @@ class FakeMgr:
         return '1.2.3.4'
 
 
+class ServiceWithDependencies(CephadmService):
+    @classmethod
+    def _get_service_dependencies(
+        cls,
+        mgr,
+        spec=None,
+        daemon_type=None,
+    ):
+        return ['service-specific']
+
+
+class CephServiceWithDependencies(CephService):
+    TYPE = 'test'
+
+    @classmethod
+    def _get_service_dependencies(
+        cls,
+        mgr,
+        spec=None,
+        daemon_type=None,
+    ):
+        return ['service-specific']
+
+    def get_config_and_keyring(self, *args, **kwargs):
+        return {}
+
+
+class ServiceWithConfig(CephadmService):
+    TYPE = 'test'
+
+    def generate_config(self, deploy_ctx):
+        self.seen_ctx = deploy_ctx
+        return {}, []
+
+
 class TestCephadmService:
+    def test_get_dependencies_combines_service_and_common_dependencies(self):
+        mgr = FakeMgr()
+        spec = MagicMock()
+        spec.ssl = True
+        spec.certificate_source = 'inline'
+        spec.ssl_cert = 'CERT'
+        spec.ssl_key = 'KEY'
+        spec.ssl_ca_cert = 'CA'
+
+        deps = ServiceWithDependencies.get_dependencies(mgr, spec)
+
+        from cephadm import utils
+        assert deps == sorted([
+            'certificate_source: inline',
+            'service-specific',
+            f'ssl_cert: {utils.config_hash("CERT")}',
+            f'ssl_key: {utils.config_hash("KEY")}',
+            f'ssl_ca_cert: {utils.config_hash("CA")}',
+        ])
+
+    def test_registered_services_use_common_dependency_handler(self):
+        mgr = FakeMgr()
+        service_registry.init_services(mgr)
+
+        for service in service_registry.get_all_services():
+            assert 'get_dependencies' not in service.__class__.__dict__
+
+    def test_prepare_create_passes_context_to_generate_config(self):
+        mgr = FakeMgr()
+        service = ServiceWithConfig(mgr)
+        deploy_ctx = DaemonDeployContext(MagicMock(), MagicMock())
+
+        service.prepare_create(deploy_ctx)
+
+        assert service.seen_ctx is deploy_ctx
+
+    def test_generate_config_uses_canonical_dependencies(self):
+        mgr = FakeMgr()
+        service = CephServiceWithDependencies(mgr)
+        daemon_spec = MagicMock()
+        daemon_spec.daemon_type = 'test'
+        daemon_spec.daemon_id = 'a'
+        daemon_spec.host = 'host1'
+        daemon_spec.keyring = None
+        daemon_spec.ceph_conf = None
+        daemon_spec.config_get_files.return_value = {}
+        spec = MagicMock()
+        spec.ssl = True
+        spec.certificate_source = 'cephadm-signed'
+        spec.ssl_cert = None
+        spec.ssl_key = None
+        spec.ssl_ca_cert = None
+
+        _, deps = service.generate_config(DaemonDeployContext(daemon_spec, spec))
+
+        assert deps == ['certificate_source: cephadm-signed', 'service-specific']
+
     def test_set_value_on_dashboard(self):
         # pylint: disable=protected-access
         mgr = FakeMgr()

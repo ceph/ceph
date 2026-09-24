@@ -56,7 +56,7 @@ from ceph.deployment.drive_group import DeviceSelection
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from ceph.cryptotools.select import choose_crypto_caller
 from cephadm.serve import CephadmServe
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.http_server import CephadmHttpServer
 from cephadm.agent import CephadmAgentHelpers
 from cephadm.services.service_registry import service_registry
@@ -3160,7 +3160,8 @@ Then run the following:
         # deploy a new keyring file
         if daemon_spec.daemon_type != 'osd':
             daemon_spec = service_registry.get_service(daemon_type_to_service(
-                daemon_spec.daemon_type)).prepare_create(daemon_spec)
+                daemon_spec.daemon_type)).prepare_create(
+                DaemonDeployContext(daemon_spec, self.spec_store.active_specs.get(daemon_spec.service_name)))
         with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
             self.wait_async(CephadmServe(self)._create_daemon(daemon_spec, reconfig=True))
 
@@ -3246,12 +3247,13 @@ Then run the following:
                 action = 'redeploy'  # to ensure proper behavior since we want redeploy
             if daemon_spec.daemon_type != 'osd':
                 daemon_spec = service_registry.get_service(daemon_type_to_service(
-                    daemon_spec.daemon_type)).prepare_create(daemon_spec)
+                    daemon_spec.daemon_type)).prepare_create(
+                    DaemonDeployContext(daemon_spec, self.spec_store.active_specs.get(daemon_spec.service_name)))
             else:
                 # for OSDs, we still need to update config, just not carry out the full
                 # prepare_create function
                 daemon_spec.final_config, daemon_spec.deps = self.osd_service.generate_config(
-                    daemon_spec)
+                    DaemonDeployContext(daemon_spec, self.spec_store.active_specs.get(daemon_spec.service_name)))
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
                 return self.wait_async(
                     CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig'),
@@ -3936,9 +3938,16 @@ Then run the following:
             )
             daemons.append(sd)
 
+        # Config generation historically uses the persisted service definition.
+        # The spec passed to daemon-add may contain only placement information, so
+        # keep using it for daemon placement/construction but pass the stored spec
+        # to prepare_create() for config and dependency generation.
+        service_spec = self.spec_store[spec.service_name()].spec
+
         @forall_hosts
-        def create_func_map(*args: Any) -> str:
-            daemon_spec = service_registry.get_service(daemon_type).prepare_create(*args)
+        def create_func_map(daemon_spec: CephadmDaemonDeploySpec) -> str:
+            daemon_spec = service_registry.get_service(daemon_type).prepare_create(
+                DaemonDeployContext(daemon_spec, service_spec))
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
                 return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec))
 
