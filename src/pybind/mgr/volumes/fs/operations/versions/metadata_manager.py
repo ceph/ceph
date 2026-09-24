@@ -71,6 +71,17 @@ class MetadataManager(object):
         self.config_path = config_path
         self.config = configparser.ConfigParser()
 
+    def __str__(self):
+        rv = ''
+        for sec in self.config.sections():
+            rv += f'[{sec}]'
+            for opt, val in self.config.items(sec):
+                rv += f'{opt} = {val}\n'
+            rv += '\n'
+
+        rv += f'meta path = {self.config_path}. meta content - {rv}'
+        return rv
+
     def refresh(self):
         fd = None
         try:
