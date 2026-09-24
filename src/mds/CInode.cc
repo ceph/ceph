@@ -3701,6 +3701,10 @@ int CInode::get_caps_liked() const
     return get_caps_quiesce_mask() & (CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO);
 }
 
+/* The cap masks below shift each lock's bits by a constant: the lock types
+ * are fixed when the inode is constructed, and get_cap_shift() would look
+ * each up with an out-of-line call, for every inode a readdir issues caps
+ * on. */
 int CInode::get_caps_allowed_ever() const
 {
   int allowed;
@@ -3710,40 +3714,40 @@ int CInode::get_caps_allowed_ever() const
     allowed = CEPH_CAP_ANY;
   return allowed & 
     (CEPH_CAP_PIN |
-     (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
-     (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |
-     (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
-     (linklock.gcaps_allowed_ever() << linklock.get_cap_shift()));
+     (filelock.gcaps_allowed_ever() << CEPH_CAP_SFILE) |
+     (authlock.gcaps_allowed_ever() << CEPH_CAP_SAUTH) |
+     (xattrlock.gcaps_allowed_ever() << CEPH_CAP_SXATTR) |
+     (linklock.gcaps_allowed_ever() << CEPH_CAP_SLINK));
 }
 
 int CInode::get_caps_allowed_by_type(int type) const
 {
   return get_caps_quiesce_mask() & (
     CEPH_CAP_PIN |
-    (filelock.gcaps_allowed(type) << filelock.get_cap_shift()) |
-    (authlock.gcaps_allowed(type) << authlock.get_cap_shift()) |
-    (xattrlock.gcaps_allowed(type) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_allowed(type) << linklock.get_cap_shift())
+    (filelock.gcaps_allowed(type) << CEPH_CAP_SFILE) |
+    (authlock.gcaps_allowed(type) << CEPH_CAP_SAUTH) |
+    (xattrlock.gcaps_allowed(type) << CEPH_CAP_SXATTR) |
+    (linklock.gcaps_allowed(type) << CEPH_CAP_SLINK)
   );
 }
 
 int CInode::get_caps_careful() const
 {
   return get_caps_quiesce_mask() & (
-    (filelock.gcaps_careful() << filelock.get_cap_shift()) |
-    (authlock.gcaps_careful() << authlock.get_cap_shift()) |
-    (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_careful() << linklock.get_cap_shift())
+    (filelock.gcaps_careful() << CEPH_CAP_SFILE) |
+    (authlock.gcaps_careful() << CEPH_CAP_SAUTH) |
+    (xattrlock.gcaps_careful() << CEPH_CAP_SXATTR) |
+    (linklock.gcaps_careful() << CEPH_CAP_SLINK)
   );
 }
 
 int CInode::get_xlocker_mask(client_t client) const
 {
   return get_caps_quiesce_mask() & (
-    (filelock.gcaps_xlocker_mask(client) << filelock.get_cap_shift()) |
-    (authlock.gcaps_xlocker_mask(client) << authlock.get_cap_shift()) |
-    (xattrlock.gcaps_xlocker_mask(client) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift())
+    (filelock.gcaps_xlocker_mask(client) << CEPH_CAP_SFILE) |
+    (authlock.gcaps_xlocker_mask(client) << CEPH_CAP_SAUTH) |
+    (xattrlock.gcaps_xlocker_mask(client) << CEPH_CAP_SXATTR) |
+    (linklock.gcaps_xlocker_mask(client) << CEPH_CAP_SLINK)
   );
 }
 
