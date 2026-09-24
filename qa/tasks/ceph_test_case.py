@@ -54,6 +54,19 @@ class RunCephCmd:
         kwargs['stdout'] = kwargs.pop('stdout', StringIO())
         return self.run_ceph_cmd(**kwargs).stdout.getvalue()
 
+    def get_ceph_cmd_stderr(self, *args, **kwargs):
+        """
+        *args and **kwargs must contain arguments that are accepted by
+        vstart_runner.LocalRemote._do_run() or teuthology.orchestra.run.run()
+        methods.
+        """
+        if kwargs.get('args') is None and args:
+            if len(args) == 1:
+                args = args[0]
+            kwargs['args'] = args
+        kwargs['stderr'] = kwargs.pop('stderr', StringIO())
+        return self.run_ceph_cmd(**kwargs).stderr.getvalue()
+
     def assert_retval(self, proc_retval, exp_retval):
         msg = (f'expected return value: {exp_retval}\n'
                f'received return value: {proc_retval}\n')

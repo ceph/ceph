@@ -18,6 +18,7 @@ from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
 
 from tasks.cephfs.filesystem import Filesystem
+from .helpers.gen_io_load import GenIoLoad
 
 log = logging.getLogger(__name__)
 
@@ -1294,6 +1295,13 @@ class CephFSMountBase(object):
                                "count={0}".format(int(n_mb)),
                                "seek={0}".format(int(seek))
                                ], wait=wait)
+
+    def gen_io_load(self, path, raise_on_thread_crash=False, timeout=60*60*15,
+                    sleep=0):
+        writer = GenIoLoad(self, path=path, timeout=timeout, sleep=sleep,
+                           raise_on_thread_crash=raise_on_thread_crash)
+        writer.start()
+        return writer
 
     def write_test_pattern(self, filename, size):
         log.info("Writing {0} bytes to {1}".format(size, filename))
