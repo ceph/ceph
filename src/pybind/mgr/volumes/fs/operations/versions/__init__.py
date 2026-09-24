@@ -32,10 +32,10 @@ class SubvolumeLoader(object):
     def _load_supported_versions(self):
         for mod_cls in SubvolumeLoader.SUPPORTED_MODULES:
             cls = self._load_module(mod_cls)
-            log.info("loaded v{0} subvolume".format(cls.version()))
-            if self.max_version is not None or cls.version() > self.max_version:
-                self.max_version = cls.version()
-                self.versions[cls.version()] = cls
+            log.info("loaded v{0} subvolume".format(cls.VERSION))
+            if self.max_version is not None or cls.VERSION > self.max_version:
+                self.max_version = cls.VERSION
+                self.versions[cls.VERSION] = cls
         if self.max_version == SubvolumeLoader.INVALID_VERSION:
             raise VolumeException(-errno.EINVAL, "no subvolume version available")
         log.info("max subvolume version is v{0}".format(self.max_version))
@@ -67,7 +67,7 @@ class SubvolumeLoader(object):
             return
 
         version = int(subvolume.metadata_mgr.get_global_option('version'))
-        if version >= SubvolumeV2.version():
+        if version >= SubvolumeV2.VERSION:
             return
 
         if not self.allow_subvolume_upgrade(subvolume):
@@ -86,7 +86,8 @@ class SubvolumeLoader(object):
         if v1_subvolume.list_snapshots():
             return
 
-        subvolume.metadata_mgr.update_global_section(MetadataManager.GLOBAL_META_KEY_VERSION, SubvolumeV2.version())
+        subvolume.metadata_mgr.update_global_section(
+                MetadataManager.GLOBAL_META_KEY_VERSION, SubvolumeV2.VERSION)
         subvolume.metadata_mgr.flush()
 
     def upgrade_legacy_subvolume(self, fs, subvolume):
@@ -102,7 +103,8 @@ class SubvolumeLoader(object):
             raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
         qpath = subvolume.base_path.decode('utf-8')
         # legacy is only upgradable to v1
-        subvolume.init_config(SubvolumeV1.version(), subvolume_type, qpath, initial_state)
+        subvolume.init_config(SubvolumeV1.VERSION, subvolume_type, qpath,
+                              initial_state)
 
     def get_subvolume_object(self, mgr, fs, vol_spec, group, subvolname, upgrade=True):
         subvolume = SubvolumeBase(mgr, fs, vol_spec, group, subvolname)
