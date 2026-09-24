@@ -21,7 +21,7 @@ SimplePolicy::SimplePolicy(librados::IoCtx &ioctx)
   : Policy(ioctx) {
 }
 
-size_t SimplePolicy::calc_images_per_instance(const InstanceToImageMap& map,
+size_t SimplePolicy::calc_entity_weight_per_instance(const InstanceToImageMap& map,
                                               size_t image_count) {
   size_t nr_instances = 0;
   for (auto const &it : map) {
@@ -31,34 +31,34 @@ size_t SimplePolicy::calc_images_per_instance(const InstanceToImageMap& map,
   }
   ceph_assert(nr_instances > 0);
 
-  size_t images_per_instance = image_count / nr_instances;
-  if (images_per_instance == 0) {
-    ++images_per_instance;
+  size_t entity_weight_per_instance = image_count / nr_instances;
+  if (entity_weight_per_instance == 0) {
+    ++entity_weight_per_instance;
   }
 
-  return images_per_instance;
+  return entity_weight_per_instance;
 }
 
 void SimplePolicy::do_shuffle_add_instances(
     const InstanceToImageMap& map, size_t image_count,
     GlobalIds *remap_global_ids) {
-  uint64_t images_per_instance = calc_images_per_instance(map, image_count);
-  dout(5) << "images per instance=" << images_per_instance << dendl;
+  uint64_t entity_weight_per_instance = calc_entity_weight_per_instance(map, image_count);
+  dout(5) << "images per instance=" << entity_weight_per_instance << dendl;
 
   for (auto const &instance : map) {
-    uint64_t instance_image_count =
+    uint64_t instance_entity_weight =
       std::accumulate(instance.second.begin(), instance.second.end(), 0,
                       [this](uint64_t count, const GlobalId &global_id) {
                         return count + get_weight(global_id);
                       });
 
-    if (instance_image_count <= images_per_instance) {
+    if (instance_entity_weight <= entity_weight_per_instance) {
       continue;
     }
 
     auto it = instance.second.begin();
 
-    uint64_t cut_off = instance_image_count - images_per_instance;
+    uint64_t cut_off = instance_entity_weight - entity_weight_per_instance;
 
     // TODO: improve for weight > 1: find the best entity(ies) to cut off
     while (it != instance.second.end() && cut_off > 0) {
@@ -79,7 +79,7 @@ void SimplePolicy::do_shuffle_add_instances(
 std::string SimplePolicy::do_map(const InstanceToImageMap& map,
                                  const GlobalId &global_id) {
   auto min_it = map.end();
-  uint64_t min_image_count = UINT64_MAX;
+  uint64_t min_entity_weight = UINT64_MAX;
   for (auto it = map.begin(); it != map.end(); ++it) {
     ceph_assert(it->second.find(global_id) == it->second.end());
     if (Policy::is_dead_instance(it->first)) {
@@ -90,9 +90,9 @@ std::string SimplePolicy::do_map(const InstanceToImageMap& map,
                       [this](uint64_t count, const GlobalId &global_id) {
                         return count + get_weight(global_id);
                       });
-    if (image_count < min_image_count) {
+    if (image_count < min_entity_weight) {
       min_it = it;
-      min_image_count = image_count;
+      min_entity_weight = image_count;
     }
   }
 

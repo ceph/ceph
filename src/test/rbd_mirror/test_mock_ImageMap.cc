@@ -488,7 +488,7 @@ TEST_F(TestMockImageMap, SetLocalImages) {
 
   // initial image list
   auto entities = make_image_entities(global_image_ids);
-  mock_image_map->update_images("", std::move(entities), {});
+  mock_image_map->update_entities("", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(global_image_ids.size()));
@@ -538,7 +538,7 @@ TEST_F(TestMockImageMap, AddRemoveLocalImage) {
 
   // initial image list
   auto entities = make_image_entities(initial_global_image_ids);
-  mock_image_map->update_images("", std::move(entities), {});
+  mock_image_map->update_entities("", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(initial_global_image_ids.size()));
@@ -556,7 +556,7 @@ TEST_F(TestMockImageMap, AddRemoveLocalImage) {
 
   // remove images
   entities = make_image_entities(remove_global_image_ids);
-  mock_image_map->update_images("", {}, std::move(entities));
+  mock_image_map->update_entities("", {}, std::move(entities));
   ASSERT_TRUE(wait_for_listener_notify(remove_global_image_ids.size()));
 
   remote_peer_ack_wait(mock_image_map.get(), remove_global_image_ids, 0,
@@ -603,7 +603,7 @@ TEST_F(TestMockImageMap, AddRemoveRemoteImage) {
 
   // initial image list
   auto entities = make_image_entities(initial_global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(initial_global_image_ids.size()));
@@ -624,7 +624,7 @@ TEST_F(TestMockImageMap, AddRemoveRemoteImage) {
 
   // remove images
   entities = make_image_entities(remove_global_image_ids);
-  mock_image_map->update_images("uuid1", {}, std::move(entities));
+  mock_image_map->update_entities("uuid1", {}, std::move(entities));
   ASSERT_TRUE(wait_for_listener_notify(remove_global_image_ids.size() * 2));
 
   remote_peer_ack_nowait(mock_image_map.get(), remove_global_image_ids, 0,
@@ -674,7 +674,7 @@ TEST_F(TestMockImageMap, AddRemoveRemoteImageDuplicateNotification) {
 
   // initial image list
   auto entities = make_image_entities(initial_global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(initial_global_image_ids.size()));
@@ -682,7 +682,7 @@ TEST_F(TestMockImageMap, AddRemoveRemoteImageDuplicateNotification) {
   // trigger duplicate "add" event
   wait_for_scheduled_task();
   entities = make_image_entities(initial_global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   // remote peer ACKs image acquire request
   remote_peer_ack_nowait(mock_image_map.get(), initial_global_image_ids, 0,
@@ -699,7 +699,7 @@ TEST_F(TestMockImageMap, AddRemoveRemoteImageDuplicateNotification) {
 
   // remove images
   entities = make_image_entities(remove_global_image_ids);
-  mock_image_map->update_images("uuid1", {}, std::move(entities));
+  mock_image_map->update_entities("uuid1", {}, std::move(entities));
   ASSERT_TRUE(wait_for_listener_notify(remove_global_image_ids.size() * 2));
 
   remote_peer_ack_nowait(mock_image_map.get(), remove_global_image_ids, 0,
@@ -709,7 +709,7 @@ TEST_F(TestMockImageMap, AddRemoveRemoteImageDuplicateNotification) {
 
   // trigger duplicate "remove" notification
   entities = make_image_entities(remove_global_image_ids);
-  mock_image_map->update_images("uuid1", {}, std::move(entities));
+  mock_image_map->update_entities("uuid1", {}, std::move(entities));
 
   wait_for_scheduled_task();
   ASSERT_EQ(0, when_shut_down(mock_image_map.get()));
@@ -753,7 +753,7 @@ TEST_F(TestMockImageMap, AcquireImageErrorRetry) {
 
   // initial image list
   auto entities = make_image_entities(initial_global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(initial_global_image_ids.size()));
@@ -814,7 +814,7 @@ TEST_F(TestMockImageMap, RemoveRemoteAndLocalImage) {
 
   // initial remote image list
   auto entities = make_image_entities(initial_remote_global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(initial_remote_global_image_ids.size()));
@@ -825,7 +825,7 @@ TEST_F(TestMockImageMap, RemoveRemoteAndLocalImage) {
 
   // set initial local image list -- this is a no-op from policy pov
   entities = make_image_entities(initial_local_global_image_ids);
-  mock_image_map->update_images("", std::move(entities), {});
+  mock_image_map->update_entities("", std::move(entities), {});
 
   // remove remote images -- this should be a no-op from policy pov
   // except the listener notification
@@ -834,7 +834,7 @@ TEST_F(TestMockImageMap, RemoveRemoteAndLocalImage) {
                          &peer_ack_remove_ctxs);
 
   entities = make_image_entities(remote_remove_global_image_ids);
-  mock_image_map->update_images("uuid1", {}, std::move(entities));
+  mock_image_map->update_entities("uuid1", {}, std::move(entities));
   ASSERT_TRUE(wait_for_listener_notify(remote_remove_global_image_ids.size()));
 
   // RELEASE+REMOVE_MAPPING
@@ -845,7 +845,7 @@ TEST_F(TestMockImageMap, RemoveRemoteAndLocalImage) {
 
   // remove local images
   entities = make_image_entities(local_remove_global_image_ids);
-  mock_image_map->update_images("", {}, std::move(entities));
+  mock_image_map->update_entities("", {}, std::move(entities));
   ASSERT_TRUE(wait_for_listener_notify(local_remove_global_image_ids.size()));
 
   remote_peer_ack_nowait(mock_image_map.get(), local_remove_global_image_ids,
@@ -891,7 +891,7 @@ TEST_F(TestMockImageMap, AddInstance) {
 
   // initial image list
   auto entities = make_image_entities(global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(global_image_ids.size()));
@@ -964,7 +964,7 @@ TEST_F(TestMockImageMap, RemoveInstance) {
 
   // set initial image list
   auto entities = make_image_entities(global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(global_image_ids.size()));
@@ -1088,7 +1088,7 @@ TEST_F(TestMockImageMap, AddInstancePingPongImageTest) {
 
   // set initial image list
   auto entities = make_image_entities(global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(global_image_ids.size()));
@@ -1190,7 +1190,7 @@ TEST_F(TestMockImageMap, RemoveInstanceWithRemoveImage) {
 
   // initial image list
   auto entities = make_image_entities(global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(global_image_ids.size()));
@@ -1238,7 +1238,7 @@ TEST_F(TestMockImageMap, RemoveInstanceWithRemoveImage) {
   expect_update_request(mock_update_request, 0);
 
   entities = make_image_entities(shuffled_global_image_ids);
-  mock_image_map->update_images("uuid1", {}, std::move(entities));
+  mock_image_map->update_entities("uuid1", {}, std::move(entities));
   ASSERT_TRUE(wait_for_listener_notify(shuffled_global_image_ids.size() * 2));
 
   // instance failed -- update policy for instance removal
@@ -1289,7 +1289,7 @@ TEST_F(TestMockImageMap, AddErrorAndRemoveImage) {
 
   // initial image list
   auto entities = make_image_entities(global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(global_image_ids.size()));
@@ -1359,7 +1359,7 @@ TEST_F(TestMockImageMap, AddErrorAndRemoveImage) {
   update_map_request(mock_threads, mock_update_request, shuffled_global_image_ids, 0);
 
   entities = make_image_entities(shuffled_global_image_ids);
-  mock_image_map->update_images("uuid1", {}, std::move(entities));
+  mock_image_map->update_entities("uuid1", {}, std::move(entities));
   ASSERT_TRUE(wait_for_listener_notify(shuffled_global_image_ids.size() * 2));
 
   remote_peer_ack_nowait(mock_image_map.get(), shuffled_global_image_ids, 0,
@@ -1415,7 +1415,7 @@ TEST_F(TestMockImageMap, MirrorUUIDUpdated) {
 
   // initial remote image list
   auto entities = make_image_entities(initial_remote_global_image_ids);
-  mock_image_map->update_images("uuid1", std::move(entities), {});
+  mock_image_map->update_entities("uuid1", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(initial_remote_global_image_ids.size()));
@@ -1436,7 +1436,7 @@ TEST_F(TestMockImageMap, MirrorUUIDUpdated) {
   update_map_request(mock_threads, mock_update_request, remote_removed_global_image_ids, 0);
 
   entities = make_image_entities(remote_removed_global_image_ids);
-  mock_image_map->update_images("uuid1", {}, std::move(entities));
+  mock_image_map->update_entities("uuid1", {}, std::move(entities));
   ASSERT_TRUE(wait_for_listener_notify(remote_removed_global_image_ids.size() * 2));
 
   remote_peer_ack_nowait(mock_image_map.get(),
@@ -1454,7 +1454,7 @@ TEST_F(TestMockImageMap, MirrorUUIDUpdated) {
                           &peer_ack_ctxs);
 
   entities = make_image_entities(remote_added_global_image_ids);
-  mock_image_map->update_images("uuid2", std::move(entities), {});
+  mock_image_map->update_entities("uuid2", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(remote_added_global_image_ids.size()));
@@ -1502,7 +1502,7 @@ TEST_F(TestMockImageMap, RebalanceImageMap) {
 
   // initial image list
   auto entities = make_image_entities(global_image_ids);
-  mock_image_map->update_images("", std::move(entities), {});
+  mock_image_map->update_entities("", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(global_image_ids.size()));
@@ -1548,7 +1548,7 @@ TEST_F(TestMockImageMap, RebalanceImageMap) {
                      0);
 
   entities = make_image_entities(shuffled_global_image_ids);
-  mock_image_map->update_images("", {}, std::move(entities));
+  mock_image_map->update_entities("", {}, std::move(entities));
   ASSERT_TRUE(wait_for_listener_notify(shuffled_global_image_ids.size()));
 
   remote_peer_ack_wait(mock_image_map.get(), shuffled_global_image_ids, 0,
@@ -1573,7 +1573,7 @@ TEST_F(TestMockImageMap, RebalanceImageMap) {
                                   &peer_ack_ctxs);
 
   entities = make_image_entities(new_global_image_ids);
-  mock_image_map->update_images("", std::move(entities), {});
+  mock_image_map->update_entities("", std::move(entities), {});
 
   ASSERT_TRUE(wait_for_map_update(1));
   ASSERT_TRUE(wait_for_listener_notify(new_global_image_ids.size()));

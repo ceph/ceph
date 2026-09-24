@@ -27,7 +27,7 @@ protected:
       GlobalIds *remap_global_ids) override;
 
 private:
-  size_t calc_images_per_instance(const InstanceToImageMap& map,
+  size_t calc_entity_weight_per_instance(const InstanceToImageMap& map,
                                   size_t image_count);
 
 };
