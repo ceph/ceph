@@ -5169,6 +5169,9 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
   dentry_key_t skip_key(snapid, offset_str, offset_hash);
   auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+  // Whether the client may hold dentry leases here at all depends only on
+  // the directory, and nothing below changes that, so ask once.
+  const bool dir_leasable = mds->locker->can_lease_dentries_in(diri, mdr);
   bool end = (it == dir->end());
   for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -5244,7 +5247,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
     encode(dn->get_name(), dnbl);
-    mds->locker->issue_client_lease(dn, in, mdr, now, dnbl);
+    mds->locker->issue_client_lease(dn, in, mdr, now, dnbl, dir_leasable);
 
     // inode
     dout(12) << "including inode in " << *in << " snap " << snapid << dendl;

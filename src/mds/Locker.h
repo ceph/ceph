@@ -210,6 +210,12 @@ public:
   void handle_client_lease(const cref_t<MClientLease> &m);
 
   void issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef &mdr, utime_t now, bufferlist &bl);
+  /// whether the directory lets mdr's client hold dentry leases in it at all
+  bool can_lease_dentries_in(CInode *diri, const MDRequestRef &mdr);
+  /// issue_client_lease() for a caller that has asked can_lease_dentries_in()
+  /// once for all the dentries of a directory
+  void issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef &mdr, utime_t now,
+			  bufferlist &bl, bool dir_leasable);
   void revoke_client_leases(SimpleLock *lock);
   void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 
