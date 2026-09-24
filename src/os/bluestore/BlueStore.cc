@@ -2876,20 +2876,20 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
   while (src_it != src_extents.end() || dst_it != dst_extents.end()) {
     if (src_pos > pos) {
       if (dst_pos > pos) {
-	// empty space
-	uint32_t m = std::min(src_pos - pos, dst_pos - pos);
-	// emit empty
-	tmp_extents.emplace_back(bluestore_pextent_t::INVALID_OFFSET, m);
-	pos += m;
+        // empty space
+        uint32_t m = std::min(src_pos - pos, dst_pos - pos);
+        // emit empty
+        tmp_extents.emplace_back(bluestore_pextent_t::INVALID_OFFSET, m);
+        pos += m;
       } else {
-	// copy from dst, src must not have conflicting extent
-	ceph_assert(src_pos >= dst_pos + dst_it->length);
-	// use extent from destination
-	tmp_extents.push_back(*dst_it);
-	dst_pos += dst_it->length;
-	pos = dst_pos;
-	++dst_it;
-	skip_empty(dst_extents, dst_it, dst_pos);
+        // copy from dst, src must not have conflicting extent
+        ceph_assert(src_pos >= dst_pos + dst_it->length);
+        // use extent from destination
+        tmp_extents.push_back(*dst_it);
+        dst_pos += dst_it->length;
+        pos = dst_pos;
+        ++dst_it;
+        skip_empty(dst_extents, dst_it, dst_pos);
       }
     } else {
       // copy from src, dst must not have conflicting extent
