@@ -1,5 +1,5 @@
 '''
-Helper code for operating on subvolume v3.
+Helper code for operating on subvolume v3 and v2.
 '''
 from logging import getLogger
 from errno import ENOENT
@@ -188,7 +188,7 @@ class SubvolOpsHelper(RunCephCmd):
 
 class SubvolBase(SubvolOpsHelper):
     '''
-    Base class for v3 subvol helper classes.
+    Base class for v3 and v2 subvol helper classes.
     '''
 
 
@@ -391,6 +391,152 @@ class SubvolBase(SubvolOpsHelper):
              f'exp_snap_path = {exp_snap_path}')
 
 
+class SubvolV2Helper(V1V2Base):
+    '''
+    Helper class for v2 subvolumes.
+    '''
+
+    def __init__(self, mon_manager=None, mount=None, volname=None, name=None,
+                 uuid=None, grp_name=None, snaps=[], retained=False):
+        super().__init__(mon_manager=mon_manager, mount=mount, volname=volname,
+                         name=name, uuid=uuid, grp_name=grp_name, snaps=snaps,
+                         retained=retained)
+
+        self.uuid = uuid if uuid else gen_uuid()
+
+        self._reset_paths()
+        self._verify_attrs()
+
+    def _reset_paths(self):
+        super()._reset_paths()
+
+        self._uuid_path = None
+        self._snap_base_path = None
+
+    def _verify_attrs(self):
+        super()._verify_attrs()
+
+        assert type(self.uuid) in (str, bool, type(None)), \
+            f'self.uuid = {self.uuid}'
+
+
+    # ----- basic subvol helper -----
+
+
+    @property
+    def version(self):
+        return 2
+
+    def gen_uuid_path(self):
+        if not self._uuid_path:
+            self._uuid_path = join(self.gen_base_path(), self.uuid)
+        return self._uuid_path
+
+    def gen_meta_path(self):
+        if not self._meta_path:
+            self._meta_path = join(self.gen_base_path(), META_FILE_NAME)
+        return self._meta_path
+
+    def gen_mnt_path(self):
+        return join(self.gen_base_path(), self.uuid)
+
+    def gen_snap_base_path(self):
+        if not self._snap_base_path:
+            self._snap_base_path = join(self.gen_base_path(), SNAP_BASE_DIR)
+        return self._snap_base_path
+
+    def gen_snap_path(self, snap_name):
+        return join(self.gen_snap_base_path(), snap_name)
+
+
+    # ----- subvol op methods -----
+
+
+    def create(self, opts=''):
+        super().create(opts)
+
+        if self.retained:
+            self.retained = False
+
+    def rm(self, opts=''):
+        super().rm(opts)
+
+        if '--retain-snapshots' in opts:
+            if not self.retained:
+                self.retained = True
+
+    def snap_create(self, snap_name=None):
+        super().snap_create(snap_name)
+        self.snaps.append(snap_name)
+        return snap_name
+
+    def snap_rm(self, snap_name):
+        super().snap_rm(snap_name)
+
+        self.snaps.remove(snap_name)
+        if len(self.snaps) == 0:
+            if self.retained:
+                # subvol has been deleted
+                self.retained = False
+
+
+    # ----- create stuff without create command ------
+
+
+    def custom_create(self, create_options=''):
+        '''
+        For testing subvol auto-upgrade, Create v2 subvol without using
+        'subvolume create' command.
+        '''
+        self.uuid = gen_uuid()
+
+        self.mount.run_shell(f'mkdir -p ./{self.gen_mnt_path()}')
+        self.apply_create_options(create_options)
+        self.mount.run_shell(f'chmod -R 777 ./{self.gen_mnt_path()}')
+
+        self.mount.write_file(self.gen_meta_path()[1:], dedent(f'''\
+            [GLOBAL]
+            version = 2
+            type = subvolume
+            path = {self.gen_mnt_path()}
+            state = complete'''), sudo=True)
+
+        self.write_files(num=5, ifx='at-creation')
+
+    def custom_create_snap(self, snap_name=None):
+        '''
+        For testing subvol auto-upgrade, create v1 snap subvol without using
+        'subvolume snapshot create' command.
+        '''
+        snap_name = snap_name if snap_name else gen_subvol_snap_name()
+
+        self.mount.run_libcephfs_pybind_code(dedent(f"""
+        cephfs.mksnap('{self.gen_snap_base_path()}', '{snap_name}', 0o755)
+        """))
+
+        # verify that snap was created
+        self.mount.run_shell(f'stat ./{self.gen_snap_path(snap_name)}')
+
+        self.snaps.append(snap_name)
+        return snap_name
+
+    def custom_subvol_auth(self, client_id, data_pool_name):
+        assert 'client.' not in client_id
+
+        subvol_mnt_path = self.gen_mnt_path()
+        if subvol_mnt_path[0] != '/':
+            subvol_mnt_path = '/' + subvol_mnt_path
+
+        client_name = f'client.{client_id}'
+        self.run_ceph_cmd(f'auth add {client_name} '
+                          'mon "allow r" '
+                          f'osd "allow rw pool={data_pool_name}" '
+                          f'mds "allow rw path={subvol_mnt_path}"')
+
+        return self.get_ceph_cmd_stdout(f'auth get {client_name}')
+
+
+
 class V3IncarHelper:
     '''
     Helps test/deal with v3 incarnations.
@@ -443,11 +589,29 @@ class SubvolV3Helper(SubvolBase):
         self._reset_paths()
         self.all_incars = []
 
-        assert mount and volname and not subvol
+        if subvol:
+            assert subvol and not (mon_manager or mount or volname or name or
+                                   uuid or grp_name or snaps or retained)
+            assert type(subvol) in (SubvolV2Helper)
 
-        super().__init__(mon_manager, mount=mount, volname=volname, name=name,
-                         uuid=uuid if uuid else False, grp_name=grp_name,
-                         snaps=snaps, retained=retained)
+            super().__init__(mon_manager=subvol.mon_manager, mount=subvol.mount,
+                             volname=subvol.volname, name=subvol.name,
+                             uuid=subvol.uuid, grp_name=subvol.grp_name,
+                             snaps=subvol.snaps, retained=subvol.retained)
+            if type(subvol) is SubvolV2Helper:
+                self.has_v2_snaps = (self.snaps != [])
+                self.has_v1_snaps = False
+
+            self.add_incar(self.uuid, self.snaps, self.retained)
+        else:
+            assert mount and volname and not subvol
+
+            super().__init__(mon_manager, mount=mount, volname=volname, name=name,
+                             uuid=uuid if uuid else False, grp_name=grp_name,
+                             snaps=snaps, retained=retained)
+
+            self.has_v1_snaps = False
+            self.has_v2_snaps = False
 
         #if self.snaps:
         #     self.add_incar(self.uuid, self.snaps, self.retained)
@@ -475,6 +639,8 @@ class SubvolV3Helper(SubvolBase):
 
         assert type(self.all_incars) is list, \
             f'self.all_incars = {self.all_incars}'
+        assert type(self.has_v2_snaps) is bool, \
+            f'self.has_v2_snaps = {self.has_v2_snaps}'
 
 
     # ----- subvol helper -----
@@ -531,6 +697,9 @@ class SubvolV3Helper(SubvolBase):
 
     def gen_snap_path(self, snap_name, uuid=None):
         return join(self.gen_snap_base_path(uuid), snap_name)
+
+    def gen_v2_snap_path(self, snap_name, uuid=None):
+        return join(self.gen_base_path(), SNAP_BASE_DIR, snap_name)
 
     def fetch_uuid(self):
         meta_file_name = self.mount.get_shell_stdout(
@@ -646,8 +815,12 @@ class SubvolV3Helper(SubvolBase):
             if not incar.snap_names:
                 return
             for snap_name in incar.snap_names:
-                self.mount.verify_path_is_dir(self.gen_snap_path(snap_name,
-                                                                 incar.uuid))
+                try:
+                    self.mount.verify_path_is_dir(self.gen_snap_path(
+                        snap_name, incar.uuid))
+                except:
+                    self.mount.verify_path_is_dir(
+                        self.gen_v2_snap_path(snap_name, incar.uuid))
 
     def verify_meta_file(self):
         meta_content = self.mount.get_shell_stdout('sudo cat '
@@ -659,6 +832,8 @@ class SubvolV3Helper(SubvolBase):
         assert 'version = 3' in meta_content
         assert 'type = subvolume' in meta_content
 
+        if self.has_v2_snaps:
+            assert 'has_v2_snaps = True' in meta_content
 
         incar = self.get_incar(self.uuid)
         if incar:
@@ -677,6 +852,8 @@ class SubvolV3Helper(SubvolBase):
     def verify_snap_getpath_cmd(self, snap_name, uuid=None, version=3):
         if version == 3:
             exp_snap_path = self.gen_snap_path(snap_name, uuid)
+        elif version == 2 and self.has_v2_snaps:
+            exp_snap_path = self.gen_v2_snap_path(snap_name)
         else:
             assert False, \
                 f'version = {version}'
