@@ -1373,7 +1373,14 @@ static ceph::spinlock debug_lock;
 	_buffers.push_back(*bptr.release());
         _num += 1;
       }
-      _carriage->append(data, first_round);
+      // What ptr::append() does, minus its checks: first_round is no more
+      // than the room just measured, so the carriage has a raw.  Most
+      // appends are the few bytes of an encoded integer, for which the
+      // call and the checks cost more than the copy.
+      ptr& c = *_carriage;
+      maybe_inline_memcpy(c._raw->get_data() + c._off + c._len, data,
+			  first_round, 32);
+      c._len += first_round;
     }
 
     const unsigned second_round = len - first_round;
