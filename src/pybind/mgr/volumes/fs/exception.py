@@ -9,38 +9,27 @@ class VolumeException(Exception):
         self.errno = error_code
         self.error_str = error_message
 
-        log.info(f'{self.__class__.__name__}: {str(self)}')
-
     def to_tuple(self):
         return self.errno, "", self.error_str
 
     def __str__(self):
         return "{0} ({1})".format(self.errno, self.error_str)
 
-class MetadataMgrException(Exception):
-    def __init__(self, error_code, error_message):
-        self.errno = error_code
-        self.error_str = error_message
-        log.info(f'{self.__class__.__name__}: {str(self)}')
 
-    def __str__(self):
-        return "{0} ({1})".format(self.errno, self.error_str)
+class MetadataMgrException(VolumeException):
+    pass
 
-class IndexException(Exception):
-    def __init__(self, error_code, error_message):
-        self.errno = error_code
-        self.error_str = error_message
 
-    def __str__(self):
-        return "{0} ({1})".format(self.errno, self.error_str)
+class IndexException(VolumeException):
+    pass
 
-class OpSmException(Exception):
-    def __init__(self, error_code, error_message):
-        self.errno = error_code
-        self.error_str = error_message
 
-    def __str__(self):
-        return "{0} ({1})".format(self.errno, self.error_str)
+class OpSmException(VolumeException):
+    pass
+
+
+class EvictionError(VolumeException):
+    pass
 
 class NotImplementedException(Exception):
     pass
@@ -67,6 +56,3 @@ class ClusterError(Exception):
     def __str__(self):
         return "Error {0} (\"{1}\") while {2}".format(
             self._result_code, self._result_str, self._action)
-
-class EvictionError(Exception):
-    pass
