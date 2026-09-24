@@ -628,6 +628,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.container_image_snmp_gateway = ''
             self.container_image_nginx = ''
             self.container_image_oauth2_proxy = ''
+            self.container_image_pushgateway = ''
             self.container_image_elasticsearch = ''
             self.container_image_jaeger_agent = ''
             self.container_image_jaeger_collector = ''
@@ -2147,6 +2148,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'nvmeof': self.container_image_nvmeof,
                 'prometheus': self.container_image_prometheus,
                 'promtail': self.container_image_promtail,
+                'pushgateway': self.container_image_pushgateway,
                 'alloy': self.container_image_alloy,
                 'snmp-gateway': self.container_image_snmp_gateway,
                 'mgmt-gateway': self.container_image_nginx,
@@ -4760,6 +4762,7 @@ Then run the following:
                 'alloy': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
+                'pushgateway': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
                 'mgmt-gateway': PlacementSpec(count=1),
                 'oauth2-proxy': PlacementSpec(count=1),

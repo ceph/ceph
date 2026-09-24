@@ -2228,6 +2228,7 @@ def next_action_for_mgmt_stack_service(
         'node-exporter',
         'alertmanager',
         'ceph-exporter',
+        'pushgateway',
     ]
     REDEPLOY_TRIGGERS = ['secure_monitoring_stack', 'mgmt-gateway']
     # [from: JJM, to: Redo] in different commits you added calls to

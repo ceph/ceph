@@ -797,6 +797,12 @@ def create_daemon_dirs(
             config_dir = 'etc/node-exporter'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
+        elif daemon_type == 'pushgateway':
+            data_dir_root = ident.data_dir(ctx.data_dir)
+            config_dir = 'etc/pushgateway'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+            recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
 
         # populate the config directory for the component from the config-json
         if 'files' in config_json:

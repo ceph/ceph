@@ -6,7 +6,7 @@ from mgr_util import build_url
 from typing import Dict, List, TYPE_CHECKING, cast, Collection, Callable, NamedTuple, Optional, IO, Tuple
 from cephadm.services.nfs import NFSService
 from cephadm.services.ingress import IngressService
-from cephadm.services.monitoring import AlertmanagerService, NodeExporterService, PrometheusService
+from cephadm.services.monitoring import AlertmanagerService, NodeExporterService, PrometheusService, PushgatewayService
 import secrets
 from mgr_util import verify_tls_files
 import tempfile
@@ -137,6 +137,7 @@ class Root:
 <p><a href='prometheus/sd-config?service=nvmeof'>NVMeoF http sd-config</a></p>
 <p><a href='prometheus/sd-config?service=nfs'>NFS http sd-config</a></p>
 <p><a href='prometheus/sd-config?service=smb'>SMB http sd-config</a></p>
+<p><a href='prometheus/sd-config?service=pushgateway'>Pushgateway http sd-config</a></p>
 <p><a href='prometheus/rules'>Prometheus rules</a></p>
 </body>
 </html>'''
@@ -160,6 +161,7 @@ class Root:
             'nvmeof': self.nvmeof_sd_config,
             'nfs': self.nfs_sd_config,
             'smb': self.smb_sd_config,
+            'pushgateway': self.pushgateway_sd_config,
         }
         return service_to_config.get(service, lambda: [])()
 
@@ -277,6 +279,16 @@ class Root:
                 'labels': {'instance': dd.hostname}
             })
         return srv_entries
+
+    def pushgateway_sd_config(self) -> List[Dict[str, Collection[str]]]:
+        """Return <http_sd_config> compatible prometheus config for pushgateway service."""
+        srv_entries = []
+        for dd in self.mgr.cache.get_daemons_by_service('pushgateway'):
+            assert dd.hostname is not None
+            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            port = dd.ports[0] if dd.ports else PushgatewayService.DEFAULT_SERVICE_PORT
+            srv_entries.append('{}'.format(build_url(host=addr, port=port).lstrip('/')))
+        return [{"targets": srv_entries, "labels": {}}]
 
     def container_sd_config(self, service: str) -> List[Dict[str, Collection[str]]]:
         """Return <http_sd_config> compatible prometheus config for a container service."""
