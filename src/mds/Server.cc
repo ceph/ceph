@@ -5140,6 +5140,9 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     }
     // fetch
     dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << dendl;
+    // Past the first page, the walk has lost the dirfrag it was reading.
+    if ((!offset_str.empty() || offset_hash) && mds->logger)
+      mds->logger->inc(l_mds_dir_readdir_refetch);
     dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
     return;
   }
@@ -5230,11 +5233,15 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
 	continue;
       } else {
-	// touch everything i _do_ have
-	for (auto &p : *dir) {
-	  if (!p.second->get_linkage()->is_null())
-	    mdcache->lru.lru_touch(p.second);
-        }
+	// keep everything i _do_ have while the remote inode is opened
+	if (mdcache->get_readdir_keep_complete_interval() != ceph::timespan::zero()) {
+	  dir->note_readdir(ceph::coarse_mono_clock::now());
+	} else {
+	  for (auto &p : *dir) {
+	    if (!p.second->get_linkage()->is_null())
+	      mdcache->lru.lru_touch(p.second);
+	  }
+	}
 
 	// already issued caps and leases, reply immediately.
 	if (dnbl.length() > 0) {
@@ -5284,6 +5291,11 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
      * go on to use is touched to the top by that lookup. */
     mdcache->lru.lru_midtouch(dn);
   }
+  if (end)
+    dir->clear_readdir();
+  else
+    dir->note_readdir(ceph::coarse_mono_clock::now());
+
   __u16 flags = 0;
   // client only understand END and COMPLETE flags ?
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {

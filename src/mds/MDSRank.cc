@@ -3767,6 +3767,12 @@ void MDSRank::create_logger()
 			    "dir_fetch_keys", "Fetch keys from dirfrag");
     mds_plb.add_u64_counter(l_mds_dir_fetch_background,
 			    "dir_fetch_background", "Background full dirfrag prefetch");
+    mds_plb.add_u64_counter(l_mds_dir_readdir_refetch,
+			    "dir_readdir_refetch",
+			    "Dirfrag fetched again partway through a readdir");
+    mds_plb.add_u64_counter(l_mds_dir_trim_spared,
+			    "dir_trim_spared",
+			    "Dentries of dirfrags being read spared by trimming");
     mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
     mds_plb.add_u64_counter(l_mds_dir_split, "dir_split", "Directory split");
     mds_plb.add_u64_counter(l_mds_dir_merge, "dir_merge", "Directory merge");
@@ -4200,6 +4206,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_op_history_duration",
     "mds_op_history_size",
     "mds_op_log_threshold",
+    "mds_readdir_keep_complete_interval",
     "mds_recall_max_decay_rate",
     "mds_recall_warning_decay_rate",
     "mds_request_load_average_decay_rate",

@@ -184,6 +184,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
   cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
+  readdir_keep_complete_interval =
+    g_conf().get_val<std::chrono::seconds>("mds_readdir_keep_complete_interval");
 
   export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
   export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
@@ -220,6 +222,9 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   if (changed.count("mds_cache_reservation"))
     cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
+  if (changed.count("mds_readdir_keep_complete_interval"))
+    readdir_keep_complete_interval =
+      g_conf().get_val<std::chrono::seconds>("mds_readdir_keep_complete_interval");
 
   bool ephemeral_pin_config_changed = false;
   if (changed.count("mds_export_ephemeral_distributed")) {
@@ -6932,6 +6937,17 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
               ", " << lru.lru_get_num_pinned() << " pinned"
               << dendl;
 
+  /* Trimming only to relieve cache pressure (count == 0) spares the dentries
+   * of a complete dirfrag that a readdir is walking: trimming any one of them
+   * makes the rest of the walk fetch the whole dirfrag again. Past
+   * mds_cache_memory_limit, or on an explicit trim, it spares nothing. The
+   * spared dentries are put back mid-LRU, so stop once as many have been
+   * spared as a trim may expire, rather than cycle through all of them. */
+  const auto now = ceph::coarse_mono_clock::now();
+  const bool spare_walked = count == 0 &&
+    readdir_keep_complete_interval != ceph::timespan::zero();
+  uint64_t spared = 0;
+
   // trim dentries from the LRU until count is reached
   while (!throttled && (cache_toofull() || count > 0)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
@@ -6943,10 +6959,18 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
     if (!dn) {
       break;
     }
+    CDir *dir = dn->get_dir();
     if ((is_standby_replay && dn->get_linkage()->inode &&
         dn->get_linkage()->inode->item_open_file.is_on_list())) {
       dout(20) << "unexpirable: " << *dn << dendl;
       unexpirables.push_back(dn);
+    } else if (spare_walked && dn->is_auth() && dir->is_complete() &&
+	       dir->is_being_read(now, readdir_keep_complete_interval) &&
+	       cache_size() <= cache_memory_limit) {
+      dout(20) << "sparing " << *dn << " of a dirfrag being read" << dendl;
+      unexpirables.push_back(dn);
+      if (++spared >= trim_threshold)
+	break;
     } else if (trim_dentry(dn, expiremap)) {
       unexpirables.push_back(dn);
     } else {
@@ -6961,7 +6985,10 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   }
   unexpirables.clear();
 
-  dout(7) << "trim_lru trimmed " << trimmed << " items" << dendl;
+  if (spared && mds->logger)
+    mds->logger->inc(l_mds_dir_trim_spared, spared);
+  dout(7) << "trim_lru trimmed " << trimmed << " items"
+          << ", spared " << spared << " of dirfrags being read" << dendl;
   return std::pair<bool, uint64_t>(throttled, trimmed);
 }
 
