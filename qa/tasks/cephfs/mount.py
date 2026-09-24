@@ -557,10 +557,6 @@ class CephFSMountBase(object):
         raise NotImplementedError()
 
     def _verify_attrs(self, **kwargs):
-        """
-        Verify that client_id, client_keyring_path, client_remote, hostfs_mntpt,
-        cephfs_name, cephfs_mntpt are either type str or None.
-        """
         for k, v in kwargs.items():
             if v is not None and not isinstance(v, str):
                 raise RuntimeError('value of attributes should be either str '
