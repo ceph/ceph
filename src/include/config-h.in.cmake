@@ -160,6 +160,12 @@
 /* define if OSD cuObject RDMA (READ_RDMA pushdown) enabled */
 #cmakedefine WITH_OSD_CUOBJ
 
+/* define if the OSD can be an RDMA target (EC sub-read gather) */
+#cmakedefine WITH_OSD_CUOBJ_GATHER
+
+/* define if radosgw can be an RDMA target (OSDs push object data into it) */
+#cmakedefine WITH_RADOSGW_CUOBJ_TARGET
+
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
 

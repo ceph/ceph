@@ -1,0 +1,116 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
+
+#pragma once
+
+#include <atomic>
+#include <cstdint>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "common/ceph_time.h"
+#include "include/common_fwd.h"
+
+namespace ceph { class Formatter; }
+
+class cuObjClient;
+
+/**
+ * Per-OSD RDMA target for erasure-coded sub-reads: the memory that a
+ * primary's peers write their shard chunks into instead of returning
+ * them over the messenger.
+ *
+ * This is the client half of cuObject (libcuobjclient), the same role
+ * elbencho or a GPU data loader plays towards RGW: one registered
+ * arena and one descriptor token for it. A secondary that receives the
+ * token in an ECSubRead pushes its chunk with the very code path it
+ * uses to deliver to a client (OSDCuObj::execute_plan), at the arena
+ * offset the primary assigned.
+ *
+ * The arena is carved into fixed-size slots. A slot is claimed per
+ * sub-read extent, wrapped into the read result as a zero-copy buffer
+ * once the peer reports the write landed, and returned when the last
+ * reference to that buffer drops. A slot whose write may still be in
+ * flight (the peer never replied, or replied without confirming the
+ * push) is quarantined for longer than a peer may take to start and
+ * finish a write, so a late RDMA write can never land in memory that
+ * has been handed to another read.
+ *
+ * Thread safety: acquire()/release() may be called from any op worker
+ * thread.
+ */
+class OSDCuObjGather {
+public:
+  /// a contiguous registered region of the arena
+  struct slot {
+    uint64_t ofs = 0;   ///< offset into the arena == offset in the token window
+    size_t len = 0;     ///< usable bytes
+    char* ptr = nullptr;
+  };
+
+  OSDCuObjGather(CephContext *cct);
+  ~OSDCuObjGather();
+
+  OSDCuObjGather(const OSDCuObjGather&) = delete;
+  OSDCuObjGather& operator=(const OSDCuObjGather&) = delete;
+
+  /// true once the arena is registered and a token was minted
+  bool is_available() const { return m_available; }
+
+  /// descriptor of the whole arena, as sent to peers in ECSubRead
+  const std::string& token() const { return m_token; }
+
+  size_t slot_size() const { return m_slot_size; }
+
+  /**
+   * Claim a slot able to hold len bytes. Returns nullopt when len
+   * exceeds the slot size or the pool is exhausted; the caller then
+   * reads over the messenger as before.
+   */
+  std::optional<slot> acquire(size_t len);
+
+  /**
+   * Return a slot. With quarantine set it is held out of circulation
+   * until any RDMA write a peer could still issue against it has
+   * necessarily completed or failed.
+   */
+  void release(const slot& s, bool quarantine);
+
+  /// asok/debug counters
+  void dump_stats(ceph::Formatter* f) const;
+
+private:
+  int do_init();
+  void do_shutdown();
+  void reap_quarantine(ceph::coarse_mono_clock::time_point now);
+
+  CephContext* m_cct;
+  std::unique_ptr<cuObjClient> m_client;
+  bool m_available = false;
+
+  char* m_arena = nullptr;
+  size_t m_arena_size = 0;
+  size_t m_slot_size = 0;
+  size_t m_slot_count = 0;
+  std::string m_token;
+  char* m_token_raw = nullptr;   ///< owned by the library
+  std::chrono::milliseconds m_quarantine{0};
+
+  std::mutex m_lock;
+  std::vector<uint32_t> m_free;  ///< slot indexes
+  struct held {
+    uint32_t idx;
+    ceph::coarse_mono_clock::time_point until;
+  };
+  std::deque<held> m_quarantined; ///< ascending by until
+
+  std::atomic<uint64_t> m_acquired{0};
+  std::atomic<uint64_t> m_exhausted{0};
+  std::atomic<uint64_t> m_oversized{0};
+  std::atomic<uint64_t> m_quarantines{0};
+  std::atomic<uint32_t> m_in_use{0};
+};

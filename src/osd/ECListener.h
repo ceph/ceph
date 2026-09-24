@@ -26,9 +26,16 @@
 // ECListener -- an interface decoupling the pipelines from
 // particular implementation of ECBackendL (crimson vs cassical).
 // https://stackoverflow.com/q/7872958
+class OSDCuObjGather;
+
 struct ECListener {
   virtual ~ECListener() = default;
   virtual const OSDMapRef& pgb_get_osdmap() const = 0;
+  /**
+   * The RDMA window peers may push sub-read chunks into instead of
+   * returning them over the messenger; null when this OSD has none.
+   */
+  virtual OSDCuObjGather *get_rdma_gather() { return nullptr; }
   virtual epoch_t pgb_get_osdmap_epoch() const = 0;
   virtual const pg_info_t &get_info() const = 0;
   virtual uint64_t min_peer_features() const = 0;

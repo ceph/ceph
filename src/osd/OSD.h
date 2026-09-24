@@ -75,6 +75,7 @@ class MonClient;
 class ObjectStore;
 class FuseStore;
 class OSDCuObj;
+class OSDCuObjGather;
 class OSDMap;
 class MLog;
 class Objecter;
@@ -123,6 +124,11 @@ public:
   /// cuObject RDMA endpoint backing CEPH_OSD_OP_READ_RDMA; null unless
   /// osd_cuobj_enabled and the RDMA session came up
   OSDCuObj* cuobj = nullptr;
+#endif
+#ifdef WITH_OSD_CUOBJ_GATHER
+  /// registered window that peers RDMA-write EC sub-read chunks into;
+  /// null unless osd_cuobj_gather_enabled and the arena registered
+  OSDCuObjGather* cuobj_gather = nullptr;
 #endif
 
   void enqueue_back(OpSchedulerItem&& qi);

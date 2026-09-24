@@ -598,6 +598,26 @@ if(WITH_OSD_CUOBJ)
   # when WITH_RDMA (the async messenger transport) is disabled
   find_package(verbs REQUIRED)
 endif()
+if(WITH_RADOSGW_CUOBJ OR WITH_OSD_CUOBJ)
+  # the client half of cuObject lets a daemon be an RDMA target: an OSD
+  # gathers EC sub-read chunks, a gateway receives object data for
+  # clients that cannot. It ships with the CUDA toolkit, so it is optional
+  find_library(CUOBJCLIENT_LIBRARY cuobjclient
+    HINTS /usr/local/cuda/targets/x86_64-linux/lib /usr/local/cuda/lib64)
+  find_path(CUOBJCLIENT_INCLUDE_DIR cuobjclient.h
+    HINTS /usr/local/cuda/targets/x86_64-linux/include /usr/local/cuda/include)
+  if(CUOBJCLIENT_LIBRARY AND CUOBJCLIENT_INCLUDE_DIR)
+    message(STATUS "cuObject client found: ${CUOBJCLIENT_LIBRARY}")
+    if(WITH_OSD_CUOBJ)
+      set(WITH_OSD_CUOBJ_GATHER ON)
+    endif()
+    if(WITH_RADOSGW_CUOBJ)
+      set(WITH_RADOSGW_CUOBJ_TARGET ON)
+    endif()
+  else()
+    message(STATUS "cuObject client not found (RDMA target roles disabled)")
+  endif()
+endif()
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)

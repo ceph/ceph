@@ -250,6 +250,14 @@ struct ECCommon {
 
     virtual void finish(int priority) && = 0;
 
+    /**
+     * True if the buffers this completer produces are short-lived, so
+     * peers may land them in the primary's RDMA gather slots (which
+     * are few and must be recycled quickly). Reads whose results are
+     * retained, e.g. by the extent cache, stay on the messenger.
+     */
+    virtual bool allows_rdma_gather() const { return false; }
+
     virtual ~ReadCompleter() = default;
   };
 
@@ -315,6 +323,24 @@ struct ECCommon {
 
     std::list<ECUtil::log_entry_t> debug_log;
 
+    /**
+     * An RDMA gather slot offered to a shard for one sub-read extent.
+     * The holder returns the slot when the last reference (this entry
+     * and any zero-copy buffer built over the slot) drops; a slot whose
+     * write was never confirmed is quarantined instead (see ~ReadOp).
+     */
+    struct gather_slot_t {
+      pg_shard_t shard;
+      hobject_t hoid;
+      uint64_t offset;    ///< shard-space offset of the extent
+      uint64_t len;
+      uint64_t window_ofs;
+      char *ptr;
+      bool landed = false;
+      std::shared_ptr<void> holder;
+    };
+    std::vector<gather_slot_t> gather_slots;
+
     ReadOp(
         int priority,
         ceph_tid_t tid,
@@ -332,6 +358,7 @@ struct ECCommon {
     ReadOp() = delete;
     ReadOp(const ReadOp &) = delete; // due to on_complete being unique_ptr
     ReadOp(ReadOp &&) = default;
+    ~ReadOp();
 
     void print(std::ostream &os) const {
       os << "ReadOp(tid=" << tid;

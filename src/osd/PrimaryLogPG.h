@@ -315,6 +315,13 @@ public:
   DoutPrefixProvider *get_dpp() override {
     return this;
   }
+#ifdef WITH_OSD_CUOBJ
+  OSDCuObj *get_cuobj() override;
+  bool rdma_gather_push_allowed(double age_secs) override;
+#endif
+#ifdef WITH_OSD_CUOBJ_GATHER
+  OSDCuObjGather *get_rdma_gather() override;
+#endif
 
   void on_local_recover(
     const hobject_t &oid,

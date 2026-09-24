@@ -15,6 +15,7 @@
 
 #include "ECCommon.h"
 
+#include <atomic>
 #include <iostream>
 #include <sstream>
 #include <ranges>
@@ -26,6 +27,7 @@
 #include "common/debug.h"
 #include "ECMsgTypes.h"
 #include "PGLog.h"
+#include "osd_cuobj_gather.h"
 #include "osd_tracer.h"
 
 #define dout_context cct
@@ -121,6 +123,19 @@ void ECCommon::ReadPipeline::complete_read_op(ReadOp &&rop) {
   }
   rop.in_progress.clear();
   tid_to_read_map.erase(rop.tid);
+}
+
+ECCommon::ReadOp::~ReadOp() {
+  // A slot whose push the shard confirmed is safe to recycle as soon
+  // as the buffers over it are gone. One the shard never confirmed
+  // (no reply yet, an error, or an inline fallback after a failed
+  // push) may still be the target of an RDMA write, so its holder
+  // quarantines it instead.
+  for (auto &s: gather_slots) {
+    if (!s.landed && s.holder) {
+      static_cast<std::atomic<bool>*>(s.holder.get())->store(true);
+    }
+  }
 }
 
 void ECCommon::ReadPipeline::on_change() {
@@ -588,6 +603,46 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   }
   ceph_assert(reads_sent);
 
+#ifdef WITH_OSD_CUOBJ_GATHER
+  // RDMA gather: offer each remote extent a slot in our registered
+  // window so the shard can push its chunk instead of returning it
+  if (OSDCuObjGather *gather = get_parent()->get_rdma_gather();
+      gather && rop.on_complete && rop.on_complete->allows_rdma_gather()) {
+    const int whoami = get_parent()->whoami_shard().osd;
+    for (auto &&[pg_shard, read]: messages) {
+      if (pg_shard.osd == whoami) {
+        continue; // the loopback message hands the buffers over as is
+      }
+      for (auto &&[hoid, extents]: read.to_read) {
+        auto &ofs = read.rdma_ofs[hoid];
+        for (auto &&[start, len, flags]: extents) {
+          auto slot = gather->acquire(len);
+          if (!slot) {
+            ofs.push_back(ECSubRead::RDMA_OFS_INLINE);
+            continue;
+          }
+          ofs.push_back(slot->ofs);
+          auto s = *slot;
+          rop.gather_slots.push_back(ReadOp::gather_slot_t{
+            pg_shard, hoid, start, len, s.ofs, s.ptr, false,
+            // shared_ptr<void> with a custom deleter: quarantine is
+            // decided at the holder's last release (see ~ReadOp)
+            std::shared_ptr<void>(
+              new std::atomic<bool>(false),
+              [gather, s](void *q) {
+                auto *quarantine = static_cast<std::atomic<bool>*>(q);
+                gather->release(s, quarantine->load());
+                delete quarantine;
+              })});
+        }
+      }
+      if (!read.rdma_ofs.empty()) {
+        read.rdma_token = gather->token();
+      }
+    }
+  }
+#endif
+
   std::optional<ECSubRead> local_read_op;
   std::vector<std::pair<int, Message*>> m;
   m.reserve(messages.size());
@@ -699,6 +754,9 @@ void ECCommon::ReadPipeline::create_parity_read_buffer(
 }
 
 struct ClientReadCompleter final : ECCommon::ReadCompleter {
+  // client read results live only until the reply leaves the OSD
+  bool allows_rdma_gather() const override { return true; }
+
   ClientReadCompleter(ECCommon::ReadPipeline &read_pipeline,
                       ECCommon::ClientAsyncReadStatus *status
     )

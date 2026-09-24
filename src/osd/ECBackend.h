@@ -78,11 +78,16 @@ class ECBackend : public ECCommon {
       const ZTracer::Trace &trace,
       ECListener &eclistener
     ) override;
+  /**
+   * @param age_secs how long ago the sub-read was received; bounds
+   *        whether its chunks may still be RDMA-pushed to the primary
+   */
   void handle_sub_read(
       pg_shard_t from,
       const ECSubRead &op,
       ECSubReadReply *reply,
-      const ZTracer::Trace &trace
+      const ZTracer::Trace &trace,
+      double age_secs = 0
     );
   void handle_sub_read_n_reply(
     pg_shard_t from,

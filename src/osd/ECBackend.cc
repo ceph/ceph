@@ -15,7 +15,9 @@
 
 #include "ECBackend.h"
 
+#include <algorithm>
 #include <iostream>
+#include <ranges>
 
 #include "ECInject.h"
 #include "messages/MOSDPGPush.h"
@@ -24,9 +26,13 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "common/Clock.h"
 #include "common/debug.h"
+#include "common/deleter.h"
 #include "ECMsgTypes.h"
 #include "ECTypes.h"
+#include "oob_placement.h"
+#include "osd_cuobj.h"
 #include "ECSwitch.h"
 
 #include "PrimaryLogPG.h"
@@ -281,7 +287,8 @@ bool ECBackend::_handle_message(
     reply->pgid = get_parent()->primary_spg_t();
     reply->map_epoch = switcher->get_osdmap_epoch();
     reply->min_epoch = get_parent()->get_interval_start_epoch();
-    handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace);
+    handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace,
+                    ceph_clock_now() - _op->get_req()->get_recv_stamp());
     reply->trace = _op->pg_trace;
     reply->pgid.reset_shard(op->op.from.shard);
     get_parent()->send_message_osd_cluster(
@@ -518,12 +525,35 @@ void ECBackend::handle_sub_read(
   pg_shard_t from,
   const ECSubRead &op,
   ECSubReadReply *reply,
-  const ZTracer::Trace &trace) {
+  const ZTracer::Trace &trace,
+  double age_secs) {
   trace.event("handle sub read");
   shard_id_t shard = get_parent()->whoami_shard().shard;
+  // RDMA gather: the primary offered slots in its window for (some of)
+  // these extents; push there instead of returning the data if we can
+  OSDCuObj *cuobj = nullptr;
+#ifdef WITH_OSD_CUOBJ
+  if (!op.rdma_token.empty()) {
+    cuobj = get_parent()->get_cuobj();
+    if (cuobj && !get_parent()->rdma_gather_push_allowed(age_secs)) {
+      cuobj = nullptr;
+    }
+  }
+#endif
   for (auto &&[hoid, to_read]: op.to_read) {
     int r = 0;
+    const std::vector<uint64_t> *rdma_ofs = nullptr;
+    if (cuobj) {
+      if (auto it = op.rdma_ofs.find(hoid);
+          it != op.rdma_ofs.end() && it->second.size() == to_read.size()) {
+        rdma_ofs = &it->second;
+      }
+    }
+    size_t extent_idx = 0;
     for (auto &&[offset, len, flags]: to_read) {
+      const uint64_t window_ofs = rdma_ofs ? (*rdma_ofs)[extent_idx]
+                                           : ECSubRead::RDMA_OFS_INLINE;
+      extent_idx++;
       bufferlist bl;
       auto &subchunks = op.subchunks.at(hoid);
       if ((subchunks.size() == 1) &&
@@ -577,6 +607,24 @@ void ECBackend::handle_sub_read(
       } else {
         dout(20) << __func__ << " read request=" << len << " r=" << r << " len="
           << bl.length() << dendl;
+#ifdef WITH_OSD_CUOBJ
+        if (window_ofs != ECSubRead::RDMA_OFS_INLINE && bl.length()) {
+          ssize_t pushed = cuobj->execute_plan(
+            hoid.oid.name, op.rdma_token, bl,
+            ceph::osd::oob::linear_plan(window_ofs, bl.length()));
+          if (pushed == (ssize_t)bl.length()) {
+            dout(20) << __func__ << " pushed " << pushed << " bytes of "
+                     << hoid << " to window offset " << window_ofs << dendl;
+            reply->rdma_delivered[hoid].push_back(
+              boost::make_tuple(offset, (uint64_t)bl.length(), window_ofs));
+            continue;
+          }
+          // a failed push falls back to the messenger; the primary
+          // quarantines the slot in case the write is still in flight
+          dout(5) << __func__ << " RDMA push of " << hoid << " failed: "
+                  << pushed << ", replying inline" << dendl;
+        }
+#endif
         reply->buffers_read[hoid].push_back(make_pair(offset, bl));
       }
     }
@@ -585,6 +633,7 @@ void ECBackend::handle_sub_read(
     // Do NOT check osd_read_eio_on_bad_digest here.  We need to report
     // the state of our chunk in case other chunks could substitute.
     reply->buffers_read.erase(hoid);
+    reply->rdma_delivered.erase(hoid);
     reply->errors[hoid] = r;
   }
   for (set<hobject_t>::iterator i = op.attrs_to_read.begin();
@@ -804,6 +853,46 @@ void ECBackend::handle_sub_read_reply(
         op.errors[i->first] = -EIO;
         rop.debug_log.emplace_back(ECUtil::INJECT_EIO, op.from);
       }
+    }
+  }
+  // RDMA gather: chunks the shard pushed into our window are already
+  // here; wrap the slots as zero-copy buffers and fold them in as if
+  // they had arrived in buffers_read
+  for (auto &&[hoid, extents]: op.rdma_delivered) {
+    ceph_assert(!op.errors.contains(hoid));
+    for (auto &&[offset, len, window_ofs]: extents) {
+      auto slot = std::ranges::find_if(rop.gather_slots, [&](auto &s) {
+        return s.shard == from && s.hoid == hoid && s.offset == offset &&
+          s.window_ofs == window_ofs;
+      });
+      if (slot == rop.gather_slots.end() || len > slot->len ||
+          slot->landed) {
+        // not a slot we offered: the data went somewhere we cannot
+        // see, so this shard's read is lost
+        derr << __func__ << " shard " << from << " reports an RDMA push of "
+             << hoid << " off " << offset << " len " << len
+             << " into window offset " << window_ofs
+             << ", which we did not offer" << dendl;
+        op.errors[hoid] = -EIO;
+        continue;
+      }
+      slot->landed = true;
+      if (!rop.to_read.contains(hoid)) {
+        continue; // cancelled, @see filter_read_op
+      }
+      if (!rop.complete.contains(hoid)) {
+        rop.complete.emplace(hoid, &sinfo);
+      }
+      // the buffer keeps the slot claimed until its last reference goes
+      bufferlist bl;
+      bl.push_back(ceph::buffer::claim_buffer(
+        len, slot->ptr,
+        make_deleter([holder = slot->holder] () mutable { holder.reset(); })));
+      rop.complete.at(hoid).buffers_read.insert_in_shard(from.shard, offset, bl);
+    }
+    if (op.errors.contains(hoid)) {
+      op.buffers_read.erase(hoid);
+      op.attrs_read.erase(hoid);
     }
   }
   for (auto &&[hoid, offset_buffer_map]: op.buffers_read) {

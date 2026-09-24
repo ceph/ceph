@@ -73,6 +73,9 @@
 #ifdef WITH_OSD_CUOBJ
 #include "osd_cuobj.h"
 #endif
+#ifdef WITH_OSD_CUOBJ_GATHER
+#include "osd_cuobj_gather.h"
+#endif
 
 #include "PrimaryLogPG.h"
 
@@ -538,6 +541,12 @@ void OSDService::shutdown()
   delete cuobj;
   cuobj = nullptr;
 #endif
+#ifdef WITH_OSD_CUOBJ_GATHER
+  // peers stop pushing once our reads are cancelled; the arena's
+  // registration is dropped before the memory is
+  delete cuobj_gather;
+  cuobj_gather = nullptr;
+#endif
 
   publish_map(OSDMapRef());
   next_osdmap = OSDMapRef();
@@ -554,6 +563,10 @@ void OSDService::fast_shutdown()
   // op threads are stopped by now, so no RDMA writes are in flight
   delete cuobj;
   cuobj = nullptr;
+#endif
+#ifdef WITH_OSD_CUOBJ_GATHER
+  delete cuobj_gather;
+  cuobj_gather = nullptr;
 #endif
 }
 
@@ -2872,6 +2885,11 @@ void OSD::asok_command(
     if (service.cuobj) {
       service.cuobj->dump_stats(f);
     }
+#ifdef WITH_OSD_CUOBJ_GATHER
+    if (service.cuobj_gather) {
+      service.cuobj_gather->dump_stats(f);
+    }
+#endif
     f->close_section();
 #endif
   } else if (prefix == "flush_journal") {
@@ -4086,6 +4104,17 @@ int OSD::init()
     } else {
       derr << "WARNING: cuObject RDMA init failed on " << cuobj_ip
 	   << " (READ_RDMA disabled on this osd)" << dendl;
+    }
+  }
+#endif
+#ifdef WITH_OSD_CUOBJ_GATHER
+  if (cct->_conf.get_val<bool>("osd_cuobj_gather_enabled")) {
+    auto gather = std::make_unique<OSDCuObjGather>(cct);
+    if (gather->is_available()) {
+      service.cuobj_gather = gather.release();
+    } else {
+      derr << "WARNING: cuObject RDMA gather init failed "
+	   << "(EC sub-reads stay on the messenger on this osd)" << dendl;
     }
   }
 #endif

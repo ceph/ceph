@@ -1708,3 +1708,55 @@ options:
   - osd
   flags:
   - startup
+- name: osd_cuobj_gather_enabled
+  type: bool
+  level: advanced
+  desc: Let peers RDMA-write erasure-coded sub-read chunks straight into this
+    OSD's registered memory instead of returning them over the messenger
+    (requires the cuObject client library at build time and
+    osd_cuobj_enabled on the peers)
+  default: false
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_gather_slot_size
+  type: size
+  level: advanced
+  desc: Size of each RDMA gather slot; a sub-read extent larger than this is
+    returned over the messenger. Should cover one shard's share of the
+    largest object read (stripe_unit * stripes per read)
+  default: 4_M
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_gather_slots
+  type: uint
+  level: advanced
+  desc: Number of RDMA gather slots; all are pinned and registered at startup
+  default: 256
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_gather_quarantine
+  type: float
+  level: advanced
+  desc: Seconds to keep a gather slot out of use after a peer failed to
+    confirm its push; must exceed the delivery lease plus the transport's
+    transfer timeout so a late RDMA write cannot land in a reused slot
+  default: 90
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_gather_config
+  type: str
+  level: advanced
+  desc: Path to the cuObject client (cufile) JSON naming this host's RDMA
+    interface; exported as CUFILE_ENV_PATH_JSON if that is unset
+  services:
+  - osd
+  flags:
+  - startup

@@ -120,6 +120,16 @@ struct ECSubRead {
   std::set<hobject_t> omap_headers_to_read;
   std::map<hobject_t, std::pair<std::string, uint64_t>> omap_read_from;
   /**
+   * RDMA gather (v5): instead of returning its chunks in the reply, the
+   * shard may RDMA-write them into the primary's registered window
+   * described by rdma_token. rdma_ofs[hoid][i] is the window offset for
+   * the i-th to_read extent, or RDMA_OFS_INLINE when that extent has no
+   * slot. Advisory: a shard that cannot or will not push replies inline.
+   */
+  static constexpr uint64_t RDMA_OFS_INLINE = UINT64_MAX;
+  std::string rdma_token;
+  std::map<hobject_t, std::vector<uint64_t>> rdma_ofs;
+  /**
     * Calculate the cost of the SubOp read operation for mClock scheduler.
     *
     * @param *cct: *CephContext
@@ -143,6 +153,13 @@ struct ECSubReadReply {
   std::map<hobject_t, ceph::buffer::list> omap_headers_read;
   std::map<hobject_t, std::map<std::string, ceph::buffer::list>> omap_entries_read;
   std::map<hobject_t, bool> omaps_complete;
+  /// (v4) extents pushed into the primary's RDMA window instead of
+  /// being returned in buffers_read: (shard offset, length, window
+  /// offset written). The window offset lets the primary tell which
+  /// of possibly several slots offered for the same extent (a re-sent
+  /// sub-read) actually received the data.
+  std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint64_t>>>
+    rdma_delivered;
   void encode(ceph::buffer::list &bl) const;
   void encode(ceph::buffer::list &p_bl,
 	      ceph::buffer::list &d_pl,

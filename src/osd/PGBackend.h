@@ -47,6 +47,7 @@ struct inconsistent_obj_wrapper;
 //forward declaration
 class OSDMap;
 class PGLog;
+class OSDCuObj;
 typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
  /**
@@ -272,6 +273,17 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        uint64_t cost) = 0;
 
      virtual common::intrusive_timer &get_pg_timer() = 0;
+
+     /**
+      * RDMA gather: the endpoint that pushes this shard's sub-read
+      * chunks into a primary's window (null when unavailable), and
+      * whether a push may start for a sub-read received age_secs ago.
+      * The latter applies the same lease fences as delivery to a
+      * client, since a push into a primary that has since lost the PG
+      * is a stale write into memory it may have recycled.
+      */
+     virtual OSDCuObj *get_cuobj() { return nullptr; }
+     virtual bool rdma_gather_push_allowed(double age_secs) { return false; }
 
      virtual pg_shard_t whoami_shard() const = 0;
      int whoami() const {

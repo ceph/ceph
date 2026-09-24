@@ -65,6 +65,7 @@
 #include "Session.h"
 #ifdef WITH_OSD_CUOBJ
 #include "osd_cuobj.h"
+#include "osd_cuobj_gather.h"
 #include "osd/oob_placement.h"
 #include "common/crc64nvme.h"
 #endif
@@ -9394,6 +9395,35 @@ bool PrimaryLogPG::oob_delivery_allowed(OpContext *ctx, size_t num_ops)
   }
   return true;
 }
+
+OSDCuObj *PrimaryLogPG::get_cuobj()
+{
+  return osd->cuobj;
+}
+
+bool PrimaryLogPG::rdma_gather_push_allowed(double age_secs)
+{
+  // the same two time fences as delivery to a client: past our read
+  // lease the primary that asked may have lost the PG, and past the
+  // pool's delivery lease it may have recycled the slot it offered
+  if (osd->get_mnow() > recovery_state.get_readable_until()) {
+    dout(10) << __func__ << " past readable_until, replying inline" << dendl;
+    return false;
+  }
+  if (age_secs > pool.info.get_rdma_delivery_lease()) {
+    dout(10) << __func__ << " sub-read is " << age_secs
+	     << "s old, replying inline" << dendl;
+    return false;
+  }
+  return true;
+}
+
+#ifdef WITH_OSD_CUOBJ_GATHER
+OSDCuObjGather *PrimaryLogPG::get_rdma_gather()
+{
+  return osd->cuobj_gather;
+}
+#endif
 
 bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
 			       std::vector<ceph::rdma::oob_result_t>& oob)
