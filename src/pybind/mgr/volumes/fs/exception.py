@@ -1,3 +1,4 @@
+from errno import errorcode
 from logging import getLogger
 
 
@@ -15,6 +16,8 @@ class VolumeException(Exception):
         self.errno = errno
         self.errsmg = errmsg
 
+        if self.errno:
+            self.errcode = errorcode.get(abs(self.errno), 'UNKNOWN_ERROR')
         # since error numbers are always negative.
         if self.errno > 0:
             self.errno = -self.errno
@@ -26,7 +29,7 @@ class VolumeException(Exception):
 
     def __str__(self):
         return (f'{self.__class__.__name__}: self.errno = {self.errno}, '
-                f'self.errmsg: {self.errmsg}')
+                f'self.errcode = {self.errcode}, self.errmsg = {self.errmsg}')
 
 
 class MetadataMgrException(VolumeException):
