@@ -46,17 +46,16 @@ class SubvolumeBase(object):
                                   f"invalid subvolume name {name!r}")
         return name
 
-    def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
-        self.subvolname = self.validate_subvolume_name(subvolname)
-
+    def __init__(self, mgr, fs, spec, group, name, legacy=False):
         self.mgr = mgr
         self.fs = fs
         self.auth_mdata_mgr = AuthMetadataManager(fs)
         self.cmode = None
         self.user_id = None
         self.group_id = None
-        self.vol_spec = vol_spec
+        self.spec = spec
         self.group = group
+        self.name = self.validate_subvolume_name(name)
         self.legacy_mode = legacy
         self.load_config()
 
@@ -76,6 +75,14 @@ class SubvolumeBase(object):
             raise VolumeException(
                 -errno.EINVAL,
                 f"invalid subvolume path resolution for '{self.subvolname}'")
+
+    @property
+    def subvolname(self):
+        return self.name
+
+    @property
+    def vol_spec(self):
+        return self.spec
 
     @property
     def uid(self):
@@ -517,8 +524,8 @@ class SubvolumeBase(object):
                 raise MetadataMgrException(-errno.ENOENT, 'fabricated .meta')
         except MetadataMgrException as me:
             if me.errno in (-errno.ENOENT, -errno.EINVAL) and not self.legacy_mode:
-                log.warn("subvolume '{0}', {1}, "
-                          "assuming legacy_mode".format(self.subvolname, me.error_str))
+                log.warn(f'assuming legacy mode for subvol {self.name} since '
+                         f'an exception has been caught: {me.errmsg}')
                 self.legacy_mode = True
                 self.load_config()
                 self.discover()
