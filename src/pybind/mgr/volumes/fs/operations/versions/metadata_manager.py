@@ -167,6 +167,10 @@ class MetadataManager(object):
         key, value = to_str(key, value)
         self.update_section(MetadataManager.GLOBAL_SECTION, key, value)
 
+    def remove_global_option(self, key):
+        key = to_str(key)
+        self.remove_option(self.GLOBAL_SECTION, key)
+
     def get_option(self, sec, key, def_val=''):
         if not self.config.has_section(sec):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(sec))
