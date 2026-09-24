@@ -4306,7 +4306,6 @@ void merge_version_streams(const FdbRangeHolder &o_holder,
   auto load_o = [&]() -> bool {
     while (oit != o_holder.end()) {
       const auto [key, val] = *oit;
-      last_o_sv = key;
       o_name = parse_object_key_view(key);
       if (o_name) {
         const ObjectValueHeader* h = ovh_ptr(val);
@@ -4322,7 +4321,6 @@ void merge_version_streams(const FdbRangeHolder &o_holder,
   auto load_v = [&]() -> bool {
     while (vit != v_holder.end()) {
       const auto [key, val] = *vit;
-      last_v_sv = key;
       v_name = parse_v_key_view(key);
       if (v_name) {
         const ObjectValueHeader* h = ovh_ptr(val);
