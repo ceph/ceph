@@ -3476,6 +3476,9 @@ bool OSDMap::primary_changed_broken(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
+  if (require_osd_release < ceph_release_t::vampire) {
+    f &= ~CEPH_FEATURE_SERVER_VAMPIRE;
+  }
   if (require_osd_release < ceph_release_t::umbrella) {
     f &= ~CEPH_FEATURE_SERVER_UMBRELLA;
   }
@@ -8532,6 +8535,10 @@ unsigned OSDMap::get_device_class_flags(int id) const
 
 std::optional<std::string> OSDMap::pending_require_osd_release() const
 {
+  if (HAVE_FEATURE(get_up_osd_features(), SERVER_VAMPIRE) &&
+      require_osd_release < ceph_release_t::vampire) {
+    return "vampire";
+  }
   if (HAVE_FEATURE(get_up_osd_features(), SERVER_UMBRELLA) &&
       require_osd_release < ceph_release_t::umbrella) {
     return "umbrella";
