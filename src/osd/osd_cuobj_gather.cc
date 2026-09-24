@@ -11,6 +11,7 @@
 
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/cufile_config.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 
@@ -29,8 +30,8 @@ CUObjIOOps empty_ops{};
 
 } // namespace
 
-OSDCuObjGather::OSDCuObjGather(CephContext *cct)
-  : m_cct(cct)
+OSDCuObjGather::OSDCuObjGather(CephContext *cct, const std::string& rdma_addr)
+  : m_cct(cct), m_rdma_addr(rdma_addr)
 {
   int r = do_init();
   if (r < 0) {
@@ -64,12 +65,10 @@ int OSDCuObjGather::do_init()
     return -EINVAL;
   }
 
-  // the client library reads its NIC selection from the cufile json;
-  // point it there for this process if the deployment says where
-  auto json = m_cct->_conf.get_val<std::string>("osd_cuobj_gather_config");
-  if (!json.empty() && !getenv("CUFILE_ENV_PATH_JSON")) {
-    setenv("CUFILE_ENV_PATH_JSON", json.c_str(), 0);
-  }
+  // the client library reads its NIC selection from the cufile json
+  ceph::rdma::setup_cufile_json(
+    m_cct, m_cct->_conf.get_val<std::string>("osd_cuobj_gather_config"),
+    m_rdma_addr);
 
   try {
     m_client = std::make_unique<cuObjClient>(empty_ops, CUOBJ_PROTO_RDMA_DC_V1);

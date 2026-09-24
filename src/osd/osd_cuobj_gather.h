@@ -53,7 +53,9 @@ public:
     char* ptr = nullptr;
   };
 
-  OSDCuObjGather(CephContext *cct);
+  /// rdma_addr: this OSD's RDMA address, named to the client library
+  /// when the deployment leaves that to rdma_network
+  OSDCuObjGather(CephContext *cct, const std::string& rdma_addr);
   ~OSDCuObjGather();
 
   OSDCuObjGather(const OSDCuObjGather&) = delete;
@@ -152,6 +154,7 @@ private:
   void drop_source(source& s);
 
   CephContext* m_cct;
+  const std::string m_rdma_addr;
   std::unique_ptr<cuObjClient> m_client;
   bool m_available = false;
 

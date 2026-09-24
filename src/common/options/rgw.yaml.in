@@ -4756,8 +4756,14 @@ options:
   desc: Path to the cuObject client (cufile) JSON naming this host's RDMA
     interface, used when rgw_cuobj_osd_push is set; exported as
     CUFILE_ENV_PATH_JSON if that is unset
+  long_desc: When empty and rdma_network is set, radosgw writes
+    /etc/cufile.json with rdma_dev_addr_list set to its RDMA address to
+    $run_dir/$cluster-$name.cufile.json and uses that instead, so no host
+    needs a hand-written file.
   services:
   - rgw
+  see_also:
+  - rdma_network
 - name: rgw_cuobj_osd_passthrough
   type: bool
   level: advanced

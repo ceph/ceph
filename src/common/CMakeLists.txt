@@ -100,6 +100,7 @@ set(common_srcs
   madler/crc64nvme.c
   spdk/crc64.c
   crc64nvme.cc
+  cufile_config.cc
   random_string.cc
   rdma_token.cc
   reverse.c

@@ -157,7 +157,10 @@ options:
     address in one of these networks, so one setting covers the cluster. List
     one subnet per rail on a rail-optimized fabric; an OSD with addresses on
     several rails prefers the interface on its object store's NUMA node (see
-    osd_numa_prefer_iface).
+    osd_numa_prefer_iface). A daemon that also receives over RDMA and names no
+    cuObject client file of its own (osd_cuobj_gather_config,
+    rgw_cuobj_client_config) writes one naming that address to
+    $run_dir/$cluster-$name.cufile.json.
   fmt_desc: The IP address and netmask of the RDMA network (e.g.,
    ``10.10.0.0/24``). Set in ``[global]``. You may specify comma-separated
    subnets, such as one per rail. The format of it looks like

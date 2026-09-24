@@ -4090,9 +4090,13 @@ int OSD::init()
   check_config();
 
 #ifdef WITH_OSD_CUOBJ
-  if (cct->_conf.get_val<bool>("osd_cuobj_enabled")) {
-    std::string cuobj_ip = cct->_conf.get_val<std::string>("osd_cuobj_rdma_ip");
-    const auto rdma_network = cct->_conf.get_val<std::string>("rdma_network");
+  // one RDMA address for the endpoint this OSD pushes from and the
+  // gather arena its peers push into
+  std::string cuobj_ip;
+  const auto rdma_network = cct->_conf.get_val<std::string>("rdma_network");
+  if (cct->_conf.get_val<bool>("osd_cuobj_enabled") ||
+      cct->_conf.get_val<bool>("osd_cuobj_gather_enabled")) {
+    cuobj_ip = cct->_conf.get_val<std::string>("osd_cuobj_rdma_ip");
     if (cuobj_ip.empty() && !rdma_network.empty()) {
       // as with the public address, prefer the interface (on a
       // multi-rail host, the rail) on the object store's numa node
@@ -4112,6 +4116,8 @@ int OSD::init()
       // osd_cuobj_rdma_ip
       cuobj_ip = client_messenger->get_myaddrs().front().ip_only_to_str();
     }
+  }
+  if (cct->_conf.get_val<bool>("osd_cuobj_enabled")) {
     if (cuobj_ip.empty()) {
       derr << "WARNING: no local address in rdma_network " << rdma_network
 	   << " (cuObject RDMA disabled on this osd)" << dendl;
@@ -4136,7 +4142,7 @@ int OSD::init()
 #endif
 #ifdef WITH_OSD_CUOBJ_GATHER
   if (cct->_conf.get_val<bool>("osd_cuobj_gather_enabled")) {
-    auto gather = std::make_unique<OSDCuObjGather>(cct);
+    auto gather = std::make_unique<OSDCuObjGather>(cct, cuobj_ip);
     if (gather->is_available()) {
       // chunks that land in the arena are delivered to the client
       // straight out of it

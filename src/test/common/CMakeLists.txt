@@ -272,6 +272,13 @@ add_executable(unittest_rdma_token
 add_ceph_unittest(unittest_rdma_token)
 target_link_libraries(unittest_rdma_token ceph-common)
 
+# unittest_cufile_config
+add_executable(unittest_cufile_config
+  test_cufile_config.cc
+  )
+add_ceph_unittest(unittest_cufile_config)
+target_link_libraries(unittest_cufile_config ceph-common)
+
 # unittest_interval_map
 add_executable(unittest_interval_map
   test_interval_map.cc

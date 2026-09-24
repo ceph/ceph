@@ -85,8 +85,9 @@ private:
   uint16_t acquire_channel();
   void release_channel(uint16_t channel);
 
-  /// register the pool with the client library and mint tokens
-  int init_push_target(CephContext* cct);
+  /// register the pool with the client library, on the NIC at rdma_ip
+  /// when rdma_network leaves that to us, and mint tokens
+  int init_push_target(CephContext* cct, const std::string& rdma_ip);
 
   std::unique_ptr<cuObjServer> m_server;
 #ifdef WITH_RADOSGW_CUOBJ_TARGET

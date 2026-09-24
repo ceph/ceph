@@ -176,6 +176,18 @@ Cluster (every daemon with an RDMA endpoint):
   ``rdma_network``, as ``public_network_interface`` does for
   ``public_network``; ``rdma_network`` must also be set.
 
+With ``rdma_network`` set, a daemon that also *receives* over RDMA (an
+OSD's gather arena, or a gateway with ``rgw_cuobj_osd_push``) needs no
+hand-written ``cufile.json`` either. The cuObject client library takes
+its NICs only from ``rdma_dev_addr_list`` in that file, so the daemon
+copies ``/etc/cufile.json``, sets ``rdma_dev_addr_list`` to its own RDMA
+address, writes the result to ``$run_dir/$cluster-$name.cufile.json``
+(``/var/run/ceph`` by default), and points ``CUFILE_ENV_PATH_JSON`` at
+it. The host file's other settings still apply. A file named by
+``osd_cuobj_gather_config`` or ``rgw_cuobj_client_config``, or by
+``CUFILE_ENV_PATH_JSON`` in the daemon's environment, is used as is
+instead.
+
 Gateway (staged mode and protocol handling):
 
 * ``rgw_cuobj_enabled``, ``rgw_cuobj_rdma_ip``, ``rgw_cuobj_rdma_port``,

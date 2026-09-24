@@ -14,6 +14,7 @@
 
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/cufile_config.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/pick_address.h"
@@ -147,7 +148,7 @@ int RGWCuObjServer::do_init(CephContext* cct)
 
   if (cct->_conf.get_val<bool>("rgw_cuobj_osd_push")) {
     // a failure here only loses the push-target role, not RDMA service
-    int r = init_push_target(cct);
+    int r = init_push_target(cct, rdma_ip);
     if (r < 0) {
       lderr(cct) << "rgw_cuobj: WARNING: OSDs cannot push into this gateway "
                  << "(" << cpp_strerror(r) << "); staged GETs stay on the "
@@ -170,7 +171,8 @@ int64_t now_ns()
 }
 } // namespace
 
-int RGWCuObjServer::init_push_target(CephContext* cct)
+int RGWCuObjServer::init_push_target(CephContext* cct,
+                                     const std::string& rdma_ip)
 {
 #ifndef WITH_RADOSGW_CUOBJ_TARGET
   lderr(cct) << "rgw_cuobj: rgw_cuobj_osd_push set but this radosgw was "
@@ -178,10 +180,8 @@ int RGWCuObjServer::init_push_target(CephContext* cct)
   return -EOPNOTSUPP;
 #else
   // the client library reads its NIC selection from the cufile json
-  auto json = cct->_conf.get_val<std::string>("rgw_cuobj_client_config");
-  if (!json.empty() && !getenv("CUFILE_ENV_PATH_JSON")) {
-    setenv("CUFILE_ENV_PATH_JSON", json.c_str(), 0);
-  }
+  ceph::rdma::setup_cufile_json(
+    cct, cct->_conf.get_val<std::string>("rgw_cuobj_client_config"), rdma_ip);
   try {
     m_client = std::make_unique<cuObjClient>(empty_ops, CUOBJ_PROTO_RDMA_DC_V1);
   } catch (const std::exception& e) {
