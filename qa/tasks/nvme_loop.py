@@ -15,7 +15,6 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def task(ctx, config):
     log.info('Setting up nvme_loop on scratch devices...')
-    host = 'hostnqn'
     port = '1'
     devs_by_remote = {}
     old_scratch_by_remote = {}
@@ -32,19 +31,16 @@ def task(ctx, config):
                 'grep', '^nvme_loop', '/proc/modules', run.Raw('||'),
                 'sudo', 'modprobe', 'nvme_loop',
                 run.Raw('&&'),
-                'sudo', 'mkdir', '-p', f'{base}/hosts/{host}',
-                run.Raw('&&'),
                 'sudo', 'mkdir', '-p', f'{base}/ports/{port}',
                 run.Raw('&&'),
                 'echo', 'loop', run.Raw('|'),
                 'sudo', 'tee', f'{base}/ports/{port}/addr_trtype',
             ]
         )
-        provide_hostname = True
         for dev in devs:
             short = dev.split('/')[-1]
             log.info(f'Connecting nvme_loop {remote.shortname}:{dev}...')
-            nvme_connect_args=[
+            nvme_connect_args = [
                 'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}',
                 run.Raw('&&'),
                 'echo', '1', run.Raw('|'),
@@ -61,18 +57,14 @@ def task(ctx, config):
                 'sudo', 'ln', '-s', f'{base}/subsystems/{short}',
                 f'{base}/ports/{port}/subsystems/{short}',
                 run.Raw('&&'),
-                'sudo', 'nvme', 'connect', '-t', 'loop', '-n', short
+                # Avoid nvme-cli here: some versions may inject an inconsistent
+                # HostNQN/HostID pair. Writing directly to /dev/nvme-fabrics lets
+                # the kernel use its default host identity instead.
+                'printf', '%s', f'nqn={short},transport=loop',
+                run.Raw('|'),
+                'sudo', 'tee', '/dev/nvme-fabrics',
             ]
-            if provide_hostname:
-                nvme_connect_args.extend(['-q', host])
-            try:
-                remote.run(args=nvme_connect_args)
-            except Exception:
-                if provide_hostname:
-                    provide_hostname = False
-                    remote.run(args=['sudo', 'nvme', 'connect', '-t', 'loop', '-n', short])
-                else:
-                    raise
+            remote.run(args=nvme_connect_args)
 
         # identify nvme_loops devices
         old_scratch_by_remote[remote] = remote.read_file('/scratch_devs')
