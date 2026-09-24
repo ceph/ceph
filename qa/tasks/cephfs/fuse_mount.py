@@ -17,14 +17,15 @@ log = logging.getLogger(__name__)
 # Refer mount.py for docstrings.
 class FuseMountBase(CephFSMountBase):
     def __init__(self, ctx, test_dir, client_id, client_remote,
-                 client_keyring_path=None, cephfs_name=None,
+                 client_keyring=None, client_keyring_path=None, cephfs_name=None,
                  cephfs_mntpt=None, hostfs_mntpt=None, brxnet=None,
                  client_config={}):
-        super(FuseMountBase, self).__init__(ctx=ctx, test_dir=test_dir,
-            client_id=client_id, client_remote=client_remote,
+        super(FuseMountBase, self).__init__(
+            ctx=ctx, test_dir=test_dir, client_id=client_id,
+            client_remote=client_remote, client_keyring=client_keyring,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
-            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet,
-            client_config=client_config)
+            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt,
+            client_config=client_config, brxnet=brxnet)
 
         self.fuse_daemon = None
         self._fuse_conn = None
