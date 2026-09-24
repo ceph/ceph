@@ -80,6 +80,20 @@ remove_image_from_group()
     rbd group image remove $group_name $image_name
 }
 
+force_remove_image_from_group()
+{
+    local image_name=$1
+    local group_name=$2
+
+    rbd group image remove --force "$group_name" "$image_name"
+}
+
+list_image_snaps()
+{
+    local image_name=$1
+    rbd snap ls "$image_name" --all
+}
+
 check_image_in_group()
 {
     local image_name=$1
@@ -104,6 +118,14 @@ check_image_not_in_group()
         fi
     done
     return 0
+}
+
+check_image_snapshot_exists()
+{
+    local image_name=$1
+    local snap_name=$2
+
+    list_image_snaps "$image_name" | grep -w "$snap_name"
 }
 
 create_snapshot()
@@ -303,6 +325,23 @@ check_snapshots_count_in_group $group $snap 100
 remove_snapshots $group $snap 100
 remove_group $group
 remove_image $image
+echo "PASSED"
+
+echo "TEST: remove image with --force"
+group="force_group"
+image="force_image"
+snap="snap1"
+create_image "$image"
+create_group "$group"
+add_image_to_group "$image" "$group"
+create_snapshot "$group" "$snap"
+force_remove_image_from_group "$image" "$group"
+check_snapshot_in_group "$group" "$snap"
+check_image_snapshot_exists "$image" "$snap"
+check_image_not_in_group "$image" "$group"
+remove_snapshot "$group" "$snap"
+remove_group "$group"
+remove_image "$image"
 echo "PASSED"
 
 echo "OK"
