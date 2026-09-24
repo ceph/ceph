@@ -235,7 +235,8 @@ class UpgradeState:
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
                  has_set_cephx_allowed_ciphers: Optional[bool] = False,
                  health_warnings_muted: Optional[bool] = False,
-                 rotated_osd_mds_keyrings: Optional[bool] = False
+                 rotated_osd_mds_keyrings: Optional[bool] = False,
+                 target_image_pre_pull_done: bool = False,
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -262,6 +263,7 @@ class UpgradeState:
         self.has_set_cephx_allowed_ciphers = has_set_cephx_allowed_ciphers
         self.rotated_osd_mds_keyrings = rotated_osd_mds_keyrings
         self.health_warnings_muted = health_warnings_muted
+        self.target_image_pre_pull_done = target_image_pre_pull_done
 
     def to_json(self) -> dict:
         return {
@@ -287,7 +289,8 @@ class UpgradeState:
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
             'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
             'health_warnings_muted': self.health_warnings_muted,
-            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings
+            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings,
+            'target_image_pre_pull_done': self.target_image_pre_pull_done,
         }
 
     @classmethod
@@ -297,6 +300,9 @@ class UpgradeState:
             c = {k: v for k, v in data.items() if k in valid_params}
             if 'repo_digest' in c:
                 c['target_digests'] = [c.pop('repo_digest')]
+            # Persist key renamed from image_mirror_done.
+            if 'target_image_pre_pull_done' not in c and 'image_mirror_done' in data:
+                c['target_image_pre_pull_done'] = bool(data['image_mirror_done'])
             return cls(**c)
         else:
             return None
