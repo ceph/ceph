@@ -3439,15 +3439,6 @@ private:
     ready_regions_t& ready_regions,
     blobs2read_t& blobs2read);
 
-  void _read_cache(
-    OnodeRef& o,
-    uint64_t offset,
-    size_t length,
-    int read_cache_policy,
-    ready_regions_t& ready_regions,
-    blobs2read_t& blobs2read,
-    span_stat_t* span_stat);
-
   void _reformat_scan(
     OnodeRef& o,
     uint64_t offset,
@@ -3459,12 +3450,6 @@ private:
     blobs2read_t& blobs2read,
     std::vector<ceph::buffer::list>* compressed_blob_bls,
     IOContext* ioc);
-
-  int _prepare_read_ioc(
-    blobs2read_t& blobs2read,
-    std::vector<ceph::buffer::list>* compressed_blob_bls,
-    IOContext* ioc,
-    span_stat_t* span_stat);
 
   int _generate_read_result_bl(
     OnodeRef& o,
@@ -3488,17 +3473,8 @@ private:
     size_t len,
     ceph::buffer::list& bl,
     uint32_t op_flags = 0,
-    uint64_t retry_count = 0);
-
-  int _do_read(
-    Collection *c,
-    OnodeRef& o,
-    uint64_t offset,
-    size_t len,
-    ceph::buffer::list& bl,
-    uint32_t op_flags,
-    uint64_t retry_count,
-    span_stat_t* span_stat);
+    uint64_t retry_count = 0,
+    span_stat_t* span_stat = nullptr);
 
   void _do_read_and_pad(
     Collection* c,
