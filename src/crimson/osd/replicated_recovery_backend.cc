@@ -280,7 +280,11 @@ RecoveryBackend::on_local_recover_persist(
         shard_services.get_store(pg.get_store_index()),
         coll, std::move(t));
     }).then_interruptible(
-      [this, epoch_frozen, last_complete = pg.get_info().last_complete] {
+      [this, epoch_frozen, last_complete = pg.get_info().last_complete,
+       version = _recovery_info.version] {
+      // Only now is the recovered/deleted object actually durable in the
+      // local object store; let a waiting scrub chunk scan proceed against it.
+      pg.scrubber.on_log_update(version);
       pg.get_recovery_handler()->_committed_pushed_object(epoch_frozen, last_complete);
       return seastar::make_ready_future<>();
     });
@@ -969,6 +973,9 @@ ReplicatedRecoveryBackend::_handle_pull_response(
       crimson::os::with_store_do_transaction(
         shard_services.get_store(pg.get_store_index()),
         coll, std::move(t)));
+    // Only now is the pulled object actually durable in the local object
+    // store; let a waiting scrub chunk scan on this shard proceed against it.
+    pg.scrubber.on_log_update(pull_info.recovery_info.version);
   } else {
     response->soid = push_op.soid;
     response->recovery_info = pull_info.recovery_info;
@@ -1152,6 +1159,9 @@ ReplicatedRecoveryBackend::handle_push(
         coll, std::move(t)));
     replica_push_targets.erase(ptiter);
 
+    // Only now is the pushed object actually durable in the local object
+    // store; let a waiting scrub chunk scan on this shard proceed against it.
+    pg.scrubber.on_log_update(push_op.recovery_info.version);
     pg.get_recovery_handler()->_committed_pushed_object(
       epoch_frozen, pg.get_info().last_complete);
   } else {

@@ -1355,6 +1355,9 @@ private:
     peering_state.add_local_next_event(e);
   }
   void op_applied(const eversion_t &applied_version) override final;
+  void on_sub_write_applied(const eversion_t &at_version) override final {
+    scrubber.on_log_update(at_version);
+  }
 
 private:
   friend class IOInterruptCondition;
