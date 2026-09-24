@@ -230,6 +230,18 @@ def get_all_xattrs(fs, path):
     return sv_xattrs
 
 
+def set_all_xattrs(fs, path, path_xattrs):
+    '''
+    Set all passed xattrs on the given path
+
+    :param xattrs: dict of xattr key and values
+    '''
+    for xattr, val in path_xattrs.items():
+        if not val:
+            continue
+        fs.setxattr(path, xattr, val)
+
+
 def create_base_dir(fs, path, mode):
     """
     Create volspec base/group directory if it doesn't exist
