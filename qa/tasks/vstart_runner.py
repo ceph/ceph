@@ -1351,8 +1351,22 @@ def exec_test():
     log.info(f'python version = sys.version = {sys.version}')
     log.info(f'args passed = sys.argv = {sys.argv}')
     args = sys.argv[1:]
-    flags = [a for a in args if a.startswith("-")]
-    modules = [a for a in args if not a.startswith("-")]
+
+    flags = []
+    modules = []
+    for a in args:
+        if a[:2] == '--':
+            flags.append(a)
+        elif a[0] == '-':
+            if a == '-' or len(a) == 2:
+                flags.append(a)
+            else:
+                # '-dic' -> '-d', '-i','-c'
+                for short_opt in list(a.replace('-', '')):
+                    flags.append('-' + str(short_opt))
+        else:
+            modules.append(a)
+
 
     for f in flags:
         if f == '-':
