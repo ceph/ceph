@@ -1399,3 +1399,77 @@ async fn test_delete_objects_version_if_match_size() {
         .unwrap();
     assert!(resp.errors().is_empty());
 }
+
+/// Concurrent put-if-absent:  exactly one writer may win.
+///
+/// S3 says a PUT with If-None-Match: * succeeds only if the key is absent,
+/// so of N writers racing for one absent key, one gets 200 and the rest get
+/// 412.  This is not a nicety:  table formats build commit protocols on
+/// put-if-absent, so two winners means two committers each believe they
+/// hold the commit and one of them silently loses its object.
+///
+/// A filesystem backend has to take care here, because publishing by
+/// rename replaces whatever is there.  Deciding the precondition from an
+/// earlier stat and then publishing leaves a window;  nsfs and posix both
+/// had it, and both were measured admitting two winners before the
+/// publish was made exclusive.  The test needs real concurrency to see
+/// that -- a sequential put-if-absent passes either way.
+#[tokio::test]
+async fn test_put_object_if_none_match_star_is_atomic() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+
+    const WRITERS: usize = 12;
+    const TRIALS: usize = 5;
+
+    for trial in 0..TRIALS {
+        let key = format!("put-if-absent-{trial}");
+
+        let mut tasks = Vec::with_capacity(WRITERS);
+        for i in 0..WRITERS {
+            let c = client.clone();
+            let k = key.clone();
+            let b = bucket_name.clone();
+            tasks.push(tokio::spawn(async move {
+                c.put_object()
+                    .bucket(&b)
+                    .key(&k)
+                    .if_none_match("*")
+                    .body(ByteStream::from(vec![b'x'; 64 + i]))
+                    .send()
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| {
+                        e.raw_response()
+                            .map(|r| r.status().as_u16())
+                            .unwrap_or(0)
+                    })
+            }));
+        }
+
+        let mut winners = 0usize;
+        let mut refused = 0usize;
+        let mut unexpected = Vec::new();
+        for t in tasks {
+            match t.await.expect("writer task panicked") {
+                Ok(()) => winners += 1,
+                Err(412) => refused += 1,
+                Err(status) => unexpected.push(status),
+            }
+        }
+
+        assert!(
+            unexpected.is_empty(),
+            "trial {trial}: unexpected statuses {unexpected:?} \
+             (expected 200 for one writer and 412 for the rest)"
+        );
+        assert_eq!(
+            winners, 1,
+            "trial {trial}: {winners} of {WRITERS} concurrent \
+             If-None-Match:* writers succeeded, expected exactly 1 \
+             ({refused} were refused) -- the later winner silently \
+             overwrote the earlier one"
+        );
+    }
+}
