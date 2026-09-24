@@ -55,3 +55,20 @@ def to_str(*args):
                                   f'var = {var} args = {args}')
 
     return newargs if len(newargs) > 1 else newargs[0]
+
+
+def safe_join(*args):
+    '''
+    Convert members of args to bytes before passing them to os.path.join() and
+    and return its return value. Excepatable types: str, int, float, bool.
+
+    :rtype: bytes
+    '''
+    newargs = to_bytes(*args)
+    for index, var in enumerate(newargs):
+        if index > 1 and var[0] == '/':
+            raise VolumeException(EINVAL,
+                                  ('safe_join() received non-first arg starting '
+                                   'with "/"'))
+
+    return join(*newargs)
