@@ -4,7 +4,7 @@ import errno
 from logging import getLogger
 from io import StringIO
 
-from tasks.cephfs.test_volumes import TestVolumesHelper
+from tasks.cephfs.test_volumes import VolumesHelper
 
 from teuthology.contextutil import safe_while
 from teuthology.exceptions import CommandFailedError
@@ -18,7 +18,7 @@ class RsizeDoesntMatch(Exception):
         self.msg = msg
 
 
-class CloneProgressReporterHelper(TestVolumesHelper):
+class CloneProgressReporterHelper(VolumesHelper):
     CLIENTS_REQUIRED = 1
 
     def setUp(self):
