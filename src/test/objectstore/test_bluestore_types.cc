@@ -2393,11 +2393,10 @@ public:
 
 // https://tracker.ceph.com/issues/72848
 //
-// merge_blob() moves csum data in whole csum chunks, so each pextent it
-// moves must be csum chunk aligned.  With a csum chunk larger than
-// min_alloc_size (alloc hint SEQUENTIAL_READ + IMMUTABLE/APPEND_ONLY, see
-// _choose_write_options()) a fragmented allocation breaks this.
-// can_merge_blob() used to accept such a blob, and merge_blob() then
+// merge_blob() uses move_data() that moves csum data in whole csum chunks.
+// So, it must be prepared to handle tha case when multiple allocations
+// encoded by pextents are in total a multiply of csum size, but individual
+// allocations are not. This has not been the case and merge_blob()
 // asserted on (len % (1 << csum_chunk_order)) == 0.
 TEST_F(ExtentMapFixture, merge_blob_csum_chunk_unaligned) {
   constexpr uint32_t csum_chunk_order = 15;               // 32K csum chunks
@@ -2462,8 +2461,8 @@ TEST_F(ExtentMapFixture, merge_blob_csum_chunk_unaligned) {
   }
 
   // 2. same layout, but blob #2's 32K got allocated as 12K + 20K, so its
-  //    pextents do not align with the 32K csum chunk.  The merge has to be
-  //    refused - before the fix merge_blob() asserted here.
+  //    pextents do not align with the 32K csum chunk.  The merge still
+  //    has to complete successfully.
   {
     t_onode a = create();
     write_blob(a, 0, 0, csum_chunk, {csum_chunk});
@@ -2475,15 +2474,16 @@ TEST_F(ExtentMapFixture, merge_blob_csum_chunk_unaligned) {
     BlueStore::Blob* shared = blob_at(a, 0);
     BlueStore::Blob* fragmented = blob_at(a, csum_chunk);
     uint32_t blob_width = 0;
-    ASSERT_FALSE(shared->can_merge_blob(fragmented, blob_width));
+    ASSERT_TRUE(shared->can_merge_blob(fragmented, blob_width));
 
     t_onode c2 = create();
     clone(a, c2, 2 * csum_chunk);
-    // blob #2 was left alone and converted to a shared blob of its own
-    ASSERT_EQ(blob_at(a, 0), shared);
-    ASSERT_EQ(blob_at(a, csum_chunk), fragmented);
-    ASSERT_TRUE(fragmented->get_blob().is_shared());
-    // and its csum data is still where it belongs
+    // check is blobs are merged
+    shared = blob_at(a, 0);
+    fragmented = blob_at(a, csum_chunk);
+    EXPECT_EQ(shared, fragmented);
+
+   // and its csum data is still where it belongs
     ASSERT_EQ(fragmented->get_blob().get_csum_item(1), 0x11111111 + csum_chunk);
   }
 }
