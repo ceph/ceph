@@ -1618,7 +1618,11 @@ void CDir::fetch(std::string_view dname, snapid_t last,
       if (backend_hit_count < threshold) {
         ++backend_hit_count;
       }
+      // A dirfrag loaded into a cache that is already over its reservation
+      // is trimmed straight back out, so skip the warm-up rather than read
+      // the whole frag only to evict it.
       if (g_conf().get_val<bool>("mds_dir_prefetch_backend") &&
+	  !mdcache->cache_toofull() &&
 	  !state_test(CDir::STATE_FETCHING) &&
 	  backend_hit_count >= threshold &&
 	  mdcache->num_backend_fetching < g_conf().get_val<uint64_t>("mds_dir_prefetch_backend_max")) {
