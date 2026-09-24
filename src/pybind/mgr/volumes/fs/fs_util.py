@@ -279,20 +279,29 @@ def create_base_dir(fs, path, mode):
             raise VolumeException(-e.args[0], e.args[1])
 
 
-def statx(fs, path, fields):
+def statx(fs, path, fields=None):
     '''
     Convenient wrapper around libcephfs's statx().
+
+    :param path: path to be statx'ed
+    :param fields: stat buffer fields to be fetched
+    :returns: bool or list. list if fields were passed, otherwise bool
     '''
     mask = 0
-    if 'uid' in fields:
-        mask = cephfs.CEPH_STATX_UID
-    if 'gid' in fields:
-        mask = mask | cephfs.CEPH_STATX_GID
-    if 'mode' in fields:
-        mask = mask | cephfs.CEPH_STATX_MODE
+    if fields:
+        if 'uid' in fields:
+            mask = cephfs.CEPH_STATX_UID
+        if 'gid' in fields:
+            mask = mask | cephfs.CEPH_STATX_GID
+        if 'mode' in fields:
+            mask = mask | cephfs.CEPH_STATX_MODE
 
     # sxb = statx buffer
     sxb = fs.statx(path, mask, cephfs.AT_STATX_SYNC_AS_STAT)
+
+    if mask == 0:
+        # no fields were fetched, only presence was checked
+        return True
 
     sxb_fields = []
      if 'uid' in fields:
@@ -303,3 +312,15 @@ def statx(fs, path, fields):
         sxb_fields.append(int(sxb['mode']))
 
     return sxb_fields
+
+
+def path_exists(fs, path):
+    try:
+        # prefer statx over stat has it passes much lesser data on n/w
+        statx(fs, path)
+    except cephfs.PermissionError:
+        raise
+    except:
+        return False
+    else:
+        return True
