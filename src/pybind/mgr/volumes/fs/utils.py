@@ -9,6 +9,32 @@ from .exception import VolumeException, InvalidUuidError
 log = getLogger(__name__)
 
 
+def gen_uuid():
+    return str(uuid4())
+
+
+def validate_uuid(uuid):
+    '''
+    If UUID is invaid, raise InvalidUuidError.
+    '''
+    uuid_type = type(uuid)
+    if uuid_type is str:
+        pass
+    elif uuid_type is bytes:
+        uuid = uuid.decode('utf-8')
+    else:
+        raise VolumeException(EINVAL,
+                              ('received invalid type for uuid, expected str '
+                               f'or bytes. uuid_type={uuid_type} uuid={uuid}'))
+
+    try:
+        UUID(uuid, version=4)
+    except Exception as e:
+        raise InvalidUuidError(EINVAL,
+                                   (f'received invalid uuid. uuid = {uuid}. '
+                                    f'exception raised by uuid module: {e}'))
+
+
 def to_bytes(*args):
     '''
     Convert all of args to bytes. Valid types: str, bytes, int, float and bool.
