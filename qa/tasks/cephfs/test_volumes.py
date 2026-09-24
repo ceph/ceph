@@ -215,9 +215,9 @@ class TestVolumesHelper(CephFSTestCase):
         self._verify_clone_root(path1, path2, clone, clone_group, clone_pool)
         self._verify_clone_attrs(path1, path2)
 
-    def _gen_name(self, name, n):
-        names = [f'{name}{random.randrange(0, 9999)}{i}' for i in range(n)]
-        return names[0] if n == 1 else names
+    def _gen_name(self, name, n=1):
+        name += str(random.randrange(1, 99))
+        return name if n == 1 else [f'{name}{i}' for i in range(n)]
 
     def _gen_vol_name(self, n=1):
         return self._gen_name('vol', n)
@@ -267,7 +267,7 @@ class TestVolumesHelper(CephFSTestCase):
         group_md = self._fs_cmd(*args)
         return group_md
 
-    def  _get_subvolume_path(self, vol_name, subvol_name, group_name=None):
+    def _get_subvolume_path(self, vol_name, subvol_name, group_name=None):
         args = ["subvolume", "getpath", vol_name, subvol_name]
         if group_name:
             args.append(group_name)
