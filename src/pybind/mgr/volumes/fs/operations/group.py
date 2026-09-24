@@ -29,7 +29,11 @@ class Group(GroupTemplate):
         self.user_id = None
         self.group_id = None
         self.vol_spec = vol_spec
-        self.groupname = groupname if groupname else Group.NO_GROUP_NAME
+        self.name = groupname if groupname else Group.NO_GROUP_NAME
+
+    @property
+    def groupname(self):
+        return self.name
 
     @property
     def path(self):

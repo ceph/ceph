@@ -36,9 +36,13 @@ class SubvolumeBase(object):
         self.group_id = None
         self.vol_spec = vol_spec
         self.group = group
-        self.subvolname = subvolname
+        self.name = subvolname
         self.legacy_mode = legacy
         self.load_config()
+
+    @property
+    def subvolname(self):
+        return self.name
 
     @property
     def uid(self):
