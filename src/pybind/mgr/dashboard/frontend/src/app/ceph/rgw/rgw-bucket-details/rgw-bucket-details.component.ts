@@ -2,9 +2,9 @@ import { ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 
-import * as xml2js from 'xml2js';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { RgwBucketReplication } from '../models/rgw-bucket-replication';
+import { XmlService } from '~/app/shared/services/xml.service';
 
 @Component({
   selector: 'cd-rgw-bucket-details',
@@ -28,22 +28,24 @@ export class RgwBucketDetailsComponent implements OnChanges {
   replicationData: RgwBucketReplication;
   bucketRateLimit: RgwRateLimitConfig;
 
-  constructor(private rgwBucketService: RgwBucketService, private cd: ChangeDetectorRef) {}
+  constructor(
+    private rgwBucketService: RgwBucketService,
+    private cd: ChangeDetectorRef,
+    private xmlService: XmlService
+  ) {}
 
   ngOnChanges() {
     this.updateBucketDetails(this.extraxtDetailsfromResponse.bind(this));
   }
 
   parseXmlAcl(xml: any, bucketOwner: string): Record<string, string[]> {
-    const parser = new xml2js.Parser({ explicitArray: false, trim: true });
     let data: Record<string, string[]> = {
       Owner: ['-'],
       AllUsers: ['-'],
       AuthenticatedUsers: ['-']
     };
-    parser.parseString(xml, (err, result) => {
-      if (err) return null;
-
+    const result = this.xmlService.parse(xml);
+    if (result) {
       const xmlGrantees: any = result['AccessControlPolicy']['AccessControlList']['Grant'];
       if (Array.isArray(xmlGrantees)) {
         for (let i = 0; i < xmlGrantees.length; i++) {
@@ -65,7 +67,7 @@ export class RgwBucketDetailsComponent implements OnChanges {
           data['Owner'] = xmlGrantees?.Permission;
         }
       }
-    });
+    }
     return data;
   }
 

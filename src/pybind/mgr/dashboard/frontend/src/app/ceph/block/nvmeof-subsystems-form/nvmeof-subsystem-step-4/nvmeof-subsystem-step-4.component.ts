@@ -26,7 +26,10 @@ export class NvmeofSubsystemsStepFourComponent implements OnInit, TearsheetStep 
   HOST_TYPE = HOST_TYPE;
   AUTHENTICATION = AUTHENTICATION;
 
-  constructor(public actionLabels: ActionLabelsI18n, public activeModal: NgbActiveModal) {}
+  constructor(
+    public actionLabels: ActionLabelsI18n,
+    public activeModal: NgbActiveModal
+  ) {}
 
   ngOnInit() {
     this.formGroup = new CdFormGroup({});

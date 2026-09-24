@@ -1,113 +1,162 @@
-<cds-modal size="sm"
-           [open]="open">
+<cds-modal
+  size="sm"
+  [open]="open"
+>
   <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ groupType }} flow</h3>
+    <h3
+      cdsModalHeaderHeading
+      i18n
+    >
+      {{ action | titlecase }} {{ groupType }} flow
+    </h3>
     <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
   </cds-modal-header>
-  <form name="flowForm"
-        #frm="ngForm"
-        [formGroup]="currentFormGroupContext"
-        novalidate>
+  <form
+    name="flowForm"
+    #frm="ngForm"
+    [formGroup]="currentFormGroupContext"
+    novalidate
+  >
     <div cdsModalContent>
       <!-- Flow Name-->
       <div class="form-item">
-        <cds-text-label for="flow_id"
-                        [invalid]="!currentFormGroupContext.controls.flow_id.valid && currentFormGroupContext.controls.flow_id.dirty"
-                        [invalidText]="flowIdError">
+        <cds-text-label
+          for="flow_id"
+          [invalid]="
+            !currentFormGroupContext.controls.flow_id.valid &&
+            currentFormGroupContext.controls.flow_id.dirty
+          "
+          [invalidText]="flowIdError"
+        >
           <ng-container i18n>Name</ng-container>
-          <input cdsText
-                 type="text"
-                 id="flow_id"
-                 formControlName="flow_id"
-                 autofocus
-                 [invalid]="!currentFormGroupContext.controls.flow_id.valid && currentFormGroupContext.controls.flow_id.dirty">
+          <input
+            cdsText
+            type="text"
+            id="flow_id"
+            formControlName="flow_id"
+            autofocus
+            [invalid]="
+              !currentFormGroupContext.controls.flow_id.valid &&
+              currentFormGroupContext.controls.flow_id.dirty
+            "
+          />
         </cds-text-label>
         <ng-template #flowIdError>
-        @if (currentFormGroupContext.showError('flow_id', formDir, 'required')) {
-          <span class="invalid-feedback">
-            <ng-container i18n> This field is required. </ng-container>
-          </span>
-        }
+          @if (currentFormGroupContext.showError('flow_id', formDir, 'required')) {
+            <span class="invalid-feedback">
+              <ng-container i18n> This field is required. </ng-container>
+            </span>
+          }
         </ng-template>
       </div>
       <!-- Bucket Name-->
       @if (currentFormGroupContext.controls.bucket_name.value) {
-      <div class="form-item">
-        <cds-text-label for="bucket_name"
-                        cdOptionalField="Bucket name">
-          <ng-container i18n>Bucket name</ng-container>
-          <input cdsText
-                 type="text"
-                 id="bucket_name"
-                 formControlName="bucket_name"
-                 [readOnly]="true">
-        </cds-text-label>
-      </div>
+        <div class="form-item">
+          <cds-text-label
+            for="bucket_name"
+            cdOptionalField="Bucket name"
+          >
+            <ng-container i18n>Bucket name</ng-container>
+            <input
+              cdsText
+              type="text"
+              id="bucket_name"
+              formControlName="bucket_name"
+              [readOnly]="true"
+            />
+          </cds-text-label>
+        </div>
       }
       <!-- Symmetrical flow zones -->
       @if (groupType == flowType.symmetrical) {
         <div class="form-item">
-          <cds-combo-box label="Zones"
-                         type="multi"
-                         selectionFeedback="top-after-reopen"
-                         for="zones"
-                         formControlName="zones"
-                         [helperText]="'Flow need to be associated with atleast one zone'"
-                         i18n-helperText
-                         [appendInline]="true"
-                         [items]="zones"
-                         itemValueKey="content"
-                         id="zones"
-                         cdDynamicInputCombobox
-                         [invalid]="currentFormGroupContext.controls?.zones?.invalid && currentFormGroupContext.controls?.zones?.dirty"
-                         [invalidText]="'Zone selection is required!'"
-                         i18n>
+          <cds-combo-box
+            label="Zones"
+            type="multi"
+            selectionFeedback="top-after-reopen"
+            for="zones"
+            formControlName="zones"
+            [helperText]="'Flow need to be associated with atleast one zone'"
+            i18n-helperText
+            [appendInline]="true"
+            [items]="zones"
+            itemValueKey="content"
+            id="zones"
+            cdDynamicInputCombobox
+            [invalid]="
+              currentFormGroupContext.controls?.zones?.invalid &&
+              currentFormGroupContext.controls?.zones?.dirty
+            "
+            [invalidText]="'Zone selection is required!'"
+            i18n
+          >
             <cds-dropdown-list></cds-dropdown-list>
           </cds-combo-box>
         </div>
       } @else {
         <div class="form-item">
-          <ng-container *ngTemplateOutlet="sourceAndDestZone;context: { formControl: 'source_zone', zones: zones, name: 'Source zone' }"></ng-container>
+          <ng-container
+            *ngTemplateOutlet="
+              sourceAndDestZone;
+              context: { formControl: 'source_zone', zones: zones, name: 'Source zone' }
+            "
+          ></ng-container>
         </div>
         <div class="form-item">
-          <ng-container *ngTemplateOutlet="sourceAndDestZone;context: { formControl: 'destination_zone', zones: zones, name: 'Destination zone' }"></ng-container>
+          <ng-container
+            *ngTemplateOutlet="
+              sourceAndDestZone;
+              context: { formControl: 'destination_zone', zones: zones, name: 'Destination zone' }
+            "
+          ></ng-container>
         </div>
       }
       <!-- Directional flow zones -->
     </div>
-    <cd-form-button-panel (submitActionEvent)="submit()"
-                          [form]="currentFormGroupContext"
-                          [modalForm]="true"
-                          [submitText]="(action | titlecase)"></cd-form-button-panel>
+    <cd-form-button-panel
+      (submitActionEvent)="submit()"
+      [form]="currentFormGroupContext"
+      [modalForm]="true"
+      [submitText]="action | titlecase"
+    ></cd-form-button-panel>
   </form>
 </cds-modal>
 
-<ng-template #sourceAndDestZone
-             let-name="name"
-             let-zones="zones"
-             let-formControl="formControl"
-             [formGroup]="currentFormGroupContext">
-  <cds-select [label]="name"
-              [formControlName]="formControl"
-              [id]="formControl"
-              [invalid]="currentFormGroupContext.controls[formControl].invalid && (currentFormGroupContext.controls[formControl].dirty)"
-              [invalidText]="zoneError"
-              i18n>
+<ng-template
+  #sourceAndDestZone
+  let-name="name"
+  let-zones="zones"
+  let-formControl="formControl"
+  [formGroup]="currentFormGroupContext"
+>
+  <cds-select
+    [label]="name"
+    [formControlName]="formControl"
+    [id]="formControl"
+    [invalid]="
+      currentFormGroupContext.controls[formControl].invalid &&
+      currentFormGroupContext.controls[formControl].dirty
+    "
+    [invalidText]="zoneError"
+    i18n
+  >
     @if (zones.length == 0) {
-    <option [ngValue]="null">Loading...</option>
+      <option [ngValue]="null">Loading...</option>
     }
     @if (zones.length > 0) {
-    <option [ngValue]="null">-- Select {{name}} --</option>
+      <option [ngValue]="null">-- Select {{ name }} --</option>
     }
     @for (zone of zones; track zone) {
-    <option [value]="zone.name">{{ zone.name }}</option>
+      <option [value]="zone.name">{{ zone.name }}</option>
     }
   </cds-select>
   <ng-template #zoneError>
-  @if (currentFormGroupContext.showError(formControl, frm, 'required')) {
-    <span class="invalid-feedback"
-          i18n>This field is required.</span>
-  }
+    @if (currentFormGroupContext.showError(formControl, frm, 'required')) {
+      <span
+        class="invalid-feedback"
+        i18n
+        >This field is required.</span
+      >
+    }
   </ng-template>
 </ng-template>

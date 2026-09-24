@@ -5,11 +5,12 @@
         <h4 class="modal-title float-start">
           <ng-content select=".modal-title"></ng-content>
         </h4>
-        <button type="button"
-                class="btn-close float-end"
-                aria-label="Close"
-                (click)="close()">
-        </button>
+        <button
+          type="button"
+          class="btn-close float-end"
+          aria-label="Close"
+          (click)="close()"
+        ></button>
       </div>
 
       <ng-content select=".modal-content"></ng-content>

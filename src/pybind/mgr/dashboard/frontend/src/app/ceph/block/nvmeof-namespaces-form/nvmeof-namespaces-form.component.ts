@@ -178,7 +178,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     this.nvmeofService.listNamespaces(this.group).subscribe((response: any) => {
       const namespaces: NvmeofSubsystemNamespace[] = Array.isArray(response)
         ? response
-        : response?.namespaces ?? [];
+        : (response?.namespaces ?? []);
       this.usedRbdImages = namespaces.reduce((map, ns) => {
         if (!map.has(ns.rbd_pool_name)) {
           map.set(ns.rbd_pool_name, new Set<string>());

@@ -9,7 +9,11 @@ export class ImageSpec {
     return new this(poolName, namespace, imageName);
   }
 
-  constructor(public poolName: string, public namespace: string, public imageName: string) {}
+  constructor(
+    public poolName: string,
+    public namespace: string,
+    public imageName: string
+  ) {}
 
   private getNameSpace() {
     return this.namespace ? `${this.namespace}/` : '';

@@ -187,9 +187,10 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
         // retention policies
         schedule.retention &&
           Object.entries(schedule.retention).forEach(([frequency, interval], idx) => {
-            const freqKey = Object.keys(RetentionFrequency)[
-              Object.values(RetentionFrequency).indexOf(frequency as any)
-            ];
+            const freqKey =
+              Object.keys(RetentionFrequency)[
+                Object.values(RetentionFrequency).indexOf(frequency as any)
+              ];
             this.retentionPolicies.push(
               new FormGroup({
                 retentionInterval: new FormControl(interval),
@@ -284,9 +285,9 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
         const values = this.snapScheduleForm.value as SnapshotScheduleFormValue;
 
         if (this.isEdit) {
-          const retentionPoliciesToAdd = (this.snapScheduleForm.get(
-            'retentionPolicies'
-          ) as FormArray).controls
+          const retentionPoliciesToAdd = (
+            this.snapScheduleForm.get('retentionPolicies') as FormArray
+          ).controls
             ?.filter(
               (ctrl) =>
                 !ctrl.get('retentionInterval').disabled && !ctrl.get('retentionFrequency').disabled

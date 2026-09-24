@@ -6,7 +6,10 @@ import { LoggingService } from '../api/logging.service';
 
 @Injectable()
 export class JsErrorHandler implements ErrorHandler {
-  constructor(private injector: Injector, private router: Router) {}
+  constructor(
+    private injector: Injector,
+    private router: Router
+  ) {}
 
   handleError(error: any) {
     const loggingService = this.injector.get(LoggingService);

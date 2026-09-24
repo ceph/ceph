@@ -125,7 +125,7 @@ describe('CreateClusterComponent', () => {
     stepFixture.detectChanges();
     const skipBtn = stepFixture.debugElement.query(By.css('#skipStepBtn')).nativeElement;
     expect(skipBtn).not.toBe(null);
-    expect(skipBtn.innerHTML).toBe('Skip');
+    expect(skipBtn.textContent.trim()).toBe('Skip');
   });
 
   it('should skip the Create OSDs step', () => {

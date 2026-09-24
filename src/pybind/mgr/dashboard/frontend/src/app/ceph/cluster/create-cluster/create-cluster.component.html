@@ -1,202 +1,281 @@
 @if (startClusterCreation) {
-<div class="container-fluid-main">
-  <div cdsRow
-       class="cds-ml-5 cds-mt-6">
-    <div cdsCol
-         [columnNumbers]="{'lg': 13, 'md': 8, 'sm': 8}">
-      <div class="mb-4">
-        <!-- htmllint img-req-src="false" -->
-        <img [src]="projectConstants.cephLogo"
-             alt="Ceph"
-             class="ceph-logo">
-      </div>
+  <div class="container-fluid-main">
+    <div
+      cdsRow
+      class="cds-ml-5 cds-mt-6"
+    >
+      <div
+        cdsCol
+        [columnNumbers]="{ lg: 13, md: 8, sm: 8 }"
+      >
+        <div class="mb-4">
+          <!-- htmllint img-req-src="false" -->
+          <img
+            [src]="projectConstants.cephLogo"
+            alt="Ceph"
+            class="ceph-logo"
+          />
+        </div>
 
-      <div class="mb-4">
-        <span class="cds--type-fluid-heading-05"
-              i18n>Welcome to {{ projectConstants.projectName }}
-        </span>
-      </div>
-
-      <div class="mb-2">
-        <span class="cds--type-fluid-heading-04"
-              i18n>Your Ceph cluster is initialized and running.
-        </span>
-      </div>
-
-      <div class="mb-5">
-        <span class="cds--type-body-compact-01"
-              i18n>
-          <cd-icon type="success"
-                   [size]="icons.size20">
-          </cd-icon>
-          The cluster control plane is ready.
-        </span>
-      </div>
-
-      <div class="mb-2">
-        <span class="cds--type-fluid-heading-03"
-              i18n>
-          <cd-icon type="ibmCloudBareMetalServer"
-                   [size]="icons.size20">
-          </cd-icon>
-          Add storage to begin using your cluster.
-        </span>
-      </div>
-
-      <div class="mb-2">
-        <span class="cds--type-body-01"
-              i18n>Set up storage for your cluster to run workloads and store data. You can configure storage and data services now, or skip and configure them later.</span>
-      </div>
-
-      <cds-tile class="border-subtle no-border-bottom"
-                [cdsLayer]="1">
-        <div cdsStack="horizontal"
-             gap="3">
-          <span class="cds--type-heading-compact-02"
-                i18n>
-            Storage requirements
+        <div class="mb-4">
+          <span
+            class="cds--type-fluid-heading-05"
+            i18n
+            >Welcome to {{ projectConstants.projectName }}
           </span>
-          <cd-icon type="infoCircle"
-                   [size]="icons.size20">
-          </cd-icon>
-        </div>
-      </cds-tile>
-
-      <cds-tile class="border-subtle mb-3"
-                [cdsLayer]="2">
-        <div cdsStack="horizontal"
-             gap="4">
-          <cd-icon type="ibmCloudDedicatedHost"
-                   [size]="icons.size20">
-          </cd-icon>
-          <div cdsStack="vertical"
-               gap="1">
-            <span class="cds--type-heading-compact-01"
-                  i18n>
-              Hosts
-            </span>
-            <span class="cds--type-body-compact-01 text-secondary"
-                  i18n>
-              Minimum 3 hosts required
-            </span>
-          </div>
         </div>
 
-        <hr/>
-
-        <div cdsStack="horizontal"
-             gap="4">
-          <cd-icon type="vmdkDisk"
-                   [size]="icons.size20">
-          </cd-icon>
-
-          <div cdsStack="vertical"
-               gap="1">
-            <span class="cds--type-heading-compact-01"
-                  i18n>
-              Disks
-            </span>
-
-            <span class="cds--type-body-compact-01 text-secondary"
-                  i18n>
-              At least 1 disk per host
-            </span>
-          </div>
-        </div>
-
-        <hr/>
-
-        <div cdsStack="horizontal"
-             gap="4">
-          <cd-icon type="clusterIcon"
-                   [size]="icons.size20">
-          </cd-icon>
-
-          <div cdsStack="vertical"
-               gap="1">
-            <span class="cds--type-heading-compact-01"
-                  i18n>
-              Data services (optional)
-            </span>
-
-            <span class="cds--type-body-compact-01 text-secondary"
-                  i18n>
-              Configure Object, Block, or File services
-            </span>
-          </div>
-        </div>
-      </cds-tile>
-
-      <div class="mb-3">
-        <cd-alert-panel type="info"
-                        [showTitle]="false">
-          <span class="cds--type-body-compact-01">
-              The cluster cannot store data until storage is added. If storage is already configured, continue to the cluster overview.
+        <div class="mb-2">
+          <span
+            class="cds--type-fluid-heading-04"
+            i18n
+            >Your Ceph cluster is initialized and running.
           </span>
-        </cd-alert-panel>
-      </div>
+        </div>
 
-      <div class="mb-5">
-        <button cdsButton="primary"
-                class="me-3"
-                (click)="createCluster()"
-                aria-label="Add Storage"
-                i18n>
-          Add storage
-          <cd-icon
-            [cdsIcon]="icons.add"
-            [size]="icons.size20"
-            class="cds--btn__icon">
-          </cd-icon>
-        </button>
-        <button cdsButton="tertiary"
-                (click)="skipClusterCreation()"
-                aria-label="View cluster overview"
-                i18n>
-          View cluster overview
-          <cd-icon
-            [cdsIcon]="icons.right"
-            [size]="icons.size20"
-            class="cds--btn__icon">
-          </cd-icon>
-        </button>
+        <div class="mb-5">
+          <span
+            class="cds--type-body-compact-01"
+            i18n
+          >
+            <cd-icon
+              type="success"
+              [size]="icons.size20"
+            >
+            </cd-icon>
+            The cluster control plane is ready.
+          </span>
+        </div>
+
+        <div class="mb-2">
+          <span
+            class="cds--type-fluid-heading-03"
+            i18n
+          >
+            <cd-icon
+              type="ibmCloudBareMetalServer"
+              [size]="icons.size20"
+            >
+            </cd-icon>
+            Add storage to begin using your cluster.
+          </span>
+        </div>
+
+        <div class="mb-2">
+          <span
+            class="cds--type-body-01"
+            i18n
+            >Set up storage for your cluster to run workloads and store data. You can configure
+            storage and data services now, or skip and configure them later.</span
+          >
+        </div>
+
+        <cds-tile
+          class="border-subtle no-border-bottom"
+          [cdsLayer]="1"
+        >
+          <div
+            cdsStack="horizontal"
+            gap="3"
+          >
+            <span
+              class="cds--type-heading-compact-02"
+              i18n
+            >
+              Storage requirements
+            </span>
+            <cd-icon
+              type="infoCircle"
+              [size]="icons.size20"
+            >
+            </cd-icon>
+          </div>
+        </cds-tile>
+
+        <cds-tile
+          class="border-subtle mb-3"
+          [cdsLayer]="2"
+        >
+          <div
+            cdsStack="horizontal"
+            gap="4"
+          >
+            <cd-icon
+              type="ibmCloudDedicatedHost"
+              [size]="icons.size20"
+            >
+            </cd-icon>
+            <div
+              cdsStack="vertical"
+              gap="1"
+            >
+              <span
+                class="cds--type-heading-compact-01"
+                i18n
+              >
+                Hosts
+              </span>
+              <span
+                class="cds--type-body-compact-01 text-secondary"
+                i18n
+              >
+                Minimum 3 hosts required
+              </span>
+            </div>
+          </div>
+
+          <hr />
+
+          <div
+            cdsStack="horizontal"
+            gap="4"
+          >
+            <cd-icon
+              type="vmdkDisk"
+              [size]="icons.size20"
+            >
+            </cd-icon>
+
+            <div
+              cdsStack="vertical"
+              gap="1"
+            >
+              <span
+                class="cds--type-heading-compact-01"
+                i18n
+              >
+                Disks
+              </span>
+
+              <span
+                class="cds--type-body-compact-01 text-secondary"
+                i18n
+              >
+                At least 1 disk per host
+              </span>
+            </div>
+          </div>
+
+          <hr />
+
+          <div
+            cdsStack="horizontal"
+            gap="4"
+          >
+            <cd-icon
+              type="clusterIcon"
+              [size]="icons.size20"
+            >
+            </cd-icon>
+
+            <div
+              cdsStack="vertical"
+              gap="1"
+            >
+              <span
+                class="cds--type-heading-compact-01"
+                i18n
+              >
+                Data services (optional)
+              </span>
+
+              <span
+                class="cds--type-body-compact-01 text-secondary"
+                i18n
+              >
+                Configure Object, Block, or File services
+              </span>
+            </div>
+          </div>
+        </cds-tile>
+
+        <div class="mb-3">
+          <cd-alert-panel
+            type="info"
+            [showTitle]="false"
+          >
+            <span class="cds--type-body-compact-01">
+              The cluster cannot store data until storage is added. If storage is already
+              configured, continue to the cluster overview.
+            </span>
+          </cd-alert-panel>
+        </div>
+
+        <div class="mb-5">
+          <button
+            cdsButton="primary"
+            class="me-3"
+            (click)="createCluster()"
+            aria-label="Add Storage"
+            type="button"
+            i18n
+          >
+            Add storage
+            <cd-icon
+              [cdsIcon]="icons.add"
+              [size]="icons.size20"
+              class="cds--btn__icon"
+            >
+            </cd-icon>
+          </button>
+          <button
+            cdsButton="tertiary"
+            (click)="skipClusterCreation()"
+            aria-label="View cluster overview"
+            type="button"
+            i18n
+          >
+            View cluster overview
+            <cd-icon
+              [cdsIcon]="icons.right"
+              [size]="icons.size20"
+              class="cds--btn__icon"
+            >
+            </cd-icon>
+          </button>
+        </div>
       </div>
     </div>
   </div>
-</div>
-}
-
-@else {
-<cd-tearsheet
-  type="full"
-  [steps]="steps"
-  [title]="title"
-  [description]="description"
-  [submitButtonLabel]="submitButtonLabel"
-  [isSubmitLoading]="isSubmitLoading"
-  (submitRequested)="onSubmit()"
-  [overflowScroll]="'auto'">
-  <cd-tearsheet-step>
-    <cd-create-cluster-step-1 #tearsheetStep></cd-create-cluster-step-1>
-  </cd-tearsheet-step>
-  <cd-tearsheet-step>
-    <cd-create-cluster-step-2
-      #tearsheetStep
-      (skipStep)="onSkipOsdStep()"></cd-create-cluster-step-2>
-  </cd-tearsheet-step>
-  <cd-tearsheet-step>
-    <cd-create-cluster-step-3 #tearsheetStep></cd-create-cluster-step-3>
-  </cd-tearsheet-step>
-  <cd-tearsheet-step>
-    <cd-create-cluster-step-4 #tearsheetStep></cd-create-cluster-step-4>
-  </cd-tearsheet-step>
-</cd-tearsheet>
+} @else {
+  <cd-tearsheet
+    type="full"
+    [steps]="steps"
+    [title]="title"
+    [description]="description"
+    [submitButtonLabel]="submitButtonLabel"
+    [isSubmitLoading]="isSubmitLoading"
+    (submitRequested)="onSubmit()"
+    [overflowScroll]="'auto'"
+  >
+    <cd-tearsheet-step>
+      <cd-create-cluster-step-1 #tearsheetStep></cd-create-cluster-step-1>
+    </cd-tearsheet-step>
+    <cd-tearsheet-step>
+      <cd-create-cluster-step-2
+        #tearsheetStep
+        (skipStep)="onSkipOsdStep()"
+      ></cd-create-cluster-step-2>
+    </cd-tearsheet-step>
+    <cd-tearsheet-step>
+      <cd-create-cluster-step-3 #tearsheetStep></cd-create-cluster-step-3>
+    </cd-tearsheet-step>
+    <cd-tearsheet-step>
+      <cd-create-cluster-step-4 #tearsheetStep></cd-create-cluster-step-4>
+    </cd-tearsheet-step>
+  </cd-tearsheet>
 }
 
 <ng-template #skipConfirmTpl>
-  <span i18n>You are about to skip the storage setup process.
-             You'll need to <strong>navigate through the menu to add hosts and services.</strong></span>
+  <span i18n
+    >You are about to skip the storage setup process. You'll need to
+    <strong>navigate through the menu to add hosts and services.</strong></span
+  >
 
-  <div class="cds-mt-4"
-       i18n>Are you sure you want to continue?</div>
+  <div
+    class="cds-mt-4"
+    i18n
+  >
+    Are you sure you want to continue?
+  </div>
 </ng-template>

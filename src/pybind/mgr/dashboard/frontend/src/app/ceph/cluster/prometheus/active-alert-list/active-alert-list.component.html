@@ -1,10 +1,12 @@
 <cd-prometheus-tabs></cd-prometheus-tabs>
 
 @if (!isAlertmanagerConfigured) {
-  <cd-alert-panel type="info"
-                  i18n>To see all active Prometheus alerts, please provide
-    the URL to the API of Prometheus' Alertmanager as described
-    in the&nbsp;<cd-doc section="prometheus"></cd-doc>.</cd-alert-panel>
+  <cd-alert-panel
+    type="info"
+    i18n
+    >To see all active Prometheus alerts, please provide the URL to the API of Prometheus'
+    Alertmanager as described in the&nbsp;<cd-doc section="prometheus"></cd-doc>.</cd-alert-panel
+  >
 }
 
 @if (isAlertmanagerConfigured) {
@@ -29,44 +31,50 @@
     </cd-table-actions>
 
     @if (expandedRow?.alert_count == 1) {
-    <cd-table-key-value
-      *cdTableDetail
-      [renderObjects]="true"
-      [hideEmpty]="true"
-      [appendParentKey]="false"
-      [data]="expandedRow"
-      [customCss]="customCss"
-      [autoReload]="false"
-      [showMultiLineText]="true"
-      [multilineTextKeys]="multilineTextKeys"
-    >
-    </cd-table-key-value>
+      <cd-table-key-value
+        *cdTableDetail
+        [renderObjects]="true"
+        [hideEmpty]="true"
+        [appendParentKey]="false"
+        [data]="expandedRow"
+        [customCss]="customCss"
+        [autoReload]="false"
+        [showMultiLineText]="true"
+        [multilineTextKeys]="multilineTextKeys"
+      >
+      </cd-table-key-value>
     } @else if (expandedRow?.alert_count > 1) {
-    <cd-table
-      *cdTableDetail
-      [data]="expandedRow?.subalerts"
-      [columns]="innerColumns"
-      identifier="fingerprint"
-      [forceIdentifier]="true"
-      columnMode="flex"
-      [toolHeader]="false"
-      [hasDetails]="false"
-      [showMultiLineText]="true"
-      [multilineTextKeys]="multilineTextKeys"
-      [scrollable]="false">
-    </cd-table>
+      <cd-table
+        *cdTableDetail
+        [data]="expandedRow?.subalerts"
+        [columns]="innerColumns"
+        identifier="fingerprint"
+        [forceIdentifier]="true"
+        columnMode="flex"
+        [toolHeader]="false"
+        [hasDetails]="false"
+        [showMultiLineText]="true"
+        [multilineTextKeys]="multilineTextKeys"
+        [scrollable]="false"
+      >
+      </cd-table>
     }
   </cd-table>
 }
 
-<ng-template #externalLinkTpl
-             let-row="data.row"
-             let-value="data.value">
-  <a [href]="value"
-     target="_blank">
-    <svg [cdsIcon]="icons.lineChart"
-         [size]="icons.size16"
-         >
-    </svg> Source
+<ng-template
+  #externalLinkTpl
+  let-row="data.row"
+  let-value="data.value"
+>
+  <a
+    [href]="value"
+    target="_blank"
+  >
+    <svg
+      [cdsIcon]="icons.lineChart"
+      [size]="icons.size16"
+    ></svg>
+    Source
   </a>
 </ng-template>

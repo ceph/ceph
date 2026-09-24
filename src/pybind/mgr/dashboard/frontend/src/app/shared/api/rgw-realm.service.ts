@@ -11,7 +11,10 @@ import { RgwDaemonService } from './rgw-daemon.service';
 export class RgwRealmService {
   private url = 'api/rgw/realm';
 
-  constructor(private http: HttpClient, public rgwDaemonService: RgwDaemonService) {}
+  constructor(
+    private http: HttpClient,
+    public rgwDaemonService: RgwDaemonService
+  ) {}
 
   create(realm: RgwRealm, defaultRealm: boolean) {
     let requestBody = {

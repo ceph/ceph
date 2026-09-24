@@ -10,7 +10,10 @@ import { Account } from '~/app/ceph/rgw/models/rgw-user-accounts';
 export class RgwUserAccountsService {
   private url = 'api/rgw/accounts';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
+  constructor(
+    private http: HttpClient,
+    private rgwDaemonService: RgwDaemonService
+  ) {}
 
   list(detailed?: boolean): Observable<any> {
     return this.rgwDaemonService.request((params: HttpParams) => {

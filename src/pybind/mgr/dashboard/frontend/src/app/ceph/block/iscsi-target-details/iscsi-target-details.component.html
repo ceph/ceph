@@ -2,40 +2,56 @@
   <div class="col-6 card-tree">
     <legend i18n>iSCSI Topology</legend>
 
-    <cds-tree-view #tree
-                   [tree]="nodes"
-                   (select)="onNodeSelected($event)">
+    <cds-tree-view
+      #tree
+      [tree]="nodes"
+      (select)="onNodeSelected($event)"
+    >
     </cds-tree-view>
-    <ng-template #treeNodeTemplate
-                 let-node>
-                 {{node?.data?.cdIcon}}
-    <svg [cdsIcon]="node?.data?.cdIcon"
-         [size]="icons.size16"
-         ></svg>
+    <ng-template
+      #treeNodeTemplate
+      let-node
+    >
+      {{ node?.data?.cdIcon }}
+      <svg
+        [cdsIcon]="node?.data?.cdIcon"
+        [size]="icons.size16"
+      ></svg>
       <span>{{ node?.name }}</span>
       &nbsp;
-      <cds-tag [class]="{'tag-success': ['logged_in'].includes(node?.status), 'tag-danger': ['logged_out'].includes(node?.status)}">
+      <cds-tag
+        [class]="{
+          'tag-success': ['logged_in'].includes(node?.status),
+          'tag-danger': ['logged_out'].includes(node?.status)
+        }"
+      >
         {{ node?.status }}
       </cds-tag>
     </ng-template>
   </div>
 
-  <div class="col-6 metadata"
-       *ngIf="data">
+  <div
+    class="col-6 metadata"
+    *ngIf="data"
+  >
     <legend>{{ title }}</legend>
 
-    <cd-table #detailTable
-              [data]="data"
-              columnMode="flex"
-              [columns]="columns"
-              [limit]="0">
+    <cd-table
+      #detailTable
+      [data]="data"
+      columnMode="flex"
+      [columns]="columns"
+      [limit]="0"
+    >
     </cd-table>
   </div>
 </div>
 
-<ng-template #highlightTpl
-             let-row="data.row"
-             let-value="data.value">
+<ng-template
+  #highlightTpl
+  let-row="data.row"
+  let-value="data.value"
+>
   <span *ngIf="row.default === undefined || row.default === row.current">{{ value }}</span>
   <strong *ngIf="row.default !== undefined && row.default !== row.current">{{ value }}</strong>
 </ng-template>

@@ -30,7 +30,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 })
 export class ErasureCodeProfileFormModalComponent
   extends CrushNodeSelectionClass
-  implements OnInit {
+  implements OnInit
+{
   @ViewChild(FormGroupDirective)
   formDir: FormGroupDirective;
 

@@ -221,7 +221,7 @@ describe('ApiInterceptorService', () => {
     it('should use different application icon (default Ceph) in error message', fakeAsync(() => {
       const msg = 'Cannot connect to Alertmanager';
       httpError(undefined, { status: 500 }, (resp) => {
-        (resp.application = 'Prometheus'), (resp.message = msg);
+        ((resp.application = 'Prometheus'), (resp.message = msg));
       });
       expectSaveToHaveBeenCalled(true);
       flush();

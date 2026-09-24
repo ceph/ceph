@@ -7,7 +7,10 @@ import { AuthStorageService } from './auth-storage.service';
   providedIn: 'root'
 })
 export class AuthGuardService {
-  constructor(private router: Router, private authStorageService: AuthStorageService) {}
+  constructor(
+    private router: Router,
+    private authStorageService: AuthStorageService
+  ) {}
 
   canActivate(_route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
     if (this.authStorageService.isLoggedIn()) {

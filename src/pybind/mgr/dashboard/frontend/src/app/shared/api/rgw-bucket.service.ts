@@ -27,7 +27,10 @@ export class RgwBucketService extends ApiClient {
   totalUsedCapacity$ = this.totalUsedCapacitySubject.asObservable();
   averageObjectSize$ = this.averageObjectSizeSubject.asObservable();
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {
+  constructor(
+    private http: HttpClient,
+    private rgwDaemonService: RgwDaemonService
+  ) {
     super();
   }
 

@@ -1,12 +1,14 @@
-<cds-tag *ngIf="!key; else key_value"
-         class="tags-{{value}}"
-         ngClass="{{value | colorClassFromText}}"
-         [ngbTooltip]="tooltipText">
+<cds-tag
+  *ngIf="!key; else key_value"
+  class="tags-{{ value }}"
+  ngClass="{{ value | colorClassFromText }}"
+  [ngbTooltip]="tooltipText"
+>
   {{ value }}
 </cds-tag>
 
 <ng-template #key_value>
-  <cds-tag class="tag-background-primary badge-{{key}}-{{value}}">
-        {{ key }}: {{ value }}
+  <cds-tag class="tag-background-primary badge-{{ key }}-{{ value }}">
+    {{ key }}: {{ value }}
   </cds-tag>
 </ng-template>

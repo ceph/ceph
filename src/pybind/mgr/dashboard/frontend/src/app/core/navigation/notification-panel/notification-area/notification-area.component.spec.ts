@@ -128,8 +128,8 @@ describe('NotificationAreaComponent', () => {
     expect(iconElements.length).toBe(2);
 
     // Check that icons have the correct type attribute
-    expect(iconElements[0].attributes['ng-reflect-type']).toBe('success');
-    expect(iconElements[1].attributes['ng-reflect-type']).toBe('error');
+    expect(iconElements[0].componentInstance.type).toBe('success');
+    expect(iconElements[1].componentInstance.type).toBe('error');
   });
 
   it('should render notification dividers between items', () => {
@@ -143,7 +143,7 @@ describe('NotificationAreaComponent', () => {
 
     const closeIcons = fixture.debugElement.queryAll(By.css('.notification-close cd-icon'));
     expect(closeIcons.length).toBe(2);
-    expect(closeIcons[0].attributes['ng-reflect-type']).toBe('destroy');
+    expect(closeIcons[0].componentInstance.type).toBe('destroy');
   });
 
   it('should render notification content with proper structure', () => {

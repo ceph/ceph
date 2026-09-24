@@ -50,7 +50,7 @@ describe('RgwMultisiteSyncFlowModalComponent', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwMultisiteSyncFlowModalComponent);
-    multisiteServiceMock = (TestBed.inject(RgwMultisiteService) as unknown) as MultisiteServiceMock;
+    multisiteServiceMock = TestBed.inject(RgwMultisiteService) as unknown as MultisiteServiceMock;
     component = fixture.componentInstance;
     component.groupType = FlowType.symmetrical;
     component.groupExpandedRow = { groupName: 'new', bucket: 'bucket1' };

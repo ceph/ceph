@@ -11,7 +11,10 @@ export class IopsDirective implements OnInit {
   @Input()
   ngDataReady: EventEmitter<any>;
 
-  constructor(private formatter: FormatterService, private ngControl: NgControl) {}
+  constructor(
+    private formatter: FormatterService,
+    private ngControl: NgControl
+  ) {}
 
   setValue(value: string): void {
     const iops = this.formatter.toIops(value);

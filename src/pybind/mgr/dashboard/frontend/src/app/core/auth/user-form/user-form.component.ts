@@ -105,9 +105,8 @@ export class UserFormComponent extends CdForm implements OnInit {
               this.userService,
               () => this.userForm.getValue('username'),
               (_valid: boolean, credits: number, valuation: string) => {
-                this.passwordStrengthLevelClass = this.passwordPolicyService.mapCreditsToCssClass(
-                  credits
-                );
+                this.passwordStrengthLevelClass =
+                  this.passwordPolicyService.mapCreditsToCssClass(credits);
                 this.passwordValuation = _.defaultTo(valuation, '');
               }
             )

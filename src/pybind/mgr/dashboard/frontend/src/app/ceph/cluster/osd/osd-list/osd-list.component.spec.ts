@@ -517,13 +517,7 @@ describe('OsdListComponent', () => {
     const expectOsdServiceMethodCalled = (
       actionName: string,
       osdServiceMethodName:
-        | 'markOut'
-        | 'markIn'
-        | 'markDown'
-        | 'markLost'
-        | 'purge'
-        | 'destroy'
-        | 'delete'
+        'markOut' | 'markIn' | 'markDown' | 'markLost' | 'purge' | 'destroy' | 'delete'
     ): void => {
       const osdServiceSpy = spyOn(osdService, osdServiceMethodName).and.callFake(() => EMPTY);
       openActionModal(actionName);
