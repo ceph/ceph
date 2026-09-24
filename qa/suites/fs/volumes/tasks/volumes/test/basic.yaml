@@ -6,7 +6,8 @@ tasks:
         - tasks.cephfs.test_volumes.TestVolumeCreate
         - tasks.cephfs.test_volumes.TestSubvolumeGroups
         - tasks.cephfs.test_volumes.TestSubvolumes
-        - tasks.cephfs.volumes.test_v3_features
-        - tasks.cephfs.test_volumes.TestCorruptedSubvolumes
         - tasks.cephfs.test_subvolume.TestSubvolume
         - tasks.cephfs.test_subvolume.TestSubvolumeReplicated
+        - tasks.cephfs.volumes.test_v3_features
+        - tasks.cephfs.volumes.upgrades.test_v2_to_v3
+        - tasks.cephfs.test_volumes.TestCorruptedSubvolumes
