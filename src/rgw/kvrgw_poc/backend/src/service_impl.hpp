@@ -209,7 +209,6 @@ class KvRgwServiceImpl final {
   RefTagGenerator& ref_tags() { return ref_tags_; }
   BatchCommitQueue& batch_queue() { return batch_queue_; }
 
-  bucket_id_t resolve_bucket_id(tenant_id_t tenant_id, const std::string& bucket_name);
   KvrgwErrorCode create_bucket(tenant_id_t tenant_id, std::string_view bucket_name);
   KvrgwErrorCode delete_bucket(tenant_id_t tenant_id, std::string_view bucket_name);
   KvrgwErrorCode add_tenant(std::string_view tenant_name, tenant_id_t* out_id);

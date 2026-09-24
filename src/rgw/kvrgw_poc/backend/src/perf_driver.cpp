@@ -580,7 +580,7 @@ void delete_multi_direct_worker(KvRgwServiceImpl &service,
                                 int64_t seq_start, int64_t seq_end,
                                 BenchResult &result)
 {
-  constexpr int batch = 10;
+  constexpr int batch = 100;
   for (int64_t seq = seq_start; seq < seq_end; seq += batch) {
     int64_t end = std::min(seq + batch, seq_end);
     std::vector<std::string> keys;
@@ -589,17 +589,16 @@ void delete_multi_direct_worker(KvRgwServiceImpl &service,
       keys.push_back(make_object_name(thread_id, s));
     }
     std::vector<KvRgwServiceImpl::DeleteMultiKeyOutcome> outcomes;
-    const auto ec =
-        service.delete_multi(tenant_id, bucket_name, keys, {}, &outcomes);
+    const auto ec = service.delete_multi(tenant_id, bucket_name, keys, {},
+                                         &outcomes);
     result.ops.fetch_add(end - seq, std::memory_order_relaxed);
     int err_n = 0;
     if (ec != KVRGW_ERR_OK) {
       err_n = static_cast<int>(end - seq);
     }
     else {
-      for (const auto &o : outcomes) {
-        if (o.status ==
-            KvRgwServiceImpl::DeleteMultiKeyOutcome::Status::Error) {
+      for (const auto &o : outcomes) {        
+        if (o.status == KvRgwServiceImpl::DeleteMultiKeyOutcome::Status::Error) {
           ++err_n;
         }
       }
@@ -758,11 +757,11 @@ static void cmd_put(KvRgwServiceImpl &service, tenant_id_t tenant_id,
       }
     }
 
+    // pad with objects to get a round number for verify
     int64_t pad_total = 0;
     for (int t = 0; t < p.concurrency; ++t) {
       for (int b = 0; b < num_buckets; ++b) {
-        pad_total +=
-            static_cast<int64_t>(global_max - worker_results[t].bucket_seq[b]);
+        pad_total += static_cast<int64_t>(global_max - worker_results[t].bucket_seq[b]);
       }
     }
 
@@ -797,117 +796,6 @@ static void cmd_put(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   }
 }
 
-static void put_multi_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
-                             const std::vector<std::string> &bucket_names,
-                             uint64_t obj_size, int thread_id,
-                             std::atomic<bool> &stop, BenchResult &result)
-{
-  const int batch_size = 10;
-  int num_buckets = static_cast<int>(bucket_names.size());
-  uint64_t seq = 0;
-
-  while (!stop.load(std::memory_order_relaxed)) {
-    const auto &bucket_name = bucket_names[(seq / batch_size) % num_buckets];
-
-    auto cached_bid = service.resolve_bucket_id(tenant_id, bucket_name);
-    if (cached_bid == kNullBucket) {
-      result.errors.fetch_add(batch_size, std::memory_order_relaxed);
-      continue;
-    }
-
-    auto tr_result = service.store().begin_transaction();
-    if (!tr_result) {
-      result.errors.fetch_add(batch_size, std::memory_order_relaxed);
-      continue;
-    }
-    auto &tr = *tr_result;
-
-    bool ok = true;
-    for (int i = 0; i < batch_size; ++i) {
-      auto name = make_object_name(thread_id, seq++);
-      auto ref_tag = service.ref_tags().next();
-      auto ov = build_object_value(ref_tag, g_put_buffer, obj_size);
-
-      if (obj_size <= service.tier_config_state().active_copy().max_inline) {
-        ov.hdr.chunk.type = CHUNK_INLINE;
-        ov.inline_data.assign(reinterpret_cast<const char *>(g_put_buffer),
-                              reinterpret_cast<const char *>(g_put_buffer) +
-                                  obj_size);
-      }
-      else {
-        ov.hdr.chunk.type = CHUNK_CHILD_D;
-      }
-
-      std::string data(reinterpret_cast<const char *>(g_put_buffer), obj_size);
-      KvRgwServiceImpl::PutInTxnParams params{
-          tenant_id, bucket_name, cached_bid, name,    ref_tag, ov,
-          &data,     nullptr,     g_put_tags, (i > 0), false};
-      auto st = service.put_object_in_txn(*tr, params, nullptr);
-      if (st != KVRGW_ERR_OK) {
-        ok = false;
-        break;
-      }
-    }
-
-    if (ok) {
-      auto rc = tr->commit();
-      if (rc) {
-        result.ops.fetch_add(batch_size, std::memory_order_relaxed);
-      }
-      else {
-        result.errors.fetch_add(batch_size, std::memory_order_relaxed);
-      }
-    }
-    else {
-      result.errors.fetch_add(batch_size, std::memory_order_relaxed);
-    }
-  }
-}
-
-static void cmd_put_multi(KvRgwServiceImpl &service, tenant_id_t tenant_id,
-                          const std::string &tenant_name, const ParsedParams &p)
-{
-  auto all_buckets = list_all_buckets(service, tenant_id);
-  if (all_buckets.empty()) {
-    std::cerr << "ERROR: no buckets found. Run create-buckets first.\n";
-    return;
-  }
-  std::cout << "put-multi: c=" << p.concurrency << " duration=" << p.duration
-            << "s buckets=" << all_buckets.size() << " tiers=[";
-  for (size_t i = 0; i < p.tiers.size(); ++i) {
-    if (i > 0) {
-      std::cout << ",";
-    }
-    std::cout << tier_label(p.tiers[i]);
-  }
-  std::cout << "] batch=10\n";
-
-  for (auto obj_size : p.tiers) {
-    service.latency_stats().reset();
-    service.store().fdb_put_stats().reset();
-    std::atomic<bool> stop{false};
-    BenchResult result;
-    std::vector<std::thread> threads;
-
-    for (int t = 0; t < p.concurrency; ++t) {
-      threads.emplace_back(put_multi_worker, std::ref(service), tenant_id,
-                           std::cref(all_buckets), obj_size, t, std::ref(stop),
-                           std::ref(result));
-    }
-
-    std::this_thread::sleep_for(std::chrono::seconds(p.duration));
-    stop.store(true, std::memory_order_relaxed);
-    for (auto &th : threads) {
-      th.join();
-    }
-
-    std::string label = "PUT-MULTI " + tier_label(obj_size);
-    print_results(label.c_str(), result, static_cast<double>(p.duration),
-                  service.latency_stats());
-    print_fdb_put_stats(service.store());
-  }
-}
-
 static void cmd_get(KvRgwServiceImpl &service, tenant_id_t tenant_id,
                     const std::string &tenant_name, const ParsedParams &p)
 {
@@ -922,11 +810,6 @@ static void cmd_get(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   for (const auto &bname : all_buckets) {
     auto objects = list_all_objects(service, tenant_id, bname);
     if (objects.empty()) {
-      continue;
-    }
-
-    bucket_id_t bucket_id = service.resolve_bucket_id(tenant_id, bname);
-    if (bucket_id == kNullBucket) {
       continue;
     }
 
@@ -1647,7 +1530,7 @@ static void delete_multi_worker(KvRgwServiceImpl &service,
                                 std::atomic<int64_t> &index,
                                 BenchResult &result)
 {
-  const int batch_size = 10;
+  const int batch_size = 100;
   int total = static_cast<int>(objects.size());
   while (true) {
     int64_t start = index.fetch_add(batch_size, std::memory_order_relaxed);
@@ -1683,8 +1566,9 @@ static void cmd_delete_multi(KvRgwServiceImpl &service, tenant_id_t tenant_id,
                              const ParsedParams &p)
 {
   if (p.count > 0) {
+    // Test deletion on non-existing objects
     std::string bname = "perf-bucket-0";
-    std::cout << "delete-multi: c=" << p.concurrency << " count=" << p.count
+    std::cout << "::delete_multi non-existing objects: c=" << p.concurrency << " count=" << p.count
               << " bucket=" << bname << " (direct)\n";
 
     service.latency_stats().reset();
@@ -1719,7 +1603,7 @@ static void cmd_delete_multi(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     std::cerr << "ERROR: no buckets found.\n";
     return;
   }
-  std::cout << "delete-multi: c=" << p.concurrency
+  std::cout << "::delete-multi-worker: c=" << p.concurrency
             << " buckets=" << all_buckets.size() << "\n";
 
   for (const auto &bname : all_buckets) {
@@ -1803,10 +1687,15 @@ static void cmd_list_objects(KvRgwServiceImpl &service, tenant_id_t tenant_id,
 
 struct ThreadRange {
   std::string bucket_name;
-  bucket_id_t bucket_id{};
   std::vector<std::string> keys;
 };
 
+// NOTE
+// Function process a  single bucket; loading all its objects splitting them
+// between threads.
+// Inefficent code and only covers the first bucket
+// Removed most callers; still used by cmd_copy() and cmd_delete_version()
+// Consider rewrite them in the future
 static std::vector<ThreadRange>
 prepare_thread_ranges(KvRgwServiceImpl &service, tenant_id_t tenant_id,
                       const std::string &tenant_name, int concurrency)
@@ -1822,13 +1711,6 @@ prepare_thread_ranges(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     std::cerr << "ERROR: no objects in " << bname << ".\n";
     return {};
   }
-  std::sort(objects.begin(), objects.end());
-
-  bucket_id_t bucket_id = service.resolve_bucket_id(tenant_id, bname);
-  if (bucket_id == kNullBucket) {
-    std::cerr << "ERROR: cannot resolve bucket_id for " << bname << ".\n";
-    return {};
-  }
 
   std::vector<ThreadRange> ranges(concurrency);
   for (size_t i = 0; i < objects.size(); ++i) {
@@ -1837,7 +1719,6 @@ prepare_thread_ranges(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   }
   for (auto &r : ranges) {
     r.bucket_name = bname;
-    r.bucket_id = bucket_id;
   }
 
   std::cout << "  prepared " << objects.size() << " objects across "
@@ -1922,69 +1803,6 @@ void put_overwrite_standalone_worker(KvRgwServiceImpl &service,
   }
 }
 
-void put_overwrite_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
-                          const ThreadRange &range, uint64_t obj_size,
-                          BenchResult &result)
-{
-  for (const auto &key : range.keys) {
-    ScopedRequestLatency _lat(service.latency_stats_, OpType::kPutObject);
-    const auto ref_tag = service.ref_tags_.next();
-    auto ov = build_object_value(ref_tag, g_put_buffer, obj_size);
-
-    KvRgwServiceImpl::PutObjectRequest req;
-    req.tenant_id = tenant_id;
-    req.bucket_name = range.bucket_name;
-    req.object_name = key;
-    req.ref_tag = ref_tag;
-    req.value = std::move(ov);
-    req.estimated_size = obj_size;
-    req.cond = nullptr;
-    req.tags = g_put_tags;
-
-    auto res = service.put_object_route(req, g_put_buffer, obj_size);
-    if (res.error_code == KVRGW_ERR_OK) {
-      result.ops.fetch_add(1, std::memory_order_relaxed);
-    }
-    else {
-      result.errors.fetch_add(1, std::memory_order_relaxed);
-      result.record_error(res.error_code);
-    }
-  }
-}
-
-void put_overwrite_versioned_worker(KvRgwServiceImpl &service,
-                                    tenant_id_t tenant_id,
-                                    const ThreadRange &range, uint64_t obj_size,
-                                    int versions, BenchResult &result)
-{
-  for (int v = 0; v < versions; ++v) {
-    for (const auto &key : range.keys) {
-      ScopedRequestLatency _lat(service.latency_stats_, OpType::kPutObject);
-      const auto ref_tag = service.ref_tags_.next();
-      auto ov = build_object_value(ref_tag, g_put_buffer, obj_size);
-
-      KvRgwServiceImpl::PutObjectRequest req;
-      req.tenant_id = tenant_id;
-      req.bucket_name = range.bucket_name;
-      req.object_name = key;
-      req.ref_tag = ref_tag;
-      req.value = std::move(ov);
-      req.estimated_size = obj_size;
-      req.cond = nullptr;
-      req.tags = g_put_tags;
-
-      auto res = service.put_object_route(req, g_put_buffer, obj_size);
-      if (res.error_code == KVRGW_ERR_OK) {
-        result.ops.fetch_add(1, std::memory_order_relaxed);
-      }
-      else {
-        result.errors.fetch_add(1, std::memory_order_relaxed);
-        result.record_error(res.error_code);
-      }
-    }
-  }
-}
-
 void delete_version_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
                            const ThreadRange &range, uint32_t versions,
                            int thread_id, BenchResult &result)
@@ -2017,8 +1835,8 @@ static void cmd_copy(KvRgwServiceImpl &service, tenant_id_t tenant_id,
                      const std::string &tenant_name, const ParsedParams &p)
 {
   std::cout << "copy: c=" << p.concurrency << "\n";
-  auto ranges =
-      prepare_thread_ranges(service, tenant_id, tenant_name, p.concurrency);
+  auto ranges = prepare_thread_ranges(service, tenant_id, tenant_name,
+                                      p.concurrency);
   if (ranges.empty()) {
     return;
   }
@@ -2163,106 +1981,8 @@ static void cmd_put_overwrite(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     std::cerr << "ERROR: overwrite_count= requires base_files=\n";
     return;
   }
-  if (p.base_files > 0) {
-    cmd_put_overwrite_standalone(service, tenant_id, p);
-    return;
-  }
-  std::cout << "put-overwrite: c=" << p.concurrency << " tiers=[";
-  for (size_t i = 0; i < p.tiers.size(); ++i) {
-    if (i > 0) {
-      std::cout << ",";
-    }
-    std::cout << tier_label(p.tiers[i]);
-  }
-  std::cout << "]\n";
-
-  auto ranges =
-      prepare_thread_ranges(service, tenant_id, tenant_name, p.concurrency);
-  if (ranges.empty()) {
-    return;
-  }
-
-  for (auto obj_size : p.tiers) {
-    service.latency_stats().reset();
-    service.store().fdb_put_stats().reset();
-    BenchResult result;
-    std::vector<std::thread> threads;
-
-    const Stopwatch t0;
-    for (int t = 0; t < p.concurrency; ++t) {
-      threads.emplace_back(put_overwrite_worker, std::ref(service), tenant_id,
-                           std::cref(ranges[t]), obj_size, std::ref(result));
-    }
-    for (auto &th : threads) {
-      th.join();
-    }
-    double elapsed = t0.elapsed_seconds();
-
-    int64_t total = 0;
-    for (const auto &r : ranges) {
-      total += r.keys.size();
-    }
-    std::string label = "PUT-OVERWRITE " + tier_label(obj_size) + " (" +
-                        std::to_string(total) + " objs)";
-    print_results(label.c_str(), result, elapsed, service.latency_stats());
-    print_fdb_put_stats(service.store());
-  }
-}
-
-static void cmd_put_overwrite_versioned(KvRgwServiceImpl &service,
-                                        tenant_id_t tenant_id,
-                                        const std::string &tenant_name,
-                                        const ParsedParams &p)
-{
-  if (p.tiers.empty()) {
-    std::cerr << "ERROR: put-overwrite-versioned requires tiers= parameter\n";
-    return;
-  }
-  if (p.versions <= 0) {
-    std::cerr << "ERROR: put-overwrite-versioned requires versions=N (N > 0)\n";
-    return;
-  }
-  std::cout << "put-overwrite-versioned: c=" << p.concurrency << " tiers=[";
-  for (size_t i = 0; i < p.tiers.size(); ++i) {
-    if (i > 0) {
-      std::cout << ",";
-    }
-    std::cout << tier_label(p.tiers[i]);
-  }
-  std::cout << "] versions=" << p.versions << "\n";
-
-  auto ranges =
-      prepare_thread_ranges(service, tenant_id, tenant_name, p.concurrency);
-  if (ranges.empty()) {
-    return;
-  }
-
-  for (auto obj_size : p.tiers) {
-    service.latency_stats().reset();
-    service.store().fdb_put_stats().reset();
-    BenchResult result;
-    std::vector<std::thread> threads;
-
-    const Stopwatch t0;
-    for (int t = 0; t < p.concurrency; ++t) {
-      threads.emplace_back(put_overwrite_versioned_worker, std::ref(service),
-                           tenant_id, std::cref(ranges[t]), obj_size,
-                           p.versions, std::ref(result));
-    }
-    for (auto &th : threads) {
-      th.join();
-    }
-    double elapsed = t0.elapsed_seconds();
-
-    int64_t total = 0;
-    for (const auto &r : ranges) {
-      total += static_cast<int64_t>(r.keys.size()) * p.versions;
-    }
-    std::string label = "PUT-OVERWRITE-VERSIONED " + tier_label(obj_size) +
-                        " (" + std::to_string(total) + " writes)";
-    print_results(label.c_str(), result, elapsed, service.latency_stats());
-    print_fdb_put_stats(service.store());
-  }
+  assert(p.base_files > 0 && "base_files count must be non-zero");
+  cmd_put_overwrite_standalone(service, tenant_id, p);
 }
 
 static void cmd_delete_version(KvRgwServiceImpl &service, tenant_id_t tenant_id,
@@ -2277,8 +1997,8 @@ static void cmd_delete_version(KvRgwServiceImpl &service, tenant_id_t tenant_id,
   std::cout << "delete-version: c=" << p.concurrency
             << " versions=" << p.versions << "\n";
 
-  auto ranges =
-      prepare_thread_ranges(service, tenant_id, tenant_name, p.concurrency);
+  auto ranges = prepare_thread_ranges(service, tenant_id, tenant_name,
+                                      p.concurrency);
   if (ranges.empty()) {
     return;
   }
@@ -3010,9 +2730,9 @@ int run_perf_driver(KvRgwServiceImpl &service, KvStore &store,
   std::cout << "tenant=" << config.tenant_name
             << " instance_id=" << g_instance_id << " prefix=" << g_key_prefix
             << " suffix=" << g_key_suffix << "\n";
-  std::cout << "Commands: create-buckets, put, put-multi, get, delete, "
+  std::cout << "Commands: create-buckets, put, get, delete, "
                "delete-multi,\n"
-            << "          copy, put-overwrite, put-overwrite-versioned, "
+            << "          copy, put-overwrite, "
                "delete-version,\n"
             << "          delete-buckets, list-buckets, list-objects, "
                "list-test, get-test, set-batch, quit\n";
@@ -3077,14 +2797,6 @@ int run_perf_driver(KvRgwServiceImpl &service, KvStore &store,
         cmd_put(service, tenant_id, config.tenant_name, params);
       }
     }
-    else if (cmd == "put-multi") {
-      if (params.tiers.empty()) {
-        std::cerr << "ERROR: put-multi requires tiers= parameter\n";
-      }
-      else {
-        cmd_put_multi(service, tenant_id, config.tenant_name, params);
-      }
-    }
     else if (cmd == "get") {
       cmd_get(service, tenant_id, config.tenant_name, params);
     }
@@ -3105,10 +2817,6 @@ int run_perf_driver(KvRgwServiceImpl &service, KvStore &store,
     }
     else if (cmd == "put-overwrite") {
       cmd_put_overwrite(service, tenant_id, config.tenant_name, params);
-    }
-    else if (cmd == "put-overwrite-versioned") {
-      cmd_put_overwrite_versioned(service, tenant_id, config.tenant_name,
-                                  params);
     }
     else if (cmd == "delete-version") {
       cmd_delete_version(service, tenant_id, config.tenant_name, params);

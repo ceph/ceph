@@ -1206,18 +1206,6 @@ KvRgwServiceImpl::read_bucket_state(tenant_id_t tenant_id,
 }
 
 //--------------------------------------------------------------------------------
-bucket_id_t KvRgwServiceImpl::resolve_bucket_id(tenant_id_t tenant_id,
-                                                const std::string &bucket_name)
-{
-  // TBD: consider removing this function!!!
-  auto state = read_bucket_state(tenant_id, bucket_name);
-  if (state && *state) {
-    return (*state)->bucket_id;
-  }
-  return kNullBucket;
-}
-
-//--------------------------------------------------------------------------------
 void KvRgwServiceImpl::put_tenant_cache(std::string_view tenant_name,
                                         tenant_id_t tenant_id)
 {
@@ -3120,8 +3108,8 @@ KvRgwServiceImpl::delete_multi(tenant_id_t tenant_id,
   if (!*bucket_id_res) {
     return KVRGW_ERR_NO_SUCH_BUCKET;
   }
-  if (auto ac = check_access(tenant_id, bname, **bucket_id_res, kDenyWrite);
-      ac != KVRGW_ERR_OK) {
+  auto ac = check_access(tenant_id, bname, **bucket_id_res, kDenyWrite);
+  if (ac != KVRGW_ERR_OK) {
     return ac;
   }
   const auto bucket_id = (**bucket_id_res).bucket_id;
@@ -3136,9 +3124,8 @@ KvRgwServiceImpl::delete_multi(tenant_id_t tenant_id,
         DeleteMultiKeyOutcome outcome;
         outcome.key = key;
         outcome.version_id = *obj.version_id;
-        const auto ec =
-            delete_object_version(tenant_id, bname, key, *obj.version_id,
-                                  nullptr);
+        const auto ec = delete_object_version(tenant_id, bname, key, *obj.version_id,
+                                              nullptr);
         if (ec == KVRGW_ERR_OK) {
           outcome.status = DeleteMultiKeyOutcome::Status::Deleted;
         }
@@ -3157,7 +3144,6 @@ KvRgwServiceImpl::delete_multi(tenant_id_t tenant_id,
   }
 
   const int key_count = static_cast<int>(keys.size());
-
   for (int i = 0; i < key_count;) {
     if (single_delete_mode) {
       delete_multi_one_key(tenant_id, bname, bucket_id,
