@@ -573,10 +573,8 @@ class CephFSMountBase(object):
 
         self._verify_attrs(**{key: kwargs[key] for key in verify_keys if key in kwargs})
 
-        for k in verify_keys:
-            v = kwargs.get(k)
-            if v is not None:
-                setattr(self, k, v)
+        for k, v in verify_keys.items():
+            setattr(self, k, v)
 
     def remount(self, **kwargs):
         """
