@@ -1540,6 +1540,10 @@ void CDir::log_mark_dirty()
 void CDir::mark_complete() {
   state_set(STATE_COMPLETE);
   bloom.reset();
+  // Count keyed-fetch hits afresh: once trimming drops the dir back to
+  // incomplete, a saturated counter would relaunch a full background fetch
+  // on the very next miss.
+  backend_hit_count = 0;
 }
 
 void CDir::first_get()
