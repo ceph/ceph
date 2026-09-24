@@ -45,6 +45,7 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #include "ECTransaction.h"
 #include "ECExtentCache.h"
 #include "ECListener.h"
+#include "ec_client_delivery.h"
 #include "common/dout.h"
 
 //forward declaration
@@ -343,6 +344,11 @@ struct ECCommon {
     };
     std::vector<gather_slot_t> gather_slots;
 
+    /// the client window peers holding data shards may deliver into,
+    /// and where what they delivered is recorded for the caller
+    std::optional<ceph::osd::ec_client_delivery_t> client_delivery;
+    ceph::osd::ec_client_delivery_result_t *client_result = nullptr;
+
     ReadOp(
         int priority,
         ceph_tid_t tid,
@@ -383,7 +389,9 @@ struct ECCommon {
         const std::map<hobject_t, std::list<ec_align_t>> &reads,
         bool fast_read,
         uint64_t object_size,
-        GenContextURef<ec_extents_t&&> &&func);
+        GenContextURef<ec_extents_t&&> &&func,
+        const ceph::osd::ec_client_delivery_t *client_delivery = nullptr,
+        ceph::osd::ec_client_delivery_result_t *client_result = nullptr);
 
     void objects_read_and_reconstruct_for_rmw(
         std::map<hobject_t, read_request_t> &&to_read,
@@ -409,7 +417,9 @@ struct ECCommon {
         std::map<hobject_t, read_request_t> &to_read,
         bool do_redundant_reads,
         bool for_recovery,
-        std::unique_ptr<ReadCompleter> on_complete);
+        std::unique_ptr<ReadCompleter> on_complete,
+        const ceph::osd::ec_client_delivery_t *client_delivery = nullptr,
+        ceph::osd::ec_client_delivery_result_t *client_result = nullptr);
 
     void do_read_op(ReadOp &rop);
 

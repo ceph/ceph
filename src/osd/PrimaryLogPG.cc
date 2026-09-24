@@ -313,6 +313,43 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
       },
       std::move(ctx_pair));
   }
+#ifdef WITH_OSD_CUOBJ
+  // Fan-out delivery: with one out-of-band read on an erasure-coded
+  // object, the peers holding data shards can write their chunks into
+  // the client's window themselves. Never for a retried op - an
+  // earlier attempt's writes may still be landing in that window.
+  if (pg->osd->cuobj && in_native.size() == 1 &&
+      pg->cct->_conf.get_val<bool>("osd_cuobj_fanout_delivery") &&
+      pg->pool.info.is_erasure() && pg->pool.info.allows_ecoptimizations()) {
+    auto m = op->get_req<MOSDOp>();
+    if (m->has_rdma_delivery() && m->get_retry_attempt() == 0) {
+      const auto &dels = m->get_rdma_deliveries();
+      const ceph::rdma::delivery_t *d = nullptr;
+      for (size_t i = 0; i < dels.size() && i < ops->size(); i++) {
+	if (!dels[i].empty() && (*ops)[i].op.op == CEPH_OSD_OP_READ) {
+	  d = &dels[i];
+	  break;
+	}
+      }
+      if (d && !(d->flags & ~ceph::rdma::delivery_t::KNOWN_FLAGS)) {
+	const auto &read = in_native.front().first;
+	ceph::osd::ec_client_delivery_t cd;
+	cd.token = d->token;
+	cd.base_offset = d->base_offset;
+	cd.ro_off = read.offset;
+	cd.ro_len = read.size;
+	cd.want_crc = d->flags & ceph::rdma::delivery_t::FLAG_CRC64NVME;
+	cd.recv_stamp = m->get_recv_stamp();
+	ec_client_delivery.emplace();
+	pg->pgbackend->objects_read_async_deliver(
+	  obc->obs.oi.soid, obc->obs.oi.size, in_native,
+	  new OnReadComplete(pg, this), pg->get_pool().fast_read,
+	  cd, &*ec_client_delivery);
+	return;
+      }
+    }
+  }
+#endif
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
     obc->obs.oi.size,
@@ -9432,6 +9469,19 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
   const auto& deliveries = m->get_rdma_deliveries();
   ceph_assert(oob.size() == rops.size());
   if (!oob_delivery_allowed(ctx, rops.size())) {
+    if (ctx->ec_client_delivery &&
+	!ctx->ec_client_delivery->delivered_raw_shards.empty()) {
+      // peers already wrote into the client; the inline copy is not the
+      // data, so the read must fail rather than fall back
+      dout(5) << __func__ << " delivery fences failed after peers delivered; "
+	      << "failing the read" << dendl;
+      for (size_t i = 0; i < rops.size(); i++) {
+	if (!deliveries[i].empty()) {
+	  rops[i].rval = -EAGAIN;
+	  rops[i].outdata.clear();
+	}
+      }
+    }
     return false;
   }
   bool any = false;
@@ -9525,6 +9575,29 @@ bool PrimaryLogPG::plan_op_oob(OpContext *ctx, OSDOp& op,
 	store_ofs = extents[pg_whoami.shard].range_start();
       }
     }
+  } else if (ctx->ec_client_delivery &&
+	     !ctx->ec_client_delivery->delivered_raw_shards.empty()) {
+    // the peers placed their shards' chunks in the client window
+    // themselves; the read result aliases zeros there. Place only the
+    // chunks of the remaining shards (ours, and any reconstructed) at
+    // their logical positions. An empty plan is a complete delivery.
+    const auto sinfo = pgbackend->ec_get_sinfo();
+    const uint64_t chunk = sinfo.get_chunk_size();
+    const uint64_t k = sinfo.get_k();
+    const uint64_t ro_off = data_op->op.extent.offset;
+    const uint64_t len = data_op->outdata.length();
+    const auto &done = ctx->ec_client_delivery->delivered_raw_shards;
+    for (uint64_t c = ro_off / chunk; c * chunk < ro_off + len; c++) {
+      if (done.contains(static_cast<int>(c % k))) {
+	continue;
+      }
+      const uint64_t start = std::max(c * chunk, ro_off);
+      const uint64_t end = std::min((c + 1) * chunk, ro_off + len);
+      plan.push_back({start - ro_off, d.base_offset + (start - ro_off),
+		      end - start});
+    }
+    payload = data_op->outdata;
+    return true;
   } else {
     plan = ceph::osd::oob::linear_plan(d.base_offset,
 				       data_op->outdata.length());
@@ -9579,15 +9652,52 @@ bool PrimaryLogPG::deliver_op_oob(OpContext *ctx, size_t idx, OSDOp& op,
     return false;
   }
 
+  const bool fanout = ctx->ec_client_delivery &&
+    !ctx->ec_client_delivery->delivered_raw_shards.empty();
   ssize_t pushed = osd->cuobj->execute_plan(m->get_hobj().oid.name, d.token,
 					    payload, plan);
   if (pushed < 0) {
+    if (fanout) {
+      // the peers' chunks are in the client already and the reply's
+      // copy of them is zeros: there is no inline fallback for this
+      // read any more, only an error the client retries without fan-out
+      dout(5) << __func__ << " op " << idx << " plan execution failed ("
+	      << pushed << ") after peers delivered; failing the read" << dendl;
+      data_op->rval = -EAGAIN;
+      data_op->outdata.clear();
+      return false;
+    }
     dout(10) << __func__ << " op " << idx << " plan execution failed ("
 	     << pushed << "), delivering inline" << dendl;
     return false;
   }
   strip_oob_delivered(*data_op, sparse_extents);
   res.bytes = static_cast<uint64_t>(pushed);
+  if (fanout) {
+    // account for what the peers placed, and fold their checksums
+    // with ours into the whole-range value
+    auto &cd = *ctx->ec_client_delivery;
+    res.bytes += cd.bytes;
+    if (d.flags & ceph::rdma::delivery_t::FLAG_CRC64NVME) {
+      res.ranges = cd.ranges;
+      for (const auto& t : plan) {
+	bufferlist part;
+	part.substr_of(payload, t.local_ofs, t.len);
+	res.ranges.push_back({t.client_ofs, t.len, ceph::crc64nvme(part)});
+	osd->cuobj->note_crc_source(false);
+      }
+      if (auto whole = ceph::rdma::fold_crc64_ranges(res.ranges)) {
+	res.crc64 = *whole;
+	res.flags |= ceph::rdma::oob_result_t::FLAG_CRC64NVME |
+		     ceph::rdma::oob_result_t::FLAG_CRC64_RANGES;
+      } else {
+	dout(5) << __func__ << " fan-out crc ranges do not tile the range; "
+		<< "reporting bytes only" << dendl;
+	res.ranges.clear();
+      }
+    }
+    return true;
+  }
   if (d.flags & ceph::rdma::delivery_t::FLAG_CRC64NVME) {
     // checksum each placed range at the storage node: folded from the
     // store's own checksum metadata where it keeps crc64nvme values

@@ -319,6 +319,27 @@ public:
     }
   }
 
+  void objects_read_async_deliver(
+    const hobject_t &hoid,
+    uint64_t object_size,
+    const std::list<std::pair<ec_align_t,
+                              std::pair<ceph::buffer::list*, Context*>>> &
+    to_read,
+    Context *on_complete, bool fast_read,
+    const ceph::osd::ec_client_delivery_t &delivery,
+    ceph::osd::ec_client_delivery_result_t *result) override
+  {
+    if (is_optimized()) {
+      optimized.objects_read_async_deliver(hoid, object_size, to_read,
+                                           on_complete, fast_read, delivery,
+                                           result);
+    }
+    else {
+      legacy.objects_read_async(hoid, object_size, to_read, on_complete,
+                                fast_read);
+    }
+  }
+
   bool auto_repair_supported() const override
   {
     if (is_optimized()) {

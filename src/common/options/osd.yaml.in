@@ -1761,6 +1761,17 @@ options:
   default: false
   services:
   - osd
+- name: osd_cuobj_fanout_delivery
+  type: bool
+  level: advanced
+  desc: When a primary reads an erasure-coded object for a client that asked for
+    RDMA delivery, let the peers holding data shards write their chunks straight
+    into the client's window (as a shard-direct read would) and send them to the
+    primary only if a reconstruction needs them; the primary delivers its own and
+    any reconstructed chunks. Requires osd_cuobj_enabled on every OSD of the pool
+  default: false
+  services:
+  - osd
 - name: osd_cuobj_gather_config
   type: str
   level: advanced

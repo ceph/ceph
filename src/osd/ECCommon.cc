@@ -515,7 +515,9 @@ void ECCommon::ReadPipeline::start_read_op(
     map<hobject_t, read_request_t> &to_read,
     const bool do_redundant_reads,
     const bool for_recovery,
-    std::unique_ptr<ReadCompleter> on_complete) {
+    std::unique_ptr<ReadCompleter> on_complete,
+    const ceph::osd::ec_client_delivery_t *client_delivery,
+    ceph::osd::ec_client_delivery_result_t *client_result) {
   ceph_tid_t tid = get_parent()->get_tid();
   ceph_assert(!tid_to_read_map.contains(tid));
   auto &op = tid_to_read_map.emplace(
@@ -527,6 +529,10 @@ void ECCommon::ReadPipeline::start_read_op(
       for_recovery,
       std::move(on_complete),
       std::move(to_read))).first->second;
+  if (client_delivery && client_result) {
+    op.client_delivery = *client_delivery;
+    op.client_result = client_result;
+  }
   dout(10) << __func__ << ": starting " << op << dendl;
   if (op.op) {
 #ifndef WITH_CRIMSON
@@ -604,10 +610,55 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   ceph_assert(reads_sent);
 
 #ifdef WITH_OSD_CUOBJ_GATHER
+  // Client delivery: a peer holding a data shard may write its chunks
+  // straight into the client's window. It still has to send them here
+  // when a reconstruction needs them, which is the case exactly when a
+  // parity shard is being read.
+  bool need_gather = true;
+  if (rop.client_delivery) {
+    const auto &d = *rop.client_delivery;
+    const int whoami = get_parent()->whoami_shard().osd;
+    need_gather = false;
+    for (auto &&[hoid, read_request]: rop.to_read) {
+      for (auto &&[shard, shard_read]: read_request.shard_reads) {
+        if (static_cast<int>(sinfo.get_raw_shard(shard)) >= static_cast<int>(sinfo.get_k())) {
+          need_gather = true; // parity is read: a reconstruction follows
+        }
+      }
+    }
+    for (auto &&[pg_shard, read]: messages) {
+      const auto raw = static_cast<int>(sinfo.get_raw_shard(pg_shard.shard));
+      if (pg_shard.osd == whoami || raw >= static_cast<int>(sinfo.get_k())) {
+        continue; // our own shard, or parity: nothing for the client
+      }
+      // the peer places with the interleave only an extent that starts
+      // at its first chunk of the range; anything else it must send us
+      bool aligned = true;
+      for (auto &&[hoid, extents]: read.to_read) {
+        for (auto &&[start, len, flags]: extents) {
+          if (start != ceph::osd::ec_first_shard_offset(
+                d.ro_off, sinfo.get_chunk_size(), sinfo.get_k(), raw)) {
+            aligned = false;
+          }
+        }
+      }
+      if (!aligned) {
+        need_gather = true;
+        continue;
+      }
+      read.client_token = d.token;
+      read.client_base = d.base_offset;
+      read.client_ro_off = d.ro_off;
+      read.client_ro_len = d.ro_len;
+      read.client_flags = d.want_crc ? ECSubRead::CLIENT_WANT_CRC64 : 0;
+      read.client_recv_stamp = d.recv_stamp;
+    }
+  }
   // RDMA gather: offer each remote extent a slot in our registered
   // window so the shard can push its chunk instead of returning it
   if (OSDCuObjGather *gather = get_parent()->get_rdma_gather();
-      gather && rop.on_complete && rop.on_complete->allows_rdma_gather()) {
+      need_gather && gather && rop.on_complete &&
+      rop.on_complete->allows_rdma_gather()) {
     const int whoami = get_parent()->whoami_shard().osd;
     for (auto &&[pg_shard, read]: messages) {
       if (pg_shard.osd == whoami) {
@@ -830,7 +881,9 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     const map<hobject_t, std::list<ec_align_t>> &reads,
     const bool fast_read,
     const uint64_t object_size,
-    GenContextURef<ec_extents_t&&> &&func) {
+    GenContextURef<ec_extents_t&&> &&func,
+    const ceph::osd::ec_client_delivery_t *client_delivery,
+    ceph::osd::ec_client_delivery_result_t *client_result) {
   in_progress_client_reads.emplace_back(reads.size(), std::move(func));
   if (!reads.size()) {
     kick_reads();
@@ -877,7 +930,8 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     fast_read,
     false,
     std::make_unique<ClientReadCompleter>(
-      *this, &(in_progress_client_reads.back())));
+      *this, &(in_progress_client_reads.back())),
+    client_delivery, client_result);
 }
 
 void ECCommon::ReadPipeline::objects_read_and_reconstruct_for_rmw(

@@ -238,7 +238,7 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(5, 2, bl);
+  ENCODE_START(7, 2, bl);
   encode(from, bl);
   encode(tid, bl);
   encode(to_read, bl);
@@ -248,12 +248,18 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
   encode(omap_headers_to_read, bl);
   encode(rdma_token, bl);
   encode(rdma_ofs, bl);
+  encode(client_token, bl);
+  encode(client_base, bl);
+  encode(client_ro_off, bl);
+  encode(client_ro_len, bl);
+  encode(client_flags, bl);
+  encode(client_recv_stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECSubRead::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START(5, bl);
+  DECODE_START(7, bl);
   decode(from, bl);
   decode(tid, bl);
   if (struct_v == 1) {
@@ -290,6 +296,19 @@ void ECSubRead::decode(bufferlist::const_iterator &bl)
   } else {
     rdma_token.clear();
     rdma_ofs.clear();
+  }
+  if (struct_v >= 7) {
+    decode(client_token, bl);
+    decode(client_base, bl);
+    decode(client_ro_off, bl);
+    decode(client_ro_len, bl);
+    decode(client_flags, bl);
+    decode(client_recv_stamp, bl);
+  } else {
+    client_token.clear();
+    client_base = client_ro_off = client_ro_len = 0;
+    client_flags = 0;
+    client_recv_stamp = utime_t();
   }
   DECODE_FINISH(bl);
 }
@@ -441,7 +460,7 @@ void ECSubReadReply::encode(bufferlist &p_bl,
 			    bufferlist &d_bl,
 			    uint64_t features) const
 {
-  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 4 : 1;
+  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 5 : 1;
   uint8_t compat_ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 2 : 1;
   ENCODE_START(ver, compat_ver, p_bl);
   encode(from, p_bl);
@@ -475,6 +494,10 @@ void ECSubReadReply::encode(bufferlist &p_bl,
   if (ver >= 4) {
     encode(rdma_delivered, p_bl);
   }
+  if (ver >= 5) {
+    encode(client_delivered, p_bl);
+    encode(client_ranges, p_bl);
+  }
   ENCODE_FINISH(p_bl);
 }
 
@@ -486,7 +509,7 @@ void ECSubReadReply::decode(bufferlist::const_iterator &bl)
 void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
 			    bufferlist::const_iterator &d_bl)
 {
-  DECODE_START(4, p_bl);
+  DECODE_START(5, p_bl);
   decode(from, p_bl);
   decode(tid, p_bl);
   if (struct_v < 2) {
@@ -531,6 +554,13 @@ void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
     decode(rdma_delivered, p_bl);
   } else {
     rdma_delivered.clear();
+  }
+  if (struct_v >= 5) {
+    decode(client_delivered, p_bl);
+    decode(client_ranges, p_bl);
+  } else {
+    client_delivered.clear();
+    client_ranges.clear();
   }
 
   DECODE_FINISH(p_bl);

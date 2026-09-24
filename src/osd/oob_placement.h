@@ -41,6 +41,14 @@ using placement_plan = std::vector<placement_triple>;
 placement_plan linear_plan(uint64_t base_offset, uint64_t data_len);
 
 /**
+ * A read-only block of zeros a read result can alias in place of data
+ * that was delivered elsewhere (a peer wrote it into the client), so
+ * the result keeps its shape without carrying or copying the bytes.
+ */
+constexpr size_t ZERO_BUFFER_LEN = 4u << 20;
+const char* zero_buffer();
+
+/**
  * EC direct interleave: the local buffer holds this shard's chunks
  * of the logical range [ro_off, ro_off+ro_len) in ascending stripe
  * order (partial first/last chunks included); each chunk corresponds

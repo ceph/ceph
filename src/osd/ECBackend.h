@@ -213,6 +213,25 @@ class ECBackend : public ECCommon {
       Context *on_complete,
       bool fast_read = false
     );
+  void objects_read_async_deliver(
+      const hobject_t &hoid,
+      uint64_t object_size,
+      const std::list<std::pair<ec_align_t,
+                                std::pair<ceph::buffer::list*, Context*>>> &
+      to_read,
+      Context *on_complete, bool fast_read,
+      const ceph::osd::ec_client_delivery_t &delivery,
+      ceph::osd::ec_client_delivery_result_t *result);
+  /// the shared implementation of the two above
+  void objects_read_async_impl(
+      const hobject_t &hoid,
+      uint64_t object_size,
+      const std::list<std::pair<ec_align_t,
+                                std::pair<ceph::buffer::list*, Context*>>> &
+      to_read,
+      Context *on_complete, bool fast_read,
+      const ceph::osd::ec_client_delivery_t *delivery,
+      ceph::osd::ec_client_delivery_result_t *result);
 
   bool ec_can_decode(const shard_id_set &available_shards) const;
   shard_id_map<bufferlist> ec_encode_acting_set(const bufferlist &in_bl) const;

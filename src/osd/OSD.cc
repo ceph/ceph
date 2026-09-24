@@ -72,6 +72,7 @@
 #endif
 #ifdef WITH_OSD_CUOBJ
 #include "osd_cuobj.h"
+#include "osd/oob_placement.h"
 #endif
 #ifdef WITH_OSD_CUOBJ_GATHER
 #include "osd_cuobj_gather.h"
@@ -4100,6 +4101,12 @@ int OSD::init()
       cct->_conf.get_val<uint64_t>("osd_cuobj_rdma_port"));
     auto cuobj = std::make_unique<OSDCuObj>(cct, cuobj_ip, cuobj_port);
     if (cuobj->is_available()) {
+      // read results alias this block where peers delivered the data
+      // themselves; registered so staging never has to
+      if (auto *zeros = ceph::osd::oob::zero_buffer()) {
+	cuobj->add_registered_region(const_cast<char*>(zeros),
+				     ceph::osd::oob::ZERO_BUFFER_LEN);
+      }
       service.cuobj = cuobj.release();
     } else {
       derr << "WARNING: cuObject RDMA init failed on " << cuobj_ip

@@ -793,6 +793,10 @@ public:
 	      std::pair<ceph::buffer::list*, Context*> > > pending_async_reads;
     int inflightreads;
     friend struct OnReadComplete;
+    /// set when the peers were asked to deliver their shards of this
+    /// op's read straight into the client's window; records what they
+    /// delivered so the reply can place the rest and account for all
+    std::optional<ceph::osd::ec_client_delivery_result_t> ec_client_delivery;
     void start_async_reads(PrimaryLogPG *pg);
     void finish_read(PrimaryLogPG *pg);
     bool async_reads_complete() {

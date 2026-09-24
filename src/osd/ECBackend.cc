@@ -33,6 +33,8 @@
 #include "ECTypes.h"
 #include "oob_placement.h"
 #include "osd_cuobj.h"
+#include "common/crc64nvme.h"
+#include "common/Checksummer.h"
 #include "osd_cuobj_gather.h"
 #include "common/errno.h"
 #include "ECSwitch.h"
@@ -650,11 +652,23 @@ void ECBackend::handle_sub_read(
   // RDMA gather: the primary offered slots in its window for (some of)
   // these extents; push there instead of returning the data if we can
   OSDCuObj *cuobj = nullptr;
+  // client delivery: this shard's chunks go straight into the client's
+  // window, under the fences of the client op itself
+  OSDCuObj *client_cuobj = nullptr;
 #ifdef WITH_OSD_CUOBJ
   if (!op.rdma_token.empty()) {
     cuobj = get_parent()->get_cuobj();
     if (cuobj && !get_parent()->rdma_gather_push_allowed(age_secs)) {
       cuobj = nullptr;
+    }
+  }
+  if (!op.client_token.empty() &&
+      static_cast<int>(sinfo.get_raw_shard(shard)) < static_cast<int>(sinfo.get_k()) &&
+      sinfo.supports_direct_reads()) {
+    client_cuobj = get_parent()->get_cuobj();
+    const double client_age = ceph_clock_now() - op.client_recv_stamp;
+    if (client_cuobj && !get_parent()->rdma_gather_push_allowed(client_age)) {
+      client_cuobj = nullptr;
     }
   }
 #endif
@@ -726,6 +740,49 @@ void ECBackend::handle_sub_read(
         dout(20) << __func__ << " read request=" << len << " r=" << r << " len="
           << bl.length() << dendl;
 #ifdef WITH_OSD_CUOBJ
+        bool client_took_it = false;
+        if (client_cuobj && bl.length()) {
+          // the interleave placement assumes the extent holds this
+          // shard's chunks of the range in order from the first one
+          const uint64_t chunk = sinfo.get_chunk_size();
+          const auto raw = static_cast<uint32_t>(
+            static_cast<int>(sinfo.get_raw_shard(shard)));
+          if (offset == ceph::osd::ec_first_shard_offset(
+                op.client_ro_off, chunk, sinfo.get_k(), raw)) {
+            auto plan = ceph::osd::oob::ec_direct_plan(
+              op.client_base, op.client_ro_off, op.client_ro_len, chunk,
+              sinfo.get_k(), raw, bl.length());
+            ssize_t pushed = client_cuobj->execute_plan(
+              hoid.oid.name, op.client_token, bl, plan);
+            if (pushed == (ssize_t)bl.length()) {
+              client_took_it = true;
+              if (op.client_flags & ECSubRead::CLIENT_WANT_CRC64) {
+                auto &ranges = reply->client_ranges[hoid];
+                for (const auto &t : plan) {
+                  uint64_t crc = 0;
+                  if (switcher->store->read_range_checksum(
+                        switcher->ch, ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+                        offset + t.local_ofs, t.len,
+                        Checksummer::CSUM_CRC64NVME, &crc) != 0) {
+                    bufferlist part;
+                    part.substr_of(bl, t.local_ofs, t.len);
+                    crc = ceph::crc64nvme(part);
+                    client_cuobj->note_crc_source(false);
+                  } else {
+                    client_cuobj->note_crc_source(true);
+                  }
+                  ranges.push_back({t.client_ofs, t.len, crc});
+                }
+              }
+              dout(20) << __func__ << " delivered " << pushed << " bytes of "
+                       << hoid << " to the client" << dendl;
+            } else {
+              dout(5) << __func__ << " client delivery of " << hoid
+                      << " failed: " << pushed << dendl;
+            }
+          }
+        }
+        bool returned = false;
         if (window_ofs != ECSubRead::RDMA_OFS_INLINE && bl.length()) {
           ssize_t pushed = cuobj->execute_plan(
             hoid.oid.name, op.rdma_token, bl,
@@ -735,13 +792,25 @@ void ECBackend::handle_sub_read(
                      << hoid << " to window offset " << window_ofs << dendl;
             reply->rdma_delivered[hoid].push_back(
               boost::make_tuple(offset, (uint64_t)bl.length(), window_ofs));
-            continue;
+            returned = true;
+          } else {
+            // a failed push falls back to the messenger; the primary
+            // quarantines the slot in case the write is still in flight
+            dout(5) << __func__ << " RDMA push of " << hoid << " failed: "
+                    << pushed << ", replying inline" << dendl;
           }
-          // a failed push falls back to the messenger; the primary
-          // quarantines the slot in case the write is still in flight
-          dout(5) << __func__ << " RDMA push of " << hoid << " failed: "
-                  << pushed << ", replying inline" << dendl;
         }
+        if (!returned && (!client_took_it ||
+                          window_ofs != ECSubRead::RDMA_OFS_INLINE)) {
+          // the primary wants the data (or nobody else got it)
+          reply->buffers_read[hoid].push_back(make_pair(offset, bl));
+          returned = true;
+        }
+        if (client_took_it) {
+          reply->client_delivered[hoid].push_back(
+            boost::make_tuple(offset, (uint64_t)bl.length(), returned));
+        }
+        continue;
 #endif
         reply->buffers_read[hoid].push_back(make_pair(offset, bl));
       }
@@ -1048,6 +1117,45 @@ void ECBackend::handle_sub_read_reply(
     if (op.errors.contains(hoid)) {
       op.buffers_read.erase(hoid);
       op.attrs_read.erase(hoid);
+    }
+  }
+  // client delivery: the shard wrote its chunks into the client itself.
+  // Account for them, and where it sent nothing here alias zeros so the
+  // result keeps its shape (those bytes are never delivered from here)
+  for (auto &&[hoid, extents]: op.client_delivered) {
+    if (!rop.to_read.contains(hoid) || op.errors.contains(hoid)) {
+      continue;
+    }
+    if (!rop.client_result) {
+      derr << __func__ << " shard " << from << " delivered " << hoid
+           << " to a client we did not name" << dendl;
+      op.errors[hoid] = -EIO;
+      op.buffers_read.erase(hoid);
+      continue;
+    }
+    const int raw = static_cast<int>(sinfo.get_raw_shard(from.shard));
+    for (auto &&[offset, len, returned]: extents) {
+      rop.client_result->bytes += len;
+      rop.client_result->delivered_raw_shards.insert(raw);
+      if (returned) {
+        continue;
+      }
+      if (!rop.complete.contains(hoid)) {
+        rop.complete.emplace(hoid, &sinfo);
+      }
+      bufferlist zeros;
+      const char *zb = ceph::osd::oob::zero_buffer();
+      for (uint64_t done = 0; done < len; ) {
+        const uint64_t n = std::min<uint64_t>(len - done,
+                                              ceph::osd::oob::ZERO_BUFFER_LEN);
+        zeros.push_back(ceph::buffer::create_static(n, const_cast<char*>(zb)));
+        done += n;
+      }
+      rop.complete.at(hoid).buffers_read.insert_in_shard(from.shard, offset, zeros);
+    }
+    if (auto cr = op.client_ranges.find(hoid); cr != op.client_ranges.end()) {
+      auto &ranges = rop.client_result->ranges;
+      ranges.insert(ranges.end(), cr->second.begin(), cr->second.end());
     }
   }
   for (auto &&[hoid, offset_buffer_map]: op.buffers_read) {
@@ -1601,13 +1709,14 @@ int ECBackend::objects_readv_sync(const hobject_t &hoid,
   return 0;
 }
 
-void ECBackend::objects_read_async(
+void ECBackend::objects_read_async_impl(
     const hobject_t &hoid,
     uint64_t object_size,
     const list<pair<ec_align_t,
                     pair<bufferlist*, Context*>>> &to_read,
-    Context *on_complete,
-    bool fast_read) {
+    Context *on_complete, bool fast_read,
+    const ceph::osd::ec_client_delivery_t *delivery,
+    ceph::osd::ec_client_delivery_result_t *result) {
   map<hobject_t, std::list<ec_align_t>> reads;
 
   uint32_t flags = 0;
@@ -1711,7 +1820,7 @@ void ECBackend::objects_read_async(
       to_read.clear();
     }
   };
-  objects_read_and_reconstruct(
+  read_pipeline.objects_read_and_reconstruct(
     reads,
     fast_read,
     object_size,
@@ -1721,7 +1830,31 @@ void ECBackend::objects_read_async(
          hoid,
          to_read,
          on_complete,
-         cct)));
+         cct)),
+    delivery, result);
+}
+
+void ECBackend::objects_read_async(
+    const hobject_t &hoid,
+    uint64_t object_size,
+    const list<pair<ec_align_t,
+                    pair<bufferlist*, Context*>>> &to_read,
+    Context *on_complete,
+    bool fast_read) {
+  objects_read_async_impl(hoid, object_size, to_read, on_complete, fast_read,
+                          nullptr, nullptr);
+}
+
+void ECBackend::objects_read_async_deliver(
+    const hobject_t &hoid,
+    uint64_t object_size,
+    const list<pair<ec_align_t,
+                    pair<bufferlist*, Context*>>> &to_read,
+    Context *on_complete, bool fast_read,
+    const ceph::osd::ec_client_delivery_t &delivery,
+    ceph::osd::ec_client_delivery_result_t *result) {
+  objects_read_async_impl(hoid, object_size, to_read, on_complete, fast_read,
+                          &delivery, result);
 }
 
 bool ECBackend::ec_can_decode(const shard_id_set &available_shards) const {

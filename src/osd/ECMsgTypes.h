@@ -19,6 +19,7 @@
 #include <fmt/format.h>
 
 #include "osd_types.h"
+#include "common/rdma_token.h"
 #include "include/buffer.h"
 #include "os/ObjectStore.h"
 #include "boost/tuple/tuple.hpp"
@@ -145,6 +146,20 @@ struct ECSubRead {
   std::string rdma_token;
   std::map<hobject_t, std::vector<uint64_t>> rdma_ofs;
   /**
+   * Client delivery (v7): a data shard may RDMA-write its chunks of the
+   * logical range [client_ro_off, +client_ro_len) straight into the
+   * client's window (client_base is the window offset of client_ro_off)
+   * and report so in the reply, instead of, or as well as, returning
+   * them. Applies to every object of the sub-read.
+   */
+  static constexpr uint32_t CLIENT_WANT_CRC64 = 1u << 0;
+  std::string client_token;
+  uint64_t client_base = 0;
+  uint64_t client_ro_off = 0;
+  uint64_t client_ro_len = 0;
+  uint32_t client_flags = 0;
+  utime_t client_recv_stamp;
+  /**
     * Calculate the cost of the SubOp read operation for mClock scheduler.
     *
     * @param *cct: *CephContext
@@ -175,6 +190,12 @@ struct ECSubReadReply {
   /// sub-read) actually received the data.
   std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint64_t>>>
     rdma_delivered;
+  /// (v5) extents this shard delivered into the client's window:
+  /// (shard offset, length, data also returned to the primary), and
+  /// the CRC64-NVME of each chunk it placed there
+  std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, bool>>>
+    client_delivered;
+  std::map<hobject_t, std::vector<ceph::rdma::crc_range_t>> client_ranges;
   void encode(ceph::buffer::list &bl) const;
   void encode(ceph::buffer::list &p_bl,
 	      ceph::buffer::list &d_pl,

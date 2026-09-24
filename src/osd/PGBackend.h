@@ -44,6 +44,8 @@ namespace Scrub {
 struct shard_info_wrapper;
 struct inconsistent_obj_wrapper;
 
+#include "osd/ec_client_delivery.h"
+
 //forward declaration
 class OSDMap;
 class PGLog;
@@ -693,6 +695,24 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const std::list<std::pair<ec_align_t,
 		std::pair<ceph::buffer::list*, Context*>>> &to_read,
      Context *on_complete, bool fast_read = false) = 0;
+
+   /**
+    * objects_read_async for a read the client wants delivered out of
+    * band: a backend that can lets the peers holding the data write
+    * their chunks straight into the client's window and reports what
+    * they delivered in *result (the caller then delivers the rest).
+    * The default reads as usual and leaves *result empty.
+    */
+   virtual void objects_read_async_deliver(
+     const hobject_t &hoid,
+     uint64_t object_size,
+     const std::list<std::pair<ec_align_t,
+		std::pair<ceph::buffer::list*, Context*>>> &to_read,
+     Context *on_complete, bool fast_read,
+     const ceph::osd::ec_client_delivery_t &delivery,
+     ceph::osd::ec_client_delivery_result_t *result) {
+     objects_read_async(hoid, object_size, to_read, on_complete, fast_read);
+   }
 
    virtual bool auto_repair_supported() const = 0;
 

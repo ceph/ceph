@@ -4,6 +4,8 @@
 #include "osd/oob_placement.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 
 namespace ceph::osd::oob {
 
@@ -67,6 +69,23 @@ placement_plan sparse_plan(uint64_t base_offset, uint64_t ro_off,
     }
   }
   return plan;
+}
+
+} // namespace ceph::osd::oob
+
+namespace ceph::osd::oob {
+
+const char* zero_buffer()
+{
+  // 2 MiB aligned so it can be registered for RDMA like any arena
+  static const char* zeros = [] {
+    void* p = nullptr;
+    if (posix_memalign(&p, 2u << 20, ZERO_BUFFER_LEN) != 0) {
+      return static_cast<const char*>(nullptr);
+    }
+    return static_cast<const char*>(memset(p, 0, ZERO_BUFFER_LEN));
+  }();
+  return zeros;
 }
 
 } // namespace ceph::osd::oob
