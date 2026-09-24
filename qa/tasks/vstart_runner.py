@@ -1348,6 +1348,8 @@ def exec_test():
     mode = Mode.unittest
 
     log.info('\n'*10)
+    log.info(f'python version = sys.version = {sys.version}')
+    log.info(f'args passed = sys.argv = {sys.argv}')
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
     modules = [a for a in args if not a.startswith("-")]
