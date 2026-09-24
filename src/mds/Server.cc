@@ -5032,12 +5032,44 @@ void Server::_finalize_readdir(const MDRequestRef& mdr,
   respond_to_request(mdr, 0);
 }
 
+/* Delay a readdir (or snapdiff) from a session that is acquiring caps too
+ * fast. This is checked before the path is traversed, and whatever locks and
+ * auth pins an earlier pass left on the request are dropped: the retry is
+ * only rescheduled after caps_throttle_retry_request_timeout, and holding the
+ * path rdlocks for that long would stall a rename or unlink on any of the
+ * parent directories. */
+bool Server::throttle_readdir_caps(const MDRequestRef& mdr, Session *session,
+				   std::string_view op)
+{
+  auto num_caps = session->get_num_caps();
+  auto session_cap_acquisition = session->get_cap_acquisition();
+
+  if (num_caps <= static_cast<uint64_t>(max_caps_per_client * max_caps_throttle_ratio) ||
+      session_cap_acquisition < cap_acquisition_throttle)
+    return false;
+
+  dout(20) << op << " throttled. max_caps_per_client: " << max_caps_per_client << " num_caps: " << num_caps
+	   << " session_cap_acquistion: " << session_cap_acquisition << " cap_acquisition_throttle: " << cap_acquisition_throttle << dendl;
+  if (logger)
+    logger->inc(l_mdss_cap_acquisition_throttle);
+
+  mdr->mark_event("cap_acquisition_throttle");
+  mds->locker->drop_locks(mdr.get());
+  mdr->drop_local_auth_pins();
+  mds->timer.add_event_after(caps_throttle_retry_request_timeout, new C_MDS_RetryRequest(mdcache, mdr));
+  return true;
+}
+
 void Server::handle_client_readdir(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
   Session *session = mds->get_session(req);
   client_t client = req->get_source().num();
   MutationImpl::LockOpVec lov;
+
+  if (throttle_readdir_caps(mdr, session, "readdir"))
+    return;
+
   CInode *diri = rdlock_path_pin_ref(mdr, false, true);
   if (!diri) return;
 
@@ -5047,20 +5079,6 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     dout(10) << "reply to " << *req << " readdir -ENOTDIR" << dendl;
     respond_to_request(mdr, -ENOTDIR);
     return;
-  }
-
-  auto num_caps = session->get_num_caps();
-  auto session_cap_acquisition = session->get_cap_acquisition();
-
-  if (num_caps > static_cast<uint64_t>(max_caps_per_client * max_caps_throttle_ratio) && session_cap_acquisition >= cap_acquisition_throttle) {
-      dout(20) << "readdir throttled. max_caps_per_client: " << max_caps_per_client << " num_caps: " << num_caps
-	       << " session_cap_acquistion: " << session_cap_acquisition << " cap_acquisition_throttle: " << cap_acquisition_throttle << dendl;
-      if (logger)
-          logger->inc(l_mdss_cap_acquisition_throttle);
-
-      mdr->mark_event("cap_acquisition_throttle");
-      mds->timer.add_event_after(caps_throttle_retry_request_timeout, new C_MDS_RetryRequest(mdcache, mdr));
-      return;
   }
 
   /* readdir can add dentries to cache: acquire the quiescelock */
@@ -12143,6 +12161,10 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   const cref_t<MClientRequest>& req = mdr->client_request;
   Session* session = mds->get_session(req);
   MutationImpl::LockOpVec lov;
+
+  if (throttle_readdir_caps(mdr, session, "snapdiff"))
+    return;
+
   CInode* diri = rdlock_path_pin_ref(mdr, false, true);
   if (!diri) return;
 
@@ -12151,20 +12173,6 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
     // not a dir
     dout(10) << "reply to " << *req << " snapdiff -ENOTDIR" << dendl;
     respond_to_request(mdr, -ENOTDIR);
-    return;
-  }
-
-  auto num_caps = session->get_num_caps();
-  auto session_cap_acquisition = session->get_cap_acquisition();
-
-  if (num_caps > static_cast<uint64_t>(max_caps_per_client * max_caps_throttle_ratio) && session_cap_acquisition >= cap_acquisition_throttle) {
-    dout(20) << "snapdiff throttled. max_caps_per_client: " << max_caps_per_client << " num_caps: " << num_caps
-      << " session_cap_acquistion: " << session_cap_acquisition << " cap_acquisition_throttle: " << cap_acquisition_throttle << dendl;
-    if (logger)
-      logger->inc(l_mdss_cap_acquisition_throttle);
-
-    mdr->mark_event("cap_acquisition_throttle");
-    mds->timer.add_event_after(caps_throttle_retry_request_timeout, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 
