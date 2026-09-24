@@ -10,6 +10,7 @@ from .metadata_manager import MetadataManager
 from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeFeatures
 from .op_sm import SubvolumeOpSm
 from .subvolume_v1 import SubvolumeV1
+from ...utils import safe_join
 from ...exception import OpSmException, VolumeException, MetadataMgrException
 from ...utils import safe_join, gen_uuid
 from ...fs_util import listdir, create_base_dir
@@ -175,7 +176,7 @@ class SubvolumeV2(SubvolumeV1):
             self._set_incarnation_metadata(subvol_type, self.mnt_path, initial_state)
             self.metadata_mgr.flush()
         else:
-            self.init_config(self.VERSION, subvol_type, self.mnt_path, initial_state)
+            self.init_config(self.version(), subvol_type, self.mnt_path, initial_state)
 
     def _create(self, mode, attrs, subvol_type, auth=True):
         # create group directory with default mode(0o755) if it doesn't exist.

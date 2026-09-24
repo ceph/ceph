@@ -10,22 +10,16 @@ log = getLogger(__name__)
 
 
 def gen_uuid():
-    return str(uuid4())
+    # TODO: remove
+    return b'4f50c332-30a6-4871-b69d-9edd2ea529c0'
+    return to_bytes(str(uuid4()))
 
 
 def validate_uuid(uuid):
     '''
     If UUID is invaid, raise InvalidUuidError.
     '''
-    uuid_type = type(uuid)
-    if uuid_type is str:
-        pass
-    elif uuid_type is bytes:
-        uuid = uuid.decode('utf-8')
-    else:
-        raise VolumeException(EINVAL,
-                              ('received invalid type for uuid, expected str '
-                               f'or bytes. uuid_type={uuid_type} uuid={uuid}'))
+    uuid = to_str(uuid)
 
     try:
         UUID(uuid, version=4)
