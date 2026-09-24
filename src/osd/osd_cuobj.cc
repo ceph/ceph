@@ -32,7 +32,10 @@ thread_local bool OSDCuObj::tls_channel_valid = false;
 static constexpr size_t MAX_RDMA_OP_SIZE = 1ULL << 30;
 // the library caps poll() at 16 events and documents no larger
 // per-channel bound, so never have more than that outstanding on one
-static constexpr int POLL_BATCH = 16;
+// a 16 KB stripe unit turns a 24 MiB object into thousands of writes
+// when delivered in place, so keep a deeper pipeline than the channel's
+// latency alone would ask for
+static constexpr int POLL_BATCH = 32;
 // a transfer that has not completed by then is reported failed
 static constexpr int PLAN_TIMEOUT = 60;
 // a payload in more pieces than this is copied rather than registered
@@ -127,6 +130,12 @@ void OSDCuObj::do_shutdown()
   }
   m_pool.reset();
   m_pool_count = 0;
+  if (m_server) {
+    for (auto& r : m_regions) {
+      m_server->deRegisterBuffer(r.handle);
+    }
+  }
+  m_regions.clear();
   m_server.reset();
 }
 
@@ -207,32 +216,91 @@ void OSDCuObj::release_buffer(BufEntry* buf, bool transient)
   }
 }
 
+int OSDCuObj::add_registered_region(void* ptr, size_t len)
+{
+  if (!is_available()) {
+    return -EOPNOTSUPP;
+  }
+  auto handle = m_server->registerBuffer(ptr, len);
+  if (!handle) {
+    derr << "ERROR: registering a " << len << " byte region failed" << dendl;
+    return -EIO;
+  }
+  m_regions.push_back({static_cast<const char*>(ptr), len, handle});
+  dout(1) << "registered a " << len << " byte region for in-place delivery"
+	  << dendl;
+  return 0;
+}
+
 bool OSDCuObj::stage_payload(const ceph::buffer::list& data,
 			     staged_payload* st)
 {
   const uint64_t nbufs = data.get_num_buffers();
   m_payload_segments += nbufs;
-  if (m_register_in_place && nbufs <= IN_PLACE_MAX_SEGMENTS) {
+  if (m_register_in_place || !m_regions.empty()) {
     const auto start = ceph::mono_clock::now();
+    // registrations made for this payload, by the allocation they cover
+    struct owned_reg { const char* base; size_t len; struct rdma_buffer* handle; };
+    std::vector<owned_reg> regs;
     uint64_t ofs = 0;
+    bool ok = true;
     for (const auto& b : data.buffers()) {
-      auto handle = m_server->registerBuffer(
-	const_cast<char*>(b.c_str()), b.length());
+      const char* p = b.c_str();
+      struct rdma_buffer* handle = nullptr;
+      uint64_t reg_ofs = 0;
+      // inside a region registered for good: nothing to do
+      for (const auto& r : m_regions) {
+	if (p >= r.ptr && p + b.length() <= r.ptr + r.len) {
+	  handle = r.handle;
+	  reg_ofs = p - r.ptr;
+	  m_segments_in_region++;
+	  break;
+	}
+      }
+      if (!handle && m_register_in_place) {
+	// the payload may hold many pieces of one allocation (a shard's
+	// chunks interleaved in rados order); register the allocation
+	// once and address the pieces within it
+	const char* base = b.raw_c_str();
+	const size_t blen = b.raw_length();
+	for (const auto& r : regs) {
+	  if (r.base == base) {
+	    handle = r.handle;
+	    break;
+	  }
+	}
+	if (!handle) {
+	  if (regs.size() >= IN_PLACE_MAX_SEGMENTS) {
+	    ok = false;
+	    break;
+	  }
+	  handle = m_server->registerBuffer(const_cast<char*>(base), blen);
+	  if (!handle) {
+	    ok = false;
+	    break;
+	  }
+	  m_registrations++;
+	  regs.push_back({base, blen, handle});
+	  st->owned.push_back(handle);
+	}
+	reg_ofs = p - base;
+      }
       if (!handle) {
+	ok = false;
 	break;
       }
-      st->segments.push_back({ofs, b.length(), handle});
+      st->segments.push_back({ofs, b.length(), handle, reg_ofs});
       ofs += b.length();
     }
     m_register_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(
       ceph::mono_clock::now() - start).count();
-    if (st->segments.size() == nbufs) {
+    if (ok) {
       m_plans_in_place++;
       return true;
     }
-    dout(10) << "in-place registration failed at buffer "
-	     << st->segments.size() << " of " << nbufs
-	     << ", staging a copy" << dendl;
+    dout(10) << "in-place staging failed at buffer " << st->segments.size()
+	     << " of " << nbufs << " (" << regs.size()
+	     << " registrations), staging a copy" << dendl;
     release_payload(*st);
   }
   st->copy = acquire_buffer(data.length(), &st->transient);
@@ -241,7 +309,7 @@ bool OSDCuObj::stage_payload(const ceph::buffer::list& data,
   }
   auto it = data.begin();
   it.copy(data.length(), static_cast<char*>(st->copy->ptr));
-  st->segments.push_back({0, data.length(), st->copy->handle});
+  st->segments.push_back({0, data.length(), st->copy->handle, 0});
   m_plans_copied++;
   return true;
 }
@@ -251,11 +319,11 @@ void OSDCuObj::release_payload(staged_payload& st)
   if (st.copy) {
     release_buffer(st.copy, st.transient);
     st.copy = nullptr;
-  } else {
-    for (auto& seg : st.segments) {
-      m_server->deRegisterBuffer(seg.handle);
-    }
   }
+  for (auto* handle : st.owned) {
+    m_server->deRegisterBuffer(handle);
+  }
+  st.owned.clear();
   st.segments.clear();
 }
 
@@ -286,7 +354,8 @@ int OSDCuObj::plan_xfers(const std::string& key,
       const uint64_t at = t.local_ofs + done;
       const uint64_t n = std::min({t.len - done, seg->ofs + seg->len - at,
 				   uint64_t(MAX_RDMA_OP_SIZE)});
-      out->push_back({seg->handle, at - seg->ofs, t.client_ofs + done, n});
+      out->push_back({seg->handle, seg->reg_ofs + (at - seg->ofs),
+		      t.client_ofs + done, n});
       done += n;
       if (at + n == seg->ofs + seg->len) {
 	++seg;
@@ -517,5 +586,7 @@ void OSDCuObj::dump_stats(ceph::Formatter* f) const
   f->dump_unsigned("crc64_computed", m_crc_computed.load());
   f->dump_unsigned("plans_in_place", m_plans_in_place.load());
   f->dump_unsigned("plans_copied", m_plans_copied.load());
+  f->dump_unsigned("segments_in_region", m_segments_in_region.load());
+  f->dump_unsigned("registrations", m_registrations.load());
   f->dump_unsigned("register_in_place_ns", m_register_ns.load());
 }

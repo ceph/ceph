@@ -73,6 +73,14 @@ public:
     (from_metadata ? m_crc_from_metadata : m_crc_computed)++;
   }
 
+  /**
+   * Register a long-lived memory region once so that payload buffers
+   * lying inside it (the RDMA gather arena, for one) are delivered
+   * without a per-read registration or a copy. Returns 0 or -errno.
+   */
+  int add_registered_region(void* ptr, size_t len);
+
+
   /// asok/debug counters
   void dump_stats(ceph::Formatter* f) const;
 
@@ -97,10 +105,14 @@ private:
       uint64_t ofs;  ///< where it starts in the payload
       uint64_t len;
       struct rdma_buffer* handle;
+      uint64_t reg_ofs = 0;  ///< where it starts in handle's registration
     };
     /// ascending and covering the payload: the pooled copy, or each of
-    /// the payload's own buffers registered where it lies
+    /// the payload's own buffers addressed through a registration that
+    /// contains it
     std::vector<segment> segments;
+    /// registrations made for this payload alone (released with it)
+    std::vector<struct rdma_buffer*> owned;
     BufEntry* copy = nullptr;
     bool transient = false;
   };
@@ -111,12 +123,20 @@ private:
     uint64_t remote_ofs;  ///< offset into the client window
     uint64_t len;
   };
+  /// a region registered for the OSD's lifetime (add_registered_region)
+  struct region {
+    const char* ptr;
+    size_t len;
+    struct rdma_buffer* handle;
+  };
   /**
-   * Make data addressable by the NIC. With osd_cuobj_register_in_place
-   * each of the payload's buffers is registered where it lies (data
+   * Make data addressable by the NIC. A buffer inside a registered
+   * region needs nothing. With osd_cuobj_register_in_place any other
+   * buffer's underlying allocation is registered where it lies, once
+   * per allocation however many pieces of it the payload holds (data
    * must then outlive release_payload()), which keeps the payload off
-   * the memory bus; otherwise, or if that fails or the payload is too
-   * fragmented, it is copied into a pooled buffer.
+   * the memory bus; otherwise, or if that fails or the payload spans
+   * too many allocations, it is copied into a pooled buffer.
    */
   bool stage_payload(const ceph::buffer::list& data, staged_payload* st);
   void release_payload(staged_payload& st);
@@ -135,6 +155,7 @@ private:
 
   CephContext* m_cct;
   std::unique_ptr<cuObjServer> m_server;
+  std::vector<region> m_regions;  ///< fixed after init; read without a lock
   std::unique_ptr<BufEntry[]> m_pool;
   size_t m_pool_count = 0;
   size_t m_buf_size = 0;
@@ -149,6 +170,8 @@ private:
   std::atomic<uint64_t> m_crc_computed{0};
   std::atomic<uint64_t> m_plans_in_place{0};
   std::atomic<uint64_t> m_plans_copied{0};
+  std::atomic<uint64_t> m_segments_in_region{0};  ///< needed no registration
+  std::atomic<uint64_t> m_registrations{0};       ///< per-payload registrations made
   std::atomic<uint64_t> m_register_ns{0};   ///< spent registering in place
   std::atomic<uint64_t> m_payload_segments{0};
   bool m_register_in_place = false;

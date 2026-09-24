@@ -65,6 +65,10 @@ public:
   const std::string& token() const { return m_token; }
 
   size_t slot_size() const { return m_slot_size; }
+  /// the whole registered window, for registering it with the server
+  /// library too so deliveries out of the slots need no registration
+  void* arena() const { return m_arena; }
+  size_t arena_size() const { return m_arena_size; }
 
   /**
    * Claim a slot able to hold len bytes. Returns nullopt when len
@@ -79,6 +83,7 @@ public:
    * necessarily completed or failed.
    */
   void release(const slot& s, bool quarantine);
+
 
   /// asok/debug counters
   void dump_stats(ceph::Formatter* f) const;

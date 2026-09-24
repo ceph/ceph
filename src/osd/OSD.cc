@@ -4111,6 +4111,12 @@ int OSD::init()
   if (cct->_conf.get_val<bool>("osd_cuobj_gather_enabled")) {
     auto gather = std::make_unique<OSDCuObjGather>(cct);
     if (gather->is_available()) {
+      // chunks that land in the arena are delivered to the client
+      // straight out of it
+      if (service.cuobj) {
+	service.cuobj->add_registered_region(gather->arena(),
+					     gather->arena_size());
+      }
       service.cuobj_gather = gather.release();
     } else {
       derr << "WARNING: cuObject RDMA gather init failed "
