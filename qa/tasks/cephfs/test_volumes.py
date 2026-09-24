@@ -13,6 +13,10 @@ from io import StringIO
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
+from tasks.cephfs.helpers.misc import (gen_name, gen_vol_name, gen_subvol_name,
+                                      gen_subvol_grp_name, gen_subvol_snap_name,
+                                      gen_subvol_clone_name)
+
 from teuthology.contextutil import safe_while
 from teuthology.exceptions import CommandFailedError, MaxWhileTries
 
@@ -216,23 +220,22 @@ class VolumesHelper(CephFSTestCase):
         self._verify_clone_attrs(path1, path2)
 
     def _gen_name(self, name, n=1):
-        name += str(random.randrange(1, 99))
-        return name if n == 1 else [f'{name}{i}' for i in range(n)]
+        return gen_name(name, n)
 
     def _gen_vol_name(self, n=1):
-        return self._gen_name('vol', n)
+        return gen_vol_name(n)
 
     def _gen_subvol_name(self, n=1):
-        return self._gen_name('subvol', n)
+        return gen_subvol_name(n)
 
     def _gen_subvol_grp_name(self, n=1):
-        return self._gen_name('subvol_grp', n)
+        return gen_subvol_grp_name(n)
 
     def _gen_subvol_snap_name(self, n=1):
-        return self._gen_name('subvol_snap', n)
+        return gen_subvol_snap_name(n)
 
     def _gen_subvol_clone_name(self, n=1):
-        return self._gen_name('subvol_clone', n)
+        return gen_subvol_clone_name(n)
 
     def _enable_multi_fs(self):
         self._fs_cmd("flag", "set", "enable_multiple", "true", "--yes-i-really-mean-it")
