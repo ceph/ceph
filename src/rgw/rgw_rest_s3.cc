@@ -351,15 +351,7 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
 
 RGWGetObj_ObjStore_S3::~RGWGetObj_ObjStore_S3()
 {
-#ifdef WITH_RADOSGW_CUOBJ
-  if (rdma_buf) {
-    auto* cuobj = RGWCuObjServer::get_instance();
-    if (cuobj) {
-      cuobj->release_buffer(static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf));
-    }
-    rdma_buf = nullptr;
-  }
-#endif
+  release_rdma_buf();
 }
 
 int RGWGetObj_ObjStore_S3::send_response_data_error(optional_yield y)
@@ -443,7 +435,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
                            << rdma_buf_offset << "+" << bl_len << dendl;
         return -EIO;
       }
-      memcpy(static_cast<char*>(entry->ptr) + rdma_buf_offset, bl.c_str() + bl_ofs, bl_len);
+      // with OSD push the data already sits in the buffer and bl
+      // merely points at it, in order; only account for it
+      if (!rdma_target) {
+        memcpy(static_cast<char*>(entry->ptr) + rdma_buf_offset, bl.c_str() + bl_ofs, bl_len);
+      }
       rdma_buf_offset += bl_len;
       return 0;
     }
@@ -451,8 +447,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       auto* cuobj = RGWCuObjServer::get_instance();
       ssize_t ret = cuobj->rdma_write_to_client(
           s->object->get_name(), entry, 0, rdma_buf_offset, rdma_token);
-      cuobj->release_buffer(entry);
-      rdma_buf = nullptr;
+      release_rdma_buf();
       if (ret < 0) {
         ldout(s->cct, 0) << "rgw_cuobj: ERROR: failed to write to client via RDMA: " << cpp_strerror(ret) << dendl;
         op_ret = ret;

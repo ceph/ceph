@@ -2616,9 +2616,11 @@ bool RGWGetObj::prefetch_data()
   }
 
   /* when the OSDs may push data straight into client memory, inline
-   * head data staged in RGW memory would defeat the passthrough */
-  if (s->info.env->exists("HTTP_X_AMZ_RDMA_TOKEN") &&
-      s->cct->_conf.get_val<bool>("rgw_cuobj_osd_passthrough")) {
+   * head data staged in RGW memory would defeat the passthrough; the
+   * same holds when they push into the gateway's own buffers */
+  if ((s->info.env->exists("HTTP_X_AMZ_RDMA_TOKEN") &&
+       s->cct->_conf.get_val<bool>("rgw_cuobj_osd_passthrough")) ||
+      s->cct->_conf.get_val<bool>("rgw_cuobj_osd_push")) {
     return false;
   }
 
@@ -2676,10 +2678,45 @@ static bool rgw_calc_aead_obj_size(const DoutPrefixProvider* dpp,
   return rgw_get_aead_decrypted_size(dpp, attrs, encrypted_size, out_size);
 }
 
+void RGWGetObj::release_rdma_buf()
+{
+#ifdef WITH_RADOSGW_CUOBJ
+  if (rdma_buf) {
+    if (auto* cuobj = RGWCuObjServer::get_instance()) {
+      cuobj->release_buffer(static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf),
+                            rdma_buf_quarantine_ms);
+    }
+    rdma_buf = nullptr;
+  }
+#endif
+  rdma_buf_quarantine_ms = 0;
+  rdma_target = false;
+}
+
 void RGWGetObj::select_rdma_mode(bool plain_chain)
 {
   rdma_mode = RdmaMode::NONE;
-  if (rdma_token.empty() || !get_data || get_type() != RGW_OP_GET_OBJ) {
+  rdma_target = false;
+  if (!get_data || get_type() != RGW_OP_GET_OBJ) {
+    return;
+  }
+  if (rdma_token.empty()) {
+#ifdef WITH_RADOSGW_CUOBJ
+    // a plain HTTP client: the OSDs can still push the data into a
+    // staging buffer here so the body is served without messenger copies
+    if (auto* cuobj = RGWCuObjServer::get_instance();
+        plain_chain && cuobj && cuobj->is_available() &&
+        cuobj->push_target_available() &&
+        s->cct->_conf.get_val<bool>("rgw_cuobj_osd_push")) {
+      if (!rdma_buf) {
+        rdma_buf = cuobj->acquire_buffer(total_len);
+        rdma_buf_offset = 0;
+      }
+      if (rdma_buf) {
+        rdma_target = true;
+      }
+    }
+#endif
     return;
   }
   if (plain_chain &&
@@ -2706,6 +2743,9 @@ void RGWGetObj::select_rdma_mode(bool plain_chain)
     }
     if (rdma_buf) {
       rdma_mode = RdmaMode::STAGED;
+      // the OSDs fill the staging buffer directly when they can
+      rdma_target = plain_chain && cuobj->push_target_available() &&
+        s->cct->_conf.get_val<bool>("rgw_cuobj_osd_push");
       return;
     }
     ldpp_dout(this, 1) << "rgw_cuobj: no staging buffer for " << total_len
@@ -2992,8 +3032,54 @@ void RGWGetObj::execute(optional_yield y)
     read_op->params.rdma_bytes = &rdma_bytes;
     read_op->params.rdma_crc64 = &rdma_crc64;
   }
+#ifdef WITH_RADOSGW_CUOBJ
+  if (rdma_target) {
+    // the OSDs push into our staging buffer; its token rides the reads
+    // exactly as a client's would, and the store places any stripe
+    // that comes back inline
+    auto* entry = static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf);
+    read_op->params.rdma_token = entry->token;
+    read_op->params.rdma_bytes = &rdma_bytes;
+    read_op->params.rdma_crc64 = &rdma_crc64;
+    read_op->params.rdma_target = static_cast<char*>(entry->ptr);
+    read_op->params.rdma_target_len = entry->size;
+  }
+#endif
 
   op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
+
+  if (rdma_target) {
+    if (read_op->params.rdma_target_tainted ||
+        (op_ret < 0 && read_op->params.rdma_submitted)) {
+      // an OSD may still write into the buffer: keep it out of use for
+      // the delivery lease plus the transport drain bound
+      rdma_buf_quarantine_ms = static_cast<uint64_t>(
+        std::ceil(read_op->params.rdma_lease * 1000.0)) +
+        s->cct->_conf.get_val<uint64_t>("rgw_cuobj_fence_drain_ms");
+    }
+    if (op_ret == -EOPNOTSUPP) {
+      // the store could not deliver into the buffer (d3n, an old OSD,
+      // inline head data): no bytes are committed, and unlike the
+      // client-window case nothing needs waiting for - the buffer is
+      // ours to quarantine. Retry on the messenger.
+      ldpp_dout(this, 4) << "rgw_cuobj: OSD push into the gateway "
+                         << "unsupported, restarting GET on the messenger"
+                         << dendl;
+      release_rdma_buf();
+      read_op->params.rdma_token.clear();
+      read_op->params.rdma_bytes = nullptr;
+      read_op->params.rdma_crc64 = nullptr;
+      read_op->params.rdma_target = nullptr;
+      read_op->params.rdma_target_len = 0;
+      read_op->params.rdma_target_tainted = false;
+      rdma_bytes = 0;
+      rdma_crc64.reset();
+      select_rdma_mode(false);
+      rdma_target = false;
+      op_ret = 0;
+      op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
+    }
+  }
 
   if (op_ret == -EOPNOTSUPP && rdma_mode == RdmaMode::PASSTHROUGH) {
     // an OSD (or the store) cannot push directly - old OSDs, cuObject
@@ -3053,14 +3139,17 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   }
 
-  if (rdma_mode == RdmaMode::PASSTHROUGH) {
+  if (rdma_mode == RdmaMode::PASSTHROUGH || rdma_target) {
     if (rdma_bytes != total_len) {
-      ldpp_dout(this, 0) << "ERROR: rdma passthrough delivered " << rdma_bytes
+      ldpp_dout(this, 0) << "ERROR: rdma " << (rdma_target ? "push" : "passthrough")
+                         << " delivered " << rdma_bytes
                          << " of " << total_len << " bytes" << dendl;
       op_ret = -EIO;
       goto done_err;
     }
-    s->rdma_bytes_transferred = rdma_bytes;
+    if (rdma_mode == RdmaMode::PASSTHROUGH) {
+      s->rdma_bytes_transferred = rdma_bytes;
+    }
 
     // end-to-end integrity: the OSDs checksummed each stripe after the
     // RDMA write; for a whole-object GET the combined value must match

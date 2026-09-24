@@ -4723,6 +4723,26 @@ options:
   default: 3000
   services:
   - rgw
+- name: rgw_cuobj_osd_push
+  type: bool
+  level: advanced
+  desc: Let OSDs RDMA-write object data straight into radosgw's registered
+    staging buffers instead of returning it over the messenger, for GETs the
+    gateway must serve itself - plain HTTP clients, and S3-over-RDMA clients
+    whose request is not eligible for OSD passthrough. Requires a build with
+    the cuObject client library and OSDs with osd_cuobj_enabled; a stripe an
+    OSD cannot push arrives inline and is placed by the gateway
+  default: false
+  services:
+  - rgw
+- name: rgw_cuobj_client_config
+  type: str
+  level: advanced
+  desc: Path to the cuObject client (cufile) JSON naming this host's RDMA
+    interface, used when rgw_cuobj_osd_push is set; exported as
+    CUFILE_ENV_PATH_JSON if that is unset
+  services:
+  - rgw
 - name: rgw_cuobj_osd_passthrough
   type: bool
   level: advanced

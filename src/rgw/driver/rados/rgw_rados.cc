@@ -8655,6 +8655,60 @@ int get_obj_data::flush_rdma(rgw::AioResultList&& results) {
   if (r < 0) {
     return r;
   }
+  if (rdma_target) {
+    // The window is our own buffer, so the fences that guard a client's
+    // window do not apply: a declined stripe (inline data) is simply
+    // placed at its offset, and a stripe from a resent op is accepted
+    // too - it only means the buffer must be quarantined afterwards.
+    // Stripes are handed to the callback in logical order so the HTTP
+    // body streams as they land.
+    auto cmp = [](const auto& lhs, const auto& rhs) { return lhs.id < rhs.id; };
+    results.sort(cmp);
+    completed.merge(results, cmp);
+    while (!completed.empty() && completed.front().id == offset) {
+      auto& e = completed.front();
+      auto ofs = std::find(rdma_slot_ofs.begin(), rdma_slot_ofs.end(), e.id);
+      if (ofs == rdma_slot_ofs.end()) {
+        return -EIO;
+      }
+      auto& slot = rdma_slots[ofs - rdma_slot_ofs.begin()];
+      const uint64_t rel = e.id - rdma_range_start;
+      uint64_t len = e.data.length();
+      if (len > 0) {
+        if (rel + len > rdma_target_len) {
+          return -EIO;
+        }
+        e.data.begin().copy(len, rdma_target + rel);
+        if (slot.flags & librados::ObjectReadOperation::RDMA_DELIVERY_RESENT) {
+          rdma_target_tainted = true;
+        }
+        slot.bytes = len;
+        slot.ranges.clear();
+        slot.flags = 0;
+        if (rdma_flags & librados::ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64) {
+          slot.crc64 = ceph::crc64nvme(e.data);
+          slot.flags = librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_VALID |
+                       librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_COMBINABLE;
+        }
+        rdma_patched++;
+      } else {
+        len = slot.bytes;
+        if (len == 0 || rel + len > rdma_target_len) {
+          return -EIO;
+        }
+      }
+      // alias the delivered range; the buffer outlives the request
+      bufferlist bl;
+      bl.push_back(ceph::buffer::create_static(len, rdma_target + rel));
+      offset += len;
+      r = client_cb->handle_data(bl, 0, len);
+      if (r < 0) {
+        return r;
+      }
+      completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
+    }
+    return 0;
+  }
   // OSDs that pushed wrote straight into client memory (byte counts
   // arrive through the per-stripe delivery out-params); an inline
   // reply means that OSD could not push - no RDMA support, a lapsed
@@ -8896,6 +8950,8 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
     data.rdma = true;
     data.rdma_token = params.rdma_token;
     data.rdma_range_start = ofs;
+    data.rdma_target = params.rdma_target;
+    data.rdma_target_len = params.rdma_target_len;
     if (cct->_conf.get_val<bool>("rgw_cuobj_crc64nvme")) {
       data.rdma_flags |=
         librados::ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64;
@@ -8913,12 +8969,14 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
     data.cancel(); // drain completions without writing back to client
     params.rdma_submitted = data.rdma_ops_sent;
     params.rdma_lease = data.rdma_lease;
+    params.rdma_target_tainted = data.rdma_target_tainted;
     return r;
   }
 
   r = data.drain();
   params.rdma_submitted = data.rdma_ops_sent;
   params.rdma_lease = data.rdma_lease;
+  params.rdma_target_tainted = data.rdma_target_tainted;
   if (r < 0) {
     return r;
   }

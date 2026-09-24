@@ -1189,6 +1189,16 @@ class Object {
         /// this long after receiving one, so a fallback that rewrites the
         /// window waits at least this long first
         double rdma_lease{0};
+        /// When set with rdma_token, the token describes this gateway
+        /// buffer rather than client memory: the OSDs write stripes into
+        /// it, iterate() places any stripe that comes back inline itself,
+        /// and the callback receives, in order, buffers that alias the
+        /// delivered ranges (valid until the buffer is released)
+        char* rdma_target{nullptr};
+        size_t rdma_target_len{0};
+        /// out: an OSD may still write into rdma_target after iterate()
+        /// returned (a resent op), so the caller must quarantine it
+        bool rdma_target_tainted{false};
       } params;
 
       virtual ~ReadOp() = default;

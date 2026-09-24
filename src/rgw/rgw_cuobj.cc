@@ -4,13 +4,18 @@
 #include "rgw_cuobj.h"
 
 #include <cuobjserver.h>
+#ifdef WITH_RADOSGW_CUOBJ_TARGET
+#include <cuobjclient.h>
+#endif
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/dout.h"
+#include "common/errno.h"
 #include "common/rdma_token.h"
 #include "include/scope_guard.h"
 
@@ -134,12 +139,104 @@ int RGWCuObjServer::do_init(CephContext* cct)
 
   ldout(cct, 1) << "rgw_cuobj: initialized with " << buf_count
                 << " RDMA buffers of " << buf_size << " bytes" << dendl;
+
+  if (cct->_conf.get_val<bool>("rgw_cuobj_osd_push")) {
+    // a failure here only loses the push-target role, not RDMA service
+    int r = init_push_target(cct);
+    if (r < 0) {
+      lderr(cct) << "rgw_cuobj: WARNING: OSDs cannot push into this gateway "
+                 << "(" << cpp_strerror(r) << "); staged GETs stay on the "
+                 << "messenger" << dendl;
+    }
+  }
   return 0;
+}
+
+namespace {
+#ifdef WITH_RADOSGW_CUOBJ_TARGET
+// the token flow never uses the library's own get/put callbacks
+CUObjIOOps empty_ops{};
+#endif
+
+int64_t now_ns()
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+} // namespace
+
+int RGWCuObjServer::init_push_target(CephContext* cct)
+{
+#ifndef WITH_RADOSGW_CUOBJ_TARGET
+  lderr(cct) << "rgw_cuobj: rgw_cuobj_osd_push set but this radosgw was "
+             << "built without the cuObject client library" << dendl;
+  return -EOPNOTSUPP;
+#else
+  // the client library reads its NIC selection from the cufile json
+  auto json = cct->_conf.get_val<std::string>("rgw_cuobj_client_config");
+  if (!json.empty() && !getenv("CUFILE_ENV_PATH_JSON")) {
+    setenv("CUFILE_ENV_PATH_JSON", json.c_str(), 0);
+  }
+  try {
+    m_client = std::make_unique<cuObjClient>(empty_ops, CUOBJ_PROTO_RDMA_DC_V1);
+  } catch (const std::exception& e) {
+    lderr(cct) << "rgw_cuobj: cuObjClient init failed: " << e.what() << dendl;
+    return -EIO;
+  }
+  if (!m_client->isConnected()) {
+    lderr(cct) << "rgw_cuobj: cuObjClient did not connect to the RDMA fabric"
+               << dendl;
+    m_client.reset();
+    return -EIO;
+  }
+  // the same memory the local cuObjServer pushes out of is now also a
+  // window peers can push into: a second registration and one token
+  // per buffer, both held for the life of the pool
+  for (size_t i = 0; i < m_buf_count; i++) {
+    auto& entry = m_buffer_pool[i];
+    if (m_client->cuMemObjGetDescriptor(entry.ptr, entry.size) != CU_OBJ_SUCCESS) {
+      lderr(cct) << "rgw_cuobj: client registration of buffer " << i
+                 << " failed" << dendl;
+      return -EIO;
+    }
+    if (m_client->cuMemObjGetRDMAToken(entry.ptr, entry.size, 0, CUOBJ_GET,
+                                       &entry.token_raw) != CU_OBJ_SUCCESS ||
+        !entry.token_raw) {
+      entry.token_raw = nullptr;
+      m_client->cuMemObjPutDescriptor(entry.ptr);
+      lderr(cct) << "rgw_cuobj: token mint for buffer " << i << " failed"
+                 << dendl;
+      return -EIO;
+    }
+    entry.token = entry.token_raw;
+  }
+  m_push_target = true;
+  ldout(cct, 1) << "rgw_cuobj: " << m_buf_count << " buffers registered as "
+                << "OSD push targets" << dendl;
+  return 0;
+#endif
 }
 
 void RGWCuObjServer::do_shutdown()
 {
   ldout(m_cct, 1) << "rgw_cuobj: shutting down cuObjServer" << dendl;
+  m_push_target = false;
+#ifdef WITH_RADOSGW_CUOBJ_TARGET
+  // the library's lifetime rules: tokens before registrations before
+  // the client, all before the memory goes
+  if (m_client) {
+    for (size_t i = 0; i < m_buf_count; i++) {
+      auto& entry = m_buffer_pool[i];
+      if (entry.token_raw) {
+        m_client->cuMemObjPutRDMAToken(entry.token_raw);
+        m_client->cuMemObjPutDescriptor(entry.ptr);
+        entry.token_raw = nullptr;
+        entry.token.clear();
+      }
+    }
+    m_client.reset();
+  }
+#endif
   for (size_t i = 0; i < m_buf_count; i++) {
     auto& entry = m_buffer_pool[i];
     if (entry.handle && m_server) {
@@ -214,12 +311,17 @@ void RGWCuObjServer::release_channel(uint16_t channel)
 RGWCuObjServer::RDMABufEntry* RGWCuObjServer::acquire_buffer(size_t needed_size)
 {
   ldout(m_cct, 21) << "rgw_cuobj: acquiring RDMA buffer for size " << needed_size << dendl;
+  const int64_t now = now_ns();
   for (size_t i = 0; i < m_buf_count; i++) {
     auto& entry = m_buffer_pool[i];
     if (entry.size >= needed_size) {
       bool expected = false;
       if (entry.in_use.compare_exchange_strong(expected, true,
                                                std::memory_order_acquire)) {
+        if (entry.quarantine_until_ns.load(std::memory_order_relaxed) > now) {
+          entry.in_use.store(false, std::memory_order_release);
+          continue;
+        }
         return &entry;
       }
     }
@@ -228,10 +330,15 @@ RGWCuObjServer::RDMABufEntry* RGWCuObjServer::acquire_buffer(size_t needed_size)
   return nullptr;
 }
 
-void RGWCuObjServer::release_buffer(RDMABufEntry* buf)
+void RGWCuObjServer::release_buffer(RDMABufEntry* buf, uint64_t quarantine_ms)
 {
-  ldout(m_cct, 21) << "rgw_cuobj: releasing RDMA buffer" << dendl;
+  ldout(m_cct, 21) << "rgw_cuobj: releasing RDMA buffer"
+                   << (quarantine_ms ? " (quarantined)" : "") << dendl;
   if (buf) {
+    if (quarantine_ms) {
+      buf->quarantine_until_ns.store(now_ns() + int64_t(quarantine_ms) * 1000000,
+                                     std::memory_order_relaxed);
+    }
     buf->in_use.store(false, std::memory_order_release);
   }
 }

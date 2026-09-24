@@ -484,6 +484,13 @@ protected:
   /// once response headers are out
   void* rdma_buf = nullptr;
   size_t rdma_buf_offset = 0;
+  /// the OSDs RDMA-write stripes into rdma_buf (rgw_cuobj_osd_push):
+  /// STAGED then forwards from it, NONE serves the HTTP body from it
+  bool rdma_target = false;
+  /// how long rdma_buf must stay out of use after this request: set
+  /// when an OSD may still write into it (a resent op, a fallback)
+  uint64_t rdma_buf_quarantine_ms = 0;
+  void release_rdma_buf();
 
   /// pick rdma_mode for this request; plain_chain is true when no data
   /// filter (compression, encryption, lua, flight) is engaged

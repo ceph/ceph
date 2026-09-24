@@ -436,6 +436,10 @@ endif()
 if(WITH_RADOSGW_CUOBJ)
   target_link_libraries(rgw_common PRIVATE ${CUOBJSERVER_LIBRARY})
 endif()
+if(WITH_RADOSGW_CUOBJ_TARGET)
+  target_include_directories(rgw_common PRIVATE ${CUOBJCLIENT_INCLUDE_DIR})
+  target_link_libraries(rgw_common PRIVATE ${CUOBJCLIENT_LIBRARY})
+endif()
 
 if(WITH_RADOSGW_RADOS)
   target_link_libraries(rgw_common PRIVATE
@@ -546,6 +550,10 @@ if(WITH_RADOSGW_STANDALONE)
 
   if(WITH_RADOSGW_CUOBJ)
     target_link_libraries(rgw_common_standalone PRIVATE ${CUOBJSERVER_LIBRARY})
+  endif()
+  if(WITH_RADOSGW_CUOBJ_TARGET)
+    target_include_directories(rgw_common_standalone PRIVATE ${CUOBJCLIENT_INCLUDE_DIR})
+    target_link_libraries(rgw_common_standalone PRIVATE ${CUOBJCLIENT_LIBRARY})
   endif()
 endif()
 

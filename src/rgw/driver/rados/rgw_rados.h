@@ -803,6 +803,9 @@ public:
         bool rdma_submitted = false; // out: descriptor-bearing ops reached OSDs
         double rdma_lease = 0; // out: longest rdma_delivery_lease (seconds)
                                // among the pools those ops were sent to
+        char *rdma_target = nullptr; // the token's window is this gateway buffer
+        size_t rdma_target_len = 0;
+        bool rdma_target_tainted = false; // out: quarantine rdma_target
 
         Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
 		   target_obj(nullptr), epoch(nullptr)
@@ -1807,6 +1810,11 @@ struct get_obj_data {
   std::deque<uint64_t> rdma_slot_ofs;
   // stripes an OSD declined that were then written from here
   uint64_t rdma_patched = 0;
+  // the token's window is this gateway buffer (rgw_cuobj_osd_push):
+  // stripes land here and are handed to the callback in order
+  char* rdma_target = nullptr;
+  size_t rdma_target_len = 0;
+  bool rdma_target_tainted = false;
 
   int flush(rgw::AioResultList&& results);
   int flush_rdma(rgw::AioResultList&& results);

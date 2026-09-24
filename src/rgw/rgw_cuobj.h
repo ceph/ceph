@@ -11,10 +11,12 @@
 #include <string>
 #include <vector>
 
+#include "acconfig.h"
 #include "include/common_fwd.h"
 
 struct rdma_buffer;
 class cuObjServer;
+class cuObjClient;
 
 class RGWCuObjServer {
 public:
@@ -23,6 +25,13 @@ public:
     size_t size = 0;
     struct rdma_buffer* handle = nullptr;
     std::atomic<bool> in_use{false};
+    /// descriptor of this buffer as an RDMA target (rgw_cuobj_osd_push):
+    /// carried on stripe reads so OSDs write object data straight in
+    std::string token;
+    char* token_raw = nullptr; ///< owned by the client library
+    /// a buffer an OSD might still write into (a resent op whose first
+    /// attempt we lost track of) stays out of circulation until then
+    std::atomic<int64_t> quarantine_until_ns{0};
   };
 
   ~RGWCuObjServer();
@@ -32,9 +41,16 @@ public:
   static RGWCuObjServer* get_instance();
 
   bool is_available() const;
+  /// true when pool buffers carry tokens OSDs can push into
+  bool push_target_available() const { return m_push_target; }
 
   RDMABufEntry* acquire_buffer(size_t needed_size);
-  void release_buffer(RDMABufEntry* buf);
+  /**
+   * Return a buffer. quarantine_ms > 0 keeps it unavailable that long,
+   * for a buffer some OSD may still RDMA-write into (the pool's
+   * delivery lease plus the transport drain bound).
+   */
+  void release_buffer(RDMABufEntry* buf, uint64_t quarantine_ms = 0);
 
   static size_t parse_rdma_descriptor_size(const std::string& rdma_descr);
 
@@ -65,7 +81,14 @@ private:
   uint16_t acquire_channel();
   void release_channel(uint16_t channel);
 
+  /// register the pool with the client library and mint tokens
+  int init_push_target(CephContext* cct);
+
   std::unique_ptr<cuObjServer> m_server;
+#ifdef WITH_RADOSGW_CUOBJ_TARGET
+  std::unique_ptr<cuObjClient> m_client;
+#endif
+  bool m_push_target = false;
   size_t m_buf_count = 0;
   std::unique_ptr<RDMABufEntry[]> m_buffer_pool;
   CephContext* m_cct = nullptr;
