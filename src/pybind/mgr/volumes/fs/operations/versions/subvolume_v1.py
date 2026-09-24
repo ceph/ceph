@@ -29,6 +29,7 @@ from ..clone_index import open_clone_index, create_clone_index
 
 log = logging.getLogger(__name__)
 
+
 class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     """
     Version 1 subvolumes creates a subvolume with path as follows,

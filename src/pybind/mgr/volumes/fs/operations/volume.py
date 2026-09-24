@@ -345,7 +345,7 @@ def open_volume(vc, volname):
             with open_filesystem(vc, volname) as fs_handle:
                 yield fs_handle
         except CephfsConnectionException as ce:
-            raise VolumeException(ce.errno, ce.error_str)
+            raise VolumeException(ce.errno, ce.errmsg)
 
 
 @contextmanager
@@ -362,4 +362,4 @@ def open_volume_lockless(vc, volname):
         with open_filesystem(vc, volname) as fs_handle:
             yield fs_handle
     except CephfsConnectionException as ce:
-        raise VolumeException(ce.errno, ce.error_str)
+        raise VolumeException(ce.errno, ce.errmsg)
