@@ -23,7 +23,8 @@ class VolSpec(object):
 
         self.subvol_base_path = subvol_base_path
         if not self.subvol_base_path:
-            self.subvol_bae_path = self.DEFAULT_SUBVOL_PREFIX
+            self.subvol_base_path = self.DEFAULT_SUBVOL_PREFIX
+        assert self.subvol_base_path[0] == '/'
 
         self.pool_ns_prefix = pool_ns_prefix if pool_ns_prefix else VolSpec.DEFAULT_NS_PREFIX
 
