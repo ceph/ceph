@@ -2367,7 +2367,10 @@ void CDir::go_bad(bool complete)
   }
 
   auth_unpin(this);
-  finish_waiting(WAIT_COMPLETE, -EIO);
+  // A keyed fetch parks its requests on waiting_on_dentry, not on
+  // WAIT_COMPLETE, so wake those too.  The retried request stops at the
+  // damaged dirfrag in path_traverse() and gets -EIO.
+  finish_waiting(WAIT_COMPLETE | WAIT_DENTRY, -EIO);
 }
 
 // -----------------------
