@@ -35,12 +35,13 @@ class OperationNotPermittedError(SystemError):
 
 class CephFSMountBase(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
-                 client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
-                 client_config=None):
+                 client_keyring=None, client_keyring_path=None,
+                 hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
+                 client_config=None, brxnet=None):
         """
         :param test_dir: Global teuthology test dir
         :param client_id: Client ID, the 'foo' in client.foo
+        :param client_keyring: keyring of given client_id as str
         :param client_keyring_path: path to keyring for given client_id
         :param client_remote: Remote instance for the host where client will
                               run
@@ -63,8 +64,16 @@ class CephFSMountBase(object):
         self.client_config = client_config
 
         self.cephfs_name = cephfs_name
+
         self.client_id = client_id
+        self.client_keyring = client_keyring
         self.client_keyring_path = client_keyring_path
+        # don't pass both
+        assert not (self.client_keyring and self.client_keyring_path)
+        if self.client_keyring:
+            self.client_keyring_path = self.write_keyring()
+            self.client_keyring = None
+
         self.client_remote = client_remote
         self.cluster_name = 'ceph' # TODO: use config['cluster']
         self.fs = None
@@ -96,6 +105,13 @@ class CephFSMountBase(object):
         self.test_files = ['a', 'b', 'c']
 
         self.background_procs = []
+
+    def write_keyring(self):
+        assert self.client_keyring
+
+        return self.client_remote.mktemp(
+                suffix=f'ceph.client.{self.client_id}.keyring',
+                data=self.client_keyring)
 
     # This will cleanup the stale netnses, which are from the
     # last failed test cases.
@@ -582,6 +598,12 @@ class CephFSMountBase(object):
             v = kwargs.get(k)
             if v is not None:
                 setattr(self, k, v)
+
+        # don't pass both
+        assert not (self.client_keyring and self.client_keyring_path)
+        if self.client_keyring:
+            self.client_keyring_path = self.write_keyring()
+            self.client_keyring = None
 
     def remount(self, **kwargs):
         """
