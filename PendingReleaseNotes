@@ -5,6 +5,8 @@
   hold the lock, instead of an empty list. Callers should check the
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
+* RGW: The "Bytes Sent" field is always set to "-" when bucket-logging is enabled
+  in Standard mode.
 
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
