@@ -71,10 +71,17 @@ std::list<DecayCounter> DecayCounter::generate_test_instances()
 void DecayCounter::decay(double delta) const
 {
   auto now = clock::now();
-  double el = std::chrono::duration<double>(now - last_decay).count();
 
-  // calculate new value
-  double newval = val * exp(el * rate.k) + delta;
+  // calculate new value.  The clock is coarse, so hits in quick succession
+  // land on the tick of the last one: then nothing has decayed, and since
+  // exp(0) is exactly 1 the result is the same without calling it.
+  double newval;
+  if (now == last_decay) {
+    newval = val + delta;
+  } else {
+    double el = std::chrono::duration<double>(now - last_decay).count();
+    newval = val * exp(el * rate.k) + delta;
+  }
   if (newval < .01) {
     newval = 0.0;
   }
