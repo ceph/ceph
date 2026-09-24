@@ -5278,8 +5278,11 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     ceph_assert(r >= 0);
     numfiles++;
 
-    // touch dn
-    mdcache->lru.lru_touch(dn);
+    /* Only to the middle of the LRU: a du or find returns every dentry of a
+     * tree exactly once, and moving each to the top would push the working
+     * set of every other client out of the cache. A dentry the client does
+     * go on to use is touched to the top by that lookup. */
+    mdcache->lru.lru_midtouch(dn);
   }
   __u16 flags = 0;
   // client only understand END and COMPLETE flags ?
