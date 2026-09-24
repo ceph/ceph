@@ -1,5 +1,6 @@
 from errno import errorcode
 from logging import getLogger
+from traceback import format_stack
 
 
 log = getLogger(__name__)
@@ -23,6 +24,10 @@ class VolumeException(Exception):
             self.errno = -self.errno
 
         log.info(self)
+
+        # to be logged when an exceptions is left unhandled beyond bounds of
+        # volumes plugin
+        self.traceback = 'Traceback -\n' + ''.join(format_stack())
 
     def to_tuple(self):
         return self.errno, "", self.errmsg
