@@ -206,6 +206,30 @@ def get_ancestor_xattr(fs, path, attr):
         else:
             return get_ancestor_xattr(fs, os.path.split(path)[0], attr)
 
+
+def get_all_xattrs(fs, path):
+    '''
+    Get/return all xattrs present on the given path.
+
+    :returns: dict of xattr key and values
+    '''
+    num_of_keys, keys = fs.listxattr(path)
+    if not keys:
+        return
+    keys = keys.split('\x00')
+    assert len(keys) == num_of_keys
+
+    sv_xattrs = {}
+    for xattr in keys:
+        if not xattr:
+            continue
+        val = fs.getxattr(path, xattr)
+        if val:
+            sv_xattrs[xattr] = val
+
+    return sv_xattrs
+
+
 def create_base_dir(fs, path, mode):
     """
     Create volspec base/group directory if it doesn't exist
