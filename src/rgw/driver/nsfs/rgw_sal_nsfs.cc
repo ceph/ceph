@@ -3175,8 +3175,10 @@ int NSFSObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::st
   return 0;
 }
 
-int NSFSObject::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
-                      const std::string& new_owner_name, optional_yield y)
+int NSFSObject::chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_owner,
+                    const std::string& new_owner_name,
+                    optional_yield y)
 {
   /* TODO Get UID from user */
   int uid = 0;
