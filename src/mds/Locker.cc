@@ -4598,9 +4598,9 @@ void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
   if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
     dout(25) << "encode lease reply encoding: " << ls << dendl;
     ENCODE_START(2, 1, bl);
-    encode(ls.mask, bl);
-    encode(ls.duration_ms, bl);
-    encode(ls.seq, bl);
+    // The fixed-size fields in one append rather than three: readdir encodes
+    // a lease for every entry it returns.
+    encode(std::tuple{ls.mask, ls.duration_ms, ls.seq}, bl, 0);
     encode(ls.alternate_name, bl);
     ENCODE_FINISH(bl);
   }
