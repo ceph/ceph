@@ -572,6 +572,7 @@ class FilesystemBase(MDSClusterBase):
                 raise RuntimeError("cannot specify fscid when creating fs")
             if create and not self.legacy_configured():
                 self.create(**kwargs)
+                self.getinfo(True)
         else:
             if fscid is not None:
                 self.id = fscid
