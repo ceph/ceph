@@ -29,6 +29,7 @@ from ..clone_index import open_clone_index, create_clone_index
 
 log = logging.getLogger(__name__)
 
+
 class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     """
     Version 1 subvolumes creates a subvolume with path as follows,
@@ -45,10 +46,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     component in the path.
     """
     VERSION = 1
-
-    @staticmethod
-    def version():
-        return SubvolumeV1.VERSION
 
     @property
     def path(self):
@@ -113,7 +110,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')
-            self.init_config(SubvolumeV1.VERSION, subvolume_type, qpath, initial_state)
+            self.init_config(self.VERSION, subvolume_type, qpath, initial_state)
             self.mark_subvolume()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
@@ -183,7 +180,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # persist subvolume metadata and clone source
             qpath = subvol_path.decode('utf-8')
-            self.metadata_mgr.init(SubvolumeV1.VERSION, subvolume_type.value, qpath, initial_state.value)
+            self.metadata_mgr.init(self.VERSION, subvolume_type.value, qpath, initial_state.value)
             self.add_clone_source(source_volname, source_subvolume, snapname)
             self.metadata_mgr.flush()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:

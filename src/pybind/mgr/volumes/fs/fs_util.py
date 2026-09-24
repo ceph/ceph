@@ -128,7 +128,7 @@ def listsnaps(fs, volspec, snapdirpath, filter_inherited_snaps=False):
     """
     Get the snap names from a given snap directory path
     """
-    if os.path.basename(snapdirpath) != volspec.snapshot_prefix.encode('utf-8'):
+    if os.path.basename(snapdirpath) != volspec.snap_base_dir.encode('utf-8'):
         raise VolumeException(-errno.EINVAL, "Not a snap directory: {0}".format(snapdirpath))
     snaps = []
     try:

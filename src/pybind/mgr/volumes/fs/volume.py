@@ -113,6 +113,11 @@ class VolumeClient(CephfsClient["Module"]):
                     return self.volume_exception_to_retval(ve)
             return wrapper
         elif ve is not None:
+            # prefix with "ERROR" so that it stands out in logs
+            log.error(f'ERROR: {ve}')
+            # log traceback too since error is being returned
+            log.error(ve.traceback)
+
             # used as a method on self with a VolumeException argument
             return ve.to_tuple()
         else:
@@ -312,7 +317,7 @@ class VolumeClient(CephfsClient["Module"]):
                     self.purge_queue.queue_job(volname)
         except VolumeException as ve:
             if ve.errno == -errno.EAGAIN and not force:
-                ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
+                ve = VolumeException(ve.errno, ve.errmsg + " (use --force to override)")
                 ret = self.volume_exception_to_retval(ve)
             elif not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)
