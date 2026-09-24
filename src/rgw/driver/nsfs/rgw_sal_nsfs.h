@@ -692,6 +692,14 @@ public:
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override { return true; }
 
+  int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                            std::unique_ptr<VectorBucket>* bucket, optional_yield y) override { return -ENOTSUP; }
+  int list_vector_buckets(const DoutPrefixProvider* dpp,
+			     const rgw_owner& owner, const std::string& tenant,
+			     const std::string& marker, const std::string& end_marker,
+			     uint64_t max, BucketList& buckets,
+			     optional_yield y) override { return -ENOTSUP; }
+
   virtual void finalize(void) override;
 
   virtual CephContext* ctx(void) override { return userDB->ctx(); }
@@ -1047,7 +1055,10 @@ public:
 				    Attrs* vals) override;
   virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key,
 				  bufferlist& val, bool must_exist, optional_yield y) override;
-  virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_owner,
+                    const std::string& new_owner_name,
+                    optional_yield y) override;
   virtual std::unique_ptr<Object> clone() override {
     return std::unique_ptr<Object>(new NSFSObject(*this));
   }

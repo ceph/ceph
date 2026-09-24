@@ -1604,7 +1604,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   }
 
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
+  quota_handler = RGWQuotaHandler::generate_handler(this, true);
 
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
   return 0;
@@ -3175,7 +3175,10 @@ int NSFSObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::st
   return 0;
 }
 
-int NSFSObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+int NSFSObject::chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_owner,
+                    const std::string& new_owner_name,
+                    optional_yield y)
 {
   /* TODO Get UID from user */
   int uid = 0;
