@@ -76,6 +76,8 @@ def listdir(fs, dirpath, filter_entries=None, filter_files=True):
     """
     Get the directory entries for a given path. List only dirs if 'filter_files' is True.
     Don't list the entries passed in 'filter_entries'
+
+    :rtype: list of bytes
     """
     entries = []
     if filter_entries is None:
