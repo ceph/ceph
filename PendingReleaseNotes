@@ -6,10 +6,12 @@
   from ``2`` to ``30`` seconds.
 
 * Messenger: with ``debug_ms`` below 5, the per-message log lines
-  (``<==`` / ``-->``) print only the first (msgr2) address of a daemon's
+  (``<==`` / ``-->``) print only the first (preferred) address of a daemon's
   address vector instead of the full ``[v2:...,v1:...]`` vector, matching the
-  format already used by msgr2-only daemons. Set ``debug_ms`` to 5 or higher
-  to get the full vectors.
+  format already used by msgr2-only daemons. On a dual-stack daemon (both
+  ``ms_bind_ipv4`` and ``ms_bind_ipv6`` set) this also drops the second
+  address family from these lines. Set ``debug_ms`` to 5 or higher to get
+  the full vectors.
 
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
