@@ -7038,15 +7038,17 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         meta.mtime = params.mtime;
       }
 
-      int r = target->get_state(dpp, &target->state, &target->manifest, false, y);
+      // follow the olh first, since a reload frees target->state
+      RGWObjState* current_state = nullptr;
+      int r = target->get_current_version_state(dpp, current_state, y);
+      if (r < 0 && r != -ENOENT) {
+        return r;
+      }
+      r = target->get_state(dpp, &target->state, &target->manifest, false, y);
       if (r < 0)
         return r;
-      RGWObjState* current_state = target->state;
-      r = target->get_current_version_state(dpp, current_state, y);
-      if (r == -ENOENT) {
+      if (!current_state) {
         current_state = target->state;
-      } else if (r < 0) {
-        return r;
       }
 
       r = target->check_preconditions(dpp, params.size_match, params.last_mod_time_match, params.high_precision_time,
@@ -7408,12 +7410,13 @@ int RGWRados::get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx&
   rgw_obj target;
   int r = RGWRados::follow_olh(dpp, bucket_info, obj_ctx, olh_state,
                                obj, &target, y); /* might return -EAGAIN */
+  *psm = obj_ctx.get_state(obj);
   if (r < 0) {
     return r;
   }
 
   // if prefetch was requested, apply it to the target too
-  if (olh_state->prefetch_data) {
+  if ((*psm)->state.prefetch_data) {
     obj_ctx.set_prefetch_data(target);
   }
 
@@ -7625,13 +7628,14 @@ int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
                             optional_yield y, bool assume_noent)
 {
   int ret;
+  unsigned attempts = 0;
 
   do {
     ret = get_obj_state_impl(dpp, octx, bucket_info, obj, psm,
                              follow_olh, y, assume_noent);
-  } while (ret == -EAGAIN);
+  } while (ret == -EAGAIN && ++attempts < 3);
 
-  return ret;
+  return ret == -EAGAIN ? -ERR_SERVICE_UNAVAILABLE : ret;
 }
 
 int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
@@ -10525,14 +10529,29 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
     ldpp_dout(dpp, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj.bucket << dendl;
 
     int ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, y);
-    if (ret < 0) {
-      if (ret == -ECANCELED) {
-        // In this context, ECANCELED means that the OLH tag changed in either the bucket index entry or the OLH object.
-        // If the OLH tag changed, it indicates that a previous OLH entry was removed since this request started. We
-        // return ENOENT to indicate that the OLH object was removed.
-        ret = -ENOENT;
+    if (ret == -ECANCELED) {
+      // ECANCELED can mean the olh tag changed in the bucket index or object,
+      // or another replay advanced the olh version. If a version was linked,
+      // discard the cached state and retry instead of treating it as removed.
+      if (state->attrset.find(RGW_ATTR_OLH_INFO) == state->attrset.end()) {
+        return -ENOENT; // no version was ever linked
       }
+      obj_ctx.invalidate(olh_obj);
+      return -EAGAIN;
+    }
+    if (ret < 0) {
       return ret;
+    }
+    // successful replay updates the head on disk, but not its cached attributes
+    obj_ctx.invalidate(olh_obj);
+    ret = get_obj_state(dpp, &obj_ctx, bucket_info, olh_obj,
+                       &state, nullptr, false, y);
+    if (ret < 0) {
+      return ret;
+    }
+    if (!state->is_olh) {
+      *target = olh_obj;
+      return 0;
     }
   }
 
