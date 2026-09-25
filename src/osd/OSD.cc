@@ -8307,7 +8307,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (!m->incremental_maps.empty()) {
     logger->inc(l_osd_inc_map_received, m->incremental_maps.size());
   }
-  dout(10) << __func__
+  dout(15) << __func__
            << ": received " << m->maps.size() << " full maps "
            << "and " << m->incremental_maps.size()
            << " incremental maps"
@@ -8330,7 +8330,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // make sure there is something new, here, before we bother flushing
   // the queues and such
   if (last <= superblock.get_newest_map()) {
-    dout(10) << " no new maps here, dropping" << dendl;
+    dout(20) << " no new maps here, dropping" << dendl;
     m->put();
     return;
   }
@@ -9846,7 +9846,7 @@ void OSD::do_recovery(
       goto out;
     }
 
-    dout(10) << "do_recovery starting " << reserved_pushes << " " << *pg << dendl;
+    dout(15) << "do_recovery starting " << reserved_pushes << " " << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
     dout(20) << "  active was " << service.recovery_oids[pg->pg_id] << dendl;
 #endif
