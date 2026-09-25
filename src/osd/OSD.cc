@@ -11165,6 +11165,7 @@ void OSD::ShardedOpWQ::_add_slot_waiter(
     dout(10) << __func__ << " " << pgid
 	     << " item epoch is "
 	     << qi.get_map_epoch()
+	     << (slot->waiting_for_split.empty() ? "" : " (splitting)")
 	     << ", will wait on " << qi << dendl;
     slot->waiting.push_back(std::move(qi));
   }
