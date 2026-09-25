@@ -15,7 +15,12 @@ prefix on every line.  Usage:
     expand_pg_log_prefix.py [ceph-osd.N.log ...] > expanded.log
 
 Reads stdin when no file is given.  Lines that are not PG lines, and
-compact lines with no earlier full prefix, are printed unchanged.
+compact lines with no earlier full prefix, are printed unchanged.  If
+several files are given (e.g. a rotated log split across
+ceph-osd.N.log.1 and ceph-osd.N.log), list them oldest first: full
+prefixes carry over from one file to the next in the order given, so an
+older file's state is used to expand compact lines at the start of the
+next one.
 
 A crash calls Log::dump_recent(), which replays up to log_max_recent
 buffered log entries, in their original order, after a "--- begin dump
@@ -47,8 +52,14 @@ def pg_segment(line, start):
     return -1
 
 
-def expand(stream, out):
-    last_full = {}
+def expand(stream, out, last_full):
+    """Expand compact PG prefixes read from stream, writing to out.
+
+    last_full is a dict of (osd, pgid) -> full "pg[...]" segment, owned by
+    the caller and mutated in place, so state can be threaded across
+    multiple calls (see main()) instead of being rebuilt from scratch for
+    each file.
+    """
     for line in stream:
         if DUMP_MARKER in line:
             # Entries in a recent-events dump were logged before whatever
@@ -74,11 +85,13 @@ def expand(stream, out):
 
 
 def main():
+    last_full = {}
     if len(sys.argv) == 1:
-        expand(sys.stdin, sys.stdout)
+        expand(sys.stdin, sys.stdout, last_full)
+        return
     for path in sys.argv[1:]:
         with open(path, errors='replace') as f:
-            expand(f, sys.stdout)
+            expand(f, sys.stdout, last_full)
 
 
 if __name__ == '__main__':
