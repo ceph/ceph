@@ -8952,6 +8952,16 @@ int OSDMonitor::prepare_new_pool(string& name,
     spi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
     pi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
 
+    // FLAG_NOPGCHANGE only blocks new admin pg_num commands, not the mgr-driven
+    // convergence toward pg_num_target or an in-flight merge (pg_num_pending <
+    // pg_num). Pin both to the current pg_num so neither pool splits or merges
+    // while migrating.
+    for (pg_pool_t *mp : {spi, pi}) {
+      mp->set_pg_num_target(mp->get_pg_num());
+      mp->set_pgp_num_target(mp->get_pgp_num());
+      mp->set_pg_num_pending(mp->get_pg_num());
+    }
+
     auto migration_percent = g_conf().get_val<uint64_t>("mon_pool_migration_max_pg_percent");
     uint64_t migrating_pgs_size = calculate_migrating_pg_count(spi->get_pg_num(), pi->get_pg_num(), migration_percent);
 
@@ -9258,6 +9268,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
       return -EPERM;
     }
+    // Backstop the freeze applied at migration start: the mgr must not step
+    // pg_num toward its target while the pool is migrating.
+    if (p.is_migrating()) {
+      ss << "pool pg_num change is disabled while the pool is migrating";
+      return -EPERM;
+    }
     // check for Crimson pools
     // pg merging is only supported when explicitly enabled per-pool (crimson_allow_pg_merge)
     if (p.has_flag(pg_pool_t::FLAG_CRIMSON)) {
@@ -9511,9 +9527,16 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	     var == "crimson_allow_pg_merge") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
+    bool clearing = (val == "false" || (interr.empty() && n == 0));
+    // A migrating pool keeps NOPGCHANGE for its whole lifetime; clearing it
+    // would let pg_num diverge from the value frozen at migration start.
+    if (var == "nopgchange" && clearing && p.is_migrating()) {
+      ss << "nopgchange cannot be cleared while the pool is migrating";
+      return -EPERM;
+    }
     if (val == "true" || (interr.empty() && n == 1)) {
       p.set_flag(flag);
-    } else if (val == "false" || (interr.empty() && n == 0)) {
+    } else if (clearing) {
       p.unset_flag(flag);
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
