@@ -113,7 +113,7 @@ void ECBackend::handle_recovery_push(
   if (get_parent()->pg_is_remote_backfilling()) {
     get_parent()->pg_add_local_num_bytes(op.data.length());
     get_parent()->pg_add_num_bytes(op.data.length() * sinfo.get_k());
-    dout(10) << __func__ << " " << op.soid
+    dout(20) << __func__ << " " << op.soid
              << " add new actual data by " << op.data.length()
              << " add new num_bytes by " << op.data.length() * sinfo.get_k()
              << dendl;
@@ -133,7 +133,7 @@ void ECBackend::handle_recovery_push(
       get_parent()->pg_sub_local_num_bytes(st.st_size);
       // XXX: This can be way overestimated for small objects
       get_parent()->pg_sub_num_bytes(st.st_size * sinfo.get_k());
-      dout(10) << __func__ << " " << op.soid
+      dout(20) << __func__ << " " << op.soid
                << " sub actual data by " << st.st_size
                << " sub num_bytes by " << st.st_size * sinfo.get_k()
                << dendl;

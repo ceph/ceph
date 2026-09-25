@@ -1272,6 +1272,14 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
     ceph_abort();
   }
 
+  dout(10) << __func__ << " " << op.soid << " v=" << op.version
+           << " data=" << op.data.length()
+           << " first=" << op.before_progress.first
+           << " complete=" << (op.after_progress.data_complete &&
+                               op.after_progress.omap_complete)
+           << (is_repair ? " repair" : "")
+           << dendl;
+
   bool oneshot = op.before_progress.first
     && op.after_progress.data_complete && op.after_progress.omap_complete;
   ghobject_t tobj;
@@ -1284,7 +1292,7 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
                       ghobject_t::NO_GEN,
                       get_parent()->whoami_shard().shard);
     if (op.before_progress.first) {
-      dout(10) << __func__ << ": Adding oid "
+      dout(15) << __func__ << ": Adding oid "
 	       << tobj.hobj << " in the temp collection" << dendl;
       add_temp_obj(tobj.hobj);
     }
@@ -1353,7 +1361,7 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
 
   if (op.after_progress.data_complete
     && op.after_progress.omap_complete && !oneshot) {
-    dout(10) << __func__ << ": Removing oid "
+    dout(15) << __func__ << ": Removing oid "
 	     << tobj.hobj << " from the temp collection" << dendl;
     clear_temp_obj(tobj.hobj);
     m->t.remove(coll, ghobject_t(
@@ -1458,7 +1466,7 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
     read_result_t &&res,
     read_request_t &req,
     RecoveryMessages *m) {
-  dout(10) << __func__ << ": returned " << hoid << " " << res << dendl;
+  dout(15) << __func__ << ": returned " << hoid << " " << res << dendl;
   ceph_assert(recovery_ops.contains(hoid));
   RecoveryBackend::RecoveryOp &op = recovery_ops[hoid];
 
@@ -1476,7 +1484,7 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
       if (get_parent()->get_pool().supports_omap()) {
         if (op.obc && !op.obc->obs.oi.is_omap()) {
           op.recovery_progress.omap_complete = true;
-          dout(10) << __func__ << ": object " << hoid
+          dout(15) << __func__ << ": object " << hoid
                    << " has no omap flag, marking omap_complete" << dendl;
         }
       } else {
@@ -1612,7 +1620,7 @@ void ECCommon::RecoveryBackend::dispatch_recovery_messages(
 void ECCommon::RecoveryBackend::continue_recovery_op(
   RecoveryBackend::RecoveryOp &op,
   RecoveryMessages *m) {
-  dout(10) << __func__ << ": continuing " << op << dendl;
+  dout(15) << __func__ << ": continuing " << op << dendl;
   using RecoveryOp = RecoveryBackend::RecoveryOp;
   while (1) {
     switch (op.state) {
@@ -1725,7 +1733,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         m->recovery_read(
           op.hoid,
           read_request);
-        dout(10) << __func__ << ": IDLE return " << op << dendl;
+        dout(15) << __func__ << ": IDLE return " << op << dendl;
         return;
       }
     }
@@ -1751,7 +1759,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         op.returned_data->get_sparse_buffer(pg_shard.shard, pop.data, pop.data_included);
         ceph_assert(pop.data.length() == pop.data_included.size());
 
-        dout(10) << __func__ << ": pop shard=" << pg_shard
+        dout(15) << __func__ << ": pop shard=" << pg_shard
                  << ", oid=" << pop.soid
                  << ", before_progress=" << op.recovery_progress
 		 << ", after_progress=" << after_progress
@@ -1762,7 +1770,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         if (op.recovery_progress.first) {
           if (sinfo.is_nonprimary_shard(pg_shard.shard)) {
             if (pop.version == op.recovery_info.oi.version) {
-              dout(10) << __func__ << ": copy OI attr only" << dendl;
+              dout(20) << __func__ << ": copy OI attr only" << dendl;
               pop.attrset[OI_ATTR] = op.xattrs[OI_ATTR];
             } else {
               // We are recovering a partial write - make sure we push the correct
@@ -1777,7 +1785,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
               pop.attrset[OI_ATTR] = bl;
             }
           } else {
-            dout(10) << __func__ << ": push all attrs (not nonprimary)" << dendl;
+            dout(20) << __func__ << ": push all attrs (not nonprimary)" << dendl;
             pop.attrset = op.xattrs;
             if (op.omap_header) {
               ceph_assert(get_parent()->get_pool().supports_omap());
@@ -1808,7 +1816,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
       op.returned_data.reset();
       op.waiting_on_pushes = op.missing_on;
       op.recovery_progress = after_progress;
-      dout(10) << __func__ << ": READING return " << op << dendl;
+      dout(15) << __func__ << ": READING return " << op << dendl;
       return;
     }
     case RecoveryOp::WRITING: {
@@ -1820,7 +1828,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
                i != op.missing_on.end();
                ++i) {
             if (*i != get_parent()->primary_shard()) {
-              dout(10) << __func__ << ": on_peer_recover on " << *i
+              dout(15) << __func__ << ": on_peer_recover on " << *i
 		       << ", obj " << op.hoid << dendl;
               get_parent()->on_peer_recover(
                 *i,
@@ -1842,7 +1850,7 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           return;
         } else {
           op.state = RecoveryOp::IDLE;
-          dout(10) << __func__ << ": WRITING continue " << op << dendl;
+          dout(15) << __func__ << ": WRITING continue " << op << dendl;
           continue;
         }
       }
@@ -1890,7 +1898,7 @@ ECCommon::RecoveryBackend::recover_object(
          get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
-    dout(10) << "checking " << *i << dendl;
+    dout(20) << "checking " << *i << dendl;
     const auto& missing = get_parent()->get_shard_missing(*i);
     if (auto it = missing.get_items().find(hoid);
           it != missing.get_items().end()) {
@@ -1922,7 +1930,7 @@ ECCommon::RecoveryBackend::recover_object(
       ceph_assert(get_parent()->get_pool().supports_omap());
     }
   }
-  dout(10) << __func__ << ": built op " << op << dendl;
+  dout(15) << __func__ << ": built op " << op << dendl;
   return op;
 }
 
