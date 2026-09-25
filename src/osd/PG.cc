@@ -27,6 +27,7 @@
 #include "osd/scheduler/OpSchedulerItem.h"
 #include "Session.h"
 
+#include "common/StackStringStream.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 
@@ -277,7 +278,38 @@ std::ostream& PG::gen_prefix(std::ostream& out) const
 #endif
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
-	<< " " << *this << " ";
+	<< " ";
+    if (cct->_conf->subsys.should_gather<ceph_subsys_osd, 20>() ||
+	cct->_conf->subsys.get_log_level(ceph_subsys_osd) <
+	  cct->_conf->subsys.get_gather_level(ceph_subsys_osd)) {
+      // debug_osd >= 20, or osd lines are gathered in memory above the log
+      // level: print the full PG state on every line (unchanged output).
+      // Forget the lean-mode cache so a later switch to lean mode starts
+      // with a full prefix.
+      last_logged_pg_state.clear();
+      out << *this << " ";
+    } else {
+      // Lean mode: print the full PG state only when it differs from the
+      // last full state logged for this PG. Otherwise print a compact form
+      // that keeps pgid, last_update, primary (EC only), role and state, e.g.
+      //   pg[6.cs0( v 844'13576) p3(0) r=0 active+clean]
+      // The full state for a compact line is the most recent full pg[...]
+      // for the same PG earlier in the log.
+      CachedStackStringStream css;
+      *css << *this;
+      if (css->strv() != last_logged_pg_state) {
+	last_logged_pg_state = css->strv();
+	out << css->strv() << " ";
+      } else {
+	out << "pg[" << info.pgid << "( v " << info.last_update << ")";
+	if (is_ec_pg()) {
+	  out << " p" << get_primary();
+	}
+	out << " r=" << get_role()
+	    << " " << pg_state_string(recovery_state.get_state())
+	    << "] ";
+      }
+    }
   } else {
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)

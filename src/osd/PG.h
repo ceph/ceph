@@ -803,6 +803,10 @@ protected:
 #ifndef CEPH_DEBUG_MUTEX
   mutable std::thread::id locked_by;
 #endif
+  // gen_prefix() lean mode (debug_osd < 20): the full "pg[...]" state text
+  // most recently written to the log for this PG. Only accessed from the
+  // locked branch of gen_prefix(), i.e. by the thread holding _lock.
+  mutable std::string last_logged_pg_state;
   std::atomic<unsigned int> ref{0};
 
 #ifdef PG_DEBUG_REFS
