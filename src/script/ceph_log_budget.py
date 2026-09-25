@@ -400,12 +400,13 @@ def merge_reports(reports, top=25):
     out = {'version': REPORT_VERSION, 'files': [], 'lines': 0, 'entries': 0,
            'bytes': 0, 'multiline_entries': 0, 'client_ops': 0,
            'kept': {'lines': 0, 'bytes': 0, 'multiline_entries': 0},
-           'levels': {}, 'components': {}, 'daemons': len(reports),
+           'levels': {}, 'components': {}, 'daemons': 0,
            'max_level_seen': None, 'duration_s': 0.0}
     tmpl = {}
     for r in reports:
         if not r:
             continue
+        out['daemons'] += 1
         out['level'] = r.get('level')
         out['files'].extend(r.get('files', []))
         for k in ('lines', 'entries', 'bytes', 'multiline_entries',
