@@ -14380,7 +14380,8 @@ int BlueStore::omap_iterate(
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
-      dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
+      dout(15) << __func__ << " " << c->get_cid() << " " << oid
+	       << " doesn't exist" << dendl;
       return -ENOENT;
     }
     o->flush();
