@@ -5096,7 +5096,11 @@ void PeeringState::append_log(
 	       << " dups=" << pg_log.get_log().dups.size()
 	       << dendl;
   } else {
-    psdout(10) << "appended " << brief_log_entries_t{logv}
+    // Keep "append_log" in the level-10 text (unlike the level-15 line
+    // above) so src/script/find_dups_in_pg_log.sh, which greps for
+    // "append_log" and " by ", still finds duplicate reqids on a
+    // debug_osd=10 log.
+    psdout(10) << __func__ << " appended " << brief_log_entries_t{logv}
 	       << " " << pg_log.get_log()
 	       << " trim_to=" << trim_to
 	       << " roll_forward_to=" << roll_forward_to
