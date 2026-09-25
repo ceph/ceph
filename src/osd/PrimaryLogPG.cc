@@ -2030,7 +2030,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   if (can_backoff) {
     session = static_cast<Session*>(m->get_connection()->get_priv().get());
     if (!session.get()) {
-      dout(10) << __func__ << " no session" << dendl;
+      dout(10) << __func__ << " no session " << m->get_reqid() << dendl;
       return;
     }
 
@@ -2041,7 +2041,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
   if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
     // not implemented.
-    dout(20) << __func__ << ": PARALLELEXEC not implemented " << *m << dendl;
+    dout(10) << __func__ << ": PARALLELEXEC not implemented " << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
@@ -2109,40 +2109,40 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   if (m->get_oid().name.size() > cct->_conf->osd_max_object_name_len) {
     dout(4) << "do_op name is longer than "
 	    << cct->_conf->osd_max_object_name_len
-	    << " bytes" << dendl;
+	    << " bytes " << m->get_reqid() << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
   if (m->get_hobj().get_key().size() > cct->_conf->osd_max_object_name_len) {
     dout(4) << "do_op locator is longer than "
 	    << cct->_conf->osd_max_object_name_len
-	    << " bytes" << dendl;
+	    << " bytes " << m->get_reqid() << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
   if (m->get_hobj().nspace.size() > cct->_conf->osd_max_object_namespace_len) {
     dout(4) << "do_op namespace is longer than "
 	    << cct->_conf->osd_max_object_namespace_len
-	    << " bytes" << dendl;
+	    << " bytes " << m->get_reqid() << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
   if (m->get_hobj().oid.name.empty()) {
-    dout(4) << "do_op empty oid name is not allowed" << dendl;
+    dout(4) << "do_op empty oid name is not allowed " << m->get_reqid() << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
 
   if (int r = osd->store->validate_hobject_key(head)) {
     dout(4) << "do_op object " << head << " invalid for backing store: "
-	    << r << dendl;
+	    << r << " " << m->get_reqid() << dendl;
     osd->reply_op_error(op, r);
     return;
   }
 
   // blocklisted?
   if (get_osdmap()->is_blocklisted(m->get_source_addr())) {
-    dout(10) << "do_op " << m->get_source_addr() << " is blocklisted" << dendl;
+    dout(10) << "do_op " << m->get_source_addr() << " is blocklisted " << m->get_reqid() << dendl;
     osd->reply_op_error(op, -EBLOCKLISTED);
     return;
   }
@@ -2171,7 +2171,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   // could be writing as part of file removals.
   if (write_ordered && osd->check_failsafe_full(get_dpp()) &&
       !m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
-    dout(10) << __func__ << " fail-safe full check failed, dropping request." << dendl;
+    dout(10) << __func__ << " fail-safe full check failed, dropping request " << m->get_reqid() << " " << head << dendl;
     return;
   }
   int64_t poolid = get_pgid().pool();
@@ -2182,9 +2182,9 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
     // drop op on the floor; the client will handle returning EIO
     if (m->has_flag(CEPH_OSD_FLAG_SUPPORTSPOOLEIO)) {
-      dout(10) << __func__ << " discarding op due to pool EIO flag" << dendl;
+      dout(10) << __func__ << " discarding op due to pool EIO flag " << m->get_reqid() << " " << head << dendl;
     } else {
-      dout(10) << __func__ << " replying EIO due to pool EIO flag" << dendl;
+      dout(10) << __func__ << " replying EIO due to pool EIO flag " << m->get_reqid() << " " << head << dendl;
       osd->reply_op_error(op, -EIO);
     }
     return;
@@ -2193,7 +2193,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
     // invalid?
     if (m->get_snapid() != CEPH_NOSNAP) {
-      dout(20) << __func__ << ": write to clone not valid " << *m << dendl;
+      dout(10) << __func__ << ": write to clone not valid " << *m << dendl;
       osd->reply_op_error(op, -EINVAL);
       return;
     }
@@ -2223,7 +2223,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   if (is_unreadable_object(head)) {
     if (!is_primary() && is_missing_any_head_or_clone_of(head)) {
       dout(10) << __func__ <<  "possibly missing clone object " << head
-               << " on this replica, bouncing to primary" << dendl;
+               << " on this replica, bouncing to primary" << " " << m->get_reqid() << dendl;
       osd->logger->inc(l_osd_replica_read_redirect_missing);
       osd->reply_op_error(op, -EAGAIN);
       return;
@@ -2243,7 +2243,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   // Missing direct read (EC version)
   if (m->has_flag(CEPH_OSD_FLAG_EC_DIRECT_READ) &&
       get_local_missing().is_missing(head)) {
-    dout(20) << __func__ << ": oid=" << head << " missing in direct read" << dendl;
+    dout(10) << __func__ << ": oid=" << head << " missing in direct read " << m->get_reqid() << dendl;
     osd->reply_op_error(op, -EAGAIN);
     return;
   }
@@ -2352,13 +2352,13 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
     if (osd_op.op.op == CEPH_OSD_OP_LIST_SNAPS) {
       if (m->get_snapid() != CEPH_SNAPDIR) {
-	dout(10) << "LIST_SNAPS with incorrect context" << dendl;
+	dout(10) << "LIST_SNAPS with incorrect context " << m->get_reqid() << " " << head << dendl;
 	osd->reply_op_error(op, -EINVAL);
 	return;
       }
     } else {
       if (m->get_snapid() == CEPH_SNAPDIR) {
-	dout(10) << "non-LIST_SNAPS on snapdir" << dendl;
+	dout(10) << "non-LIST_SNAPS on snapdir " << m->get_reqid() << " " << head << dendl;
 	osd->reply_op_error(op, -EINVAL);
 	return;
       }
@@ -2377,7 +2377,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       if (pool.info.is_erasure()) {
         storage_object = "shard";
       }
-      dout(20) << __func__
+      dout(10) << __func__
                << ": unstable write on " << storage_object
                << ", bouncing to primary "
 	       << *m << dendl;
@@ -2480,7 +2480,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       fill_in_copy_get_noent(op, oid, m->ops[0]);
       return;
     }
-    dout(20) << __func__ << ": find_object_context got error " << r << dendl;
+    dout(10) << __func__ << ": find_object_context got error " << r << " on " << oid << " " << m->get_reqid() << dendl;
     if (op->may_write() &&
 	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
       record_write_error(op, oid, nullptr, r);
@@ -2494,7 +2494,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   object_locator_t oloc(obc->obs.oi.soid);
   if (m->get_object_locator() != oloc) {
     dout(10) << " provided locator " << m->get_object_locator()
-	     << " != object's " << obc->obs.oi.soid << dendl;
+	     << " != object's " << obc->obs.oi.soid << " " << m->get_reqid() << dendl;
     osd->clog->warn() << "bad locator " << m->get_object_locator()
 		     << " on object " << oloc
 		      << " op " << *m;
@@ -2524,7 +2524,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     // FIXME: we could make this a stronger test.
     map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(obc->obs.oi.soid);
     if (p == flush_ops.end()) {
-      dout(10) << __func__ << " no flush in progress, aborting" << dendl;
+      dout(10) << __func__ << " no flush in progress, aborting " << obc->obs.oi.soid << " " << m->get_reqid() << dendl;
       reply_ctx(ctx, -EINVAL);
       return;
     }
@@ -2538,7 +2538,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   dout(20) << __func__ << " obc " << *obc << dendl;
 
   if (r) {
-    dout(20) << __func__ << " returned an error: " << r << dendl;
+    dout(10) << __func__ << " returned an error: " << r << " on " << oid << " " << m->get_reqid() << dendl;
     if (op->may_write() &&
 	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
       record_write_error(op, oid, nullptr, r,
@@ -2785,7 +2785,7 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
 				      MOSDOpReply *orig_reply, int r,
 				      OpContext *ctx_for_op_returns)
 {
-  dout(20) << __func__ << " r=" << r << dendl;
+  dout(10) << __func__ << " " << op->get_reqid() << " " << soid << " r=" << r << dendl;
   ceph_assert(op->may_write());
   const osd_reqid_t &reqid = op->get_req<MOSDOp>()->get_reqid();
   mempool::osd_pglog::list<pg_log_entry_t> entries;
@@ -2814,7 +2814,8 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
       ldpp_dout(pg, 20) << "finished " << __func__ << " r=" << r << dendl;
       auto m = op->get_req<MOSDOp>();
       MOSDOpReply *reply = orig_reply.detach();
-      ldpp_dout(pg, 10) << " sending commit on " << *m << " " << reply << dendl;
+      ldpp_dout(pg, 10) << " sending commit on " << *m << " " << reply
+			<< " r=" << r << dendl;
       pg->osd->send_message_osd_client(reply, m->get_connection());
     }
   };
@@ -4549,8 +4550,10 @@ void PrimaryLogPG::close_op_ctx(OpContext *ctx) {
 
 void PrimaryLogPG::reply_ctx(OpContext *ctx, int r)
 {
-  if (ctx->op)
+  if (ctx->op) {
+    dout(10) << __func__ << " r=" << r << " " << *ctx->op->get_req() << dendl;
     osd->reply_op_error(ctx->op, r);
+  }
   close_op_ctx(ctx);
 }
 
@@ -8393,7 +8396,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
   }
   if (result < 0) {
-    dout(10) << __func__ << " error: " << cpp_strerror(result) << dendl;
+    dout(10) << __func__ << " " << soid << " " << ctx->reqid
+	     << " error: " << cpp_strerror(result) << dendl;
   }
   return result;
 }
@@ -9201,11 +9205,11 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 	       << dendl;
     } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
       // they tried, they failed.
-      dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
+      dout(10) << __func__ << " full, replying to FULL_TRY op " << *m << dendl;
       return pool.info.has_flag(pg_pool_t::FLAG_FULL_QUOTA) ? -EDQUOT : -ENOSPC;
     } else {
       // drop request
-      dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
+      dout(10) << __func__ << " full, dropping request (bad client) " << *m << dendl;
       return -EAGAIN;
     }
   }
