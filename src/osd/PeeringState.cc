@@ -4943,9 +4943,12 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, ObjectStore::Transacti
 
 namespace {
 /* Compact single-line rendering of the entries handed to append_log(), used
- * only by the level-10 summary line below: "<version> <op> <soid> <reqid>"
- * per entry (plus " rc=<rc>" when set), comma separated.  Only evaluated
- * inside a dout block, so it costs nothing when the level is disabled. */
+ * only by the level-10 summary line below: "<version> (<prior_version>) <op>
+ * <soid> by <reqid>" per entry (plus " rc=<rc>" when set), comma separated.
+ * This mirrors the prefix of pg_log_entry_t::fmt_print() (osd_types.cc) so
+ * the same grep patterns match entries at level 10 and at 15/20.  Only
+ * evaluated inside a dout block, so it costs nothing when the level is
+ * disabled. */
 struct brief_log_entries_t {
   const std::vector<pg_log_entry_t> &entries;
 };
@@ -4957,8 +4960,8 @@ std::ostream &operator<<(std::ostream &out, const brief_log_entries_t &b)
     if (it != b.entries.begin()) {
       out << ",";
     }
-    out << it->version << " " << it->get_op_name() << " " << it->soid
-	<< " " << it->reqid;
+    out << it->version << " (" << it->prior_version << ") "
+	<< it->get_op_name() << " " << it->soid << " by " << it->reqid;
     if (it->return_code != 0) {
       out << " rc=" << it->return_code;
     }
