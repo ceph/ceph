@@ -5,6 +5,19 @@
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
   from ``2`` to ``30`` seconds.
 
+* OSD: with ``debug_osd`` below 20 (and its memory level not above its log
+  level), a PG's debug log lines print the full ``pg[<pgid>( v <last_update>)
+  [p<primary>] r=<role> <state>]`` prefix only when that state changes since
+  the last full prefix logged for that PG, and at least every 1000 lines or
+  every 60 seconds per PG; other lines carry a compact
+  ``pg[<pgid>( v <last_update>) ...]`` prefix that omits fields such as
+  ``les/c``, ``lpr=`` and ``crt=``. Set ``debug_osd`` to 20 (or a memory
+  level above the log level) to restore the full prefix on every line.
+  ``src/script/expand_pg_log_prefix.py`` rewrites a captured log to carry
+  the full prefix on every line again. Tools that parse ``les/c``, ``lpr=``,
+  ``crt=`` or similar fields out of ``debug_osd = 10`` (or lower) logs
+  should run that script first, or raise ``debug_osd``.
+
 * Messenger: with ``debug_ms`` below 5, the per-message log lines
   (``<==`` / ``-->``) print only the first (preferred) address of a daemon's
   address vector instead of the full ``[v2:...,v1:...]`` vector, matching the
