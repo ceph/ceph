@@ -12053,7 +12053,7 @@ void PrimaryLogPG::populate_obc_watchers(ObjectContextRef obc)
 	  it_objects->second->reverting_to ==
 	    obc->obs.oi.version));
 
-  dout(10) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
+  dout(20) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
   ceph_assert(obc->watchers.empty());
   // populate unconnected_watchers
   for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
@@ -12161,7 +12161,7 @@ ObjectContextRef PrimaryLogPG::create_object_context(const object_info_t& oi,
   obc->ssc = ssc;
   if (ssc)
     register_snapset_context(ssc);
-  dout(10) << "create_object_context " << (void*)obc.get() << " " << oi.soid << " " << dendl;
+  dout(15) << "create_object_context " << (void*)obc.get() << " " << oi.soid << " " << dendl;
   if (is_active())
     populate_obc_watchers(obc);
   return obc;
@@ -12183,10 +12183,10 @@ ObjectContextRef PrimaryLogPG::get_object_context(
   osd->logger->inc(l_osd_object_ctx_cache_total);
   if (obc) {
     osd->logger->inc(l_osd_object_ctx_cache_hit);
-    dout(10) << __func__ << ": found obc in cache: " << *obc
+    dout(20) << __func__ << ": found obc in cache: " << *obc
 	     << dendl;
   } else {
-    dout(10) << __func__ << ": obc NOT found in cache: " << soid << dendl;
+    dout(20) << __func__ << ": obc NOT found in cache: " << soid << dendl;
     // check disk
     bufferlist bv;
     if (attrs) {
@@ -12197,13 +12197,13 @@ ObjectContextRef PrimaryLogPG::get_object_context(
       int r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
       if (r < 0) {
 	if (!can_create) {
-	  dout(10) << __func__ << ": no obc for soid "
+	  dout(15) << __func__ << ": no obc for soid "
 		   << soid << " and !can_create"
 		   << dendl;
 	  return ObjectContextRef();   // -ENOENT!
 	}
 
-	dout(10) << __func__ << ": no obc for soid "
+	dout(15) << __func__ << ": no obc for soid "
 		 << soid << " but can_create"
 		 << dendl;
 	// new object.
@@ -12212,7 +12212,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 	  soid, true, 0, false);
         ceph_assert(ssc);
 	obc = create_object_context(oi, ssc);
-	dout(10) << __func__ << ": " << *obc
+	dout(15) << __func__ << ": " << *obc
 		 << " oi: " << obc->obs.oi
 		 << " " << *obc->ssc << dendl;
 	return obc;
@@ -12253,7 +12253,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
       }
     }
 
-    dout(10) << __func__ << ": creating obc from disk: " << *obc
+    dout(15) << __func__ << ": creating obc from disk: " << *obc
 	     << dendl;
   }
 
@@ -12263,7 +12263,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
     return ObjectContextRef();   // -ENOENT!
   }
 
-  dout(10) << __func__ << ": " << *obc
+  dout(20) << __func__ << ": " << *obc
 	   << " oi: " << obc->obs.oi
 	   << " exists: " << (int)obc->obs.exists
 	   << " " << *obc->ssc << dendl;
@@ -12313,7 +12313,7 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
         *pmissing = oid;
       return -ENOENT;
     }
-    dout(10) << __func__ << " " << oid
+    dout(15) << __func__ << " " << oid
        << " @" << oid.snap
        << " oi=" << obc->obs.oi
        << dendl;
@@ -12336,13 +12336,13 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
   }
 
   if (map_snapid_to_clone) {
-    dout(10) << __func__ << " " << oid << " @" << oid.snap
+    dout(15) << __func__ << " " << oid << " @" << oid.snap
 	     << " snapset " << ssc->snapset
 	     << " map_snapid_to_clone=true" << dendl;
     if (oid.snap > ssc->snapset.seq) {
       // already must be readable
       ObjectContextRef obc = get_object_context(head, false);
-      dout(10) << __func__ << " " << oid << " @" << oid.snap
+      dout(15) << __func__ << " " << oid << " @" << oid.snap
 	       << " snapset " << ssc->snapset
 	       << " maps to head" << dendl;
       *pobc = obc;
@@ -12354,19 +12354,19 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 	ssc->snapset.clones.end(),
 	oid.snap);
       if (citer == ssc->snapset.clones.end()) {
-	dout(10) << __func__ << " " << oid << " @" << oid.snap
+	dout(15) << __func__ << " " << oid << " @" << oid.snap
 		 << " snapset " << ssc->snapset
 		 << " maps to nothing" << dendl;
 	put_snapset_context(ssc);
 	return -ENOENT;
       }
 
-      dout(10) << __func__ << " " << oid << " @" << oid.snap
+      dout(15) << __func__ << " " << oid << " @" << oid.snap
 	       << " snapset " << ssc->snapset
 	       << " maps to " << oid << dendl;
 
       if (recovery_state.get_pg_log().get_missing().is_missing(oid)) {
-	dout(10) << __func__ << " " << oid << " @" << oid.snap
+	dout(15) << __func__ << " " << oid << " @" << oid.snap
 		 << " snapset " << ssc->snapset
 		 << " " << oid << " is missing" << dendl;
 	if (pmissing)
@@ -12377,7 +12377,7 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 
       ObjectContextRef obc = get_object_context(oid, false);
       if (!obc || !obc->obs.exists) {
-	dout(10) << __func__ << " " << oid << " @" << oid.snap
+	dout(15) << __func__ << " " << oid << " @" << oid.snap
 		 << " snapset " << ssc->snapset
 		 << " " << oid << " is not present" << dendl;
 	if (pmissing)
@@ -12385,7 +12385,7 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 	put_snapset_context(ssc);
 	return -ENOENT;
       }
-      dout(10) << __func__ << " " << oid << " @" << oid.snap
+      dout(15) << __func__ << " " << oid << " @" << oid.snap
 	       << " snapset " << ssc->snapset
 	       << " " << oid << " HIT" << dendl;
       *pobc = obc;
@@ -12395,13 +12395,13 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
     ceph_abort(); //unreachable
   }
 
-  dout(10) << __func__ << " " << oid << " @" << oid.snap
+  dout(15) << __func__ << " " << oid << " @" << oid.snap
 	   << " snapset " << ssc->snapset << dendl;
 
   // head?
   if (oid.snap > ssc->snapset.seq) {
     ObjectContextRef obc = get_object_context(head, false);
-    dout(10) << __func__ << " " << head
+    dout(15) << __func__ << " " << head
 	     << " want " << oid.snap << " > snapset seq " << ssc->snapset.seq
 	     << " -- HIT " << obc->obs
 	     << dendl;
@@ -12421,7 +12421,7 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 	 ssc->snapset.clones[k] < oid.snap)
     k++;
   if (k == ssc->snapset.clones.size()) {
-    dout(10) << __func__ << " no clones with last >= oid.snap "
+    dout(15) << __func__ << " no clones with last >= oid.snap "
 	     << oid.snap << " -- DNE" << dendl;
     put_snapset_context(ssc);
     return -ENOENT;
