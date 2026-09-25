@@ -1796,13 +1796,13 @@ int ECBackendL::be_deep_scrub(
     stride, bl,
     ECCommonL::scrub_fadvise_flags);
   if (r < 0) {
-    dout(20) << __func__ << "  " << poid << " got "
+    dout(10) << __func__ << "  " << poid << " got "
 	     << r << " on read, read_error" << dendl;
     o.read_error = true;
     return 0;
   }
   if (bl.length() % sinfo.get_chunk_size()) {
-    dout(20) << __func__ << "  " << poid << " got "
+    dout(10) << __func__ << "  " << poid << " got "
 	     << r << " on read, not chunk size " << sinfo.get_chunk_size() << " aligned"
 	     << dendl;
     o.read_error = true;
@@ -1832,9 +1832,9 @@ int ECBackendL::be_deep_scrub(
       }
       if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
 	dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
-		<< std::hex << pos
+		<< std::hex << pos.data_pos
 		<< " expected 0x" << hinfo->get_total_chunk_size() << std::dec
-		<< dendl;
+		<< " " << pos << dendl;
 	o.ec_size_mismatch = true;
 	return 0;
       }
