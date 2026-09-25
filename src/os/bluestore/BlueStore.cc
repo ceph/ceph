@@ -16401,7 +16401,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     }
     if (!create && (!o || !o->exists)) {
       dout(10) << __func__ << " op " << op->op << " got ENOENT on "
-	       << i.get_oid(op->oid) << dendl;
+	       << i.get_oid(op->oid) << " in " << c->cid << dendl;
       r = -ENOENT;
       goto endop;
     }
@@ -16652,7 +16652,7 @@ int BlueStore::_touch(TransContext *txc,
   int r = 0;
   _assign_nid(txc, o);
   txc->write_onode(o);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18283,7 +18283,7 @@ int BlueStore::_write(TransContext *txc,
   }
   auto finish = mono_clock::now();
   logger->tinc_with_max(l_bluestore_write_lat, finish - start);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
@@ -18304,7 +18304,7 @@ int BlueStore::_zero(TransContext *txc,
     _assign_nid(txc, o);
     r = _do_zero(txc, c, o, offset, length);
   }
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
@@ -18336,7 +18336,7 @@ int BlueStore::_do_zero(TransContext *txc,
   }
   txc->write_onode(o);
 
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
@@ -18410,7 +18410,7 @@ int BlueStore::_truncate(TransContext *txc,
       return ostr.str();
     }
   );
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec
 	   << " = " << r << dendl;
   return r;
@@ -18564,7 +18564,7 @@ int BlueStore::_remove(TransContext *txc,
     }
   );
 
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18592,7 +18592,7 @@ int BlueStore::_setattr(TransContext *txc,
   b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
 
   txc->write_onode(o);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << " = " << r << dendl;
   return r;
@@ -18619,7 +18619,7 @@ int BlueStore::_setattrs(TransContext *txc,
     }
   }
   txc->write_onode(o);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << aset.size() << " keys"
 	   << " = " << r << dendl;
   return r;
@@ -18642,7 +18642,7 @@ int BlueStore::_rmattr(TransContext *txc,
   txc->write_onode(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " = " << r << dendl;
   return r;
 }
@@ -18661,7 +18661,7 @@ int BlueStore::_rmattrs(TransContext *txc,
   txc->write_onode(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18694,7 +18694,7 @@ int BlueStore::_omap_clear(TransContext *txc,
   }
   logger->tinc_with_max(l_bluestore_omap_clear_lat, mono_clock::now() - t0);
 
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18746,7 +18746,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   logger->inc(l_bluestore_omap_setkeys_records, num0);
   logger->inc(l_bluestore_omap_setkeys_bytes, total_bytes);
   r = 0;
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18780,7 +18780,7 @@ int BlueStore::_omap_setheader(TransContext *txc,
   logger->inc(l_bluestore_omap_setheader_count);
   logger->inc(l_bluestore_omap_setheader_bytes, bl.length());
   r = 0;
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18816,7 +18816,7 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   txc->note_modified_object(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18866,7 +18866,7 @@ int BlueStore::_set_alloc_hint(
   o->onode.expected_write_size = expected_write_size;
   o->onode.alloc_hint_flags = flags;
   txc->write_onode(o);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
 	   << " flags " << ceph_osd_alloc_hint_flag_string(flags)
@@ -18953,7 +18953,7 @@ int BlueStore::_clone(TransContext *txc,
   r = 0;
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
 	   << newo->oid << " = " << r << dendl;
   return r;
 }
@@ -19031,7 +19031,7 @@ int BlueStore::_clone_range(TransContext *txc,
   r = 0;
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
 	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec
 	   << " = " << r << dendl;
@@ -19089,7 +19089,7 @@ int BlueStore::_rename(TransContext *txc,
   txc->note_modified_object(oldo);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << old_oid << " -> "
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << old_oid << " -> "
 	   << new_oid << " = " << r << dendl;
   return r;
 }
