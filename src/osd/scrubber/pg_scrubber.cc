@@ -1187,7 +1187,7 @@ eversion_t PgScrubber::search_log_for_updates() const
 
 void PgScrubber::get_replicas_maps(bool replica_can_preempt)
 {
-  dout(10) << __func__ << " started in epoch/interval: " << m_epoch_start << "/"
+  dout(15) << __func__ << " started in epoch/interval: " << m_epoch_start << "/"
 	   << m_interval_start << " pg same_interval_since: "
 	   << m_pg->info.history.same_interval_since
 	   << " range: [" << m_start << "," << m_end << ") deep: " << m_is_deep
@@ -1210,7 +1210,13 @@ void PgScrubber::get_replicas_maps(bool replica_can_preempt)
 		       replica_can_preempt);
   }
 
-  dout(15) << __func__ << " awaiting" << m_maps_status << dendl;
+  // the one line at the lean level that says which replicas we are still
+  // waiting on; carry the chunk identifiers here since the entry line
+  // above is no longer visible at that level.
+  dout(10) << __func__ << " range: [" << m_start << "," << m_end
+	   << ") deep: " << m_is_deep << " last_update: " << m_subset_last_update
+	   << " interval: " << m_interval_start << " awaiting" << m_maps_status
+	   << dendl;
 }
 
 bool PgScrubber::was_epoch_changed() const
