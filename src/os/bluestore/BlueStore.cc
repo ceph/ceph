@@ -12595,7 +12595,7 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
     buf->omap_allocated = db->estimate_prefix_size(prefix, key_prefix);
   }
 
-  dout(10) << __func__ << *buf << dendl;
+  dout(15) << __func__ << *buf << dendl;
   return 0;
 }
 
@@ -12785,7 +12785,7 @@ void BlueStore::set_collection_commit_queue(
 bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 {
   Collection *c = static_cast<Collection *>(c_.get());
-  dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   if (!c->exists)
     return false;
 
@@ -12810,7 +12810,7 @@ int BlueStore::stat(
   Collection *c = static_cast<Collection *>(c_.get());
   if (!c->exists)
     return -ENOENT;
-  dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->get_cid() << " " << oid << dendl;
 
   {
     std::shared_lock l(c->lock);
@@ -12957,7 +12957,7 @@ int BlueStore::read(
     dout(0) << __func__ << ": inject random EIO" << dendl;
     r = -EIO;
   }
-  dout(10) << __func__ << " " << cid << " " << oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
 
@@ -13420,7 +13420,8 @@ int BlueStore::_do_read(
   if (retry_count) {
     logger->inc(l_bluestore_reads_with_retries);
     dout(5) << __func__ << " read at 0x" << std::hex << offset << "~" << length
-            << " failed " << std::dec << retry_count << " times before succeeding" << dendl;
+            << " failed " << std::dec << retry_count << " times before succeeding"
+            << " " << c->cid << " " << o->oid << dendl;
     stringstream s;
     s << " reads with retries: " << logger->get(l_bluestore_reads_with_retries);
     _set_spurious_read_errors_alert(s.str());
@@ -13690,7 +13691,7 @@ int BlueStore::readv(
     dout(0) << __func__ << ": inject random EIO" << dendl;
     r = -EIO;
   }
-  dout(10) << __func__ << " " << cid << " " << oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << cid << " " << oid
            << " fiemap " << m << std::dec
            << " = " << r << dendl;
   if (op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
@@ -13843,6 +13844,7 @@ int BlueStore::_do_readv(
     logger->inc(l_bluestore_reads_with_retries);
     dout(5) << __func__ << " read fiemap " << m
             << " failed " << retry_count << " times before succeeding"
+            << " " << c->cid << " " << o->oid
             << dendl;
   }
   return bl.length();
@@ -13918,7 +13920,7 @@ int BlueStore::getattr(
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
   }
-  dout(10) << __func__ << " " << c->cid << " " << oid << " " << name
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT && r != -ENODATA) ? 10 : 15)) << __func__ << " " << c->cid << " " << oid << " " << name
 	   << " = " << r << dendl;
   return r;
 }
@@ -13954,7 +13956,7 @@ int BlueStore::getattrs(
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
   }
-  dout(10) << __func__ << " " << c->cid << " " << oid
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->cid << " " << oid
 	   << " = " << r << dendl;
   return r;
 }
@@ -13987,7 +13989,7 @@ int BlueStore::collection_empty(CollectionHandle& ch, bool *empty)
     return r;
   }
   *empty = ls.empty();
-  dout(10) << __func__ << " " << ch->cid << " = " << (int)(*empty) << dendl;
+  dout(15) << __func__ << " " << ch->cid << " = " << (int)(*empty) << dendl;
   return 0;
 }
 
@@ -13996,7 +13998,7 @@ int BlueStore::collection_bits(CollectionHandle& ch)
   dout(15) << __func__ << " " << ch->cid << dendl;
   Collection *c = static_cast<Collection*>(ch.get());
   std::shared_lock l(c->lock);
-  dout(10) << __func__ << " " << ch->cid << " = " << c->cnode.bits << dendl;
+  dout(15) << __func__ << " " << ch->cid << " = " << c->cnode.bits << dendl;
   return c->cnode.bits;
 }
 
@@ -14014,7 +14016,7 @@ int BlueStore::collection_list(
     r = _collection_list(c, start, end, max, false, ls, pnext);
   }
 
-  dout(10) << __func__ << " " << c->cid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid
     << " start " << start << " end " << end << " max " << max
     << " = " << r << ", ls.size() = " << ls->size()
     << ", next = " << (pnext ? *pnext : ghobject_t())  << dendl;
@@ -14035,7 +14037,7 @@ int BlueStore::collection_list_legacy(
     r = _collection_list(c, start, end, max, true, ls, pnext);
   }
 
-  dout(10) << __func__ << " " << c->cid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid
     << " start " << start << " end " << end << " max " << max
     << " = " << r << ", ls.size() = " << ls->size()
     << ", next = " << (pnext ? *pnext : ghobject_t())  << dendl;
@@ -14175,7 +14177,7 @@ int BlueStore::_omap_get(
   }
   r = _onode_omap_get(o, header, out);
  out:
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
 }
@@ -14253,7 +14255,7 @@ int BlueStore::omap_get_header(
     }
   }
  out:
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
 }
@@ -14304,7 +14306,7 @@ int BlueStore::omap_get_values(
     mono_clock::now() - start1,
     c->store->cct->_conf->bluestore_log_omap_iterator_age);
 
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
 }
@@ -14351,7 +14353,7 @@ int BlueStore::omap_check_keys(
     }
   }
  out:
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
 }
@@ -14364,7 +14366,7 @@ int BlueStore::omap_iterate(
   )
 {
   Collection *c = static_cast<Collection *>(c_.get());
-  dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->get_cid() << " " << oid << dendl;
   if (!c->exists) {
     return -ENOENT;
   }
@@ -14382,7 +14384,7 @@ int BlueStore::omap_iterate(
       return -ENOENT;
     }
     o->flush();
-    dout(10) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
+    dout(20) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
     if (!o->onode.has_omap()) {
       return 0; // nothing to do
     }
