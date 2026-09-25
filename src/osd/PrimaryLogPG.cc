@@ -3329,7 +3329,7 @@ void PrimaryLogPG::cancel_proxy_read(ProxyReadOpRef prdop,
 
 void PrimaryLogPG::cancel_proxy_ops(bool requeue, vector<ceph_tid_t> *tids)
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
 
   // cancel proxy reads
   map<ceph_tid_t, ProxyReadOpRef>::iterator p = proxyread_ops.begin();
@@ -3582,7 +3582,7 @@ struct C_SetDedupChunks : public Context {
 
 void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
   auto p = manifest_ops.begin();
   while (p != manifest_ops.end()) {
     auto mop = p->second;
@@ -10709,7 +10709,7 @@ void PrimaryLogPG::cancel_copy(CopyOpRef cop, bool requeue,
 
 void PrimaryLogPG::cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids)
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
   map<hobject_t,CopyOpRef>::iterator p = copy_ops.begin();
   while (p != copy_ops.end()) {
     // requeue this op? can I queue up all of them?
@@ -11597,7 +11597,7 @@ void PrimaryLogPG::cancel_flush(FlushOpRef fop, bool requeue,
 
 void PrimaryLogPG::cancel_flush_ops(bool requeue, vector<ceph_tid_t> *tids)
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
   map<hobject_t,FlushOpRef>::iterator p = flush_ops.begin();
   while (p != flush_ops.end()) {
     cancel_flush((p++)->second, requeue, tids);
@@ -11638,7 +11638,7 @@ void PrimaryLogPG::cancel_cls_gather(map<hobject_t,CLSGatherOp>::iterator iter, 
 
 void PrimaryLogPG::cancel_cls_gather_ops(bool requeue, vector<ceph_tid_t> *tids)
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
   map<hobject_t,CLSGatherOp>::iterator p = cls_gather_ops.begin();
   while (p != cls_gather_ops.end()) {
     cancel_cls_gather(p++, requeue, tids);
@@ -13242,7 +13242,7 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction &t)
 
 void PrimaryLogPG::clear_async_reads()
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
   for(auto& i : in_progress_async_reads) {
     dout(10) << "clear ctx: "
              << "OpRequestRef " << i.first
