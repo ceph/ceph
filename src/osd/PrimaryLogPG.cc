@@ -646,6 +646,7 @@ void PrimaryLogPG::wait_for_unreadable_object(
   const hobject_t& soid, OpRequestRef op)
 {
   ceph_assert(is_unreadable_object(soid));
+  dout(10) << __func__ << " " << soid << " " << *op->get_req() << dendl;
   maybe_kick_recovery(soid);
   waiting_for_unreadable_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
@@ -706,6 +707,7 @@ void PrimaryLogPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
 {
   ceph_assert(is_degraded_or_backfilling_object(soid) || is_degraded_on_async_recovery_target(soid));
 
+  dout(10) << __func__ << " " << soid << " " << *op->get_req() << dendl;
   maybe_kick_recovery(soid);
   waiting_for_degraded_object[soid].push_back(op);
   op->mark_delayed("waiting for degraded object");
@@ -716,7 +718,7 @@ void PrimaryLogPG::block_write_on_full_cache(
   const hobject_t& _oid, OpRequestRef op)
 {
   const hobject_t oid = _oid.get_head();
-  dout(20) << __func__ << ": blocking object " << oid
+  dout(10) << __func__ << ": blocking object " << oid
 	   << " on full cache" << dendl;
   objects_blocked_on_cache_full.insert(oid);
   waiting_for_cache_not_full.push_back(op);
@@ -882,7 +884,7 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 
     publish_stats_to_osd();
   }
-  dout(10) << __func__ << " not readable" << dendl;
+  dout(10) << __func__ << " not readable, waiting " << op->get_reqid() << dendl;
   waiting_for_readable.push_back(op);
   op->mark_delayed("waiting for readable");
   return false;
@@ -895,7 +897,7 @@ bool PrimaryLogPG::check_laggy_requeue(OpRequestRef& op)
   if (!state_test(PG_STATE_WAIT) && !state_test(PG_STATE_LAGGY)) {
     return true; // not laggy
   }
-  dout(10) << __func__ << " not readable" << dendl;
+  dout(10) << __func__ << " not readable, waiting " << op->get_reqid() << dendl;
   waiting_for_readable.push_front(op);
   op->mark_delayed("waiting for readable");
   return false;
@@ -1840,15 +1842,16 @@ void PrimaryLogPG::do_request(
   auto p = waiting_for_map.find(op->get_source());
   if (p != waiting_for_map.end()) {
     // preserve ordering
-    dout(20) << __func__ << " waiting_for_map "
-	     << p->first << " not empty, queueing" << dendl;
+    dout(10) << __func__ << " waiting_for_map "
+	     << p->first << " not empty, queueing " << *op->get_req() << dendl;
     p->second.push_back(op);
     op->mark_delayed("waiting_for_map not empty");
     return;
   }
   if (!have_same_or_newer_map(op->min_epoch)) {
-    dout(20) << __func__ << " min " << op->min_epoch
-	     << ", queue on waiting_for_map " << op->get_source() << dendl;
+    dout(10) << __func__ << " min " << op->min_epoch
+	     << ", queue on waiting_for_map " << op->get_source()
+	     << " " << *op->get_req() << dendl;
     waiting_for_map[op->get_source()].push_back(op);
     op->mark_delayed("op must wait for map");
     osd->request_osdmap_update(op->min_epoch);
@@ -1903,6 +1906,8 @@ void PrimaryLogPG::do_request(
       ceph_assert(handled);
       return;
     } else {
+      dout(10) << __func__ << " not peered, waiting for peered on "
+	       << *op->get_req() << dendl;
       waiting_for_peered.push_back(op);
       op->mark_delayed("waiting for peered");
       return;
@@ -1910,7 +1915,7 @@ void PrimaryLogPG::do_request(
   }
 
   if (recovery_state.needs_flush()) {
-    dout(20) << "waiting for flush on " << *op->get_req() << dendl;
+    dout(10) << "waiting for flush on " << *op->get_req() << dendl;
     waiting_for_flush.push_back(op);
     op->mark_delayed("waiting for flush");
     return;
@@ -1924,7 +1929,7 @@ void PrimaryLogPG::do_request(
   case CEPH_MSG_OSD_OP:
   case CEPH_MSG_OSD_BACKOFF:
     if (!is_active()) {
-      dout(20) << " peered, not active, waiting for active on "
+      dout(10) << " peered, not active, waiting for active on "
                << *op->get_req() << dendl;
       waiting_for_active.push_back(op);
       op->mark_delayed("waiting for active");
@@ -2256,7 +2261,8 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     }
 
     if (m_scrubber->write_blocked_by_scrub(head)) {
-      dout(20) << __func__ << ": waiting for scrub" << dendl;
+      dout(10) << __func__ << ": waiting for scrub on " << head
+	       << " " << m->get_reqid() << dendl;
       waiting_for_scrub.push_back(op);
       op->mark_delayed("waiting for scrub");
       return;
@@ -2311,7 +2317,8 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       if (already_complete(version)) {
 	osd->reply_op_error(op, return_code, version, user_version, op_returns);
       } else {
-	dout(10) << " waiting for " << version << " to commit" << dendl;
+	dout(10) << __func__ << " dup " << m->get_reqid() << " waiting for "
+		 << version << " to commit" << dendl;
         // always queue ondisk waiters, so that we can requeue if needed
 	waiting_for_ondisk[version].emplace_back(op, user_version, return_code,
 						 op_returns);
@@ -2522,7 +2529,8 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       return;
     }
   } else if (!get_rw_locks(write_ordered, ctx)) {
-    dout(20) << __func__ << " waiting for rw locks " << dendl;
+    dout(10) << __func__ << " waiting for rw locks on " << obc->obs.oi.soid
+	     << " " << m->get_reqid() << dendl;
     op->mark_delayed("waiting for rw locks");
     close_op_ctx(ctx);
     return;
@@ -2601,7 +2609,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (coro_op_in_flight) {
-    dout(20) << __func__ << ": coroutine op in flight, queuing " << op << dendl;
+    dout(10) << __func__ << ": coroutine op in flight, queuing " << op
+	     << " " << *m << dendl;
     waiting_for_coro_op.push_back(op);
     return;
   }
@@ -2734,7 +2743,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
       // which cannot test if an object is degarded or backfilling
       // redirect these requests to the primary
       if (!is_primary()) {
-        dout(20) << __func__ << " need to redirect to primary" << dendl;
+        dout(10) << __func__ << " need to redirect to primary " << head << dendl;
         osd->reply_op_error(op, -EAGAIN);
         return cache_result_t::REPLIED_WITH_EAGAIN;
       }
@@ -2746,7 +2755,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
       }
 
       if (m_scrubber->write_blocked_by_scrub(head)) {
-	dout(20) << __func__ << ": waiting for scrub" << dendl;
+	dout(10) << __func__ << ": waiting for scrub on " << head << dendl;
 	waiting_for_scrub.push_back(op);
 	op->mark_delayed("waiting for scrub");
 	return cache_result_t::BLOCKED_RECOVERY;
