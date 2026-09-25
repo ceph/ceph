@@ -920,6 +920,12 @@ bool ECCommonL::RMWPipeline::try_state_to_reads()
       op->remote_read,
       [op, this](ec_extents_t &&results) {
 	for (auto &&i: results) {
+	  if (i.second.err < 0) {
+	    derr << "try_state_to_reads: rmw read of " << i.first
+		 << " failed r=" << i.second.err << " for " << op->hoid
+		 << " v=" << op->version << " tid=" << op->tid
+		 << " reqid=" << op->reqid << dendl;
+	  }
 	  op->remote_read_result.emplace(make_pair(i.first, i.second.emap));
 	}
 	check_ops();
@@ -1170,7 +1176,19 @@ void ECCommonL::RMWPipeline::check_ops()
 
 void ECCommonL::RMWPipeline::on_change()
 {
-  dout(10) << __func__ << dendl;
+  dout(10) << __func__ << ": dropping " << tid_to_op_map.size()
+	   << " ops waiting_state=" << waiting_state.size()
+	   << " waiting_reads=" << waiting_reads.size()
+	   << " waiting_commit=" << waiting_commit.size()
+	   << " completed_to=" << completed_to
+	   << " committed_to=" << committed_to << dendl;
+  for (auto &&[tid, op]: tid_to_op_map) {
+    dout(10) << __func__ << ": dropping " << op->hoid
+	     << " v=" << op->version << " tid=" << tid
+	     << " reqid=" << op->reqid
+	     << " remote_read=" << op->remote_read
+	     << " pending_commit=" << op->pending_commit << dendl;
+  }
 
   completed_to = eversion_t();
   committed_to = eversion_t();
