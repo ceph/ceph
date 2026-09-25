@@ -4930,7 +4930,8 @@ int BlueFS::open_for_write(
   }
   }
 
-  dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
+  dout(10) << __func__ << " " << dirname << "/" << filename
+           << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
 
