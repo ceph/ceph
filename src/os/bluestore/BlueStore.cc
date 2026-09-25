@@ -16212,7 +16212,7 @@ int BlueStore::queue_transactions(
 	tstart)) {
     // ensure we do not block here because of deferred writes
     dout(10) << __func__ << " failed get throttle_deferred_bytes, aggressive"
-	     << dendl;
+	     << " txc " << txc << " " << c->cid << dendl;
     ++deferred_aggressive;
     deferred_try_submit();
     {
