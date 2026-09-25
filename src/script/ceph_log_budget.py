@@ -25,8 +25,12 @@ lines).  This tool reports, for one or more log files (plain or .gz):
   * lines/bytes by component (osd, bluestore, bluefs, ms, rocksdb, ...),
   * the top message templates overall and among the kept lines, optionally
     attributed to source files (--source-root),
-  * the number of client ops (dequeue_op osd_op(client...)) and the kept
-    bytes per client op, the kept fraction and the kept byte rate,
+  * the number of client ops (genuine "dequeue_op osd_op(client...) ...
+    prio ..." start lines, falling back to finish lines when there are
+    none) and the kept bytes per client op, the kept fraction and the kept
+    byte rate.  A requeued op (waiting_for_readable, blocked on an object,
+    a map-wait requeue) is dequeued, and so counted, once per attempt: the
+    count is "client ops dequeued", not "distinct client ops",
   * budget checks (--max-*): exit status 1 if any budget is exceeded.
 
 Continuation lines (entries that contain '\\n') are attributed to the entry
@@ -95,6 +99,14 @@ COMPONENT_PREFIXES = (
 
 CLIENT_OP_MARK = b'dequeue_op osd_op(client.'
 CLIENT_OP_FINISH_MARK = b' finish latency'
+# Only the genuine dequeue_op start line carries ' prio ' (the message
+# priority, logged right after the op).  A requeue (waiting_for_readable,
+# blocked on an object, a map-wait requeue) is dequeued, and therefore
+# logged, once per attempt without becoming a second client op; a line like
+# "dequeue_op osd_op(client....) pg 1.2s0 is deleting, dropping" also
+# contains CLIENT_OP_MARK but has neither ' prio ' nor the finish mark and
+# so is not counted as either a start or a finish.
+CLIENT_OP_PRIO_MARK = b' prio '
 
 # Source directories searched by attribute_sources().
 SOURCE_DIRS = ('src/osd', 'src/os', 'src/msg', 'src/common', 'src/mon',
@@ -283,7 +295,7 @@ class Analysis(object):
             elif CLIENT_OP_MARK in rest:
                 if CLIENT_OP_FINISH_MARK in rest:
                     self.op_finishes += 1
-                else:
+                elif CLIENT_OP_PRIO_MARK in rest:
                     self.op_starts += 1
             n += 1
             if n % sample == 0:

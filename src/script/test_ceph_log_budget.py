@@ -168,6 +168,34 @@ class TestAnalysis(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn('BUDGET EXCEEDED', out.getvalue())
 
+    def test_client_ops_excludes_requeues_and_drops(self):
+        # A requeue (e.g. waiting_for_readable) is dequeued, and logged,
+        # more than once for the same client op; a "pg ... is deleting,
+        # dropping" line also matches CLIENT_OP_MARK.  Neither carries the
+        # start line's ' prio ' field, so neither must inflate client_ops.
+        lines = [
+            '2026-07-10T07:29:46.450+0000 7f8adb893640 10 osd.3 844 '
+            'dequeue_op osd_op(client.13496.0:1 6.6s0 6.79858b36 '
+            '(undecoded) ondisk+write e844) v9 prio 63 cost 65536 '
+            'latency 0.000031',
+            # requeued: dequeued again, no ' prio ' this time in this
+            # synthetic example other than the embedded op description
+            '2026-07-10T07:29:46.460+0000 7f8adb893640 10 osd.3 844 '
+            'dequeue_op osd_op(client.13496.0:1 6.6s0 6:6cd1a19e:::obj1:'
+            'head [read]) requeued: waiting_for_readable',
+            '2026-07-10T07:29:46.470+0000 7f8adb893640 10 osd.3 844 '
+            'dequeue_op osd_op(client.13496.0:1 6.6s0 6:6cd1a19e:::obj1:'
+            'head [read]) v9 pg 6.6s0 is deleting, dropping',
+            '2026-07-10T07:29:46.480+0000 7f8adb893640 10 osd.3 844 '
+            'dequeue_op osd_op(client.13496.0:1 6.6s0 6:6cd1a19e:::obj1:'
+            'head [read]) v9 finish latency 0.003357',
+        ]
+        path = os.path.join(self.dir, 'requeue.log')
+        with open(path, 'w') as f:
+            f.write('\n'.join(lines) + '\n')
+        r = self.analyse(path, level=10)
+        self.assertEqual(r['client_ops'], 1)
+
     def test_source_attribution(self):
         src = os.path.join(self.dir, 'src', 'osd')
         os.makedirs(src)
