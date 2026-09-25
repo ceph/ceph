@@ -1207,7 +1207,8 @@ void ECBackendL::handle_sub_write_reply(
       i->second->on_all_commit &&
       // also wait for apply, to preserve ordering with luminous peers.
       i->second->pending_apply.empty()) {
-    dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
+    dout(15) << __func__ << " Calling on_all_commit on " << i->second
+	     << " " << i->second->hoid << " tid=" << op.tid << dendl;
     i->second->on_all_commit->complete(0);
     i->second->on_all_commit = 0;
     i->second->trace.event("ec write all committed");
@@ -1496,7 +1497,7 @@ std::tuple<
 {
   struct stat st;
   if (int r = object_stat(hoid, &st); r < 0) {
-    dout(10) << __func__ << ": stat error " << r << " on" << hoid << dendl;
+    dout(ceph::dout::need_dynamic(r == -ENOENT ? 20 : 10)) << __func__ << ": stat error " << r << " on" << hoid << dendl;
     return { r, {}, 0 };
   }
   map<string, bufferlist, less<>> real_attrs;
@@ -1550,7 +1551,7 @@ void ECBackendL::submit_transaction(
     sinfo,
     *(op->t),
     [&](const hobject_t &i) {
-      dout(10) << "submit_transaction: obtaining hash info for get_write_plan" << dendl;
+      dout(20) << "submit_transaction: obtaining hash info for get_write_plan" << dendl;
       ECUtilL::HashInfoRef ref;
       if (auto [r, attrs, size] = get_attrs_n_size_from_disk(i); r >= 0 || r == -ENOENT) {
         ref = unstable_hashinfo_registry.get_hash_info(
@@ -1569,7 +1570,13 @@ void ECBackendL::submit_transaction(
       return ref;
     },
     get_parent()->get_dpp());
-  dout(10) << __func__ << ": op " << *op << " starting" << dendl;
+  dout(20) << __func__ << ": op " << *op << " starting" << dendl;
+  dout(10) << __func__ << ": " << op->hoid
+	   << " v=" << op->version
+	   << " tid=" << op->tid
+	   << " reqid=" << op->reqid
+	   << " to_read=" << op->plan.to_read
+	   << " will_write=" << op->plan.will_write << dendl;
   rmw_pipeline.start_rmw(std::move(op));
 }
 

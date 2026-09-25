@@ -818,7 +818,7 @@ void ECCommonL::ReadPipeline::kick_reads()
 void ECCommonL::RMWPipeline::start_rmw(OpRef op)
 {
   ceph_assert(op);
-  dout(10) << __func__ << ": " << *op << dendl;
+  dout(20) << __func__ << ": " << *op << dendl;
 
   ceph_assert(!tid_to_op_map.count(op->tid));
   waiting_state.push_back(*op);
@@ -883,7 +883,7 @@ bool ECCommonL::RMWPipeline::try_state_to_reads()
     op->remote_read = op->plan.to_read;
   }
 
-  dout(10) << __func__ << ": " << *op << dendl;
+  dout(15) << __func__ << ": " << *op << dendl;
 
   if (!op->remote_read.empty()) {
     ceph_assert(get_parent()->get_pool().allows_ecoverwrites());
@@ -910,7 +910,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
   waiting_reads.pop_front();
   waiting_commit.push_back(*op);
 
-  dout(10) << __func__ << ": starting commit on " << *op << dendl;
+  dout(15) << __func__ << ": starting commit on " << *op << dendl;
   dout(20) << __func__ << ": " << cache << dendl;
 
   get_parent()->apply_stats(
@@ -1087,7 +1087,12 @@ bool ECCommonL::RMWPipeline::try_finish_rmw()
     return false;
   waiting_commit.pop_front();
 
-  dout(10) << __func__ << ": " << *op << dendl;
+  dout(20) << __func__ << ": " << *op << dendl;
+  dout(10) << __func__ << ": complete " << op->hoid
+	   << " v=" << op->version
+	   << " tid=" << op->tid
+	   << " reqid=" << op->reqid
+	   << " pg_committed_to=" << op->pg_committed_to << dendl;
   dout(20) << __func__ << ": " << cache << dendl;
 
   if (op->pg_committed_to > completed_to)
@@ -1174,15 +1179,15 @@ ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
   const map<string, bufferlist, less<>>& attrs,
   uint64_t size)
 {
-  dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
+  dout(20) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtilL::HashInfoRef ref = registry.lookup(hoid);
   if (!ref) {
-    dout(10) << __func__ << ": not in cache " << hoid << dendl;
+    dout(15) << __func__ << ": not in cache " << hoid << dendl;
     ECUtilL::HashInfo hinfo(ec_impl->get_chunk_count());
     bufferlist bl;
     map<string, bufferlist>::const_iterator k = attrs.find(ECUtilL::get_hinfo_key());
     if (k == attrs.end()) {
-      dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
+      dout(ceph::dout::need_dynamic(size == 0 ? 15 : 5)) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
     } else {
       bl = k->second;
     }
@@ -1196,7 +1201,8 @@ ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
       }
       if (hinfo.get_total_chunk_size() != size) {
         dout(0) << __func__ << ": Mismatch of total_chunk_size "
-      		       << hinfo.get_total_chunk_size() << dendl;
+      		       << hinfo.get_total_chunk_size() << " size " << size
+			       << " for " << hoid << dendl;
         return ECUtilL::HashInfoRef();
       } else {
         create = true;
