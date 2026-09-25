@@ -42,6 +42,7 @@ from .enums import (
     State,
     UserGroupSourceType,
 )
+from .fs import CephFSSubvolumeResolutionError
 from .internal import (
     ClusterEntry,
     CommonResourceEntry,
@@ -440,7 +441,40 @@ class ClusterConfigHandler:
                 staging.prune_linked_entries()
             _reconcile_store(staging.destination_store)
             with _store_transaction(staging.destination_store):
-                self._sync_modified(results)
+                try:
+                    self._sync_modified(results)
+                except (CephFSSubvolumeResolutionError, ErrorResult) as err:
+                    if isinstance(err, ErrorResult):
+                        msg = err.msg
+                        cluster_id = getattr(err.src, 'cluster_id', None)
+                        share_id = getattr(err.src, 'share_id', None)
+                        subvolume_id = getattr(err.src, 'subvolume_id', None)
+                        cephfs_volume = getattr(err.src, 'cephfs_volume', None)
+                        cephfs_subvolumegroup = getattr(err.src, 'cephfs_subvolumegroup', None)
+                    else:
+                        msg = str(err)
+                        cluster_id = getattr(err, 'cluster_id', None)
+                        share_id = getattr(err, 'share_id', None)
+                        subvolume_id = getattr(err, 'subvolume_id', None)
+                        cephfs_volume = getattr(err, 'cephfs_volume', None)
+                        cephfs_subvolumegroup = getattr(err, 'cephfs_subvolumegroup', None)
+                    log.debug('sync failed: %s', msg)
+                    error_detail = {
+                        'msg': msg,
+                        'success': False,
+                        'cluster_id': cluster_id,
+                        'share_id': share_id,
+                        'subvolume_id': subvolume_id,
+                        'volume_id': cephfs_volume,
+                        'subvolumegroup_id': cephfs_subvolumegroup,
+                    }
+                    for res in results:
+                        if isinstance(res, ResourceResult):
+                            status = dict(res.status or {})
+                            error_results = list(status.get('error_results') or [])
+                            error_results.append(error_detail)
+                            status['error_results'] = error_results
+                            res.status = status
         return results
 
     def cluster_ids(self) -> List[str]:
@@ -1117,12 +1151,25 @@ def _generate_share(conf: _ShareConf) -> Dict[str, Dict[str, str]]:
     assert cephfs.provider.is_vfs(), "not a vfs provider"
     assert cephx_entity, "cephx entity name missing"
     cephx_entity = cephx_stripped_entity(cephx_entity)
-    path = conf.resolver.resolve(
-        cephfs.volume,
-        cephfs.subvolumegroup,
-        cephfs.subvolume,
-        cephfs.path,
-    )
+    try:
+        path = conf.resolver.resolve(
+            cephfs.volume,
+            cephfs.subvolumegroup,
+            cephfs.subvolume,
+            cephfs.path,
+        )
+    except CephFSSubvolumeResolutionError as err:
+        raise CephFSSubvolumeResolutionError(
+            f"Subvolume issue for cluster '{share.cluster_id}' with share '{share.share_id}'. "
+            "This may indicate that one or more shares reference a subvolume that "
+            "no longer exists. Please verify share configurations and remove or "
+            "update any shares with invalid subvolume references.",
+            cluster_id=share.cluster_id,
+            share_id=share.share_id,
+            subvolume_id=cephfs.subvolume,
+            cephfs_volume=cephfs.volume,
+            cephfs_subvolumegroup=cephfs.subvolumegroup,
+        ) from err
     try:
         ceph_vfs, proxy_val = {
             CephFSStorageProvider.SAMBA_VFS_CLASSIC: ('ceph', ''),
