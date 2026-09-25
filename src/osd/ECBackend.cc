@@ -1254,12 +1254,12 @@ std::tuple<
 > ECBackend::get_attrs_n_size_from_disk(const hobject_t &hoid) {
   struct stat st;
   if (int r = object_stat(hoid, &st); r < 0) {
-    dout(10) << __func__ << ": stat error " << r << " on" << hoid << dendl;
+    dout(10) << __func__ << ": stat error " << r << " on " << hoid << dendl;
     return {r, {}, 0};
   }
   map<string, bufferlist, less<>> real_attrs;
   if (int r = switcher->objects_get_attrs_with_hinfo(hoid, &real_attrs); r < 0) {
-    dout(10) << __func__ << ": get attr error " << r << " on" << hoid << dendl;
+    dout(10) << __func__ << ": get attr error " << r << " on " << hoid << dendl;
     return {r, {}, 0};
   }
   return {0, real_attrs, st.st_size};
