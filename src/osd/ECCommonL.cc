@@ -702,7 +702,7 @@ out:
   ECCommonL::ClientAsyncReadStatus *status;
 };
 static ostream& _prefix(std::ostream *_dout, ClientReadCompleter *read_completer) {
-  return _prefix(_dout, &read_completer->read_pipeline) << "ECCommonL";
+  return _prefix(_dout, &read_completer->read_pipeline);
 }
 
 void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
