@@ -33,7 +33,7 @@ import yaml
 from ceph.deployment.hostspec import HostSpec, SpecValidationError, assert_valid_host
 from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_int
 from ceph.deployment.utils import verify_positive_int, verify_non_negative_number
-from ceph.deployment.utils import verify_boolean, verify_enum, verify_int
+from ceph.deployment.utils import verify_boolean, verify_enum, verify_int, validate_ip
 from ceph.utils import is_hex
 from ceph.smb import constants as smbconst
 
@@ -2147,6 +2147,7 @@ class MgmtGatewaySpec(ServiceSpec):
     def validate(self) -> None:
         super(MgmtGatewaySpec, self).validate()
         self._validate_port(self.port)
+        validate_ip(self.virtual_ip)
         self._validate_certificate(self.ssl_cert, "ssl_cert")
         self._validate_private_key(self.ssl_key, "ssl_key")
         self._validate_boolean_switch(self.ssl_prefer_server_ciphers, "ssl_prefer_server_ciphers")
