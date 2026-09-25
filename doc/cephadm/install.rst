@@ -100,7 +100,7 @@ Using Curl to Install Cephadm
 -----------------------------
 
 #. Determine which version of Ceph you will install. Use the releases page to
-   find the :ref:`active-releases`.  For example,
+   find the `latest active releases`_.  For example,
    you might find that ``18.2.1`` is the latest active release.
 
 #. Use ``curl`` to fetch a build of cephadm for that release.
@@ -610,3 +610,8 @@ would simply be a matter of getting another key signed by the same CA and provid
 cephadm with the new private key and the new signed certificate. No additional distribution of
 keys to cluster nodes is needed after the initial setup of the CA key as a trusted key,
 no matter how many new private key/signed cert pairs are rotated in.
+
+
+.. Needs to be an external link because doc/releases/index.rst is not in
+   stable branches and we want to always use the main branch version
+.. _latest active releases: https://docs.ceph.com/en/latest/releases/#active-releases
