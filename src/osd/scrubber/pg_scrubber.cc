@@ -867,10 +867,20 @@ void PgScrubber::on_operator_abort_scrub(ceph::Formatter* f)
 bool PgScrubber::has_pg_marked_new_updates() const
 {
   auto last_applied = m_pg->recovery_state.get_last_update_applied();
-  dout(15) << __func__ << " recovery last: " << last_applied
-	   << " vs. scrub's: " << m_subset_last_update << dendl;
+  const bool ready = last_applied >= m_subset_last_update;
+  if (ready) {
+    dout(15) << __func__ << " recovery last: " << last_applied
+	     << " vs. scrub's: " << m_subset_last_update << dendl;
+  } else {
+    // still waiting: this is the only place that logs both the version
+    // recovery has applied and the version the scrub needs, so keep it
+    // visible at the lean level while we are stalled here.
+    dout(10) << __func__ << " recovery last: " << last_applied
+	     << " vs. scrub's: " << m_subset_last_update << " - waiting"
+	     << dendl;
+  }
 
-  return last_applied >= m_subset_last_update;
+  return ready;
 }
 
 void PgScrubber::set_subset_last_update(eversion_t e)
