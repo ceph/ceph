@@ -11,6 +11,7 @@ from typing import (
     Union,
     cast,
 )
+from typing import Iterable, Iterator, List, Optional, cast
 
 import errno
 
@@ -190,6 +191,31 @@ class InvalidResourceResult(BaseResult):
         if self.msg:
             ds['msg'] = self.msg
         return ds
+
+class FailedTransactionResult(InvalidResourceResult):
+    def __init__(
+        self,
+        msg: str = '',
+        cluster_id: Optional[str] = None,
+        share_id: Optional[str] = None,
+        subvolume_id: Optional[str] = None,
+        status: Optional[Simplified] = None,
+    ) -> None:
+        resource_data: Simplified = {
+            'resource_type': 'ceph.smb.failed.transaction',
+        }
+
+        if cluster_id:
+            resource_data['cluster_id'] = cluster_id
+        if share_id:
+            resource_data['share_id'] = share_id
+        if subvolume_id:
+            resource_data['subvolume_id'] = subvolume_id
+
+        if status:
+            resource_data['status'] = status
+
+        super().__init__(resource_data, msg=msg,)
 
 
 class ResultGroup:
