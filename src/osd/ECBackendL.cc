@@ -618,6 +618,7 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
 	// we must have lost a recovery source
 	ceph_assert(!op.recovery_progress.first);
 	dout(10) << __func__ << ": canceling recovery op for obj " << op.hoid
+		 << " r=" << r << " want=" << want << " v=" << op.v
 		 << dendl;
 	// in crimson
 	get_parent()->cancel_pull(op.hoid);
@@ -1092,13 +1093,13 @@ void ECBackendL::handle_sub_read(
 	if (r == -ENOENT && get_parent()->get_pool().fast_read) {
 	  dout(5) << __func__ << ": Error " << r
 		  << " reading " << i->first << ", fast read, probably ok"
-		  << dendl;
+		  << " tid=" << op.tid << dendl;
 	} else {
 	  get_parent()->clog_error() << "Error " << r
 				     << " reading object "
 				     << i->first;
 	  dout(5) << __func__ << ": Error " << r
-		  << " reading " << i->first << dendl;
+		  << " reading " << i->first << " tid=" << op.tid << dendl;
 	}
 	goto error;
       } else {
@@ -1175,6 +1176,8 @@ error:
 	*i, ghobject_t::NO_GEN, shard),
       reply->attrs_read[*i]);
     if (r < 0) {
+      dout(5) << __func__ << ": Error " << r << " getattrs " << *i
+	      << " tid=" << op.tid << dendl;
       // If we read error, we should not return the attrs too.
       reply->attrs_read.erase(*i);
       reply->buffers_read.erase(*i);
@@ -1504,12 +1507,12 @@ std::tuple<
 {
   struct stat st;
   if (int r = object_stat(hoid, &st); r < 0) {
-    dout(ceph::dout::need_dynamic(r == -ENOENT ? 20 : 10)) << __func__ << ": stat error " << r << " on" << hoid << dendl;
+    dout(ceph::dout::need_dynamic(r == -ENOENT ? 20 : 10)) << __func__ << ": stat error " << r << " on " << hoid << dendl;
     return { r, {}, 0 };
   }
   map<string, bufferlist, less<>> real_attrs;
   if (int r = switcher->objects_get_attrs_with_hinfo(hoid, &real_attrs); r < 0) {
-    dout(10) << __func__ << ": get attr error " << r << " on" << hoid << dendl;
+    dout(10) << __func__ << ": get attr error " << r << " on " << hoid << dendl;
     return { r, {}, 0 };
   }
   return { 0, real_attrs, st.st_size };
