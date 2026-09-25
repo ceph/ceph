@@ -109,9 +109,7 @@ LFUDAPolicy::~LFUDAPolicy()
     std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
     cond->notify(l);
   }
-  if (watermark_timer.has_value()) {
-    watermark_timer->cancel();
-  }
+  wake_cleaning_timers();
   if (cleaning_coroutine_pool) {
     cleaning_coroutine_pool->stop();
     cleaning_coroutine_pool.reset();
@@ -249,7 +247,6 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
     cleaning_thread_pool = std::make_unique<boost::asio::thread_pool>(num_cleaning_threads);
     quit = false;
     cond.emplace(io_context.get_executor());
-    watermark_timer.emplace(io_context);
     if (!cleaning_coroutine_pool) {
       cleaning_coroutine_pool = std::make_unique<rgw::sal::CoroutinePool>(cleaning_thread_pool->get_executor(), num_cleaning_threads);
       cleaning_coroutine_pool->start(dpp);
@@ -534,9 +531,9 @@ void LFUDAPolicy::background_eviction_worker(const DoutPrefixProvider* dpp, opti
       consecutive_failures = 0;
     }
 
-    //if still above watermark, trigger cleaning
-    if (above_watermark && watermark_timer.has_value()) {
-      watermark_timer->cancel();
+    //if still above watermark, trigger cleaning by waking every cleaning coroutine
+    if (above_watermark) {
+      wake_cleaning_timers();
     }
   }
 }
@@ -1160,7 +1157,7 @@ int LFUDAPolicy::mark_data_blocks_dir_clean(const DoutPrefixProvider* dpp, LFUDA
 
     rgw::d4n::CacheBlock block {
       .cacheObj = {
-        .objName = e->obj_key.get_oid(),
+        .objName = e->obj_key.name,
         .bucketName = e->bucket_id,
       },
       .blockID = static_cast<uint64_t>(fst),
@@ -1878,6 +1875,19 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
   // - Reset to nullptr after processing (success/failure/retry)
   std::optional<LFUDAObjEntry*> e;
 
+  // Per-coroutine timer used for the wait-based scheduling below. Registered in watermark_timers so the eviction worker / shutdown
+  // can wake this coroutine early via wake_cleaning_timers(). shared_ptr ensures the
+  // timer outlives any in-flight posted cancel, even after this coroutine deregisters.
+  auto timer = std::make_shared<boost::asio::steady_timer>(y.get_yield_context().get_executor());
+  {
+    std::lock_guard<std::mutex> l(watermark_timers_lock);
+    watermark_timers.push_back(timer);
+  }
+  auto timer_guard = make_scope_guard([this, &timer] {
+    std::lock_guard<std::mutex> l(watermark_timers_lock);
+    std::erase(watermark_timers, timer);
+  });
+
   while(!quit) {
     ldpp_dout(dpp, 20) << __func__ << " : " << " Cache cleaning!" << dendl;
 
@@ -1948,14 +1958,14 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
     // - Watermark exceeded (cache full, need urgent cleaning)
     // - Quit signal
     if (!entry_ready) {
-      auto wait_duration = std::chrono::duration_cast<std::chrono::seconds>(
+      auto wait_duration = std::chrono::ceil<std::chrono::milliseconds>(
           target_time - now).count();
       ldpp_dout(dpp, 10) << __LINE__ << " " << __func__
                          << "(): entry not ready and below watermark, waiting on=" << (*e)->key
                          << " age=" << age << "ms"
                          << " retry_count=" << (*e)->retry_count
                          << " target_time=" << target_time
-                         << " wait_seconds=" << wait_duration << dendl;
+                         << " wait_ms=" << wait_duration << dendl;
       l.unlock();
       while (!quit && !above_watermark) {
         now = ceph::real_clock::now();
@@ -1963,11 +1973,13 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
 
         // Sleep until target_time or watermark exceeds
         // Note: watermark check in loop condition allows early wakeup for urgent cleaning
-        auto remaining = std::chrono::duration_cast<std::chrono::seconds>(
-            target_time - now).count();
+        // Round up so the wait always reaches/passes target_time: a truncating cast
+        // to seconds would floor sub-second remainders to 0, firing the timer
+        // immediately and busy-spinning until the target second ticks over.
+        auto remaining = std::chrono::ceil<std::chrono::milliseconds>(target_time - now);
         boost::system::error_code ec;
-        watermark_timer->expires_after(std::chrono::seconds(remaining));
-        watermark_timer->async_wait(y.get_yield_context()[ec]);
+        timer->expires_after(remaining);
+        timer->async_wait(y.get_yield_context()[ec]);
       }
       continue;
     }

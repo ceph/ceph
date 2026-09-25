@@ -6,6 +6,8 @@
 #include <boost/heap/fibonacci_heap.hpp>
 #include <boost/system/detail/errc.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/post.hpp>
 
 #include "d4n_directory.h"
 #include "rgw_sal_d4n.h"
@@ -229,7 +231,19 @@ class LFUDAPolicy : public CachePolicy {
     std::unique_ptr<rgw::sal::CoroutinePool> cleaning_coroutine_pool;
     //variables needed to trigger cleaning also when cache fills up to EVICTION_WATERMARK
     std::atomic<bool> above_watermark{false};
-    std::optional<boost::asio::steady_timer> watermark_timer;
+    // Each cleaning() coroutine owns its own timer (registered here).
+    // shared_ptr keeps each timer alive until any in-flight posted cancel has run.
+    std::mutex watermark_timers_lock;
+    std::vector<std::shared_ptr<boost::asio::steady_timer>> watermark_timers;
+    // Cancel every registered cleaning timer to wake the coroutines early (e.g. when
+    // the cache crosses the eviction watermark, or on shutdown). Each cancel is posted
+    // onto the timer's own executor so it runs on the thread that owns the timer.
+    void wake_cleaning_timers() {
+      std::lock_guard<std::mutex> l(watermark_timers_lock);
+      for (auto& t : watermark_timers) {
+        boost::asio::post(t->get_executor(), [t]{ t->cancel(); });
+      }
+    }
     //queue to maintain failed entries
     std::deque<LFUDAObjEntry> failed_entries;
 
