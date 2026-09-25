@@ -826,7 +826,7 @@ bool ECBackendL::can_handle_while_inactive(
 bool ECBackendL::_handle_message(
   OpRequestRef _op)
 {
-  dout(10) << __func__ << ": " << *_op->get_req() << dendl;
+  dout(15) << __func__ << ": " << *_op->get_req() << dendl;
   int priority = _op->get_req()->get_priority();
   switch (_op->get_req()->get_type()) {
   case MSG_OSD_EC_WRITE: {
