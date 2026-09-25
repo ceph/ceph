@@ -3,6 +3,7 @@ local.file_match "system" {
 		__address__ = "localhost",
 		__path__    = "/var/log/ceph/**/*.log",
 		job         = "Cluster Logs",
+		host        = constants.hostname
 	}]
 }
 
@@ -15,26 +16,18 @@ loki.source.file "system" {
 loki.relabel "ceph_component" {
 	forward_to = [loki.process.remove_timestamp.receiver]
 
-	// ceph-client.rgw.<host>.log
+	// ceph-client.<id>.log - rgw rbd nfs
 	rule {
 		source_labels = ["filename"]
-		regex         = ".*/ceph-client\\.rgw\\.[^/]+\\.log"
+		regex         = ".*/ceph-client\\.(rgw|rbd-mirror|nfs)\\.[^/]+\\.log"
 		target_label  = "component"
-		replacement   = "rgw"
-	}
-
-	// ceph-client.<id>.log
-	rule {
-		source_labels = ["filename"]
-		regex         = ".*/ceph-client\\.[^/]+\\.log"
-		target_label  = "component"
-		replacement   = "client"
+		replacement   = "$1"
 	}
 
 	// ceph-<type>.<id>.log
 	rule {
 		source_labels = ["filename"]
-		regex         = ".*/ceph-(osd|mon|mgr|mds|rgw|rbd-mirror|nfs)\\.[^/]+\\.log"
+		regex         = ".*/ceph-(osd|mon|mgr|mds)\\.[^/]+\\.log"
 		target_label  = "component"
 		replacement   = "$1"
 	}

@@ -1189,6 +1189,50 @@ class TestMonitoring:
                     use_current_daemon_image=False,
                 )
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_alloy_ceph_component_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, MonitoringSpec('alloy')):
+                config, _ = service_registry.get_service('alloy').generate_config(
+                    CephadmDaemonDeploySpec('test', 'daemon', 'alloy'))
+                alloy_cfg = config['files']['config.alloy']
+
+                assert 'loki.relabel "ceph_component"' in alloy_cfg
+                assert 'forward_to = [loki.process.remove_timestamp.receiver]' in alloy_cfg
+                # ceph-client.<id>.log - rgw, rbd-mirror, nfs
+                assert r'.*/ceph-client\\.(rgw|rbd-mirror|nfs)\\.[^/]+\\.log' in alloy_cfg
+                # ceph-<type>.<id>.log - osd, mon, mgr, mds
+                assert r'.*/ceph-(osd|mon|mgr|mds)\\.[^/]+\\.log' in alloy_cfg
+                # ceph.log (cluster log)
+                assert r'.*/ceph\\.log$' in alloy_cfg
+                assert 'replacement   = "cluster"' in alloy_cfg
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_alloy_remove_timestamp_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, MonitoringSpec('alloy')):
+                config, _ = service_registry.get_service('alloy').generate_config(
+                    CephadmDaemonDeploySpec('test', 'daemon', 'alloy'))
+                alloy_cfg = config['files']['config.alloy']
+
+                assert 'loki.process "remove_timestamp"' in alloy_cfg
+                assert 'forward_to = [loki.write.default.receiver]' in alloy_cfg
+                assert 'stage.replace' in alloy_cfg
+                # Ceph daemon timestamp format: 2024-03-15T12:34:56.789012+0530
+                assert (
+                    r'^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}[+-]\\d{4})\\s+'
+                    in alloy_cfg
+                )
+                # Fallback for other ISO-like timestamps
+                assert (
+                    r'^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{4})?)\\s+'
+                    in alloy_cfg
+                )
+
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_post_remove_no_op_when_other_daemons_remain_on_same_host_host_scope(
             self, cephadm_module: CephadmOrchestrator):
