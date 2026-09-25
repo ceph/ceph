@@ -221,12 +221,21 @@ struct ECCommon {
     void print(std::ostream &os) const {
       os << "read_result_t(r=" << r << ", errors=" << errors;
       if (attrs) {
-        os << ", attrs=" << *(attrs);
+        os << ", attrs={";
+        bool first = true;
+        for (const auto &[key, bl] : *attrs) {
+          if (!first) {
+            os << ",";
+          }
+          first = false;
+          os << key << "(" << bl.length() << ")";
+        }
+        os << "}";
       } else {
         os << ", noattrs";
       }
       if (omap_header) {
-        os << ", omap_header=" << *(omap_header);
+        os << ", omap_header_len=" << omap_header->length();
       } else {
         os << ", no_omap_header";
       }
@@ -657,6 +666,12 @@ struct ECCommon {
         std::move(to_read),
         [this](ec_extents_t &&results) {
           for (auto &&[oid, result]: results) {
+            if (result.err < 0) {
+              ldpp_dout(get_parent()->get_dpp(), 0)
+                << "backend_read: RMW read of " << oid
+                << " failed err=" << result.err
+                << ", write continues with partial read data" << dendl;
+            }
             extent_cache.read_done(oid, std::move(result.shard_extent_map));
           }
         });
