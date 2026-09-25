@@ -1097,6 +1097,11 @@ void ECBackend::handle_sub_read_reply(
     dout(20) << __func__ << " Complete: " << rop << dendl;
     dout(10) << __func__ << " read complete tid=" << rop.tid
              << " for_recovery=" << rop.for_recovery;
+#ifndef WITH_CRIMSON
+    if (rop.op) {
+      *_dout << " reqid=" << rop.op->get_reqid();
+    }
+#endif
     for (auto &&[oid, res] : rop.complete) {
       *_dout << " " << oid << " r=" << res.r;
       if (!res.errors.empty()) {

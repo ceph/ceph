@@ -630,6 +630,11 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
            << " priority=" << priority
            << " for_recovery=" << rop.for_recovery
            << " redundant=" << rop.do_redundant_reads;
+#ifndef WITH_CRIMSON
+  if (rop.op) {
+    *_dout << " reqid=" << rop.op->get_reqid();
+  }
+#endif
   for (auto &&[hoid, read_request] : rop.to_read) {
     *_dout << " " << hoid << " reads={";
     for (auto &&[_, shard_read] : read_request.shard_reads) {
