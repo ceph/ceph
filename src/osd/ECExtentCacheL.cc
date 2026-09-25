@@ -224,21 +224,22 @@ void ECExtentCacheL::present_rmw_update(
 
 ostream &ECExtentCacheL::print(ostream &out) const
 {
-  out << "ECExtentCacheL(" << std::endl;
+  out << "ECExtentCacheL(";
   for (auto esiter = per_object_caches.begin();
        esiter != per_object_caches.end();
        ++esiter) {
-    out << "  Extents(" << esiter->oid << ")[" << std::endl;
+    out << " Extents(" << esiter->oid << ")[";
     for (auto exiter = esiter->extent_set.begin();
 	 exiter != esiter->extent_set.end();
 	 ++exiter) {
-      out << "    Extent(" << exiter->offset
+      out << " Extent(" << exiter->offset
 	  << "~" << exiter->get_length()
 	  << ":" << exiter->pin_tid()
-	  << ")" << std::endl;
+	  << ")";
     }
+    out << " ]";
   }
-  return out << ")" << std::endl;
+  return out << " )";
 }
 
 ostream &operator<<(ostream &lhs, const ECExtentCacheL &cache)
