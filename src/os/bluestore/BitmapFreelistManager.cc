@@ -449,7 +449,7 @@ bool BitmapFreelistManager::enumerate_next(KeyValueDB *kvdb, uint64_t *offset, u
 		 << dendl;
 	end = std::min(get_alloc_units() * bytes_per_block, end);
 	*length = end - *offset;
-        dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
+        dout(20) << __func__ << std::hex << " 0x" << *offset << "~" << *length
 		 << std::dec << dendl;
 	return true;
       }
@@ -471,7 +471,7 @@ bool BitmapFreelistManager::enumerate_next(KeyValueDB *kvdb, uint64_t *offset, u
   if (enumerate_offset < size) {
     end = get_alloc_units() * bytes_per_block;
     *length = end - *offset;
-    dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
+    dout(20) << __func__ << std::hex << " 0x" << *offset << "~" << *length
 	     << std::dec << dendl;
     enumerate_offset = size;
     enumerate_bl_pos = blocks_per_key;
@@ -496,7 +496,7 @@ void BitmapFreelistManager::allocate(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (!is_null_manager()) {
     _xor(offset, length, txn);
@@ -507,7 +507,7 @@ void BitmapFreelistManager::release(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (!is_null_manager()) {
     _xor(offset, length, txn);

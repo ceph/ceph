@@ -88,6 +88,20 @@ ostream &operator<<(ostream &lhs, const ECCommonL::ec_extent_t &rhs)
 	     << rhs.emap;
 }
 
+// shard=length only: buffer::list's operator<< is multi-line
+static ostream &operator<<(ostream &lhs, const map<int, bufferlist> &rhs)
+{
+  lhs << "[";
+  for (map<int, bufferlist>::const_iterator i = rhs.begin();
+       i != rhs.end();
+       ++i) {
+    if (i != rhs.begin())
+      lhs << ", ";
+    lhs << make_pair(i->first, i->second.length());
+  }
+  return lhs << "]";
+}
+
 ostream &operator<<(ostream &lhs, const ECCommonL::read_request_t &rhs)
 {
   return lhs << "read_request_t(to_read=[" << rhs.to_read << "]"
@@ -101,11 +115,40 @@ ostream &operator<<(ostream &lhs, const ECCommonL::read_result_t &rhs)
   lhs << "read_result_t(r=" << rhs.r
       << ", errors=" << rhs.errors;
   if (rhs.attrs) {
-    lhs << ", attrs=" << *(rhs.attrs);
+    // attr name=length only: buffer::list's operator<< is multi-line
+    lhs << ", attrs={";
+    bool first_attr = true;
+    for (const auto &[name, bl] : *(rhs.attrs)) {
+      if (!first_attr) {
+        lhs << ",";
+      }
+      first_attr = false;
+      lhs << name << "=" << bl.length();
+    }
+    lhs << "}";
   } else {
     lhs << ", noattrs";
   }
-  return lhs << ", returned=" << rhs.returned << ")";
+  // offset,length,{shard=buffer length}: buffer::list's operator<< is multi-line
+  lhs << ", returned=";
+  bool first_ret = true;
+  for (const auto &ret : rhs.returned) {
+    if (!first_ret) {
+      lhs << ",";
+    }
+    first_ret = false;
+    lhs << ret.get<0>() << "," << ret.get<1>() << ",{";
+    bool first_buf = true;
+    for (const auto &[shard, bl] : ret.get<2>()) {
+      if (!first_buf) {
+        lhs << ",";
+      }
+      first_buf = false;
+      lhs << shard << "=" << bl.length();
+    }
+    lhs << "}";
+  }
+  return lhs << ")";
 }
 
 ostream &operator<<(ostream &lhs, const ECCommonL::ReadOp &rhs)
@@ -173,6 +216,20 @@ ostream &operator<<(ostream &lhs, const ECCommonL::RMWPipeline::Op &rhs)
 void ECCommonL::ReadPipeline::complete_read_op(ReadOp &rop)
 {
   dout(20) << __func__ << " completing " << rop << dendl;
+  dout(10) << __func__ << ": tid=" << rop.tid
+	   << (rop.for_recovery ? " recovery" : "");
+#ifndef WITH_CRIMSON
+  if (rop.op) {
+    *_dout << " reqid=" << rop.op->get_reqid();
+  }
+#endif
+  for (const auto &[hoid, res] : rop.complete) {
+    *_dout << " " << hoid << " r=" << res.r;
+    if (!res.errors.empty()) {
+      *_dout << " errors=" << res.errors;
+    }
+  }
+  *_dout << dendl;
   map<hobject_t, read_request_t>::iterator req_iter =
     rop.to_read.begin();
   map<hobject_t, read_result_t>::iterator resiter =
@@ -222,7 +279,7 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
 	 get_parent()->get_acting_shards().begin();
        i != get_parent()->get_acting_shards().end();
        ++i) {
-    dout(10) << __func__ << ": checking acting " << *i << dendl;
+    dout(20) << __func__ << ": checking acting " << *i << dendl;
     const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
     if (error_shards.contains(*i)) {
       continue;
@@ -251,7 +308,7 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
 	ceph_assert(shards.count(i->shard));
 	continue;
       }
-      dout(10) << __func__ << ": checking backfill " << *i << dendl;
+      dout(15) << __func__ << ": checking backfill " << *i << dendl;
       ceph_assert(!shards.count(i->shard));
       const pg_info_t &info = get_parent()->get_shard_info(*i);
       const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
@@ -268,7 +325,7 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
       for (set<pg_shard_t>::iterator i = miter->second.begin();
 	   i != miter->second.end();
 	   ++i) {
-	dout(10) << __func__ << ": checking missing_loc " << *i << dendl;
+	dout(15) << __func__ << ": checking missing_loc " << *i << dendl;
 	auto m = get_parent()->maybe_get_shard_missing(*i);
 	if (m) {
 	  ceph_assert(!(*m).is_missing(hoid));
@@ -416,7 +473,7 @@ void ECCommonL::ReadPipeline::start_read_op(
       _op,
       std::move(want_to_read),
       std::move(to_read))).first->second;
-  dout(10) << __func__ << ": starting " << op << dendl;
+  dout(15) << __func__ << ": starting " << op << dendl;
   if (_op) {
 #ifndef WITH_CRIMSON
     op.trace = _op->pg_trace;
@@ -431,7 +488,7 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
   int priority = op.priority;
   ceph_tid_t tid = op.tid;
 
-  dout(10) << __func__ << ": starting read " << op << dendl;
+  dout(20) << __func__ << ": starting read " << op << dendl;
 
   map<pg_shard_t, ECSubRead> messages;
   for (map<hobject_t, read_request_t>::iterator i = op.to_read.begin();
@@ -499,7 +556,17 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
   }
 
-  dout(10) << __func__ << ": started " << op << dendl;
+  dout(20) << __func__ << ": started " << op << dendl;
+  dout(10) << __func__ << ": started tid=" << op.tid
+	   << (op.for_recovery ? " recovery" : "")
+	   << (op.do_redundant_reads ? " redundant" : "");
+#ifndef WITH_CRIMSON
+  if (op.op) {
+    *_dout << " reqid=" << op.op->get_reqid();
+  }
+#endif
+  *_dout << " to_read=" << op.to_read
+	 << " in_progress=" << op.in_progress << dendl;
 }
 
 void ECCommonL::ReadPipeline::get_want_to_read_shards(
@@ -624,7 +691,7 @@ struct ClientReadCompleter : ECCommonL::ReadCompleter {
 	to_decode,
 	&bl);
       if (r < 0) {
-        dout(10) << __func__ << " error on ECUtilL::decode r=" << r << dendl;
+        dout(10) << __func__ << " error on ECUtilL::decode r=" << r << " " << hoid << dendl;
         res.r = r;
         goto out;
       }
@@ -673,7 +740,7 @@ out:
   ECCommonL::ClientAsyncReadStatus *status;
 };
 static ostream& _prefix(std::ostream *_dout, ClientReadCompleter *read_completer) {
-  return _prefix(_dout, &read_completer->read_pipeline) << "ECCommonL";
+  return _prefix(_dout, &read_completer->read_pipeline);
 }
 
 void ECCommonL::ReadPipeline::objects_read_and_reconstruct(
@@ -749,7 +816,8 @@ int ECCommonL::ReadPipeline::send_all_remaining_reads(
   const set<pg_shard_t>& ots = rop.obj_to_source[hoid];
   for (set<pg_shard_t>::iterator i = ots.begin(); i != ots.end(); ++i)
     already_read.insert(static_cast<int>(i->shard));
-  dout(10) << __func__ << " have/error shards=" << already_read << dendl;
+  dout(10) << __func__ << " " << hoid << " tid=" << rop.tid
+	   << " have/error shards=" << already_read << dendl;
   map<pg_shard_t, vector<pair<int, int>>> shards;
   int r = get_remaining_shards(hoid, already_read, rop.want_to_read[hoid],
 			       rop.complete[hoid], &shards, rop.for_recovery);
@@ -763,7 +831,7 @@ int ECCommonL::ReadPipeline::send_all_remaining_reads(
     rop.to_read.find(hoid)->second.want_attrs &&
     (!rop.complete[hoid].attrs || rop.complete[hoid].attrs->empty());
   if (want_attrs) {
-    dout(10) << __func__ << " want attrs again" << dendl;
+    dout(10) << __func__ << " " << hoid << " want attrs again" << dendl;
   }
 
   rop.to_read.erase(hoid);
@@ -789,7 +857,7 @@ void ECCommonL::ReadPipeline::kick_reads()
 void ECCommonL::RMWPipeline::start_rmw(OpRef op)
 {
   ceph_assert(op);
-  dout(10) << __func__ << ": " << *op << dendl;
+  dout(20) << __func__ << ": " << *op << dendl;
 
   ceph_assert(!tid_to_op_map.count(op->tid));
   waiting_state.push_back(*op);
@@ -854,7 +922,7 @@ bool ECCommonL::RMWPipeline::try_state_to_reads()
     op->remote_read = op->plan.to_read;
   }
 
-  dout(10) << __func__ << ": " << *op << dendl;
+  dout(15) << __func__ << ": " << *op << dendl;
 
   if (!op->remote_read.empty()) {
     ceph_assert(get_parent()->get_pool().allows_ecoverwrites());
@@ -862,6 +930,12 @@ bool ECCommonL::RMWPipeline::try_state_to_reads()
       op->remote_read,
       [op, this](ec_extents_t &&results) {
 	for (auto &&i: results) {
+	  if (i.second.err < 0) {
+	    derr << "try_state_to_reads: rmw read of " << i.first
+		 << " failed r=" << i.second.err << " for " << op->hoid
+		 << " v=" << op->version << " tid=" << op->tid
+		 << " reqid=" << op->reqid << dendl;
+	  }
 	  op->remote_read_result.emplace(make_pair(i.first, i.second.emap));
 	}
 	check_ops();
@@ -881,7 +955,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
   waiting_reads.pop_front();
   waiting_commit.push_back(*op);
 
-  dout(10) << __func__ << ": starting commit on " << *op << dendl;
+  dout(15) << __func__ << ": starting commit on " << *op << dendl;
   dout(20) << __func__ << ": " << cache << dendl;
 
   get_parent()->apply_stats(
@@ -1058,7 +1132,12 @@ bool ECCommonL::RMWPipeline::try_finish_rmw()
     return false;
   waiting_commit.pop_front();
 
-  dout(10) << __func__ << ": " << *op << dendl;
+  dout(20) << __func__ << ": " << *op << dendl;
+  dout(10) << __func__ << ": complete " << op->hoid
+	   << " v=" << op->version
+	   << " tid=" << op->tid
+	   << " reqid=" << op->reqid
+	   << " pg_committed_to=" << op->pg_committed_to << dendl;
   dout(20) << __func__ << ": " << cache << dendl;
 
   if (op->pg_committed_to > completed_to)
@@ -1107,7 +1186,19 @@ void ECCommonL::RMWPipeline::check_ops()
 
 void ECCommonL::RMWPipeline::on_change()
 {
-  dout(10) << __func__ << dendl;
+  dout(10) << __func__ << ": dropping " << tid_to_op_map.size()
+	   << " ops waiting_state=" << waiting_state.size()
+	   << " waiting_reads=" << waiting_reads.size()
+	   << " waiting_commit=" << waiting_commit.size()
+	   << " completed_to=" << completed_to
+	   << " committed_to=" << committed_to << dendl;
+  for (auto &&[tid, op]: tid_to_op_map) {
+    dout(10) << __func__ << ": dropping " << op->hoid
+	     << " v=" << op->version << " tid=" << tid
+	     << " reqid=" << op->reqid
+	     << " remote_read=" << op->remote_read
+	     << " pending_commit=" << op->pending_commit << dendl;
+  }
 
   completed_to = eversion_t();
   committed_to = eversion_t();
@@ -1145,15 +1236,15 @@ ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
   const map<string, bufferlist, less<>>& attrs,
   uint64_t size)
 {
-  dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
+  dout(20) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtilL::HashInfoRef ref = registry.lookup(hoid);
   if (!ref) {
-    dout(10) << __func__ << ": not in cache " << hoid << dendl;
+    dout(15) << __func__ << ": not in cache " << hoid << dendl;
     ECUtilL::HashInfo hinfo(ec_impl->get_chunk_count());
     bufferlist bl;
     map<string, bufferlist>::const_iterator k = attrs.find(ECUtilL::get_hinfo_key());
     if (k == attrs.end()) {
-      dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
+      dout(ceph::dout::need_dynamic(size == 0 ? 15 : 5)) << __func__ << " " << hoid << " missing hinfo attr size=" << size << dendl;
     } else {
       bl = k->second;
     }
@@ -1167,7 +1258,8 @@ ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
       }
       if (hinfo.get_total_chunk_size() != size) {
         dout(0) << __func__ << ": Mismatch of total_chunk_size "
-      		       << hinfo.get_total_chunk_size() << dendl;
+                << hinfo.get_total_chunk_size() << " size " << size
+                << " for " << hoid << dendl;
         return ECUtilL::HashInfoRef();
       } else {
         create = true;

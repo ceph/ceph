@@ -103,6 +103,7 @@
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDForceRecovery.h"
 #include "messages/MOSDPGCreated.h"
+#include "messages/MOSDECSubOpWrite.h"
 
 #include "messages/MOSDPeeringOp.h"
 
@@ -1123,6 +1124,11 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
 
   if (next_map->is_down(peer) ||
       next_map->get_info(peer).up_from > from_epoch) {
+    // dout-lint: error-path
+    dout(10) << __func__ << " dropping " << *m << " to osd." << peer
+             << " from_epoch " << from_epoch
+             << ": peer down or restarted as of e" << next_map->get_epoch()
+             << dendl;
     m->put();
     release_map(next_map);
     return;
@@ -1149,6 +1155,12 @@ void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>&
   for (auto& iter : messages) {
     if (next_map->is_down(iter.first) ||
 	next_map->get_info(iter.first).up_from > from_epoch) {
+      // dout-lint: error-path
+      dout(10) << __func__ << " dropping " << *iter.second
+               << " to osd." << iter.first
+               << " from_epoch " << from_epoch
+               << ": peer down or restarted as of e" << next_map->get_epoch()
+               << dendl;
       iter.second->put();
       continue;
     }
@@ -7618,7 +7630,7 @@ void OSDService::maybe_share_map(
     std::lock_guard l(session->projected_epoch_lock);
 
     if (peer_epoch_lb > session->projected_epoch) {
-      dout(10) << __func__ << ": con " << con->get_peer_addr()
+      dout(15) << __func__ << ": con " << con->get_peer_addr()
                << " updating session's projected_epoch from "
                << session->projected_epoch
                << " to ping map epoch of " << peer_epoch_lb
@@ -7627,7 +7639,7 @@ void OSDService::maybe_share_map(
     }
 
     if (osdmap->get_epoch() <= session->projected_epoch) {
-      dout(10) << __func__ << ": con " << con->get_peer_addr()
+      dout(20) << __func__ << ": con " << con->get_peer_addr()
                << " our osdmap epoch of " << osdmap->get_epoch()
                << " is not newer than session's projected_epoch of "
                << session->projected_epoch << dendl;
@@ -7636,7 +7648,7 @@ void OSDService::maybe_share_map(
     // send incremental maps in the range of:
     // (projected_epoch, osdmap]
     send_from = session->projected_epoch + 1;
-    dout(10) << __func__ << ": con " << con->get_peer_addr()
+    dout(15) << __func__ << ": con " << con->get_peer_addr()
              << " map epoch " << session->projected_epoch
              << " -> " << osdmap->get_epoch()
              << " (shared)" << dendl;
@@ -7666,6 +7678,9 @@ void OSD::dispatch_session_waiting(const ceph::ref_t<Session>& session, OSDMapRe
       pg_t actual_pgid = osdmap->raw_pg_to_pg(
 	static_cast<const MOSDOp*>(m)->get_pg());
       if (!osdmap->get_primary_shard(actual_pgid, &pgid)) {
+	dout(10) << __func__ << " dropping " << *m
+		 << ": no primary shard for " << actual_pgid
+		 << " e" << osdmap->get_epoch() << dendl;
 	continue;
       }
     } else {
@@ -8295,7 +8310,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (!m->incremental_maps.empty()) {
     logger->inc(l_osd_inc_map_received, m->incremental_maps.size());
   }
-  dout(10) << __func__
+  dout(15) << __func__
            << ": received " << m->maps.size() << " full maps "
            << "and " << m->incremental_maps.size()
            << " incremental maps"
@@ -8318,7 +8333,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // make sure there is something new, here, before we bother flushing
   // the queues and such
   if (last <= superblock.get_newest_map()) {
-    dout(10) << " no new maps here, dropping" << dendl;
+    dout(20) << " no new maps here, dropping" << dendl;
     m->put();
     return;
   }
@@ -9834,7 +9849,7 @@ void OSD::do_recovery(
       goto out;
     }
 
-    dout(10) << "do_recovery starting " << reserved_pushes << " " << *pg << dendl;
+    dout(15) << "do_recovery starting " << reserved_pushes << " " << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
     dout(20) << "  active was " << service.recovery_oids[pg->pg_id] << dendl;
 #endif
@@ -9982,6 +9997,37 @@ void OSD::enqueue_peering_evt(spg_t pgid, PGPeeringEventRef evt)
 }
 
 /*
+ * Level of the per-op "dequeue_op" start and finish log lines: 10 for ops,
+ * 15 for high-volume replies to sub-ops this OSD sent (one per replica/shard
+ * per client op), so those do not gain an unconditional level-10 line on
+ * top of the level-15 handling other areas already give them. Replies on
+ * rare / error paths (log-missing, recovery-delete) stay at 10: their
+ * handlers only log receipt at 20, so this is the only level-10 record that
+ * they completed.
+ */
+static int dequeue_op_log_level(const Message *m)
+{
+  switch (m->get_type()) {
+  case MSG_OSD_REPOPREPLY:
+  case MSG_OSD_EC_WRITE_REPLY:
+  case MSG_OSD_EC_READ_REPLY:
+  case MSG_OSD_PG_PUSH_REPLY:
+    return 15;
+  case MSG_OSD_EC_WRITE:
+    // ECDummyOp roll-forward sub-writes (at_version 0'0) are handled at 20
+    // by handle_sub_write/sub_write_committed; an unconditional level-10
+    // dequeue_op start/finish pair for them adds no debugging value.
+    if (static_cast<const MOSDECSubOpWrite*>(m)->op.at_version ==
+	eversion_t()) {
+      return 15;
+    }
+    return 10;
+  default:
+    return 10;
+  }
+}
+
+/*
  * NOTE: dequeue called in worker thread, with pg lock
  */
 void OSD::dequeue_op(
@@ -9997,12 +10043,22 @@ void OSD::dequeue_op(
   op->set_dequeued_time(now);
 
   utime_t latency = now - m->get_recv_stamp();
-  dout(10) << "dequeue_op " << *op->get_req()
-           << " prio " << m->get_priority()
-	   << " cost " << m->get_cost()
-	   << " latency " << latency
-	   << " " << *m
-	   << " pg " << *pg << dendl;
+  // Lean start line (reqid, prio, cost, queue latency) so a hung or crashed
+  // do_request() still leaves a record of the op that was running; the full
+  // undecoded message and PG state are only added at 15+ (byte-identical to
+  // the old level-10 text). Uses the same level as the finish line below, so
+  // high-volume sub-op replies (which the finish line demotes to 15) do not
+  // gain a second, unconditional level-10 line here.
+  const int op_log_level = dequeue_op_log_level(m);
+  dout(ceph::dout::need_dynamic(op_log_level))
+    << "dequeue_op " << *op->get_req()
+    << " prio " << m->get_priority()
+    << " cost " << m->get_cost()
+    << " latency " << latency;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 15>()) {
+    *_dout << " " << *m << " pg " << *pg;
+  }
+  *_dout << dendl;
 
   logger->tinc(l_osd_op_before_dequeue_op_lat, latency);
 
@@ -10010,8 +10066,11 @@ void OSD::dequeue_op(
 			  pg->get_osdmap(),
 			  op->sent_epoch);
 
-  if (pg->is_deleting())
+  if (pg->is_deleting()) {
+    dout(10) << "dequeue_op " << *op->get_req() << " pg " << pg->pg_id
+	     << " is deleting, dropping" << dendl;
     return;
+  }
 
   op->mark_reached_pg();
   op->osd_trace.event("dequeue_op");
@@ -10019,8 +10078,14 @@ void OSD::dequeue_op(
   pg->do_request(op, handle);
 
   // finish
-  dout(10) << "dequeue_op " << *op->get_req() << " finish"
-    << " latency " << (ceph_clock_now() - now) << dendl;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    dout(ceph::dout::need_dynamic(op_log_level))
+      << "dequeue_op " << *op->get_req() << " finish"
+      << " latency " << (ceph_clock_now() - now)
+      << " queue_latency " << latency
+      << " state " << op->state_string()
+      << dendl;
+  }
   OID_EVENT_TRACE_WITH_MSG(m, "DEQUEUE_OP_END", false);
 }
 
@@ -10798,7 +10863,7 @@ void OSDShard::consume_map(
       while (!slot->waiting.empty() &&
 	     slot->waiting.front().get_map_epoch() <= new_osdmap->get_epoch()) {
 	auto& qi = slot->waiting.front();
-	dout(20) << __func__ << "  " << pgid
+	dout(10) << __func__ << "  " << pgid
 		 << " waiting item " << qi
 		 << " epoch " << qi.get_map_epoch()
 		 << " <= " << new_osdmap->get_epoch()
@@ -11109,9 +11174,10 @@ void OSD::ShardedOpWQ::_add_slot_waiter(
 	     << ", will wait on " << qi << dendl;
     slot->waiting_peering[qi.get_map_epoch()].push_back(std::move(qi));
   } else {
-    dout(20) << __func__ << " " << pgid
+    dout(10) << __func__ << " " << pgid
 	     << " item epoch is "
 	     << qi.get_map_epoch()
+	     << (slot->waiting_for_split.empty() ? "" : " (splitting)")
 	     << ", will wait on " << qi << dendl;
     slot->waiting.push_back(std::move(qi));
   }
@@ -11342,7 +11408,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
 	if (create_info) {
 	  if (create_info->by_mon &&
 	      osdmap->get_pg_acting_primary(token.pgid) != osd->whoami) {
-	    dout(20) << __func__ << " " << token
+	    // dout-lint: error-path
+	    dout(10) << __func__ << " " << token
 		     << " no pg, no longer primary, ignoring mon create on "
 		     << qi << dendl;
 	  } else {
@@ -11361,14 +11428,17 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
 	      // distribute remaining split children to other shards below!
 	      break;
 	    }
-	    dout(20) << __func__ << " ignored create on " << qi << dendl;
+	    // dout-lint: error-path
+	    dout(10) << __func__ << " ignored create on " << qi << dendl;
 	  }
 	} else {
-	  dout(20) << __func__ << " " << token
+	  // dout-lint: error-path
+	  dout(10) << __func__ << " " << token
 		   << " no pg, peering, !create, discarding " << qi << dendl;
 	}
       } else {
-	dout(20) << __func__ << " " << token
+	// dout-lint: error-path
+	dout(10) << __func__ << " " << token
 		 << " no pg, peering, doesn't map here e" << osdmap->get_epoch()
 		 << ", discarding " << qi
 		 << dendl;
@@ -11379,7 +11449,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
 	       << ", will wait on " << qi << dendl;
       _add_slot_waiter(token, slot, std::move(qi));
     } else {
-      dout(20) << __func__ << " " << token
+      // dout-lint: error-path
+      dout(10) << __func__ << " " << token
 	       << " no pg, shouldn't exist e" << osdmap->get_epoch()
 	       << ", dropping " << qi << dendl;
       // share map with client?

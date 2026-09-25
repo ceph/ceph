@@ -742,6 +742,32 @@ WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
 template <> struct fmt::formatter<entity_addrvec_t> : fmt::ostream_formatter {};
 #endif
 
+/*
+ * Compact printer for an entity_addrvec_t in high-volume per-message log
+ * lines.  When 'brief' is true and the vector holds more than one address,
+ * only the first (preferred) address of the vector is printed, e.g.
+ * "v2:10.0.0.1:6800/1234" instead of
+ * "[v2:10.0.0.1:6800/1234,v1:10.0.0.1:6801/1234]" -- the same text that
+ * operator<< already prints for a single-address vector.  The others,
+ * including a second address family on a dual-stack daemon (both
+ * ms_bind_ipv4 and ms_bind_ipv6 set), are dropped from the brief form; use
+ * debug_ms >= 5 to see the full vector.  Otherwise the output is identical
+ * to operator<<(entity_addrvec_t).
+ */
+struct entity_addrvec_brief_t {
+  const entity_addrvec_t& av;
+  bool brief;
+};
+
+inline std::ostream& operator<<(std::ostream& out,
+				const entity_addrvec_brief_t& b)
+{
+  if (b.brief && b.av.v.size() > 1) {
+    return out << b.av.v.front();
+  }
+  return out << b.av;
+}
+
 namespace std {
 template<> struct hash<entity_addrvec_t> {
   size_t operator()( const entity_addrvec_t& x) const {

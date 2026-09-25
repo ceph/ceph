@@ -200,7 +200,7 @@ void ReplicatedBackend::check_recovery_sources(const OSDMapRef& osdmap)
 
 bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
 {
-  dout(10) << __func__ << ": " << *op->get_req() << dendl;
+  dout(15) << __func__ << ": " << *op->get_req() << dendl;
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PULL:
     return true;
@@ -213,7 +213,7 @@ bool ReplicatedBackend::_handle_message(
   OpRequestRef op
   )
 {
-  dout(10) << __func__ << ": " << *op->get_req() << dendl;
+  dout(15) << __func__ << ": " << *op->get_req() << dendl;
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PUSH:
     do_push(op);
@@ -574,7 +574,7 @@ void ReplicatedBackend::maybe_kick_pct_update()
     return;
   }
 
-  dout(10) << __func__ << ": scheduling pct update after "
+  dout(15) << __func__ << ": scheduling pct update after "
 	   << pct_delay << " seconds" << dendl;
   parent->get_pg_timer().schedule_after(
     pct_callback, std::chrono::seconds(pct_delay));
@@ -583,7 +583,7 @@ void ReplicatedBackend::maybe_kick_pct_update()
 void ReplicatedBackend::cancel_pct_update()
 {
   if (pct_callback.is_scheduled()) {
-    dout(10) << __func__ << ": canceling pct update" << dendl;
+    dout(15) << __func__ << ": canceling pct update" << dendl;
     parent->get_pg_timer().cancel(pct_callback);
   }
 }
@@ -687,7 +687,7 @@ void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp>& op)
 
   FUNCTRACE(cct);
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
-  dout(10) << __func__ << ": " << op->tid << dendl;
+  dout(15) << __func__ << ": " << op->tid << dendl;
   if (op->op) {
     op->op->mark_event("op_commit");
     op->op->pg_trace.event("op commit");
@@ -723,12 +723,12 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       m = ip_op.op->get_req<MOSDOp>();
 
     if (m)
-      dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
+      dout(15) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
 	      << " ack_type " << (int)r->ack_type
 	      << " from " << from
 	      << dendl;
     else
-      dout(7) << __func__ << ": tid " << ip_op.tid << " (no op) "
+      dout(15) << __func__ << ": tid " << ip_op.tid << " (no op) "
 	      << " ack_type " << (int)r->ack_type
 	      << " from " << from
 	      << dendl;
@@ -756,6 +756,9 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ip_op.on_commit = 0;
       in_progress_ops.erase(iter);
     }
+  } else {
+    dout(10) << __func__ << ": tid " << rep_tid << " from " << from
+	     << " not in progress, ignoring " << *r << dendl;
   }
   maybe_kick_pct_update();
 }
@@ -834,7 +837,7 @@ std::optional<int32_t> ReplicatedBackend::be_deep_scrub_read_data(
     // done with bytes
     smap_object.digest = pos.data_hash.digest();
     smap_object.digest_present = true;
-    dout(10) << fmt::format(
+    dout(15) << fmt::format(
                     "{}: {} read {} bytes total ({} now; expected:{}; "
                     "obj-size:{}), done with data. Digest {:#x}",
                     __func__, poid, pos.data_pos, r, to_read, smap_object.size,
@@ -845,7 +848,7 @@ std::optional<int32_t> ReplicatedBackend::be_deep_scrub_read_data(
     // analyzing the object.
     return std::nullopt;
   }
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
                   "{}: {} read {} bytes total ({} now; obj-size:{}), more data "
                   "to read. Digest so far: {:#x}",
                   __func__, poid, pos.data_pos, r, smap_object.size,
@@ -862,7 +865,7 @@ int ReplicatedBackend::be_deep_scrub(
   ScrubMapBuilder &pos,
   ScrubMap::object& smap_object)
 {
-  dout(10) << fmt::format("{} {} pos {}", __func__, poid, pos) << dendl;
+  dout(15) << fmt::format("{} {} pos {}", __func__, poid, pos) << dendl;
   auto& perf_logger = *(get_parent()->get_logger());
 
   {
@@ -897,7 +900,7 @@ int ReplicatedBackend::be_deep_scrub(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &hdrbl, true);
     if (r == -EIO) {
-      dout(20) << __func__ << "  " << poid << " got "
+      dout(10) << __func__ << "  " << poid << " got "
 	       << r << " on omap header read, read_error" << dendl;
       smap_object.read_error = true;
       return 0;
@@ -1273,7 +1276,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   const hobject_t& soid = m->poid;
 
-  dout(10) << __func__ << " " << soid
+  dout(15) << __func__ << " " << soid
            << " v " << m->version
 	   << (m->logbl.length() ? " (transaction)" : " (parallel exec")
 	   << " " << m->logbl.length()
@@ -1378,6 +1381,7 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   ceph_assert(m->get_type() == MSG_OSD_REPOP);
   dout(10) << __func__ << " on op " << *m
 	   << ", sending commit to osd." << rm->ackerosd
+	   << " lat " << (ceph_clock_now() - m->get_recv_stamp())
 	   << dendl;
   ceph_assert(get_osdmap()->is_up(rm->ackerosd));
 

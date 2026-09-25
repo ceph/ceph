@@ -254,7 +254,7 @@ objs_fix_list_t ScrubBackend::scrub_compare_maps(
   bool max_reached,
   SnapMapReaderI& snaps_getter)
 {
-  dout(10) << __func__ << " has maps, analyzing" << dendl;
+  dout(15) << __func__ << " has maps, analyzing" << dendl;
   ceph_assert(m_scrubber.is_primary());
 
   // construct authoritative scrub map for type-specific scrubbing
@@ -293,7 +293,9 @@ void ScrubBackend::collect_omap_stats(
 	  obj_in_smap.large_omap_object_value_size);
 
       clog.do_log(CLOG_WARN, erm);
-      dout(5) << __func__ << ": " << erm << dendl;
+      dout(5) << __func__ << ": "
+              << std::string_view{erm}.substr(0, erm.find_last_not_of('\n') + 1)
+              << dendl;
     }
   }
 }
@@ -310,7 +312,7 @@ void ScrubBackend::collect_omap_stats(
  */
 void ScrubBackend::update_authoritative()
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
 
   if (m_acting_but_me.empty()) {
     // nothing to fix. Just count OMAP stats
@@ -461,6 +463,7 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
   auth_selection_t ret_auth;
   ret_auth.auth = this_chunk->received_maps.end();
   eversion_t auth_version;
+  bool had_shard_errors = false;
 
   for (auto& l : shards) {
 
@@ -474,11 +477,13 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
 
       ret_auth.digest_match = false;
       dout(10) << fmt::format(
-                    "{}: digest_match = false, {} data_digest 0x{:x} != "
-                    "data_digest 0x{:x}",
+                    "{}: digest_match = false, {} auth {} data_digest 0x{:x} "
+                    "!= shard {} data_digest 0x{:x}",
                     __func__,
                     ho,
+                    ret_auth.auth_shard,
                     ret_auth.auth->second.objects.at(ho).digest,
+                    l,
                     *shard_ret.digest)
                << dendl;
     }
@@ -496,6 +501,7 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
       ceph_assert(shard_ret.error_text.length());
       errstream << m_pg_id.pgid << " shard " << l << " soid " << ho << " : "
                 << shard_ret.error_text << "\n";
+      had_shard_errors = true;
 
     } else if (shard_ret.possible_auth ==
                shard_as_auth_t::usable_t::not_found) {
@@ -541,7 +547,14 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
     }
   }
 
-  dout(10) << fmt::format("{}: selecting osd {} for obj {} with oi {}",
+  // Clean pick: log at 15 (one line per scrubbed object).  When some
+  // candidates were rejected, no auth was found, or the digests disagree,
+  // this is the only line that says which shard's object_info the repair
+  // decision was based on, so log it at 10.
+  dout(ceph::dout::need_dynamic(
+         (had_shard_errors || !ret_auth.is_auth_available ||
+          !ret_auth.digest_match) ? 10 : 15))
+    << fmt::format("{}: selecting osd {} for obj {} with oi {}",
                           __func__,
                           ret_auth.auth_shard,
                           ho,
@@ -795,7 +808,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
 // re-implementation of PGBackend::be_compare_scrubmaps()
 void ScrubBackend::compare_smaps()
 {
-  dout(10) << __func__
+  dout(15) << __func__
            << ": authoritative-set #: " << this_chunk->all_chunk_objects.size()
            << dendl;
 
@@ -875,9 +888,9 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
         const int num_redundancy_shards = m_pg.get_ec_sinfo().get_m();
         if (missing_shards > 0 && missing_shards < num_redundancy_shards) {
           dout(10) << fmt::format(
-                          "{}: Decoding {} missing shards for pg {} "
+                          "{}: {} decoding {} missing shards (primary {}) "
                           "as only received shards were ({}).",
-                          __func__, missing_shards, m_pg_whoami,
+                          __func__, ho, missing_shards, m_pg_whoami,
                           available_shards)
                    << dendl;
           this_chunk->m_ec_digest_map =
@@ -885,9 +898,9 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
                                         m_pg.get_ec_sinfo().get_chunk_size());
         } else if (missing_shards != 0) {
           dout(10) << fmt::format(
-                          "{}: Cannot decode {} shards from pg {} "
+                          "{}: {} cannot decode {} shards (primary {}) "
                           "when only shards {} were received. Ignoring.",
-                          __func__, missing_shards, m_pg_whoami,
+                          __func__, ho, missing_shards, m_pg_whoami,
                           available_shards)
                    << dendl;
         } else {
@@ -951,9 +964,9 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
         }
       } else {
         dout(10) << fmt::format(
-                        "{}: Cannot decode missing shards in pg {} "
+                        "{}: {} cannot decode missing shards (primary {}) "
                         "when only shards {} were received. Ignoring.",
-                        __func__, m_pg_whoami, available_shards)
+                        __func__, ho, m_pg_whoami, available_shards)
                  << dendl;
       }
     }
@@ -1098,14 +1111,21 @@ void ScrubBackend::inconsistents(const hobject_t& ho,
   m_current_obj.cur_inconsistent.insert(auth_n_errs.object_errors.begin(),
                                         auth_n_errs.object_errors.end());
 
-  dout(15) << fmt::format(
-                "{}: object errors #: {}  auth list #: {}  cur_missing #: {}  "
-                "cur_incon #: {}",
+  // Good path (nothing missing or inconsistent for this object) stays at
+  // 15; a damaged object is logged at 10 with the actual shard sets (not
+  // just their sizes), since that is what a later 'pg repair' will act on.
+  dout(ceph::dout::need_dynamic(
+         (m_current_obj.cur_missing.empty() &&
+          m_current_obj.cur_inconsistent.empty()) ? 15 : 10))
+    << fmt::format(
+                "{}: {} object errors #: {} auth list: {} cur_missing: {} "
+                "cur_incon: {}",
                 __func__,
+                ho,
                 auth_n_errs.object_errors.size(),
-                auth_n_errs.auth_list.size(),
-                m_current_obj.cur_missing.size(),
-                m_current_obj.cur_inconsistent.size())
+                auth_n_errs.auth_list,
+                m_current_obj.cur_missing,
+                m_current_obj.cur_inconsistent)
            << dendl;
 
 
@@ -1782,7 +1802,7 @@ static inline bool doing_clones(
  */
 void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map, const pg_shard_t &srd)
 {
-  dout(10) << __func__ << " num stat obj "
+  dout(15) << __func__ << " num stat obj "
 	   << m_pg.get_pg_info(ScrubberPasskey{}).stats.stats.sum.num_objects
 	   << dendl;
 
@@ -2073,7 +2093,13 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map, const pg_shard_t &srd)
   // fix data/omap digests
   m_scrubber.submit_digest_fixes(this_chunk->missing_digest);
 
-  dout(10) << __func__ << " (" << m_mode_desc << ") finish" << dendl;
+  dout(10) << __func__ << " (" << m_mode_desc << ") finish. chunk objects: "
+           << this_chunk->all_chunk_objects.size()
+           << " errors (shallow/deep): "
+           << this_chunk->m_error_counts.shallow_errors << "/"
+           << this_chunk->m_error_counts.deep_errors
+           << " inconsistent objs: " << this_chunk->m_inconsistent_objs.size()
+           << " digest fixes: " << this_chunk->missing_digest.size() << dendl;
 }
 
 int ScrubBackend::process_clones_to(
@@ -2159,7 +2185,7 @@ std::vector<snap_mapper_fix_t> ScrubBackend::scan_snaps(
         try {
           decode(snapset, p);
         } catch (...) {
-          dout(20) << fmt::format("{}: failed to decode the snapset ({})",
+          dout(10) << fmt::format("{}: failed to decode the snapset ({})",
                                   __func__,
                                   hoid)
                    << dendl;

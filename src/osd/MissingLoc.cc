@@ -174,7 +174,7 @@ void MissingLoc::check_recovery_sources(const OSDMapRef& osdmap)
   }
 
   if (now_down.empty()) {
-    ldout(cct, 10) << __func__ << " no source osds (" << missing_loc_sources << ") went down" << dendl;
+    ldout(cct, 20) << __func__ << " no source osds (" << missing_loc_sources << ") went down" << dendl;
   } else {
     ldout(cct, 10) << __func__ << " sources osds " << now_down << " now down, remaining sources are "
 		       << missing_loc_sources << dendl;

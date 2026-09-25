@@ -1934,7 +1934,7 @@ void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache,
                                            TransContext* txc,
                                            uint32_t offset, uint32_t len)
 {
-  ldout(cache->cct, 10) << __func__ << " txc " << txc
+  ldout(cache->cct, 20) << __func__ << " txc " << txc
                         << std::hex << " 0x" << offset << "~" << len << std::dec
                         << dendl;
 
@@ -2115,7 +2115,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 void BlueStore::OnodeSpace::clear()
 {
   std::lock_guard l(cache->lock);
-  ldout(cache->cct, 10) << __func__ << " " << onode_map.size()<< dendl;
+  ldout(cache->cct, 15) << __func__ << " " << onode_map.size()<< dendl;
   for (auto &p : onode_map) {
     cache->_rm(p.second.get());
   }
@@ -2921,7 +2921,7 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
 
 void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 {
-  dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
+  dout(15) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " start " << *this << dendl;
   ceph_assert(r);
   ceph_assert(blob.can_split());
@@ -2939,9 +2939,9 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
   r->maybe_prune_tail(); // likely redundant (as we tend to prune original blob beforehand)
                          // but let it be
 
-  dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
+  dout(20) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " finish " << *this << dendl;
-  dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
+  dout(20) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << "    and " << *r << dendl;
 }
 
@@ -3563,7 +3563,7 @@ BlueStore::ExtentMap::reshard_decision(uint32_t segment_size) {
   ReshardPlan plan;
   auto cct = onode->c->store->cct; // used by dout
 
-  dout(10) << __func__ << " 0x[" << std::hex << needs_reshard_begin << ","
+  dout(15) << __func__ << " 0x[" << std::hex << needs_reshard_begin << ","
 	   << needs_reshard_end << ") segment 0x" << segment_size << std::dec
 	   << " of " << onode->onode.extent_map_shards.size()
 	   << " shards on " << onode->oid << dendl;
@@ -5058,13 +5058,13 @@ void BlueStore::Onode::finish_write(TransContext* txc, uint32_t offset, uint32_t
 	       << dendl;
       continue;
     }
-    ldout(c->store->cct, 10) << __func__ << " txc " << txc << std::hex
+    ldout(c->store->cct, 20) << __func__ << " txc " << txc << std::hex
                              << " 0x" << offset << "~" << length << std::dec
                              << dendl;
     bc._finish_write(cache, txc, offset, length);
     break;
   }
-  ldout(c->store->cct, 10) << __func__ << " done " << txc << dendl;
+  ldout(c->store->cct, 20) << __func__ << " done " << txc << dendl;
 }
 
 struct FragMetric {
@@ -5315,12 +5315,12 @@ void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
   SharedBlobRef sb = shared_blob_set.lookup(sbid);
   if (sb) {
     b->set_shared_blob(sb);
-    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+    ldout(store->cct, 15) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " had " << *b->get_shared_blob() << dendl;
   } else {
     b->set_shared_blob(new SharedBlob(sbid, this));
     shared_blob_set.add(this, b->get_shared_blob().get());
-    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+    ldout(store->cct, 15) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " opened " << *b->get_shared_blob()
 			  << dendl;
   }
@@ -5346,14 +5346,14 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
     sb->persistent = new bluestore_shared_blob_t(sbid);
     auto p = v.cbegin();
     decode(*(sb->persistent), p);
-    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+    ldout(store->cct, 15) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " loaded shared_blob " << *sb << dendl;
   }
 }
 
 void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 {
-  ldout(store->cct, 10) << __func__ << " " << *b << dendl;
+  ldout(store->cct, 15) << __func__ << " " << *b << dendl;
 
   // update blob
   bluestore_blob_t& blob = b->dirty_blob();
@@ -5377,7 +5377,7 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 
 uint64_t BlueStore::Collection::make_blob_unshared(SharedBlob *sb)
 {
-  ldout(store->cct, 10) << __func__ << " " << *sb << dendl;
+  ldout(store->cct, 15) << __func__ << " " << *sb << dendl;
   ceph_assert(sb->is_loaded());
 
   uint64_t sbid = sb->get_sbid();
@@ -5439,7 +5439,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 void BlueStore::Collection::split_cache(
   Collection *dest)
 {
-  ldout(store->cct, 10) << __func__ << " to " << dest << dendl;
+  ldout(store->cct, 10) << __func__ << " to " << dest << " " << dest->cid << dendl;
 
   auto *ocache = get_onode_cache();
   auto *ocache_dest = dest->get_onode_cache();
@@ -5510,7 +5510,7 @@ void BlueStore::Collection::split_cache(
 
       for (auto& b : o->bc.buffer_map) {
         ceph_assert(!b.is_writing());
-        ldout(store->cct, 1)
+        ldout(store->cct, 20)
           << __func__ << "   moving " << b << dendl;
         dest->cache->_move(cache, &b);
       }
@@ -5819,7 +5819,7 @@ static void discard_cb(void *priv, void *priv2)
 
 void BlueStore::handle_discard(interval_set<uint64_t>& to_release)
 {
-  dout(10) << __func__ << dendl;
+  dout(20) << __func__ << dendl;
   ceph_assert(alloc);
   alloc->release(to_release);
 }
@@ -12595,7 +12595,7 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
     buf->omap_allocated = db->estimate_prefix_size(prefix, key_prefix);
   }
 
-  dout(10) << __func__ << *buf << dendl;
+  dout(15) << __func__ << *buf << dendl;
   return 0;
 }
 
@@ -12676,7 +12676,7 @@ BlueStore::CollectionRef BlueStore::_get_collection_by_oid(const ghobject_t& oid
 
 void BlueStore::_queue_reap_collection(CollectionRef& c)
 {
-  dout(10) << __func__ << " " << c << " " << c->cid << dendl;
+  dout(15) << __func__ << " " << c << " " << c->cid << dendl;
   // _reap_collections and this in the same thread,
   // so no need a lock.
   removed_collections.push_back(c);
@@ -12698,7 +12698,7 @@ void BlueStore::_reap_collections()
   list<CollectionRef>::iterator p = removed_colls.begin();
   while (p != removed_colls.end()) {
     CollectionRef c = *p;
-    dout(10) << __func__ << " " << c << " " << c->cid << dendl;
+    dout(15) << __func__ << " " << c << " " << c->cid << dendl;
     if (c->onode_space.map_any([&](Onode* o) {
 	  ceph_assert(!o->exists);
 	  if (o->flushing_count.load()) {
@@ -12716,7 +12716,7 @@ void BlueStore::_reap_collections()
     dout(10) << __func__ << " " << c << " " << c->cid << " done" << dendl;
   }
   if (removed_colls.empty()) {
-    dout(10) << __func__ << " all reaped" << dendl;
+    dout(15) << __func__ << " all reaped" << dendl;
   } else {
     removed_collections.splice(removed_collections.begin(), removed_colls);
   }
@@ -12785,7 +12785,7 @@ void BlueStore::set_collection_commit_queue(
 bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 {
   Collection *c = static_cast<Collection *>(c_.get());
-  dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   if (!c->exists)
     return false;
 
@@ -12810,7 +12810,7 @@ int BlueStore::stat(
   Collection *c = static_cast<Collection *>(c_.get());
   if (!c->exists)
     return -ENOENT;
-  dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->get_cid() << " " << oid << dendl;
 
   {
     std::shared_lock l(c->lock);
@@ -12957,7 +12957,7 @@ int BlueStore::read(
     dout(0) << __func__ << ": inject random EIO" << dendl;
     r = -EIO;
   }
-  dout(10) << __func__ << " " << cid << " " << oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
 
@@ -13420,7 +13420,8 @@ int BlueStore::_do_read(
   if (retry_count) {
     logger->inc(l_bluestore_reads_with_retries);
     dout(5) << __func__ << " read at 0x" << std::hex << offset << "~" << length
-            << " failed " << std::dec << retry_count << " times before succeeding" << dendl;
+            << " failed " << std::dec << retry_count << " times before succeeding"
+            << " " << c->cid << " " << o->oid << dendl;
     stringstream s;
     s << " reads with retries: " << logger->get(l_bluestore_reads_with_retries);
     _set_spurious_read_errors_alert(s.str());
@@ -13690,7 +13691,7 @@ int BlueStore::readv(
     dout(0) << __func__ << ": inject random EIO" << dendl;
     r = -EIO;
   }
-  dout(10) << __func__ << " " << cid << " " << oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << cid << " " << oid
            << " fiemap " << m << std::dec
            << " = " << r << dendl;
   if (op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
@@ -13843,6 +13844,7 @@ int BlueStore::_do_readv(
     logger->inc(l_bluestore_reads_with_retries);
     dout(5) << __func__ << " read fiemap " << m
             << " failed " << retry_count << " times before succeeding"
+            << " " << c->cid << " " << o->oid
             << dendl;
   }
   return bl.length();
@@ -13918,7 +13920,7 @@ int BlueStore::getattr(
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
   }
-  dout(10) << __func__ << " " << c->cid << " " << oid << " " << name
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT && r != -ENODATA) ? 10 : 15)) << __func__ << " " << c->cid << " " << oid << " " << name
 	   << " = " << r << dendl;
   return r;
 }
@@ -13954,7 +13956,7 @@ int BlueStore::getattrs(
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
   }
-  dout(10) << __func__ << " " << c->cid << " " << oid
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->cid << " " << oid
 	   << " = " << r << dendl;
   return r;
 }
@@ -13987,7 +13989,7 @@ int BlueStore::collection_empty(CollectionHandle& ch, bool *empty)
     return r;
   }
   *empty = ls.empty();
-  dout(10) << __func__ << " " << ch->cid << " = " << (int)(*empty) << dendl;
+  dout(15) << __func__ << " " << ch->cid << " = " << (int)(*empty) << dendl;
   return 0;
 }
 
@@ -13996,7 +13998,7 @@ int BlueStore::collection_bits(CollectionHandle& ch)
   dout(15) << __func__ << " " << ch->cid << dendl;
   Collection *c = static_cast<Collection*>(ch.get());
   std::shared_lock l(c->lock);
-  dout(10) << __func__ << " " << ch->cid << " = " << c->cnode.bits << dendl;
+  dout(15) << __func__ << " " << ch->cid << " = " << c->cnode.bits << dendl;
   return c->cnode.bits;
 }
 
@@ -14014,7 +14016,7 @@ int BlueStore::collection_list(
     r = _collection_list(c, start, end, max, false, ls, pnext);
   }
 
-  dout(10) << __func__ << " " << c->cid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid
     << " start " << start << " end " << end << " max " << max
     << " = " << r << ", ls.size() = " << ls->size()
     << ", next = " << (pnext ? *pnext : ghobject_t())  << dendl;
@@ -14035,7 +14037,7 @@ int BlueStore::collection_list_legacy(
     r = _collection_list(c, start, end, max, true, ls, pnext);
   }
 
-  dout(10) << __func__ << " " << c->cid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid
     << " start " << start << " end " << end << " max " << max
     << " = " << r << ", ls.size() = " << ls->size()
     << ", next = " << (pnext ? *pnext : ghobject_t())  << dendl;
@@ -14175,7 +14177,7 @@ int BlueStore::_omap_get(
   }
   r = _onode_omap_get(o, header, out);
  out:
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
 }
@@ -14253,7 +14255,7 @@ int BlueStore::omap_get_header(
     }
   }
  out:
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
 }
@@ -14304,7 +14306,7 @@ int BlueStore::omap_get_values(
     mono_clock::now() - start1,
     c->store->cct->_conf->bluestore_log_omap_iterator_age);
 
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
 }
@@ -14351,7 +14353,7 @@ int BlueStore::omap_check_keys(
     }
   }
  out:
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
+  dout(ceph::dout::need_dynamic((r < 0 && r != -ENOENT) ? 10 : 15)) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
 }
@@ -14364,7 +14366,7 @@ int BlueStore::omap_iterate(
   )
 {
   Collection *c = static_cast<Collection *>(c_.get());
-  dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
+  dout(15) << __func__ << " " << c->get_cid() << " " << oid << dendl;
   if (!c->exists) {
     return -ENOENT;
   }
@@ -14378,11 +14380,12 @@ int BlueStore::omap_iterate(
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
-      dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
+      dout(15) << __func__ << " " << c->get_cid() << " " << oid
+	       << " doesn't exist" << dendl;
       return -ENOENT;
     }
     o->flush();
-    dout(10) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
+    dout(20) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
     if (!o->onode.has_omap()) {
       return 0; // nothing to do
     }
@@ -14737,9 +14740,48 @@ void BlueStore::_txc_calc_cost(TransContext *txc)
   auto cost = throttle_cost_per_io.load();
   txc->cost = ios * cost + txc->bytes;
   txc->ios = ios;
-  dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("
+  dout(10) << __func__ << " txc " << txc << " cost " << txc->cost << " ("
 	   << ios << " ios * " << cost << " + " << txc->bytes
-	   << " bytes)" << dendl;
+	   << " bytes) " << txc->ch->cid
+	   << " onodes " << txc->onodes.size();
+  {
+    // name the touched objects (skip pgmeta, cap the list) so a hung or
+    // corrupt txc can be found by object id even if it never logs its
+    // commit line. Data writes, setattr(s), set_alloc_hint, touch,
+    // truncate, zero and clone targets only ever reach txc->onodes (via
+    // write_onode()), not txc->modified_objects (which gets entries only
+    // from omap-only ops, rename and removal), so we have to walk both
+    // sets; txc->onodes is checked first since it is the common case.
+    unsigned n = 0;
+    bool more = true;
+    auto name = [&](const OnodeRef& o) {
+      if (o->oid.is_pgmeta()) {
+	return true;
+      }
+      if (n++ == 3) {
+	*_dout << " ...";
+	return false;
+      }
+      *_dout << " " << o->oid;
+      return true;
+    };
+    for (auto& o : txc->onodes) {
+      if (!(more = name(o))) {
+	break;
+      }
+    }
+    if (more) {
+      for (auto& o : txc->modified_objects) {
+	if (txc->onodes.count(o)) {
+	  continue;
+	}
+	if (!(more = name(o))) {
+	  break;
+	}
+      }
+    }
+  }
+  *_dout << dendl;
 }
 
 void BlueStore::_txc_update_store_statfs(TransContext *txc)
@@ -14785,7 +14827,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 {
   BLUE_SCOPE(txc_state_proc);
   while (true) {
-    dout(10) << __func__ << " txc " << txc
+    dout(15) << __func__ << " txc " << txc
 	     << " " << txc->get_state_name() << dendl;
     switch (txc->get_state()) {
     case TransContext::STATE_PREPARE:
@@ -15101,7 +15143,13 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
 
 void BlueStore::_txc_committed_kv(TransContext *txc)
 {
-  dout(20) << __func__ << " txc " << txc << dendl;
+  dout(10) << __func__ << " txc " << txc << " " << txc->ch->cid
+	   << " bytes " << txc->bytes << " ios " << txc->ios
+	   << " onodes " << txc->onodes.size()
+	   << (txc->deferred_txn ? " deferred" : "")
+	   << " lat " << (mono_clock::now() - txc->start)
+	   << " kv_lat " << (mono_clock::now() - txc->last_stamp)
+	   << dendl;
   throttle.complete_kv(*txc);
   {
     std::lock_guard l(txc->osr->qlock);
@@ -15212,9 +15260,9 @@ void BlueStore::_txc_finish(TransContext *txc)
   if (empty && osr->zombie) {
     std::lock_guard l(zombie_osr_lock);
     if (zombie_osr_set.erase(osr->cid)) {
-      dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
+      dout(10) << __func__ << " reaping empty zombie osr " << osr << " " << osr->cid << dendl;
     } else {
-      dout(10) << __func__ << " empty zombie osr " << osr << " already reaped"
+      dout(15) << __func__ << " empty zombie osr " << osr << " already reaped"
 	       << dendl;
     }
   }
@@ -15233,7 +15281,7 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   // if async discard succeeded, will do alloc->release when discard callback
   // else we should release here
   if (!discard_queued) {
-      dout(10) << __func__ << "(sync) " << txc << " " << std::hex
+      dout(15) << __func__ << "(sync) " << txc << " " << std::hex
                << txc->released << std::dec << dendl;
       alloc->release(txc->released);
   }
@@ -15257,7 +15305,7 @@ void BlueStore::_osr_attach(Collection *c)
     auto p = zombie_osr_set.find(c->cid);
     if (p == zombie_osr_set.end()) {
       c->osr = ceph::make_ref<OpSequencer>(this, next_sequencer_id++, c->cid);
-      ldout(cct, 10) << __func__ << " " << c->cid
+      ldout(cct, 15) << __func__ << " " << c->cid
 		     << " fresh osr " << c->osr << dendl;
     } else {
       c->osr = p->second;
@@ -15377,15 +15425,16 @@ void BlueStore::_osr_drain_all()
     std::lock_guard l(zombie_osr_lock);
     for (auto& osr : zombies) {
       if (zombie_osr_set.erase(osr->cid)) {
-	dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
+	dout(10) << __func__ << " reaping empty zombie osr " << osr
+		 << " " << osr->cid << dendl;
 	ceph_assert(osr->q.empty());
       } else if (osr->zombie) {
-	dout(10) << __func__ << " empty zombie osr " << osr
-		 << " already reaped" << dendl;
+	dout(15) << __func__ << " empty zombie osr " << osr
+		 << " " << osr->cid << " already reaped" << dendl;
 	ceph_assert(osr->q.empty());
       } else {
 	dout(10) << __func__ << " empty zombie osr " << osr
-		 << " resurrected" << dendl;
+		 << " " << osr->cid << " resurrected" << dendl;
       }
     }
   }
@@ -15877,7 +15926,7 @@ void BlueStore::deferred_try_submit()
 
 void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 {
-  dout(10) << __func__ << " osr " << osr
+  dout(10) << __func__ << " osr " << osr << " " << osr->cid
 	   << " " << osr->deferred_pending->iomap.size() << " ios pending "
 	   << dendl;
   ceph_assert(osr->deferred_pending);
@@ -15942,7 +15991,7 @@ struct C_DeferredTrySubmit : public Context {
 
 void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 {
-  dout(10) << __func__ << " osr " << osr << dendl;
+  dout(10) << __func__ << " osr " << osr << " " << osr->cid << dendl;
   ceph_assert(osr->deferred_running);
   DeferredBatch *b = osr->deferred_running;
 
@@ -16144,7 +16193,7 @@ int BlueStore::queue_transactions(
 
   Collection *c = static_cast<Collection*>(ch.get());
   OpSequencer *osr = c->osr.get();
-  dout(10) << __func__ << " ch " << c << " " << c->cid << dendl;
+  dout(15) << __func__ << " ch " << c << " " << c->cid << dendl;
 
   // prepare
   TransContext *txc = _txc_create(static_cast<Collection*>(ch.get()), osr,
@@ -16187,7 +16236,7 @@ int BlueStore::queue_transactions(
 	tstart)) {
     // ensure we do not block here because of deferred writes
     dout(10) << __func__ << " failed get throttle_deferred_bytes, aggressive"
-	     << dendl;
+	     << " txc " << txc << " " << c->cid << dendl;
     ++deferred_aggressive;
     deferred_try_submit();
     {
@@ -16242,7 +16291,7 @@ int BlueStore::queue_transactions(
 
 void BlueStore::_txc_aio_submit(TransContext *txc)
 {
-  dout(10) << __func__ << " txc " << txc << dendl;
+  dout(15) << __func__ << " txc " << txc << dendl;
   bdev->aio_submit(&txc->ioc);
 }
 
@@ -16338,7 +16387,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
           uint64_t num_objs;
           decode(pg_num, hiter);
           decode(num_objs, hiter);
-          dout(10) << __func__ << " collection hint objects is a no-op, "
+          dout(15) << __func__ << " collection hint objects is a no-op, "
 		   << " pg_num " << pg_num << " num_objects " << num_objs
 		   << dendl;
         } else {
@@ -16394,7 +16443,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     }
     if (!create && (!o || !o->exists)) {
       dout(10) << __func__ << " op " << op->op << " got ENOENT on "
-	       << i.get_oid(op->oid) << dendl;
+	       << i.get_oid(op->oid) << " in " << c->cid << dendl;
       r = -ENOENT;
       goto endop;
     }
@@ -16645,7 +16694,7 @@ int BlueStore::_touch(TransContext *txc,
   int r = 0;
   _assign_nid(txc, o);
   txc->write_onode(o);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -16719,7 +16768,7 @@ void BlueStore::_do_write_small(
     bufferlist::iterator& blp,
     WriteContext *wctx)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+  dout(15) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   ceph_assert(length < min_alloc_size);
 
@@ -17103,7 +17152,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
   } while (any_change);
 
   if (above_blob_threshold) {
-    dout(10) << __func__ << " request GC, blobs >= " << inspected_blobs.size()
+    dout(15) << __func__ << " request GC, blobs >= " << inspected_blobs.size()
             << " " << std::hex << min_off << "~" << max_off << std::dec
 	    << dendl;
     ceph_assert(start_ep != end_ep);
@@ -17249,7 +17298,7 @@ void BlueStore::_do_write_big(
     bufferlist::iterator& blp,
     WriteContext *wctx)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+  dout(15) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " target_blob_size 0x" << wctx->target_blob_size << std::dec
 	   << " compress " << (int)wctx->compress
 	   << dendl;
@@ -18276,7 +18325,7 @@ int BlueStore::_write(TransContext *txc,
   }
   auto finish = mono_clock::now();
   logger->tinc_with_max(l_bluestore_write_lat, finish - start);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
@@ -18297,7 +18346,7 @@ int BlueStore::_zero(TransContext *txc,
     _assign_nid(txc, o);
     r = _do_zero(txc, c, o, offset, length);
   }
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
@@ -18329,7 +18378,7 @@ int BlueStore::_do_zero(TransContext *txc,
   }
   txc->write_onode(o);
 
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
@@ -18360,7 +18409,7 @@ void BlueStore::_do_truncate(
     // if we have shards past EOF, ask for a reshard
     if (!o->onode.extent_map_shards.empty() &&
 	o->onode.extent_map_shards.back().offset >= offset) {
-      dout(10) << __func__ << "  request reshard past EOF" << dendl;
+      dout(15) << __func__ << "  request reshard past EOF" << dendl;
       if (offset) {
 	o->extent_map.request_reshard(offset - 1, offset + length);
       } else {
@@ -18403,7 +18452,7 @@ int BlueStore::_truncate(TransContext *txc,
       return ostr.str();
     }
   );
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec
 	   << " = " << r << dendl;
   return r;
@@ -18444,7 +18493,7 @@ int BlueStore::_do_remove(
   }
 
   // see if we can unshare blobs still referenced by the head
-  dout(10) << __func__ << " gen and maybe_unshared_blobs "
+  dout(15) << __func__ << " gen and maybe_unshared_blobs "
 	   << maybe_unshared_blobs << dendl;
   ghobject_t nogen = o->oid;
   if (is_gen)
@@ -18557,7 +18606,7 @@ int BlueStore::_remove(TransContext *txc,
     }
   );
 
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18585,7 +18634,7 @@ int BlueStore::_setattr(TransContext *txc,
   b.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
 
   txc->write_onode(o);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << " = " << r << dendl;
   return r;
@@ -18612,7 +18661,7 @@ int BlueStore::_setattrs(TransContext *txc,
     }
   }
   txc->write_onode(o);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << aset.size() << " keys"
 	   << " = " << r << dendl;
   return r;
@@ -18635,7 +18684,7 @@ int BlueStore::_rmattr(TransContext *txc,
   txc->write_onode(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " = " << r << dendl;
   return r;
 }
@@ -18654,7 +18703,7 @@ int BlueStore::_rmattrs(TransContext *txc,
   txc->write_onode(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18687,7 +18736,7 @@ int BlueStore::_omap_clear(TransContext *txc,
   }
   logger->tinc_with_max(l_bluestore_omap_clear_lat, mono_clock::now() - t0);
 
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18739,7 +18788,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   logger->inc(l_bluestore_omap_setkeys_records, num0);
   logger->inc(l_bluestore_omap_setkeys_bytes, total_bytes);
   r = 0;
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18773,7 +18822,7 @@ int BlueStore::_omap_setheader(TransContext *txc,
   logger->inc(l_bluestore_omap_setheader_count);
   logger->inc(l_bluestore_omap_setheader_bytes, bl.length());
   r = 0;
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18809,7 +18858,7 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   txc->note_modified_object(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
@@ -18859,7 +18908,7 @@ int BlueStore::_set_alloc_hint(
   o->onode.expected_write_size = expected_write_size;
   o->onode.alloc_hint_flags = flags;
   txc->write_onode(o);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
 	   << " flags " << ceph_osd_alloc_hint_flag_string(flags)
@@ -18946,7 +18995,7 @@ int BlueStore::_clone(TransContext *txc,
   r = 0;
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
 	   << newo->oid << " = " << r << dendl;
   return r;
 }
@@ -19024,7 +19073,7 @@ int BlueStore::_clone_range(TransContext *txc,
   r = 0;
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
 	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec
 	   << " = " << r << dendl;
@@ -19082,7 +19131,7 @@ int BlueStore::_rename(TransContext *txc,
   txc->note_modified_object(oldo);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << old_oid << " -> "
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << __func__ << " " << c->cid << " " << old_oid << " -> "
 	   << new_oid << " = " << r << dendl;
   return r;
 }
@@ -19160,7 +19209,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
       // so bypass check.
       bool exists = (!next.is_max());
       for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
-        dout(10) << __func__ << " oid " << *it << dendl;
+        dout(15) << __func__ << " oid " << *it << dendl;
         auto onode = (*c)->onode_space.lookup(*it);
         exists = !onode || onode->exists;
         if (exists) {

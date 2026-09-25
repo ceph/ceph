@@ -511,7 +511,7 @@ void BlueFS::_update_logger_stats()
   in_data = get_used_non_bluefs();
   in_meta = _get_used(BDEV_SLOW) + _get_used(BDEV_DB) + _get_used(BDEV_WAL);
   if (in_data > 0) {
-    dout(10) << __func__ << " got meta ratio parameters, "
+    dout(20) << __func__ << " got meta ratio parameters, "
             << "data: " << in_data << ", meta: " << in_meta
             << dendl;
     r = double(in_meta) / double(in_data);
@@ -2568,7 +2568,7 @@ int64_t BlueFS::_read_random(
   auto* buf = &h->buf;
 
   int64_t ret = 0;
-  dout(10) << __func__ << " h " << h
+  dout(15) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << lock_fnode_print(h->file) << dendl;
 
@@ -2800,8 +2800,8 @@ int64_t BlueFS::_read_envmode(
   char *out)             ///< [out] optional: or copy it here
 {
   ceph_assert(h->file->envelopes_indexed);
-  dout(10) << __func__ << " h " << h << " offset: 0x"
-    << off_req << std::hex << "~" << len_req << std::hex << dendl;
+  dout(15) << __func__ << " h " << h << " offset: 0x"
+    << std::hex << off_req << "~" << len_req << std::dec << dendl;
   if (outbl) {
     outbl->clear();
   }
@@ -2815,7 +2815,9 @@ int64_t BlueFS::_read_envmode(
       break;
     }
     if (readable < 0) {
-      dout(10) << fmt::format("{} invalid wal flush", __func__) << dendl;
+      dout(10) << __func__ << " h " << h << " ino " << h->file->fnode.ino
+               << " invalid wal flush at 0x" << std::hex << off
+               << " req 0x" << off_req << "~" << len_req << std::dec << dendl;
       break;
     }
     readable = std::min(uint64_t(readable), off_req + len_req - off);
@@ -2827,7 +2829,10 @@ int64_t BlueFS::_read_envmode(
     r = _read(h, file_off, readable, outbl ? &res : nullptr,
               out ? out + (off - off_req) : nullptr);
     if (r < 0) {
-      dout(10) << fmt::format("{} read failed with {:#d}", __func__, r) << dendl;
+      dout(10) << __func__ << " h " << h << " ino " << h->file->fnode.ino
+               << " read failed with " << r
+               << " file_off 0x" << std::hex << file_off
+               << " len 0x" << readable << std::dec << dendl;
       break;
     }
     if (outbl) {
@@ -2855,7 +2860,7 @@ int64_t BlueFS::_read(
   FileReaderBuffer *buf = &(h->buf);
 
   bool prefetch = !outbl && !out;
-  dout(10) << __func__ << " h " << h
+  dout(15) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << lock_fnode_print(h->file)
 	   << (prefetch ? " prefetch" : "")
@@ -2897,7 +2902,15 @@ int64_t BlueFS::_read(
         uint64_t x_off = 0;
         auto p = h->file->fnode.seek(buf->bl_off, &x_off);
 	if (p == h->file->fnode.extents.end()) {
-	  dout(5) << __func__ << " reading less then required "
+	  // fnode.ino never changes after creation, and fnode.size/extents
+	  // cannot change here without file->lock: an open FileReader (this
+	  // one) holds file->num_readers > 0, and _flush_range_F() asserts
+	  // num_readers == 0 before it touches fnode -- not h->lock, which
+	  // only protects this FileReader's own read-ahead buffer.
+	  dout(5) << __func__ << " h " << h << " ino " << h->file->fnode.ino
+		  << " 0x" << std::hex << off << "~" << len
+		  << " size 0x" << h->file->fnode.size << std::dec
+		  << " reading less then required "
 		  << ret << "<" << ret + len << dendl;
 	  break;
 	}
@@ -3070,7 +3083,7 @@ bool BlueFS::_should_start_compact_log_L_N()
   }
   uint64_t expected = _estimate_log_size_N();
   float ratio = (float)current / (float)expected;
-  dout(10) << __func__ << " current 0x" << std::hex << current
+  dout(20) << __func__ << " current 0x" << std::hex << current
 	   << " expected " << expected << std::dec
 	   << " ratio " << ratio
 	   << dendl;
@@ -3078,6 +3091,9 @@ bool BlueFS::_should_start_compact_log_L_N()
       ratio < cct->_conf->bluefs_log_compact_min_ratio) {
     return false;
   }
+  dout(10) << __func__ << " log compaction needed: current 0x" << std::hex
+	   << current << " expected 0x" << expected << std::dec
+	   << " ratio " << ratio << dendl;
   return true;
 }
 
@@ -4112,7 +4128,7 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t end)
   ceph_assert(h->file->num_readers.load() == 0);
   ceph_assert(h->file->fnode.ino > 1);
 
-  dout(10) << __func__ << " " << h << std::hex
+  dout(15) << __func__ << " " << h << std::hex
            << " 0x" << h->get_pos() << ".." << end << std::dec
            << " to " << h->file->fnode
            << " hint " << h->file->vselector_hint << dendl;
@@ -4123,7 +4139,8 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t end)
     return 0;
   std::lock_guard file_lock(h->file->lock);
   if (h->file->deleted) {
-    dout(10) << __func__ << " deleted, no-op" << dendl;
+    dout(10) << __func__ << " " << h << " ino " << h->file->fnode.ino
+             << " deleted, no-op" << dendl;
     return 0;
   }
 
@@ -4262,7 +4279,7 @@ void BlueFS::_claim_completed_aios(FileWriter *h, list<aio_t> *ls)
       ls->splice(ls->end(), p->running_aios);
     }
   }
-  dout(10) << __func__ << " got " << ls->size() << " aios" << dendl;
+  dout(20) << __func__ << " got " << ls->size() << " aios" << dendl;
 }
 
 void BlueFS::_wait_for_aio(FileWriter *h)
@@ -4270,7 +4287,7 @@ void BlueFS::_wait_for_aio(FileWriter *h)
   // NOTE: this is safe to call without a lock, as long as our reference is
   // stable.
   utime_t start;
-  lgeneric_subdout(cct, bluefs, 10) << __func__;
+  lgeneric_subdout(cct, bluefs, 15) << __func__;
   start = ceph_clock_now();
   *_dout << " " << h << dendl;
   for (auto p : h->iocv) {
@@ -4278,7 +4295,7 @@ void BlueFS::_wait_for_aio(FileWriter *h)
       p->aio_wait();
     }
   }
-  dout(10) << __func__ << " " << h << " done in " << (ceph_clock_now() - start) << dendl;
+  dout(15) << __func__ << " " << h << " done in " << (ceph_clock_now() - start) << dendl;
 }
 #endif
 
@@ -4349,18 +4366,18 @@ int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
   }
   if (!force &&
       length < cct->_conf->bluefs_min_flush_size) {
-    dout(10) << __func__ << " " << h << " ignoring, length " << length
+    dout(20) << __func__ << " " << h << " ignoring, length " << length
 	     << " < min_flush_size " << cct->_conf->bluefs_min_flush_size
 	     << dendl;
     return 0;
   }
   if (length == 0) {
-    dout(10) << __func__ << " " << h << " no dirty data on "
+    dout(20) << __func__ << " " << h << " no dirty data on "
 	     << h->file->fnode << dendl;
     return 0;
   }
   uint64_t end = offset + length;
-  dout(10) << __func__ << " " << h << " 0x"
+  dout(15) << __func__ << " " << h << " 0x"
            << std::hex << offset << ".." << end << std::dec
 	   << " to " << h->file->fnode << dendl;
   ceph_assert(h->get_pos() <= h->file->fnode.size);
@@ -4524,9 +4541,23 @@ int BlueFS::_fsync(FileWriter *h, bool force_dirty)/*_F_D_LD_LNF_NF*/
   auto t0 = mono_clock::now();
   _maybe_check_vselector_LNF();
   uint64_t old_dirty_seq = 0;
+  uint64_t fsync_tail = 0; // for the level 10 summary below; only set when gathered
   {
-    dout(10) << __func__ << " " << h << " " << h->file->fnode
+    // Note: the entry line below is level 15 and the summary line at the
+    // end of this function is logged only on completion, so at level 10
+    // a fsync that hangs below (e.g. in _flush_bdev()/_wait_for_aio())
+    // leaves no "started" marker; it can only be inferred from the last
+    // txc in kv_submitted plus heartbeat timeouts. Accepted trade-off for
+    // the per-commit line saved.
+    dout(15) << __func__ << " " << h << " " << h->file->fnode
              << " dirty " << h->file->is_dirty << dendl;
+    if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+      // buffer_length() is only the unflushed tail as of fsync entry;
+      // append_try_flush() may already have flushed earlier chunks once
+      // bluefs_min_flush_size was reached, so this understates the bytes
+      // written since the previous fsync for large records.
+      fsync_tail = h->get_buffer_length();
+    }
     int r = _flush_F(h, true);
     if (r < 0)
       return r;
@@ -4549,6 +4580,11 @@ int BlueFS::_fsync(FileWriter *h, bool force_dirty)/*_F_D_LD_LNF_NF*/
   }
   _maybe_compact_log_LNF_NF_LD_D();
   logger->tinc_with_max(l_bluefs_fsync_lat, mono_clock::now() - t0);
+  dout(10) << __func__ << " " << h << " ino " << h->file->fnode.ino
+           << " tail 0x" << std::hex << fsync_tail
+           << " size 0x" << h->file->fnode.size << std::dec
+           << " log_seq " << old_dirty_seq
+           << " lat " << (mono_clock::now() - t0) << dendl;
   return 0;
 }
 
@@ -4627,7 +4663,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
                       size_t alloc_attempts,
                       bool permit_dev_fallback)
 {
-  dout(10) << __func__ << " len 0x" << std::hex << len
+  dout(15) << __func__ << " len 0x" << std::hex << len
            << " au 0x" << alloc_unit
            << std::dec << " from " << (int)id
            << " cooldown " << cooldown_deadline
@@ -4792,7 +4828,7 @@ void BlueFS::sync_metadata(bool avoid_compact)/*_LNF_NF_LD_D*/
     can_skip_flush = log.t.empty() && dirty.files.empty();
   }
   if (can_skip_flush) {
-    dout(10) << __func__ << " - no pending log events" << dendl;
+    dout(20) << __func__ << " - no pending log events" << dendl;
   } else {
     utime_t start;
     lgeneric_subdout(cct, bluefs, 10) << __func__;
@@ -4918,7 +4954,8 @@ int BlueFS::open_for_write(
   }
   }
 
-  dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
+  dout(10) << __func__ << " " << dirname << "/" << filename
+           << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
 

@@ -54,7 +54,7 @@ std::ostream& ScrubQueue::gen_prefix(std::ostream& out, std::string_view fn)
  */
 void ScrubQueue::remove_from_osd_queue(spg_t pgid)
 {
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
 		  "removing pg[{}] from OSD scrub queue", pgid)
 	   << dendl;
   std::unique_lock lck{jobs_lock};

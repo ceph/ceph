@@ -27,6 +27,7 @@
 #include "osd/scheduler/OpSchedulerItem.h"
 #include "Session.h"
 
+#include "common/StackStringStream.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 
@@ -277,7 +278,49 @@ std::ostream& PG::gen_prefix(std::ostream& out) const
 #endif
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
-	<< " " << *this << " ";
+	<< " ";
+    if (cct->_conf->subsys.should_gather<ceph_subsys_osd, 20>() ||
+	cct->_conf->subsys.get_log_level(ceph_subsys_osd) <
+	  cct->_conf->subsys.get_gather_level(ceph_subsys_osd)) {
+      // debug_osd >= 20, or osd lines are gathered in memory above the log
+      // level: print the full PG state on every line (unchanged output).
+      // Forget the lean-mode cache so a later switch to lean mode starts
+      // with a full prefix.
+      last_logged_pg_state.clear();
+      out << *this << " ";
+    } else {
+      // Lean mode: print the full PG state only when it differs from the
+      // last full state logged for this PG, after 1000 compact prefixes,
+      // or after 60s (whichever comes first: the time limit covers a PG
+      // that is otherwise idle, so a log rotation, a cut window or a tail
+      // is not left with only compact prefixes for that PG). Otherwise
+      // print a compact form that keeps pgid, last_update, primary (EC
+      // only), role and state, e.g.
+      //   pg[6.cs0( v 844'13576) p3(0) r=0 active+clean]
+      // The full state for a compact line is the most recent full pg[...]
+      // for the same PG earlier in the log.
+      constexpr unsigned lean_prefix_refresh = 1000;
+      constexpr auto lean_prefix_refresh_age = std::chrono::seconds(60);
+      CachedStackStringStream css;
+      *css << *this;
+      auto now = ceph::coarse_mono_clock::now();
+      if (css->strv() != last_logged_pg_state ||
+	  ++lean_prefixes_since_full >= lean_prefix_refresh ||
+	  now - last_logged_pg_state_stamp >= lean_prefix_refresh_age) {
+	last_logged_pg_state = css->strv();
+	lean_prefixes_since_full = 0;
+	last_logged_pg_state_stamp = now;
+	out << css->strv() << " ";
+      } else {
+	out << "pg[" << info.pgid << "( v " << info.last_update << ")";
+	if (is_ec_pg()) {
+	  out << " p" << get_primary();
+	}
+	out << " r=" << get_role()
+	    << " " << pg_state_string(recovery_state.get_state())
+	    << "] ";
+      }
+    }
   } else {
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
@@ -397,8 +440,12 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 			     op->classes(),
 			     session->get_peer_socket_addr());
 
-  dout(20) << "op_has_sufficient_caps "
-           << "session=" << session
+  // Success is good-path and stays at 20; a client op refused for caps is
+  // an error path that reply_op_error() never logs, so log it at 10.
+  dout(ceph::dout::need_dynamic(cap ? 20 : 10))  // dout-lint: error-path
+           << "op_has_sufficient_caps "
+           << req->get_reqid()
+           << " session=" << session
            << " pool=" << pool.id << " (" << pool.name
            << " " << req->get_hobj().nspace
 	   << ")"
@@ -1305,11 +1352,12 @@ Scrub::schedule_result_t PG::start_scrubbing(
 void PG::on_scrub_schedule_input_change()
 {
   if (is_active() && is_primary() && !is_scrub_queued_or_active()) {
-    dout(10) << fmt::format("{}: active/primary", __func__) << dendl;
+    dout(15) << fmt::format("{}: active/primary", __func__) << dendl;
     ceph_assert(m_scrubber);
     m_scrubber->update_scrub_job();
   } else {
-    dout(10) << fmt::format(
+    // a pure no-op decision: nothing to reschedule.
+    dout(20) << fmt::format(
 		    "{}: inactive, non-primary - or already scrubbing",
 		    __func__)
 	     << dendl;
@@ -1545,7 +1593,7 @@ void PG::on_active_actmap()
 
 
   if (recovery_state.is_active()) {
-    dout(10) << "Active: kicking snap trim" << dendl;
+    dout(15) << "Active: kicking snap trim" << dendl;
     kick_snap_trim();
   }
 
@@ -1835,7 +1883,11 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 {
   if (auto last_reset = get_last_peering_reset();
       last_reset > reply_epoch || last_reset > query_epoch) {
-    dout(10) << "old_peering_msg reply_epoch " << reply_epoch << " query_epoch "
+    // Every caller logs its own self-contained level-10 line (naming the
+    // message/event being discarded) when this returns true -- including
+    // PG::queue_peering_event, via its own discard-branch dout(10) -- so
+    // this generic line is just backup detail and can stay at 15.
+    dout(15) << "old_peering_msg reply_epoch " << reply_epoch << " query_epoch "
 	     << query_epoch << " last_peering_reset " << last_reset << dendl;
     return true;
   }
@@ -1932,7 +1984,8 @@ bool PG::can_discard_op(OpRequestRef& op)
 {
   auto m = op->get_req<MOSDOp>();
   if (cct->_conf->osd_discard_disconnected_ops && OSD::op_is_discardable(m)) {
-    dout(20) << " discard " << *m << dendl;
+    // dout-lint: error-path
+    dout(10) << __func__ << " discard (client disconnected) " << *m << dendl;
     return true;
   }
 
@@ -1950,6 +2003,9 @@ bool PG::can_discard_op(OpRequestRef& op)
     // changed since the send epoch, we got it, and we're primary, it won't
     // have resent even if the interval did change as it sent it to the primary
     // (us).
+    // dout-lint: error-path
+    dout(10) << __func__ << " direct read sent before interval change, dropping "
+	     << *m << dendl;
     return true;
   }
 
@@ -1975,7 +2031,7 @@ bool PG::can_discard_op(OpRequestRef& op)
     }
     if (m->get_map_epoch() < info.history.last_epoch_split) {
       dout(7) << __func__ << " pg split in "
-	      << info.history.last_epoch_split << ", dropping" << dendl;
+	      << info.history.last_epoch_split << ", dropping " << *m << dendl;
       return true;
     }
   } else if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_POOLRESEND)) {
@@ -2007,7 +2063,8 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
   // out-of-order replies, the messages from that replica should be discarded.
   OSDMapRef next_map = osd->get_next_osdmap();
   if (next_map->is_down(from)) {
-    dout(20) << " " << __func__ << " dead for nextmap is down " << from << dendl;
+    dout(10) << __func__ << " dropping " << *m << " from osd." << from
+	     << ": down in next map e" << next_map->get_epoch() << dendl;
     return true;
   }
   /* Mostly, this overlaps with the old_peering_msg
@@ -2016,7 +2073,9 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
    * if such a replica goes down it does not cause
    * a new interval. */
   if (next_map->get_down_at(from) >= m->map_epoch) {
-    dout(20) << " " << __func__ << " dead for 'get_down_at' " << from << dendl;
+    dout(10) << __func__ << " dropping " << *m << " from osd." << from
+	     << ": down_at " << next_map->get_down_at(from) << " >= "
+	     << m->map_epoch << dendl;
     return true;
   }
 
@@ -2025,7 +2084,7 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
   if (old_peering_msg(m->map_epoch, m->map_epoch)) {
     dout(10) << "can_discard_replica_op pg changed " << info.history
 	     << " after " << m->map_epoch
-	     << ", dropping" << dendl;
+	     << ", dropping " << *m << dendl;
     return true;
   }
   return false;
@@ -2037,7 +2096,8 @@ bool PG::can_discard_scan(OpRequestRef op)
   ceph_assert(m->get_type() == MSG_OSD_PG_SCAN);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
-    dout(10) << " got old scan, ignoring" << dendl;
+    dout(10) << " got old scan, ignoring, map_epoch " << m->map_epoch
+	     << " query_epoch " << m->query_epoch << dendl;
     return true;
   }
   return false;
@@ -2049,7 +2109,8 @@ bool PG::can_discard_backfill(OpRequestRef op)
   ceph_assert(m->get_type() == MSG_OSD_PG_BACKFILL);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
-    dout(10) << " got old backfill, ignoring" << dendl;
+    dout(10) << " got old backfill, ignoring, map_epoch " << m->map_epoch
+	     << " query_epoch " << m->query_epoch << dendl;
     return true;
   }
 
@@ -2117,10 +2178,32 @@ bool PG::can_discard_request(OpRequestRef& op)
 
 void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx &rctx)
 {
-  dout(10) << __func__ << ": " << evt->get_desc() << dendl;
+  // NullEvt only makes advance_pg() (already run by our caller) bring the PG
+  // up to date with the OSD's map; the state machine ignores it. Lease events
+  // are periodic keep-alives. Classify both below level 10. The type checks
+  // run only when level 10 is enabled. The discard branch below reuses this
+  // same classification, so a discarded event is still identifiable at
+  // whatever level its trace line would have been: without that, discarding
+  // a NullEvt or lease event left nothing self-contained at level 10 naming
+  // the event that was dropped.
+  int evt_lvl = 20;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    const boost::statechart::event_base *e = evt->evt.get();
+    if (dynamic_cast<const NullEvt*>(e)) {
+      evt_lvl = 20;
+    } else if (dynamic_cast<const RenewLease*>(e) ||
+	       dynamic_cast<const MLease*>(e) ||
+	       dynamic_cast<const MLeaseAck*>(e)) {
+      evt_lvl = 15;
+    } else {
+      evt_lvl = 10;
+    }
+    dout(ceph::dout::need_dynamic(evt_lvl)) << __func__ << ": " << evt->get_desc() << dendl;
+  }
   ceph_assert(have_same_or_newer_map(evt->get_epoch_sent()));
   if (old_peering_evt(evt)) {
-    dout(10) << "discard old " << evt->get_desc() << dendl;
+    dout(ceph::dout::need_dynamic(evt_lvl)) << "discard old " << evt->get_desc()
+	     << " last_peering_reset " << get_last_peering_reset() << dendl;
   } else {
     recovery_state.handle_event(evt, &rctx);
   }
@@ -2131,8 +2214,12 @@ void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx &rctx)
 
 void PG::queue_peering_event(PGPeeringEventRef evt)
 {
-  if (old_peering_evt(evt))
+  if (old_peering_evt(evt)) {
+    dout(10) << __func__ << " discard old " << evt->get_desc()
+	     << " last_peering_reset " << get_last_peering_reset() << dendl;
     return;
+  }
+  dout(10) << __func__ << " " << evt->get_desc() << dendl;
   osd->osd->enqueue_peering_evt(info.pgid, evt);
 }
 
@@ -2187,7 +2274,7 @@ void PG::handle_advance_map(
   vector<int>& newacting, int acting_primary,
   PeeringCtx &rctx)
 {
-  dout(10) << __func__ << ": " << osdmap->get_epoch() << dendl;
+  dout(20) << __func__ << ": " << osdmap->get_epoch() << dendl;
   osd_shard->update_pg_epoch(pg_slot, osdmap->get_epoch());
   recovery_state.advance_map(
     osdmap,
@@ -2201,9 +2288,23 @@ void PG::handle_advance_map(
 
 void PG::handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at)
 {
-  dout(10) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
-                          get_osdmap()->get_epoch())
-           << dendl;
+  // This fires for every PG on every map batch, whether or not anything
+  // changed for this PG. Only log the full, enriched summary at 10 when a
+  // peering reset actually happened within the batch's epoch range; the
+  // common no-op case goes to 15.
+  if (get_last_peering_reset() >= range_starts_at) {
+    dout(10) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
+                            get_osdmap()->get_epoch())
+             << " up/acting " << pg_vector_string(recovery_state.get_up())
+             << "/" << pg_vector_string(recovery_state.get_acting())
+             << " same_interval_since " << info.history.same_interval_since
+             << " (peering reset in range)"
+             << dendl;
+  } else {
+    dout(15) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
+                            get_osdmap()->get_epoch())
+             << dendl;
+  }
   recovery_state.activate_map(rctx);
   requeue_map_waiters();
 

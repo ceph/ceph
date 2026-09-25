@@ -803,6 +803,20 @@ protected:
 #ifndef CEPH_DEBUG_MUTEX
   mutable std::thread::id locked_by;
 #endif
+  // gen_prefix() lean mode (debug_osd < 20): the full "pg[...]" state text
+  // most recently written to the log for this PG. Only accessed from the
+  // locked branch of gen_prefix(), i.e. by the thread holding _lock.
+  mutable std::string last_logged_pg_state;
+  // number of compact prefixes printed since last_logged_pg_state was
+  // printed in full (same locking rule as last_logged_pg_state)
+  mutable unsigned lean_prefixes_since_full = 0;
+  // wall-clock time last_logged_pg_state was last printed in full (same
+  // locking rule as last_logged_pg_state); lets gen_prefix() also refresh
+  // the full prefix on a time limit, independent of line count, so a PG
+  // that is otherwise idle (e.g. read-only, or just being scrubbed) does
+  // not go arbitrarily long -- across a log rotation, a cut window, or a
+  // tail -- without a full prefix appearing in the log.
+  mutable ceph::coarse_mono_time last_logged_pg_state_stamp;
   std::atomic<unsigned int> ref{0};
 
 #ifdef PG_DEBUG_REFS

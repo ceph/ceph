@@ -425,7 +425,7 @@ SnapMapper::get_snaps_common(const hobject_t &oid) const
     return tl::unexpected(result_t{code_t::backend_error, r});
   }
   if (got.empty()) {
-    dout(10) << __func__ << " " << oid << " got.empty()" << dendl;
+    dout(15) << __func__ << " " << oid << " got.empty()" << dendl;
     return tl::unexpected(result_t{code_t::not_found, -ENOENT});
   }
 
@@ -509,7 +509,7 @@ SnapMapper::get_snaps_check_consistency(const hobject_t &hoid) const
 	     << dendl;
     return tl::unexpected(result_t{code_t::inconsistent});
   }
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
 		"{}: snaps for {}: {}", __func__, hoid, snaps_from_mapping)
 	   << dendl;
   return obj_snaps;
@@ -519,7 +519,7 @@ void SnapMapper::clear_snaps(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(10) << __func__ << " " << oid << dendl;
+  dout(15) << __func__ << " " << oid << dendl;
   ceph_assert(check(oid));
   set<string> to_remove;
   to_remove.insert(to_object_key(oid));
@@ -664,7 +664,7 @@ void SnapMapper::reset_prefix_itr(snapid_t snap, const char *s)
     dout(10) << *this << __func__ << "::from <"<< prefix_itr_snap << "> to <CEPH_NOSNAP> ::" << s << dendl;
   }
   else if (prefix_itr_snap == snap) {
-    dout(10) << *this << __func__ << "::with the same snapid <" << snap << "> ::" << s << dendl;
+    dout(15) << *this << __func__ << "::with the same snapid <" << snap << "> ::" << s << dendl;
   }
   else {
     // This is unexpected!!
@@ -776,7 +776,7 @@ int SnapMapper::remove_oid(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(10) << *this << __func__ << " " << oid << dendl;
+  dout(15) << *this << __func__ << " " << oid << dendl;
   ceph_assert(check(oid));
   return _remove_oid(oid, t);
 }

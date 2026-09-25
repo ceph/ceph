@@ -120,7 +120,7 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
   const auto env_restrictions =
       restrictions_on_scrubbing(is_recovery_active, scrub_time);
 
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
 		  "scrub scheduling (@tick) starts. "
 		  "time now:{:s}, recovery is active?:{} restrictions:{}",
 		  scrub_time, is_recovery_active, env_restrictions)

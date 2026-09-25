@@ -153,6 +153,18 @@ add_executable(unittest_ecfailover_with_peering
 add_ceph_unittest(unittest_ecfailover_with_peering)
 target_link_libraries(unittest_ecfailover_with_peering osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ecfailover_with_peering ${EC_ISA_LIB} ec_jerasure)
+# unittest_log_budget: level<=10 debug log entries/bytes per op
+# (see doc/dev/osd_internals/debug_log_levels.rst)
+add_executable(unittest_log_budget
+  TestLogBudget.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:store_test_fixture>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  )
+add_ceph_unittest(unittest_log_budget)
+target_link_libraries(unittest_log_budget osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+add_dependencies(unittest_log_budget ${EC_ISA_LIB} ec_jerasure)
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
@@ -237,6 +249,7 @@ set(OSD_UNITTESTS
   unittest_extent_cache
   unittest_extent_cache_l
   unittest_hitset
+  unittest_log_budget
   unittest_mclock_scheduler
   unittest_osd_osdcap
   unittest_osd_types

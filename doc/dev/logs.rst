@@ -28,6 +28,61 @@ the best performance.
 Sometimes, enabling logging can hide race conditions and other bugs by changing
 the timing of events. Keep this in mind when debugging.
 
+OSD PG log prefix
+=================
+
+Most OSD log lines about a placement group start with a prefix that shows
+the full state of the PG, for example::
+
+  osd.3 pg_epoch: 844 pg[6.cs0( v 844'13576 (822'3500,844'13576] local-lis/les=817/818 n=13576 ec=817/817 lis/c=817/817 les/c/f=818/818/0 sis=817) [3,0,10]p3(0) r=0 lpr=817 crt=844'13576 lcod 844'13575 mlcod 844'13575 active+clean]
+
+When ``debug_osd`` is 20, or when its memory level is higher than its log
+level (for example the default ``1/5``), this full prefix is printed on every
+line. Otherwise (for example ``debug_osd = 10``) the full prefix is printed
+only when it differs from the last full prefix printed for that PG (and at
+least once every 1000 lines of that PG, or every 60 seconds, whichever comes
+first), and the other lines carry a compact prefix::
+
+  osd.3 pg_epoch: 844 pg[6.cs0( v 844'13576) p3(0) r=0 active+clean]
+
+The compact prefix keeps the PG id, ``last_update``, the primary (erasure
+coded pools only), the role and the PG state. The complete state for any
+line is the most recent full prefix for the same PG earlier in the log;
+``src/script/expand_pg_log_prefix.py`` rewrites a log with the full prefix
+on every line.
+
+A crash calls ``Log::dump_recent()``, which appends a replay of recently
+buffered log entries, in their original order, after a "--- begin dump of
+recent events ---" marker. Compact lines in that dump were logged before
+whatever full prefix appears earlier in the surrounding log, so their
+complete state is the most recent full prefix for the same PG *inside the
+dump*, not before it; ``expand_pg_log_prefix.py`` handles this by
+forgetting all full prefixes it has seen when it reaches that marker.
+
+The lean/full choice is based only on ``debug_osd``'s file log and gather
+levels. A sink with its own threshold, such as ``err_to_stderr`` or
+``err_to_syslog`` (which only pass level ``-1``, i.e. ``derr``), can still
+receive a compact prefix on that sink even though the full state for that
+line went only to the file log, because ``gen_prefix()`` has no way to
+know which sink, or level, a given line is headed for. The full state for
+any such line is still in the file log.
+
+``gen_prefix()`` runs when a dout statement starts, but the line is only
+submitted to the log at ``dendl``. If the body of a PG dout statement logs
+something else for the same PG after that PG's state has changed, the
+inner line can be submitted first, with a compact prefix that already
+matches the new state, before the outer line carrying the full prefix for
+the old state is submitted. In the log, the compact line then appears
+*before* the full prefix it belongs to instead of after it. This is rare
+in practice and no known hot path does it.
+
+A compact prefix does not repeat ``up``/``acting``/``backfill``/``async``,
+so a tool that scrapes those sets out of every ``pg[...]`` line (rather
+than tracking the most recent full prefix per PG) will see them go missing,
+or stale, on every line that carries a compact prefix. Such a tool should
+either read only lines whose prefix is full (for example, contains
+``lpr=``), or run the log through ``expand_pg_log_prefix.py`` first.
+
 Performance counters
 ====================
 
