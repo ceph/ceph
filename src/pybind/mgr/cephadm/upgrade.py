@@ -60,6 +60,31 @@ MID_UPGRADE_MUTED_WARNINGS = [
     'AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE'
 ]
 
+# Minimum x86-64 microarchitecture level required to run the official builds
+# of a given major release. Hosts whose CPUs do not support that level will
+# crash with SIGILL when running the release's binaries, so upgrades to it
+# are blocked while any such host is present. Later majors inherit the
+# highest requirement of all earlier entries. Levels are compared against
+# the 'cpu_isa_level' host fact gathered by cephadm (e.g. 'x86-64-v2').
+UPGRADE_MIN_X86_64_ISA_LEVEL: Dict[int, int] = {
+    21: 3,  # umbrella containers/packages are built for x86-64-v3
+}
+
+
+def x86_64_isa_level_to_int(level: Optional[str]) -> Optional[int]:
+    """Parse an x86-64 microarchitecture level string (e.g. 'x86-64-v3')
+    into its numeric level; return None if missing or unparseable.
+    """
+    if not isinstance(level, str):
+        return None
+    prefix = 'x86-64-v'
+    if not level.startswith(prefix):
+        return None
+    try:
+        return int(level[len(prefix):])
+    except ValueError:
+        return None
+
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
     """
@@ -312,7 +337,8 @@ class CephadmUpgrade:
         'UPGRADE_OFFLINE_HOST',
         'UPGRADE_INVALID_CRUSH_BUCKET',
         'UPGRADE_OSD_NO_VERSION',
-        'UPGRADE_KEY_ROTATION'
+        'UPGRADE_KEY_ROTATION',
+        'UPGRADE_INCOMPATIBLE_HOST_CPU'
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -469,6 +495,50 @@ class CephadmUpgrade:
             return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
 
         return None
+
+    def check_host_cpu_isa_level(self, target_version: str,
+                                 hosts: Optional[List[str]] = None) -> List[str]:
+        """Verify host CPUs can run the binaries of the target release.
+
+        Returns one error string per host whose CPU does not support the
+        x86-64 microarchitecture level the target release's official builds
+        are compiled for. Hosts whose ISA level is unknown (no facts yet,
+        non-x86 architecture, or a pre-existing cephadm that does not gather
+        the 'cpu_isa_level' fact) are skipped. An empty list means no
+        incompatibility was detected.
+        """
+        if not self.mgr.upgrade_cpu_isa_check:
+            return []
+        try:
+            target_major = int(target_version.split('.', 1)[0])
+        except ValueError:
+            return []
+        required = max((level for major, level in UPGRADE_MIN_X86_64_ISA_LEVEL.items()
+                        if target_major >= major), default=None)
+        if required is None:
+            return []
+        errors: List[str] = []
+        for host in sorted(self.mgr.inventory.keys()):
+            if hosts is not None and host not in hosts:
+                continue
+            facts = self.mgr.cache.get_facts(host)
+            host_level = x86_64_isa_level_to_int(facts.get('cpu_isa_level'))
+            if host_level is not None and host_level < required:
+                cpu_model = facts.get('cpu_model', 'unknown CPU')
+                errors.append(
+                    f'host {host} ({cpu_model}) only supports '
+                    f'{facts.get("cpu_isa_level")}, but ceph {target_major}.x '
+                    f'requires a CPU supporting x86-64-v{required}')
+        return errors
+
+    def _host_cpu_isa_error_detail(self, errors: List[str]) -> List[str]:
+        return errors + [
+            'Running ceph on these hosts would crash with an illegal '
+            'instruction (SIGILL) error. Replace or remove the hosts before '
+            'upgrading, or, if you are using custom-built images targeting '
+            'an older CPU generation, disable this check with '
+            "'ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false'"
+        ]
 
     def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool]) -> Dict:
         if not image:
@@ -634,6 +704,12 @@ class CephadmUpgrade:
             version_error = self._check_target_version(version)
             if version_error:
                 raise OrchestratorError(version_error)
+            isa_errors = self.check_host_cpu_isa_level(version, hosts=hosts)
+            if isa_errors:
+                raise OrchestratorError(
+                    'Cannot start upgrade. Found host(s) with a CPU that '
+                    f'cannot run ceph version {version}:\n'
+                    + '\n'.join(self._host_cpu_isa_error_detail(isa_errors)))
             target_name = self.mgr.container_image_base + ':v' + version
         elif image:
             target_name = normalize_image_digest(image, self.mgr.default_registry)
@@ -2216,6 +2292,18 @@ class CephadmUpgrade:
                 'summary': f'Upgrade: cannot upgrade/downgrade to {target_version}',
                 'count': 1,
                 'detail': [version_error],
+            })
+            return
+
+        isa_errors = self.check_host_cpu_isa_level(
+            target_version, hosts=self.upgrade_state.hosts)
+        if isa_errors:
+            self._fail_upgrade('UPGRADE_INCOMPATIBLE_HOST_CPU', {
+                'severity': 'error',
+                'summary': f'Upgrade: {len(isa_errors)} host(s) have a CPU '
+                           f'that cannot run ceph version {target_version}',
+                'count': len(isa_errors),
+                'detail': self._host_cpu_isa_error_detail(isa_errors),
             })
             return
 
