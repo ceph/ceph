@@ -2079,6 +2079,8 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     if (is_primary() || is_nonprimary()) {
       op->set_ec_direct_read();
     } else {
+      // dout-lint: error-path
+      dout(10) << __func__ << ": misdirected, dropping " << *m << dendl;
       osd->handle_misdirected_op(this, op);
       return;
     }
@@ -2089,12 +2091,16 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     // balanced reads; any replica will do
     // This means "is in acting set"
     if (!(is_primary() || is_nonprimary())) {
+      // dout-lint: error-path
+      dout(10) << __func__ << ": misdirected, dropping " << *m << dendl;
       osd->handle_misdirected_op(this, op);
       return;
     }
   } else {
     // normal case; must be primary
     if (!is_primary()) {
+      // dout-lint: error-path
+      dout(10) << __func__ << ": misdirected, dropping " << *m << dendl;
       osd->handle_misdirected_op(this, op);
       return;
     }

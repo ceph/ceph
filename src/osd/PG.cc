@@ -2002,6 +2002,9 @@ bool PG::can_discard_op(OpRequestRef& op)
     // changed since the send epoch, we got it, and we're primary, it won't
     // have resent even if the interval did change as it sent it to the primary
     // (us).
+    // dout-lint: error-path
+    dout(10) << __func__ << " direct read sent before interval change, dropping "
+	     << *m << dendl;
     return true;
   }
 
@@ -2027,7 +2030,7 @@ bool PG::can_discard_op(OpRequestRef& op)
     }
     if (m->get_map_epoch() < info.history.last_epoch_split) {
       dout(7) << __func__ << " pg split in "
-	      << info.history.last_epoch_split << ", dropping" << dendl;
+	      << info.history.last_epoch_split << ", dropping " << *m << dendl;
       return true;
     }
   } else if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_POOLRESEND)) {
