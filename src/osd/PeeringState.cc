@@ -456,7 +456,7 @@ bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t
 
   auto p = peer_info.find(from);
   if (p != peer_info.end() && p->second.last_update == oinfo.last_update) {
-    psdout(10) << " got dup osd." << from << " info "
+    psdout(15) << " got dup osd." << from << " info "
 	       << oinfo << ", identical to ours" << dendl;
     return false;
   }
@@ -577,7 +577,7 @@ void PeeringState::advance_map(
   PeeringCtx &rctx)
 {
   ceph_assert(lastmap == osdmap_ref);
-  psdout(10) << "handle_advance_map "
+  psdout(15) << "handle_advance_map epoch " << osdmap->get_epoch() << " "
 	    << newup << "/" << newacting
 	    << " -- " << up_primary << "/" << acting_primary
 	    << dendl;
@@ -598,7 +598,7 @@ void PeeringState::advance_map(
 
 void PeeringState::activate_map(PeeringCtx &rctx)
 {
-  psdout(10) << dendl;
+  psdout(20) << dendl;
   ActMap evt;
   handle_event(evt, &rctx);
   if (osdmap_ref->get_epoch() - last_persisted_osdmap >
@@ -1372,7 +1372,7 @@ void PeeringState::proc_lease(const pg_lease_t& l)
     psdout(20) << "no-op, !nonprimary" << dendl;
     return;
   }
-  psdout(10) << l << dendl;
+  psdout(15) << l << dendl;
   if (l.readable_until_ub > readable_until_ub_from_primary) {
     readable_until_ub_from_primary = l.readable_until_ub;
   }
@@ -2949,7 +2949,7 @@ void PeeringState::build_might_have_unfound()
   ceph_assert(might_have_unfound.empty());
   ceph_assert(is_primary());
 
-  psdout(10) << dendl;
+  psdout(20) << dendl;
 
   check_past_interval_bounds();
 
@@ -2961,7 +2961,7 @@ void PeeringState::build_might_have_unfound()
   for (auto p = peer_info.begin(); p != peer_info.end(); ++p)
     might_have_unfound.insert(p->first);
 
-  psdout(15) << ": built " << might_have_unfound << dendl;
+  psdout(10) << ": built " << might_have_unfound << dendl;
 }
 
 void PeeringState::activate(
@@ -5504,7 +5504,7 @@ PeeringState::Started::react(const IntervalFlush&)
 boost::statechart::result PeeringState::Started::react(const AdvMap& advmap)
 {
   DECLARE_LOCALS;
-  psdout(10) << "Started advmap" << dendl;
+  psdout(20) << "Started advmap" << dendl;
   ps->check_full_transition(advmap.lastmap, advmap.osdmap);
   if (ps->should_restart_peering(
 	advmap.up_primary,
@@ -5571,7 +5571,7 @@ PeeringState::Reset::react(const IntervalFlush&)
 boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
 {
   DECLARE_LOCALS;
-  psdout(10) << "Reset advmap" << dendl;
+  psdout(15) << "Reset advmap" << dendl;
 
   ps->check_full_transition(advmap.lastmap, advmap.osdmap);
 
@@ -5699,7 +5699,7 @@ PeeringState::Primary::Primary(my_context ctx)
 boost::statechart::result PeeringState::Primary::react(const MNotifyRec& notevt)
 {
   DECLARE_LOCALS;
-  psdout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
+  psdout(15) << "handle_pg_notify from osd." << notevt.from << dendl;
   ps->proc_replica_notify(notevt.from, notevt.notify);
   return discard_event();
 }
@@ -5707,7 +5707,7 @@ boost::statechart::result PeeringState::Primary::react(const MNotifyRec& notevt)
 boost::statechart::result PeeringState::Primary::react(const ActMap&)
 {
   DECLARE_LOCALS;
-  psdout(7) << "handle ActMap primary" << dendl;
+  psdout(15) << "handle ActMap primary" << dendl;
   pl->publish_stats_to_osd();
   return discard_event();
 }
@@ -5784,7 +5784,7 @@ PeeringState::Peering::Peering(my_context ctx)
 boost::statechart::result PeeringState::Peering::react(const AdvMap& advmap)
 {
   DECLARE_LOCALS;
-  psdout(10) << "Peering advmap" << dendl;
+  psdout(15) << "Peering advmap" << dendl;
   if (prior_set.affected_by_map(*(advmap.osdmap), ps->dpp)) {
     psdout(1) << "Peering, affected_by_map, going to Reset" << dendl;
     post_event(advmap);
@@ -6023,6 +6023,11 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
       context< Active >().remote_shards_to_reserve_backfill.end()) {
     // The primary never backfills itself
     ceph_assert(*backfill_osd_it != ps->pg_whoami);
+    psdout(10) << "requesting remote backfill reservation from "
+	       << *backfill_osd_it
+	       << " prio " << ps->get_backfill_priority()
+	       << " num_bytes " << num_bytes
+	       << " peer_bytes " << ps->peer_bytes[*backfill_osd_it] << dendl;
     pl->send_cluster_message(
       backfill_osd_it->osd,
       TOPNSPC::make_message<MBackfillReserve>(
@@ -6560,6 +6565,9 @@ PeeringState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &ev
   if (remote_recovery_reservation_it !=
       context< Active >().remote_shards_to_reserve_recovery.end()) {
     ceph_assert(*remote_recovery_reservation_it != ps->pg_whoami);
+    psdout(10) << "requesting remote recovery reservation from "
+	       << *remote_recovery_reservation_it
+	       << " prio " << ps->get_recovery_priority() << dendl;
     pl->send_cluster_message(
       remote_recovery_reservation_it->osd,
       TOPNSPC::make_message<MRecoveryReserve>(
@@ -6857,7 +6865,7 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
     psdout(10) << "Active advmap interval change, fast return" << dendl;
     return forward_event();
   }
-  psdout(10) << "Active advmap" << dendl;
+  psdout(15) << "Active advmap" << dendl;
 
   pl->on_active_advmap(advmap.osdmap);
   if (ps->dirty_big_info) {
@@ -6918,7 +6926,7 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
 boost::statechart::result PeeringState::Active::react(const ActMap&)
 {
   DECLARE_LOCALS;
-  psdout(10) << "Active: handling ActMap" << dendl;
+  psdout(15) << "Active: handling ActMap" << dendl;
   ceph_assert(ps->is_primary());
 
   pl->on_active_actmap();
@@ -6950,11 +6958,11 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
   DECLARE_LOCALS;
   ceph_assert(ps->is_primary());
   if (ps->peer_info.count(notevt.from)) {
-    psdout(10) << "Active: got notify from " << notevt.from
+    psdout(15) << "Active: got notify from " << notevt.from
 		       << ", already have info from that osd, ignoring"
 		       << dendl;
   } else if (ps->peer_purged.count(notevt.from)) {
-    psdout(10) << "Active: got notify from " << notevt.from
+    psdout(15) << "Active: got notify from " << notevt.from
 		       << ", already purged that peer, ignoring"
 		       << dendl;
   } else {
@@ -7801,7 +7809,7 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
       auto p = peer_info_requested.begin();
       while (p != peer_info_requested.end()) {
 	if (prior_set.probe.count(*p) == 0) {
-	  psdout(20) << " dropping osd." << *p << " from info_requested, no longer in probe set" << dendl;
+	  psdout(10) << " dropping osd." << *p << " from info_requested, no longer in probe set" << dendl;
 	  peer_info_requested.erase(p++);
 	} else {
 	  ++p;
@@ -8276,7 +8284,9 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
       // pull anything.
       // FIXME: we can do better here.  if last_update==last_complete we
       //        can infer the rest!
-      psdout(10) << " osd." << *i << " has no missing, identical log" << dendl;
+      psdout(10) << " osd." << *i << " has no missing, identical log (lu "
+		 << pi.last_update << " lc " << pi.last_complete
+		 << " log_tail " << pi.log_tail << ")" << dendl;
       ps->peer_missing[*i].clear();
       continue;
     }

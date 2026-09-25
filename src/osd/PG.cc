@@ -1570,7 +1570,7 @@ void PG::on_active_actmap()
 
 
   if (recovery_state.is_active()) {
-    dout(10) << "Active: kicking snap trim" << dendl;
+    dout(15) << "Active: kicking snap trim" << dendl;
     kick_snap_trim();
   }
 
@@ -1860,7 +1860,7 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 {
   if (auto last_reset = get_last_peering_reset();
       last_reset > reply_epoch || last_reset > query_epoch) {
-    dout(10) << "old_peering_msg reply_epoch " << reply_epoch << " query_epoch "
+    dout(15) << "old_peering_msg reply_epoch " << reply_epoch << " query_epoch "
 	     << query_epoch << " last_peering_reset " << last_reset << dendl;
     return true;
   }
@@ -2062,7 +2062,8 @@ bool PG::can_discard_scan(OpRequestRef op)
   ceph_assert(m->get_type() == MSG_OSD_PG_SCAN);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
-    dout(10) << " got old scan, ignoring" << dendl;
+    dout(10) << " got old scan, ignoring, map_epoch " << m->map_epoch
+	     << " query_epoch " << m->query_epoch << dendl;
     return true;
   }
   return false;
@@ -2074,7 +2075,8 @@ bool PG::can_discard_backfill(OpRequestRef op)
   ceph_assert(m->get_type() == MSG_OSD_PG_BACKFILL);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
-    dout(10) << " got old backfill, ignoring" << dendl;
+    dout(10) << " got old backfill, ignoring, map_epoch " << m->map_epoch
+	     << " query_epoch " << m->query_epoch << dendl;
     return true;
   }
 
@@ -2142,10 +2144,24 @@ bool PG::can_discard_request(OpRequestRef& op)
 
 void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx &rctx)
 {
-  dout(10) << __func__ << ": " << evt->get_desc() << dendl;
+  int evt_lvl = 20;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    const boost::statechart::event_base *e = evt->evt.get();
+    if (dynamic_cast<const NullEvt*>(e)) {
+      evt_lvl = 20;
+    } else if (dynamic_cast<const RenewLease*>(e) ||
+	       dynamic_cast<const MLease*>(e) ||
+	       dynamic_cast<const MLeaseAck*>(e)) {
+      evt_lvl = 15;
+    } else {
+      evt_lvl = 10;
+    }
+    dout(ceph::dout::need_dynamic(evt_lvl)) << __func__ << ": " << evt->get_desc() << dendl;
+  }
   ceph_assert(have_same_or_newer_map(evt->get_epoch_sent()));
   if (old_peering_evt(evt)) {
-    dout(10) << "discard old " << evt->get_desc() << dendl;
+    dout(ceph::dout::need_dynamic(evt_lvl)) << "discard old " << evt->get_desc()
+	     << " last_peering_reset " << get_last_peering_reset() << dendl;
   } else {
     recovery_state.handle_event(evt, &rctx);
   }
@@ -2156,8 +2172,12 @@ void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx &rctx)
 
 void PG::queue_peering_event(PGPeeringEventRef evt)
 {
-  if (old_peering_evt(evt))
+  if (old_peering_evt(evt)) {
+    dout(10) << __func__ << " discard old " << evt->get_desc()
+	     << " last_peering_reset " << get_last_peering_reset() << dendl;
     return;
+  }
+  dout(10) << __func__ << " " << evt->get_desc() << dendl;
   osd->osd->enqueue_peering_evt(info.pgid, evt);
 }
 
@@ -2212,7 +2232,7 @@ void PG::handle_advance_map(
   vector<int>& newacting, int acting_primary,
   PeeringCtx &rctx)
 {
-  dout(10) << __func__ << ": " << osdmap->get_epoch() << dendl;
+  dout(20) << __func__ << ": " << osdmap->get_epoch() << dendl;
   osd_shard->update_pg_epoch(pg_slot, osdmap->get_epoch());
   recovery_state.advance_map(
     osdmap,
@@ -2226,9 +2246,19 @@ void PG::handle_advance_map(
 
 void PG::handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at)
 {
-  dout(10) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
-                          get_osdmap()->get_epoch())
-           << dendl;
+  if (get_last_peering_reset() >= range_starts_at) {
+    dout(10) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
+                            get_osdmap()->get_epoch())
+             << " up/acting " << pg_vector_string(recovery_state.get_up())
+             << "/" << pg_vector_string(recovery_state.get_acting())
+             << " same_interval_since " << info.history.same_interval_since
+             << " (peering reset in range)"
+             << dendl;
+  } else {
+    dout(15) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
+                            get_osdmap()->get_epoch())
+             << dendl;
+  }
   recovery_state.activate_map(rctx);
   requeue_map_waiters();
 
