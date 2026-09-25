@@ -142,9 +142,11 @@ Tools
   ``debug_osd = 20`` and at ``debug_osd = 10``, captures the log entries and
   checks the level 10 entries and bytes per op, the level 10 / level 20 byte
   ratio and the level 10 output of an OSD failure and recovery cycle.  It
-  prints ``LOG_BUDGET`` lines with the measured values; set
-  ``CEPH_LOG_BUDGET_REPORT_ONLY=1`` to report without failing.  It does not
-  cover ``OSD::dequeue_op``, ``PrimaryLogPG`` or BlueStore.
+  prints ``LOG_BUDGET`` lines with the measured values, and is report-only
+  (it never fails) until its budgets have been seen against a real run and
+  tightened; set ``CEPH_LOG_BUDGET_ENFORCE=1`` to fail on a budget that is
+  exceeded.  It does not cover ``OSD::dequeue_op``, ``PrimaryLogPG`` or
+  BlueStore.
 
 ``src/script/dout_hotpath_lint.py`` (ctest ``dout_hotpath_lint``)
   A source-level ratchet.  ``src/script/dout_hotpath_baseline.json`` lists

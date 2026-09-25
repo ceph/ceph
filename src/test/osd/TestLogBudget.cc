@@ -33,10 +33,12 @@
  * PeeringState/PGLog are exercised; OSD::dequeue_op, PrimaryLogPG and
  * BlueStore are not part of these fixtures.
  *
- * The budgets below are deliberately generous; tighten them as the debug
- * level work lands.  Each run prints one "LOG_BUDGET" line per measurement
- * with the actual values to tune against.  Set CEPH_LOG_BUDGET_REPORT_ONLY=1
- * in the environment to report without failing.
+ * The budgets below are deliberately generous, but were written without
+ * being run: no Linux build was available.  Each run prints one
+ * "LOG_BUDGET" line per measurement with the actual values.  The test is
+ * report-only (it always passes) until the budgets have been seen against
+ * a real run and tightened; set CEPH_LOG_BUDGET_ENFORCE=1 in the
+ * environment to fail on a budget that is exceeded.
  *
  * Bytes are message bytes: the "<timestamp> <thread> <level> " header that
  * every entry carries in a real log (~45 bytes) is not counted.
@@ -86,7 +88,10 @@ constexpr bool kFailOnL10MultilineEntries = false;
 
 bool report_only()
 {
-  return std::getenv("CEPH_LOG_BUDGET_REPORT_ONLY") != nullptr;
+  // Report-only by default: the budgets below have not been checked
+  // against a real run.  Set CEPH_LOG_BUDGET_ENFORCE=1 once they have been
+  // tuned to make the test fail on a budget that is exceeded.
+  return std::getenv("CEPH_LOG_BUDGET_ENFORCE") == nullptr;
 }
 
 struct LogStats {
