@@ -202,6 +202,15 @@ ostream &operator<<(ostream &lhs, const ECCommonL::RMWPipeline::Op &rhs)
 void ECCommonL::ReadPipeline::complete_read_op(ReadOp &rop)
 {
   dout(20) << __func__ << " completing " << rop << dendl;
+  dout(10) << __func__ << ": tid=" << rop.tid
+	   << (rop.for_recovery ? " recovery" : "");
+  for (const auto &[hoid, res] : rop.complete) {
+    *_dout << " " << hoid << " r=" << res.r;
+    if (!res.errors.empty()) {
+      *_dout << " errors=" << res.errors;
+    }
+  }
+  *_dout << dendl;
   map<hobject_t, read_request_t>::iterator req_iter =
     rop.to_read.begin();
   map<hobject_t, read_result_t>::iterator resiter =
@@ -251,7 +260,7 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
 	 get_parent()->get_acting_shards().begin();
        i != get_parent()->get_acting_shards().end();
        ++i) {
-    dout(10) << __func__ << ": checking acting " << *i << dendl;
+    dout(20) << __func__ << ": checking acting " << *i << dendl;
     const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
     if (error_shards.contains(*i)) {
       continue;
@@ -280,7 +289,7 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
 	ceph_assert(shards.count(i->shard));
 	continue;
       }
-      dout(10) << __func__ << ": checking backfill " << *i << dendl;
+      dout(15) << __func__ << ": checking backfill " << *i << dendl;
       ceph_assert(!shards.count(i->shard));
       const pg_info_t &info = get_parent()->get_shard_info(*i);
       const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
@@ -297,7 +306,7 @@ void ECCommonL::ReadPipeline::get_all_avail_shards(
       for (set<pg_shard_t>::iterator i = miter->second.begin();
 	   i != miter->second.end();
 	   ++i) {
-	dout(10) << __func__ << ": checking missing_loc " << *i << dendl;
+	dout(15) << __func__ << ": checking missing_loc " << *i << dendl;
 	auto m = get_parent()->maybe_get_shard_missing(*i);
 	if (m) {
 	  ceph_assert(!(*m).is_missing(hoid));
@@ -445,7 +454,7 @@ void ECCommonL::ReadPipeline::start_read_op(
       _op,
       std::move(want_to_read),
       std::move(to_read))).first->second;
-  dout(10) << __func__ << ": starting " << op << dendl;
+  dout(15) << __func__ << ": starting " << op << dendl;
   if (_op) {
 #ifndef WITH_CRIMSON
     op.trace = _op->pg_trace;
@@ -460,7 +469,7 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
   int priority = op.priority;
   ceph_tid_t tid = op.tid;
 
-  dout(10) << __func__ << ": starting read " << op << dendl;
+  dout(20) << __func__ << ": starting read " << op << dendl;
 
   map<pg_shard_t, ECSubRead> messages;
   for (map<hobject_t, read_request_t>::iterator i = op.to_read.begin();
@@ -528,7 +537,12 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
   }
 
-  dout(10) << __func__ << ": started " << op << dendl;
+  dout(20) << __func__ << ": started " << op << dendl;
+  dout(10) << __func__ << ": started tid=" << op.tid
+	   << (op.for_recovery ? " recovery" : "")
+	   << (op.do_redundant_reads ? " redundant" : "")
+	   << " to_read=" << op.to_read
+	   << " in_progress=" << op.in_progress << dendl;
 }
 
 void ECCommonL::ReadPipeline::get_want_to_read_shards(
@@ -653,7 +667,7 @@ struct ClientReadCompleter : ECCommonL::ReadCompleter {
 	to_decode,
 	&bl);
       if (r < 0) {
-        dout(10) << __func__ << " error on ECUtilL::decode r=" << r << dendl;
+        dout(10) << __func__ << " error on ECUtilL::decode r=" << r << " " << hoid << dendl;
         res.r = r;
         goto out;
       }
@@ -778,7 +792,8 @@ int ECCommonL::ReadPipeline::send_all_remaining_reads(
   const set<pg_shard_t>& ots = rop.obj_to_source[hoid];
   for (set<pg_shard_t>::iterator i = ots.begin(); i != ots.end(); ++i)
     already_read.insert(static_cast<int>(i->shard));
-  dout(10) << __func__ << " have/error shards=" << already_read << dendl;
+  dout(10) << __func__ << " " << hoid << " tid=" << rop.tid
+	   << " have/error shards=" << already_read << dendl;
   map<pg_shard_t, vector<pair<int, int>>> shards;
   int r = get_remaining_shards(hoid, already_read, rop.want_to_read[hoid],
 			       rop.complete[hoid], &shards, rop.for_recovery);
@@ -792,7 +807,7 @@ int ECCommonL::ReadPipeline::send_all_remaining_reads(
     rop.to_read.find(hoid)->second.want_attrs &&
     (!rop.complete[hoid].attrs || rop.complete[hoid].attrs->empty());
   if (want_attrs) {
-    dout(10) << __func__ << " want attrs again" << dendl;
+    dout(10) << __func__ << " " << hoid << " want attrs again" << dendl;
   }
 
   rop.to_read.erase(hoid);

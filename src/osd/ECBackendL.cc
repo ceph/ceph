@@ -1117,7 +1117,7 @@ void ECBackendL::handle_sub_read(
 	struct stat st;
 	int r = object_stat(i->first, &st);
         if (r >= 0) {
-	  dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
+	  dout(20) << __func__ << ": found on disk, size " << st.st_size << dendl;
 	  r = switcher->objects_get_attrs_with_hinfo(i->first, &attrs);
 	}
 	if (r >= 0) {
@@ -1162,7 +1162,7 @@ error:
   for (set<hobject_t>::iterator i = op.attrs_to_read.begin();
        i != op.attrs_to_read.end();
        ++i) {
-    dout(10) << __func__ << ": fulfilling attr request on "
+    dout(15) << __func__ << ": fulfilling attr request on "
 	     << *i << dendl;
     if (reply->errors.count(*i))
       continue;
@@ -1231,7 +1231,7 @@ void ECBackendL::handle_sub_read_reply(
   const ZTracer::Trace &trace)
 {
   trace.event("ec sub read reply");
-  dout(10) << __func__ << ": reply " << op << dendl;
+  dout(15) << __func__ << ": reply " << op << dendl;
   map<ceph_tid_t, ReadOp>::iterator iter = read_pipeline.tid_to_read_map.find(op.tid);
   if (iter == read_pipeline.tid_to_read_map.end()) {
     //canceled
@@ -1298,7 +1298,8 @@ void ECBackendL::handle_sub_read_reply(
       make_pair(
 	from,
 	i->second));
-    dout(20) << __func__ << " shard=" << from << " error=" << i->second << dendl;
+    dout(10) << __func__ << " shard=" << from << " error=" << i->second
+	     << " " << i->first << " tid=" << op.tid << dendl;
   }
 
   map<pg_shard_t, set<ceph_tid_t> >::iterator siter =
@@ -1355,7 +1356,9 @@ void ECBackendL::handle_sub_read_reply(
         ceph_assert(rop.complete[iter->first].r == 0);
 	if (!rop.complete[iter->first].errors.empty()) {
 	  if (cct->_conf->osd_read_ec_check_for_errors) {
-	    dout(10) << __func__ << ": Not ignoring errors, use one shard err=" << err << dendl;
+	    dout(10) << __func__ << ": Not ignoring errors, use one shard err=" << err
+		     << " " << iter->first << " errors=" << iter->second.errors
+		     << " tid=" << rop.tid << dendl;
 	    err = rop.complete[iter->first].errors.begin()->second;
             rop.complete[iter->first].r = err;
 	  } else {
@@ -1381,7 +1384,7 @@ void ECBackendL::handle_sub_read_reply(
     rop.trace.event("ec read complete");
     read_pipeline.complete_read_op(rop);
   } else {
-    dout(10) << __func__ << " readop not complete: " << rop << dendl;
+    dout(20) << __func__ << " readop not complete: " << rop << dendl;
   }
 }
 
