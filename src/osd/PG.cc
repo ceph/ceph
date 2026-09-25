@@ -442,7 +442,8 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 
   // Success is good-path and stays at 20; a client op refused for caps is
   // an error path that reply_op_error() never logs, so log it at 10.
-  dout(ceph::dout::need_dynamic(cap ? 20 : 10)) << "op_has_sufficient_caps "
+  dout(ceph::dout::need_dynamic(cap ? 20 : 10))  // dout-lint: error-path
+           << "op_has_sufficient_caps "
            << req->get_reqid()
            << " session=" << session
            << " pool=" << pool.id << " (" << pool.name
