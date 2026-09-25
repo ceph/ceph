@@ -107,6 +107,34 @@ pub async fn driver_hint(hint: &str, params: &[(&str, &str)]) -> RawResponse {
     admin_request(reqwest::Method::DELETE, "/admin/driver/hint", &query, None).await
 }
 
+/// `PUT /admin/nsfs/adopt?bucket=<name>` -- mark an existing bucket as
+/// carrying the nsfs extensions.
+///
+/// A function point rather than a hint:  it is what an operator runs once
+/// against a tree that came from NooBaa, so it has its own resource and
+/// its own capability instead of riding the dev-gated hint endpoint.
+/// `None` when the deployment does not offer it.
+pub async fn nsfs_adopt(bucket: &str) -> Option<HashMap<String, String>> {
+    let resp = admin_request(
+        reqwest::Method::PUT, "/admin/nsfs/adopt",
+        &format!("bucket={bucket}"), None).await;
+    if resp.status != 200 {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(&resp.body).ok()?;
+    let map = v.as_object()?;
+    let mut out = HashMap::new();
+    for (k, val) in map {
+        let s = match val {
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::String(s) => s.clone(),
+            other => other.to_string(),
+        };
+        out.insert(k.clone(), s);
+    }
+    Some(out)
+}
+
 /// The `results` a hint reported, or `None` if it did not report any.
 ///
 /// A hint can both act and answer -- whether the buffered copy is armed,
