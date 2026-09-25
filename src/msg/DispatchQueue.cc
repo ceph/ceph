@@ -28,7 +28,9 @@ using ceph::ref_t;
  */
 
 #undef dout_prefix
-#define dout_prefix *_dout << "-- " << msgr->get_myaddrs() << " "
+#define dout_prefix *_dout << "-- "					\
+  << entity_addrvec_brief_t{msgr->get_myaddrs(),			\
+      !cct->_conf->subsys.should_gather<ceph_subsys_ms, 5>()} << " "
 
 double DispatchQueue::get_max_age(utime_t now) const {
   std::lock_guard l{lock};
