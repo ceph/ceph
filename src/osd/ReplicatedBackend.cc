@@ -574,7 +574,7 @@ void ReplicatedBackend::maybe_kick_pct_update()
     return;
   }
 
-  dout(10) << __func__ << ": scheduling pct update after "
+  dout(15) << __func__ << ": scheduling pct update after "
 	   << pct_delay << " seconds" << dendl;
   parent->get_pg_timer().schedule_after(
     pct_callback, std::chrono::seconds(pct_delay));
@@ -583,7 +583,7 @@ void ReplicatedBackend::maybe_kick_pct_update()
 void ReplicatedBackend::cancel_pct_update()
 {
   if (pct_callback.is_scheduled()) {
-    dout(10) << __func__ << ": canceling pct update" << dendl;
+    dout(15) << __func__ << ": canceling pct update" << dendl;
     parent->get_pg_timer().cancel(pct_callback);
   }
 }
