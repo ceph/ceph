@@ -2053,7 +2053,7 @@ void PgScrubber::scrub_finish()
       // a recovery will be initiated (below). Arrange for a deep-scrub
       // after the recovery, to get the updated error counts.
       m_after_repair_scrub_required = true;
-      dout(20) << fmt::format(
+      dout(10) << fmt::format(
 		      "{}: setting for deep-scrub-after-repair ({} errors. {} "
 		      "errors fixed)",
 		      __func__, m_shallow_errors + m_deep_errors, m_fixed_count)
