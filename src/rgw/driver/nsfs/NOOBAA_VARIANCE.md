@@ -49,7 +49,7 @@ object lock (#9881, #9896, #10051), bucket policy and ARNs (#10052),
 conditional request metadata (`eadecc66e`), and MPU error semantics --
 `a91d56f99` makes CompleteMultipartUpload surface InvalidPart rather than
 InternalError, which is the same conformance point we were failing until
-`7331428e9c3`.  Treat "NooBaa cannot" as a statement with a date on it.
+`e7512f634c2`.  Treat "NooBaa cannot" as a statement with a date on it.
 
 **#10049 does NOT affect us**, despite its title.  "MPU performance
 improvement - Defer parts DB ops" touches `object_services/*` and
@@ -150,16 +150,16 @@ they may reappear.
 | Attribute | NooBaa xattr | Ceph NSFS xattr | Value format |
 |-----------|-------------|-----------------|--------------|
 | ETag | `user.content_md5` (no `noobaa.` prefix!) | `user.nsfs.rgw.etag` | both bare hex strings -- the key differs, the value does not (see above) |
-| Content-Type | `user.noobaa.content_type` | `user.nsfs.rgw.content_type` | NooBaa: string; Ceph: encoded string |
-| Content-Encoding | `user.noobaa.content_encoding` | `user.nsfs.rgw.content_encoding` | same divergence |
-| Version ID | `user.noobaa.version_id` | `user.nsfs.version_id` | NooBaa: string; Ceph: encoded |
-| Delete marker | `user.noobaa.delete_marker` | `user.nsfs.delete_marker` | NooBaa: string; Ceph: encoded |
+| Content-Type | `user.noobaa.content_type` | `user.nsfs.rgw.content_type` | both raw strings -- key only (verified, see below) |
+| Content-Encoding | `user.noobaa.content_encoding` | `user.nsfs.rgw.content_encoding` | both raw strings -- key only |
+| Version ID | `user.noobaa.version_id` | `user.nsfs.version_id` | **identical**:  `mtime-<b36>-ino-<b36>`, sentinel `null` |
+| Delete marker | `user.noobaa.delete_marker` | `user.nsfs.delete_marker` | **identical**:  the literal `"true"`, written only when true, never cleared |
 | Dir content | `user.noobaa.dir_content` (marker *in addition to* `.folder`) | N/A | see section 1.1 -- the sentinel is shared, this marker is not |
 | Object tags | `user.noobaa.tag.<tagkey>` (one per tag) | `user.nsfs.rgw.x-amz-tagging` (single blob) | completely different structure |
 | Legal hold | `user.noobaa.legal_hold` | `user.nsfs.rgw.obj-legal-hold-status` | different key and encoding |
 | Retention mode | `user.noobaa.retention_mode` | `user.nsfs.rgw.obj-retention` | different key and encoding |
 | Retention date | `user.noobaa.retention_date` | (embedded in retention blob) | — |
-| Non-current timestamp | `user.noobaa.non_current_timestamp` | `user.nsfs.non_current_timestamp` | NooBaa: string; Ceph: encoded |
+| Non-current timestamp | `user.noobaa.non_current_timestamp` | `user.nsfs.non_current_timestamp` | **identical**:  decimal milliseconds since the epoch |
 | User metadata | `user.<key>` (raw, no prefix) | `user.nsfs.rgw.<key>` | NooBaa: passthrough, no terminator; Ceph: prefix-swapped, terminator present or not depending on the writing path |
 | ACL | (not stored as xattr by NooBaa) | `user.nsfs.rgw.acl` | Ceph-specific, ceph-encoded |
 | Object type | (inferred from stat) | `user.nsfs.object_type` | Ceph-specific enum |
@@ -169,12 +169,64 @@ they may reappear.
 | GPFS encryption | `gpfs.Encryption` | N/A (not yet integrated) | — |
 
 **Impact:** A completed NooBaa object's xattrs are largely unreadable by
-our driver -- though less uniformly than this document first claimed:  the
-etag, content type and user metadata differ in key and terminator rather
-than in encoding, while the ACL and the object-lock attributes differ in
-kind.  Our driver would treat NooBaa objects as having no metadata
-(no content-type, no etag, no user metadata, no tags).  The reverse
-is equally true.
+our driver -- but far less uniformly than this document claimed twice
+over.  Our driver would treat NooBaa objects as having no metadata, and
+the reverse is equally true, yet the *reason* is the key in most rows and
+the value in only a few.
+
+### What is actually ceph-encoded (verified 2026-09-25)
+
+This document said "Ceph: encoded" for five rows.  That was wrong for all
+five, and it mattered:  it made the value-format problem look four times
+larger than it is.
+
+The plain scalars are raw bytes on our side too.  Version id is written
+and read with a bare `fgetxattr` and compared as a `string_view`
+(`is_null_version_fd`, `rgw_sal_nsfs.cc:308`);  the etag likewise
+(`etag_from_fd`, `:326`);  content type is
+`bl.append(mime.data(), mime.size())` (`:6753`);  the non-current
+timestamp is `std::to_string(millis)` written straight to the attribute
+(`:1088`);  the delete marker is presence, read into an 8-byte buffer
+nobody parses (`:1734`).  RGW passes attributes as `bufferlist`, which
+looks like an envelope, and `decode_attr()` sits nearby -- but for a
+scalar the bufferlist just holds the bytes.
+
+What *is* ceph-encoded is the structured set:  the ACL
+(`RGWAccessControlPolicy`), `object_type`, the multipart part count and
+sizes, `bucket_info`, and the object-lock blobs.  Every one of those is
+either ours-only or differs in kind, so none of them was ever going to
+rename cleanly.
+
+So the value-format work in S5 is three things, not eight:  object tags,
+the object-lock family, and the user-metadata terminator.
+
+### Three rows are already byte-identical
+
+**Version id.**  `_get_version_id_by_stat()`
+(`namespace_fs.js:126-129`) returns
+`'mtime-' + mtimeNsBigint.toString(36) + '-ino-' + ino.toString(36)`, and
+`NULL_VERSION_ID = 'null'` (`:90`).  Ours is the same string and the same
+sentinel (`rgw_sal_nsfs.cc:93`, `:634`).  Only the key differs.
+
+**Non-current timestamp.**  Theirs is `String(Date.now())`
+(`namespace_fs.js:2735`), ours is `duration_cast<milliseconds>` of the
+system clock (`rgw_sal_nsfs.cc:1083`).  Same unit, same epoch.
+
+**Delete marker.**  Both write the literal `"true"`
+(`namespace_fs.js:2712`, `rgw_sal_nsfs.cc:8315`), both write it only when
+the marker is being created, and neither ever clears it --
+`_clear_user_xattr` is never called with `XATTR_DELETE_MARKER` anywhere
+in their tree.  A boolean whose only value is `"true"` is a presence
+flag, which is why our presence test and their `=== 'true'` both give the
+right answer against either side's trees.
+
+There is no transition that would write `"false"`, because a delete
+marker is a whole file in `.versions/` rather than a state on a file:
+promotion unlinks the marker instead of un-marking it.  The attribute
+that *does* describe a mutable state is the non-current timestamp, and
+there both projects remove it on promotion rather than falsify it
+(`namespace_fs.js:2758`, `rgw_sal_nsfs.cc:549`) -- arrived at
+independently, and the same answer.
 
 ### Sideloaded file etag synthesis
 
