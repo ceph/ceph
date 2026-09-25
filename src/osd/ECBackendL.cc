@@ -225,7 +225,7 @@ void ECBackendL::handle_recovery_push(
   if (get_parent()->pg_is_remote_backfilling()) {
     get_parent()->pg_add_local_num_bytes(op.data.length());
     get_parent()->pg_add_num_bytes(op.data.length() * get_ec_data_chunk_count());
-    dout(10) << __func__ << " " << op.soid
+    dout(15) << __func__ << " " << op.soid
              << " add new actual data by " << op.data.length()
              << " add new num_bytes by " << op.data.length() * get_ec_data_chunk_count()
              << dendl;
@@ -243,7 +243,7 @@ void ECBackendL::handle_recovery_push(
       get_parent()->pg_sub_local_num_bytes(st.st_size);
       // XXX: This can be way overestimated for small objects
       get_parent()->pg_sub_num_bytes(st.st_size * get_ec_data_chunk_count());
-      dout(10) << __func__ << " " << op.soid
+      dout(15) << __func__ << " " << op.soid
                << " sub actual data by " << st.st_size
                << " sub num_bytes by " << st.st_size * get_ec_data_chunk_count()
                << dendl;
@@ -272,7 +272,7 @@ void ECBackendL::RecoveryBackend::handle_recovery_push(
 		      ghobject_t::NO_GEN,
 		      get_parent()->whoami_shard().shard);
     if (op.before_progress.first) {
-      dout(10) << __func__ << ": Adding oid "
+      dout(15) << __func__ << ": Adding oid "
 	       << tobj.hobj << " in the temp collection" << dendl;
       add_temp_obj(tobj.hobj);
     }
@@ -307,7 +307,7 @@ void ECBackendL::RecoveryBackend::handle_recovery_push(
   }
 
   if (op.after_progress.data_complete && !oneshot) {
-    dout(10) << __func__ << ": Removing oid "
+    dout(15) << __func__ << ": Removing oid "
 	     << tobj.hobj << " from the temp collection" << dendl;
     clear_temp_obj(tobj.hobj);
     m->t.remove(coll, ghobject_t(
@@ -364,7 +364,7 @@ void ECBackendL::RecoveryBackend::handle_recovery_read_complete(
   std::optional<map<string, bufferlist, less<>> > attrs,
   RecoveryMessages *m)
 {
-  dout(10) << __func__ << ": returned " << hoid << " "
+  dout(15) << __func__ << ": returned " << hoid << " "
 	   << "(" << to_read.get<0>()
 	   << ", " << to_read.get<1>()
 	   << ", " << to_read.get<2>()
@@ -387,7 +387,7 @@ void ECBackendL::RecoveryBackend::handle_recovery_read_complete(
     int s = static_cast<int>(i->first.shard);
     from[s] = std::move(i->second);
   }
-  dout(10) << __func__ << ": " << from << dendl;
+  dout(20) << __func__ << ": " << from << dendl;
   int r;
   r = ECUtilL::decode(sinfo, ec_impl, from, target);
   ceph_assert(r == 0);
@@ -563,7 +563,7 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
   RecoveryBackend::RecoveryOp &op,
   RecoveryMessages *m)
 {
-  dout(10) << __func__ << ": continuing " << op << dendl;
+  dout(15) << __func__ << ": continuing " << op << dendl;
   using RecoveryOp = RecoveryBackend::RecoveryOp;
   while (1) {
     switch (op.state) {
@@ -631,7 +631,7 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
       op.extent_requested = make_pair(
 	from,
 	amount);
-      dout(10) << __func__ << ": IDLE return " << op << dendl;
+      dout(15) << __func__ << ": IDLE return " << op << dendl;
       return;
     }
     case RecoveryOp::READING: {
@@ -657,7 +657,7 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
 	pop.soid = op.hoid;
 	pop.version = op.v;
 	pop.data = op.returned_data[static_cast<int>(mi->shard)];
-	dout(10) << __func__ << ": before_progress=" << op.recovery_progress
+	dout(15) << __func__ << ": before_progress=" << op.recovery_progress
 		 << ", after_progress=" << after_progress
 		 << ", pop.data.length()=" << pop.data.length()
 		 << ", size=" << op.obc->obs.oi.size << dendl;
@@ -688,7 +688,7 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
       op.returned_data.clear();
       op.waiting_on_pushes = op.missing_on;
       op.recovery_progress = after_progress;
-      dout(10) << __func__ << ": READING return " << op << dendl;
+      dout(15) << __func__ << ": READING return " << op << dendl;
       return;
     }
     case RecoveryOp::WRITING: {
@@ -699,7 +699,7 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
 	       i != op.missing_on.end();
 	       ++i) {
 	    if (*i != get_parent()->primary_shard()) {
-	      dout(10) << __func__ << ": on_peer_recover on " << *i
+	      dout(15) << __func__ << ": on_peer_recover on " << *i
 		       << ", obj " << op.hoid << dendl;
 	      get_parent()->on_peer_recover(
 		*i,
@@ -721,7 +721,7 @@ void ECBackendL::RecoveryBackend::continue_recovery_op(
 	  return;
 	} else {
 	  op.state = RecoveryOp::IDLE;
-	  dout(10) << __func__ << ": WRITING continue " << op << dendl;
+	  dout(15) << __func__ << ": WRITING continue " << op << dendl;
 	  continue;
 	}
       }
@@ -807,13 +807,13 @@ int ECBackendL::RecoveryBackend::recover_object(
 	 get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
-    dout(10) << "checking " << *i << dendl;
+    dout(20) << "checking " << *i << dendl;
     if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
       h->ops.back().missing_on.insert(*i);
       h->ops.back().missing_on_shards.insert(i->shard);
     }
   }
-  dout(10) << __func__ << ": built op " << h->ops.back() << dendl;
+  dout(15) << __func__ << ": built op " << h->ops.back() << dendl;
   return 0;
 }
 
@@ -1763,7 +1763,7 @@ int ECBackendL::be_deep_scrub(
   ScrubMapBuilder &pos,
   ScrubMap::object &o)
 {
-  dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
+  dout(15) << __func__ << " " << poid << " pos " << pos << dendl;
   int r;
 
   utime_t sleeptime;
