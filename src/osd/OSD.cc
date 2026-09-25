@@ -10083,7 +10083,7 @@ void OSD::dequeue_op(
       << "dequeue_op " << *op->get_req() << " finish"
       << " latency " << (ceph_clock_now() - now)
       << " queue_latency " << latency
-      << " state " << OpRequest::get_state_string(op->state_flag())
+      << " state " << op->state_string()
       << dendl;
   }
   OID_EVENT_TRACE_WITH_MSG(m, "DEQUEUE_OP_END", false);
