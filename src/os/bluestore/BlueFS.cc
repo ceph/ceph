@@ -2801,7 +2801,7 @@ int64_t BlueFS::_read_envmode(
 {
   ceph_assert(h->file->envelopes_indexed);
   dout(15) << __func__ << " h " << h << " offset: 0x"
-    << off_req << std::hex << "~" << len_req << std::hex << dendl;
+    << std::hex << off_req << "~" << len_req << std::dec << dendl;
   if (outbl) {
     outbl->clear();
   }
@@ -2815,7 +2815,9 @@ int64_t BlueFS::_read_envmode(
       break;
     }
     if (readable < 0) {
-      dout(10) << fmt::format("{} invalid wal flush", __func__) << dendl;
+      dout(10) << __func__ << " h " << h << " ino " << h->file->fnode.ino
+               << " invalid wal flush at 0x" << std::hex << off
+               << " req 0x" << off_req << "~" << len_req << std::dec << dendl;
       break;
     }
     readable = std::min(uint64_t(readable), off_req + len_req - off);
@@ -2827,7 +2829,10 @@ int64_t BlueFS::_read_envmode(
     r = _read(h, file_off, readable, outbl ? &res : nullptr,
               out ? out + (off - off_req) : nullptr);
     if (r < 0) {
-      dout(10) << fmt::format("{} read failed with {:#d}", __func__, r) << dendl;
+      dout(10) << __func__ << " h " << h << " ino " << h->file->fnode.ino
+               << " read failed with " << r
+               << " file_off 0x" << std::hex << file_off
+               << " len 0x" << readable << std::dec << dendl;
       break;
     }
     if (outbl) {
