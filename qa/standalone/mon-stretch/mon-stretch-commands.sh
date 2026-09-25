@@ -52,6 +52,27 @@ function TEST_stretch_set_replicated_pool() {
     test "$(pool_field rep size)" = 3 || return 1
 }
 
+function TEST_stretch_set_ec_pool() {
+    local dir=$1
+    setup_zones $dir || return 1
+
+    ceph osd erasure-code-profile set p21 k=2 m=1 crush-failure-domain=osd || return 1
+    ceph osd pool create ec 8 8 erasure p21 || return 1
+    ceph osd pool set ec allow_ec_optimizations true || return 1
+    local rule=$(ceph osd pool get ec crush_rule -f json | jq -r .crush_rule)
+    local min_size=$(pool_field ec min_size)
+    test "$(pool_field ec size)" = 3 || return 1
+
+    expect_failure $dir "not supported for EC pools" \
+        ceph osd pool stretch set ec 2 2 zone $rule 6 2 || return 1
+    expect_failure $dir "is not a stretch pool" \
+        ceph osd pool stretch unset ec $rule 3 2 || return 1
+
+    test "$(pool_field ec peering_crush_bucket_count)" = 0 || return 1
+    test "$(pool_field ec size)" = 3 || return 1
+    test "$(pool_field ec min_size)" = $min_size || return 1
+}
+
 # zone iris: mon.a, osd.0, osd.1; zone pze: mon.b, osd.2, osd.3; tiebreaker mon.c
 function stretch_cluster() {
     local dir=$1
