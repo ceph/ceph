@@ -1142,7 +1142,16 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
   dout(20) << __func__ << " op=" << *op << dendl;
 
   if (op->on_all_commit) {
-    dout(10) << __func__ << " Calling on_all_commit on " << *op << dendl;
+    dout(10) << __func__ << " Calling on_all_commit tid=" << op->tid
+             << " reqid=" << op->reqid
+             << " v=" << op->version
+             << " " << op->hoid;
+#ifndef WITH_CRIMSON
+    if (op->client_op) {
+      *_dout << " lat=" << double(ceph_clock_now() - op->client_op->get_initiated());
+    }
+#endif
+    *_dout << dendl;
     op->on_all_commit->complete(0);
     op->on_all_commit = nullptr;
     op->trace.event("ec write all committed");

@@ -1224,9 +1224,27 @@ void ECBackend::submit_transaction(
     read_pipeline,
     rmw_pipeline,
     get_parent()->get_dpp());
-  ldpp_dout(get_parent()->get_dpp(), 20) << __func__
-             << " plans=" << plans
-             << dendl;
+  ldpp_dout(get_parent()->get_dpp(), 10) << __func__
+             << " tid=" << tid
+             << " reqid=" << reqid
+             << " v=" << at_version
+             << " " << hoid;
+  const bool multi_object = plans.plans.size() > 1;
+  for (const auto &p : plans.plans) {
+    if (multi_object) {
+      *_dout << " [" << p.hoid << "]";
+    }
+    *_dout << " read=" << p.to_read
+           << " write=" << p.will_write
+           << " size=" << p.orig_size << "->" << p.projected_size;
+    if (p.do_parity_delta_write) {
+      *_dout << " pdw";
+    }
+    if (p.invalidates_cache) {
+      *_dout << " invalidates_cache";
+    }
+  }
+  *_dout << dendl;
   rmw_pipeline.start_rmw(std::move(op));
 }
 
