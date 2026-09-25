@@ -6039,7 +6039,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 		    new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
 					   &osd_op.outdata, maybe_crc, oi.size,
 					   osd, soid, op.flags))));
-      dout(10) << " async_read noted for " << soid << dendl;
+      dout(15) << " async_read noted for " << soid << dendl;
 
       ctx->op_finishers[ctx->current_osd_subop_num].reset(
       new ReadFinisher(osd_op));
@@ -6074,7 +6074,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       result = r;
       op.extent.length = 0;
     }
-    dout(10) << " read got " << r << " / " << op.extent.length
+    dout(15) << " read got " << r << " / " << op.extent.length
 	     << " bytes from obj " << soid << dendl;
   }
   if (result >= 0) {
@@ -6119,14 +6119,14 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
      &osd_op.outdata,
      new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
   		   &op.extent.length))));
-      dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
+      dout(15) << " async_read (was sparse_read) noted for " << soid << dendl;
 
       ctx->op_finishers[ctx->current_osd_subop_num].reset(
         new ReadFinisher(osd_op));
       // For async reads, op.extent.length will be updated by ToSparseReadResult
       bytes_read = length;
     } else {
-      dout(10) << " sparse read ended up empty for " << soid << dendl;
+      dout(15) << " sparse read ended up empty for " << soid << dendl;
       map<uint64_t, uint64_t> extents;
       encode(extents, osd_op.outdata);
       bufferlist data_bl;
@@ -6181,7 +6181,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     encode(m, osd_op.outdata); // re-encode since it might be modified
     ::encode_destructively(data_bl, osd_op.outdata);
 
-    dout(10) << " sparse_read got " << m.size() << " extents and " << r
+    dout(15) << " sparse_read got " << m.size() << " extents and " << r
              << " bytes from object " << soid << dendl;
   }
 
@@ -6202,7 +6202,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
   PGTransaction* t = ctx->op_t.get();
 
-  dout(10) << "do_osd_op " << soid << " " << ops << dendl;
+  dout(15) << "do_osd_op " << soid << " " << ops << dendl;
 
   ctx->current_osd_subop_num = 0;
   for (auto p = ops.begin(); p != ops.end(); ++p, ctx->current_osd_subop_num++, ctx->processed_subop_count++) {
@@ -6223,7 +6223,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     // tracepoints do?
     tracepoint(osd, do_osd_op_pre, soid.oid.name.c_str(), soid.snap.val, op.op, ceph_osd_op_name(op.op), op.flags);
 
-    dout(10) << "do_osd_op  " << osd_op << dendl;
+    dout(15) << "do_osd_op  " << osd_op << dendl;
 
     auto bp = osd_op.indata.cbegin();
 
@@ -6405,7 +6405,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->user_modify = true;
 
 	bufferlist outdata;
-	dout(10) << "call method " << cname << "." << mname << dendl;
+	dout(15) << "call method " << cname << "." << mname << dendl;
 	int prev_rd = ctx->num_read;
 	int prev_wr = ctx->num_write;
 	result = method->exec((cls_method_context_t)&ctx, indata, outdata);
@@ -6421,7 +6421,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 
-	dout(10) << "method called response length=" << outdata.length() << dendl;
+	dout(15) << "method called response length=" << outdata.length() << dendl;
 	op.extent.length = outdata.length();
 	osd_op.outdata.claim_append(outdata);
 	dout(30) << "out dump: ";
@@ -6438,10 +6438,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (obs.exists && !oi.is_whiteout()) {
 	  encode(oi.size, osd_op.outdata);
 	  encode(oi.mtime, osd_op.outdata);
-	  dout(10) << "stat oi has " << oi.size << " " << oi.mtime << dendl;
+	  dout(15) << "stat oi has " << oi.size << " " << oi.mtime << dendl;
 	} else {
 	  result = -ENOENT;
-	  dout(10) << "stat oi object does not exist" << dendl;
+	  dout(15) << "stat oi object does not exist" << dendl;
 	}
 
 	ctx->delta_stats.num_rd++;
@@ -7025,7 +7025,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length);
 	ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
-	dout(10) << "clean_regions modified" << ctx->clean_regions << dendl;
+	dout(20) << "clean_regions modified" << ctx->clean_regions << dendl;
       }
       break;
 
@@ -7219,11 +7219,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         entity_name_t entity = ctx->reqid.name;
 	ObjectContextRef obc = ctx->obc;
 
-	dout(10) << "watch " << ceph_osd_watch_op_name(op.watch.op)
+	dout(15) << "watch " << ceph_osd_watch_op_name(op.watch.op)
 		 << ": ctx->obc=" << (void *)obc.get() << " cookie=" << cookie
 		 << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
-	dout(10) << "watch: oi.user_version=" << oi.user_version<< dendl;
-	dout(10) << "watch: peer_addr="
+	dout(15) << "watch: oi.user_version=" << oi.user_version<< dendl;
+	dout(15) << "watch: peer_addr="
 	  << ctx->op->get_req()->get_connection()->get_peer_addr() << dendl;
 
 	uint32_t timeout = cct->_conf->osd_client_watch_timeout;
@@ -7236,9 +7236,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (op.watch.op == CEPH_OSD_WATCH_OP_WATCH ||
 	    op.watch.op == CEPH_OSD_WATCH_OP_LEGACY_WATCH) {
 	  if (oi.watchers.count(make_pair(cookie, entity))) {
-	    dout(10) << " found existing watch " << w << " by " << entity << dendl;
+	    dout(15) << " found existing watch " << w << " by " << entity << dendl;
 	  } else {
-	    dout(10) << " registered new watch " << w << " by " << entity << dendl;
+	    dout(10) << " registered new watch " << w << " by " << entity << " on " << soid << dendl;
 	    oi.watchers[make_pair(cookie, entity)] = w;
 	    t->nop(soid);  // make sure update the object_info on disk!
 	  }
@@ -7249,7 +7249,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -ENOTCONN;
 	    break;
 	  }
-	  dout(10) << " found existing watch " << w << " by " << entity << dendl;
+	  dout(15) << " found existing watch " << w << " by " << entity << dendl;
 	  ctx->watch_connects.push_back(make_pair(w, true));
         } else if (op.watch.op == CEPH_OSD_WATCH_OP_PING) {
 	  /* Note: WATCH with PING doesn't cause may_write() to return true,
@@ -7267,7 +7267,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -ETIMEDOUT;
 	    break;
 	  }
-	  dout(10) << " found existing watch " << w << " by " << entity << dendl;
+	  dout(15) << " found existing watch " << w << " by " << entity << dendl;
 	  p->second->got_ping(ceph_clock_now());
 	  result = 0;
         } else if (op.watch.op == CEPH_OSD_WATCH_OP_UNWATCH) {
@@ -7275,7 +7275,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    oi.watchers.find(make_pair(cookie, entity));
 	  if (oi_iter != oi.watchers.end()) {
 	    dout(10) << " removed watch " << oi_iter->second << " by "
-		     << entity << dendl;
+		     << entity << " on " << soid << dendl;
             oi.watchers.erase(oi_iter);
 	    t->nop(soid);  // update oi on disk
 	    ctx->watch_disconnects.push_back(
@@ -9283,10 +9283,10 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
     ctx->new_obs.oi.last_reqid = ctx->reqid;
     if (ctx->mtime != utime_t()) {
       ctx->new_obs.oi.mtime = ctx->mtime;
-      dout(10) << " set mtime to " << ctx->new_obs.oi.mtime << dendl;
+      dout(20) << " set mtime to " << ctx->new_obs.oi.mtime << dendl;
       ctx->new_obs.oi.local_mtime = now;
     } else {
-      dout(10) << " mtime unchanged at " << ctx->new_obs.oi.mtime << dendl;
+      dout(20) << " mtime unchanged at " << ctx->new_obs.oi.mtime << dendl;
     }
 
     // object_info_t
@@ -9298,13 +9298,13 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
 
     // snapset
     if (soid.snap == CEPH_NOSNAP) {
-      dout(10) << " final snapset " << ctx->new_snapset
+      dout(15) << " final snapset " << ctx->new_snapset
 	       << " in " << soid << dendl;
       bufferlist bss;
       encode(ctx->new_snapset, bss);
       attrs[SS_ATTR] = std::move(bss);
     } else {
-      dout(10) << " no snapset (this is a clone)" << dendl;
+      dout(15) << " no snapset (this is a clone)" << dendl;
     }
     ctx->op_t->setattrs(soid, attrs);
   } else {
