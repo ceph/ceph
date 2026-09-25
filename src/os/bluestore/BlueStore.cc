@@ -15926,7 +15926,7 @@ void BlueStore::deferred_try_submit()
 
 void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 {
-  dout(15) << __func__ << " osr " << osr
+  dout(10) << __func__ << " osr " << osr << " " << osr->cid
 	   << " " << osr->deferred_pending->iomap.size() << " ios pending "
 	   << dendl;
   ceph_assert(osr->deferred_pending);
@@ -15991,7 +15991,7 @@ struct C_DeferredTrySubmit : public Context {
 
 void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 {
-  dout(15) << __func__ << " osr " << osr << dendl;
+  dout(10) << __func__ << " osr " << osr << " " << osr->cid << dendl;
   ceph_assert(osr->deferred_running);
   DeferredBatch *b = osr->deferred_running;
 
