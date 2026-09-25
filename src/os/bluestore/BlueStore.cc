@@ -15402,15 +15402,16 @@ void BlueStore::_osr_drain_all()
     std::lock_guard l(zombie_osr_lock);
     for (auto& osr : zombies) {
       if (zombie_osr_set.erase(osr->cid)) {
-	dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
+	dout(10) << __func__ << " reaping empty zombie osr " << osr
+		 << " " << osr->cid << dendl;
 	ceph_assert(osr->q.empty());
       } else if (osr->zombie) {
-	dout(10) << __func__ << " empty zombie osr " << osr
-		 << " already reaped" << dendl;
+	dout(15) << __func__ << " empty zombie osr " << osr
+		 << " " << osr->cid << " already reaped" << dendl;
 	ceph_assert(osr->q.empty());
       } else {
 	dout(10) << __func__ << " empty zombie osr " << osr
-		 << " resurrected" << dendl;
+		 << " " << osr->cid << " resurrected" << dendl;
       }
     }
   }
