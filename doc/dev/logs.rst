@@ -28,6 +28,29 @@ the best performance.
 Sometimes, enabling logging can hide race conditions and other bugs by changing
 the timing of events. Keep this in mind when debugging.
 
+OSD PG log prefix
+=================
+
+Most OSD log lines about a placement group start with a prefix that shows
+the full state of the PG, for example::
+
+  osd.3 pg_epoch: 844 pg[6.cs0( v 844'13576 (822'3500,844'13576] local-lis/les=817/818 n=13576 ec=817/817 lis/c=817/817 les/c/f=818/818/0 sis=817) [3,0,10]p3(0) r=0 lpr=817 crt=844'13576 lcod 844'13575 mlcod 844'13575 active+clean]
+
+When ``debug_osd`` is 20, or when its memory level is higher than its log
+level (for example the default ``1/5``), this full prefix is printed on every
+line. Otherwise (for example ``debug_osd = 10``) the full prefix is printed
+only when it differs from the last full prefix printed for that PG (and at
+least once every 1000 lines of that PG), and the other lines carry a compact
+prefix::
+
+  osd.3 pg_epoch: 844 pg[6.cs0( v 844'13576) p3(0) r=0 active+clean]
+
+The compact prefix keeps the PG id, ``last_update``, the primary (erasure
+coded pools only), the role and the PG state. The complete state for any
+line is the most recent full prefix for the same PG earlier in the log;
+``src/script/expand_pg_log_prefix.py`` rewrites a log with the full prefix
+on every line.
+
 Performance counters
 ====================
 
