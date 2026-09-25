@@ -2568,7 +2568,7 @@ int64_t BlueFS::_read_random(
   auto* buf = &h->buf;
 
   int64_t ret = 0;
-  dout(10) << __func__ << " h " << h
+  dout(15) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << lock_fnode_print(h->file) << dendl;
 
@@ -2800,7 +2800,7 @@ int64_t BlueFS::_read_envmode(
   char *out)             ///< [out] optional: or copy it here
 {
   ceph_assert(h->file->envelopes_indexed);
-  dout(10) << __func__ << " h " << h << " offset: 0x"
+  dout(15) << __func__ << " h " << h << " offset: 0x"
     << off_req << std::hex << "~" << len_req << std::hex << dendl;
   if (outbl) {
     outbl->clear();
@@ -2855,7 +2855,7 @@ int64_t BlueFS::_read(
   FileReaderBuffer *buf = &(h->buf);
 
   bool prefetch = !outbl && !out;
-  dout(10) << __func__ << " h " << h
+  dout(15) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << lock_fnode_print(h->file)
 	   << (prefetch ? " prefetch" : "")
