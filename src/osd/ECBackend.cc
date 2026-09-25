@@ -1085,7 +1085,8 @@ void ECBackend::handle_sub_read_reply(
             rop.complete.at(oid).r = err;
           } else {
             get_parent()->clog_warn() << "Error(s) ignored for "
-              << iter->first << " enough copies available";
+              << oid << " (read tid " << iter->first << ") errors="
+              << rop.complete.at(oid).errors << " enough copies available";
             dout(10) << __func__ << " Error(s) ignored for tid " << iter->first
                      << " " << oid << " errors=" << rop.complete.at(oid).errors
                      << " enough copies available" << dendl;
