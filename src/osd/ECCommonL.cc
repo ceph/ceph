@@ -218,6 +218,11 @@ void ECCommonL::ReadPipeline::complete_read_op(ReadOp &rop)
   dout(20) << __func__ << " completing " << rop << dendl;
   dout(10) << __func__ << ": tid=" << rop.tid
 	   << (rop.for_recovery ? " recovery" : "");
+#ifndef WITH_CRIMSON
+  if (rop.op) {
+    *_dout << " reqid=" << rop.op->get_reqid();
+  }
+#endif
   for (const auto &[hoid, res] : rop.complete) {
     *_dout << " " << hoid << " r=" << res.r;
     if (!res.errors.empty()) {
@@ -554,9 +559,14 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
   dout(20) << __func__ << ": started " << op << dendl;
   dout(10) << __func__ << ": started tid=" << op.tid
 	   << (op.for_recovery ? " recovery" : "")
-	   << (op.do_redundant_reads ? " redundant" : "")
-	   << " to_read=" << op.to_read
-	   << " in_progress=" << op.in_progress << dendl;
+	   << (op.do_redundant_reads ? " redundant" : "");
+#ifndef WITH_CRIMSON
+  if (op.op) {
+    *_dout << " reqid=" << op.op->get_reqid();
+  }
+#endif
+  *_dout << " to_read=" << op.to_read
+	 << " in_progress=" << op.in_progress << dendl;
 }
 
 void ECCommonL::ReadPipeline::get_want_to_read_shards(
