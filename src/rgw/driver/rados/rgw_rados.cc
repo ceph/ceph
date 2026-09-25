@@ -10176,6 +10176,9 @@ int RGWRados::clear_olh(const DoutPrefixProvider *dpp,
   if (r == -ECANCELED) {
     return r; /* someone else made a modification in the meantime */
   }
+  // apply the same change to the cached olh state
+  s->exists = false;
+  s->is_olh = false;
   /* 
    * only clear if was successful, otherwise we might clobber pending operations on this object
    */
@@ -10563,8 +10566,8 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
     return -EINVAL;
   }
   iter = state->attrset.find(RGW_ATTR_OLH_INFO);
-  if (iter == state->attrset.end()) {
-    return -ENOENT;
+  if (!state->exists || iter == state->attrset.end()) {
+    return -ENOENT; // the replay removed the olh head, or no version was linked
   }
 
   RGWOLHInfo olh;
