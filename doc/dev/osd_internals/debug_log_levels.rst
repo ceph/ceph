@@ -56,6 +56,11 @@ and so on).
   * error, unusual and slow paths **in detail**: retries, resends, EIO,
     missing objects, blocked ops, unexpected messages.
 
+  Replies to sub-ops (repop, EC sub-write, EC sub-read and push replies)
+  are logged at 15, not 10: to see which shard an op is waiting on at
+  level 10, also set ``debug_ms = 1`` (messenger send/receive lines carry
+  the ``tid`` and ``reqid``).
+
 ``15``
   A step-by-step trace of the good path: the individual steps of an op in
   each layer.
