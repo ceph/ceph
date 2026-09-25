@@ -758,7 +758,7 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
     }
   } else {
     dout(10) << __func__ << ": tid " << rep_tid << " from " << from
-	     << " not in progress, ignoring" << dendl;
+	     << " not in progress, ignoring " << *r << dendl;
   }
   maybe_kick_pct_update();
 }

@@ -2334,7 +2334,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       m->get_reqid(), &version, &user_version, &return_code, &op_returns);
     if (got) {
       dout(3) << __func__ << " dup " << m->get_reqid()
-	      << " version " << version << dendl;
+	      << " version " << version << " rc " << return_code << dendl;
       if (already_complete(version)) {
 	osd->reply_op_error(op, return_code, version, user_version, op_returns);
       } else {
@@ -11739,6 +11739,10 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
         if (return_code >= 0) {
           return_code = std::get<2>(i);
         }
+        // dout-lint: error-path
+        dout(10) << __func__ << " sending dup commit "
+		 << *std::get<0>(i)->get_req() << " r=" << return_code
+		 << " v " << repop->v << " uv " << std::get<1>(i) << dendl;
         osd->reply_op_error(std::get<0>(i), return_code, repop->v,
                             std::get<1>(i), std::get<3>(i));
       }
@@ -13204,7 +13208,7 @@ void PrimaryLogPG::apply_and_flush_repops(bool requeue)
   while (!repop_queue.empty()) {
     RepGather *repop = repop_queue.front();
     repop_queue.pop_front();
-    dout(10) << " canceling repop tid " << repop->rep_tid << dendl;
+    dout(10) << " canceling repop " << *repop << " " << repop->hoid << dendl;
     repop->rep_aborted = true;
     repop->on_committed.clear();
     repop->on_success.clear();
