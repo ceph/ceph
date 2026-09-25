@@ -27,6 +27,7 @@
 #include "osd/scheduler/OpSchedulerItem.h"
 #include "Session.h"
 
+#include "common/StackStringStream.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 
@@ -277,7 +278,31 @@ std::ostream& PG::gen_prefix(std::ostream& out) const
 #endif
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
-	<< " " << *this << " ";
+	<< " ";
+    if (cct->_conf->subsys.should_gather<ceph_subsys_osd, 20>() ||
+	cct->_conf->subsys.get_log_level(ceph_subsys_osd) <
+	  cct->_conf->subsys.get_gather_level(ceph_subsys_osd)) {
+      last_logged_pg_state.clear();
+      out << *this << " ";
+    } else {
+      constexpr unsigned lean_prefix_refresh = 1000;
+      CachedStackStringStream css;
+      *css << *this;
+      if (css->strv() != last_logged_pg_state ||
+	  ++lean_prefixes_since_full >= lean_prefix_refresh) {
+	last_logged_pg_state = css->strv();
+	lean_prefixes_since_full = 0;
+	out << css->strv() << " ";
+      } else {
+	out << "pg[" << info.pgid << "( v " << info.last_update << ")";
+	if (is_ec_pg()) {
+	  out << " p" << get_primary();
+	}
+	out << " r=" << get_role()
+	    << " " << pg_state_string(recovery_state.get_state())
+	    << "] ";
+      }
+    }
   } else {
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
