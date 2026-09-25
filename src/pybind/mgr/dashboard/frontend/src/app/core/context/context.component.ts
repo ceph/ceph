@@ -27,7 +27,8 @@ export class ContextComponent implements OnInit, OnDestroy {
   private rgwUserUrlPrefix = '/rgw/user';
   private rgwBuckerUrlPrefix = '/rgw/bucket';
   private rgwAccountsUrlPrefix = '/rgw/accounts';
-  private rgwAccountsResourcePagePattern = /^\/rgw\/accounts\/[^/]+\/(overview|roles)(?:$|[?#])/;
+  private rgwAccountsResourcePagePattern =
+    /^\/rgw\/accounts\/[^/]+\/(overview|roles|policies)(?:$|[?#])/;
   private rgwMultisiteSyncPolicyPrefix = '/rgw/multisite/sync-policy';
   permissions: Permissions;
   featureToggleMap$: FeatureTogglesMap$;

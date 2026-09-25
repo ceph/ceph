@@ -1,0 +1,236 @@
+<cds-modal
+  size="lg"
+  [open]="open"
+  [hasScrollingContent]="true"
+  (overlaySelected)="closeModal()"
+>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h4
+      cdsModalHeaderLabel
+      class="cds--type-label-01"
+      i18n
+    >
+      IAM policy
+    </h4>
+    <h3 cdsModalHeaderHeading>{{ policy.PolicyName }}</h3>
+    <p class="cds--modal-header__description cds--type-body-01 cds-mt-3">
+      {{ policy.Arn }}
+    </p>
+  </cds-modal-header>
+
+  <div cdsModalContent>
+    @if (loading) {
+      <cds-loading [isActive]="true"></cds-loading>
+    } @else {
+      <cds-tabs>
+        <cds-tab heading="Policy document">
+          <div class="cds-mt-4">
+            <p
+              class="cds--type-label-01 cds-mb-2"
+              i18n
+            >
+              Default version (iam:GetPolicy)
+            </p>
+            <pre class="policy-document-panel"><code>{{ policyDocument }}</code></pre>
+          </div>
+        </cds-tab>
+
+        <cds-tab heading="Versions">
+          <div class="cds-mt-4">
+            <div class="cds-mb-4">
+              <button
+                cdsButton="tertiary"
+                size="sm"
+                type="button"
+                (click)="toggleVersionForm()"
+                i18n
+              >
+                Create policy version
+              </button>
+            </div>
+
+            @if (showVersionForm) {
+              <form
+                class="version-form cds-mb-4"
+                [formGroup]="versionForm"
+                (ngSubmit)="createVersion()"
+              >
+                <cds-textarea-label labelInputID="version_policy_doc">
+                  Policy document
+                  <textarea
+                    cdsTextArea
+                    id="version_policy_doc"
+                    formControlName="policy_doc"
+                    rows="8"
+                  ></textarea>
+                </cds-textarea-label>
+                <cds-checkbox formControlName="set_as_default">
+                  <span i18n>Set as default version</span>
+                </cds-checkbox>
+                <div class="cds-mt-3">
+                  <button
+                    cdsButton="primary"
+                    size="sm"
+                    type="submit"
+                    i18n
+                  >
+                    Save version
+                  </button>
+                </div>
+              </form>
+            }
+
+            @if (versions.length === 0) {
+              <p
+                class="cds--type-body-01"
+                i18n
+              >
+                No policy versions found.
+              </p>
+            } @else {
+              <table class="cds--data-table cds--data-table--no-border">
+                <thead>
+                  <tr>
+                    <th i18n>Version</th>
+                    <th i18n>Default</th>
+                    <th i18n>Created at</th>
+                    <th i18n>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (version of versions; track version.VersionId) {
+                    <tr [class.selected-row]="version.VersionId === selectedVersionId">
+                      <td>{{ version.VersionId }}</td>
+                      <td>{{ isDefaultVersion(version) ? 'Yes' : 'No' }}</td>
+                      <td>{{ version.CreateDate | cdDate }}</td>
+                      <td class="version-actions">
+                        <button
+                          cdsButton="ghost"
+                          size="sm"
+                          type="button"
+                          (click)="selectVersion(version.VersionId)"
+                          i18n
+                        >
+                          View
+                        </button>
+                        @if (!isDefaultVersion(version)) {
+                          <button
+                            cdsButton="ghost"
+                            size="sm"
+                            type="button"
+                            (click)="setDefaultVersion(version.VersionId)"
+                            i18n
+                          >
+                            Set default
+                          </button>
+                          <button
+                            cdsButton="ghost"
+                            size="sm"
+                            type="button"
+                            (click)="deleteVersion(version.VersionId)"
+                            i18n
+                          >
+                            Delete
+                          </button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              @if (selectedVersionDocument) {
+                <pre
+                  class="policy-document-panel cds-mt-4"
+                ><code>{{ selectedVersionDocument }}</code></pre>
+              }
+            }
+          </div>
+        </cds-tab>
+
+        <cds-tab heading="Tags">
+          <div class="cds-mt-4">
+            <form
+              class="tag-form cds-mb-4"
+              [formGroup]="tagForm"
+              (ngSubmit)="addTag()"
+            >
+              <div class="tag-form__fields">
+                <cds-text-label label="Tag key">
+                  <input
+                    cdsText
+                    formControlName="tag_key"
+                    placeholder="Key"
+                  />
+                </cds-text-label>
+                <cds-text-label label="Tag value">
+                  <input
+                    cdsText
+                    formControlName="tag_value"
+                    placeholder="Value"
+                  />
+                </cds-text-label>
+              </div>
+              <button
+                cdsButton="primary"
+                size="sm"
+                type="submit"
+                i18n
+              >
+                Add tag
+              </button>
+            </form>
+
+            @if (tags.length === 0) {
+              <p
+                class="cds--type-body-01"
+                i18n
+              >
+                No tags on this policy.
+              </p>
+            } @else {
+              <table class="cds--data-table cds--data-table--no-border">
+                <thead>
+                  <tr>
+                    <th i18n>Key</th>
+                    <th i18n>Value</th>
+                    <th i18n>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (tag of tags; track tag.Key) {
+                    <tr>
+                      <td>{{ tag.Key }}</td>
+                      <td>{{ tag.Value }}</td>
+                      <td>
+                        <button
+                          cdsButton="ghost"
+                          size="sm"
+                          type="button"
+                          (click)="removeTag(tag.Key)"
+                          i18n
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          </div>
+        </cds-tab>
+      </cds-tabs>
+    }
+  </div>
+
+  <cds-modal-footer>
+    <button
+      cdsButton="secondary"
+      type="button"
+      (click)="closeModal()"
+      i18n
+    >
+      Close
+    </button>
+  </cds-modal-footer>
+</cds-modal>
