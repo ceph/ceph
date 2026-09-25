@@ -10029,8 +10029,11 @@ void OSD::dequeue_op(
 			  pg->get_osdmap(),
 			  op->sent_epoch);
 
-  if (pg->is_deleting())
+  if (pg->is_deleting()) {
+    dout(10) << "dequeue_op " << *op->get_req() << " pg " << pg->pg_id
+	     << " is deleting, dropping" << dendl;
     return;
+  }
 
   op->mark_reached_pg();
   op->osd_trace.event("dequeue_op");
@@ -10822,7 +10825,7 @@ void OSDShard::consume_map(
       while (!slot->waiting.empty() &&
 	     slot->waiting.front().get_map_epoch() <= new_osdmap->get_epoch()) {
 	auto& qi = slot->waiting.front();
-	dout(20) << __func__ << "  " << pgid
+	dout(10) << __func__ << "  " << pgid
 		 << " waiting item " << qi
 		 << " epoch " << qi.get_map_epoch()
 		 << " <= " << new_osdmap->get_epoch()
@@ -11133,7 +11136,7 @@ void OSD::ShardedOpWQ::_add_slot_waiter(
 	     << ", will wait on " << qi << dendl;
     slot->waiting_peering[qi.get_map_epoch()].push_back(std::move(qi));
   } else {
-    dout(20) << __func__ << " " << pgid
+    dout(10) << __func__ << " " << pgid
 	     << " item epoch is "
 	     << qi.get_map_epoch()
 	     << ", will wait on " << qi << dendl;
@@ -11403,7 +11406,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
 	       << ", will wait on " << qi << dendl;
       _add_slot_waiter(token, slot, std::move(qi));
     } else {
-      dout(20) << __func__ << " " << token
+      dout(10) << __func__ << " " << token
 	       << " no pg, shouldn't exist e" << osdmap->get_epoch()
 	       << ", dropping " << qi << dendl;
       // share map with client?
