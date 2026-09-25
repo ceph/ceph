@@ -53,6 +53,13 @@ not your Monitor and Manager nodes) in order to avoid resource contention.
 If your cluster deploys the Ceph Object Gateway, RGW daemons may co-reside
 with your Monitor and Manager services if the nodes have sufficient resources.
 
+Ceph enables performance optimizations on platforms supporting the SIMD
+instructions in SSE, AVX, AVX2, and AVX-512. Beginning with the Umbrella
+release, containerized deployments on the x86 architecture require CPU support
+for the x86-64-v3 microarchitecture level. Packages continue to work on older
+CPUs and the baseline is set by the distribution.
+
+
 RAM
 ===
 
