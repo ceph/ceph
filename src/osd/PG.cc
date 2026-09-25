@@ -1879,9 +1879,10 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 {
   if (auto last_reset = get_last_peering_reset();
       last_reset > reply_epoch || last_reset > query_epoch) {
-    // Every caller already logs its own self-contained level-10 line
-    // (naming the message/event being discarded) when this returns true,
-    // so this generic line is now just backup detail.
+    // Every caller logs its own self-contained level-10 line (naming the
+    // message/event being discarded) when this returns true -- including
+    // PG::queue_peering_event, via its own discard-branch dout(10) -- so
+    // this generic line is just backup detail and can stay at 15.
     dout(15) << "old_peering_msg reply_epoch " << reply_epoch << " query_epoch "
 	     << query_epoch << " last_peering_reset " << last_reset << dendl;
     return true;
@@ -2203,8 +2204,12 @@ void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx &rctx)
 
 void PG::queue_peering_event(PGPeeringEventRef evt)
 {
-  if (old_peering_evt(evt))
+  if (old_peering_evt(evt)) {
+    dout(10) << __func__ << " discard old " << evt->get_desc()
+	     << " last_peering_reset " << get_last_peering_reset() << dendl;
     return;
+  }
+  dout(10) << __func__ << " " << evt->get_desc() << dendl;
   osd->osd->enqueue_peering_evt(info.pgid, evt);
 }
 
