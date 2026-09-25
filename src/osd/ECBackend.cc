@@ -355,6 +355,13 @@ struct SubWriteCommitted : public Context {
 void ECBackend::sub_write_committed(
   ceph_tid_t tid, eversion_t version, eversion_t last_complete,
   const ZTracer::Trace &trace) {
+  // Pairs with the receive-side line in handle_sub_write: this is the only
+  // place a sub-write's commit is recorded on the shard doing the commit
+  // (the primary's own local commit never goes via a message, so debug_ms
+  // does not cover it either).  Same dummy-op policy as handle_sub_write.
+  dout(ceph::dout::need_dynamic(version == eversion_t() ? 20 : 10))
+    << __func__ << " tid=" << tid << " v=" << version
+    << " last_complete=" << last_complete << dendl;
   if (get_parent()->pgb_is_primary()) {
     ECSubWriteReply reply;
     reply.tid = tid;
