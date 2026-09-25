@@ -1978,7 +1978,7 @@ bool PG::can_discard_op(OpRequestRef& op)
 {
   auto m = op->get_req<MOSDOp>();
   if (cct->_conf->osd_discard_disconnected_ops && OSD::op_is_discardable(m)) {
-    dout(20) << " discard " << *m << dendl;
+    dout(10) << __func__ << " discard " << *m << dendl;
     return true;
   }
 

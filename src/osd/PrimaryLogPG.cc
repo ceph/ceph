@@ -728,8 +728,8 @@ void PrimaryLogPG::block_write_on_full_cache(
 void PrimaryLogPG::block_for_clean(
   const hobject_t& oid, OpRequestRef op)
 {
-  dout(20) << __func__ << ": blocking object " << oid
-	   << " on primary repair" << dendl;
+  dout(10) << __func__ << ": blocking object " << oid
+	   << " on primary repair " << *op->get_req() << dendl;
   waiting_for_clean_to_primary_repair.push_back(op);
   op->mark_delayed("waiting for clean to repair");
 }
@@ -1940,6 +1940,8 @@ void PrimaryLogPG::do_request(
       // verify client features
       if ((pool.info.has_tiers() || pool.info.is_tier()) &&
 	  !op->has_feature(CEPH_FEATURE_OSD_CACHEPOOL)) {
+	dout(10) << __func__ << " client lacks CACHEPOOL feature, EOPNOTSUPP "
+		 << *op->get_req() << dendl;
 	osd->reply_op_error(op, -EOPNOTSUPP);
 	return;
       }
@@ -2049,6 +2051,8 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   {
     int r = op->maybe_init_op_info(*get_osdmap());
     if (r) {
+      dout(10) << __func__ << " init_op_info failed r=" << r << " " << *m
+	       << dendl;
       osd->reply_op_error(op, r);
       return;
     }
