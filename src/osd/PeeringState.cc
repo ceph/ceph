@@ -5056,6 +5056,8 @@ void PeeringState::append_log(
     info.partial_writes_last_complete_epoch = 0;
   }
 
+  psdout(20) << "approx pg log length =  "
+	     << pg_log.get_log().approx_size() << dendl;
   psdout(20) << "dups pg log length =  "
 	     << pg_log.get_log().dups.size() << dendl;
   psdout(20) << "transaction_applied = "
