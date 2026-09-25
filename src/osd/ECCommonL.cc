@@ -1230,8 +1230,8 @@ ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
       }
       if (hinfo.get_total_chunk_size() != size) {
         dout(0) << __func__ << ": Mismatch of total_chunk_size "
-      		       << hinfo.get_total_chunk_size() << " size " << size
-			       << " for " << hoid << dendl;
+                << hinfo.get_total_chunk_size() << " size " << size
+                << " for " << hoid << dendl;
         return ECUtilL::HashInfoRef();
       } else {
         create = true;
