@@ -6,6 +6,10 @@
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
 
+* RGW: The Elasticsearch sync module is deprecated in Vampire and will
+  be removed in the X release. People wanting to continue using
+  Elasticsearch can populate it with bucket notifications. The
+  upcoming S3 Inventory feature also covers some of the use case.
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
