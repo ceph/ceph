@@ -4134,7 +4134,8 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t end)
     return 0;
   std::lock_guard file_lock(h->file->lock);
   if (h->file->deleted) {
-    dout(10) << __func__ << " deleted, no-op" << dendl;
+    dout(10) << __func__ << " " << h << " ino " << h->file->fnode.ino
+             << " deleted, no-op" << dendl;
     return 0;
   }
 
