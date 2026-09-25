@@ -88,6 +88,20 @@ ostream &operator<<(ostream &lhs, const ECCommonL::ec_extent_t &rhs)
 	     << rhs.emap;
 }
 
+// shard=length only: buffer::list's operator<< is multi-line
+static ostream &operator<<(ostream &lhs, const map<int, bufferlist> &rhs)
+{
+  lhs << "[";
+  for (map<int, bufferlist>::const_iterator i = rhs.begin();
+       i != rhs.end();
+       ++i) {
+    if (i != rhs.begin())
+      lhs << ", ";
+    lhs << make_pair(i->first, i->second.length());
+  }
+  return lhs << "]";
+}
+
 ostream &operator<<(ostream &lhs, const ECCommonL::read_request_t &rhs)
 {
   return lhs << "read_request_t(to_read=[" << rhs.to_read << "]"
