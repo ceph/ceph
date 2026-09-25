@@ -1348,11 +1348,12 @@ Scrub::schedule_result_t PG::start_scrubbing(
 void PG::on_scrub_schedule_input_change()
 {
   if (is_active() && is_primary() && !is_scrub_queued_or_active()) {
-    dout(10) << fmt::format("{}: active/primary", __func__) << dendl;
+    dout(15) << fmt::format("{}: active/primary", __func__) << dendl;
     ceph_assert(m_scrubber);
     m_scrubber->update_scrub_job();
   } else {
-    dout(10) << fmt::format(
+    // a pure no-op decision: nothing to reschedule.
+    dout(20) << fmt::format(
 		    "{}: inactive, non-primary - or already scrubbing",
 		    __func__)
 	     << dendl;
