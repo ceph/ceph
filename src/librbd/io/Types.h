@@ -39,6 +39,7 @@ enum FlushSource {
   FLUSH_SOURCE_REFRESH,
   FLUSH_SOURCE_WRITEBACK,
   FLUSH_SOURCE_WRITE_BLOCK,
+  FLUSH_SOURCE_INTERNAL_WRITES, // like INTERNAL, but not waiting for reads
 };
 
 enum Direction {
