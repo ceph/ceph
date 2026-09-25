@@ -2933,7 +2933,7 @@ public:
 private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
-  void _txc_apply_kv(TransContext *txc, bool sync_submit_transaction);
+  void _txc_apply_kv(TransContext *txc, bool osr_lock_held);
   void _txc_committed_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
