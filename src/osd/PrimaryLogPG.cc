@@ -1842,6 +1842,7 @@ void PrimaryLogPG::do_request(
   auto p = waiting_for_map.find(op->get_source());
   if (p != waiting_for_map.end()) {
     // preserve ordering
+    // dout-lint: error-path
     dout(10) << __func__ << " waiting_for_map "
 	     << p->first << " not empty, queueing " << *op->get_req() << dendl;
     p->second.push_back(op);
@@ -1849,6 +1850,7 @@ void PrimaryLogPG::do_request(
     return;
   }
   if (!have_same_or_newer_map(op->min_epoch)) {
+    // dout-lint: error-path
     dout(10) << __func__ << " min " << op->min_epoch
 	     << ", queue on waiting_for_map " << op->get_source()
 	     << " " << *op->get_req() << dendl;
@@ -1906,6 +1908,7 @@ void PrimaryLogPG::do_request(
       ceph_assert(handled);
       return;
     } else {
+      // dout-lint: error-path
       dout(10) << __func__ << " not peered, waiting for peered on "
 	       << *op->get_req() << dendl;
       waiting_for_peered.push_back(op);
@@ -1915,6 +1918,7 @@ void PrimaryLogPG::do_request(
   }
 
   if (recovery_state.needs_flush()) {
+    // dout-lint: error-path
     dout(10) << "waiting for flush on " << *op->get_req() << dendl;
     waiting_for_flush.push_back(op);
     op->mark_delayed("waiting for flush");
@@ -1929,6 +1933,7 @@ void PrimaryLogPG::do_request(
   case CEPH_MSG_OSD_OP:
   case CEPH_MSG_OSD_BACKOFF:
     if (!is_active()) {
+      // dout-lint: error-path
       dout(10) << " peered, not active, waiting for active on "
                << *op->get_req() << dendl;
       waiting_for_active.push_back(op);
@@ -1940,6 +1945,7 @@ void PrimaryLogPG::do_request(
       // verify client features
       if ((pool.info.has_tiers() || pool.info.is_tier()) &&
 	  !op->has_feature(CEPH_FEATURE_OSD_CACHEPOOL)) {
+	// dout-lint: error-path
 	dout(10) << __func__ << " client lacks CACHEPOOL feature, EOPNOTSUPP "
 		 << *op->get_req() << dendl;
 	osd->reply_op_error(op, -EOPNOTSUPP);
@@ -2043,6 +2049,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
   if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
     // not implemented.
+    // dout-lint: error-path
     dout(10) << __func__ << ": PARALLELEXEC not implemented " << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
@@ -2051,6 +2058,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   {
     int r = op->maybe_init_op_info(*get_osdmap());
     if (r) {
+      // dout-lint: error-path
       dout(10) << __func__ << " init_op_info failed r=" << r << " " << *m
 	       << dendl;
       osd->reply_op_error(op, r);
@@ -2197,6 +2205,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
     // invalid?
     if (m->get_snapid() != CEPH_NOSNAP) {
+      // dout-lint: error-path
       dout(10) << __func__ << ": write to clone not valid " << *m << dendl;
       osd->reply_op_error(op, -EINVAL);
       return;
@@ -2247,6 +2256,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   // Missing direct read (EC version)
   if (m->has_flag(CEPH_OSD_FLAG_EC_DIRECT_READ) &&
       get_local_missing().is_missing(head)) {
+    // dout-lint: error-path
     dout(10) << __func__ << ": oid=" << head << " missing in direct read " << m->get_reqid() << dendl;
     osd->reply_op_error(op, -EAGAIN);
     return;
@@ -2265,6 +2275,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     }
 
     if (m_scrubber->write_blocked_by_scrub(head)) {
+      // dout-lint: error-path
       dout(10) << __func__ << ": waiting for scrub on " << head
 	       << " " << m->get_reqid() << dendl;
       waiting_for_scrub.push_back(op);
@@ -2381,6 +2392,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       if (pool.info.is_erasure()) {
         storage_object = "shard";
       }
+      // dout-lint: error-path
       dout(10) << __func__
                << ": unstable write on " << storage_object
                << ", bouncing to primary "
@@ -2484,6 +2496,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       fill_in_copy_get_noent(op, oid, m->ops[0]);
       return;
     }
+    // dout-lint: error-path
     dout(10) << __func__ << ": find_object_context got error " << r << " on " << oid << " " << m->get_reqid() << dendl;
     if (op->may_write() &&
 	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
@@ -2533,6 +2546,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       return;
     }
   } else if (!get_rw_locks(write_ordered, ctx)) {
+    // dout-lint: error-path
     dout(10) << __func__ << " waiting for rw locks on " << obc->obs.oi.soid
 	     << " " << m->get_reqid() << dendl;
     op->mark_delayed("waiting for rw locks");
@@ -2542,6 +2556,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   dout(20) << __func__ << " obc " << *obc << dendl;
 
   if (r) {
+    // dout-lint: error-path
     dout(10) << __func__ << " returned an error: " << r << " on " << oid << " " << m->get_reqid() << dendl;
     if (op->may_write() &&
 	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
@@ -2613,6 +2628,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (coro_op_in_flight) {
+    // dout-lint: error-path
     dout(10) << __func__ << ": coroutine op in flight, queuing " << op
 	     << " " << *m << dendl;
     waiting_for_coro_op.push_back(op);
@@ -9217,10 +9233,12 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 	       << dendl;
     } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
       // they tried, they failed.
+      // dout-lint: error-path
       dout(10) << __func__ << " full, replying to FULL_TRY op " << *m << dendl;
       return pool.info.has_flag(pg_pool_t::FLAG_FULL_QUOTA) ? -EDQUOT : -ENOSPC;
     } else {
       // drop request
+      // dout-lint: error-path
       dout(10) << __func__ << " full, dropping request (bad client) " << *m << dendl;
       return -EAGAIN;
     }
