@@ -16,12 +16,20 @@ prefix on every line.  Usage:
 
 Reads stdin when no file is given.  Lines that are not PG lines, and
 compact lines with no earlier full prefix, are printed unchanged.
+
+A crash calls Log::dump_recent(), which replays up to log_max_recent
+buffered log entries, in their original order, after a "--- begin dump
+of recent events ---" marker. Those entries were logged before whatever
+full prefix this script has seen most recently, so this script forgets
+all full prefixes at that marker; only full prefixes inside the dump are
+used to expand compact lines inside it.
 """
 
 import re
 import sys
 
 PG_RE = re.compile(r'(osd\.\d+) pg_epoch: \d+ pg\[')
+DUMP_MARKER = '--- begin dump of recent events ---'
 
 
 def pg_segment(line, start):
@@ -42,6 +50,14 @@ def pg_segment(line, start):
 def expand(stream, out):
     last_full = {}
     for line in stream:
+        if DUMP_MARKER in line:
+            # Entries in a recent-events dump were logged before whatever
+            # full prefix we have seen so far is known to still apply, so
+            # forget it; only full prefixes inside the dump can expand
+            # compact lines inside the dump.
+            last_full.clear()
+            out.write(line)
+            continue
         m = PG_RE.search(line)
         if m:
             start = m.end() - 3          # index of "pg["

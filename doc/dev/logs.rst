@@ -51,6 +51,14 @@ line is the most recent full prefix for the same PG earlier in the log;
 ``src/script/expand_pg_log_prefix.py`` rewrites a log with the full prefix
 on every line.
 
+A crash calls ``Log::dump_recent()``, which appends a replay of recently
+buffered log entries, in their original order, after a "--- begin dump of
+recent events ---" marker. Compact lines in that dump were logged before
+whatever full prefix appears earlier in the surrounding log, so their
+complete state is the most recent full prefix for the same PG *inside the
+dump*, not before it; ``expand_pg_log_prefix.py`` handles this by
+forgetting all full prefixes it has seen when it reaches that marker.
+
 Performance counters
 ====================
 
