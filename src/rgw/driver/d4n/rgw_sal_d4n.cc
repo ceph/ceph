@@ -470,6 +470,7 @@ int D4NFilterBucket::populate_cache_results(const DoutPrefixProvider* dpp, std::
     }
 
     // Fetch metadata from cache
+    //Since there is no need for atomicity, we don't use explicit transactions
     auto ret = blockDir->get(dpp, y, blocks, std::nullopt);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " blockDir->get() failed: " << ret << dendl;
@@ -1101,7 +1102,13 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
 
   std::string key = get_cache_block_prefix(dest_object, dest_version);
   d4n_dest_object->set_object_version(dest_version);
-  auto ret = d4n_dest_object->set_head_block_dir_entry(dpp, y, baseAttrs, true, dirty, std::nullopt);
+  auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
+  auto ret = d4n_dest_object->set_head_block_dir_entry(dpp, y, baseAttrs, true, dirty, std::ref(*txn));
+  if (int r = txn->commit(dpp, y); r < 0) {
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to commit transaction with error: " << r << dendl;
+    return r;
+  }
+
   baseAttrs.erase(RGW_CACHE_ATTR_MTIME);
   baseAttrs.erase(RGW_CACHE_ATTR_OBJECT_SIZE);
   baseAttrs.erase(RGW_CACHE_ATTR_ACCOUNTED_SIZE);
@@ -1153,58 +1160,83 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
 }
 
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y, uint32_t flags)
-{
+                                   Attrs* delattrs, optional_yield y, uint32_t flags){
   rgw::sal::Attrs attrs;
   std::string head_oid_in_cache;
   rgw::d4n::CacheBlock block;
-  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
+  auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
+  int ret = 0;
+
+  int head_ret = check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y, false, std::ref(*txn));
+
+  if (head_ret < 0) {
+    ret = head_ret;
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): check_head_exists_in_cache_get_oid failed with ret: " << ret << dendl;
+  } else if (head_ret > 0) {
     if (setattrs != nullptr) {
       /* Ensure setattrs and delattrs do not overlap */
       if (delattrs != nullptr) {
-        for (const auto& attr : *delattrs) {
-          if (std::find(setattrs->begin(), setattrs->end(), attr) != setattrs->end()) {
-            delattrs->erase(std::find(delattrs->begin(), delattrs->end(), attr));
+        for (const auto& attr : *setattrs) {
+          auto it = std::find_if(delattrs->begin(), delattrs->end(), [&attr](const auto& delattr) {
+            return delattr.first == attr.first;
+          });
+          if (it != delattrs->end()) {
+            delattrs->erase(it);
           }
         }
       }
+
       for (const auto& attr : *setattrs) {
         block.cacheObj.attrs[attr.first] = attr.second;
       }
-    } //if setattrs != nullptr
+    } // if setattrs != nullptr
 
     if (delattrs != nullptr) {
-      Attrs::iterator attr;
       Attrs currentattrs = this->get_attrs();
 
       /* Ensure all delAttrs exist */
-      for (const auto& attr : *delattrs) {
-        if (std::find(currentattrs.begin(), currentattrs.end(), attr) == currentattrs.end()) {
-          delattrs->erase(std::find(delattrs->begin(), delattrs->end(), attr));
+      for (auto it = delattrs->begin(); it != delattrs->end();) {
+        auto current_it = std::find_if(currentattrs.begin(), currentattrs.end(), [&it](const auto& currentattr) {
+          return currentattr.first == it->first;
+        });
+        if (current_it == currentattrs.end()) {
+          it = delattrs->erase(it);
+        } else {
+          ++it;
         }
       }
+
       for (const auto& attr : *delattrs) {
         block.cacheObj.attrs.erase(attr.first);
       }
-    } //if delattrs != nullptr
-    auto ret = driver->get_block_dir()->set(dpp, y, &block, std::nullopt);
+    } // if delattrs != nullptr
+
+    ret = driver->get_block_dir()->set(dpp, y, &block, std::ref(*txn));
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed with ret: " << ret << dendl;
-      return ret;
     }
   } else {
     if (block.deleteMarker || cache_request) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
-      return -ENOENT;
-    }
-    auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
-      return ret;
+      ret = -ENOENT;
+    } else {
+      if (!block.cacheObj.dirty) {
+        ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
+        }
+      }
     }
   }
 
-  return 0;
+  if (int r = txn->commit(dpp, y); r < 0) {
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to commit transaction with error: " << r << dendl;
+    if (ret == 0) {
+      ret = r;
+    }
+  }
+
+  return ret;
 }
 
 int D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y)
@@ -1653,7 +1685,7 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
         };
       }
       rgw::d4n::ObjectDirectory* objDir = this->driver->get_obj_dir();
-      if (int r = objDir->add_version(dpp, y, this->get_bucket()->get_bucket_id(), objName, object_version, mtime, ver_params, std::nullopt); r < 0) {
+      if (int r = objDir->add_version(dpp, y, this->get_bucket()->get_bucket_id(), objName, object_version, mtime, ver_params, std::ref(*txn)); r < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add version to ordered set with error: " << r << dendl;
         return r;
       }
@@ -1671,20 +1703,26 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
         };
       }
       rgw::d4n::BucketDirectory* bucketDir = this->driver->get_bucket_dir();
-      if (int r = bucketDir->add_object(dpp, y, this->get_bucket()->get_bucket_id(), this->get_name(), bucket_params, std::nullopt); r < 0) {
+      if (int r = bucketDir->add_object(dpp, y, this->get_bucket()->get_bucket_id(), this->get_name(), bucket_params, std::ref(*txn)); r < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add object to ordered set with error: " << r << dendl;
         return r;
       }
-      if (p) p->execute(dpp, y);
+      if (p){
+	p->execute(dpp, y);
+      }
     } else { //for clean/non-dirty objects
       rgw::d4n::CacheBlock latest = block;
-      auto ret = blockDir->get(dpp, y, &latest, std::nullopt);
+      auto ret = blockDir->get(dpp, y, &latest, std::ref(*txn));
       if (ret == -ENOENT) {
         if (!this->get_bucket()->versioned()) {
           std::optional<rgw::d4n::Pipeline> pipeline_opt;
           rgw::d4n::Pipeline* p = make_pipeline(pipeline_opt);
-          if (int r = set_head_blocks(p); r < 0) return r;
-          if (p) p->execute(dpp, y);
+          if (int r = set_head_blocks(p); r < 0){
+	    return r;
+	  }
+          if (p){
+	    p->execute(dpp, y);
+	  }
         }
       } else if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory get method failed for head object with ret: " << ret << dendl;
@@ -1692,7 +1730,7 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
         /* for clean objects belonging to versioned buckets we will fetch the latest entry from backend store, hence removing latest head entry
            once a bucket transitions to a versioned state */
         if (this->get_bucket()->versioned()) {
-          ret = blockDir->del(dpp, y, &block, std::nullopt);
+          ret = blockDir->del(dpp, y, &block, std::ref(*txn));
           //Ignore a racing delete that could have deleted the latest block
           if (ret < 0 && ret != -ENOENT) {
             ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory del method failed for head object with ret: " << ret << dendl;
@@ -1702,8 +1740,12 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
         if (!this->get_bucket()->versioned()) {
           std::optional<rgw::d4n::Pipeline> pipeline_opt;
           rgw::d4n::Pipeline* p = make_pipeline(pipeline_opt);
-          if (int r = set_head_blocks(p); r < 0) return r;
-          if (p) p->execute(dpp, y);
+          if (int r = set_head_blocks(p); r < 0){
+	    return r;
+	  }
+          if (p){
+	    p->execute(dpp, y);
+	  }
         }
       } //end-if ret = 0
     } //end-else
@@ -1744,7 +1786,7 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
       .size = 0,
     };
 
-    auto ret = blockDir->set(dpp, y, &version_block, std::nullopt);
+    auto ret = blockDir->set(dpp, y, &version_block, std::ref(*txn));
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for versioned head object with ret: " << ret << dendl;
       return ret;
@@ -1753,7 +1795,7 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
     // a concurrent GET's readers guard on that entry survives a subsequent PUT overwriting "_:null_<name>".
     if (this->get_instance() == "null" || !this->get_bucket()->versioning_enabled()) {
       version_block.cacheObj.objName = get_versioned_head_block_name(this->get_object_version(), this->get_name());
-      ret = blockDir->set(dpp, y, &version_block, std::nullopt);
+      ret = blockDir->set(dpp, y, &version_block, std::ref(*txn));
       if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for version-specific null-instance head block with ret: " << ret << dendl;
         return ret;
@@ -1764,13 +1806,13 @@ int D4NFilterObject::set_head_block_dir_entry(const DoutPrefixProvider* dpp, opt
   return 0;
 }
 
-
 /*
  This method updates the hostslist, version and dirty flag for data block directory entries
 */
 int D4NFilterObject::set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty)
 {
   rgw::d4n::BlockDirectory* blockDir = driver->get_block_dir();
+  auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
 
   //update data block entries in directory
   const off_t lst = is_remote_cache_request() ? this->get_remote_block_len() : this->get_size();
@@ -1792,7 +1834,7 @@ int D4NFilterObject::set_data_block_dir_entries(const DoutPrefixProvider* dpp, o
     blocks.emplace_back(block);
   }
 
-  auto ret = blockDir->get(dpp, y, blocks, std::nullopt);
+  auto ret = blockDir->get(dpp, y, blocks, std::ref(*txn));
   if (ret == -ENOENT) {
     ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): BlockDirectory get() no entry exists in directory." << dendl;
   }
@@ -1813,8 +1855,13 @@ int D4NFilterObject::set_data_block_dir_entries(const DoutPrefixProvider* dpp, o
     block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
     block.version = version;
   }
-  if ((ret = blockDir->set(dpp, y, blocks, std::nullopt)) < 0) {
+  if ((ret = blockDir->set(dpp, y, blocks, std::ref(*txn))) < 0) {
     ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): BlockDirectory pipelined set() method failed, ret=" << ret << dendl;
+    return ret;
+  }
+
+  if ((ret = txn->commit(dpp, y)) < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): Transaction commit failed, ret=" << ret << dendl;
     return ret;
   }
 
@@ -1860,10 +1907,11 @@ int D4NFilterObject::delete_data_block_cache_entries(const DoutPrefixProvider* d
   return 0;
 }
 
-bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y, bool acquire_lease, std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn)
+int D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y, bool acquire_lease, std::optional<std::reference_wrapper<rgw::d4n::Transaction>> txn)
 {
   rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
   std::string objName = this->get_oid();
+
   //object oid does not contain "null" in case the instance is "null", so explicitly populating that
   if (this->have_instance() && this->get_instance() == "null") {
     objName = get_versioned_head_block_name("null", this->get_name());
@@ -1874,37 +1922,44 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
   // block "_:<d4n_version>_<name>" first so we get attrs for that specific version rather than
   // the potentially-overwritten "latest" entry.
   if (this->is_remote_cache_request() && !this->have_instance() && !this->get_object_version().empty()) {
-    rgw::d4n::CacheBlock ver_block {
+    rgw::d4n::CacheBlock ver_block{
       .cacheObj = {
         .objName = get_versioned_head_block_name(this->get_object_version(), this->get_name()),
         .bucketName = this->get_bucket()->get_bucket_id(),
       },
       .blockID = 0, .size = 0,
     };
-    if (blockDir->get(dpp, y, &ver_block, txn) == 0) {
+
+    int ret = blockDir->get(dpp, y, &ver_block, txn);
+    if (ret == 0) {
       blk = ver_block;
       head_oid_in_cache = get_cache_block_prefix(this, ver_block.version);
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): remote head_oid_in_cache=" << head_oid_in_cache << dendl;
       attrs = ver_block.cacheObj.attrs;
       this->exists_in_cache = true;
-      return !ver_block.deleteMarker;
+      return ver_block.deleteMarker ? 0 : 1;
+    } else if (ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory get method failed for version-specific head, ret=" << ret << dendl;
+      return ret;
     }
   }
 
   ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): objName: " << objName << dendl;
+
   rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
-        .objName = objName,
-        .bucketName = this->get_bucket()->get_bucket_id(),
-        };
+    .objName = objName,
+    .bucketName = this->get_bucket()->get_bucket_id(),
+  };
 
   rgw::d4n::CacheBlock block = rgw::d4n::CacheBlock{
-          .cacheObj = object,
-          .blockID = 0,
-          .size = 0
-          };
+    .cacheObj = object,
+    .blockID = 0,
+    .size = 0
+  };
 
   bool found_in_cache = true;
   int ret;
+
   //if the block corresponding to head object does not exist in directory, implies it is not cached
   if ((ret = blockDir->get(dpp, y, &block, txn)) == 0) {
     if (block.cacheObj.dirty && !block.deleteMarker && !this->is_remote_cache_request() && acquire_lease && !this->lease_acquired) {
@@ -1912,7 +1967,7 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
       // Only done for read operations (acquire_lease=true), not for DELETE/PUT/attr operations
       // Skip if lease already acquired during this GET operation
       // Skip delete markers: a GET on a delete marker returns 404 (see block.deleteMarker
-      // handling below), so there is no data read to protect, and acquiring a lease here
+      // handling below), so there is no data read to protect it, and acquiring a lease here
       // would leave a stale GET lease on the version that spuriously blocks its deletion.
       auto* lease = this->driver->get_lease();
       if (lease) {
@@ -1937,6 +1992,7 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
                             << " - aborting to prevent race condition" << dendl;
           return rc;
         }
+
         this->lease_acquired = true;
         ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__
                            << " acquired lease: resource=" << this->lease_resource << dendl;
@@ -1948,7 +2004,7 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__
                          << "(): object tombstoned (invalid), returning not found" << dendl;
       this->exists_in_cache = false;
-      return false;
+      return 0;
     }
 
     blk = block;
@@ -1959,23 +2015,24 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
     std::string version = (this->is_remote_cache_request() && !this->get_object_version().empty())
         ? this->get_object_version()
         : block.version;
-    this->set_object_version(version);
 
+    this->set_object_version(version);
     head_oid_in_cache = get_cache_block_prefix(this, version); //check if still needed
     attrs = block.cacheObj.attrs;
     this->exists_in_cache = true;
     found_in_cache = true;
-  } else if (ret == -ENOENT) { //if blockDir->get
+  } else if (ret == -ENOENT) {
     found_in_cache = false;
   } else {
-    found_in_cache = false;
     ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory get method failed, ret=" << ret << dendl;
+    return ret;
   }
 
   if (block.deleteMarker) {
     found_in_cache = false;
   }
-  return found_in_cache;
+
+  return found_in_cache ? 1 : 0;
 }
 
 int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
@@ -2019,10 +2076,16 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     if (version.empty()) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): version could not be calculated." << dendl;
     }
-    ret = set_head_block_dir_entry(dpp, y, attrs, is_latest_version, false, std::nullopt);
+    auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
+    ret = set_head_block_dir_entry(dpp, y, attrs, is_latest_version, false, std::ref(*txn));
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object, ret=" << ret << dendl;
     }
+    if (int r = txn->commit(dpp, y); r < 0) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to commit transaction with error: " << r << dendl;
+      return r;
+    }
+    return ret;
   } else {
     if(perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_hits);
@@ -2033,17 +2096,19 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 }
 
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
-                               optional_yield y, const DoutPrefixProvider* dpp,  uint32_t flags)
+                                      optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
   std::string head_oid_in_cache;
   rgw::sal::Attrs attrs;
   rgw::d4n::CacheBlock block;
-  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
+  auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
+
+  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y, false, std::ref(*txn))) {
     block.cacheObj.attrs[attr_name] = attr_val;
-    if (auto ret = driver->get_block_dir()->set(dpp, y, &block, std::nullopt); ret < 0) {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed with ret: " << ret << dendl;
+    if (auto ret = driver->get_block_dir()->set(dpp, y, &block, std::ref(*txn)); ret < 0) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__  << "(): BlockDirectory set method failed with ret: " << ret << dendl;
       return ret;
     }
   } else {
@@ -2056,49 +2121,72 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
       return -ENOENT;
     }
 
-    auto ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): modify_obj_attrs of backend store failed with ret: " << ret << dendl;
-      return ret;
+    if (!block.cacheObj.dirty){
+      auto ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): modify_obj_attrs of backend store failed with ret: " << ret << dendl;
+        return ret;
+      }	
     }
   }
+
+  if (int r = txn->commit(dpp, y); r < 0) {
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to commit transaction with error: " << r << dendl;
+    return r;
+  }
+
   return 0;
 }
 
-int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y)
+int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
 {
   buffer::list bl;
   std::string head_oid_in_cache;
   rgw::sal::Attrs attrs;
   Attrs delattr;
   rgw::d4n::CacheBlock block;
-  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
+  int ret = 0;
+
+  int head_ret = check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y, false, std::nullopt);
+
+  if (head_ret < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): check_head_exists_in_cache_get_oid failed with ret: " << head_ret << dendl;
+    return head_ret;
+  }
+
+  if (head_ret > 0) {
+    auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
     auto it = block.cacheObj.attrs.find(attr_name);
+
     if (it != block.cacheObj.attrs.end()) {
       block.cacheObj.attrs.erase(it);
-
-      auto ret = driver->get_block_dir()->set(dpp, y, &block, std::nullopt);
+      ret = driver->get_block_dir()->set(dpp, y, &block, std::ref(*txn));
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed with ret: " << ret << dendl;
-        return ret;
+      }
+    }
+
+    if (int r = txn->commit(dpp, y); r < 0) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to commit transaction with error: " << r << dendl;
+      if (ret == 0) {
+        ret = r;
       }
     }
   } else {
     if (block.deleteMarker) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
-      return -ENOENT;
-    }
-    if (cache_request) {
-      return -ENOENT;
-    }
-    if (auto ret = next->delete_obj_attrs(dpp, attr_name, y); ret < 0) {
-      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): delete_obj_attrs method of backend store failed with ret: " << ret << dendl;
-      return ret;
+      ret = -ENOENT;
+    } else if (cache_request) {
+      ret = -ENOENT;
+    } else {
+      ret = next->delete_obj_attrs(dpp, attr_name, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): delete_obj_attrs method of backend store failed with ret: " << ret << dendl;
+      }
     }
   }
 
-  return 0;
+  return ret;
 }
 
 std::unique_ptr<Object> D4NFilterDriver::get_object(const rgw_obj_key& k)
@@ -2220,9 +2308,14 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     }
 
     this->source->set_attr_crypt_parts(dpp, y, attrs);
-    ret = source->set_head_block_dir_entry(dpp, y, attrs, is_latest_version, false, std::nullopt);
+    auto txn = source->driver->get_txn_factory()->create_transaction(dpp);
+    ret = source->set_head_block_dir_entry(dpp, y, attrs, is_latest_version, false, std::ref(*txn));
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_head_block_dir_entry method failed for head object, ret=" << ret << dendl;
+    }
+    if (int r = txn->commit(dpp, y); r < 0) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to commit transaction with error: " << r << dendl;
+      return r;
     }
   } else {
     /*
@@ -2396,38 +2489,47 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
         rgw::sal::Attrs attrs;
         D4NFilterObject* d4n_dest_object = dynamic_cast<D4NFilterObject*>(source->dest_object);
         bufferlist bl_val;
+        std::unique_ptr<rgw::d4n::Transaction> txn;
+
         if (is_remote) {
+          txn = source->driver->get_txn_factory()->create_transaction(dpp);
           dest_version = source->get_object_version();
           dest_block.version = dest_version;
           dest_block.cacheObj.objName = source->get_name();
           dest_block.cacheObj.bucketName = source->get_bucket()->get_bucket_id();
           key = get_key_in_cache(get_cache_block_prefix(source, dest_version), std::to_string(ofs), std::to_string(len));
-          if (auto ret = source->driver->get_block_dir()->get(dpp, y, &dest_block, std::nullopt); ret < 0) {
+
+          if (auto ret = source->driver->get_block_dir()->get(dpp, y, &dest_block, std::ref(*txn)); ret < 0) {
             ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory get failed with ret: " << ret << dendl;
-            //should we return from here?
+	    //should we return from here?
           }
+
           //if a new version has been written, then do not cache old data locally
           if (dest_version != dest_block.version) {
             write_to_local_cache = false;
           }
+
           // TODO: Add DIRTY attr as well
-          bufferlist bl_val;
           if (source->have_instance()) {
             bl_val.append(source->get_instance());
             attrs[RGW_CACHE_ATTR_VERSION_ID] = std::move(bl_val);
           }
+
           bl_val.clear();
           bl_val.append(source->get_key().ns);
           attrs[RGW_CACHE_ATTR_OBJECT_NS] = std::move(bl_val);
-        } else { // for copy object
+        } else {
+          // for copy object
           bl_val.append("1");
           attrs[RGW_CACHE_ATTR_DIRTY] = std::move(bl_val);
           bl_val.clear();
+
           if (d4n_dest_object->have_instance()) {
             bufferlist bl_val;
             bl_val.append(d4n_dest_object->get_instance());
             attrs[RGW_CACHE_ATTR_VERSION_ID] = std::move(bl_val);
           }
+
           bl_val.append(d4n_dest_object->get_key().ns);
           attrs[RGW_CACHE_ATTR_OBJECT_NS] = std::move(bl_val);
           dest_version = d4n_dest_object->get_object_version();
@@ -2442,21 +2544,40 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
         if (write_to_local_cache) {
           ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " object version in update method is: " << dest_version << dendl;
           int ret;
-          // destination key is the same as key
+
           if (is_remote) {
-            ret = source->write_if_space_available(dpp, key, bl, bl.length(), attrs, ofs, dest_version, true, std::get<rgw_user>(source->get_bucket()->get_owner()), 
-                                                    source->get_bucket()->get_name(), rgw::d4n::RefCount::NOOP, y, &dest_block);
+            ret = source->write_if_space_available(dpp, key, bl, bl.length(), attrs, ofs, dest_version, true, std::get<rgw_user>(source->get_bucket()->get_owner()), source->get_bucket()->get_name(), rgw::d4n::RefCount::NOOP, y, &dest_block);
           } else {
-            ret = source->write_if_space_available(dpp, key, bl, bl.length(), attrs, ofs, dest_version, true, std::get<rgw_user>(source->get_bucket()->get_owner()), 
-                                                    source->get_bucket()->get_name(), rgw::d4n::RefCount::NOOP, y, nullptr);
+            ret = source->write_if_space_available(dpp, key, bl, bl.length(), attrs, ofs, dest_version, true, std::get<rgw_user>(source->get_bucket()->get_owner()), source->get_bucket()->get_name(), rgw::d4n::RefCount::NOOP, y, nullptr);
           }
+
           if (ret == 0) {
             dest_block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
-            if (ret = source->driver->get_block_dir()->set(dpp, y, &dest_block, std::nullopt); ret < 0){
-              ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory set failed with ret: " << ret << dendl;
+
+            if (is_remote) {
+              if (ret = source->driver->get_block_dir()->set(dpp, y, &dest_block, std::ref(*txn)); ret < 0) {
+                ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory set failed with ret: " << ret << dendl;
+              }
+            } else {
+              if (ret = source->driver->get_block_dir()->set(dpp, y, &dest_block, std::nullopt); ret < 0) {
+                ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory set failed with ret: " << ret << dendl;
+              }
             }
           } else {
-			ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Write failed for key, ret=" << ret << dendl;
+            ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Write failed for key, ret=" << ret << dendl;
+          }
+
+          if (is_remote) {
+            if (int r = txn->commit(dpp, y); r < 0) {
+              ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory transaction commit failed with ret: " << r << dendl;
+              if (ret == 0) {
+                ret = r;
+              }
+            }
+          }
+        } else if (is_remote) {
+          if (int r = txn->commit(dpp, y); r < 0) {
+            ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory transaction commit failed with ret: " << r << dendl;
           }
         }
       }
@@ -2602,15 +2723,21 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       } else { // else - if update_refcount_if_key_exists
         int r = -1;
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: Fetching from remote cache! " << dendl;
-        if ((ret = block_dir->get(dpp, y, &block, std::nullopt)) == 0) {
+        auto txn = this->source->driver->get_txn_factory()->create_transaction(dpp);
+        if ((ret = block_dir->get(dpp, y, &block, std::ref(*txn))) == 0) {
           auto it = block.cacheObj.hostsList.find(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
           auto hostsListSize = block.cacheObj.hostsList.size();
           if (it != block.cacheObj.hostsList.end()) {
-            if ((r = block_dir->remove_host(dpp, y, &block, dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, std::nullopt)) < 0) {
+	    if ((r = block_dir->remove_host(dpp, y, &block, dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, std::ref(*txn))) < 0) {
               ldpp_dout(dpp, 10) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to remove incorrect host from block with oid=" << oid_in_cache <<", ret=" << r << dendl;
               hostsListSize = hostsListSize - 1;
             }
           }
+
+	  if ((r = txn->commit(dpp, y)) < 0) {
+	    ldpp_dout(dpp, 10) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to commit transaction, ret=" << r << dendl;
+	  }
+
           ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): hostsListSize=" << hostsListSize << dendl;
           if (hostsListSize > 0) { /* Remote copy */
             ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Block with oid=" << oid_in_cache << " found in remote cache." << dendl;
@@ -3006,7 +3133,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       }//bl_rem.length()
     }
     if (last_part) {
-      auto ret = blockDir->get(dpp, *y, blocks, std::nullopt);
+      auto txn = this->filter->get_txn_factory()->create_transaction(dpp);
+      auto ret = blockDir->get(dpp, *y, blocks, std::ref(*txn));
       if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): BlockDirectory pipelined get() method failed, ret=" << ret << dendl;
       }
@@ -3016,13 +3144,16 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
         block.version = version;
       }
-      if ((ret = blockDir->set(dpp, *y, blocks, std::nullopt)) < 0) {
+      if ((ret = blockDir->set(dpp, *y, blocks, std::ref(*txn))) < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): BlockDirectory pipelined set() method failed, ret=" << ret << dendl;
       }
       if (source->dest_object && source->dest_bucket) {
-        if ((ret = blockDir->set(dpp, *y, dest_blocks, std::nullopt)) < 0) {
+        if ((ret = blockDir->set(dpp, *y, dest_blocks, std::ref(*txn))) < 0) {
           ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): BlockDirectory pipelined set() method for dest blocks failed, ret=" << ret << dendl;
         }
+      }
+      if ((ret = txn->commit(dpp, *y)) < 0) {
+        ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): BlockDirectory transaction commit failed, ret=" << ret << dendl;
       }
     }// if last_part
   }//if write_to_cache
@@ -3560,10 +3691,15 @@ int D4NFilterWriter::prepare(optional_yield y)
       if (!object->is_remote_cache_request()) {
         rgw::d4n::CacheBlock block;
         rgw::sal::Attrs attrs;
-        if (object->check_head_exists_in_cache_get_oid(dpp, prev_oid_in_cache, attrs, block, y)) {
+        auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
+        if (object->check_head_exists_in_cache_get_oid(dpp, prev_oid_in_cache, attrs, block, y, false, std::ref(*txn))) {
           ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): found in cache, prev_oid_in_cache=" << prev_oid_in_cache << ", old_version=" << block.version << dendl;
           // Save old version for remote PUT invalidation
           object->set_old_version(block.version);
+        }
+        if (int r = txn->commit(dpp, y); r < 0) {
+          ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): Failed to commit transaction with error: " << r << dendl;
+          return r;
         }
       }
       object->clear_instance();
@@ -3848,7 +3984,12 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   object->set_object_version(version);
   //don't update directory head block entry for a remote request
   if (!remote_cache_request) {
-    ret = object->set_head_block_dir_entry(dpp, y, attrs, true, dirty, std::nullopt);
+    auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
+    ret = object->set_head_block_dir_entry(dpp, y, attrs, true, dirty, std::ref(*txn));
+    if (int r = txn->commit(dpp, y); r < 0) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to commit transaction with error: " << r << dendl;
+      return r;
+    }
     attrs.erase(RGW_CACHE_ATTR_MTIME);
     attrs.erase(RGW_CACHE_ATTR_OBJECT_SIZE);
     attrs.erase(RGW_CACHE_ATTR_ACCOUNTED_SIZE);
@@ -4062,15 +4203,20 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
   std::string version;
   d4n_target_obj->calculate_version(dpp, y, version, attrs);
   if (version.empty()) {
-    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): version could not be calculated." << dendl;
+    ldpp_dout(dpp, 10) << "D4NFilterMultipartUpload::" << __func__ << "(): version could not be calculated." << dendl;
   }
 
-  ret = d4n_target_obj->set_head_block_dir_entry(dpp, y, attrs, true, false, std::nullopt);
+  auto txn = this->driver->get_txn_factory()->create_transaction(dpp);
+  ret = d4n_target_obj->set_head_block_dir_entry(dpp, y, attrs, true, false, std::ref(*txn));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "D4NFilterMultipartUpload::" << __func__ << "(): BlockDirectory set method failed for head object, ret=" << ret << dendl;
   }
+  if (int r = txn->commit(dpp, y); r < 0) {
+    ldpp_dout(dpp, 10) << "D4NFilterMultipartUpload::" << __func__ << "(): Failed to commit transaction with error: " << r << dendl;
+    return r;
+  }
 
-  return 0;
+  return ret;
 }
 
 } } // namespace rgw::sal
