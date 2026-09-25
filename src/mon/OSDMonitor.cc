@@ -15370,6 +15370,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      if (mon.monmap->global_stretch_mode_enabled){
+        ss << "global stretch mode does not support erasure-coded pools";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
       if (has_ec_params) {
         if (k < 2) {
           ss << "k=" << k << " must be >= 2";
