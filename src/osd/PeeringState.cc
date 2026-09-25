@@ -4961,7 +4961,8 @@ std::ostream &operator<<(std::ostream &out, const brief_log_entries_t &b)
       out << ",";
     }
     out << it->version << " (" << it->prior_version << ") "
-	<< it->get_op_name() << " " << it->soid << " by " << it->reqid;
+	<< fmt::format("{:<8}", it->get_op_name())
+	<< " " << it->soid << " by " << it->reqid;
     if (it->return_code != 0) {
       out << " rc=" << it->return_code;
     }
