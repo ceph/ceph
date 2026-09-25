@@ -14574,6 +14574,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    // Without k/m the pool uses the shared default profile and crush rule,
+    // which cannot honour per-pool crush parameters.
+    if (pool_type == pg_pool_t::TYPE_ERASURE && has_crush_params && !has_ec_params) {
+      ss << "crush parameters (crush_root, zone_failure_domain, "
+            "osd_failure_domain, crush_device_class) require k and m";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+
     if (pool_type == pg_pool_t::TYPE_REPLICATED && (k > 0 || m > 0)) {
       ss << "cannot specify k/m parameters for replicated pools";
       err = -EINVAL;
