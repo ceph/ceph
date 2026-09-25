@@ -213,7 +213,7 @@ bool ReplicatedBackend::_handle_message(
   OpRequestRef op
   )
 {
-  dout(10) << __func__ << ": " << *op->get_req() << dendl;
+  dout(15) << __func__ << ": " << *op->get_req() << dendl;
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PUSH:
     do_push(op);
@@ -687,7 +687,7 @@ void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp>& op)
 
   FUNCTRACE(cct);
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
-  dout(10) << __func__ << ": " << op->tid << dendl;
+  dout(15) << __func__ << ": " << op->tid << dendl;
   if (op->op) {
     op->op->mark_event("op_commit");
     op->op->pg_trace.event("op commit");
@@ -723,12 +723,12 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       m = ip_op.op->get_req<MOSDOp>();
 
     if (m)
-      dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
+      dout(15) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
 	      << " ack_type " << (int)r->ack_type
 	      << " from " << from
 	      << dendl;
     else
-      dout(7) << __func__ << ": tid " << ip_op.tid << " (no op) "
+      dout(15) << __func__ << ": tid " << ip_op.tid << " (no op) "
 	      << " ack_type " << (int)r->ack_type
 	      << " from " << from
 	      << dendl;
@@ -756,6 +756,9 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ip_op.on_commit = 0;
       in_progress_ops.erase(iter);
     }
+  } else {
+    dout(10) << __func__ << ": tid " << rep_tid << " from " << from
+	     << " not in progress, ignoring" << dendl;
   }
   maybe_kick_pct_update();
 }
@@ -1273,7 +1276,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   const hobject_t& soid = m->poid;
 
-  dout(10) << __func__ << " " << soid
+  dout(15) << __func__ << " " << soid
            << " v " << m->version
 	   << (m->logbl.length() ? " (transaction)" : " (parallel exec")
 	   << " " << m->logbl.length()
@@ -1378,6 +1381,7 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   ceph_assert(m->get_type() == MSG_OSD_REPOP);
   dout(10) << __func__ << " on op " << *m
 	   << ", sending commit to osd." << rm->ackerosd
+	   << " lat " << (ceph_clock_now() - m->get_recv_stamp())
 	   << dendl;
   ceph_assert(get_osdmap()->is_up(rm->ackerosd));
 
