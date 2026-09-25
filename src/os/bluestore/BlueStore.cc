@@ -2921,7 +2921,7 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
 
 void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 {
-  dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
+  dout(15) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " start " << *this << dendl;
   ceph_assert(r);
   ceph_assert(blob.can_split());
@@ -2939,9 +2939,9 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
   r->maybe_prune_tail(); // likely redundant (as we tend to prune original blob beforehand)
                          // but let it be
 
-  dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
+  dout(20) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " finish " << *this << dendl;
-  dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
+  dout(20) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << "    and " << *r << dendl;
 }
 
@@ -3563,7 +3563,7 @@ BlueStore::ExtentMap::reshard_decision(uint32_t segment_size) {
   ReshardPlan plan;
   auto cct = onode->c->store->cct; // used by dout
 
-  dout(10) << __func__ << " 0x[" << std::hex << needs_reshard_begin << ","
+  dout(15) << __func__ << " 0x[" << std::hex << needs_reshard_begin << ","
 	   << needs_reshard_end << ") segment 0x" << segment_size << std::dec
 	   << " of " << onode->onode.extent_map_shards.size()
 	   << " shards on " << onode->oid << dendl;
@@ -5315,12 +5315,12 @@ void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
   SharedBlobRef sb = shared_blob_set.lookup(sbid);
   if (sb) {
     b->set_shared_blob(sb);
-    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+    ldout(store->cct, 15) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " had " << *b->get_shared_blob() << dendl;
   } else {
     b->set_shared_blob(new SharedBlob(sbid, this));
     shared_blob_set.add(this, b->get_shared_blob().get());
-    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+    ldout(store->cct, 15) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " opened " << *b->get_shared_blob()
 			  << dendl;
   }
@@ -5346,14 +5346,14 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
     sb->persistent = new bluestore_shared_blob_t(sbid);
     auto p = v.cbegin();
     decode(*(sb->persistent), p);
-    ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
+    ldout(store->cct, 15) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " loaded shared_blob " << *sb << dendl;
   }
 }
 
 void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 {
-  ldout(store->cct, 10) << __func__ << " " << *b << dendl;
+  ldout(store->cct, 15) << __func__ << " " << *b << dendl;
 
   // update blob
   bluestore_blob_t& blob = b->dirty_blob();
@@ -5377,7 +5377,7 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 
 uint64_t BlueStore::Collection::make_blob_unshared(SharedBlob *sb)
 {
-  ldout(store->cct, 10) << __func__ << " " << *sb << dendl;
+  ldout(store->cct, 15) << __func__ << " " << *sb << dendl;
   ceph_assert(sb->is_loaded());
 
   uint64_t sbid = sb->get_sbid();
@@ -15886,7 +15886,7 @@ void BlueStore::deferred_try_submit()
 
 void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 {
-  dout(10) << __func__ << " osr " << osr
+  dout(15) << __func__ << " osr " << osr
 	   << " " << osr->deferred_pending->iomap.size() << " ios pending "
 	   << dendl;
   ceph_assert(osr->deferred_pending);
@@ -15951,7 +15951,7 @@ struct C_DeferredTrySubmit : public Context {
 
 void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 {
-  dout(10) << __func__ << " osr " << osr << dendl;
+  dout(15) << __func__ << " osr " << osr << dendl;
   ceph_assert(osr->deferred_running);
   DeferredBatch *b = osr->deferred_running;
 
@@ -16728,7 +16728,7 @@ void BlueStore::_do_write_small(
     bufferlist::iterator& blp,
     WriteContext *wctx)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+  dout(15) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   ceph_assert(length < min_alloc_size);
 
@@ -17112,7 +17112,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
   } while (any_change);
 
   if (above_blob_threshold) {
-    dout(10) << __func__ << " request GC, blobs >= " << inspected_blobs.size()
+    dout(15) << __func__ << " request GC, blobs >= " << inspected_blobs.size()
             << " " << std::hex << min_off << "~" << max_off << std::dec
 	    << dendl;
     ceph_assert(start_ep != end_ep);
@@ -17258,7 +17258,7 @@ void BlueStore::_do_write_big(
     bufferlist::iterator& blp,
     WriteContext *wctx)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+  dout(15) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " target_blob_size 0x" << wctx->target_blob_size << std::dec
 	   << " compress " << (int)wctx->compress
 	   << dendl;
@@ -18369,7 +18369,7 @@ void BlueStore::_do_truncate(
     // if we have shards past EOF, ask for a reshard
     if (!o->onode.extent_map_shards.empty() &&
 	o->onode.extent_map_shards.back().offset >= offset) {
-      dout(10) << __func__ << "  request reshard past EOF" << dendl;
+      dout(15) << __func__ << "  request reshard past EOF" << dendl;
       if (offset) {
 	o->extent_map.request_reshard(offset - 1, offset + length);
       } else {
@@ -18453,7 +18453,7 @@ int BlueStore::_do_remove(
   }
 
   // see if we can unshare blobs still referenced by the head
-  dout(10) << __func__ << " gen and maybe_unshared_blobs "
+  dout(15) << __func__ << " gen and maybe_unshared_blobs "
 	   << maybe_unshared_blobs << dendl;
   ghobject_t nogen = o->oid;
   if (is_gen)
