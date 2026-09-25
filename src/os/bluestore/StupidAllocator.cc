@@ -63,7 +63,7 @@ int64_t StupidAllocator::allocate_int(
 
   auto lock_acquired = mono_clock::now();
 
-  ldout(cct, 10) << __func__ << " want_size 0x" << std::hex << want_size
+  ldout(cct, 20) << __func__ << " want_size 0x" << std::hex << want_size
 	   	 << " alloc_unit 0x" << alloc_unit
 	   	 << " hint 0x" << hint << std::dec
 	   	 << dendl;
@@ -242,7 +242,7 @@ void StupidAllocator::release(
        ++p) {
     const auto offset = p.get_start();
     const auto length = p.get_len();
-    ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
+    ldout(cct, 20) << __func__ << " 0x" << std::hex << offset << "~" << length
 		   << std::dec << dendl;
     _insert_free(offset, length);
     num_free += length;
@@ -352,7 +352,7 @@ void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
   if (!length)
     return;
   std::lock_guard l(lock);
-  ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
+  ldout(cct, 20) << __func__ << " 0x" << std::hex << offset << "~" << length
 		 << std::dec << dendl;
   _insert_free(offset, length);
   num_free += length;
@@ -363,7 +363,7 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
   if (!length)
     return;
   std::lock_guard l(lock);
-  ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
+  ldout(cct, 20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   	 << std::dec << dendl;
   interval_set_t rm;
   rm.insert(offset, length);

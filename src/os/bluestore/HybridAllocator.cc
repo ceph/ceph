@@ -35,7 +35,7 @@ int64_t HybridBtree2Allocator::allocate(
   int64_t  hint, // unused and likely unneeded for btree2 allocator
   PExtentVector* extents)
 {
-  ldout(get_context(), 10) << __func__ << std::hex
+  ldout(get_context(), 20) << __func__ << std::hex
     << " want 0x" << want
     << " unit 0x" << unit
     << " max_alloc_size 0x" << max_alloc_size
