@@ -10057,12 +10057,12 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 
   const rgw_bucket& bucket = obj.bucket;
 
+  bufferlist bl;
   if (need_to_link) {
     rgw_obj target(bucket, key);
     RGWOLHInfo info;
     info.target = target;
     info.removed = delete_marker;
-    bufferlist bl;
     encode(info, bl);
     op.setxattr(RGW_ATTR_OLH_INFO, bl);
   }
@@ -10088,6 +10088,17 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": could not apply olh update to oid \"" << ref.obj.oid << "\", r=" << r << dendl;
     }
     return r;
+  }
+
+  // apply the same changes to the cached olh state
+  state.attrset[RGW_ATTR_OLH_VER] = ver_bl;
+  if (need_to_link) {
+    state.attrset[RGW_ATTR_OLH_INFO] = bl;
+  }
+  for (const auto& [epoch, entries] : log) {
+    for (const auto& entry : entries) {
+      state.attrset.erase(RGW_ATTR_OLH_PENDING_PREFIX + entry.op_tag);
+    }
   }
 
   if (need_to_remove) {
@@ -10540,6 +10551,10 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
     }
     if (ret < 0) {
       return ret;
+    }
+    // later follows in this request resolve the same version
+    for (const auto& [name, bl] : pending_entries) {
+      state->attrset.erase(name);
     }
   }
 
