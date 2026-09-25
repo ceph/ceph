@@ -1878,7 +1878,10 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 {
   if (auto last_reset = get_last_peering_reset();
       last_reset > reply_epoch || last_reset > query_epoch) {
-    dout(10) << "old_peering_msg reply_epoch " << reply_epoch << " query_epoch "
+    // Every caller already logs its own self-contained level-10 line
+    // (naming the message/event being discarded) when this returns true,
+    // so this generic line is now just backup detail.
+    dout(15) << "old_peering_msg reply_epoch " << reply_epoch << " query_epoch "
 	     << query_epoch << " last_peering_reset " << last_reset << dendl;
     return true;
   }
@@ -2080,7 +2083,8 @@ bool PG::can_discard_scan(OpRequestRef op)
   ceph_assert(m->get_type() == MSG_OSD_PG_SCAN);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
-    dout(10) << " got old scan, ignoring" << dendl;
+    dout(10) << " got old scan, ignoring, map_epoch " << m->map_epoch
+	     << " query_epoch " << m->query_epoch << dendl;
     return true;
   }
   return false;
@@ -2092,7 +2096,8 @@ bool PG::can_discard_backfill(OpRequestRef op)
   ceph_assert(m->get_type() == MSG_OSD_PG_BACKFILL);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
-    dout(10) << " got old backfill, ignoring" << dendl;
+    dout(10) << " got old backfill, ignoring, map_epoch " << m->map_epoch
+	     << " query_epoch " << m->query_epoch << dendl;
     return true;
   }
 
@@ -2162,23 +2167,30 @@ void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx &rctx)
 {
   // NullEvt only makes advance_pg() (already run by our caller) bring the PG
   // up to date with the OSD's map; the state machine ignores it. Lease events
-  // are periodic keep-alives. Log both below level 10. The type checks run only
-  // when level 10 is enabled.
+  // are periodic keep-alives. Classify both below level 10. The type checks
+  // run only when level 10 is enabled. The discard branch below reuses this
+  // same classification, so a discarded event is still identifiable at
+  // whatever level its trace line would have been: without that, discarding
+  // a NullEvt or lease event left nothing self-contained at level 10 naming
+  // the event that was dropped.
+  int evt_lvl = 20;
   if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
     const boost::statechart::event_base *e = evt->evt.get();
     if (dynamic_cast<const NullEvt*>(e)) {
-      dout(20) << __func__ << ": " << evt->get_desc() << dendl;
+      evt_lvl = 20;
     } else if (dynamic_cast<const RenewLease*>(e) ||
 	       dynamic_cast<const MLease*>(e) ||
 	       dynamic_cast<const MLeaseAck*>(e)) {
-      dout(15) << __func__ << ": " << evt->get_desc() << dendl;
+      evt_lvl = 15;
     } else {
-      dout(10) << __func__ << ": " << evt->get_desc() << dendl;
+      evt_lvl = 10;
     }
+    dout(ceph::dout::need_dynamic(evt_lvl)) << __func__ << ": " << evt->get_desc() << dendl;
   }
   ceph_assert(have_same_or_newer_map(evt->get_epoch_sent()));
   if (old_peering_evt(evt)) {
-    dout(15) << "discard old " << evt->get_desc() << dendl;
+    dout(ceph::dout::need_dynamic(evt_lvl)) << "discard old " << evt->get_desc()
+	     << " last_peering_reset " << get_last_peering_reset() << dendl;
   } else {
     recovery_state.handle_event(evt, &rctx);
   }
