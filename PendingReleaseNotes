@@ -5,6 +5,12 @@
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
   from ``2`` to ``30`` seconds.
 
+* RGW: Fixed a bug in same-account evaluation of bucket policy statements that
+  allow the account principal. Users and roles in that account now require a
+  corresponding allow from identity policy to match AWS behavior. The evaluation
+  of bucket policy against user or role principals is unchanged and still does
+  not require identity policy.
+
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
   ``$GETOPT`` environment override so GNU getopt can be selected
