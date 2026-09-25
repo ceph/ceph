@@ -196,6 +196,23 @@ class TestAnalysis(unittest.TestCase):
         r = self.analyse(path, level=10)
         self.assertEqual(r['client_ops'], 1)
 
+    def test_max_kept_multiline_entries(self):
+        r = self.analyse(self.plain, level=10)
+        self.assertEqual(r['kept']['multiline_entries'], 1)
+        self.assertIn('append_log', r['kept']['first_multiline_example'])
+        v = clb.check_budgets(r, max_kept_multiline_entries=0)
+        self.assertEqual([x['budget'] for x in v],
+                         ['max_kept_multiline_entries'])
+        self.assertEqual(v[0]['actual'], 1)
+        self.assertIn('append_log', v[0]['example'])
+        # off by default, and satisfied when the budget is high enough
+        self.assertEqual(clb.check_budgets(r), [])
+        self.assertEqual(
+            clb.check_budgets(r, max_kept_multiline_entries=1), [])
+        m = clb.merge_reports([r, self.analyse(self.gz, level=10)])
+        self.assertEqual(m['kept']['multiline_entries'], 2)
+        self.assertIn('append_log', m['kept']['first_multiline_example'])
+
     def test_source_attribution(self):
         src = os.path.join(self.dir, 'src', 'osd')
         os.makedirs(src)

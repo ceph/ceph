@@ -14,11 +14,15 @@ both bounds are recorded before doing anything else, so a slow analysis of
 a huge log, and the OSDs' own teardown logging, do not inflate duration_s
 and so kept.bytes_per_s.
 
-  max_kept_bytes_per_op  level<=N bytes per client op (summed over all
-                         OSDs / client ops dequeued by all primaries)
-  max_kept_fraction      level<=N bytes / all bytes (only evaluated when the
-                         logs were captured at level 20)
-  max_kept_mb_per_s      level<=N MB per second per daemon
+  max_kept_bytes_per_op        level<=N bytes per client op (summed over all
+                               OSDs / client ops dequeued by all primaries)
+  max_kept_fraction            level<=N bytes / all bytes (only evaluated
+                               when the logs were captured at level 20)
+  max_kept_mb_per_s            level<=N MB per second per daemon
+  max_kept_multiline_entries   level<=N entries spanning more than one line
+                               (off/None by default: every kept entry
+                               should be a single line for grep/lnav, see
+                               debug_log_levels.rst)
 
 The warning names the top level<=N message templates and the source lines
 they most likely come from, so a regression can be reported against the
@@ -69,6 +73,7 @@ DEFAULTS = {
     'max_kept_bytes_per_op': 20480,
     'max_kept_fraction': 0.2,
     'max_kept_mb_per_s': 12.0,
+    'max_kept_multiline_entries': None,  # off: see check_budgets()
     'min_client_ops': 1000,
     'top': 50,
     'sample_target_bytes': 2 << 30,
@@ -175,6 +180,7 @@ def _analyse(ctx, config, tool_path, since, until):
         max_kept_bytes_per_op=config['max_kept_bytes_per_op'],
         max_kept_fraction=config['max_kept_fraction'],
         max_kept_mb_per_s=config['max_kept_mb_per_s'],
+        max_kept_multiline_entries=config['max_kept_multiline_entries'],
         min_client_ops=config['min_client_ops'],
         offenders=config['offenders'])
     summary['violations'] = violations
@@ -193,6 +199,8 @@ def _analyse(ctx, config, tool_path, since, until):
     for v in violations:
         log.warning('log_budget: %s exceeded: %.4g > %.4g', v['budget'],
                     v['actual'], v['limit'])
+        if v.get('example'):
+            log.warning('log_budget:   example: %s', v['example'])
     if violations:
         log.warning('log_budget: top level<=%d templates:', config['level'])
         for o in violations[0]['offenders']:

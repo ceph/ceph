@@ -211,6 +211,7 @@ class Analysis(object):
         self.kept_bytes = 0
         self.multiline = 0
         self.kept_multiline = 0
+        self.first_kept_multiline_example = None
         self.levels = {}          # level -> [lines, bytes]
         self.components = {}      # comp -> [lines, bytes, kept_lines, kept_bytes]
         self.templates = {}       # (comp, level, tmpl) -> [lines, bytes, token, example]
@@ -253,6 +254,10 @@ class Analysis(object):
                     self.multiline += 1
                     if lv <= level:
                         self.kept_multiline += 1
+                        if (self.first_kept_multiline_example is None and
+                                key is not None):
+                            self.first_kept_multiline_example = \
+                                templates[key][3]
                 st = levels[lv]
                 st[0] += 1
                 st[1] += ln
@@ -384,6 +389,7 @@ class Analysis(object):
                 'lines': self.kept_lines,
                 'bytes': self.kept_bytes,
                 'multiline_entries': self.kept_multiline,
+                'first_multiline_example': self.first_kept_multiline_example,
                 'fraction': (float(self.kept_bytes) / self.bytes
                              if self.bytes else 0.0),
                 'bytes_per_s': (self.kept_bytes / dur) if dur > 0 else None,
@@ -411,7 +417,8 @@ def merge_reports(reports, top=25):
     (component, level, template)."""
     out = {'version': REPORT_VERSION, 'files': [], 'lines': 0, 'entries': 0,
            'bytes': 0, 'multiline_entries': 0, 'client_ops': 0,
-           'kept': {'lines': 0, 'bytes': 0, 'multiline_entries': 0},
+           'kept': {'lines': 0, 'bytes': 0, 'multiline_entries': 0,
+                    'first_multiline_example': None},
            'levels': {}, 'components': {}, 'daemons': 0,
            'max_level_seen': None, 'duration_s': 0.0}
     tmpl = {}
@@ -426,6 +433,9 @@ def merge_reports(reports, top=25):
             out[k] += r.get(k) or 0
         for k in ('lines', 'bytes', 'multiline_entries'):
             out['kept'][k] += r['kept'].get(k) or 0
+        if out['kept']['first_multiline_example'] is None:
+            out['kept']['first_multiline_example'] = \
+                r['kept'].get('first_multiline_example')
         out['duration_s'] = max(out['duration_s'], r.get('duration_s') or 0.0)
         mls = r.get('max_level_seen')
         if mls is not None and (out['max_level_seen'] is None or
@@ -472,10 +482,15 @@ def merge_reports(reports, top=25):
 
 
 def check_budgets(report, max_kept_bytes_per_op=None, max_kept_fraction=None,
-                  max_kept_mb_per_s=None, min_client_ops=1000, offenders=5):
+                  max_kept_mb_per_s=None, max_kept_multiline_entries=None,
+                  min_client_ops=1000, offenders=5):
     """Return a list of violations (dicts).  A budget that cannot be
     evaluated (too few client ops, log not captured at level >= 20, no
-    duration) is skipped and noted in report['budget_notes']."""
+    duration) is skipped and noted in report['budget_notes'].
+    max_kept_multiline_entries is off (None) by default: policy rule 3
+    (every kept entry is a single line, for grep/lnav) is measured
+    (report['kept']['multiline_entries']) but not enforced until a caller
+    opts in."""
     notes = report.setdefault('budget_notes', [])
     viol = []
     worst = [{'component': t['component'], 'level': t['level'],
@@ -483,9 +498,11 @@ def check_budgets(report, max_kept_bytes_per_op=None, max_kept_fraction=None,
               'source': t.get('source', [])}
              for t in report.get('top_kept_templates', [])[:offenders]]
 
-    def add(name, limit, actual):
-        viol.append({'budget': name, 'limit': limit, 'actual': actual,
-                     'offenders': worst})
+    def add(name, limit, actual, **extra):
+        v = {'budget': name, 'limit': limit, 'actual': actual,
+             'offenders': worst}
+        v.update(extra)
+        viol.append(v)
 
     if max_kept_bytes_per_op is not None:
         ops = report.get('client_ops') or 0
@@ -510,6 +527,12 @@ def check_budgets(report, max_kept_bytes_per_op=None, max_kept_fraction=None,
             notes.append('max_kept_mb_per_s not evaluated: no duration')
         elif rate / 1e6 > max_kept_mb_per_s:
             add('max_kept_mb_per_s', max_kept_mb_per_s, rate / 1e6)
+    if max_kept_multiline_entries is not None:
+        n = report['kept'].get('multiline_entries') or 0
+        if n > max_kept_multiline_entries:
+            example = report['kept'].get('first_multiline_example')
+            add('max_kept_multiline_entries', max_kept_multiline_entries, n,
+                **({'example': example} if example else {}))
     return viol
 
 
@@ -689,6 +712,8 @@ def print_text(r, out=None):
     for v in r.get('violations', []):
         p('BUDGET EXCEEDED: %s: actual %.4g > limit %.4g' % (
             v['budget'], v['actual'], v['limit']))
+        if v.get('example'):
+            p('    example: ' + v['example'])
         for o in v['offenders']:
             p('    %s %2d %s %s %s' % (
                 o['component'], o['level'], human(o['bytes']),
@@ -730,6 +755,10 @@ def main(argv=None):
                          'been captured at level >= 20)')
     ap.add_argument('--max-kept-mb-per-s', type=float,
                     help='budget: kept MB per second')
+    ap.add_argument('--max-kept-multiline-entries', type=int,
+                    help='budget: kept (level<=N) entries spanning more '
+                         'than one line; every kept entry should be a '
+                         'single line for grep/lnav (off by default)')
     ap.add_argument('--min-client-ops', type=int, default=1000,
                     help='evaluate the per-op budget only with at least '
                          'this many client ops (default 1000)')
@@ -761,7 +790,7 @@ def main(argv=None):
         attribute_sources(r['top_kept_templates'], root, index=idx)
     r['violations'] = check_budgets(
         r, a.max_kept_bytes_per_op, a.max_kept_fraction, a.max_kept_mb_per_s,
-        a.min_client_ops)
+        a.max_kept_multiline_entries, a.min_client_ops)
     if a.json:
         json.dump(r, sys.stdout, indent=1, sort_keys=True)
         sys.stdout.write('\n')

@@ -100,6 +100,10 @@ The budgets are defined relative to what the same workload costs at level
   by the number of client ops dequeued by the primaries): at most 20 KiB.
   At level 20 a client write currently costs 65-110 KB of OSD log, EC more
   than replicated.
+* **Every kept (level <= 10) entry is a single line** (see above): measured
+  as ``kept.multiline_entries``, and off by default as a budget
+  (``max_kept_multiline_entries``) until it has been checked against real
+  logs.
 
 For reference, rados teuthology logs from mid 2026 spend 39-52% of their
 level 20 bytes on level <= 10 lines, 31-53 KB per client op.

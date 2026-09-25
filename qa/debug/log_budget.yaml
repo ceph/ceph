@@ -29,3 +29,7 @@ overrides:
     max_kept_bytes_per_op: 20480
     max_kept_fraction: 0.2
     max_kept_mb_per_s: 12
+    # Warn-only for now (mode: warn above): every kept (level<=10) entry
+    # should be a single line for grep/lnav, so any multi-line one is worth
+    # a look even though this budget is not tightened yet.
+    max_kept_multiline_entries: 0
