@@ -5318,11 +5318,11 @@ void PeeringState::calc_trim_to()
       ++it;
       if (new_trim_to > limit) {
         new_trim_to = limit;
-        psdout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
+        psdout(15) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
         break;
       }
     }
-    psdout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
+    psdout(15) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
     pg_trim_to = new_trim_to;
     ceph_assert(pg_trim_to <= pg_log.get_head());
     ceph_assert(pg_trim_to <= min_last_complete_ondisk);
@@ -5338,16 +5338,16 @@ void PeeringState::calc_trim_to_aggressive()
     pg_log.get_head(),
     pg_log.get_can_rollback_to(),
     pg_committed_to});
-  psdout(10) << "limit = " << limit << dendl;
+  psdout(20) << "limit = " << limit << dendl;
 
   if (limit != eversion_t() &&
       limit != pg_trim_to &&
       pg_log.get_log().approx_size() > target) {
-    psdout(10) << "approx pg log length =  "
+    psdout(20) << "approx pg log length =  "
              << pg_log.get_log().approx_size() << dendl;
     uint64_t num_to_trim = std::min<uint64_t>(pg_log.get_log().approx_size() - target,
                                               cct->_conf->osd_pg_log_trim_max);
-    psdout(10) << "num_to_trim =  " << num_to_trim << dendl;
+    psdout(20) << "num_to_trim =  " << num_to_trim << dendl;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
@@ -5375,7 +5375,7 @@ void PeeringState::calc_trim_to_aggressive()
     }
 
     pg_trim_to = std::min({by_n_to_keep, by_n_to_trim, limit});
-    psdout(10) << "pg_trim_to now " << pg_trim_to << dendl;
+    psdout(15) << "pg_trim_to now " << pg_trim_to << dendl;
     ceph_assert(pg_trim_to <= pg_log.get_head());
   }
 }
