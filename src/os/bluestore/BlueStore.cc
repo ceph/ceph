@@ -14739,10 +14739,26 @@ void BlueStore::_txc_calc_cost(TransContext *txc)
   auto cost = throttle_cost_per_io.load();
   txc->cost = ios * cost + txc->bytes;
   txc->ios = ios;
-  dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("
+  dout(10) << __func__ << " txc " << txc << " cost " << txc->cost << " ("
 	   << ios << " ios * " << cost << " + " << txc->bytes
 	   << " bytes) " << txc->ch->cid
-	   << " onodes " << txc->onodes.size() << dendl;
+	   << " onodes " << txc->onodes.size();
+  {
+    // name the touched objects (skip pgmeta, cap the list) so a hung or
+    // corrupt txc can be found by object id even if it never logs its
+    // commit line.
+    unsigned n = 0;
+    for (auto& o : txc->modified_objects) {
+      if (o->oid.is_pgmeta())
+	continue;
+      if (n++ == 3) {
+	*_dout << " ...";
+	break;
+      }
+      *_dout << " " << o->oid;
+    }
+  }
+  *_dout << dendl;
 }
 
 void BlueStore::_txc_update_store_statfs(TransContext *txc)
