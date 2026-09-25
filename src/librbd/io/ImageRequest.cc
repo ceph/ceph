@@ -685,11 +685,10 @@ void ImageFlushRequest<I>::send_request() {
       object_dispatch_spec->send();
     });
 
-  // ensure all in-flight IOs are settled if non-user flush request
   if (m_flush_source == FLUSH_SOURCE_WRITEBACK) {
     ctx->complete(0);
   } else {
-    aio_comp->async_op.flush(ctx);
+    aio_comp->async_op.flush(ctx, m_flush_source == FLUSH_SOURCE_INTERNAL_WRITES);
   }
 
   // might be flushing during image shutdown

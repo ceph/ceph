@@ -40,9 +40,10 @@ struct C_CompleteFlushes : public Context {
 
 } // anonymous namespace
 
-void AsyncOperation::start_op(ImageCtx &image_ctx) {
+void AsyncOperation::start_op(ImageCtx &image_ctx, bool writes) {
   ceph_assert(m_image_ctx == NULL);
   m_image_ctx = &image_ctx;
+  m_writes = writes;
 
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << dendl;
   std::lock_guard l{m_image_ctx->async_ops_lock};
@@ -52,44 +53,55 @@ void AsyncOperation::start_op(ImageCtx &image_ctx) {
 void AsyncOperation::finish_op() {
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << dendl;
 
+  std::list<Context *> flush_contexts;
   {
     std::lock_guard l{m_image_ctx->async_ops_lock};
-    xlist<AsyncOperation *>::iterator iter(&m_xlist_item);
-    ++iter;
+    auto transfer = [&](FlushContexts& waiters, bool skip_reads) {
+      if (waiters.empty()) {
+        return;
+      }
+      auto* older = find_older_waiters(skip_reads);
+      auto& dest = older ? *older : flush_contexts;
+      dest.splice(dest.end(), waiters);
+    };
+    transfer(m_flush_contexts, false);
+    transfer(m_flush_writes_contexts, true);
     ceph_assert(m_xlist_item.remove_myself());
-
-    // linked list stored newest -> oldest ops
-    if (!iter.end() && !m_flush_contexts.empty()) {
-      ldout(m_image_ctx->cct, 20) << "moving flush contexts to previous op: "
-                                  << *iter << dendl;
-      (*iter)->m_flush_contexts.insert((*iter)->m_flush_contexts.end(),
-                                       m_flush_contexts.begin(),
-                                       m_flush_contexts.end());
-      return;
-    }
   }
 
-  if (!m_flush_contexts.empty()) {
+  if (!flush_contexts.empty()) {
     C_CompleteFlushes *ctx = new C_CompleteFlushes(m_image_ctx,
-                                                   std::move(m_flush_contexts));
+                                                   std::move(flush_contexts));
     m_image_ctx->asio_engine->post(ctx, 0);
   }
 }
 
-void AsyncOperation::flush(Context* on_finish) {
+void AsyncOperation::flush(Context* on_finish, bool skip_reads) {
   {
     std::lock_guard locker{m_image_ctx->async_ops_lock};
-    xlist<AsyncOperation *>::iterator iter(&m_xlist_item);
-    ++iter;
-
-    // linked list stored newest -> oldest ops
-    if (!iter.end()) {
-      (*iter)->m_flush_contexts.push_back(on_finish);
+    if (auto* waiters = find_older_waiters(skip_reads)) {
+      waiters->push_back(on_finish);
       return;
     }
   }
 
   m_image_ctx->asio_engine->post(on_finish, 0);
+}
+
+AsyncOperation::FlushContexts* AsyncOperation::find_older_waiters(bool skip_reads) {
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx->async_ops_lock));
+
+  // linked list stored newest -> oldest ops
+  xlist<AsyncOperation *>::iterator iter(&m_xlist_item);
+  for (++iter; !iter.end(); ++iter) {
+    if (!skip_reads) {
+      return &(*iter)->m_flush_contexts;
+    }
+    if ((*iter)->m_writes) {
+      return &(*iter)->m_flush_writes_contexts;
+    }
+  }
+  return nullptr;
 }
 
 } // namespace io

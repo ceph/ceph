@@ -123,7 +123,10 @@ void AioCompletion::start_op() {
   }
 
   ceph_assert(!async_op.started());
-  async_op.start_op(*ictx);
+  // Reads and list-snaps can be skipped. An older flush must get its
+  // chance to report a deferred write error before diff-iterate flushes.
+  async_op.start_op(*ictx, aio_type != AIO_TYPE_READ &&
+                           aio_type != AIO_TYPE_GENERIC);
 }
 
 void AioCompletion::queue_complete() {

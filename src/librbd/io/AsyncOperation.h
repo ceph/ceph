@@ -33,16 +33,24 @@ public:
     return m_xlist_item.is_on_list();
   }
 
-  void start_op(ImageCtx &image_ctx);
+  // pass false for reads and list-snaps, which diff-iterate can skip
+  void start_op(ImageCtx &image_ctx, bool writes = true);
   void finish_op();
 
-  void flush(Context *on_finish);
+  // Older writes and flushes are always waited on.
+  void flush(Context *on_finish, bool skip_reads = false);
 
 private:
 
   ImageCtx *m_image_ctx;
+  bool m_writes = true;
   xlist<AsyncOperation *>::item m_xlist_item;
-  std::list<Context *> m_flush_contexts;
+  using FlushContexts = std::list<Context *>;
+  FlushContexts m_flush_contexts;
+  FlushContexts m_flush_writes_contexts;
+
+  // Waiter queue on the next older matching op. Requires async_ops_lock.
+  FlushContexts* find_older_waiters(bool skip_reads);
 
 };
 
