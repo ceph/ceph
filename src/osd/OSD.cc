@@ -9982,6 +9982,25 @@ void OSD::enqueue_peering_evt(spg_t pgid, PGPeeringEventRef evt)
 }
 
 /*
+ * Level of the per-op "dequeue_op ... finish" log line: 10 for ops, 15 for
+ * replies to sub-ops this OSD sent (one per replica/shard per client op).
+ */
+static int dequeue_op_finish_log_level(const Message *m)
+{
+  switch (m->get_type()) {
+  case MSG_OSD_REPOPREPLY:
+  case MSG_OSD_EC_WRITE_REPLY:
+  case MSG_OSD_EC_READ_REPLY:
+  case MSG_OSD_PG_PUSH_REPLY:
+  case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    return 15;
+  default:
+    return 10;
+  }
+}
+
+/*
  * NOTE: dequeue called in worker thread, with pg lock
  */
 void OSD::dequeue_op(
@@ -9997,7 +10016,7 @@ void OSD::dequeue_op(
   op->set_dequeued_time(now);
 
   utime_t latency = now - m->get_recv_stamp();
-  dout(10) << "dequeue_op " << *op->get_req()
+  dout(15) << "dequeue_op " << *op->get_req()
            << " prio " << m->get_priority()
 	   << " cost " << m->get_cost()
 	   << " latency " << latency
@@ -10019,8 +10038,13 @@ void OSD::dequeue_op(
   pg->do_request(op, handle);
 
   // finish
-  dout(10) << "dequeue_op " << *op->get_req() << " finish"
-    << " latency " << (ceph_clock_now() - now) << dendl;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    const int finish_level = dequeue_op_finish_log_level(m);
+    dout(ceph::dout::need_dynamic(finish_level))
+      << "dequeue_op " << *op->get_req() << " finish"
+      << " latency " << (ceph_clock_now() - now)
+      << " queue_latency " << latency << dendl;
+  }
   OID_EVENT_TRACE_WITH_MSG(m, "DEQUEUE_OP_END", false);
 }
 
