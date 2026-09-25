@@ -3453,7 +3453,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   target->state = state;
   RGWObjState* current_state = target->state;
   RGWObjState no_current_version;
-  if (!target->obj.key.instance.empty() || is_olh) {
+  if ((!target->obj.key.instance.empty() || is_olh) &&
+      (meta.if_match || meta.if_nomatch)) {
     r = target->get_current_version_state(rctx.dpp, current_state, rctx.y);
     if (r == -ENOENT) {
       current_state = &no_current_version;
@@ -7042,7 +7043,10 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       if (r < 0)
         return r;
       RGWObjState* current_state = target->state;
-      r = target->get_current_version_state(dpp, current_state, y);
+      if (params.if_match || params.size_match ||
+          !real_clock::is_zero(params.last_mod_time_match)) {
+        r = target->get_current_version_state(dpp, current_state, y);
+      }
       if (r == -ENOENT) {
         current_state = target->state;
       } else if (r < 0) {
