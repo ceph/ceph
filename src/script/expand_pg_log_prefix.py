@@ -30,6 +30,7 @@ all full prefixes at that marker; only full prefixes inside the dump are
 used to expand compact lines inside it.
 """
 
+import gzip
 import re
 import sys
 
@@ -84,13 +85,31 @@ def expand(stream, out, last_full):
         out.write(line)
 
 
+def open_log(path):
+    """Open a plain or .gz log for text reading.
+
+    Debug logs can contain raw object names or omap keys that are not
+    valid UTF-8; decode as latin-1 (which maps every byte 0-255 to a
+    codepoint, so it never raises) rather than silently corrupting bytes
+    with errors='replace', or crashing on strict decoding.
+    """
+    if path.endswith('.gz'):
+        return gzip.open(path, 'rt', encoding='latin-1')
+    return open(path, encoding='latin-1')
+
+
 def main():
     last_full = {}
+    # Reconfigure stdio to latin-1 too, so bytes read from stdin (or from a
+    # file, above) pass through to stdout unchanged instead of being
+    # decoded/encoded with the locale's (usually strict UTF-8) codec.
+    sys.stdin.reconfigure(encoding='latin-1')
+    sys.stdout.reconfigure(encoding='latin-1')
     if len(sys.argv) == 1:
         expand(sys.stdin, sys.stdout, last_full)
         return
     for path in sys.argv[1:]:
-        with open(path, errors='replace') as f:
+        with open_log(path) as f:
             expand(f, sys.stdout, last_full)
 
 
