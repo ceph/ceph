@@ -2271,14 +2271,23 @@ void PG::handle_advance_map(
 
 void PG::handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at)
 {
-  dout(10) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
-                          get_osdmap()->get_epoch())
-           << " up/acting " << pg_vector_string(recovery_state.get_up())
-           << "/" << pg_vector_string(recovery_state.get_acting())
-           << " same_interval_since " << info.history.same_interval_since
-           << (get_last_peering_reset() >= range_starts_at ?
-               " (peering reset in range)" : "")
-           << dendl;
+  // This fires for every PG on every map batch, whether or not anything
+  // changed for this PG. Only log the full, enriched summary at 10 when a
+  // peering reset actually happened within the batch's epoch range; the
+  // common no-op case goes to 15.
+  if (get_last_peering_reset() >= range_starts_at) {
+    dout(10) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
+                            get_osdmap()->get_epoch())
+             << " up/acting " << pg_vector_string(recovery_state.get_up())
+             << "/" << pg_vector_string(recovery_state.get_acting())
+             << " same_interval_since " << info.history.same_interval_since
+             << " (peering reset in range)"
+             << dendl;
+  } else {
+    dout(15) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
+                            get_osdmap()->get_epoch())
+             << dendl;
+  }
   recovery_state.activate_map(rctx);
   requeue_map_waiters();
 
