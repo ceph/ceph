@@ -38,7 +38,7 @@ Btree2Allocator::Btree2Allocator(CephContext* _cct,
 
 void Btree2Allocator::init_add_free(uint64_t offset, uint64_t length)
 {
-  ldout(cct, 10) << __func__ << std::hex
+  ldout(cct, 20) << __func__ << std::hex
     << " offset 0x" << offset
     << " length 0x" << length
     << std::dec << dendl;
@@ -51,7 +51,7 @@ void Btree2Allocator::init_add_free(uint64_t offset, uint64_t length)
 
 void Btree2Allocator::init_rm_free(uint64_t offset, uint64_t length)
 {
-  ldout(cct, 10) << __func__ << std::hex
+  ldout(cct, 20) << __func__ << std::hex
     << " offset 0x" << offset
     << " length 0x" << length
     << std::dec << dendl;
@@ -69,7 +69,7 @@ int64_t Btree2Allocator::allocate(
   int64_t  hint, // unused and likely unneeded
   PExtentVector* extents)
 {
-  ldout(cct, 10) << __func__ << std::hex
+  ldout(cct, 20) << __func__ << std::hex
     << " want 0x" << want
     << " unit 0x" << unit
     << " max_alloc_size 0x" << max_alloc_size
@@ -308,7 +308,7 @@ void Btree2Allocator::_release(const release_set_t& release_set)
     const auto offset = p.get_start();
     const auto length = p.get_len();
     ceph_assert(offset + length <= uint64_t(device_size));
-    ldout(cct, 10) << __func__ << std::hex
+    ldout(cct, 20) << __func__ << std::hex
       << " offset 0x" << offset
       << " length 0x" << length
       << std::dec << dendl;
@@ -319,7 +319,7 @@ void Btree2Allocator::_release(const release_set_t& release_set)
 void Btree2Allocator::_release(const PExtentVector& release_set)
 {
   for (auto& e : release_set) {
-    ldout(cct, 10) << __func__ << std::hex
+    ldout(cct, 20) << __func__ << std::hex
       << " offset 0x" << e.offset
       << " length 0x" << e.length
       << std::dec << dendl;
@@ -331,7 +331,7 @@ void Btree2Allocator::_release(size_t count, const release_set_entry_t** to_rele
 {
   for (size_t i = 0; i < count; i++) {
     auto* e = to_release[i];
-    ldout(cct, 10) << __func__ << std::hex
+    ldout(cct, 20) << __func__ << std::hex
       << " offset 0x" << e->first
       << " length 0x" << e->second
       << std::dec << dendl;

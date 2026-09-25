@@ -324,7 +324,7 @@ void BtreeAllocator::_release(const interval_set<uint64_t>& release_set)
     const auto offset = p.get_start();
     const auto length = p.get_len();
     ceph_assert(offset + length <= uint64_t(device_size));
-    ldout(cct, 10) << __func__ << std::hex
+    ldout(cct, 20) << __func__ << std::hex
       << " offset 0x" << offset
       << " length 0x" << length
       << std::dec << dendl;
@@ -334,7 +334,7 @@ void BtreeAllocator::_release(const interval_set<uint64_t>& release_set)
 
 void BtreeAllocator::_release(const PExtentVector& release_set) {
   for (auto& e : release_set) {
-    ldout(cct, 10) << __func__ << std::hex
+    ldout(cct, 20) << __func__ << std::hex
       << " offset 0x" << e.offset
       << " length 0x" << e.length
       << std::dec << dendl;
@@ -382,7 +382,7 @@ int64_t BtreeAllocator::allocate(
   int64_t  hint,
   PExtentVector* extents)
 {
-  ldout(cct, 10) << __func__ << std::hex
+  ldout(cct, 20) << __func__ << std::hex
                  << " want 0x" << want
                  << " unit 0x" << unit
                  << " max_alloc_size 0x" << max_alloc_size
@@ -510,7 +510,7 @@ void BtreeAllocator::init_add_free(uint64_t offset, uint64_t length)
     return;
   std::lock_guard l(lock);
   ceph_assert(offset + length <= uint64_t(device_size));
-  ldout(cct, 10) << __func__ << std::hex
+  ldout(cct, 20) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
                  << std::dec << dendl;
@@ -523,7 +523,7 @@ void BtreeAllocator::init_rm_free(uint64_t offset, uint64_t length)
     return;
   std::lock_guard l(lock);
   ceph_assert(offset + length <= uint64_t(device_size));
-  ldout(cct, 10) << __func__ << std::hex
+  ldout(cct, 20) << __func__ << std::hex
                  << " offset 0x" << offset
                  << " length 0x" << length
                  << std::dec << dendl;
