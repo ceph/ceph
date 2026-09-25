@@ -626,17 +626,17 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
   }
 
+  // rop.op is never set for a client read (ReadOp's constructor takes no
+  // OpRequestRef and nothing assigns rop.op after), so this line cannot
+  // carry the client reqid.  Join it to the client op on the same thread:
+  // "execute_ctx <reqid>" logged immediately before this "sent tid=" line.
   dout(10) << __func__ << ": sent tid=" << tid
            << " priority=" << priority
            << " for_recovery=" << rop.for_recovery
            << " redundant=" << rop.do_redundant_reads;
-#ifndef WITH_CRIMSON
-  if (rop.op) {
-    *_dout << " reqid=" << rop.op->get_reqid();
-  }
-#endif
   for (auto &&[hoid, read_request] : rop.to_read) {
-    *_dout << " " << hoid << " reads={";
+    *_dout << " " << hoid << " size=" << read_request.object_size
+           << " reads={";
     for (auto &&[_, shard_read] : read_request.shard_reads) {
       *_dout << " " << shard_read.pg_shard << ":" << shard_read.extents;
     }
