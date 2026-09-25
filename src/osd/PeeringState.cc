@@ -8351,7 +8351,9 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
       // pull anything.
       // FIXME: we can do better here.  if last_update==last_complete we
       //        can infer the rest!
-      psdout(10) << " osd." << *i << " has no missing, identical log" << dendl;
+      psdout(10) << " osd." << *i << " has no missing, identical log (lu "
+		 << pi.last_update << " lc " << pi.last_complete
+		 << " log_tail " << pi.log_tail << ")" << dendl;
       ps->peer_missing[*i].clear();
       continue;
     }
