@@ -4115,7 +4115,7 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t end)
   ceph_assert(h->file->num_readers.load() == 0);
   ceph_assert(h->file->fnode.ino > 1);
 
-  dout(10) << __func__ << " " << h << std::hex
+  dout(15) << __func__ << " " << h << std::hex
            << " 0x" << h->get_pos() << ".." << end << std::dec
            << " to " << h->file->fnode
            << " hint " << h->file->vselector_hint << dendl;
@@ -4273,7 +4273,7 @@ void BlueFS::_wait_for_aio(FileWriter *h)
   // NOTE: this is safe to call without a lock, as long as our reference is
   // stable.
   utime_t start;
-  lgeneric_subdout(cct, bluefs, 10) << __func__;
+  lgeneric_subdout(cct, bluefs, 15) << __func__;
   start = ceph_clock_now();
   *_dout << " " << h << dendl;
   for (auto p : h->iocv) {
@@ -4281,7 +4281,7 @@ void BlueFS::_wait_for_aio(FileWriter *h)
       p->aio_wait();
     }
   }
-  dout(10) << __func__ << " " << h << " done in " << (ceph_clock_now() - start) << dendl;
+  dout(15) << __func__ << " " << h << " done in " << (ceph_clock_now() - start) << dendl;
 }
 #endif
 
@@ -4363,7 +4363,7 @@ int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
     return 0;
   }
   uint64_t end = offset + length;
-  dout(10) << __func__ << " " << h << " 0x"
+  dout(15) << __func__ << " " << h << " 0x"
            << std::hex << offset << ".." << end << std::dec
 	   << " to " << h->file->fnode << dendl;
   ceph_assert(h->get_pos() <= h->file->fnode.size);
@@ -4630,7 +4630,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
                       size_t alloc_attempts,
                       bool permit_dev_fallback)
 {
-  dout(10) << __func__ << " len 0x" << std::hex << len
+  dout(15) << __func__ << " len 0x" << std::hex << len
            << " au 0x" << alloc_unit
            << std::dec << " from " << (int)id
            << " cooldown " << cooldown_deadline
