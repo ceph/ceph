@@ -152,7 +152,7 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
     const bool for_recovery,
     const std::optional<set<pg_shard_t>> &error_shards) {
   for (auto &&pg_shard: get_parent()->get_acting_shards()) {
-    dout(10) << __func__ << ": checking acting " << pg_shard << dendl;
+    dout(20) << __func__ << ": checking acting " << pg_shard << dendl;
     const pg_missing_t &missing = get_parent()->get_shard_missing(pg_shard);
     if (error_shards && error_shards->contains(pg_shard)) {
       continue;
@@ -183,7 +183,7 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
         ceph_assert(shards.contains(shard));
         continue;
       }
-      dout(10) << __func__ << ": checking backfill " << pg_shard << dendl;
+      dout(15) << __func__ << ": checking backfill " << pg_shard << dendl;
       ceph_assert(!shards.count(shard));
       const pg_info_t &info = get_parent()->get_shard_info(pg_shard);
       if (hoid < info.last_backfill &&
@@ -196,7 +196,7 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
     auto miter = get_parent()->get_missing_loc_shards().find(hoid);
     if (miter != get_parent()->get_missing_loc_shards().end()) {
       for (auto &&pg_shard: miter->second) {
-        dout(10) << __func__ << ": checking missing_loc " << pg_shard << dendl;
+        dout(15) << __func__ << ": checking missing_loc " << pg_shard << dendl;
         if (const auto m = get_parent()->maybe_get_shard_missing(pg_shard)) {
           ceph_assert(!m->is_missing(hoid));
         }
@@ -220,7 +220,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   ceph_assert(!for_recovery || !do_redundant_reads);
 
   if (read_request.object_size == 0) {
-    dout(10) << __func__ << " empty read" << dendl;
+    dout(15) << __func__ << " empty read" << dendl;
     return 0;
   }
 
@@ -512,7 +512,7 @@ void ECCommon::ReadPipeline::start_read_op(
       for_recovery,
       std::move(on_complete),
       std::move(to_read))).first->second;
-  dout(10) << __func__ << ": starting " << op << dendl;
+  dout(20) << __func__ << ": starting " << op << dendl;
   if (op.op) {
 #ifndef WITH_CRIMSON
     op.trace = op.op->pg_trace;
@@ -527,7 +527,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   const ceph_tid_t tid = rop.tid;
   bool reads_sent = false;
 
-  dout(10) << __func__ << ": starting read " << rop << dendl;
+  dout(20) << __func__ << ": starting read " << rop << dendl;
   ceph_assert(!rop.to_read.empty());
 
   map<pg_shard_t, ECSubRead> messages;
@@ -619,14 +619,32 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
     }
     msg->compute_cost(cct, subchunk_info);
     m.push_back(std::make_pair(pg_shard.osd, msg));
-    dout(10) << __func__ << ": will send msg " << *msg
+    dout(15) << __func__ << ": will send msg " << *msg
              << " to osd." << pg_shard.osd << dendl;
   }
   if (!m.empty()) {
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
   }
 
-  dout(10) << __func__ << ": started " << rop << dendl;
+  dout(10) << __func__ << ": sent tid=" << tid
+           << " priority=" << priority
+           << " for_recovery=" << rop.for_recovery
+           << " redundant=" << rop.do_redundant_reads;
+  for (auto &&[hoid, read_request] : rop.to_read) {
+    *_dout << " " << hoid << " reads={";
+    for (auto &&[_, shard_read] : read_request.shard_reads) {
+      *_dout << " " << shard_read.pg_shard << ":" << shard_read.extents;
+    }
+    *_dout << " }";
+    if (read_request.want_attrs) {
+      *_dout << " +attrs";
+    }
+    if (read_request.want_omap_header || read_request.want_omap_keys) {
+      *_dout << " +omap";
+    }
+  }
+  *_dout << dendl;
+  dout(20) << __func__ << ": started " << rop << dendl;
 
 #if WITH_CRIMSON
   if (local_read_op) {

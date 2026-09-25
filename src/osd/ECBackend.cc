@@ -816,7 +816,7 @@ void ECBackend::handle_sub_read_reply(
     ECSubReadReply &op,
     const ZTracer::Trace &trace) {
   trace.event("ec sub read reply");
-  dout(10) << __func__ << ": reply " << op << dendl;
+  dout(15) << __func__ << ": reply " << op << dendl;
   map<ceph_tid_t, ReadOp>::iterator iter = read_pipeline.tid_to_read_map.
                                                          find(op.tid);
   if (iter == read_pipeline.tid_to_read_map.end()) {
@@ -1064,6 +1064,15 @@ void ECBackend::handle_sub_read_reply(
   } else if (rop.in_progress.empty() ||
              is_complete == rop.complete.size()) {
     dout(20) << __func__ << " Complete: " << rop << dendl;
+    dout(10) << __func__ << " read complete tid=" << rop.tid
+             << " for_recovery=" << rop.for_recovery;
+    for (auto &&[oid, res] : rop.complete) {
+      *_dout << " " << oid << " r=" << res.r;
+      if (!res.errors.empty()) {
+        *_dout << " errors=" << res.errors;
+      }
+    }
+    *_dout << dendl;
     rop.trace.event("ec read complete");
     rop.debug_log.emplace_back(ECUtil::COMPLETE, op.from);
 
@@ -1079,7 +1088,7 @@ void ECBackend::handle_sub_read_reply(
     }
     read_pipeline.complete_read_op(std::move(rop));
   } else {
-    dout(10) << __func__ << " readop not complete: " << rop << dendl;
+    dout(20) << __func__ << " readop not complete: " << rop << dendl;
   }
 }
 
