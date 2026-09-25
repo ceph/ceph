@@ -76,6 +76,13 @@ the old state is submitted. In the log, the compact line then appears
 *before* the full prefix it belongs to instead of after it. This is rare
 in practice and no known hot path does it.
 
+A compact prefix does not repeat ``up``/``acting``/``backfill``/``async``,
+so a tool that scrapes those sets out of every ``pg[...]`` line (rather
+than tracking the most recent full prefix per PG) will see them go missing,
+or stale, on every line that carries a compact prefix. Such a tool should
+either read only lines whose prefix is full (for example, contains
+``lpr=``), or run the log through ``expand_pg_log_prefix.py`` first.
+
 Performance counters
 ====================
 
