@@ -926,6 +926,15 @@ void ReplicaActive::clear_remote_reservation(bool warn_if_no_reservation)
 		  pending_reservation_nonce, reservation_granted)
 	   << dendl;
   if (reservation_granted || pending_reservation_nonce) {
+    // the only record that a held or pending reservation was actually
+    // cancelled; a leaked/cancelled replica reservation is a known cause
+    // of scrubs stuck in ReservingReplicas, so keep this visible at the
+    // lean level even though the entry line above is not.
+    dout(10) << fmt::format(
+		    "ReplicaActive::clear_remote_reservation(): cancelling "
+		    "(nonce {}, granted {})",
+		    pending_reservation_nonce, reservation_granted)
+	     << dendl;
     m_osds->get_scrub_reserver().cancel_reservation(pg_id);
     reservation_granted = false;
     pending_reservation_nonce = 0;
