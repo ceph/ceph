@@ -14627,6 +14627,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             goto reply_no_propose;
           profile_map["k"] = to_string(k);
           profile_map["m"] = to_string(m);
+          // Record the crush parameters from the command line in the
+          // profile, so that it matches them when checked below.
+          if (!root.empty())
+            profile_map["crush-root"] = root;
+          if (!zone_failure_domain.empty())
+            profile_map["crush-zone-failure-domain"] = zone_failure_domain;
+          if (!osd_failure_domain.empty()) {
+            // ErasureCode::init() prefers the new key if present.
+            if (profile_map.contains("crush-osd-failure-domain"))
+              profile_map["crush-osd-failure-domain"] = osd_failure_domain;
+            else
+              profile_map["crush-failure-domain"] = osd_failure_domain;
+          }
+          if (!device_class.empty())
+            profile_map["crush-device-class"] = device_class;
 
           err = normalize_profile(auto_profile_name, profile_map, false, &ss);
           if (err)
