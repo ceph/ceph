@@ -34,6 +34,9 @@
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
+
+#include <limits>
 
 #include <fmt/core.h>
 
@@ -191,10 +194,14 @@ public:
         strand(boost::asio::make_strand(executor)),
         running(false),
         on_strand(on_strand),
-        work_notifier(executor)
-  { 
-    work_notifier.expires_at(std::chrono::steady_clock::time_point::max());
-  }
+        // A concurrent_channel is internally synchronized, so producers (submit) and
+        // consumers (workers) can use it from different threads with no strand. Delivery
+        // is buffered/level-triggered: a task sent while no worker is waiting is retained
+        // and picked up by the next async_receive. This removes both the data race and the
+        // lost-wakeup that the shared steady_timer (used as a condition variable) had.
+        // An effectively-unbounded capacity preserves the previous non-blocking submit().
+        channel(executor, std::numeric_limits<std::size_t>::max())
+  {}
 
   void start(const DoutPrefixProvider *dpp) {
     running = true;
@@ -205,16 +212,17 @@ public:
 
   void stop() {
     running = false;
-    work_notifier.cancel();
+    // Closing the channel completes every pending async_receive with channel_closed,
+    // so parked workers wake and exit cleanly.
+    channel.close();
   }
 
   void submit(Task task) {
-    {
-      std::lock_guard<std::mutex> lock(queue_mutex);
-      task_queue.push(std::move(task));
+    // try_send never blocks; with the max capacity above it only fails once the channel
+    // has been closed by stop(), in which case the task is dropped.
+    if (channel.try_send(boost::system::error_code{}, std::move(task))) {
       queued_tasks++;
     }
-    work_notifier.cancel_one();
   }
 
   struct Stats {
@@ -227,12 +235,11 @@ public:
     Stats() = default;
 
     explicit Stats(const CoroutinePool& pool) {
-      std::lock_guard<std::mutex> lock(pool.queue_mutex);
       pool_size      = pool.pool_size;
-      queue_size     = pool.task_queue.size();
-      active_workers = pool.active_workers;
-      idle_workers   = static_cast<int>(pool.pool_size) - pool.active_workers;
-      queued_tasks   = pool.queued_tasks;
+      active_workers = pool.active_workers.load();
+      idle_workers   = static_cast<int>(pool.pool_size) - active_workers;
+      queued_tasks   = pool.queued_tasks.load();
+      queue_size     = queued_tasks < 0 ? 0 : static_cast<size_t>(queued_tasks);
     }
   };
 
@@ -251,24 +258,16 @@ private:
 
   void worker_loop(const DoutPrefixProvider *dpp, size_t worker_id, boost::asio::yield_context yield) {
     while (running) {
-      Task task;
-      {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        while (running && task_queue.empty()) {
-          lock.unlock();
-          boost::system::error_code ec;
-          ldpp_dout(dpp, 20) << "Worker " << worker_id << " yielding (queue empty)" << dendl;
-          work_notifier.async_wait(yield[ec]);
-          lock.lock();
-        }
-        if (!running && task_queue.empty()) {
-          return;
-        }
-
-        task = std::move(task_queue.front());
-        task_queue.pop();
-        queued_tasks--;
+      boost::system::error_code ec;
+      ldpp_dout(dpp, 20) << "Worker " << worker_id << " waiting for task" << dendl;
+      // Blocks (suspends) the coroutine until a task arrives or the channel is closed.
+      // No mutex is held across this suspension; the channel handles synchronization.
+      Task task = channel.async_receive(yield[ec]);
+      if (ec) {
+        // channel_closed (stop() called) or operation aborted: exit the worker.
+        return;
       }
+      queued_tasks--;
 
       auto task_start = std::chrono::steady_clock::now();
       active_workers++;
@@ -289,13 +288,11 @@ private:
   boost::asio::any_io_executor executor;
   size_t pool_size;
   boost::asio::strand<boost::asio::any_io_executor> strand;
-  std::queue<Task> task_queue;
-  mutable std::mutex queue_mutex;
   std::atomic<bool> running;
   std::atomic<int> active_workers{0};
   std::atomic<int> queued_tasks{0};
   bool on_strand{false};
-  boost::asio::steady_timer work_notifier;
+  boost::asio::experimental::concurrent_channel<void(boost::system::error_code, Task)> channel;
 };
 
 class D4NFilterDriver : public FilterDriver {
