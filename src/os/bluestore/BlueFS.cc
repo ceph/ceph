@@ -2897,7 +2897,10 @@ int64_t BlueFS::_read(
         uint64_t x_off = 0;
         auto p = h->file->fnode.seek(buf->bl_off, &x_off);
 	if (p == h->file->fnode.extents.end()) {
-	  dout(5) << __func__ << " reading less then required "
+	  dout(5) << __func__ << " h " << h << " ino " << h->file->fnode.ino
+		  << " 0x" << std::hex << off << "~" << len
+		  << " size 0x" << h->file->fnode.size << std::dec
+		  << " reading less then required "
 		  << ret << "<" << ret + len << dendl;
 	  break;
 	}
