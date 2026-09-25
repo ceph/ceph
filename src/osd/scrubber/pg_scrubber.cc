@@ -1565,7 +1565,7 @@ void PgScrubber::apply_snap_mapper_fixes(
       if (auto r = m_pg->snap_mapper.remove_oid(hoid, &t_drv); r < 0) {
 
 	derr << __func__ << ": remove_oid returned " << cpp_strerror(r)
-	     << dendl;
+	     << " for " << hoid << dendl;
 	if (fix_op == snap_mapper_op_t::update) {
 	  // for inconsistent snapmapper objects (i.e. for
 	  // snap_mapper_op_t::inconsistent), we don't fret if we can't remove

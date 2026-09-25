@@ -973,7 +973,8 @@ int PGBackend::be_scan_list(
 	       << ", stat_error" << dendl;
       o.stat_error = true;
     } else if (r != 0) {
-      derr << __func__ << " got: " << cpp_strerror(r) << dendl;
+      derr << __func__ << " got: " << cpp_strerror(r) << " on " << poid
+	   << dendl;
       ceph_abort();
     }
 
@@ -993,7 +994,8 @@ int PGBackend::be_scan_list(
     if (r == -EINPROGRESS) {
       return -EINPROGRESS;
     } else if (r != 0) {
-      derr << __func__ << " be_deep_scrub got: " << cpp_strerror(r) << dendl;
+      derr << __func__ << " be_deep_scrub got: " << cpp_strerror(r)
+	   << " on " << poid << dendl;
       ceph_abort();
     }
   }
