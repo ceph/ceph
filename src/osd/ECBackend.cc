@@ -1314,6 +1314,13 @@ void ECBackend::submit_transaction(
     read_pipeline,
     rmw_pipeline,
     get_parent()->get_dpp());
+  // Policy: level-20 output must not change.  Keep this exact pre-existing
+  // line (duplicate of get_write_plan's own "plans=" dout(20), but under
+  // submit_transaction's __func__) so external tools matching on
+  // "submit_transaction.*hoid: " at 20 keep working unchanged.
+  ldpp_dout(get_parent()->get_dpp(), 20) << __func__
+             << " plans=" << plans
+             << dendl;
   ldpp_dout(get_parent()->get_dpp(), 10) << __func__
              << " tid=" << tid
              << " reqid=" << reqid
