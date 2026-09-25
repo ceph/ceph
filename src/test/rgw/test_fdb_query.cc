@@ -476,16 +476,32 @@ TEST_CASE("query helpers clamp algebraic infinity to ordinary FDB keyspace", "[f
        });
 }
 
-TEST_CASE("query contains clamps algebraically unbounded expressions", "[fdb][query]")
+TEST_CASE("query contains clamps universal and complement expressions", "[fdb][query]")
 {
  const auto algebraic_universal = algebraic_byte_query::universal();
+ const auto query_universal = lq::universal();
+ const auto without_m = lq::complement(lq::prefix("m"));
+ const auto ordinary_high_key = std::string("\xFE\xFF", 2);
  const auto keyspace_limit = std::string("\xFF", 1);
  const auto system_key = std::string("\xFF\0", 2);
 
  CHECK(lq::contains(algebraic_universal, ""));
  CHECK(lq::contains(algebraic_universal, "z"));
+ CHECK(lq::contains(algebraic_universal, ordinary_high_key));
  CHECK_FALSE(lq::contains(algebraic_universal, keyspace_limit));
  CHECK_FALSE(lq::contains(algebraic_universal, system_key));
+
+ CHECK(lq::contains(query_universal, ""));
+ CHECK(lq::contains(query_universal, ordinary_high_key));
+ CHECK_FALSE(lq::contains(query_universal, keyspace_limit));
+ CHECK_FALSE(lq::contains(query_universal, system_key));
+
+ CHECK(lq::contains(without_m, ""));
+ CHECK_FALSE(lq::contains(without_m, "m"));
+ CHECK(lq::contains(without_m, "n"));
+ CHECK(lq::contains(without_m, ordinary_high_key));
+ CHECK_FALSE(lq::contains(without_m, keyspace_limit));
+ CHECK_FALSE(lq::contains(without_m, system_key));
 }
 
 TEST_CASE("query execution intervals suppress empty selections", "[fdb][query]")

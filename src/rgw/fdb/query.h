@@ -436,17 +436,20 @@ struct is_keyspace_bounded<configured<ExprT>> : is_keyspace_bounded<ExprT> {};
 
 template <byte_interval_expression LHS_T, byte_interval_expression RHS_T>
 struct is_keyspace_bounded<core::detail::difference_expr<LHS_T, RHS_T>>
- : is_keyspace_bounded<LHS_T> {};
+ : is_keyspace_bounded<LHS_T>
+{};
 
 template <byte_interval_expression LHS_T, byte_interval_expression RHS_T>
 struct is_keyspace_bounded<core::detail::intersection_expr<LHS_T, RHS_T>>
  : std::bool_constant<is_keyspace_bounded<LHS_T>::value ||
-                      is_keyspace_bounded<RHS_T>::value> {};
+                      is_keyspace_bounded<RHS_T>::value>
+{};
 
 template <byte_interval_expression LHS_T, byte_interval_expression RHS_T>
 struct is_keyspace_bounded<core::detail::set_union_expr<LHS_T, RHS_T>>
  : std::bool_constant<is_keyspace_bounded<LHS_T>::value &&
-                      is_keyspace_bounded<RHS_T>::value> {};
+                      is_keyspace_bounded<RHS_T>::value>
+{};
 
 template <typename ExprT>
 inline constexpr bool is_keyspace_bounded_v =
