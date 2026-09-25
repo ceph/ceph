@@ -1272,8 +1272,8 @@ void ECCommon::RecoveryBackend::handle_recovery_push(
   RecoveryMessages *m,
   bool is_repair) {
   if (get_parent()->check_failsafe_full()) {
-    dout(10) << __func__ << " Out of space (failsafe) processing push request."
-             << dendl;
+    dout(0) << __func__ << " Out of space (failsafe) processing push request "
+            << op.soid << dendl;
     ceph_abort();
   }
 
