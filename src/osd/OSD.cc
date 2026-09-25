@@ -7675,6 +7675,9 @@ void OSD::dispatch_session_waiting(const ceph::ref_t<Session>& session, OSDMapRe
       pg_t actual_pgid = osdmap->raw_pg_to_pg(
 	static_cast<const MOSDOp*>(m)->get_pg());
       if (!osdmap->get_primary_shard(actual_pgid, &pgid)) {
+	dout(10) << __func__ << " dropping " << *m
+		 << ": no primary shard for " << actual_pgid
+		 << " e" << osdmap->get_epoch() << dendl;
 	continue;
       }
     } else {
