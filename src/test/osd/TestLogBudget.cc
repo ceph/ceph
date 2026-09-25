@@ -153,11 +153,17 @@ bool parse_entry_header(const std::string& line, int& prio, std::string& msg)
   return true;
 }
 
-/// Lines logged by the test harness itself (MockMessenger, EventLoop).
+/// Lines logged by the test harness itself (MockMessenger, EventLoop,
+/// MockPeeringListener, MockPGLogEntryHandler) rather than by the
+/// production code under test.
 bool is_harness_line(const std::string& msg)
 {
   return msg.rfind("MockMessenger:", 0) == 0 ||
-         msg.rfind("EventLoop:", 0) == 0;
+         msg.rfind("EventLoop:", 0) == 0 ||
+         msg.rfind("MockPGLogEntryHandler::", 0) == 0 ||
+         msg.rfind("send_cluster_message to ", 0) == 0 ||
+         msg.rfind("activate ", 0) == 0 ||
+         msg == "on_activate_complete";
 }
 
 /// Message with the "pg[...]" prefix removed and digit runs replaced by N.
