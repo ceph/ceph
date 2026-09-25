@@ -8397,8 +8397,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         result != -EAGAIN && result != -EINPROGRESS)
       result = 0;
 
-    if (result < 0)
+    if (result < 0) {
+      dout(10) << __func__ << " " << soid << " " << ctx->reqid
+	       << " failed " << osd_op << " r=" << result << dendl;
       break;
+    }
   }
   if (result < 0) {
     dout(10) << __func__ << " " << soid << " " << ctx->reqid
