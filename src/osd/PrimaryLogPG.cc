@@ -13993,7 +13993,7 @@ int PrimaryLogPG::prep_object_replica_deletes(
   ObjectContextRef obc = get_object_context(soid, false);
   if (obc) {
     if (!obc->get_recovery_read()) {
-      dout(20) << "replica delete delayed on " << soid
+      dout(10) << "replica delete delayed on " << soid
 	       << "; could not get rw_manager lock" << dendl;
       *work_started = true;
       return 0;
@@ -14048,7 +14048,7 @@ int PrimaryLogPG::prep_object_replica_pushes(
   }
 
   if (!obc->get_recovery_read()) {
-    dout(20) << "recovery delayed on " << soid
+    dout(10) << "recovery delayed on " << soid
 	     << "; could not get rw_manager lock" << dendl;
     *work_started = true;
     return 0;
@@ -14469,7 +14469,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	  ops++;
 	} else {
 	  *work_started = true;
-	  dout(20) << "backfill blocking on " << backfill_info.begin
+	  dout(10) << "backfill blocking on " << backfill_info.begin
 		   << "; could not get rw_manager lock" << dendl;
 	  break;
 	}
