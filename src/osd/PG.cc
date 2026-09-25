@@ -290,19 +290,26 @@ std::ostream& PG::gen_prefix(std::ostream& out) const
       out << *this << " ";
     } else {
       // Lean mode: print the full PG state only when it differs from the
-      // last full state logged for this PG (or after 1000 compact
-      // prefixes). Otherwise print a compact form that keeps pgid,
-      // last_update, primary (EC only), role and state, e.g.
+      // last full state logged for this PG, after 1000 compact prefixes,
+      // or after 60s (whichever comes first: the time limit covers a PG
+      // that is otherwise idle, so a log rotation, a cut window or a tail
+      // is not left with only compact prefixes for that PG). Otherwise
+      // print a compact form that keeps pgid, last_update, primary (EC
+      // only), role and state, e.g.
       //   pg[6.cs0( v 844'13576) p3(0) r=0 active+clean]
       // The full state for a compact line is the most recent full pg[...]
       // for the same PG earlier in the log.
       constexpr unsigned lean_prefix_refresh = 1000;
+      constexpr auto lean_prefix_refresh_age = std::chrono::seconds(60);
       CachedStackStringStream css;
       *css << *this;
+      auto now = ceph::coarse_mono_clock::now();
       if (css->strv() != last_logged_pg_state ||
-	  ++lean_prefixes_since_full >= lean_prefix_refresh) {
+	  ++lean_prefixes_since_full >= lean_prefix_refresh ||
+	  now - last_logged_pg_state_stamp >= lean_prefix_refresh_age) {
 	last_logged_pg_state = css->strv();
 	lean_prefixes_since_full = 0;
+	last_logged_pg_state_stamp = now;
 	out << css->strv() << " ";
       } else {
 	out << "pg[" << info.pgid << "( v " << info.last_update << ")";

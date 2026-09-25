@@ -40,8 +40,8 @@ When ``debug_osd`` is 20, or when its memory level is higher than its log
 level (for example the default ``1/5``), this full prefix is printed on every
 line. Otherwise (for example ``debug_osd = 10``) the full prefix is printed
 only when it differs from the last full prefix printed for that PG (and at
-least once every 1000 lines of that PG), and the other lines carry a compact
-prefix::
+least once every 1000 lines of that PG, or every 60 seconds, whichever comes
+first), and the other lines carry a compact prefix::
 
   osd.3 pg_epoch: 844 pg[6.cs0( v 844'13576) p3(0) r=0 active+clean]
 
