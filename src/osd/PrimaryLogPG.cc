@@ -587,7 +587,7 @@ bool PrimaryLogPG::should_send_op(
   if (is_async_recovery_target(peer) &&
       recovery_state.get_peer_missing(peer).is_missing(hoid)) {
     should_send = false;
-    dout(15) << __func__ << " issue_repop shipping empty opt to osd." << peer
+    dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
              << ", object " << hoid
              << " which is pending recovery in async_recovery_targets" << dendl;
   }
