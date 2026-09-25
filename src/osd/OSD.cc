@@ -11408,7 +11408,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
 	if (create_info) {
 	  if (create_info->by_mon &&
 	      osdmap->get_pg_acting_primary(token.pgid) != osd->whoami) {
-	    dout(20) << __func__ << " " << token
+	    // dout-lint: error-path
+	    dout(10) << __func__ << " " << token
 		     << " no pg, no longer primary, ignoring mon create on "
 		     << qi << dendl;
 	  } else {
@@ -11427,14 +11428,17 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
 	      // distribute remaining split children to other shards below!
 	      break;
 	    }
-	    dout(20) << __func__ << " ignored create on " << qi << dendl;
+	    // dout-lint: error-path
+	    dout(10) << __func__ << " ignored create on " << qi << dendl;
 	  }
 	} else {
-	  dout(20) << __func__ << " " << token
+	  // dout-lint: error-path
+	  dout(10) << __func__ << " " << token
 		   << " no pg, peering, !create, discarding " << qi << dendl;
 	}
       } else {
-	dout(20) << __func__ << " " << token
+	// dout-lint: error-path
+	dout(10) << __func__ << " " << token
 		 << " no pg, peering, doesn't map here e" << osdmap->get_epoch()
 		 << ", discarding " << qi
 		 << dendl;
