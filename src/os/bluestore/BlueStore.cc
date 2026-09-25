@@ -14747,16 +14747,38 @@ void BlueStore::_txc_calc_cost(TransContext *txc)
   {
     // name the touched objects (skip pgmeta, cap the list) so a hung or
     // corrupt txc can be found by object id even if it never logs its
-    // commit line.
+    // commit line. Data writes, setattr(s), set_alloc_hint, touch,
+    // truncate, zero and clone targets only ever reach txc->onodes (via
+    // write_onode()), not txc->modified_objects (which gets entries only
+    // from omap-only ops, rename and removal), so we have to walk both
+    // sets; txc->onodes is checked first since it is the common case.
     unsigned n = 0;
-    for (auto& o : txc->modified_objects) {
-      if (o->oid.is_pgmeta())
-	continue;
+    bool more = true;
+    auto name = [&](const OnodeRef& o) {
+      if (o->oid.is_pgmeta()) {
+	return true;
+      }
       if (n++ == 3) {
 	*_dout << " ...";
-	break;
+	return false;
       }
       *_dout << " " << o->oid;
+      return true;
+    };
+    for (auto& o : txc->onodes) {
+      if (!(more = name(o))) {
+	break;
+      }
+    }
+    if (more) {
+      for (auto& o : txc->modified_objects) {
+	if (txc->onodes.count(o)) {
+	  continue;
+	}
+	if (!(more = name(o))) {
+	  break;
+	}
+      }
     }
   }
   *_dout << dendl;
