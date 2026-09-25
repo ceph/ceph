@@ -2160,10 +2160,25 @@ bool PG::can_discard_request(OpRequestRef& op)
 
 void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx &rctx)
 {
-  dout(10) << __func__ << ": " << evt->get_desc() << dendl;
+  // NullEvt only makes advance_pg() (already run by our caller) bring the PG
+  // up to date with the OSD's map; the state machine ignores it. Lease events
+  // are periodic keep-alives. Log both below level 10. The type checks run only
+  // when level 10 is enabled.
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    const boost::statechart::event_base *e = evt->evt.get();
+    if (dynamic_cast<const NullEvt*>(e)) {
+      dout(20) << __func__ << ": " << evt->get_desc() << dendl;
+    } else if (dynamic_cast<const RenewLease*>(e) ||
+	       dynamic_cast<const MLease*>(e) ||
+	       dynamic_cast<const MLeaseAck*>(e)) {
+      dout(15) << __func__ << ": " << evt->get_desc() << dendl;
+    } else {
+      dout(10) << __func__ << ": " << evt->get_desc() << dendl;
+    }
+  }
   ceph_assert(have_same_or_newer_map(evt->get_epoch_sent()));
   if (old_peering_evt(evt)) {
-    dout(10) << "discard old " << evt->get_desc() << dendl;
+    dout(15) << "discard old " << evt->get_desc() << dendl;
   } else {
     recovery_state.handle_event(evt, &rctx);
   }
