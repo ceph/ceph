@@ -2210,7 +2210,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     }
   }
 
-  dout(10) << "do_op " << *m
+  dout(15) << "do_op " << *m
 	   << (op->may_write() ? " may_write" : "")
 	   << (op->may_read() ? " may_read" : "")
 	   << (op->may_cache() ? " may_cache" : "")
@@ -4314,7 +4314,7 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
 void PrimaryLogPG::execute_ctx(OpContext *ctx)
 {
   FUNCTRACE(cct);
-  dout(10) << __func__ << " " << ctx << dendl;
+  dout(20) << __func__ << " " << ctx << dendl;
   ctx->reset_obs(ctx->obc);
   ctx->update_log_only = false; // reset in case finish_copyfrom() is re-running execute_ctx
   OpRequestRef op = ctx->op;
@@ -4351,13 +4351,13 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     ctx->at_version = get_next_version();
     ctx->mtime = m->get_mtime();
 
-    dout(10) << __func__ << " " << soid << " " << *ctx->ops
+    dout(10) << __func__ << " " << ctx->reqid << " " << soid << " " << *ctx->ops
 	     << " ov " << obc->obs.oi.version << " av " << ctx->at_version
 	     << " snapc " << ctx->snapc
 	     << " snapset " << obc->ssc->snapset
 	     << dendl;
   } else {
-    dout(10) << __func__ << " " << soid << " " << *ctx->ops
+    dout(10) << __func__ << " " << ctx->reqid << " " << soid << " " << *ctx->ops
 	     << " ov " << obc->obs.oi.version
 	     << dendl;
   }
@@ -4503,7 +4503,12 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 	MOSDOpReply *reply = ctx->reply;
 	ctx->reply = nullptr;
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-	dout(10) << " sending reply on " << *m << " " << reply << dendl;
+	dout(10) << " sending reply on " << *m << " " << reply
+		 << " r=" << reply->get_result()
+		 << " v " << ctx->at_version
+		 << " uv " << ctx->user_at_version
+		 << " lat " << (ceph_clock_now() - m->get_recv_stamp())
+		 << dendl;
 	osd->send_message_osd_client(reply, m->get_connection());
 	ctx->sent_reply = true;
 	ctx->op->mark_commit_sent();
@@ -9413,6 +9418,11 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 
   reply->set_result(result);
   reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+  dout(10) << __func__ << " " << *m << " r=" << result
+	   << " uv " << reply->get_user_version()
+	   << " outb " << ctx->bytes_read
+	   << " lat " << (ceph_clock_now() - m->get_recv_stamp())
+	   << dendl;
   osd->send_message_osd_client(reply, m->get_connection());
   close_op_ctx(ctx);
 }
