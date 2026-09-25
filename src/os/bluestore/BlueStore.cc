@@ -2115,7 +2115,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 void BlueStore::OnodeSpace::clear()
 {
   std::lock_guard l(cache->lock);
-  ldout(cache->cct, 10) << __func__ << " " << onode_map.size()<< dendl;
+  ldout(cache->cct, 15) << __func__ << " " << onode_map.size()<< dendl;
   for (auto &p : onode_map) {
     cache->_rm(p.second.get());
   }
@@ -5439,7 +5439,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 void BlueStore::Collection::split_cache(
   Collection *dest)
 {
-  ldout(store->cct, 10) << __func__ << " to " << dest << dendl;
+  ldout(store->cct, 10) << __func__ << " to " << dest << " " << dest->cid << dendl;
 
   auto *ocache = get_onode_cache();
   auto *ocache_dest = dest->get_onode_cache();
@@ -5510,7 +5510,7 @@ void BlueStore::Collection::split_cache(
 
       for (auto& b : o->bc.buffer_map) {
         ceph_assert(!b.is_writing());
-        ldout(store->cct, 1)
+        ldout(store->cct, 20)
           << __func__ << "   moving " << b << dendl;
         dest->cache->_move(cache, &b);
       }
@@ -12676,7 +12676,7 @@ BlueStore::CollectionRef BlueStore::_get_collection_by_oid(const ghobject_t& oid
 
 void BlueStore::_queue_reap_collection(CollectionRef& c)
 {
-  dout(10) << __func__ << " " << c << " " << c->cid << dendl;
+  dout(15) << __func__ << " " << c << " " << c->cid << dendl;
   // _reap_collections and this in the same thread,
   // so no need a lock.
   removed_collections.push_back(c);
@@ -12698,7 +12698,7 @@ void BlueStore::_reap_collections()
   list<CollectionRef>::iterator p = removed_colls.begin();
   while (p != removed_colls.end()) {
     CollectionRef c = *p;
-    dout(10) << __func__ << " " << c << " " << c->cid << dendl;
+    dout(15) << __func__ << " " << c << " " << c->cid << dendl;
     if (c->onode_space.map_any([&](Onode* o) {
 	  ceph_assert(!o->exists);
 	  if (o->flushing_count.load()) {
@@ -12716,7 +12716,7 @@ void BlueStore::_reap_collections()
     dout(10) << __func__ << " " << c << " " << c->cid << " done" << dendl;
   }
   if (removed_colls.empty()) {
-    dout(10) << __func__ << " all reaped" << dendl;
+    dout(15) << __func__ << " all reaped" << dendl;
   } else {
     removed_collections.splice(removed_collections.begin(), removed_colls);
   }
@@ -15221,9 +15221,9 @@ void BlueStore::_txc_finish(TransContext *txc)
   if (empty && osr->zombie) {
     std::lock_guard l(zombie_osr_lock);
     if (zombie_osr_set.erase(osr->cid)) {
-      dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
+      dout(10) << __func__ << " reaping empty zombie osr " << osr << " " << osr->cid << dendl;
     } else {
-      dout(10) << __func__ << " empty zombie osr " << osr << " already reaped"
+      dout(15) << __func__ << " empty zombie osr " << osr << " already reaped"
 	       << dendl;
     }
   }
@@ -15266,7 +15266,7 @@ void BlueStore::_osr_attach(Collection *c)
     auto p = zombie_osr_set.find(c->cid);
     if (p == zombie_osr_set.end()) {
       c->osr = ceph::make_ref<OpSequencer>(this, next_sequencer_id++, c->cid);
-      ldout(cct, 10) << __func__ << " " << c->cid
+      ldout(cct, 15) << __func__ << " " << c->cid
 		     << " fresh osr " << c->osr << dendl;
     } else {
       c->osr = p->second;
@@ -19169,7 +19169,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
       // so bypass check.
       bool exists = (!next.is_max());
       for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
-        dout(10) << __func__ << " oid " << *it << dendl;
+        dout(15) << __func__ << " oid " << *it << dendl;
         auto onode = (*c)->onode_space.lookup(*it);
         exists = !onode || onode->exists;
         if (exists) {
