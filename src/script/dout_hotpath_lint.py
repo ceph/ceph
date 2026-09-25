@@ -50,7 +50,19 @@ Usage:
     dout_hotpath_lint.py --source-root <ceph checkout> \\
         --baseline src/script/dout_hotpath_baseline.json [--update] [--strict]
 
-Exit status: 0 ok, 1 ratchet violated / function not found, 2 usage error.
+A need_dynamic() level, such as `need_dynamic(cond ? 20 : 10)`, is
+classified by the minimum of its branches, since that is the level that
+would need a baseline bump; a level that cannot be resolved that way (a
+bare variable or a function call) is reported but does not fail the
+ratchet, since telling it apart from a genuine new low-level line would
+need dataflow analysis across statements.
+
+A manifest function that is no longer found (renamed or moved) is reported
+as a note, not a failure, so that an unrelated refactor does not fail
+make check: pass --strict to make it fatal.
+
+Exit status: 0 ok, 1 ratchet violated (or, with --strict, a stale count or
+a missing function), 2 usage error.
 """
 
 import argparse
@@ -226,12 +238,80 @@ def split_args(s):
     return [a.strip() for a in args]
 
 
-def classify_level(arg):
-    a = arg.strip()
+CALL_RE = re.compile(r'^([\w:]+)\s*\((.*)\)$', re.DOTALL)
+
+
+def _strip_outer_parens(a):
+    """Strip a redundant outer '(...)' pair, but only when the leading '('
+    is actually matched by the trailing ')' (not e.g. in "(a)+(b)")."""
     while a.startswith('(') and a.endswith(')'):
+        depth = 0
+        matched = True
+        for i, c in enumerate(a):
+            if c == '(':
+                depth += 1
+            elif c == ')':
+                depth -= 1
+                if depth == 0 and i != len(a) - 1:
+                    matched = False
+                    break
+        if not matched:
+            break
         a = a[1:-1].strip()
+    return a
+
+
+def _split_ternary(s):
+    """Return (pos of top-level '?', pos of its matching ':') in s, or
+    (None, None).  Skips '::' (scope resolution) and nested ternaries."""
+    depth = 0
+    qpos = None
+    nested = 0
+    i, n = 0, len(s)
+    while i < n:
+        c = s[i]
+        if c in '([{':
+            depth += 1
+        elif c in ')]}':
+            depth -= 1
+        elif depth == 0 and c == ':' and i + 1 < n and s[i + 1] == ':':
+            i += 2
+            continue
+        elif depth == 0 and c == '?':
+            if qpos is None:
+                qpos = i
+            else:
+                nested += 1
+        elif depth == 0 and c == ':' and qpos is not None:
+            if nested > 0:
+                nested -= 1
+            else:
+                return qpos, i
+        i += 1
+    return None, None
+
+
+def classify_level(arg):
+    """Return the debug level of a dout()-family macro's level argument as
+    an int, or None if it cannot be resolved to one.  Handles a literal
+    int, a redundant '(...)' wrapper, ceph::dout::need_dynamic(...), and a
+    '?:' conditional whose branches both resolve to a level (the level is
+    then the minimum of the two, since that is the level that would need a
+    baseline bump).  A bare identifier or function call (e.g. a level
+    computed by a helper on an earlier line) is not resolvable: it is
+    reported but not gated (see the "dynamic" note in main())."""
+    a = _strip_outer_parens(arg.strip())
     if INT_RE.match(a):
         return int(a)
+    m = CALL_RE.match(a)
+    if m and m.group(1).rsplit('::', 1)[-1] == 'need_dynamic':
+        return classify_level(m.group(2))
+    q, c = _split_ternary(a)
+    if q is not None:
+        t = classify_level(a[q + 1:c])
+        f = classify_level(a[c + 1:])
+        if t is not None and f is not None:
+            return min(t, f)
     return None
 
 
@@ -350,7 +430,9 @@ def main(argv=None):
     ap.add_argument('--update', action='store_true',
                     help='rewrite the baseline counts from the current source')
     ap.add_argument('--strict', action='store_true',
-                    help='also fail when a count went down (baseline stale)')
+                    help='also fail when a count went down (baseline stale) '
+                         'or a manifest function is not found (renamed or '
+                         'moved)')
     ap.add_argument('--verbose', '-v', action='store_true',
                     help='print every function, not just changes')
     a = ap.parse_args(argv)
@@ -384,28 +466,44 @@ def main(argv=None):
     stale = 0
     print('dout_hotpath_lint: level<=%d debug statements in %d hot-path '
           'functions (baseline %s)' % (max_level, len(manifest), a.baseline))
+    renamed = 0
     for ent, r in zip(manifest, results):
         name = '%s:%s' % (r['file'], r['function'])
         if not r['found']:
-            print('  FAIL %s: definition not found; if it was renamed or '
-                  'moved, update the manifest in %s' % (name, a.baseline))
-            failures += 1
+            print('  %s %s: definition not found; if it was renamed or '
+                  'moved, update the manifest in %s' %
+                  ('FAIL' if a.strict else 'note', name, a.baseline))
+            if a.strict:
+                failures += 1
+            else:
+                renamed += 1
             continue
         msgs = []
         failed = False
-        for key in ('le10', 'dynamic'):
-            want = ent.get(key)
-            have = r[key]
-            if want is None:
-                msgs.append('%s=%d (no baseline)' % (key, have))
-                failed = True
-            elif have > want:
-                msgs.append('%s %d > baseline %d' % (key, have, want))
-                failed = True
-            elif have < want:
-                msgs.append('%s %d < baseline %d (lower the baseline)' %
-                            (key, have, want))
-                stale += 1
+        key = 'le10'
+        want = ent.get(key)
+        have = r[key]
+        if want is None:
+            msgs.append('%s=%d (no baseline)' % (key, have))
+            failed = True
+        elif have > want:
+            msgs.append('%s %d > baseline %d' % (key, have, want))
+            failed = True
+        elif have < want:
+            msgs.append('%s %d < baseline %d (lower the baseline)' %
+                        (key, have, want))
+            stale += 1
+        if r['dynamic']:
+            # need_dynamic() with a level that count_statements() could not
+            # resolve to a literal (e.g. a variable computed by a helper on
+            # an earlier line).  Not gated -- that would need dataflow
+            # analysis across statements -- but shown so a reviewer can
+            # check the levels used by eye; see classify_level().
+            base_dynamic = ent.get('dynamic')
+            note = 'dynamic=%d' % r['dynamic']
+            if base_dynamic is not None and r['dynamic'] != base_dynamic:
+                note += ' (baseline %d, not gated)' % base_dynamic
+            msgs.append(note)
         if failed:
             failures += 1
         if msgs:
@@ -426,6 +524,11 @@ def main(argv=None):
               'debug_log_levels.rst.' % (max_level, max_level, EXEMPT_MARKER,
                                          os.path.relpath(__file__)))
         return 1
+    if renamed:
+        print('dout_hotpath_lint: %d function(s) not found (see "note" '
+              'lines above); pass --strict to make this fatal, e.g. in a '
+              'dedicated, non-gating job.  Most likely they were renamed or '
+              'moved: update the manifest in %s.' % (renamed, a.baseline))
     if stale:
         print('dout_hotpath_lint: %d count(s) went down; run with --update '
               'to ratchet the baseline.' % stale)

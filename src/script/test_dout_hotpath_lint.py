@@ -54,6 +54,19 @@ void Foo::cold()
 }
 '''
 
+# Foo::dyn(int) exercises need_dynamic(): two ternaries whose branches are
+# both int literals (statically resolvable, classified by their minimum)
+# and one bare variable (not resolvable: report-only, see classify_level()).
+DYNAMIC_SOURCE = r'''
+void Foo::dyn(int r) const
+{
+  dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15)) << "a" << dendl;
+  dout(ceph::dout::need_dynamic(r == 0 ? 20 : 10)) << "b" << dendl;
+  const int lvl = r;
+  dout(ceph::dout::need_dynamic(lvl)) << "c" << dendl;
+}
+'''
+
 
 class TestLint(unittest.TestCase):
     def setUp(self):
@@ -123,13 +136,66 @@ class TestLint(unittest.TestCase):
         self.assertEqual(rc, 1)
 
     def test_missing_function(self):
+        # a renamed/moved function is a non-fatal note by default (an
+        # unrelated refactor should not fail make check); --strict makes
+        # it fatal for a dedicated, non-gating job.
         with open(self.baseline, 'w') as f:
             json.dump({'version': 1, 'max_level': 10, 'functions': [
                 {'file': 'src/foo.cc', 'function': 'Foo::gone',
                  'le10': 0, 'dynamic': 0}]}, f)
         rc, out = self.run_lint()
+        self.assertEqual(rc, 0, out)
+        self.assertIn('definition not found', out)
+        rc, out = self.run_lint('--strict')
         self.assertEqual(rc, 1)
         self.assertIn('definition not found', out)
+
+    def test_classify_level_ternary_and_need_dynamic(self):
+        self.assertEqual(lint.classify_level('10'), 10)
+        self.assertEqual(lint.classify_level(' ( 10 ) '), 10)
+        self.assertEqual(lint.classify_level('(a)+(b)'), None)
+        self.assertEqual(
+            lint.classify_level('ceph::dout::need_dynamic(cond ? 20 : 10)'),
+            10)
+        self.assertEqual(
+            lint.classify_level('need_dynamic(r < 0 ? 10 : 15)'), 10)
+        self.assertEqual(
+            lint.classify_level(
+                'ceph::dout::need_dynamic(version == eversion_t() ? 20 : 10)'),
+            10)
+        # a bare variable, or a ternary with one unresolvable branch, is not
+        # statically resolvable.
+        self.assertIsNone(lint.classify_level('op_log_level'))
+        self.assertIsNone(
+            lint.classify_level('ceph::dout::need_dynamic(op_log_level)'))
+        self.assertIsNone(
+            lint.classify_level('ceph::dout::need_dynamic(a ? 20 : b)'))
+
+    def test_need_dynamic_ternary_classified_by_minimum(self):
+        masked = lint.mask_source(DYNAMIC_SOURCE)
+        bodies = lint.find_function_bodies(masked, 'Foo::dyn')
+        self.assertEqual(len(bodies), 1)
+        c = lint.count_statements(DYNAMIC_SOURCE, masked, bodies[0][0],
+                                  bodies[0][1], 10)
+        # both ternaries resolve statically to a minimum of 10: real le10
+        # lines that must be gated.
+        self.assertEqual(c['le10'], 2)
+        # the bare-variable need_dynamic() cannot be resolved statically.
+        self.assertEqual(c['dynamic'], 1)
+
+    def test_dynamic_is_report_only(self):
+        with open(self.src, 'w') as f:
+            f.write(DYNAMIC_SOURCE)
+        with open(self.baseline, 'w') as f:
+            json.dump({'version': 1, 'max_level': 10, 'functions': [
+                {'file': 'src/foo.cc', 'function': 'Foo::dyn',
+                 'le10': 2, 'dynamic': 0}]}, f)
+        # dynamic went from a baseline of 0 to 1, but a need_dynamic() level
+        # that cannot be resolved to a literal is report-only: it must not
+        # fail the ratchet on its own.
+        rc, out = self.run_lint()
+        self.assertEqual(rc, 0, out)
+        self.assertIn('dynamic=1', out)
 
 
 if __name__ == '__main__':
