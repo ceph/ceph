@@ -6087,6 +6087,11 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
       context< Active >().remote_shards_to_reserve_backfill.end()) {
     // The primary never backfills itself
     ceph_assert(*backfill_osd_it != ps->pg_whoami);
+    psdout(10) << "requesting remote backfill reservation from "
+	       << *backfill_osd_it
+	       << " prio " << ps->get_backfill_priority()
+	       << " num_bytes " << num_bytes
+	       << " peer_bytes " << ps->peer_bytes[*backfill_osd_it] << dendl;
     pl->send_cluster_message(
       backfill_osd_it->osd,
       TOPNSPC::make_message<MBackfillReserve>(
@@ -6624,6 +6629,9 @@ PeeringState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &ev
   if (remote_recovery_reservation_it !=
       context< Active >().remote_shards_to_reserve_recovery.end()) {
     ceph_assert(*remote_recovery_reservation_it != ps->pg_whoami);
+    psdout(10) << "requesting remote recovery reservation from "
+	       << *remote_recovery_reservation_it
+	       << " prio " << ps->get_recovery_priority() << dendl;
     pl->send_cluster_message(
       remote_recovery_reservation_it->osd,
       TOPNSPC::make_message<MRecoveryReserve>(
