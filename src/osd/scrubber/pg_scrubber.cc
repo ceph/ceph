@@ -467,7 +467,7 @@ void PgScrubber::update_targets(utime_t scrub_clock_now)
 {
   const auto applicable_conf = populate_config_params();
 
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
 		  "{}: config:{} job on entry:{}{}", __func__, applicable_conf,
 		  *m_scrub_job,
 		  m_pg->info.stats.stats_invalid ? " invalid-stats" : "")
@@ -484,7 +484,7 @@ void PgScrubber::update_targets(utime_t scrub_clock_now)
   m_scrub_job->adjust_deep_schedule(
       m_pg->info.history.last_deep_scrub_stamp, applicable_conf);
 
-  dout(10) << fmt::format("{}: adjusted:{}", __func__, *m_scrub_job) << dendl;
+  dout(15) << fmt::format("{}: adjusted:{}", __func__, *m_scrub_job) << dendl;
 }
 
 
@@ -537,7 +537,7 @@ void PgScrubber::update_scrub_job()
   // if we were marked as 'not registered' - do not try to push into
   // the queue. And if we are already in the queue - dequeue.
   if (!m_scrub_job->is_registered()) {
-    dout(10) << fmt::format("{}: PG[{}] not registered", __func__, m_pg_id)
+    dout(20) << fmt::format("{}: PG[{}] not registered", __func__, m_pg_id)
 	     << dendl;
     return;
   }
@@ -695,7 +695,7 @@ Scrub::sched_conf_t PgScrubber::populate_config_params() const
 		  __func__, configs.shallow_interval, shallow_pool,
 		  configs.deep_interval, deep_pool)
 	   << dendl;
-  dout(10) << fmt::format("{}: updated config:{}", __func__, configs) << dendl;
+  dout(15) << fmt::format("{}: updated config:{}", __func__, configs) << dendl;
   return configs;
 }
 
