@@ -552,8 +552,15 @@ int AsyncConnection::send_msg(MessageRef&& m)
   FUNCTRACE(async_msgr->cct);
 
   lgeneric_subdout(async_msgr->cct, ms,
-		   1) << "-- " << async_msgr->get_myaddrs() << " --> "
-		      << get_peer_addrs() << " -- "
+		   1) << "-- "
+		      << entity_addrvec_brief_t{
+			   async_msgr->get_myaddrs(),
+			   !async_msgr->cct->_conf->subsys.should_gather<ceph_subsys_ms, 5>()}
+		      << " --> "
+		      << entity_addrvec_brief_t{
+			   get_peer_addrs(),
+			   !async_msgr->cct->_conf->subsys.should_gather<ceph_subsys_ms, 5>()}
+		      << " -- "
 		      << *m << " -- " << m << " con "
 		      << this
 		      << dendl;
