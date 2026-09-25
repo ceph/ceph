@@ -13244,8 +13244,7 @@ void PrimaryLogPG::clear_async_reads()
 {
   dout(15) << __func__ << dendl;
   for(auto& i : in_progress_async_reads) {
-    dout(10) << "clear ctx: "
-             << "OpRequestRef " << i.first
+    dout(10) << __func__ << " clear ctx: " << *i.first->get_req()
              << " OpContext " << i.second
              << dendl;
     close_op_ctx(i.second);
