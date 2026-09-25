@@ -681,7 +681,7 @@ void PGLog::write_log_and_missing(
   bool require_rollback)
 {
   if (needs_write()) {
-    dout(6) << "write_log_and_missing with: "
+    dout(15) << "write_log_and_missing with: "
 	     << "dirty_to: " << dirty_to
 	     << ", dirty_from: " << dirty_from
 	     << ", writeout_from: " << writeout_from
@@ -708,7 +708,7 @@ void PGLog::write_log_and_missing(
       this);
     undirty();
   } else {
-    dout(10) << "log is not dirty" << dendl;
+    dout(20) << "log is not dirty" << dendl;
   }
 }
 
@@ -777,7 +777,7 @@ void PGLog::_write_log_and_missing_wo_missing(
   const DoutPrefixProvider *dpp
   )
 {
-  ldpp_dout(dpp, 10) << "_write_log_and_missing_wo_missing, clearing up to " << dirty_to
+  ldpp_dout(dpp, 15) << "_write_log_and_missing_wo_missing, clearing up to " << dirty_to
 		     << " dirty_to_dups=" << dirty_to_dups
 		     << " dirty_from_dups=" << dirty_from_dups
 		     << " write_from_dups=" << write_from_dups << dendl;
@@ -849,7 +849,7 @@ void PGLog::_write_log_and_missing_wo_missing(
       dirty_from_dup.get_key_name(), max.get_key_name());
   }
 
-  ldpp_dout(dpp, 10) << __func__ << " going to encode log.dups.size()="
+  ldpp_dout(dpp, 20) << __func__ << " going to encode log.dups.size()="
 		     << log.dups.size() << dendl;
   for (const auto& entry : log.dups) {
     if (entry.version > dirty_to_dups)
@@ -858,7 +858,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     encode(entry, bl);
     (*km)[entry.get_key_name()] = std::move(bl);
   }
-  ldpp_dout(dpp, 10) << __func__ << " 1st round encoded log.dups.size()="
+  ldpp_dout(dpp, 20) << __func__ << " 1st round encoded log.dups.size()="
 		     << log.dups.size() << dendl;
   for (auto p = log.dups.rbegin();
        p != log.dups.rend() &&
@@ -869,7 +869,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     encode(*p, bl);
     (*km)[p->get_key_name()] = std::move(bl);
   }
-  ldpp_dout(dpp, 10) << __func__ << " 2st round encoded log.dups.size()="
+  ldpp_dout(dpp, 20) << __func__ << " 2st round encoded log.dups.size()="
 		     << log.dups.size() << dendl;
 
   if (dirty_divergent_priors) {
@@ -885,7 +885,7 @@ void PGLog::_write_log_and_missing_wo_missing(
       log.get_rollback_info_trimmed_to(),
       (*km)["rollback_info_trimmed_to"]);
   }
-  ldpp_dout(dpp, 10) << "end of " << __func__ << dendl;
+  ldpp_dout(dpp, 20) << "end of " << __func__ << dendl;
 }
 
 // static
@@ -910,7 +910,7 @@ void PGLog::_write_log_and_missing(
   set<string> *log_keys_debug,
   const DoutPrefixProvider *dpp
   ) {
-  ldpp_dout(dpp, 10) << __func__ << " clearing up to " << dirty_to
+  ldpp_dout(dpp, 15) << __func__ << " clearing up to " << dirty_to
 		     << " dirty_to_dups=" << dirty_to_dups
 		     << " dirty_from_dups=" << dirty_from_dups
 		     << " write_from_dups=" << write_from_dups
@@ -997,7 +997,7 @@ void PGLog::_write_log_and_missing(
       dirty_from_dup.get_key_name(), max.get_key_name());
   }
 
-  ldpp_dout(dpp, 10) << __func__ << " going to encode log.dups.size()="
+  ldpp_dout(dpp, 20) << __func__ << " going to encode log.dups.size()="
 		     << log.dups.size() << dendl;
   for (const auto& entry : log.dups) {
     if (entry.version > dirty_to_dups)
@@ -1006,7 +1006,7 @@ void PGLog::_write_log_and_missing(
     encode(entry, bl);
     (*km)[entry.get_key_name()] = std::move(bl);
   }
-  ldpp_dout(dpp, 10) << __func__ << " 1st round encoded log.dups.size()="
+  ldpp_dout(dpp, 20) << __func__ << " 1st round encoded log.dups.size()="
 		     << log.dups.size() << dendl;
 
   for (auto p = log.dups.rbegin();
@@ -1018,7 +1018,7 @@ void PGLog::_write_log_and_missing(
     encode(*p, bl);
     (*km)[p->get_key_name()] = std::move(bl);
   }
-  ldpp_dout(dpp, 10) << __func__ << " 2st round encoded log.dups.size()="
+  ldpp_dout(dpp, 20) << __func__ << " 2st round encoded log.dups.size()="
 		     << log.dups.size() << dendl;
 
   if (clear_divergent_priors) {
@@ -1053,7 +1053,7 @@ void PGLog::_write_log_and_missing(
 
   if (!to_remove.empty())
     t.omap_rmkeys(coll, log_oid, to_remove);
-  ldpp_dout(dpp, 10) << "end of " << __func__ << dendl;
+  ldpp_dout(dpp, 20) << "end of " << __func__ << dendl;
 }
 
 void PGLog::rebuild_missing_set_with_deletes(
