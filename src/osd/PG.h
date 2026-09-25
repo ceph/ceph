@@ -807,6 +807,9 @@ protected:
   // most recently written to the log for this PG. Only accessed from the
   // locked branch of gen_prefix(), i.e. by the thread holding _lock.
   mutable std::string last_logged_pg_state;
+  // number of compact prefixes printed since last_logged_pg_state was
+  // printed in full (same locking rule as last_logged_pg_state)
+  mutable unsigned lean_prefixes_since_full = 0;
   std::atomic<unsigned int> ref{0};
 
 #ifdef PG_DEBUG_REFS
