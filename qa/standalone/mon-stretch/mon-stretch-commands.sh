@@ -47,9 +47,22 @@ function TEST_stretch_set_replicated_pool() {
     ceph osd pool stretch set rep 2 2 zone replicated_rule 4 2 || return 1
     test "$(pool_field rep peering_crush_bucket_count)" = 2 || return 1
     test "$(pool_field rep size)" = 4 || return 1
+    # an individual stretch pool is one zone with min_size over all its
+    # copies, as in earlier releases
+    test "$(pool_field rep num_zones)" = 1 || return 1
+    test "$(pool_field rep replica)" = 4 || return 1
+    test "$(pool_field rep min_size)" = 2 || return 1
     ceph osd pool stretch unset rep replicated_rule 3 2 || return 1
     test "$(pool_field rep peering_crush_bucket_count)" = 0 || return 1
     test "$(pool_field rep size)" = 3 || return 1
+
+    # --replica in place of size
+    ceph osd pool stretch set rep 2 2 zone replicated_rule --min_size 2 \
+        --replica 3 || return 1
+    test "$(pool_field rep size)" = 6 || return 1
+    ceph osd pool stretch unset rep replicated_rule --min_size 2 \
+        --replica 2 || return 1
+    test "$(pool_field rep size)" = 2 || return 1
 }
 
 function TEST_stretch_set_ec_pool() {
@@ -58,14 +71,15 @@ function TEST_stretch_set_ec_pool() {
 
     ceph osd erasure-code-profile set p21 k=2 m=1 crush-failure-domain=osd || return 1
     ceph osd pool create ec 8 8 erasure p21 || return 1
+    ceph osd pool set ec allow_ec_optimizations true || return 1
     local rule=$(ceph osd pool get ec crush_rule -f json | jq -r .crush_rule)
     local min_size=$(pool_field ec min_size)
     test "$(pool_field ec size)" = 3 || return 1
 
-    expect_failure $dir "erasure-coded" \
-        ceph osd pool stretch set ec 2 2 zone $rule 3 2 || return 1
+    expect_failure $dir "not supported for EC pools" \
+        ceph osd pool stretch set ec 2 2 zone $rule 6 2 || return 1
     expect_failure $dir "is not a stretch pool" \
-        ceph osd pool stretch unset ec $rule 6 2 || return 1
+        ceph osd pool stretch unset ec $rule 3 2 || return 1
 
     test "$(pool_field ec peering_crush_bucket_count)" = 0 || return 1
     test "$(pool_field ec size)" = 3 || return 1
