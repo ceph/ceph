@@ -221,12 +221,21 @@ struct ECCommon {
     void print(std::ostream &os) const {
       os << "read_result_t(r=" << r << ", errors=" << errors;
       if (attrs) {
-        os << ", attrs=" << *(attrs);
+        os << ", attrs={";
+        bool first = true;
+        for (const auto &[key, bl] : *attrs) {
+          if (!first) {
+            os << ",";
+          }
+          first = false;
+          os << key << "(" << bl.length() << ")";
+        }
+        os << "}";
       } else {
         os << ", noattrs";
       }
       if (omap_header) {
-        os << ", omap_header=" << *(omap_header);
+        os << ", omap_header_len=" << omap_header->length();
       } else {
         os << ", no_omap_header";
       }
