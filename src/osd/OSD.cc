@@ -1123,6 +1123,7 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
 
   if (next_map->is_down(peer) ||
       next_map->get_info(peer).up_from > from_epoch) {
+    // dout-lint: error-path
     dout(10) << __func__ << " dropping " << *m << " to osd." << peer
              << " from_epoch " << from_epoch
              << ": peer down or restarted as of e" << next_map->get_epoch()
@@ -1153,6 +1154,7 @@ void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>&
   for (auto& iter : messages) {
     if (next_map->is_down(iter.first) ||
 	next_map->get_info(iter.first).up_from > from_epoch) {
+      // dout-lint: error-path
       dout(10) << __func__ << " dropping " << *iter.second
                << " to osd." << iter.first
                << " from_epoch " << from_epoch
@@ -11433,6 +11435,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
 	       << ", will wait on " << qi << dendl;
       _add_slot_waiter(token, slot, std::move(qi));
     } else {
+      // dout-lint: error-path
       dout(10) << __func__ << " " << token
 	       << " no pg, shouldn't exist e" << osdmap->get_epoch()
 	       << ", dropping " << qi << dendl;
