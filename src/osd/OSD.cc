@@ -103,6 +103,7 @@
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDForceRecovery.h"
 #include "messages/MOSDPGCreated.h"
+#include "messages/MOSDECSubOpWrite.h"
 
 #include "messages/MOSDPeeringOp.h"
 
@@ -10012,6 +10013,15 @@ static int dequeue_op_log_level(const Message *m)
   case MSG_OSD_EC_READ_REPLY:
   case MSG_OSD_PG_PUSH_REPLY:
     return 15;
+  case MSG_OSD_EC_WRITE:
+    // ECDummyOp roll-forward sub-writes (at_version 0'0) are handled at 20
+    // by handle_sub_write/sub_write_committed; an unconditional level-10
+    // dequeue_op start/finish pair for them adds no debugging value.
+    if (static_cast<const MOSDECSubOpWrite*>(m)->op.at_version ==
+	eversion_t()) {
+      return 15;
+    }
+    return 10;
   default:
     return 10;
   }
