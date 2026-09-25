@@ -6101,8 +6101,9 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       result = r;
       op.extent.length = 0;
     }
-    dout(15) << " read got " << r << " / " << op.extent.length
-	     << " bytes from obj " << soid << dendl;
+    dout(ceph::dout::need_dynamic(r < 0 ? 10 : 15))
+      << " read got " << r << " / " << op.extent.length
+      << " bytes from obj " << soid << dendl;
   }
   if (result >= 0) {
     ctx->delta_stats.num_rd_kb += shift_round_up(bytes_read, 10);
@@ -16056,12 +16057,13 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
     // Replicas cannot run recovery, so the request need to be
     // failed with EAGAIN to the client which will then retry the
     // request to the primary
-    dout(10) << __func__ << " not primary, failing op with EAGAIN" << dendl;
+    dout(10) << __func__ << " not primary, failing op with EAGAIN "
+	     << soid << " " << ctx->reqid << dendl;
     osd->reply_op_error(op, -EAGAIN);
     return -EAGAIN;
   }
 
-  dout(10) << __func__ << " " << soid
+  dout(10) << __func__ << " " << soid << " " << ctx->reqid
 	   << " peers osd.{" << get_acting_recovery_backfill() << "}" << dendl;
 
   if (!is_clean()) {
