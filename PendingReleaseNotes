@@ -5,6 +5,12 @@
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
   from ``2`` to ``30`` seconds.
 
+* Messenger: with ``debug_ms`` below 5, the per-message log lines
+  (``<==`` / ``-->``) print only the first (msgr2) address of a daemon's
+  address vector instead of the full ``[v2:...,v1:...]`` vector, matching the
+  format already used by msgr2-only daemons. Set ``debug_ms`` to 5 or higher
+  to get the full vectors.
+
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
   ``$GETOPT`` environment override so GNU getopt can be selected
