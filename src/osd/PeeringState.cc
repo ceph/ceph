@@ -456,7 +456,7 @@ bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t
 
   auto p = peer_info.find(from);
   if (p != peer_info.end() && p->second.last_update == oinfo.last_update) {
-    psdout(10) << " got dup osd." << from << " info "
+    psdout(15) << " got dup osd." << from << " info "
 	       << oinfo << ", identical to ours" << dendl;
     return false;
   }
@@ -1372,7 +1372,7 @@ void PeeringState::proc_lease(const pg_lease_t& l)
     psdout(20) << "no-op, !nonprimary" << dendl;
     return;
   }
-  psdout(10) << l << dendl;
+  psdout(15) << l << dendl;
   if (l.readable_until_ub > readable_until_ub_from_primary) {
     readable_until_ub_from_primary = l.readable_until_ub;
   }
@@ -5699,7 +5699,7 @@ PeeringState::Primary::Primary(my_context ctx)
 boost::statechart::result PeeringState::Primary::react(const MNotifyRec& notevt)
 {
   DECLARE_LOCALS;
-  psdout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
+  psdout(15) << "handle_pg_notify from osd." << notevt.from << dendl;
   ps->proc_replica_notify(notevt.from, notevt.notify);
   return discard_event();
 }
