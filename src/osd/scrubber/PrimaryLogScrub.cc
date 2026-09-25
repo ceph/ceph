@@ -51,7 +51,7 @@ void PrimaryLogScrub::submit_digest_fixes(const digests_fixes_t& fixes)
   // note: the following line was modified from '+=' to '=', as we should not
   // encounter previous-chunk digest updates after starting a new chunk
   num_digest_updates_pending = fixes.size();
-  dout(10) << __func__
+  dout(15) << __func__
 	   << ": num_digest_updates_pending: " << num_digest_updates_pending
 	   << dendl;
 

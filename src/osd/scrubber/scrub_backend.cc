@@ -254,7 +254,7 @@ objs_fix_list_t ScrubBackend::scrub_compare_maps(
   bool max_reached,
   SnapMapReaderI& snaps_getter)
 {
-  dout(10) << __func__ << " has maps, analyzing" << dendl;
+  dout(15) << __func__ << " has maps, analyzing" << dendl;
   ceph_assert(m_scrubber.is_primary());
 
   // construct authoritative scrub map for type-specific scrubbing
@@ -310,7 +310,7 @@ void ScrubBackend::collect_omap_stats(
  */
 void ScrubBackend::update_authoritative()
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
 
   if (m_acting_but_me.empty()) {
     // nothing to fix. Just count OMAP stats
@@ -795,7 +795,7 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
 // re-implementation of PGBackend::be_compare_scrubmaps()
 void ScrubBackend::compare_smaps()
 {
-  dout(10) << __func__
+  dout(15) << __func__
            << ": authoritative-set #: " << this_chunk->all_chunk_objects.size()
            << dendl;
 
@@ -1782,7 +1782,7 @@ static inline bool doing_clones(
  */
 void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map, const pg_shard_t &srd)
 {
-  dout(10) << __func__ << " num stat obj "
+  dout(15) << __func__ << " num stat obj "
 	   << m_pg.get_pg_info(ScrubberPasskey{}).stats.stats.sum.num_objects
 	   << dendl;
 
@@ -2073,7 +2073,13 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map, const pg_shard_t &srd)
   // fix data/omap digests
   m_scrubber.submit_digest_fixes(this_chunk->missing_digest);
 
-  dout(10) << __func__ << " (" << m_mode_desc << ") finish" << dendl;
+  dout(10) << __func__ << " (" << m_mode_desc << ") finish. chunk objects: "
+           << this_chunk->all_chunk_objects.size()
+           << " errors (shallow/deep): "
+           << this_chunk->m_error_counts.shallow_errors << "/"
+           << this_chunk->m_error_counts.deep_errors
+           << " inconsistent objs: " << this_chunk->m_inconsistent_objs.size()
+           << " digest fixes: " << this_chunk->missing_digest.size() << dendl;
 }
 
 int ScrubBackend::process_clones_to(
