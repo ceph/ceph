@@ -6950,11 +6950,14 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
   DECLARE_LOCALS;
   ceph_assert(ps->is_primary());
   if (ps->peer_info.count(notevt.from)) {
-    psdout(10) << "Active: got notify from " << notevt.from
+    // No-op branch: the do_peering_event MNotifyRec line (kept at 10)
+    // already logged the sender and pg_info for this notify.
+    psdout(15) << "Active: got notify from " << notevt.from
 		       << ", already have info from that osd, ignoring"
 		       << dendl;
   } else if (ps->peer_purged.count(notevt.from)) {
-    psdout(10) << "Active: got notify from " << notevt.from
+    // No-op branch: same reasoning as above.
+    psdout(15) << "Active: got notify from " << notevt.from
 		       << ", already purged that peer, ignoring"
 		       << dendl;
   } else {
