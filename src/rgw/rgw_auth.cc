@@ -936,6 +936,11 @@ void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
   if (account) {
     entry.account_id = account->id;
   }
+  entry.user = info.keystone_user;
+
+  if (info.keystone_scope.has_value()) {
+    entry.keystone_scope = info.keystone_scope;
+  }
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
