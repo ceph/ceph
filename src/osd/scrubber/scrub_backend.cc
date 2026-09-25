@@ -541,7 +541,7 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
     }
   }
 
-  dout(10) << fmt::format("{}: selecting osd {} for obj {} with oi {}",
+  dout(15) << fmt::format("{}: selecting osd {} for obj {} with oi {}",
                           __func__,
                           ret_auth.auth_shard,
                           ho,
@@ -2159,7 +2159,7 @@ std::vector<snap_mapper_fix_t> ScrubBackend::scan_snaps(
         try {
           decode(snapset, p);
         } catch (...) {
-          dout(20) << fmt::format("{}: failed to decode the snapset ({})",
+          dout(10) << fmt::format("{}: failed to decode the snapset ({})",
                                   __func__,
                                   hoid)
                    << dendl;

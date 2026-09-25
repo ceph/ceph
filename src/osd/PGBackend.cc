@@ -932,7 +932,7 @@ int PGBackend::be_scan_list(
   ScrubMap &map,
   ScrubMapBuilder &pos)
 {
-  dout(10) << __func__ << " " << pos << dendl;
+  dout(15) << __func__ << " " << pos << dendl;
   ceph_assert(!pos.done());
   ceph_assert(pos.pos < pos.ls.size());
   hobject_t& poid = pos.ls[pos.pos];
@@ -962,11 +962,11 @@ int PGBackend::be_scan_list(
     }
 
     if (r == -ENOENT) {
-      dout(25) << __func__ << "  " << poid << " got " << r
+      dout(15) << __func__ << "  " << poid << " got " << r
 	       << ", removing from map" << dendl;
       map.objects.erase(poid);
     } else if (r == -EIO) {
-      dout(25) << __func__ << "  " << poid << " got " << r
+      dout(10) << __func__ << "  " << poid << " got " << r
 	       << ", stat_error" << dendl;
       o.stat_error = true;
     } else if (r != 0) {
