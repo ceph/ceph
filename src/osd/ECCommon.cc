@@ -1412,8 +1412,11 @@ void ECCommon::RecoveryBackend::handle_recovery_push_reply(
     const PushReplyOp &op,
     pg_shard_t from,
     RecoveryMessages *m) {
-  if (!recovery_ops.count(op.soid))
+  if (!recovery_ops.count(op.soid)) {
+    dout(10) << __func__ << " " << op.soid << " from " << from
+             << " no recovery op, ignoring" << dendl;
     return;
+  }
   RecoveryOp &rop = recovery_ops[op.soid];
   ceph_assert(rop.waiting_on_pushes.contains(from));
   rop.waiting_on_pushes.erase(from);
