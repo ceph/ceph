@@ -1669,8 +1669,7 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   dout(10) << __func__ << " pg:" << m_pg->pg_id
 	   << " Msg: map_epoch:" << msg->map_epoch
 	   << " min_epoch:" << msg->min_epoch << " deep?" << msg->deep
-	   << " range: [" << msg->start << "," << msg->end << ")"
-	   << " scrub_to: " << msg->scrub_to << dendl;
+	   << " range: [" << msg->start << "," << msg->end << ")" << dendl;
 
   if (should_drop_message(op)) {
     return;
