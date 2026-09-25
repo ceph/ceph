@@ -4941,6 +4941,31 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, ObjectStore::Transacti
   pg_log.add(e, nonprimary, applied, &info, handler.get());
 }
 
+namespace {
+/* Compact single-line rendering of the entries handed to append_log(), used
+ * only by the level-10 summary line below: "<version> <op> <soid> <reqid>"
+ * per entry (plus " rc=<rc>" when set), comma separated.  Only evaluated
+ * inside a dout block, so it costs nothing when the level is disabled. */
+struct brief_log_entries_t {
+  const std::vector<pg_log_entry_t> &entries;
+};
+
+std::ostream &operator<<(std::ostream &out, const brief_log_entries_t &b)
+{
+  out << "[";
+  for (auto it = b.entries.begin(); it != b.entries.end(); ++it) {
+    if (it != b.entries.begin()) {
+      out << ",";
+    }
+    out << it->version << " " << it->get_op_name() << " " << it->soid
+	<< " " << it->reqid;
+    if (it->return_code != 0) {
+      out << " rc=" << it->return_code;
+    }
+  }
+  return out << "]";
+}
+} // anonymous namespace
 
 void PeeringState::append_log(
   vector<pg_log_entry_t>&& logv,
@@ -4976,7 +5001,7 @@ void PeeringState::append_log(
   if (info.last_interval_started != info.history.last_interval_started) {
     info.history.last_interval_started = info.last_interval_started;
   }
-  psdout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
+  psdout(15) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
   bool invalidate_pwlc = false;
 
@@ -5031,14 +5056,39 @@ void PeeringState::append_log(
     info.partial_writes_last_complete_epoch = 0;
   }
 
-  psdout(10) << "approx pg log length =  "
-	     << pg_log.get_log().approx_size() << dendl;
-  psdout(10) << "dups pg log length =  "
+  // One self-contained line per pg log append: new entries (version, op,
+  // object, reqid), resulting log bounds, trim/roll-forward targets and log
+  // sizes.  An append with no entries (e.g. the EC roll-forward "dummy" op)
+  // is good-path noise and is logged at 15 with identical text.
+  if (logv.empty()) {
+    psdout(15) << "appended " << brief_log_entries_t{logv}
+	       << " " << pg_log.get_log()
+	       << " trim_to=" << trim_to
+	       << " roll_forward_to=" << roll_forward_to
+	       << " pct=" << pct
+	       << (transaction_applied ? "" : " not_applied")
+	       << (async ? " async" : "")
+	       << " approx_len=" << pg_log.get_log().approx_size()
+	       << " dups=" << pg_log.get_log().dups.size()
+	       << dendl;
+  } else {
+    psdout(10) << "appended " << brief_log_entries_t{logv}
+	       << " " << pg_log.get_log()
+	       << " trim_to=" << trim_to
+	       << " roll_forward_to=" << roll_forward_to
+	       << " pct=" << pct
+	       << (transaction_applied ? "" : " not_applied")
+	       << (async ? " async" : "")
+	       << " approx_len=" << pg_log.get_log().approx_size()
+	       << " dups=" << pg_log.get_log().dups.size()
+	       << dendl;
+  }
+  psdout(20) << "dups pg log length =  "
 	     << pg_log.get_log().dups.size() << dendl;
-  psdout(10) << "transaction_applied = "
+  psdout(20) << "transaction_applied = "
 	     << transaction_applied << dendl;
   if (!transaction_applied || async)
-    psdout(10) << pg_whoami
+    psdout(15) << pg_whoami
 	       << " is async_recovery or backfill target" << dendl;
   if (pool.info.allows_ecoptimizations() &&
       (trim_to > pg_log.get_can_rollback_to())) {
