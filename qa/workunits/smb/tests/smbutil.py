@@ -176,6 +176,31 @@ class PathWrapper:
         """Unlink (remove) a file."""
         smbclient.remove(str(self.share_path))
 
+    def stat(self):
+        return smbclient.stat(str(self.share_path))
+
+    def get_security_descriptor(self):
+        import smbclient.security
+
+        return smbclient.security.get_security_descriptor(
+            str(self.share_path)
+        )
+
+    def set_security_descriptor(self, sec_desc):
+        import smbclient.security
+
+        return smbclient.security.set_security_descriptor(
+            str(self.share_path),
+            sec_desc,
+        )
+
+    def rmtree(self, *, ignore_errors=False):
+        import smbclient.shutil
+
+        return smbclient.shutil.rmtree(
+            str(self.share_path), ignore_errors=ignore_errors
+        )
+
 
 def _get_resources(smb_cfg, rtype):
     jres = cephutil.cephadm_shell_cmd(
