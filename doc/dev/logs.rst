@@ -59,6 +59,23 @@ complete state is the most recent full prefix for the same PG *inside the
 dump*, not before it; ``expand_pg_log_prefix.py`` handles this by
 forgetting all full prefixes it has seen when it reaches that marker.
 
+The lean/full choice is based only on ``debug_osd``'s file log and gather
+levels. A sink with its own threshold, such as ``err_to_stderr`` or
+``err_to_syslog`` (which only pass level ``-1``, i.e. ``derr``), can still
+receive a compact prefix on that sink even though the full state for that
+line went only to the file log, because ``gen_prefix()`` has no way to
+know which sink, or level, a given line is headed for. The full state for
+any such line is still in the file log.
+
+``gen_prefix()`` runs when a dout statement starts, but the line is only
+submitted to the log at ``dendl``. If the body of a PG dout statement logs
+something else for the same PG after that PG's state has changed, the
+inner line can be submitted first, with a compact prefix that already
+matches the new state, before the outer line carrying the full prefix for
+the old state is submitted. In the log, the compact line then appears
+*before* the full prefix it belongs to instead of after it. This is rare
+in practice and no known hot path does it.
+
 Performance counters
 ====================
 
