@@ -801,6 +801,17 @@ void ECBackend::handle_sub_write_reply(
         from, ec_write_reply_op.last_complete);
     }
   }
+  // Names which shard's commit this was: on a hung write, the primary's
+  // "submit_transaction tid=N" has no other record of which shard is still
+  // outstanding.  Join to that shard's own log via tid: "handle_sub_write
+  // tid=N" and "sub_write_committed tid=N" in the same PG.
+  dout(15) << __func__ << " tid=" << ec_write_reply_op.tid
+           << " hoid=" << op->hoid
+           << " from=" << from
+           << " committed=" << ec_write_reply_op.committed
+           << " last_complete=" << ec_write_reply_op.last_complete
+           << " pending_commits=" << op->pending_commits
+           << dendl;
 
   if (cct->_conf->bluestore_debug_inject_read_err &&
     (op->pending_commits == 1) &&
