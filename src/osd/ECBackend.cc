@@ -843,7 +843,7 @@ void ECBackend::handle_sub_read_reply(
     // the tid as soon as enough shards have decoded, so the remaining
     // shards' late replies hit this branch on every read: that is good-path
     // noise there, not the unusual case it is on non-fast_read pools.
-    dout(ceph::dout::need_dynamic(get_parent()->get_pool().fast_read ? 15 : 10))
+    dout(ceph::dout::need_dynamic(get_parent()->get_pool().fast_read ? 15 : 10))  // dout-lint: error-path
       << __func__ << ": dropped " << op << " from " << from;
     for (auto &kv : op.buffers_read) {
       *_dout << " " << kv.first;
@@ -980,6 +980,7 @@ void ECBackend::handle_sub_read_reply(
     // ignore all zeros, or minimum_to_decode may conclude that it has enough
     // shards available.
     rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
+    // dout-lint: error-path
     dout(10) << __func__ << " tid=" << op.tid << " " << hoid << " shard=" << from << " error=" << err << dendl;
   }
 
@@ -1048,6 +1049,7 @@ void ECBackend::handle_sub_read_reply(
           // attrs/omap decode failure (err is -EIO and minimum_to_decode is
           // skipped whenever attrs or omap are not yet satisfied), which is
           // otherwise indistinguishable from this line alone.
+          // dout-lint: error-path
           dout(10) << __func__ << " tid=" << rop.tid << " " << oid
                    << " cannot decode from shards " << have
                    << " attrs_ok=" << attrs_satisfied
