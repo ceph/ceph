@@ -2949,7 +2949,7 @@ void PeeringState::build_might_have_unfound()
   ceph_assert(might_have_unfound.empty());
   ceph_assert(is_primary());
 
-  psdout(10) << dendl;
+  psdout(20) << dendl;
 
   check_past_interval_bounds();
 
@@ -2961,7 +2961,7 @@ void PeeringState::build_might_have_unfound()
   for (auto p = peer_info.begin(); p != peer_info.end(); ++p)
     might_have_unfound.insert(p->first);
 
-  psdout(15) << ": built " << might_have_unfound << dendl;
+  psdout(10) << ": built " << might_have_unfound << dendl;
 }
 
 void PeeringState::activate(
@@ -7876,7 +7876,7 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
       auto p = peer_info_requested.begin();
       while (p != peer_info_requested.end()) {
 	if (prior_set.probe.count(*p) == 0) {
-	  psdout(20) << " dropping osd." << *p << " from info_requested, no longer in probe set" << dendl;
+	  psdout(10) << " dropping osd." << *p << " from info_requested, no longer in probe set" << dendl;
 	  peer_info_requested.erase(p++);
 	} else {
 	  ++p;
