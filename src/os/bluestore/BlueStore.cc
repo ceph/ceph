@@ -1934,7 +1934,7 @@ void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache,
                                            TransContext* txc,
                                            uint32_t offset, uint32_t len)
 {
-  ldout(cache->cct, 10) << __func__ << " txc " << txc
+  ldout(cache->cct, 20) << __func__ << " txc " << txc
                         << std::hex << " 0x" << offset << "~" << len << std::dec
                         << dendl;
 
@@ -5058,13 +5058,13 @@ void BlueStore::Onode::finish_write(TransContext* txc, uint32_t offset, uint32_t
 	       << dendl;
       continue;
     }
-    ldout(c->store->cct, 10) << __func__ << " txc " << txc << std::hex
+    ldout(c->store->cct, 20) << __func__ << " txc " << txc << std::hex
                              << " 0x" << offset << "~" << length << std::dec
                              << dendl;
     bc._finish_write(cache, txc, offset, length);
     break;
   }
-  ldout(c->store->cct, 10) << __func__ << " done " << txc << dendl;
+  ldout(c->store->cct, 20) << __func__ << " done " << txc << dendl;
 }
 
 struct FragMetric {
@@ -5819,7 +5819,7 @@ static void discard_cb(void *priv, void *priv2)
 
 void BlueStore::handle_discard(interval_set<uint64_t>& to_release)
 {
-  dout(10) << __func__ << dendl;
+  dout(20) << __func__ << dendl;
   ceph_assert(alloc);
   alloc->release(to_release);
 }
