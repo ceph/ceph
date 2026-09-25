@@ -2246,6 +2246,11 @@ void PG::handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at)
 {
   dout(10) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
                           get_osdmap()->get_epoch())
+           << " up/acting " << pg_vector_string(recovery_state.get_up())
+           << "/" << pg_vector_string(recovery_state.get_acting())
+           << " same_interval_since " << info.history.same_interval_since
+           << (get_last_peering_reset() >= range_starts_at ?
+               " (peering reset in range)" : "")
            << dendl;
   recovery_state.activate_map(rctx);
   requeue_map_waiters();
