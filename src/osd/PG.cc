@@ -2056,7 +2056,8 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
   // out-of-order replies, the messages from that replica should be discarded.
   OSDMapRef next_map = osd->get_next_osdmap();
   if (next_map->is_down(from)) {
-    dout(20) << " " << __func__ << " dead for nextmap is down " << from << dendl;
+    dout(10) << __func__ << " dropping " << *m << " from osd." << from
+	     << ": down in next map e" << next_map->get_epoch() << dendl;
     return true;
   }
   /* Mostly, this overlaps with the old_peering_msg
@@ -2065,7 +2066,9 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
    * if such a replica goes down it does not cause
    * a new interval. */
   if (next_map->get_down_at(from) >= m->map_epoch) {
-    dout(20) << " " << __func__ << " dead for 'get_down_at' " << from << dendl;
+    dout(10) << __func__ << " dropping " << *m << " from osd." << from
+	     << ": down_at " << next_map->get_down_at(from) << " >= "
+	     << m->map_epoch << dendl;
     return true;
   }
 
@@ -2074,7 +2077,7 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
   if (old_peering_msg(m->map_epoch, m->map_epoch)) {
     dout(10) << "can_discard_replica_op pg changed " << info.history
 	     << " after " << m->map_epoch
-	     << ", dropping" << dendl;
+	     << ", dropping " << *m << dendl;
     return true;
   }
   return false;
