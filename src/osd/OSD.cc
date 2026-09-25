@@ -1123,6 +1123,10 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
 
   if (next_map->is_down(peer) ||
       next_map->get_info(peer).up_from > from_epoch) {
+    dout(10) << __func__ << " dropping " << *m << " to osd." << peer
+             << " from_epoch " << from_epoch
+             << ": peer down or restarted as of e" << next_map->get_epoch()
+             << dendl;
     m->put();
     release_map(next_map);
     return;
@@ -1149,6 +1153,11 @@ void OSDService::send_message_osd_cluster(std::vector<std::pair<int, Message*>>&
   for (auto& iter : messages) {
     if (next_map->is_down(iter.first) ||
 	next_map->get_info(iter.first).up_from > from_epoch) {
+      dout(10) << __func__ << " dropping " << *iter.second
+               << " to osd." << iter.first
+               << " from_epoch " << from_epoch
+               << ": peer down or restarted as of e" << next_map->get_epoch()
+               << dendl;
       iter.second->put();
       continue;
     }
