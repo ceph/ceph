@@ -1356,7 +1356,8 @@ void ECBackendL::handle_sub_read_reply(
         ceph_assert(rop.complete[iter->first].r == 0);
 	if (!rop.complete[iter->first].errors.empty()) {
 	  if (cct->_conf->osd_read_ec_check_for_errors) {
-	    dout(10) << __func__ << ": Not ignoring errors, use one shard err=" << err
+	    dout(10) << __func__ << ": Not ignoring errors, use one shard err="
+		     << iter->second.errors.begin()->second
 		     << " " << iter->first << " errors=" << iter->second.errors
 		     << " tid=" << rop.tid << dendl;
 	    err = rop.complete[iter->first].errors.begin()->second;
