@@ -293,7 +293,9 @@ void ScrubBackend::collect_omap_stats(
 	  obj_in_smap.large_omap_object_value_size);
 
       clog.do_log(CLOG_WARN, erm);
-      dout(5) << __func__ << ": " << erm << dendl;
+      dout(5) << __func__ << ": "
+              << std::string_view{erm}.substr(0, erm.find_last_not_of('\n') + 1)
+              << dendl;
     }
   }
 }
