@@ -171,9 +171,12 @@ Tools
   hot-path functions (op dispatch, ``PrimaryLogPG``, the EC and replicated
   backends, pg log, BlueStore transaction and BlueFS flush paths, messenger)
   with the number of debug statements at level 10 or below in each.  The
-  test fails if a function gains one.  If the new line is a genuine error
-  path, mark it with a ``// dout-lint: error-path`` comment on the same or
-  the preceding line.  A ``ceph::dout::need_dynamic(cond ? a : b)`` level is
+  test fails if a function gains one.  If the new line is a genuine error,
+  unusual or blocked/bounced path (dropped or discarded message, caps
+  rejection, an op requeued because the PG is not yet peered/active or a
+  map is not yet available, an EAGAIN bounce, ...), mark it with a
+  ``// dout-lint: error-path`` comment on the same or the preceding line.
+  A ``ceph::dout::need_dynamic(cond ? a : b)`` level is
   classified by ``min(a, b)``; a level that cannot be resolved that way (a
   bare variable, or a call to a helper) is reported but does not fail the
   ratchet.  If a function loses lines, run::

@@ -22,7 +22,11 @@ level-10 line in e.g. OSD::dequeue_op or BlueStore::_txc_state_proc is
 noticed at "make check" time.
 
 Statements are counted per *statement*, not per execution: a line inside a
-loop counts once.  Error-path lines that deliberately stay at <= 10 can be
+loop counts once.  "error-path" covers error, unusual and blocked/bounced
+paths (a dropped or discarded message, a caps rejection, an op requeued
+because the PG is not yet peered/active or a map is not yet available, an
+EAGAIN bounce, ...): anything that is not the good/fast path, not only a
+literal error return.  Such a line that deliberately stays at <= 10 can be
 exempted by putting the marker comment
 
     // dout-lint: error-path
