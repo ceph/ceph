@@ -5056,10 +5056,28 @@ void PeeringState::append_log(
     info.partial_writes_last_complete_epoch = 0;
   }
 
+  psdout(20) << "dups pg log length =  "
+	     << pg_log.get_log().dups.size() << dendl;
+  psdout(20) << "transaction_applied = "
+	     << transaction_applied << dendl;
+  if (!transaction_applied || async)
+    psdout(15) << pg_whoami
+	       << " is async_recovery or backfill target" << dendl;
+  if (pool.info.allows_ecoptimizations() &&
+      (trim_to > pg_log.get_can_rollback_to())) {
+    // An exceptionally long sequence of partial writes followed by a full
+    // write can result in trim_to being ahead of crt
+    trim_to = pg_log.get_can_rollback_to();
+  }
+  pg_log.trim(trim_to, info, transaction_applied, async);
+
   // One self-contained line per pg log append: new entries (version, op,
   // object, reqid), resulting log bounds, trim/roll-forward targets and log
-  // sizes.  An append with no entries (e.g. the EC roll-forward "dummy" op)
-  // is good-path noise and is logged at 15 with identical text.
+  // sizes.  Logged after the trim above so trim_to is the value actually
+  // applied (EC-optimised pools can clamp it to crt) and the log bounds are
+  // the post-trim bounds.  An append with no entries (e.g. the EC
+  // roll-forward "dummy" op) is good-path noise and is logged at 15 with
+  // identical text.
   if (logv.empty()) {
     psdout(15) << "appended " << brief_log_entries_t{logv}
 	       << " " << pg_log.get_log()
@@ -5083,20 +5101,6 @@ void PeeringState::append_log(
 	       << " dups=" << pg_log.get_log().dups.size()
 	       << dendl;
   }
-  psdout(20) << "dups pg log length =  "
-	     << pg_log.get_log().dups.size() << dendl;
-  psdout(20) << "transaction_applied = "
-	     << transaction_applied << dendl;
-  if (!transaction_applied || async)
-    psdout(15) << pg_whoami
-	       << " is async_recovery or backfill target" << dendl;
-  if (pool.info.allows_ecoptimizations() &&
-      (trim_to > pg_log.get_can_rollback_to())) {
-    // An exceptionally long sequence of partial writes followed by a full
-    // write can result in trim_to being ahead of crt
-    trim_to = pg_log.get_can_rollback_to();
-  }
-  pg_log.trim(trim_to, info, transaction_applied, async);
 
   // update the local pg, pg log
   dirty_info = true;
