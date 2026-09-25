@@ -702,6 +702,10 @@ endif(NOT WIN32)
 
 add_ceph_test(run-cli-tests ${CMAKE_CURRENT_SOURCE_DIR}/run-cli-tests)
 
+# debug log level policy tools, see doc/dev/osd_internals/debug_log_levels.rst
+add_ceph_test(test_ceph_log_budget.py
+  ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/src/script/test_ceph_log_budget.py)
+
 # flaky, see https://tracker.ceph.com/issues/44243
 #add_ceph_test(test_objectstore_memstore.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_objectstore_memstore.sh)
 
