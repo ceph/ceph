@@ -106,3 +106,33 @@ pub async fn driver_hint(hint: &str, params: &[(&str, &str)]) -> RawResponse {
     let query = query_parts.join("&");
     admin_request(reqwest::Method::DELETE, "/admin/driver/hint", &query, None).await
 }
+
+/// The `results` a hint reported, or `None` if it did not report any.
+///
+/// A hint can both act and answer -- whether the buffered copy is armed,
+/// how many bytes it has moved -- and the answer is what lets a test
+/// assert rather than assume.  `None` covers every way the answer can be
+/// missing: a non-200, a driver that does not implement the hint, a body
+/// that is not a hint document.  It is never the same as an empty map,
+/// which is a hint that ran and had nothing to say.
+pub async fn driver_hint_results(
+    hint: &str,
+    params: &[(&str, &str)],
+) -> Option<HashMap<String, String>> {
+    let resp = driver_hint(hint, params).await;
+    if resp.status != 200 {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(&resp.body).ok()?;
+    let map = v.get("results")?.as_object()?;
+    let mut out = HashMap::new();
+    for (k, val) in map {
+        let s = match val {
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::String(s) => s.clone(),
+            other => other.to_string(),
+        };
+        out.insert(k.clone(), s);
+    }
+    Some(out)
+}
