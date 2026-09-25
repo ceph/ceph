@@ -8424,13 +8424,26 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       result = 0;
 
     if (result < 0) {
-      dout(10) << __func__ << " " << soid << " " << ctx->reqid
-	       << " failed " << osd_op << " r=" << result << dendl;
+      // Top-level client ops are logged at 10: a failing sub-op is the
+      // reason an op stalled or errored out.  EAGAIN/EINPROGRESS are the
+      // deliberate FAILOK pass-through for an async continuation (copy-from,
+      // async cls CALL, cache flush), not a failure, so keep those at 20.
+      // Nested cls calls (objclass.cc, using a local ops vector) see ENOENT
+      // and friends as a normal outcome for RGW/CephFS, so log those at 15.
+      dout(ceph::dout::need_dynamic(
+	     (result == -EAGAIN || result == -EINPROGRESS) ? 20 :
+	     (&ops == ctx->ops ? 10 : 15)))
+	<< __func__ << " " << soid << " " << ctx->reqid
+	<< " failed " << osd_op << " r=" << result
+	<< " (" << cpp_strerror(result) << ")" << dendl;
       break;
     }
   }
   if (result < 0) {
-    dout(10) << __func__ << " " << soid << " " << ctx->reqid
+    // redundant with the per-sub-op line above on every path that reaches
+    // it (result < 0 here only via the break above); keep it at 15 so
+    // level 20 output is unchanged.
+    dout(15) << __func__ << " " << soid << " " << ctx->reqid
 	     << " error: " << cpp_strerror(result) << dendl;
   }
   return result;
