@@ -1,0 +1,31 @@
+# Debug-log volume budget, see doc/dev/osd_internals/debug_log_levels.rst.
+#
+# This fragment only sets options.  The log_budget task itself has to be
+# listed in the job's tasks AFTER the ceph task (so that it runs before the
+# logs are compressed) and BEFORE the workload (so that the workload is
+# measured), for example:
+#
+#   tasks:
+#   - install:
+#   - ceph:
+#   - log_budget:
+#   - radosbench:
+#       clients: [client.0]
+#       time: 300
+#
+# Capture the OSD logs at debug level 20: the report then shows both the
+# full cost and what level 10 would have cost.
+overrides:
+  ceph:
+    conf:
+      osd:
+        debug osd: 20
+        debug bluestore: 20
+        debug bluefs: 20
+        debug ms: 1
+  log_budget:
+    mode: warn
+    level: 10
+    max_kept_bytes_per_op: 20480
+    max_kept_fraction: 0.2
+    max_kept_mb_per_s: 12
