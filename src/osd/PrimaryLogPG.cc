@@ -2680,12 +2680,13 @@ void PrimaryLogPG::on_coroutine_complete()
   active_coro_op = nullptr;
 
   if (active_coro_ctx) {
-    dout(20) << __func__ << ": Warning - OpContext not cleaned up normally" << dendl;
+    dout(10) << __func__ << ": Warning - OpContext not cleaned up normally "
+	     << active_coro_ctx->reqid << dendl;
     active_coro_ctx = nullptr;
   }
 
   if (!waiting_for_coro_op.empty()) {
-    dout(20) << __func__ << ": requeuing " << waiting_for_coro_op.size() << " ops" << dendl;
+    dout(10) << __func__ << ": requeuing " << waiting_for_coro_op.size() << " ops" << dendl;
     requeue_ops(waiting_for_coro_op);
   }
 }
@@ -13417,12 +13418,15 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   dout(10) << __func__ << dendl;
 
   if (coro_resumer != nullptr) {
-    dout(20) << __func__ << ": Stopping active coroutine" << dendl;
+    dout(10) << __func__ << ": Stopping active coroutine for "
+	     << (active_coro_op ? active_coro_op->get_reqid() : osd_reqid_t())
+	     << dendl;
     coro_resumer = nullptr;
     coro_op_in_flight = false;
 
     if (active_coro_ctx) {
-      dout(20) << __func__ << ": Cleaning up orphaned OpContext from coroutine" << dendl;
+      dout(10) << __func__ << ": Cleaning up orphaned OpContext "
+	       << active_coro_ctx->reqid << " from coroutine" << dendl;
       // Remove from in_progress_async_reads if present
       for (auto it = in_progress_async_reads.begin();
           it != in_progress_async_reads.end(); ++it) {
@@ -13607,7 +13611,7 @@ void PrimaryLogPG::_clear_recovery_state()
 
 void PrimaryLogPG::cancel_pull(const hobject_t &soid)
 {
-  dout(20) << __func__ << ": " << soid << dendl;
+  dout(10) << __func__ << ": " << soid << dendl;
   ceph_assert(recovering.count(soid));
   ObjectContextRef obc = recovering[soid];
   if (obc) {
