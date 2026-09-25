@@ -511,7 +511,7 @@ void BlueFS::_update_logger_stats()
   in_data = get_used_non_bluefs();
   in_meta = _get_used(BDEV_SLOW) + _get_used(BDEV_DB) + _get_used(BDEV_WAL);
   if (in_data > 0) {
-    dout(10) << __func__ << " got meta ratio parameters, "
+    dout(20) << __func__ << " got meta ratio parameters, "
             << "data: " << in_data << ", meta: " << in_meta
             << dendl;
     r = double(in_meta) / double(in_data);
@@ -3070,7 +3070,7 @@ bool BlueFS::_should_start_compact_log_L_N()
   }
   uint64_t expected = _estimate_log_size_N();
   float ratio = (float)current / (float)expected;
-  dout(10) << __func__ << " current 0x" << std::hex << current
+  dout(20) << __func__ << " current 0x" << std::hex << current
 	   << " expected " << expected << std::dec
 	   << " ratio " << ratio
 	   << dendl;
@@ -3078,6 +3078,9 @@ bool BlueFS::_should_start_compact_log_L_N()
       ratio < cct->_conf->bluefs_log_compact_min_ratio) {
     return false;
   }
+  dout(10) << __func__ << " log compaction needed: current 0x" << std::hex
+	   << current << " expected 0x" << expected << std::dec
+	   << " ratio " << ratio << dendl;
   return true;
 }
 
@@ -4262,7 +4265,7 @@ void BlueFS::_claim_completed_aios(FileWriter *h, list<aio_t> *ls)
       ls->splice(ls->end(), p->running_aios);
     }
   }
-  dout(10) << __func__ << " got " << ls->size() << " aios" << dendl;
+  dout(20) << __func__ << " got " << ls->size() << " aios" << dendl;
 }
 
 void BlueFS::_wait_for_aio(FileWriter *h)
@@ -4349,13 +4352,13 @@ int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
   }
   if (!force &&
       length < cct->_conf->bluefs_min_flush_size) {
-    dout(10) << __func__ << " " << h << " ignoring, length " << length
+    dout(20) << __func__ << " " << h << " ignoring, length " << length
 	     << " < min_flush_size " << cct->_conf->bluefs_min_flush_size
 	     << dendl;
     return 0;
   }
   if (length == 0) {
-    dout(10) << __func__ << " " << h << " no dirty data on "
+    dout(20) << __func__ << " " << h << " no dirty data on "
 	     << h->file->fnode << dendl;
     return 0;
   }
@@ -4792,7 +4795,7 @@ void BlueFS::sync_metadata(bool avoid_compact)/*_LNF_NF_LD_D*/
     can_skip_flush = log.t.empty() && dirty.files.empty();
   }
   if (can_skip_flush) {
-    dout(10) << __func__ << " - no pending log events" << dendl;
+    dout(20) << __func__ << " - no pending log events" << dendl;
   } else {
     utime_t start;
     lgeneric_subdout(cct, bluefs, 10) << __func__;
