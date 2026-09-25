@@ -63,6 +63,15 @@ REPORT_VERSION = 1
 # "<timestamp> <thread-id> <level> <message>"; the level is printed with
 # "%2d" so single-digit levels are preceded by two spaces.
 HEADER_RE = re.compile(rb'^(\d{4}-\d\d-\d\dT[0-9:.]+\S*) (\S+) +(-?\d+) ')
+# Log::dump_recent() (a crash backtrace) writes these two markers raw, with
+# no timestamp/thread/level header, and everything in between (replayed
+# recent-event entries, each prefixed with "%6ld> " before its own embedded
+# timestamp so it still doesn't match HEADER_RE, plus the "--- logging
+# levels ---" and thread-name dump) only repeats entries already counted
+# elsewhere in the log.  Skip the whole region rather than miscounting it
+# as a continuation of whatever entry preceded it.
+CRASH_DUMP_BEGIN = b'--- begin dump of recent events ---'
+CRASH_DUMP_END = b'--- end dump of recent events ---'
 PG_RE = re.compile(r'^osd\.\d+ pg_epoch: \d+ ')
 OSD_RE = re.compile(r'^osd\.\d+ (?:\d+ )?')
 BLUESTORE_RE = re.compile(
@@ -225,9 +234,20 @@ class Analysis(object):
     def add_file(self, path):
         self.files.append(path)
         with open_log(path) as fh:
-            self._scan(fh)
+            # If this is a plain (non-.gz) file, it may still be growing
+            # under us (e.g. a live OSD log read while the daemon keeps
+            # running): cap the scan at the size it had when we opened it,
+            # so a log that is appended faster than we can read it does not
+            # make the scan run unbounded.
+            limit = None
+            if not path.endswith('.gz'):
+                try:
+                    limit = os.fstat(fh.fileno()).st_size
+                except (OSError, AttributeError):
+                    limit = None
+            self._scan(fh, limit)
 
-    def _scan(self, fh):
+    def _scan(self, fh, limit=None):
         level = self.level
         sample = self.sample
         since = self.since
@@ -238,11 +258,27 @@ class Analysis(object):
         templates = self.templates
         cur = None            # [level, comp, tmpl_key or None, multiline?]
         skipping = False
+        in_crash_dump = False
+        consumed = 0
         n = 0
         for raw in fh:
+            if limit is not None and consumed >= limit:
+                # Don't chase a file that is still being appended to faster
+                # than we can read it: stop at the size it had when we
+                # opened it.
+                break
             ln = len(raw)
+            consumed += ln
             m = HEADER_RE.match(raw)
             if m is None:
+                if raw.startswith(CRASH_DUMP_BEGIN):
+                    in_crash_dump = True
+                    cur = None
+                    continue
+                if in_crash_dump:
+                    if raw.startswith(CRASH_DUMP_END):
+                        in_crash_dump = False
+                    continue
                 # continuation of a multi-line entry
                 if skipping or cur is None:
                     continue

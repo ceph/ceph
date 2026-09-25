@@ -59,11 +59,19 @@ import os
 from io import StringIO
 
 from teuthology import misc as teuthology
+from teuthology.exceptions import MaxWhileTries
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
 TOOL = 'ceph_log_budget.py'
+# Safety net for run.wait() below: ceph_log_budget.py --until only stops
+# *counting* lines, not reading them (see the matching per-file size cap in
+# Analysis._scan()), so a daemon that is still logging faster than the
+# analysis can read it could otherwise make teardown hang indefinitely.
+# This is an independent bound: on timeout we skip whichever daemons have
+# not reported back yet instead of blocking the job.
+ANALYSIS_TIMEOUT = 600
 DEFAULTS = {
     'mode': 'warn',
     'level': 10,
@@ -150,10 +158,19 @@ def _analyse(ctx, config, tool_path, since, until):
             proc = remote.run(args=args, stdout=StringIO(), stderr=StringIO(),
                               wait=False, check_status=False)
             procs.append((name, daemon, proc))
-    run.wait([p for _, _, p in procs])
+    try:
+        run.wait([p for _, _, p in procs], timeout=ANALYSIS_TIMEOUT)
+    except MaxWhileTries:
+        log.warning('log_budget: analysis did not finish within %ss; '
+                    'using whatever daemons finished in time',
+                    ANALYSIS_TIMEOUT)
 
     reports = {}
     for name, daemon, proc in procs:
+        if not proc.finished:
+            log.warning('log_budget: analysis of %s on %s did not finish '
+                        'in time, skipping', daemon, name)
+            continue
         if proc.exitstatus not in (0, 1):
             log.warning('log_budget: analysis of %s on %s failed (%s): %s',
                         daemon, name, proc.exitstatus,
