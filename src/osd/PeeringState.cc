@@ -4941,6 +4941,29 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, ObjectStore::Transacti
   pg_log.add(e, nonprimary, applied, &info, handler.get());
 }
 
+namespace {
+// Brief form of pg_log_entry_t::fmt_print() for the append_log summary.
+struct brief_log_entries_t {
+  const std::vector<pg_log_entry_t> &entries;
+};
+
+std::ostream &operator<<(std::ostream &out, const brief_log_entries_t &b)
+{
+  out << "[";
+  for (auto it = b.entries.begin(); it != b.entries.end(); ++it) {
+    if (it != b.entries.begin()) {
+      out << ",";
+    }
+    out << it->version << " (" << it->prior_version << ") "
+	<< fmt::format("{:<8}", it->get_op_name())
+	<< " " << it->soid << " by " << it->reqid;
+    if (it->return_code != 0) {
+      out << " rc=" << it->return_code;
+    }
+  }
+  return out << "]";
+}
+} // anonymous namespace
 
 void PeeringState::append_log(
   vector<pg_log_entry_t>&& logv,
@@ -4976,7 +4999,7 @@ void PeeringState::append_log(
   if (info.last_interval_started != info.history.last_interval_started) {
     info.history.last_interval_started = info.last_interval_started;
   }
-  psdout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
+  psdout(15) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
   bool invalidate_pwlc = false;
 
@@ -5031,14 +5054,14 @@ void PeeringState::append_log(
     info.partial_writes_last_complete_epoch = 0;
   }
 
-  psdout(10) << "approx pg log length =  "
+  psdout(20) << "approx pg log length =  "
 	     << pg_log.get_log().approx_size() << dendl;
-  psdout(10) << "dups pg log length =  "
+  psdout(20) << "dups pg log length =  "
 	     << pg_log.get_log().dups.size() << dendl;
-  psdout(10) << "transaction_applied = "
+  psdout(20) << "transaction_applied = "
 	     << transaction_applied << dendl;
   if (!transaction_applied || async)
-    psdout(10) << pg_whoami
+    psdout(15) << pg_whoami
 	       << " is async_recovery or backfill target" << dendl;
   if (pool.info.allows_ecoptimizations() &&
       (trim_to > pg_log.get_can_rollback_to())) {
@@ -5047,6 +5070,31 @@ void PeeringState::append_log(
     trim_to = pg_log.get_can_rollback_to();
   }
   pg_log.trim(trim_to, info, transaction_applied, async);
+
+  if (logv.empty()) {
+    psdout(15) << "appended " << brief_log_entries_t{logv}
+	       << " " << pg_log.get_log()
+	       << " trim_to=" << trim_to
+	       << " roll_forward_to=" << roll_forward_to
+	       << " pct=" << pct
+	       << (transaction_applied ? "" : " not_applied")
+	       << (async ? " async" : "")
+	       << " approx_len=" << pg_log.get_log().approx_size()
+	       << " dups=" << pg_log.get_log().dups.size()
+	       << dendl;
+  } else {
+    // find_dups_in_pg_log.sh greps for "append_log" and " by ".
+    psdout(10) << __func__ << " appended " << brief_log_entries_t{logv}
+	       << " " << pg_log.get_log()
+	       << " trim_to=" << trim_to
+	       << " roll_forward_to=" << roll_forward_to
+	       << " pct=" << pct
+	       << (transaction_applied ? "" : " not_applied")
+	       << (async ? " async" : "")
+	       << " approx_len=" << pg_log.get_log().approx_size()
+	       << " dups=" << pg_log.get_log().dups.size()
+	       << dendl;
+  }
 
   // update the local pg, pg log
   dirty_info = true;
@@ -5268,11 +5316,11 @@ void PeeringState::calc_trim_to()
       ++it;
       if (new_trim_to > limit) {
         new_trim_to = limit;
-        psdout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
+        psdout(15) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
         break;
       }
     }
-    psdout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
+    psdout(15) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
     pg_trim_to = new_trim_to;
     ceph_assert(pg_trim_to <= pg_log.get_head());
     ceph_assert(pg_trim_to <= min_last_complete_ondisk);
@@ -5288,16 +5336,16 @@ void PeeringState::calc_trim_to_aggressive()
     pg_log.get_head(),
     pg_log.get_can_rollback_to(),
     pg_committed_to});
-  psdout(10) << "limit = " << limit << dendl;
+  psdout(20) << "limit = " << limit << dendl;
 
   if (limit != eversion_t() &&
       limit != pg_trim_to &&
       pg_log.get_log().approx_size() > target) {
-    psdout(10) << "approx pg log length =  "
+    psdout(20) << "approx pg log length =  "
              << pg_log.get_log().approx_size() << dendl;
     uint64_t num_to_trim = std::min<uint64_t>(pg_log.get_log().approx_size() - target,
                                               cct->_conf->osd_pg_log_trim_max);
-    psdout(10) << "num_to_trim =  " << num_to_trim << dendl;
+    psdout(20) << "num_to_trim =  " << num_to_trim << dendl;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
@@ -5325,7 +5373,7 @@ void PeeringState::calc_trim_to_aggressive()
     }
 
     pg_trim_to = std::min({by_n_to_keep, by_n_to_trim, limit});
-    psdout(10) << "pg_trim_to now " << pg_trim_to << dendl;
+    psdout(15) << "pg_trim_to now " << pg_trim_to << dendl;
     ceph_assert(pg_trim_to <= pg_log.get_head());
   }
 }
