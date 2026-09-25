@@ -131,6 +131,43 @@ function TEST_erasure_code_pool() {
         grep 'cannot change to type replicated' || return 1
 }
 
+function TEST_erasure_code_pool_km_crush_params() {
+    local dir=$1
+    run_mon $dir a || return 1
+    # the default profile uses crush-failure-domain=host, so the crush
+    # parameters given here differ from it and must end up in the
+    # auto-created profile
+    local poolname=km_crush
+    local profile=$poolname-k2-m1
+    ceph osd pool create $poolname --pool_type erasure --k 2 --m 1 \
+        --pg_num 8 --pgp_num 8 \
+        --zone_failure_domain rack --osd_failure_domain osd || return 1
+    ceph osd erasure-code-profile get $profile | tee $dir/profile.txt
+    grep '^crush-failure-domain=osd$' $dir/profile.txt || return 1
+    grep '^crush-zone-failure-domain=rack$' $dir/profile.txt || return 1
+    # recreating the pool reuses the profile
+    ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it || return 1
+    ceph osd pool create $poolname --pool_type erasure --k 2 --m 1 \
+        --pg_num 8 --pgp_num 8 \
+        --zone_failure_domain rack --osd_failure_domain osd || return 1
+}
+
+function TEST_erasure_code_pool_crush_params_need_km() {
+    local dir=$1
+    run_mon $dir a || return 1
+    # without k/m or a profile the pool shares the default profile and the
+    # "erasure-code" rule, so crush parameters cannot be honoured; they
+    # must be rejected even when they equal the default profile's values
+    for fd in osd host ; do
+        ! ceph osd pool create crush_no_km --pool_type erasure \
+            --pg_num 8 --pgp_num 8 --osd_failure_domain $fd \
+            2> $dir/err.txt || return 1
+        cat $dir/err.txt
+        grep 'crush parameters .* require k and m' $dir/err.txt || return 1
+    done
+    ! ceph osd pool ls | grep crush_no_km || return 1
+}
+
 function TEST_replicated_pool_with_rule() {
     local dir=$1
     run_mon $dir a
