@@ -576,7 +576,7 @@ bool PrimaryLogPG::should_send_op(
       hoid <= recovery_state.get_peer_info(peer).last_backfill;
   if (!should_send) {
     ceph_assert(is_backfill_target(peer));
-    dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
+    dout(15) << __func__ << " issue_repop shipping empty opt to osd." << peer
              << ", object " << hoid
              << " beyond std::max(last_backfill_started "
              << ", peer_info[peer].last_backfill "
@@ -587,7 +587,7 @@ bool PrimaryLogPG::should_send_op(
   if (is_async_recovery_target(peer) &&
       recovery_state.get_peer_missing(peer).is_missing(hoid)) {
     should_send = false;
-    dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
+    dout(15) << __func__ << " issue_repop shipping empty opt to osd." << peer
              << ", object " << hoid
              << " which is pending recovery in async_recovery_targets" << dendl;
   }
@@ -11661,7 +11661,7 @@ public:
 
 void PrimaryLogPG::repop_all_committed(RepGather *repop)
 {
-  dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all committed "
+  dout(15) << __func__ << ": repop tid " << repop->rep_tid << " all committed "
 	   << dendl;
   repop->all_committed = true;
   if (!repop->rep_aborted) {
@@ -11674,7 +11674,7 @@ void PrimaryLogPG::repop_all_committed(RepGather *repop)
 
 void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 {
-  dout(10) << "op_applied version " << applied_version << dendl;
+  dout(20) << "op_applied version " << applied_version << dendl;
   ceph_assert(applied_version != eversion_t());
   ceph_assert(applied_version <= info.last_update);
   recovery_state.local_write_applied(applied_version);
@@ -11688,12 +11688,12 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 
 void PrimaryLogPG::eval_repop(RepGather *repop)
 {
-  dout(10) << "eval_repop " << *repop
+  dout(20) << "eval_repop " << *repop
     << (repop->op && repop->op->get_req<MOSDOp>() ? "" : " (no op)") << dendl;
 
   // ondisk?
   if (repop->all_committed) {
-    dout(10) << " commit: " << *repop << dendl;
+    dout(15) << " commit: " << *repop << dendl;
     for (auto p = repop->on_committed.begin();
 	 p != repop->on_committed.end();
 	 repop->on_committed.erase(p++)) {
@@ -11716,7 +11716,7 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
 
     publish_stats_to_osd();
 
-    dout(10) << " removing " << *repop << dendl;
+    dout(20) << " removing " << *repop << dendl;
     ceph_assert(!repop_queue.empty());
     dout(20) << "   q front is " << *repop_queue.front() << dendl;
     if (repop_queue.front() == repop) {
@@ -11739,7 +11739,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
 {
   FUNCTRACE(cct);
   const hobject_t& soid = ctx->obs->oi.soid;
-  dout(7) << "issue_repop rep_tid " << repop->rep_tid
+  dout(15) << "issue_repop rep_tid " << repop->rep_tid
           << " o " << soid
           << dendl;
 
@@ -11787,9 +11787,9 @@ PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
   ceph_tid_t rep_tid)
 {
   if (ctx->op)
-    dout(10) << "new_repop rep_tid " << rep_tid << " on " << *ctx->op->get_req() << dendl;
+    dout(15) << "new_repop rep_tid " << rep_tid << " on " << *ctx->op->get_req() << dendl;
   else
-    dout(10) << "new_repop rep_tid " << rep_tid << " (no op)" << dendl;
+    dout(15) << "new_repop rep_tid " << rep_tid << " (no op)" << dendl;
 
   RepGather *repop = new RepGather(
     ctx, rep_tid, info.last_complete);
@@ -11801,7 +11801,7 @@ PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
 
   osd->logger->inc(l_osd_op_wip);
 
-  dout(10) << __func__ << ": " << *repop << dendl;
+  dout(20) << __func__ << ": " << *repop << dendl;
   return repop;
 }
 
@@ -11827,7 +11827,7 @@ boost::intrusive_ptr<PrimaryLogPG::RepGather> PrimaryLogPG::new_repop(
 
   osd->logger->inc(l_osd_op_wip);
 
-  dout(10) << __func__ << ": " << *repop << dendl;
+  dout(20) << __func__ << ": " << *repop << dendl;
   return boost::intrusive_ptr<RepGather>(repop);
 }
 
