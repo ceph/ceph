@@ -8,7 +8,11 @@ job run at debug_osd=20 tells us what the same job would have logged at
 level 10.  At the end of the job, before the ceph task compresses the logs,
 this task runs src/script/ceph_log_budget.py on every OSD log on every
 remote, merges the per-OSD reports, stores them in the job archive as
-log_budget.json, and checks the budgets:
+log_budget.json, and checks the budgets.  Unless whole_job is set, the
+analysis window is exactly [task start, workload end] (--since/--until):
+both bounds are recorded before doing anything else, so a slow analysis of
+a huge log, and the OSDs' own teardown logging, do not inflate duration_s
+and so kept.bytes_per_s.
 
   max_kept_bytes_per_op  level<=N bytes per client op (summed over all
                          OSDs / client ops dequeued by all primaries)
@@ -109,7 +113,7 @@ def _find_logs(remote, cluster, daemon_types):
     return logs
 
 
-def _analyse(ctx, config, tool_path, since):
+def _analyse(ctx, config, tool_path, since, until):
     tool = _load_tool(tool_path)
     testdir = teuthology.get_testdir(ctx)
     remote_tool = os.path.join(testdir, TOOL)
@@ -135,6 +139,8 @@ def _analyse(ctx, config, tool_path, since):
                     str(config['sample_target_bytes'])]
             if since.get(name):
                 args += ['--since', since[name]]
+            if until.get(name):
+                args += ['--until', until[name]]
             args += sorted(files)
             proc = remote.run(args=args, stdout=StringIO(), stderr=StringIO(),
                               wait=False, check_status=False)
@@ -197,8 +203,9 @@ def _analyse(ctx, config, tool_path, since):
     if ctx.archive is not None:
         path = os.path.join(ctx.archive, 'log_budget.json')
         with open(path, 'w') as f:
-            json.dump({'config': config, 'since': since, 'summary': summary,
-                       'daemons': reports}, f, indent=1, sort_keys=True)
+            json.dump({'config': config, 'since': since, 'until': until,
+                       'summary': summary, 'daemons': reports},
+                      f, indent=1, sort_keys=True)
         log.info('log_budget: report written to %s', path)
     return violations
 
@@ -231,6 +238,17 @@ def task(ctx, config):
     try:
         yield
     finally:
+        until = {}
+        if config['mode'] != 'off' and not config['whole_job']:
+            # Fix the analysis window to [task start, workload end] before
+            # doing anything else: the OSDs keep logging during teardown and
+            # during the analysis itself (e.g. compressing/archiving takes
+            # much longer than the job on a large log), and without an
+            # upper bound the analyser keeps chasing new data at EOF, which
+            # inflates duration_s and so kept.bytes_per_s.
+            for remote in ctx.cluster.remotes.keys():
+                until[remote.name] = remote.sh(
+                    ['date', '+%Y-%m-%dT%H:%M:%S.%3N']).strip()
         if config['mode'] != 'off':
             tool_path = _find_tool(ctx)
             if tool_path is None:
@@ -238,7 +256,8 @@ def task(ctx, config):
                             'skipping', TOOL)
             else:
                 try:
-                    violations = _analyse(ctx, config, tool_path, since)
+                    violations = _analyse(ctx, config, tool_path, since,
+                                          until)
                 except Exception:
                     log.exception('log_budget: analysis failed')
     if violations and config['mode'] == 'fail':
