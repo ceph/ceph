@@ -9991,18 +9991,21 @@ void OSD::enqueue_peering_evt(spg_t pgid, PGPeeringEventRef evt)
 }
 
 /*
- * Level of the per-op "dequeue_op ... finish" log line: 10 for ops, 15 for
- * replies to sub-ops this OSD sent (one per replica/shard per client op).
+ * Level of the per-op "dequeue_op" start and finish log lines: 10 for ops,
+ * 15 for high-volume replies to sub-ops this OSD sent (one per replica/shard
+ * per client op), so those do not gain an unconditional level-10 line on
+ * top of the level-15 handling other areas already give them. Replies on
+ * rare / error paths (log-missing, recovery-delete) stay at 10: their
+ * handlers only log receipt at 20, so this is the only level-10 record that
+ * they completed.
  */
-static int dequeue_op_finish_log_level(const Message *m)
+static int dequeue_op_log_level(const Message *m)
 {
   switch (m->get_type()) {
   case MSG_OSD_REPOPREPLY:
   case MSG_OSD_EC_WRITE_REPLY:
   case MSG_OSD_EC_READ_REPLY:
   case MSG_OSD_PG_PUSH_REPLY:
-  case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
-  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
     return 15;
   default:
     return 10;
@@ -10025,12 +10028,22 @@ void OSD::dequeue_op(
   op->set_dequeued_time(now);
 
   utime_t latency = now - m->get_recv_stamp();
-  dout(15) << "dequeue_op " << *op->get_req()
-           << " prio " << m->get_priority()
-	   << " cost " << m->get_cost()
-	   << " latency " << latency
-	   << " " << *m
-	   << " pg " << *pg << dendl;
+  // Lean start line (reqid, prio, cost, queue latency) so a hung or crashed
+  // do_request() still leaves a record of the op that was running; the full
+  // undecoded message and PG state are only added at 15+ (byte-identical to
+  // the old level-10 text). Uses the same level as the finish line below, so
+  // high-volume sub-op replies (which the finish line demotes to 15) do not
+  // gain a second, unconditional level-10 line here.
+  const int op_log_level = dequeue_op_log_level(m);
+  dout(ceph::dout::need_dynamic(op_log_level))
+    << "dequeue_op " << *op->get_req()
+    << " prio " << m->get_priority()
+    << " cost " << m->get_cost()
+    << " latency " << latency;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 15>()) {
+    *_dout << " " << *m << " pg " << *pg;
+  }
+  *_dout << dendl;
 
   logger->tinc(l_osd_op_before_dequeue_op_lat, latency);
 
@@ -10051,11 +10064,12 @@ void OSD::dequeue_op(
 
   // finish
   if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
-    const int finish_level = dequeue_op_finish_log_level(m);
-    dout(ceph::dout::need_dynamic(finish_level))
+    dout(ceph::dout::need_dynamic(op_log_level))
       << "dequeue_op " << *op->get_req() << " finish"
       << " latency " << (ceph_clock_now() - now)
-      << " queue_latency " << latency << dendl;
+      << " queue_latency " << latency
+      << " state " << OpRequest::get_state_string(op->state_flag())
+      << dendl;
   }
   OID_EVENT_TRACE_WITH_MSG(m, "DEQUEUE_OP_END", false);
 }
