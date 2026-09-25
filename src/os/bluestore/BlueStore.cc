@@ -14739,7 +14739,8 @@ void BlueStore::_txc_calc_cost(TransContext *txc)
   txc->ios = ios;
   dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("
 	   << ios << " ios * " << cost << " + " << txc->bytes
-	   << " bytes)" << dendl;
+	   << " bytes) " << txc->ch->cid
+	   << " onodes " << txc->onodes.size() << dendl;
 }
 
 void BlueStore::_txc_update_store_statfs(TransContext *txc)
@@ -14785,7 +14786,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 {
   BLUE_SCOPE(txc_state_proc);
   while (true) {
-    dout(10) << __func__ << " txc " << txc
+    dout(15) << __func__ << " txc " << txc
 	     << " " << txc->get_state_name() << dendl;
     switch (txc->get_state()) {
     case TransContext::STATE_PREPARE:
@@ -15101,7 +15102,13 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
 
 void BlueStore::_txc_committed_kv(TransContext *txc)
 {
-  dout(20) << __func__ << " txc " << txc << dendl;
+  dout(10) << __func__ << " txc " << txc << " " << txc->ch->cid
+	   << " bytes " << txc->bytes << " ios " << txc->ios
+	   << " onodes " << txc->onodes.size()
+	   << (txc->deferred_txn ? " deferred" : "")
+	   << " lat " << (mono_clock::now() - txc->start)
+	   << " kv_lat " << (mono_clock::now() - txc->last_stamp)
+	   << dendl;
   throttle.complete_kv(*txc);
   {
     std::lock_guard l(txc->osr->qlock);
@@ -15233,7 +15240,7 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   // if async discard succeeded, will do alloc->release when discard callback
   // else we should release here
   if (!discard_queued) {
-      dout(10) << __func__ << "(sync) " << txc << " " << std::hex
+      dout(15) << __func__ << "(sync) " << txc << " " << std::hex
                << txc->released << std::dec << dendl;
       alloc->release(txc->released);
   }
@@ -16144,7 +16151,7 @@ int BlueStore::queue_transactions(
 
   Collection *c = static_cast<Collection*>(ch.get());
   OpSequencer *osr = c->osr.get();
-  dout(10) << __func__ << " ch " << c << " " << c->cid << dendl;
+  dout(15) << __func__ << " ch " << c << " " << c->cid << dendl;
 
   // prepare
   TransContext *txc = _txc_create(static_cast<Collection*>(ch.get()), osr,
@@ -16242,7 +16249,7 @@ int BlueStore::queue_transactions(
 
 void BlueStore::_txc_aio_submit(TransContext *txc)
 {
-  dout(10) << __func__ << " txc " << txc << dendl;
+  dout(15) << __func__ << " txc " << txc << dendl;
   bdev->aio_submit(&txc->ioc);
 }
 
@@ -16338,7 +16345,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
           uint64_t num_objs;
           decode(pg_num, hiter);
           decode(num_objs, hiter);
-          dout(10) << __func__ << " collection hint objects is a no-op, "
+          dout(15) << __func__ << " collection hint objects is a no-op, "
 		   << " pg_num " << pg_num << " num_objects " << num_objs
 		   << dendl;
         } else {
