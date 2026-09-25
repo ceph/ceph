@@ -962,7 +962,10 @@ int PGBackend::be_scan_list(
     }
 
     if (r == -ENOENT) {
-      dout(15) << __func__ << "  " << poid << " got " << r
+      // benign race with a concurrent delete during a scrub scan; keep
+      // this at its pre-existing level so debug_osd=20 output is
+      // unchanged (see doc/dev/osd_internals/debug_log_levels.rst).
+      dout(25) << __func__ << "  " << poid << " got " << r
 	       << ", removing from map" << dendl;
       map.objects.erase(poid);
     } else if (r == -EIO) {

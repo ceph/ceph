@@ -67,6 +67,20 @@ and so on).
 Levels above 20 (``25``, ``30``) exist in some places for exceptionally
 voluminous output.  Do not add new ones: everything must be visible at 20.
 
+Debug level 20 output must otherwise be unchanged by a re-levelling pass:
+do not move a statement that used to be at 20 or below to above 20, and do
+not delete one.  A statement that used to sit above 20 may still be pulled
+down into the lean level when it turns out to be a genuine error path and
+not exceptionally voluminous; note the change explicitly in the commit
+message when you do this, since it does add a line to the level 20 output
+that was not there before.  For example, the ``-EIO`` ("stat_error")
+branch of ``PGBackend::be_scan_list()`` moved from ``25`` to ``10``: it is
+a real, rare error (a failed stat/getattrs on an object during scrub) and
+belongs at the lean level per the rule above.  The sibling ``-ENOENT``
+branch in the same function is a benign race with a concurrent delete and
+was left at ``25`` rather than promoted, to keep level 20 output stable for
+a non-error case.
+
 Writing a level 10 line
 -----------------------
 
