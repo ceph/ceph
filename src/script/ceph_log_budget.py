@@ -542,7 +542,7 @@ def check_budgets(report, max_kept_bytes_per_op=None, max_kept_fraction=None,
 
     if max_kept_bytes_per_op is not None:
         ops = report.get('client_ops') or 0
-        if ops < min_client_ops:
+        if ops < max(1, min_client_ops) or report.get('kept_bytes_per_op') is None:
             notes.append('max_kept_bytes_per_op not evaluated: only %d '
                          'client ops (< %d)' % (ops, min_client_ops))
         elif report['kept_bytes_per_op'] > max_kept_bytes_per_op:
