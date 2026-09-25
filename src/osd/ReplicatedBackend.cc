@@ -200,7 +200,7 @@ void ReplicatedBackend::check_recovery_sources(const OSDMapRef& osdmap)
 
 bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
 {
-  dout(10) << __func__ << ": " << *op->get_req() << dendl;
+  dout(15) << __func__ << ": " << *op->get_req() << dendl;
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PULL:
     return true;
