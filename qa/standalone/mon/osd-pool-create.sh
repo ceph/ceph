@@ -34,6 +34,44 @@ function run() {
     done
 }
 
+function TEST_pool_get_unset_option() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd pool create p 8 || return 1
+    ! ceph osd pool get p compression_mode > $dir/out 2>&1 || return 1
+    grep "option 'compression_mode' is not set on pool 'p'" $dir/out || return 1
+    ceph osd pool set p compression_mode aggressive || return 1
+    ceph osd pool get p compression_mode | grep aggressive || return 1
+    ceph osd pool get p num_zones | grep 'num_zones: 1' || return 1
+}
+
+function TEST_pool_rule_removed_when_unused() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated op_rule default host || return 1
+    ceph osd pool create p 8 8 replicated op_rule || return 1
+    ceph osd pool create p2 8 8 replicated op_rule || return 1
+    # kept while another pool uses it
+    ceph osd pool delete p p --yes-i-really-really-mean-it || return 1
+    ceph osd crush rule ls | grep -qx op_rule || return 1
+    # removed with its last pool, whoever created it
+    ceph osd pool delete p2 p2 --yes-i-really-really-mean-it || return 1
+    ! ceph osd crush rule ls | grep -qx op_rule || return 1
+    # and when its last pool is given another rule
+    ceph osd crush rule create-replicated r-ssd default host || return 1
+    ceph osd pool create r 8 8 replicated r-ssd || return 1
+    ceph osd pool set r crush_rule replicated_rule || return 1
+    ! ceph osd crush rule ls | grep -qx r-ssd || return 1
+    # the default rule stays
+    ceph osd pool delete r r --yes-i-really-really-mean-it || return 1
+    ceph osd crush rule ls | grep -qx replicated_rule || return 1
+    # a rule generated for an erasure coded pool goes with the pool
+    ceph osd pool create e 8 8 erasure || return 1
+    local rule=$(ceph osd pool get e crush_rule | awk '{print $2}')
+    ceph osd pool delete e e --yes-i-really-really-mean-it || return 1
+    ! ceph osd crush rule ls | grep -qx "$rule" || return 1
+}
+
 # Before http://tracker.ceph.com/issues/8307 the invalid profile was created
 function TEST_erasure_invalid_profile() {
     local dir=$1
@@ -55,6 +93,41 @@ function TEST_failed_pool_create_leaves_no_pool() {
     timeout 60 ceph osd pool create goodpool 12 || return 1
     ceph osd pool ls | grep -qx goodpool || return 1
     ! ceph osd pool ls | grep -q badpool || return 1
+}
+
+# A pool create that fails removes the rule and the profile it generated; a
+# rule of that name made by hand stays
+function TEST_failed_pool_create_removes_its_rule() {
+    local dir=$1
+    run_mon $dir a --enable_experimental_unrecoverable_data_corrupting_features=crimson || return 1
+    ceph osd set-allow-crimson --yes-i-really-mean-it || return 1
+    # crimson needs EC optimizations, which lrc does not support
+    ceph osd erasure-code-profile set lrcprofile plugin=lrc k=2 m=1 l=3 || return 1
+    ! ceph osd pool create badpool 12 12 erasure lrcprofile --crimson || return 1
+    ! ceph osd crush rule ls | grep -qx badpool || return 1
+    ceph osd crush rule create-erasure badpool lrcprofile || return 1
+    ! ceph osd pool create badpool 12 12 erasure lrcprofile --crimson || return 1
+    ceph osd crush rule ls | grep -qx badpool || return 1
+    # the PG limit is checked with the rule
+    ! ceph osd pool create bigec 1024 1024 erasure > $dir/out 2>&1 || return 1
+    grep "exceeds the" $dir/out || return 1
+    ! ceph osd crush rule ls | grep -qx erasure-code || return 1
+    ! ceph osd erasure-code-profile ls | grep -q '^bigec-' || return 1
+}
+
+# A default profile with a stripe unit that is not a multiple of 4096, which
+# only --force accepts, does not serve the pools that name no profile, and the
+# refused create leaves nothing behind
+function TEST_default_profile_odd_stripe_unit() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set default plugin=isa k=2 m=1 \
+        stripe_unit=2048 --force --yes-i-really-mean-it || return 1
+    expect_failure $dir "stripe_unit should be a multiple of 4096 bytes" \
+        ceph osd pool create e 8 8 erasure || return 1
+    ! ceph osd pool ls | grep -qx e || return 1
+    ! ceph osd erasure-code-profile ls | grep -qx e-k2-m1 || return 1
+    ! ceph osd crush rule ls | grep -qx e || return 1
 }
 
 function TEST_erasure_crush_rule() {
@@ -131,17 +204,68 @@ function TEST_erasure_crush_stripe_unit_padded() {
 function TEST_erasure_code_pool() {
     local dir=$1
     run_mon $dir a || return 1
-    ceph --format json osd dump > $dir/osd.json
-    local expected='"erasure_code_profile":"default"'
-    ! grep "$expected" $dir/osd.json || return 1
     ceph osd pool create erasurecodes 12 12 erasure
+    # a copy of the default profile of the pool's own
+    ceph osd pool get erasurecodes erasure_code_profile | \
+        grep 'erasure_code_profile: erasurecodes-k2-m2$' || return 1
+    test "$(ceph osd erasure-code-profile get erasurecodes-k2-m2 -f json | jq -r .plugin)" = \
+        "$(ceph osd erasure-code-profile get default -f json | jq -r .plugin)" || return 1
     ceph --format json osd dump | tee $dir/osd.json
-    grep "$expected" $dir/osd.json > /dev/null || return 1
+    ! grep '"erasure_code_profile":"default"' $dir/osd.json || return 1
+    test "$(ceph osd pool get erasurecodes crush_rule -f json | jq -r .crush_rule)" = \
+        erasure-code || return 1
 
     ceph osd pool create erasurecodes 12 12 erasure 2>&1 | \
         grep 'already exists' || return 1
     ceph osd pool create erasurecodes 12 12 2>&1 | \
         grep 'cannot change to type replicated' || return 1
+}
+
+function TEST_erasure_code_pool_km_crush_params() {
+    local dir=$1
+    run_mon $dir a || return 1
+    # the default profile uses crush-failure-domain=host, so the crush
+    # parameters given here differ from it and must end up in the
+    # auto-created profile
+    local poolname=km_crush
+    local profile=$poolname-k2-m1
+    ceph osd pool create $poolname --pool_type erasure --k 2 --m 1 \
+        --pg_num 8 --pgp_num 8 \
+        --zone_failure_domain rack --osd_failure_domain osd || return 1
+    ceph osd erasure-code-profile get $profile | tee $dir/profile.txt
+    grep '^crush-failure-domain=osd$' $dir/profile.txt || return 1
+    grep '^crush-zone-failure-domain=rack$' $dir/profile.txt || return 1
+    # recreating the pool reuses the profile
+    ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it || return 1
+    ceph osd pool create $poolname --pool_type erasure --k 2 --m 1 \
+        --pg_num 8 --pgp_num 8 \
+        --zone_failure_domain rack --osd_failure_domain osd || return 1
+}
+
+function TEST_erasure_code_pool_crush_params_without_km() {
+    local dir=$1
+    run_mon $dir a || return 1
+    # k and m come from the default profile, and the pool's own profile and
+    # rule record the crush parameters
+    ceph osd pool create crush_no_km --pool_type erasure \
+        --pg_num 8 --pgp_num 8 --osd_failure_domain osd || return 1
+    ceph osd erasure-code-profile get crush_no_km-k2-m2 | tee $dir/profile.txt
+    grep '^crush-failure-domain=osd$' $dir/profile.txt || return 1
+    test "$(ceph osd pool get crush_no_km crush_rule -f json | jq -r .crush_rule)" = \
+        crush_no_km || return 1
+}
+
+function TEST_erasure_code_pool_profile_name_taken() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set taken-k2-m2 plugin=isa k=2 m=2 \
+        crush-failure-domain=osd || return 1
+    ! ceph osd pool create taken --pool_type erasure --pg_num 8 \
+        2> $dir/err.txt || return 1
+    grep "EC profile 'taken-k2-m2' already exists with different contents; remove it with ceph osd erasure-code-profile rm taken-k2-m2, or use it with --erasure_code_profile taken-k2-m2" \
+        $dir/err.txt || return 1
+    ceph osd pool create taken --pool_type erasure --pg_num 8 \
+        --erasure_code_profile taken-k2-m2 || return 1
 }
 
 function TEST_replicated_pool_with_rule() {
@@ -312,6 +436,127 @@ function TEST_pool_both_prio_no_pos() {
    check_pool_priority $dir 20 "2 - 36" "-10 -9 -8 -8 -7 -7 -6 -6 -5 -5 -4 -3 -3 -2 -2 -1 -1 0 0 2 4" || return 1
 }
 
+
+# A pool given a rule in the same update that removes the rule must not get
+# it: the pool would have a rule that is gone
+function TEST_pool_set_rule_racing_its_removal() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated race_rule default host || return 1
+    ceph osd pool create a 8 8 replicated race_rule || return 1
+    ceph osd pool create b 8 8 replicated || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool set a crush_rule replicated_rule &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool set b crush_rule race_rule > $dir/out 2>&1
+    wait $pid || return 1
+    cat $dir/out
+    timeout 60 ceph osd pool get b crush_rule > $dir/rule || return 1
+    local rule=$(awk '{print $2}' $dir/rule)
+    ceph osd crush rule ls | grep -qx "$rule" || return 1
+    if [ "$rule" = replicated_rule ]; then
+        grep "does not exist" $dir/out || return 1
+    fi
+}
+
+# A rule created by name while the deletion of its last pool is pending exists
+# afterwards
+function TEST_crush_rule_create_simple_racing_its_removal() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-simple race_rule default host || return 1
+    ceph osd pool create a 8 8 replicated race_rule || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm a a --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd crush rule create-simple race_rule default host || return 1
+    wait $pid || return 1
+    ceph osd crush rule ls | grep -qx race_rule || return 1
+}
+
+# A default rule named in the update that removes the rule must not be taken:
+# replicated pools would have no default rule left
+function TEST_pool_default_rule_racing_its_removal() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated race_rule default host || return 1
+    ceph osd pool create a 8 8 replicated race_rule || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool rm a a --yes-i-really-really-mean-it &
+    local pid=$!
+    sleep 1
+    ! timeout 60 ceph osd pool default set --rule race_rule > $dir/out 2>&1 || return 1
+    wait $pid || return 1
+    grep "does not exist" $dir/out || return 1
+    ! ceph osd crush rule ls | grep -qx race_rule || return 1
+    timeout 60 ceph osd pool create p 8 || return 1
+}
+
+# osd pool set num_zones checks the rule and the replicas as pool create does
+function TEST_pool_set_num_zones_checks() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated one_zone default host || return 1
+    ceph osd pool create r 8 8 replicated || return 1
+    ! ceph osd pool set r num_zones 2 --crush_rule one_zone > $dir/out 2>&1 || return 1
+    grep "does not place the pool in 2 buckets of type datacenter" $dir/out || return 1
+    ! ceph osd pool set r num_zones 2 --replica 11 > $dir/out 2>&1 || return 1
+    grep "replica must be between 1 and 10" $dir/out || return 1
+
+    ceph osd pool create e 8 8 erasure --k 2 --m 1 || return 1
+    ceph osd pool set e allow_ec_optimizations true || return 1
+    ! ceph osd pool set e num_zones 2 --crush_rule nosuch > $dir/out 2>&1 || return 1
+    grep "specified rule nosuch doesn't exist" $dir/out || return 1
+    ! ceph osd crush rule ls | grep -qx nosuch || return 1
+}
+
+# The min_size of an LRC pool is checked against its chunks
+function TEST_lrc_min_size() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd erasure-code-profile set lrcp plugin=lrc k=4 m=2 l=3 \
+        crush-failure-domain=osd || return 1
+    ! ceph osd pool create l 8 8 erasure lrcp --min_size 9 > $dir/out 2>&1 || return 1
+    grep "pool min_size must be between 4 and 8" $dir/out || return 1
+    ceph osd pool create l 8 8 erasure lrcp --min_size 5 || return 1
+    test "$(ceph osd pool get l min_size | awk '{print $2}')" = 5 || return 1
+}
+
+# A pool deleted in the update that gives it another rule takes that rule
+# with it
+function TEST_pool_delete_after_rule_change() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated r1 default host || return 1
+    ceph osd crush rule create-replicated r2 default host || return 1
+    ceph osd pool create p 8 8 replicated r1 || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool set p crush_rule r2 &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool rm p p --yes-i-really-really-mean-it || return 1
+    wait $pid || return 1
+    ! ceph osd crush rule ls | grep -qx r1 || return 1
+    ! ceph osd crush rule ls | grep -qx r2 || return 1
+}
 
 main osd-pool-create "$@"
 
