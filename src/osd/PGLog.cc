@@ -832,7 +832,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     pg_log_dup_t min, dirty_to_dup;
     dirty_to_dup.version = dirty_to_dups;
     ldpp_dout(dpp, 10) << __func__ << " remove dups min=" << min.get_key_name()
-		       << " to dirty_to_dup=" << dirty_to_dup.get_key_name() << dendl;
+		       << " to dirty_to_dup=" << dirty_to_dup.get_key_name() << " coll=" << coll << dendl;
     t.omap_rmkeyrange(
       coll, log_oid,
       min.get_key_name(), dirty_to_dup.get_key_name());
@@ -843,7 +843,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     dirty_from_dup.version = dirty_from_dups;
     ldpp_dout(dpp, 10) << __func__ << " remove dups dirty_from_dup="
 		       << dirty_from_dup.get_key_name()
-		       << " to max=" << max.get_key_name() << dendl;
+		       << " to max=" << max.get_key_name() << " coll=" << coll << dendl;
     t.omap_rmkeyrange(
       coll, log_oid,
       dirty_from_dup.get_key_name(), max.get_key_name());
@@ -874,7 +874,7 @@ void PGLog::_write_log_and_missing_wo_missing(
 
   if (dirty_divergent_priors) {
     ldpp_dout(dpp, 10) << "write_log_and_missing: writing divergent_priors"
-		       << dendl;
+		       << " coll=" << coll << dendl;
     encode(divergent_priors, (*km)["divergent_priors"]);
   }
   if (require_rollback) {
@@ -938,7 +938,7 @@ void PGLog::_write_log_and_missing(
   }
   if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
     ldpp_dout(dpp, 10) << "write_log_and_missing, clearing from "
-		       << dirty_from << dendl;
+		       << dirty_from << " coll=" << coll << dendl;
     t.omap_rmkeyrange(
       coll, log_oid,
       dirty_from.get_key_name(), eversion_t::max().get_key_name());
@@ -980,7 +980,7 @@ void PGLog::_write_log_and_missing(
     pg_log_dup_t min, dirty_to_dup;
     dirty_to_dup.version = dirty_to_dups;
     ldpp_dout(dpp, 10) << __func__ << " remove dups min=" << min.get_key_name()
-		       << " to dirty_to_dup=" << dirty_to_dup.get_key_name() << dendl;
+		       << " to dirty_to_dup=" << dirty_to_dup.get_key_name() << " coll=" << coll << dendl;
     t.omap_rmkeyrange(
       coll, log_oid,
       min.get_key_name(), dirty_to_dup.get_key_name());
@@ -991,7 +991,7 @@ void PGLog::_write_log_and_missing(
     dirty_from_dup.version = dirty_from_dups;
     ldpp_dout(dpp, 10) << __func__ << " remove dups dirty_from_dup="
 		       << dirty_from_dup.get_key_name()
-		       << " to max=" << max.get_key_name() << dendl;
+		       << " to max=" << max.get_key_name() << " coll=" << coll << dendl;
     t.omap_rmkeyrange(
       coll, log_oid,
       dirty_from_dup.get_key_name(), max.get_key_name());
@@ -1023,7 +1023,7 @@ void PGLog::_write_log_and_missing(
 
   if (clear_divergent_priors) {
     ldpp_dout(dpp, 10) << "write_log_and_missing: writing divergent_priors"
-		       << dendl;
+		       << " coll=" << coll << dendl;
     to_remove.insert("divergent_priors");
   }
   // since we encode individual missing items instead of a whole
