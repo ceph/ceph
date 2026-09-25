@@ -115,7 +115,7 @@ void ScrubJob::adjust_shallow_schedule(
     utime_t last_scrub,
     const Scrub::sched_conf_t& app_conf)
 {
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
 		  "at entry: shallow target:{}, conf:{}, last-stamp:{:s}",
 		  shallow_target, app_conf, last_scrub)
 	   << dendl;
@@ -145,7 +145,7 @@ void ScrubJob::adjust_shallow_schedule(
     sh_times.not_before = sh_times.scheduled_at;
   }
 
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
 		  "adjusted: nb:{:s} target:{:s} ({})", sh_times.not_before,
 		  sh_times.scheduled_at, state_desc())
 	   << dendl;
@@ -252,7 +252,7 @@ void ScrubJob::adjust_deep_schedule(
     utime_t last_deep,
     const Scrub::sched_conf_t& app_conf)
 {
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
 		  "at entry: deep target:{}, conf:{}, last-stamp:{:s}",
 		  deep_target, app_conf, last_deep)
 	   << dendl;
@@ -283,7 +283,7 @@ void ScrubJob::adjust_deep_schedule(
     dp_times.not_before = dp_times.scheduled_at;
   }
 
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
 		  "adjusted: nb:{:s} target:{:s} ({})", dp_times.not_before,
 		  dp_times.scheduled_at, state_desc())
 	   << dendl;

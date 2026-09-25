@@ -837,7 +837,7 @@ std::optional<int32_t> ReplicatedBackend::be_deep_scrub_read_data(
     // done with bytes
     smap_object.digest = pos.data_hash.digest();
     smap_object.digest_present = true;
-    dout(10) << fmt::format(
+    dout(15) << fmt::format(
                     "{}: {} read {} bytes total ({} now; expected:{}; "
                     "obj-size:{}), done with data. Digest {:#x}",
                     __func__, poid, pos.data_pos, r, to_read, smap_object.size,
@@ -848,7 +848,7 @@ std::optional<int32_t> ReplicatedBackend::be_deep_scrub_read_data(
     // analyzing the object.
     return std::nullopt;
   }
-  dout(10) << fmt::format(
+  dout(15) << fmt::format(
                   "{}: {} read {} bytes total ({} now; obj-size:{}), more data "
                   "to read. Digest so far: {:#x}",
                   __func__, poid, pos.data_pos, r, smap_object.size,
@@ -865,7 +865,7 @@ int ReplicatedBackend::be_deep_scrub(
   ScrubMapBuilder &pos,
   ScrubMap::object& smap_object)
 {
-  dout(10) << fmt::format("{} {} pos {}", __func__, poid, pos) << dendl;
+  dout(15) << fmt::format("{} {} pos {}", __func__, poid, pos) << dendl;
   auto& perf_logger = *(get_parent()->get_logger());
 
   {
@@ -900,7 +900,7 @@ int ReplicatedBackend::be_deep_scrub(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &hdrbl, true);
     if (r == -EIO) {
-      dout(20) << __func__ << "  " << poid << " got "
+      dout(10) << __func__ << "  " << poid << " got "
 	       << r << " on omap header read, read_error" << dendl;
       smap_object.read_error = true;
       return 0;
