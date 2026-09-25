@@ -556,13 +556,7 @@ class CephFSMountBase(object):
         """
         raise NotImplementedError()
 
-    def _verify_attrs(self, **kwargs):
-        for k, v in kwargs.items():
-            if v is not None and not isinstance(v, str):
-                raise RuntimeError('value of attributes should be either str '
-                                   f'or None. {k} - {v}')
-
-    def update_attrs(self, **kwargs):
+   def _verify_attrs(self, **kwargs):
         verify_keys = [
           'client_id',
           'client_keyring_path',
@@ -571,9 +565,15 @@ class CephFSMountBase(object):
           'cephfs_mntpt',
         ]
 
-        self._verify_attrs(**{key: kwargs[key] for key in verify_keys if key in kwargs})
+        for k, v in kwargs.items():
+            if k in verify_keys:
+                if v is not None and not isinstance(v, str):
+                    raise RuntimeError('value of attributes should be either str '
+                                       f'or None. {k} - {v}')
+   def update_attrs(self, **kwargs):
+       self._verify_attrs(**kwargs)
 
-        for k, v in verify_keys.items():
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
     def remount(self, **kwargs):
