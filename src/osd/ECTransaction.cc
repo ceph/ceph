@@ -838,7 +838,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   }
 
   if (create_whiteout) {
-    ldpp_dout(dpp, 10) << __func__ << " detecting whiteout creation for " << oid << dendl;
+    ldpp_dout(dpp, 15) << __func__ << " detecting whiteout creation for " << oid << dendl;
     if (osdmap->get_pg_pool(pgid.pool())->supports_omap()) {
       ec_omap_journal.append_whiteout(plan.hoid);
     }

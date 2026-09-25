@@ -1646,7 +1646,7 @@ int ECBackend::be_deep_scrub(
   ScrubMap &map,
   ScrubMapBuilder &pos,
   ScrubMap::object &o) {
-  dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
+  dout(15) << __func__ << " " << poid << " pos " << pos << dendl;
   int r;
 
   utime_t sleeptime;
