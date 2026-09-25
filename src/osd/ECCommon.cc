@@ -258,7 +258,10 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   }
 
   if (r < 0) {
-    dout(10) << __func__ << " " << hoid << " minimum_to_decode_failed r: " << r
+    // Most callers ceph_assert(r == 0) right after this; keep it within the
+    // default in-memory ring (debug_osd default gather/keep is "1/5") so a
+    // crash dump still has the oid/want/have/need even without debug_osd=10.
+    dout(5) << __func__ << " " << hoid << " minimum_to_decode_failed r: " << r
       << " want: " << want << " have: " << have << " need: " << need_set << dendl;
     return r;
   }
