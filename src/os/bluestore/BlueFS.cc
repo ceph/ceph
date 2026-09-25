@@ -4538,6 +4538,11 @@ int BlueFS::_fsync(FileWriter *h, bool force_dirty)/*_F_D_LD_LNF_NF*/
   uint64_t old_dirty_seq = 0;
   uint64_t fsync_len = 0; // for the level 10 summary below; only set when gathered
   {
+    // Note: the entry line above is level 15 and the summary line below is
+    // logged only on completion, so at level 10 a fsync that hangs below
+    // (e.g. in _flush_bdev()/_wait_for_aio()) leaves no "started" marker;
+    // it can only be inferred from the last txc in kv_submitted plus
+    // heartbeat timeouts. Accepted trade-off for the per-commit line saved.
     dout(15) << __func__ << " " << h << " " << h->file->fnode
              << " dirty " << h->file->is_dirty << dendl;
     if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
