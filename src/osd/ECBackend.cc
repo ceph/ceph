@@ -828,7 +828,19 @@ void ECBackend::handle_sub_read_reply(
                                                          find(op.tid);
   if (iter == read_pipeline.tid_to_read_map.end()) {
     //canceled
-    dout(10) << __func__ << ": dropped " << op << " from " << from << dendl;
+    // On fast_read pools with do_redundant_reads, complete_read_op() erases
+    // the tid as soon as enough shards have decoded, so the remaining
+    // shards' late replies hit this branch on every read: that is good-path
+    // noise there, not the unusual case it is on non-fast_read pools.
+    dout(ceph::dout::need_dynamic(get_parent()->get_pool().fast_read ? 15 : 10))
+      << __func__ << ": dropped " << op << " from " << from;
+    for (auto &kv : op.buffers_read) {
+      *_dout << " " << kv.first;
+    }
+    for (auto &kv : op.errors) {
+      *_dout << " " << kv.first;
+    }
+    *_dout << dendl;
     return;
   }
   ReadOp &rop = iter->second;
