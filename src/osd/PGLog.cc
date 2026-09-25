@@ -60,7 +60,7 @@ void PGLog::IndexedLog::trim(
   set<string>* trimmed_dups,
   eversion_t *write_from_dups)
 {
-  lgeneric_subdout(cct, osd, 10) << "IndexedLog::trim s=" << s << dendl;
+  lgeneric_subdout(cct, osd, 20) << "IndexedLog::trim s=" << s << dendl;
   ceph_assert(s <= can_rollback_to);
   if (complete_to != log.end())
     lgeneric_subdout(cct, osd, 20) << " complete_to " << complete_to->version << dendl;
@@ -204,20 +204,20 @@ void PGLog::trim(
   bool transaction_applied,
   bool async)
 {
-  dout(10) << __func__ << " proposed trim_to = " << trim_to << dendl;
+  dout(20) << __func__ << " proposed trim_to = " << trim_to << dendl;
   // trim?
   if (trim_to > log.tail) {
-    dout(10) << __func__ << " missing = " << missing.num_missing() << dendl;
+    dout(20) << __func__ << " missing = " << missing.num_missing() << dendl;
     // Don't assert for async_recovery_targets or backfill_targets
     // or whenever there are missing items
     if (transaction_applied && !async && (missing.num_missing() == 0))
       ceph_assert(trim_to <= info.last_complete);
 
-    dout(10) << "trim " << log << " to " << trim_to << dendl;
+    dout(15) << "trim " << log << " to " << trim_to << dendl;
     log.trim(cct, trim_to, &trimmed, &trimmed_dups, &write_from_dups);
     info.log_tail = log.tail;
     if (log.complete_to != log.log.end())
-      dout(10) << " after trim complete_to " << log.complete_to->version << dendl;
+      dout(15) << " after trim complete_to " << log.complete_to->version << dendl;
   }
 }
 
