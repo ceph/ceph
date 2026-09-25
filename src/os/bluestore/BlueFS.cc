@@ -4527,9 +4527,13 @@ int BlueFS::_fsync(FileWriter *h, bool force_dirty)/*_F_D_LD_LNF_NF*/
   auto t0 = mono_clock::now();
   _maybe_check_vselector_LNF();
   uint64_t old_dirty_seq = 0;
+  uint64_t fsync_len = 0; // for the level 10 summary below; only set when gathered
   {
-    dout(10) << __func__ << " " << h << " " << h->file->fnode
+    dout(15) << __func__ << " " << h << " " << h->file->fnode
              << " dirty " << h->file->is_dirty << dendl;
+    if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+      fsync_len = h->get_buffer_length();
+    }
     int r = _flush_F(h, true);
     if (r < 0)
       return r;
@@ -4552,6 +4556,11 @@ int BlueFS::_fsync(FileWriter *h, bool force_dirty)/*_F_D_LD_LNF_NF*/
   }
   _maybe_compact_log_LNF_NF_LD_D();
   logger->tinc_with_max(l_bluefs_fsync_lat, mono_clock::now() - t0);
+  dout(10) << __func__ << " " << h << " ino " << h->file->fnode.ino
+           << " flushed 0x" << std::hex << fsync_len
+           << " size 0x" << h->file->fnode.size << std::dec
+           << " log_seq " << old_dirty_seq
+           << " lat " << (mono_clock::now() - t0) << dendl;
   return 0;
 }
 
