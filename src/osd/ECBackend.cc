@@ -1033,8 +1033,15 @@ void ECBackend::handle_sub_read_reply(
 
           rop.debug_log.emplace_back(ECUtil::REQUEST_MISSING, op.from);
           int r = read_pipeline.send_all_remaining_reads(oid, rop);
+          // attrs_ok/omap_ok/err distinguish "too few shards" from a missing
+          // attrs/omap decode failure (err is -EIO and minimum_to_decode is
+          // skipped whenever attrs or omap are not yet satisfied), which is
+          // otherwise indistinguishable from this line alone.
           dout(10) << __func__ << " tid=" << rop.tid << " " << oid
                    << " cannot decode from shards " << have
+                   << " attrs_ok=" << attrs_satisfied
+                   << " omap_ok=" << omap_satisfied
+                   << " err=" << err
                    << " errors=" << read_result.errors
                    << " send_all_remaining_reads r=" << r << dendl;
           if (r == 0 && !rop.do_redundant_reads) {
