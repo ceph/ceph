@@ -821,7 +821,7 @@ void ECBackend::handle_sub_read_reply(
                                                          find(op.tid);
   if (iter == read_pipeline.tid_to_read_map.end()) {
     //canceled
-    dout(20) << __func__ << ": dropped " << op << dendl;
+    dout(10) << __func__ << ": dropped " << op << " from " << from << dendl;
     return;
   }
   ReadOp &rop = iter->second;
@@ -950,7 +950,7 @@ void ECBackend::handle_sub_read_reply(
     // ignore all zeros, or minimum_to_decode may conclude that it has enough
     // shards available.
     rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
-    dout(20) << __func__ << " shard=" << from << " error=" << err << dendl;
+    dout(10) << __func__ << " tid=" << op.tid << " " << hoid << " shard=" << from << " error=" << err << dendl;
   }
 
   map<pg_shard_t, set<ceph_tid_t>>::iterator siter =
@@ -1014,6 +1014,10 @@ void ECBackend::handle_sub_read_reply(
 
           rop.debug_log.emplace_back(ECUtil::REQUEST_MISSING, op.from);
           int r = read_pipeline.send_all_remaining_reads(oid, rop);
+          dout(10) << __func__ << " tid=" << rop.tid << " " << oid
+                   << " cannot decode from shards " << have
+                   << " errors=" << read_result.errors
+                   << " send_all_remaining_reads r=" << r << dendl;
           if (r == 0 && !rop.do_redundant_reads) {
             // We found that new reads are required to do a decode.
             need_resend = true;
@@ -1037,14 +1041,15 @@ void ECBackend::handle_sub_read_reply(
         if (!rop.complete.at(oid).errors.empty()) {
           if (cct->_conf->osd_read_ec_check_for_errors) {
             rop.debug_log.emplace_back(ECUtil::COMPLETE_ERROR, op.from);
-            dout(10) << __func__ << ": Not ignoring errors, use one shard" << dendl;
+            dout(10) << __func__ << ": Not ignoring errors, use one shard: tid=" << rop.tid << " " << oid << " errors=" << rop.complete.at(oid).errors << dendl;
             err = rop.complete.at(oid).errors.begin()->second;
             rop.complete.at(oid).r = err;
           } else {
             get_parent()->clog_warn() << "Error(s) ignored for "
               << iter->first << " enough copies available";
-            dout(10) << __func__ << " Error(s) ignored for " << iter->first
-		     << " enough copies available" << dendl;
+            dout(10) << __func__ << " Error(s) ignored for tid " << iter->first
+                     << " " << oid << " errors=" << rop.complete.at(oid).errors
+                     << " enough copies available" << dendl;
             rop.debug_log.emplace_back(ECUtil::ERROR_CLEAR, op.from);
             rop.complete.at(oid).errors.clear();
           }
@@ -1670,7 +1675,7 @@ int ECBackend::be_deep_scrub(
     stride, bl,
     ECCommon::scrub_fadvise_flags);
   if (r < 0) {
-    dout(20) << __func__ << "  " << poid << " got "
+    dout(10) << __func__ << "  " << poid << " got "
 	     << r << " on read, read_error" << dendl;
     o.read_error = true;
     return 0;

@@ -258,8 +258,8 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   }
 
   if (r < 0) {
-    dout(20) << "minimum_to_decode_failed r: " << r << "want: " << want
-      << " have: " << have << " need: " << need_set << dendl;
+    dout(10) << __func__ << " " << hoid << " minimum_to_decode_failed r: " << r
+      << " want: " << want << " have: " << have << " need: " << need_set << dendl;
     return r;
   }
 
@@ -881,7 +881,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
       rop.to_read.at(hoid).want_attrs &&
       (!rop.complete.at(hoid).attrs || rop.complete.at(hoid).attrs->empty());
   if (want_attrs) {
-    dout(10) << __func__ << " want attrs again" << dendl;
+    dout(10) << __func__ << " tid=" << rop.tid << " " << hoid << " want attrs again" << dendl;
   }
 
   // Check if we need to read omap_header again
@@ -890,7 +890,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
       !rop.complete.at(hoid).omap_header;
   if (want_omap_header) {
     ceph_assert(get_parent()->get_pool().supports_omap());
-    dout(10) << __func__ << " want omap_header again" << dendl;
+    dout(10) << __func__ << " tid=" << rop.tid << " " << hoid << " want omap_header again" << dendl;
   }
 
   // Check if we need to read omap_keys again
@@ -899,7 +899,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
       (!rop.complete.at(hoid).omap_entries || rop.complete.at(hoid).omap_entries->empty());
   if (want_omap_keys) {
     ceph_assert(get_parent()->get_pool().supports_omap());
-    dout(10) << __func__ << " want omap_keys again" << dendl;
+    dout(10) << __func__ << " tid=" << rop.tid << " " << hoid << " want omap_keys again" << dendl;
   }
 
   read_request_t &read_request = rop.to_read.at(hoid);

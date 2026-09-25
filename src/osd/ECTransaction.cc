@@ -889,7 +889,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   for (auto &&[shard, t] : transactions) {
     if (std::cmp_greater(t.get_num_ops(), old_transaction_counts[int(shard)]) &&
         !entry->is_written_shard(shard)) {
-      ldpp_dout(dpp, 20) << __func__ << " Transaction for shard " << shard << ": ";
+      ldpp_dout(dpp, 0) << __func__ << " Transaction for shard " << shard << ": ";
       Formatter *f = Formatter::create("json");
       f->open_object_section("t");
       t.dump(f);
