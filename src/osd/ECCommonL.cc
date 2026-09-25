@@ -1216,7 +1216,7 @@ ECUtilL::HashInfoRef ECCommonL::UnstableHashInfoRegistry::get_hash_info(
     bufferlist bl;
     map<string, bufferlist>::const_iterator k = attrs.find(ECUtilL::get_hinfo_key());
     if (k == attrs.end()) {
-      dout(ceph::dout::need_dynamic(size == 0 ? 15 : 5)) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
+      dout(ceph::dout::need_dynamic(size == 0 ? 15 : 5)) << __func__ << " " << hoid << " missing hinfo attr size=" << size << dendl;
     } else {
       bl = k->second;
     }
