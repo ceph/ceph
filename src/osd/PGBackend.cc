@@ -607,7 +607,7 @@ void PGBackend::remove(
 
 void PGBackend::on_change_cleanup(ObjectStore::Transaction *t)
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
   // clear temp
   for (set<hobject_t>::iterator i = temp_contents.begin();
        i != temp_contents.end();
