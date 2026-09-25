@@ -19,6 +19,7 @@ from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
 from .utils import get_default_ssh_config
 from cephadm.cephadm_secrets import CephadmSecrets
+from ceph_secrets_types import SecretScope
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
 from ceph.deployment.tls_utils import (
     SSLConfigException,
@@ -815,6 +816,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
            be returned instead.
         """
         return self.inventory.get_fqdn(hostname) or self.inventory.get_addr(hostname)
+
+    def get_registry_credentials_json(self) -> Optional[Dict[str, Any]]:
+        """Return registry credentials dict (dual-read legacy store → secret store)."""
+        return self.cephadm_secrets.get_legacy_registry_credentials()
 
     def _init_cert_mgr(self) -> None:
 
@@ -1628,7 +1633,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             return 1, '', r
         # if logins succeeded, store info
         self.log.debug("Host logins successful. Storing login info.")
-        self.set_store('registry_credentials', json.dumps(registry_json))
+        # Store in secret store (phase 1)
+        self.cephadm_secrets.set(name='registry_credentials',
+                                 data=registry_json,
+                                 user_made=True, editable=True)
         # distribute new login info to all hosts
         self.cache.distribute_new_registry_login_info()
         return 0, "registry login scheduled", ''
@@ -3989,6 +3997,7 @@ Then run the following:
                 creds = {'username': 'admin', 'password': 'admin'}
             # only persist if not coming from secret store
             self.cephadm_secrets.set(name=AlertmanagerService.BASIC_AUTH_CREDS,
+                                     scope=SecretScope.SERVICE,
                                      target=AlertmanagerService.TYPE,
                                      data=creds,
                                      user_made=True,
@@ -4010,9 +4019,9 @@ Then run the following:
                 creds = {'username': 'admin', 'password': 'admin'}
             # only persist if not coming from secret store
             self.cephadm_secrets.set(name=PrometheusService.BASIC_AUTH_CREDS,
+                                     scope=SecretScope.SERVICE,
                                      target=PrometheusService.TYPE,
                                      data=creds,
-                                     secret_type='basic-auth',
                                      user_made=True,
                                      editable=True)
 
@@ -4038,9 +4047,9 @@ Then run the following:
     @handle_orch_error
     def set_prometheus_access_info(self, user: str, password: str) -> str:
         self.cephadm_secrets.set(name=PrometheusService.BASIC_AUTH_CREDS,
+                                 scope=SecretScope.SERVICE,
                                  data={'username': user, 'password': password},
-                                 target='prometheus',
-                                 secret_type='basic-auth',
+                                 target=PrometheusService.TYPE,
                                  user_made=True,
                                  editable=True)
         return 'prometheus credentials updated correctly'
@@ -4149,9 +4158,9 @@ Then run the following:
     @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:
         self.cephadm_secrets.set(name=AlertmanagerService.BASIC_AUTH_CREDS,
+                                 scope=SecretScope.SERVICE,
                                  data={'username': user, 'password': password},
-                                 target='alertmanager',  # service type
-                                 secret_type='basic-auth',
+                                 target=AlertmanagerService.TYPE,
                                  user_made=True,
                                  editable=True)
         return 'alertmanager credentials updated correctly'
