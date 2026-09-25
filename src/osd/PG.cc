@@ -1588,7 +1588,7 @@ void PG::on_active_actmap()
 
 
   if (recovery_state.is_active()) {
-    dout(10) << "Active: kicking snap trim" << dendl;
+    dout(15) << "Active: kicking snap trim" << dendl;
     kick_snap_trim();
   }
 
@@ -2230,7 +2230,7 @@ void PG::handle_advance_map(
   vector<int>& newacting, int acting_primary,
   PeeringCtx &rctx)
 {
-  dout(10) << __func__ << ": " << osdmap->get_epoch() << dendl;
+  dout(20) << __func__ << ": " << osdmap->get_epoch() << dendl;
   osd_shard->update_pg_epoch(pg_slot, osdmap->get_epoch());
   recovery_state.advance_map(
     osdmap,
