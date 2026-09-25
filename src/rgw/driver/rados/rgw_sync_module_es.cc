@@ -953,6 +953,10 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
 }
 
 int RGWElasticSyncModule::create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+  ldpp_dout(dpp, -1)
+      << "WARNING: The Elasticsearch sync module is "
+         "deprecated in Vampire and will be removed in the X release of Ceph."
+      << dendl;
   string endpoint = config["endpoint"];
   instance->reset(new RGWElasticSyncModuleInstance(dpp, cct, config));
   return 0;
