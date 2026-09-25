@@ -8278,7 +8278,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
       if (ret == -ENOENT) {
         // object maybe delete_marker, skip check_obj_lock
         check_obj_lock = false;
-      } else {
+      } else if (check_obj_lock) {
         // Something went wrong.
         send_partial_response(o, false, "", ret);
         return;
