@@ -26,7 +26,11 @@ export class ServicesPageHelper extends PageHelper {
   }
 
   private selectServiceType(serviceType: string) {
-    return this.selectOption('service_type', serviceType);
+    return this.selectOption('service_type', serviceType, true);
+  }
+
+  private setServiceCount(count: number) {
+    cy.get('cds-number#count input').clear().type(String(count));
   }
 
   clickServiceTab(serviceName: string, tabName: string) {
@@ -51,14 +55,14 @@ export class ServicesPageHelper extends PageHelper {
           cy.get('#service_id').type('foo');
           unmanaged
             ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
-            : cy.get('#count').clear().type(String(count));
+            : this.setServiceCount(count);
           break;
 
         case 'ingress':
           if (unmanaged) {
             cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true });
           }
-          this.selectOption('backend_service', 'rgw.foo');
+          this.selectOption('backend_service', 'rgw.foo', true);
           cy.get('#service_id').should('have.value', 'rgw.foo');
           cy.get('#virtual_ip').type('192.168.100.1/24');
           cy.get('#frontend_port').type('8081');
@@ -69,14 +73,14 @@ export class ServicesPageHelper extends PageHelper {
           cy.get('#service_id').type('testnfs');
           unmanaged
             ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
-            : cy.get('#count').clear().type(String(count));
+            : this.setServiceCount(count);
           break;
 
         case 'smb':
           cy.get('#service_id').type('testsmb');
           unmanaged
             ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
-            : cy.get('#count').clear().type(String(count));
+            : this.setServiceCount(count);
           cy.get('#cluster_id').type('cluster_foo');
           cy.get('#config_uri').type('rados://.smb/foo/scc.toml');
           break;
@@ -117,7 +121,7 @@ export class ServicesPageHelper extends PageHelper {
           cy.get('#service_id').type('test');
           unmanaged
             ? cy.get('cds-checkbox#unmanaged input[type="checkbox"]').check({ force: true })
-            : cy.get('#count').clear().type(String(count));
+            : this.setServiceCount(count);
           break;
       }
       cy.wait(1000);
@@ -126,7 +130,7 @@ export class ServicesPageHelper extends PageHelper {
     if (exist) {
       cy.get('#service_id').should('have.class', 'ng-invalid');
     } else {
-      // back to service list
+      cy.get('cd-service-form').should('not.exist');
       cy.get(`${this.pages.index.id}`);
     }
   }
@@ -136,9 +140,10 @@ export class ServicesPageHelper extends PageHelper {
     cy.get(`${this.pages.create.id}`).within(() => {
       cy.get('cds-select#service_type select').should('be.disabled');
       cy.get('#service_id').should('be.disabled');
-      cy.get('#count').clear().type(daemonCount);
+      this.setServiceCount(Number(daemonCount));
       cy.get('cd-submit-button').click();
     });
+    cy.get('cd-service-form').should('not.exist');
   }
 
   checkServiceStatus(daemon: string, expectedStatus = 'running') {

@@ -4,16 +4,28 @@ import { HostsPageHelper } from './hosts.po';
 import { ServicesPageHelper } from './services.po';
 
 export class OnboardingHelper extends PageHelper {
-  pages = { index: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' } };
+  pages = { index: { url: '#/add-storage', id: 'cd-create-cluster' } };
 
   onboarding() {
-    cy.get('cd-create-cluster').should('contain.text', 'Welcome to Ceph Dashboard');
-    cy.get('[aria-label="Add Storage"]').first().click({ force: true });
-    cy.get('cd-tearsheet').should('exist');
+    cy.get('cd-create-cluster').then(($cluster) => {
+      if ($cluster.find('cd-tearsheet').length) {
+        return;
+      }
+      cy.get('cd-create-cluster').should('contain.text', 'Welcome to Ceph Dashboard');
+      cy.get('[aria-label="Add Storage"]').first().click({ force: true });
+      cy.get('cd-tearsheet').should('exist');
+    });
   }
 
   selectStep(stepLabel: string) {
     cy.get('cd-tearsheet cds-progress-indicator').contains(stepLabel).click();
+  }
+
+  openWizardStep(stepLabel: string) {
+    cy.visit('/');
+    this.navigateTo();
+    this.onboarding();
+    this.selectStep(stepLabel);
   }
 
   clickNext() {
@@ -55,11 +67,15 @@ export class CreateClusterServicePageHelper extends ServicesPageHelper {
     create: { url: '', id: 'cd-service-form' }
   };
 
-  columnIndex = {
-    service_name: 1,
-    placement: 2,
-    running: 3,
-    size: 4,
-    last_refresh: 5
-  };
+  checkExist(serviceName: string, exist: boolean) {
+    this.existTableCell(serviceName, exist);
+  }
+
+  expectPlacementCount(serviceName: string, expectedCount: string) {
+    this.getTableRow(serviceName)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.placement})`)
+      .should(($cell) => {
+        expect($cell.text()).to.include(`count:${expectedCount}`);
+      });
+  }
 }

@@ -8,12 +8,12 @@
     cdsCol
     [columnNumbers]="{ sm: 4, md: 8, lg: 16 }"
   >
-    <h4 18n>Create Services</h4>
+    <h4 i18n>Create Services</h4>
 
     <cd-services
       [hasDetails]="false"
       [hiddenServices]="['mon', 'mgr', 'crash', 'agent']"
-      [hiddenColumns]="['status.running', 'status.size', 'status.last_refresh']"
+      [hiddenColumns]="['status', 'status.last_refresh', 'status.ports', 'certificate.status']"
       [routedModal]="false"
     ></cd-services>
   </div>

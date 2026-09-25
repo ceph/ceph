@@ -250,7 +250,7 @@ export abstract class PageHelper {
     }
     return cy.contains(
       `[cdstablerow] [cdstabledata]:nth-child(${columnIndex})`,
-      new RegExp(`^${exactContent}$`)
+      new RegExp(`^${exactContent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
     );
   }
 
