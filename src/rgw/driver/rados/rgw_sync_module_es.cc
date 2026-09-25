@@ -136,8 +136,8 @@ struct es_version_decoder {
   int parse_version(const std::string& s) {
     int major, minor;
     int ret = sscanf(s.c_str(), "%d.%d", &major, &minor);
-    if (ret < 0) {
-      return ret;
+    if (ret < 2) {
+      return -EINVAL;
     }
     version = std::make_pair(major,minor);
     return 0;
