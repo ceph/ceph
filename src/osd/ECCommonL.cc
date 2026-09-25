@@ -101,11 +101,40 @@ ostream &operator<<(ostream &lhs, const ECCommonL::read_result_t &rhs)
   lhs << "read_result_t(r=" << rhs.r
       << ", errors=" << rhs.errors;
   if (rhs.attrs) {
-    lhs << ", attrs=" << *(rhs.attrs);
+    // attr name=length only: buffer::list's operator<< is multi-line
+    lhs << ", attrs={";
+    bool first_attr = true;
+    for (const auto &[name, bl] : *(rhs.attrs)) {
+      if (!first_attr) {
+        lhs << ",";
+      }
+      first_attr = false;
+      lhs << name << "=" << bl.length();
+    }
+    lhs << "}";
   } else {
     lhs << ", noattrs";
   }
-  return lhs << ", returned=" << rhs.returned << ")";
+  // offset,length,{shard=buffer length}: buffer::list's operator<< is multi-line
+  lhs << ", returned=";
+  bool first_ret = true;
+  for (const auto &ret : rhs.returned) {
+    if (!first_ret) {
+      lhs << ",";
+    }
+    first_ret = false;
+    lhs << ret.get<0>() << "," << ret.get<1>() << ",{";
+    bool first_buf = true;
+    for (const auto &[shard, bl] : ret.get<2>()) {
+      if (!first_buf) {
+        lhs << ",";
+      }
+      first_buf = false;
+      lhs << shard << "=" << bl.length();
+    }
+    lhs << "}";
+  }
+  return lhs << ")";
 }
 
 ostream &operator<<(ostream &lhs, const ECCommonL::ReadOp &rhs)
