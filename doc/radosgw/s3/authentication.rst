@@ -216,6 +216,26 @@ access the same resources when things like Swift user ACLs are in
 play. This is one of the many reasons that you should use S3 bucket
 policies rather than S3 ACLs when possible.
 
+The SNS topic actions are mapped the same way, so that the Keystone
+project-reader role (see :ref:`radosgw-keystone`) can inspect topics but
+not modify them:
+
++---------------------------------------+---------------+
+| Operation                             | Permission    |
++=======================================+===============+
+| ``sns:GetTopicAttributes``            | ``READ``      |
++---------------------------------------+---------------+
+| ``sns:ListTopics``                    | ``READ``      |
++---------------------------------------+---------------+
+| ``sns:CreateTopic``                   | ``WRITE``     |
++---------------------------------------+---------------+
+| ``sns:SetTopicAttributes``            | ``WRITE``     |
++---------------------------------------+---------------+
+| ``sns:DeleteTopic``                   | ``WRITE``     |
++---------------------------------------+---------------+
+| ``sns:Publish``                       | ``WRITE``     |
++---------------------------------------+---------------+
+
 
 .. _Authenticating Requests (AWS Signature Version 4): https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
 .. _Authenticating requests (AWS signature version 2): https://docs.aws.amazon.com/AmazonS3/latest/userguide/auth-request-sig-v2.html
