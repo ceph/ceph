@@ -948,6 +948,12 @@ protected:
                            RadosMultipartPart* part,
                            std::list<rgw_obj_index_key>& remove_objs,
                            boost::container::flat_set<std::string>& processed_prefixes);
+  // the completion record: the tag a completion writes into the meta
+  // object before its head write, which is the ID tag its head carries
+  int set_completion_record(const DoutPrefixProvider* dpp, optional_yield y,
+                            const bufferlist* tag);
+  int head_carries(const DoutPrefixProvider* dpp, optional_yield y,
+                   rgw::sal::Object* head, const bufferlist& tag);
 };
 
 class MPRadosSerializer : public StoreMPSerializer {
