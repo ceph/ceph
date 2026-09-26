@@ -10752,7 +10752,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   string prefix;
   cmd_getval(cmdmap, "prefix", prefix);
 
-  int64_t osdid;
+  int64_t osdid = 0;
   string osd_name;
   bool osdid_present = false;
   if (prefix != "osd pg-temp" &&
@@ -12931,11 +12931,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       }
     }
-    else if (prefix == "osd rm-primary-temp") {
+    else { // "osd rm-primary-temp" per the enclosing condition
       osd = -1;
-    }
-    else {
-      ceph_assert(0 == "Unreachable!");
     }
 
     if (osdmap.require_min_compat_client != ceph_release_t::unknown &&

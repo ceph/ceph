@@ -4217,7 +4217,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   list<rgw_obj_index_key> remove_objs;
   bool truncated;
   int marker = 0;
-  int ret;
+  int ret = 0;
   uint64_t parts_accounted_size = 0;
 
   prefix_map_t processed_prefixes;

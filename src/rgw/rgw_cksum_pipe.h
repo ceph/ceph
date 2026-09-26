@@ -160,7 +160,7 @@ namespace rgw::putobj {
 			       std::string_view(hv, std::strlen(hv)));
       }
     }
-    return GetHeaderCksumResult(cksum::Cksum(cksum_type), "");
+    return GetHeaderCksumResult(cksum::Cksum(cksum::Type::none), "");
   } /* find_hdr_cksum */
 
   static inline uint16_t

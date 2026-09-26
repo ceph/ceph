@@ -1604,7 +1604,7 @@ static unsigned crush_msr_choose(
 		}
 
 		int found = 0;
-		int child_bucket_candidate;
+		int child_bucket_candidate = 0; /* read only under found != 0 below */
 		for (unsigned local_tryno = 0;
 		     local_tryno < input->msr_collision_tries;
 		     ++local_tryno) {

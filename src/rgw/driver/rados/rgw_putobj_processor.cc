@@ -296,7 +296,7 @@ int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
 int AtomicObjectProcessor::prepare(optional_yield y)
 {
   uint64_t max_head_chunk_size;
-  uint64_t head_max_size;
+  uint64_t head_max_size = 0;
   uint64_t chunk_size = 0;
   uint64_t alignment;
   rgw_pool head_pool;

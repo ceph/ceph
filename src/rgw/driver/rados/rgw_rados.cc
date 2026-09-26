@@ -2923,7 +2923,7 @@ int RGWRados::move_rados_obj(const DoutPrefixProvider *dpp,
   int ret = 0;
   real_time mtime;
   struct timespec mtime_ts;
-  uint64_t size;
+  uint64_t size = 0; // set by stat2() on the first loop iteration
 
   if (src_oid == dst_oid && src_locator == dst_locator) {
     return 0;
@@ -3781,7 +3781,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   index_op.set_zones_trace(meta.zones_trace);
   
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
-  int r;
+  int r = 0;
   if (assume_noent) {
     r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op);
     if (r == -EEXIST) {
@@ -8513,7 +8513,7 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
 {
   RGWRados *store = target->get_store();
   BucketShard *bs = nullptr;
-  int r;
+  int r = 0;
 
 #define NUM_RESHARD_RETRIES 10
   for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
@@ -9241,7 +9241,7 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
 {
   rgw_obj obj;
   const rgw_obj *pobj = &obj_instance;
-  int r;
+  int r = 0;
 
   for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
     r = bs->init(pobj->bucket, *pobj, nullptr /* no RGWBucketInfo */, dpp, y);

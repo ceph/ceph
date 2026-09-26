@@ -175,13 +175,13 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-address-of-packed-member>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-warning-option>)
   add_compile_options(
+    -Wconditional-uninitialized
     -Wno-unused-function
     -Wno-unused-local-typedef
     -Wno-varargs
     -Wno-gnu-designator
     -Wno-missing-braces
-    -Wno-parentheses
-    -Wno-deprecated-register)
+    -Wno-parentheses)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 18)
     add_compile_options(
     -Wno-vla-cxx-extension)
