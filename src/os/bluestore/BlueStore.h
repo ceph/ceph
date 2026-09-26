@@ -2299,45 +2299,8 @@ public:
       return false;
     }
 
-    void flush() {
-      std::unique_lock l(qlock);
-      while (true) {
-	// std::set flag before the check because the condition
-	// may become true outside qlock, and we need to make
-	// sure those threads see waiters and signal qcond.
-	++kv_submitted_waiters;
-	if (q.empty() || _is_all_kv_submitted()) {
-	  --kv_submitted_waiters;
-	  return;
-	}
-	qcond.wait(l);
-	--kv_submitted_waiters;
-      }
-    }
-
-    void flush_all_but_last() {
-      std::unique_lock l(qlock);
-      ceph_assert (q.size() >= 1);
-      while (true) {
-	// std::set flag before the check because the condition
-	// may become true outside qlock, and we need to make
-	// sure those threads see waiters and signal qcond.
-	++kv_submitted_waiters;
-	if (q.size() <= 1) {
-	  --kv_submitted_waiters;
-	  return;
-	} else {
-	  auto it = q.rbegin();
-	  it++;
-	  if (it->get_state() >= TransContext::STATE_KV_SUBMITTED) {
-	    --kv_submitted_waiters;
-	    return;
-          }
-	}
-	qcond.wait(l);
-	--kv_submitted_waiters;
-      }
-      }
+    void flush();
+    void flush_all_but_last();
 
     bool flush_commit(Context *c) {
       std::lock_guard l(qlock);
@@ -2984,7 +2947,7 @@ public:
 private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
-  void _txc_apply_kv(TransContext *txc, bool sync_submit_transaction);
+  void _txc_apply_kv(TransContext *txc, bool osr_lock_held);
   void _txc_committed_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
