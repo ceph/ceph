@@ -155,6 +155,7 @@ It is also possible to provide explicit sizes to `ceph-volume` via the arguments
 * ``--block-db-size``
 * ``--block-wal-size``
 * ``--journal-size``
+* ``--bluestore-min-alloc-size``
 
 `ceph-volume` will try to satisfy the requested sizes given the passed disks. If
 this is not possible, no OSDs will be deployed.

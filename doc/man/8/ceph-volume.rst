@@ -134,6 +134,13 @@ Optional arguments:
 
    Set (or override) the "bluestore_block_db_size" value, in bytes
 
+.. option:: --bluestore-min-alloc-size
+
+   Set bluestore_min_alloc_size for each OSD created, in bytes. Applied at
+   mkfs of each individual OSD and immutable for that OSD's lifetime. Use for
+   coarse indirection-unit QLC SSDs, whose allocation unit is larger than the
+   4 KiB default
+
 .. option:: --journal-size
 
    Override the "osd_journal_size" value, in megabytes

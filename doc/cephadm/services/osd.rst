@@ -771,6 +771,22 @@ Additional Options
 There are multiple optional settings that specify the way OSDs are deployed.
 Add these options to an OSD spec for them to take effect.
 
+This example sets ``bluestore_min_alloc_size`` for the OSDs it deploys.  This
+value takes effect only at OSD creation and cannot be changed afterwards without
+destroying and redeploying the OSD, so it must be supplied here rather than as a
+config option.  Coarse indirection-unit QLC SSDs want this set to their
+indirection unit, which is larger than the 4 KiB default.
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: coarse_iu_qlc
+    placement:
+      host_pattern: '*'
+    data_devices:
+      model: SBFPF2BV614T
+    min_alloc_size: 16384
+
 This example deploys encrypted OSDs on all unused drives.  Note that if Linux
 MD mirroring is used for the boot, ``/var/log``, or other volumes this spec *may*
 grab replacement or added drives before you can employ them for non-OSD purposes.
