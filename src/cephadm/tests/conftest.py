@@ -11,3 +11,17 @@
 # because Patcher is a ref-counted singleton, every later fs-based test errors
 # with "'NoneType' object has no attribute 'add_real_directory'".
 import tracemalloc  # noqa: F401
+
+from pyfakefs import fake_file, helpers
+
+# pyfakefs 5.4.0 stopped letting the root user through the permission check
+# in lresolve(), so os.rename() fails in a directory chowned to another user,
+# which is how cephadm creates every daemon directory.
+# see https://github.com/pytest-dev/pyfakefs/issues/1341
+if hasattr(fake_file.FakeFile, 'has_permission'):
+    _has_permission = fake_file.FakeFile.has_permission
+
+    def _has_permission_or_root(self, permission_bits: int) -> bool:
+        return helpers.is_root() or _has_permission(self, permission_bits)
+
+    fake_file.FakeFile.has_permission = _has_permission_or_root
