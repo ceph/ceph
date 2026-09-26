@@ -35,6 +35,8 @@ class Config:
         self.checkpoint_delay = kwargs.get('checkpoint_delay', 5)
         # allow some time for realm reconfiguration after changing master zone
         self.reconfigure_delay = kwargs.get('reconfigure_delay', 5)
+        # wait for runtime configuration changes to reach daemons
+        self.config_propagation_wait = kwargs.get('config_propagation_wait', 20)
         self.tenant = kwargs.get('tenant', '')
 
 @contextlib.contextmanager
@@ -80,6 +82,18 @@ def get_tenant():
 
 def get_realm():
     return realm
+
+def get_config_option(cluster, option, default, value_type=str):
+    output, retcode = cluster.ceph_admin(
+        ['config', 'get', 'client', option], check_retcode=False)
+    if retcode == 0:
+        try:
+            return value_type(output.splitlines()[-1].strip())
+        except (IndexError, TypeError, ValueError):
+            pass
+
+    log.warning('failed to read config option %s; using default=%s', option, default)
+    return default
 
 log = logging.getLogger('rgw_multi.tests')
 
@@ -7139,6 +7153,147 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
         except:
             pass
         raise
+
+def test_bucket_sync_retries_transient_object_sync_errors():
+    master_zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(master_zonegroup)
+
+    if len(zonegroup_conns.rw_zones) < 2:
+        raise SkipTest("test_bucket_sync_retries_transient_object_sync_errors requires at least 2 read-write zones")
+
+    primary_zone_client_conn = zonegroup_conns.master_zone
+    secondary_zone_client_conn = next(
+        z for z in zonegroup_conns.rw_zones if z != primary_zone_client_conn
+    )
+
+    secondary_zone_cluster_conn = secondary_zone_client_conn.zone
+
+    injected_objects = {
+        "retry-ebusy": ("retry-ebusy-body", errno.EBUSY),
+        "retry-eagain": ("retry-eagain-body", errno.EAGAIN),
+        "retry-eio": ("retry-eio-body", errno.EIO),
+    }
+    control_key = "not-injected"
+    control_body = "not-injected-body"
+    seed_key = "sync-ready"
+    seed_body = "sync-ready-body"
+    buckets = {}
+    injection_observation_wait = get_config_option(secondary_zone_cluster_conn.cluster, "rgw_data_sync_poll_interval", 30, int)
+    retry_timeout = config.checkpoint_retries * config.checkpoint_delay
+
+    try:
+        for object_key in injected_objects:
+            bucket = primary_zone_client_conn.create_bucket(gen_bucket_name())
+            buckets[object_key] = bucket
+            log.info(f"created bucket={bucket.name} for object key={object_key}")
+        zonegroup_meta_checkpoint(master_zonegroup)
+
+        # upload and sync seed objects to ensure the buckets will go into incremental sync
+        # mode before we upload control and injected objects
+        for bucket in buckets.values():
+            primary_zone_client_conn.s3_client.put_object(
+                Bucket=bucket.name, Key=seed_key, Body=seed_body)
+            zone_bucket_checkpoint(
+                secondary_zone_client_conn.zone,
+                primary_zone_client_conn.zone,
+                bucket.name,
+            )
+
+        injected_errors = ",".join(
+            f"{object_key}={error_code}"
+            for object_key, (_, error_code) in injected_objects.items()
+        )
+        log.info(f"inject deterministic data sync errors: {injected_errors}")
+        secondary_zone_cluster_conn.cluster.ceph_admin(
+            ["config", "set", "client", "rgw_sync_data_inject_err_probability", "1.0"]
+        )
+        secondary_zone_cluster_conn.cluster.ceph_admin(
+            ["config", "set", "client", "rgw_sync_data_inject_err_list", injected_errors]
+        )
+        log.info(f"wait {config.config_propagation_wait}s for injection settings to propagate")
+        time.sleep(config.config_propagation_wait)
+
+        log.info("upload the control and injected object to each bucket")
+        for object_key, (object_body, _) in injected_objects.items():
+            bucket = buckets[object_key]
+            log.info(f"upload object key={object_key} to bucket={bucket.name}")
+            primary_zone_client_conn.s3_client.put_object(
+                Bucket=bucket.name, Key=object_key, Body=object_body)
+            primary_zone_client_conn.s3_client.put_object(
+                Bucket=bucket.name, Key=control_key, Body=control_body)
+
+        log.info(f"wait {injection_observation_wait}s to span the data sync polling interval")
+        time.sleep(injection_observation_wait)
+
+        for object_key in injected_objects:
+            bucket = buckets[object_key]
+            log.info(f"control object {control_key} with no error injected must have been replicated")
+            result = secondary_zone_client_conn.s3_client.get_object(Bucket=bucket.name, Key=control_key)
+            assert_equal(result["Body"].read().decode("utf-8"), control_body)
+
+            try:
+                secondary_zone_client_conn.s3_client.head_object(Bucket=bucket.name, Key=object_key)
+                assert False, f"object {object_key} unexpectedly replicated while injection is active"
+            except ClientError as e:
+                err_code = e.response.get("Error", {}).get("Code", "")
+                assert err_code in ("404", "NoSuchKey", "NotFound"), \
+                    f"unexpected head_object error while injection is active: {e}"
+
+        log.info("remove deterministic injection settings")
+        secondary_zone_cluster_conn.cluster.ceph_admin(
+            ["config", "rm", "client", "rgw_sync_data_inject_err_probability"]
+        )
+        secondary_zone_cluster_conn.cluster.ceph_admin(
+            ["config", "rm", "client", "rgw_sync_data_inject_err_list"]
+        )
+
+        log.info(f"wait up to {retry_timeout}s for the failed objects sync to retry")
+        retry_deadline = time.monotonic() + retry_timeout
+        pending_objects = dict(injected_objects)
+        while pending_objects:
+            for object_key, (object_body, _) in list(pending_objects.items()):
+                bucket = buckets[object_key]
+                try:
+                    result = secondary_zone_client_conn.s3_client.get_object(
+                        Bucket=bucket.name,
+                        Key=object_key,
+                    )
+                    replicated_body = result["Body"].read().decode("utf-8")
+                    assert_equal(replicated_body, object_body)
+                    del pending_objects[object_key]
+                except ClientError as e:
+                    err_code = e.response.get("Error", {}).get("Code", "")
+                    assert err_code in ("404", "NoSuchKey", "NotFound"), \
+                        f"unexpected get_object error while waiting for retry: {e}"
+            if pending_objects:
+                if time.monotonic() >= retry_deadline:
+                    raise AssertionError(
+                        f"objects did not replicate within {retry_timeout}s: "
+                        f"{list(pending_objects)}"
+                    )
+                time.sleep(config.checkpoint_delay)
+    finally:
+        try:
+            secondary_zone_cluster_conn.cluster.ceph_admin(
+                ["config", "rm", "client", "rgw_sync_data_inject_err_probability"]
+            )
+            secondary_zone_cluster_conn.cluster.ceph_admin(
+                ["config", "rm", "client", "rgw_sync_data_inject_err_list"]
+            )
+        except:
+            pass
+
+        for object_key, bucket in buckets.items():
+            for key in (object_key, control_key, seed_key):
+                try:
+                    primary_zone_client_conn.s3_client.delete_object(
+                        Bucket=bucket.name, Key=key)
+                except:
+                    pass
+            try:
+                primary_zone_client_conn.s3_client.delete_bucket(Bucket=bucket.name)
+            except:
+                pass
 
 def test_stale_bucket_owner_after_concurrent_chown():
     """ Integration test for https://tracker.ceph.com/issues/77731 """
