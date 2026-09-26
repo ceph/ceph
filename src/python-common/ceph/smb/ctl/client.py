@@ -83,10 +83,19 @@ def _extract(obj: Any) -> Any:
     except AttributeError:
         # not a grpc/protobuf object
         return obj
-    out = {}
+    out: dict = {}
     for field in desc.fields:
         if NamedValue._is_enum_field(field):
             out[field.name] = NamedValue.from_field(obj, field)
+            continue
+        if (
+            field.message_type is not None
+            and not field.is_repeated
+            and not obj.HasField(field.name)
+        ):
+            # An unset message field. Report it as absent rather
+            # than getattr's zero valued placeholder instance.
+            out[field.name] = None
             continue
         v = getattr(obj, field.name)
         if isinstance(v, collections.abc.Mapping):
@@ -204,6 +213,22 @@ class SetDebugLevelResult(EmptyResult):
 
 class CTDBMoveIPResult(EmptyResult):
     """Result value for CTDBMoveIPResult API."""
+
+
+class ActiveClusterLevelResult(ValueResult):
+    """Result value for GetActiveClusterLevel API."""
+
+
+class ClusterLevelDetailsResult(ValueResult):
+    """Result value for GetClusterLevelDetails API."""
+
+
+class ClusterLevelUpgradeResult(ValueResult):
+    """Result value for UpgradeClusterLevel API."""
+
+
+class ClusterLevelFeaturesResult(ValueResult):
+    """Result value for GetClusterLevelFeatures API."""
 
 
 class KillClientConnectionResult(EmptyResult):
@@ -577,3 +602,49 @@ class Client:
                 metadata=self._config.headers,
             )
         return CTDBMoveIPResult.convert(result)
+
+    def get_active_cluster_level(self) -> ActiveClusterLevelResult:
+        """Call the SambaControl GetActiveClusterLevel API."""
+        with self._api() as api:
+            active_level_api = api["GetActiveClusterLevel"]
+            result = active_level_api.call(
+                api.channel,
+                active_level_api.input_type(),
+                metadata=self._config.headers,
+            )
+        return ActiveClusterLevelResult.convert(result)
+
+    def get_cluster_level_details(self) -> ClusterLevelDetailsResult:
+        """Call the SambaControl GetClusterLevelDetails API."""
+        with self._api() as api:
+            level_details_api = api["GetClusterLevelDetails"]
+            result = level_details_api.call(
+                api.channel,
+                level_details_api.input_type(),
+                metadata=self._config.headers,
+            )
+        return ClusterLevelDetailsResult.convert(result)
+
+    def upgrade_cluster_level(
+        self, apply: bool = False
+    ) -> ClusterLevelUpgradeResult:
+        """Call the SambaControl UpgradeClusterLevel API."""
+        with self._api() as api:
+            upgrade_level_api = api["UpgradeClusterLevel"]
+            result = upgrade_level_api.call(
+                api.channel,
+                upgrade_level_api.input_type(apply=apply),
+                metadata=self._config.headers,
+            )
+        return ClusterLevelUpgradeResult.convert(result)
+
+    def get_cluster_level_features(self) -> ClusterLevelFeaturesResult:
+        """Call the SambaControl GetClusterLevelFeatures API."""
+        with self._api() as api:
+            level_features_api = api["GetClusterLevelFeatures"]
+            result = level_features_api.call(
+                api.channel,
+                level_features_api.input_type(),
+                metadata=self._config.headers,
+            )
+        return ClusterLevelFeaturesResult.convert(result)
