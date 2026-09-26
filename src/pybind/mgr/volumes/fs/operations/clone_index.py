@@ -38,7 +38,7 @@ class CloneIndex(Index):
             if isinstance(e, cephfs.Error):
                 e = IndexException(-e.args[0], e.args[1])
             elif isinstance(e, VolumeException):
-                e = IndexException(e.errno, e.error_str)
+                e = IndexException(e.errno, e.errmsg)
             raise e
 
     def untrack(self, tracking_id):

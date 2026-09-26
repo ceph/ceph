@@ -14,6 +14,7 @@ from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 
 from mgr_util import CephfsClient
 
+from .utils import to_bytes
 from .fs_util import listdir, has_subdir
 from .stats_util import get_stats
 
@@ -113,6 +114,11 @@ class VolumeClient(CephfsClient["Module"]):
                     return self.volume_exception_to_retval(ve)
             return wrapper
         elif ve is not None:
+            # prefix with "ERROR" so that it stands out in logs
+            log.error(f'ERROR: {ve}')
+            # log traceback too since error is being returned
+            log.error(ve.traceback)
+
             # used as a method on self with a VolumeException argument
             return ve.to_tuple()
         else:
@@ -312,7 +318,7 @@ class VolumeClient(CephfsClient["Module"]):
                     self.purge_queue.queue_job(volname)
         except VolumeException as ve:
             if ve.errno == -errno.EAGAIN and not force:
-                ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
+                ve = VolumeException(ve.errno, ve.errmsg + " (use --force to override)")
                 ret = self.volume_exception_to_retval(ve)
             elif not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)
@@ -807,6 +813,7 @@ class VolumeClient(CephfsClient["Module"]):
         snapname   = kwargs['snap_name']
         groupname  = kwargs['group_name']
 
+        snapname = to_bytes(snapname)
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
@@ -824,19 +831,27 @@ class VolumeClient(CephfsClient["Module"]):
         groupname  = kwargs['group_name']
         force      = kwargs['force']
 
+        snapname = to_bytes(snapname)
         try:
+            should_trigger = False
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     op = SubvolumeOpType.SNAP_REMOVE_FORCE if force else SubvolumeOpType.SNAP_REMOVE
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, op) as subvolume:
+                        log.info('mark123 removing snap')
                         subvolume.remove_snapshot(snapname, force)
+                        log.info('mark123 snap removed')
         except VolumeException as ve:
+            log.info('mark123 vol exc')
             # ESTALE serves as an error to state that subvolume is currently stale due to internal removal and,
             # we should tickle the purge jobs to purge the same
             if ve.errno == -errno.ESTALE:
+                log.info('mark123 queueing job')
                 self.purge_queue.queue_job(volname)
+                log.info('mark123 queued job')
             elif not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)
+        log.info(f'mark123 queued returning {ret}')
         return ret
 
     def subvolume_snapshot_info(self, **kwargs):
@@ -863,6 +878,7 @@ class VolumeClient(CephfsClient["Module"]):
         snapname   = kwargs['snap_name']
         groupname  = kwargs['group_name']
 
+        snapname = to_bytes(snapname)
         try:
             with open_subvol_in_vol(self, self.volspec, volname, groupname, subvolname,
                                     SubvolumeOpType.SNAP_GETPATH) \

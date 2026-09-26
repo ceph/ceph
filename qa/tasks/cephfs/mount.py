@@ -18,6 +18,7 @@ from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
 
 from tasks.cephfs.filesystem import Filesystem
+from .helpers.gen_io_load import GenIoLoad
 
 log = logging.getLogger(__name__)
 
@@ -34,12 +35,13 @@ class OperationNotPermittedError(SystemError):
 
 class CephFSMountBase(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
-                 client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
-                 client_config=None):
+                 client_keyring=None, client_keyring_path=None,
+                 hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
+                 client_config=None, brxnet=None):
         """
         :param test_dir: Global teuthology test dir
         :param client_id: Client ID, the 'foo' in client.foo
+        :param client_keyring: keyring of given client_id as str
         :param client_keyring_path: path to keyring for given client_id
         :param client_remote: Remote instance for the host where client will
                               run
@@ -62,8 +64,16 @@ class CephFSMountBase(object):
         self.client_config = client_config
 
         self.cephfs_name = cephfs_name
+
         self.client_id = client_id
+        self.client_keyring = client_keyring
         self.client_keyring_path = client_keyring_path
+        # don't pass both
+        assert not (self.client_keyring and self.client_keyring_path)
+        if self.client_keyring:
+            self.client_keyring_path = self.write_keyring()
+            self.client_keyring = None
+
         self.client_remote = client_remote
         self.cluster_name = 'ceph' # TODO: use config['cluster']
         self.fs = None
@@ -95,6 +105,13 @@ class CephFSMountBase(object):
         self.test_files = ['a', 'b', 'c']
 
         self.background_procs = []
+
+    def write_keyring(self):
+        assert self.client_keyring
+
+        return self.client_remote.mktemp(
+                suffix=f'ceph.client.{self.client_id}.keyring',
+                data=self.client_keyring)
 
     # This will cleanup the stale netnses, which are from the
     # last failed test cases.
@@ -582,6 +599,12 @@ class CephFSMountBase(object):
             if v is not None:
                 setattr(self, k, v)
 
+        # don't pass both
+        assert not (self.client_keyring and self.client_keyring_path)
+        if self.client_keyring:
+            self.client_keyring_path = self.write_keyring()
+            self.client_keyring = None
+
     def remount(self, **kwargs):
         """
         Update mount object's attributes and attempt remount with these
@@ -803,6 +826,27 @@ class CephFSMountBase(object):
         p = self._run_python(pyscript, py_version, sudo=sudo, timeout=timeout)
         p.wait()
         return p.stdout.getvalue().strip()
+
+    def run_libcephfs_pybind_code(self, code):
+        final_code = dedent("""
+        import cephfs as libcephfs
+
+        global cephfs
+        cephfs = libcephfs.LibCephFS(conffile='')
+        cephfs.mount()
+        """)
+
+        # appending separately so that dedent() has intended effect regardless
+        # of indentation present in "code".
+        final_code += dedent(f"""
+        {code}
+        """)
+
+        final_code += dedent("""
+        cephfs.shutdown()
+        """)
+
+        self.run_python(final_code)
 
     def run_shell(self, args, **kwargs):
         kwargs.setdefault('cwd', self.mountpoint)
@@ -1273,6 +1317,13 @@ class CephFSMountBase(object):
                                "count={0}".format(int(n_mb)),
                                "seek={0}".format(int(seek))
                                ], wait=wait)
+
+    def gen_io_load(self, path, raise_on_thread_crash=False, timeout=60*60*15,
+                    sleep=0):
+        writer = GenIoLoad(self, path=path, timeout=timeout, sleep=sleep,
+                           raise_on_thread_crash=raise_on_thread_crash)
+        writer.start()
+        return writer
 
     def write_test_pattern(self, filename, size):
         log.info("Writing {0} bytes to {1}".format(size, filename))
