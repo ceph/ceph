@@ -131,6 +131,18 @@ Options
 
    mark an osd as in (but do not persist)
 
+.. option:: --create-osds <count>
+
+   add *count* osds to the map, with ids starting at the current ``max_osd``,
+   each marked as existing, up and in (but do not persist without --save).
+
+   This widens a captured OSD map so that placement can be simulated for OSDs
+   the cluster does not have yet. The new OSDs are not added to the CRUSH map
+   and are assigned no uuid, so they take no data until a CRUSH map that places
+   them is supplied with --import-crush. Because --import-crush refuses a CRUSH
+   map whose ``max_devices`` exceeds ``max_osd``, --create-osds is applied first
+   when both are given.
+
 .. option:: --tree
 
    Displays a hierarchical tree of the map.
