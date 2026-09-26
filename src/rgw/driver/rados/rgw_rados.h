@@ -874,6 +874,8 @@ public:
         int flags;
         const char *if_match{nullptr};
         const char *if_nomatch{nullptr};
+        // write only over the head whose ID tag this is, if set
+        const bufferlist *id_tag_guard{nullptr};
         std::optional<uint64_t> olh_epoch;
         ceph::real_time delete_at;
         bool canceled;
