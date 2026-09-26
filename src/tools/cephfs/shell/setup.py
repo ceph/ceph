@@ -14,6 +14,8 @@ setup(
         'cephfs',
         'cmd2',
         'colorama',
+        'distro',
+        'packaging',
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',

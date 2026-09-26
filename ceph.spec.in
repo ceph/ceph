@@ -1578,6 +1578,8 @@ It also contains utilities used for the cephadm orchestrator.
 Summary:    Interactive shell for Ceph file system
 Requires:   python3dist(cmd2)
 Requires:   python3dist(colorama)
+Requires:   python3dist(distro)
+Requires:   python3dist(packaging)
 Requires:   python3-cephfs
 %description -n cephfs-shell
 This package contains an interactive tool that allows accessing a Ceph
