@@ -3579,6 +3579,31 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst) {
     }
     ASSERT_TRUE(pool.nonprimary_shards.size() > 0);
     encoded = osdmap.pgtemp_primaryfirst(pool, set);
+    // pgtemp_primaryfirst() stable-partitions shards into "primary-eligible"
+    // (kept first, in their original relative order) then "non-primary"
+    // (kept last, in their original relative order). A stable partition is
+    // a no-op exactly when the range is already partitioned, i.e. no
+    // primary-eligible shard appears after a non-primary one.
+    bool already_partitioned = true;
+    bool seen_nonprimary = false;
+    for (int s = 0; s < pool.size; s++) {
+      if (pool.is_nonprimary_shard(shard_id_t(s))) {
+        seen_nonprimary = true;
+      } else if (seen_nonprimary) {
+        already_partitioned = false;
+        break;
+      }
+    }
+    // There is no per-shard forward-mapping entry point on OSDMap (only the
+    // vector form is used in production), so derive a shard's forward
+    // position from `encoded` directly: since `set` is the identity vector,
+    // shard s ends up at whichever index in `encoded` holds the value s.
+    auto forward_pos = [&](int s) -> shard_id_t {
+      auto it = std::find(encoded.begin(), encoded.end(), s);
+      ceph_assert(it != encoded.end());
+      return shard_id_t(it - encoded.begin());
+    };
+    bool any_nonzero_shard_moved = false;
     for (size_t osd = 0; osd < 6; osd++ ) {
       if (osd < pool.size - pool.nonprimary_shards.size() ) {
 	// primary shards first
@@ -3587,25 +3612,169 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst) {
 	// non-primary shards last
 	ASSERT_TRUE(pool.is_nonprimary_shard(shard_id_t(encoded[osd])));
       }
-      std::cout << osd << " " << seed << " " << osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)) << std::endl;
-      // Encode and decode should be equivalent
-      ASSERT_EQ(osdmap.pgtemp_undo_primaryfirst(pool, pgid,
-		  osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd))),
+      // Per-shard forward position should round-trip through the per-shard
+      // undo transform.
+      ASSERT_EQ(osdmap.pgtemp_undo_primaryfirst(pool, pgid, forward_pos(osd)),
 		shard_id_t(osd));
-      // Shard 0 never changes, seed 62 is a special case because all the other
-      // shards are non-primary
-      if ((osd != 0) && (seed != 62)) {
-	// Encode should be different
-	ASSERT_NE(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
-		  shard_id_t(osd));
-      } else {
-	// Encode should not change
-	ASSERT_EQ(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
-		  shard_id_t(osd));
+      // Shard 0 is never in nonprimary_shards (seed is always even, so bit 0
+      // is never set -- see the loop above), so it is always in the primary
+      // group and always already first: it never moves.
+      if (osd == 0) {
+        ASSERT_EQ(forward_pos(osd), shard_id_t(osd));
+      } else if (forward_pos(osd) != shard_id_t(osd)) {
+        any_nonzero_shard_moved = true;
       }
     }
+    // Some shard must have moved unless the arrangement was already
+    // partitioned (see already_partitioned above).
+    ASSERT_EQ(any_nonzero_shard_moved, !already_partitioned);
     decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
     ASSERT_EQ(set, decoded);
+  }
+}
+
+// Helper function to test primaryfirst mapping with an OSD-per-shard array
+// (osd_vec[i] is the OSD holding shard i).
+// Verifies forward and reverse mapping consistency
+void test_primaryfirst_mapping(
+  OSDMap& osdmap,
+  pg_pool_t& pool,
+  pg_t pgid,
+  const vector<int>& osd_vec)
+{
+  // Perform forward mapping using pgtemp_primaryfirst
+  vector<int> encoded = osdmap.pgtemp_primaryfirst(pool, osd_vec);
+
+  // Verify pgtemp_undo_primaryfirst returns back to original map
+  vector<int> decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
+  ASSERT_EQ(osd_vec, decoded) << "Forward/reverse mapping mismatch for full vector";
+
+  // Verify pgtemp_undo_primaryfirst (shard variation) does the correct thing for each shard
+  // For each position in the encoded array, verify undo returns the correct original shard
+  for (size_t i = 0; i < encoded.size(); i++) {
+    shard_id_t original_shard = osdmap.pgtemp_undo_primaryfirst(pool, pgid, shard_id_t(i));
+    // Verify the decoded OSD matches the original OSD at this shard position
+    ASSERT_LT(original_shard.id, osd_vec.size()) << "Decoded shard " << original_shard << " out of range";
+    ASSERT_EQ(encoded[i], osd_vec[original_shard.id])
+      << "OSD mismatch: encoded[" << i << "]=" << encoded[i]
+      << " but osd_vec[" << original_shard << "]=" << osd_vec[original_shard.id];
+  }
+}
+
+// Wrapper function that generates test patterns for given k, m, num_zones
+void test_primaryfirst_patterns(
+  OSDMap& osdmap,
+  pg_t pgid,
+  int k,
+  int m,
+  int num_zones)
+{
+  int total_shards = (k + m) * num_zones;
+  pg_pool_t pool;
+  pool.size = total_shards;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+
+  // Set up pg_temp for this pool
+  OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
+  vector<int> temp_osds;
+  for (int i = 0; i < total_shards; i++) {
+    temp_osds.push_back(i);
+  }
+  pgtemp_map.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
+    temp_osds.begin(), temp_osds.end());
+  osdmap.apply_incremental(pgtemp_map);
+
+  // Mark some shards as non-primary (data shards 1 through k-1 are non-primary)
+  for (int i = 1; i < k; i++) {
+    for (int z = 0; z < num_zones; z++) {
+      pool.nonprimary_shards.insert(shard_id_t(i + (k + m) * z));
+    }
+  }
+
+  // Pattern 1: shard == osd (simple case)
+  {
+    vector<int> osd_vec;
+    for (int i = 0; i < total_shards; i++) {
+      osd_vec.push_back(i);
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, osd_vec);
+  }
+
+  // Pattern 2: large OSDs that won't fit in an int8
+  {
+    vector<int> osd_vec;
+    int base_osd = 1000 * num_zones; // Large OSD numbers
+    for (int i = 0; i < total_shards; i++) {
+      osd_vec.push_back(base_osd + i);
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, osd_vec);
+  }
+
+  // Pattern 3: Overlapping OSDs - shards 0,1 same OSD
+  {
+    vector<int> osd_vec;
+    osd_vec.push_back(100);
+    osd_vec.push_back(100); // Same OSD as shard 0
+    for (int i = 2; i < total_shards; i++) {
+      osd_vec.push_back(100 + i);
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, osd_vec);
+  }
+
+  // Pattern 4: Overlapping OSDs - shards 0,k same OSD
+  // (k < total_shards always holds since total_shards == k + m and m >= 1)
+  {
+    vector<int> osd_vec;
+    osd_vec.push_back(200);
+    for (int i = 1; i < k; i++) {
+      osd_vec.push_back(200 + i);
+    }
+    osd_vec.push_back(200); // Same OSD as shard 0
+    for (int i = k + 1; i < total_shards; i++) {
+      osd_vec.push_back(200 + i);
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, osd_vec);
+  }
+
+  // Pattern 5: Overlapping OSDs - shards 1,2 same OSD
+  // (total_shards > 2 always holds since total_shards == k + m, k >= 2, m >= 1)
+  {
+    vector<int> osd_vec;
+    osd_vec.push_back(300);
+    osd_vec.push_back(301);
+    osd_vec.push_back(301); // Same OSD as shard 1
+    for (int i = 3; i < total_shards; i++) {
+      osd_vec.push_back(300 + i);
+    }
+    test_primaryfirst_mapping(osdmap, pool, pgid, osd_vec);
+  }
+
+  // Pattern 6: All shards same OSD
+  {
+    vector<int> osd_vec(total_shards, 400);
+    test_primaryfirst_mapping(osdmap, pool, pgid, osd_vec);
+  }
+}
+
+// Main test: test all combinations of k, m for a single zone.
+//
+// num_zones is intentionally fixed at 1 here (stretch EC not implemented yet)
+TEST_F(OSDMapTest, pgtemp_primaryfirst_comprehensive) {
+  set_up_map();
+
+  pg_t rawpg(0, my_ec_pool);
+  pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
+
+  // Test all combinations:
+  // k = 2 to 5 inclusive
+  // m = 1 to 3 inclusive
+  constexpr int num_zones = 1;
+  for (int k = 2; k <= 5; k++) {
+    for (int m = 1; m <= 3; m++) {
+      SCOPED_TRACE(::testing::Message()
+        << "k=" << k << " m=" << m << " num_zones=" << num_zones);
+      test_primaryfirst_patterns(osdmap, pgid, k, m, num_zones);
+    }
   }
 }
 
