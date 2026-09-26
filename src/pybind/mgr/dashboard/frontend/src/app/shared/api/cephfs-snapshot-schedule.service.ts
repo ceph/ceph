@@ -61,7 +61,7 @@ export class CephfsSnapshotScheduleService {
       path
     )}/delete_snapshot?schedule=${schedule}&start=${encodeURIComponent(start)}`;
     if (retentionPolicy) {
-      deleteUrl += `&retention_policy=${retentionPolicy}`;
+      deleteUrl += `&retention_policy=${encodeURIComponent(retentionPolicy)}`;
     }
     if (subvol && group) {
       deleteUrl += `&subvol=${encodeURIComponent(subvol)}&group=${encodeURIComponent(group)}`;
@@ -177,5 +177,41 @@ export class CephfsSnapshotScheduleService {
     return Object.entries(retention).map(([frequency, interval]) =>
       $localize`${interval} ${RetentionFrequencyCopy[frequency]}`.toLocaleLowerCase()
     );
+  }
+
+  // Convert API/table retention into "7-d|4-w". Skip placeholders like "-".
+  buildRetentionPolicyParam(
+    retention?: Record<string, number> | string | null
+  ): string | undefined {
+    if (!retention || retention === '-') {
+      return undefined;
+    }
+
+    const validFrequency = /^[nmhdwMy]$/;
+    const parts: string[] = [];
+
+    if (typeof retention === 'string') {
+      retention.split(/\s+/).forEach((token) => {
+        if (!token || token === '-') {
+          return;
+        }
+        const frequency = token.slice(-1);
+        const interval = token.slice(0, -1);
+        if (interval && /^\d+$/.test(interval) && validFrequency.test(frequency)) {
+          parts.push(`${interval}-${frequency}`);
+        }
+      });
+    } else {
+      Object.entries(retention).forEach(([frequency, interval]) => {
+        if (interval === null || interval === undefined) {
+          return;
+        }
+        if (validFrequency.test(frequency)) {
+          parts.push(`${interval}-${frequency}`);
+        }
+      });
+    }
+
+    return parts.length ? parts.join('|') : undefined;
   }
 }
