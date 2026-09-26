@@ -5032,12 +5032,44 @@ void Server::_finalize_readdir(const MDRequestRef& mdr,
   respond_to_request(mdr, 0);
 }
 
+/* Delay a readdir (or snapdiff) from a session that is acquiring caps too
+ * fast. This is checked before the path is traversed, and whatever locks and
+ * auth pins an earlier pass left on the request are dropped: the retry is
+ * only rescheduled after caps_throttle_retry_request_timeout, and holding the
+ * path rdlocks for that long would stall a rename or unlink on any of the
+ * parent directories. */
+bool Server::throttle_readdir_caps(const MDRequestRef& mdr, Session *session,
+				   std::string_view op)
+{
+  auto num_caps = session->get_num_caps();
+  auto session_cap_acquisition = session->get_cap_acquisition();
+
+  if (num_caps <= static_cast<uint64_t>(max_caps_per_client * max_caps_throttle_ratio) ||
+      session_cap_acquisition < cap_acquisition_throttle)
+    return false;
+
+  dout(20) << op << " throttled. max_caps_per_client: " << max_caps_per_client << " num_caps: " << num_caps
+	   << " session_cap_acquistion: " << session_cap_acquisition << " cap_acquisition_throttle: " << cap_acquisition_throttle << dendl;
+  if (logger)
+    logger->inc(l_mdss_cap_acquisition_throttle);
+
+  mdr->mark_event("cap_acquisition_throttle");
+  mds->locker->drop_locks(mdr.get());
+  mdr->drop_local_auth_pins();
+  mds->timer.add_event_after(caps_throttle_retry_request_timeout, new C_MDS_RetryRequest(mdcache, mdr));
+  return true;
+}
+
 void Server::handle_client_readdir(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
   Session *session = mds->get_session(req);
   client_t client = req->get_source().num();
   MutationImpl::LockOpVec lov;
+
+  if (throttle_readdir_caps(mdr, session, "readdir"))
+    return;
+
   CInode *diri = rdlock_path_pin_ref(mdr, false, true);
   if (!diri) return;
 
@@ -5047,20 +5079,6 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     dout(10) << "reply to " << *req << " readdir -ENOTDIR" << dendl;
     respond_to_request(mdr, -ENOTDIR);
     return;
-  }
-
-  auto num_caps = session->get_num_caps();
-  auto session_cap_acquisition = session->get_cap_acquisition();
-
-  if (num_caps > static_cast<uint64_t>(max_caps_per_client * max_caps_throttle_ratio) && session_cap_acquisition >= cap_acquisition_throttle) {
-      dout(20) << "readdir throttled. max_caps_per_client: " << max_caps_per_client << " num_caps: " << num_caps
-	       << " session_cap_acquistion: " << session_cap_acquisition << " cap_acquisition_throttle: " << cap_acquisition_throttle << dendl;
-      if (logger)
-          logger->inc(l_mdss_cap_acquisition_throttle);
-
-      mdr->mark_event("cap_acquisition_throttle");
-      mds->timer.add_event_after(caps_throttle_retry_request_timeout, new C_MDS_RetryRequest(mdcache, mdr));
-      return;
   }
 
   /* readdir can add dentries to cache: acquire the quiescelock */
@@ -5122,6 +5140,9 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     }
     // fetch
     dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << dendl;
+    // Past the first page, the walk has lost the dirfrag it was reading.
+    if ((!offset_str.empty() || offset_hash) && mds->logger)
+      mds->logger->inc(l_mds_dir_readdir_refetch);
     dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
     return;
   }
@@ -5169,6 +5190,15 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
   dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
   auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+  /* Past the cache limit, trimming cannot keep up, and every cap handed out
+   * pins an inode it could otherwise expire. Optionally stop a walker from
+   * making it worse: its client still gets the entries and their leases, but
+   * no caps on inodes it does not already hold. */
+  const bool new_caps =
+    !(g_conf().get_val<bool>("mds_readdir_withhold_caps_over_limit") &&
+      mdcache->cache_size() > mdcache->cache_limit_memory());
+  if (!new_caps)
+    dout(10) << " cache over its limit, issuing no new caps" << dendl;
   bool end = (it == dir->end());
   for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -5212,11 +5242,15 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
 	continue;
       } else {
-	// touch everything i _do_ have
-	for (auto &p : *dir) {
-	  if (!p.second->get_linkage()->is_null())
-	    mdcache->lru.lru_touch(p.second);
-        }
+	// keep everything i _do_ have while the remote inode is opened
+	if (mdcache->get_readdir_keep_complete_interval() != ceph::timespan::zero()) {
+	  dir->note_readdir(ceph::coarse_mono_clock::now());
+	} else {
+	  for (auto &p : *dir) {
+	    if (!p.second->get_linkage()->is_null())
+	      mdcache->lru.lru_touch(p.second);
+	  }
+	}
 
 	// already issued caps and leases, reply immediately.
 	if (dnbl.length() > 0) {
@@ -5248,7 +5282,8 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 
     // inode
     dout(12) << "including inode in " << *in << " snap " << snapid << dendl;
-    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid, bytes_left - (int)dnbl.length());
+    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid,
+				 bytes_left - (int)dnbl.length(), 0, new_caps);
     if (r < 0) {
       // chop off dn->name, lease
       dout(10) << " ran out of room, stopping at " << start_len << " < " << bytes_left << dendl;
@@ -5260,9 +5295,17 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     ceph_assert(r >= 0);
     numfiles++;
 
-    // touch dn
-    mdcache->lru.lru_touch(dn);
+    /* Only to the middle of the LRU: a du or find returns every dentry of a
+     * tree exactly once, and moving each to the top would push the working
+     * set of every other client out of the cache. A dentry the client does
+     * go on to use is touched to the top by that lookup. */
+    mdcache->lru.lru_midtouch(dn);
   }
+  if (end)
+    dir->clear_readdir();
+  else
+    dir->note_readdir(ceph::coarse_mono_clock::now());
+
   __u16 flags = 0;
   // client only understand END and COMPLETE flags ?
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
@@ -12143,6 +12186,10 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   const cref_t<MClientRequest>& req = mdr->client_request;
   Session* session = mds->get_session(req);
   MutationImpl::LockOpVec lov;
+
+  if (throttle_readdir_caps(mdr, session, "snapdiff"))
+    return;
+
   CInode* diri = rdlock_path_pin_ref(mdr, false, true);
   if (!diri) return;
 
@@ -12151,20 +12198,6 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
     // not a dir
     dout(10) << "reply to " << *req << " snapdiff -ENOTDIR" << dendl;
     respond_to_request(mdr, -ENOTDIR);
-    return;
-  }
-
-  auto num_caps = session->get_num_caps();
-  auto session_cap_acquisition = session->get_cap_acquisition();
-
-  if (num_caps > static_cast<uint64_t>(max_caps_per_client * max_caps_throttle_ratio) && session_cap_acquisition >= cap_acquisition_throttle) {
-    dout(20) << "snapdiff throttled. max_caps_per_client: " << max_caps_per_client << " num_caps: " << num_caps
-      << " session_cap_acquistion: " << session_cap_acquisition << " cap_acquisition_throttle: " << cap_acquisition_throttle << dendl;
-    if (logger)
-      logger->inc(l_mdss_cap_acquisition_throttle);
-
-    mdr->mark_event("cap_acquisition_throttle");
-    mds->timer.add_event_after(caps_throttle_retry_request_timeout, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 

@@ -1737,7 +1737,11 @@ public:
     if (omap.empty()) {
       omap.swap(omap_more);
     } else {
-      omap.insert(omap_more.begin(), omap_more.end());
+      // Splice the nodes over rather than copying every key and value: the
+      // whole frag is held here until it is decoded, and a copy would hold
+      // each batch twice until omap_more is destroyed.
+      omap.merge(omap_more);
+      omap_more.clear();
     }
     if (more) {
       dir->_omap_fetch_more(omap_version, hdrbl, omap, fin);
