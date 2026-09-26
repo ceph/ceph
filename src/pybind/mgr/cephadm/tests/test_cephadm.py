@@ -3745,3 +3745,331 @@ class TestCephadmLogDestination:
                 f'cephadm should be called with --log-dest={dest!r} '
                 f'when cephadm_log_destination is {log_destination!r}'
             )
+
+
+class TestCephadmPlanReconfigRedeploy:
+    """Test reconfig and redeploy prediction in cephadm
+    _plan().
+    """
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_reconfig_when_no_last_config(self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'host1'):
+            spec = ServiceSpec(
+                service_type='crash',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+            )
+            with with_service(cephadm_module, spec):
+                daemons = cephadm_module.cache.get_daemons_by_service('crash')
+                assert daemons, 'expected at least one crash daemon'
+                daemon = daemons[0]
+
+                host = daemon.hostname
+                cephadm_module.cache.daemon_config_deps.get(host, {}).pop(daemon.name(), None)
+
+                result = cephadm_module._plan(spec)
+
+                assert result['reconfig'] == [daemon.name()]
+                assert result['redeploy'] == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_redeploy_on_extra_container_args_change(self, cephadm_module: CephadmOrchestrator):
+        from ceph.utils import datetime_now
+
+        with with_host(cephadm_module, 'host1'):
+            deploy_spec = ServiceSpec(
+                service_type='crash',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+            )
+            with with_service(cephadm_module, deploy_spec):
+                daemons = cephadm_module.cache.get_daemons_by_service('crash')
+                assert daemons
+                daemon = daemons[0]
+                host = daemon.hostname
+
+                cephadm_module.cache.update_daemon_config_deps(
+                    host, daemon.name(), [], datetime_now()
+                )
+
+                preview_spec = ServiceSpec(
+                    service_type='crash',
+                    placement=PlacementSpec(hosts=['host1'], count=1),
+                    extra_container_args=['--cpus=2'],
+                )
+                assert daemon.extra_container_args is None
+
+                result = cephadm_module._plan(preview_spec)
+
+                assert result['redeploy'] == [daemon.name()]
+                assert result['reconfig'] == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_redeploy_on_extra_entrypoint_args_change(self, cephadm_module: CephadmOrchestrator):
+        from ceph.utils import datetime_now
+
+        with with_host(cephadm_module, 'host1'):
+            deploy_spec = ServiceSpec(
+                service_type='crash',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+            )
+            with with_service(cephadm_module, deploy_spec):
+                daemons = cephadm_module.cache.get_daemons_by_service('crash')
+                assert daemons
+                daemon = daemons[0]
+                host = daemon.hostname
+
+                cephadm_module.cache.update_daemon_config_deps(
+                    host, daemon.name(), [], datetime_now()
+                )
+
+                preview_spec = ServiceSpec(
+                    service_type='crash',
+                    placement=PlacementSpec(hosts=['host1'], count=1),
+                    extra_entrypoint_args=['--log-level=debug'],
+                )
+                assert daemon.extra_container_args is None
+                assert daemon.extra_entrypoint_args is None
+
+                result = cephadm_module._plan(preview_spec)
+
+                assert result['redeploy'] == [daemon.name()]
+                assert result['reconfig'] == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_reconfig_on_deps_fingerprint_change(self, cephadm_module: CephadmOrchestrator):
+        from ceph.utils import datetime_now
+        from cephadm.services.service_registry import service_registry
+        from cephadm import utils as ceph_utils
+
+        with with_host(cephadm_module, 'host1'):
+            spec = ServiceSpec(
+                service_type='crash',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+            )
+            with with_service(cephadm_module, spec):
+                daemons = cephadm_module.cache.get_daemons_by_service('crash')
+                assert daemons
+                daemon = daemons[0]
+                host = daemon.hostname
+
+                cephadm_module.cache.update_daemon_config_deps(
+                    host, daemon.name(), [], datetime_now()
+                )
+                daemon.extra_container_args = None
+                spec.extra_container_args = None
+                daemon.extra_entrypoint_args = None
+                spec.extra_entrypoint_args = None
+
+                svc = service_registry.get_service(spec.service_type)
+                with mock.patch.object(
+                    type(svc),
+                    'choose_next_action',
+                    return_value=ceph_utils.NextDaemonStep(ceph_utils.Action.RECONFIG),
+                ):
+                    result = cephadm_module._plan(spec)
+
+                assert result['reconfig'] == [daemon.name()]
+                assert result['redeploy'] == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_redeploy_on_deps_fingerprint_change(self, cephadm_module: CephadmOrchestrator):
+        from ceph.utils import datetime_now
+        from cephadm.services.service_registry import service_registry
+        from cephadm import utils as ceph_utils
+
+        with with_host(cephadm_module, 'host1'):
+            spec = ServiceSpec(
+                service_type='crash',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+            )
+            with with_service(cephadm_module, spec):
+                daemons = cephadm_module.cache.get_daemons_by_service('crash')
+                assert daemons
+                daemon = daemons[0]
+                host = daemon.hostname
+
+                cephadm_module.cache.update_daemon_config_deps(
+                    host, daemon.name(), [], datetime_now()
+                )
+                daemon.extra_container_args = None
+                spec.extra_container_args = None
+                daemon.extra_entrypoint_args = None
+                spec.extra_entrypoint_args = None
+
+                svc = service_registry.get_service(spec.service_type)
+                with mock.patch.object(
+                    type(svc),
+                    'choose_next_action',
+                    return_value=ceph_utils.NextDaemonStep(ceph_utils.Action.REDEPLOY),
+                ):
+                    result = cephadm_module._plan(spec)
+
+                assert result['redeploy'] == [daemon.name()]
+                assert result['reconfig'] == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_reconfig_on_monmap_update(self, cephadm_module: CephadmOrchestrator):
+        from ceph.utils import datetime_now, str_to_datetime
+        from cephadm.services.service_registry import service_registry
+        from cephadm import utils as ceph_utils
+
+        with with_host(cephadm_module, 'host1'):
+            cephadm_module.cache.update_host_networks(
+                'host1',
+                {'127.0.0.0/8': {'lo': ['127.0.0.1']}},
+            )
+            cephadm_module.check_mon_command({
+                'prefix': 'config set',
+                'who': 'mon',
+                'name': 'public_network',
+                'value': '127.0.0.0/8',
+            })
+            spec = ServiceSpec(
+                service_type='mon',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+            )
+            with with_service(cephadm_module, spec, CephadmOrchestrator.apply_mon, 'host1'):
+                daemons = cephadm_module.cache.get_daemons_by_service('mon')
+                assert daemons
+                daemon = daemons[0]
+                host = daemon.hostname
+
+                past = str_to_datetime('2000-01-01T00:00:00.000000Z')
+                cephadm_module.cache.update_daemon_config_deps(
+                    host, daemon.name(), [], past
+                )
+                daemon.extra_container_args = None
+                spec.extra_container_args = None
+                daemon.extra_entrypoint_args = None
+                spec.extra_entrypoint_args = None
+
+                svc = service_registry.get_service('mon')
+                with mock.patch.object(
+                    type(svc),
+                    'choose_next_action',
+                    return_value=ceph_utils.NextDaemonStep(ceph_utils.Action.NO_ACTION),
+                ):
+                    cephadm_module.last_monmap = datetime_now()
+                    result = cephadm_module._plan(spec)
+
+                assert result['reconfig'] == [daemon.name()]
+                assert result['redeploy'] == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_reconfig_on_extra_ceph_conf_update(self, cephadm_module: CephadmOrchestrator):
+        from ceph.utils import datetime_now, str_to_datetime
+        from cephadm.services.service_registry import service_registry
+        from cephadm import utils as ceph_utils
+        from cephadm.module import CephadmOrchestrator as _Mod
+
+        with with_host(cephadm_module, 'host1'):
+            cephadm_module.cache.update_host_networks(
+                'host1',
+                {'127.0.0.0/8': {'lo': ['127.0.0.1']}},
+            )
+            cephadm_module.check_mon_command({
+                'prefix': 'config set',
+                'who': 'mon',
+                'name': 'public_network',
+                'value': '127.0.0.0/8',
+            })
+            spec = ServiceSpec(
+                service_type='mon',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+            )
+            with with_service(cephadm_module, spec, CephadmOrchestrator.apply_mon, 'host1'):
+                daemons = cephadm_module.cache.get_daemons_by_service('mon')
+                assert daemons
+                daemon = daemons[0]
+                host = daemon.hostname
+
+                past = str_to_datetime('2000-01-01T00:00:00.000000Z')
+                cephadm_module.cache.update_daemon_config_deps(
+                    host, daemon.name(), [], past
+                )
+                daemon.extra_container_args = None
+                spec.extra_container_args = None
+                daemon.extra_entrypoint_args = None
+                spec.extra_entrypoint_args = None
+                cephadm_module.last_monmap = None
+
+                svc = service_registry.get_service('mon')
+                with mock.patch.object(
+                    type(svc),
+                    'choose_next_action',
+                    return_value=ceph_utils.NextDaemonStep(ceph_utils.Action.NO_ACTION),
+                ):
+                    with mock.patch.object(
+                        _Mod,
+                        'extra_ceph_conf_is_newer',
+                        return_value=True,
+                    ):
+                        result = cephadm_module._plan(spec)
+
+                assert result['reconfig'] == [daemon.name()]
+                assert result['redeploy'] == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_no_action_when_nothing_changed(self, cephadm_module: CephadmOrchestrator):
+        from ceph.utils import datetime_now
+        from cephadm.services.service_registry import service_registry
+        from cephadm import utils as ceph_utils
+
+        with with_host(cephadm_module, 'host1'):
+            spec = ServiceSpec(
+                service_type='crash',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+            )
+            with with_service(cephadm_module, spec):
+                daemons = cephadm_module.cache.get_daemons_by_service('crash')
+                assert daemons
+                daemon = daemons[0]
+                host = daemon.hostname
+
+                cephadm_module.cache.update_daemon_config_deps(
+                    host, daemon.name(), [], datetime_now()
+                )
+                daemon.extra_container_args = None
+                spec.extra_container_args = None
+                daemon.extra_entrypoint_args = None
+                spec.extra_entrypoint_args = None
+                cephadm_module.last_monmap = None
+
+                svc = service_registry.get_service(spec.service_type)
+                with mock.patch.object(
+                    type(svc),
+                    'choose_next_action',
+                    return_value=ceph_utils.NextDaemonStep(ceph_utils.Action.NO_ACTION),
+                ):
+                    result = cephadm_module._plan(spec)
+
+                assert result['reconfig'] == []
+                assert result['redeploy'] == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_skips_staying_daemons_for_unmanaged_spec(self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'host1'):
+            spec = ServiceSpec(
+                service_type='crash',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+                unmanaged=True,
+            )
+            wait(cephadm_module, cephadm_module.apply([spec]))
+
+            result = cephadm_module._plan(spec)
+
+            assert result['reconfig'] == []
+            assert result['redeploy'] == []
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_plan_return_dict_always_has_reconfig_redeploy_keys(self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'host1'):
+            spec = ServiceSpec(
+                service_type='crash',
+                placement=PlacementSpec(hosts=['host1'], count=1),
+            )
+            result = cephadm_module._plan(spec)
+
+            assert 'reconfig' in result
+            assert 'redeploy' in result
+            assert isinstance(result['reconfig'], list)
+            assert isinstance(result['redeploy'], list)

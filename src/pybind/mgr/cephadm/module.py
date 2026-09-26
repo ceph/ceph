@@ -4570,11 +4570,66 @@ Then run the following:
         ha.validate()
         hosts, to_add, to_remove = ha.place()
 
+        to_reconfig: List[str] = []
+        to_redeploy: List[str] = []
+
+        if not spec.unmanaged:
+            staying_hostnames = {h.hostname for h in hosts}
+            current_daemons = self.cache.get_daemons_by_service(spec.service_name())
+            for daemon in current_daemons:
+                if daemon.hostname not in staying_hostnames:
+                    continue
+
+                last_deps, last_config = self.cache.get_daemon_last_config_deps(
+                    daemon.hostname, daemon.name())
+
+                if not last_config:
+                    to_reconfig.append(daemon.name())
+                    continue
+
+                if (spec is not None
+                        and hasattr(spec, 'extra_container_args')
+                        and daemon.extra_container_args != spec.extra_container_args):
+                    to_redeploy.append(daemon.name())
+                    continue
+
+                if (spec is not None
+                        and hasattr(spec, 'extra_entrypoint_args')
+                        and daemon.extra_entrypoint_args != spec.extra_entrypoint_args):
+                    to_redeploy.append(daemon.name())
+                    continue
+
+                curr_deps = svc.get_dependencies(self, spec, daemon.daemon_type)
+                effective_last_deps = last_deps if last_deps is not None else []
+                _step = svc.choose_next_action(
+                    utils.Action.NO_ACTION,
+                    daemon.daemon_type,
+                    spec,
+                    curr_deps=sorted(curr_deps),
+                    last_deps=sorted(effective_last_deps),
+                )
+                if _step.action == utils.Action.REDEPLOY:
+                    to_redeploy.append(daemon.name())
+                    continue
+                if _step.action == utils.Action.RECONFIG:
+                    to_reconfig.append(daemon.name())
+                    continue
+
+                if daemon.daemon_type in utils.CEPH_TYPES:
+                    if self.last_monmap and self.last_monmap > last_config:
+                        to_reconfig.append(daemon.name())
+                        continue
+                    if self.extra_ceph_conf_is_newer(last_config):
+                        to_reconfig.append(daemon.name())
+                        continue
+
         return {
             'service_name': spec.service_name(),
             'service_type': spec.service_type,
             'add': [hs.hostname for hs in to_add],
-            'remove': [d.name() for d in to_remove]
+            'remove': [d.name() for d in to_remove],
+            'reconfig': to_reconfig,
+            'redeploy': to_redeploy
         }
 
     @handle_orch_error
