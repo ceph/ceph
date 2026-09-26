@@ -213,7 +213,7 @@ int DiffIterate<I>::diff_iterate(I *ictx, uint64_t from_snap_id,
     return -ENODEV;
   }
 
-  // ensure previous writes are visible to listsnaps
+  // ensure previous writes are visible to listsnaps and the object map
   C_SaferCond flush_ctx;
   {
     std::shared_lock owner_locker{ictx->owner_lock};
@@ -221,7 +221,7 @@ int DiffIterate<I>::diff_iterate(I *ictx, uint64_t from_snap_id,
                                                         io::AIO_TYPE_FLUSH);
     auto req = io::ImageDispatchSpec::create_flush(
       *ictx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
-      aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+      aio_comp, io::FLUSH_SOURCE_INTERNAL_WRITES, {});
     req->send();
   }
   int r = flush_ctx.wait();

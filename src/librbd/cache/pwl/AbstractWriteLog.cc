@@ -967,6 +967,7 @@ void AbstractWriteLog<I>::flush(io::FlushSource flush_source, Context *on_finish
   ldout(cct, 20) << "on_finish=" << on_finish << " flush_source=" << flush_source << dendl;
 
   if (io::FLUSH_SOURCE_SHUTDOWN == flush_source || io::FLUSH_SOURCE_INTERNAL == flush_source ||
+      io::FLUSH_SOURCE_INTERNAL_WRITES == flush_source ||
       io::FLUSH_SOURCE_WRITE_BLOCK == flush_source) {
     internal_flush(false, on_finish);
     return;

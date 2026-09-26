@@ -21,6 +21,7 @@
 #include "librbd/api/PoolMetadata.h"
 #include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageRequest.h"
 #include "osdc/Striper.h"
 #include "common/Cond.h"
@@ -2394,6 +2395,86 @@ TEST_F(TestInternal, MissingDataPool) {
   ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, m_image_name, no_op));
 
   ASSERT_EQ(0, create_image_pp(m_rbd, m_ioctx, m_image_name, m_image_size));
+}
+
+TEST_F(TestInternal, AsyncOperationFlushWrites) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  // oldest first: write, read, write, and the op that flushes
+  librbd::io::AsyncOperation write1, read, write2, flusher;
+  write1.start_op(*ictx);
+  read.start_op(*ictx, false);
+  write2.start_op(*ictx);
+  flusher.start_op(*ictx);
+
+  C_SaferCond flush_writes_ctx;
+  flusher.flush_writes(&flush_writes_ctx);
+  C_SaferCond flush_ctx;
+  flusher.flush(&flush_ctx);
+
+  // finish all ops before checking the results, an op still in flight
+  // asserts when it goes out of scope
+  write2.finish_op();
+  int flush_writes_r1 = flush_writes_ctx.wait_for(0.1);
+  write1.finish_op();
+  int flush_writes_r2 = flush_writes_ctx.wait_for(10);
+  int flush_r1 = flush_ctx.wait_for(0.1);
+  read.finish_op();
+  flusher.finish_op();
+  int flush_r2 = flush_ctx.wait();
+  flush_writes_ctx.wait();
+
+  // a flush of writes waits for older writes, but not for older reads
+  ASSERT_EQ(ETIMEDOUT, flush_writes_r1);
+  ASSERT_EQ(0, flush_writes_r2);
+  // a full flush waits for older reads too
+  ASSERT_EQ(ETIMEDOUT, flush_r1);
+  ASSERT_EQ(0, flush_r2);
+}
+
+TEST_F(TestInternal, AsyncOperationFlushWritesNoWrites) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  // a read, a flush and a list-snaps in flight
+  std::vector<librbd::io::AioCompletion*> comps;
+  for (auto aio_type : {librbd::io::AIO_TYPE_READ,
+                        librbd::io::AIO_TYPE_FLUSH,
+                        librbd::io::AIO_TYPE_GENERIC}) {
+    Context *ctx = new DummyContext();
+    auto c = librbd::io::AioCompletion::create_and_start(ctx, ictx, aio_type);
+    c->get();
+    comps.push_back(c);
+  }
+
+  librbd::io::AsyncOperation flusher;
+  flusher.start_op(*ictx);
+
+  C_SaferCond flush_writes_ctx;
+  flusher.flush_writes(&flush_writes_ctx);
+  C_SaferCond flush_ctx;
+  flusher.flush(&flush_ctx);
+
+  // finish all ops before checking the results, an op still in flight
+  // asserts when it goes out of scope
+  int flush_writes_r = flush_writes_ctx.wait_for(10);
+  int flush_r1 = flush_ctx.wait_for(0.1);
+  for (auto c : comps) {
+    c->set_request_count(1);
+    (new librbd::io::C_AioRequest(c))->complete(0);
+    c->wait_for_complete();
+    c->put();
+  }
+  flusher.finish_op();
+  int flush_r2 = flush_ctx.wait();
+  flush_writes_ctx.wait();
+
+  // a flush of writes does not wait for reads, flushes or list-snaps
+  ASSERT_EQ(0, flush_writes_r);
+  // a full flush waits for all of them
+  ASSERT_EQ(ETIMEDOUT, flush_r1);
+  ASSERT_EQ(0, flush_r2);
 }
 
 } // namespace librbd
