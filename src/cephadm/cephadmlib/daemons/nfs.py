@@ -57,7 +57,7 @@ class NFSGanesha(ContainerDaemonForm):
         self.image = image
 
         # config-json options
-        self.pool = dict_get(config_json, 'pool', require=True)
+        self.pool = dict_get(config_json, 'pool')
         self.namespace = dict_get(config_json, 'namespace')
         self.userid = dict_get(config_json, 'userid')
         self.extra_args = dict_get(config_json, 'extra_args', [])
@@ -142,14 +142,18 @@ class NFSGanesha(ContainerDaemonForm):
             raise Error('invalid daemon_id: %s' % self.daemon_id)
         if not self.image:
             raise Error('invalid image: %s' % self.image)
-
-        # check for the required files
-        if self.required_files:
-            for fname in self.required_files:
-                if fname not in self.files:
-                    raise Error(
+        config_json_is_empty = not self.pool and not self.files
+        if not config_json_is_empty:
+            # check for the required pools
+            if not self.pool:
+                raise Error('pool missing from dict')
+            # check for the required files
+            if self.required_files:
+                for fname in self.required_files:
+                    if fname not in self.files:
+                        raise Error(
                         'required file missing from config-json: %s' % fname
-                    )
+                        )
 
         # check for an RGW config
         if self.rgw:
