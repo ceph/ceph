@@ -890,11 +890,19 @@ def test_spec_hash_eq(spec1: ServiceSpec,
         ('nfs', 's_id', 'nfs.s_id'),
         ('iscsi', 's_id', 'iscsi.s_id'),
         ('osd', 's_id', 'osd.s_id'),
+        ('cephfs-mirror', 's_id', 'cephfs-mirror.s_id'),
     ])
 def test_service_name(s_type, s_id, s_name):
     spec = ServiceSpec.from_json(_get_dict_spec(s_type, s_id))
     spec.validate()
     assert spec.service_name() == s_name
+
+
+def test_cephfs_mirror_service_id_optional():
+    spec = ServiceSpec.from_json({'service_type': 'cephfs-mirror'})
+    spec.validate()
+    assert spec.service_id is None
+    assert spec.service_name() == 'cephfs-mirror'
 
 @pytest.mark.parametrize(
     's_type,s_id',

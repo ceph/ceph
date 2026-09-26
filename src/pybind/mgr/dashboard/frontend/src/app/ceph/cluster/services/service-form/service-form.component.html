@@ -474,10 +474,29 @@
             formControlName="count"
             id="count"
             min="1"
+            [max]="countMax"
             helperText="Number of service instances that will be deployed"
             i18n-helperText
+            [invalid]="serviceForm.controls.count.invalid && serviceForm.controls.count.dirty"
+            [invalidText]="invalidCountError"
           >
           </cds-number>
+          <ng-template #invalidCountError>
+            @if (serviceForm.showError('count', frm, 'min')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The value must be at least 1.</span
+              >
+            }
+            @if (serviceForm.showError('count', frm, 'maxHosts')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Count cannot exceed the number of selected hosts.</span
+              >
+            }
+          </ng-template>
         </div>
       }
 
