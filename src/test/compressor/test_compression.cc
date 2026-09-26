@@ -144,6 +144,147 @@ TEST_P(CompressorTest, big_round_trip_randomish)
        << " with " << GetParam() << std::endl;
 }
 
+TEST(ZstdCompressor, truncated_decompress)
+{
+  // Compress some data, then lop off the tail of the compressed buffer and
+  // make sure the decompressor reports a failure instead of silently
+  // returning success with truncated/garbage output.
+  auto compressor = Compressor::create(g_ceph_context, "zstd");
+  ASSERT_TRUE(compressor);
+
+  bufferlist orig;
+  while (orig.length() < 128 * 1024) {
+    orig.append("This is a short string.  There are many strings like it but this one is mine.");
+  }
+  bufferlist compressed;
+  std::optional<int32_t> compressor_message;
+  int r = compressor->compress(orig, compressed, compressor_message);
+  ASSERT_EQ(0, r);
+  ASSERT_GT(compressed.length(), 8u);
+
+  // Drop the last quarter of the compressed payload.
+  bufferlist truncated;
+  truncated.substr_of(compressed, 0, compressed.length() * 3 / 4);
+
+  bufferlist decompressed;
+  r = compressor->decompress(truncated, decompressed, compressor_message);
+  // ZstdCompressor must detect the truncated frame and report an error rather than
+  // silently returning success with truncated output.
+  ASSERT_LT(r, 0);
+}
+
+TEST(ZstdCompressor, corrupted_decompress)
+{
+  // Flip bytes in the middle of a compressed frame and confirm the
+  // decompressor never returns success with the wrong bytes.
+  auto compressor = Compressor::create(g_ceph_context, "zstd");
+  ASSERT_TRUE(compressor);
+
+  bufferlist orig;
+  while (orig.length() < 128 * 1024) {
+    orig.append("This is a short string.  There are many strings like it but this one is mine.");
+  }
+  bufferlist compressed;
+  std::optional<int32_t> compressor_message;
+  int r = compressor->compress(orig, compressed, compressor_message);
+  ASSERT_EQ(0, r);
+  ASSERT_GT(compressed.length(), 16u);
+
+  // Rebuild into a contiguous, mutable buffer and corrupt the middle, well
+  // past the length prefix and frame header.
+  bufferlist corrupted;
+  corrupted.append(compressed);
+  corrupted.rebuild();
+  char *p = corrupted.c_str();
+  size_t mid = corrupted.length() / 2;
+  for (size_t i = 0; i < 8 && mid + i < corrupted.length(); ++i) {
+    p[mid + i] ^= 0xff;
+  }
+
+  bufferlist decompressed;
+  r = compressor->decompress(corrupted, decompressed, compressor_message);
+  // zstd's block checks must catch the corruption; never return success with
+  // the wrong bytes.
+  if (r == 0) {
+    ASSERT_FALSE(decompressed.contents_equal(orig));
+  } else {
+    ASSERT_LT(r, 0);
+  }
+}
+
+TEST(ZstdCompressor, oversized_length_prefix)
+{
+  // ZstdCompressor prefixes the compressed payload with a 4-byte decompressed length.
+  // A prefix larger than the real decompressed size must be rejected (the
+  // frame won't fill the buffer, so the final output length won't match)
+  // rather than returning success with the wrong length. We use a modestly
+  // oversized value (not 0xffffffff) so the test doesn't attempt a multi-GiB
+  // allocation.
+  auto compressor = Compressor::create(g_ceph_context, "zstd");
+  ASSERT_TRUE(compressor);
+
+  bufferlist orig;
+  orig.append("compress me");
+  bufferlist compressed;
+  std::optional<int32_t> compressor_message;
+  int r = compressor->compress(orig, compressed, compressor_message);
+  ASSERT_EQ(0, r);
+  ASSERT_GE(compressed.length(), 4u);
+
+  // Replace the 4-byte length prefix with a value well above the real size.
+  bufferlist payload;
+  payload.substr_of(compressed, 4, compressed.length() - 4);
+  bufferlist bad;
+  ceph::encode((uint32_t)(orig.length() + 4096), bad);
+  bad.append(payload);
+
+  bufferlist decompressed;
+  r = compressor->decompress(bad, decompressed, compressor_message);
+  ASSERT_LT(r, 0);
+}
+
+TEST(ZstdCompressor, undersized_length_prefix)
+{
+  // A length prefix smaller than the real decompressed size must be rejected
+  // rather than silently returning truncated output.
+  auto compressor = Compressor::create(g_ceph_context, "zstd");
+  ASSERT_TRUE(compressor);
+
+  bufferlist orig;
+  while (orig.length() < 64 * 1024) {
+    orig.append("the quick brown fox jumps over the lazy dog, repeatedly. ");
+  }
+  bufferlist compressed;
+  std::optional<int32_t> compressor_message;
+  int r = compressor->compress(orig, compressed, compressor_message);
+  ASSERT_EQ(0, r);
+  ASSERT_GE(compressed.length(), 4u);
+
+  bufferlist payload;
+  payload.substr_of(compressed, 4, compressed.length() - 4);
+  bufferlist bad;
+  ceph::encode((uint32_t)1, bad);  // claim the output is just 1 byte
+  bad.append(payload);
+
+  bufferlist decompressed;
+  r = compressor->decompress(bad, decompressed, compressor_message);
+  ASSERT_LT(r, 0);
+}
+
+TEST(ZstdCompressor, short_input)
+{
+  // Fewer than 4 bytes cannot even hold the length prefix.
+  auto compressor = Compressor::create(g_ceph_context, "zstd");
+  ASSERT_TRUE(compressor);
+
+  bufferlist bad;
+  bad.append("ab");
+  bufferlist decompressed;
+  std::optional<int32_t> compressor_message;
+  int r = compressor->decompress(bad, decompressed, compressor_message);
+  ASSERT_LT(r, 0);
+}
+
 #if 0
 TEST_P(CompressorTest, big_round_trip_file)
 {
