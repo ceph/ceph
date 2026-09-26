@@ -542,6 +542,23 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_session_close_free_unused_delegated_inos
+  type: bool
+  level: advanced
+  desc: Return delegated inos a client never used to the inode table when it closes
+    its session cleanly, instead of deleting their objects
+  long_desc: When a session closes, every delegated ino the client did not create a
+    file with is purged, one object delete per ino, because an async create may
+    have written data under an ino whose create never reached the MDS. A client
+    that asks to close its session with no request in flight cannot have done
+    that for an ino it never named in a request, so such inos are returned to the
+    inode table instead. Inos the client did name, and every ino of a session
+    that is evicted, times out or is killed, are still purged.
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_purge_inodes_max_ops
   type: uint
   level: advanced
