@@ -88,7 +88,8 @@ public:
 
   seastar::future<> do_transaction_no_callbacks(
     CollectionRef c,
-    ceph::os::Transaction&& txn) override;
+    ceph::os::Transaction&& txn,
+    transaction_exec_info_t* exec_info = nullptr) override;
 
   // error injection
   seastar::future<> inject_data_error(const ghobject_t& o) override;
