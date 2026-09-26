@@ -1146,6 +1146,10 @@ COMMAND("osd pool rmsnap "
 	"name=pool,type=CephPoolname "
 	"name=snap,type=CephString",
 	"remove snapshot <snap> from <pool>", "osd", "rw")
+COMMAND("osd pool rollbacksnap "
+	"name=pool,type=CephPoolname "
+	"name=snap,type=CephString",
+	"roll back pool <pool> to snapshot <snap>", "osd", "rw")
 COMMAND("osd pool force-remove-snap "
 	"name=pool,type=CephPoolname "
 	"name=lower_snapid_bound,type=CephInt,range=0,req=false "

@@ -25,3 +25,4 @@ tasks:
       snap_create: 10
       snap_remove: 10
       rollback: 10
+      snap_rollback: 10

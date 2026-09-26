@@ -32,6 +32,7 @@ tasks:
       read: 100
       rmattr: 25
       rollback: 50
+      snap_rollback: 10
       setattr: 25
       snap_create: 50
       snap_remove: 50

@@ -6,8 +6,10 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/io/MockObjectDispatch.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
+#include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "include/stringify.h"
 #include "common/bit_vector.hpp"
+#include "common/ceph_releases.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/operation/SnapshotRollbackRequest.h"
@@ -77,8 +79,10 @@ namespace librbd {
 namespace operation {
 
 using ::testing::_;
+using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Return;
+using ::testing::SetArgPointee;
 using ::testing::WithArg;
 
 class TestMockOperationSnapshotRollbackRequest : public TestMockFixture {
@@ -193,14 +197,31 @@ public:
                    .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
+  // WI-14-c helpers
+  void expect_get_min_compatible_osd(MockOperationImageCtx &mock_image_ctx,
+                                     ceph_release_t release, int r = 0) {
+    auto &mock_rados_client =
+      *get_mock_io_ctx(mock_image_ctx.data_ctx).get_mock_rados_client();
+    EXPECT_CALL(mock_rados_client, get_min_compatible_osd(_))
+      .WillOnce(DoAll(SetArgPointee<0>(static_cast<int8_t>(release)),
+                      Return(r)));
+  }
+
+  void expect_pool_selfmanaged_snap_rollback(MockOperationImageCtx &mock_image_ctx,
+                                             uint64_t snap_id, int r) {
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
+                pool_selfmanaged_snap_rollback(snap_id, _))
+      .WillOnce(Return(r));
+  }
+
   int when_snap_rollback(MockOperationImageCtx &mock_image_ctx,
                          const std::string &snap_name,
                          uint64_t snap_id, uint64_t snap_size) {
     C_SaferCond cond_ctx;
     librbd::NoOpProgressContext prog_ctx;
     MockSnapshotRollbackRequest *req = new MockSnapshotRollbackRequest(
-	mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), snap_name,
-	snap_id, snap_size, prog_ctx);
+ mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), snap_name,
+ snap_id, snap_size, prog_ctx);
     {
       std::shared_lock owner_locker{mock_image_ctx.owner_lock};
       req->send();
@@ -363,6 +384,105 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, InvalidateCacheError) {
   expect_commit_op_event(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
   ASSERT_EQ(-EINVAL, when_snap_rollback(mock_image_ctx, "snap", 123, 0));
+}
+
+// WI-14-c: Umbrella cluster → pool-op fast path is used (no per-object ops)
+TEST_F(TestMockOperationSnapshotRollbackRequest, FastPathUmbrellaSuccess) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockOperationImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock mock_exclusive_lock;
+  MockJournal mock_journal;
+  MockObjectMap mock_object_map;
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
+                      mock_object_map);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  MockResizeRequest mock_resize_request;
+  expect_append_op_event(mock_image_ctx, false, 0);
+  expect_block_writes(mock_image_ctx, 0);
+  expect_resize(mock_image_ctx, mock_resize_request, 0);
+  expect_get_flags(mock_image_ctx, 123, 0);
+  expect_get_snap_object_map(mock_image_ctx, &mock_object_map, 123);
+  expect_rollback_object_map(mock_image_ctx, mock_object_map);
+  // Fast path: get_min_compatible_osd returns umbrella; pool-op called
+  expect_get_min_compatible_osd(mock_image_ctx, ceph_release_t::umbrella);
+  expect_pool_selfmanaged_snap_rollback(mock_image_ctx, 123, 0);
+  MockObjectMap mock_refresh_object_map;
+  expect_refresh_object_map(mock_image_ctx, mock_refresh_object_map);
+  expect_invalidate_cache(mock_image_ctx, 0);
+  expect_commit_op_event(mock_image_ctx, 0);
+  expect_unblock_writes(mock_image_ctx);
+  ASSERT_EQ(0, when_snap_rollback(mock_image_ctx, "snap", 123, 0));
+}
+
+// WI-14-c: Tentacle cluster → pool-op fast path is skipped; per-object path used
+TEST_F(TestMockOperationSnapshotRollbackRequest, FastPathFallbackTentacle) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockOperationImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock mock_exclusive_lock;
+  MockJournal mock_journal;
+  MockObjectMap mock_object_map;
+  MockObjectMap mock_snap_object_map;
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
+                      mock_object_map);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  MockResizeRequest mock_resize_request;
+  expect_append_op_event(mock_image_ctx, false, 0);
+  expect_block_writes(mock_image_ctx, 0);
+  expect_resize(mock_image_ctx, mock_resize_request, 0);
+  expect_get_flags(mock_image_ctx, 123, 0);
+  expect_get_snap_object_map(mock_image_ctx, &mock_snap_object_map, 123);
+  expect_rollback_object_map(mock_image_ctx, mock_object_map);
+  // Tentacle: get_min_compatible_osd returns tentacle → falls back to per-object
+  expect_get_min_compatible_osd(mock_image_ctx, ceph_release_t::tentacle);
+  // Per-object path: expect the per-object selfmanaged_snap_rollback
+  expect_rollback(mock_image_ctx, 0);
+  expect_refresh_object_map(mock_image_ctx, mock_object_map);
+  expect_invalidate_cache(mock_image_ctx, 0);
+  expect_commit_op_event(mock_image_ctx, 0);
+  expect_unblock_writes(mock_image_ctx);
+  ASSERT_EQ(0, when_snap_rollback(mock_image_ctx, "snap", 123, 0));
+}
+
+// WI-14-c: Fast-path error triggers fallback to per-object path
+TEST_F(TestMockOperationSnapshotRollbackRequest, FastPathPoolOpErrorFallback) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockOperationImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock mock_exclusive_lock;
+  MockJournal mock_journal;
+  MockObjectMap mock_object_map;
+  MockObjectMap mock_snap_object_map;
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
+                      mock_object_map);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  MockResizeRequest mock_resize_request;
+  expect_append_op_event(mock_image_ctx, false, 0);
+  expect_block_writes(mock_image_ctx, 0);
+  expect_resize(mock_image_ctx, mock_resize_request, 0);
+  expect_get_flags(mock_image_ctx, 123, 0);
+  expect_get_snap_object_map(mock_image_ctx, &mock_snap_object_map, 123);
+  expect_rollback_object_map(mock_image_ctx, mock_object_map);
+  // Fast path attempted but pool-op returns -EPERM → falls back to per-object
+  expect_get_min_compatible_osd(mock_image_ctx, ceph_release_t::umbrella);
+  expect_pool_selfmanaged_snap_rollback(mock_image_ctx, 123, -EPERM);
+  // Per-object path executes after fallback
+  expect_rollback(mock_image_ctx, 0);
+  expect_refresh_object_map(mock_image_ctx, mock_object_map);
+  expect_invalidate_cache(mock_image_ctx, 0);
+  expect_commit_op_event(mock_image_ctx, 0);
+  expect_unblock_writes(mock_image_ctx);
+  ASSERT_EQ(0, when_snap_rollback(mock_image_ctx, "snap", 123, 0));
 }
 
 } // namespace operation

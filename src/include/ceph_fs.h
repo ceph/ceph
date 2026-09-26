@@ -202,6 +202,8 @@ enum {
   POOL_OP_DELETE_SNAP			= 0x12,
   POOL_OP_CREATE_UNMANAGED_SNAP		= 0x21,
   POOL_OP_DELETE_UNMANAGED_SNAP		= 0x22,
+  POOL_OP_ROLLBACK_SNAP                 = 0x31,
+  POOL_OP_ROLLBACK_UNMANAGED_SNAP       = 0x32,
 };
 
 struct ceph_mon_request_header {
