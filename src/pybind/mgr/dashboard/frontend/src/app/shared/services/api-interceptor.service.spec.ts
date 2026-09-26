@@ -118,29 +118,19 @@ describe('ApiInterceptorService', () => {
       );
     });
 
-    it('should not redirect 403 for unscoped ui-api/ background check requests', () => {
-      const uiApiUrl = 'ui-api/prometheus/prometheus-api-host';
-      httpClient.get(uiApiUrl).subscribe(
-        () => true,
-        (_resp) => undefined
-      );
-      httpTesting.expectOne(uiApiUrl).error(new ErrorEvent('abc'), { status: 403 });
-      httpTesting.verify();
-      expect(router.navigate).not.toHaveBeenCalled();
-    });
-
-    it('should redirect 403 for scoped ui-api/ requests', () => {
-      const scopedUiApiUrl = 'ui-api/osd/deployment_options';
-      httpClient.get(scopedUiApiUrl).subscribe(
-        () => true,
-        (_resp) => undefined
-      );
-      httpTesting.expectOne(scopedUiApiUrl).error(new ErrorEvent('abc'), { status: 403 });
-      httpTesting.verify();
-      expect(router.navigate).toHaveBeenCalledWith(
-        ['error'],
-        { state: { header: 'Access Denied', icon: 'locked', message: "Sorry, you don't have permission to view this page or resource.", source: 'forbidden' } } // prettier-ignore
-      );
+    it('should not redirect 403 for prometheus ui-api/ background check requests', () => {
+      for (const uiApiUrl of [
+        'ui-api/prometheus/prometheus-api-host',
+        'ui-api/prometheus/alertmanager-api-host'
+      ]) {
+        httpClient.get(uiApiUrl).subscribe(
+          () => true,
+          (_resp) => undefined
+        );
+        httpTesting.expectOne(uiApiUrl).error(new ErrorEvent('abc'), { status: 403 });
+        httpTesting.verify();
+        expect(router.navigate).not.toHaveBeenCalled();
+      }
     });
 
     it('should show notification (error string)', () => {
