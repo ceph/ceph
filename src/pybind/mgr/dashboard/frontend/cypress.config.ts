@@ -38,6 +38,12 @@ export default defineConfig({
     // We've imported your old cypress plugins here.
     // You may want to clean this up later by importing these.
     setupNodeEvents(on, config) {
+      // Allow CYPRESS_BASE_URL env var to override baseUrl at runtime,
+      // so the active cephadm MGR node can be passed in without editing
+      // this file (the active MGR can change between test runs).
+      if (process.env.CYPRESS_BASE_URL) {
+        config.baseUrl = process.env.CYPRESS_BASE_URL;
+      }
       on(
         'after:spec',
         (_: Cypress.Spec, results: CypressCommandLine.RunResult) => {
@@ -55,9 +61,8 @@ export default defineConfig({
       )
       return require('./cypress/plugins/index.js')(on, config);
     },
-    baseUrl: 'https://localhost:4200/',
+    baseUrl: 'https://localhost:8443/',
     excludeSpecPattern: ['*.po.ts', '**/orchestrator/**'],
-    experimentalSessionAndOrigin: true,
     specPattern: 'cypress/e2e/**/*-spec.{js,jsx,ts,tsx,feature}'
   },
 
