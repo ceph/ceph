@@ -13,12 +13,12 @@
  *
  */
 
+#include "cls_cephfs_client.h"
 
-
+#include "include/buffer.h"
+#include "include/object.h" // for object_t
 #include "include/rados/librados.hpp"
 #include "mds/CInode.h"
-
-#include "cls_cephfs_client.h"
 
 using ceph::bufferlist;
 using ceph::decode;
