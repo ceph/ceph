@@ -3242,6 +3242,11 @@ bool OSDMap::primary_changed_broken(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
+  // TODO: the release after umbrella, once it exists.  Until then this keeps
+  // crush weight_shift out of the encoding.
+  if (require_osd_release < ceph_release_t::max) {
+    f &= ~CEPH_FEATURE_SERVER_VAMPIRE;
+  }
   if (require_osd_release < ceph_release_t::umbrella) {
     f &= ~CEPH_FEATURE_SERVER_UMBRELLA;
   }
@@ -7954,6 +7959,23 @@ void OSDMap::check_health(CephContext *cct,
       d.detail.push_back(
 	"see http://docs.ceph.com/en/latest/rados/operations/crush-map/#tunables");
     }
+  }
+
+  // CRUSH_WEIGHT_LIMIT: the mons raise weight_shift as capacity is added, so
+  // this only fires once it is at its maximum
+  if (crush->get_weight_shift() >= CRUSH_MAX_WEIGHT_SHIFT &&
+      crush->get_weight_utilization() > 0.9) {
+    double headroom = 1.0 - crush->get_weight_utilization();
+    ostringstream ss;
+    ss << "crush map is within " << (unsigned)(headroom * 100)
+       << "% of the largest bucket weight it can represent";
+    auto& d = checks->add("CRUSH_WEIGHT_LIMIT", HEALTH_WARN, ss.str(), 0);
+    d.detail.push_back(
+      "weight_shift is already at its maximum of " +
+      stringify(CRUSH_MAX_WEIGHT_SHIFT) +
+      "; no further capacity can be added under the affected bucket");
+    d.detail.push_back(
+      "see https://docs.ceph.com/en/latest/rados/operations/crush-map/#weight-shift");
   }
 
   // CACHE_POOL_NO_HIT_SET
