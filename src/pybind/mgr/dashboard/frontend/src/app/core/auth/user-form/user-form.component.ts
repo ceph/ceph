@@ -64,6 +64,7 @@ export class UserFormComponent extends CdForm implements OnInit {
   passwordexp: boolean = false;
   isSSO = false;
   isAdminRoleProtected: boolean = false;
+  isLastAdminUser: boolean = false;
 
   constructor(
     private authService: AuthService,
@@ -189,10 +190,23 @@ export class UserFormComponent extends CdForm implements OnInit {
     this.disableForEdit();
     this.route.params.subscribe((params: { username: string }) => {
       const username = params.username;
-      this.userService.get(username).subscribe((userFormModel: UserFormModel) => {
+      observableForkJoin([
+        this.userService.get(username),
+        this.userService.list()
+      ]).subscribe(([userFormModel, allUsers]: [UserFormModel, any[]]) => {
         this.response = _.cloneDeep(userFormModel);
         this.setResponse(userFormModel);
-        if (this.authStorageService.getUsername() === userFormModel.username) {
+
+        const isCurrentUser = this.authStorageService.getUsername() === userFormModel.username;
+        const hasAdminRole = userFormModel.roles?.includes('administrator');
+        if (hasAdminRole) {
+          const enabledAdmins = allUsers.filter(
+            (u) => u.enabled && u.roles?.includes('administrator')
+          );
+          this.isLastAdminUser = enabledAdmins.length <= 1;
+        }
+
+        if (isCurrentUser || this.isLastAdminUser) {
           this.allRoles = _.map(this.allRoles, (role) => ({
             ...role,
             disabled: role.name.toLowerCase() === 'administrator'
@@ -289,7 +303,7 @@ export class UserFormComponent extends CdForm implements OnInit {
   }
 
   disableRolesClearButton(): boolean {
-    if (!this.isCurrentUser() || !this.allRoles) {
+    if ((!this.isCurrentUser() && !this.isLastAdminUser) || !this.allRoles) {
       return false;
     }
     const administratorRole = this.allRoles.find(
