@@ -34,3 +34,4 @@ std::string const pretty_version_to_str(void);
 const char *ceph_release_type(void);
 
 #endif
+// auto-ptl-batch pipeline test — safe to close
