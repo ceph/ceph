@@ -145,6 +145,12 @@ EOM
     local cxx_compiler="${discovered_cxx_compiler}"
     local c_compiler="${discovered_c_compiler}"
     local cmake_opts
+    # Use CMAKE_OPTS for controlling feature builds instead of creating
+    # new variable for each feature.
+    # CMAKE_OPTS=-DWITH_RADOSGW_LANCEDB=OFF -DWITH_CRIMSON=OFF
+    if [ -n $CMAKE_OPTS ]; then
+        cmake_opts+="$CMAKE_OPTS"
+    fi
     cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
     cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
     cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
