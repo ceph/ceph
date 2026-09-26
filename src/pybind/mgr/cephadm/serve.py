@@ -1576,8 +1576,6 @@ class CephadmServe:
                     spec = cast(CustomContainerSpec,
                                 self.mgr.spec_store[daemon_spec.service_name].spec)
                     image = spec.image
-                    if spec.ports:
-                        ports.extend(spec.ports)
 
                 # TCP port to open in the host firewall
                 if len(ports) > 0:
