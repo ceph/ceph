@@ -67,6 +67,18 @@
   of the key/value store). They surface automatically as ``ceph_mon_*``
   Prometheus metrics via the ``prometheus`` mgr module and ``ceph-exporter``,
   enabling trending of mon DB growth and filesystem free space.
+* RGW: Application credential access rules are now enforced for Swift API
+  requests authenticated via Keystone. When a token belongs to an application
+  credential that carries access rules, RGW validates each request against those
+  rules and returns 401 if validation fails. Enforcement is enabled by default with
+  ``rgw_keystone_verify_access_rules``. The accepted service types default to
+  ``object-store`` and can be changed with
+  ``rgw_keystone_accepted_service_types``; an accepted type must also be present
+  in the validated token's service catalog. Tokens without access rules are
+  unaffected. Both options are startup-only. Service tokens are now validated
+  before the user-token cache is consulted, so an invalid service token is
+  rejected regardless of user-token cache state.
+  Related Tracker: https://tracker.ceph.com/issues/68232
 
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
