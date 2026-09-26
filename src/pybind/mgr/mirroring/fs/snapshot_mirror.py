@@ -20,7 +20,7 @@ from .blocklist import blocklist
 from .notify import Notifier, InstanceWatcher
 from .utils import INSTANCE_ID_PREFIX, MIRROR_OBJECT_NAME, Finisher, \
     AsyncOpTracker, get_metadata_pool, norm_path, connect_to_filesystem, \
-    disconnect_from_filesystem
+    disconnect_from_filesystem, norm_priority_mode, DEFAULT_PRIORITY_MODE
 from .metrics.cache import (
     COMPLETE_CACHE_MAX, lru_cache_timeout, PARTIAL_CACHE_MAX,
     metrics_for_dir_and_peers, try_get_from_complete)
@@ -193,21 +193,24 @@ class FSPolicy:
             finally:
                 self.op_tracker.finish_async_op()
 
-    def handle_checkpoint_acquire_ack(self, dir_path, r):
-        """Ack for checkpoint refresh acquire; does not advance the policy state machine."""
-        log.debug(f'handle_checkpoint_acquire_ack: {dir_path} r={r}')
+    def handle_refresh_acquire_ack(self, dir_path, r):
+        """Ack for an out-of-band acquire (checkpoint refresh, priority mode
+        update); does not advance the policy state machine.
+        """
+        log.debug(f'handle_refresh_acquire_ack: {dir_path} r={r}')
         with self.lock:
             try:
                 if self.stopping.is_set():
-                    log.debug('handle_checkpoint_acquire_ack: policy shutting down')
+                    log.debug('handle_refresh_acquire_ack: policy shutting down')
                     return
             finally:
                 self.op_tracker.finish_async_op()
 
     def process_updates(self):
-        def acquire_message(dir_path):
+        def acquire_message(dir_path, priority_mode):
             return json.dumps({'dir_path': dir_path,
-                               'mode': 'acquire'
+                               'mode': 'acquire',
+                               'priority': priority_mode
                                })
         def release_message(dir_path, purging=False):
             msg = {'dir_path': dir_path,
@@ -232,14 +235,17 @@ class FSPolicy:
                     # take care to not overwrite purge status
                     update_map[dir_path] = {'version': 1,
                                             'instance_id': lookup_info['instance_id'],
-                                            'last_shuffled': lookup_info['mapped_time']
+                                            'last_shuffled': lookup_info['mapped_time'],
+                                            'priority_mode': lookup_info['priority_mode']
                     }
                     if lookup_info['purging']:
                         update_map[dir_path]['purging'] = 1
                 elif action_type == ActionType.MAP_REMOVE:
                     removals.append(dir_path)
                 elif action_type == ActionType.ACQUIRE:
-                    notifies[dir_path] = (lookup_info['instance_id'], acquire_message(dir_path))
+                    notifies[dir_path] = (lookup_info['instance_id'],
+                                          acquire_message(dir_path,
+                                                          lookup_info['priority_mode']))
                 elif action_type == ActionType.RELEASE:
                     notifies[dir_path] = (lookup_info['instance_id'],
                                           release_message(dir_path,
@@ -251,7 +257,7 @@ class FSPolicy:
                 self.notifier.notify(dir_path, message, self.handle_peer_ack)
             self.dir_paths.clear()
 
-    def add_dir(self, dir_path):
+    def add_dir(self, dir_path, priority_mode=DEFAULT_PRIORITY_MODE):
         with self.lock:
             lookup_info = self.policy.lookup(dir_path)
             if lookup_info:
@@ -259,10 +265,12 @@ class FSPolicy:
                     raise MirrorException(-errno.EAGAIN, f'remove in-progress for {dir_path}')
                 else:
                     raise MirrorException(-errno.EEXIST, f'directory {dir_path} is already tracked')
-            schedule = self.policy.add_dir(dir_path)
+            schedule = self.policy.add_dir(dir_path, priority_mode)
             if not schedule:
                 return
-            update_map = {dir_path: {'version': 1, 'instance_id': '', 'last_shuffled': 0.0}}
+            update_map = {dir_path: {'version': 1, 'instance_id': '',
+                                     'last_shuffled': 0.0,
+                                     'priority_mode': priority_mode}}
             updated = False
             def update_safe(updates, removals, r):
                 nonlocal updated
@@ -282,6 +290,7 @@ class FSPolicy:
             update_map = {dir_path: {'version': 1,
                                      'instance_id': lookup_info['instance_id'],
                                      'last_shuffled': lookup_info['mapped_time'],
+                                     'priority_mode': lookup_info['priority_mode'],
                                      'purging': 1}}
             updated = False
             sync_lock = threading.Lock()
@@ -298,6 +307,61 @@ class FSPolicy:
             schedule = self.policy.remove_dir(dir_path)
             if schedule:
                 self.schedule_action([dir_path])
+
+    def set_priority(self, dir_path, priority_mode):
+        """Persist a new priority mode for a tracked directory and relay it to
+        the mirror daemon instance the directory is mapped to. The daemon applies
+        the change the next time the directory is idle, so an in-progress
+        snapshot synchronization is never interrupted.
+        """
+        with self.lock:
+            lookup_info = self.policy.lookup(dir_path)
+            if not lookup_info:
+                raise MirrorException(-errno.ENOENT, f'directory {dir_path} is not tracked')
+            if lookup_info['purging']:
+                raise MirrorException(-errno.EINVAL, f'directory {dir_path} is under removal')
+            if not self.policy.set_priority(dir_path, priority_mode):
+                log.debug(f'{dir_path} already in {priority_mode} priority mode')
+                return
+
+            update_map = {dir_path: {'version': 1,
+                                     'instance_id': lookup_info['instance_id'],
+                                     'last_shuffled': lookup_info['mapped_time'],
+                                     'priority_mode': priority_mode}}
+            updated = False
+            sync_lock = threading.Lock()
+            sync_cond = threading.Condition(sync_lock)
+            def update_safe(r):
+                with sync_lock:
+                    nonlocal updated
+                    updated = True
+                    sync_cond.notifyAll()
+            request = UpdateDirMapRequest(self.ioctx, update_map.copy(), [], update_safe)
+            request.send()
+            with sync_lock:
+                sync_cond.wait_for(lambda: updated)
+
+            # Nudge the daemon holding the directory. Notify on any mapped
+            # state, not just ASSOCIATED: while an acquire built with the old
+            # mode is in flight the directory still reads as ASSOCIATING, and
+            # nothing would re-send it afterwards. If the directory is not
+            # mapped at all the mode simply rides along with the next acquire,
+            # which process_updates() builds from the policy state updated
+            # above.
+            instance_id = lookup_info['instance_id']
+            if instance_id:
+                acquire_msg = json.dumps({'dir_path': dir_path,
+                                          'mode': 'acquire',
+                                          'priority': priority_mode})
+                log.debug(f'relaying priority mode {priority_mode} for {dir_path} '
+                          f'to instance {instance_id}')
+                self.op_tracker.start_async_op()
+                self.notifier.notify(dir_path, (instance_id, acquire_msg),
+                                     self.handle_refresh_acquire_ack)
+
+    def get_priority(self, dir_path):
+        with self.lock:
+            return self.policy.get_priority(dir_path)
 
     def status(self, dir_path):
         with self.lock:
@@ -712,7 +776,7 @@ class FSSnapshotMirror:
         remote_cluster_spec = f'{client_name}@{cluster_name}'
         return self.peer_add(filesystem, remote_cluster_spec, remote_fs_name, token_dct)
 
-    def add_dir(self, filesystem, dir_path):
+    def add_dir(self, filesystem, dir_path, priority_mode=None):
         try:
             with self.lock:
                 if not self.filesystem_exist(filesystem):
@@ -721,13 +785,49 @@ class FSSnapshotMirror:
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
                 dir_path = norm_path(dir_path)
+                priority_mode = norm_priority_mode(priority_mode)
                 log.debug(f'path normalized to {dir_path}')
-                fspolicy.add_dir(dir_path)
+                fspolicy.add_dir(dir_path, priority_mode)
                 return 0, json.dumps({}), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
         except Exception as e:
             return e.args[0], '', 'failed to add directory'
+
+    def set_priority(self, filesystem, dir_path, priority_mode):
+        try:
+            with self.lock:
+                if not self.filesystem_exist(filesystem):
+                    raise MirrorException(-errno.ENOENT, f'filesystem {filesystem} does not exist')
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                dir_path = norm_path(dir_path)
+                priority_mode = norm_priority_mode(priority_mode)
+                fspolicy.set_priority(dir_path, priority_mode)
+                return 0, json.dumps({}), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except Exception as e:
+            return e.args[0], '', 'failed to set directory priority'
+
+    def get_priority(self, filesystem, dir_path):
+        try:
+            with self.lock:
+                if not self.filesystem_exist(filesystem):
+                    raise MirrorException(-errno.ENOENT, f'filesystem {filesystem} does not exist')
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                dir_path = norm_path(dir_path)
+                priority_mode = fspolicy.get_priority(dir_path)
+                return 0, json.dumps({'path': dir_path,
+                                      'priority_mode': priority_mode},
+                                     indent=4, sort_keys=True), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except Exception as e:
+            return e.args[0], '', 'failed to get directory priority'
 
     def remove_dir(self, filesystem, dir_path):
         try:
@@ -753,7 +853,9 @@ class FSSnapshotMirror:
                 fspolicy = self.pool_policy.get(filesystem, None)
                 if not fspolicy:
                     raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
-                return 0, json.dumps(list(fspolicy.policy.dir_states.keys()), indent=4, sort_keys=True), ''
+                dirs = {dir_path: {'priority_mode': dir_state.priority_mode}
+                        for dir_path, dir_state in fspolicy.policy.dir_states.items()}
+                return 0, json.dumps(dirs, indent=4, sort_keys=True), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
         except Exception as e:
@@ -1065,7 +1167,7 @@ class FSSnapshotMirror:
                     log.debug(f'sending acquire notification for {dir_path} to instance {instance_id}')
                     fspolicy.op_tracker.start_async_op()
                     fspolicy.notifier.notify(dir_path, (instance_id, acquire_msg),
-                                               fspolicy.handle_checkpoint_acquire_ack)
+                                               fspolicy.handle_refresh_acquire_ack)
         except Exception as e:
             log.error(f'failed to send acquire notification for {dir_path}: {e}')
 
