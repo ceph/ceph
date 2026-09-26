@@ -52,6 +52,9 @@ tasks:
         ceph orch ls mon --export > mon.yaml
         sed /"$HOST_C"/d mon.yaml > mon_adjusted.yaml
         ceph orch apply -i mon_adjusted.yaml
+        # wait for all OSDs on HOST_C to be exist before proceeding to drain
+        ceph orch ps --refresh
+        while ! ceph orch ps --hostname $HOST_C --daemon_type osd --format json | jq -e ". | length == 2"; do sleep 5; done
         # now drain that host
         ceph orch host drain $HOST_C --zap-osd-devices
         # wait for drain to complete
