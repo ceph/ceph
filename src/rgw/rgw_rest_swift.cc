@@ -1073,7 +1073,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
 #define MAX_SLO_ENTRY_SIZE (1024 + 128) // 1024 - max obj name, 128 - enough extra for other info
     uint64_t max_len = s->cct->_conf->rgw_max_slo_entries * MAX_SLO_ENTRY_SIZE;
     
-    slo_info = new RGWSLOInfo;
+    slo_info = std::make_unique<RGWSLOInfo>();
     
     int r = 0;
     std::tie(r, slo_info->raw_data) = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len);
