@@ -375,6 +375,19 @@
   option (``never`` or ``read-only``, default ``read-only``); mount, repair, and
   ``ceph-bluestore-tool trim`` still abort.
 
+* mon: A new setting, mon_config_history_max_changesets, bounds the number of
+  configuration changesets retained in the monitors' store. Each 'ceph config
+  set', 'ceph config rm', 'ceph config assimilate-conf' and 'ceph config reset'
+  records one changeset. Older changesets are now trimmed in their entirety,
+  which prevents the unbounded growth that triggers MON_DISK_BIG on clusters
+  where an autotuner rewrites options such as osd_memory_target continuously.
+  'ceph config log' no longer reports trimmed changesets, and 'ceph config
+  reset' now fails with EINVAL when asked to revert to a changeset that has
+  been trimmed, instead of silently applying only the part of the history that
+  still remains.
+  Related trackers:
+  - https://tracker.ceph.com/issues/67453
+  
 >=20.0.0
 
 * Client: New config value osd_min_split_replica_read_size, which allows control

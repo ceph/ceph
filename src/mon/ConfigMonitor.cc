@@ -62,6 +62,9 @@ static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
 
 const string KEY_PREFIX("config/");
 const string HISTORY_PREFIX("config-history/");
+// low-water mark: the oldest changeset still present.  '-' (0x2d) sorts before
+// '/' (0x2f), so this key is never picked up by a HISTORY_PREFIX range scan.
+const string HISTORY_FIRST_KEY("config-history-first");
 
 ConfigMonitor::ConfigMonitor(Monitor &m, Paxos &p, const string& service_name)
   : PaxosService(m, p, service_name) {
@@ -415,7 +418,14 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     if (f) {
       f->open_array_section("changesets");
     }
-    for (version_t v = version; v > version - std::min(version, (version_t)num); --v) {
+    // don't walk below the trim watermark; those changesets are gone and would
+    // otherwise be reported as empty
+    const version_t history_first = get_history_first();
+    version_t lo = version - std::min(version, (version_t)num);
+    if (lo < history_first) {
+      lo = history_first > 0 ? history_first - 1 : 0;
+    }
+    for (version_t v = version; v > lo; --v) {
       ConfigChangeSet ch;
       load_changeset(v, &ch);
       if (f) {
@@ -616,6 +626,18 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       err = 0;
       goto reply;
     }
+    // reverting to <revert_to> replays changesets (revert_to, version], so the
+    // oldest one we need is revert_to + 1.  reverting to history_first - 1 is
+    // still fully satisfiable; anything older is not.
+    const version_t history_first = get_history_first();
+    if (revert_to + 1 < (int64_t)history_first) {
+      err = -EINVAL;
+      ss << "cannot revert to version " << revert_to
+	 << ": configuration history below version " << history_first
+	 << " has been trimmed (see mon_config_history_max_changesets); "
+	 << "reverting would silently apply only part of the history";
+      goto reply;
+    }
     for (int64_t v = version; v > revert_to; --v) {
       ConfigChangeSet ch;
       load_changeset(v, &ch);
@@ -761,12 +783,20 @@ void ConfigMonitor::tick()
   if (!pending_cleanup.empty()) {
     changed = true;
   }
-  if (changed && mon.kvmon()->is_writeable()) {
-    paxos.plug();
-    encode_pending_to_kvmon();
-    mon.kvmon()->propose_pending();
-    paxos.unplug();
-    propose_pending();
+  if (mon.kvmon()->is_writeable()) {
+    // trimming only enqueues removals into kvmon; it must not go through
+    // encode_pending_to_kvmon(), which unconditionally stamps a new changeset
+    // marker and would leave an empty, unreclaimable changeset behind.
+    bool trimmed = _trim_config_history();
+    if (changed) {
+      paxos.plug();
+      encode_pending_to_kvmon();
+      mon.kvmon()->propose_pending();	// carries the trims along
+      paxos.unplug();
+      propose_pending();
+    } else if (trimmed) {
+      mon.kvmon()->propose_pending();	// removals only: no marker, no new version
+    }
   }
 }
 
@@ -984,4 +1014,66 @@ void ConfigMonitor::check_all_subs()
     }
   }
   dout(10) << __func__ << " updated " << updated << " / " << total << dendl;
+}
+
+version_t ConfigMonitor::get_history_first()
+{
+  bufferlist bl;
+  if (mon.store->get(KV_PREFIX, HISTORY_FIRST_KEY, bl) == 0) {
+    try {
+      version_t first;
+      auto p = bl.cbegin();
+      decode(first, p);
+      return first;
+    } catch (ceph::buffer::error& e) {
+      derr << __func__ << " failure decoding " << HISTORY_FIRST_KEY << dendl;
+    }
+  }
+
+  // No watermark (fresh cluster or upgrade from a version without this code) 
+  // is presented, so the config history is not trimmed.
+  dout(20) << __func__ << " no watermark, nothing has been trimmed" << dendl;
+  return 0;
+}
+
+bool ConfigMonitor::_trim_config_history()
+{
+  const uint64_t keep = g_conf()->mon_config_history_max_changesets;
+  if (version <= keep) {
+    return false;
+  }
+  // retain exactly 'keep' changesets: [target, version].  everything strictly
+  // below target is eligible for removal.
+  const version_t target = version - keep + 1;
+  const version_t first = get_history_first();
+  if (first >= target) {
+    return false;
+  }
+
+  // bound the work per tick; the persisted watermark makes this resumable
+  constexpr size_t max_changesets_per_tick = 16;
+
+  version_t v = first;
+  size_t removed = 0;
+  for (size_t n = 0; v < target && n < max_changesets_per_tick; ++v, ++n) {
+    // delete the marker and every +/- record of this changeset together, so a
+    // changeset is never left partially present
+    const string prefix = HISTORY_PREFIX + stringify(v) + "/";
+    auto it = mon.store->get_iterator(KV_PREFIX);
+    it->lower_bound(prefix);
+    while (it->valid() && it->key().starts_with(prefix)) {
+      dout(20) << __func__ << " removing " << it->key() << dendl;
+      mon.kvmon()->enqueue_rm(it->key());
+      ++removed;
+      it->next();
+    }
+  }
+
+  dout(10) << __func__ << " trimmed changesets [" << first << ","
+	   << v << ") removing " << removed << " keys" << dendl;
+
+  bufferlist bl;
+  encode(v, bl);
+  mon.kvmon()->enqueue_set(HISTORY_FIRST_KEY, bl);
+  return true;
 }
