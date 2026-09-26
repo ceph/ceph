@@ -7,6 +7,7 @@ overrides:
       - OSD_ROOT_DOWN
       - osds down
       - PG_DEGRADED
+      - Degraded data redundancy
       # mon thrashing
       - MON_DOWN
       - mons down
@@ -23,7 +24,18 @@ overrides:
       - is in error state
       - failed cephadm daemon
       - CEPHADM_STRAY_DAEMON
+      - stray daemon.* not managed by cephadm
+      # https://tracker.ceph.com/issues/76988
+      # ignore expected placement/apply failures when thrashing hosts/daemons
       - CEPHADM_DAEMON_PLACE_FAIL
+      - Failed to place .* daemon
+      - CEPHADM_APPLY_SPEC_FAIL
+      - Failed to apply .* service
+      - Cannot place .* Unknown hosts
+      # https://tracker.ceph.com/issues/75452
+      # ignore probe/refresh warnings during thrashing
+      - CEPHADM_REFRESH_FAILED
+      - failed to probe daemons or devices
 
 tasks:
 - nvmeof.thrash:
