@@ -2476,6 +2476,18 @@ class CephadmUpgrade:
             if to_upgrade:
                 return
 
+            if daemon_type == 'mds' and need_upgrade:
+                # Every MDS selected for this pass was skipped by _to_upgrade:
+                # they were just redeployed and the daemon cache has not caught
+                # up yet (unknown image id, correct image name). Falling
+                # through would `continue` to the next daemon type and let a
+                # filtered upgrade finish with the MDS of the *other*
+                # filesystems untouched, since this pass was restricted to a
+                # single filesystem. Wait for the cache instead.
+                logger.info('Upgrade: MDS of this pass were just redeployed; waiting '
+                            'for the daemon cache before moving on')
+                return
+
             self._handle_need_upgrade_self(need_upgrade_self, daemon_type == 'mgr')
 
             # following bits of _do_upgrade are for completing upgrade for given

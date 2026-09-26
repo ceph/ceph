@@ -1482,3 +1482,72 @@ def test_restrict_mds_need_upgrade_to_one_fs_handles_multi_part_fs_names(
     # 'mds.my.fs' sorts before 'mds.other'
     assert fs_names == {'mds.my.fs'}, fs_names
     assert len(restricted) == 2
+
+
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(CephadmUpgrade, '_prepare_for_mds_upgrade', return_value=True)
+@mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', ''))
+@mock.patch("cephadm.module.CephadmOrchestrator.set_container_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests")
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+    'filesystems': [],
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch("cephadm.module.HostCache.get_daemons_by_type")
+@mock.patch("cephadm.module.HostCache.get_daemons")
+def test_do_upgrade_waits_for_cache_after_last_mds_of_a_fs(
+    get_daemons: mock.MagicMock,
+    get_daemons_by_type: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    get_active_mgr_digests: mock.MagicMock,
+    _set_container_image: mock.MagicMock,
+    _check_mon_command: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    complete: mock.MagicMock,
+    _prepare: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    # Regression: after the last MDS of one filesystem was redeployed, the
+    # next pass still sees those daemons in need_upgrade (daemon cache not
+    # refreshed yet: unknown image id, correct image name) and, being
+    # restricted to that filesystem, _to_upgrade skips them all. The pass
+    # must then wait, not fall through to the next daemon type - with
+    # --daemon-types mds that declared the upgrade complete while the MDS
+    # of the remaining filesystems had never been touched.
+    target_digest = 'target_image@digest'
+    get_active_mgr_digests.return_value = [target_digest]
+    stale = DaemonDescription(daemon_type='mds', daemon_id='cephfs2.host1.aaa', hostname='host1',
+                              service_name='mds.cephfs2', container_image_name=target_digest,
+                              container_image_id=None)
+    old = DaemonDescription(daemon_type='mds', daemon_id='cephfs3.host1.bbb', hostname='host1',
+                            service_name='mds.cephfs3', container_image_name='old_image',
+                            container_image_id='old', container_image_digests=['old@digest'])
+    get_daemons.return_value = [stale, old]
+    get_daemons_by_type.return_value = [stale, old]
+
+    def detect(daemons, *args, **kwargs):
+        return (False, [(d, False) for d in daemons if d.daemon_type == 'mds'], [], 0)
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'pid', target_id='image_id',
+        target_digests=[target_digest], target_version='19.3.0-0',
+        daemon_types=['mds'], fail_fs=True)
+    with mock.patch.object(CephadmUpgrade, '_detect_need_upgrade', side_effect=detect):
+        cephadm_module.upgrade._do_upgrade()
+
+    # still upgrading: the pass restricted itself to cephfs2 (all stale) and waited
+    assert cephadm_module.upgrade.upgrade_state is not None
+    complete.assert_not_called()
