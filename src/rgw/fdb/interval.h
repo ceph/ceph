@@ -566,43 +566,43 @@ concept expression =
  (std::derived_from<std::remove_cvref_t<T>, detail::expression_tag> ||
   interval_view<T>);
 
-template <typename LhsT, typename RhsT>
+template <typename LHS_T, typename RHS_T>
 concept same_expression_domain =
- expression<LhsT> &&
- expression<RhsT> &&
- std::same_as<typename std::remove_cvref_t<LhsT>::domain_type,
-              typename std::remove_cvref_t<RhsT>::domain_type>;
+ expression<LHS_T> &&
+ expression<RHS_T> &&
+ std::same_as<typename std::remove_cvref_t<LHS_T>::domain_type,
+              typename std::remove_cvref_t<RHS_T>::domain_type>;
 
 namespace detail {
 
-template <expression LhsT, expression RhsT>
-requires same_expression_domain<LhsT, RhsT>
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
 struct difference_expr final : expression_tag
 {
- using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
+ using domain_type = typename std::remove_cvref_t<LHS_T>::domain_type;
 
- LhsT lhs;
- RhsT rhs;
+ LHS_T lhs;
+ RHS_T rhs;
 };
 
-template <expression LhsT, expression RhsT>
-requires same_expression_domain<LhsT, RhsT>
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
 struct intersection_expr final : expression_tag
 {
- using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
+ using domain_type = typename std::remove_cvref_t<LHS_T>::domain_type;
 
- LhsT lhs;
- RhsT rhs;
+ LHS_T lhs;
+ RHS_T rhs;
 };
 
-template <expression LhsT, expression RhsT>
-requires same_expression_domain<LhsT, RhsT>
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
 struct set_union_expr final : expression_tag
 {
- using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
+ using domain_type = typename std::remove_cvref_t<LHS_T>::domain_type;
 
- LhsT lhs;
- RhsT rhs;
+ LHS_T lhs;
+ RHS_T rhs;
 };
 
 } // namespace detail
@@ -614,16 +614,16 @@ template <interval_view IntervalT, typename SinkT>
 requires (!canonical_interval<IntervalT>)
 constexpr void for_each_interval(const IntervalT& x, SinkT&& sink);
 
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& expression,
+template <expression LHS_T, expression RHS_T, typename SinkT>
+constexpr void for_each_interval(const detail::difference_expr<LHS_T, RHS_T>& expression,
                                  SinkT&& sink);
 
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::intersection_expr<LhsT, RhsT>& expression,
+template <expression LHS_T, expression RHS_T, typename SinkT>
+constexpr void for_each_interval(const detail::intersection_expr<LHS_T, RHS_T>& expression,
                                  SinkT&& sink);
 
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::set_union_expr<LhsT, RhsT>& expression,
+template <expression LHS_T, expression RHS_T, typename SinkT>
+constexpr void for_each_interval(const detail::set_union_expr<LHS_T, RHS_T>& expression,
                                  SinkT&& sink);
 
 namespace detail {
@@ -641,10 +641,9 @@ constexpr bool merge_inclusive(const bool lhs,
  return inclusivity_merge::all == merge ? lhs && rhs : lhs || rhs;
 }
 
-template <boundary_view LhsT, boundary_view RhsT>
-requires std::same_as<boundary_domain_t<LhsT>, boundary_domain_t<RhsT>>
-constexpr std::strong_ordering compare_position(const LhsT& lhs,
-                                                const RhsT& rhs)
+template <boundary_view LHS_T, boundary_view RHS_T>
+requires std::same_as<boundary_domain_t<LHS_T>, boundary_domain_t<RHS_T>>
+constexpr std::strong_ordering compare_position(const LHS_T& lhs, const RHS_T& rhs)
 {
  if (lhs.kind() != rhs.kind()) {
   return lhs.kind() <=> rhs.kind();
@@ -654,7 +653,7 @@ constexpr std::strong_ordering compare_position(const LhsT& lhs,
   return std::strong_ordering::equal;
  }
 
- return boundary_domain_t<LhsT>::compare(lhs.finite_key(), rhs.finite_key());
+ return boundary_domain_t<LHS_T>::compare(lhs.finite_key(), rhs.finite_key());
 }
 
 template <boundary_view LowerT, boundary_view UpperT>
@@ -697,16 +696,13 @@ constexpr void emit_bounds(SinkT&& sink, const LowerT& lower, const UpperT& uppe
                }) {
   std::forward<SinkT>(sink).emit_interval(lower, upper);
  } else {
-  std::invoke(std::forward<SinkT>(sink),
-              query<domain_type>::between(lower, upper));
+  std::invoke(std::forward<SinkT>(sink), query<domain_type>::between(lower, upper));
  }
 }
 
-template <boundary_view LhsT, boundary_view RhsT>
-requires std::same_as<boundary_domain_t<LhsT>, boundary_domain_t<RhsT>>
-constexpr auto min_bound(const LhsT& lhs,
-                         const RhsT& rhs,
-                         const inclusivity_merge merge)
+template <boundary_view LHS_T, boundary_view RHS_T>
+requires std::same_as<boundary_domain_t<LHS_T>, boundary_domain_t<RHS_T>>
+constexpr auto min_bound(const LHS_T& lhs, const RHS_T& rhs, const inclusivity_merge merge)
 {
  const auto order = compare_position(lhs, rhs);
 
@@ -721,11 +717,9 @@ constexpr auto min_bound(const LhsT& lhs,
  return materialize_boundary(lhs, merge_inclusive(lhs.inclusive(), rhs.inclusive(), merge));
 }
 
-template <boundary_view LhsT, boundary_view RhsT>
-requires std::same_as<boundary_domain_t<LhsT>, boundary_domain_t<RhsT>>
-constexpr auto max_bound(const LhsT& lhs,
-                         const RhsT& rhs,
-                         const inclusivity_merge merge)
+template <boundary_view LHS_T, boundary_view RHS_T>
+requires std::same_as<boundary_domain_t<LHS_T>, boundary_domain_t<RHS_T>>
+constexpr auto max_bound(const LHS_T& lhs, const RHS_T& rhs, const inclusivity_merge merge)
 {
  const auto order = compare_position(lhs, rhs);
 
@@ -768,6 +762,21 @@ constexpr bool contains(const IntervalT& x, const ValueT& value)
         bounds.upper().allows_before(value);
 }
 
+template <expression LHS_T, expression RHS_T, typename ValueT>
+requires detail::comparable_value<expression_domain_t<LHS_T>, ValueT>
+constexpr bool contains(const detail::difference_expr<LHS_T, RHS_T>& expression,
+                        const ValueT& value);
+
+template <expression LHS_T, expression RHS_T, typename ValueT>
+requires detail::comparable_value<expression_domain_t<LHS_T>, ValueT>
+constexpr bool contains(const detail::intersection_expr<LHS_T, RHS_T>& expression,
+                        const ValueT& value);
+
+template <expression LHS_T, expression RHS_T, typename ValueT>
+requires detail::comparable_value<expression_domain_t<LHS_T>, ValueT>
+constexpr bool contains(const detail::set_union_expr<LHS_T, RHS_T>& expression,
+                        const ValueT& value);
+
 template <expression ExprT, typename ValueT>
 requires (!interval_view<ExprT>) &&
  detail::comparable_value<expression_domain_t<ExprT>, ValueT>
@@ -775,22 +784,45 @@ constexpr bool contains(const ExprT& expression, const ValueT& value)
 {
  bool found = false;
 
- ::ceph::libfdb::interval::for_each_interval(expression, [&found, &value](const auto& x) {
-  if (found) {
-   return;
-  }
-
-  found = ::ceph::libfdb::interval::contains(x, value);
+ interval::for_each_interval(expression, [&found, &value](const auto& x) {
+  found = found || interval::contains(x, value);
  });
 
  return found;
 }
 
-template <interval_view LhsT, interval_view RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr auto intersection(const LhsT& lhs, const RhsT& rhs)
+template <expression LHS_T, expression RHS_T, typename ValueT>
+requires detail::comparable_value<expression_domain_t<LHS_T>, ValueT>
+constexpr bool contains(const detail::difference_expr<LHS_T, RHS_T>& expression,
+                        const ValueT& value)
 {
- using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
+ return interval::contains(expression.lhs, value) &&
+        !interval::contains(expression.rhs, value);
+}
+
+template <expression LHS_T, expression RHS_T, typename ValueT>
+requires detail::comparable_value<expression_domain_t<LHS_T>, ValueT>
+constexpr bool contains(const detail::intersection_expr<LHS_T, RHS_T>& expression,
+                        const ValueT& value)
+{
+ return interval::contains(expression.lhs, value) &&
+        interval::contains(expression.rhs, value);
+}
+
+template <expression LHS_T, expression RHS_T, typename ValueT>
+requires detail::comparable_value<expression_domain_t<LHS_T>, ValueT>
+constexpr bool contains(const detail::set_union_expr<LHS_T, RHS_T>& expression,
+                        const ValueT& value)
+{
+ return interval::contains(expression.lhs, value) ||
+        interval::contains(expression.rhs, value);
+}
+
+template <interval_view LHS_T, interval_view RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr auto intersection(const LHS_T& lhs, const RHS_T& rhs)
+{
+ using domain_type = typename std::remove_cvref_t<LHS_T>::domain_type;
  const auto lhs_bounds = detail::bounds_of(lhs);
  const auto rhs_bounds = detail::bounds_of(rhs);
 
@@ -803,7 +835,7 @@ constexpr auto intersection(const LhsT& lhs, const RhsT& rhs)
   detail::max_bound(lhs_bounds.lower(), rhs_bounds.lower(), detail::inclusivity_merge::all),
   detail::min_bound(lhs_bounds.upper(), rhs_bounds.upper(), detail::inclusivity_merge::all));
 
- if (::ceph::libfdb::interval::is_empty(out)) {
+ if (interval::is_empty(out)) {
   return query<domain_type>::empty();
  }
 
@@ -812,9 +844,9 @@ constexpr auto intersection(const LhsT& lhs, const RhsT& rhs)
 
 namespace detail {
 
-template <interval_view LhsT, interval_view RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr bool definitely_before(const LhsT& lhs, const RhsT& rhs)
+template <interval_view LHS_T, interval_view RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool definitely_before(const LHS_T& lhs, const RHS_T& rhs)
 {
  const auto lhs_bounds = detail::bounds_of(lhs);
  const auto rhs_bounds = detail::bounds_of(rhs);
@@ -827,26 +859,41 @@ constexpr bool definitely_before(const LhsT& lhs, const RhsT& rhs)
  return !lhs_bounds.upper().inclusive() && !rhs_bounds.lower().inclusive();
 }
 
-template <interval_view LhsT, interval_view RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr bool definitely_after(const LhsT& lhs, const RhsT& rhs)
+template <interval_view LHS_T, interval_view RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool disjoint_before(const LHS_T& lhs, const RHS_T& rhs)
+{
+ const auto lhs_bounds = bounds_of(lhs);
+ const auto rhs_bounds = bounds_of(rhs);
+ const auto order = compare_position(lhs_bounds.upper(), rhs_bounds.lower());
+
+ if (std::strong_ordering::equal != order) {
+  return std::strong_ordering::less == order;
+ }
+
+ return !lhs_bounds.upper().inclusive() || !rhs_bounds.lower().inclusive();
+}
+
+template <interval_view LHS_T, interval_view RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool definitely_after(const LHS_T& lhs, const RHS_T& rhs)
 {
  return definitely_before(rhs, lhs);
 }
 
-template <interval_view LhsT, interval_view RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr bool can_coalesce(const LhsT& lhs, const RhsT& rhs)
+template <interval_view LHS_T, interval_view RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool can_coalesce(const LHS_T& lhs, const RHS_T& rhs)
 {
  return !definitely_before(lhs, rhs) &&
         !definitely_after(lhs, rhs);
 }
 
-template <interval_view LhsT, interval_view RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr auto coalesce(const LhsT& lhs, const RhsT& rhs)
+template <interval_view LHS_T, interval_view RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr auto coalesce(const LHS_T& lhs, const RHS_T& rhs)
 {
- using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
+ using domain_type = typename std::remove_cvref_t<LHS_T>::domain_type;
  const auto lhs_bounds = detail::bounds_of(lhs);
  const auto rhs_bounds = detail::bounds_of(rhs);
  const auto lhs_empty = detail::empty_interval(lhs, lhs_bounds);
@@ -882,12 +929,11 @@ constexpr auto difference_begin_after(const BoundT& removed_end)
 }
 
 template <ordered_domain DomainT, typename SinkT>
-constexpr void emit_coalesced_intervals(std::vector<query<DomainT>> intervals,
-                                        SinkT&& sink);
+constexpr void emit_coalesced_intervals(std::vector<query<DomainT>> intervals, SinkT&& sink);
 
-template <interval_view LhsT, interval_view RhsT, typename SinkT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr void emit_difference(const LhsT& lhs, const RhsT& rhs, SinkT&& sink)
+template <interval_view LHS_T, interval_view RHS_T, typename SinkT>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr void emit_difference(const LHS_T& lhs, const RHS_T& rhs, SinkT&& sink)
 {
  const auto lhs_bounds = bounds_of(lhs);
  const auto rhs_bounds = bounds_of(rhs);
@@ -899,57 +945,54 @@ constexpr void emit_difference(const LhsT& lhs, const RhsT& rhs, SinkT&& sink)
  if (empty_interval(rhs, rhs_bounds) ||
      definitely_before(rhs, lhs) ||
      definitely_after(rhs, lhs)) {
-  ::ceph::libfdb::interval::for_each_interval(lhs, std::forward<SinkT>(sink));
+  interval::for_each_interval(lhs, std::forward<SinkT>(sink));
   return;
  }
 
- emit_bounds(sink,
-             lhs_bounds.lower(),
-             difference_end_before(rhs_bounds.lower()));
+ emit_bounds(sink, lhs_bounds.lower(), difference_end_before(rhs_bounds.lower()));
  emit_bounds(std::forward<SinkT>(sink),
-             difference_begin_after(rhs_bounds.upper()),
-             lhs_bounds.upper());
+             difference_begin_after(rhs_bounds.upper()), lhs_bounds.upper());
 }
 
 } // namespace detail
 
-template <typename LhsT, typename RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr auto difference(LhsT&& lhs, RhsT&& rhs)
+template <typename LHS_T, typename RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr auto difference(LHS_T&& lhs, RHS_T&& rhs)
 {
- using lhs_type = std::remove_cvref_t<LhsT>;
- using rhs_type = std::remove_cvref_t<RhsT>;
+ using lhs_type = std::remove_cvref_t<LHS_T>;
+ using rhs_type = std::remove_cvref_t<RHS_T>;
 
  return detail::difference_expr<lhs_type, rhs_type> {
-  .lhs = std::forward<LhsT>(lhs),
-  .rhs = std::forward<RhsT>(rhs)
+  .lhs = std::forward<LHS_T>(lhs),
+  .rhs = std::forward<RHS_T>(rhs)
  };
 }
 
-template <typename LhsT, typename RhsT>
-requires same_expression_domain<LhsT, RhsT> &&
-        (!interval_view<LhsT> || !interval_view<RhsT>)
-constexpr auto intersection(LhsT&& lhs, RhsT&& rhs)
+template <typename LHS_T, typename RHS_T>
+requires same_expression_domain<LHS_T, RHS_T> &&
+        (!interval_view<LHS_T> || !interval_view<RHS_T>)
+constexpr auto intersection(LHS_T&& lhs, RHS_T&& rhs)
 {
- using lhs_type = std::remove_cvref_t<LhsT>;
- using rhs_type = std::remove_cvref_t<RhsT>;
+ using lhs_type = std::remove_cvref_t<LHS_T>;
+ using rhs_type = std::remove_cvref_t<RHS_T>;
 
  return detail::intersection_expr<lhs_type, rhs_type> {
-  .lhs = std::forward<LhsT>(lhs),
-  .rhs = std::forward<RhsT>(rhs)
+  .lhs = std::forward<LHS_T>(lhs),
+  .rhs = std::forward<RHS_T>(rhs)
  };
 }
 
-template <typename LhsT, typename RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr auto set_union(LhsT&& lhs, RhsT&& rhs)
+template <typename LHS_T, typename RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr auto set_union(LHS_T&& lhs, RHS_T&& rhs)
 {
- using lhs_type = std::remove_cvref_t<LhsT>;
- using rhs_type = std::remove_cvref_t<RhsT>;
+ using lhs_type = std::remove_cvref_t<LHS_T>;
+ using rhs_type = std::remove_cvref_t<RHS_T>;
 
  return detail::set_union_expr<lhs_type, rhs_type> {
-  .lhs = std::forward<LhsT>(lhs),
-  .rhs = std::forward<RhsT>(rhs)
+  .lhs = std::forward<LHS_T>(lhs),
+  .rhs = std::forward<RHS_T>(rhs)
  };
 }
 
@@ -964,7 +1007,7 @@ constexpr auto complement(ExprT&& expression)
 template <ordered_domain DomainT, typename SinkT>
 constexpr void for_each_interval(const query<DomainT>& x, SinkT&& sink)
 {
- if (::ceph::libfdb::interval::is_empty(x)) {
+ if (interval::is_empty(x)) {
   return;
  }
 
@@ -986,15 +1029,11 @@ constexpr void for_each_interval(const IntervalT& x, SinkT&& sink)
 
 namespace detail {
 
-template <interval_view LhsT, interval_view RhsT, typename SinkT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr void emit_intersection(const LhsT& lhs,
-                                 const RhsT& rhs,
-                                 SinkT&& sink)
+template <interval_view LHS_T, interval_view RHS_T, typename SinkT>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr void emit_intersection(const LHS_T& lhs, const RHS_T& rhs, SinkT&& sink)
 {
- ::ceph::libfdb::interval::for_each_interval(
-  ::ceph::libfdb::interval::intersection(lhs, rhs),
-  std::forward<SinkT>(sink));
+ interval::for_each_interval(interval::intersection(lhs, rhs), std::forward<SinkT>(sink));
 }
 
 template <typename OutT, interval_view IntervalT>
@@ -1002,34 +1041,30 @@ constexpr void append_materialized_interval(OutT& out, const IntervalT& interval
 {
  using domain_type = typename std::remove_cvref_t<IntervalT>::domain_type;
 
- ceph::util::emplace_append(out,
-                            query<domain_type>::between(interval.lower(), interval.upper()));
+ ceph::util::emplace_append(out, query<domain_type>::between(interval.lower(), interval.upper()));
 }
 
 } // namespace detail
 
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& expression,
+template <expression LHS_T, expression RHS_T, typename SinkT>
+constexpr void for_each_interval(const detail::difference_expr<LHS_T, RHS_T>& expression,
                                  SinkT&& sink)
 {
- using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
+ using domain_type = typename std::remove_cvref_t<LHS_T>::domain_type;
 
- if constexpr (interval_view<LhsT> && interval_view<RhsT>) {
-  detail::emit_difference(expression.lhs,
-                          expression.rhs,
-                          std::forward<SinkT>(sink));
+ if constexpr (interval_view<LHS_T> && interval_view<RHS_T>) {
+  detail::emit_difference(expression.lhs, expression.rhs, std::forward<SinkT>(sink));
   return;
  }
 
- if constexpr (interval_view<RhsT>) {
-  if (::ceph::libfdb::interval::is_empty(expression.rhs)) {
-   ::ceph::libfdb::interval::for_each_interval(expression.lhs,
-                                               std::forward<SinkT>(sink));
+ if constexpr (interval_view<RHS_T>) {
+  if (interval::is_empty(expression.rhs)) {
+   interval::for_each_interval(expression.lhs, std::forward<SinkT>(sink));
    return;
   }
  }
 
- ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&](const auto& lhs) {
+ interval::for_each_interval(expression.lhs, [&](const auto& lhs) {
   auto cursor = materialize_boundary(lhs.lower());
   bool emitted_tail = false;
 
@@ -1040,7 +1075,7 @@ constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& expr
 
    const auto remaining = query<domain_type>::between(cursor, lhs.upper());
 
-   if (::ceph::libfdb::interval::is_empty(remaining)) {
+   if (interval::is_empty(remaining)) {
     emitted_tail = true;
     return;
    }
@@ -1055,19 +1090,18 @@ constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& expr
     return;
    }
 
-   const auto overlap = ::ceph::libfdb::interval::intersection(remaining, rhs);
+   const auto overlap = interval::intersection(remaining, rhs);
 
-   if (::ceph::libfdb::interval::is_empty(overlap)) {
+   if (interval::is_empty(overlap)) {
     return;
    }
 
-   detail::emit_bounds(sink,
-                       cursor,
-                       detail::difference_end_before(overlap.lower()));
+   detail::emit_bounds(sink, cursor, detail::difference_end_before(overlap.lower()));
+
    cursor = detail::difference_begin_after(overlap.upper());
   };
 
-  ::ceph::libfdb::interval::for_each_interval(expression.rhs, emit_remaining);
+  interval::for_each_interval(expression.rhs, emit_remaining);
 
   if (emitted_tail) {
    return;
@@ -1077,46 +1111,46 @@ constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& expr
  });
 }
 
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::intersection_expr<LhsT, RhsT>& expression,
+template <expression LHS_T, expression RHS_T, typename SinkT>
+constexpr void for_each_interval(const detail::intersection_expr<LHS_T, RHS_T>& expression,
                                  SinkT&& sink)
 {
- if constexpr (interval_view<RhsT> && !canonical_interval<RhsT>) {
-  ::ceph::libfdb::interval::for_each_interval(expression.rhs, [&sink, &expression](const auto& rhs) {
-   ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&sink, &rhs](const auto& lhs) {
+ if constexpr (interval_view<RHS_T> && !canonical_interval<RHS_T>) {
+  interval::for_each_interval(expression.rhs, [&sink, &expression](const auto& rhs) {
+   interval::for_each_interval(expression.lhs, [&sink, &rhs](const auto& lhs) {
     detail::emit_intersection(lhs, rhs, sink);
    });
   });
   return;
  }
 
- if constexpr (interval_view<RhsT>) {
-  ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&sink, &expression](const auto& lhs) {
+ if constexpr (interval_view<RHS_T>) {
+  interval::for_each_interval(expression.lhs, [&sink, &expression](const auto& lhs) {
    detail::emit_intersection(lhs, expression.rhs, sink);
   });
   return;
  }
 
- if constexpr (interval_view<LhsT> && !canonical_interval<LhsT>) {
-  ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&sink, &expression](const auto& lhs) {
-   ::ceph::libfdb::interval::for_each_interval(expression.rhs, [&sink, &lhs](const auto& rhs) {
+ if constexpr (interval_view<LHS_T> && !canonical_interval<LHS_T>) {
+  interval::for_each_interval(expression.lhs, [&sink, &expression](const auto& lhs) {
+   interval::for_each_interval(expression.rhs, [&sink, &lhs](const auto& rhs) {
     detail::emit_intersection(lhs, rhs, sink);
    });
   });
   return;
  }
 
- if constexpr (interval_view<LhsT>) {
-  ::ceph::libfdb::interval::for_each_interval(expression.rhs, [&sink, &expression](const auto& rhs) {
+ if constexpr (interval_view<LHS_T>) {
+  interval::for_each_interval(expression.rhs, [&sink, &expression](const auto& rhs) {
    detail::emit_intersection(expression.lhs, rhs, sink);
   });
   return;
  }
 
- using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
+ using domain_type = typename std::remove_cvref_t<LHS_T>::domain_type;
  std::vector<query<domain_type>> rhs_intervals;
 
- ::ceph::libfdb::interval::for_each_interval(expression.rhs, [&rhs_intervals](const auto& rhs) {
+ interval::for_each_interval(expression.rhs, [&rhs_intervals](const auto& rhs) {
   detail::append_materialized_interval(rhs_intervals, rhs);
  });
 
@@ -1126,10 +1160,10 @@ constexpr void for_each_interval(const detail::intersection_expr<LhsT, RhsT>& ex
 
  std::vector<query<domain_type>> overlaps;
 
- ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&rhs_intervals, &overlaps](const auto& lhs) {
+ interval::for_each_interval(expression.lhs, [&rhs_intervals, &overlaps](const auto& lhs) {
   for (const auto& rhs : rhs_intervals) {
-   if (auto overlap = ::ceph::libfdb::interval::intersection(lhs, rhs);
-       !::ceph::libfdb::interval::is_empty(overlap)) {
+   if (auto overlap = interval::intersection(lhs, rhs);
+       !interval::is_empty(overlap)) {
     ceph::util::emplace_append(overlaps, std::move(overlap));
    }
   }
@@ -1163,8 +1197,7 @@ constexpr bool interval_less(const query<DomainT>& lhs, const query<DomainT>& rh
 }
 
 template <ordered_domain DomainT, typename SinkT>
-constexpr void emit_coalesced_intervals(std::vector<query<DomainT>> intervals,
-                                        SinkT&& sink)
+constexpr void emit_coalesced_intervals(std::vector<query<DomainT>> intervals, SinkT&& sink)
 {
  if (intervals.empty()) {
   return;
@@ -1180,57 +1213,54 @@ constexpr void emit_coalesced_intervals(std::vector<query<DomainT>> intervals,
    continue;
   }
 
-  ::ceph::libfdb::interval::for_each_interval(current, sink);
+  interval::for_each_interval(current, sink);
   current = std::move(next);
  }
 
- ::ceph::libfdb::interval::for_each_interval(current, std::forward<SinkT>(sink));
+ interval::for_each_interval(current, std::forward<SinkT>(sink));
 }
 
-template <interval_view LhsT, interval_view RhsT, typename SinkT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr void emit_union(const LhsT& lhs,
-                          const RhsT& rhs,
-                          SinkT&& sink)
+template <interval_view LHS_T, interval_view RHS_T, typename SinkT>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr void emit_union(const LHS_T& lhs, const RHS_T& rhs, SinkT&& sink)
 {
- if (::ceph::libfdb::interval::is_empty(lhs)) {
-  ::ceph::libfdb::interval::for_each_interval(rhs, std::forward<SinkT>(sink));
+ if (interval::is_empty(lhs)) {
+  interval::for_each_interval(rhs, std::forward<SinkT>(sink));
   return;
  }
 
- if (::ceph::libfdb::interval::is_empty(rhs)) {
-  ::ceph::libfdb::interval::for_each_interval(lhs, std::forward<SinkT>(sink));
+ if (interval::is_empty(rhs)) {
+  interval::for_each_interval(lhs, std::forward<SinkT>(sink));
   return;
  }
 
  if (can_coalesce(lhs, rhs)) {
-  ::ceph::libfdb::interval::for_each_interval(coalesce(lhs, rhs),
-                                              std::forward<SinkT>(sink));
+  interval::for_each_interval(coalesce(lhs, rhs), std::forward<SinkT>(sink));
   return;
  }
 
  if (definitely_before(lhs, rhs)) {
-  ::ceph::libfdb::interval::for_each_interval(lhs, sink);
-  ::ceph::libfdb::interval::for_each_interval(rhs, std::forward<SinkT>(sink));
+  interval::for_each_interval(lhs, sink);
+  interval::for_each_interval(rhs, std::forward<SinkT>(sink));
   return;
  }
 
- ::ceph::libfdb::interval::for_each_interval(rhs, sink);
- ::ceph::libfdb::interval::for_each_interval(lhs, std::forward<SinkT>(sink));
+ interval::for_each_interval(rhs, sink);
+ interval::for_each_interval(lhs, std::forward<SinkT>(sink));
 }
 
 } // namespace detail
 
-template <expression LhsT, expression RhsT, typename SinkT>
-constexpr void for_each_interval(const detail::set_union_expr<LhsT, RhsT>& expression,
+template <expression LHS_T, expression RHS_T, typename SinkT>
+constexpr void for_each_interval(const detail::set_union_expr<LHS_T, RHS_T>& expression,
                                  SinkT&& sink)
 {
- if constexpr (interval_view<LhsT> && interval_view<RhsT>) {
+ if constexpr (interval_view<LHS_T> && interval_view<RHS_T>) {
   detail::emit_union(expression.lhs, expression.rhs, std::forward<SinkT>(sink));
   return;
  }
 
- using domain_type = typename std::remove_cvref_t<LhsT>::domain_type;
+ using domain_type = typename std::remove_cvref_t<LHS_T>::domain_type;
  std::vector<query<domain_type>> intervals;
  intervals.reserve(4);
 
@@ -1238,8 +1268,8 @@ constexpr void for_each_interval(const detail::set_union_expr<LhsT, RhsT>& expre
   detail::append_materialized_interval(intervals, x);
  };
 
- ::ceph::libfdb::interval::for_each_interval(expression.lhs, collect);
- ::ceph::libfdb::interval::for_each_interval(expression.rhs, collect);
+ interval::for_each_interval(expression.lhs, collect);
+ interval::for_each_interval(expression.rhs, collect);
 
  detail::emit_coalesced_intervals(std::move(intervals), std::forward<SinkT>(sink));
 }
@@ -1251,7 +1281,7 @@ constexpr auto compile_intervals(const ExprT& expression)
  std::vector<query<domain_type>> out;
  out.reserve(interval_view<ExprT> ? 1 : 4);
 
- ::ceph::libfdb::interval::for_each_interval(expression, [&out](const auto& interval) {
+ interval::for_each_interval(expression, [&out](const auto& interval) {
   detail::append_materialized_interval(out, interval);
  });
 
@@ -1264,7 +1294,7 @@ constexpr auto compile_intervals(const ExprT& expression)
  using domain_type = typename std::remove_cvref_t<ExprT>::domain_type;
  static_interval_set<domain_type, Capacity> out;
 
- ::ceph::libfdb::interval::for_each_interval(expression, [&out](const auto& interval) {
+ interval::for_each_interval(expression, [&out](const auto& interval) {
   detail::append_materialized_interval(out, interval);
  });
 
@@ -1276,17 +1306,29 @@ constexpr std::size_t interval_count(const ExprT& expression)
 {
  std::size_t count = 0;
 
- ::ceph::libfdb::interval::for_each_interval(expression, [&count](const auto&) {
-  ++count;
- });
+ interval::for_each_interval(expression, [&count](const auto&) { ++count; });
 
  return count;
 }
 
 template <expression ExprT>
+constexpr bool is_empty_expression(const ExprT& expression);
+
+template <expression LHS_T, expression RHS_T>
+constexpr bool is_empty_expression(const detail::set_union_expr<LHS_T, RHS_T>& expression)
+{
+ return interval::is_empty_expression(expression.lhs) &&
+        interval::is_empty_expression(expression.rhs);
+}
+
+template <expression ExprT>
 constexpr bool is_empty_expression(const ExprT& expression)
 {
- return 0 == interval_count(expression);
+ if constexpr (interval_view<ExprT>) {
+  return interval::is_empty(expression);
+ }
+
+ return 0 == interval::interval_count(expression);
 }
 
 enum struct endpoint_inclusion : std::uint8_t
@@ -1584,25 +1626,130 @@ constexpr auto prefix_starting_after(PrefixT&& prefix_value, CursorT&& cursor)
                        std::forward<CursorT>(cursor));
 }
 
-template <expression LhsT, expression RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr bool is_disjoint(const LhsT& lhs, const RhsT& rhs)
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool intersects(const LHS_T& lhs, const RHS_T& rhs);
+
+template <interval_view LHS_T, interval_view RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool intersects(const LHS_T& lhs, const RHS_T& rhs)
 {
- return is_empty_expression(intersection(lhs, rhs));
+ const auto lhs_bounds = detail::bounds_of(lhs);
+ const auto rhs_bounds = detail::bounds_of(rhs);
+
+ if (detail::empty_interval(lhs, lhs_bounds) ||
+     detail::empty_interval(rhs, rhs_bounds)) {
+  return false;
+ }
+
+ return !detail::disjoint_before(lhs, rhs) &&
+        !detail::disjoint_before(rhs, lhs);
 }
 
-template <expression LhsT, expression RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr bool intersects(const LhsT& lhs, const RhsT& rhs)
+namespace detail {
+
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool canonical_intersects(const LHS_T& lhs, const RHS_T& rhs)
 {
- return !is_disjoint(lhs, rhs);
+ const auto lhs_intervals = interval::compile_intervals(lhs);
+ const auto rhs_intervals = interval::compile_intervals(rhs);
+ auto lhs_it = std::begin(lhs_intervals);
+ auto rhs_it = std::begin(rhs_intervals);
+
+ while (lhs_it != std::end(lhs_intervals) &&
+        rhs_it != std::end(rhs_intervals)) {
+  if (disjoint_before(*lhs_it, *rhs_it)) {
+   ++lhs_it;
+   continue;
+  }
+
+  if (disjoint_before(*rhs_it, *lhs_it)) {
+   ++rhs_it;
+   continue;
+  }
+
+  return true;
+ }
+
+ return false;
 }
 
-template <expression LhsT, expression RhsT>
-requires same_expression_domain<LhsT, RhsT>
-constexpr bool encloses(const LhsT& outer, const RhsT& inner)
+template <expression OuterT, expression InnerT>
+requires same_expression_domain<OuterT, InnerT>
+constexpr bool canonical_encloses(const OuterT& outer, const InnerT& inner)
 {
- return is_empty_expression(difference(inner, outer));
+ const auto outer_intervals = interval::compile_intervals(outer);
+ const auto inner_intervals = interval::compile_intervals(inner);
+ auto outer_it = std::begin(outer_intervals);
+ const auto outer_end = std::end(outer_intervals);
+
+ return std::ranges::all_of(inner_intervals, [&outer_it, outer_end](const auto& inner_interval) {
+  while (outer_it != outer_end && definitely_before(*outer_it, inner_interval)) {
+   ++outer_it;
+  }
+
+  return outer_it != outer_end &&
+         interval::is_empty_expression(interval::difference(inner_interval, *outer_it));
+ });
+}
+
+} // namespace detail
+
+template <expression LHS_T, expression RHS_T, interval_view OtherT>
+requires same_expression_domain<LHS_T, OtherT>
+constexpr bool intersects(const detail::set_union_expr<LHS_T, RHS_T>& lhs, const OtherT& rhs)
+{
+ return interval::intersects(lhs.lhs, rhs) ||
+        interval::intersects(lhs.rhs, rhs);
+}
+
+template <interval_view OtherT, expression LHS_T, expression RHS_T>
+requires same_expression_domain<OtherT, LHS_T>
+constexpr bool intersects(const OtherT& lhs, const detail::set_union_expr<LHS_T, RHS_T>& rhs)
+{
+ return interval::intersects(lhs, rhs.lhs) ||
+        interval::intersects(lhs, rhs.rhs);
+}
+
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool intersects(const LHS_T& lhs, const RHS_T& rhs)
+{
+ return detail::canonical_intersects(lhs, rhs);
+}
+
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool is_disjoint(const LHS_T& lhs, const RHS_T& rhs)
+{
+ return !interval::intersects(lhs, rhs);
+}
+
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool encloses(const LHS_T& outer, const RHS_T& inner);
+
+template <interval_view OuterT, interval_view InnerT>
+requires same_expression_domain<OuterT, InnerT>
+constexpr bool encloses(const OuterT& outer, const InnerT& inner)
+{
+ return interval::is_empty_expression(interval::difference(inner, outer));
+}
+
+template <interval_view OuterT, expression LHS_T, expression RHS_T>
+requires same_expression_domain<OuterT, LHS_T>
+constexpr bool encloses(const OuterT& outer, const detail::set_union_expr<LHS_T, RHS_T>& inner)
+{
+ return interval::encloses(outer, inner.lhs) &&
+        interval::encloses(outer, inner.rhs);
+}
+
+template <expression LHS_T, expression RHS_T>
+requires same_expression_domain<LHS_T, RHS_T>
+constexpr bool encloses(const LHS_T& outer, const RHS_T& inner)
+{
+ return detail::canonical_encloses(outer, inner);
 }
 
 } // namespace ceph::libfdb::interval

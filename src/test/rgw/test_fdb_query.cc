@@ -293,8 +293,52 @@ static_assert(not li::expression<malformed_interval_expression>);
 using composite_intersection_query =
  decltype(lq::intersection(lq::difference(lq::empty(), lq::universal()),
                            lq::universal()));
+using algebraic_byte_query = li::query<lq::byte_string_domain>;
+using bounded_difference =
+ decltype(lq::difference(lq::universal(), algebraic_byte_query::universal()));
+using bounded_intersection =
+ decltype(lq::intersection(
+  li::set_union(algebraic_byte_query::empty(),
+                algebraic_byte_query::universal()),
+  lq::universal()));
+using unbounded_union =
+ decltype(lq::set_union(lq::universal(), algebraic_byte_query::universal()));
 
 static_assert(lq::expression<composite_intersection_query>);
+static_assert(lq::detail::is_keyspace_bounded_v<bounded_difference>);
+static_assert(lq::detail::is_keyspace_bounded_v<bounded_intersection>);
+static_assert(not lq::detail::is_keyspace_bounded_v<unbounded_union>);
+
+consteval bool structural_predicates_are_constant_expressions()
+{
+ using int_query = li::query<int_domain>;
+
+ const auto lhs = li::set_union(int_query::closed_open(0, 4),
+                                int_query::closed_open(8, 12));
+ const auto rhs = int_query::closed_open(3, 9);
+ const auto rhs_union = li::set_union(rhs, int_query::closed_open(16, 20));
+ const auto enclosed = li::set_union(int_query::closed_open(0, 2),
+                                     int_query::closed_open(9, 11));
+ const auto staggered_lhs = li::set_union(int_query::closed_open(0, 2),
+                                          int_query::closed_open(4, 6));
+ const auto staggered_rhs = li::set_union(int_query::closed_open(2, 4),
+                                          int_query::closed_open(6, 8));
+
+ return li::contains(lhs, 1) &&
+        not li::contains(lhs, 6) &&
+        li::intersects(lhs, rhs) &&
+        li::intersects(lhs, rhs_union) &&
+        li::intersects(int_query::closed(0, 2), int_query::closed(2, 4)) &&
+        not li::intersects(int_query::closed_open(0, 2),
+                           int_query::closed_open(2, 4)) &&
+        not li::intersects(staggered_lhs, staggered_rhs) &&
+        not li::is_disjoint(lhs, rhs) &&
+        li::encloses(lhs, int_query::closed_open(0, 2)) &&
+        li::encloses(lhs, enclosed) &&
+        not li::is_empty_expression(lhs);
+}
+
+static_assert(structural_predicates_are_constant_expressions());
 
 TEST_CASE("generic interval algebra emits canonical intervals", "[fdb][query]")
 {
@@ -713,6 +757,44 @@ TEST_CASE("query expressions satisfy set algebra laws over sampled keys", "[fdb]
   check_disjoint("prefix difference A is disjoint from A",
                  lq::difference(prefix, a), a);
  }
+}
+
+TEST_CASE("query predicates agree with canonical interval output", "[fdb][query]")
+{
+ constexpr auto sample_keys = std::array {
+  ""sv, "a"sv, "aa"sv, "b"sv, "c"sv, "d"sv,
+  "m"sv, "n"sv, "p"sv, "q"sv, "z"sv
+ };
+
+ auto verify = [&sample_keys](const lq::expression auto& expression) {
+  const auto intervals = emitted_intervals(expression);
+
+  CHECK(lq::is_empty_expression(expression) == std::empty(intervals));
+
+  for (const auto key : sample_keys) {
+   const auto expected = std::ranges::any_of(
+    intervals, [key](const auto& interval) {
+     return contains_key(interval, key);
+    });
+
+   CHECK(expected == lq::contains(expression, key));
+  }
+ };
+
+ const auto a = lq::interval("a", "q");
+ const auto b = lq::interval("d", "z");
+ const auto c = lq::prefix("m");
+
+ verify(lq::set_union(a, b));
+ verify(lq::intersection(lq::set_union(a, c), b));
+ verify(lq::difference(lq::set_union(a, b), c));
+ verify(lq::complement(lq::set_union(a, c)));
+
+ CHECK(lq::intersects(lq::set_union(a, c), b));
+ CHECK(lq::intersects(lq::set_union(a, c),
+                      lq::set_union(b, lq::prefix("zz"))));
+ CHECK_FALSE(lq::intersects(lq::set_union(a, c), lq::prefix("zz")));
+ CHECK(lq::encloses(lq::set_union(a, b), lq::set_union(c, lq::prefix("d"))));
 }
 
 TEST_CASE("query examples compose record and revision selectors", "[fdb][query][example]")
