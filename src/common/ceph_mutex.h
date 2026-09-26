@@ -112,6 +112,14 @@ namespace ceph {
   typedef ceph::condition_variable_debug condition_variable;
   typedef ceph::shared_mutex_debug shared_mutex;
 
+#ifdef CEPH_LOCKSTAT
+#define make_mutex(name, ...) mutex_debug(LOCKSTAT(name), ##__VA_ARGS__)
+#define make_recursive_mutex(name, ...) \
+  mutex_recursive_debug(LOCKSTAT(name), ##__VA_ARGS__)
+#define make_shared_mutex(name, ...) \
+  shared_mutex_debug(LOCKSTAT(name), ##__VA_ARGS__)
+
+#else
   // pass arguments to mutex_debug ctor
   template <typename ...Args>
   mutex make_mutex(Args&& ...args) {
@@ -129,15 +137,42 @@ namespace ceph {
   shared_mutex make_shared_mutex(Args&& ...args) {
     return {std::forward<Args>(args)...};
   }
+#endif
 
   // debug methods
-  #define ceph_mutex_is_locked(m) ((m).is_locked())
-  #define ceph_mutex_is_not_locked(m) (!(m).is_locked())
-  #define ceph_mutex_is_rlocked(m) ((m).is_rlocked())
-  #define ceph_mutex_is_wlocked(m) ((m).is_wlocked())
-  #define ceph_mutex_is_locked_by_me(m) ((m).is_locked_by_me())
-  #define ceph_mutex_is_not_locked_by_me(m) (!(m).is_locked_by_me())
+#define ceph_mutex_is_locked(m) ((m).is_locked())
+#define ceph_mutex_is_not_locked(m) (!(m).is_locked())
+#define ceph_mutex_is_rlocked(m) ((m).is_rlocked())
+#define ceph_mutex_is_wlocked(m) ((m).is_wlocked())
+#define ceph_mutex_is_locked_by_me(m) ((m).is_locked_by_me())
+#define ceph_mutex_is_not_locked_by_me(m) (!(m).is_locked_by_me())
 }
+
+#elif defined(CEPH_LOCKSTAT)
+#include <condition_variable>
+
+#include "common/ceph_mutex_lockstat.h"
+
+namespace ceph {
+typedef mutex_lockstat mutex;
+typedef mutex_recursive_lockstat recursive_mutex;
+typedef condition_variable_lockstat condition_variable;
+typedef shared_mutex_lockstat shared_mutex;
+} // namespace ceph
+
+#define make_mutex(name, ...) mutex_lockstat(LOCKSTAT(name))
+#define make_recursive_mutex(name, ...) mutex_recursive_lockstat(LOCKSTAT(name))
+#define make_shared_mutex(name, ...) shared_mutex_lockstat(LOCKSTAT(name))
+
+// debug methods.  Note that these can blindly return true
+// because any code that does anything other than assert these
+// are true is broken.
+#define ceph_mutex_is_locked(m) true
+#define ceph_mutex_is_not_locked(m) true
+#define ceph_mutex_is_rlocked(m) true
+#define ceph_mutex_is_wlocked(m) true
+#define ceph_mutex_is_locked_by_me(m) true
+#define ceph_mutex_is_not_locked_by_me(m) true
 
 #else
 

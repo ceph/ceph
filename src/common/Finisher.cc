@@ -6,6 +6,10 @@
 #include "common/perf_counters.h"
 #include "include/types.h" // for operator<<(std::vector)
 
+#ifdef CEPH_LOCKSTAT
+#include "lockstat.h"
+#endif
+
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
 #else
@@ -85,6 +89,9 @@ bool Finisher::is_empty()
 
 void *Finisher::finisher_thread_entry()
 {
+#ifdef CEPH_LOCKSTAT
+  ceph::lockstat_detail::LockStat::set_thread_iopath(true);
+#endif
   std::unique_lock ul(finisher_lock);
   ldout(cct, 10) << "finisher_thread start" << dendl;
 
