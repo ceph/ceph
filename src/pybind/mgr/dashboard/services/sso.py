@@ -8,7 +8,7 @@ import logging
 import os
 import threading
 import warnings
-from typing import Dict, Optional
+from typing import Dict, Optional  # noqa: F401  (used in type comments)
 from urllib import parse
 
 from mgr_module import HandleCommandResult

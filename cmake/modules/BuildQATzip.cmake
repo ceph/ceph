@@ -13,6 +13,12 @@ function(build_qatzip)
   list(APPEND configure_cmd --with-pic --enable-static --disable-shared)
 
   set(CFLAGS "-Wno-error=strict-prototypes -Wno-error=unused-but-set-variable")
+  # glibc >= 2.42 (ubuntu 26.04) expands strrchr() and friends through
+  # _Generic, which QATzip's pre-C11 utils/ build turns into an error.
+  # gcc has no -Wc11-extensions and rejects the option, so clang only.
+  if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    list(APPEND CFLAGS -Wno-error=c11-extensions)
+  endif()
   if(QATDRV_INCLUDE_DIR)
     list(APPEND configure_cmd --with-ICP_ROOT=${QATDRV_INCLUDE_DIR})
   endif()
