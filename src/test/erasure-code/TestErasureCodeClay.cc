@@ -366,6 +366,68 @@ TEST(ErasureCodeClay, DISABLED_encode_decode_shortening_case)
   }
 }
 
+TEST(ErasureCodeClay, encode_decode_small_subchunks)
+{
+  // k=12 m=4 (d=15) splits every chunk into 256 sub-chunks, so with a 4 KiB
+  // stripe unit each sub-chunk is 32 bytes, smaller than SIMD_ALIGN. CLAY
+  // used to realign such sub-chunks before decoding into them, which copied
+  // them and silently dropped the decoded data: parity came out wrong and
+  // lost chunks were rebuilt from uninitialised memory.
+  ErasureCodeClay clay(g_conf().get_val<std::string>("erasure_code_dir"));
+  ErasureCodeProfile profile;
+  profile["k"] = "12";
+  profile["m"] = "4";
+  ASSERT_EQ(0, clay.init(profile, &cerr));
+  const int k = 12;
+  const int m = 4;
+  const unsigned chunk_size = clay.get_chunk_size(k * 4096);
+  const unsigned sub_chunk_size = chunk_size / clay.get_sub_chunk_count();
+  ASSERT_NE(0u, sub_chunk_size % ErasureCode::SIMD_ALIGN);
+
+  bufferptr in_ptr(buffer::create_page_aligned(k * chunk_size));
+  for (unsigned i = 0; i < in_ptr.length(); i++) {
+    in_ptr[i] = (char)(i * 2654435761u >> 24);
+  }
+  bufferlist in;
+  in.push_back(in_ptr);
+
+  set<int> want_to_encode;
+  for (int i = 0; i < k + m; i++) {
+    want_to_encode.insert(i);
+  }
+  map<int, bufferlist> encoded;
+  ASSERT_EQ(0, clay.encode(want_to_encode, in, &encoded));
+  ASSERT_EQ((unsigned)(k + m), encoded.size());
+
+  set<int> want_to_read;
+  for (int i = 0; i < k; i++) {
+    want_to_read.insert(i);
+  }
+  const vector<set<int>> erasure_sets = {
+    {0}, {2, 9, 14}, {8, 13, 14, 15}, {0, 1, 2, 3}, {3, 7, 11, 12}};
+  for (const auto& erasures : erasure_sets) {
+    // decode twice: CLAY keeps scratch buffers between calls
+    for (int pass = 0; pass < 2; pass++) {
+      map<int, bufferlist> degraded;
+      for (auto& [shard, bl] : encoded) {
+        if (erasures.count(shard) == 0) {
+          bufferlist copy;
+          copy.append(bl.c_str(), bl.length());
+          degraded[shard] = copy;
+        }
+      }
+      map<int, bufferlist> decoded;
+      ASSERT_EQ(0, clay._decode(want_to_read, degraded, &decoded));
+      for (int i = 0; i < k; i++) {
+        ASSERT_EQ(chunk_size, decoded[i].length());
+        EXPECT_EQ(0, memcmp(decoded[i].c_str(), in.c_str() + i * chunk_size,
+                            chunk_size))
+          << "chunk " << i << " erasures " << erasures << " pass " << pass;
+      }
+    }
+  }
+}
+
 TEST(ErasureCodeClay, minimum_to_decode)
 {
   ErasureCodeClay clay(g_conf().get_val<std::string>("erasure_code_dir"));
