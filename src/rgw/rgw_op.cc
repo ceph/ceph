@@ -81,6 +81,7 @@
 #include "include/ceph_assert.h"
 
 #include "compressor/Compressor.h"
+#include "rgw_inject.h"
 
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight.h"
@@ -7859,6 +7860,8 @@ void RGWCompleteMultipart::execute(optional_yield y)
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
   }
+  // for testing: the head is written, the meta object not yet deleted
+  rgw_inject_delay(this, y, "complete_mp_after_head_write");
 
   // size is logged in stadared mode
   int ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Standard, s->object.get(), s, canonical_name(), "", ofs, this, y, true, false);
@@ -7876,7 +7879,13 @@ void RGWCompleteMultipart::execute(optional_yield y)
   for (auto i = 0u; i < MAX_DELETE_RETRIES; i++) {
     // remove the upload meta object ; the meta object is not versioned
     // when the bucket is, as that would add an unneeded delete marker
-    int ret = meta_obj->delete_object(this, y, rgw::sal::FLAG_PREVENT_VERSIONING, &remove_objs, &objv_tracker);
+    int ret;
+    if (const auto err = s->cct->_conf.get_val<uint64_t>("rgw_debug_inject_mp_meta_delete_err"); err) {
+      // for testing: the meta object's delete fails after the head is written
+      ret = -static_cast<int>(err);
+    } else {
+      ret = meta_obj->delete_object(this, y, rgw::sal::FLAG_PREVENT_VERSIONING, &remove_objs, &objv_tracker);
+    }
     if (ret != -ECANCELED || i == MAX_DELETE_RETRIES - 1) {
       if (ret >= 0) {
         /* serializer's exclusive lock is released */

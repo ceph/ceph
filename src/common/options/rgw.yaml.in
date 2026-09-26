@@ -3138,6 +3138,19 @@ options:
   with_legacy: true
   services:
   - rgw
+- name: rgw_debug_inject_mp_meta_delete_err
+  type: uint
+  level: dev
+  desc: Error code to inject when CompleteMultipartUpload deletes the upload's meta
+    object
+  long_desc: When non-zero, CompleteMultipartUpload fails to delete the upload's meta
+    object with this error code, after it has written the head object. This exists for
+    development and testing purposes.
+  default: 0
+  services:
+  - rgw
+  flags:
+  - runtime
 - name: rgw_reshard_batch_size
   type: uint
   level: advanced
