@@ -202,4 +202,10 @@ target_include_directories(unittest_${test_name}
 
 add_ceph_unittest(unittest_${test_name})
 
+# Record this binary so the generated manifest (see the bottom of the
+# top-level CMakeLists.txt) can tell consumers - e.g. the Windows test
+# runner in ceph-win32-tests - which built binaries are Catch2-based
+# without having to hardcode a list of names.
+set_property(GLOBAL APPEND PROPERTY CEPH_CATCH2_TEST_BINARIES unittest_${test_name})
+
 endfunction()
