@@ -7345,6 +7345,14 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLease& l)
   epoch_t epoch = pl->get_osdmap_epoch();
 
   ps->proc_lease(l.lease);
+  {
+    auto drop_pool = ps->cct->_conf->osd_debug_drop_pg_lease_acks_pool;
+    if (drop_pool >= 0 && spgid.pgid.pool() == drop_pool) {
+      psdout(10) << "dropping lease ack for " << spgid
+		 << " (osd_debug_drop_pg_lease_acks_pool)" << dendl;
+      return discard_event();
+    }
+  }
   pl->send_cluster_message(
     ps->get_primary().osd,
     TOPNSPC::make_message<MOSDPGLeaseAck>(epoch,

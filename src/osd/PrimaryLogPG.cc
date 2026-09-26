@@ -907,6 +907,7 @@ void PrimaryLogPG::recheck_readable()
     dout(20) << __func__ << " wasn't wait or laggy" << dendl;
     return;
   }
+  const bool was_laggy = is_laggy();
   auto mnow = osd->get_mnow();
   bool pub = false;
   if (is_wait()) {
@@ -943,6 +944,12 @@ void PrimaryLogPG::recheck_readable()
     publish_stats_to_osd();
   }
   if (!is_laggy() && !is_wait()) {
+    if (was_laggy) {
+      // Leaving LAGGY is not an interval change, so clear_primary_state()
+      // won't release these.  Not after WAIT alone: that would also drop
+      // per-object backoffs.
+      release_pg_backoffs();
+    }
     requeue_ops(waiting_for_readable);
   }
 }
@@ -1878,6 +1885,11 @@ void PrimaryLogPG::do_request(
 	(!is_active() && is_peered());
       if (g_conf()->osd_backoff_on_peering && !backoff) {
 	if (is_peering()) {
+	  backoff = true;
+	}
+      }
+      if (g_conf()->osd_backoff_on_laggy && !backoff) {
+	if (is_laggy()) {
 	  backoff = true;
 	}
       }

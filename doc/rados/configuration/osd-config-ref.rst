@@ -362,6 +362,24 @@ mClock and dmClock experiments on the ``ceph-devel`` mailing list.
 
 .. _the dmClock algorithm: https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Gulati.pdf
 
+.. index:: OSD; laggy placement groups
+
+Laggy Placement Groups
+----------------------
+
+A placement group is ``laggy`` when its primary cannot renew the read lease
+with the rest of the acting set, for example because a cluster network
+connection has stalled. It serves no I/O until the lease is renewed, even
+though all of its OSDs are up.
+
+By default, clients are sent a backoff for a laggy placement group instead of
+having their requests queued on the OSD. Queued requests hold
+``osd_client_message_cap`` and ``osd_client_message_size_cap`` budget, and
+once either limit is reached the OSD stops reading from all clients, stalling
+its healthy placement groups as well.
+
+.. confval:: osd_backoff_on_laggy
+
 .. index:: OSD; backfilling
 
 Backfilling

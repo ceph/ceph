@@ -3299,6 +3299,18 @@ options:
   level: advanced
   default: false
   with_legacy: true
+# pg is laggy (read lease expired)
+- name: osd_backoff_on_laggy
+  type: bool
+  level: advanced
+  desc: Backoff clients on a PG whose read lease has expired
+  long_desc: Otherwise requests for a laggy PG are queued on the OSD, where they
+    can exhaust the client message throttles and stall I/O to every other PG on
+    that OSD.
+  fmt_desc: Send clients a backoff for a placement group whose read lease has
+    expired, instead of queuing their requests on the OSD.
+  default: true
+  with_legacy: true
 - name: osd_debug_shutdown
   type: bool
   level: dev
