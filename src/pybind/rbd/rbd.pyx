@@ -5528,11 +5528,16 @@ written." % (self.name, ret, length))
         if _specs == NULL:
             raise MemoryError("malloc failed")
 
+        passphrases = []
         memset(<void *>_specs, 0, len(specs) * sizeof(rbd_encryption_spec_t))
         try:
             for i in range(len(specs)):
                 format, passphrase = specs[i]
                 passphrase = cstr(passphrase, "specs[%d][1]" % i)
+                # if the passphrase is specified as a string, cstr() converts
+                # it to a bytes object which needs to stay alive for the entire
+                # duration of the call, not just the current loop iteration
+                passphrases.append(passphrase)
                 _specs[i].format = format
                 if (format == RBD_ENCRYPTION_FORMAT_LUKS1):
                     _luks1_opts = <rbd_encryption_luks1_format_options_t *>malloc(
@@ -5567,7 +5572,7 @@ written." % (self.name, ret, length))
                 else:
                     raise make_ex(
                         -errno.ENOTSUP,
-                        'specs[%d][1]: Unsupported encryption format' % i)
+                        'specs[%d][0]: Unsupported encryption format' % i)
             with nogil:
                 ret = rbd_encryption_load2(self.image, _specs, spec_count)
             if ret != 0:
