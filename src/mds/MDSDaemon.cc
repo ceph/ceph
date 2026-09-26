@@ -439,6 +439,11 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "dump metadata loads");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("dump phase times",
+                                     asok_hook,
+                                     "dump time spent in each upkeep phase, "
+                                     "and mds_lock utilization");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump snaps name=server,type=CephChoices,strings=--server,req=false",
                                      asok_hook,
                                      "dump snapshots");
