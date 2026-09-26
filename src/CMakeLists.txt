@@ -1325,3 +1325,102 @@ if(DOXYGEN_FOUND)
     rgw
     COMMENT "Generate C++ documentation")
 endif()
+
+# Precompiled header.
+#
+# This is a Clang feature first.  Clang gains the most, and under GCC the
+# option cannot be combined with a compiler cache at all (see the allow-list
+# in the top-level CMakeLists.txt), so a GCC build trades ccache for a
+# smaller gain.  The GCC columns are kept because they are what was measured,
+# not because GCC is the intended path.
+#
+# Applied to the targets measured to benefit.  The three columns are three
+# separate measurements, not a range: compiler CPU (user+sys) per target with
+# ccache off, net of building the PCH itself, taken in September 2026 on one
+# machine.  Read them as ordinal, not exact: absolute figures shift with the
+# CPU, the compiler version and the core headers.  What held up across runs is
+# the grouping, and that is what this list rests on.
+#
+#                        Debug Clang  Debug GCC  Release GCC
+#   common-common-objs          -69%       -26%         -37%
+#   rbd                         -67%       -20%         -35%
+#   rbd_mirror_internal         -66%       -38%         -51%
+#   rbd_internal                -55%       -36%         -44%
+#   common-objs                 -48%       -18%         -32%
+#   mds                         -26%       -12%         -42%
+#   unittest_librbd             -18%       -19%          n/m
+#   rgw_common                  -17%       -12%          -9%
+#   rgw_common_standalone       -14%       -13%         -17%
+#   osd                         -12%       -13%         -24%
+#
+# Ordered by the Debug Clang column.  Release GCC was measured over the nine
+# targets of a vstart build; unittest_librbd is not one of them (n/m).
+#
+# A percentage alone misranks these: weigh it against how much CPU the target
+# spends.  rgw_common is the weakest entry in Release at -9%, yet it is a
+# quarter of those nine targets' translation units and 40% of their
+# unaccelerated CPU, so that -9% saves more than any of the four smallest
+# entries costs in total.
+#
+# The compiler gap is not one ratio: on the rbd and common targets Clang
+# gains about 1.5 to 3 times what GCC does, yet the two are level on osd,
+# unittest_librbd and rgw_common_standalone.
+#
+# Listed explicitly rather than by a source-count threshold: the payoff depends
+# on how much of a target's cost is core headers, and neither size nor per-file
+# cost predicts it; rgw_a scores highest on both and measured -1%.
+#
+# Measure before adding an entry.  Each one costs roughly 100MB of build tree
+# under Clang against 400MB under GCC, plus seconds to build it.
+#
+# Nothing here is an obvious drop: which entry is weakest depends on the build
+# type, osd in Debug and rgw_common in Release.
+#
+# The payload in include/ceph_pch.h is core infrastructure, so it will mask a
+# translation unit that has stopped including what it uses.  Every build
+# without WITH_PCH (the default, including CI) catches that drift.
+if(WITH_PCH)
+  foreach(tgt IN ITEMS
+      common-common-objs
+      common-objs
+      mds
+      osd
+      rbd
+      rbd_internal
+      rbd_mirror_internal
+      rgw_common
+      rgw_common_standalone
+      unittest_librbd)
+    # Several of these are conditional on build options.
+    if(TARGET ${tgt})
+      # Everything the payload needs is already on the tree-wide include path
+      # except fmt in a WITH_SYSTEM_FMT build.  Carried over as includes plus
+      # FMT_HEADER_ONLY rather than target_link_libraries(), because several of
+      # these targets use the plain link signature elsewhere and CMake forbids
+      # mixing it with the keyword form.
+      target_include_directories(${tgt} SYSTEM PRIVATE
+        $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_INCLUDE_DIRECTORIES>)
+      target_compile_definitions(${tgt} PRIVATE
+        $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+      # Only ccache under Clang needs this.  GCC cannot reach it: the
+      # allow-list in the top-level CMakeLists.txt refuses WITH_CCACHE with
+      # WITH_PCH under anything but Clang, because together they silently
+      # produce objects built against a stale precompiled header.  The
+      # compiler test below is therefore redundant, and kept only so this
+      # block does not depend on a guard living in another file.
+      if(WITH_CCACHE AND CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+        # Clang records the mtime of every PCH input, so a rebuilt PCH is
+        # byte-different even with unchanged sources; ccache hashes the PCH, so
+        # every object built against it then misses.  Measured on a clean
+        # rebuild of an unchanged tree: 0% hits without this, 100% with.  See
+        # PRECOMPILED HEADERS in ccache(1).  Left off without ccache, so that
+        # Clang keeps checking the PCH against its inputs.
+        target_compile_options(${tgt} PRIVATE
+          $<$<COMPILE_LANGUAGE:CXX>:-Xclang>
+          $<$<COMPILE_LANGUAGE:CXX>:-fno-pch-timestamp>)
+      endif()
+      target_precompile_headers(${tgt} PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/include/ceph_pch.h>")
+    endif()
+  endforeach()
+endif()
