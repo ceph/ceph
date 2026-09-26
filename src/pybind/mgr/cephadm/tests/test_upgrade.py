@@ -1209,3 +1209,75 @@ def test_do_upgrade_limit_exhausted_marks_complete_without_scope_check(
 
     mark_complete.assert_called_once()
     filtered_scope.assert_not_called()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_check_host_cpu_isa_level(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            cephadm_module.cache.update_host_facts('test', {
+                'arch': 'x86_64',
+                'cpu_model': 'Intel(R) Xeon(R) CPU E5-2650 v2 @ 2.60GHz',
+                'cpu_isa_level': 'x86-64-v2',
+            })
+            cephadm_module.cache.update_host_facts('test2', {
+                'arch': 'x86_64',
+                'cpu_model': 'Intel(R) Xeon(R) Gold 6130 CPU @ 2.10GHz',
+                'cpu_isa_level': 'x86-64-v3',
+            })
+
+            # tentacle (20.x) has no ISA requirement
+            assert cephadm_module.upgrade.check_host_cpu_isa_level('20.2.0') == []
+
+            # umbrella (21.x) requires x86-64-v3; only 'test' is flagged
+            errs = cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0')
+            assert len(errs) == 1
+            assert 'test' in errs[0]
+            assert 'x86-64-v2' in errs[0]
+            assert 'x86-64-v3' in errs[0]
+
+            # staggered upgrade restricted to a compatible host passes
+            assert cephadm_module.upgrade.check_host_cpu_isa_level(
+                '21.2.0', hosts=['test2']) == []
+
+            # hosts with unknown ISA level (no facts / non-x86 / older
+            # cephadm) are skipped
+            cephadm_module.cache.update_host_facts('test', {'arch': 'aarch64'})
+            assert cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0') == []
+
+            # disabling the check via config skips it entirely
+            cephadm_module.cache.update_host_facts('test', {
+                'arch': 'x86_64',
+                'cpu_isa_level': 'x86-64-v1',
+            })
+            assert cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0') != []
+            cephadm_module.upgrade_cpu_isa_check = False
+            try:
+                assert cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0') == []
+            finally:
+                cephadm_module.upgrade_cpu_isa_check = True
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_blocks_on_insufficient_cpu_isa_level(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                cephadm_module.cache.update_host_facts('test', {
+                    'arch': 'x86_64',
+                    'cpu_model': 'Intel(R) Xeon(R) CPU E5-2650 v2 @ 2.60GHz',
+                    'cpu_isa_level': 'x86-64-v2',
+                })
+                with mock.patch.object(CephadmUpgrade, '_check_target_version', return_value=None):
+                    with pytest.raises(OrchestratorError) as err:
+                        cephadm_module.upgrade_start('', '21.2.0')
+                    assert 'x86-64-v3' in str(err.value)
+                    assert 'host test' in str(err.value)
+
+                    # excluding the incompatible host allows the upgrade
+                    with mock.patch("cephadm.serve.CephadmServe._get_container_image_info",
+                                    side_effect=async_side_effect(
+                                        ContainerInspectInfo('image_id', '21.2.0', 'digest'))):
+                        assert wait(cephadm_module, cephadm_module.upgrade_start(
+                            '', '21.2.0', host_placement='test2')
+                        ).startswith('Initiating upgrade')
