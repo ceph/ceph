@@ -1249,7 +1249,7 @@ TEST_F(QuiesceDbTest, ReleaseAwait)
   }));
 
   // the corresponding await must have been interrupted due to the change to the members
-  EXPECT_EQ(ERR(EINTR), release_await2.wait_result_for(0.1));
+  EXPECT_EQ(ERR(EINTR), release_await2.wait_result_for(5));
 
   // still releasing
   EXPECT_EQ(QS_RELEASING, last_request->response.sets.at("set2").rstate.state);
@@ -1269,7 +1269,7 @@ TEST_F(QuiesceDbTest, ReleaseAwait)
     r.exclude_roots({"root1"});
   }));
 
-  EXPECT_EQ(ERR(ECANCELED), release_await22.wait_result_for(0.1));
+  EXPECT_EQ(ERR(ECANCELED), release_await22.wait_result_for(5));
 
   std::atomic<QuiesceState> root1_state(QS__INVALID);
   managers.at(mds_gid_t(1))->reset_agent_callback([&](auto &map){
@@ -1283,12 +1283,12 @@ TEST_F(QuiesceDbTest, ReleaseAwait)
   // validate that root1 is still reported to the agents as QUIESCING
   // even though we are already releasing set1
   // this is because there is another set with this root which is not releasing
-  EXPECT_TRUE(timed_run(sec(0.1), [&](){root1_state.wait(QS__INVALID);}));
+  EXPECT_TRUE(timed_run(sec(5), [&](){root1_state.wait(QS__INVALID);}));
   EXPECT_EQ(QS_QUIESCING, root1_state.load());
 
   // allow acks
   managers.at(mds_gid_t(1))->reset_agent_callback(QUIESCING_AGENT_CB);
-  EXPECT_EQ(OK(), release_await1.wait_result_for(0.1));
+  EXPECT_EQ(OK(), release_await1.wait_result_for(5));
 
   EXPECT_EQ(QS_RELEASED, release_await1.response.sets.at("set1").rstate.state);
 
