@@ -860,16 +860,20 @@ public:
   nsfs::PathStrategy* get_path_strategy() { return path_strategy.get(); }
   const nsfs::ReservedNames& get_reserved_names() const { return reserved_names; }
 
-  /* The profile a marker value selects, or nullptr for a value this
-   * build does not implement -- which is refused rather than guessed. */
+  /* The profile a mark selects, or nullptr for a bucket carrying a bit
+   * this build does not implement -- refused rather than guessed.
+   *
+   * The two profile objects differ only in which strategies they point
+   * at, and today both point at the same ones.  When S5 makes them
+   * differ, a bucket carrying a *subset* of the known bits will need to
+   * carry its own mask rather than borrow the profile's;  the profile
+   * selects implementations, the mask says what the bucket has. */
   const nsfs::BucketProfile* resolve_profile(uint32_t extensions) const {
-    if (extensions == nsfs::EXTENSIONS_NONE) {
-      return &base_profile;
+    if (extensions & ~nsfs::EXTENSIONS_KNOWN) {
+      return nullptr;
     }
-    if (extensions == nsfs::EXTENSIONS_VERSION) {
-      return &extended_profile;
-    }
-    return nullptr;
+    return (extensions == nsfs::EXTENSIONS_NONE) ? &base_profile
+						 : &extended_profile;
   }
   const nsfs::BucketProfile* get_base_profile() const { return &base_profile; }
 

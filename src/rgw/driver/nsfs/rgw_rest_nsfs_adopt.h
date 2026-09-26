@@ -67,7 +67,7 @@ public:
     f->dump_string("bucket", bucket);
     /* what it was, so a caller can tell an adoption from a no-op */
     f->dump_unsigned("had", had);
-    f->dump_unsigned("extensions", rgw::sal::nsfs::EXTENSIONS_VERSION);
+    f->dump_unsigned("extensions", rgw::sal::nsfs::EXTENSIONS_DEFAULT);
     f->close_section();
     flusher.flush();
   }

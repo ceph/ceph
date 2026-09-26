@@ -2923,12 +2923,12 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   base_profile.extensions = nsfs::EXTENSIONS_NONE;
   base_profile.xattr_strategy = xattr_strategy.get();
   base_profile.path_strategy = path_strategy.get();
-  extended_profile.extensions = nsfs::EXTENSIONS_VERSION;
+  extended_profile.extensions = nsfs::EXTENSIONS_STRONG;
   extended_profile.xattr_strategy = xattr_strategy.get();
   extended_profile.path_strategy = path_strategy.get();
   ldpp_dout(dpp, 1) << "nsfs: new buckets are "
     << (extensions_enabled() ? "marked with extension set "
-	  + std::to_string(nsfs::EXTENSIONS_VERSION)
+	  + std::to_string(nsfs::EXTENSIONS_DEFAULT)
 	: std::string("unmarked (reversible mode)")) << dendl;
 
   /* Every strategy names some scaffolding, and the listing paths test one
@@ -3471,6 +3471,17 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
     ret = load_bucket(dpp, rgw_bucket("", entry->d_name), &bucket, null_yield);
     if (ret < 0) {
       if (ret == -ENOENT) {
+	errno = 0;
+	continue;
+      }
+      /* A bucket we cannot read is one bucket, not a failed listing.
+       * ERR_NOT_IMPLEMENTED means it carries an extension set this build
+       * does not implement -- written by a newer gateway, or restored
+       * from one -- and refusing the whole account's ListBuckets over it
+       * denies every other bucket for no reason.  Skip it and say so. */
+      if (ret == -ERR_NOT_IMPLEMENTED) {
+	ldpp_dout(dpp, 4) << "list_buckets: skipping " << entry->d_name
+	  << ", this gateway cannot serve it" << dendl;
 	errno = 0;
 	continue;
       }
@@ -4572,7 +4583,11 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
       ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " carries an "
 	<< "unreadable " << nsfs::EXTENSIONS_XATTR << " (\"" << buf
 	<< "\");  refusing to serve it" << dendl;
-      return -ENOTSUP;
+      /* ERR_NOT_IMPLEMENTED, not ENOTSUP:  the latter has no entry in
+       * rgw_common.cc's table and falls through to 500/UnknownError,
+       * which tells a client we malfunctioned.  This is a deliberate
+       * refusal and 501 says so. */
+      return -ERR_NOT_IMPLEMENTED;
     }
     extensions = (uint32_t)v;
   }
@@ -4581,9 +4596,21 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
   if (! profile) {
     ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " was written with "
       << "extension set " << extensions << ", which this gateway does not "
-      << "implement (it implements " << nsfs::EXTENSIONS_VERSION
+      << "implement (it implements " << nsfs::EXTENSIONS_KNOWN
       << ");  refusing to serve it" << dendl;
-    return -ENOTSUP;
+    /* 501 NotImplemented, and terminal.  Not -ENOTSUP:  it has no entry
+     * in rgw_common.cc's table, falls through to 500/UnknownError, and
+     * that is malformed enough that clients abend rather than report --
+     * `aws s3 ls` raises "argument of type 'NoneType' is not iterable".
+     * 500 also tells every SDK to retry something that cannot succeed.
+     *
+     * Terminal is right only while a deployment is one gateway.  Once
+     * several serve one filesystem, a bucket this node cannot read may
+     * be readable by the node beside it -- mid-upgrade, or after a
+     * partial rollback -- and a retryable 503 becomes the better answer,
+     * because the retry can land somewhere that succeeds.  Revisit when
+     * multi-instance works;  it cannot start today. */
+    return -ERR_NOT_IMPLEMENTED;
   }
 
   ldpp_dout(dpp, 20) << "bucket " << get_name() << " profile "
@@ -4979,7 +5006,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
    * must not mark it by a side effect, since marking is what ends its
    * ability to go back. */
   if ((!existed || !*existed) && driver->extensions_enabled()) {
-    ret = mark_extensions(dpp, nsfs::EXTENSIONS_VERSION);
+    ret = mark_extensions(dpp, nsfs::EXTENSIONS_DEFAULT);
     if (ret < 0) {
       return ret;
     }
@@ -9594,7 +9621,7 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   }
   features["rename_enabled"] =
     ctx()->_conf->rgw_nsfs_enable_rename ? "true" : "false";
-  features["extensions"] = std::to_string(nsfs::EXTENSIONS_VERSION);
+  features["extensions"] = std::to_string(nsfs::EXTENSIONS_KNOWN);
   features["extensions_default"] = extensions_enabled() ? "true" : "false";
 }
 
@@ -9634,8 +9661,8 @@ int NSFSDriver::adopt_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   ldpp_dout(dpp, 1) << "nsfs: adopting bucket " << name
-    << " into extension set " << nsfs::EXTENSIONS_VERSION << dendl;
-  return bucket.mark_extensions(dpp, nsfs::EXTENSIONS_VERSION);
+    << " into extension set " << nsfs::EXTENSIONS_DEFAULT << dendl;
+  return bucket.mark_extensions(dpp, nsfs::EXTENSIONS_DEFAULT);
 }
 
 void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
