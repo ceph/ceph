@@ -79,6 +79,24 @@ uint64_t BitmapAllocator::get_free_extents(
     });
 }
 
+int64_t BitmapAllocator::claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector* extents)
+{
+  if (length == 0) {
+    return 0;
+  }
+  auto mas = get_min_alloc_size();
+  ceph_assert(p2aligned(offset, (uint64_t)mas));
+  ceph_assert(p2aligned(length, (uint64_t)mas));
+  ceph_assert(offset <= uint64_t(device_size));
+  // written as a subtraction rather than 'offset + length <= device_size'
+  // so that a length near UINT64_MAX cannot wrap past the check
+  ceph_assert(length <= uint64_t(device_size) - offset);
+  return claim_range_internal(offset, length, extents);
+}
+
 void BitmapAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
