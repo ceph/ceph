@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <limits.h>
 
 /* Maximum number of symlinks to visit while resolving a path before returning
  * ELOOP. */
