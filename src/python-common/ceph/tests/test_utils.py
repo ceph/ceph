@@ -1,6 +1,7 @@
 import pytest
 
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6, wrap_ipv6, valid_addr
+from ceph.utils import with_units_to_int
 from typing import NamedTuple
 
 
@@ -73,3 +74,55 @@ def test_valid_addr(addr_object: Address):
     valid, description = valid_addr(addr_object.addr)
     assert valid == addr_object.status
     assert description == addr_object.description
+
+
+@pytest.mark.parametrize('value,expected', [
+    # No unit suffix
+    ('', 0),
+    ('100', 100),
+    # Decimal (SI) suffixes
+    ('100B', 100),
+    ('100KB', 100 * 1000),
+    ('100MB', 100 * 1000 ** 2),
+    ('1GB', 1000 ** 3),
+    ('1TB', 1000 ** 4),
+    # Binary (IEC) suffixes
+    ('100KiB', 100 * 1024),
+    ('100MiB', 100 * 1024 ** 2),
+    ('1GiB', 1024 ** 3),
+    ('1TiB', 1024 ** 4),
+    # Bare unit letters, without a trailing B. These are binary, matching
+    # size_to_bytes() and the behaviour this helper had before the decimal
+    # suffixes were added.
+    ('128K', 128 * 1024),
+    ('500M', 500 * 1024 ** 2),
+    ('1G', 1024 ** 3),
+    ('2T', 2 * 1024 ** 4),
+    ('1g', 1024 ** 3),
+    ('1.5G', 1610612736),
+])
+def test_with_units_to_int(value, expected):
+    assert with_units_to_int(value) == expected
+
+
+@pytest.mark.parametrize('value', [
+    # A unit suffix with nothing in front of it
+    'B',
+    'iB',
+    'K',
+    'KB',
+    'GiB',
+    # The B and iB suffixes are matched case sensitively, the unit letter
+    # is not, so '1g' is valid but '1gb' is not
+    '1gb',
+    # Not a size at all
+    'abc',
+    '1X',
+    # float() accepts these, int() then overflows
+    'inf',
+    '1e400',
+])
+def test_with_units_to_int_invalid(value):
+    # Callers guard on ValueError only, so every bad value must be one.
+    with pytest.raises(ValueError, match='invalid size'):
+        with_units_to_int(value)
