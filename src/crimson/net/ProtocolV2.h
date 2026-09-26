@@ -122,7 +122,7 @@ private:
   void trigger_state_phase2(state_t new_state, io_state_t new_io_state);
 
   void trigger_state(state_t new_state, io_state_t new_io_state) {
-    ceph_assert_always(!pr_switch_io_shard.has_value());
+    ceph_assert(!pr_switch_io_shard.has_value());
     trigger_state_phase1(new_state);
     trigger_state_phase2(new_state, new_io_state);
   }
