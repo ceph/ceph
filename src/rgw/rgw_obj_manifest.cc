@@ -115,6 +115,7 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     update_location();
     return;
   }
+
   if (o < manifest->get_head_size()) {
     rule_iter = manifest->rules.begin();
     stripe_ofs = 0;
@@ -139,6 +140,23 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
   }
 
   const RGWObjManifestRule& rule = rule_iter->second;
+
+  /* A small head-only object can end before the first tail rule. For example,
+   * obj_end() for a 7-byte object (head_size==obj_size==7) with seek offset at 7, 
+   * while its tail manifest rule starts at 4 MiB. The head check above is ofs < head_size, 
+   * so that offset falls through to the tail rule calculation.
+   *
+   * Calculating (ofs - rule.start_ofs) below results in underflow for such small objects. 
+   * Comparing against obj_size or head_size instead would break multipart end iterators, 
+   * which need this calculation to determine the part after the last one. 
+   *
+   * start_ofs identifies whether the current ofs is covered by the manifest rule. */
+  if (ofs < rule.start_ofs) {
+    stripe_ofs = ofs;
+    stripe_size = 0;
+    update_location();
+    return;
+  }
 
   if (rule.part_size > 0) {
     cur_part_id = rule.start_part_num + (ofs - rule.start_ofs) / rule.part_size;
