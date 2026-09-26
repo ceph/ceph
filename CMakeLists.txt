@@ -842,17 +842,9 @@ if(WITH_CRIMSON)
   list(APPEND BOOST_COMPONENTS timer)
 endif()
 
-if(WITH_RADOSGW AND WITH_RADOSGW_LUA_PACKAGES)
-  list(APPEND BOOST_COMPONENTS filesystem)
-endif()
-
 if(WITH_LIBCEPHFS OR WITH_FUSE)
   find_package(ICU REQUIRED COMPONENTS uc i18n)
   list(APPEND BOOST_COMPONENTS locale)
-endif()
-
-if(WITH_CEPHFS)
-  list(APPEND BOOST_COMPONENTS filesystem)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
@@ -892,6 +884,9 @@ else()
     add_compile_definitions(BOOST_USE_ASAN BOOST_USE_UCONTEXT)
   endif()
 endif()
+# Set tree-wide: the macro changes the type of bp::filesystem::path in inline
+# code, so a binary mixing both settings would be an ODR violation.
+add_compile_definitions(BOOST_PROCESS_USE_STD_FS)
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 if(WIN32 AND WITH_CATCH2)
   foreach(catch2_target Catch2 Catch2WithMain)
@@ -928,7 +923,6 @@ CMAKE_DEPENDENT_OPTION(WITH_MGR_ROOK_CLIENT "Enable the mgr's Rook support" ON
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
-find_package(StdFilesystem REQUIRED)
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)

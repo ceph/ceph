@@ -15,6 +15,5 @@ target_link_libraries(ceph-immutable-object-cache
   legacy-option-headers
   ceph_immutable_object_cache_lib
   librados
-  StdFilesystem::filesystem
   global)
 install(TARGETS ceph-immutable-object-cache DESTINATION bin)

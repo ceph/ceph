@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include <boost/asio.hpp>
+#include <boost/system/error_code.hpp>
 #include <boost/process/v1.hpp>
 #include <boost/process/v1/child.hpp>
 #include <boost/process/v1/env.hpp>

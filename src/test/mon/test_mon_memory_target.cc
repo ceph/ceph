@@ -6,6 +6,7 @@
 #include <regex>
 #include <system_error>
 
+#include <boost/system/error_code.hpp>
 #include <boost/process/v1/io.hpp>
 #include <boost/process/v1/child.hpp>
 #include <boost/process/v1/pipe.hpp>
