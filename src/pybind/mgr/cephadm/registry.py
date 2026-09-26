@@ -1,3 +1,4 @@
+import shlex
 import requests
 from typing import List, Dict, Tuple
 from requests import Response
@@ -26,12 +27,38 @@ class Registry:
         raise ValueError(f'Unknown token reply {ret}')
 
     def parse_www_authenticate(self, text: str) -> Tuple[str, Dict[str, str]]:
-        # 'Www-Authenticate': 'Bearer realm="https://auth.docker.io/token",service="registry.docker.io",scope="repository:ceph/ceph:pull"'
+        """
+        Parse Bearer authentication parameters from a WWW-Authenticate header.
+
+        Some registries (e.g. IBM Container Registry) return headers with
+        spaces after commas:
+            Bearer realm=https://cp.icr.io/oauth/token, service=registry, scope=...
+        shlex.split() handles quoted strings natively and treats commas and
+        spaces as delimiters, so both quoted and unquoted values work without
+        any custom regex.
+        """
         r: Dict[str, str] = {}
-        for token in text.split(','):
-            key, value = token.split('=', 1)
-            r[key] = value.strip('"')
-        realm = r.pop('Bearer realm')
+
+        # Strip the scheme token ("Bearer ") before parsing key=value pairs.
+        bearer_prefix = 'Bearer '
+        if text.startswith(bearer_prefix):
+            text = text[len(bearer_prefix):]
+
+        # shlex splits on whitespace and respects quoted strings.
+        # Replace commas with spaces so they act as plain delimiters, but
+        # only outside quoted strings — shlex handles this correctly.
+        lex = shlex.shlex(text, posix=True)
+        lex.whitespace = ', '
+        lex.whitespace_split = True
+        for token in lex:
+            if '=' in token:
+                key, _, value = token.partition('=')
+                r[key.strip()] = value
+
+        if 'realm' not in r:
+            raise ValueError(f'No realm found in WWW-Authenticate header: {text}')
+
+        realm = r.pop('realm')
         return realm, r
 
     def get_tags(self, image: str) -> List[str]:
