@@ -149,6 +149,10 @@ struct C_aio_notify_Complete : public C_aio_linger_Complete {
     // invoked by C_aio_notify_Ack
     lock.lock();
     acked = true;
+    {
+      std::scoped_lock cl{c->lock};
+      c->objver = linger_op->notify_version;
+    }
     complete_unlock(r);
   }
 
@@ -1921,7 +1925,7 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
   // Issue RADOS op
   objecter->linger_notify(linger_op.get(),
 			  rd, snap_seq, inbl, NULL,
-			  onack, &c->objver);
+			  onack, &linger_op->notify_version);
   return 0;
 }
 
