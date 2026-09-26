@@ -1085,7 +1085,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     }
     st.osd = st.acting[index];
 
-    target.used_replica = (st.acting_primary != st.osd);
+    st.used_replica = (st.acting_primary != st.osd);
 
     objecter._op_submit(sub_op, sul, &tids[i++]);
 
