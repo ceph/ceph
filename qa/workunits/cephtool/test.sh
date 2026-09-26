@@ -2428,8 +2428,8 @@ function test_mon_osd_pool_set()
 
   for size in compression_max_blob_size compression_min_blob_size csum_max_block csum_min_block; do
       ceph osd pool get $TEST_POOL_GETSET $size | expect_false grep '.'
-      ceph osd pool set $TEST_POOL_GETSET $size 100
-      ceph osd pool get $TEST_POOL_GETSET $size | grep '100'
+      ceph osd pool set $TEST_POOL_GETSET $size 128
+      ceph osd pool get $TEST_POOL_GETSET $size | grep '128'
       ceph osd pool set $TEST_POOL_GETSET $size 0
       ceph osd pool get $TEST_POOL_GETSET $size | expect_false grep '.'
   done
