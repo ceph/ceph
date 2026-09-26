@@ -21,8 +21,11 @@
  * retried on the new layout (UpdateIndex::guard_reshard).
  * A request's tag, and the writer recorded in what it writes, is its rid.
  * write_meta's outcome is WRITTEN, LOST (a lost race, answered as
- * success) or FAILED (the head was written but the index completion
- * failed, answered as an error).
+ * success), FAILED (the head was written but the index completion
+ * failed, answered as an error), or, for a conditional write, PRECOND,
+ * NOENT or REFUSED (not written, answered 412, 404 or another error).
+ * PutObject, CompleteMultipartUpload and DeleteObject may carry a
+ * condition (If-Match, If-None-Match: *).
  */
 machine Rgw {
   var cfg: tCfg;
@@ -38,17 +41,21 @@ machine Rgw {
       driver = p.driver;
       rid = p.rid;
       announce mStarted, rid;
+      if (p.req.cond.kind != C_NONE) {
+        announce mRequest, (rid = rid, key = p.req.key, cond = p.req.cond, del = p.req.kind == R_DELETE,
+                            etag = OwnEtag(p.req));
+      }
       gen = GetLayout();
       if (p.req.kind == R_PUT) {
-        PutObject(p.req.key);
+        PutObject(p.req.key, p.req.cond);
       } else if (p.req.kind == R_DELETE) {
-        DeleteObject(p.req.key);
+        DeleteObject(p.req.key, p.req.cond);
       } else if (p.req.kind == R_COPY) {
         CopyObject(p.req.src, p.req.key);
       } else if (p.req.kind == R_UPLOAD_PART) {
         UploadPart(p.req.upload, p.req.num, p.req.etag);
       } else if (p.req.kind == R_COMPLETE) {
-        CompleteMultipart(p.req.upload, p.req.list);
+        CompleteMultipart(p.req.upload, p.req.list, p.req.cond);
       } else if (p.req.kind == R_ABORT) {
         Abort(p.req.upload, cfg.abortTakesLock);
       } else if (p.req.kind == R_LIST) {
@@ -63,32 +70,51 @@ machine Rgw {
     }
   }
 
+  // the ETag a request's own write leaves on its key
+  fun OwnEtag(req: tSpec): int {
+    if (req.kind == R_PUT) {
+      return rid;
+    }
+    if (req.kind == R_COMPLETE) {
+      return MPETAG(req.list);
+    }
+    return 0;
+  }
+
   // AtomicObjectProcessor: the tail first, then the head (holding the
   // first chunk) in write_meta
-  fun PutObject(key: int) {
+  fun PutObject(key: int, cond: tCond) {
     var tail: set[int];
     var w: int;
     tail += (TAIL(rid));
     WriteData(tail);
-    w = WriteMeta(key, tail, rid, 0, default(set[int]), rid, false, 1);
+    w = WriteMeta(key, tail, rid, 0, default(set[int]), rid, false, 1, cond);
     if (w != WRITTEN()) {
-      // lost a race, or failed: ~RadosWriter removes the tail it wrote
+      // lost a race, refused or failed: ~RadosWriter removes the tail it
+      // wrote
       DeleteInline(tail);
     }
-    Answer(w != FAILED());
+    Reply(Ans(w));
   }
 
   // RGWRados::Object::Delete::delete_obj on a non-versioned bucket
-  fun DeleteObject(key: int) {
+  fun DeleteObject(key: int, cond: tCond) {
     var st: tHead;
     var r: (rc: tRc, epoch: int);
+    // RGWDeleteObj::execute reads the head (load_obj_state), and
+    // delete_obj checks the condition against that state
     st = ReadHead(key);
     if (!st.present) {
-      Answer(true);  // -ENOENT, answered 204
+      Reply(A_OK);  // -ENOENT, answered 204, before any condition
+      return;
+    }
+    if (Precondition(cond, st) != A_OK) {
+      Reply(A_PRECOND);  // check_preconditions
       return;
     }
     IndexPrepare(key);
-    // cls_rgw_remove_obj; on main without the ID tag check (55f5b762c67)
+    // cls_rgw_remove_obj; on main without the ID tag check (55f5b762c67),
+    // so nothing checks the condition again
     r = HeadRemove(key, cfg.deleteGuard, st.tag);
     if (r.rc == OK || r.rc == ENOENT) {
       if (cfg.ixCompleteMayFail && $) {
@@ -107,7 +133,12 @@ machine Rgw {
       return;
     }
     IndexComplete(key, IX_CANCEL, -1, 0, 0, default(set[int]));
-    Answer(false);
+    // -ECANCELED: RGWDeleteObj::execute answers it as success (204)
+    if (cond.kind != C_NONE && cfg.condLossFails) {
+      Reply(A_ERR);
+    } else {
+      Reply(A_OK);
+    }
   }
 
   // RGWRados::copy_obj within one pool. The destination shares the
@@ -134,7 +165,8 @@ machine Rgw {
         canceled = WriteHeadOver(dst, s, s.manifest, s.etag, s.upload, s.tailTag, s.size);
         Answer(true);
       } else {
-        w = WriteMeta(dst, s.manifest, s.etag, s.upload, default(set[int]), s.tailTag, true, s.size);
+        w = WriteMeta(dst, s.manifest, s.etag, s.upload, default(set[int]), s.tailTag, true, s.size,
+                      default(tCond));
         Answer(w != FAILED());
       }
       return;
@@ -153,7 +185,7 @@ machine Rgw {
         got += (o);
       }
     }
-    w = WriteMeta(dst, s.manifest, s.etag, 0, default(set[int]), rid, false, s.size);
+    w = WriteMeta(dst, s.manifest, s.etag, 0, default(set[int]), rid, false, s.size, default(tCond));
     // done_ret drops the references on an error; a lost race keeps them
     if (w == FAILED() || (w == LOST() && cfg.copyLoserDropsRefs)) {
       foreach (g in got) {
@@ -165,7 +197,7 @@ machine Rgw {
 
   // RGWRados::Object::Write::write_meta and _do_write_meta
   fun WriteMeta(key: int, manifest: set[int], etag: int, upload: int, removeKeys: set[int],
-                tailTag: int, keepTail: bool, size: int): int {
+                tailTag: int, keepTail: bool, size: int, cond: tCond): int {
     var st: tHead;
     var nh: tHead;
     var r: (rc: tRc, epoch: int);
@@ -175,24 +207,37 @@ machine Rgw {
     var old: set[int];
     var o: int;
     var ixrc: tRc;
+    var a: tAns;
+    var w: int;
     nh = (present = true, tag = rid, tailTag = tailTag, manifest = manifest, writer = rid, etag = etag,
           upload = upload, size = size, ver = 0);
     // first without reading the head, as an exclusive create; on
-    // -EEXIST, read it and replace it
-    assumeNoent = true;
+    // -EEXIST, read it and replace it. A conditional write reads the head
+    // at once, and writes once.
+    assumeNoent = cond.kind == C_NONE;
     while (attempts < 2) {
       attempts = attempts + 1;
       if (assumeNoent) {
         st = default(tHead);
       } else {
         st = ReadHead(key);
+        // check_preconditions, against the head just read, before the
+        // index op
+        a = Precondition(cond, st);
+        if (a == A_PRECOND) {
+          return PRECOND();
+        }
+        if (a == A_NOTFOUND) {
+          return NOENT();
+        }
       }
       if (!prepared) {
         IndexPrepare(key);
         prepared = true;
       }
       // prepare_atomic_modification: cmpxattr on the ID tag read, and an
-      // exclusive create if there was no head
+      // exclusive create if there was no head. If-None-Match: * adds no
+      // cmpxattr (set_attr_id_tag); its head was absent, so it creates.
       r = HeadWrite(key, st.present && cfg.idTagGuard, st.tag, !st.present, nh);
       if (!(r.rc == EEXIST && assumeNoent)) {
         attempts = 2;
@@ -200,9 +245,16 @@ machine Rgw {
       assumeNoent = false;
     }
     if (r.rc != OK) {
-      // done_cancel: -ECANCELED, -ENOENT or -EEXIST, answered as success
-      IndexComplete(key, IX_CANCEL, -1, 0, 0, removeKeys);
-      return LOST();
+      // done_cancel: -ECANCELED, -ENOENT or -EEXIST. Without a condition
+      // each is answered as success; with one, as LostAs says. On main the
+      // cancel removes remove_objs either way.
+      w = LostAs(cond, r.rc);
+      if (w != LOST() && cfg.refusedKeepsParts) {
+        IndexComplete(key, IX_CANCEL, -1, 0, 0, default(set[int]));
+      } else {
+        IndexComplete(key, IX_CANCEL, -1, 0, 0, removeKeys);
+      }
+      return w;
     }
     // complete_atomic_modification: the replaced head's manifest goes to
     // GC under its tail tag, unless keep_tail
@@ -393,6 +445,73 @@ machine Rgw {
   fun WRITTEN(): int { return 0; }
   fun LOST(): int { return 1; }
   fun FAILED(): int { return 2; }
+  fun PRECOND(): int { return 3; }
+  fun NOENT(): int { return 4; }
+  fun REFUSED(): int { return 5; }
+
+  // how a write_meta outcome is answered
+  fun Ans(w: int): tAns {
+    if (w == WRITTEN() || w == LOST()) {
+      return A_OK;
+    }
+    if (w == PRECOND()) {
+      return A_PRECOND;
+    }
+    if (w == NOENT()) {
+      return A_NOTFOUND;
+    }
+    return A_ERR;
+  }
+
+  // RGWRados::Object::check_preconditions: If-Match (an ETag, or *) needs
+  // a head, and its absence is -ENOENT, answered 404; another ETag, or a
+  // head under If-None-Match: *, is answered 412
+  fun Precondition(cond: tCond, st: tHead): tAns {
+    if (cond.kind == C_IF_MATCH || cond.kind == C_IF_MATCH_ANY) {
+      if (!st.present) {
+        return A_NOTFOUND;
+      }
+      if (cond.kind == C_IF_MATCH && st.etag != cond.etag) {
+        return A_PRECOND;
+      }
+    } else if (cond.kind == C_IF_NONE_MATCH_ANY && st.present) {
+      return A_PRECOND;
+    }
+    return A_OK;
+  }
+
+  // done_cancel's answer to a conditional write that lost the head race:
+  // If-Match: * turns -ENOENT into 412 and -ECANCELED into success;
+  // If-None-Match: * turns -EEXIST into 412 and -ENOENT into success;
+  // under If-Match with an ETag the error stands (-ENOENT is 404,
+  // -ECANCELED has no S3 code and is answered 500)
+  fun LostAs(cond: tCond, rc: tRc): int {
+    if (cond.kind == C_NONE) {
+      return LOST();
+    }
+    if (cond.kind == C_IF_MATCH_ANY) {
+      if (rc == ENOENT) {
+        return PRECOND();
+      }
+      if (rc == ECANCELED && !cfg.condLossFails) {
+        return LOST();
+      }
+      return REFUSED();
+    }
+    if (cond.kind == C_IF_NONE_MATCH_ANY) {
+      if (rc == EEXIST) {
+        return PRECOND();
+      }
+      if (rc == ENOENT && !cfg.condLossFails) {
+        return LOST();
+      }
+      return REFUSED();
+    }
+    if (rc == ENOENT) {
+      return NOENT();
+    }
+    return REFUSED();
+  }
 
   // cls_bucket_list_ordered: an entry with pending ops, or not marked as
   // existing, goes through check_disk_state, which reads the head and
@@ -472,7 +591,7 @@ machine Rgw {
   }
 
   // RGWCompleteMultipart::execute
-  fun CompleteMultipart(u: int, list: map[int, int]) {
+  fun CompleteMultipart(u: int, list: map[int, int], cond: tCond) {
     var m: (rc: tRc, ver: int);
     var lp: (rc: tRc, parts: map[int, tPart]);
     var h: tHead;
@@ -595,11 +714,17 @@ machine Rgw {
         return;
       }
     }
-    w = WriteMeta(MPKEY(), manifest, MPETAG(list), u, removeKeys, rid, false, sizeof(manifest));
-    if (w == FAILED()) {
+    w = WriteMeta(MPKEY(), manifest, MPETAG(list), u, removeKeys, rid, false, sizeof(manifest), cond);
+    if (w != WRITTEN() && w != LOST()) {
       // RadosMultipartUpload::complete returns the error: the meta
-      // object stays, and complete() releases the lock
-      Finish(u, false);
+      // object stays, and complete() releases the lock. A write refused
+      // before it reached the head clears its record, so that a retry can
+      // still complete the upload
+      if (cfg.completionMark && w != FAILED()) {
+        MetaMark(u, 0);
+      }
+      Unlock(u);
+      Reply(Ans(w));
       return;
     }
     if (w == LOST() && cfg.loserGcsParts) {
@@ -776,8 +901,17 @@ machine Rgw {
   }
 
   fun Answer(ok: bool) {
+    if (ok) {
+      Reply(A_OK);
+    } else {
+      Reply(A_ERR);
+    }
+  }
+
+  fun Reply(a: tAns) {
     send store, eFinished, rid;
-    announce mAnswered, (rid = rid, ok = ok);
+    announce mAnswered, (rid = rid, ok = a == A_OK);
+    announce mReply, (rid = rid, ans = a);
     send driver, eDone, (rid = rid, crashed = false);
   }
 
@@ -810,7 +944,7 @@ machine Rgw {
 
   fun HeadRemove(key: int, guard: bool, expectTag: int): (rc: tRc, epoch: int) {
     var r: (rc: tRc, epoch: int);
-    send store, eHeadRemove, (from = this, key = key, guard = guard, expectTag = expectTag);
+    send store, eHeadRemove, (from = this, key = key, guard = guard, expectTag = expectTag, rid = rid);
     receive {
       case eHeadWritten: (x: (rc: tRc, epoch: int)) { r = x; }
     }

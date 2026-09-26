@@ -3,6 +3,8 @@
  * existing object, DeleteObject, CopyObject (sharing the source's tail
  * through cls_refcount), and multipart uploads - their parts, re-uploaded
  * parts, completion, abort and lifecycle's abort - completing over key 1.
+ * PutObject, a completion and DeleteObject may carry a condition
+ * (If-Match, If-None-Match: *).
  *
  * The RADOS state is one Store machine: each key's head object and bucket
  * index entry, the multipart namespace of the index, the data objects that
@@ -45,6 +47,10 @@ type tCfg = (
   completionMark: bool,        // a completion records its tag in the meta object before the
                                // head write; a later completion or abort of the upload that
                                // finds the record checks it against the head's ID tag
+  condLossFails: bool,         // a conditional write or delete that loses the head race is
+                               // answered an error, not success
+  refusedKeepsParts: bool,     // a write refused after it lost the head race cancels its index
+                               // op without remove_objs, so a live upload's parts stay listed
   // environment
   completeMayCrash: bool,      // RGW may die after a completion's head write, before it
                                // deletes the meta object; the lock then expires
@@ -75,8 +81,17 @@ type tIx = (present: bool, listed: bool, writer: int, size: int, pool: int, epoc
 type tPart = (prefix: int, etag: int, past: set[int]);
 
 enum tKind { R_PUT, R_DELETE, R_COPY, R_UPLOAD_PART, R_COMPLETE, R_ABORT, R_LC_ABORT, R_LIST, R_DEDUP, R_RESHARD }
+// A request's condition on the head of its key: If-Match with an ETag,
+// If-Match: *, or If-None-Match: * on a PutObject or completion; If-Match
+// with an ETag on a DeleteObject.
+enum tCondKind { C_NONE, C_IF_MATCH, C_IF_MATCH_ANY, C_IF_NONE_MATCH_ANY }
+type tCond = (kind: tCondKind, etag: int);
+// what a request is answered: success, 412 PreconditionFailed, 404
+// NoSuchKey, or another error
+enum tAns { A_OK, A_PRECOND, A_NOTFOUND, A_ERR }
 // key: the key written or deleted, or a copy's destination; src: a copy's source
-type tSpec = (kind: tKind, key: int, src: int, upload: int, num: int, etag: int, list: map[int, int]);
+type tSpec = (kind: tKind, key: int, src: int, upload: int, num: int, etag: int, list: map[int, int],
+              cond: tCond);
 
 // Ids. rid < 100. An upload's base prefix is its id (1..9); a
 // re-uploaded part takes a random prefix, 100 + rid. A part is one
@@ -124,7 +139,7 @@ event eDone: (rid: int, crashed: bool);
 event eReadHead: (from: machine, key: int);
 event eHeadRead: tHead;
 event eHeadWrite: (from: machine, key: int, guard: bool, expectTag: int, excl: bool, head: tHead);
-event eHeadRemove: (from: machine, key: int, guard: bool, expectTag: int);
+event eHeadRemove: (from: machine, key: int, guard: bool, expectTag: int, rid: int);
 // dedup's head update: cmpxattr on the ETag and ref (tail) tag, then
 // setxattr of SHARE_MANIFEST and, on the target, of the manifest
 event eHeadRewrite: (from: machine, key: int, etag: int, tailTag: int, setManifest: bool, manifest: set[int]);
@@ -200,3 +215,11 @@ event mStarted: int;
 event mAnswered: (rid: int, ok: bool);
 event mCompleted: (rid: int, etag: int, want: int);  // a completion answered success
 event mCrashed: int;
+// a conditional request starts: the key, its condition, and what its own
+// op leaves there (del: no head; else a head with this ETag)
+event mRequest: (rid: int, key: int, cond: tCond, del: bool, etag: int);
+// a key's head written (present) or removed by request by (0: set up)
+event mHeadState: (key: int, by: int, present: bool, etag: int);
+event mReply: (rid: int, ans: tAns);
+// n index entries removed through a request's remove_objs
+event mIxRemoved: (by: int, n: int);

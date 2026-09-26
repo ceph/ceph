@@ -9,7 +9,7 @@ for the mechanism.
 
 | Model | Covers | Properties |
 |---|---|---|
-| [`rgw_overwrite`](rgw_overwrite/README.md) | PutObject, DeleteObject, CopyObject with a shared tail, dedup and multipart completion over existing keys: head-object races, the bucket index entry and stats, listings, resharding, `cls_refcount`, part re-uploads, abort, lifecycle's abort, GC | no head's data is deleted; the index matches the head; the stats match the index; nothing leaks; every request answered |
+| [`rgw_overwrite`](rgw_overwrite/README.md) | PutObject, DeleteObject, CopyObject with a shared tail, dedup and multipart completion over existing keys: head-object races, the bucket index entry and stats, listings, resharding, `cls_refcount`, part re-uploads, abort, lifecycle's abort, GC; `If-Match` and `If-None-Match: *` on PutObject, completion and DeleteObject | no head's data is deleted; the index matches the head; the stats match the index; nothing leaks; every request answered; a conditional request is answered as some order of the requests would answer it |
 
 ## Running
 
@@ -36,8 +36,8 @@ test name may be a prefix of another.
 
 ## What the models found
 
-`rgw_overwrite` finds eleven gaps on main, detailed in its README, which
-also lists the tracker issue and the proposed fix for each:
+`rgw_overwrite` finds fourteen gaps on main, detailed in its README, which
+also lists the tracker issues and the proposed fixes:
 
 - **The bucket index can keep a stale entry.** A stale or canceled
   completion still overwrites the entry's version. Three overlapping
@@ -64,5 +64,15 @@ also lists the tracker issue and the proposed fix for each:
   frees the old tail at once, and the copy writes it back.
 - **A write that stalls past the pending-op expiry is lost from the
   index.** A listing rewrites the entry from the old head.
+- **A conditional DeleteObject can delete an object that fails its
+  condition.** It checks `If-Match` against the head it read, and the
+  removal does not check it again.
+- **A conditional request that loses the race is answered success, even
+  when the write that beat it needed the head it read.** `If-Match: *`
+  does so on main; so does a conditional delete once its removal is
+  guarded, and a lease release and a takeover of the same lease then both
+  succeed.
+- **A completion refused after it lost the race drops its parts from the
+  bucket index**, while the upload stays.
 
 Resharding holds, and each of its mechanisms is needed.

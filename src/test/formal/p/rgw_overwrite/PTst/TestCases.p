@@ -172,6 +172,44 @@ test tcBugReshardNoCheckExisting [main=TestReshardNoCheckExisting]:
 test tcBugOldShardsOpen [main=TestReshardOldShardsOpen]:
   assert IndexMatchesHead in (union System, { TestReshardOldShardsOpen });
 
+// conditional requests
+test tcCreates [main=TestCreates]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCreates });
+test tcCreateVsCompleteSafe [main=TestCreateVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AllAnswered, BucketStats in (union System, { TestCreateVsComplete });
+test tcCreateVsCompleteCond [main=TestCreateVsComplete]:
+  assert CondSemantics in (union System, { TestCreateVsComplete });
+test tcCreateVsCompleteKeepsParts [main=TestCreateVsCompleteKeepsParts]:
+  assert CondSemantics in (union System, { TestCreateVsCompleteKeepsParts });
+test tcIfMatchVsPut [main=TestIfMatchVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestIfMatchVsPut });
+test tcBugCondNoIdTagGuard [main=TestIfMatchVsPutNoIdTagGuard]:
+  assert CondSemantics in (union System, { TestIfMatchVsPutNoIdTagGuard });
+test tcMatchAnyVsMatchSafe [main=TestMatchAnyVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AllAnswered, BucketStats in (union System, { TestMatchAnyVsMatch });
+test tcMatchAnyVsMatchCond [main=TestMatchAnyVsMatch]:
+  assert CondSemantics in (union System, { TestMatchAnyVsMatch });
+test tcMatchAnyVsMatchLossFails [main=TestMatchAnyVsMatchLossFails]:
+  assert CondSemantics in (union System, { TestMatchAnyVsMatchLossFails });
+test tcCondDelVsPutSafe [main=TestCondDelVsPut]:
+  assert HeadIntact, IndexMatchesHead, AllAnswered, BucketStats in (union System, { TestCondDelVsPut });
+test tcCondDelVsPutLeak [main=TestCondDelVsPut]:
+  assert NoOrphans in (union System, { TestCondDelVsPut });
+test tcCondDelVsPutCond [main=TestCondDelVsPut]:
+  assert CondSemantics in (union System, { TestCondDelVsPut });
+test tcCondDelVsPutGuard [main=TestCondDelVsPutGuard]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CondSemantics in (union System, { TestCondDelVsPutGuard });
+test tcCondDelVsMatchSafe [main=TestCondDelVsMatch]:
+  assert HeadIntact, IndexMatchesHead, AllAnswered, BucketStats in (union System, { TestCondDelVsMatch });
+test tcCondDelVsMatchCond [main=TestCondDelVsMatch]:
+  assert CondSemantics in (union System, { TestCondDelVsMatch });
+test tcCondDelVsMatchGuard [main=TestCondDelVsMatchGuard]:
+  assert CondSemantics in (union System, { TestCondDelVsMatchGuard });
+test tcCondDelVsMatchLossFails [main=TestCondDelVsMatchLossFails]:
+  assert CondSemantics in (union System, { TestCondDelVsMatchLossFails });
+test tcCondCompleteVsPut [main=TestCondCompleteVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondCompleteVsPut });
+
 // the fixes together
 test tcFixedPuts [main=TestFixedPuts]:
   assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestFixedPuts });
@@ -361,3 +399,61 @@ test tcMarkLapseLcAbort [main=TestMarkLapseLcAbort]:
   assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestMarkLapseLcAbort });
 test tcMarkLapseSameCompletes [main=TestMarkLapseSameCompletes]:
   assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestMarkLapseSameCompletes });
+test tcFixedCreates [main=TestFixedCreates]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedCreates });
+test tcFixedCreateVsComplete [main=TestFixedCreateVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedCreateVsComplete });
+test tcFixedIfMatchVsPut [main=TestFixedIfMatchVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedIfMatchVsPut });
+test tcFixedMatchAnyVsMatch [main=TestFixedMatchAnyVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedMatchAnyVsMatch });
+test tcFixedCondDelVsPut [main=TestFixedCondDelVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedCondDelVsPut });
+test tcFixedCondDelVsMatch [main=TestFixedCondDelVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedCondDelVsMatch });
+test tcFixedCondCompleteVsPut [main=TestFixedCondCompleteVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedCondCompleteVsPut });
+test tcFixedIxCreates [main=TestFixedIxCreates]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedIxCreates });
+test tcFixedIxCreateVsComplete [main=TestFixedIxCreateVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedIxCreateVsComplete });
+test tcFixedIxIfMatchVsPut [main=TestFixedIxIfMatchVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedIxIfMatchVsPut });
+test tcFixedIxMatchAnyVsMatch [main=TestFixedIxMatchAnyVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedIxMatchAnyVsMatch });
+test tcFixedIxCondDelVsPut [main=TestFixedIxCondDelVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedIxCondDelVsPut });
+test tcFixedIxCondDelVsMatch [main=TestFixedIxCondDelVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedIxCondDelVsMatch });
+test tcFixedIxCondCompleteVsPut [main=TestFixedIxCondCompleteVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestFixedIxCondCompleteVsPut });
+
+// the fixes together, and the two for conditional requests
+test tcCondFixedCreates [main=TestCondFixedCreates]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedCreates });
+test tcCondFixedCreateVsComplete [main=TestCondFixedCreateVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedCreateVsComplete });
+test tcCondFixedIfMatchVsPut [main=TestCondFixedIfMatchVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIfMatchVsPut });
+test tcCondFixedMatchAnyVsMatch [main=TestCondFixedMatchAnyVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedMatchAnyVsMatch });
+test tcCondFixedCondDelVsPut [main=TestCondFixedCondDelVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedCondDelVsPut });
+test tcCondFixedCondDelVsMatch [main=TestCondFixedCondDelVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedCondDelVsMatch });
+test tcCondFixedCondCompleteVsPut [main=TestCondFixedCondCompleteVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedCondCompleteVsPut });
+test tcCondFixedIxCreates [main=TestCondFixedIxCreates]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIxCreates });
+test tcCondFixedIxCreateVsComplete [main=TestCondFixedIxCreateVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIxCreateVsComplete });
+test tcCondFixedIxIfMatchVsPut [main=TestCondFixedIxIfMatchVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIxIfMatchVsPut });
+test tcCondFixedIxMatchAnyVsMatch [main=TestCondFixedIxMatchAnyVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIxMatchAnyVsMatch });
+test tcCondFixedIxCondDelVsPut [main=TestCondFixedIxCondDelVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIxCondDelVsPut });
+test tcCondFixedIxCondDelVsMatch [main=TestCondFixedIxCondDelVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIxCondDelVsMatch });
+test tcCondFixedIxCondCompleteVsPut [main=TestCondFixedIxCondCompleteVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIxCondCompleteVsPut });

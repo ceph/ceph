@@ -6,12 +6,14 @@ fun Main(): tCfg {
           cancelKeepsVer = false, lcTakesLock = false, loserGcsParts = false, gcSparesHead = false,
           deleteGuard = false, copyLoserDropsRefs = false, copySelfGuardsSource = false,
           ixFailKeepsWrite = false, lateCompleteRelinks = false, completionMark = false,
+          condLossFails = false, refusedKeepsParts = false,
           completeMayCrash = false, metaDeleteMayFail = false, ixCompleteMayFail = false,
           lockHeld = true, writersPrompt = true);
 }
 
 fun Req(kind: tKind, key: int, src: int, upload: int): tSpec {
-  return (kind = kind, key = key, src = src, upload = upload, num = 0, etag = 0, list = default(map[int, int]));
+  return (kind = kind, key = key, src = src, upload = upload, num = 0, etag = 0, list = default(map[int, int]),
+          cond = default(tCond));
 }
 fun Put(key: int): tSpec { return Req(R_PUT, key, 0, 0); }
 fun Del(key: int): tSpec { return Req(R_DELETE, key, 0, 0); }
@@ -26,11 +28,20 @@ fun Complete(u: int): tSpec {
   var l: map[int, int];
   l[1] = PARTETAG(u, 1);
   l[2] = PARTETAG(u, 2);
-  return (kind = R_COMPLETE, key = MPKEY(), src = 0, upload = u, num = 0, etag = 0, list = l);
+  return (kind = R_COMPLETE, key = MPKEY(), src = 0, upload = u, num = 0, etag = 0, list = l,
+          cond = default(tCond));
 }
 fun Reupload(u: int, num: int, etag: int): tSpec {
   return (kind = R_UPLOAD_PART, key = MPKEY(), src = 0, upload = u, num = num, etag = etag,
-          list = default(map[int, int]));
+          list = default(map[int, int]), cond = default(tCond));
+}
+// conditions, and requests that carry one
+fun IfMatch(etag: int): tCond { return (kind = C_IF_MATCH, etag = etag); }
+fun IfMatchAny(): tCond { return (kind = C_IF_MATCH_ANY, etag = 0); }
+fun IfNoneMatchAny(): tCond { return (kind = C_IF_NONE_MATCH_ANY, etag = 0); }
+fun With(r: tSpec, c: tCond): tSpec {
+  r.cond = c;
+  return r;
 }
 fun One(a: tSpec): seq[tSpec] {
   var s: seq[tSpec];
@@ -86,11 +97,20 @@ enum tScenario {
   SC_RESHARD_VS_DEL,    // a reshard, a DeleteObject and a PutObject on key 1
   SC_RESHARD_VS_MPU,    // a reshard, a completion, and a re-upload of part 1
   SC_LIST_PUT_DEL,      // a PutObject, a DeleteObject and a bucket listing
-  SC_LIST_NEW_PUT       // key 1 deleted; then a PutObject of a new object and a bucket listing
+  SC_LIST_NEW_PUT,      // key 1 deleted; then a PutObject of a new object and a bucket listing
+  // conditional requests. The ETag named is that of key 1's object
+  SC_CREATES,           // key 1 empty: two PutObjects with If-None-Match: *
+  SC_CREATE_VS_COMPLETE, // key 1 empty: a PutObject and a completion, both with If-None-Match: *
+  SC_IF_MATCH_VS_PUT,   // a PutObject with If-Match, and a PutObject
+  SC_MATCH_ANY_VS_MATCH, // a PutObject with If-Match: *, and one with If-Match
+  SC_COND_DEL_VS_PUT,   // a DeleteObject with If-Match, and a PutObject
+  SC_COND_DEL_VS_MATCH, // a DeleteObject and a PutObject, both with If-Match
+  SC_COND_COMPLETE_VS_PUT // a completion with If-Match, and a PutObject
 }
 
-// Key 1 starts with an object, and key 2 too in the copy scenarios.
-// Uploads 1 and 2 (to key 1) have parts 1 and 2 uploaded.
+// Key 1 starts with an object, except in the If-None-Match scenarios, and
+// key 2 too in the copy scenarios. Uploads 1 and 2 (to key 1) have parts 1
+// and 2 uploaded.
 machine Scenario {
   start state Init {
     entry (p: (cfg: tCfg, sc: tScenario)) {
@@ -199,6 +219,24 @@ machine Scenario {
       } else if (p.sc == SC_RESHARD_VS_MPU) {
         uploads += (1);
         script += (0, Three(Reshard(), Complete(1), Reupload(1, 1, PARTETAG(1, 1))));
+      } else if (p.sc == SC_CREATES) {
+        objects -= (1);
+        script += (0, Two(With(Put(1), IfNoneMatchAny()), With(Put(1), IfNoneMatchAny())));
+      } else if (p.sc == SC_CREATE_VS_COMPLETE) {
+        objects -= (1);
+        uploads += (1);
+        script += (0, Two(With(Put(1), IfNoneMatchAny()), With(Complete(1), IfNoneMatchAny())));
+      } else if (p.sc == SC_IF_MATCH_VS_PUT) {
+        script += (0, Two(With(Put(1), IfMatch(OLDWRITER(1))), Put(1)));
+      } else if (p.sc == SC_MATCH_ANY_VS_MATCH) {
+        script += (0, Two(With(Put(1), IfMatchAny()), With(Put(1), IfMatch(OLDWRITER(1)))));
+      } else if (p.sc == SC_COND_DEL_VS_PUT) {
+        script += (0, Two(With(Del(1), IfMatch(OLDWRITER(1))), Put(1)));
+      } else if (p.sc == SC_COND_DEL_VS_MATCH) {
+        script += (0, Two(With(Del(1), IfMatch(OLDWRITER(1))), With(Put(1), IfMatch(OLDWRITER(1)))));
+      } else if (p.sc == SC_COND_COMPLETE_VS_PUT) {
+        uploads += (1);
+        script += (0, Two(With(Complete(1), IfMatch(OLDWRITER(1))), Put(1)));
       } else {
         objects += (2);
         twins = true;
@@ -388,6 +426,33 @@ machine TestReshardNoCheckExisting {
 machine TestReshardOldShardsOpen {
   start state Init { entry { var c: tCfg; c = Main(); c.oldShardsBlocked = false; new Scenario((cfg = c, sc = SC_RESHARD_VS_PUTS)); } }
 }
+
+// conditional requests
+machine TestCreates { start state Init { entry { new Scenario((cfg = Main(), sc = SC_CREATES)); } } }
+machine TestCreateVsComplete { start state Init { entry { new Scenario((cfg = Main(), sc = SC_CREATE_VS_COMPLETE)); } } }
+machine TestCreateVsCompleteKeepsParts {
+  start state Init { entry { var c: tCfg; c = Main(); c.refusedKeepsParts = true; new Scenario((cfg = c, sc = SC_CREATE_VS_COMPLETE)); } }
+}
+machine TestIfMatchVsPut { start state Init { entry { new Scenario((cfg = Main(), sc = SC_IF_MATCH_VS_PUT)); } } }
+machine TestIfMatchVsPutNoIdTagGuard {
+  start state Init { entry { var c: tCfg; c = Main(); c.idTagGuard = false; new Scenario((cfg = c, sc = SC_IF_MATCH_VS_PUT)); } }
+}
+machine TestMatchAnyVsMatch { start state Init { entry { new Scenario((cfg = Main(), sc = SC_MATCH_ANY_VS_MATCH)); } } }
+machine TestMatchAnyVsMatchLossFails {
+  start state Init { entry { var c: tCfg; c = Main(); c.condLossFails = true; new Scenario((cfg = c, sc = SC_MATCH_ANY_VS_MATCH)); } }
+}
+machine TestCondDelVsPut { start state Init { entry { new Scenario((cfg = Main(), sc = SC_COND_DEL_VS_PUT)); } } }
+machine TestCondDelVsPutGuard {
+  start state Init { entry { var c: tCfg; c = Main(); c.deleteGuard = true; new Scenario((cfg = c, sc = SC_COND_DEL_VS_PUT)); } }
+}
+machine TestCondDelVsMatch { start state Init { entry { new Scenario((cfg = Main(), sc = SC_COND_DEL_VS_MATCH)); } } }
+machine TestCondDelVsMatchGuard {
+  start state Init { entry { var c: tCfg; c = Main(); c.deleteGuard = true; new Scenario((cfg = c, sc = SC_COND_DEL_VS_MATCH)); } }
+}
+machine TestCondDelVsMatchLossFails {
+  start state Init { entry { var c: tCfg; c = Main(); c.deleteGuard = true; c.condLossFails = true; new Scenario((cfg = c, sc = SC_COND_DEL_VS_MATCH)); } }
+}
+machine TestCondCompleteVsPut { start state Init { entry { new Scenario((cfg = Main(), sc = SC_COND_COMPLETE_VS_PUT)); } } }
 
 // the seven fixes proposed upstream (see the README), together: every scenario, and every scenario
 // with index completions that may fail
@@ -683,4 +748,96 @@ machine TestMarkLapseLcAbort {
 }
 machine TestMarkLapseSameCompletes {
   start state Init { entry { var c: tCfg; c = Fixed(); c.completionMark = true; c.lockHeld = false; new Scenario((cfg = c, sc = SC_SAME_COMPLETES)); } }
+}
+machine TestFixedCreates {
+  start state Init { entry { var c: tCfg; c = Fixed(); new Scenario((cfg = c, sc = SC_CREATES)); } }
+}
+machine TestFixedIxCreates {
+  start state Init { entry { var c: tCfg; c = Fixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_CREATES)); } }
+}
+machine TestFixedCreateVsComplete {
+  start state Init { entry { var c: tCfg; c = Fixed(); new Scenario((cfg = c, sc = SC_CREATE_VS_COMPLETE)); } }
+}
+machine TestFixedIxCreateVsComplete {
+  start state Init { entry { var c: tCfg; c = Fixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_CREATE_VS_COMPLETE)); } }
+}
+machine TestFixedIfMatchVsPut {
+  start state Init { entry { var c: tCfg; c = Fixed(); new Scenario((cfg = c, sc = SC_IF_MATCH_VS_PUT)); } }
+}
+machine TestFixedIxIfMatchVsPut {
+  start state Init { entry { var c: tCfg; c = Fixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_IF_MATCH_VS_PUT)); } }
+}
+machine TestFixedMatchAnyVsMatch {
+  start state Init { entry { var c: tCfg; c = Fixed(); new Scenario((cfg = c, sc = SC_MATCH_ANY_VS_MATCH)); } }
+}
+machine TestFixedIxMatchAnyVsMatch {
+  start state Init { entry { var c: tCfg; c = Fixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_MATCH_ANY_VS_MATCH)); } }
+}
+machine TestFixedCondDelVsPut {
+  start state Init { entry { var c: tCfg; c = Fixed(); new Scenario((cfg = c, sc = SC_COND_DEL_VS_PUT)); } }
+}
+machine TestFixedIxCondDelVsPut {
+  start state Init { entry { var c: tCfg; c = Fixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COND_DEL_VS_PUT)); } }
+}
+machine TestFixedCondDelVsMatch {
+  start state Init { entry { var c: tCfg; c = Fixed(); new Scenario((cfg = c, sc = SC_COND_DEL_VS_MATCH)); } }
+}
+machine TestFixedIxCondDelVsMatch {
+  start state Init { entry { var c: tCfg; c = Fixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COND_DEL_VS_MATCH)); } }
+}
+machine TestFixedCondCompleteVsPut {
+  start state Init { entry { var c: tCfg; c = Fixed(); new Scenario((cfg = c, sc = SC_COND_COMPLETE_VS_PUT)); } }
+}
+machine TestFixedIxCondCompleteVsPut {
+  start state Init { entry { var c: tCfg; c = Fixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COND_COMPLETE_VS_PUT)); } }
+}
+// the seven fixes proposed upstream, and the two for conditional requests
+fun FixedCond(): tCfg {
+  var c: tCfg;
+  c = Fixed();
+  c.condLossFails = true;
+  c.refusedKeepsParts = true;
+  return c;
+}
+machine TestCondFixedCreates {
+  start state Init { entry { var c: tCfg; c = FixedCond(); new Scenario((cfg = c, sc = SC_CREATES)); } }
+}
+machine TestCondFixedIxCreates {
+  start state Init { entry { var c: tCfg; c = FixedCond(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_CREATES)); } }
+}
+machine TestCondFixedCreateVsComplete {
+  start state Init { entry { var c: tCfg; c = FixedCond(); new Scenario((cfg = c, sc = SC_CREATE_VS_COMPLETE)); } }
+}
+machine TestCondFixedIxCreateVsComplete {
+  start state Init { entry { var c: tCfg; c = FixedCond(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_CREATE_VS_COMPLETE)); } }
+}
+machine TestCondFixedIfMatchVsPut {
+  start state Init { entry { var c: tCfg; c = FixedCond(); new Scenario((cfg = c, sc = SC_IF_MATCH_VS_PUT)); } }
+}
+machine TestCondFixedIxIfMatchVsPut {
+  start state Init { entry { var c: tCfg; c = FixedCond(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_IF_MATCH_VS_PUT)); } }
+}
+machine TestCondFixedMatchAnyVsMatch {
+  start state Init { entry { var c: tCfg; c = FixedCond(); new Scenario((cfg = c, sc = SC_MATCH_ANY_VS_MATCH)); } }
+}
+machine TestCondFixedIxMatchAnyVsMatch {
+  start state Init { entry { var c: tCfg; c = FixedCond(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_MATCH_ANY_VS_MATCH)); } }
+}
+machine TestCondFixedCondDelVsPut {
+  start state Init { entry { var c: tCfg; c = FixedCond(); new Scenario((cfg = c, sc = SC_COND_DEL_VS_PUT)); } }
+}
+machine TestCondFixedIxCondDelVsPut {
+  start state Init { entry { var c: tCfg; c = FixedCond(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COND_DEL_VS_PUT)); } }
+}
+machine TestCondFixedCondDelVsMatch {
+  start state Init { entry { var c: tCfg; c = FixedCond(); new Scenario((cfg = c, sc = SC_COND_DEL_VS_MATCH)); } }
+}
+machine TestCondFixedIxCondDelVsMatch {
+  start state Init { entry { var c: tCfg; c = FixedCond(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COND_DEL_VS_MATCH)); } }
+}
+machine TestCondFixedCondCompleteVsPut {
+  start state Init { entry { var c: tCfg; c = FixedCond(); new Scenario((cfg = c, sc = SC_COND_COMPLETE_VS_PUT)); } }
+}
+machine TestCondFixedIxCondCompleteVsPut {
+  start state Init { entry { var c: tCfg; c = FixedCond(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COND_COMPLETE_VS_PUT)); } }
 }

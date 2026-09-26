@@ -5,7 +5,8 @@ objects. A key is overwritten by PutObject, CopyObject or a multipart
 completion, or removed by DeleteObject. Those operations race each other,
 part re-uploads, aborts, lifecycle, dedup, bucket listings, a reshard and
 GC. A copy within one pool, and dedup, share a tail through
-`cls_refcount`.
+`cls_refcount`. PutObject, a completion and DeleteObject may carry a
+condition on the key's current object: `If-Match` or `If-None-Match: *`.
 
 The model follows the code on main as of `44d50f6abb9`, which includes
 the completion-lock renewal of PR 67696 (tracker #75375). Line numbers
@@ -37,6 +38,24 @@ never an empty one.
 
 **AllAnswered** (liveness). Every request is answered, unless its RGW
 dies.
+
+**CondSemantics.** A conditional request is answered as some order of the
+requests on its key would answer it:
+- a request that wrote or removed the head found a head that met its
+  condition;
+- a request answered success without changing the head met its condition
+  at some point while it ran, and can be ordered just before the write
+  that replaced that head, whose own condition still holds after it. A
+  conditional delete also meets its condition where there is no head, as
+  RGW answers it 204 with nothing to delete;
+- a request answered PreconditionFailed found, while it ran, a head that
+  failed its condition, and one answered NoSuchKey found no head. Neither
+  changed anything: no head, and no bucket index entry.
+
+Another error, such as a 500, promises nothing, so the spec only checks
+that such a request did not write over a head that failed its condition.
+Unconditional requests are checked only as the writes that replace a
+head.
 
 ## What is modelled
 
@@ -90,6 +109,8 @@ dies.
     - reads the head and prepares the index;
     - removes the head, with no ID-tag guard since `55f5b762c67`;
     - completes the index `DEL`, then sends the manifest it read to GC.
+    - A removal that fails with `-ECANCELED` is answered 204
+      (`RGWDeleteObj::execute`, `rgw_op.cc:6101-6103`).
   - Every write goes through `write_meta`. If its index completion fails
     after the head write, as the FIFO bilog flush can make it, it cancels
     the index op (which may fail too) and returns the error. PutObject
@@ -134,6 +155,37 @@ dies.
       `cmpxattr` on its ETag and ref tag, leaving the ID tag alone;
     - frees the target's old tail at once, not through GC.
   - A reshard (`RGWBucketReshard::do_reshard`), step by step.
+  - Conditions (`If-Match` with an ETag, `If-Match: *`,
+    `If-None-Match: *`) on PutObject and a completion, which both pass
+    them to `write_meta`, and `If-Match` with an ETag on DeleteObject.
+    Each write carries its own ETag, and the ETag named is that of key 1's
+    object.
+    - A conditional write does not try an exclusive create first: it reads
+      the head, and `check_preconditions` checks the condition against it
+      before the index op is prepared (`rgw_rados.cc:3465`, `3783`).
+      `If-Match` without a head is answered 404 (`rgw_rados.cc:7860`,
+      `7873`); another ETag, or a head under `If-None-Match: *`, 412.
+    - The head write is then guarded as any other: `cmpxattr` on the ID
+      tag read under `If-Match`, and an exclusive create under
+      `If-None-Match: *`, which adds no `cmpxattr` (`rgw_rados.cc:3470`,
+      `7925`).
+    - A lost race goes through `done_cancel`, which cancels the index op
+      with its `remove_objs` (`rgw_rados.cc:3725`) and maps the error
+      (`rgw_rados.cc:3739-3768`): under `If-Match: *`, `-ENOENT` is 412
+      and `-ECANCELED` success; under `If-None-Match: *`, `-EEXIST` is 412;
+      under `If-Match` with an ETag the error stands. `-ENOENT` is then
+      404, and `-ECANCELED`, which has no S3 code, is answered 500
+      UnknownError (`rgw_common.cc:364-368`), not 412.
+    - A refused PutObject deletes its tail. A refused completion returns
+      the error from `RadosMultipartUpload::complete`
+      (`rgw_sal_rados.cc:4736-4738`); `RGWCompleteMultipart::execute`
+      returns before it deletes the meta object (`rgw_op.cc:7855-7861`),
+      so the upload stays.
+    - DeleteObject: `RGWDeleteObj::execute` reads the head, and
+      `delete_obj` answers 204 if there is none, before any condition
+      (`rgw_rados.cc:7203-7206`), then checks the condition against the
+      head read (`rgw_rados.cc:7214`). The removal does not check it again
+      on main.
 - **`Driver`**: runs a script of phases. The requests of a phase run
   concurrently.
 
@@ -161,6 +213,13 @@ dies.
 | `SC_LIST_VS_PUT`, `SC_LIST_VS_DEL`, `SC_LIST_VS_COMPLETE` | a listing, and a PutObject, DeleteObject or completion |
 | `SC_DEDUP_*` | keys 1 and 2 hold the same bytes: dedup of key 2 onto key 1, alone or racing a PutObject over, DeleteObject of, or copy onto itself of either key |
 | `SC_RESHARD_VS_PUTS`, `SC_RESHARD_VS_DEL`, `SC_RESHARD_VS_MPU` | a reshard, and two PutObjects; a DeleteObject and a PutObject; or a completion and a part re-upload |
+| `SC_CREATES` | key 1 empty: two PutObjects with `If-None-Match: *` |
+| `SC_CREATE_VS_COMPLETE` | key 1 empty: a PutObject and a completion, both with `If-None-Match: *` |
+| `SC_IF_MATCH_VS_PUT` | a PutObject with `If-Match`, and a PutObject |
+| `SC_MATCH_ANY_VS_MATCH` | a PutObject with `If-Match: *`, and one with `If-Match` |
+| `SC_COND_DEL_VS_PUT` | a DeleteObject with `If-Match`, and a PutObject |
+| `SC_COND_DEL_VS_MATCH` | a DeleteObject and a PutObject, both with `If-Match` |
+| `SC_COND_COMPLETE_VS_PUT` | a completion with `If-Match`, and a PutObject |
 
 ## Environment and assumptions
 
@@ -199,7 +258,8 @@ rare order of three index completions, and 2,000 schedules can miss
 them. Each of the 37 cases that
 holds on main or with one proposed fix was also run for 100,000 schedules
 under each of random, PCT and POS scheduling (`../deep.sh`), with no bug
-found.
+found. The cases of conditional requests were run with the default
+20,000 schedules only.
 
 | Test case | Scenario | Changes | Result |
 |---|---|---|---|
@@ -271,8 +331,27 @@ found.
 | `tcBugReshardNoLog` | `SC_RESHARD_VS_PUTS` | no reshard log (before `55b404afeb6`) | violated: IndexMatchesHead |
 | `tcBugReshardNoCheckExisting` | `SC_RESHARD_VS_PUTS` | the incremental pass adds re-copied entries' stats again | violated: BucketStats |
 | `tcBugOldShardsOpen` | `SC_RESHARD_VS_PUTS` | the old shards accept ops after the commit | violated: IndexMatchesHead |
-| `tcFixed<Scenario>` | each scenario | the seven proposed fixes together (`Fixed()`) | holds, except the dedup scenarios of findings 9 and 10 |
-| `tcFixedIx<Scenario>` | each scenario | the same, and the index completion may fail | holds, except the same dedup scenarios |
+| `tcCreates` | `SC_CREATES` | none | holds |
+| `tcCreateVsCompleteSafe` | `SC_CREATE_VS_COMPLETE` | none | holds |
+| `tcCreateVsCompleteCond` | `SC_CREATE_VS_COMPLETE` | none | **violated**: CondSemantics (finding 14) |
+| `tcCreateVsCompleteKeepsParts` | `SC_CREATE_VS_COMPLETE` | a write refused after a lost race cancels without `remove_objs` (proposed) | holds |
+| `tcIfMatchVsPut` | `SC_IF_MATCH_VS_PUT` | none | holds |
+| `tcBugCondNoIdTagGuard` | `SC_IF_MATCH_VS_PUT` | no `cmpxattr` on the ID tag | violated: CondSemantics |
+| `tcMatchAnyVsMatchSafe` | `SC_MATCH_ANY_VS_MATCH` | none | holds |
+| `tcMatchAnyVsMatchCond` | `SC_MATCH_ANY_VS_MATCH` | none | **violated**: CondSemantics (finding 13) |
+| `tcMatchAnyVsMatchLossFails` | `SC_MATCH_ANY_VS_MATCH` | a conditional request that loses the race is answered an error (proposed) | holds |
+| `tcCondDelVsPutSafe` | `SC_COND_DEL_VS_PUT` | none | holds |
+| `tcCondDelVsPutLeak` | `SC_COND_DEL_VS_PUT` | none | **violated**: NoOrphans (finding 5) |
+| `tcCondDelVsPutCond` | `SC_COND_DEL_VS_PUT` | none | **violated**: CondSemantics (finding 12) |
+| `tcCondDelVsPutGuard` | `SC_COND_DEL_VS_PUT` | the removal guarded on the ID tag (M5) | holds |
+| `tcCondDelVsMatchSafe` | `SC_COND_DEL_VS_MATCH` | none | holds |
+| `tcCondDelVsMatchCond` | `SC_COND_DEL_VS_MATCH` | none | **violated**: CondSemantics (finding 12) |
+| `tcCondDelVsMatchGuard` | `SC_COND_DEL_VS_MATCH` | the guarded removal (M5) | violated: CondSemantics (finding 13) |
+| `tcCondDelVsMatchLossFails` | `SC_COND_DEL_VS_MATCH` | the guarded removal, and a losing conditional request answered an error | holds |
+| `tcCondCompleteVsPut` | `SC_COND_COMPLETE_VS_PUT` | none | holds |
+| `tcFixed<Scenario>` | each scenario | the seven proposed fixes together (`Fixed()`) | holds, except the dedup scenarios of findings 9 and 10, and `SC_CREATE_VS_COMPLETE`, `SC_MATCH_ANY_VS_MATCH` and `SC_COND_DEL_VS_MATCH` (CondSemantics, findings 13 and 14) |
+| `tcFixedIx<Scenario>` | each scenario | the same, and the index completion may fail | holds, except the same scenarios |
+| `tcCondFixed<Scenario>`, `tcCondFixedIx<Scenario>` | each conditional scenario | the seven, and the two for conditional requests (`FixedCond()`); then with index completions that may fail | holds |
 | `tcStall<Scenario>` | `SC_LIST_*` | `Fixed()`, and a request may stall past the pending-op expiry | violated (finding 11) |
 | `tcRelink<Scenario>` | `SC_LIST_*` | the same, and a writer whose pending op is gone re-links its entry (proposed) | holds |
 | `tcMarkCrash<Scenario>` | `SC_RETRY`, `SC_THEN_ABORT`, `SC_PUT_THEN_RETRY`, `SC_CRASH_COPY_RETRY`, `SC_SAME_COMPLETES`, `SC_ABORT`, `SC_LC_ABORT` | `Fixed()`, a completion records its tag before the head write (proposed), and RGW may die | holds |
@@ -289,7 +368,8 @@ hold one request while another runs (`rgw_inject.h`, in
 findings 4, 5, 6, 9 and 10 in `qa/workunits/rgw/test_rgw_overwrite_races.py`
 ([#72096](https://github.com/ceph/ceph/pull/72096)); findings 2, 3, 7 and 11 in s3-tests (`rgw_inject`
 marker, [wip-rgw-overwrite-races](https://github.com/mmgaggle/s3-tests/tree/wip-rgw-overwrite-races)).
-Finding 8 needs a FIFO bilog flush to fail.
+Finding 8 needs a FIFO bilog flush to fail. Findings 12, 13 and 14
+reproduce with the workunit's conditional-request cases.
 
 | Finding | Tracker | Fix |
 |---|---|---|
@@ -303,6 +383,9 @@ Finding 8 needs a FIFO bilog flush to fail.
 | 8 | [80902](https://tracker.ceph.com/issues/80902) | [#72098](https://github.com/ceph/ceph/pull/72098) |
 | 9, 10 | [80901](https://tracker.ceph.com/issues/80901) | open |
 | 11 | [80903](https://tracker.ceph.com/issues/80903) | [#72102](https://github.com/ceph/ceph/pull/72102) |
+| 12 | [80898](https://tracker.ceph.com/issues/80898) | [#72100](https://github.com/ceph/ceph/pull/72100) |
+| 13 | [80906](https://tracker.ceph.com/issues/80906) | [#72109](https://github.com/ceph/ceph/pull/72109), and [#72100](https://github.com/ceph/ceph/pull/72100) for deletes |
+| 14 | [80907](https://tracker.ceph.com/issues/80907) | [#72109](https://github.com/ceph/ceph/pull/72109) |
 
 
 1. **The bucket index can keep a stale entry for good.**
@@ -411,13 +494,63 @@ Finding 8 needs a FIFO bilog flush to fail.
     error is ignored because the completion is asynchronous. It needs a
     request to stall for two minutes between its index prepare and
     complete.
+12. **A conditional DeleteObject can delete an object that fails its
+    condition.** `delete_obj` checks `If-Match` against the head it read
+    (`rgw_rados.cc:7214`), then removes whatever head is there, since the
+    removal has no ID-tag guard (finding 5; `rgw_rados.cc:7241`, `7250`).
+    A PutObject that lands between the two is deleted, although its ETag
+    does not match, and the delete is answered 204. With S3 used as a lock,
+    an owner releasing its lease (`DELETE If-Match`) can delete the lease
+    another client just took over (`PUT If-Match`) on the same ETag, which
+    leaves no lease at all (`tcCondDelVsMatchCond`). The new object's tail
+    also leaks (`tcCondDelVsPutLeak`). The guarded removal (M5) closes it
+    (`tcCondDelVsPutGuard`). `x-amz-if-match-size` is checked the same
+    way. `x-amz-if-match-last-modified-time` is also put in the removal op
+    (`cls_obj_check_mtime`, `rgw_rados.cc:7216-7218`), so the OSD checks
+    it, to the second unless the request is a system request; it is not
+    modelled.
+13. **A conditional request that loses the race is answered success, even
+    when the write that beat it needed the head it read.** Under
+    `If-Match: *`, `done_cancel` answers `-ECANCELED` as success
+    (`rgw_rados.cc:3752-3753`). `RGWDeleteObj::execute` answers any
+    `-ECANCELED` from the removal as 204 (`rgw_op.cc:6101-6103`); on main
+    only `cls_obj_check_mtime` returns it, and with the guarded removal
+    (M5) every lost race does. If the write that won carried `If-Match` on
+    the ETag both requests read, both are answered success, and no order
+    of the two gives both answers: had the loser's write, or delete, come
+    first, the winner's `If-Match` would fail; had it come second, its
+    result would be what remains. With M5, a lease release and a takeover
+    of the same lease are both answered success (`tcCondDelVsMatchGuard`),
+    and `If-Match: *` loses the same way to `If-Match` with the ETag on
+    main (`tcMatchAnyVsMatchCond`). Answering the lost race with an error
+    instead holds (`tcCondDelVsMatchLossFails`,
+    `tcMatchAnyVsMatchLossFails`); RGW has no S3 error code for that yet.
+    The same holds for an unconditional PutObject that loses to an
+    `If-Match` write, which is answered success as every lost race is
+    (`rgw_rados.cc:3739-3745`); CondSemantics does not check unconditional
+    requests, so the model does not report it.
+14. **A completion refused after it lost the race drops its parts from the
+    bucket index.** `done_cancel` cancels the index op with its
+    `remove_objs` (`rgw_rados.cc:3725`), which a cancel applies too
+    (`cls_rgw.cc:1357`, since `8b27472bbd8a`); for a completion they are
+    the parts' entries (`rgw_sal_rados.cc:4643`, `4723`). When the lost race
+    is answered as an error, such as 412 for `If-None-Match: *`
+    (`rgw_rados.cc:3762`), the completion returns before it deletes the
+    meta object (`rgw_op.cc:7855-7861`). The upload stays, and can be
+    completed again or aborted, but the bucket stats, and so quota, stop
+    counting its parts until then (`tcCreateVsCompleteCond`). No data is
+    lost. Cancelling without `remove_objs` when the lost race is refused
+    holds (`tcCreateVsCompleteKeepsParts`).
 
 The seven proposed fixes hold together (`tcFixed*`), with index
-completions that may fail too (`tcFixedIx*`), apart from dedup. Checking
-them together showed that keeping a write whose index completion failed
-must still remove the entries it replaces, such as a completion's parts:
-the listing that repairs the entry reads the head it finds, and a later
-completion may have replaced this one by then.
+completions that may fail too (`tcFixedIx*`), apart from dedup and
+findings 13 and 14. With the two proposed for conditional requests as
+well, every conditional scenario holds (`tcCondFixed*`,
+`tcCondFixedIx*`). Checking the seven together showed that keeping a
+write whose index completion failed must still remove the entries it
+replaces, such as a completion's parts: the listing that repairs the
+entry reads the head it finds, and a later completion may have replaced
+this one by then.
 
 Proposed fixes for findings 3 and 11, checked with the seven fixes on:
 
@@ -460,9 +593,19 @@ commit, a write would land in an index nobody reads.
 
 ## Not modelled
 
-- Versioned buckets, OLH, and conditional writes (`If-Match`,
-  `If-None-Match`, conditional delete).
-- Multi-object delete, and a copy across pools or placements
+- Versioned buckets and OLH.
+- Some conditions: `If-None-Match` with an ETag; on DeleteObject,
+  `x-amz-if-match-size`, which is checked against the head read as the
+  ETag is, and `x-amz-if-match-last-modified-time` and
+  `x-amz-delete-if-unmodified-since`, which the removal op also checks
+  (`cls_obj_check_mtime`); CopyObject's `x-amz-copy-source-if-*`, which
+  apply to the source as `copy_obj` reads it; a retried conditional
+  completion, which `check_previously_completed` answers without its
+  condition.
+- CondSemantics does not check unconditional requests, and it checks
+  answers other than success, 412 and 404 only for what they wrote.
+- Multi-object delete, which runs the same `delete_obj` for each key,
+  with the same conditions, and a copy across pools or placements
   (`copy_obj_data`, which writes a fresh tail like a PutObject).
 - GET. HeadIntact stands in for "a GET of the current object succeeds".
 - Tail stripes, and a head that carries data. A PutObject is one tail

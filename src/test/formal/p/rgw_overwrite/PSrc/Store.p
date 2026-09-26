@@ -98,6 +98,7 @@ machine Store {
                   pending = default(set[int]), iver = 0);
         Account(1);
         announce mHead, (key = k, writer = h.writer, manifest = h.manifest);
+        announce mHeadState, (key = k, by = 0, present = true, etag = h.etag);
       }
       // uploads to key 1 with parts 1 and 2 uploaded once, at the base prefix
       foreach (u in p.uploads) {
@@ -145,10 +146,11 @@ machine Store {
       h.ver = epoch;
       heads[w.key] = h;
       announce mHead, (key = w.key, writer = h.writer, manifest = h.manifest);
+      announce mHeadState, (key = w.key, by = h.writer, present = true, etag = h.etag);
       send w.from, eHeadWritten, (rc = OK, epoch = epoch);
     }
 
-    on eHeadRemove do (w: (from: machine, key: int, guard: bool, expectTag: int)) {
+    on eHeadRemove do (w: (from: machine, key: int, guard: bool, expectTag: int, rid: int)) {
       var h: tHead;
       MaybeGc();
       h = heads[w.key];
@@ -163,6 +165,7 @@ machine Store {
       heads[w.key] = default(tHead);
       epoch = epoch + 1;
       announce mHead, (key = w.key, writer = 0, manifest = default(set[int]));
+      announce mHeadState, (key = w.key, by = w.rid, present = false, etag = 0);
       send w.from, eHeadWritten, (rc = OK, epoch = epoch);
     }
 
@@ -276,7 +279,6 @@ machine Store {
                               writer: int, size: int, removeKeys: set[int])) {
       var e: tIx;
       var op: tIxOp;
-      var k: int;
       MaybeGc();
       if (!GenOk(c.gen)) {
         send c.from, eIndexDone, Busy(c.gen);
@@ -285,9 +287,7 @@ machine Store {
       // a cancel without a tag touches no entry and no pending op: it
       // only removes the remove_objs entries
       if (c.tag == 0) {
-        foreach (k in c.removeKeys) {
-          MpRemove(k);
-        }
+        RemoveObjs(c.writer, c.removeKeys);
         send c.from, eIndexDone, OK;
         return;
       }
@@ -334,9 +334,7 @@ machine Store {
       e.iver = hver;
       ixs[c.key] = e;
       if (op != IX_CANCEL || cfg.cancelRemovesObjs) {
-        foreach (k in c.removeKeys) {
-          MpRemove(k);
-        }
+        RemoveObjs(c.writer, c.removeKeys);
       }
       send c.from, eIndexDone, OK;
     }
@@ -748,6 +746,21 @@ machine Store {
   fun Touch(id: int) {
     if (rstate == 1 && cfg.reshardLogs) {
       rlog += (id);
+    }
+  }
+
+  // an index op's remove_objs (complete_remove_obj), for request by
+  fun RemoveObjs(by: int, removeKeys: set[int]) {
+    var k: int;
+    var n: int;
+    foreach (k in removeKeys) {
+      if (k in mpIndex) {
+        n = n + 1;
+      }
+      MpRemove(k);
+    }
+    if (n > 0) {
+      announce mIxRemoved, (by = by, n = n);
     }
   }
 

@@ -73,6 +73,26 @@ tcBugReshardNoLog              violated the bucket index lists
 tcBugReshardNoCheckExisting    violated the bucket stats say
 tcBugOldShardsOpen             violated the bucket index lists
 
+# conditional requests
+tcCreates                      holds
+tcCreateVsCompleteSafe         holds
+tcCreateVsCompleteCond         violated but removed index entries
+tcCreateVsCompleteKeepsParts   holds
+tcIfMatchVsPut                 holds
+tcBugCondNoIdTagGuard          violated over one that fails its condition
+tcMatchAnyVsMatchSafe          holds
+tcMatchAnyVsMatchCond          violated answered success without changing the head
+tcMatchAnyVsMatchLossFails     holds
+tcCondDelVsPutSafe             holds
+tcCondDelVsPutLeak             violated leaked
+tcCondDelVsPutCond             violated over one that fails its condition
+tcCondDelVsPutGuard            holds
+tcCondDelVsMatchSafe           holds
+tcCondDelVsMatchCond           violated over one that fails its condition
+tcCondDelVsMatchGuard          violated answered success without changing the head
+tcCondDelVsMatchLossFails      holds
+tcCondCompleteVsPut            holds
+
 # the fixes together
 tcFixedPuts                        holds
 tcFixedPutOne                      holds
@@ -169,3 +189,33 @@ tcMarkMetaDelLcAbort               holds
 tcMarkLapseAbort                   violated deleted
 tcMarkLapseLcAbort                 violated deleted
 tcMarkLapseSameCompletes           violated deleted
+tcFixedCreates                     holds
+tcFixedCreateVsComplete            violated but removed index entries
+tcFixedIfMatchVsPut                holds
+tcFixedMatchAnyVsMatch             violated answered success without changing the head
+tcFixedCondDelVsPut                holds
+tcFixedCondDelVsMatch              violated answered success without changing the head
+tcFixedCondCompleteVsPut           holds
+tcFixedIxCreates                   holds
+tcFixedIxCreateVsComplete          violated but removed index entries
+tcFixedIxIfMatchVsPut              holds
+tcFixedIxMatchAnyVsMatch           violated answered success without changing the head
+tcFixedIxCondDelVsPut              holds
+tcFixedIxCondDelVsMatch            violated answered success without changing the head
+tcFixedIxCondCompleteVsPut         holds
+
+# the fixes together, and the two for conditional requests
+tcCondFixedCreates                 holds
+tcCondFixedCreateVsComplete        holds
+tcCondFixedIfMatchVsPut            holds
+tcCondFixedMatchAnyVsMatch         holds
+tcCondFixedCondDelVsPut            holds
+tcCondFixedCondDelVsMatch          holds
+tcCondFixedCondCompleteVsPut       holds
+tcCondFixedIxCreates               holds
+tcCondFixedIxCreateVsComplete      holds
+tcCondFixedIxIfMatchVsPut          holds
+tcCondFixedIxMatchAnyVsMatch       holds
+tcCondFixedIxCondDelVsPut          holds
+tcCondFixedIxCondDelVsMatch        holds
+tcCondFixedIxCondCompleteVsPut     holds
