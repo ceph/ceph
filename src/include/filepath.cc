@@ -15,6 +15,7 @@
 
 #include "filepath.h"
 #include "common/Formatter.h"
+#include "include/encoding_string.h"
 
 #include <ostream>
 

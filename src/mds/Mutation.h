@@ -26,7 +26,6 @@
 
 #include "common/ref.h" // for cref_t
 #include "include/cephfs/types.h" // for mds_rank_t
-#include "include/Context.h"
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
@@ -39,15 +38,15 @@
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
 
-#include "messages/MMDSPeerRequest.h"
-
 class LogSegment;
 class BatchOp;
 class CInode;
 class CDir;
 class CDentry;
+class Context;
 class MDSCacheObject;
 class MDSContext;
+class MMDSPeerRequest;
 class Session;
 class ScatterLock;
 class SimpleLock;
@@ -505,10 +504,7 @@ struct MDPeerUpdate {
     origop(oo) {
     rollback = std::move(rbl);
   }
-  ~MDPeerUpdate() {
-    if (waiter)
-      waiter->complete(0);
-  }
+  ~MDPeerUpdate();
   int origop;
   ceph::buffer::list rollback;
   Context *waiter = nullptr;

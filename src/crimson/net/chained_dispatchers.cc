@@ -3,6 +3,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "msg/Message.h"
+#include "msg/MessageFmt.h"
 
 namespace {
   seastar::logger& logger() {

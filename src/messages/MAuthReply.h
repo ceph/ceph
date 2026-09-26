@@ -18,6 +18,8 @@
 
 #include "msg/Message.h"
 #include "common/errno.h"
+#include "include/errorcode32.h"
+#include "include/encoding_string.h"
 
 class MAuthReply final : public Message {
 public:

@@ -16,14 +16,12 @@
 #ifndef CEPH_MMONCOMMANDACK_H
 #define CEPH_MMONCOMMANDACK_H
 
+#include "common/cmdparse.h" // for cmdmap_from_json()
+#include "include/errorcode32.h"
 #include "messages/PaxosServiceMessage.h"
 
-#include <sstream>
 #include <string>
 #include <vector>
-
-using ceph::common::cmdmap_from_json;
-using ceph::common::cmd_getval;
 
 class MMonCommandAck final : public PaxosServiceMessage {
 public:
@@ -40,46 +38,11 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "mon_command"; }
-  void print(std::ostream& o) const override {
-    cmdmap_t cmdmap;
-    std::ostringstream ss;
-    std::string prefix;
-    cmdmap_from_json(cmd, &cmdmap, ss);
-    cmd_getval(cmdmap, "prefix", prefix);
-    // Some config values contain sensitive data, so don't log them
-    o << "mon_command_ack(";
-    if (prefix == "config set") {
-      std::string name;
-      cmd_getval(cmdmap, "name", name);
-      o << "[{prefix=" << prefix
-        << ", name=" << name << "}]"
-        << "=" << r << " " << rs << " v" << version << ")";
-    } else if (prefix == "config-key set") {
-      std::string key;
-      cmd_getval(cmdmap, "key", key);
-      o << "[{prefix=" << prefix << ", key=" << key << "}]"
-        << "=" << r << " " << rs << " v" << version << ")";
-    } else {
-      o << cmd;
-    }
-    o << "=" << r << " " << rs << " v" << version << ")";
-  }
+  void print(std::ostream& o) const override;
   
-  void encode_payload(uint64_t features) override {
-    using ceph::encode;
-    paxos_encode();
-    encode(r, payload);
-    encode(rs, payload);
-    encode(cmd, payload);
-  }
-  void decode_payload() override {
-    using ceph::decode;
-    auto p = payload.cbegin();
-    paxos_decode(p);
-    decode(r, p);
-    decode(rs, p);
-    decode(cmd, p);
-  }
+  void encode_payload(uint64_t features) override;
+  void decode_payload() override;
+
 private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);

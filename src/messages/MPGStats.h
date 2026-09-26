@@ -19,6 +19,7 @@
 #include <map>
 
 #include "common/Formatter.h"
+#include "include/encoding_map.h"
 #include "osd/osd_types.h"
 #include "messages/PaxosServiceMessage.h"
 

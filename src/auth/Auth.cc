@@ -15,6 +15,8 @@
 #include "Auth.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 
 void EntityAuth::encode(ceph::buffer::list& bl) const {
   __u8 struct_v = 3;

@@ -2,6 +2,7 @@
 #include "ceph_ver.h"
 #include "CompressionPluginBrotli.h"
 #include "common/ceph_context.h"
+#include "common/PluginRegistry.h"
 
 
 const char *__ceph_plugin_version()

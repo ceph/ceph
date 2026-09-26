@@ -12,6 +12,22 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/encoding_array.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_boost_tuple.h"
+#include "include/encoding_deque.h"
+#include "include/encoding_flat_map.h"
+#include "include/encoding_flat_set.h"
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_set.h"
+#include "include/encoding_small_vector.h"
+#include "include/encoding_string.h"
+#include "include/encoding_tuple.h"
+#include "include/encoding_unordered_map.h"
+#include "include/encoding_unordered_set.h"
+#include "include/encoding_vector.h"
 
 #include <fmt/format.h>
 #include "gtest/gtest.h"

@@ -9,7 +9,7 @@
 
 #include "include/cephfs/types.h" // for inode_t
 #include "include/encoding.h"
-#include "include/object.h" // for snapid_t
+#include "include/snapid.h" // for snapid_t
 
 template<template<typename> class Allocator = std::allocator>
 struct old_inode_t {

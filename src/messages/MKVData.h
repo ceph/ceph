@@ -4,6 +4,9 @@
 #pragma once
 
 #include "msg/Message.h"
+#include "include/encoding_map.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_string.h"
 
 class MKVData : public Message {
 public:

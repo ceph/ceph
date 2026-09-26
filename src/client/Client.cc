@@ -59,6 +59,7 @@ using namespace std::literals::string_view_literals;
 #include <sys/statvfs.h>
 
 #include "common/config.h"
+#include "common/OnFinisher.h"
 #include "common/version.h"
 #include "common/async/blocked_completion.h"
 #include "common/strescape.h"
@@ -95,6 +96,7 @@ using namespace std::literals::string_view_literals;
 #include "common/admin_socket.h"
 #include "common/errno.h"
 #include "include/str_list.h"
+#include "include/xlist_print.h"
 
 #define dout_subsys ceph_subsys_client
 

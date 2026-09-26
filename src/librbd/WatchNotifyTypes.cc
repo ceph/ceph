@@ -4,6 +4,8 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
 #include "include/ceph_assert.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "librbd/WatchNotifyTypes.h"
 

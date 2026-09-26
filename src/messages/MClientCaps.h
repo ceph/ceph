@@ -19,6 +19,8 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs_encoder.h"
+#include "include/encoding_vector.h"
 
 class MClientCaps final : public SafeMessage {
 private:
