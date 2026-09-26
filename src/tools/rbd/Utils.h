@@ -244,6 +244,10 @@ bool is_not_user_snap_namespace(librbd::Image* image,
 
 std::string image_id(librbd::Image& image);
 
+void warn_if_image_being_removed(librbd::RBD &rbd, librados::IoCtx &io_ctx,
+                                 const std::string &name,
+                                 const std::string &id);
+
 std::string mirror_image_mode(
     librbd::mirror_image_mode_t mirror_image_mode);
 std::string mirror_image_state(
