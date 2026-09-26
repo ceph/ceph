@@ -41,9 +41,11 @@
 #include "msg/msg_types.h"
 #include "include/common_fwd.h" // for CephContext
 #include "include/compat.h"
-#include "include/types.h"
+#include "include/container_ios.h"
+#include "include/errorcode32.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
+#include "common/bitset_set.h"
 #include "common/dout.h"
 #include "common/histogram.h" // for pow2_hist_t
 #include "include/interval_set.h"

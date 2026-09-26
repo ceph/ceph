@@ -22,6 +22,8 @@
 #include "auth/Crypto.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include "include/ceph_fs.h" // for CEPH_CRYPTO_AES256KRB5
+#include "include/container_ios.h"
 #include "include/str_list.h"
 #include "mon/MonMap.h"
 #include "mon/mon_types.h" // for ceph::features::mon::*
