@@ -200,6 +200,12 @@
                 applications, Ceph Users, and :term:`Ceph Client`\s. Ceph
                 Storage Clusters receive data from :term:`Ceph Client`\s.
 
+	cephadm
+                The tool that deploys and manages a Ceph cluster as containers
+                on a set of hosts. ``cephadm bootstrap`` creates a new cluster
+                on one host, and the ``ceph orch`` commands then add hosts and
+                daemons through the orchestrator. See :ref:`cephadm`.
+
 	CephX
                 The Ceph authentication protocol. CephX authenticates users and
                 daemons. CephX operates like Kerberos, but it has no single
@@ -298,6 +304,14 @@
 
         Hybrid OSD  
                 Refers to an OSD that has both HDD and SSD drives.
+
+	Keyring
+                A file that holds one or more Ceph user names and their secret
+                keys. Clients and daemons present a key from a keyring to
+                authenticate with :term:`CephX`. The bootstrap process writes
+                the administrator's keyring to
+                ``/etc/ceph/ceph.client.admin.keyring``. See :ref:`User
+                Management <user-management>`.
 
         librados
                 An API that can be used to create a custom interface to a Ceph
