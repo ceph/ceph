@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
+#include <vector>
 #include "common/ceph_time.h"
+#include "include/utime.h"
 #include "include/common_fwd.h"
 #include "rgw_notify_event_type.h"
 #include "common/async/yield_context.h"
@@ -106,10 +109,26 @@ struct reservation_t {
 
 
 
+// the gateway holding a queue shard's lock
+struct rgw_topic_shard_lock {
+  std::string owner;      // the daemon name kept in the lock. empty if the
+                          // lock is held by a gateway old enough not to store
+                          // it, which can happen while an upgrade is ongoing
+  std::string owner_addr;
+  utime_t expiration;
+};
+
+// ownership of a single queue shard, taken from the shard's lock
+struct rgw_topic_shard_owner {
+  std::string shard_name;
+  std::optional<rgw_topic_shard_lock> lock; // unset if no gateway owns it
+};
+
 struct rgw_topic_stats {
   std::size_t queue_reservations; // number of reservations
   uint64_t queue_size;            // in bytes
   uint32_t queue_entries;         // number of entries
+  std::vector<rgw_topic_shard_owner> shard_owners;
 
   void dump(Formatter *f) const;
 };
