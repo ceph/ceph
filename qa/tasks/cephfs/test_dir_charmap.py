@@ -1,5 +1,6 @@
 import base64
 import json
+from io import StringIO
 from logging import getLogger
 
 from teuthology.exceptions import CommandFailedError
@@ -500,3 +501,58 @@ class TestCaseFolding(CephFSTestCase, CharMapMixin):
         altn_bin = base64.b64decode(altn)
         expected = base64.b64decode("R3LDvMOfZW4=") # 8 chars, not 9
         self.assertIn(expected, altn_bin)
+
+
+class TestCharMapLargeReaddir(CephFSTestCase, CharMapMixin):
+    """
+    readdir over a charmap directory too large to be returned in one reply.
+
+    The no-charmap equivalent lives in test_readdir.py and runs everywhere;
+    this covers the other side of the branch, where the optional metadata is
+    actually encoded and so consumes part of the reply's byte budget.
+    """
+
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+
+    FILES = 5000
+    NAME = "large-readdir-%06d"
+
+    def test_cs_large_readdir(self):
+        """
+        That a readdir spanning several replies returns every entry exactly
+        once when the directory carries a charmap.
+        """
+        self.mount_a.run_shell_payload("mkdir foo/")
+        self.mount_a.setfattr("foo/", "ceph.dir.casesensitive", "0")
+        self.check_cs("foo/", casesensitive=False)
+
+        self.mount_a.run_shell_payload(f"""
+set -e
+cd foo
+seq 1 {self.FILES} | awk '{{printf "{self.NAME}\\n", $1}}' | xargs -r -n 500 touch
+""")
+
+        # Read it back through a cold client cache, or the listing is served
+        # locally and the MDS is never asked.
+        self.mount_a.umount_wait()
+        self.mount_a.mount_wait()
+
+        def readdirs():
+            c = self.fs.mds_asok(['perf', 'dump', 'mds_server',
+                                  'req_readdir_latency'])
+            return c['mds_server']['req_readdir_latency']['avgcount']
+
+        before = readdirs()
+        p = self.mount_a.run_shell_payload("ls -U -1 foo", stdout=StringIO())
+        names = p.stdout.getvalue().split()
+        after = readdirs()
+
+        expected = {self.NAME % i for i in range(1, self.FILES + 1)}
+        self.assertGreater(after - before, 1,
+                           "directory was returned in a single reply, so the "
+                           "multi-reply path was not exercised")
+        self.assertEqual(len(names), len(set(names)),
+                         "readdir returned duplicate entries")
+        self.assertEqual(set(names), expected,
+                         "readdir did not return every entry")
