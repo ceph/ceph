@@ -220,7 +220,8 @@ log_to_file = False"""
                             "files": {
                                 "iscsi-gateway.cfg": iscsi_gateway_conf,
                             },
-                        }
+                        },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -299,7 +300,8 @@ log_to_file = False"""
                             "files": {
                                 "iscsi-gateway.cfg": iscsi_gateway_conf,
                             },
-                        }
+                        },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
