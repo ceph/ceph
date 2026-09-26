@@ -17,6 +17,7 @@
 #include <mutex>
 #include <thread>
 
+#include "common/condition_variable_debug.h"
 #include "common/mutex_debug.h"
 
 #include "gtest/gtest.h"
@@ -103,4 +104,34 @@ TEST(MutexRecursiveDebug, Recursive) {
   ASSERT_NO_THROW(m.unlock());
   ASSERT_FALSE(m.is_locked());
   ASSERT_TRUE(std::async(std::launch::async, ttl, &m).get());
+}
+
+TEST(MutexAdaptiveDebug, Lock) { test_lock<ceph::mutex_adaptive_debug>(); }
+
+TEST(MutexAdaptiveDebugDeathTest, NotRecursive)
+{
+  ceph::mutex_adaptive_debug m("foo");
+  std::unique_lock locker{m};
+  ASSERT_TRUE(m.is_locked());
+  ASSERT_DEATH(m.lock(), "FAILED ceph_assert(recursive || !is_locked_by_me())");
+}
+
+TEST(ConditionVariableAdaptiveDebug, WaitNotify)
+{
+  ceph::mutex_adaptive_debug m("cv_mutex");
+  ceph::condition_variable_adaptive_debug cv;
+  bool ready = false;
+
+  std::thread waiter([&] {
+    std::unique_lock lock{m};
+    cv.wait(lock, [&] { return ready; });
+    ASSERT_TRUE(ready);
+  });
+
+  {
+    std::unique_lock lock{m};
+    ready = true;
+  }
+  cv.notify_one();
+  waiter.join();
 }
