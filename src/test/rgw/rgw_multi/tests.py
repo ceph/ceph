@@ -7227,3 +7227,70 @@ def test_stale_bucket_owner_after_concurrent_chown():
         for uid in (uid_a, uid_b1, uid_b2):
             master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'],
                                       check_retcode=False)
+
+@allow_bucket_replication
+def test_zone_local_bucket_create():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    # create a destination bucket for replication policy
+    # use DataRedundancy=ZoneGroup to test for service-2.sdk-extras.json extensions
+    dest_bucket_name = gen_bucket_name()
+    try:
+        zonegroup_conns.rw_zones[0].s3_client.create_bucket(Bucket=dest_bucket_name, CreateBucketConfiguration={'DataRedundancy': 'ZoneGroup'})
+    except botocore.exceptions.ParamValidationError:
+        raise SkipTest("Tests for zone-local buckets require rgw extensions in service-2.sdk-extras.json")
+
+    try:
+        for bucket_zone in zonegroup_conns.non_account_rw_zones:
+            bucket_name = gen_bucket_name()
+
+            # create a non-replicated bucket
+            bucket_zone.s3_client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration={'DataRedundancy': 'SingleZone'})
+            try:
+                zonegroup_meta_checkpoint(zonegroup)
+
+                # upload an empty object
+                k = new_key(bucket_zone, bucket_name, 'obj')
+                k.set_contents_from_string('')
+
+                # check that bilog is empty
+                assert not bilog_list(bucket_zone.zone, bucket_name)
+
+                try:
+                    # without waiting for a checkpoint, verify that each zone redirects
+                    # HeadObject and that ReplicationStatus is empty from all zones
+                    for zone in zonegroup_conns.non_account_rw_zones:
+                        k = new_key(zone, bucket_name, 'obj')
+                        eq(None, k.get_metadata('x-amz-replication-status'))
+
+                        #boto3.set_stream_logger(name='botocore')
+                        #response = zone.s3_client.get_object(Bucket=bucket_name, Key='obj')
+                        #assert 'ReplicationStatus' not in response
+                finally:
+                    k = new_key(bucket_zone, bucket_name, 'obj')
+                    k.delete()
+
+                # test that put_bucket_replication() fails with InvalidBucketState
+                e = assert_raises(ClientError,
+                                  bucket_zone.s3_client.put_bucket_replication,
+                                  Bucket=bucket_name,
+                                  ReplicationConfiguration={
+                                      'Role': '',
+                                      'Rules': [{
+                                          'ID': 'rule1',
+                                          'Status': 'Enabled',
+                                          'Destination': {
+                                              'Bucket': f'arn:aws:s3:::{dest_bucket_name}',
+                                              }
+                                          }]
+                                      })
+                eq(e.response['ResponseMetadata']['HTTPStatusCode'], 409)
+                eq(e.response['Error']['Code'], 'InvalidBucketState')
+            finally:
+                bucket_zone.conn.delete_bucket(bucket_name)
+    finally:
+        zonegroup_conns.rw_zones[0].conn.delete_bucket(dest_bucket_name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_data_checkpoint(zonegroup_conns)
