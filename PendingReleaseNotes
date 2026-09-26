@@ -1,3 +1,16 @@
+* cephadm: A new opt-in ``mgr/cephadm/upgrade_staged_switch`` option makes
+  ``ceph orch upgrade`` stage the new deployment of a group of daemons on every
+  host while they still serve (``cephadm deploy --stage``), take the group out
+  of service, switch every daemon to the staged deployment in parallel
+  (``cephadm switch-staged``), verify with the monitors that all of them are
+  back on the target release, and restore the group. The outage is one container
+  restart instead of one serial redeploy per daemon. On failure the daemons are
+  switched back to their previous deployment and the group is restored on the
+  previous release. The mechanism is daemon-type agnostic; this release ships
+  the MDS policy (one filesystem at a time, requires
+  ``mgr/orchestrator/fail_fs``). The two new ``cephadm`` commands can also be
+  used by hand.
+
 * cephadm: During ``ceph orch upgrade``, CephFS filesystems are now prepared
   and restored one at a time during the MDS phase, so at most one filesystem
   is offline (``fail_fs = true``) or degraded (scaled down to ``max_mds 1``)
