@@ -163,10 +163,15 @@ CircularJournalSpace::device_write_bl(
     "overwrite in CircularJournalSpace, offset {}, length {}",
     offset,
     length);
+  // Hand the block-aligned record straight to writev: the SPDK driver routes it
+  // through do_writev (sector-aligned DMA data extents go zero-copy, only the
+  // sub-sector metadata is coalesced), and the kernel driver issues a vectored
+  // dma_write. Gathering into one buffer here would memcpy the whole record and
+  // defeat that.
   co_await device->writev(offset, bl
   ).handle_error(
     submit_ertr::pass_further{},
-    crimson::ct_error::assert_all( "Invalid error device->write" )
+    crimson::ct_error::assert_all( "Invalid error device->writev" )
   );
 }
 
@@ -175,7 +180,7 @@ CircularJournalSpace::read_header()
 {
   LOG_PREFIX(CircularJournalSpace::read_header);
   assert(device);
-  auto bptr = bufferptr(ceph::buffer::create_page_aligned(
+  auto bptr = bufferptr(device->alloc_io_buffer(
 			device->get_block_size()));
   DEBUG("reading {}", device->get_shard_journal_start());
   co_await device->read(device->get_shard_journal_start(), bptr);
@@ -222,7 +227,7 @@ CircularJournalSpace::write_header()
   assert(device);
   auto iter = bl.begin();
   assert(bl.length() < get_block_size());
-  bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(get_block_size()));
+  bufferptr bp = bufferptr(device->alloc_io_buffer(get_block_size()));
   iter.copy(bl.length(), bp.c_str());
   co_await device->write(device->get_shard_journal_start(), std::move(bp)
   ).handle_error(
