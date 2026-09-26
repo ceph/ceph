@@ -5,15 +5,14 @@ Feature: Cluster expansion host addition
 
   Background: Cluster expansion wizard
     Given I am logged in
-    And I am on the "onboarding" page
-    And I click on "Add Storage" button
+    And I open the Add Storage wizard
 
   Scenario Outline: Add hosts
     Given I am on the "Add Hosts" section
     When I click on "Add" button
     And enter "hostname" "<hostname>" in the carbon modal
     And "add" option "<labels>"
-    And I click on "Add Host" button
+    And I submit the carbon modal with "Add Host"
     And I should see a row with "<hostname>"
     And I should see row "<hostname>" have "<labels>"
 
@@ -29,7 +28,7 @@ Feature: Cluster expansion host addition
     And I click on "Remove" button from the table actions
     Then I should see the carbon modal
     And I confirm the resource "<hostname>"
-    And I click on "Remove Host" button
+    And I submit the carbon modal with "Remove Host"
     And I should not see a row with "<hostname>"
 
     Examples:
@@ -41,7 +40,7 @@ Feature: Cluster expansion host addition
     Given I am on the "Add Hosts" section
     When I click on "Add" button
     And enter "hostname" "ceph-node-[01-02]" in the carbon modal
-    And I click on "Add Host" button
+    And I submit the carbon modal with "Add Host"
     And I should see rows with following entries
       | hostname     |
       | ceph-node-01 |
@@ -53,18 +52,20 @@ Feature: Cluster expansion host addition
     When I click on "Add" button
     And enter "hostname" "ceph-node-00" in the carbon modal
     Then I should see an error in "hostname" field
+    When I cancel the carbon modal
 
   Scenario Outline: Add and remove labels on host
     Given I am on the "Add Hosts" section
+    And I should see a row with "<hostname>"
     When I select a row "<hostname>"
     And I click on "Edit" button from the table actions
     And "add" option "<labels>"
-    And I click on "Edit Host" button
+    And I submit the carbon modal with "Save changes"
     Then I should see row "<hostname>" have "<labels>"
     When I select a row "<hostname>"
     And I click on "Edit" button from the table actions
     And "remove" option "<labels>"
-    And I click on "Edit Host" button
+    And I submit the carbon modal with "Save changes"
     Then I should see row "<hostname>" does not have "<labels>"
 
     Examples:
