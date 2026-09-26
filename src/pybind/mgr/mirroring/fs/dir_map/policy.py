@@ -53,13 +53,73 @@ class Policy:
         return self.is_state_scheduled(self.dir_states[dir_path], State.SHUFFLING)
 
     def can_shuffle_dir(self, dir_path):
-        """Right now, shuffle directories only based on idleness. Later, we
-        probably want to avoid shuffling images that were recently shuffled.
+        """Return True if dir_path may be reshuffled to another instance.
+
+        A directory is eligible only when:
+        - its state machine is idle (not mid ASSOCIATING/SHUFFLING/...), and
+        - either it has no mapped_time yet, or DIR_SHUFFLE_THROTTLE_INTERVAL
+          seconds have elapsed since it was last mapped.
+
+        The throttle avoids thrashing directory assignments when mirror
+        daemons flap. Dead-instance failover bypasses this via forced
+        SHUFFLING in _remove_instances().
         """
         log.debug(f'can_shuffle_dir: {dir_path}')
         dir_state = self.dir_states[dir_path]
-        return StateTransition.is_idle(dir_state.state) and \
-            (time.time() - dir_state['mapped_time']) > Policy.DIR_SHUFFLE_THROTTLE_INTERVAL
+        if not StateTransition.is_idle(dir_state.state):
+            return False
+        # Never mapped / just unmapped: nothing to throttle against.
+        if dir_state.mapped_time is None:
+            return True
+        return (time.time() - dir_state.mapped_time) > Policy.DIR_SHUFFLE_THROTTLE_INTERVAL
+
+    def _live_dir_counts(self):
+        """Per live instance directory counts (includes idle instances with 0)."""
+        counts = []
+        for instance_id, dir_paths in self.instance_to_dir_map.items():
+            if self.is_dead_instance(instance_id):
+                continue
+            counts.append(len(dir_paths))
+        return counts
+
+    def needs_rebalance(self):
+        """True if live instances differ by more than one directory.
+
+        Using max-min > 1 (rather than len > floor(n/k)) avoids perpetual
+        ping-pong when the directory count is not evenly divisible — e.g.
+        5 dirs on 2 daemons is balanced as 3+2, not a bug to keep "fixing".
+        """
+        with self.lock:
+            counts = self._live_dir_counts()
+            if len(counts) <= 1:
+                return False
+            return (max(counts) - min(counts)) > 1
+
+    def throttle_remaining(self):
+        """Seconds until the last throttled directory becomes shuffle-eligible.
+
+        Aligns deferred rebalance with each dir's mapped_time + throttle,
+        rather than always waiting a full DIR_SHUFFLE_THROTTLE_INTERVAL from
+        daemon join. Returns 0 if every directory is already eligible.
+        """
+        with self.lock:
+            now = time.time()
+            remaining = []
+            for dir_state in self.dir_states.values():
+                if dir_state.mapped_time is None:
+                    continue
+                left = Policy.DIR_SHUFFLE_THROTTLE_INTERVAL - (now - dir_state.mapped_time)
+                if left > 0:
+                    remaining.append(left)
+            return max(remaining) if remaining else 0
+
+    def rebalance(self):
+        """Retry directory shuffle with the current instance set.
+
+        Equivalent to add_instances([]) — used by deferred rebalance after
+        the throttle window. Does not abort in-flight SHUFFLING transitions.
+        """
+        return self.add_instances([]) or []
 
     def set_state(self, dir_state, state, ignore_current_state=False):
         if not ignore_current_state and dir_state.state == state:
