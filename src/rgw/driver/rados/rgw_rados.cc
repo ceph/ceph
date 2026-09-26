@@ -103,6 +103,7 @@
 #include "compressor/Compressor.h"
 
 #include "rgw_d3n_datacache.h"
+#include "rgw_inject.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -3627,6 +3628,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   auto& ioctx = ref.ioctx;
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
+  // for testing: the index op is prepared, the head not yet written
+  rgw_inject_delay(rctx.dpp, rctx.y, "write_meta_before_head_write");
   r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, std::move(op), rctx.y, 0, &trace, &epoch);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
@@ -5546,6 +5549,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   write_op.meta.modify_tail = !copy_itself;
   write_op.meta.keep_tail = copy_itself;
 
+  // for testing: the source is read, the destination head not yet written
+  rgw_inject_delay(dpp, y, "copy_obj_before_write_meta");
   ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
   if (ret < 0) {
     goto done_ret;
@@ -7233,6 +7238,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     index_op.set_bilog_flags(params.bilog_flags | RGW_BILOG_NULL_VERSION);
   }
 
+  // for testing: the head's state is read, its index op not yet prepared
+  rgw_inject_delay(dpp, y, "delete_obj_before_head_delete");
   r = index_op.prepare(dpp, CLS_RGW_OP_DEL, &state->write_tag, y);
   if (r < 0) {
     return r;
