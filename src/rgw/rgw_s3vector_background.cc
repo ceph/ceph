@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <memory>
+#include <algorithm>
+#include <atomic>
 #include <boost/functional/hash.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -17,13 +19,16 @@
 #include <future>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include "rgw_sal.h"
 #include "rgw_s3vector.h"
-#include "lancedb.h"
+#include "rgw_s3vector_background.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::s3vector {
+
+int lancedb_error_to_errno(LanceDBError err);
 
 class Manager : public DoutPrefixProvider {
 public:
@@ -42,6 +47,11 @@ public:
       const session_name_t session_name;
       const table_name_t table_name;
       const Op type;
+    };
+
+    enum class LanceDBSessionCacheType {
+      INDEX_CACHE,
+      METADATA_CACHE
     };
 
 private:
@@ -65,8 +75,15 @@ private:
     }
   };
   using SessionPtr = std::shared_ptr<LanceDBSession>;
-  ceph::shared_mutex sessions_mutex = ceph::make_shared_mutex("s3vector::Manager::sessions_mutex"); 
-  std::unordered_map<session_name_t, SessionPtr, boost::hash<session_name_t>> sessions;
+  struct SessionEntry {
+    SessionPtr session;
+    std::atomic<int64_t> last_used;
+    SessionEntry(SessionPtr session)
+      : session(std::move(session)),
+        last_used(ceph::coarse_real_clock::now().time_since_epoch().count()){}
+  };
+  mutable ceph::shared_mutex sessions_mutex = ceph::make_shared_mutex("s3vector::Manager::sessions_mutex");
+  std::unordered_map<session_name_t, SessionEntry, boost::hash<session_name_t>> sessions;
   std::unordered_map<table_name_t, ceph::coarse_real_time, boost::hash<table_name_t>> tables;
   MessageQueue messages;
   static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
@@ -133,6 +150,40 @@ private:
     }
   }
 
+  void remove_inactive_sessions(std::chrono::seconds timeout) {
+    const auto now = ceph::coarse_real_clock::now();
+    std::vector<session_name_t> sessions_to_remove;
+    {
+      std::shared_lock l(sessions_mutex);
+      sessions_to_remove.reserve(sessions.size());
+      for (const auto& [session_name, entry] : sessions) {
+        const auto count = entry.last_used.load();
+        const auto last_used =
+            ceph::coarse_real_time(ceph::coarse_real_clock::duration(count));
+        if (now - last_used > timeout) {
+          sessions_to_remove.push_back(session_name);
+        }
+      }
+    }
+
+    for (const auto& session_name : sessions_to_remove) {
+      std::unique_lock l(sessions_mutex);
+      auto it = sessions.find(session_name);
+      if (it == sessions.end()) {
+        continue;
+      }
+
+      const auto count = it->second.last_used.load();
+      const auto last_used =
+          ceph::coarse_real_time(ceph::coarse_real_clock::duration(count));
+      if (now - last_used > timeout) {
+        ldpp_dout(this, 20) << "INFO: removing inactive session for bucket: " << session_name.second <<
+          " of tenant: " << session_name.first << dendl;
+        sessions.erase(it);
+      }
+    }
+  }
+
   // processing of a specific table
   int process_table(const table_name_t& table_name, boost::asio::yield_context yield) {
     // TODO: check if processing is needed based on unindexed rows stats and skip if not needed
@@ -148,6 +199,7 @@ private:
   // process all work items for tables and sessions
   void process_messages(boost::asio::yield_context yield) {
     ldpp_dout(this, 5) << "INFO: manager started. starting to process messages for background table and session operations" << dendl;
+    auto last_session_cleanup = ceph::coarse_real_clock::now();
     while (!shutdown) {
       std::vector<table_name_t> tables_to_process;
       const auto message_count = messages.consume_all([&tables_to_process, this](auto message) {
@@ -198,16 +250,18 @@ private:
                 ldpp_dout(this, 1) << "ERROR: unrecognized backend type: " << backend_str << dendl;
                 return;
               }
-              LanceDBSession* session = nullptr;
 
-              // To pass custom LanceDBSessionOptions for cache sizes etc.
-              const LanceDBSessionOptions* options = nullptr;
+              // a zero cache size keeps the LanceDB default
+              LanceDBSessionOptions options{};
+              options.index_cache_bytes =
+                cct->_conf.get_val<Option::size_t>("rgw_s3vector_session_index_cache_size");
+              options.metadata_cache_bytes =
+                cct->_conf.get_val<Option::size_t>("rgw_s3vector_session_metadata_cache_size");
 
-              if (is_rgw_backend(backend_type)) {
-                session = create_rgw_session(this, driver, session_name.first, options);
-              } else {
-                session = lancedb_session_new(options);
-              }
+              // the RGW backend needs a session with the object store registry of the SAL
+              LanceDBSession* session = is_rgw_backend(backend_type) ?
+                  create_rgw_session(this, driver, session_name.first, &options) :
+                  lancedb_session_new(&options);
               if (!session) {
                 ldpp_dout(this, 1) << "ERROR: failed to create session for bucket: " << session_name.second <<
                   " of tenant: " << session_name.first << dendl;
@@ -216,7 +270,7 @@ private:
               ldpp_dout(this, 20) << "INFO: created session for bucket: " << session_name.second <<
                 " of tenant: " << session_name.first << dendl;
 
-              sessions[session_name] = SessionPtr(session, LanceDBSessionDeleter());
+              sessions.emplace(session_name, SessionPtr(session, LanceDBSessionDeleter()));
               return;
             }
           case message_t::Op::SESSION_DELETE:
@@ -257,6 +311,18 @@ private:
       if (!tables_to_process.empty()) {
         // wait for all pending work to finish
         tw.async_wait(yield);
+      }
+
+      const auto session_inactive_timeout = std::chrono::seconds(
+          cct->_conf.get_val<uint64_t>("rgw_s3vector_session_inactive_timeout"));
+      const auto now = ceph::coarse_real_clock::now();
+      const auto session_cleanup_interval = std::max(
+          std::chrono::seconds(1), session_inactive_timeout / 2);
+      if (session_inactive_timeout.count() > 0 &&
+          now - last_session_cleanup >= session_cleanup_interval) {
+        ldpp_dout(this, 20) << "INFO: starting session cleanup..." <<  dendl;
+        remove_inactive_sessions(session_inactive_timeout);
+        last_session_cleanup = now;
       }
 
       if (message_count == 0) {
@@ -358,9 +424,58 @@ public:
     if (it == sessions.end()) {
       return nullptr;
     }
-    return it->second;
+    it->second.last_used.store(ceph::coarse_real_clock::now().time_since_epoch().count());
+    return it->second.session;
   }
-  
+
+  int delete_session(const std::string& tenant, const std::string& bucket_name) {
+    std::unique_lock l(sessions_mutex);
+    if (sessions.erase(session_name_t(tenant, bucket_name)) == 0) {
+      return -ENOENT;
+    }
+    return 0;
+  }
+
+  int get_session_cache_stats(const std::string& tenant, const std::string& bucket_name,
+                              LanceDBSessionCacheType cache_type, LanceDBSessionCacheStats& out_stats) const {
+    SessionPtr session;
+    {
+      std::shared_lock l(sessions_mutex);
+      auto it = sessions.find(session_name_t(tenant, bucket_name));
+      if (it == sessions.end()) {
+        return -ENOENT;
+      }
+      session = it->second.session;
+    }
+
+    char* error_message = nullptr;
+    LanceDBError result;
+    if (cache_type == LanceDBSessionCacheType::INDEX_CACHE) {
+      result = lancedb_session_index_cache_stats(session.get(), &out_stats, &error_message);
+    } else if (cache_type == LanceDBSessionCacheType::METADATA_CACHE) {
+      result = lancedb_session_metadata_cache_stats(session.get(), &out_stats, &error_message);
+    } else {
+      return -EINVAL; // invalid cache type
+    }
+
+    if (error_message) {
+      ldpp_dout(this, 1) << "ERROR: failed to get cache stats for bucket: " << bucket_name <<
+        " of tenant: " << tenant << ": " << error_message << dendl;
+      lancedb_free_string(error_message);
+    }
+    return lancedb_error_to_errno(result);
+  }
+
+  int get_index_cache_stats(const std::string& tenant, const std::string& bucket_name,
+                            LanceDBSessionCacheStats& out_stats) const {
+    return get_session_cache_stats(tenant, bucket_name, LanceDBSessionCacheType::INDEX_CACHE, out_stats);
+  }
+
+  int get_metadata_cache_stats(const std::string& tenant, const std::string& bucket_name,
+                               LanceDBSessionCacheStats& out_stats) const {
+    return get_session_cache_stats(tenant, bucket_name, LanceDBSessionCacheType::METADATA_CACHE, out_stats);
+  }
+
   Manager(CephContext* _cct, rgw::sal::Driver* _driver) :
     cct(_cct),
     work_guard(boost::asio::make_work_guard(io_context)),
@@ -435,7 +550,30 @@ bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& ten
   return s_manager->notify_session(dpp, tenant, bucket_name, Manager::message_t::Op::SESSION_DELETE);
 }
 
+int delete_session(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name) {
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to delete s3vectors session: manager is not initialized" << dendl;
+    return -EIO;
+  }
+  return s_manager->delete_session(tenant, bucket_name);
+}
 
+int get_index_cache_stats(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name,
+                          LanceDBSessionCacheStats& out_stats) {
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get s3vectors index cache stats: manager is not initialized" << dendl;
+    return -EIO;
+  }
+  return s_manager->get_index_cache_stats(tenant, bucket_name, out_stats);
+}
+
+int get_metadata_cache_stats(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name,
+                             LanceDBSessionCacheStats& out_stats) {
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get s3vectors metadata cache stats: manager is not initialized" << dendl;
+    return -EIO;
+  }
+  return s_manager->get_metadata_cache_stats(tenant, bucket_name, out_stats);
+}
 
 } // namespace rgw::s3vector
-
