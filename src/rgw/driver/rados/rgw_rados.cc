@@ -7221,6 +7221,14 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     return r;
   }
 
+  // remove only the head that was read. a write that replaced it meanwhile
+  // sent the old manifest to GC; removing the new head and sending the old
+  // manifest again would leak the new tail
+  r = store->append_atomic_test(dpp, state, op);
+  if (r < 0) {
+    return r;
+  }
+
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(store, bucket_info);

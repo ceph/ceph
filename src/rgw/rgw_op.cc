@@ -8355,7 +8355,9 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   if (script_return_code != -EPERM) {
     r = del_op->delete_obj(dpp, y,
                           rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
-    if (r == -ENOENT) {
+    // -ECANCELED: a newer write replaced the head the delete read. as for
+    // DeleteObject, the delete counts as ordered before that write
+    if (r == -ENOENT || r == -ECANCELED) {
       r = 0;
     }
   }
