@@ -89,6 +89,45 @@ options:
   flags:
   - startup
 
+# Prometheus endpoint. Seastar serves its metric registry at /metrics.
+
+- name: crimson_prometheus_port_base
+  type: uint
+  level: advanced
+  default: 0
+  min: 0
+  max: 65535
+  desc: Base TCP port for the Prometheus metrics endpoint. 0 disables it.
+  long_desc: When non-zero, OSD N listens on this value plus N and serves
+             Seastar metrics at /metrics. Set it once on the osd config
+             section so every OSD gets a distinct port on a shared host
+             network. The endpoint does not authenticate clients.
+             Changes apply when the OSD restarts.
+  flags:
+  - startup
+
+- name: crimson_prometheus_address
+  type: str
+  level: advanced
+  default: "0.0.0.0"
+  desc: Address the Prometheus metrics endpoint binds.
+  long_desc: Bind address for the Prometheus text endpoint. Set a specific
+             address to avoid exposing metrics on every interface.
+             Changes apply when the OSD restarts.
+  flags:
+  - startup
+
+- name: crimson_prometheus_prefix
+  type: str
+  level: advanced
+  default: osd
+  desc: Prefix prepended to Prometheus metric names.
+  long_desc: Seastar inserts an underscore between this prefix and the metric
+             family. With the default, reactor_utilization is exported as
+             osd_reactor_utilization. Changes apply when the OSD restarts.
+  flags:
+  - startup
+
 # Crimson OSD options:
 
 - name: crimson_osd_obc_lru_size
