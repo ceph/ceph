@@ -6317,6 +6317,23 @@ def cephadm_require_root() -> None:
         sys.exit(1)
 
 
+# Commands that probe/install the engine themselves, or do not need one.
+# host-maintenance only toggles systemd targets and must keep working even
+# if podman prints incidental stdout (e.g. a database migration notice).
+_SKIP_CONTAINER_ENGINE_CHECK = (
+    command_check_host,
+    command_check_online,
+    command_prepare_host,
+    command_setup_ssh_user,
+    command_prepare_host_sudo_hardening,
+    command_add_repo,
+    command_rm_repo,
+    command_install,
+    command_bootstrap,
+    command_maintenance,
+)
+
+
 def main() -> None:
     av: List[str] = []
     av = sys.argv[1:]
@@ -6340,18 +6357,7 @@ def main() -> None:
     try:
         # podman or docker?
         ctx.container_engine = find_container_engine(ctx)
-        if ctx.func not in \
-                [
-                    command_check_host,
-                    command_check_online,
-                    command_prepare_host,
-                    command_setup_ssh_user,
-                    command_prepare_host_sudo_hardening,
-                    command_add_repo,
-                    command_rm_repo,
-                    command_install,
-                    command_bootstrap,
-                ]:
+        if ctx.func not in _SKIP_CONTAINER_ENGINE_CHECK:
             check_container_engine(ctx)
         # command handler
         r = ctx.func(ctx)
