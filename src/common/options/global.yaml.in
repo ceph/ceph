@@ -907,7 +907,7 @@ options:
     are client or daemon names (e.g., 'osd.0') and each section contains a 'key' property
     with CephX authentication key as the value.
   # please note, document are generated without accessing to the CMake
-  # variables, so please update the document manually with a representive
+  # variables, so please update the document manually with a representative
   # default value using the ":default:" option of ".. confval::" directive.
   default: @keyring_paths@
   see_also:
@@ -1080,7 +1080,7 @@ options:
 - name: ms_osd_compress_min_size
   type: uint
   level: advanced
-  desc: Minimal message size eligable for on-wire compression
+  desc: Minimal message size eligible for on-wire compression
   default: 1_K
   services:
   - osd
@@ -2042,7 +2042,7 @@ options:
 - name: mon_debug_dump_json
   type: bool
   level: dev
-  desc: Dump paxos transasctions to log as JSON
+  desc: Dump paxos transactions to log as JSON
   default: false
   services:
   - mon
@@ -2211,7 +2211,7 @@ options:
 - name: max_rotating_auth_attempts
   type: int
   level: advanced
-  desc: Mumber of attempts to initialize rotating keys before giving up
+  desc: Number of attempts to initialize rotating keys before giving up
   default: 10
   with_legacy: true
 - name: rotating_keys_bootstrap_timeout
@@ -3195,7 +3195,7 @@ options:
   level: dev
   desc: Number of intervals in clean_offsets
   long_desc: Partial recovery uses multiple intervals to record the clean part of
-    the objectwhen the number of intervals is greater than osd_object_clean_region_max_num_intervals,
+    the object. When the number of intervals is greater than osd_object_clean_region_max_num_intervals,
     minimum interval will be trimmed(0 will recovery the entire object data interval)
   default: 10
   services:
@@ -3473,7 +3473,7 @@ options:
   desc: Fast, immediate shutdown
   long_desc: Setting this to false makes the OSD do a slower teardown of all state
     when it receives a SIGINT or SIGTERM or when shutting down for any other reason.  That
-    slow shutdown is primarilyy useful for doing memory leak checking with valgrind.
+    slow shutdown is primarily useful for doing memory leak checking with valgrind.
   default: true
   with_legacy: true
 - name: osd_fast_shutdown_timeout
@@ -3540,7 +3540,7 @@ options:
   level: advanced
   default: 64
   with_legacy: true
-# default timeout while caling WaitInterval on an empty queue
+# default timeout while calling WaitInterval on an empty queue
 - name: threadpool_default_timeout
   type: int
   level: advanced
@@ -3644,7 +3644,7 @@ options:
     memory when it is opened and remove them from memory when an SST file is closed.  Thus,
     memory consumption by indices and bloom filters is directly tied to the number
     of concurrent SST files allowed to be kept open.  This option instead stores cached
-    indicies and filters in the block cache where they directly compete with other
+    indices and filters in the block cache where they directly compete with other
     cached data.  By default we set this option to true to better account for and bound
     RocksDB memory usage and keep filters in memory even when an SST file is closed.
   default: true
@@ -3914,7 +3914,7 @@ options:
   long_desc: This value caps the maximal number of entries a single
     call to collection_list() can return. The configurable controls
     this aspect of PG deletion and OSD::clear_temp_objects().
-    Increasing it trade-offs less agressive chunking (and thus less
+    Increasing it trade-offs less aggressive chunking (and thus less
     CPU consumption overall) for higher memory pressure.
     Please note that in the case of PG deletion the chunking is
     steered by std::min of the this value and the value of
@@ -4408,7 +4408,7 @@ options:
   type: bool
   level: dev
   desc: Attempt to read bluefs log so large that it became unreadable.
-  long_desc: If BlueFS log grows to extreme sizes (200GB+) it is likely that it becames
+  long_desc: If BlueFS log grows to extreme sizes (200GB+) it is likely that it becomes
     unreadable. This options enables heuristics that scans devices for missing data.
     DO NOT ENABLE BY DEFAULT
   default: false
@@ -5034,7 +5034,7 @@ options:
   - runtime
   with_legacy: true
 # Specifies minimum expected amount of saved allocation units
-# per all blobsb to enable compressed blobs garbage collection
+# per all blobs to enable compressed blobs garbage collection
 - name: bluestore_gc_enable_total_threshold
   type: int
   level: dev
@@ -5570,7 +5570,7 @@ options:
   level: dev
   desc: For testing only. Compare legacy and multithread allocation recovery.
   long_desc: Chance to perform compare between procedures.
-    Value in range <0..1>; defines chance to perform comparision between legacy
+    Value in range <0..1>; defines chance to perform comparison between legacy
     and multithreaded allocation recovery. 0 means never compare. 1 means always compare.
   default: 0
   with_legacy: false
@@ -5848,7 +5848,7 @@ options:
   level: dev
   desc: Allows mkfs to create OSDs with the legacy omap naming mode (neither per-pool nor per-pg).
     This is intended primarily for developers. The resulting OSDs might / would
-    be transformed to the currrently default 'per-pg' format when BlueStore's quick-fix or
+    be transformed to the currently default 'per-pg' format when BlueStore's quick-fix or
     repair are applied.
   default: false
   with_legacy: true
@@ -5894,7 +5894,7 @@ options:
   level: basic
   desc: The interval at which to perform a BlueStore free fragmentation check.
     Checking fragmentation is usually almost immediate. For highly fragmented storage,
-    it can take several miliseconds and can cause a write operation to stall.
+    it can take several milliseconds and can cause a write operation to stall.
   default: 3600
   with_legacy: false
   flags:
@@ -7006,7 +7006,7 @@ options:
   desc: Max ratio of misplaced RADOS objects to target when scheduling data rebalancing
     activity. A lower value results in the balancer making smaller, less impactful changes
     with the tradeoff of decreased efficiency and longer time to converge. When making
-    CRUSH rules or topolgy changes or performing large cluster expansions, a lower value
+    CRUSH rules or topology changes or performing large cluster expansions, a lower value
     can help avoid transitory nearfull or backfillfull ratio excursions.
   default: 0.05
 - name: device_failure_prediction_mode
