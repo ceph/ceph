@@ -2,10 +2,10 @@ import orchestrator
 from .fixtures import wait
 import pytest
 from types import SimpleNamespace
-from unittest.mock import patch, PropertyMock
+from unittest.mock import Mock, patch, PropertyMock
 
 from rook.module import RookOrchestrator
-from rook.rook_cluster import RookCluster
+from rook.rook_cluster import ApiException, KubernetesResource, RookCluster
 
 
 # we use this intermediate class as .rook_cluster property
@@ -27,6 +27,46 @@ def _fake_node(name, addresses, labels=None):
             addresses=[SimpleNamespace(type=t, address=a) for t, a in addresses]
         ),
     )
+
+
+class TestKubernetesResource(object):
+
+    def test_items_refetch_after_watch_expires(self):
+        expired = ApiException()
+        expired.status = 410
+
+        stale_item = Mock()
+        stale_item.metadata.name = 'stale'
+        fresh_item = Mock()
+        fresh_item.metadata.name = 'fresh'
+        response = Mock()
+        response.items = [fresh_item]
+        response.metadata.resource_version = 'new-version'
+        api_func = Mock(return_value=response)
+
+        resource = KubernetesResource(api_func)
+        resource._items = {'stale': stale_item}
+        resource.exception = expired
+        resource.thread = Mock()
+        resource.thread.is_alive.return_value = True
+
+        with patch('rook.rook_cluster._urllib3_supports_read_chunked', True):
+            with patch.object(resource, '_watch') as watch:
+                assert list(resource.items) == [fresh_item]
+
+        api_func.assert_called_once_with()
+        watch.assert_called_once_with('new-version')
+
+    def test_items_propagate_other_watch_errors(self):
+        error = ApiException()
+        error.status = 500
+        resource = KubernetesResource(Mock())
+        resource.exception = error
+
+        with pytest.raises(ApiException) as raised:
+            list(resource.items)
+
+        assert raised.value is error
 
 
 class TestRook(object):
