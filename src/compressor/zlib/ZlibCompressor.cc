@@ -16,7 +16,9 @@
 #include "common/debug.h"
 #include "ZlibCompressor.h"
 #include "osd/osd_types.h"
+#ifdef HAVE_ISAL
 #include "isa-l/include/igzip_lib.h"
+#endif
 #ifdef HAVE_QATZIP
   #include "compressor/QatAccel.h"
 #endif
@@ -70,10 +72,7 @@ ZlibCompressor::ZlibCompressor(CephContext *cct, bool isal)
   : Compressor(COMP_ALG_ZLIB, "zlib"), isal_enabled(isal), cct(cct)
 {
 
-#if (__x86_64__ && defined(HAVE_NASM_X64_AVX2))
-#elif defined(__aarch64__)
-#elif defined(HAVE_RISCV_RVV)
-#else
+#ifndef HAVE_ISAL
   if (isal_enabled) {
     derr << "WARN: ISA-L enabled (compressor_zlib_isal=true) but not supported"
          << dendl;
@@ -155,7 +154,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, std::op
   return 0;
 }
 
-#if (__x86_64__ && defined(HAVE_NASM_X64_AVX2)) || defined(__aarch64__) || defined(HAVE_RISCV_RVV)
+#ifdef HAVE_ISAL
 int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message)
 {
   int ret;
@@ -220,7 +219,7 @@ int ZlibCompressor::compress(const bufferlist &in, bufferlist &out, std::optiona
   if (uadk_enabled)
     return uadk_accel.compress(in, out);
 #endif
-#if (__x86_64__ && defined(HAVE_NASM_X64_AVX2)) || defined(__aarch64__) || defined(HAVE_RISCV_RVV)
+#ifdef HAVE_ISAL
   if (isal_enabled)
     return isal_compress(in, out, compressor_message);
   else

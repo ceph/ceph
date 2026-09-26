@@ -13,7 +13,7 @@ if(${WITH_CEPHFS})
       ceph-common
       cephfs
   )
-  if(NOT WIN32)
+  if(NOT WIN32 AND NOT APPLE)
     target_link_options(ceph_test_trim_caps PRIVATE -Wl,--copy-dt-needed-entries)
   endif()
   install(TARGETS ceph_test_trim_caps DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -25,7 +25,7 @@ if(${WITH_CEPHFS})
       ceph-common
       cephfs
   )
-  if(NOT WIN32)
+  if(NOT WIN32 AND NOT APPLE)
     target_link_options(ceph_test_ino_release_cb PRIVATE -Wl,--copy-dt-needed-entries)
   endif()
   install(TARGETS ceph_test_ino_release_cb DESTINATION ${CMAKE_INSTALL_BINDIR})
