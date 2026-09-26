@@ -3386,6 +3386,7 @@ int MotrStore::register_to_service_map(const DoutPrefixProvider *dpp, const stri
 
 void MotrStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
                               RGWRateLimitInfo& user_ratelimit,
+                              RGWRateLimitInfo& account_ratelimit,
                               RGWRateLimitInfo& anon_ratelimit)
 {
   return;
