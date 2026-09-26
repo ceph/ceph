@@ -94,14 +94,18 @@ public:
 
 /* What nsfs writes today.
  *
- * Note what object_name() inherits.  rgw_obj_key::get_index_key_name()
- * doubles a leading underscore, because in rados the index shares a
- * keyspace with entries spelled `_<ns>_<name>` and a key beginning `_`
- * would collide.  A directory has no such keyspace, so on a filesystem
- * the doubling buys nothing and an object called `_foo` is the file
- * `__foo`.  It is symmetric -- parse_raw_oid() undoes it -- so it is
- * correct, just not meaningful, and it is one of the things the noobaa
- * format drops. */
+ * An object is stored under its own name.  `rgw_obj_key::get_index_key_name()`
+ * and `get_oid()` double a leading underscore -- in rados the index shares
+ * a keyspace with entries spelled `_<ns>_<name>`, so a key beginning `_`
+ * would collide -- and object_name() undoes that.  A directory has no
+ * such keyspace, the doubling bought nothing here, and it stored the
+ * user's object under a name the user did not choose and NooBaa does not
+ * write.  Dropped in every profile, not only the noobaa one:  it is a
+ * rados artifact rather than a format choice.
+ *
+ * Both halves had to move together, which is why they live on one
+ * object;  key_from_name() no longer calls parse_raw_oid(), whose
+ * namespace branch would mis-split a bare `_foo_bar`. */
 class RGWPathStrategy : public PathStrategy {
 public:
   std::string object_name(const rgw_obj_key& key,

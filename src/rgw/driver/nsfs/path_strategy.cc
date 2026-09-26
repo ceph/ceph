@@ -27,7 +27,18 @@ std::string RGWPathStrategy::object_name(const rgw_obj_key& key,
 {
   std::string fname = use_version ? key.get_oid() : key.get_index_key_name();
 
-  if (!key.get_ns().empty()) {
+  if (key.get_ns().empty()) {
+    /* Undo the leading-underscore doubling both of those apply.  It
+     * exists because a rados bucket index shares a keyspace with entries
+     * spelled _<ns>_<name>, so a key beginning '_' would collide.  A
+     * directory has no such keyspace:  the doubling buys nothing here and
+     * stores the user's object under a name the user did not choose,
+     * which is also the name NooBaa does not write.  key_from_name()
+     * below is the matching half. */
+    if (fname.size() >= 2 && fname[0] == '_' && fname[1] == '_') {
+      fname.erase(0, 1);
+    }
+  } else {
     fname.insert(0, 1, '.');
   }
 
@@ -42,8 +53,17 @@ std::string RGWPathStrategy::object_name(const rgw_obj_key& key,
 
 rgw_obj_key RGWPathStrategy::key_from_name(const std::string& fname) const
 {
+  /* The file name is the key, verbatim -- the inverse of object_name()
+   * above, which no longer doubles a leading underscore.
+   *
+   * Not parse_raw_oid():  it would read a bare `_foo_bar` as namespace
+   * `foo`, name `bar`, and mis-split an object whose name simply begins
+   * with an underscore.  Its namespace branch was already unreachable
+   * from here, because object_name() prefixes a namespaced entry with
+   * '.', which sends parse_raw_oid() down its first branch;  only the
+   * plain and doubled cases were ever live. */
   rgw_obj_key key;
-  rgw_obj_key::parse_raw_oid(fname, &key);
+  key.name = fname;
   return key;
 }
 

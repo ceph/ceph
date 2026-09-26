@@ -2582,7 +2582,13 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 
           rgw_bucket_dir_entry bde{};
           std::string full_key = path_prefix + obj_name;
-          bde.key.name = full_key;
+          /* obj_name came off a file name, so it has to go back through
+           * the path strategy to become a key -- every other path fills
+           * bde.key from get_index_key(), and a cache entry keyed the
+           * other way is one the removal path cannot find.  The two
+           * agreed only while both doubled a leading underscore. */
+          rgw_obj_key vkey = path_strategy->key_from_name(full_key);
+          vkey.get_index_key(&bde.key);
           bde.key.instance = ver_id;
           bde.ver.pool = 1;
           bde.ver.epoch = 1;
