@@ -720,6 +720,14 @@ seastar::future<> OSD::_send_boot()
   if (ret == 0) {
     m->metadata["osd_objectstore"] = type;
   }
+  auto data_backend = co_await store.get_data_backend_type_name();
+  if (!data_backend.empty()) {
+    m->metadata["seastore_data_backend"] = data_backend;
+  }
+  auto cache_backend = co_await store.get_cache_backend_type_name();
+  if (!cache_backend.empty()) {
+    m->metadata["seastore_cache_backend"] = cache_backend;
+  }
   co_await monc->send_message(std::move(m));
 }
 

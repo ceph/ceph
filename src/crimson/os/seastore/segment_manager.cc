@@ -29,17 +29,17 @@ std::ostream& operator<<(std::ostream &out, Segment::segment_state_t s)
 
 seastar::future<crimson::os::seastore::SegmentManagerRef>
 SegmentManager::get_segment_manager(
-    const std::string& device,
-    device_type_t dtype)
+  const std::string& device,
+  device_type_t dtype,
+  device_id_t id)
 {
-  const std::string device_block = device + "/block";
 #ifdef HAVE_ZNS
   if (dtype == device_type_t::ZBD) {
     co_return std::make_unique<segment_manager::zbd::ZBDSegmentManager>(
-        device_block);
+      device, dtype, id);
   }
 #endif
   co_return std::make_unique<segment_manager::block::BlockSegmentManager>(
-      device_block, dtype);
+      device, dtype, id);
 }
 } // namespace crimson::os::seastore
