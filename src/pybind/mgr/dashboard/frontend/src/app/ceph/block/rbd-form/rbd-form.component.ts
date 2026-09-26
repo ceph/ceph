@@ -432,7 +432,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
     const dataPools = [];
     for (const pool of data) {
       if (this.rbdService.isRBDPool(pool)) {
-        if (pool.type === 'replicated') {
+        if (this.rbdService.isRBDCapablePool(pool)) {
           pools.push(pool);
           dataPools.push(pool);
         } else if (pool.type === 'erasure' && pool.flags_names.indexOf('ec_overwrites') !== -1) {
