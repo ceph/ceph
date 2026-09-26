@@ -665,7 +665,6 @@ struct ECCommon {
     using OpRef = std::shared_ptr<Op>;
 
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
-    std::map<hobject_t, eversion_t> oid_to_version;
 
     std::list<OpRef> waiting_commit;
     eversion_t completed_to;
