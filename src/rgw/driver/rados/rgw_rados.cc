@@ -3466,6 +3466,12 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (r < 0) {
     return r;
   }
+  if (meta.id_tag_guard) {
+    // the caller read the head before the state above, and may reuse what
+    // it read, such as the tail. the head must still be that one. this goes
+    // before prepare_atomic_modification() sets the new ID tag
+    op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, *meta.id_tag_guard);
+  }
   bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
   bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == nullptr || meta.if_nomatch != "*"sv);
   r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, set_attr_id_tag, rctx.y);
@@ -3780,7 +3786,10 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
   index_op.set_zones_trace(meta.zones_trace);
   
-  bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
+  // a guarded write expects the head it names; an exclusive create would
+  // recreate it if it was deleted meanwhile
+  bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL &&
+                       meta.id_tag_guard == nullptr);
   int r;
   if (assume_noent) {
     r = _do_write_meta(size, accounted_size, attrs, assume_noent, (void *)&index_op, rctx, trace, log_op);
@@ -5545,6 +5554,11 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   write_op.meta.delete_at = delete_at;
   write_op.meta.modify_tail = !copy_itself;
   write_op.meta.keep_tail = copy_itself;
+  if (copy_itself && astate->obj_tag.length() > 0 && !astate->fake_tag) {
+    // the head keeps the tail read above, so it must be the head read
+    // above. an overwrite since then has sent that tail to GC
+    write_op.meta.id_tag_guard = &astate->obj_tag;
+  }
 
   ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
   if (ret < 0) {
