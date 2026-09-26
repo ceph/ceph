@@ -13,6 +13,7 @@
  *
  */
 
+#include <iomanip> // for std::setprecision()
 #include <memory>
 #include <functional>
 
