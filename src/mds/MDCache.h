@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <string_view>
 #include <thread>
 #include <unordered_map>
@@ -1446,6 +1447,13 @@ private:
   StrayManager stray_manager;
 
  private:
+  // purge_inodes() jobs, issued under one mds_purge_inodes_max_ops budget
+  struct PurgeInodes;
+  void kick_purge_inodes();
+  void finish_purge_inodes_batch(std::shared_ptr<PurgeInodes> p, uint64_t n);
+  std::deque<std::shared_ptr<PurgeInodes>> purge_inodes_queue;
+  uint64_t purge_inodes_inflight = 0;
+
   enum dirfrag_killpoint : std::int8_t {
     FRAGMENT_FREEZE = 1,
     FRAGMENT_HANDLE_NOTIFY,

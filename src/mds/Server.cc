@@ -333,6 +333,19 @@ void Server::dispatch(const cref_t<Message> &m)
 
 */
   bool sessionclosed_isok = replay_unsafe_with_closed_session;
+
+  if (m->get_type() == CEPH_MSG_CLIENT_REQUEST) {
+    // Note a delegated ino the client names here, before the request can be
+    // deferred, forwarded or fail: the client may already be writing objects
+    // under it, so journal_close_session() must purge it if it is not used.
+    const auto &req = ref_cast<MClientRequest>(m);
+    if (req->head.ino) {
+      Session *session = mds->get_session(req);
+      if (session)
+	session->claim_delegated_ino(inodeno_t(req->head.ino));
+    }
+  }
+
   // active?
   // handle_peer_request()/handle_client_session() will wait if necessary
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST && !mds->is_active()) {
@@ -357,6 +370,7 @@ void Server::dispatch(const cref_t<Message> &m)
 	    // don't purge inodes that will be created by later replay
 	    session->free_prealloc_inos.erase(ino);
 	    session->delegated_inos.insert(ino);
+	    session->claim_delegated_ino(ino);
 	  }
 	}
       } else if (req->get_retry_attempt()) {
@@ -871,7 +885,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 			  << session->get_push_seq() << ", dropping" << " from client : " << session->get_human_name();
 	return;
       }
-      journal_close_session(session, Session::STATE_CLOSING, NULL);
+      journal_close_session(session, Session::STATE_CLOSING, NULL, true);
     }
     break;
 
@@ -950,6 +964,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     }
     session->free_prealloc_inos = session->info.prealloc_inos;
     session->delegated_inos.clear();
+    session->claimed_inos.clear();
   }
 
   mds->sessionmap.mark_dirty(session);
@@ -1520,13 +1535,31 @@ size_t Server::apply_blocklist()
   return victims.size();
 }
 
-void Server::journal_close_session(Session *session, int state, Context *on_safe)
+void Server::journal_close_session(Session *session, int state, Context *on_safe,
+				   bool client_close)
 {
   dout(10) << __func__ << " : "
 	   << session->info.inst
 	   << " pending_prealloc_inos " << session->pending_prealloc_inos
 	   << " free_prealloc_inos " << session->free_prealloc_inos
-	   << " delegated_inos " << session->delegated_inos << dendl;
+	   << " delegated_inos " << session->delegated_inos
+	   << " claimed_inos " << session->claimed_inos << dendl;
+
+  // A delegated ino may back objects an async create wrote before its
+  // request reached us, so by default every one still delegated is purged.
+  // A client closing its session with nothing in flight cannot have done
+  // that for an ino it never named in a request (Server::dispatch notes
+  // those), so return such inos to the inotable instead.
+  interval_set<inodeno_t> inos_to_purge = session->delegated_inos;
+  interval_set<inodeno_t> unused_delegated;
+  if (client_close && session->is_open() && session->requests.empty() &&
+      g_conf().get_val<bool>("mds_session_close_free_unused_delegated_inos")) {
+    inos_to_purge.intersection_of(session->delegated_inos, session->claimed_inos);
+    unused_delegated = session->delegated_inos;
+    unused_delegated.subtract(inos_to_purge);
+    dout(10) << __func__ << " clean close: freeing " << unused_delegated.size()
+	     << " unused delegated inos, purging " << inos_to_purge.size() << dendl;
+  }
 
   uint64_t sseq = mds->sessionmap.set_state(session, state);
   version_t pv = mds->sessionmap.mark_projected(session);
@@ -1537,16 +1570,17 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   interval_set<inodeno_t> inos_to_free;
   inos_to_free.insert(session->pending_prealloc_inos);
   inos_to_free.insert(session->free_prealloc_inos);
+  inos_to_free.insert(unused_delegated);
   if (inos_to_free.size()) {
     mds->inotable->project_release_ids(inos_to_free);
     piv = mds->inotable->get_projected_version();
   } else
     piv = 0;
-  
+
   auto le = new ESession(session->info.inst, false, pv, inos_to_free, piv,
-    session->delegated_inos, session->info.auth_name);
+    inos_to_purge, session->info.auth_name);
   auto fin = new C_MDS_session_finish(this, session, sseq, false, pv, inos_to_free, piv,
-				      session->delegated_inos, mdlog->get_current_segment(), on_safe);
+				      inos_to_purge, mdlog->get_current_segment(), on_safe);
   mdlog->submit_entry(le, fin);
   mdlog->flush();
 
