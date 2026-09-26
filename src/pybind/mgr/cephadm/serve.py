@@ -1538,7 +1538,18 @@ class CephadmServe:
                              osd_uuid_map: Optional[Dict[str, Any]] = None,
                              skip_restart_for_reconfig: bool = False,
                              send_signal_to_daemon: Optional[str] = None,
+                             stage: bool = False,
                              ) -> str:
+        """Deploy, reconfigure or - with stage=True - stage a daemon.
+
+        Staging writes the new config, keyring and unit files next to the
+        live ones on the host (`cephadm deploy --stage`) without restarting
+        anything; `cephadm switch-staged` applies them later. The daemon
+        cache is left alone since nothing has changed for the running
+        daemon.
+        """
+        if stage and reconfig:
+            raise OrchestratorError('cannot stage and reconfig at the same time')
 
         daemon_params: Dict[str, Any] = {}
         with set_exception_subject('service', orchestrator.DaemonDescription(
@@ -1587,6 +1598,8 @@ class CephadmServe:
 
                 if reconfig:
                     daemon_params['reconfig'] = True
+                if stage:
+                    daemon_params['stage'] = True
                 if skip_restart_for_reconfig:
                     daemon_params['skip_restart_for_reconfig'] = True
                 if send_signal_to_daemon:
@@ -1609,7 +1622,7 @@ class CephadmServe:
                     await self._registry_login(daemon_spec.host, json.loads(str(self.mgr.get_store('registry_credentials'))))
 
                 self.log.info('%s daemon %s on %s' % (
-                    'Reconfiguring' if reconfig else 'Deploying',
+                    'Staging' if stage else 'Reconfiguring' if reconfig else 'Deploying',
                     daemon_spec.name(), daemon_spec.host))
 
                 termination_grace_period = None
@@ -1666,8 +1679,11 @@ class CephadmServe:
                     raise OrchestratorError(
                         f'cephadm exited with an error code: {code}, stderr: {err}')
 
-                # refresh daemon state?  (ceph daemon reconfig does not need it)
-                if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:
+                # refresh daemon state?  (ceph daemon reconfig does not need it,
+                # and a staged deploy changed nothing for the running daemon)
+                if stage:
+                    pass
+                elif not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:
                     if not code and daemon_spec.host in self.mgr.cache.daemons:
                         # prime cached service state with what we (should have)
                         # just created
@@ -1708,11 +1724,12 @@ class CephadmServe:
                         f"exited with code {code}; leaving agent config deps unchanged so "
                         f"delivery of updated MGR endpoint can be retried")
                 msg = "{} {} on host '{}'".format(
-                    'Reconfigured' if reconfig else 'Deployed', daemon_spec.name(), daemon_spec.host)
+                    'Staged' if stage else 'Reconfigured' if reconfig else 'Deployed',
+                    daemon_spec.name(), daemon_spec.host)
                 if not code:
                     self.mgr.events.for_daemon(daemon_spec.name(), OrchestratorEvent.INFO, msg)
                 else:
-                    what = 'reconfigure' if reconfig else 'deploy'
+                    what = 'stage' if stage else 'reconfigure' if reconfig else 'deploy'
                     self.mgr.events.for_daemon(
                         daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {what}: {err}')
                 self.mgr.recently_altered_daemons[daemon_spec.name()] = datetime_now()

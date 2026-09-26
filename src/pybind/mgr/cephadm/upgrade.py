@@ -12,6 +12,7 @@ import orchestrator
 from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.staged_switch import StagedSwitchRunner, policy_for
 from cephadm.utils import (
     ceph_release_to_major,
     name_to_config_section,
@@ -236,7 +237,8 @@ class UpgradeState:
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
                  has_set_cephx_allowed_ciphers: Optional[bool] = False,
                  health_warnings_muted: Optional[bool] = False,
-                 rotated_osd_mds_keyrings: Optional[bool] = False
+                 rotated_osd_mds_keyrings: Optional[bool] = False,
+                 staged_switch: Optional[Dict[str, Any]] = None,
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -269,6 +271,9 @@ class UpgradeState:
         self.has_set_cephx_allowed_ciphers = has_set_cephx_allowed_ciphers
         self.rotated_osd_mds_keyrings = rotated_osd_mds_keyrings
         self.health_warnings_muted = health_warnings_muted
+        # progress of the staged switch of the group currently being
+        # handled (see cephadm.staged_switch), so a mgr failover resumes it
+        self.staged_switch: Dict[str, Any] = staged_switch or {}
 
     def to_json(self) -> dict:
         return {
@@ -295,7 +300,8 @@ class UpgradeState:
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
             'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
             'health_warnings_muted': self.health_warnings_muted,
-            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings
+            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings,
+            'staged_switch': self.staged_switch,
         }
 
     @classmethod
@@ -320,7 +326,9 @@ class CephadmUpgrade:
         'UPGRADE_OFFLINE_HOST',
         'UPGRADE_INVALID_CRUSH_BUCKET',
         'UPGRADE_OSD_NO_VERSION',
-        'UPGRADE_KEY_ROTATION'
+        'UPGRADE_KEY_ROTATION',
+        'UPGRADE_STAGE_FAILED',
+        'UPGRADE_SWITCH_FAILED',
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -2457,6 +2465,16 @@ class CephadmUpgrade:
                 if finished_fs:
                     self._complete_mds_upgrade(fs_names=finished_fs)
                 need_upgrade = self._restrict_mds_need_upgrade_to_one_fs(need_upgrade)
+
+            # staged switch (mgr/cephadm/upgrade_staged_switch): stage the new
+            # deployment while the daemons serve, take the group down, switch
+            # all of them in parallel, verify with the monitors, restore - one
+            # group per pass. The next pass re-evaluates what is left.
+            if need_upgrade:
+                policy = policy_for(self, daemon_type)
+                if policy and StagedSwitchRunner(self, policy).run(
+                        [d_entry[0] for d_entry in need_upgrade], target_image):
+                    return
 
             # prepare filesystems for daemon upgrades?
             if (
