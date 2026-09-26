@@ -6099,7 +6099,13 @@ void RGWDeleteObj::execute(optional_yield y)
     }
 
     if (op_ret == -ECANCELED) {
-      op_ret = 0;
+      // a newer write replaced the head the delete read. an unconditional
+      // delete counts as ordered before that write; a conditional one cannot
+      // claim its condition held, and answers a conflict for the client to
+      // retry
+      const bool conditional = if_match || size_match ||
+          !real_clock::is_zero(last_mod_time_match) || !real_clock::is_zero(unmod_since);
+      op_ret = conditional ? -ERR_CONDITIONAL_REQUEST_CONFLICT : 0;
     }
     if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
       op_ret = 0;
@@ -8355,10 +8361,15 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   if (script_return_code != -EPERM) {
     r = del_op->delete_obj(dpp, y,
                           rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
-    // -ECANCELED: a newer write replaced the head the delete read. as for
-    // DeleteObject, the delete counts as ordered before that write
-    if (r == -ENOENT || r == -ECANCELED) {
+    if (r == -ENOENT) {
       r = 0;
+    } else if (r == -ECANCELED) {
+      // a newer write replaced the head the delete read. as for DeleteObject,
+      // an unconditional delete counts as ordered before that write, and a
+      // conditional one answers a conflict
+      const bool conditional = object.get_if_match() || object.get_size_match() ||
+          !real_clock::is_zero(object.get_last_mod_time());
+      r = conditional ? -ERR_CONDITIONAL_REQUEST_CONFLICT : 0;
     }
   }
   std::ignore = run_lua_script(rgw::lua::context::postRequest, obj.get());
