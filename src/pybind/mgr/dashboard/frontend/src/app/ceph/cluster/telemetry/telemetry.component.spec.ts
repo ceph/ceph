@@ -9,6 +9,7 @@ import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { LoadingStatus } from '~/app/shared/forms/cd-form';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TelemetryComponent } from './telemetry.component';
@@ -153,6 +154,39 @@ describe('TelemetryComponent', () => {
 
     it('should create', () => {
       expect(component).toBeTruthy();
+    });
+
+    describe('licenseAgrmt validation', () => {
+      beforeEach(() => {
+        component.report = { report: { report_id: 42, channels_available: [] } };
+        component.reportId = 42;
+        component['createPreviewForm']();
+        component.loading = LoadingStatus.Ready;
+        component.step = 2;
+        fixture.detectChanges();
+      });
+
+      it('should render the "This field is required." message when unchecked and dirty', () => {
+        component.previewForm.get('licenseAgrmt').setValue(false);
+        component.previewForm.get('licenseAgrmt').markAsDirty();
+        fixture.detectChanges();
+
+        const errorEl = fixture.nativeElement.querySelector(
+          'span.invalid-feedback'
+        ) as HTMLElement;
+
+        expect(errorEl).toBeTruthy();
+        expect(errorEl.textContent.trim()).toBe('This field is required.');
+      });
+
+      it('should not render the "This field is required." message when checked', () => {
+        component.previewForm.get('licenseAgrmt').setValue(true);
+        component.previewForm.get('licenseAgrmt').markAsDirty();
+        fixture.detectChanges();
+
+        const errorEl = fixture.nativeElement.querySelector('span.invalid-feedback');
+        expect(errorEl).toBeFalsy();
+      });
     });
 
     it('should only replace the ranges and values of a JSON object', () => {

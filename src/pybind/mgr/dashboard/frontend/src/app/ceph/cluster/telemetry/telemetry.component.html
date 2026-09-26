@@ -453,7 +453,7 @@
                     formControlName="licenseAgrmt"
                   />
                   <label
-                    class="custom-control-label"
+                    class="custom-control-label required"
                     for="licenseAgrmt"
                     i18n
                     >I agree to my telemetry data being submitted under the
@@ -462,6 +462,12 @@
                     ></label
                   >
                 </div>
+                <span
+                  class="invalid-feedback"
+                  *ngIf="previewForm.showError('licenseAgrmt', frm, 'required')"
+                  i18n
+                  >This field is required.</span
+                >
               </div>
             </div>
           </div>
