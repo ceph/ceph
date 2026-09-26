@@ -1,60 +1,24 @@
-<cds-modal
+<cd-tearsheet
+  [steps]="steps"
+  [title]="title"
+  [modalHeaderLabel]="modalHeaderLabel"
+  [description]="description"
   size="md"
-  [open]="open"
-  (overlaySelected)="closeModal()"
+  [isSubmitLoading]="isSubmitLoading"
+  [submitButtonLabel]="isEdit ? 'Save' : 'Create'"
+  [submitButtonLoadingLabel]="isEdit ? 'Saving' : 'Creating'"
+  (submitRequested)="onSubmit()"
+  (closeRequested)="closeModal()"
 >
-  <cds-modal-header (closeSelect)="closeModal()">
-    @if (isEdit) {
-      <h4
-        cdsModalHeaderLabel
-        class="cds--type-label-01"
-        i18n
-      >
-        Role
-      </h4>
-      <h3
-        cdsModalHeaderHeading
-        i18n
-      >
-        Edit session duration
-      </h3>
-      <p
-        class="cds--modal-header__description cds--type-body-01 cds-mt-3"
-        i18n
-      >
-        Update the maximum session duration for this role.
-      </p>
-    } @else {
-      <h4
-        cdsModalHeaderLabel
-        class="cds--type-label-01"
-        i18n
-      >
-        User account
-      </h4>
-      <h3
-        cdsModalHeaderHeading
-        i18n
-      >
-        Create role
-      </h3>
-      <p
-        class="cds--modal-header__description cds--type-body-01 cds-mt-3"
-        i18n
-      >
-        Role grants temporary permissions to trusted users, applications, or services.
-      </p>
-    }
-  </cds-modal-header>
-
-  <section cdsModalContent>
+  <cd-tearsheet-step>
     <form
-      class="form"
+      name="form"
       #formDir="ngForm"
       [formGroup]="form"
+      novalidate
     >
+      <!-- Account (Create only) -->
       @if (!isEdit) {
-        <!-- Account -->
         <div class="form-item">
           <legend
             class="cds--label cds--type-label-01"
@@ -62,15 +26,17 @@
           >
             Account
           </legend>
-          <p class="cds--type-body-01">{{ accountName }}</p>
+          <p class="cds--type-body-01">
+            {{ accountName || accountId }}
+          </p>
         </div>
 
-        <!-- Role Name -->
+        <!-- Role name -->
         <div class="form-item">
           <cds-text-label
             label="Role name"
-            for="role_name"
-            [invalid]="roleName.isInvalid"
+            labelInputID="role_name"
+            [invalid]="isFieldInvalid('role_name')"
             [invalidText]="roleNameError"
             helperText="Unique name used to identify this role within the account."
             i18n-helperText
@@ -78,20 +44,18 @@
             Role name
             <input
               cdsText
-              cdValidate
-              #roleName="cdValidate"
               type="text"
               id="role_name"
               name="role_name"
               formControlName="role_name"
               placeholder="Enter a role name (e.g. BackupServiceRole)"
-              [invalid]="roleName.isInvalid"
+              [invalid]="isFieldInvalid('role_name')"
               [autofocus]="true"
               modal-primary-focus
             />
           </cds-text-label>
           <ng-template #roleNameError>
-            @if (form.showError('role_name', formDir, 'required')) {
+            @if (showFieldError('role_name', 'required')) {
               <span
                 class="invalid-feedback"
                 i18n
@@ -100,9 +64,8 @@
             }
           </ng-template>
         </div>
-
-        <!-- Role (Edit only) -->
       } @else {
+        <!-- Role (Edit only) -->
         <div class="form-item">
           <legend
             class="cds--label cds--type-label-01"
@@ -132,34 +95,31 @@
         </div>
       }
 
-      <!-- Path & Assume Role Policy Document (Create only) -->
+      <!-- Path & Trust policy & Permission policies (Create only) -->
       @if (!isEdit) {
         <!-- Path -->
         <div class="form-item">
           <cds-text-label
-            label="Role path"
-            for="role_path"
-            [invalid]="rolePath.isInvalid"
+            label="Path"
+            labelInputID="role_path"
+            [invalid]="isFieldInvalid('role_path')"
             [invalidText]="pathError"
-            helperText='Specifies the hierarchy or namespace for the role. Use "/" for the root path.'
+            helperText='Organize roles into logical hierarchies. Use "/" for the root path.'
             i18n-helperText
           >
-            Role path
+            Path
             <input
               cdsText
-              cdValidate
-              #rolePath="cdValidate"
               type="text"
               id="role_path"
               name="role_path"
               formControlName="role_path"
               placeholder="Enter path (/applications/)"
-              [invalid]="rolePath.isInvalid"
-              [invalidText]="pathError"
+              [invalid]="isFieldInvalid('role_path')"
             />
           </cds-text-label>
           <ng-template #pathError>
-            @if (form.showError('role_path', formDir, 'required')) {
+            @if (showFieldError('role_path', 'required')) {
               <span
                 class="invalid-feedback"
                 i18n
@@ -169,40 +129,37 @@
           </ng-template>
         </div>
 
-        <!-- Assume Role Policy Document -->
+        <!-- Trust policy -->
         <div class="form-item">
           <cds-textarea-label
             labelInputID="role_assume_policy_doc"
-            [invalid]="policyDoc.isInvalid"
+            [invalid]="isFieldInvalid('role_assume_policy_doc')"
             [invalidText]="policyError"
-            helperText="Defines which principals can assume this role. Enter a valid JSON policy document."
+            helperText="Defines who can assume this role."
             i18n-helperText
           >
             Trust policy
             <textarea
               cdsTextArea
-              cdValidate
-              #policyDoc="cdValidate"
               id="role_assume_policy_doc"
               name="role_assume_policy_doc"
               formControlName="role_assume_policy_doc"
-              placeholder="Enter a JSON trust policy document"
-              rows="8"
+              placeholder="Provide a valid JSON trust policy."
+              rows="6"
               cols="200"
-              [invalid]="policyDoc.isInvalid"
-              [invalidText]="policyError"
               cdRequiredField="Trust Policy"
+              [invalid]="isFieldInvalid('role_assume_policy_doc')"
             ></textarea>
           </cds-textarea-label>
           <ng-template #policyError>
-            @if (form.showError('role_assume_policy_doc', formDir, 'required')) {
+            @if (showFieldError('role_assume_policy_doc', 'required')) {
               <span
                 class="invalid-feedback"
                 i18n
                 >This field is required.</span
               >
             }
-            @if (form.showError('role_assume_policy_doc', formDir, 'json')) {
+            @if (showFieldError('role_assume_policy_doc', 'invalidJson')) {
               <span
                 class="invalid-feedback"
                 i18n
@@ -211,6 +168,199 @@
             }
           </ng-template>
         </div>
+
+        <!-- Permission Policy section -->
+        <div class="form-item cds-mt-5">
+          <div
+            class="cds--type-heading-compact-01 cds-mb-2"
+            i18n
+          >
+            Permission policy (optional)
+          </div>
+          <p
+            class="cds--form__helper-text cds-mb-4"
+            i18n
+          >
+            Attach an IAM-compatible JSON policy to specify the S3 resources this role can access
+            and the actions it can take. Roles without permission policies will block all S3 actions
+            until a policy is attached.
+          </p>
+
+          <div formArrayName="permission_policies">
+            @for (policy of permissionPolicies.controls; track policy; let i = $index) {
+              <div
+                [formGroup]="$any(policy)"
+                class="cds-mb-4 policy-item"
+              >
+                <!-- Policy mode toggle -->
+                <div class="form-item cds-mb-3">
+                  <div
+                    class="cds--label"
+                    [id]="'policy-mode-label-' + i"
+                    i18n
+                  >
+                    Policy type
+                  </div>
+                  <div class="cds-mt-2">
+                    <cds-radio-group
+                      [aria-labelledby]="'policy-mode-label-' + i"
+                      orientation="horizontal"
+                      formControlName="policy_mode"
+                      (change)="onRolePolicyModeChange(i, $any($event).value || $event)"
+                    >
+                      <cds-radio
+                        value="predefined"
+                        [checked]="policy.get('policy_mode')?.value === 'predefined'"
+                        i18n
+                      >
+                        Predefined template
+                      </cds-radio>
+                      <cds-radio
+                        value="custom"
+                        [checked]="policy.get('policy_mode')?.value === 'custom'"
+                        i18n
+                      >
+                        Custom inline policy (JSON)
+                      </cds-radio>
+                    </cds-radio-group>
+                  </div>
+                </div>
+
+                <!-- Predefined template select -->
+                <div
+                  class="form-item"
+                  *ngIf="policy.get('policy_mode')?.value === 'predefined'"
+                >
+                  <cds-select
+                    label="Predefined template"
+                    formControlName="selected_template"
+                    [id]="'selected_template_' + i"
+                    (change)="onRoleTemplateSelect(i, $any($event).target.value)"
+                    helperText="Select a ready-to-use policy template."
+                    i18n-label
+                    i18n-helperText
+                  >
+                    <option
+                      value=""
+                      disabled
+                      [selected]="!policy.get('selected_template')?.value"
+                    >
+                      Select a policy template...
+                    </option>
+                    <option
+                      *ngFor="let t of predefinedTemplates"
+                      [value]="t.name"
+                    >
+                      {{ t.name }} — {{ t.description }}
+                    </option>
+                  </cds-select>
+                </div>
+
+                <!-- Policy name (shown in custom mode) -->
+                <div
+                  class="form-item"
+                  *ngIf="policy.get('policy_mode')?.value === 'custom'"
+                >
+                  <cds-text-label
+                    label="Policy name"
+                    [labelInputID]="'policy_name_' + i"
+                    [invalid]="isPolicyFieldInvalid(policy, 'policy_name')"
+                    [invalidText]="policyNameError"
+                  >
+                    Policy name
+                    <input
+                      cdsText
+                      type="text"
+                      [id]="'policy_name_' + i"
+                      name="policy_name"
+                      formControlName="policy_name"
+                      placeholder="S3ReadWritePolicy"
+                      [invalid]="isPolicyFieldInvalid(policy, 'policy_name')"
+                    />
+                  </cds-text-label>
+                  <ng-template #policyNameError>
+                    @if (showPolicyFieldError(policy, 'policy_name', 'required')) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                        >This field is required.</span
+                      >
+                    }
+                  </ng-template>
+                </div>
+
+                <!-- JSON document (shown in custom mode) -->
+                <div
+                  class="form-item"
+                  *ngIf="policy.get('policy_mode')?.value === 'custom'"
+                >
+                  <cds-textarea-label
+                    [labelInputID]="'policy_doc_' + i"
+                    [invalid]="isPolicyFieldInvalid(policy, 'policy_doc')"
+                    [invalidText]="policyDocError"
+                  >
+                    JSON
+                    <textarea
+                      cdsTextArea
+                      [id]="'policy_doc_' + i"
+                      name="policy_doc"
+                      formControlName="policy_doc"
+                      [placeholder]="policyDocPlaceholder"
+                      rows="8"
+                      cols="200"
+                      [invalid]="isPolicyFieldInvalid(policy, 'policy_doc')"
+                    ></textarea>
+                  </cds-textarea-label>
+                  <ng-template #policyDocError>
+                    @if (showPolicyFieldError(policy, 'policy_doc', 'required')) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                        >This field is required.</span
+                      >
+                    }
+                    @if (showPolicyFieldError(policy, 'policy_doc', 'invalidJson')) {
+                      <span
+                        class="invalid-feedback"
+                        i18n
+                        >Must be a valid JSON.</span
+                      >
+                    }
+                  </ng-template>
+                </div>
+
+                <!-- Remove policy action -->
+                <div class="form-item cds-mt-2">
+                  <button
+                    type="button"
+                    cdsButton="danger--ghost"
+                    size="sm"
+                    (click)="removePermissionPolicy(i)"
+                  >
+                    <span i18n>Remove policy</span>
+                    <cd-icon
+                      type="trash"
+                      class="cds-ml-2"
+                    ></cd-icon>
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Add policy button -->
+          <div class="form-item cds-mt-3">
+            <button
+              type="button"
+              cdsButton="tertiary"
+              size="sm"
+              (click)="addPermissionPolicy()"
+            >
+              <span i18n>Add policy</span>
+              <span class="cds-ml-2">+</span>
+            </button>
+          </div>
+        </div>
       }
 
       <!-- Maximum Session Duration (Edit only) -->
@@ -218,9 +368,7 @@
         <div class="form-item">
           <cds-number
             label="Maximum session duration (hours)"
-            cdValidate
-            #maxSessionDuration="cdValidate"
-            [invalid]="maxSessionDuration.isInvalid"
+            [invalid]="isFieldInvalid('max_session_duration')"
             [invalidText]="durationError"
             formControlName="max_session_duration"
             min="1"
@@ -229,21 +377,21 @@
           >
           </cds-number>
           <ng-template #durationError>
-            @if (form.showError('max_session_duration', formDir, 'required')) {
+            @if (showFieldError('max_session_duration', 'required')) {
               <span
                 class="invalid-feedback"
                 i18n
                 >This field is required.</span
               >
             }
-            @if (form.showError('max_session_duration', formDir, 'min')) {
+            @if (showFieldError('max_session_duration', 'min')) {
               <span
                 class="invalid-feedback"
                 i18n
                 >Minimum value is 1 hour.</span
               >
             }
-            @if (form.showError('max_session_duration', formDir, 'max')) {
+            @if (showFieldError('max_session_duration', 'max')) {
               <span
                 class="invalid-feedback"
                 i18n
@@ -254,12 +402,5 @@
         </div>
       }
     </form>
-  </section>
-
-  <cd-form-button-panel
-    (submitActionEvent)="onSubmit()"
-    [form]="form"
-    [submitText]="isEdit ? 'Save' : 'Create'"
-    [modalForm]="true"
-  ></cd-form-button-panel>
-</cds-modal>
+  </cd-tearsheet-step>
+</cd-tearsheet>
