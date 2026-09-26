@@ -56,15 +56,22 @@ int read(const DoutPrefixProvider* dpp, optional_yield y,
          rgw_pubsub_topic& info, RGWChainedCacheImpl<cache_entry>& cache,
          ceph::real_time* pmtime, RGWObjVersionTracker* pobjv)
 {
+  auto expected_version = rgw_expected_version(dpp);
   if (auto e = cache.find(topic_key)) {
-    if (pmtime) {
-      *pmtime = e->mtime;
+    /* check for expected version in chained cache entry */
+    if (expected_version &&
+        !e->objv.read_version.compare(&(*expected_version))) {
+      cache.invalidate(topic_key);
+    } else {
+      if (pmtime) {
+        *pmtime = e->mtime;
+      }
+      if (pobjv) {
+        *pobjv = std::move(e->objv);
+      }
+      info = std::move(e->info);
+      return 0;
     }
-    if (pobjv) {
-      *pobjv = std::move(e->objv);
-    }
-    info = std::move(e->info);
-    return 0;
   }
 
   const rgw_raw_obj obj = get_topic_obj(zone, topic_key);
