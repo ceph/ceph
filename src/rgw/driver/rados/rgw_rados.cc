@@ -5564,6 +5564,12 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   if (ret < 0) {
     goto done_ret;
   }
+  if (write_op.meta.canceled) {
+    // another write of the destination won the race, and the copy is
+    // answered as success. no head names the source's tail through the
+    // references taken above, so drop them
+    goto done_ret;
+  }
 
   return 0;
 
