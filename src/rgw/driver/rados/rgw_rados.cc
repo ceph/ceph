@@ -872,6 +872,8 @@ struct complete_op_data {
   bool log_op;
   uint16_t bilog_op;
   rgw_zone_set zones_trace;
+  // the pending op was gone: re-link the entry instead of completing
+  bool relink{false};
 
   bool stopped{false};
 
@@ -920,6 +922,11 @@ class RGWIndexCompletionManager {
   
   uint32_t next_shard() {
     return cur_shard++ % num_shards;
+  }
+
+  // cls_rgw answers -EINVAL when it cannot find the op's pending entry
+  static bool needs_relink(const complete_op_data *c) {
+    return !c->tag.empty() && (c->op == CLS_RGW_OP_ADD || c->op == CLS_RGW_OP_DEL);
   }
 
 public:
@@ -993,6 +1000,13 @@ void RGWIndexCompletionManager::process()
 
       ldpp_dout(&dpp, 20) << __func__ << "(): handling completion for key=" << c->key << dendl;
 
+      if (c->relink) {
+        std::ignore = store->relink_index_entry(&dpp, c->obj, c->op, c->ver, c->key, c->dir_meta,
+                                                &c->remove_objs, c->log_op, c->bilog_op,
+                                                &c->zones_trace);
+        continue;
+      }
+
       RGWRados::BucketShard bs(store);
       RGWBucketInfo bucket_info;
 
@@ -1023,6 +1037,12 @@ void RGWIndexCompletionManager::process()
 				 "EXITING " << __func__ << ": ret=" << dendl_bitx;
 			       return ret;
                              }, null_yield);
+      if (r == -EINVAL && needs_relink(c)) {
+        std::ignore = store->relink_index_entry(&dpp, c->obj, c->op, c->ver, c->key, c->dir_meta,
+                                                &c->remove_objs, c->log_op, c->bilog_op,
+                                                &c->zones_trace);
+        continue;
+      }
       if (r < 0) {
         ldpp_dout(&dpp, 0) << "ERROR: " << __func__ << "(): bucket index completion failed, obj=" << c->obj << " r=" << r << dendl;
         /* ignoring error, can't do anything about it */
@@ -1115,6 +1135,14 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
   }
 
   int r = rados_aio_get_return_value(cb);
+  if (r == -EINVAL && needs_relink(arg)) {
+    // the pending op is gone, dropped as expired by a listing that may
+    // have read the head from before this write
+    arg->relink = true;
+    add_completion(arg);
+    ldout(arg->manager->ctx(), 5) << __func__ << "(): pending op gone, relinking obj=" << arg->key << dendl;
+    return false;
+  }
   if (r != -ERR_BUSY_RESHARDING) {
     ldout(arg->manager->ctx(), 20) << __func__ << "(): completion " << 
       (r == 0 ? "ok" : "failed with " + to_string(r)) << 
@@ -12172,6 +12200,116 @@ int RGWRados::remove_objs_from_index(const DoutPrefixProvider *dpp,
   return r;
 }
 
+void RGWRados::head_dir_meta(const DoutPrefixProvider *dpp, const rgw_obj& obj,
+                             RGWObjState *astate, rgw_bucket_dir_entry_meta *meta)
+{
+  meta->size = astate->size;
+  meta->accounted_size = astate->accounted_size;
+  meta->mtime = astate->mtime;
+
+  auto iter = astate->attrset.find(RGW_ATTR_ETAG);
+  if (iter != astate->attrset.end()) {
+    meta->etag = rgw_bl_str(iter->second);
+  }
+  iter = astate->attrset.find(RGW_ATTR_CONTENT_TYPE);
+  if (iter != astate->attrset.end()) {
+    meta->content_type = rgw_bl_str(iter->second);
+  }
+  iter = astate->attrset.find(RGW_ATTR_STORAGE_CLASS);
+  if (iter != astate->attrset.end()) {
+    meta->storage_class = rgw_bl_str(iter->second);
+  }
+  ACLOwner owner;
+  iter = astate->attrset.find(RGW_ATTR_ACL);
+  if (iter != astate->attrset.end()) {
+    int r = decode_policy(dpp, iter->second, &owner);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "WARNING: could not decode policy for object: " << obj << dendl;
+    }
+  }
+  meta->owner = to_string(owner.id);
+  meta->owner_display_name = owner.display_name;
+  meta->appendable = astate->attrset.find(RGW_ATTR_APPEND_PART_NUM) != astate->attrset.end();
+}
+
+int RGWRados::relink_index_entry(const DoutPrefixProvider *dpp, rgw_obj& obj,
+                                 RGWModifyOp op, const rgw_bucket_entry_ver& ver,
+                                 const cls_rgw_obj_key& key,
+                                 const rgw_bucket_dir_entry_meta& dir_meta,
+                                 std::list<cls_rgw_obj_key> *remove_objs,
+                                 bool log_op, uint16_t bilog_op,
+                                 rgw_zone_set *zones_trace)
+{
+  BucketShard bs(this);
+  RGWBucketInfo bucket_info;
+  int r = bs.init(obj.bucket, obj, &bucket_info, dpp, null_yield);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to initialize BucketShard, obj="
+                      << obj << " r=" << r << dendl;
+    return r;
+  }
+
+  std::string tag;
+  append_rand_alpha(cct, tag, tag, 32);
+  r = guard_reshard(dpp, &bs, obj, bucket_info,
+                    [&](BucketShard *bs) -> int {
+                      return cls_obj_prepare_op(dpp, *bs, op, tag, obj, null_yield);
+                    }, null_yield);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): prepare failed, obj=" << obj
+                      << " r=" << r << dendl;
+    return r;
+  }
+
+  // the head as it is now decides the entry: if it exists, the entry is
+  // updated from it with its epoch, which the epoch check orders against
+  // any other completion. a delete whose head is still gone completes
+  // with its own epoch; anything else is canceled. remove_objs, such as
+  // a completion's parts, go either way
+  RGWModifyOp complete_op = CLS_RGW_OP_CANCEL;
+  rgw_bucket_entry_ver complete_ver;
+  rgw_bucket_dir_entry_meta meta = dir_meta;
+  RGWObjectCtx octx(this->driver);
+  RGWObjState *astate = nullptr;
+  RGWObjManifest *manifest = nullptr;
+  r = get_obj_state(dpp, &octx, bucket_info, obj, &astate, &manifest, false, null_yield);
+  if (r >= 0 && astate->exists) {
+    librados::IoCtx head_ioctx;
+    r = get_obj_head_ioctx(dpp, bucket_info, obj, &head_ioctx);
+    if (r >= 0) {
+      head_dir_meta(dpp, obj, astate, &meta);
+      complete_op = CLS_RGW_OP_ADD;
+      complete_ver.pool = head_ioctx.get_id();
+      complete_ver.epoch = astate->epoch;
+    }
+  } else if (r >= 0 && op == CLS_RGW_OP_DEL) {
+    complete_op = CLS_RGW_OP_DEL;
+    complete_ver = ver;
+  }
+
+  r = guard_reshard(dpp, &bs, obj, bucket_info,
+                    [&](BucketShard *bs) -> int {
+                      librados::ObjectWriteOperation o;
+                      o.assert_exists();
+                      cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
+                      cls_rgw_bucket_complete_op(o, complete_op, tag, complete_ver, key, meta,
+                                                 remove_objs, log_op, bilog_op, zones_trace);
+                      return bs->bucket_obj.operate(dpp, std::move(o), null_yield);
+                    }, null_yield);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): completion failed, obj=" << obj
+                      << " r=" << r << dendl;
+    return r;
+  }
+  ldpp_dout(dpp, 5) << __func__ << "(): relinked obj=" << obj << " op=" << complete_op << dendl;
+
+  if (log_op) {
+    std::ignore = add_datalog_entry(dpp, svc.datalog_rados, bucket_info,
+                                    obj.get_hash_object(), bs.shard_id, null_yield);
+  }
+  return 0;
+}
+
 int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
                                RGWBucketInfo& bucket_info,
                                const rgw_bucket_entry_ver& index_ver,
@@ -12246,39 +12384,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     return -ENOENT;
   }
 
-  string etag;
-  string content_type;
-  string storage_class;
-  ACLOwner owner;
-  bool appendable = false;
-
-  object.meta.size = astate->size;
-  object.meta.accounted_size = astate->accounted_size;
-  object.meta.mtime = astate->mtime;
-
-  map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_ETAG);
-  if (iter != astate->attrset.end()) {
-    etag = rgw_bl_str(iter->second);
-  }
-  iter = astate->attrset.find(RGW_ATTR_CONTENT_TYPE);
-  if (iter != astate->attrset.end()) {
-    content_type = rgw_bl_str(iter->second);
-  }
-  iter = astate->attrset.find(RGW_ATTR_STORAGE_CLASS);
-  if (iter != astate->attrset.end()) {
-    storage_class = rgw_bl_str(iter->second);
-  }
-  iter = astate->attrset.find(RGW_ATTR_ACL);
-  if (iter != astate->attrset.end()) {
-    r = decode_policy(dpp, iter->second, &owner);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: could not decode policy for object: " << obj << dendl;
-    }
-  }
-  iter = astate->attrset.find(RGW_ATTR_APPEND_PART_NUM);
-  if (iter != astate->attrset.end()) {
-    appendable = true;
-  }
+  head_dir_meta(dpp, obj, astate, &object.meta);
 
   if (manifest) {
     RGWObjManifest::obj_iterator miter;
@@ -12298,13 +12404,6 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     }
   }
 
-  object.meta.etag = etag;
-  object.meta.content_type = content_type;
-  object.meta.storage_class = storage_class;
-  object.meta.owner = to_string(owner.id);
-  object.meta.owner_display_name = owner.display_name;
-  object.meta.appendable = appendable;
-
   // encode suggested updates
 
   list_state.meta.size = object.meta.size;
@@ -12314,10 +12413,10 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   // the head object.
   list_state.meta.category = (manifest && manifest->is_tier_type_s3()) ?
 			     RGWObjCategory::CloudTiered : main_category;
-  list_state.meta.etag = etag;
-  list_state.meta.appendable = appendable;
-  list_state.meta.content_type = content_type;
-  list_state.meta.storage_class = storage_class;
+  list_state.meta.etag = object.meta.etag;
+  list_state.meta.appendable = object.meta.appendable;
+  list_state.meta.content_type = object.meta.content_type;
+  list_state.meta.storage_class = object.meta.storage_class;
 
   librados::IoCtx head_obj_ctx; // initialize to data pool so we can get pool id
   r = get_obj_head_ioctx(dpp, bucket_info, obj, &head_obj_ctx);
@@ -12334,8 +12433,8 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     list_state.tag = astate->obj_tag.c_str();
   }
 
-  list_state.meta.owner = to_string(owner.id);
-  list_state.meta.owner_display_name = owner.display_name;
+  list_state.meta.owner = object.meta.owner;
+  list_state.meta.owner_display_name = object.meta.owner_display_name;
 
   list_state.exists = true;
 
