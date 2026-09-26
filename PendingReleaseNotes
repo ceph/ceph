@@ -16,6 +16,11 @@
   corresponding allow from identity policy to match AWS behavior. The evaluation
   of bucket policy against user or role principals is unchanged and still does
   not require identity policy.
+* RGW: The STS AssumeRole and AssumeRoleWithWebIdentity actions now consult
+  identity policy according to the AWS same-account and cross-account policy
+  evaluation rules. They had previously only consulted the role's trust policy.
+  This means that account users will now require an Allow from identity policy
+  to assume roles in other accounts.
 
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
