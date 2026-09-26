@@ -21,13 +21,13 @@ and determines if it is syntactically correct.
 It does not check to see if the policy makes sense;
 it only checks to see if the file would be accepted
 by the policy parsing logic inside
-:program:`radsogw`.
+:program:`radosgw`.
 
 More than one filename may be specified.  If no files are
 given, the program will read from stdin.
 
 On success, the program will say nothing.  On failure,
-the program will emit a error message indicating the
+the program will emit an error message indicating the
 problem.  The program will terminate with non-zero exit
 status if one or more policies could not be read or parsed.
 
