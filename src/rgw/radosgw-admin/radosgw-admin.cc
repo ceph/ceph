@@ -6313,7 +6313,7 @@ int main(int argc, const char **argv)
 	auto p = zonegroup.placement_targets.find(placement_id);
 	if (p == zonegroup.placement_targets.end()) {
 	  cerr << "failed to find a zonegroup placement target named '" << placement_id << "'" << std::endl;
-	  return -ENOENT;
+	  return ENOENT;
 	}
 	encode_json("placement_targets", p->second, formatter.get());
 	formatter->flush(cout);
@@ -6456,7 +6456,7 @@ int main(int argc, const char **argv)
       if (!zonegroup.placement_targets.count(placement_id)) {
         cerr << "failed to find a zonegroup placement target named '"
              << placement_id << "'" << std::endl;
-        return -ENOENT;
+        return ENOENT;
       }
       zonegroup.default_placement = rule;
     }
@@ -7020,7 +7020,7 @@ int main(int argc, const char **argv)
           if (ret < 0) {
              cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
                  << "' does not support omap" << std::endl;
-             return ret;
+             return -ret;
           }
         } else 
 #endif
@@ -7270,14 +7270,14 @@ int main(int argc, const char **argv)
       cerr << "ERROR: --tenant is not supported for OIDC providers. "
            << "Use --account-id for account-scoped providers, "
            << "or omit for global providers." << std::endl;
-      return {-EINVAL, {}};
+      return {EINVAL, {}};
     }
     if (!account_id.empty()) {
       std::string err_msg;
       if (!rgw::account::validate_id(account_id, &err_msg)) {
         cerr << "ERROR: invalid --account-id '" << account_id << "': "
              << err_msg << std::endl;
-        return {-EINVAL, {}};
+        return {EINVAL, {}};
       }
       return {0, account_id};
     }
@@ -7488,12 +7488,12 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (assume_role_doc.empty()) {
         cerr << "ERROR: assume role policy document is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       try {
         const rgw::IAM::Policy p(
@@ -7502,7 +7502,7 @@ int main(int argc, const char **argv)
 	    "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
         cerr << "failed to parse policy: " << e.what() << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id, path,
                                                                  assume_role_doc, description, max_session_duration);
@@ -7518,7 +7518,7 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: empty role name" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->delete_obj(dpp(), null_yield);
@@ -7532,7 +7532,7 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: empty role name" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->load_by_name(dpp(), null_yield);
@@ -7547,12 +7547,12 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (assume_role_doc.empty()) {
         cerr << "ERROR: assume role policy document is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       try {
@@ -7561,7 +7561,7 @@ int main(int argc, const char **argv)
 				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
         cerr << "failed to parse policy: " << e.what() << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
@@ -7786,17 +7786,17 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (policy_name.empty()) {
         cerr << "policy name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (perm_policy_doc.empty() && infile.empty()) {
         cerr << "permission policy document is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (!infile.empty()) {
@@ -7814,7 +7814,7 @@ int main(int argc, const char **argv)
 				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
         cerr << "failed to parse perm policy: " << e.what() << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
@@ -7835,7 +7835,7 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: Role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->load_by_name(dpp(), null_yield);
@@ -7850,12 +7850,12 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (policy_name.empty()) {
         cerr << "ERROR: policy name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       int ret = role->load_by_name(dpp(), null_yield);
@@ -7874,12 +7874,12 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (policy_name.empty()) {
         cerr << "ERROR: policy name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->load_by_name(dpp(), null_yield);
@@ -7995,7 +7995,7 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
@@ -8006,7 +8006,7 @@ int main(int argc, const char **argv)
       role->update_max_session_duration(max_session_duration);
       if (!role->validate_max_session_duration(dpp())) {
         ret = -EINVAL;
-        return ret;
+        return -ret;
       }
       constexpr bool exclusive = false;
       ret = role->store_info(dpp(), exclusive, null_yield);
@@ -8096,7 +8096,7 @@ int main(int argc, const char **argv)
       if (!rgw::sal::User::empty(user)) {
         if (!user_op.has_existing_user()) {
           cerr << "ERROR: could not find user: " << user << std::endl;
-          return -ENOENT;
+          return ENOENT;
         }
       }
       bucket_op.marker = marker;
@@ -8224,7 +8224,7 @@ int main(int argc, const char **argv)
       rgw_bucket bucket;
       if (!rgw_find_bucket_by_id(dpp(), driver->ctx(), driver, marker, bucket_id, &bucket)) {
         cerr << "failure: no such bucket id" << std::endl;
-        return -ENOENT;
+        return ENOENT;
       }
       bucket_op.set_tenant(bucket.tenant);
       bucket_op.set_bucket_name(bucket.name);
@@ -8516,7 +8516,7 @@ int main(int argc, const char **argv)
     if (ret < 0) {
       cerr << "ERROR: failed to get pending log entries for bucket '" << bucket_name
            << "': " << cpp_strerror(-ret) << std::endl;
-      return ret;
+      return -ret;
     }
 
     formatter->open_array_section("pending_logs");
@@ -8752,7 +8752,7 @@ next:
 
     ret = RGWUsage::clear(dpp(), driver, null_yield);
     if (ret < 0) {
-      return ret;
+      return -ret;
     }
   }
 
@@ -9151,7 +9151,7 @@ next:
       obj->set_instance(p_object_version);
       ret = store->reindex_obj(driver, bucket->get_info(), obj->get_obj(), dpp(), null_yield);
       if (ret < 0) {
-	return ret;
+	return -ret;
       }
       return 0;
     };
@@ -9346,7 +9346,7 @@ next:
 					  yes_i_really_mean_it,
 					  &bucket);
     if (ret < 0) {
-      return ret;
+      return -ret;
     }
 
     auto zone_svc = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone;
@@ -9402,7 +9402,7 @@ next:
 					  yes_i_really_mean_it,
 					  &bucket);
     if (ret < 0) {
-      return ret;
+      return -ret;
     }
 
     int num_source_shards = rgw::current_num_shards(bucket->get_info().layout);
@@ -9441,7 +9441,7 @@ next:
         ret = reshard.list(dpp(), i, marker, max_entries - count, entries, &is_truncated);
         if (ret < 0) {
           cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
-          return ret;
+          return -ret;
         }
         for (const auto& entry : entries) {
           encode_json("entry", entry, formatter.get());
@@ -9572,17 +9572,17 @@ next:
   if (opt_cmd == OPT::BUCKET_SET_MIN_SHARDS) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     if (!num_shards_specified) {
       cerr << "ERROR: --num-shards not specified" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     if (num_shards < 1) {
       cerr << "ERROR: --num-shards must be at least 1" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
@@ -10125,7 +10125,7 @@ next:
 
     auto aiter = bucket->get_attrs().find(RGW_ATTR_LC);
     if (aiter == bucket->get_attrs().end()) {
-      return -ENOENT;
+      return ENOENT;
     }
 
     bufferlist::const_iterator iter{&aiter->second};
@@ -10133,7 +10133,7 @@ next:
       config.decode(iter);
     } catch (const buffer::error& e) {
       cerr << "ERROR: decode life cycle config failed" << std::endl;
-      return -EIO;
+      return EIO;
     }
 
     encode_json("result", config, formatter.get());
@@ -10148,7 +10148,7 @@ next:
 	if (ret < 0) {
 	  cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret)
 	       << std::endl;
-	  return ret;
+	  return -ret;
 	}
     }
 
@@ -10463,7 +10463,7 @@ next:
   if (opt_cmd == OPT::USER_POLICY_LIST_ATTACHED) {
     if (rgw::sal::User::empty(user)) {
       cerr << "ERROR: uid not specified" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     ret = user->load_user(dpp(), null_yield);
     if (ret < 0) {
@@ -10597,22 +10597,22 @@ next:
   if (opt_cmd == OPT::MDLOG_LIST) {
     if (!start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_marker.empty()) {
       std::cerr << "end-marker not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!start_marker.empty()) {
       if (marker.empty()) {
 	marker = start_marker;
       } else {
 	std::cerr << "start-marker and marker not both allowed." << std::endl;
-	return -EINVAL;
+	return EINVAL;
       }
     }
 
@@ -10717,7 +10717,7 @@ next:
       dpp(), static_cast<rgw::sal::RadosStore*>(driver), &http, num_shards);
     if (!mltcr) {
       cerr << "Cluster misconfigured! Unable to trim." << std::endl;
-      return -EIO;
+      return EIO;
     }
     ret = crs.run(dpp(), mltcr);
     if (ret < 0) {
@@ -10729,22 +10729,22 @@ next:
   if (opt_cmd == OPT::MDLOG_TRIM) {
     if (!start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!start_marker.empty()) {
       std::cerr << "start-marker not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_marker.empty()) {
       if (marker.empty()) {
 	marker = end_marker;
       } else {
 	std::cerr << "end-marker and marker not both allowed." << std::endl;
-	return -EINVAL;
+	return EINVAL;
       }
     }
 
@@ -10970,7 +10970,7 @@ next:
         static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_params().tier_config, &sync_module);
     if (ret < 0) {
       ldpp_dout(dpp(), -1) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
-      return ret;
+      return -ret;
     }
 
     RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr, sync_module);
@@ -11253,22 +11253,22 @@ next:
     }
     if (!start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_marker.empty()) {
       std::cerr << "end-marker not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!start_marker.empty()) {
       if (marker.empty()) {
 	marker = start_marker;
       } else {
 	std::cerr << "start-marker and marker not both allowed." << std::endl;
-	return -EINVAL;
+	return EINVAL;
       }
     }
 
@@ -11338,19 +11338,19 @@ next:
   if (opt_cmd == OPT::SYNC_ERROR_TRIM) {
     if (!start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!start_marker.empty()) {
       std::cerr << "start-marker not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_marker.empty()) {
       std::cerr << "end_marker not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (marker.empty()) {
       marker = "9"; // trims everything
@@ -11820,14 +11820,14 @@ next:
 		   &err);
     if (ret < 0) {
       std::cerr << "datalog semaphore list: " << err << std::endl;
-      return ret;
+      return -ret;
     }
   }
 
   if (opt_cmd == OPT::DATALOG_SEMAPHORE_RESET) {
     if (marker.empty()) {
       std::cerr << "Specify the semaphore key with --marker." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     std::string errstr;
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)
@@ -11837,7 +11837,7 @@ next:
 			&errstr);
     if (ret < 0) {
       std::cerr << "datalog semaphore reset: " << errstr << std::endl;
-      return ret;
+      return -ret;
     }
   }
 
@@ -11849,22 +11849,22 @@ next:
       max_entries = 1000;
     if (!start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_marker.empty()) {
       std::cerr << "end-marker not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!start_marker.empty()) {
       if (marker.empty()) {
 	marker = start_marker;
       } else {
 	std::cerr << "start-marker and marker not both allowed." << std::endl;
-	return -EINVAL;
+	return EINVAL;
       }
     }
 
@@ -11963,22 +11963,22 @@ next:
   if (opt_cmd == OPT::DATALOG_TRIM) {
     if (!start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!start_marker.empty()) {
       std::cerr << "start-marker not allowed." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (!end_marker.empty()) {
       if (marker.empty()) {
 	marker = end_marker;
       } else {
 	std::cerr << "end-marker and marker not both allowed." << std::endl;
-	return -EINVAL;
+	return EINVAL;
       }
     }
 
@@ -12007,11 +12007,11 @@ next:
   if (opt_cmd == OPT::DATALOG_TYPE) {
     if (!opt_log_type) {
       std::cerr << "log-type not specified." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     if (opt_log_type == log_type::omap) {
       std::cerr << "omap datalogs are deprecated. You cannot convert to them." << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     auto datalog = static_cast<rgw::sal::RadosStore*>(driver)->svc()->datalog_rados;
     std::string errstr;
@@ -12156,6 +12156,7 @@ next:
         int ret = show_user_ratelimit(user, formatter.get());
         if (ret < 0) {
           std::cerr << "ERROR: failed to get a ratelimit for user id: '" << user->get_id() << "', errno: " << cpp_strerror(-ret) << std::endl;
+	  ret = -ret;
         }
         return ret;
       } else {
@@ -12675,7 +12676,7 @@ next:
     auto iter = find_unique_topic(bucket_topics, notification_id);
     if (!iter) {
       cerr << "ERROR: notification was not found" << std::endl;
-      return -ENOENT;
+      return ENOENT;
     }
     encode_json("notification", *iter, formatter.get());
     formatter->flush(cout);
@@ -12688,7 +12689,7 @@ next:
     }
     if (!driver->is_meta_master()) {
       cerr << "ERROR: Run 'topic rm' from master zone " << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     const std::string& account = !account_id.empty() ? account_id : tenant;
@@ -12708,7 +12709,7 @@ next:
     }
     if (!driver->is_meta_master()) {
       cerr << "ERROR: Run 'notification rm' from master zone " << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
@@ -13089,17 +13090,17 @@ next:
     ret = g_conf().get_val("rgw_gcors_allow_origins", &allow_origins);
     if (ret < 0 || allow_origins.empty()) {
       cerr << "ERROR in OPT::GLOBAL_CORS_GET, no rgw_gcors_allow_origins config found or empty, ret=" << ret << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     ret = g_conf().get_val("rgw_gcors_allow_headers", &allow_headers);
     if (ret < 0 || allow_headers.empty()) {
       cerr << "ERROR in OPT::GLOBAL_CORS_GET, no rgw_gcors_allow_headers config found or empty, ret=" << ret << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     ret = g_conf().get_val("rgw_gcors_allow_methods", &allow_methods);
     if (ret < 0 || allow_methods.empty()) {
       cerr << "ERROR in OPT::GLOBAL_CORS_GET, no rgw_gcors_allow_methods config found or empty, ret=" << ret << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     ret = g_conf().get_val("rgw_gcors_expose_headers", &expose_headers);
     std::optional<RGWCORSRule> optional_global_cors;
@@ -13108,7 +13109,7 @@ next:
       cerr << "ERROR: couldn't create RGWCORSRule from rgw_gcors_allow_origins=" << allow_origins <<
 		  ", rgw_gcors_allow_headers=" << allow_headers << ", rgw_gcors_allow_methods=" << allow_methods <<
 		  ", rgw_gcors_expose_headers=" << expose_headers << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
 
     optional_global_cors->dump(formatter.get());
