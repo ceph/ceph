@@ -66,6 +66,38 @@ int RGWGC::tag_index(const string& tag)
   return rgw_shards_mod(XXH64(tag.c_str(), tag.size(), seed), max_objs);
 }
 
+std::string RGWGC::fifo_oid(int index) const
+{
+  return std::string(fifo_oid_prefix) + "." + std::to_string(index);
+}
+
+int RGWGC::fifo_push(int index, const cls_rgw_gc_obj_info& info, optional_yield y)
+{
+  // stub
+  return 0;
+}
+
+int RGWGC::fifo_list(int index, const std::string& marker, uint32_t max,
+                     bool expired_only, std::list<cls_rgw_gc_obj_info>& entries,
+                     bool* truncated, std::string* next_marker, optional_yield y)
+{
+  // stub
+  entries.clear();
+  if (truncated) {
+    *truncated = false;
+  }
+  if (next_marker) {
+    next_marker->clear();
+  }
+  return 0;
+}
+
+int RGWGC::fifo_trim(int index, const std::string& marker, optional_yield y)
+{
+  // stub
+  return 0;
+}
+
 std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y)
 {
   ldpp_dout(this, 20) << "RGWGC::send_split_chain - tag is: " << tag << dendl;
@@ -120,13 +152,14 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
 
 int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag, optional_yield y)
 {
-  ObjectWriteOperation op;
   cls_rgw_gc_obj_info info;
   info.chain = chain;
   info.tag = tag;
-  gc_log_enqueue2(op, cct->_conf->rgw_gc_obj_min_wait, info);
 
   int i = tag_index(tag);
+
+  ObjectWriteOperation op;
+  gc_log_enqueue2(op, cct->_conf->rgw_gc_obj_min_wait, info);
 
   ldpp_dout(this, 20) << "RGWGC::send_chain - on object name: " << obj_names[i] << "tag is: " << tag << dendl;
 

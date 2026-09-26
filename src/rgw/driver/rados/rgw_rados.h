@@ -361,6 +361,7 @@ class RGWRados
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx(const DoutPrefixProvider *dpp);
   int open_gc_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_gc_pool_neo_ctx(const DoutPrefixProvider *dpp);
   int open_lc_pool_ctx(const DoutPrefixProvider *dpp);
   int open_restore_pool_ctx(const DoutPrefixProvider *dpp);
   int open_restore_pool_neo_ctx(const DoutPrefixProvider *dpp);
@@ -467,6 +468,7 @@ protected:
   RGWChainedCacheImpl_bucket_topics_entry* topic_cache{nullptr};
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
+  neorados::IOContext gc_pool_neo_ctx; // .rgw.gc (fifo)
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
   librados::IoCtx restore_pool_ctx;        // .rgw.restore
   neorados::IOContext restore_pool_neo_ctx;        // .rgw.restore 
@@ -573,6 +575,10 @@ public:
 
   librados::IoCtx* get_restore_pool_ctx() {
     return &restore_pool_ctx;
+  }
+
+  neorados::IOContext* get_gc_pool_neo_ctx() {
+    return &gc_pool_neo_ctx;
   }
 
   neorados::IOContext* get_restore_pool_neo_ctx() {
