@@ -137,6 +137,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
     { ERR_RESTORE_ALREADY_IN_PROGRESS, {409, "RestoreAlreadyInProgress"}},
     { ERR_CONCURRENT_MODIFICATION, {409, "ConcurrentModification"}},
+    { ERR_CONDITIONAL_REQUEST_CONFLICT, {409, "ConditionalRequestConflict"}},
     { EDQUOT, {507, "InsufficientCapacity"}},
     { ENOSPC, {507, "InsufficientCapacity"}},
     { ERR_ACLS_NOT_SUPPORTED, {400, "AccessControlListNotSupported"}},
