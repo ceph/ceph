@@ -7962,7 +7962,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bufferlist bl;
 	if (oi.is_omap()) {
 	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
-	  const auto result = get_pgbackend()->omap_iterate(
+	  const auto iter_result = get_pgbackend()->omap_iterate(
 	    ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
 	    // try to seek as many keys-at-once as possible for the sake of performance.
 	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
@@ -7987,7 +7987,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      ++num;
 	      return ObjectStore::omap_iter_ret_t::NEXT;
 	    });
-	  if (result < 0) {
+	  if (iter_result < 0) {
+	    result = iter_result;
 	    goto fail;
 	  }
 	} // else return empty out_set
