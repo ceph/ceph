@@ -3744,14 +3744,19 @@ done_cancel:
       r = 0;
     }
   } else {
+    // a conditional write that lost the race did not take effect, and
+    // cannot claim its condition held for the head that won: answer a
+    // conflict, for the client to retry, as S3 does
     if (meta.if_match != NULL) {
       // only overwrite existing object
       if (strcmp(meta.if_match, "*") == 0) {
         if (r == -ENOENT) {
           r = -ERR_PRECONDITION_FAILED;
         } else if (r == -ECANCELED) {
-          r = 0;
+          r = -ERR_CONDITIONAL_REQUEST_CONFLICT;
         }
+      } else if (r == -ECANCELED) {
+        r = -ERR_CONDITIONAL_REQUEST_CONFLICT;
       }
     }
 
@@ -3761,7 +3766,7 @@ done_cancel:
         if (r == -EEXIST) {
           r = -ERR_PRECONDITION_FAILED;
         } else if (r == -ENOENT) {
-          r = 0;
+          r = -ERR_CONDITIONAL_REQUEST_CONFLICT;
         }
       }
     }
