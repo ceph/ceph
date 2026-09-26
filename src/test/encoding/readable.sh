@@ -233,14 +233,18 @@ test_object() {
         if ! $CEPH_DENCODER type $type is_deterministic; then
           echo "  sorting json output for nondeterministic object"
           for tmpfile in $tmp1 $tmp2; do
-            sort $tmpfile | sed 's/,$//' > $tmpfile.new
+            # LC_ALL=C: locale collation ties distinct lines, byte order
+            # does not, so only C gives one canonical order to compare.
+            LC_ALL=C sort $tmpfile | sed 's/,$//' > $tmpfile.new
             mv $tmpfile.new $tmpfile
           done
         fi
 
         if ! cmp $tmp1 $tmp2; then
           echo "**** reencode of $vdir/objects/$type/$f resulted in a different dump ****"
-          diff $tmp1 $tmp2
+          # diff always exits non-zero here; || true keeps set -e from
+          # killing this job before it records its result.
+          diff $tmp1 $tmp2 || true
           failed=$(($failed + 1))
         fi
         numtests=$(($numtests + 1))
