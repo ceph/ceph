@@ -20,7 +20,6 @@
 #include <string>
 #include <vector>
 
-#include "include/Context.h"
 #include "health_check.h"
 #include "MonitorDBStore.h"
 #include "PaxosMap.h"
@@ -28,6 +27,7 @@
 
 class Monitor;
 class Paxos;
+class Context;
 
 /**
  * A Paxos Service is an abstraction that easily allows one to obtain an
