@@ -95,6 +95,33 @@ if (WITH_RADOSGW)
     target_compile_options(cls_otp_client PUBLIC
       $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
   endif()
+
+  set(cls_rgw_ratelimit_srcs
+    rgw_ratelimit/cls_rgw_ratelimit.cc
+    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_ratelimit_core.cc)
+  add_library(cls_rgw_ratelimit SHARED ${cls_rgw_ratelimit_srcs})
+  target_include_directories(cls_rgw_ratelimit
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+  set_target_properties(cls_rgw_ratelimit PROPERTIES
+    VERSION "1.0.0"
+    SOVERSION "1"
+    INSTALL_RPATH ""
+    CXX_VISIBILITY_PRESET hidden)
+  install(TARGETS cls_rgw_ratelimit DESTINATION ${cls_dir})
+  if(COMPILER_SUPPORTS_VLA_ERROR)
+    target_compile_options(cls_rgw_ratelimit PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  endif()
+
+  set(cls_rgw_ratelimit_client_srcs
+    rgw_ratelimit/cls_rgw_ratelimit_client.cc)
+  add_library(cls_rgw_ratelimit_client STATIC ${cls_rgw_ratelimit_client_srcs})
+  target_include_directories(cls_rgw_ratelimit_client
+    PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
+  if(COMPILER_SUPPORTS_VLA_ERROR)
+    target_compile_options(cls_rgw_ratelimit_client PUBLIC
+      $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  endif()
 endif (WITH_RADOSGW)
 
 # cls_refcount
