@@ -4,3 +4,4 @@ kubernetes
 urllib3==1.26.15
 pytest<10.0
 pytest-xdist
+pytest-timeout
