@@ -3718,17 +3718,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   return 0;
 
 done_cancel:
-  // if r == -ETIMEDOUT, rgw can't determine whether or not the rados op succeeded
-  // we shouldn't be calling index_op->cancel() in this case
-  // Instead, we should leave that pending entry in the index so than bucket listing can recover with check_disk_state() and cls_rgw_suggest_changes()
-  if (r != -ETIMEDOUT) {
-    int ret = index_op->cancel(rctx.dpp, meta.remove_objs, rctx.y, log_op);
-    if (ret < 0) {
-      ldpp_dout(rctx.dpp, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
-    }
-
-    meta.canceled = true;
-  }
+  const int err = r;
 
   /* we lost in a race. There are a few options:
    * - existing object was rewritten (ECANCELED)
@@ -3770,6 +3760,21 @@ done_cancel:
         }
       }
     }
+  }
+
+  // if err == -ETIMEDOUT, rgw can't determine whether or not the rados op succeeded
+  // we shouldn't be calling index_op->cancel() in this case
+  // Instead, we should leave that pending entry in the index so than bucket listing can recover with check_disk_state() and cls_rgw_suggest_changes()
+  if (err != -ETIMEDOUT) {
+    // a write answered with an error was refused, and its request stays to
+    // be retried, as a refused completion's upload does: so do the entries
+    // it would have replaced, such as the upload's parts
+    int ret = index_op->cancel(rctx.dpp, r < 0 ? nullptr : meta.remove_objs, rctx.y, log_op);
+    if (ret < 0) {
+      ldpp_dout(rctx.dpp, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
+    }
+
+    meta.canceled = true;
   }
 
   return r;
