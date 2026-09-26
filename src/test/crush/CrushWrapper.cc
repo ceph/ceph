@@ -1225,6 +1225,71 @@ TEST_F(CrushWrapperTest, split_id_class) {
   ASSERT_EQ(-1, retrieved_class_id);
 }
 
+TEST_F(CrushWrapperTest, get_rule_device_class) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "root");
+
+  map<string,string> loc;
+  loc["root"] = "default";
+  c.insert_item(cct, 1, 1, "osd.1", loc);
+  c.insert_item(cct, 2, 1, "osd.2", loc);
+  int class_id = c.get_or_create_class_id("ssd");
+  int other_class_id = c.get_or_create_class_id("hdd");
+  c.class_map[1] = class_id;
+  c.class_map[2] = other_class_id;
+
+  map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  ASSERT_EQ(c.populate_classes(old_class_bucket), 0);
+  ASSERT_TRUE(c.name_exists("default~ssd"));
+  ASSERT_TRUE(c.name_exists("default~hdd"));
+
+  // a rule without a class takes from the real root
+  int plain = c.add_simple_rule("plain", "default", "osd", "",
+                                "firstn", pg_pool_t::TYPE_REPLICATED);
+  ASSERT_GE(plain, 0);
+  ASSERT_FALSE(c.get_rule_device_class(plain).has_value());
+
+  // ... while a rule with one takes from that class's shadow root
+  int classed = c.add_simple_rule("classed", "default", "osd", "ssd",
+                                  "firstn", pg_pool_t::TYPE_REPLICATED);
+  ASSERT_GE(classed, 0);
+  auto found = c.get_rule_device_class(classed);
+  ASSERT_TRUE(found.has_value());
+  ASSERT_EQ(class_id, *found);
+
+  // a rule can take more than once, as the stretch rules do, and any one of
+  // those takes carrying a class is enough
+  int real_root = c.get_item_id("default");
+  int ssd_root = c.get_item_id("default~ssd");
+  int hdd_root = c.get_item_id("default~hdd");
+
+  int second_take = c.add_rule(2, 4, pg_pool_t::TYPE_REPLICATED);
+  ASSERT_EQ(2, second_take);
+  c.set_rule_step_take(second_take, 0, real_root);
+  c.set_rule_step_emit(second_take, 1);
+  c.set_rule_step_take(second_take, 2, ssd_root);
+  c.set_rule_step_emit(second_take, 3);
+  auto late = c.get_rule_device_class(second_take);
+  ASSERT_TRUE(late.has_value());
+  ASSERT_EQ(class_id, *late);
+
+  // taking from two classes reports one of them, and is still not class-free
+  int two_classes = c.add_rule(3, 4, pg_pool_t::TYPE_REPLICATED);
+  ASSERT_EQ(3, two_classes);
+  c.set_rule_step_take(two_classes, 0, ssd_root);
+  c.set_rule_step_emit(two_classes, 1);
+  c.set_rule_step_take(two_classes, 2, hdd_root);
+  c.set_rule_step_emit(two_classes, 3);
+  auto either = c.get_rule_device_class(two_classes);
+  ASSERT_TRUE(either.has_value());
+  ASSERT_TRUE(*either == class_id || *either == other_class_id);
+
+  // and a rule that does not exist has no class
+  ASSERT_FALSE(c.get_rule_device_class(123).has_value());
+}
+
 TEST_F(CrushWrapperTest, populate_classes) {
   CrushWrapper c;
   c.create();
