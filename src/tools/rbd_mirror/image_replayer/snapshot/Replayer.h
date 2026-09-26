@@ -336,7 +336,7 @@ private:
   void handle_replay_complete(int r, const std::string& description);
   void handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
                               int r, const std::string& description);
-  void notify_status_updated();
+  void notify_status_updated(bool force=false);
 
   bool is_replay_interrupted();
   bool is_replay_interrupted(std::unique_lock<ceph::mutex>* lock);
