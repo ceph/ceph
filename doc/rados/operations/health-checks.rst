@@ -2387,6 +2387,34 @@ To disable the debug mode, run the following command:
 
    ceph dashboard debug disable
 
+HIGH_DEBUG_LEVEL
+________________
+
+One or more OSDs or Monitors have a debug subsystem whose log level is at or
+above :confval:`high_debug_level_threshold`. High log levels can produce enough
+log output to saturate the log device and slow the daemon down. This alert is
+raised only if :confval:`high_debug_level_threshold` is set to a non-zero value
+(it is ``0``, disabled, by default).
+
+The alert lists the affected daemons and the highest log level found. To see
+which debug settings of a daemon differ from their defaults, run a command of
+the following form and look for ``debug_`` options:
+
+.. prompt:: bash #
+
+   ceph config show <daemon-name>
+
+Unless :confval:`high_debug_level_reset_timeout` is ``0``, the daemon reverts
+the level automatically once that timeout expires, and the alert clears. To
+clear the alert sooner, lower the level by running a command of the following
+form:
+
+.. prompt:: bash #
+
+   ceph tell <daemon-name> config set debug_<subsystem> <level>
+
+For more information, see :ref:`high-debug-level-guard`.
+
 BLAUM_ROTH_W_IS_NOT_PRIME
 _________________________
 
