@@ -2323,7 +2323,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 	  }
         }
         omap_entries.insert(make_pair(key, to_bufferlist(value)));
-	available -= std::min(available, num_new_bytes);
+	available -= std::min<uint64_t>(available, num_new_bytes);
         return ObjectStore::omap_iter_ret_t::NEXT;
       });
     if (result < 0) {
