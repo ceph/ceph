@@ -14,6 +14,7 @@
  */
 
 #include "SessionMap.h"
+#include "InoTable.h"
 #include "Capability.h"
 #include "CDentry.h" // for struct ClientLease
 #include "CInode.h"
@@ -324,6 +325,16 @@ void SessionMap::_load_finish(
 	   << ", " << session_map.size() << " sessions" << dendl;
     projected = committing = committed = version;
     dump();
+
+    // Sync InoTable with loaded sessions. This prevents overlapping prealloc_inos
+    // if the SessionMap was saved ahead of the InoTable via save_if_dirty()
+    //  before a crash.
+    for (auto& [name, session] : session_map) {
+      if (!session->info.prealloc_inos.empty()) {
+        mds->inotable->replay_alloc_ids(session->info.prealloc_inos);
+      }
+    }
+
     finish_contexts(g_ceph_context, waiting_for_load);
   }
 }
@@ -408,7 +419,12 @@ void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
     dirty_sessions.insert(i->first);
   }
   loaded_legacy = true;
-
+  // Sync InoTable with loaded legacy sessions
+  for (auto& [name, session] : session_map) {
+    if (!session->info.prealloc_inos.empty()) {
+      mds->inotable->replay_alloc_ids(session->info.prealloc_inos);
+    }
+  }
   finish_contexts(g_ceph_context, waiting_for_load);
 }
 
