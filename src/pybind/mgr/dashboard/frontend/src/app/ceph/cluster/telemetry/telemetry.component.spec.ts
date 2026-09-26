@@ -9,6 +9,9 @@ import _ from 'lodash';
 import { of as observableOf } from 'rxjs';
 
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { LoadingStatus } from '~/app/shared/forms/cd-form';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TelemetryComponent } from './telemetry.component';
@@ -142,13 +145,17 @@ describe('TelemetryComponent', () => {
   });
 
   describe('previewForm', () => {
+    let notificationService: NotificationService;
+
     beforeEach(() => {
       fixture = TestBed.createComponent(TelemetryComponent);
       component = fixture.componentInstance;
       fixture.detectChanges();
       httpTesting = TestBed.inject(HttpTestingController);
       router = TestBed.inject(Router);
+      notificationService = TestBed.inject(NotificationService);
       spyOn(router, 'navigate');
+      spyOn(notificationService, 'show');
     });
 
     it('should create', () => {
@@ -307,6 +314,10 @@ describe('TelemetryComponent', () => {
       });
       req2.flush({});
       expect(router.url).toBe('/');
+      expect(notificationService.show).toHaveBeenCalledWith(
+        NotificationType.success,
+        'The Telemetry module has been configured and activated successfully.'
+      );
     });
 
     it('should only update config when telemetry is already enabled', () => {
@@ -322,6 +333,10 @@ describe('TelemetryComponent', () => {
       });
       req.flush({});
       expect(router.url).toBe('/');
+      expect(notificationService.show).toHaveBeenCalledWith(
+        NotificationType.success,
+        'Telemetry configuration has been updated successfully.'
+      );
     });
   });
 });
