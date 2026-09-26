@@ -1799,6 +1799,10 @@ class CephadmAgent(DaemonForm):
                 self.loop_interval = int(config['refresh_period'])
                 self.starting_port = int(config['listener_port'])
                 self.host = config['host']
+                # Older agent.json files do not contain this field. Keep the
+                # existing image inference fallback for upgrade compatibility.
+                if 'container_image' in config:
+                    self.ctx.image = config['container_image'] or None
                 use_lsm = config['device_enhanced_scan']
         except Exception as e:
             self.shutdown()

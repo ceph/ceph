@@ -21,11 +21,29 @@ class TestAgent:
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: TLSCredentials(ceph_generated_cert, ceph_generated_key))
+    @patch(
+        "cephadm.services.cephadmservice.CephadmAgent._get_ceph_volume_image",
+        return_value="quay.io/ceph/ceph:test"
+    )
     @patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_deploy_cephadm_agent(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+    def test_deploy_cephadm_agent(self, _run_cephadm, _get_ceph_volume_image, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         agent_spec = ServiceSpec(service_type="agent", placement=PlacementSpec(count=1))
-        agent_config = {"agent.json": "{\"target_ip\": \"::1\", \"target_port\": 7150, \"refresh_period\": 20, \"listener_port\": 4721, \"host\": \"test\", \"device_enhanced_scan\": \"False\"}", "keyring": "[client.agent.test]\nkey = None\n", "root_cert.pem": f"{cephadm_root_ca}", "listener.crt": f"{ceph_generated_cert}", "listener.key": f"{ceph_generated_key}"}
+        agent_config = {
+            "agent.json": (
+                "{\"target_ip\": \"::1\", "
+                "\"target_port\": 7150, "
+                "\"refresh_period\": 20, "
+                "\"listener_port\": 4721, "
+                "\"host\": \"test\", "
+                "\"container_image\": \"quay.io/ceph/ceph:test\", "
+                "\"device_enhanced_scan\": \"False\"}"
+            ),
+            "keyring": "[client.agent.test]\nkey = None\n",
+            "root_cert.pem": f"{cephadm_root_ca}",
+            "listener.crt": f"{ceph_generated_cert}",
+            "listener.key": f"{ceph_generated_key}",
+        }
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, agent_spec):
@@ -57,6 +75,7 @@ class TestAgent:
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+        _get_ceph_volume_image.assert_called_with(cephadm_module)
 
 
 def test_agent_get_dependencies():
@@ -68,10 +87,12 @@ def test_agent_get_dependencies():
     mgr.get_mgr_ip.return_value = '10.0.0.1'
     mgr.cert_mgr.get_root_ca.return_value = 'ROOT-CA'
     mgr.get_module_option.return_value = True
+    mgr.get_container_image.return_value = 'quay.io/ceph/ceph:test'
 
     assert CephadmAgent.get_dependencies(mgr) == sorted([
         '10.0.0.1',
         '7150',
         'ROOT-CA',
         'True',
+        'quay.io/ceph/ceph:test',
     ])
