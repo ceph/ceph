@@ -58,6 +58,7 @@
 #ifndef CEPH_JOURNALER_H
 #define CEPH_JOURNALER_H
 
+#include <atomic>
 #include <list>
 #include <map>
 
@@ -235,6 +236,8 @@ private:
   int64_t pg_pool;
   bool readonly;
   file_layout_t layout;
+  /// Cached layout.period(); lock-free for callers under mds_lock (see get_layout_period).
+  std::atomic<uint64_t> layout_period = {0};
   uint32_t stream_format;
   JournalStream journal_stream;
 
@@ -253,9 +256,9 @@ private:
   void _do_delayed_flush()
   {
     ceph_assert(delay_flush_event != NULL);
-    lock_guard l(lock);
+    unique_lock l(lock);
     delay_flush_event = NULL;
-    _do_flush();
+    _do_flush(l);
   }
 
   // my state
@@ -270,7 +273,7 @@ private:
   int state;
   int error;
 
-  void _write_head(Context *oncommit=NULL);
+  void _write_head(unique_lock& l, Context *oncommit=NULL);
   void _wait_for_flush(Context *onsafe);
   void _trim();
 
@@ -330,8 +333,8 @@ private:
   // when safe through given offset
   std::map<uint64_t, std::list<Context*> > waitfor_safe;
 
-  void _flush(C_OnFinisher *onsafe);
-  void _do_flush(unsigned amount=0);
+  void _flush(unique_lock& l, C_OnFinisher *onsafe);
+  void _do_flush(unique_lock& l, unsigned amount=0);
   void _finish_flush(int r, uint64_t start, ceph::real_time stamp);
   class C_Flush;
   friend class C_Flush;
@@ -357,8 +360,8 @@ private:
   void _finish_read(int r, uint64_t offset, uint64_t length, bufferlist &bl);
   void _finish_retry_read(int r);
   void _assimilate_prefetch();
-  void _issue_read(uint64_t len); // read some more
-  void _prefetch(); // maybe read ahead
+  void _issue_read(unique_lock& l, uint64_t len); // read some more
+  void _prefetch(unique_lock& l); // maybe read ahead
   class C_Read;
   friend class C_Read;
   class C_RetryRead;
@@ -375,9 +378,11 @@ private:
   class C_Trim;
   friend class C_Trim;
 
-  void _issue_prezero();
+  void _issue_prezero(unique_lock& l);
   void _finish_prezero(int r, uint64_t from, uint64_t len);
   friend struct C_Journaler_Prezero;
+  // Unit-test access to lock for deadlock regression (get_layout_period while held).
+  friend class JournalerTestAccess;
 
   // only init_headers when following or first reading off-disk
   void init_headers(Header& h) {
@@ -492,10 +497,10 @@ public:
 
   void trim();
   void trim_tail() {
-    lock_guard l(lock);
+    unique_lock l(lock);
 
     ceph_assert(!readonly);
-    _issue_prezero();
+    _issue_prezero(l);
   }
 
   void set_write_error_handler(Context *c);
@@ -523,6 +528,13 @@ public:
   }
 
   uint64_t get_layout_period() const {
+    // Prefer lock-free cached value. Taking Journaler::lock here while an
+    // MDS timer already holds mds_lock deadlocks if the submit thread is
+    // blocked in Objecter::_throttle_op while holding this lock (prezero/flush).
+    uint64_t p = layout_period.load(std::memory_order_acquire);
+    if (p != 0) {
+      return p;
+    }
     lock_guard l(lock);
     return layout.get_period();
   }
@@ -547,7 +559,7 @@ public:
     return readonly;
   }
   bool is_readable();
-  bool _is_readable();
+  bool _is_readable(unique_lock& l);
   bool try_read_entry(bufferlist& bl);
   uint64_t get_write_pos() const {
     lock_guard l(lock);
@@ -575,6 +587,16 @@ public:
   }
   void check_isreadable();
 };
+
+/** Test-only helper to hold Journaler::lock (non-recursive) while exercising
+ * lock-free getters such as get_layout_period(). */
+class JournalerTestAccess {
+public:
+  static ceph::mutex &lock(Journaler &j) {
+    return j.lock;
+  }
+};
+
 WRITE_CLASS_ENCODER(Journaler::Header)
 
 #endif

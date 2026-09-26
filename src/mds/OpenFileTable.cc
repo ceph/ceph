@@ -346,8 +346,13 @@ void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
   for (auto& [idx, vops] : ops_map) {
     object_t oid = get_object_name(idx);
     for (auto& op : vops) {
-      mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(),
-			    0, gather.new_sub());
+      Context* fin = gather.new_sub();
+      // Objecter may block in _throttle_op; submit on objecter_finisher.
+      mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid,
+                                             oloc, op = std::move(op), snapc,
+                                             fin](int) mutable {
+        objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+      }));
     }
   }
   gather.activate();
@@ -361,6 +366,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
   dout(10) << __func__ << " log_seq " << log_seq << " committing_log_seq:"
           << committing_log_seq << dendl;
 
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
   ceph_assert(num_pending_commit == 0);
   num_pending_commit++;
   ceph_assert(log_seq >= committing_log_seq);
@@ -383,6 +389,9 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     std::set<string> to_remove, journaled_remove;
   };
   std::vector<omap_update_ctl> omap_updates(omap_num_objs);
+  // Journal OSD ops built while mds_lock is held. Submitted only after
+  // anchor_map / dirty_items updates for this commit are finished.
+  std::vector<std::pair<object_t, ObjectOperation>> pending_journal;
 
   using ceph::encode;
   auto journal_func = [&](unsigned idx) {
@@ -419,9 +428,11 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     tmp_map[key].swap(bl);
     op.omap_set(tmp_map);
 
-    object_t oid = get_object_name(idx);
-    mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0,
-			  gather.new_sub());
+    // Do not submit here. commit() is still mutating anchor_map / dirty_items;
+    // dropping mds_lock lets put_ref/get_ref race and trip ceph_assert in
+    // put_ref (DIRTY_NEW with omap_idx already assigned). Queue the op and
+    // submit after local state is consistent.
+    pending_journal.emplace_back(get_object_name(idx), std::move(op));
 
 #ifdef HAVE_STDLIB_MAP_SPLICING
     ctl.journaled_update.merge(ctl.to_update);
@@ -434,6 +445,19 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 #endif
     ctl.to_update.clear();
     ctl.to_remove.clear();
+  };
+
+  auto flush_journal_ops = [&]() {
+    for (auto& [oid, op] : pending_journal) {
+      Context *fin = gather.new_sub();
+      // Objecter may block in _throttle_op; submit on objecter_finisher.
+      mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid,
+                                             oloc, op = std::move(op), snapc,
+                                             fin](int) mutable {
+        objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+      }));
+    }
+    pending_journal.clear();
   };
 
   std::map<unsigned, std::vector<ObjectOperation> > ops_map;
@@ -474,8 +498,14 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     for (auto& [idx, vops] : ops_map) {
       object_t oid = get_object_name(idx);
       for (auto& op : vops) {
-	mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(),
-			      0, gather.new_sub());
+        Context* fin = gather.new_sub();
+        // Objecter may block in _throttle_op; submit on objecter_finisher.
+        mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid,
+                                               oloc, op = std::move(op), snapc,
+                                               fin](int) mutable {
+          objecter->mutate(
+              oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+        }));
       }
     }
     gather.activate();
@@ -626,6 +656,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
       ctl.write_size = 0;
     }
   }
+  flush_journal_ops();
 
   if (journal_state == JOURNAL_START) {
     ceph_assert(gather.has_subs());
