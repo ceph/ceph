@@ -2,7 +2,27 @@ import datetime
 
 import pytest
 
-from ceph.utils import datetime_now, datetime_to_str, str_to_datetime
+from ceph.utils import (datetime_now, datetime_to_str, parse_timedelta,
+                        str_to_datetime)
+
+
+@pytest.mark.parametrize('delta', [
+    '2days', '5seconds', '10minutes', '3hours', '1w2d', '1d2h', '1d\n',
+])
+def test_parse_timedelta_rejects_trailing_characters(delta):
+    assert parse_timedelta(delta) is None
+
+
+@pytest.mark.parametrize('delta, expected', [
+    ('5s', datetime.timedelta(seconds=5)),
+    ('-5s', datetime.timedelta(seconds=-5)),
+    ('10m', datetime.timedelta(minutes=10)),
+    ('3H', datetime.timedelta(hours=3)),
+    ('2d', datetime.timedelta(days=2)),
+    ('1w', datetime.timedelta(weeks=1)),
+])
+def test_parse_timedelta_valid_units(delta, expected):
+    assert parse_timedelta(delta) == expected
 
 
 def test_datetime_to_str_1():

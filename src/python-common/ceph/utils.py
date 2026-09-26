@@ -107,12 +107,12 @@ def parse_timedelta(delta: str) -> Optional[datetime.timedelta]:
     :return: The `datetime.timedelta` object or `None` in case of
         a parsing error.
     """
-    parts = re.match(
+    parts = re.fullmatch(
         r'(?P<seconds>-?\d+)s|'
         r'(?P<minutes>-?\d+)m|'
         r'(?P<hours>-?\d+)h|'
         r'(?P<days>-?\d+)d|'
-        r'(?P<weeks>-?\d+)w$',
+        r'(?P<weeks>-?\d+)w',
         delta,
         re.IGNORECASE,
     )
