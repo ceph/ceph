@@ -1285,19 +1285,31 @@ RandomBlockOolWriter::alloc_write_ool_extents(
     try {
       co_await trans_intr::make_interruptible(
         token_bucket.get(size));
+      // Backpressure on accumulated deferred frees of conflicted OOL writes.
+      co_await trans_intr::make_interruptible(
+        rb_cleaner->wait_for_conflict_drain());
       seastar::lw_shared_ptr<rbm_pending_ool_t> ptr =
           seastar::make_lw_shared<rbm_pending_ool_t>();
       auto& pal = t.get_pre_alloc_list();
       ptr->pending_extents.assign(pal.begin(), pal.end());
       assert(!t.is_conflicted());
       t.set_pending_ool(ptr);
+      // Conflict check, frees and clear_pending_ool() run in the completion
+      // continuation itself: atomic w.r.t. task interleaving and on every exit
+      // path. t outlives the future (the submit fiber awaits this coroutine).
       co_await do_write(t, extents
-      ).finally([this, ptr=ptr] {
+      ).finally([this, ptr=ptr, &t] {
         if (ptr->is_conflicted) {
+          std::size_t freed = 0;
           for (auto &e : ptr->pending_extents) {
             rb_cleaner->mark_space_free(e->get_paddr(), e->get_length());
+            freed += e->get_length();
+          }
+          if (freed > 0) {
+            rb_cleaner->deaccount_conflict_pending_free(freed);
           }
         }
+        t.clear_pending_ool();
       });
     } catch (...) {
       token_bucket.release(size);
@@ -1402,7 +1414,7 @@ RandomBlockOolWriter::do_write(
       trans_stats.num_records += writes.size();
       return alloc_write_ertr::parallel_for_each(writes,
         [](auto& info) {
-        return info.rbm->write(info.offset, info.bp
+        return info.rbm->write(info.offset, std::move(info.bp)
         ).handle_error(
           alloc_write_ertr::pass_further{},
           crimson::ct_error::assert_all(
