@@ -233,8 +233,17 @@ int KernelDevice::open(const string& p)
   r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], 0, 0, POSIX_FADV_RANDOM);
   if (r) {
     r = -r;
-    derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
-    goto out_fail;
+    if (r == -ENODEV || r == -EOPNOTSUPP) {
+      // posix_fadvise() is advisory and tunes an OS page cache that some
+      // backing stores do not have -- FreeBSD returns ENODEV for ZFS zvols.
+      // There is no readahead to disable, so this is a no-op, not a failure.
+      dout(10) << __func__ << " posix_fadvise not supported on this device, "
+               << "ignoring: " << cpp_strerror(r) << dendl;
+      r = 0;
+    } else {
+      derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
+      goto out_fail;
+    }
   }
 
   if (lock_exclusive) {
@@ -734,7 +743,7 @@ void KernelDevice::_aio_thread()
 		path.c_str(),
 		r,
 #if defined(HAVE_POSIXAIO)
-                aio[i]->aio.aiocb.aio_lio_opcode,
+                aio[i]->aio.aio_lio_opcode,
 #else
                 aio[i]->iocb.aio_lio_opcode,
 #endif
@@ -1185,7 +1194,7 @@ int KernelDevice::aio_write(
 
   _aio_log_start(ioc, off, len);
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio && !buffered) {
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
@@ -1500,7 +1509,7 @@ int KernelDevice::aio_read(
 	  << dendl;
 
   int r = 0;
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
@@ -1646,8 +1655,14 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   int r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, POSIX_FADV_DONTNEED);
   if (r) {
     r = -r;
+    if (r == -ENODEV || r == -EOPNOTSUPP) {
+      // No page cache to drop (e.g. a ZFS zvol); nothing to do.
+      dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+               << " posix_fadvise not supported on this device, ignoring" << dendl;
+      return 0;
+    }
     derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
-	 << " error: " << cpp_strerror(r) << dendl;
+         << " error: " << cpp_strerror(r) << dendl;
   }
   return r;
 }
