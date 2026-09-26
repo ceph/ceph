@@ -10,5 +10,6 @@ ceph_test_libcephfs_snapdiff
 ceph_test_libcephfs_vxattr
 ceph_test_libcephfs_perfcounters
 ceph_test_libcephfs_fscrypt
+ceph_test_libcephfs_copyfilerange
 
 exit 0
