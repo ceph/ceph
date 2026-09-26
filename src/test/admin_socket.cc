@@ -26,8 +26,11 @@
 #include <stdint.h>
 #include <string.h>
 #include <string>
+#include <sys/socket.h>
 #include <sys/un.h>
 #include <signal.h>
+#include <unistd.h>
+#include <filesystem>
 
 #include <iostream> // for std::cout
 
@@ -343,7 +346,78 @@ TEST(AdminSocket, bind_and_listen) {
   }
 }
 
-class AdminSocketRaise: public ::testing::Test 
+#ifndef _WIN32
+// Create a bound-but-unlistened unix socket file, i.e. a socket that a process
+// left behind after being killed (connect() to it is refused == dead).
+static void make_dead_socket(const std::string& path)
+{
+  int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+  ASSERT_GE(fd, 0);
+  struct sockaddr_un addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sun_family = AF_UNIX;
+  ASSERT_LT(path.size(), sizeof(addr.sun_path));
+  strncpy(addr.sun_path, path.c_str(), sizeof(addr.sun_path) - 1);
+  ::unlink(path.c_str());
+  ASSERT_EQ(0, ::bind(fd, (struct sockaddr*)&addr, sizeof(addr)));
+  // no listen(): the file persists on close, but connect() is refused
+  ASSERT_EQ(0, ::close(fd));
+}
+
+// AdminSocket::init() sweeps and unlinks admin-socket files left behind by
+// previous, SIGKILLed instances of this same daemon (Redmine #76939), while
+// leaving live instances and other daemons' sockets alone.
+TEST(AdminSocket, UnlinkStaleSiblingSockets) {
+  namespace fs = std::filesystem;
+  const char *tdir = getenv("TMPDIR");
+  const std::string dir = std::string(tdir ? tdir : "/tmp") +
+			  "/asok_sweep_test." + std::to_string(getpid());
+  ASSERT_TRUE(fs::create_directories(dir));
+
+  // Mirror the per-process default admin_socket layout "$cluster-$name.*.asok".
+  const std::string stem = g_ceph_context->_conf->cluster + "-" +
+			   g_ceph_context->_conf->name.to_str();
+  auto sib = [&](const std::string& tag) {
+    return dir + "/" + stem + "." + tag + ".asok";
+  };
+
+  // A stale socket left by a previous instance that was killed with SIGKILL.
+  const std::string stale = sib("1001.11111111");
+  make_dead_socket(stale);
+  ASSERT_TRUE(fs::is_socket(stale));
+
+  // A dead socket belonging to a *different* daemon must be left alone.
+  const std::string other = dir + "/" + g_ceph_context->_conf->cluster +
+			    "-client.other.1002.22222222.asok";
+  make_dead_socket(other);
+
+  // A *live* instance of the same daemon must be left alone.
+  const std::string live = sib("1003.33333333");
+  std::unique_ptr<AdminSocket> liveasok =
+    std::make_unique<AdminSocket>(g_ceph_context);
+  AdminSocketTest livet(liveasok.get());
+  ASSERT_TRUE(livet.init(live));
+
+  // Our own init() runs the sweep and then binds our socket.
+  const std::string ours = sib(std::to_string(getpid()) + ".44444444");
+  std::unique_ptr<AdminSocket> asok =
+    std::make_unique<AdminSocket>(g_ceph_context);
+  AdminSocketTest t(asok.get());
+  ASSERT_TRUE(t.init(ours));
+
+  EXPECT_FALSE(fs::exists(stale));   // dead same-daemon socket swept
+  EXPECT_TRUE(fs::exists(other));    // different daemon untouched
+  EXPECT_TRUE(fs::exists(live));     // live instance preserved
+  EXPECT_TRUE(fs::exists(ours));     // our own socket bound
+
+  ASSERT_TRUE(t.shutdown());
+  ASSERT_TRUE(livet.shutdown());
+  std::error_code ec;
+  fs::remove_all(dir, ec);
+}
+#endif // _WIN32
+
+class AdminSocketRaise: public ::testing::Test
 {
 public:
   struct TestSignal {
