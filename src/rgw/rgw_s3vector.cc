@@ -1536,9 +1536,13 @@ namespace rgw::s3vector {
     decode_vector_bucket_name(vector_bucket_name, vector_bucket_arn, obj);
 
     if (policy.empty()) {
-      throw JSONDecoder::err("policy must be specified and cannot be empty");
+      throw JSONDecoder::err("Invalid JSON policy");
     }
-    // policy TODO: validate JSON
+
+    JSONParser parser;
+    if(!parser.parse(policy.c_str(), policy.length())) {
+      throw JSONDecoder::err("Invalid JSON policy");
+    }
   }
 
   // get vector bucket policy
