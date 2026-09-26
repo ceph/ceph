@@ -1,0 +1,103 @@
+<cd-tearsheet
+  [steps]="steps"
+  [title]="title"
+  [modalHeaderLabel]="modalHeaderLabel"
+  [description]="description"
+  size="md"
+  [isSubmitLoading]="isSubmitLoading"
+  [submitButtonLabel]="isEdit ? 'Update' : 'Attach'"
+  [submitButtonLoadingLabel]="isEdit ? 'Updating' : 'Attaching'"
+  [secondaryButtonLabel]="isEdit ? 'Delete' : null"
+  [secondaryButtonIcon]="isEdit ? icons.trash : null"
+  (submitRequested)="onSubmit()"
+  (secondaryRequested)="deletePolicy()"
+  (closeRequested)="closeModal()"
+>
+  <cd-tearsheet-step>
+    <form
+      name="form"
+      #formDir="ngForm"
+      [formGroup]="form"
+      novalidate
+    >
+      <!-- Policy Name -->
+      <div class="form-item">
+        <cds-text-label
+          label="Policy name"
+          labelInputID="policy_name"
+          [invalid]="policyNameRef.isInvalid"
+          [invalidText]="policyNameError"
+          helperText="Unique name to identify this permission policy (e.g. S3FullAccessPolicy)."
+          i18n-helperText
+        >
+          Policy name
+          <input
+            cdsText
+            cdValidate
+            #policyNameRef="cdValidate"
+            type="text"
+            id="policy_name"
+            name="policy_name"
+            formControlName="policy_name"
+            placeholder="Enter policy name"
+            [readonly]="isEdit"
+            [autofocus]="!isEdit"
+            modal-primary-focus
+            [invalid]="policyNameRef.isInvalid"
+          />
+        </cds-text-label>
+        <ng-template #policyNameError>
+          @if (form.showError('policy_name', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+        </ng-template>
+      </div>
+
+      <!-- Policy Document (JSON) -->
+      <div class="form-item">
+        <cds-textarea-label
+          labelInputID="policy_doc"
+          [invalid]="policyDoc.isInvalid"
+          [invalidText]="policyError"
+          helperText="JSON document defining the permissions policy statement."
+          i18n-helperText
+        >
+          JSON
+          <textarea
+            cdsTextArea
+            cdValidate
+            #policyDoc="cdValidate"
+            id="policy_doc"
+            name="policy_doc"
+            formControlName="policy_doc"
+            placeholder="Provide a valid JSON permission policy."
+            rows="12"
+            cols="200"
+            cdRequiredField="Policy Document"
+            [invalid]="policyDoc.isInvalid"
+          ></textarea>
+        </cds-textarea-label>
+        <ng-template #policyError>
+          @if (form.showError('policy_doc', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (form.showError('policy_doc', formDir, 'invalidJson')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Please enter a valid JSON policy document.</span
+            >
+          }
+        </ng-template>
+      </div>
+    </form>
+  </cd-tearsheet-step>
+</cd-tearsheet>

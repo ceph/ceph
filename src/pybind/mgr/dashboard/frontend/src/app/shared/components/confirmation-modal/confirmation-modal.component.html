@@ -4,8 +4,17 @@
   (overlaySelected)="closeModal()"
 >
   <cds-modal-header (closeSelect)="closeModal()">
+    @if (modalHeaderLabel) {
+      <p
+        cdsModalHeaderLabel
+        class="cds--type-label-01"
+      >
+        {{ modalHeaderLabel }}
+      </p>
+    }
     <h3
       cdsModalHeaderHeading
+      class="cds--type-fluid-heading-03"
       i18n
     >
       {{ titleText }}
@@ -19,7 +28,10 @@
       novalidate
     >
       <ng-container *ngTemplateOutlet="bodyTpl; context: bodyContext"></ng-container>
-      <p *ngIf="description">
+      <p
+        *ngIf="description"
+        class="cds--type-body-01"
+      >
         {{ description }}
       </p>
     </form>

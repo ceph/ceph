@@ -30,6 +30,7 @@ export class ConfirmationModalComponent extends BaseModal implements OnInit, OnD
     @Optional() @Inject('description') public description?: TemplateRef<any>,
 
     // Optional
+    @Optional() @Inject('modalHeaderLabel') public modalHeaderLabel?: string,
     @Optional() @Inject('warning') public warning = false,
     @Optional() @Inject('bodyData') public bodyData?: object,
     @Optional() @Inject('onCancel') public onCancel?: Function,

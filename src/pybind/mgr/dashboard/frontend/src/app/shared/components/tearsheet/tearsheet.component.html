@@ -94,6 +94,25 @@
               </button>
             }
             @if (currentStep === lastStep) {
+              @if (secondaryButtonLabel) {
+                <button
+                  type="button"
+                  cdsButton="secondary"
+                  size="xl"
+                  [disabled]="isSubmitLoading"
+                  (click)="secondaryRequested.emit()"
+                  i18n
+                >
+                  {{ secondaryButtonLabel }}
+                  @if (secondaryButtonIcon) {
+                    <svg
+                      [cdsIcon]="secondaryButtonIcon"
+                      size="16"
+                      class="cds--btn__icon"
+                    ></svg>
+                  }
+                </button>
+              }
               <button
                 type="button"
                 cdsButton="primary"
@@ -273,6 +292,25 @@
             </button>
           }
           @if (currentStep === lastStep) {
+            @if (secondaryButtonLabel) {
+              <button
+                type="button"
+                cdsButton="secondary"
+                size="xl"
+                [disabled]="isSubmitLoading"
+                (click)="secondaryRequested.emit()"
+                i18n
+              >
+                {{ secondaryButtonLabel }}
+                @if (secondaryButtonIcon) {
+                  <svg
+                    [cdsIcon]="secondaryButtonIcon"
+                    size="16"
+                    class="cds--btn__icon"
+                  ></svg>
+                }
+              </button>
+            }
             <button
               type="button"
               cdsButton="primary"
