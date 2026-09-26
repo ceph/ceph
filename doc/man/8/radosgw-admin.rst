@@ -1033,14 +1033,6 @@ Bucket Notifications/PubSub Options
 
    The bucket notifications/pubsub topic name.
 
-.. option:: --subscription
-
-   The pubsub subscription name.
-
-.. option:: --event-id
-
-   The event id in a pubsub subscription.
-
 
 Examples
 ========
