@@ -1,0 +1,14 @@
+# Jerasure plugin with k=4, m=2, cauchy technique
+overrides:
+  ceph:
+    pool-config:
+      ec_pool: true
+      erasure_code_profile:
+        name: jerasure42profile
+        plugin: jerasure
+        k: 4
+        m: 2
+        technique: cauchy
+        crush-failure-domain: host
+        crush-osds-per-failure-domain: 2
+        crush-num-failure-domains: 3
