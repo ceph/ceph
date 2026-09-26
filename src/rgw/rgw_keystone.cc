@@ -118,7 +118,8 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
   TokenEnvelope t;
 
   /* Try cache first before calling Keystone for a new admin token. */
-  if (token_cache.find_admin(t)) {
+  auto once = token_cache.admin_request(t);
+  if (! once) {
     ldpp_dout(dpp, 20) << "found cached admin token" << dendl;
     token = t.token.id;
     token_cached = true;
@@ -126,10 +127,19 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
   }
 
   /* Call Keystone now. */
-  const auto ret = issue_admin_token_request(dpp, config, y, t);
+  const auto [ret, id] = call_once(*once, y, [&] {
+    TokenEnvelope fresh;
+    const int r = issue_admin_token_request(dpp, config, y, fresh);
+    if (r == 0) {
+      token_cache.add_admin(fresh);
+    }
+    // retire the request before returning, so the next miss starts a new
+    // one instead of replaying this result
+    token_cache.admin_request_done();
+    return TokenCache::admin_result{r, fresh.token.id};
+  });
   if (! ret) {
-    token_cache.add_admin(t);
-    token = t.token.id;
+    token = id;
   }
 
   return ret;
@@ -350,13 +360,6 @@ bool TokenCache::find_locked(const std::string& token_id, rgw::keystone::TokenEn
   return true;
 }
 
-bool TokenCache::find_admin(rgw::keystone::TokenEnvelope& token)
-{
-  std::lock_guard l{lock};
-
-  return find_locked(admin_token_id, token, tokens, tokens_lru);
-}
-
 bool TokenCache::find_barbican(rgw::keystone::TokenEnvelope& token)
 {
   std::lock_guard l{lock};
@@ -434,6 +437,25 @@ void TokenCache::invalidate(const DoutPrefixProvider *dpp, const std::string& to
 void TokenCache::invalidate_admin(const DoutPrefixProvider *dpp)
 {
   invalidate(dpp, admin_token_id);
+}
+
+std::shared_ptr<TokenCache::admin_once>
+TokenCache::admin_request(rgw::keystone::TokenEnvelope& token)
+{
+  std::lock_guard l{lock};
+  if (find_locked(admin_token_id, token, tokens, tokens_lru)) {
+    return nullptr;
+  }
+  if (! admin_request_once) {
+    admin_request_once = std::make_shared<admin_once>();
+  }
+  return admin_request_once;
+}
+
+void TokenCache::admin_request_done()
+{
+  std::lock_guard l{lock};
+  admin_request_once.reset();
 }
 
 bool TokenCache::going_down() const
