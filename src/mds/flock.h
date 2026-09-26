@@ -184,10 +184,6 @@ private:
                     std::list<std::multimap<uint64_t, ceph_filelock>::iterator>
                       neighbor_locks);
 
-  //get last lock prior to start position
-  std::multimap<uint64_t, ceph_filelock>::iterator
-  get_lower_bound(uint64_t start,
-                  std::multimap<uint64_t, ceph_filelock>& lock_map);
   //get latest-starting lock that goes over the byte "end"
   std::multimap<uint64_t, ceph_filelock>::iterator
   get_last_before(uint64_t end,
@@ -230,15 +226,6 @@ private:
     return get_overlapping_locks(lock, overlaps, NULL);
   }
 
-  /**
-   * Get a list of all waiting locks that overlap with the given lock's range.
-   * lock: specifies the range to compare with
-   * overlaps: an empty list, to be filled
-   * Returns: true if at least one waiting_lock overlaps
-   */
-  bool get_waiting_overlaps(const ceph_filelock& lock,
-                            std::list<std::multimap<uint64_t,
-                                ceph_filelock>::iterator>& overlaps);
   /*
    * split a list of locks up by whether they're owned by same
    * process as given lock
