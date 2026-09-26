@@ -880,6 +880,14 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
     dout(0) << __func__ << " " << msg << dendl;
     osd->clog->warn() << msg;
 
+    // Unlike PG_STATE_WAIT -- which is bounded by prior_readable_until_ub and
+    // gets its own CheckReadable event from AllReplicasActivated -- LAGGY is
+    // otherwise only ever cleared from PeeringState::proc_lease_ack().  If
+    // lease renewal has stalled no ack will arrive, and nothing else would
+    // re-examine this pg before the next interval change.  Arrange for
+    // recheck_readable() to run again on its own.
+    recovery_state.schedule_laggy_recheck();
+
     publish_stats_to_osd();
   }
   dout(10) << __func__ << " not readable" << dendl;
@@ -929,9 +937,11 @@ void PrimaryLogPG::recheck_readable()
     if (ru == ceph::signedspan::zero()) {
       dout(10) << __func__ << " still laggy (mnow " << mnow
 	       << ", readable_until zero)" << dendl;
+      recovery_state.schedule_laggy_recheck();
     } else if (mnow >= ru) {
       dout(10) << __func__ << " still laggy (mnow " << mnow
 	       << " >= readable_until " << ru << ")" << dendl;
+      recovery_state.schedule_laggy_recheck();
     } else {
       dout(10) << __func__ << " no longer laggy (mnow " << mnow
 	       << " < readable_until " << ru << ")" << dendl;

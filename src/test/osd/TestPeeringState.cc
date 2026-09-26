@@ -857,6 +857,54 @@ protected:
     get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
   }
 
+  // Helper - check readable
+  void test_event_check_readable(int osd)
+  {
+    dout(0) << "= test_event_check_readable =" << dendl;
+    auto evt = std::make_shared<PGPeeringEvent>(
+      osdmap->get_epoch(),
+      osdmap->get_epoch(),
+      PeeringState::CheckReadable());
+
+    get_ps(osd)->handle_event(evt, get_ctx(osd));
+  }
+
+  // Helper - peer to active+clean, then forget what peering sent and
+  // scheduled so a test only sees what it triggers itself
+  void peer_to_active_clean()
+  {
+    test_create_peering_state();
+    test_init();
+    test_event_initialize();
+    test_event_advance_map();
+    test_event_activate_map();
+    dispatch_all();
+    new_epoch(); // for wait_upthru
+    test_event_advance_map();
+    test_event_activate_map();
+    dispatch_all();
+    verify_all_active_clean();
+    for (auto& [osd, listener] : listeners) {
+      listener->messages.clear();
+      listener->renew_lease_scheduled = false;
+      listener->check_readable_queued = false;
+      listener->readable_rechecked = false;
+    }
+  }
+
+  unsigned count_leases_sent(int fromosd)
+  {
+    unsigned n = 0;
+    for (auto& [osd, ls] : get_listener(fromosd)->messages) {
+      for (auto& m : ls) {
+        if (m->get_type() == MSG_OSD_PG_LEASE) {
+          n++;
+        }
+      }
+    }
+    return n;
+  }
+
   // Helper - recovery done
   void test_event_recovery_done(int osd)
   {
@@ -2817,6 +2865,56 @@ TEST_F(PeeringStateTest, RebuildStatsMultiHopHandoverRecordsEachSegment) {
 // ============================================================================
 // Main
 // ============================================================================
+
+// ============================================================================
+// Read leases: a CheckReadable restarts a lease renewal chain that has
+// stalled, and a laggy primary keeps re-checking readability on its own.
+// ============================================================================
+TEST_F(PeeringStateTest, CheckReadableRestartsStalledLeaseRenewal) {
+  dout(0) << "== CheckReadableRestartsStalledLeaseRenewal ==" << dendl;
+  peer_to_active_clean();
+  PeeringState *ps = get_ps(acting_primary);
+  MockPeeringListener *listener = get_listener(acting_primary);
+
+  // the bound sent at activation has expired: no renewal ran since
+  listener->mnow = ps->get_lease().readable_until_ub + std::chrono::seconds(1);
+  test_event_check_readable(acting_primary);
+
+  EXPECT_EQ(count_leases_sent(acting_primary), acting.size() - 1);
+  EXPECT_TRUE(listener->renew_lease_scheduled);
+  EXPECT_TRUE(listener->readable_rechecked);
+}
+
+TEST_F(PeeringStateTest, CheckReadableLeavesHealthyLeaseRenewalAlone) {
+  dout(0) << "== CheckReadableLeavesHealthyLeaseRenewalAlone ==" << dendl;
+  peer_to_active_clean();
+  PeeringState *ps = get_ps(acting_primary);
+  MockPeeringListener *listener = get_listener(acting_primary);
+
+  ASSERT_LT(listener->mnow, ps->get_lease().readable_until_ub);
+  test_event_check_readable(acting_primary);
+
+  // a renewal chain that is merely slow must not get a second one
+  EXPECT_EQ(count_leases_sent(acting_primary), 0u);
+  EXPECT_FALSE(listener->renew_lease_scheduled);
+  EXPECT_TRUE(listener->readable_rechecked);
+}
+
+TEST_F(PeeringStateTest, LaggyRecheckOnlyOnPrimary) {
+  dout(0) << "== LaggyRecheckOnlyOnPrimary ==" << dendl;
+  peer_to_active_clean();
+
+  get_ps(acting_primary)->schedule_laggy_recheck();
+  EXPECT_TRUE(get_listener(acting_primary)->check_readable_queued);
+
+  for (int osd : acting) {
+    if (osd == acting_primary) {
+      continue;
+    }
+    get_ps(osd)->schedule_laggy_recheck();
+    EXPECT_FALSE(get_listener(osd)->check_readable_queued);
+  }
+}
 
 int main(int argc, char **argv)
 {

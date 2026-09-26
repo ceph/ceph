@@ -200,7 +200,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     pg_created_sent = true;
   }
   ceph::signedspan get_mnow() const override {
-    return ceph::signedspan::zero();
+    return mnow;
   }
 
   HeartbeatStampsRef get_hb_stamps(int peer) override {
@@ -489,6 +489,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   }
 
   unsigned target_pg_log_entries = 100;
+  ceph::signedspan mnow = ceph::signedspan::zero();
   bool renew_lease_scheduled = false;
   bool check_readable_queued = false;
   bool readable_rechecked = false;
