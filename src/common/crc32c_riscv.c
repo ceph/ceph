@@ -21,7 +21,7 @@
 
 // Folding constants for CRC32C
 static const uint64_t crc32c_fold_const[4] __attribute__((aligned(16))) = {
-    0x00000000740eef02ULL, 0x000000009e4addf8ULL,
+    0x000000006992cea2ULL, 0x000000000d3b6092ULL,
     0x00000000f20c0dfeULL, 0x00000000493c7d27ULL
 };
 
@@ -30,159 +30,293 @@ static const uint64_t crc32c_fold_const[4] __attribute__((aligned(16))) = {
  * This uses the reflected polynomial version compatible with standard CRC32C.
  */
 uint32_t ceph_crc32c_riscv(uint32_t crc, unsigned char const *buf, unsigned len) {
-    if (unlikely(len < 64) || unlikely(!buf)) {
+    if (unlikely(len < 128) || unlikely(!buf)) {
         // Fall back to table-based implementation for small buffers
         return ceph_crc32c_sctp(crc, buf, len);
     }
 
-    uint32_t result;
     const uint64_t *fold_consts = crc32c_fold_const;
-    uint64_t tmp_buf[2] __attribute__((aligned(16)));
+    const uint8_t *buf_end_loop = buf + (len & ~127);
+    uint64_t mask_data[2] = {1, 0};
+
+    register uintptr_t r_buf    asm("a0") = (uintptr_t)buf;
+    register uintptr_t r_crc    asm("a1") = (uintptr_t)crc;
+    register uintptr_t r_len    asm("a2") = (uintptr_t)len;
+    register uintptr_t r_end    asm("a6") = (uintptr_t)buf_end_loop;
+    register uintptr_t r_consts asm("a5") = (uintptr_t)fold_consts;
+    register uintptr_t r_mask   asm("t0") = (uintptr_t)mask_data;
 
     __asm__ __volatile__(
-        // Initialize CRC
-        "li             t5, 0xffffffff\n\t"
-        "and            %[crc], %[crc], t5\n\t"
-        "li             a3, 0\n\t"
-        "li             t1, 64\n\t"
+        ".option push\n\t"
+        ".option arch, +v, +zvbc, +zbc, +zbb\n\t"
 
-        // Set vector configuration for 128-bit elements
-        "vsetivli       zero, 2, e64, m1, ta, ma\n\t"
+	"addi   sp, sp, -112\n\t"
+        "sd     ra, 104(sp)\n\t"
+        "sd     s0, 96(sp)\n\t"
+        "sd     s1, 88(sp)\n\t"
+        "sd     s2, 80(sp)\n\t"
+        "sd     s3, 72(sp)\n\t"
+        "sd     s4, 64(sp)\n\t"
+        "sd     s5, 56(sp)\n\t"
+        "sd     s6, 48(sp)\n\t"
+        "sd     s7, 40(sp)\n\t"
+        "sd     s8, 32(sp)\n\t"
+        "sd     s9, 24(sp)\n\t"
+        "sd     s10, 16(sp)\n\t"
+        "sd     s11, 8(sp)\n\t"
 
-        // Load first 64 bytes and initialize
-        "mv             a4, %[buf]\n\t"
-        "vle64.v        v0, 0(a4)\n\t"
-        "addi           a4, a4, 16\n\t"
-        "vle64.v        v1, 0(a4)\n\t"
-        "addi           a4, a4, 16\n\t"
-        "vle64.v        v2, 0(a4)\n\t"
-        "addi           a4, a4, 16\n\t"
-        "vle64.v        v3, 0(a4)\n\t"
-        "addi           a4, a4, 16\n\t"
-        "andi           a3, %[len], ~63\n\t"
-        "addi           t0, a3, -64\n\t"
+        "sd     a5, 0(sp)\n\t"
+        "slli   a1, a1, 32\n\t"
+        "srli   a1, a1, 32\n\t"
+        "li     a3, 0\n\t"
+        "li     t1, 128\n\t"
+        "vsetivli zero, 2, e64, m1, ta, ma\n\t"
 
-        // XOR initial CRC into first vector
-        "vmv.s.x        v4, zero\n\t"
-        "vmv.s.x        v5, %[crc]\n\t"
-        "vslideup.vi    v5, v4, 1\n\t"
-        "vxor.vv        v0, v0, v5\n\t"
-        "vmv.s.x        v8, zero\n\t"
+        "vle64.v v0, (t0)\n\t"
 
-        // Load folding constant
-        "add            a5, a4, t0\n\t"
-        "mv             t4, %[consts]\n\t"
-        "vle64.v        v5, 0(t4)\n\t"
+        "addi   t0, a0, 64\n\t"
+        "addi   t1, a0, 80\n\t"
+        "addi   t2, a0, 96\n\t"
+        "addi   t3, a0, 112\n\t"
 
-        // Check if we need main loop
-        "addi           t0, %[len], -64\n\t"
-        "bltu           t0, t1, 2f\n\t"
+        "ld     s0, 0(a0)\n\t"
+        "ld     s1, 8(a0)\n\t"
+        "ld     s2, 16(a0)\n\t"
+        "ld     s3, 24(a0)\n\t"
+        "ld     s4, 32(a0)\n\t"
+        "ld     s5, 40(a0)\n\t"
+        "ld     s6, 48(a0)\n\t"
+        "ld     s7, 56(a0)\n\t"
 
-        // Main loop - process 64 bytes at a time
+        "vle64.v v1, (t0)\n\t"
+        "vle64.v v2, (t1)\n\t"
+        "vle64.v v3, (t2)\n\t"
+        "vle64.v v4, (t3)\n\t"
+
+        "addi   a0, a0, 128\n\t"
+        "andi   a3, a2, ~127\n\t"
+        "addi   t0, a3, -128\n\t"
+        "sub    a2, a2, a3\n\t"
+        "xor    s0, s0, a1\n\t"
+
+        "ld     a3, 0(a5)\n\t"
+        "ld     a4, 8(a5)\n\t"
+        "vle64.v v5, 0(a5)\n\t"
+
+        "beq    a0, a6, 2f\n\t"
+
+        ".align 3\n\t"
         "1:\n\t"
-        "vle64.v        v7, 0(a4)\n\t"
-        "vclmul.vv      v4, v0, v5\n\t"
-        "vclmulh.vv     v0, v0, v5\n\t"
-        "vredxor.vs     v0, v0, v8\n\t"
-        "vredxor.vs     v4, v4, v8\n\t"
-        "vslideup.vi    v4, v0, 1\n\t"
-        "vxor.vv        v0, v4, v7\n\t"
+        "ld     a5, 0(a0)\n\t"
+        "clmulh t0, a3, s0\n\t"
+        "clmulh t2, a3, s2\n\t"
+        "ld     ra, 8(a0)\n\t"
+        "clmulh t4, a3, s4\n\t"
+        "clmulh t6, a3, s6\n\t"
+        "ld     a1, 16(a0)\n\t"
+        "clmul  t1, a4, s1\n\t"
+        "clmul  t3, a4, s3\n\t"
+        "ld     a2, 24(a0)\n\t"
+        "clmul  t5, a4, s5\n\t"
+        "clmul  a7, a4, s7\n\t"
+        "ld     s8, 32(a0)\n\t"
+        "clmul  s0, a3, s0\n\t"
+        "clmul  s2, a3, s2\n\t"
+        "ld     s9, 40(a0)\n\t"
+        "clmul  s4, a3, s4\n\t"
+        "clmul  s6, a3, s6\n\t"
+        "ld     s10, 48(a0)\n\t"
+        "clmulh s1, a4, s1\n\t"
+        "clmulh s3, a4, s3\n\t"
+        "ld     s11, 56(a0)\n\t"
+        "clmulh s5, a4, s5\n\t"
+        "clmulh s7, a4, s7\n\t"
 
-        "addi           a4, a4, 16\n\t"
-        "vle64.v        v7, 0(a4)\n\t"
-        "vclmul.vv      v4, v1, v5\n\t"
-        "vclmulh.vv     v1, v1, v5\n\t"
-        "vredxor.vs     v1, v1, v8\n\t"
-        "vredxor.vs     v4, v4, v8\n\t"
-        "vslideup.vi    v4, v1, 1\n\t"
-        "vxor.vv        v1, v4, v7\n\t"
+        "addi   a0, a0, 64\n\t"
+        "vle64.v v10, (a0)\n\t"
+        "addi   a0, a0, 16\n\t"
+        "vclmul.vv v6, v1, v5\n\t"
+        "vclmulh.vv v1, v1, v5\n\t"
+        "vle64.v v11, (a0)\n\t"
+        "addi   a0, a0, 16\n\t"
+        "vclmul.vv v7, v2, v5\n\t"
+        "vclmulh.vv v2, v2, v5\n\t"
+        "vle64.v v12, (a0)\n\t"
+        "addi   a0, a0, 16\n\t"
+        "vclmul.vv v8, v3, v5\n\t"
+        "vclmulh.vv v3, v3, v5\n\t"
+        "vle64.v v13, (a0)\n\t"
+        "addi   a0, a0, 16\n\t"
+        "vclmul.vv v9, v4, v5\n\t"
+        "vclmulh.vv v4, v4, v5\n\t"
 
-        "addi           a4, a4, 16\n\t"
-        "vle64.v        v7, 0(a4)\n\t"
-        "vclmul.vv      v4, v2, v5\n\t"
-        "vclmulh.vv     v2, v2, v5\n\t"
-        "vredxor.vs     v2, v2, v8\n\t"
-        "vredxor.vs     v4, v4, v8\n\t"
-        "vslideup.vi    v4, v2, 1\n\t"
-        "vxor.vv        v2, v4, v7\n\t"
+        "vmv.v.v v14, v6\n\t"
+        "vmv.v.v v15, v7\n\t"
+        "vmv.v.v v16, v8\n\t"
+        "vmv.v.v v17, v9\n\t"
 
-        "addi           a4, a4, 16\n\t"
-        "vle64.v        v7, 0(a4)\n\t"
-        "vclmul.vv      v4, v3, v5\n\t"
-        "vclmulh.vv     v3, v3, v5\n\t"
-        "vredxor.vs     v3, v3, v8\n\t"
-        "vredxor.vs     v4, v4, v8\n\t"
-        "vslideup.vi    v4, v3, 1\n\t"
-        "vxor.vv        v3, v4, v7\n\t"
+        "vslideup.vi v6, v1, 1\n\t"
+        "vslideup.vi v7, v2, 1\n\t"
+        "vslideup.vi v8, v3, 1\n\t"
+        "vslideup.vi v9, v4, 1\n\t"
 
-        "addi           a4, a4, 16\n\t"
-        "bne            a4, a5, 1b\n\t"
+        "vsetivli zero, 2, e64, m1, ta, mu\n\t"
+        "vslidedown.vi v1, v14, 1, v0.t\n\t"
+        "vslidedown.vi v2, v15, 1, v0.t\n\t"
+        "vslidedown.vi v3, v16, 1, v0.t\n\t"
+        "vslidedown.vi v4, v17, 1, v0.t\n\t"
+        "vsetivli zero, 2, e64, m1, ta, ma\n\t"
 
-        // Fold 512 bits to 128 bits
+        "xor    t1, t1, s0\n\t"
+        "xor    t3, t3, s2\n\t"
+        "xor    t5, t5, s4\n\t"
+        "xor    a7, a7, s6\n\t"
+        "xor    t0, t0, s1\n\t"
+        "xor    t2, t2, s3\n\t"
+        "xor    t4, t4, s5\n\t"
+        "xor    t6, t6, s7\n\t"
+
+        "xor    s0, t1, a5\n\t"
+        "xor    s2, t3, a1\n\t"
+        "xor    s4, t5, s8\n\t"
+        "xor    s6, a7, s10\n\t"
+        "xor    s1, t0, ra\n\t"
+        "xor    s3, t2, a2\n\t"
+        "xor    s5, t4, s9\n\t"
+        "xor    s7, t6, s11\n\t"
+
+        "vxor.vv v1, v1, v6\n\t"
+        "vxor.vv v2, v2, v7\n\t"
+        "vxor.vv v3, v3, v8\n\t"
+        "vxor.vv v4, v4, v9\n\t"
+        "vxor.vv v1, v1, v10\n\t"
+        "vxor.vv v2, v2, v11\n\t"
+        "vxor.vv v3, v3, v12\n\t"
+        "vxor.vv v4, v4, v13\n\t"
+
+        "bne    a0, a6, 1b\n\t"
+
+        // Folding 1024b -> 128b
         "2:\n\t"
-        "addi           t4, t4, 16\n\t"
-        "vle64.v        v5, 0(t4)\n\t"
-        "vclmul.vv      v6, v0, v5\n\t"
-        "vclmulh.vv     v7, v0, v5\n\t"
-        "vredxor.vs     v6, v6, v8\n\t"
-        "vredxor.vs     v7, v7, v8\n\t"
-        "vslideup.vi    v6, v7, 1\n\t"
-        "vxor.vv        v0, v6, v1\n\t"
+        "ld     a5, 0(sp)\n\t"
+        "ld     a3, 16(a5)\n\t"
+        "ld     a4, 24(a5)\n\t"
+        "mv     t6, sp\n\t"
 
-        "vclmul.vv      v6, v0, v5\n\t"
-        "vclmulh.vv     v7, v0, v5\n\t"
-        "vredxor.vs     v6, v6, v8\n\t"
-        "vredxor.vs     v7, v7, v8\n\t"
-        "vslideup.vi    v6, v7, 1\n\t"
-        "vxor.vv        v0, v6, v2\n\t"
+        "addi   sp, sp, -16\n\t"
+        "vse64.v v4, 0(sp)\n\t"
+        "addi   sp, sp, -16\n\t"
+        "vse64.v v3, 0(sp)\n\t"
+        "addi   sp, sp, -16\n\t"
+        "vse64.v v2, 0(sp)\n\t"
+        "addi   sp, sp, -16\n\t"
+        "vse64.v v1, 0(sp)\n\t"
 
-        "vclmul.vv      v6, v0, v5\n\t"
-        "vclmulh.vv     v7, v0, v5\n\t"
-        "vredxor.vs     v6, v6, v8\n\t"
-        "vredxor.vs     v7, v7, v8\n\t"
-        "vslideup.vi    v6, v7, 1\n\t"
-        "vxor.vv        v0, v6, v3\n\t"
+        "clmul  t0, a3, s0\n\t"
+        "clmulh t1, a3, s0\n\t"
+        "clmul  t2, a4, s1\n\t"
+        "clmulh t3, a4, s1\n\t"
+        "xor    s0, s2, t0\n\t"
+        "xor    s0, s0, t2\n\t"
+        "xor    s1, s3, t1\n\t"
+        "xor    s1, s1, t3\n\t"
 
-        // Extract 128-bit result from vector register
-        "vse64.v        v0, (%[tmp_ptr])\n\t"
-        "ld             t0, 0(%[tmp_ptr])\n\t"
-        "ld             t1, 8(%[tmp_ptr])\n\t"
+        "clmul  t0, a3, s0\n\t"
+        "clmulh t1, a3, s0\n\t"
+        "clmul  t2, a4, s1\n\t"
+        "clmulh t3, a4, s1\n\t"
+        "xor    s0, s4, t0\n\t"
+        "xor    s0, s0, t2\n\t"
+        "xor    s1, s5, t1\n\t"
+        "xor    s1, s1, t3\n\t"
 
-        // Barrett reduction
-        "li             t2, %[const0]\n\t"
-        "and            t2, t2, t5\n\t"
-        "li             t3, %[const1]\n\t"
+        "clmul  t4, a3, s0\n\t"
+        "clmulh t5, a3, s0\n\t"
+        "clmul  t2, a4, s1\n\t"
+        "clmulh t3, a4, s1\n\t"
+        "xor    s0, s6, t4\n\t"
+        "xor    t0, s0, t2\n\t"
+        "xor    s1, s7, t5\n\t"
+        "xor    t1, s1, t3\n\t"
 
-        "clmul          t4, t0, t3\n\t"
-        "clmulh         t3, t0, t3\n\t"
-        "xor            t1, t1, t4\n\t"
-        "and            t4, t1, t5\n\t"
-        "srli           t1, t1, 32\n\t"
-        "clmul          t0, t4, t2\n\t"
-        "slli           t3, t3, 32\n\t"
-        "xor            t3, t3, t1\n\t"
-        "xor            t3, t3, t0\n\t"
+        ".align 3\n\t"
+        "3:\n\t"
+        "clmul  t4, a3, t0\n\t"
+        "clmulh t5, a3, t0\n\t"
+        "clmul  t2, a4, t1\n\t"
+        "clmulh t3, a4, t1\n\t"
+        "ld     s0, 0(sp)\n\t"
+        "ld     s1, 8(sp)\n\t"
+        "addi   sp, sp, 16\n\t"
+        "xor    t0, s0, t4\n\t"
+        "xor    t0, t0, t2\n\t"
+        "xor    t1, s1, t5\n\t"
+        "xor    t1, t1, t3\n\t"
 
-        // Final Barrett reduction
-        "and            t4, t3, t5\n\t"
-        "li             t2, %[quo]\n\t"
-        "li             t1, %[poly]\n\t"
-        "clmul          t4, t4, t2\n\t"
-        "and            t4, t4, t5\n\t"
-        "clmul          t4, t4, t1\n\t"
-        "xor            t4, t3, t4\n\t"
-        "srai           %[result], t4, 32\n\t"
-        "and            %[result], %[result], t5\n\t"
+        "bne    sp, t6, 3b\n\t"
 
-        : [result] "=r" (result),[crc] "+r" (crc)
-        : [buf] "r" (buf), [len] "r" (len), [consts] "r" (fold_consts),
-          [const0] "i" (CRC32C_CONST_0), [const1] "i" (CRC32C_CONST_1),
-          [quo] "i" (CRC32C_CONST_QUO), [poly] "i" (CRC32C_CONST_POLY),
-          [tmp_ptr] "r" (tmp_buf)
-        : "a3", "a4", "a5", "t0", "t1", "t2", "t3", "t4", "t5", "v0", "v1", "v2", "v3",
-          "v4", "v5", "v6", "v7", "v8", "memory"
+	"ld     ra, 104(sp)\n\t"
+        "ld     s0, 96(sp)\n\t"
+        "ld     s1, 88(sp)\n\t"
+        "ld     s2, 80(sp)\n\t"
+        "ld     s3, 72(sp)\n\t"
+        "ld     s4, 64(sp)\n\t"
+        "ld     s5, 56(sp)\n\t"
+        "ld     s6, 48(sp)\n\t"
+        "ld     s7, 40(sp)\n\t"
+        "ld     s8, 32(sp)\n\t"
+        "ld     s9, 24(sp)\n\t"
+        "ld     s10, 16(sp)\n\t"
+        "ld     s11, 8(sp)\n\t"
+	"addi   sp, sp, 112\n\t"
+
+        // 128bit -> 64bit Folding & Barrett Reduction
+        "mv     t2, %[const_low]\n\t"
+        "mv     t3, %[const_high]\n\t"
+        "li     t6, 0xffffffff\n\t"
+
+        "clmul  t4, t0, t3\n\t"
+        "clmulh t3, t0, t3\n\t"
+        "xor    t1, t1, t4\n\t"
+        "slli   t4, t1, 32\n\t"
+        "srli   t4, t4, 32\n\t"
+        "srli   t1, t1, 32\n\t"
+        "clmul  t0, t4, t2\n\t"
+        "slli   t3, t3, 32\n\t"
+        "xor    t3, t3, t1\n\t"
+        "xor    t3, t3, t0\n\t"
+
+        "and    t4, t3, t6\n\t"
+        "mv     t2, %[const_quo]\n\t"
+        "mv     t1, %[const_poly]\n\t"
+
+        "clmul  t4, t4, t2\n\t"
+        "and    t4, t4, t6\n\t"
+        "clmul  t4, t4, t1\n\t"
+        "xor    t4, t3, t4\n\t"
+        "srli   a1, t4, 32\n\t"
+
+
+        "not    a1, a1\n\t"
+        "sext.w a1, a1\n\t"
+        "xori   a1, a1, -1\n\t"
+        ".option pop\n\t"
+
+        : "+r" (r_buf), "+r" (r_crc), "+r" (r_len), "+r" (r_consts), "+r" (r_mask)
+        : "r" (r_end),
+          [const_low] "r" ((uint64_t)CRC32C_CONST_0),
+          [const_high] "r" ((uint64_t)CRC32C_CONST_1),
+          [const_quo] "r" ((uint64_t)CRC32C_CONST_QUO),
+          [const_poly] "r" ((uint64_t)CRC32C_CONST_POLY)
+        : "t1", "t2", "t3", "t4", "t5", "t6",
+          "a3", "a4", "a7",
+          "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9",
+          "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"
     );
-    size_t tail_len = len % 64;
+
+    uint32_t result = (uint32_t)r_crc;
+
+    size_t tail_len = len & 127;
     if (tail_len > 0) {
         result = ceph_crc32c_sctp(result, buf + len - tail_len, tail_len);
     }
