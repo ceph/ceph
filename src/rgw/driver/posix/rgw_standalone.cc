@@ -22,11 +22,6 @@ rgw::sal::Driver* newRadosStore(void* io_context, CephContext* cct)
   return NULL;
 }
 
-rgw::sal::Driver* newMotrStore(CephContext *cct)
-{
-  return NULL;
-}
-
 rgw::sal::Driver* newDaosStore(CephContext *cct)
 {
   return NULL;

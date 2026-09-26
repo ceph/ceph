@@ -295,11 +295,8 @@ list(APPEND librgw_dbstore_srcs
   driver/dbstore/sqlite/sqliteDB.h
   driver/dbstore/sqlite/sqliteDB.cc
 )
-list(APPEND librgw_motr_srcs
-  driver/motr/rgw_sal_motr.cc
-)
 list(APPEND librgw_daos_srcs
-  driver/motr/rgw_sal_daos.cc
+  driver/daos/rgw_sal_daos.cc
 )
 list(APPEND librgw_posix_srcs
   driver/posix/rgw_sal_posix.cc
@@ -324,9 +321,6 @@ if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_STANDALONE)
   list(APPEND librgw_driver_standalone_srcs ${librgw_dbstore_srcs})
   list(APPEND rgw_common_libs sqlite3)
 set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
-endif()
-if(WITH_RADOSGW_MOTR)
-  list(APPEND librgw_driver_srcs ${librgw_motr_srcs})
 endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_driver_srcs ${librgw_daos_srcs})
@@ -464,11 +458,6 @@ if(WITH_RADOSGW_RADOS)
   )
 endif()
 
-if(WITH_RADOSGW_MOTR)
-  find_package(motr REQUIRED)
-  list(APPEND rgw_libs motr::motr)
-endif()
-
 if(WITH_RADOSGW_DAOS)
   find_package(DAOS REQUIRED)
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG ")
@@ -529,7 +518,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS"
     PUBLIC "-UWITH_RADOSGW_AMQP_ENDPOINT")
 
@@ -822,7 +810,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS")
 
   target_include_directories(rgw_a_standalone
@@ -950,7 +937,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS")
 
   target_include_directories(rgw-standalone
@@ -1030,7 +1016,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS")
 
   install(TARGETS rgw-standalone-admin DESTINATION bin)
