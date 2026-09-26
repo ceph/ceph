@@ -17,23 +17,22 @@
     </div>
 
     <!-- Id -->
-    <div
-      class="form-item"
-      *ngIf="editing"
-    >
-      <cds-text-label
-        for="id"
-        i18n
-        >Id
-        <input
-          cdsText
-          id="id"
-          name="id"
-          formControlName="id"
-          readonly
-        />
-      </cds-text-label>
-    </div>
+    @if (editing) {
+      <div class="form-item">
+        <cds-text-label
+          for="id"
+          i18n
+          >Id
+          <input
+            cdsText
+            id="id"
+            name="id"
+            formControlName="id"
+            readonly
+          />
+        </cds-text-label>
+      </div>
+    }
 
     <!-- Name -->
     <div class="form-item">
@@ -57,55 +56,63 @@
         />
       </cds-text-label>
       <ng-template #nameError>
-        <span
-          class="invalid-feedback"
-          *ngIf="bucketForm.showError('bid', frm, 'required')"
-          i18n
-          >This field is required.</span
-        >
-        <span
-          class="invalid-feedback"
-          *ngIf="bucketForm.showError('bid', frm, 'bucketNameInvalid')"
-          i18n
-          >Bucket names can only contain lowercase letters, numbers, periods and hyphens.</span
-        >
-        <span
-          class="invalid-feedback"
-          *ngIf="bucketForm.showError('bid', frm, 'bucketNameNotAllowed')"
-          i18n
-          >The chosen name is already in use.</span
-        >
-        <span
-          class="invalid-feedback"
-          *ngIf="bucketForm.showError('bid', frm, 'containsUpperCase')"
-          i18n
-          >Bucket names must not contain uppercase characters or underscores.</span
-        >
-        <span
-          class="invalid-feedback"
-          *ngIf="bucketForm.showError('bid', frm, 'lowerCaseOrNumber')"
-          i18n
-          >Each label must start and end with a lowercase letter or a number.</span
-        >
-        <span
-          class="invalid-feedback"
-          *ngIf="bucketForm.showError('bid', frm, 'ipAddress')"
-          i18n
-          >Bucket names cannot be formatted as IP address.</span
-        >
-        <span
-          class="invalid-feedback"
-          *ngIf="bucketForm.showError('bid', frm, 'onlyLowerCaseAndNumbers')"
-          i18n
-          >Bucket labels cannot be empty and can only contain lowercase letters, numbers and
-          hyphens.</span
-        >
-        <span
-          class="invalid-feedback"
-          *ngIf="bucketForm.showError('bid', frm, 'shouldBeInRange')"
-          i18n
-          >Bucket names must be 3 to 63 characters long.</span
-        >
+        @if (bucketForm.showError('bid', frm, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >This field is required.</span
+          >
+        }
+        @if (bucketForm.showError('bid', frm, 'bucketNameInvalid')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >Bucket names can only contain lowercase letters, numbers, periods and hyphens.</span
+          >
+        }
+        @if (bucketForm.showError('bid', frm, 'bucketNameNotAllowed')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >The chosen name is already in use.</span
+          >
+        }
+        @if (bucketForm.showError('bid', frm, 'containsUpperCase')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >Bucket names must not contain uppercase characters or underscores.</span
+          >
+        }
+        @if (bucketForm.showError('bid', frm, 'lowerCaseOrNumber')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >Each label must start and end with a lowercase letter or a number.</span
+          >
+        }
+        @if (bucketForm.showError('bid', frm, 'ipAddress')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >Bucket names cannot be formatted as IP address.</span
+          >
+        }
+        @if (bucketForm.showError('bid', frm, 'onlyLowerCaseAndNumbers')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >Bucket labels cannot be empty and can only contain lowercase letters, numbers and
+            hyphens.</span
+          >
+        }
+        @if (bucketForm.showError('bid', frm, 'shouldBeInRange')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >Bucket names must be 3 to 63 characters long.</span
+          >
+        }
       </ng-template>
     </div>
 
@@ -134,41 +141,36 @@
           cdRequiredField="Account user"
           i18n
           >Account user
-          <option
-            *ngIf="accountusers === null"
-            [ngValue]="null"
-          >
-            Loading...
-          </option>
-          <option
-            *ngIf="accountusers !== null"
-            value=""
-          >
-            -- Select a user --
-          </option>
-          <option
-            *ngFor="let user of accountUsers"
-            [value]="user.uid"
-          >
-            {{ user.uid }}
-          </option>
+          @if (accountusers === null) {
+            <option [ngValue]="null">Loading...</option>
+          }
+          @if (accountusers !== null) {
+            <option value="">-- Select a user --</option>
+          }
+          @for (user of accountUsers; track user) {
+            <option [value]="user.uid">
+              {{ user.uid }}
+            </option>
+          }
         </cds-select>
         <ng-template #accountUserError>
-          <span
-            class="invalid-feedback"
-            *ngIf="bucketForm.showError('accountUser', frm, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (bucketForm.showError('accountUser', frm, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
-        <cd-alert-panel
-          type="info"
-          *ngIf="bucketForm.get('accountUser').disabled"
-          i18n
-        >
-          The bucket is owned by an account. UI does not support changing the ownership of bucket
-          owned by an account.
-        </cd-alert-panel>
+        @if (bucketForm.get('accountUser').disabled) {
+          <cd-alert-panel
+            type="info"
+            i18n
+          >
+            The bucket is owned by an account. UI does not support changing the ownership of bucket
+            owned by an account.
+          </cd-alert-panel>
+        }
       </div>
     } @else {
       <!-- Owner -->
@@ -182,272 +184,267 @@
           cdRequiredField="Owner"
           i18n
           >Owner
-          <option
-            *ngIf="owners === null"
-            [ngValue]="null"
-          >
-            Loading...
-          </option>
-          <option
-            *ngIf="owners !== null"
-            value=""
-          >
-            -- Select a user --
-          </option>
-          <option
-            *ngFor="let owner of owners"
-            [value]="owner.uid"
-          >
-            {{ owner.uid }}
-          </option>
+          @if (owners === null) {
+            <option [ngValue]="null">Loading...</option>
+          }
+          @if (owners !== null) {
+            <option value="">-- Select a user --</option>
+          }
+          @for (owner of owners; track owner) {
+            <option [value]="owner.uid">
+              {{ owner.uid }}
+            </option>
+          }
         </cds-select>
         <ng-template #ownerError>
-          <span
-            class="invalid-feedback"
-            *ngIf="bucketForm.showError('owner', frm, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (bucketForm.showError('owner', frm, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
     }
 
     <!-- Versioning -->
-    <fieldset *ngIf="editing">
-      <div class="form-item">
-        <legend
-          class="cd-header"
-          i18n
-        >
-          Versioning
-        </legend>
-
-        <cds-checkbox
-          name="versioning"
-          formControlName="versioning"
-          id="versioning"
-          (checkedChange)="setMfaDeleteValidators()"
-          i18n
-          >Enabled
-          <cd-help-text>
-            <span>Enables versioning for the objects in the bucket.</span>
-          </cd-help-text>
-        </cds-checkbox>
-      </div>
-    </fieldset>
+    @if (editing) {
+      <fieldset>
+        <div class="form-item">
+          <legend
+            class="cd-header"
+            i18n
+          >
+            Versioning
+          </legend>
+          <cds-checkbox
+            name="versioning"
+            formControlName="versioning"
+            id="versioning"
+            (checkedChange)="setMfaDeleteValidators()"
+            i18n
+            >Enabled
+            <cd-help-text>
+              <span>Enables versioning for the objects in the bucket.</span>
+            </cd-help-text>
+          </cds-checkbox>
+        </div>
+      </fieldset>
+    }
 
     <!-- Multi-Factor Authentication -->
-    <fieldset *ngIf="editing">
-      <!-- MFA Delete -->
-      <div class="form-item">
-        <legend
-          class="cd-header"
-          i18n
-        >
-          Multi-Factor Authentication
-        </legend>
-
-        <cds-checkbox
-          name="mfa-delete"
-          formControlName="mfa-delete"
-          id="mfa-delete"
-          (checkedChange)="setMfaDeleteValidators()"
-          helperText="Enables MFA (multi-factor authentication) Delete, which requires additional authentication for changing the bucket versioning state."
-          i18n-helperText
-          i18n
-          >Delete enabled
-        </cds-checkbox>
-      </div>
-      <div
-        *ngIf="areMfaCredentialsRequired()"
-        class="form-item"
-      >
-        <cds-text-label
-          for="mfa-token-serial"
-          cdRequiredField="MFA Serial Number"
-          [invalid]="
-            !bucketForm.controls['mfa-token-serial'].valid &&
-            bucketForm.controls['mfa-token-serial'].dirty
-          "
-          [invalidText]="mfaSerialError"
-          i18n
-          >Token Serial Number
-          <input
-            cdsText
-            id="mfa-token-serial"
-            name="mfa-token-serial"
-            formControlName="mfa-token-serial"
-            [invalid]="
-              !bucketForm.controls['mfa-token-serial'].valid &&
-              bucketForm.controls['mfa-token-serial'].dirty
-            "
-          />
-        </cds-text-label>
-        <ng-template #mfaSerialError>
-          <span
-            class="invalid-feedback"
-            *ngIf="bucketForm.showError('mfa-token-serial', frm, 'required')"
+    @if (editing) {
+      <fieldset>
+        <!-- MFA Delete -->
+        <div class="form-item">
+          <legend
+            class="cd-header"
             i18n
-            >This field is required.</span
           >
-        </ng-template>
-      </div>
-      <div
-        *ngIf="areMfaCredentialsRequired()"
-        class="form-item"
-      >
-        <cds-text-label
-          for="mfa-token-pin"
-          cdRequiredField="MFA Token PIN"
-          [invalid]="
-            !bucketForm.controls['mfa-token-pin'].valid &&
-            bucketForm.controls['mfa-token-pin'].dirty
-          "
-          [invalidText]="mfaPinError"
-          i18n
-          >Token PIN
-          <input
-            cdsText
-            id="mfa-token-pin"
-            name="mfa-token-pin"
-            formControlName="mfa-token-pin"
-            [invalid]="
-              !bucketForm.controls['mfa-token-pin'].valid &&
-              bucketForm.controls['mfa-token-pin'].dirty
-            "
-          />
-        </cds-text-label>
-        <ng-template #mfaPinError>
-          <span
-            class="invalid-feedback"
-            *ngIf="bucketForm.showError('mfa-token-pin', frm, 'required')"
+            Multi-Factor Authentication
+          </legend>
+          <cds-checkbox
+            name="mfa-delete"
+            formControlName="mfa-delete"
+            id="mfa-delete"
+            (checkedChange)="setMfaDeleteValidators()"
+            helperText="Enables MFA (multi-factor authentication) Delete, which requires additional authentication for changing the bucket versioning state."
+            i18n-helperText
             i18n
-            >This field is required.</span
-          >
-        </ng-template>
-      </div>
-    </fieldset>
+            >Delete enabled
+          </cds-checkbox>
+        </div>
+        @if (areMfaCredentialsRequired()) {
+          <div class="form-item">
+            <cds-text-label
+              for="mfa-token-serial"
+              cdRequiredField="MFA Serial Number"
+              [invalid]="
+                !bucketForm.controls['mfa-token-serial'].valid &&
+                bucketForm.controls['mfa-token-serial'].dirty
+              "
+              [invalidText]="mfaSerialError"
+              i18n
+              >Token Serial Number
+              <input
+                cdsText
+                id="mfa-token-serial"
+                name="mfa-token-serial"
+                formControlName="mfa-token-serial"
+                [invalid]="
+                  !bucketForm.controls['mfa-token-serial'].valid &&
+                  bucketForm.controls['mfa-token-serial'].dirty
+                "
+              />
+            </cds-text-label>
+            <ng-template #mfaSerialError>
+              @if (bucketForm.showError('mfa-token-serial', frm, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required.</span
+                >
+              }
+            </ng-template>
+          </div>
+        }
+        @if (areMfaCredentialsRequired()) {
+          <div class="form-item">
+            <cds-text-label
+              for="mfa-token-pin"
+              cdRequiredField="MFA Token PIN"
+              [invalid]="
+                !bucketForm.controls['mfa-token-pin'].valid &&
+                bucketForm.controls['mfa-token-pin'].dirty
+              "
+              [invalidText]="mfaPinError"
+              i18n
+              >Token PIN
+              <input
+                cdsText
+                id="mfa-token-pin"
+                name="mfa-token-pin"
+                formControlName="mfa-token-pin"
+                [invalid]="
+                  !bucketForm.controls['mfa-token-pin'].valid &&
+                  bucketForm.controls['mfa-token-pin'].dirty
+                "
+              />
+            </cds-text-label>
+            <ng-template #mfaPinError>
+              @if (bucketForm.showError('mfa-token-pin', frm, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required.</span
+                >
+              }
+            </ng-template>
+          </div>
+        }
+      </fieldset>
+    }
 
     <!-- Object Locking -->
-    <fieldset *ngIf="!editing || (editing && bucketForm.getValue('lock_enabled'))">
-      <div class="form-item">
-        <legend
-          class="cd-header"
-          i18n
-        >
-          Object Locking
-          <cd-help-text>
-            Store objects using a write-once-read-many (WORM) model to prevent objects from being
-            deleted or overwritten for a fixed amount of time or indefinitely. Object Locking works
-            only in versioned buckets.
-          </cd-help-text>
-        </legend>
-        <!-- Object Locking enable -->
-        <cds-checkbox
-          name="lock_enabled"
-          formControlName="lock_enabled"
-          id="lock_enabled"
-          [disabled]="editing"
-          i18n
-          >Enable
+    @if (!editing || (editing && bucketForm.getValue('lock_enabled'))) {
+      <fieldset>
+        <div class="form-item">
+          <legend
+            class="cd-header"
+            i18n
+          >
+            Object Locking
+            <cd-help-text>
+              Store objects using a write-once-read-many (WORM) model to prevent objects from being
+              deleted or overwritten for a fixed amount of time or indefinitely. Object Locking
+              works only in versioned buckets.
+            </cd-help-text>
+          </legend>
+          <!-- Object Locking enable -->
+          <cds-checkbox
+            name="lock_enabled"
+            formControlName="lock_enabled"
+            id="lock_enabled"
+            [disabled]="editing"
+            i18n
+            >Enable
 
-          <cd-help-text>
-            <span
-              >Enables locking for the objects in the bucket. Locking can only be enabled while
-              creating a bucket.</span
+            <cd-help-text>
+              <span
+                >Enables locking for the objects in the bucket. Locking can only be enabled while
+                creating a bucket.</span
+              >
+            </cd-help-text>
+          </cds-checkbox>
+        </div>
+        <!-- Object Locking mode -->
+        @if (bucketForm.getValue('lock_enabled')) {
+          <div class="form-item">
+            <cds-select
+              label="Mode"
+              for="lock_mode"
+              formControlName="lock_mode"
+              name="lock_mode"
+              [helperText]="lockModeHelper"
+              id="lock_mode"
+              i18n
             >
-          </cd-help-text>
-        </cds-checkbox>
-      </div>
-
-      <!-- Object Locking mode -->
-      <div
-        *ngIf="bucketForm.getValue('lock_enabled')"
-        class="form-item"
-      >
-        <cds-select
-          label="Mode"
-          for="lock_mode"
-          formControlName="lock_mode"
-          name="lock_mode"
-          [helperText]="lockModeHelper"
-          id="lock_mode"
-          i18n
-        >
-          <option value="COMPLIANCE">Compliance</option>
-          <option value="GOVERNANCE">Governance</option>
-        </cds-select>
-        <ng-template #lockModeHelper>
-          <span
-            *ngIf="bucketForm.getValue('lock_mode') === 'COMPLIANCE'"
-            i18n
+              <option value="COMPLIANCE">Compliance</option>
+              <option value="GOVERNANCE">Governance</option>
+            </cds-select>
+            <ng-template #lockModeHelper>
+              @if (bucketForm.getValue('lock_mode') === 'COMPLIANCE') {
+                <span i18n>
+                  In COMPLIANCE an object version cannot be overwritten or deleted for the duration
+                  of the period.
+                </span>
+              }
+              @if (bucketForm.getValue('lock_mode') === 'GOVERNANCE') {
+                <span i18n>
+                  In GOVERNANCE mode, users cannot overwrite or delete an object version or alter
+                  its lock settings unless they have special permissions.
+                </span>
+              }
+            </ng-template>
+          </div>
+        }
+        <!-- Retention period (days) -->
+        @if (bucketForm.getValue('lock_enabled')) {
+          <div class="form-item">
+            <cds-number
+              name="lock_retention_period_days"
+              formControlName="lock_retention_period_days"
+              id="lock_retention_period_days"
+              min="1"
+              label="Retention period (days)"
+              helperText="The number of days that you want to specify for the default retention period that will be applied to new objects placed in this bucket."
+              [invalid]="
+                bucketForm.controls.lock_retention_period_days.invalid &&
+                bucketForm.controls.lock_retention_period_days.dirty
+              "
+              [invalidText]="retentionPeriodError"
+              i18n-helperText
+              i18n-label
+              i18n
+            ></cds-number>
+            <ng-template #retentionPeriodError>
+              @if (bucketForm.showError('lock_retention_period_days', frm, 'pattern')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The entered value must be a positive integer.</span
+                >
+              }
+              @if (bucketForm.showError('lock_retention_period_days', frm, 'lockDays')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >Retention Days must be a positive integer.</span
+                >
+              }
+            </ng-template>
+          </div>
+        }
+        <!-- Alerts -->
+        @if (bucketForm.getValue('lock_enabled')) {
+          <cd-alert-panel
+            type="info"
+            class="me-1"
+            i18n-alertTitle
           >
-            In COMPLIANCE an object version cannot be overwritten or deleted for the duration of the
-            period.
-          </span>
-          <span
-            *ngIf="bucketForm.getValue('lock_mode') === 'GOVERNANCE'"
-            i18n
-          >
-            In GOVERNANCE mode, users cannot overwrite or delete an object version or alter its lock
-            settings unless they have special permissions.
-          </span>
-        </ng-template>
-      </div>
-      <!-- Retention period (days) -->
-      <div
-        *ngIf="bucketForm.getValue('lock_enabled')"
-        class="form-item"
-      >
-        <cds-number
-          name="lock_retention_period_days"
-          formControlName="lock_retention_period_days"
-          id="lock_retention_period_days"
-          min="1"
-          label="Retention period (days)"
-          helperText="The number of days that you want to specify for the default retention period that will be applied to new objects placed in this bucket."
-          [invalid]="
-            bucketForm.controls.lock_retention_period_days.invalid &&
-            bucketForm.controls.lock_retention_period_days.dirty
-          "
-          [invalidText]="retentionPeriodError"
-          i18n-helperText
-          i18n-label
-          i18n
-        ></cds-number>
-        <ng-template #retentionPeriodError>
-          <span
-            class="invalid-feedback"
-            *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'pattern')"
-            i18n
-            >The entered value must be a positive integer.</span
-          >
-          <span
-            class="invalid-feedback"
-            *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'lockDays')"
-            i18n
-            >Retention Days must be a positive integer.</span
-          >
-        </ng-template>
-      </div>
-      <!-- Alerts -->
-      <cd-alert-panel
-        type="info"
-        *ngIf="bucketForm.getValue('lock_enabled')"
-        class="me-1"
-        i18n-alertTitle
-      >
-        Bucket Versioning can't be disabled when Object Locking is enabled.
-      </cd-alert-panel>
-      <cd-alert-panel
-        type="warning"
-        *ngIf="bucketForm.getValue('lock_enabled')"
-      >
-        Enabling Object Locking will allow the configuration of GOVERNANCE or COMPLIANCE modes,
-        which will help ensure that an object version cannot be overwritten or deleted for the
-        specified period.
-      </cd-alert-panel>
-    </fieldset>
+            Bucket Versioning can't be disabled when Object Locking is enabled.
+          </cd-alert-panel>
+        }
+        @if (bucketForm.getValue('lock_enabled')) {
+          <cd-alert-panel type="warning">
+            Enabling Object Locking will allow the configuration of GOVERNANCE or COMPLIANCE modes,
+            which will help ensure that an object version cannot be overwritten or deleted for the
+            specified period.
+          </cd-alert-panel>
+        }
+      </fieldset>
+    }
 
     <!-- Encryption -->
     <fieldset>
@@ -480,93 +477,91 @@
         </cds-checkbox>
       </div>
 
-      <div *ngIf="bucketForm.getValue('encryption_enabled')">
-        <div class="form-item">
-          <cds-radio-group formControlName="encryption_type">
-            <cds-radio
-              value="AES256"
-              [disabled]="!s3Configured"
-              >SSE-S3</cds-radio
-            >
-            <cds-radio
-              value="aws:kms"
-              [disabled]="!kmsConfigured"
-              >Connect to an external key management service</cds-radio
-            >
-          </cds-radio-group>
-        </div>
-
-        <div *ngIf="bucketForm.getValue('encryption_type') === 'aws:kms'">
+      @if (bucketForm.getValue('encryption_enabled')) {
+        <div>
           <div class="form-item">
-            <cds-select
-              label="KMS Provider"
-              for="kms_provider"
-              formControlName="kms_provider"
-              name="kms_provider"
-              id="kms_provider"
-              [invalidText]="kmsProviderError"
-              [invalid]="
-                !bucketForm.controls.kms_provider.valid && bucketForm.controls.kms_provider.dirty
-              "
-              cdRequiredField="KMS Provider"
-              i18n
-              >KMS Provider
-              <option
-                *ngIf="kmsProviders === null"
-                [ngValue]="null"
+            <cds-radio-group formControlName="encryption_type">
+              <cds-radio
+                value="AES256"
+                [disabled]="!s3Configured"
+                >SSE-S3</cds-radio
               >
-                Loading...
-              </option>
-              <option
-                *ngIf="kmsProviders !== null"
-                [ngValue]="null"
+              <cds-radio
+                value="aws:kms"
+                [disabled]="!kmsConfigured"
+                >Connect to an external key management service</cds-radio
               >
-                -- Select a provider --
-              </option>
-              <option
-                *ngFor="let provider of kmsProviders"
-                [value]="provider"
-              >
-                {{ provider }}
-              </option>
-            </cds-select>
-            <ng-template #kmsProviderError>
-              <span
-                class="invalid-feedback"
-                *ngIf="bucketForm.showError('kms_provider', frm, 'required')"
-                i18n
-                >This field is required.</span
-              >
-            </ng-template>
+            </cds-radio-group>
           </div>
-
-          <div class="form-item">
-            <cds-text-label
-              for="keyId"
-              cdRequiredField="Key Id"
-              [invalid]="!bucketForm.controls.keyId.valid && bucketForm.controls.keyId.dirty"
-              [invalidText]="keyIdError"
-              i18n
-              >Key Id
-              <input
-                cdsText
-                id="keyId"
-                name="keyId"
-                formControlName="keyId"
-                [invalid]="!bucketForm.controls.keyId.valid && bucketForm.controls.keyId.dirty"
-              />
-            </cds-text-label>
-            <ng-template #keyIdError>
-              <span
-                class="invalid-feedback"
-                *ngIf="bucketForm.showError('keyId', frm, 'required')"
-                i18n
-                >This field is required.</span
-              >
-            </ng-template>
-          </div>
+          @if (bucketForm.getValue('encryption_type') === 'aws:kms') {
+            <div>
+              <div class="form-item">
+                <cds-select
+                  label="KMS Provider"
+                  for="kms_provider"
+                  formControlName="kms_provider"
+                  name="kms_provider"
+                  id="kms_provider"
+                  [invalidText]="kmsProviderError"
+                  [invalid]="
+                    !bucketForm.controls.kms_provider.valid &&
+                    bucketForm.controls.kms_provider.dirty
+                  "
+                  cdRequiredField="KMS Provider"
+                  i18n
+                  >KMS Provider
+                  @if (kmsProviders === null) {
+                    <option [ngValue]="null">Loading...</option>
+                  }
+                  @if (kmsProviders !== null) {
+                    <option [ngValue]="null">-- Select a provider --</option>
+                  }
+                  @for (provider of kmsProviders; track provider) {
+                    <option [value]="provider">
+                      {{ provider }}
+                    </option>
+                  }
+                </cds-select>
+                <ng-template #kmsProviderError>
+                  @if (bucketForm.showError('kms_provider', frm, 'required')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                      >This field is required.</span
+                    >
+                  }
+                </ng-template>
+              </div>
+              <div class="form-item">
+                <cds-text-label
+                  for="keyId"
+                  cdRequiredField="Key Id"
+                  [invalid]="!bucketForm.controls.keyId.valid && bucketForm.controls.keyId.dirty"
+                  [invalidText]="keyIdError"
+                  i18n
+                  >Key Id
+                  <input
+                    cdsText
+                    id="keyId"
+                    name="keyId"
+                    formControlName="keyId"
+                    [invalid]="!bucketForm.controls.keyId.valid && bucketForm.controls.keyId.dirty"
+                  />
+                </cds-text-label>
+                <ng-template #keyIdError>
+                  @if (bucketForm.showError('keyId', frm, 'required')) {
+                    <span
+                      class="invalid-feedback"
+                      i18n
+                      >This field is required.</span
+                    >
+                  }
+                </ng-template>
+              </div>
+            </div>
+          }
         </div>
-      </div>
+      }
     </fieldset>
 
     <!-- Replication -->
@@ -578,15 +573,13 @@
         >
           Replication
         </legend>
-        <ng-container
-          *ngIf="
-            {
-              status: multisiteStatus$ | async,
-              isDefaultZg: isDefaultZoneGroup$ | async
-            } as multisiteStatus;
-            else loadingTpl
-          "
-        >
+        @if (
+          {
+            status: multisiteStatus$ | async,
+            isDefaultZg: isDefaultZoneGroup$ | async
+          };
+          as multisiteStatus
+        ) {
           <cds-checkbox
             name="replication"
             formControlName="replication"
@@ -603,19 +596,22 @@
             >Enable
             <cd-help-text>Enables replication for the objects in the bucket.</cd-help-text>
           </cds-checkbox>
-
-          <cd-alert-panel
-            type="info"
-            class="me-1"
-            id="replication-info"
-            spacingClass="mt-1"
-            *ngIf="!editing"
-            i18n
-          >
-            A bi-directional sync policy group will be created by the dashboard along with flows and
-            pipes. The pipe id will then be used for applying the replication policy to the bucket.
-          </cd-alert-panel>
-        </ng-container>
+          @if (!editing) {
+            <cd-alert-panel
+              type="info"
+              class="me-1"
+              id="replication-info"
+              spacingClass="mt-1"
+              i18n
+            >
+              A bi-directional sync policy group will be created by the dashboard along with flows
+              and pipes. The pipe id will then be used for applying the replication policy to the
+              bucket.
+            </cd-alert-panel>
+          }
+        } @else {
+          <cd-loading-panel i18n>Checking multi-site status...</cd-loading-panel>
+        }
       </div>
     </fieldset>
 
@@ -628,9 +624,11 @@
         Tags
         <cd-help-text>Tagging provides a way to categorize storage</cd-help-text>
       </legend>
-      <span *ngFor="let tag of tags; let i = index">
-        <ng-container *ngTemplateOutlet="tagTpl; context: { index: i, tag: tag }"></ng-container>
-      </span>
+      @for (tag of tags; track tag; let i = $index) {
+        <span>
+          <ng-container *ngTemplateOutlet="tagTpl; context: { index: i, tag: tag }"></ng-container>
+        </span>
+      }
 
       <div cdsRow>
         <div cdsCol>
@@ -690,12 +688,13 @@
           ></textarea>
         </cds-textarea-label>
         <ng-template #bucketPolicyError>
-          <span
-            class="invalid-feedback"
-            *ngIf="bucketForm.showError('bucket_policy', frm, 'invalidJson')"
-            i18n
-            >Invalid json text.</span
-          >
+          @if (bucketForm.showError('bucket_policy', frm, 'invalidJson')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Invalid json text.</span
+            >
+          }
         </ng-template>
         <div cdsRow>
           <div cdsCol>
@@ -756,84 +755,85 @@
       </div>
 
       <!-- Lifecycle -->
-      <div
-        *ngIf="editing"
-        class="form-item"
-      >
-        <cds-textarea-label
-          for="id"
-          [invalid]="!bucketForm.controls.lifecycle.valid && bucketForm.controls.lifecycle.dirty"
-          [invalidText]="lifecycleError"
-          i18n
-          >Lifecycle
-          <textarea
-            cdsTextArea
-            class="textarea-field"
-            id="lifecycle"
-            formControlName="lifecycle"
-            (change)="textAreaOnChange('lifecycle')"
-            cols="200"
-            #lifecycleTextArea
-          ></textarea>
-          <cd-help-text>JSON or XML formatted document</cd-help-text>
-        </cds-textarea-label>
-        <ng-template #lifecycleError>
-          <span
-            class="invalid-feedback"
-            *ngIf="bucketForm.showError('lifecycle', frm, 'invalidJson')"
+      @if (editing) {
+        <div class="form-item">
+          <cds-textarea-label
+            for="id"
+            [invalid]="!bucketForm.controls.lifecycle.valid && bucketForm.controls.lifecycle.dirty"
+            [invalidText]="lifecycleError"
             i18n
-            >Invalid json text.</span
-          >
-          <span
-            class="invalid-feedback"
-            *ngIf="bucketForm.showError('lifecycle', frm, 'invalidXml')"
-            i18n
-            >Invalid xml text.</span
-          >
-        </ng-template>
-        <div cdsRow>
-          <div cdsCol>
-            <cds-button-set class="mt-1">
-              <button
-                cdsButton="tertiary"
-                id="lifecycle-examples-button"
-                (click)="
-                  openUrl(
-                    'https://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-lifecycle.html#examples'
-                  )
-                "
-                type="button"
+            >Lifecycle
+            <textarea
+              cdsTextArea
+              class="textarea-field"
+              id="lifecycle"
+              formControlName="lifecycle"
+              (change)="textAreaOnChange('lifecycle')"
+              cols="200"
+              #lifecycleTextArea
+            ></textarea>
+            <cd-help-text>JSON or XML formatted document</cd-help-text>
+          </cds-textarea-label>
+          <ng-template #lifecycleError>
+            @if (bucketForm.showError('lifecycle', frm, 'invalidJson')) {
+              <span
+                class="invalid-feedback"
                 i18n
+                >Invalid json text.</span
               >
-                Policy examples
-                <svg
-                  [cdsIcon]="icons.launch"
-                  [size]="icons.size16"
-                  class="cds--btn__icon"
-                ></svg>
-              </button>
-            </cds-button-set>
-          </div>
-          <div cdsCol>
-            <cds-button-set class="float-end mt-1">
-              <button
-                cdsButton="tertiary"
-                id="clear-lifecycle"
-                (click)="clearTextArea('lifecycle', '{}')"
-                type="button"
+            }
+            @if (bucketForm.showError('lifecycle', frm, 'invalidXml')) {
+              <span
+                class="invalid-feedback"
                 i18n
+                >Invalid xml text.</span
               >
-                Clear
-                <svg
-                  [cdsIcon]="icons.destroy"
-                  [size]="icons.size16"
-                  class="cds--btn__icon"
-                ></svg>
-              </button>
-            </cds-button-set>
+            }
+          </ng-template>
+          <div cdsRow>
+            <div cdsCol>
+              <cds-button-set class="mt-1">
+                <button
+                  cdsButton="tertiary"
+                  id="lifecycle-examples-button"
+                  (click)="
+                    openUrl(
+                      'https://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-lifecycle.html#examples'
+                    )
+                  "
+                  type="button"
+                  i18n
+                >
+                  Policy examples
+                  <svg
+                    [cdsIcon]="icons.launch"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"
+                  ></svg>
+                </button>
+              </cds-button-set>
+            </div>
+            <div cdsCol>
+              <cds-button-set class="float-end mt-1">
+                <button
+                  cdsButton="tertiary"
+                  id="clear-lifecycle"
+                  (click)="clearTextArea('lifecycle', '{}')"
+                  type="button"
+                  i18n
+                >
+                  Clear
+                  <svg
+                    [cdsIcon]="icons.destroy"
+                    [size]="icons.size16"
+                    class="cds--btn__icon"
+                  ></svg>
+                </button>
+              </cds-button-set>
+            </div>
           </div>
         </div>
-      </div>
+      }
 
       <div class="form-item">
         <!-- ACL -->
@@ -860,20 +860,20 @@
               (valueChange)="onSelectionFilter()"
               i18n
               >Grantee
-              <option
-                *ngFor="let item of grantees"
-                [value]="item"
-              >
-                {{ item }}
-              </option>
+              @for (item of grantees; track item) {
+                <option [value]="item">
+                  {{ item }}
+                </option>
+              }
             </cds-select>
             <ng-template #granteeError>
-              <span
-                class="invalid-feedback"
-                *ngIf="bucketForm.showError('grantee', frm, 'required')"
-                i18n
-                >This field is required.</span
-              >
+              @if (bucketForm.showError('grantee', frm, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required.</span
+                >
+              }
             </ng-template>
           </div>
           <div cdsCol>
@@ -888,21 +888,23 @@
               helperText="Select the permision to give to the selected grantee. Regardless, the owner of the bucket will always have FULL CONTROL access"
               formControlName="aclPermission"
             >
-              <option
-                *ngFor="let permission of aclPermissions"
-                [value]="permission"
-                i18n
-              >
-                {{ permission }}
-              </option>
+              @for (permission of aclPermissions; track permission) {
+                <option
+                  [value]="permission"
+                  i18n
+                >
+                  {{ permission }}
+                </option>
+              }
             </cds-select>
             <ng-template #aclPermissionError>
-              <span
-                class="invalid-feedback"
-                *ngIf="bucketForm.showError('aclPermission', frm, 'required')"
-                i18n
-                >This field is required.</span
-              >
+              @if (bucketForm.showError('aclPermission', frm, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required.</span
+                >
+              }
             </ng-template>
           </div>
         </div>
@@ -912,40 +914,32 @@
     <!--Advanced-->
     <cd-form-advanced-fieldset>
       <!-- Placement target -->
-      <div
-        class="form-item"
-        *ngIf="!editing"
-      >
-        <cds-select
-          label="Placement target"
-          for="placement-target"
-          formControlName="placement-target"
-          name="placement-target"
-          id="placement-target"
-          helperText="When creating a bucket, a placement target can be provided as part of the LocationConstraint to override the default placement targets from the user and zonegroup."
-          i18n-helperText
-          i18n
-          >Placement target
-          <option
-            *ngIf="placementTargets === null"
-            [ngValue]="null"
-          >
-            Loading...
-          </option>
-          <option
-            *ngIf="placementTargets !== null"
-            [ngValue]="null"
-          >
-            -- Select a placement target --
-          </option>
-          <option
-            *ngFor="let placementTarget of placementTargets"
-            [value]="placementTarget.name"
-          >
-            {{ placementTarget.description }}
-          </option>
-        </cds-select>
-      </div>
+      @if (!editing) {
+        <div class="form-item">
+          <cds-select
+            label="Placement target"
+            for="placement-target"
+            formControlName="placement-target"
+            name="placement-target"
+            id="placement-target"
+            helperText="When creating a bucket, a placement target can be provided as part of the LocationConstraint to override the default placement targets from the user and zonegroup."
+            i18n-helperText
+            i18n
+            >Placement target
+            @if (placementTargets === null) {
+              <option [ngValue]="null">Loading...</option>
+            }
+            @if (placementTargets !== null) {
+              <option [ngValue]="null">-- Select a placement target --</option>
+            }
+            @for (placementTarget of placementTargets; track placementTarget) {
+              <option [value]="placementTarget.name">
+                {{ placementTarget.description }}
+              </option>
+            }
+          </cds-select>
+        </div>
+      }
 
       <!-- Bucket Rate Limit -->
       <cd-rgw-rate-limit
@@ -972,7 +966,7 @@
   let-index="index"
 >
   <div class="form-item form-item-append">
-    <ng-container *ngFor="let config of tagConfig">
+    @for (config of tagConfig; track config) {
       <input
         type="text"
         id="tag-{{ config.attribute }}-{{ index }}"
@@ -981,7 +975,7 @@
         [value]="tag[config.attribute]"
         readonly
       />
-    </ng-container>
+    }
 
     <!-- Tag actions -->
     <cds-icon-button
@@ -1007,8 +1001,4 @@
       ></svg>
     </cds-icon-button>
   </div>
-</ng-template>
-
-<ng-template #loadingTpl>
-  <cd-loading-panel i18n>Checking multi-site status...</cd-loading-panel>
 </ng-template>

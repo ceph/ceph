@@ -1,48 +1,51 @@
-<ng-container *ngIf="subvolumeGroup$ | async as subvolumeGroup">
-  <cd-table
-    *ngIf="subvolumeGroup"
-    [data]="subvolumeGroup"
-    columnMode="flex"
-    [columns]="columns"
-    selectionType="single"
-    [hasDetails]="false"
-    (fetchData)="fetchData()"
-    (updateSelection)="updateSelection($event)"
-  >
-    <div class="table-actions">
-      <cd-table-actions
-        [permission]="permissions.cephfs"
-        [selection]="selection"
-        class="btn-group"
-        id="cephfs-subvolumegropup-actions"
-        [tableActions]="tableActions"
-      >
-      </cd-table-actions>
-    </div>
-  </cd-table>
-</ng-container>
+@if (subvolumeGroup$ | async; as subvolumeGroup) {
+  @if (subvolumeGroup) {
+    <cd-table
+      [data]="subvolumeGroup"
+      columnMode="flex"
+      [columns]="columns"
+      selectionType="single"
+      [hasDetails]="false"
+      (fetchData)="fetchData()"
+      (updateSelection)="updateSelection($event)"
+    >
+      <div class="table-actions">
+        <cd-table-actions
+          [permission]="permissions.cephfs"
+          [selection]="selection"
+          class="btn-group"
+          id="cephfs-subvolumegropup-actions"
+          [tableActions]="tableActions"
+        >
+        </cd-table-actions>
+      </div>
+    </cd-table>
+  }
+}
 
 <ng-template
   #quotaUsageTpl
   let-row="data.row"
 >
-  <cd-usage-bar
-    *ngIf="row.info?.bytes_pcent && row.info.bytes_pcent !== 'undefined'; else noLimitTpl"
-    [total]="row.info.bytes_quota"
-    [used]="row.info.bytes_used"
-    [title]="row.name"
-    decimals="2"
-  ></cd-usage-bar>
-  <ng-template #noLimitTpl>
-    <span
-      *ngIf="row.info?.bytes_pcent === 'undefined'; else missingQuotaTpl"
-      ngbTooltip="Quota limit is not set"
-      i18n-ngbTooltip
-    >
-      {{ row.info.bytes_used | dimlessBinary }}</span
-    >
-    <ng-template #missingQuotaTpl>-</ng-template>
-  </ng-template>
+  @if (row.info?.bytes_pcent && row.info.bytes_pcent !== 'undefined') {
+    <cd-usage-bar
+      [total]="row.info.bytes_quota"
+      [used]="row.info.bytes_used"
+      [title]="row.name"
+      decimals="2"
+    ></cd-usage-bar>
+  } @else {
+    @if (row.info?.bytes_pcent === 'undefined') {
+      <span
+        ngbTooltip="Quota limit is not set"
+        i18n-ngbTooltip
+      >
+        {{ row.info.bytes_used | dimlessBinary }}</span
+      >
+    } @else {
+      -
+    }
+  }
 </ng-template>
 
 <ng-template
@@ -51,11 +54,12 @@
 >
   <span class="fw-bold">{{ row.name }}</span>
 
-  <cd-label
-    [value]="unmanagedState"
-    *ngIf="row?.info?.state === unmanagedState"
-    [tooltipText]="unmanagedHint"
-  ></cd-label>
+  @if (row?.info?.state === unmanagedState) {
+    <cd-label
+      [value]="unmanagedState"
+      [tooltipText]="unmanagedHint"
+    ></cd-label>
+  }
 </ng-template>
 
 <ng-template
@@ -69,11 +73,12 @@
   #modeToHumanReadableTpl
   let-value="data.value"
 >
-  <cds-tag
-    *ngFor="let result of value | octalToHumanReadable"
-    [class]="result.class"
-    [ngbTooltip]="result.toolTip"
-  >
-    {{ result.content }}
-  </cds-tag>
+  @for (result of value | octalToHumanReadable; track result) {
+    <cds-tag
+      [class]="result.class"
+      [ngbTooltip]="result.toolTip"
+    >
+      {{ result.content }}
+    </cds-tag>
+  }
 </ng-template>

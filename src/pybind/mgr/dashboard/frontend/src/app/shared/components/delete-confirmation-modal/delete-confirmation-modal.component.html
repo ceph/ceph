@@ -14,52 +14,54 @@
       [formGroup]="deletionForm"
       novalidate
     >
-      <cd-alert-panel
-        *ngIf="infoMessage"
-        type="info"
-        spacingClass="cds-mb-3"
-        i18n
-      >
-        <p>{{ infoMessage }}</p>
-      </cd-alert-panel>
+      @if (infoMessage) {
+        <cd-alert-panel
+          type="info"
+          spacingClass="cds-mb-3"
+          i18n
+        >
+          <p>{{ infoMessage }}</p>
+        </cd-alert-panel>
+      }
       <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
       <div class="question">
-        <span *ngIf="itemNames; else noNames">
-          <ng-container *ngIf="itemNames.length === 1; else manyNames">
-            <p
-              *ngIf="impact == impactEnum.medium"
-              i18n
-            >
-              Are you sure that you want to {{ actionDescription | lowercase }}
-              <strong>{{ itemNames[0] }}</strong
-              >?
-            </p>
-          </ng-container>
-          <ng-template #manyNames>
+        @if (itemNames) {
+          <span>
+            @if (itemNames.length === 1) {
+              @if (impact == impactEnum.medium) {
+                <p i18n>
+                  Are you sure that you want to {{ actionDescription | lowercase }}
+                  <strong>{{ itemNames[0] }}</strong
+                  >?
+                </p>
+              }
+            } @else {
+              <p i18n>
+                Are you sure that you want to {{ actionDescription | lowercase }} the selected
+                items?
+              </p>
+              <ul>
+                @for (itemName of itemNames; track itemName) {
+                  <li>
+                    <strong>{{ itemName }}</strong>
+                  </li>
+                }
+              </ul>
+            }
+          </span>
+        } @else {
+          @if (impact == impactEnum.medium) {
             <p i18n>
-              Are you sure that you want to {{ actionDescription | lowercase }} the selected items?
+              Are you sure that you want to {{ actionDescription | lowercase }} the selected
+              {{ itemDescription }}?
             </p>
-            <ul>
-              <li *ngFor="let itemName of itemNames">
-                <strong>{{ itemName }}</strong>
-              </li>
-            </ul>
-          </ng-template>
-        </span>
-        <ng-template #noNames>
-          <p
-            *ngIf="impact == impactEnum.medium"
-            i18n
-          >
-            Are you sure that you want to {{ actionDescription | lowercase }} the selected
-            {{ itemDescription }}?
-          </p>
-        </ng-template>
+          }
+        }
         <ng-container
           *ngTemplateOutlet="childFormGroupTemplate; context: { form: deletionForm }"
         ></ng-container>
         <div class="form-item">
-          <ng-container *ngIf="impact == impactEnum.medium; else highImpactDeletion">
+          @if (impact == impactEnum.medium) {
             <cds-checkbox
               id="confirmation"
               formControlName="confirmation"
@@ -70,8 +72,7 @@
               i18n
               >Yes, I am sure.</cds-checkbox
             >
-          </ng-container>
-          <ng-template #highImpactDeletion>
+          } @else {
             <p class="cds--type-body-01">
               @if (bodyContext?.deletionMessage) {
                 <span [innerHTML]="bodyContext.deletionMessage"></span>
@@ -117,18 +118,16 @@
               />
             </cds-text-label>
             <ng-template #ResourceError>
-              <span
-                *ngIf="deletionForm.controls.confirmInput.hasError('required')"
-                class="invalid-feedback"
-              >
-                <ng-container i18n>This field is required.</ng-container>
-              </span>
-              <span
-                *ngIf="deletionForm.controls.confirmInput.hasError('matchResource')"
-                class="invalid-feedback"
-              >
-                <ng-container i18n>Enter the correct resource name.</ng-container>
-              </span>
+              @if (deletionForm.controls.confirmInput.hasError('required')) {
+                <span class="invalid-feedback">
+                  <ng-container i18n>This field is required.</ng-container>
+                </span>
+              }
+              @if (deletionForm.controls.confirmInput.hasError('matchResource')) {
+                <span class="invalid-feedback">
+                  <ng-container i18n>Enter the correct resource name.</ng-container>
+                </span>
+              }
             </ng-template>
             @if (bodyContext?.forceDeleteAcknowledgementMessage) {
               <div class="form-item cds-mt-3">
@@ -142,7 +141,7 @@
                 </cds-checkbox>
               </div>
             }
-          </ng-template>
+          }
         </div>
       </div>
     </form>

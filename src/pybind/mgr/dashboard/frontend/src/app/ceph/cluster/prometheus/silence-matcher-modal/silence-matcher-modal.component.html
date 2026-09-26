@@ -34,19 +34,19 @@
               >
                 -- Select an attribute to match against --
               </option>
-              <option
-                *ngFor="let attribute of nameAttributes"
-                [value]="attribute"
-              >
-                {{ attribute }}
-              </option>
+              @for (attribute of nameAttributes; track attribute) {
+                <option [value]="attribute">
+                  {{ attribute }}
+                </option>
+              }
             </select>
-            <span
-              class="help-block"
-              *ngIf="form.showError('name', formDir, 'required')"
-              i18n
-              >This field is required!</span
-            >
+            @if (form.showError('name', formDir, 'required')) {
+              <span
+                class="help-block"
+                i18n
+                >This field is required!</span
+              >
+            }
           </div>
         </div>
 
@@ -69,22 +69,24 @@
               formControlName="value"
               #instance="ngbTypeahead"
             />
-            <span
-              *ngIf="form.showError('value', formDir, 'required')"
-              class="help-block"
-              i18n
-              >This field is required!</span
+            @if (form.showError('value', formDir, 'required')) {
+              <span
+                class="help-block"
+                i18n
+                >This field is required!</span
+              >
+            }
+          </div>
+          @if (form.getValue('value') && !form.getValue('isRegex') && matcherMatch) {
+            <div
+              class="cd-col-form-offset {{ matcherMatch.cssClass }}"
+              id="match-state"
             >
-          </div>
-          <div
-            *ngIf="form.getValue('value') && !form.getValue('isRegex') && matcherMatch"
-            class="cd-col-form-offset {{ matcherMatch.cssClass }}"
-            id="match-state"
-          >
-            <span class="text-muted {{ matcherMatch.cssClass }}">
-              {{ matcherMatch.status }}
-            </span>
-          </div>
+              <span class="text-muted {{ matcherMatch.cssClass }}">
+                {{ matcherMatch.status }}
+              </span>
+            </div>
+          }
         </div>
 
         <!-- isRegex -->

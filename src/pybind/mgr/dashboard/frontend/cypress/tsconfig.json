@@ -17,7 +17,7 @@
       "cypress",
       "cypress-axe"
     ],
-    "target": "es6",
+    "target": "ES2022",
     "skipLibCheck": true
   }
 }

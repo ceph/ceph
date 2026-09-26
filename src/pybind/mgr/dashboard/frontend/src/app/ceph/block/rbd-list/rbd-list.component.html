@@ -31,11 +31,18 @@
   #parentTpl
   let-value="data.value"
 >
-  <span *ngIf="value"
-    >{{ value.pool_name }}<span *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span
-    >/{{ value.image_name }}&#64;{{ value.snap_name }}</span
-  >
-  <span *ngIf="!value">-</span>
+  @if (value) {
+    <span
+      >{{ value.pool_name }}
+      @if (value.pool_namespace) {
+        <span>/{{ value.pool_namespace }}</span>
+      }
+      /{{ value.image_name }}&#64;{{ value.snap_name }}</span
+    >
+  }
+  @if (!value) {
+    <span>-</span>
+  }
 </ng-template>
 
 <ng-template
@@ -43,37 +50,34 @@
   let-value="data.value"
   let-row="data.row"
 >
-  <cds-tag
-    *ngIf="value?.length === 3; else probb"
-    class="tag-info"
-  >
-    {{ value[0] }} </cds-tag
-  >&nbsp;
-  <cds-tag
-    *ngIf="value?.length === 3"
-    class="tag-info"
-  >
-    {{ value[1] }} </cds-tag
-  >&nbsp;
-  <cds-tag
-    *ngIf="row?.primary === true"
-    class="tag-info"
-    i18n
-  >
-    primary
-  </cds-tag>
-  <cds-tag
-    *ngIf="row?.primary === false"
-    class="tag-info"
-    i18n
-  >
-    secondary
-  </cds-tag>
-  <ng-template #probb>
+  @if (value?.length === 3) {
+    <cds-tag class="tag-info"> {{ value[0] }} </cds-tag>
+  } @else {
     <cds-tag class="tag-info">
       {{ value }}
     </cds-tag>
-  </ng-template>
+  }
+  &nbsp;
+  @if (value?.length === 3) {
+    <cds-tag class="tag-info"> {{ value[1] }} </cds-tag>
+  }
+  &nbsp;
+  @if (row?.primary === true) {
+    <cds-tag
+      class="tag-info"
+      i18n
+    >
+      primary
+    </cds-tag>
+  }
+  @if (row?.primary === false) {
+    <cds-tag
+      class="tag-info"
+      i18n
+    >
+      secondary
+    </cds-tag>
+  }
 </ng-template>
 
 <ng-template
@@ -81,12 +85,11 @@
   let-value="data.value"
   let-row="data.row"
 >
-  <cds-tag
-    *ngIf="value?.length === 3"
-    class="tag-info"
-  >
-    {{ value[2] | cdDate }}
-  </cds-tag>
+  @if (value?.length === 3) {
+    <cds-tag class="tag-info">
+      {{ value[2] | cdDate }}
+    </cds-tag>
+  }
 </ng-template>
 
 <ng-template
@@ -108,20 +111,23 @@
   let-hasSnapshots="hasSnapshots"
   let-snapshots="snapshots"
 >
-  <div
-    class="alert alert-warning"
-    *ngIf="hasSnapshots"
-    role="alert"
-  >
-    <span i18n>Deleting this image will also delete all its snapshots.</span>
-    <br />
-    <ng-container *ngIf="snapshots.length > 0">
-      <span i18n>The following snapshots are currently protected and will be removed:</span>
-      <ul>
-        <li *ngFor="let snapshot of snapshots">{{ snapshot }}</li>
-      </ul>
-    </ng-container>
-  </div>
+  @if (hasSnapshots) {
+    <div
+      class="alert alert-warning"
+      role="alert"
+    >
+      <span i18n>Deleting this image will also delete all its snapshots.</span>
+      <br />
+      @if (snapshots.length > 0) {
+        <span i18n>The following snapshots are currently protected and will be removed:</span>
+        <ul>
+          @for (snapshot of snapshots; track snapshot) {
+            <li>{{ snapshot }}</li>
+          }
+        </ul>
+      }
+    </div>
+  }
 </ng-template>
 
 <ng-template
@@ -130,37 +136,41 @@
   let-value="data.value"
   let-row="data.row"
 >
-  <cds-inline-loading *ngIf="row.cdExecuting"></cds-inline-loading>
+  @if (row.cdExecuting) {
+    <cds-inline-loading></cds-inline-loading>
+  }
   <span [ngClass]="column?.customTemplateConfig?.valueClass">
-    <a
-      *ngIf="row?.cdLink; else plainValue"
-      [routerLink]="[row.cdLink]"
-      [queryParams]="row.cdParams"
+    @if (row?.cdLink) {
+      <a
+        [routerLink]="[row.cdLink]"
+        [queryParams]="row.cdParams"
+      >
+        {{ value }}
+      </a>
+    } @else {
+      {{ value }}
+    }
+  </span>
+  @if (row.cdExecuting) {
+    <span
+      [ngClass]="
+        column?.customTemplateConfig?.executingClass
+          ? column.customTemplateConfig.executingClass
+          : 'text-muted italic'
+      "
     >
-      {{ value }}
-    </a>
-    <ng-template #plainValue>
-      {{ value }}
-    </ng-template>
-  </span>
-  <span
-    *ngIf="row.cdExecuting"
-    [ngClass]="
-      column?.customTemplateConfig?.executingClass
-        ? column.customTemplateConfig.executingClass
-        : 'text-muted italic'
-    "
-  >
-    ({{ row.cdExecuting }})
-  </span>
-  <svg
-    *ngIf="row.source && row.source === 'REMOVING'"
-    i18n-title
-    title="RBD in status 'Removing'"
-    [cdsIcon]="icons.warning"
-    [size]="icons.size16"
-    class="cds-warning-color"
-  ></svg>
+      ({{ row.cdExecuting }})
+    </span>
+  }
+  @if (row.source && row.source === 'REMOVING') {
+    <svg
+      i18n-title
+      title="RBD in status 'Removing'"
+      [cdsIcon]="icons.warning"
+      [size]="icons.size16"
+      class="cds-warning-color"
+    ></svg>
+  }
 </ng-template>
 
 <ng-template #forcePromoteConfirmation>
@@ -177,22 +187,21 @@
   #imageUsageTpl
   let-row="data.row"
 >
-  <span
-    *ngIf="row.features_name && !row.features_name.includes('fast-diff'); else usageBar"
-    [ngbTooltip]="usageTooltip"
-  >
-    <span>-</span>
-  </span>
-  <ng-template #usageBar>
-    <cd-usage-bar
-      *ngIf="row"
-      [total]="row.size"
-      [used]="row.disk_usage"
-      [title]="row.name"
-      decimals="2"
-    >
-    </cd-usage-bar>
-  </ng-template>
+  @if (row.features_name && !row.features_name.includes('fast-diff')) {
+    <span [ngbTooltip]="usageTooltip">
+      <span>-</span>
+    </span>
+  } @else {
+    @if (row) {
+      <cd-usage-bar
+        [total]="row.size"
+        [used]="row.disk_usage"
+        [title]="row.name"
+        decimals="2"
+      >
+      </cd-usage-bar>
+    }
+  }
 </ng-template>
 
 <ng-template #usageTooltip>

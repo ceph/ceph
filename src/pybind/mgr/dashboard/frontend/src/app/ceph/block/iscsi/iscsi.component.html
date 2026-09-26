@@ -24,18 +24,17 @@
   let-row="data.row"
   let-value="data.value"
 >
-  <span *ngIf="row.backstore === 'user:rbd'">
-    <cd-sparkline
-      [data]="value"
-      [isBinary]="row.cdIsBinary"
-    ></cd-sparkline>
-  </span>
-  <span
-    *ngIf="row.backstore !== 'user:rbd'"
-    class="text-muted"
-  >
-    n/a
-  </span>
+  @if (row.backstore === 'user:rbd') {
+    <span>
+      <cd-sparkline
+        [data]="value"
+        [isBinary]="row.cdIsBinary"
+      ></cd-sparkline>
+    </span>
+  }
+  @if (row.backstore !== 'user:rbd') {
+    <span class="text-muted"> n/a </span>
+  }
 </ng-template>
 
 <ng-template
@@ -43,13 +42,12 @@
   let-row="data.row"
   let-value="data.value"
 >
-  <span *ngIf="row.backstore === 'user:rbd'"> {{ value }} /s </span>
-  <span
-    *ngIf="row.backstore !== 'user:rbd'"
-    class="text-muted"
-  >
-    n/a
-  </span>
+  @if (row.backstore === 'user:rbd') {
+    <span> {{ value }} /s </span>
+  }
+  @if (row.backstore !== 'user:rbd') {
+    <span class="text-muted"> n/a </span>
+  }
 </ng-template>
 
 <ng-template
@@ -57,13 +55,12 @@
   let-row="data.row"
   let-value="data.value"
 >
-  <span *ngIf="row.backstore === 'user:rbd'">
-    {{ value | relativeDate | notAvailable }}
-  </span>
-  <span
-    *ngIf="row.backstore !== 'user:rbd'"
-    class="text-muted"
-  >
-    n/a
-  </span>
+  @if (row.backstore === 'user:rbd') {
+    <span>
+      {{ value | relativeDate | notAvailable }}
+    </span>
+  }
+  @if (row.backstore !== 'user:rbd') {
+    <span class="text-muted"> n/a </span>
+  }
 </ng-template>
