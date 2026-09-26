@@ -2868,6 +2868,8 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
   uint32_t src_pos = 0; //offset of next non-empty extent
   uint32_t dst_pos = 0;
   uint32_t pos = 0; //already processed amount
+  uint32_t move_pos = 0;
+  uint32_t move_length = 0;
   auto src_it = src_extents.begin(); // iterator to next non-empty extent
   auto dst_it = dst_extents.begin();
 
@@ -2875,34 +2877,45 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
   skip_empty(dst_extents, dst_it, dst_pos);
   while (src_it != src_extents.end() || dst_it != dst_extents.end()) {
     if (src_pos > pos) {
+      if (move_length > 0) {
+        // pending copy src -> dst
+        move_data(move_pos, move_length);
+        move_length = 0;
+      }
       if (dst_pos > pos) {
-	// empty space
-	uint32_t m = std::min(src_pos - pos, dst_pos - pos);
-	// emit empty
-	tmp_extents.emplace_back(bluestore_pextent_t::INVALID_OFFSET, m);
-	pos += m;
+        // empty space
+        uint32_t m = std::min(src_pos - pos, dst_pos - pos);
+        // emit empty
+        tmp_extents.emplace_back(bluestore_pextent_t::INVALID_OFFSET, m);
+        pos += m;
       } else {
-	// copy from dst, src must not have conflicting extent
-	ceph_assert(src_pos >= dst_pos + dst_it->length);
-	// use extent from destination
-	tmp_extents.push_back(*dst_it);
-	dst_pos += dst_it->length;
-	pos = dst_pos;
-	++dst_it;
-	skip_empty(dst_extents, dst_it, dst_pos);
+        // copy from dst, src must not have conflicting extent
+        ceph_assert(src_pos >= dst_pos + dst_it->length);
+        // use extent from destination
+        tmp_extents.push_back(*dst_it);
+        dst_pos += dst_it->length;
+        pos = dst_pos;
+        ++dst_it;
+        skip_empty(dst_extents, dst_it, dst_pos);
       }
     } else {
       // copy from src, dst must not have conflicting extent
       ceph_assert(dst_pos >= src_pos + src_it->length);
       // use extent from source
       tmp_extents.push_back(*src_it);
-      // copy blob data
-      move_data(src_pos, src_it->length);
+      // more length to copy data
+      if (move_length == 0) {
+        move_pos = src_pos;
+      }
+      move_length += src_it->length;
       src_pos += src_it->length;
       pos = src_pos;
       ++src_it;
       skip_empty(src_extents, src_it, src_pos);
     }
+  }
+  if (move_length > 0) {
+    move_data(move_pos, move_length);
   }
   if (pos < dst_blob.get_logical_length()) {
     // this is a candidate for improvement;
