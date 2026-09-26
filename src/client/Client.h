@@ -76,7 +76,8 @@ class MonClient;
 
 
 struct DirStat;
-struct LeaseStat;
+template<class S> struct lease_stat_t;
+using LeaseStat = lease_stat_t<std::string>;
 struct InodeStat;
 
 class Filer;

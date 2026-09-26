@@ -2691,6 +2691,200 @@ TEST(LibCephFS, SnapXattrs) {
   ceph_shutdown(cmount);
 }
 
+/*
+ * The MDS resolves the SnapInfo behind ceph.snap.btime and the snapshot
+ * metadata once for every inode it encodes, and a readdir encodes every inode
+ * in the directory.  SnapXattrs above checks a single lookup; these check the
+ * readdir loop, the snapdir listing, and a realm chain deep enough that the
+ * lookup has to walk up it.
+ *
+ * Each remounts before reading, so the values cannot come from anything the
+ * client already had: ceph.snap.btime is served out of Inode::snap_btime, so
+ * after a remount it is whatever the readdir reply carried.
+ */
+
+static std::string get_snap_btime(struct ceph_mount_info *cmount, const char *path)
+{
+  char buf[128];
+  int len = ceph_getxattr(cmount, path, "ceph.snap.btime", buf, sizeof(buf));
+  if (len <= 0 || len >= (int)sizeof(buf))
+    return std::string();
+  return std::string(buf, len);
+}
+
+TEST(LibCephFS, SnapBtimeViaReaddir) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  auto top = generate_random_string();
+  ASSERT_EQ(0, ceph_mkdir(cmount, top.c_str(), 0777));
+  ASSERT_EQ(0, ceph_chdir(cmount, top.c_str()));
+
+  const int nfiles = 20;
+  for (int i = 0; i < nfiles; i++) {
+    char name[32];
+    snprintf(name, sizeof(name), "f%d", i);
+    int fd = ceph_open(cmount, name, O_CREAT|O_WRONLY, 0666);
+    ASSERT_LT(0, fd);
+    ASSERT_EQ(0, ceph_close(cmount, fd));
+  }
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, ".snap/s", 0777));
+
+  std::string want = get_snap_btime(cmount, ".snap/s");
+  ASSERT_FALSE(want.empty());
+
+  // remount, so every entry below comes from the readdir reply
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+  ASSERT_EQ(0, ceph_chdir(cmount, top.c_str()));
+
+  struct ceph_dir_result *cdr = nullptr;
+  ASSERT_EQ(0, ceph_opendir(cmount, ".snap/s", &cdr));
+  int seen = 0;
+  struct dirent *de;
+  while ((de = ceph_readdir(cmount, cdr))) {
+    if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
+      continue;
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), ".snap/s/%s", de->d_name);
+    ASSERT_EQ(want, get_snap_btime(cmount, path)) << " for " << path;
+    seen++;
+  }
+  ASSERT_EQ(0, ceph_closedir(cmount, cdr));
+  ASSERT_EQ(nfiles, seen);
+
+  ceph_shutdown(cmount);
+}
+
+/*
+ * Listing .snap is lssnap, which encodes one inodestat per snapshot, each
+ * carrying that snapshot's own btime and metadata.  Give the snapshots
+ * metadata that names them, so a mix-up shows up as one snapshot reporting
+ * another's.
+ */
+TEST(LibCephFS, SnapInfoViaSnapdirReaddir) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  auto top = generate_random_string();
+  ASSERT_EQ(0, ceph_mkdir(cmount, top.c_str(), 0777));
+  ASSERT_EQ(0, ceph_chdir(cmount, top.c_str()));
+
+  const std::vector<std::string> names = {"s0", "s1", "s2"};
+  std::map<std::string, std::string> want_btime;
+  for (const auto& n : names) {
+    struct snap_metadata md[] = {{"which", n.c_str()}};
+    ASSERT_EQ(0, ceph_mksnap(cmount, ".", n.c_str(), 0755, md, std::size(md)));
+    std::string p = ".snap/" + n;
+    want_btime[n] = get_snap_btime(cmount, p.c_str());
+    ASSERT_FALSE(want_btime[n].empty());
+  }
+  // distinct snapshots must have distinct btimes, or the check below is vacuous
+  ASSERT_NE(want_btime["s0"], want_btime["s2"]);
+
+  // remount, so the snapdir listing is what populates the cache
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+  ASSERT_EQ(0, ceph_chdir(cmount, top.c_str()));
+
+  struct ceph_dir_result *cdr = nullptr;
+  ASSERT_EQ(0, ceph_opendir(cmount, ".snap", &cdr));
+  std::vector<std::string> listed;
+  struct dirent *de;
+  while ((de = ceph_readdir(cmount, cdr))) {
+    if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
+      continue;
+    listed.push_back(de->d_name);
+  }
+  ASSERT_EQ(0, ceph_closedir(cmount, cdr));
+  std::sort(listed.begin(), listed.end());
+  ASSERT_EQ(names, listed);
+
+  for (const auto& n : listed) {
+    std::string p = ".snap/" + n;
+    ASSERT_EQ(want_btime[n], get_snap_btime(cmount, p.c_str())) << " for " << p;
+
+    // ceph_free_snap_info_buffer() does not clear the pointer it frees, so
+    // never reuse one of these across calls
+    struct snap_info info = {};
+    ASSERT_EQ(0, ceph_get_snap_info(cmount, p.c_str(), &info)) << " for " << p;
+    ASSERT_GT(info.id, 0u);
+    ASSERT_EQ(1u, info.nr_snap_metadata) << " for " << p;
+    ASSERT_STREQ("which", info.snap_metadata[0].key);
+    ASSERT_STREQ(n.c_str(), info.snap_metadata[0].value) << " for " << p;
+    ceph_free_snap_info_buffer(&info);
+  }
+
+  ceph_shutdown(cmount);
+}
+
+/*
+ * A directory that has a snapshot of its own gets its own snaprealm, so a
+ * snapshot taken on an ancestor is no longer in the realm the lookup starts
+ * from and has to be reached by walking up the chain -- while a snapshot the
+ * realm owns itself has to win over anything above it.
+ */
+TEST(LibCephFS, SnapInfoNestedRealms) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  auto top = generate_random_string();
+  ASSERT_EQ(0, ceph_mkdir(cmount, top.c_str(), 0777));
+  ASSERT_EQ(0, ceph_chdir(cmount, top.c_str()));
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, "parent", 0777));
+  ASSERT_EQ(0, ceph_mkdir(cmount, "parent/child", 0777));
+
+  // the parent's snapshot first, so it predates the child's realm
+  struct snap_metadata pmd[] = {{"level", "parent"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, "parent", "ps", 0755, pmd, std::size(pmd)));
+  struct snap_metadata cmd[] = {{"level", "child"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, "parent/child", "cs", 0755, cmd, std::size(cmd)));
+
+  std::string ps_btime = get_snap_btime(cmount, "parent/.snap/ps");
+  std::string cs_btime = get_snap_btime(cmount, "parent/child/.snap/cs");
+  ASSERT_FALSE(ps_btime.empty());
+  ASSERT_FALSE(cs_btime.empty());
+  ASSERT_NE(ps_btime, cs_btime);
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+  ASSERT_EQ(0, ceph_chdir(cmount, top.c_str()));
+
+  // the child seen inside the parent's snapshot: the child has a realm of its
+  // own now, so this only resolves if the walk goes up past it
+  ASSERT_EQ(ps_btime, get_snap_btime(cmount, "parent/.snap/ps/child"));
+
+  // and the child's own snapshot still resolves to the child's own snap
+  ASSERT_EQ(cs_btime, get_snap_btime(cmount, "parent/child/.snap/cs"));
+
+  struct snap_info cinfo = {};
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, "parent/child/.snap/cs", &cinfo));
+  ASSERT_EQ(1u, cinfo.nr_snap_metadata);
+  ASSERT_STREQ("level", cinfo.snap_metadata[0].key);
+  ASSERT_STREQ("child", cinfo.snap_metadata[0].value);
+  ceph_free_snap_info_buffer(&cinfo);
+
+  struct snap_info pinfo = {};
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, "parent/.snap/ps", &pinfo));
+  ASSERT_EQ(1u, pinfo.nr_snap_metadata);
+  ASSERT_STREQ("level", pinfo.snap_metadata[0].key);
+  ASSERT_STREQ("parent", pinfo.snap_metadata[0].value);
+  ceph_free_snap_info_buffer(&pinfo);
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, Lseek) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(0, ceph_create(&cmount, NULL));

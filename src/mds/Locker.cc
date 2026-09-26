@@ -4556,19 +4556,19 @@ void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr
     now += mdcache->client_lease_durations[pool];
     mdcache->touch_client_lease(l, pool, now);
 
-    LeaseStat lstat;
+    LeaseStatView lstat;
     lstat.mask = CEPH_LEASE_VALID | mask;
     lstat.duration_ms = (uint32_t)(1000 * mdcache->client_lease_durations[pool]);
     lstat.seq = ++l->seq;
-    lstat.alternate_name = std::string(dn->alternate_name);
+    lstat.alternate_name = dn->get_alternate_name();
     encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease seq " << lstat.seq << " dur " << lstat.duration_ms << "ms "
 	     << " on " << *dn << dendl;
   } else {
     // null lease
-    LeaseStat lstat;
+    LeaseStatView lstat;
     lstat.mask = 0;
-    lstat.alternate_name = std::string(dn->alternate_name);
+    lstat.alternate_name = dn->get_alternate_name();
     encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
   }
@@ -4592,8 +4592,30 @@ void Locker::revoke_client_leases(SimpleLock *lock)
   }
 }
 
+/*
+ * How many bytes encode_lease() below will append.  The readdir paths need
+ * this to decide whether one more entry fits.  They used to use
+ * sizeof(LeaseStat) for it, which is the size of the C++ object -- 48 bytes,
+ * 32 of them the std::string -- and bears no relation to the encoding: it
+ * overestimates a lease with no alternate name, and underestimates every
+ * lease whose alternate name is longer than 28 bytes, which on an
+ * fscrypt-enabled directory is all of them.
+ */
+unsigned Locker::lease_encoded_size(const session_info_t& info,
+				    std::string_view alternate_name)
+{
+  unsigned len = sizeof(__u16)		// mask
+	       + sizeof(__u32)		// duration_ms
+	       + sizeof(__u32);		// seq
+  if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    len += ceph::encoding_detail::struct_header_len();
+    len += sizeof(__u32) + alternate_name.size();	// alternate_name
+  }
+  return len;
+}
+
 void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
-			  const LeaseStat& ls)
+			  const LeaseStatView& ls)
 {
   if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
     dout(25) << "encode lease reply encoding: " << ls << dendl;
