@@ -28,6 +28,7 @@ check_function_exists(accept4 HAVE_ACCEPT4)
 check_function_exists(sigdescr_np HAVE_SIGDESCR_NP)
 
 include(CMakePushCheckState)
+include(CheckCXXSourceCompiles)
 cmake_push_check_state(RESET)
 set(CMAKE_REQUIRED_LIBRARIES pthread)
 check_function_exists(pthread_spin_init HAVE_PTHREAD_SPINLOCK)
@@ -36,6 +37,13 @@ check_function_exists(pthread_get_name_np HAVE_PTHREAD_GET_NAME_NP)
 check_function_exists(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
 check_function_exists(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
 check_function_exists(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
+check_cxx_source_compiles("
+#include <pthread.h>
+int main() {
+  (void) PTHREAD_MUTEX_ADAPTIVE_NP;
+  return 0;
+}
+" HAVE_PTHREAD_MUTEX_ADAPTIVE_NP)
 cmake_pop_check_state()
 
 check_function_exists(eventfd HAVE_EVENTFD)

@@ -457,6 +457,14 @@ endif(WITH_LZ4)
 CMAKE_DEPENDENT_OPTION(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep" ON
   "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
 
+option(WITH_CEPH_ADAPTIVE_MUTEX
+  "Use PTHREAD_MUTEX_ADAPTIVE_NP as ceph::mutex (perf experiment)" OFF)
+if(WITH_CEPH_ADAPTIVE_MUTEX AND NOT HAVE_PTHREAD_MUTEX_ADAPTIVE_NP)
+  message(WARNING
+    "WITH_CEPH_ADAPTIVE_MUTEX is ON but PTHREAD_MUTEX_ADAPTIVE_NP is unavailable; "
+    "ceph::mutex will remain non-adaptive")
+endif()
+
 option(WITH_CPUTRACE "Enable Cputrace support via the admin socket" OFF)
 
 # Determine default for WITH_CEPH_LOCKSTAT based on compiler/version
