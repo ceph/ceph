@@ -6936,6 +6936,7 @@ bool Monitor::ms_handle_fast_authentication(Connection *con)
   auto priv = con->get_priv();
   MonSession *s = static_cast<MonSession*>(priv.get());
   if (!s) {
+    std::lock_guard l(session_map_lock);
     // must be msgr2, otherwise dispatch would have set up the session.
     if (state == STATE_SHUTDOWN) {
       dout(10) << __func__ << " ignoring new con " << con << " (shutdown)" << dendl;
