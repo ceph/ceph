@@ -159,6 +159,100 @@ TEST_P(TestClsRgw, index_multiple_obj_writers)
   }
 }
 
+// A skipped completion must not lower the entry's version. Three writers'
+// completions arrive at epochs 3, 1 and 2: epoch 1 is stale and skipped,
+// and epoch 2 must then be skipped too, leaving epoch 3's write listed.
+TEST_P(TestClsRgw, index_stale_complete_keeps_newest)
+{
+  string bucket_oid = str_int("bucket", 100);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  cls_rgw_obj_key obj = str_int("obj", 0);
+  string loc = str_int("loc", 0);
+  const int epochs[] = {3, 1, 2};
+  for (int e : epochs) {
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, str_int("tag", e), obj, loc);
+  }
+  for (int e : epochs) {
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = RGWObjCategory::None;
+    meta.size = 1024 * e;
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, str_int("tag", e), e, obj, meta);
+  }
+  test_stats(ioctx, bucket_oid, RGWObjCategory::None, 1, 1024 * 3);
+}
+
+// A canceled op must not reset the entry's version either: after epoch 2's
+// write, a cancel, and a stale completion at epoch 1, epoch 2's write
+// stays listed.
+TEST_P(TestClsRgw, index_cancel_keeps_newest)
+{
+  string bucket_oid = str_int("bucket", 101);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  cls_rgw_obj_key obj = str_int("obj", 0);
+  string loc = str_int("loc", 0);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-new", obj, loc);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-cancel", obj, loc);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-old", obj, loc);
+
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = RGWObjCategory::None;
+  meta.size = 2048;
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-new", 2, obj, meta);
+  rgw_bucket_dir_entry_meta cancel_meta;
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_CANCEL, "tag-cancel", 0, obj, cancel_meta);
+  rgw_bucket_dir_entry_meta old_meta;
+  old_meta.category = RGWObjCategory::None;
+  old_meta.size = 1024;
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-old", 1, obj, old_meta);
+
+  test_stats(ioctx, bucket_oid, RGWObjCategory::None, 1, 2048);
+}
+
+// A delete, a put and a delete, whose completions arrive at epochs 4, 2
+// and 3: the put (epoch 3) is older than the last delete (epoch 4), so no
+// entry may remain.
+TEST_P(TestClsRgw, index_stale_complete_after_delete)
+{
+  string bucket_oid = str_int("bucket", 102);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  cls_rgw_obj_key obj = str_int("obj", 0);
+  string loc = str_int("loc", 0);
+  {
+    // the object exists at epoch 1
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-init", obj, loc);
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = RGWObjCategory::None;
+    meta.size = 1024;
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-init", 1, obj, meta);
+  }
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, "tag-del1", obj, loc);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-put", obj, loc);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, "tag-del2", obj, loc);
+
+  rgw_bucket_dir_entry_meta del_meta;
+  del_meta.category = RGWObjCategory::None;
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, "tag-del2", 4, obj, del_meta);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, "tag-del1", 2, obj, del_meta);
+  rgw_bucket_dir_entry_meta put_meta;
+  put_meta.category = RGWObjCategory::None;
+  put_meta.size = 2048;
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-put", 3, obj, put_meta);
+
+  test_stats(ioctx, bucket_oid, RGWObjCategory::None, 0, 0);
+}
+
 TEST_P(TestClsRgw, index_remove_object)
 {
   string bucket_oid = str_int("bucket", 2);
