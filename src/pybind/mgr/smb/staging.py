@@ -13,7 +13,7 @@ import functools
 import logging
 import operator
 
-from ceph.fs.earmarking import EarmarkTopScope
+from ceph.fs.earmarking import EarmarkConflictError, SMBEarmark
 
 from . import config_store, resources, rgw
 from .enums import (
@@ -507,41 +507,13 @@ def _check_share_resource(
             share, msg="path is not a valid directory in volume"
         )
     if earmark_resolver:
-        earmark = earmark_resolver.get_earmark(
-            volpath,
-            share.cephfs.volume,
-        )
-        if not earmark:
-            smb_earmark = (
-                f"{EarmarkTopScope.SMB.value}.cluster.{share.cluster_id}"
+        wanted = SMBEarmark.from_cluster_id(share.cluster_id)
+        try:
+            earmark_resolver.test_and_set_earmark(
+                volpath, share.cephfs.volume, wanted
             )
-            earmark_resolver.set_earmark(
-                volpath,
-                share.cephfs.volume,
-                smb_earmark,
-            )
-        else:
-            parsed_earmark = _parse_earmark(earmark)
-
-            # Check if the top-level scope is not SMB
-            if not earmark_resolver.check_earmark(
-                earmark, EarmarkTopScope.SMB
-            ):
-                raise ErrorResult(
-                    share,
-                    msg=f"earmark has already been set by {parsed_earmark['scope']}",
-                )
-
-            # Check if the earmark is set by a different cluster
-            if (
-                parsed_earmark['cluster_id']
-                and parsed_earmark['cluster_id'] != share.cluster_id
-            ):
-                raise ErrorResult(
-                    share,
-                    msg="earmark has already been set by smb cluster "
-                    f"{parsed_earmark['cluster_id']}",
-                )
+        except EarmarkConflictError as err:
+            raise ErrorResult(share, str(err)) from err
 
     name_used_by = _share_name_in_use(staging, share)
     if name_used_by:
