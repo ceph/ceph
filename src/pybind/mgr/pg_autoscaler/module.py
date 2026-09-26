@@ -76,7 +76,11 @@ def effective_target_ratio(target_ratio: float,
     adjusting for capacity reserved by pools that have target_size_bytes set.
     """
     target_ratio = float(target_ratio)
-    if total_target_ratio:
+    if total_target_ratio > 1.0:
+        # The ratios are only relative weights once they ask for more than the
+        # cluster has. While they still fit, each pool gets the fraction it
+        # asked for, so a lone pool set to 0.1 does not end up claiming
+        # everything and then having to merge the PGs back down again.
         target_ratio = target_ratio / total_target_ratio
 
     if total_target_bytes and capacity:
