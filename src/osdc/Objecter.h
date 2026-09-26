@@ -2034,6 +2034,16 @@ public:
     std::variant<OpComp, fu2::unique_function<OpSig>,
 		 Context*> onfinish;
     uint64_t ontimeout = 0;
+    // The tid 'ontimeout' was armed for.  A resubmitted op may be given a new
+    // tid, which leaves the pending event naming a tid that op_cancel() can no
+    // longer look up; _maybe_arm_op_timeout() compares against this to detect
+    // that and re-point the event at the current tid.
+    ceph_tid_t timeout_tid = 0;
+    // Deadline captured when the op enters op_submit(); the timer event is
+    // only registered once tid has been assigned, under the session lock.
+    // The deadline is per op, not per attempt: it is an absolute point in
+    // time, so re-pointing the event at a new tid does not restart the clock.
+    std::optional<ceph::coarse_mono_time> timeout_deadline;
 
     ceph_tid_t tid = 0;
     std::unique_ptr<std::vector<ceph_tid_t>> split_op_tids;
@@ -2850,6 +2860,7 @@ private:
   // low-level
   void _op_submit(Op *op, ceph::shunique_lock<ceph::shared_mutex>& lc,
 		  ceph_tid_t *ptid);
+  void _maybe_arm_op_timeout(Op *op);
   void add_op_to_splitop_session(Op *op);
   void _op_submit_with_budget(Op *op,
 			      ceph::shunique_lock<ceph::shared_mutex>& lc,
