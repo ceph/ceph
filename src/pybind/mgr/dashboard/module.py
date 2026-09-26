@@ -42,6 +42,7 @@ from .services.exception import dashboard_exception_handler
 from .services.nvmeof_top_cli import NvmeofTopCollector
 from .services.service import RgwServiceManager
 from .services.sso import SSO_COMMANDS, handle_sso_command
+from .services.telemetry import DashboardTelemetryService
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
     configure_cors, prepare_url_prefix, str_to_bool
@@ -362,6 +363,8 @@ class Module(MgrModule, CherryPyConfig):
         AuthManager.initialize()
         load_sso_db()
 
+        self.update_telemetry_metrics()
+
         conf_result = self.await_configuration()
         if conf_result is None:
             return
@@ -597,6 +600,12 @@ class Module(MgrModule, CherryPyConfig):
             'OAuth2 SSO has been automatically disabled because '
             'oauth2-proxy is no longer running.'
         )
+
+    def update_telemetry_metrics(self):
+        """
+        Update dashboard telemetry metrics in config-key store.
+        """
+        DashboardTelemetryService.refresh_authentication_user_signals()
 
     def notify(self, notify_type: NotifyType, notify_id):
         NotificationQueue.new_notification(str(notify_type), notify_id)
