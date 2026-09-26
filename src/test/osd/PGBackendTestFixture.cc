@@ -1586,3 +1586,116 @@ void PGBackendTestFixture::corrupt_shard_data(const hobject_t& obj, pg_shard_t s
   std::cout << "Corrupted shard " << shard.osd << " data for object " << obj
             << " (wrote " << size << " bytes of zeros)" << std::endl;
 }
+
+int PGBackendTestFixture::omap_write(
+  const std::string& obj_name,
+  const OmapUpdate& update,
+  bool run)
+{
+  int primary_osd = osdmap->get_pg_acting_primary(pgid);
+  ceph_assert(primary_osd >= 0);
+
+  auto result = std::make_shared<int>(-EINPROGRESS);
+  event_loop->schedule_transaction(primary_osd, [this, result, obj_name, update]() {
+    hobject_t hoid = make_test_object(obj_name);
+    PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+
+    ObjectContextRef obc = get_object_context(hoid, false);
+    pg_t->obc_map[hoid] = obc;
+    outstanding_writes[hoid]++;
+
+    // omap_clear() discards any header/key updates already queued on the
+    // op, so it has to go first.
+    if (update.clear) {
+      pg_t->omap_clear(hoid);
+    }
+    if (update.header) {
+      bufferlist header = *update.header;
+      pg_t->omap_setheader(hoid, header);
+    }
+    if (!update.set_keys.empty()) {
+      std::map<std::string, bufferlist> keys = update.set_keys;
+      pg_t->omap_setkeys(hoid, keys);
+    }
+    if (!update.rm_keys.empty()) {
+      std::set<std::string> keys = update.rm_keys;
+      pg_t->omap_rmkeys(hoid, keys);
+    }
+
+    eversion_t prior_version = obc->obs.oi.version;
+    eversion_t at_version = get_next_version();
+
+    object_info_t new_oi = obc->obs.oi;
+    new_oi.version = at_version;
+    new_oi.prior_version = prior_version;
+    {
+      bufferlist oi_bl;
+      new_oi.encode(oi_bl,
+        osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+      pg_t->setattr(hoid, OI_ATTR, oi_bl);
+    }
+    obc->obs.oi = new_oi;
+
+    std::vector<pg_log_entry_t> log_entries;
+    pg_log_entry_t entry;
+    entry.op = pg_log_entry_t::MODIFY;
+    entry.soid = hoid;
+    entry.version = at_version;
+    entry.prior_version = prior_version;
+    log_entries.push_back(entry);
+
+    auto write_complete = [this, hoid, obc, prior_version](int r) {
+      if (outstanding_writes[hoid] > 0) {
+        outstanding_writes[hoid]--;
+        if (outstanding_writes[hoid] == 0) {
+          outstanding_writes.erase(hoid);
+        }
+      }
+      if (r != 0 && r != -EINPROGRESS) {
+        obc->obs.oi.version = prior_version;
+        obc->attr_cache.clear();
+        outstanding_writes.erase(hoid);
+      }
+    };
+
+    // Drain inside the primary's context, as write() does, so the result
+    // reflects the completed write rather than -EINPROGRESS.
+    object_stat_sum_t delta_stats;
+    *result = do_transaction_and_complete(
+      hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries),
+      write_complete, true);
+  });
+  if (run) {
+    event_loop->run_until_idle();
+  }
+  return *result;
+}
+
+int PGBackendTestFixture::omap_read(
+  const std::string& obj_name,
+  bufferlist* header,
+  std::map<std::string, bufferlist>* out)
+{
+  hobject_t hoid = make_test_object(obj_name);
+  MockPGBackendListener* primary_listener = get_primary_listener();
+  PGBackend* primary_backend = get_primary_backend();
+  ceph_assert(primary_listener != nullptr);
+  ceph_assert(primary_backend != nullptr);
+
+  pg_shard_t me = primary_listener->whoami_shard();
+  shard_id_t shard = (pool_type == EC) ? me.shard : shard_id_t::NO_SHARD;
+  ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard);
+  header->clear();
+  out->clear();
+  return primary_backend->omap_get(chs[me.osd], ghoid, header, out);
+}
+
+void PGBackendTestFixture::assert_backends_idle()
+{
+  for (auto& [instance, backend] : backends) {
+    // Only the optimized EC backend is covered.
+    if (ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(backend.get())) {
+      ec_switch->assert_idle();
+    }
+  }
+}

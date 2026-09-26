@@ -52,6 +52,16 @@ struct ECSubRead;
 struct PGLog;
 struct RecoveryMessages;
 
+/* IDLE-STATE CONTRACT
+ *
+ * With no I/O in flight, an EC backend must hold no per-op or per-object
+ * state. Every container in ECCommon and its pipelines that grows with I/O
+ * must be released when that I/O completes, and must be covered by the owning
+ * class's assert_idle(). The unit tests call ECBackend::assert_idle() once
+ * I/O has drained; nothing in production calls it. State that only
+ * on_change() releases is a leak: it lives until the next interval change
+ * (https://tracker.ceph.com/issues/80087).
+ */
 struct ECCommon {
   ECOmapJournal ec_omap_journal;
 
@@ -391,6 +401,7 @@ struct ECCommon {
     void on_change();
 
     void kick_reads();
+    void assert_idle() const;
 
     std::map<ceph_tid_t, ReadOp> tid_to_read_map;
     std::map<pg_shard_t, std::set<ceph_tid_t>> shard_to_read_map;
@@ -665,7 +676,6 @@ struct ECCommon {
     using OpRef = std::shared_ptr<Op>;
 
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
-    std::map<hobject_t, eversion_t> oid_to_version;
 
     std::list<OpRef> waiting_commit;
     eversion_t completed_to;
@@ -677,6 +687,7 @@ struct ECCommon {
 
     void on_change();
     void on_change2();
+    void assert_idle() const;
     void call_write_ordered(std::function<void(void)> &&cb);
 
     CephContext *cct;
@@ -871,6 +882,8 @@ struct ECCommon {
     };
 
     std::map<hobject_t, RecoveryOp> recovery_ops;
+
+    void assert_idle() const;
 
     uint64_t get_recovery_chunk_size() const {
       return round_up_to(cct->_conf->osd_recovery_max_chunk,

@@ -1311,3 +1311,157 @@ INSTANTIATE_TEST_SUITE_P(
   }
 );
 
+// ---------------------------------------------------------------------------
+// OMAP on optimized EC pools
+// ---------------------------------------------------------------------------
+
+// A separate suite so that FLAG_OMAP only applies here. Optimized EC keeps
+// omap updates in ECOmapJournal until the pg log entry rolls forward, so
+// these tests also prove the journal drains once a write completes.
+class TestECOmapWithPeering : public ECPeeringTestFixture,
+                              public ::testing::WithParamInterface<BackendConfig> {
+public:
+  TestECOmapWithPeering() : ECPeeringTestFixture() {
+    const auto& config = GetParam();
+    k = config.k;
+    m = config.m;
+    stripe_unit = config.stripe_unit;
+    ec_plugin = config.ec_plugin;
+    ec_technique = config.ec_technique;
+    pool_flags = config.pool_flags;
+  }
+
+  static bufferlist bl(const std::string& s) {
+    bufferlist b;
+    b.append(s);
+    return b;
+  }
+
+  void expect_omap(
+    const std::string& obj_name,
+    const std::optional<std::string>& expected_header,
+    const std::map<std::string, std::string>& expected_keys,
+    const std::string& context)
+  {
+    bufferlist header;
+    std::map<std::string, bufferlist> keys;
+    ASSERT_EQ(0, omap_read(obj_name, &header, &keys)) << context;
+    if (expected_header) {
+      EXPECT_EQ(*expected_header, header.to_str()) << context;
+    }
+    std::map<std::string, std::string> got;
+    for (auto& [key, val] : keys) {
+      got[key] = val.to_str();
+    }
+    EXPECT_EQ(expected_keys, got) << context;
+  }
+};
+
+namespace {
+
+const std::vector<BackendConfig> kECOmapPeeringConfigs = {
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van",
+   pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS | pg_pool_t::FLAG_OMAP,
+   4096, 4, 2, "EC_ISA_Opt_Omap_k4m2_su4k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van",
+   pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS | pg_pool_t::FLAG_OMAP,
+   4096, 2, 1, "EC_Jerasure_Opt_Omap_k2m1_su4k"},
+};
+
+}  // namespace
+
+TEST_P(TestECOmapWithPeering, OmapSetKeysAndHeader) {
+  const std::string obj_name = "omap_set_keys";
+  create_and_write_verify(obj_name, "payload");
+
+  OmapUpdate update;
+  update.header = bl("hdr1");
+  update.set_keys = {{"k1", bl("v1")}, {"k2", bl("v2")}};
+  ASSERT_EQ(0, omap_write(obj_name, update));
+
+  // The write has fully committed and been rolled forward, so the omap
+  // journal must already have released this object's entries. Check before
+  // reading the object back: an omap read processes and drops whatever the
+  // journal still holds for the object, which would mask a leak here.
+  assert_backends_idle();
+
+  expect_omap(obj_name, "hdr1", {{"k1", "v1"}, {"k2", "v2"}}, "after set");
+  assert_backends_idle();
+}
+
+TEST_P(TestECOmapWithPeering, OmapRemoveAndClear) {
+  const std::string obj_name = "omap_remove_clear";
+  create_and_write_verify(obj_name, "payload");
+
+  OmapUpdate set;
+  set.set_keys = {{"k1", bl("v1")}, {"k2", bl("v2")}, {"k3", bl("v3")}};
+  ASSERT_EQ(0, omap_write(obj_name, set));
+
+  OmapUpdate rm;
+  rm.rm_keys = {"k2"};
+  ASSERT_EQ(0, omap_write(obj_name, rm));
+  expect_omap(obj_name, std::nullopt, {{"k1", "v1"}, {"k3", "v3"}}, "after rm");
+
+  OmapUpdate clear;
+  clear.clear = true;
+  clear.set_keys = {{"k9", bl("v9")}};
+  ASSERT_EQ(0, omap_write(obj_name, clear));
+  expect_omap(obj_name, std::nullopt, {{"k9", "v9"}}, "after clear");
+
+  assert_backends_idle();
+}
+
+TEST_P(TestECOmapWithPeering, OmapAcrossFailover) {
+  const std::string obj_name = "omap_failover";
+  create_and_write_verify(obj_name, "payload");
+
+  OmapUpdate before;
+  before.header = bl("hdr");
+  before.set_keys = {{"k1", bl("v1")}, {"k2", bl("v2")}};
+  ASSERT_EQ(0, omap_write(obj_name, before));
+
+  // Lose a non-primary data shard. The interval change clears the omap
+  // journal, so the keys must have reached the store by now.
+  mark_osd_down(1);
+  ASSERT_TRUE(all_shards_active()) << "PG should re-activate after peering";
+  expect_omap(obj_name, "hdr", {{"k1", "v1"}, {"k2", "v2"}}, "after failover");
+
+  OmapUpdate after;
+  after.set_keys = {{"k3", bl("v3")}};
+  after.rm_keys = {"k1"};
+  ASSERT_EQ(0, omap_write(obj_name, after));
+  expect_omap(obj_name, "hdr", {{"k2", "v2"}, {"k3", "v3"}}, "after post-failover write");
+
+  assert_backends_idle();
+}
+
+TEST_P(TestECOmapWithPeering, OmapManyObjects) {
+  // Many distinct objects is the pattern that exposed
+  // https://tracker.ceph.com/issues/80087; make sure omap-carrying objects
+  // leave nothing behind per object either.
+  const int num_objects = 16;
+  for (int i = 0; i < num_objects; i++) {
+    const std::string obj_name = "omap_many_" + std::to_string(i);
+    create_and_write_verify(obj_name, "payload");
+    OmapUpdate update;
+    update.set_keys = {{"k", bl("v" + std::to_string(i))}};
+    ASSERT_EQ(0, omap_write(obj_name, update));
+  }
+  // Before any read-back, which would clear per-object journal state.
+  assert_backends_idle();
+  for (int i = 0; i < num_objects; i++) {
+    const std::string obj_name = "omap_many_" + std::to_string(i);
+    expect_omap(obj_name, std::nullopt, {{"k", "v" + std::to_string(i)}}, obj_name);
+  }
+  assert_backends_idle();
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  ECOmapConfigs,
+  TestECOmapWithPeering,
+  ::testing::ValuesIn(kECOmapPeeringConfigs),
+  [](const ::testing::TestParamInfo<BackendConfig>& info) {
+    return info.param.label;
+  }
+);
+
