@@ -288,6 +288,37 @@ def test_deploy_nvmeof_container(cephadm_fs, funkypatch):
         assert (si.st_uid, si.st_gid) == (167, 167)
 
 
+def test_redeploy_nvmeof_removes_stale_encryption_key(cephadm_fs, funkypatch):
+    _common_patches(funkypatch)
+    fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
+
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'nvmeof.andu'
+        ctx.image = 'quay.io/ceph/nvmeof:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {
+            'config': 'XXXXXXX',
+            'keyring': 'YYYYYY',
+            'files': {
+                'ceph-nvmeof.conf': 'test config',
+            },
+        }
+
+        basedir = pathlib.Path(
+            f'/var/lib/ceph/{fsid}/nvmeof.andu'
+        )
+        basedir.mkdir(parents=True)
+
+        encryption_key = basedir / 'encryption_key'
+        encryption_key.write_text('stale key')
+
+        _cephadm._common_deploy(ctx)
+
+    assert not encryption_key.exists()
+
+
 def test_deploy_a_monitoring_container(cephadm_fs, funkypatch):
     mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']

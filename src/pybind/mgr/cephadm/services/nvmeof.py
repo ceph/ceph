@@ -1,11 +1,12 @@
 import errno
 import logging
 import json
-from typing import List, cast, Optional, NamedTuple
+from typing import List, cast, Optional, NamedTuple, TYPE_CHECKING
 from ipaddress import ip_address, IPv6Address
+from dataclasses import replace
 
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource
+from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource, ServiceSpec
 
 from orchestrator import (
     OrchestratorError,
@@ -20,6 +21,8 @@ from ceph.cephadm.constants import (
 from .cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
 from .service_registry import register_cephadm_service
 from .. import utils
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 NVMEOF_CLIENT_CERT_LABEL = 'client'
@@ -67,6 +70,51 @@ class NvmeofService(CephService):
         # that reason we make no attempt to catch the OrchestratorError
         # this may raise
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
+
+    @classmethod
+    def get_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None,
+    ) -> List[str]:
+        deps = []
+
+        if spec:
+            nvmeof_spec = cast(NvmeofServiceSpec, spec)
+            if nvmeof_spec.encryption_key:
+                deps.append(
+                    f'encryption_key:{utils.config_hash(nvmeof_spec.encryption_key)}'
+                )
+
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
+
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
+        step = super().choose_next_action(
+            scheduled_action,
+            daemon_type,
+            spec,
+            curr_deps,
+            last_deps,
+            daemon,
+        )
+
+        if step.action is utils.Action.RECONFIG:
+            sym_diff = set(curr_deps).symmetric_difference(last_deps)
+
+            if any(dep.startswith('encryption_key:') for dep in sym_diff):
+                return replace(step, action=utils.Action.REDEPLOY)
+
+        return step
 
     def configure_tls(self, spec: NvmeofServiceSpec, daemon_spec: CephadmDaemonDeploySpec) -> None:
         """
