@@ -703,6 +703,7 @@ class ExportMgr:
                              squash: str,
                              access_type: str,
                              clients: list = [],
+                             server_addrs: Optional[List[str]] = None,
                              sectype: Optional[List[str]] = None,
                              xprtsec: Optional[str] = None,
                              cmount_path: Optional[str] = "/",
@@ -735,6 +736,8 @@ class ExportMgr:
         }
         if transports is not None:
             export_dict["transports"] = transports
+        if server_addrs:
+            export_dict["server_addrs"] = server_addrs
         if not self._fetch_export(cluster_id, pseudo_path):
             export = self.create_export_from_dict(
                 cluster_id,
@@ -764,6 +767,7 @@ class ExportMgr:
                           bucket: Optional[str] = None,
                           user_id: Optional[str] = None,
                           clients: list = [],
+                          server_addrs: Optional[List[str]] = None,
                           sectype: Optional[List[str]] = None,
                           xprtsec: Optional[str] = None,
                           transports: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -791,6 +795,8 @@ class ExportMgr:
         }
         if transports is not None:
             export_dict["transports"] = transports
+        if server_addrs:
+            export_dict["server_addrs"] = server_addrs
         if not self._fetch_export(cluster_id, pseudo_path):
             export = self.create_export_from_dict(
                 cluster_id,

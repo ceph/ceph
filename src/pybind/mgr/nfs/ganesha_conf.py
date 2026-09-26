@@ -365,7 +365,8 @@ class Export:
             clients: Optional[List[Client]] = None,
             sectype: Optional[List[str]] = None,
             xprtsec: Optional[str] = None,
-            qos_block: Optional[QOS] = None) -> None:
+            qos_block: Optional[QOS] = None,
+            server_addrs: Optional[List[str]] = None) -> None:
         self.export_id = export_id
         self.path = path
         self.fsal = fsal
@@ -381,6 +382,7 @@ class Export:
         self.sectype = sectype
         self.xprtsec = xprtsec
         self.qos_block = qos_block
+        self.server_addrs: Optional[List[str]] = server_addrs
 
     @classmethod
     def from_export_block(cls, export_block: RawBlock, cluster_id: str) -> 'Export':
@@ -417,6 +419,12 @@ class Export:
 
         xprtsec = export_block.values.get('XprtSec')
 
+        server_addrs = export_block.values.get('server_addrs')
+        if isinstance(server_addrs, str):
+            server_addrs = [server_addrs]
+        elif not isinstance(server_addrs, list):
+            server_addrs = None
+
         return cls(export_block.values['export_id'],
                    export_block.values['path'],
                    cluster_id,
@@ -431,7 +439,8 @@ class Export:
                     for client in client_blocks],
                    sectype=sectype,
                    xprtsec=xprtsec,
-                   qos_block=qos_block
+                   qos_block=qos_block,
+                   server_addrs=server_addrs
                    )
 
     def to_export_block(self) -> RawBlock:
@@ -450,6 +459,8 @@ class Export:
             values['SecType'] = self.sectype
         if self.xprtsec:
             values['XprtSec'] = self.xprtsec
+        if self.server_addrs:
+            values['server_addrs'] = self.server_addrs
         result = RawBlock("EXPORT", values=values)
         result.blocks = [
             self.fsal.to_fsal_block()
@@ -480,7 +491,8 @@ class Export:
                    [Client.from_dict(client) for client in ex_dict.get('clients', [])],
                    sectype=ex_dict.get("sectype"),
                    xprtsec=ex_dict.get('XprtSec'),
-                   qos_block=qos_block
+                   qos_block=qos_block,
+                   server_addrs=ex_dict.get('server_addrs')
                    )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -501,6 +513,8 @@ class Export:
             values['sectype'] = self.sectype
         if self.xprtsec:
             values['XprtSec'] = self.xprtsec
+        if self.server_addrs:
+            values['server_addrs'] = self.server_addrs
         if self.qos_block:
             values['qos_block'] = self.qos_block.to_dict()
         return values
@@ -547,6 +561,10 @@ class Export:
             _validate_sec_type(st)
         if self.xprtsec:
             _validate_xprtsec_type(self.xprtsec)
+        if self.server_addrs is not None and len(self.server_addrs) == 0:
+            raise NFSInvalidOperation(
+                'server_addrs must contain at least one IP address if specified'
+            )
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Export):
