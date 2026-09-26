@@ -7,7 +7,6 @@ from collections import deque
 from mgr_util import lock_timeout_log, CephfsClient
 
 from .operations.volume import list_volumes
-from .exception import NotImplementedException
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ class JobThread(threading.Thread):
                 # execute the job (outside lock)
                 self.async_job.execute_job(vol_job[0], vol_job[1], should_cancel=lambda: thread_id.should_cancel())
                 retries = 0
-            except NotImplementedException:
+            except NotImplementedError:
                 raise
             except Exception:
                 # unless the jobs fetching and execution routines are not implemented
@@ -405,11 +404,11 @@ class AsyncJobs(threading.Thread):
         jobs are available return (0, None) else return (0, job). on error return
         (-ret, None). called under `self.lock`.
         """
-        raise NotImplementedException()
+        raise NotImplementedError()
 
     def execute_job(self, volname, job, should_cancel):
         """
         execute a job for a volume. the job can block on I/O operations, sleep for long
         hours and do all kinds of synchronous work. called outside `self.lock`.
         """
-        raise NotImplementedException()
+        raise NotImplementedError()
