@@ -1,10 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 
+#include <gtest/gtest.h>
+
 #include <array>
+#include <chrono>
+#include <future>
 #include <mutex>
 #include <numeric>
-#include <future>
-#include <gtest/gtest.h>
+#include <thread>
+#include <vector>
+
 #include "common/fair_mutex.h"
 
 TEST(FairMutex, simple)
@@ -64,5 +69,38 @@ TEST(FairMutex, fair)
   std::array<std::future<void>, NR_TEAMS> completed;
   for (int team = 0; team < NR_TEAMS; team++) {
     completed[team] = std::async(std::launch::async, play, team);
+  }
+}
+
+TEST(FairMutex, fifo_order)
+{
+  // waiters must acquire the lock in the order they queued
+  ceph::fair_mutex mutex{"fair::fifo"};
+  mutex.lock();
+
+  const int NR_WAITERS = 16;
+  std::vector<unsigned> acquire_order;
+  std::mutex order_mutex;
+  std::vector<std::thread> threads;
+  for (int i = 0; i < NR_WAITERS; i++) {
+    threads.emplace_back([&, i]() {
+      std::unique_lock lock{mutex};
+      std::lock_guard olk{order_mutex};
+      acquire_order.push_back(i);
+    });
+    // Start one thread at a time so each blocks on fair_mutex::lock() before
+    // the next thread is created.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+
+  mutex.unlock();
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  ASSERT_EQ(acquire_order.size(), NR_WAITERS);
+  for (int i = 0; i < NR_WAITERS; i++) {
+    ASSERT_EQ(acquire_order[i], i);
   }
 }
