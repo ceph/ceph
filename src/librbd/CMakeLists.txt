@@ -186,6 +186,7 @@ set(librbd_internal_srcs
   operation/MetadataRemoveRequest.cc
   operation/MetadataSetRequest.cc
   operation/MigrateRequest.cc
+  operation/CheckObjectMapRequest.cc
   operation/ObjectMapIterate.cc
   operation/RebuildObjectMapRequest.cc
   operation/RenameRequest.cc
