@@ -476,9 +476,11 @@ void CopyupRequest<I>::copyup() {
 
     m_image_ctx->rados_api.execute(
       object, copyup_io_context, std::move(copyup_op),
-      librbd::asio::util::get_callback_adapter(
-        [this](int r) { handle_copyup(r); }), nullptr,
-        (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+      librbd::asio::util::get_completion_token(
+        *m_image_ctx->asio_engine,
+        [this](int r) { handle_copyup(r); }),
+      nullptr,
+      (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
   }
 
   if (write_op.size() > 0) {
@@ -491,9 +493,11 @@ void CopyupRequest<I>::copyup() {
 
     m_image_ctx->rados_api.execute(
       object, *io_context, std::move(write_op),
-      librbd::asio::util::get_callback_adapter(
-        [this](int r) { handle_copyup(r); }), nullptr,
-        (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
+      librbd::asio::util::get_completion_token(
+        *m_image_ctx->asio_engine,
+        [this](int r) { handle_copyup(r); }),
+      nullptr,
+      (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
   }
 }
 
