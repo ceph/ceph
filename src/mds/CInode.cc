@@ -3701,6 +3701,10 @@ int CInode::get_caps_liked() const
     return get_caps_quiesce_mask() & (CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO);
 }
 
+/* The cap masks below shift each lock's bits by a constant: the lock types
+ * are fixed when the inode is constructed, and get_cap_shift() would look
+ * each up with an out-of-line call, for every inode a readdir issues caps
+ * on. */
 int CInode::get_caps_allowed_ever() const
 {
   int allowed;
@@ -3710,40 +3714,40 @@ int CInode::get_caps_allowed_ever() const
     allowed = CEPH_CAP_ANY;
   return allowed & 
     (CEPH_CAP_PIN |
-     (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
-     (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |
-     (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
-     (linklock.gcaps_allowed_ever() << linklock.get_cap_shift()));
+     (filelock.gcaps_allowed_ever() << CEPH_CAP_SFILE) |
+     (authlock.gcaps_allowed_ever() << CEPH_CAP_SAUTH) |
+     (xattrlock.gcaps_allowed_ever() << CEPH_CAP_SXATTR) |
+     (linklock.gcaps_allowed_ever() << CEPH_CAP_SLINK));
 }
 
 int CInode::get_caps_allowed_by_type(int type) const
 {
   return get_caps_quiesce_mask() & (
     CEPH_CAP_PIN |
-    (filelock.gcaps_allowed(type) << filelock.get_cap_shift()) |
-    (authlock.gcaps_allowed(type) << authlock.get_cap_shift()) |
-    (xattrlock.gcaps_allowed(type) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_allowed(type) << linklock.get_cap_shift())
+    (filelock.gcaps_allowed(type) << CEPH_CAP_SFILE) |
+    (authlock.gcaps_allowed(type) << CEPH_CAP_SAUTH) |
+    (xattrlock.gcaps_allowed(type) << CEPH_CAP_SXATTR) |
+    (linklock.gcaps_allowed(type) << CEPH_CAP_SLINK)
   );
 }
 
 int CInode::get_caps_careful() const
 {
   return get_caps_quiesce_mask() & (
-    (filelock.gcaps_careful() << filelock.get_cap_shift()) |
-    (authlock.gcaps_careful() << authlock.get_cap_shift()) |
-    (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_careful() << linklock.get_cap_shift())
+    (filelock.gcaps_careful() << CEPH_CAP_SFILE) |
+    (authlock.gcaps_careful() << CEPH_CAP_SAUTH) |
+    (xattrlock.gcaps_careful() << CEPH_CAP_SXATTR) |
+    (linklock.gcaps_careful() << CEPH_CAP_SLINK)
   );
 }
 
 int CInode::get_xlocker_mask(client_t client) const
 {
   return get_caps_quiesce_mask() & (
-    (filelock.gcaps_xlocker_mask(client) << filelock.get_cap_shift()) |
-    (authlock.gcaps_xlocker_mask(client) << authlock.get_cap_shift()) |
-    (xattrlock.gcaps_xlocker_mask(client) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift())
+    (filelock.gcaps_xlocker_mask(client) << CEPH_CAP_SFILE) |
+    (authlock.gcaps_xlocker_mask(client) << CEPH_CAP_SAUTH) |
+    (xattrlock.gcaps_xlocker_mask(client) << CEPH_CAP_SXATTR) |
+    (linklock.gcaps_xlocker_mask(client) << CEPH_CAP_SLINK)
   );
 }
 
@@ -3902,6 +3906,57 @@ void CInode::clear_clientwriteable()
 
 // =============================================
 
+namespace {
+/* A C struct the wire format carries as its raw bytes, the way
+ * WRITE_RAW_ENCODER() encodes it, wrapped so that denc can place it in a
+ * contiguous append alongside its neighbours. */
+template<typename T>
+struct raw_bytes_t {
+  const T& v;
+};
+
+template<typename T>
+raw_bytes_t<T> raw_bytes(const T& v)
+{
+  static_assert(std::is_trivially_copyable_v<T>);
+  return raw_bytes_t<T>{v};
+}
+}
+
+template<typename T>
+struct denc_traits<raw_bytes_t<T>> {
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = false;
+  static void bound_encode(const raw_bytes_t<T>&, size_t& p) {
+    p += sizeof(T);
+  }
+  static void encode(const raw_bytes_t<T>& o,
+		     ceph::buffer::list::contiguous_appender& p) {
+    p.append(reinterpret_cast<const char*>(&o.v), sizeof(T));
+  }
+};
+
+namespace {
+/* Append several values back to back, bounds-checking the buffer once rather
+ * than once per value.  Each is encoded exactly as encode() would encode it
+ * on its own.  This is encode(std::tuple{...}) without the tuple, which would
+ * copy every string, map and vector it holds.
+ *
+ * encode_inodestat() below is called for every inode a readdir returns, and
+ * a bufferlist append of a few bytes costs about as much as encoding the
+ * field did. */
+template<typename... Ts>
+void encode_contiguous(ceph::buffer::list& bl, const Ts&... vs)
+{
+  size_t len = 0;
+  (denc(vs, len), ...);
+  auto app = bl.get_contiguous_appender(len);
+  (denc(vs, app), ...);
+}
+}
+
 int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     SnapRealm *dir_realm,
 			     snapid_t snapid,
@@ -4010,12 +4065,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // file
   const mempool_inode *file_i = pfile ? pi:oi;
-  file_layout_t layout;
-  if (is_dir()) {
-    layout = (ppolicy ? pi : oi)->layout;
-  } else {
-    layout = file_i->layout;
-  }
+  // A reference, not a copy: file_layout_t carries the pool namespace as a
+  // std::string, and this runs for every inode a readdir encodes.
+  const file_layout_t& layout = is_dir() ? (ppolicy ? pi : oi)->layout
+                                         : file_i->layout;
 
   // max_size is min of projected, actual
   uint64_t max_size =
@@ -4249,57 +4302,59 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
     ENCODE_START(9, 1, bl);
-    encode(std::tuple{
-      oi->ino,
-      snapid,
-      oi->rdev,
-      version,
-      xattr_version,
-    }, bl, 0);
-    encode(ecap, bl);
-    {
-      ceph_file_layout legacy_layout;
-      layout.to_legacy(&legacy_layout);
-      encode(legacy_layout, bl);
-    }
-    encode(std::tuple{
-      any_i->ctime,
-      file_i->mtime,
-      file_i->atime,
-      file_i->time_warp_seq,
-      file_i->size,
-      max_size,
-      file_i->truncate_size,
-      file_i->truncate_seq,
-      auth_i->mode,
-      (uint32_t)auth_i->uid,
-      (uint32_t)auth_i->gid,
-      link_i->nlink,
-      file_i->dirstat.nfiles,
-      file_i->dirstat.nsubdirs,
-      file_i->rstat.rbytes,
-      file_i->rstat.rfiles,
-      file_i->rstat.rsubdirs,
-      file_i->rstat.rctime,
-    }, bl, 0);
+    ceph_file_layout legacy_layout;
+    layout.to_legacy(&legacy_layout);
+    encode_contiguous(bl,
+      std::tuple{
+        oi->ino,
+        snapid,
+        oi->rdev,
+        version,
+        xattr_version,
+      },
+      raw_bytes(ecap),
+      raw_bytes(legacy_layout),
+      std::tuple{
+        any_i->ctime,
+        file_i->mtime,
+        file_i->atime,
+        file_i->time_warp_seq,
+        file_i->size,
+        max_size,
+        file_i->truncate_size,
+        file_i->truncate_seq,
+        auth_i->mode,
+        (uint32_t)auth_i->uid,
+        (uint32_t)auth_i->gid,
+        link_i->nlink,
+        file_i->dirstat.nfiles,
+        file_i->dirstat.nsubdirs,
+        file_i->rstat.rbytes,
+        file_i->rstat.rfiles,
+        file_i->rstat.rsubdirs,
+        file_i->rstat.rctime,
+      });
     dirfragtree.encode(bl);
-    encode(symlink, bl);
-    encode(file_i->dir_layout, bl);
+    encode_contiguous(bl, symlink, raw_bytes(file_i->dir_layout));
     encode_xattrs();
-    encode(inline_version, bl);
-    encode(inline_data, bl);
+    // encode(inline_data) is its length and then its buffers, shared rather
+    // than copied.
+    encode_contiguous(bl, inline_version, (uint32_t)inline_data.length());
+    if (inline_data.length())
+      bl.append(inline_data);
     const mempool_inode *policy_i = ppolicy ? pi : oi;
     encode(policy_i->quota, bl);
-    encode(layout.pool_ns, bl);
-    encode(any_i->btime, bl);
-    encode(any_i->change_attr, bl);
-    encode(file_i->export_pin, bl);
-    encode(snap_btime, bl);
-    encode(file_i->rstat.rsnaps, bl);
-    encode(snap_metadata, bl);
-    encode(!file_i->fscrypt_auth.empty(), bl);
-    encode(file_i->fscrypt_auth, bl);
-    encode(file_i->fscrypt_file, bl);
+    encode_contiguous(bl,
+      layout.pool_ns,
+      any_i->btime,
+      any_i->change_attr,
+      file_i->export_pin,
+      snap_btime,
+      file_i->rstat.rsnaps,
+      snap_metadata,
+      !file_i->fscrypt_auth.empty(),
+      file_i->fscrypt_auth,
+      file_i->fscrypt_file);
     encode_nohead(optmdbl, bl);
     encode(get_subvolume_id(), bl);
     // encode inodestat

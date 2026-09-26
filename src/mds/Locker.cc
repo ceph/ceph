@@ -4525,18 +4525,29 @@ void Locker::handle_client_lease(const cref_t<MClientLease> &m)
 }
 
 
+bool Locker::can_lease_dentries_in(CInode *diri, const MDRequestRef& mdr)
+{
+  client_t client = mdr->get_client();
+  return mdr->snapid == CEPH_NOSNAP &&
+	 !diri->is_stray() &&  // do not issue dn leases in stray dir!
+	 !diri->filelock.can_lease(client) &&
+	 !(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL));
+}
+
 void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr, utime_t now,
                                 bufferlist &bl)
+{
+  issue_client_lease(dn, in, mdr, now, bl,
+		     can_lease_dentries_in(dn->get_dir()->get_inode(), mdr));
+}
+
+void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr, utime_t now,
+                                bufferlist &bl, bool dir_leasable)
 {
   client_t client = mdr->get_client();
   Session *session = mdr->session;
 
-  CInode *diri = dn->get_dir()->get_inode();
-  if (mdr->snapid == CEPH_NOSNAP &&
-      dn->lock.can_lease(client) &&
-      !diri->is_stray() &&  // do not issue dn leases in stray dir!
-      !diri->filelock.can_lease(client) &&
-      !(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL))) {
+  if (dir_leasable && dn->lock.can_lease(client)) {
     int mask = 0;
     CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
     if (dnl->is_primary()) {
@@ -4598,9 +4609,17 @@ void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
   if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
     dout(25) << "encode lease reply encoding: " << ls << dendl;
     ENCODE_START(2, 1, bl);
-    encode(ls.mask, bl);
-    encode(ls.duration_ms, bl);
-    encode(ls.seq, bl);
+    // The fixed-size fields in one append rather than three: readdir encodes
+    // a lease for every entry it returns.
+    struct __attribute__((packed)) {
+      ceph_le16 mask;
+      ceph_le32 duration_ms;
+      ceph_le32 seq;
+    } fixed;
+    fixed.mask = ls.mask;
+    fixed.duration_ms = ls.duration_ms;
+    fixed.seq = ls.seq;
+    bl.append(reinterpret_cast<const char*>(&fixed), sizeof(fixed));
     encode(ls.alternate_name, bl);
     ENCODE_FINISH(bl);
   }
