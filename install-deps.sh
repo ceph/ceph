@@ -429,7 +429,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
-    [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
@@ -505,9 +504,6 @@ else
         fi
         if $with_crimson; then
             build_profiles+=",pkg.ceph.crimson"
-        fi
-        if $with_pmem; then
-            build_profiles+=",pkg.ceph.pmdk"
         fi
 
         ci_debug "for_make_check=$for_make_check"
