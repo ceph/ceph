@@ -519,7 +519,8 @@ done:
         s,
         op->canonical_name(),
         "",
-        (s->src_object ? s->src_object->get_size() : (s->object ? s->object->get_size() : 0)),
+        (s->src_object ? s->src_object->get_size() :
+         (s->object && s->object->get_size() > 0 ? s->object->get_size() : s->obj_size)),
         op,
         yield,
         true,
