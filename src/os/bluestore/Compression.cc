@@ -14,6 +14,8 @@
 
 #include "Compression.h"
 #include "BlueStore.h"
+#include "BlueStore_objects.h"
+#include "BlueStore_inlines.h"
 #include "include/intarith.h"
 #include "common/debug.h" // for dout()
 #include "common/Formatter.h"
