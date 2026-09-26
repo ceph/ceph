@@ -2721,18 +2721,10 @@ def get_bucket_sync_state(zone, source_zone, bucket_name):
     sources = status.get('sources', [])
     if not sources:
         return None
-    # 'status' field is set for non-incremental states. It is absent
-    # when the bucket is in incremental sync.
-    source_status = sources[0].get('status', '')
-    if not source_status:
-        return 'incremental-sync'
-    if source_status.startswith('full sync'):
-        return 'full-sync'
-    if source_status.startswith('init'):
-        return 'init'
-    if source_status.startswith('stopped'):
-        return 'stopped'
-    return source_status
+    source = sources[0]
+    assert 'sync_state' in source, \
+        'missing sync_state in bucket sync status: %r' % source
+    return source['sync_state']
 
 @attr('bucket_sync_disable')
 def test_bucket_sync_run_during_full_sync():
