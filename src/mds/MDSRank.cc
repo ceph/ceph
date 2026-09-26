@@ -2511,14 +2511,20 @@ void MDSRankDispatcher::handle_mds_map(
       set<mds_rank_t> olddis, dis;
       oldmap.get_mds_set_lower_bound(olddis, MDSMap::STATE_REJOIN);
       mdsmap->get_mds_set_lower_bound(dis, MDSMap::STATE_REJOIN);
+      bool send_rejoins = false;
       for (const auto& r : dis) {
 	if (r == whoami)
 	  continue; // not me
 	if (!olddis.count(r) || restart.count(r)) {  // newly so?
 	  mdcache->kick_discovers(r);
 	  mdcache->kick_open_ino_peers(r);
+	  send_rejoins = true;
 	}
       }
+      // Retry OP_WEAK that was skipped while this peer was still in
+      // resolve/reconnect. See https://tracker.ceph.com/issues/54840
+      if (send_rejoins)
+	mdcache->rejoin_send_rejoins();
     }
   }
 
