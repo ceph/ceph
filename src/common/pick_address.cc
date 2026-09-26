@@ -17,6 +17,7 @@
 
 #include <bitset>
 #include <ifaddrs.h> // for struct ifaddrs
+#include <list>
 #include <netdb.h>
 #include <netinet/in.h>
 #ifdef _WIN32
@@ -33,7 +34,7 @@
 #include <fmt/format.h>
 
 #include "include/ipaddr.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "common/ceph_context.h"
 #ifndef WITH_CRIMSON
 #include "common/config.h"
@@ -162,8 +163,8 @@ const struct sockaddr *find_ip_in_subnet_list(
   const std::string &interfaces,
   int numa_node)
 {
-  const auto ifs = get_str_list(interfaces);
-  const auto nets = get_str_list(networks);
+  const auto ifs = ceph::split_strings(interfaces);
+  const auto nets = ceph::split_strings(networks);
   if (!ifs.empty() && nets.empty()) {
       lderr(cct) << "interface names specified but not network names" << dendl;
       exit(1);
@@ -173,14 +174,14 @@ const struct sockaddr *find_ip_in_subnet_list(
   const sockaddr* best_addr = nullptr;
   for (const auto* addr = ifa; addr != nullptr; addr = addr->ifa_next) {
     if (!ifs.empty() &&
-	std::none_of(std::begin(ifs), std::end(ifs),
+	std::ranges::none_of(ifs,
                      [&](const auto& if_name) {
                        return matches_with_name(*addr, if_name);
                      })) {
       continue;
     }
     if (!nets.empty() &&
-	std::none_of(std::begin(nets), std::end(nets),
+	std::ranges::none_of(nets,
                      [&](const auto& net) {
                        return matches_with_net(cct, *addr, net, ipv);
                      })) {
@@ -611,9 +612,8 @@ int get_iface_numa_node(
     break;
   case iface_t::BOND_PORT:
     int bond_node = -1;
-    std::vector<std::string> sv;
     std::string ifacestr = buf;
-    get_str_vec(ifacestr, " ", sv);
+    const auto sv = ceph::split_strings(ifacestr, " ");
     for (auto& iter : sv) {
       int bn = -1;
       r = get_iface_numa_node(iter, &bn);
@@ -642,7 +642,7 @@ bool is_addr_in_subnet(
   const std::string &networks,
   const entity_addr_t &addr)
 {
-  const auto nets = get_str_list(networks);
+  const auto nets = ceph::split_strings(networks);
   ceph_assert(!nets.empty());
   unsigned ipv = CEPH_PICK_ADDRESS_IPV4;
   struct sockaddr_in6 public_addr6;
