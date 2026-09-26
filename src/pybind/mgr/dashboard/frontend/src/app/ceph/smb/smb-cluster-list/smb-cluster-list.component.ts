@@ -1,4 +1,5 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
+import { Router } from '@angular/router';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 
@@ -23,14 +24,19 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-
-export const CLUSTER_PATH = 'cephfs/smb/cluster';
+import { getClusterPath } from '../utils';
 
 @Component({
   selector: 'cd-smb-cluster-list',
   templateUrl: './smb-cluster-list.component.html',
   styleUrls: ['./smb-cluster-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(CLUSTER_PATH) }],
+  providers: [
+    {
+      provide: URLBuilderService,
+      useFactory: (router: Router) => new URLBuilderService(getClusterPath(router.url)),
+      deps: [Router]
+    }
+  ],
   standalone: false
 })
 export class SmbClusterListComponent implements OnInit {
@@ -51,7 +57,8 @@ export class SmbClusterListComponent implements OnInit {
     private smbService: SmbService,
     private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
-    private urlBuilder: URLBuilderService
+    private urlBuilder: URLBuilderService,
+    private router: Router
   ) {
     this.permission = this.authStorageService.getPermissions().smb;
   }
@@ -99,7 +106,7 @@ export class SmbClusterListComponent implements OnInit {
           map((clusters: SMBCluster[]) =>
             clusters.map((cluster: SMBCluster) => ({
               ...cluster,
-              cdLink: `/cephfs/smb/cluster/${encodeURIComponent(cluster.cluster_id)}/overview`
+              cdLink: `/${getClusterPath(this.router.url)}/${encodeURIComponent(cluster.cluster_id)}/overview`
             }))
           ),
           catchError(() => {
@@ -126,7 +133,7 @@ export class SmbClusterListComponent implements OnInit {
       itemNames: [cluster_id],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${CLUSTER_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${getClusterPath(this.router.url)}/${URLVerbs.DELETE}`, {
             cluster_id: cluster_id
           }),
           call: this.smbService.removeCluster(cluster_id)
