@@ -3674,8 +3674,22 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 			 meta.user_data, meta.appendable, log_op,
 			 idx_restore_status, idx_restore_expiry_date);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
-  if (r < 0)
-    goto done_cancel;
+  if (r < 0) {
+    // the head is written, so the write stands. canceling the index op and
+    // reporting a lost race or an error would have the caller free what the
+    // new head names: PutObject its tail, a copy its references. leave the
+    // pending op instead; a bucket listing repairs the entry from the head
+    ldpp_dout(rctx.dpp, 0) << "ERROR: index_op.complete() returned r=" << r
+                           << ", leaving the entry for a listing to repair" << dendl;
+    // the entries the write replaces, such as a completion's parts, are
+    // its own to remove. a listing repairs only the head it finds, which a
+    // later write may have replaced by then
+    int ret = index_op->complete_remove_objs(rctx.dpp, meta.remove_objs, rctx.y, log_op);
+    if (ret < 0) {
+      ldpp_dout(rctx.dpp, 0) << "ERROR: failed to remove the replaced index entries, ret="
+                             << ret << dendl;
+    }
+  }
 
   if (meta.mtime) {
     *meta.mtime = meta.set_mtime;
@@ -5548,6 +5562,12 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
 
   ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
   if (ret < 0) {
+    goto done_ret;
+  }
+  if (write_op.meta.canceled) {
+    // another write of the destination won the race, and the copy is
+    // answered as success. no head names the source's tail through the
+    // references taken above, so drop them
     goto done_ret;
   }
 
@@ -8720,6 +8740,38 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
      * for following the specific bucket shard log. Otherwise they end up staying behind, and users
      * have no way to tell that they're all caught up
      */
+    ret = add_datalog_entry(dpp, store->svc.datalog_rados,
+			    target->bucket_info, obj.get_hash_object(),
+			    bs->shard_id, y);
+  }
+
+  return ret;
+}
+
+int RGWRados::Bucket::UpdateIndex::complete_remove_objs(const DoutPrefixProvider *dpp,
+                                                        list<rgw_obj_index_key> *remove_objs,
+                                                        optional_yield y,
+                                                        bool log_op)
+{
+  if (blind || !remove_objs || remove_objs->empty()) {
+    return 0;
+  }
+  RGWRados *store = target->get_store();
+  BucketShard *bs;
+
+  const bool add_log = log_op && store->svc.zone->need_to_log_data();
+
+  // a cancel without a tag touches no entry and no pending op; it only
+  // removes the remove_objs entries
+  std::string no_tag;
+  int ret = guard_reshard(dpp, obj, &bs, [&](BucketShard *bs) -> int {
+				 return store->cls_obj_complete_cancel(dpp, target->bucket_info,
+				                                       *bs, no_tag, obj, remove_objs,
+				                                       bilog_flags, y, zones_trace,
+				                                       log_op);
+			       }, y);
+
+  if (ret >= 0 && add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
 			    target->bucket_info, obj.get_hash_object(),
 			    bs->shard_id, y);
