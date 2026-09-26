@@ -1045,8 +1045,8 @@ public:
    * base, which is the safe direction:  the interlocks refuse. */
   bool extended() const { return profile && profile->extended(); }
 
-  /* Write the marker.  Called at creation when the deployment stamps,
-   * and by adoption. */
+  /* Write the marker.  Called at creation when the deployment marks new
+   * buckets, and by adoption. */
   int mark_extensions(const DoutPrefixProvider* dpp, uint32_t version);
 
   /* test support only -- reachable through the unmark-bucket hint */

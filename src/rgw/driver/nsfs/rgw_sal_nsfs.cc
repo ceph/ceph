@@ -1566,7 +1566,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
          * write owns it.  It parses as one of ours -- it is under
          * user.nsfs. -- so without this it would be pruned by the next
          * REPLACE_ALL, and a bucket would silently lose its profile a
-         * moment after being stamped. */
+         * moment after being marked. */
         if (disk_name == nsfs::EXTENSIONS_XATTR) {
           continue;
         }
