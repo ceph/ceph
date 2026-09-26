@@ -282,6 +282,154 @@ def test_losing_copy(client, reader):
     check_no_leaks(client, bucket, marker)
 
 
+def status(request):
+    """the HTTP status a finished Request was answered with"""
+    if request.error is None:
+        return 200
+    if isinstance(request.error, botocore.exceptions.ClientError):
+        return request.error.response['ResponseMetadata']['HTTPStatusCode']
+    raise request.error
+
+
+def part_entries(bucket, upload):
+    """the bucket index entries of an upload's parts"""
+    out = exec_cmd(f'radosgw-admin bi list --bucket {bucket}')
+    entries = json.loads(out.replace(b'\x80', b'0x80'))
+    return sorted(e['entry']['name'] for e in entries
+                  if e.get('type') == 'plain' and upload in e['entry'].get('name', '')
+                  and not e['entry']['name'].endswith('.meta'))
+
+
+def test_cond_delete_racing_put(client, reader):
+    # TESTCASE 'conditional DeleteObject racing PutObject','object','delete','deletes an object that fails its If-Match'
+    """
+    A DeleteObject with If-Match on the object's ETag checks it against the
+    head it read, then waits. A PUT replaces the object. The delete must not
+    remove the new object, whose ETag does not match.
+    """
+    point = 'delete_obj_before_head_delete'
+    bucket, marker = new_bucket(client, 'conddel')
+    key = 'obj'
+    old = put(client, bucket, key, body('a'))
+
+    with inject_delay(point, DELAY):
+        delete = Request('delete', lambda: client.delete_object(Bucket=bucket, Key=key, IfMatch=old))
+        delete.start()
+        time.sleep(DELAY / 3)
+        new = put(client, bucket, key, body('b'))
+        delete.join()
+    delete.check_held(point, DELAY)
+    log.debug(f'the conditional delete was answered {status(delete)}')
+    assert etag(client, bucket, key) == new, \
+        'the If-Match delete removed an object whose ETag does not match'
+
+    check_no_leaks(client, bucket, marker)
+
+
+def test_conditional_puts_race(client, reader):
+    # TESTCASE 'two conditional PutObjects','object','put','both answered success'
+    """
+    A PutObject with If-Match on the object's ETag and one with If-Match: *
+    both wait at the head write, and the first wins. If both are answered
+    success, the second must have come after the first, so the head must
+    hold the second's object; with the first's there, no order of the two
+    explains both answers.
+    """
+    point = 'write_meta_before_head_write'
+    bucket, marker = new_bucket(client, 'condputs')
+    key = 'obj'
+    old = put(client, bucket, key, body('a'))
+
+    with inject_delay(point, DELAY):
+        first = Request('if-match', lambda: client.put_object(
+            Bucket=bucket, Key=key, Body=body('b'), IfMatch=old)['ETag'])
+        first.start()
+        time.sleep(DELAY / 3)
+        second = Request('if-match-any', lambda: client.put_object(
+            Bucket=bucket, Key=key, Body=body('c'), IfMatch='*')['ETag'])
+        second.start()
+        first.join()
+        second.join()
+    first.check_held(point, DELAY)
+    head = etag(client, bucket, key)
+    if status(first) != 200 or head != first.result:
+        raise Inconclusive('the If-Match PUT did not win the race')
+    assert status(second) != 200, \
+        'both conditional PUTs were answered success, and the head holds the first'
+
+    check_no_leaks(client, bucket, marker)
+
+
+def test_if_match_losing_race(client, reader):
+    # TESTCASE 'PutObject with If-Match losing a race','object','put','answered 500'
+    """
+    A PutObject, then a PutObject with If-Match on the object's ETag, both
+    wait at the head write. The unconditional one waits twice, for its
+    exclusive create and then its guarded write, so it reads the head
+    before the conditional one and writes before it. The conditional one
+    loses its guard: it must be answered 412, not 500.
+    """
+    point = 'write_meta_before_head_write'
+    bucket, marker = new_bucket(client, 'ifmatch')
+    key = 'obj'
+    old = put(client, bucket, key, body('a'))
+
+    with inject_delay(point, DELAY):
+        writer = Request('put', lambda: put(client, bucket, key, body('b')))
+        writer.start()
+        time.sleep(DELAY * 1.3)
+        cond = Request('if-match', lambda: client.put_object(
+            Bucket=bucket, Key=key, Body=body('c'), IfMatch=old)['ETag'])
+        cond.start()
+        writer.join()
+        cond.join()
+    writer.check_held(point, DELAY)
+    if etag(client, bucket, key) != writer.result:
+        raise Inconclusive('the If-Match PUT did not lose the race')
+    assert status(cond) != 500, 'the If-Match PUT that lost the race was answered 500'
+
+    check_no_leaks(client, bucket, marker)
+
+
+def test_refused_complete_keeps_parts(client, reader):
+    # TESTCASE 'CompleteMultipartUpload with If-None-Match refused','multipart','complete','drops its parts index entries'
+    """
+    A PutObject and a completion with If-None-Match: * both create a new
+    key and wait at the head write; the PutObject wins. The completion is
+    refused with 412 and its upload stays, so its parts must stay in the
+    bucket index.
+    """
+    point = 'write_meta_before_head_write'
+    bucket, marker = new_bucket(client, 'refused')
+    key = 'obj'
+    upload = client.create_multipart_upload(Bucket=bucket, Key=key)['UploadId']
+    parts = []
+    for num, fill in ((1, 'p'), (2, 'q')):
+        res = client.upload_part(Bucket=bucket, Key=key, UploadId=upload,
+                                 PartNumber=num, Body=fill.encode() * (5 * MB))
+        parts.append({'PartNumber': num, 'ETag': res['ETag']})
+    before = part_entries(bucket, upload)
+
+    with inject_delay(point, DELAY):
+        writer = Request('put', lambda: put(client, bucket, key, body('b')))
+        writer.start()
+        time.sleep(DELAY / 3)
+        complete = Request('complete', lambda: client.complete_multipart_upload(
+            Bucket=bucket, Key=key, UploadId=upload, MultipartUpload={'Parts': parts},
+            IfNoneMatch='*'))
+        complete.start()
+        writer.join()
+        complete.join()
+    writer.check_held(point, DELAY)
+    if status(complete) != 412:
+        raise Inconclusive(f'the completion was answered {status(complete)}, not refused')
+    after = part_entries(bucket, upload)
+    assert after == before, \
+        f'the refused completion dropped its parts from the index ({len(before)} -> {len(after)}), while its upload stays'
+
+    check_no_leaks(client, bucket, marker)
+
+
 def test_delete_racing_dedup(client, reader):
     # TESTCASE 'DeleteObject racing dedup','dedup','delete','leaks the source tail'
     """
@@ -347,6 +495,10 @@ CASES = [
     test_losing_complete,
     test_delete_racing_put,
     test_losing_copy,
+    test_cond_delete_racing_put,
+    test_conditional_puts_race,
+    test_if_match_losing_race,
+    test_refused_complete_keeps_parts,
     test_delete_racing_dedup,
     test_copy_to_itself_racing_dedup,
 ]
