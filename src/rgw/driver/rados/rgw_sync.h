@@ -496,6 +496,11 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
   bufferlist md_bl;
 
+  /* track the fetched version and last locally applied version
+    within a coroutine*/
+  obj_version fetched_ver;
+  obj_version prev_applied_ver;
+
   RGWMetaSyncShardMarkerTrack *marker_tracker;
 
   int tries;

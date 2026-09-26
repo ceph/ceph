@@ -141,6 +141,49 @@ def check_bucket_instance_metadata(zone, bucket):
 
     return True
 
+# returns the whole metadata entry, ver and data, as seen by this zone
+def meta_entry(zone_conn, key):
+    out, _ = zone_conn.zone.cluster.admin(
+        ['metadata', 'get', key] + zone_conn.zone.zone_args(),
+        check_retcode=False, read_only=True)
+    try:
+        return json.loads(out)
+    except ValueError:
+        return {}
+
+def instance_owner(zone_conn, key):
+    return meta_entry(zone_conn, 'bucket.instance:' + key).get(
+        'data', {}).get('bucket_info', {}).get('owner')
+
+# the objv of the stored entry. Only counts stores while the local version
+# is generated locally rather than copied from the master
+def instance_ver(zone_conn, key):
+    return meta_entry(zone_conn, 'bucket.instance:' + key).get(
+        'ver', {}).get('ver')
+
+def entrypoint_owner(zone_conn, name):
+    return meta_entry(zone_conn, 'bucket:' + name).get('data', {}).get('owner')
+
+@contextlib.contextmanager
+def meta_sync_delay(zone, pattern, poll_interval=1):
+    """ Hold a metadata sync entry at the given injection point.
+
+    Polls the mdlog frequently to sync update without waiting. Leaving the block clears 
+    the pattern, which releases the held entry.
+    """
+    cluster = zone.cluster
+    cluster.ceph_admin(['config', 'set', 'client', 'rgw_meta_sync_poll_interval',
+                        str(poll_interval)])
+    # enables the delay inject by setting rgw_inject_delay_sec=1
+    cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_sec', '1'])
+    cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_pattern', pattern])
+    try:
+        yield
+    finally:
+        cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_pattern'])
+        cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_sec'])
+        cluster.ceph_admin(['config', 'rm', 'client', 'rgw_meta_sync_poll_interval'])
+
 def parse_meta_sync_status(meta_sync_status_json):
     log.debug('current meta sync status=%s', meta_sync_status_json)
     sync_status = json.loads(meta_sync_status_json)
@@ -7227,3 +7270,152 @@ def test_stale_bucket_owner_after_concurrent_chown():
         for uid in (uid_a, uid_b1, uid_b2):
             master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'],
                                       check_retcode=False)
+
+@contextlib.contextmanager
+def concurrent_bucket_instance_updates(pattern, uid_tag):
+    """ Race two bucket owner updates against a held metadata sync entry.
+
+    Holds the next bucket.instance entry on the secondary at the given
+    injection point, links the bucket to a first owner, waits for the hold to
+    engage, then links it to a second owner so the shard queues a retry
+    instead of starting a second coroutine. Releases the hold and waits for
+    sync to settle.
+
+    Yields (secondary, instance_key, uid_b2, base_ver, objv_is_local).
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    if len(zonegroup_conns.rw_zones) < 2:
+        raise SkipTest('concurrent bucket instance updates require at least 2 read-write zones')
+
+    master = zonegroup_conns.master_zone
+    secondary = next(z for z in zonegroup_conns.rw_zones if z != master)
+    poll_interval = 1
+
+    # The instance owner might still be old simply because the update has not
+    # been processed yet. It must remain old across several polls to confirm
+    # that processing is actually paused by the hold.
+    def instance_owner_stays(key, owner, polls=5):
+        for _ in range(polls):
+            time.sleep(poll_interval)
+            if instance_owner(secondary, key) != owner:
+                return False
+        return True
+
+    uid_a = run_prefix + '-' + uid_tag + '-a'
+    uid_b1 = run_prefix + '-' + uid_tag + '-b1'
+    uid_b2 = run_prefix + '-' + uid_tag + '-b2'
+    ak_a, sk_a = uid_a + 'AK', uid_a + 'SK'
+
+    master.zone.cluster.admin(['user', 'create', '--uid', uid_a, '--display-name', uid_a,
+                               '--access-key', ak_a, '--secret-key', sk_a])
+    for uid in (uid_b1, uid_b2):
+        master.zone.cluster.admin(['user', 'create', '--uid', uid, '--display-name', uid])
+
+    zonegroup_meta_checkpoint(zonegroup)
+    bucket_name = gen_bucket_name()
+
+    try:
+        region = zonegroup.name
+        owner_conn = get_gateway_connection(master.zone.gateways[0],
+                                            Credentials(ak_a, sk_a), region)
+        owner_conn.create_bucket(Bucket=bucket_name)
+        # drain any other bucket.instance entry, the hold takes only the
+        # first one it sees
+        zonegroup_meta_checkpoint(zonegroup)
+
+        instance_list_json, _ = master.zone.cluster.admin(
+            ['metadata', 'list', 'bucket.instance'] + master.zone.zone_args(),
+            read_only=True)
+        instance_key = next(k for k in json.loads(instance_list_json)
+                            if k.startswith(bucket_name + ':'))
+
+        # A locally generated secondary version lets us count store operations.
+        # If the version is copied from the master instead, 
+        # verify only the final owner (fixed in https://github.com/ceph/ceph/pull/71779).
+        base_ver = instance_ver(secondary, instance_key)
+        objv_is_local = base_ver != instance_ver(master, instance_key) 
+
+        with meta_sync_delay(secondary.zone, pattern, poll_interval):
+            time.sleep(10)  # let the config reach the secondary's radosgws
+
+            # first update: the secondary picks up the mdlog entry and is
+            # held on it
+            master.zone.cluster.admin(['bucket', 'link', '--bucket', bucket_name,
+                                       '--uid', uid_b1])
+            assert instance_owner(master, instance_key) == uid_b1, \
+                'master did not record the first update'
+
+            # the entrypoint is not held, so it reaching uid_b1 
+            # when instance is still uid_a means the entry is paused
+            paused = False
+            for _ in range(config.checkpoint_retries):
+                time.sleep(config.checkpoint_delay)
+                ep_owner = entrypoint_owner(secondary, bucket_name)
+                inst = instance_owner(secondary, instance_key)
+                log.info('secondary state: entrypoint=%s instance=%s', ep_owner, inst)
+                if ep_owner == uid_b1 and inst == uid_a and \
+                        instance_owner_stays(instance_key, uid_a):
+                    paused = True
+                    break
+                if ep_owner == uid_b1 and inst == uid_b1:
+                    break  # the instance applied too; the hold never engaged
+            assert paused, \
+                'could not reproduce held-bucket.instance window on secondary'
+
+            # second update on the same key while the first is still held. It
+            # queues a retry rather than starting a second coroutine
+            master.zone.cluster.admin(['bucket', 'link', '--bucket', bucket_name,
+                                       '--uid', uid_b2])
+            assert instance_owner(master, instance_key) == uid_b2, \
+                'master did not record the second update'
+
+            # let the shard read the second entry while the first is still
+            # held, so it queues a retry instead of syncing on its own
+            time.sleep(poll_interval * 3)
+
+        # leaving the block released the hold, the coroutine resumes
+        zone_meta_checkpoint(secondary.zone)
+        yield secondary, instance_key, uid_b2, base_ver, objv_is_local
+    finally:
+        zonegroup_meta_checkpoint(zonegroup)
+        for uid in (uid_a, uid_b1, uid_b2):
+            master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'],
+                                      check_retcode=False)
+
+def test_stale_metadata_applied_after_concurrent_updates():
+    """ Integration test for https://tracker.ceph.com/issues/79311
+
+    Verify that metadata sync preserves newest bucket instance on concurrent
+    sync.
+    """
+    with override_config(checkpoint_retries=30, checkpoint_delay=2):
+        # hold the entry between fetch and apply, so the later update is
+        # applied first and the stale one lands on top
+        with concurrent_bucket_instance_updates(
+                'delay_meta_sync_bucket_instance_hold', 'stale') as (
+                secondary, instance_key, uid_b2, _, _):
+            owner = instance_owner(secondary, instance_key)
+            assert owner == uid_b2, \
+                'secondary owner: %r, expected latest owner:%r' % (owner, uid_b2)
+
+def test_redundant_metadata_apply_skipped_on_retry():
+    """ Integration test for https://tracker.ceph.com/issues/79311
+
+    A second update for a key that is already being synced queues a retry
+    instead of a second coroutine. Hold the initial fetch until that second
+    update is queued, so the fetch returns the newest state and the queued
+    retry re-reads what was just applied. The redundant store is skipped.
+    """
+    with override_config(checkpoint_retries=30, checkpoint_delay=2):
+        with concurrent_bucket_instance_updates(
+                'delay_meta_sync_bucket_instance_fetch_hold', 'redundant') as (
+                secondary, instance_key, uid_b2, base_ver, objv_is_local):
+            owner = instance_owner(secondary, instance_key)
+            assert owner == uid_b2, \
+                'secondary owner: %r, expected latest owner:%r' % (owner, uid_b2)
+
+            if objv_is_local:
+                applies = instance_ver(secondary, instance_key) - base_ver
+                assert applies == 1, \
+                    'secondary applied the entry %d times, expected 1' % applies
