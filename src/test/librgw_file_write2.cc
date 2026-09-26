@@ -1778,19 +1778,26 @@ TEST(OPEN2, XATTR_PERSIST)
 }
 
 /* An attribute set over NFS must land in the same bytes as the same
- * attribute set over S3.
+ * attribute set over S3, and those bytes must be the value alone.
  *
  * RGW stores request metadata as a counted string whose length includes
- * the terminator (rgw_get_request_metadata, rgw_op.h) so that a reader can
- * treat the value as a C string.  On rados that is invisible;  on a
+ * the terminator (rgw_get_request_metadata, rgw_op.h) so that a reader
+ * can treat the value as a C string.  On rados that is invisible;  on a
  * filesystem backend the bufferlist's bytes ARE the file's xattr, so the
- * convention becomes on-disk format and the two protocols have to agree
- * about an object they both see.
+ * convention becomes on-disk format -- and it is format NooBaa does not
+ * write, which makes our metadata differ from theirs for the same object
+ * by a byte nobody intended.
+ *
+ * The driver strips it on the way to disk and restores it on the way
+ * back (attr_on_disk(), XattrStrategy::counted_string_value()), so the
+ * tree is clean and every RGW consumer still sees what it sees on rados.
+ * This test is the check that the strip covers the librgw path too:
+ * rgw_file appends the terminator exactly as the S3 path does, and both
+ * must lose it at the same place.
  *
  * Checked on the file rather than through the API, because the API round
  * trip passes either way -- setxattrs appends the terminator and
- * getxattrs takes it off, so only the disk can say whether it is
- * there. */
+ * getxattrs takes it off, so only the disk can say what is there. */
 TEST(OPEN2, XATTR_STORED_AS_S3_STORES_IT)
 {
   if (! have_fs_layout()) {
@@ -1805,9 +1812,11 @@ TEST(OPEN2, XATTR_STORED_AS_S3_STORES_IT)
 		    << ";  the attribute this reasons about is not there";
 
   const std::string stored(buf, len);
-  EXPECT_EQ(stored, std::string("round\0", 6))
-      << "stored " << len << " bytes, expected the value plus a terminator"
-	 " -- an attribute set over NFS is not landing as S3 stores it";
+  EXPECT_EQ(stored, std::string("round"))
+      << "stored " << len << " bytes, expected the 5-byte value alone."
+	 "  A 6th byte is the counted-string terminator surviving to disk:"
+	 "  some write path skipped attr_on_disk(), and NooBaa would read"
+	 " a different value than we wrote";
 
   /* and the terminator must not reach a client:  an S3 client never sees
    * it, because the HTTP layer reads with c_str() */

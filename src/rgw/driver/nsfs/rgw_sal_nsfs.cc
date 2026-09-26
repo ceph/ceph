@@ -1335,6 +1335,21 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 
     bufferlist bl;
     bl.append(vp, vallen);
+    if (xs->counted_string_value(key)) {
+      /* Restore the terminator RGW writes and attr_on_disk() strips.
+       *
+       * If the value already ends in one, some write path skipped
+       * attr_on_disk() and we are about to double it.  That is a bug in
+       * this driver, not in the tree, so say so loudly rather than hand
+       * a NUL to a client. */
+      if (vallen > 0 && vp[vallen - 1] == '\0') {
+	ldpp_dout(dpp, 0) << "ERROR: attribute " << key << " on " << display
+	  << " is already NUL-terminated on disk;  some write path skipped "
+	  << "attr_on_disk().  Not restoring." << dendl;
+      } else {
+	bl.append('\0');
+      }
+    }
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
 
     buflen -= keylen;
@@ -1342,6 +1357,33 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
   }
 
   return 0;
+}
+
+/* The on-disk form of an attribute value.
+ *
+ * RGW stores several string attributes as counted strings, terminator
+ * included;  on rados that byte is private, here it is on-disk format.
+ * Strip it going out.  get_x_attrs() restores it coming back, so every
+ * RGW consumer sees what it would see on rados.
+ *
+ * EVERY write of an attribute value must come through here.  The driver
+ * has twenty raw fsetxattr() sites;  they all ask the strategy for the
+ * name already, and they must all ask it about the value too.  Missing
+ * one does not lose the byte, it *doubles* it -- the read side restores
+ * unconditionally -- and a doubled terminator reaches the client.  That
+ * is not hypothetical:  it happened to multipart on the first attempt.
+ *
+ * See XattrStrategy::counted_string_value() and
+ * docs/RGW_COUNTED_STRING_ATTRS.md. */
+static std::string attr_on_disk(const nsfs::XattrStrategy* xs,
+				const std::string& key,
+				const bufferlist& value)
+{
+  std::string v = value.to_str();
+  if (!v.empty() && v.back() == '\0' && xs->counted_string_value(key)) {
+    v.pop_back();
+  }
+  return v;
 }
 
 static int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd,
@@ -1354,7 +1396,8 @@ static int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd,
 
   attrname = xs->disk_name(key);
 
-  ret = fsetxattr(fd, attrname.c_str(), value.c_str(), value.length(), 0);
+  const std::string v = attr_on_disk(xs, key, value);
+  ret = fsetxattr(fd, attrname.c_str(), v.data(), v.size(), 0);
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not write attribute " << attrname << " for " << display << ": " << cpp_strerror(ret) << dendl;
@@ -1546,14 +1589,16 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
         if (skip_empty && !bl.length()) {
           continue;
         }
-        to_write.try_emplace(xattr_strategy->disk_name(key), bl.to_str());
+        to_write.try_emplace(xattr_strategy->disk_name(key),
+			     attr_on_disk(xattr_strategy, key, bl));
       }
     }
     for (auto& [key, bl] : attrs) {
       if (skip_empty && !bl.length()) {
         continue;
       }
-      to_write.try_emplace(xattr_strategy->disk_name(key), bl.to_str());
+      to_write.try_emplace(xattr_strategy->disk_name(key),
+			   attr_on_disk(xattr_strategy, key, bl));
     }
 
     std::vector<std::string> to_remove;
@@ -3006,7 +3051,9 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 	  bufferlist bl;
 	  encode(upi, bl);
 	  std::string xn = xattr_strategy->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
-	  ::fsetxattr(pfd, xn.c_str(), bl.c_str(), bl.length(), 0);
+	  std::string xv = attr_on_disk(xattr_strategy.get(),
+					RGW_NSFS_ATTR_MPUPLOAD, bl);
+	  ::fsetxattr(pfd, xn.c_str(), xv.data(), xv.size(), 0);
 	  ::close(pfd);
 	}
 	::close(dir_fd);
@@ -5946,7 +5993,8 @@ static int apply_create_spec(const nsfs::XattrStrategy* xs,
 	continue; /* empty value means "leave this attr alone" */
       }
       std::string xname = xs->disk_name(key);
-      if (::fsetxattr(fd, xname.c_str(), bl.c_str(), bl.length(), 0) < 0) {
+      std::string xval = attr_on_disk(xs, key, bl);
+      if (::fsetxattr(fd, xname.c_str(), xval.data(), xval.size(), 0) < 0) {
 	return -errno;
       }
     }
@@ -6157,8 +6205,10 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     bufferlist acl_bl;
     policy.encode(acl_bl);
     std::string xname = driver->get_xattr_strategy()->disk_name(RGW_ATTR_ACL);
+    std::string xval = attr_on_disk(driver->get_xattr_strategy(),
+				    RGW_ATTR_ACL, acl_bl);
     if (::fsetxattr(build_fd, xname.c_str(),
-		    acl_bl.c_str(), acl_bl.length(), 0) < 0) {
+		    xval.data(), xval.size(), 0) < 0) {
       int err = -errno;
       ::close(build_fd);
       if ((! tmp_name.empty()) &&
@@ -6595,9 +6645,9 @@ int NSFSObject::NSFSFSIOObject::fsetattr(const DoutPrefixProvider* dpp, const st
     return 0;
   }
   std::string xname = driver->get_xattr_strategy()->disk_name(name);
-  std::string sval = val.to_str();
+  std::string sval = attr_on_disk(driver->get_xattr_strategy(), name, val);
   if (::fsetxattr(shadow_fd, xname.c_str(),
-		   sval.c_str(), sval.length(), 0) < 0) {
+		   sval.data(), sval.size(), 0) < 0) {
     return -errno;
   }
   return 0;
@@ -6621,8 +6671,9 @@ int NSFSObject::NSFSFSIOObject::fsetattrs(const DoutPrefixProvider* dpp, Attrs& 
       continue; /* empty value means "leave this attr alone" */
     }
     std::string xname = driver->get_xattr_strategy()->disk_name(key);
+    std::string xval = attr_on_disk(driver->get_xattr_strategy(), key, bl);
     if (::fsetxattr(shadow_fd, xname.c_str(),
-		     bl.c_str(), bl.length(), 0) < 0) {
+		     xval.data(), xval.size(), 0) < 0) {
       return -errno;
     }
   }
@@ -8369,8 +8420,10 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     bufferlist acl_bl;
     if (rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ACL, acl_bl)) {
       std::string acl_xattr = source->driver->get_xattr_strategy()->disk_name(RGW_ATTR_ACL);
+      std::string acl_v = attr_on_disk(source->driver->get_xattr_strategy(),
+                                       RGW_ATTR_ACL, acl_bl);
       ::fsetxattr(dm_fd, acl_xattr.c_str(),
-                  acl_bl.c_str(), acl_bl.length(), 0);
+                  acl_v.data(), acl_v.size(), 0);
     }
     ::close(dm_fd);
 
@@ -8888,7 +8941,9 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   for (auto& [k, v] : attrs) {
     std::string xattr_name = driver->get_xattr_strategy()->disk_name(k);
-    ret = fsetxattr(afd, xattr_name.c_str(), v.c_str(), v.length(), 0);
+    std::string xattr_val = attr_on_disk(driver->get_xattr_strategy(), k, v);
+    ret = fsetxattr(afd, xattr_name.c_str(),
+                    xattr_val.data(), xattr_val.size(), 0);
     if (ret < 0) {
       ::close(afd);
       return -errno;

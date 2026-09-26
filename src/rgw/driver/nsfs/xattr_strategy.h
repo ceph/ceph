@@ -60,6 +60,27 @@ public:
   virtual int object_owner(const Attrs& attrs, const struct statx* stx,
 			   ACLOwner& owner) const = 0;
 
+  /* Does RGW store this attribute's value as a counted string, with its
+   * NUL terminator included?
+   *
+   * `rgw_get_request_metadata` (`rgw_op.h:2479`) and four other writers
+   * append `size() + 1`.  On rados the byte is private.  On a filesystem
+   * it is on-disk format, and it makes our metadata differ from NooBaa's
+   * for the same object by a byte nobody meant to write.
+   *
+   * The driver strips it on the way to disk and restores it on the way
+   * back, so the tree is clean and every RGW consumer sees what it sees
+   * on rados.  A compensation, not a fix -- see
+   * docs/RGW_COUNTED_STRING_ATTRS.md.  If upstream drops the terminator,
+   * this predicate and `attr_on_disk()` go with it.
+   *
+   * It asks about the KEY because the value cannot say:  a ceph-encoded
+   * blob may legitimately end in a zero byte, so "strip whatever ends in
+   * NUL" would corrupt an ACL or a bucket_info.  And only attributes
+   * that are counted on *every* path that writes them may be listed --
+   * etag is not, which is why it is absent. */
+  virtual bool counted_string_value(const std::string& key) const = 0;
+
   /* The attribute holding this bucket's encoded RGWBucketInfo.
    *
    * Both formats answer the same way, deliberately:  a tree we write is
@@ -107,6 +128,8 @@ public:
 
   int object_owner(const Attrs& attrs, const struct statx* stx,
 		   ACLOwner& owner) const override;
+
+  bool counted_string_value(const std::string& key) const override;
 
   const char* bucket_info_key() const override;
 

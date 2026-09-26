@@ -75,6 +75,36 @@ int RGWXattrStrategy::object_owner(const Attrs& attrs,
   return 0;
 }
 
+/* The attributes RGW writes as counted strings, from the five writers
+ * catalogued in docs/RGW_COUNTED_STRING_ATTRS.md.  Everything else --
+ * the encoded ACL, object_type, bucket_info, the multipart blobs -- is
+ * ceph-encoded and must not be touched. */
+bool RGWXattrStrategy::counted_string_value(const std::string& key) const
+{
+  /* x-amz-meta-*, from rgw_get_request_metadata() and the librgw
+   * setxattr path */
+  if (key.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1,
+		  RGW_ATTR_META_PREFIX) == 0) {
+    return true;
+  }
+
+  /* s->generic_attrs, written by rgw_op.cc:3861;  the table is
+   * generic_attrs[] at rgw_rest.cc:122 */
+  return key == RGW_ATTR_CONTENT_TYPE ||
+         key == RGW_ATTR_CONTENT_LANG ||
+         key == RGW_ATTR_EXPIRES ||
+         key == RGW_ATTR_CACHE_CONTROL ||
+         key == RGW_ATTR_CONTENT_DISP ||
+         key == RGW_ATTR_CONTENT_ENC ||
+         key == RGW_ATTR_X_ROBOTS_TAG;
+
+  /* NOT RGW_ATTR_ETAG.  Only the opaque-etag path (rgw_op.cc:9000)
+   * writes it counted;  the ordinary MD5 path does not, and nsfs stores
+   * it bare since 15386ec4a26.  Listing it made the strip a no-op and
+   * the restore a corruption -- HEAD returned an etag with a NUL inside
+   * the quotes. */
+}
+
 const char* RGWXattrStrategy::bucket_info_key() const
 {
   return "bucket_info";
