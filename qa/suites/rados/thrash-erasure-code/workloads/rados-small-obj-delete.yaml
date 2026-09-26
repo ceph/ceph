@@ -1,0 +1,18 @@
+# Small object workload with heavy delete operations
+# Low concurrency, delete-focused pattern
+tasks:
+  - rados:
+      use-pool-config: true
+      clients: [client.0]
+      ops: 400000
+      max_seconds: 600
+      max_in_flight: 8
+      objects: 20
+      size: 16384
+      write_append_excl: false
+      op_weights:
+        write: 0
+        read: 0
+        append: 10
+        delete: 20
+  - print: "**** done rados ec small-obj-delete"

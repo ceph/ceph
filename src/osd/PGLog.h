@@ -1046,10 +1046,11 @@ public:
   }
 
   void proc_replica_log(pg_info_t &oinfo,
-			const pg_log_t &olog,
-			pg_missing_t& omissing, pg_shard_t from,
-			const pg_shard_t &to,
-			bool ec_optimizations_enabled) const;
+                        const pg_log_t &olog,
+                        pg_missing_t& omissing, pg_shard_t from,
+                        const pg_shard_t &to,
+                        bool ec_optimizations_enabled,
+                        const pg_pool_t &pool) const;
 
   void set_missing_may_contain_deletes() {
     missing.may_include_deletes = true;
@@ -1100,7 +1101,7 @@ protected:
     missing_type &missing,               ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
-    shard_id_t orig_shard,               ///< [in] Which shard has orig_entries
+    shard_id_t orig_rel_shard,               ///< [in] Which shard has orig_entries
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
@@ -1152,7 +1153,7 @@ protected:
       }
       if (i->is_error()) {
         ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
-      } else if (!i->written_shards.empty() && !i->written_shards.contains(orig_shard)) {
+      } else if (!i->written_shards.empty() && !i->written_shards.contains(orig_rel_shard)) {
         ldpp_dout(dpp, 20) << __func__ << ": ignoring partial write " << *i << dendl;
         last = i->version;
         if (!prior_version_opt) {
@@ -1349,7 +1350,7 @@ protected:
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     bool ec_optimizations_enabled,       ///< [in] relax asserts for allow_ec_optimzations pools
-    shard_id_t orig_shard,               ///< [in] Which shard is this (for detecting partial writes)
+    shard_id_t orig_rel_shard,           ///< [in] Which relative shard is this (for detecting partial writes)
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     std::map<hobject_t, mempool::osd_pglog::list<pg_log_entry_t> > split;
@@ -1364,7 +1365,7 @@ protected:
 	omissing,
 	rollbacker,
 	ec_optimizations_enabled,
-	orig_shard,
+	orig_rel_shard,
 	dpp);
     }
   }
@@ -1403,7 +1404,8 @@ public:
                             bool &dirty_info,
                             bool &dirty_big_info,
 			    bool ec_optimizations_enabled,
-			    const pg_shard_t &shard);
+			    const pg_shard_t &shard,
+                            const pg_pool_t &pool);
 
   void merge_log(pg_info_t &oinfo,
 		 pg_log_t&& olog,
@@ -1570,7 +1572,8 @@ public:
     std::ostringstream &oss,
     bool tolerate_divergent_missing_log,
     bool ec_optimizations_enabled, // Relax asserts for partial writes
-    bool debug_verify_stored_missing = false
+    bool debug_verify_stored_missing = false,
+    const pg_pool_t *pool = nullptr
     ) {
     return read_log_and_missing(
       cct, store, ch, pgmeta_oid, info,
@@ -1580,7 +1583,8 @@ public:
       &clear_divergent_priors,
       this,
       (pg_log_debug ? &log_keys_debug : nullptr),
-      debug_verify_stored_missing);
+      debug_verify_stored_missing,
+      pool);
   }
 
   template <typename missing_type>
@@ -1598,7 +1602,8 @@ public:
     bool *clear_divergent_priors = nullptr,
     const DoutPrefixProvider *dpp = nullptr,
     std::set<std::string> *log_keys_debug = nullptr,
-    bool debug_verify_stored_missing = false
+    bool debug_verify_stored_missing = false,
+    const pg_pool_t *pool = nullptr
     ) {
     ldpp_dout(dpp, 10) << "read_log_and_missing coll " << ch->cid
 		       << " " << pgmeta_oid << dendl;
@@ -1710,12 +1715,17 @@ public:
 	std::set<hobject_t> did;
 	std::set<hobject_t> checked;
 	std::set<hobject_t> skipped;
+	// written_shards holds relative shard ids, so convert before testing it.
+	// Without a pool (the offline tools) assume a single zone, where the
+	// relative and absolute ids are the same.
+	const shard_id_t written_shard = pool ?
+	  pool->get_relative_shard(info.pgid.shard) : info.pgid.shard;
 	for (auto i = log.log.rbegin(); i != log.log.rend(); ++i) {
 	  if (i->soid > info.last_backfill)
 	    continue;
 	  if (i->is_error())
 	    continue;
-	  if (!i->is_written_shard(info.pgid.shard)) {
+	  if (!i->is_written_shard(written_shard)) {
 	    // optimized EC - partial write that this shard didn't participate in
 	    ceph_assert(ec_optimizations_enabled);
 	    continue;

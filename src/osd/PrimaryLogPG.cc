@@ -14640,10 +14640,12 @@ void PrimaryLogPG::update_range(
 	      const auto & [shard, version] = entry.second;
 	      versions[shard] = version;
 	    }
-	    // Update entries in map that are modified by log entry
+	    // Update entries in map that are modified by log entry.
+	    // backfill_targets and versions are keyed by absolute shard id,
+	    // but written_shards holds relative ids.
 	    bool uses_default = false;
 	    for (const auto & shard : backfill_targets) {
-	      if (e.is_written_shard(shard.shard)) {
+	      if (e.is_written_shard(pool.info.get_relative_shard(shard.shard))) {
 		versions.erase(shard.shard);
 		uses_default = true;
 	      } else {

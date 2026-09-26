@@ -70,7 +70,9 @@ public:
     ceph_abort_msg("ErasureCode::decode_chunks not implemented");
   }
 
+  using ErasureCode::create_rule;
   int create_rule(const string &name,
+		  int num_zones,
 		  CrushWrapper &crush,
 		  ostream *ss) const override { return 0; }
 };

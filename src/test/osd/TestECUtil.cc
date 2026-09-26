@@ -1630,3 +1630,62 @@ TEST(ECUtil, erase_after_ro_offset_single_byte)
   // Shard 1 should be empty
   ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
 }
+
+
+// Test get_base_shard and get_shard_zone
+TEST(ECUtil, get_base_shard)
+{
+  int k = 2;
+  int m = 1;
+  stripe_info_t sinfo(k, m, 4096 * k);
+
+  // Basic: k+m=3, so shard % 3
+  ASSERT_EQ(shard_id_t(0), sinfo.get_rel_shard(shard_id_t(0)));
+  ASSERT_EQ(shard_id_t(2), sinfo.get_rel_shard(shard_id_t(2)));
+  ASSERT_EQ(shard_id_t(0), sinfo.get_rel_shard(shard_id_t(3)));
+  ASSERT_EQ(shard_id_t(1), sinfo.get_rel_shard(shard_id_t(100)));
+
+  // Zone: shard / 3
+  ASSERT_EQ(0, sinfo.get_shard_zone(shard_id_t(2)));
+  ASSERT_EQ(1, sinfo.get_shard_zone(shard_id_t(3)));
+  ASSERT_EQ(33, sinfo.get_shard_zone(shard_id_t(100)));
+}
+
+
+
+// Verify consistency: abs_shard == zone * (k+m) + rel_shard
+TEST(ECUtil, get_shard_zone_consistency_with_get_rel_shard)
+{
+  int k = 4;
+  int m = 2;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k);
+
+  // Test a few examples
+  for (int shard_id = 0; shard_id < 20; shard_id++) {
+    shard_id_t abs_shard(shard_id);
+    int zone = sinfo.get_shard_zone(abs_shard);
+    shard_id_t rel_shard = sinfo.get_rel_shard(abs_shard);
+    int reconstructed = zone * sinfo.get_k_plus_m() + rel_shard.id;
+    ASSERT_EQ(shard_id, reconstructed);
+  }
+}
+
+// stripe_info_t::get_num_zones() and pg_pool_t::get_num_zone() are two
+// near-identically named helpers answering the same question ("how many
+// zones does this pool have?") for the same unset-option case, and they
+// must not silently disagree on the default. A default pg_pool_t leaves
+// pool_opts_t::NUM_ZONES unset, which is exactly the "no zones configured"
+// case both helpers claim to handle.
+TEST(ECUtil, get_num_zones_matches_pg_pool_t_get_num_zone_default)
+{
+  pg_pool_t pool;
+  stripe_info_t sinfo(2, 1, 4096 * 2, &pool);
+
+  // pg_pool_t treats "unset" as a single-zone pool.
+  ASSERT_EQ(1, pool.get_num_zone());
+
+  // stripe_info_t must agree with pg_pool_t on the very same question,
+  // for the very same pool.
+  ASSERT_EQ(pool.get_num_zone(), (int)sinfo.get_num_zones());
+}

@@ -364,6 +364,71 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
   }
 }
 
+bool OSDMap::at_least_one_zone_has_min_size(const pg_pool_t& pool,
+                                        const vector<int>& acting) const
+{
+  set<int> rule_roots;
+  crush->find_takes_by_rule(pool.crush_rule, &rule_roots);
+  vector<int> zones;
+  for (int root : rule_roots) {
+    crush->get_children_of_type(root, pool.peering_crush_bucket_barrier, &zones);
+  }
+  for (int zone : zones) {
+    vector<int> zone_osds;
+    crush->get_children_of_type(zone, 0, &zone_osds);
+    set<int> zone_osd_set(zone_osds.begin(), zone_osds.end());
+
+    unsigned zone_acting = 0;
+    for (int osd : acting) {
+      if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
+        ++zone_acting;
+      }
+    }
+
+    if (zone_acting >= pool.min_size) {
+      return true;
+    }
+  }
+  return false;
+}                                      
+
+unsigned OSDMap::stretch_ec_num_acting_below_min_size(const pg_pool_t& pool,
+                                        const vector<int>& acting) const
+{
+  if(!pool.is_erasure() || !pool.is_stretch_pool() || pool.peering_crush_bucket_count == 0) {
+    return 0;
+  }
+
+  set<int> rule_roots;
+  crush->find_takes_by_rule(pool.crush_rule, &rule_roots);
+  vector<int> zones;
+  for (int root : rule_roots) {
+    crush->get_children_of_type(root, pool.peering_crush_bucket_barrier, &zones);
+  }
+  int deficit = 0;
+  for (int zone : zones) {
+    if (pool.peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
+        zone != (int)pool.peering_crush_mandatory_member) {
+      continue;
+    }
+    vector<int> zone_osds;
+    crush->get_children_of_type(zone, 0, &zone_osds);
+    set<int> zone_osd_set(zone_osds.begin(), zone_osds.end());
+
+    unsigned zone_acting = 0;
+    for (int osd : acting) {
+      if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
+        ++zone_acting;
+      }
+    }
+
+    if (zone_acting < pool.min_size) {
+      deficit += (pool.min_size - zone_acting);
+    }
+  }
+  return deficit;
+}
+
 bool OSDMap::subtree_type_is_down(
   CephContext *cct,
   int id,
@@ -952,7 +1017,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -3022,46 +3087,32 @@ const std::vector<int> OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
   return acting;
 }
 
-const shard_id_t OSDMap::pgtemp_primaryfirst(const pg_pool_t& pool,
-	const pg_t pg, const shard_id_t shard) const
-{
-  if ((shard == shard_id_t::NO_SHARD) ||
-      (shard == shard_id_t(0))) {
-    return shard;
-  }
-  shard_id_t result = shard;
-  if (pool.allows_ecoptimizations()) {
-    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
-      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
-      if (shard >= pool.size - num_parity_shards) {
-	result = shard_id_t(result + num_parity_shards + 1 - pool.size);
-      } else {
-	result = shard_id_t(result + num_parity_shards);
-      }
-    }
-  }
-  return result;
-}
-
 shard_id_t OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
-	const pg_t pg, const shard_id_t shard) const
+                                            const pg_t pg, const shard_id_t primary_first_pos) const
 {
-  if ((shard == shard_id_t::NO_SHARD) ||
-      (shard == shard_id_t(0))) {
-    return shard;
+  if ((primary_first_pos == shard_id_t::NO_SHARD) ||
+      (primary_first_pos == shard_id_t(0)) ||
+      !pool.allows_ecoptimizations() ||
+      !has_pgtemp(pool.raw_pg_to_pg(pg))) {
+    return primary_first_pos;
   }
-  shard_id_t result = shard;
-  if (pool.allows_ecoptimizations()) {
-    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
-      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
-      if (shard > num_parity_shards) {
-	result = shard_id_t(result - num_parity_shards);
-      } else {
-	result = shard_id_t(result + pool.size - num_parity_shards - 1);
+  shard_id_t i(0);
+  shard_id_t j(pool.size - pool.nonprimary_shards.size());
+  for (shard_id_t shard(0); shard < pool.size; ++shard) {
+    if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+      if (j == primary_first_pos) {
+        return shard;
       }
+      ++j;
+    } else {
+      if (i == primary_first_pos) {
+        return shard;
+      }
+      ++i;
     }
   }
-  return result;
+  ceph_abort("Shard out of range!");
+  return shard_id_t::NO_SHARD;
 }
 
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
@@ -3861,7 +3912,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blocklist, bl);

@@ -701,7 +701,8 @@ private:
 	     crc_defined(false), crc(0),
 	     crush(std::make_shared<CrushWrapper>()),
 	     stretch_mode_enabled(false), stretch_bucket_count(0),
-	     degraded_stretch_mode(0), recovering_stretch_mode(0), stretch_mode_bucket(0) {
+	     degraded_stretch_mode(0), recovering_stretch_mode(0),
+       stretch_mode_bucket(0) {
   }
 
 private:
@@ -1014,6 +1015,9 @@ public:
    */
   bool subtree_is_down(int id, std::set<int> *down_cache) const;
   bool containing_subtree_is_down(CephContext *cct, int osd, int subtree_type, std::set<int> *down_cache) const;
+
+  bool at_least_one_zone_has_min_size(const pg_pool_t& pool, const std::vector<int>& acting) const ;
+  unsigned stretch_ec_num_acting_below_min_size(const pg_pool_t& pool, const std::vector<int>& acting) const;
 
   bool subtree_type_is_down(CephContext *cct, int id, int subtree_type, std::set<int> *down_in_osds, std::set<int> *up_in_osds,
                             std::set<int> *subtree_up, std::unordered_map<int, std::set<int> > *subtree_type_down) const;
@@ -1375,9 +1379,6 @@ public:
   const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 			   const pg_t pg,
 			   const std::vector<int>& acting) const;
-  const shard_id_t pgtemp_primaryfirst(const pg_pool_t& pool,
-				       const pg_t pg,
-				       const shard_id_t shard) const;
   shard_id_t pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 					    const pg_t pg,
 					    const shard_id_t shard) const;
