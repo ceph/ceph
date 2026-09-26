@@ -609,6 +609,11 @@ void MDSRankDispatcher::init()
   finisher->start();
 }
 
+int MDSRank::get_dispatch_queue_len() const
+{
+  return messenger->get_dispatch_queue_len();
+}
+
 void MDSRank::update_targets()
 {
   // get MonMap's idea of my export_targets

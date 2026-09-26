@@ -1397,6 +1397,55 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_max_readdir_entries
+  type: uint
+  level: advanced
+  desc: Cap on entries returned by one readdir request (0 for the client's request)
+  long_desc: A readdir page is encoded while mds_lock is held, so a client asking for
+    a large page blocks every other client for the duration. Pages are already separate
+    requests, so a lower cap gives the rank more points at which to interleave other
+    work, at the cost of more round trips for the walker.
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_max_readdir_bytes
+  type: uint
+  level: advanced
+  desc: Cap on bytes returned by one readdir request (0 for the client's request)
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_readdir_yield_entries
+  type: uint
+  level: advanced
+  desc: Entries encoded between checks for messages queued for dispatch (0 to disable)
+  long_desc: A readdir page is encoded with mds_lock held and a client request is
+    dispatched inline under that lock, so a client walking a large directory makes
+    everything that arrives meanwhile wait in the dispatch queue. With this set the
+    MDS looks at that queue every so many entries and ends the page early once work
+    is waiting, which costs the reading client an extra round trip and lets the
+    queued work run. It also sets the smallest page the MDS will cut short to, so a
+    busy rank still makes progress.
+  default: 128
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_readdir_yield_min_queued
+  type: uint
+  level: advanced
+  desc: Messages queued for dispatch before a readdir page is cut short
+  long_desc: Raise this to let a readdir page run on unless several messages are already
+    queued behind it. Has no effect unless mds_readdir_yield_entries is set.
+  default: 1
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_verify_backtrace
   type: uint
   level: dev

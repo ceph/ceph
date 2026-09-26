@@ -71,6 +71,43 @@
 .. confval:: mds_extraordinary_events_dump_interval
 .. confval:: subv_metrics_window_interval
 
+Readdir page size
+-----------------
+
+The MDS encodes a readdir reply while holding ``mds_lock``, and the size of that
+reply is chosen by the client. A client that asks for a whole directory -- or
+that leaves the entry count unset, as libcephfs does -- is served the whole
+directory in one reply, bounded only by a 512KB byte cap. Every other request on
+that rank waits for the encoding to finish, so a single client walking a large
+directory, such as a backup or an indexer, can dominate the latency everyone else
+sees.
+
+Readdir pages are already separate requests, so ``mds_lock`` is released between
+them. Ending a page early therefore costs the reading client one more round trip
+and gives the rank a point at which to serve the work waiting behind it.
+
+By default the MDS does this only while other work is actually queued: while
+encoding a page it examines the dispatch queue every
+``mds_readdir_yield_entries`` entries, and ends the page once at least
+``mds_readdir_yield_min_queued`` messages are waiting. A client walking a large
+directory on an otherwise idle rank is left alone. The check interval is also the
+smallest page the MDS will cut short to, so a busy rank still returns useful
+pages rather than a handful of entries at a time. Set
+``mds_readdir_yield_entries`` to 0 to disable this and restore the previous
+behaviour.
+
+.. confval:: mds_readdir_yield_entries
+.. confval:: mds_readdir_yield_min_queued
+
+Two unconditional caps are also available, and are off by default. These apply
+whether or not the rank is busy, so a walker pays the extra round trips even when
+nothing else is running; prefer the conditional bound above unless you need a
+hard limit on reply size.
+
+.. confval:: mds_max_readdir_entries
+.. confval:: mds_max_readdir_bytes
+
+
 The following options control the dmClock QoS scheduler for client
 metadata requests. See :ref:`mds-qos` for an explanation of the
 feature and a worked example.
