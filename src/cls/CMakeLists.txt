@@ -91,6 +91,7 @@ if (WITH_RADOSGW)
     otp/cls_otp_types.cc
     )
   add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+  target_link_libraries(cls_otp_client PRIVATE ceph-json-headers)
   if(COMPILER_SUPPORTS_VLA_ERROR)
     target_compile_options(cls_otp_client PUBLIC
       $<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
@@ -100,9 +101,9 @@ endif (WITH_RADOSGW)
 # cls_refcount
 set(cls_refcount_srcs
   refcount/cls_refcount.cc
-  refcount/cls_refcount_ops.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+  refcount/cls_refcount_ops.cc)
 add_library(cls_refcount SHARED ${cls_refcount_srcs})
+target_link_libraries(cls_refcount PRIVATE ceph-json)
 set_target_properties(cls_refcount PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
@@ -114,11 +115,13 @@ set(cls_refcount_client_srcs
   refcount/cls_refcount_client.cc
   refcount/cls_refcount_ops.cc)
 add_library(cls_refcount_client STATIC ${cls_refcount_client_srcs})
+target_link_libraries(cls_refcount_client PRIVATE ceph-json-headers)
 
 
 # cls_version
 set(cls_version_srcs version/cls_version.cc)
 add_library(cls_version SHARED ${cls_version_srcs})
+target_link_libraries(cls_version PRIVATE ceph-json-headers)
 set_target_properties(cls_version PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
@@ -130,11 +133,13 @@ set(cls_version_client_srcs
   version/cls_version_client.cc
   version/cls_version_types.cc)
 add_library(cls_version_client STATIC ${cls_version_client_srcs})
+target_link_libraries(cls_version_client PUBLIC ceph-json-headers)
 
 
 # cls_log
 set(cls_log_srcs log/cls_log.cc)
 add_library(cls_log SHARED ${cls_log_srcs})
+target_link_libraries(cls_log PRIVATE ceph-json-headers)
 set_target_properties(cls_log PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
@@ -144,11 +149,13 @@ install(TARGETS cls_log DESTINATION ${cls_dir})
 
 set(cls_log_client_srcs log/cls_log_client.cc)
 add_library(cls_log_client STATIC ${cls_log_client_srcs})
+target_link_libraries(cls_log_client PUBLIC ceph-json-headers)
 
 
 # cls_timeindex
 set(cls_timeindex_srcs timeindex/cls_timeindex.cc timeindex/cls_timeindex_types.cc)
 add_library(cls_timeindex SHARED ${cls_timeindex_srcs})
+target_link_libraries(cls_timeindex PRIVATE ceph-json-headers)
 set_target_properties(cls_timeindex PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
@@ -160,6 +167,7 @@ set(cls_timeindex_client_srcs
   timeindex/cls_timeindex_types.cc
   timeindex/cls_timeindex_client.cc)
 add_library(cls_timeindex_client STATIC ${cls_timeindex_client_srcs})
+target_link_libraries(cls_timeindex_client PUBLIC ceph-json-headers)
 
 
 # cls_user
@@ -177,6 +185,7 @@ set(cls_user_client_srcs
   user/cls_user_types.cc
   user/cls_user_ops.cc)
 add_library(cls_user_client STATIC ${cls_user_client_srcs})
+target_link_libraries(cls_user_client PRIVATE ceph-json-headers)
 
 
 # cls_journal
@@ -202,10 +211,9 @@ if (WITH_RADOSGW)
   set(cls_rgw_srcs
     rgw/cls_rgw.cc
     rgw/cls_rgw_ops.cc
-    rgw/cls_rgw_types.cc
-    ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+    rgw/cls_rgw_types.cc)
   add_library(cls_rgw SHARED ${cls_rgw_srcs})
-  target_link_libraries(cls_rgw ${FMT_LIB})
+  target_link_libraries(cls_rgw PRIVATE ${FMT_LIB} ceph-json)
   target_include_directories(cls_rgw
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -225,6 +233,7 @@ if (WITH_RADOSGW)
     rgw/cls_rgw_types.cc
     rgw/cls_rgw_ops.cc)
   add_library(cls_rgw_client STATIC ${cls_rgw_client_srcs})
+  target_link_libraries(cls_rgw_client PRIVATE ceph-json-headers)
   target_include_directories(cls_rgw_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -300,9 +309,9 @@ install(TARGETS cls_cas DESTINATION ${cls_dir})
 #cls_queue
 set(cls_queue_srcs
   queue/cls_queue.cc
-  queue/cls_queue_src.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+  queue/cls_queue_src.cc)
 add_library(cls_queue SHARED ${cls_queue_srcs})
+target_link_libraries(cls_queue PRIVATE ceph-json)
 set_target_properties(cls_queue PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
@@ -313,14 +322,15 @@ install(TARGETS cls_queue DESTINATION ${cls_dir})
 set(cls_queue_client_srcs
   queue/cls_queue_client.cc)
 add_library(cls_queue_client STATIC ${cls_queue_client_srcs})
+target_link_libraries(cls_queue_client PUBLIC ceph-json-headers)
 
 # cls_rgw_gc
 if (WITH_RADOSGW)
   set(cls_rgw_gc_srcs
     rgw_gc/cls_rgw_gc.cc
-    queue/cls_queue_src.cc
-    ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+    queue/cls_queue_src.cc)
   add_library(cls_rgw_gc SHARED ${cls_rgw_gc_srcs})
+  target_link_libraries(cls_rgw_gc PRIVATE ceph-json)
   target_include_directories(cls_rgw_gc
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -339,6 +349,7 @@ if (WITH_RADOSGW)
     rgw_gc/cls_rgw_gc_client.cc
     rgw/cls_rgw_types.cc)
   add_library(cls_rgw_gc_client STATIC ${cls_rgw_gc_client_srcs})
+  target_link_libraries(cls_rgw_gc_client PUBLIC ceph-json-headers)
   target_include_directories(cls_rgw_gc_client
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
@@ -352,9 +363,9 @@ endif (WITH_RADOSGW)
 #cls_2pc_queue
 set(cls_2pc_queue_srcs
   2pc_queue/cls_2pc_queue.cc
-  queue/cls_queue_src.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
+  queue/cls_queue_src.cc)
 add_library(cls_2pc_queue SHARED ${cls_2pc_queue_srcs})
+target_link_libraries(cls_2pc_queue PRIVATE ceph-json)
 set_target_properties(cls_2pc_queue PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
@@ -364,6 +375,7 @@ install(TARGETS cls_2pc_queue DESTINATION ${cls_dir})
 set(cls_2pc_queue_client_srcs
   2pc_queue/cls_2pc_queue_client.cc)
 add_library(cls_2pc_queue_client STATIC ${cls_2pc_queue_client_srcs})
+target_link_libraries(cls_2pc_queue_client PUBLIC ceph-json-headers)
 
 
 add_subdirectory(cmpomap)

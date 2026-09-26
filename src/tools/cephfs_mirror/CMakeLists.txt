@@ -17,6 +17,7 @@ add_executable(cephfs-mirror
 
 add_library(cephfs_mirror_internal STATIC
   ${cephfs_mirror_internal})
+target_link_libraries(cephfs_mirror_internal PRIVATE ceph-json-headers)
 
 target_link_libraries(cephfs-mirror
   cephfs_mirror_internal
