@@ -121,6 +121,16 @@ pub struct CRgwObjectMeta {
     pub last_modified: i64,
     /// Nanoseconds part of the last modified timestamp
     pub last_modified_ns: i32,
+    /// Content encoding (e.g., "gzip"), null-terminated string
+    pub content_encoding: *mut c_char,
+    /// Content disposition (e.g., "attachment; filename=..."), null-terminated string
+    pub content_disposition: *mut c_char,
+    /// Content language (e.g., "en-US"), null-terminated string
+    pub content_language: *mut c_char,
+    /// Cache control (e.g., "max-age=604800"), null-terminated string
+    pub cache_control: *mut c_char,
+    /// Custom metadata as JSON string (e.g., {"key1":"value1","key2":"value2"}), null-terminated
+    pub metadata: *mut c_char,
 }
 
 impl Default for CRgwObjectMeta {
@@ -131,6 +141,11 @@ impl Default for CRgwObjectMeta {
             content_type: std::ptr::null_mut(),
             last_modified: 0,
             last_modified_ns: 0,
+            content_encoding: std::ptr::null_mut(),
+            content_disposition: std::ptr::null_mut(),
+            content_language: std::ptr::null_mut(),
+            cache_control: std::ptr::null_mut(),
+            metadata: std::ptr::null_mut(),
         }
     }
 }
@@ -190,7 +205,9 @@ extern "C" {
         bucket: *const CRgwBucket,
         obj: *const CRgwObject,
         buffer: *const CRgwBuffer,
-        etag_out: *mut *mut c_char,
+        attrs: *const CRgwObjectMeta,
+        etag_out: *mut c_char,
+        etag_len: usize,
     ) -> c_int;
 
     /// Write an object with conditional preconditions
@@ -204,7 +221,9 @@ extern "C" {
         if_match: *const c_char,
         if_nomatch: *const c_char,
         canceled: *mut c_int,
-        etag_out: *mut *mut c_char,
+        attrs: *const CRgwObjectMeta,
+        etag_out: *mut c_char,
+        etag_len: usize,
     ) -> c_int;
 
     /// Read an object from RGW storage
@@ -298,13 +317,15 @@ extern "C" {
     //=========================================================================
 
     /// Initialize a multipart upload
-    pub fn rgw_init_multipart(
+    pub fn rgw_multipart_init(
         driver: *mut CRgwDriver,
         dpp: *const CRgwDoutPrefix,
         yield_ctx: *mut CRgwYieldContext,
         bucket: *const CRgwBucket,
         obj: *const CRgwObject,
-        upload_id: *mut *mut c_char,
+        attrs: *const CRgwObjectMeta,
+        upload_id_out: *mut c_char,
+        upload_id_len: usize,
     ) -> c_int;
 
     /// Upload a part in a multipart upload
@@ -318,7 +339,8 @@ extern "C" {
         part_num: u32,
         data: *const u8,
         len: usize,
-        etag: *mut *mut c_char,
+        etag_out: *mut c_char,
+        etag_len: usize,
     ) -> c_int;
 
     /// Complete a multipart upload
@@ -355,6 +377,12 @@ extern "C" {
 
     /// Free list result allocated by rgw_list_objects
     pub fn rgw_free_list_result(result: *mut CRgwListResult);
+
+    /// Buffer size (incl. NUL) the caller must allocate for an ETag out-param.
+    pub fn rgw_get_max_etag_len() -> usize;
+
+    /// Buffer size (incl. NUL) the caller must allocate for an upload-id out-param.
+    pub fn rgw_get_max_upload_id_len() -> usize;
 
     //=========================================================================
     // Configuration
@@ -416,6 +444,44 @@ impl Drop for OwnedRGWListResult {
     fn drop(&mut self) {
         unsafe {
             rgw_free_list_result(&mut self.0);
+        }
+    }
+}
+
+/// A zero-initialized byte buffer sized to receive a NULL-terminated string
+/// that the C++ wrapper writes into (etag, upload id).
+///
+/// The wrapper only copies into this buffer, so ownership never crosses the FFI
+/// boundary — the buffer is freed when the `Vec` drops.
+pub struct RGWStringBuffer(Vec<u8>);
+
+impl RGWStringBuffer {
+    /// Allocate a buffer of `len` bytes
+    pub fn with_len(len: usize) -> Self {
+        // At least one byte so the buffer is always safely NUL-terminated.
+        RGWStringBuffer(vec![0u8; len.max(1)])
+    }
+
+    /// Mutable pointer to the buffer, to pass as the out-param.
+    pub fn as_mut_ptr(&mut self) -> *mut c_char {
+        self.0.as_mut_ptr() as *mut c_char
+    }
+
+    /// Capacity in bytes, to pass alongside the pointer.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Interpret the (NUL-terminated) contents as an owned `String`, or `None`
+    /// if the wrapper left it empty.
+    pub fn as_string(&self) -> Option<String> {
+        let s = unsafe { std::ffi::CStr::from_ptr(self.0.as_ptr() as *const c_char) }
+            .to_string_lossy()
+            .into_owned();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
         }
     }
 }
