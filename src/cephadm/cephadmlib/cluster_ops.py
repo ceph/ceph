@@ -391,15 +391,23 @@ def get_daemon_type_priority(daemon_types: List[str]) -> int:
     Lower number = process earlier in shutdown.
 
     Monitoring/gateways first (low number), core services last (high number).
+
+    Stopping a host stops every daemon on it, so the host is ranked by the most
+    critical daemon it runs. Ranking it by the least critical one would stop a
+    host running a mon as early as a host running only node-exporter.
     """
-    min_priority = len(DAEMON_SHUTDOWN_ORDER)
+    max_priority = -1
 
     for dtype in daemon_types:
         if dtype in DAEMON_SHUTDOWN_ORDER:
             priority = DAEMON_SHUTDOWN_ORDER.index(dtype)
-            min_priority = min(min_priority, priority)
+            max_priority = max(max_priority, priority)
 
-    return min_priority
+    if max_priority < 0:
+        # nothing recognized: stop it last, the conservative choice
+        return len(DAEMON_SHUTDOWN_ORDER)
+
+    return max_priority
 
 
 def order_hosts_for_shutdown(
