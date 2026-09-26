@@ -583,12 +583,29 @@ OpsExecuter::interruptible_errorated_future<OpsExecuter::osd_op_errorator>
 OpsExecuter::execute_op(OSDOp& osd_op)
 {
   return do_execute_op(osd_op).handle_error_interruptible(
-    osd_op_errorator::all_same_way([&osd_op](auto e, auto&& e_raw)
+    osd_op_errorator::all_same_way([this, &osd_op](auto e, auto&& e_raw)
       -> OpsExecuter::osd_op_errorator::future<> {
         // All ops except for CMPEXT should have rval set to -e.value(),
         // CMPEXT sets rval itself and shouldn't be overridden.
         if (e.value() != ct_error::cmp_fail_error_value) {
           osd_op.rval = -e.value();
+        }
+        // tracker #77070: remember that reading object data found the copy
+        // corrupt (PGBackend reports that as object_corrupted, EILSEQ), so
+        // ClientRequest can repair it. Only object-data reads count, since a
+        // class method may return EILSEQ for its own reasons, but a read a
+        // class method issues arrives here as its own op and counts as well.
+        if (e.value() == EILSEQ) {
+          switch (osd_op.op.op) {
+          case CEPH_OSD_OP_READ:
+          case CEPH_OSD_OP_SYNC_READ:
+          case CEPH_OSD_OP_SPARSE_READ:
+          case CEPH_OSD_OP_TMAPGET:
+            corrupt_read = true;
+            break;
+          default:
+            break;
+          }
         }
         if ((osd_op.op.flags & CEPH_OSD_OP_FLAG_FAILOK) &&
 	  e.value() != EAGAIN && e.value() != EINPROGRESS) {

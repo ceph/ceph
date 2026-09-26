@@ -1063,19 +1063,72 @@ PG::submit_transaction(
   );
 }
 
-PG::interruptible_future<> PG::repair_object(
+bool PG::repair_object(
   const hobject_t& oid,
-  eversion_t& v) 
+  const eversion_t& v)
 {
+  LOG_PREFIX(PG::repair_object);
   // see also PrimaryLogPG::rep_repair_primary_object()
-  assert(is_primary());
-  logger().debug("{}: {} peers osd.{}", __func__, oid, get_acting_recovery_backfill());
-  // Add object to PG's missing set if it isn't there already
-  assert(!get_local_missing().is_missing(oid));
+  ceph_assert(is_primary());
+  // Whether the PG can take a repair is decided here, in one place, right
+  // before acting on it; the caller only looked at the op. When it cannot,
+  // classic parks the op on waiting_for_clean_to_primary_repair and repairs
+  // once the PG is clean; crimson has no such wait queue, so the caller fails
+  // the read as it does today and the copy is repaired by scrub or by a later
+  // read.
+  if (!is_active_clean()) {
+    // Marking an object missing while the PG is recovering or backfilling,
+    // or while another repair is in flight (which leaves Clean, below), races
+    // the transition into Recovered, whose constructor asserts
+    // !needs_recovery().
+    DEBUGDPP("{}: not clean, not repairing", *this, oid);
+    return false;
+  }
+  if (peering_state.state_test(PG_STATE_SNAPTRIM)) {
+    // The snap trimmer asserts is_active_clean() on every step
+    // (SnapTrimEvent, SnapTrimObjSubEvent) and, unlike classic's, does not
+    // back off when the PG stops being clean.
+    DEBUGDPP("{}: trimming snaps, not repairing", *this, oid);
+    return false;
+  }
+  if (get_acting_recovery_backfill().size() <= 1) {
+    // No peer to pull a copy from; the object would only become unfound.
+    DEBUGDPP("{}: no other copy to recover from, not repairing", *this, oid);
+    return false;
+  }
+  DEBUGDPP("{} peers osd.{}", *this, oid, get_acting_recovery_backfill());
+  // Add object to PG's missing set if it isn't there already. A clean PG is
+  // what guarantees the object is not already missing, exactly as in
+  // rep_repair_primary_object().
+  ceph_assert(!get_local_missing().is_missing(oid));
   peering_state.force_object_missing(pg_whoami, oid, v);
-  auto [op, fut] = get_shard_services().start_operation<UrgentRecovery>(
-    oid, v, this, get_shard_services(), get_osdmap_epoch());
-  return std::move(fut);
+  // As PrimaryLogPG::primary_error() does, report the bad copy and whether
+  // anything is left to recover it from. Crimson's cluster log channels are
+  // still stubs that discard what is streamed into them (PG::get_clog_error()
+  // passes a null sink), so for now only the OSD log below carries this; the
+  // clog write starts working once the channels are wired up to the monitors.
+  const auto &missing_loc = peering_state.get_missing_loc();
+  auto errorstr = missing_loc.is_unfound(oid)
+    ? fmt::format("missing primary copy of {}, unfound", oid)
+    : fmt::format("missing primary copy of {}, will try copies on {}",
+		  oid, missing_loc.get_locations(oid));
+  ERRORDPP("{}", *this, errorstr);
+  get_clog_error() << get_pgid() << " " << errorstr;
+  // Leave Clean and hand the object to the peering state machine, as classic
+  // does. DoRecovery takes the PG through WaitLocalRecoveryReserved into
+  // Recovering (or NotRecovering should the object turn out unfound). That is
+  // what makes the missing copy visible to the monitors, since
+  // update_calc_stats() only counts it once the PG is not clean, and what
+  // keeps a second repair on this PG from starting before this one is done:
+  // Recovered asserts !needs_recovery() on the way back to Clean. REPAIR is
+  // cleared again in C_PG_FinishRecovery, like PG::_finish_recovery().
+  peering_state.state_set(PG_STATE_REPAIR);
+  peering_state.state_clear(PG_STATE_CLEAN);
+  start_peering_event_operation(
+    PGPeeringEvent(get_osdmap_epoch(), get_osdmap_epoch(),
+		   PeeringState::DoRecovery()),
+    0.001);
+  return true;
 }
 
 PG::interruptible_future<>
@@ -1941,9 +1994,13 @@ void PG::C_PG_FinishRecovery::finish(int r) {
     DEBUGDPP("raced with delete or repair", pg);
     return;
   }
+  // When recovery is initiated by a repair, that flag is left on
+  peering_state.state_clear(PG_STATE_REPAIR);
   if (this == pg.recovery_finisher) {
     peering_state.purge_strays();
     pg.recovery_finisher = nullptr;
+    // as PG::_finish_recovery() does, so the monitors see REPAIR go
+    pg.publish_stats_to_osd();
   } else {
     DEBUGDPP("stale recovery finsher", pg);
   }
