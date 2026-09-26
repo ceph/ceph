@@ -2440,12 +2440,30 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
   _op_submit_with_budget(op, rl, ptid, ctx_budget);
 }
 
+// Register the op timeout noted by _op_submit_with_budget().  Must be called
+// with the op's session lock held and op->tid assigned: op_cancel() finds the
+// op by tid through the session, and the session lock keeps the reply handler
+// from retiring the op while we are still touching it.  An op that is
+// resubmitted (redirect, -EAGAIN) keeps the event armed on its first pass.
+void Objecter::_maybe_arm_op_timeout(Op *op)
+{
+  if (!op->timeout_deadline || op->ontimeout != 0)
+    return;
+
+  auto tid = op->tid;
+  ceph_assert(tid != 0);
+  op->ontimeout = timer.add_event(*op->timeout_deadline,
+				  [this, tid]() {
+				    op_cancel(tid, -ETIMEDOUT); });
+}
+
 void Objecter::add_op_to_splitop_session(Op *op) {
   unique_lock sl(splitop_session->lock);
   if (op->tid == 0) {
     op->tid = ++last_tid;
   }
   _session_op_assign(splitop_session, op);
+  _maybe_arm_op_timeout(op);
   inflight_ops++;
   sl.unlock();
 }
@@ -2472,13 +2490,15 @@ void Objecter::_op_submit_with_budget(Op *op,
     }
   }
 
+  // Note the deadline here, but leave the timer event to be registered by
+  // _maybe_arm_op_timeout() once op->tid has been assigned under the session
+  // lock.  Assigning a tid out here would let a thread that drew a later tid
+  // reach _send_op() first, and tid order has to match the order ops are sent
+  // (_kick_requests() resends in tid order).  As before, the clock starts
+  // after _take_op_budget(): that wait is not interruptible, so there is
+  // nothing there for a deadline to bound.
   if (osd_timeout > timespan(0)) {
-    if (op->tid == 0)
-      op->tid = ++last_tid;
-    auto tid = op->tid;
-    op->ontimeout = timer.add_event(osd_timeout,
-				    [this, tid]() {
-				      op_cancel(tid, -ETIMEDOUT); });
+    op->timeout_deadline = ceph::coarse_mono_clock::now() + osd_timeout;
   }
 
 
@@ -2676,6 +2696,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 
   _session_op_assign(s, op);
 
+  _maybe_arm_op_timeout(op);
 
   auto compptr = std::get_if<Op::OpComp>(&op->onfinish);
   if (compptr) {
