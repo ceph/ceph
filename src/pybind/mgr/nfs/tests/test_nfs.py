@@ -239,6 +239,13 @@ QOS_BLOCK {
         else:
             self.temp_store[self.temp_store_namespace][key].raw = content.decode('utf-8')
 
+    def _ioctx_append_mock(self, key: str, content: bytes) -> None:
+        if key not in self.temp_store[self.temp_store_namespace]:
+            self.temp_store[self.temp_store_namespace][key] = \
+                TestNFS.RObject(key, content.decode('utf-8'))
+        else:
+            self.temp_store[self.temp_store_namespace][key].raw += content.decode('utf-8')
+
     def _ioctx_remove_mock(self, key: str) -> None:
         del self.temp_store[self.temp_store_namespace][key]
 
@@ -247,6 +254,8 @@ QOS_BLOCK {
         return r
 
     def _ioctl_stat_mock(self, key):
+        if key not in self.temp_store[self.temp_store_namespace]:
+            raise ObjectNotFound
         return self.temp_store[self.temp_store_namespace][key].stat()
 
     def _ioctl_read_mock(self, key: str, size: Optional[Any] = None) -> bytes:
@@ -269,7 +278,7 @@ QOS_BLOCK {
         }
 
     @contextmanager
-    def _mock_orchestrator(self, enable: bool) -> Iterator:
+    def _mock_orchestrator(self, enable: bool, clients_per_pool: Optional[int] = None) -> Iterator:
         self.io_mock = MagicMock()
         self.io_mock.set_namespace.side_effect = self._ioctx_set_namespace_mock
         self.io_mock.read = self._ioctl_read_mock
@@ -277,10 +286,14 @@ QOS_BLOCK {
         self.io_mock.list_objects.side_effect = self._ioctx_list_objects_mock
         self.io_mock.write_full.side_effect = self._ioctx_write_full_mock
         self.io_mock.remove_object.side_effect = self._ioctx_remove_mock
+        self.io_mock.append.side_effect = self._ioctx_append_mock
 
         # mock nfs services
         orch_nfs_services = [
-            ServiceDescription(spec=NFSServiceSpec(service_id=self.cluster_id))
+            ServiceDescription(spec=NFSServiceSpec(
+                service_id=self.cluster_id,
+                clients_per_pool=clients_per_pool,
+            ))
         ] if enable else []
 
         orch_nfs_daemons = [
@@ -519,8 +532,8 @@ NFS_CORE_PARAM {
         assert blocks[1].block_name == "%url"
         assert blocks[1].values['value'] == f"rados://{NFS_POOL_NAME}/{self.cluster_id}/export-2"
 
-    def _do_mock_test(self, func, *args) -> None:
-        with self._mock_orchestrator(True):
+    def _do_mock_test(self, func, *args, clients_per_pool: Optional[int] = None) -> None:
+        with self._mock_orchestrator(True, clients_per_pool=clients_per_pool):
             func(*args)
             self._reset_temp_store()
 
@@ -1270,6 +1283,181 @@ NFS_CORE_PARAM {
         assert export.clients[0].addresses == ["192.168.1.0/8"]
         assert export.cluster_id == self.cluster_id
 
+    def test_rotate_keys(self):
+        self._do_mock_test(self._do_test_rotate_keys)
+
+    def test_rotate_keys_all_entities(self):
+        self._do_mock_test(self._do_test_rotate_keys_all_entities)
+
+    def test_rotate_keys_rejects_foreign_entity(self):
+        self._do_mock_test(self._do_test_rotate_keys_rejects_foreign_entity)
+
+    def test_rotate_keys_requires_explicit_selection(self):
+        self._do_mock_test(self._do_test_rotate_keys_requires_explicit_selection)
+
+    def test_rotate_keys_rejects_both_selections(self):
+        self._do_mock_test(self._do_test_rotate_keys_rejects_both_selections)
+
+    def _do_test_rotate_keys(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+        cluster = nfs_mod.nfs
+
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/cephfs_rotate',
+            read_only=False,
+            squash='none',
+        )
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/cephfs_rotate2',
+            read_only=False,
+            squash='none',
+        )
+
+        entity = 'client.nfs.foo.myfs.86ca58ef'
+        rotated_key = 'rotated-export-key'
+
+        def mock_create_user_key(self, cluster_id, entity_name, path, fs_name):
+            return rotated_key
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=[entity, 'nfs.foo.myfs.86ca58ef'],
+                key_type='aes256k',
+            )
+
+        check_mon.assert_called_once_with({
+            'prefix': 'auth rotate',
+            'entity': entity,
+            'key_type': 'aes256k',
+        })
+        redeploy.assert_not_called()
+        assert result['cluster_id'] == self.cluster_id
+        assert result['rotated'] == [entity]
+        assert result['export_keys'] == [entity]
+        assert result['daemon_keys'] == []
+        assert result['key_type'] == 'aes256k'
+        assert result['service_redeployed'] is False
+        assert sorted(result['updated_exports']) == ['/cephfs_rotate', '/cephfs_rotate2']
+
+        for pseudo in ('/cephfs_rotate', '/cephfs_rotate2'):
+            export = conf._fetch_export(self.cluster_id, pseudo)
+            assert export is not None
+            assert export.fsal.cephx_key == rotated_key
+
+    def _do_test_rotate_keys_all_entities(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+        cluster = nfs_mod.nfs
+
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/cephfs_rotate_all',
+            read_only=False,
+            squash='none',
+        )
+
+        export_entity = 'client.nfs.foo.myfs.86ca58ef'
+        daemon_entity = 'client.nfs.foo.0.0.host.hash-rgw'
+        cluster_entity = 'client.nfs.foo'
+        rotated_key = 'rotated-export-key'
+
+        def mock_create_user_key(self, cluster_id, entity_name, path, fs_name):
+            return rotated_key
+
+        auth_ls = {
+            'auth_dump': [
+                {'entity': cluster_entity},
+                {'entity': daemon_entity},
+                {'entity': export_entity},
+                {'entity': 'client.nfs.other.fs.deadbeef'},
+            ]
+        }
+
+        def mock_check_mon(cmd):
+            if cmd.get('prefix') == 'auth ls':
+                return mock.Mock(stdout=json.dumps(auth_ls), retval=0, stderr='')
+            return mock.Mock(stdout='', retval=0, stderr='')
+
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon) as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                all_daemon_and_export_keys=True,
+                key_type='aes256k',
+            )
+
+        rotate_calls = [
+            c.args[0] for c in check_mon.call_args_list
+            if c.args[0].get('prefix') == 'auth rotate'
+        ]
+        rotated = [c['entity'] for c in rotate_calls]
+        assert sorted(rotated) == sorted([cluster_entity, daemon_entity, export_entity])
+        assert all(c.get('key_type') == 'aes256k' for c in rotate_calls)
+        redeploy.assert_called_once_with(nfs_mod, self.cluster_id)
+        assert result['service_redeployed'] is True
+        assert sorted(result['daemon_keys']) == sorted([cluster_entity, daemon_entity])
+        assert result['export_keys'] == [export_entity]
+        assert result['updated_exports'] == ['/cephfs_rotate_all']
+
+    def _do_test_rotate_keys_rejects_foreign_entity(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = nfs_mod.nfs
+
+        with pytest.raises(Exception) as e:
+            cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=['client.nfs.other.fs.deadbeef'],
+            )
+        assert 'does not belong to NFS cluster' in str(e.value)
+
+    def _do_test_rotate_keys_requires_explicit_selection(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = nfs_mod.nfs
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            with pytest.raises(Exception) as e:
+                cluster.rotate_keys(cluster_id=self.cluster_id)
+
+        assert '--all-daemon-and-export-keys' in str(e.value)
+        assert '--auth-entities' in str(e.value)
+        assert 'ceph auth ls' in str(e.value)
+        check_mon.assert_not_called()
+        redeploy.assert_not_called()
+
+    def _do_test_rotate_keys_rejects_both_selections(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = nfs_mod.nfs
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            with pytest.raises(Exception) as e:
+                cluster.rotate_keys(
+                    cluster_id=self.cluster_id,
+                    all_daemon_and_export_keys=True,
+                    auth_entities=['client.nfs.foo.myfs.86ca58ef'],
+                )
+
+        assert 'mutually exclusive' in str(e.value)
+        check_mon.assert_not_called()
+        redeploy.assert_not_called()
+
     def test_create_export_default_transports_rdma_cluster(self):
         """When cluster has enable_rdma=True, new exports get default Transports = tcp, RDMA."""
         self._do_mock_test(self._do_test_create_export_default_transports_rdma_cluster)
@@ -1883,6 +2071,494 @@ EXPORT {
     def test_export_qos_bw_ops(self, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params):
         self._do_mock_test(self._do_test_export_qos_bw_ops, qos_type, clust_bw_params, clust_ops_params, export_bw_params, export_ops_params)
 
+    def test_cephfs_client_pool_create_and_delete(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_create_and_delete, clients_per_pool=3)
+
+    def _do_test_cephfs_client_pool_create_and_delete(self):
+        from nfs.export import get_pool_user_id, get_user_id
+        from nfs.utils import ceph_users_obj_name
+        from nfs.ganesha_conf import CephUsers
+
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        created = []
+
+        def mock_create_key(cluster_id, entity, path, fs_name):
+            created.append((entity, path, fs_name))
+            return f'key-{entity}'
+
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+            r = conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/',
+                pseudo_path='/cephfs_pool',
+                read_only=False,
+                squash='root',
+            )
+        assert r["bind"] == "/cephfs_pool"
+        export = conf._fetch_export(self.cluster_id, '/cephfs_pool')
+        first_pool_user = get_pool_user_id(self.cluster_id, 'myfs', 0)
+        # Slot 0 is the id an export gets when client-pool mode is off.
+        assert first_pool_user == f'nfs.{get_user_id(self.cluster_id, "myfs", "/")}'
+        assert export.fsal.user_id == first_pool_user
+        assert export.fsal.cephx_key == f'key-{first_pool_user}'
+        assert [c[0] for c in created] == [
+            get_pool_user_id(self.cluster_id, 'myfs', 0),
+            get_pool_user_id(self.cluster_id, 'myfs', 1),
+            get_pool_user_id(self.cluster_id, 'myfs', 2),
+        ]
+        assert all(c[1] == '/' for c in created)
+
+        raw = conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id))
+        assert raw is not None
+        ceph_users = CephUsers.from_raw(raw)
+        assert len(ceph_users.users_for_fs('myfs')) == 3
+        conf_raw = conf._rados(self.cluster_id).read_obj(f'conf-nfs.{self.cluster_id}')
+        assert f'ceph-users-nfs.{self.cluster_id}' in conf_raw
+
+        # Second export of the same filesystem reuses the pool users.
+        created.clear()
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/',
+                pseudo_path='/cephfs_pool2',
+                read_only=False,
+                squash='root',
+            )
+        assert created == []
+        # ... and share the first pool identity in their FSAL block.
+        export2 = conf._fetch_export(self.cluster_id, '/cephfs_pool2')
+        assert export2.fsal.user_id == first_pool_user
+        assert export2.fsal.cephx_key == f'key-{first_pool_user}'
+
+        rm_entities = []
+
+        def mock_check_mon_command(cmd):
+            if cmd.get('prefix') == 'auth rm':
+                rm_entities.append(cmd['entity'])
+            return 0, '', ''
+
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon_command):
+            conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/cephfs_pool')
+        assert rm_entities == []
+        assert conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)) is not None
+
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon_command):
+            conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/cephfs_pool2')
+        assert set(rm_entities) == {
+            f'client.{get_pool_user_id(self.cluster_id, "myfs", 0)}',
+            f'client.{get_pool_user_id(self.cluster_id, "myfs", 1)}',
+            f'client.{get_pool_user_id(self.cluster_id, "myfs", 2)}',
+        }
+        assert conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)) is None
+        conf_raw = conf._rados(self.cluster_id).read_obj(f'conf-nfs.{self.cluster_id}')
+        assert f'ceph-users-nfs.{self.cluster_id}' not in conf_raw
+
+    def test_cephfs_client_pool_two_filesystems(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_two_filesystems, clients_per_pool=2)
+
+    def _do_test_cephfs_client_pool_two_filesystems(self):
+        from nfs.export import get_pool_user_id
+        from nfs.utils import ceph_users_obj_name
+        from nfs.ganesha_conf import CephUsers
+
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        def mock_create_key(cluster_id, entity, path, fs_name):
+            return f'key-{entity}'
+
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='fs_a',
+                path='/',
+                pseudo_path='/a',
+                read_only=False,
+                squash='none',
+            )
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='fs_b',
+                path='/',
+                pseudo_path='/b',
+                read_only=False,
+                squash='none',
+            )
+
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        assert len(ceph_users.users_for_fs('fs_a')) == 2
+        assert len(ceph_users.users_for_fs('fs_b')) == 2
+
+        rm_entities = []
+
+        def mock_check_mon_command(cmd):
+            if cmd.get('prefix') == 'auth rm':
+                rm_entities.append(cmd['entity'])
+            return 0, '', ''
+
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon_command):
+            conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/a')
+        assert set(rm_entities) == {
+            f'client.{get_pool_user_id(self.cluster_id, "fs_a", 0)}',
+            f'client.{get_pool_user_id(self.cluster_id, "fs_a", 1)}',
+        }
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        assert not ceph_users.users_for_fs('fs_a')
+        assert len(ceph_users.users_for_fs('fs_b')) == 2
+
+        rm_entities.clear()
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon_command):
+            conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/b')
+        assert conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)) is None
+
+    def test_cephfs_client_pool_ignores_non_root_cmount(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_ignores_non_root_cmount,
+                           clients_per_pool=2)
+
+    def _do_test_cephfs_client_pool_ignores_non_root_cmount(self):
+        from nfs.export import get_pool_user_id, get_user_id
+        from nfs.utils import ceph_users_obj_name
+
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        created = []
+
+        def mock_create_key(cluster_id, entity, path, fs_name):
+            created.append((entity, path, fs_name))
+            return f'key-{entity}'
+
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/volumes',
+                pseudo_path='/sub',
+                read_only=False,
+                squash='none',
+                cmount_path='/volumes',
+            )
+
+        hashed_user = f'nfs.{get_user_id(self.cluster_id, "myfs", "/volumes")}'
+        export = conf._fetch_export(self.cluster_id, '/sub')
+        assert export.fsal.user_id == hashed_user
+        assert export.fsal.cephx_key == f'key-{hashed_user}'
+        assert created == [(hashed_user, '/volumes', 'myfs')]
+        assert conf._rados(self.cluster_id).read_obj(
+            ceph_users_obj_name(self.cluster_id)) is None
+
+        created.clear()
+        with mock.patch.object(conf, '_create_user_key', side_effect=mock_create_key):
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/',
+                pseudo_path='/root',
+                read_only=False,
+                squash='none',
+            )
+
+        root_export = conf._fetch_export(self.cluster_id, '/root')
+        assert root_export.fsal.user_id == get_pool_user_id(self.cluster_id, 'myfs', 0)
+        assert [c[0] for c in created] == [
+            get_pool_user_id(self.cluster_id, 'myfs', 0),
+            get_pool_user_id(self.cluster_id, 'myfs', 1),
+        ]
+        export = conf._fetch_export(self.cluster_id, '/sub')
+        assert export.fsal.user_id == hashed_user
+
+        rm_entities = []
+
+        def mock_check_mon_command(cmd):
+            if cmd.get('prefix') == 'auth rm':
+                rm_entities.append(cmd['entity'])
+            return 0, '', ''
+
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon_command):
+            conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/root')
+        assert set(rm_entities) == {
+            f'client.{get_pool_user_id(self.cluster_id, "myfs", 0)}',
+            f'client.{get_pool_user_id(self.cluster_id, "myfs", 1)}',
+        }
+        assert conf._fetch_export(self.cluster_id, '/sub').fsal.user_id == hashed_user
+
+        rm_entities.clear()
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon_command):
+            conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/sub')
+        assert rm_entities == [f'client.{hashed_user}']
+
+    def test_cephfs_client_pool_single_notify_per_change(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_single_notify_per_change,
+                           clients_per_pool=2)
+
+    def _do_test_cephfs_client_pool_single_notify_per_change(self):
+        """Ganesha is notified once per export change, not once per object.
+
+        A change in client-pool mode writes both the export object and the
+        CEPH_USERS object. Only the export object write notifies, and it is
+        always the last one, so ganesha rereads both at once.
+        """
+        from nfs.utils import ceph_users_obj_name
+
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        self.io_mock.notify.reset_mock()
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/pool',
+            read_only=False,
+            squash='none',
+        )
+        # Both objects were written ...
+        assert conf._rados(self.cluster_id).read_obj(
+            ceph_users_obj_name(self.cluster_id)) is not None
+        # ... and ganesha was told about it exactly once.
+        assert self.io_mock.notify.call_count == 1
+
+        self.io_mock.notify.reset_mock()
+        r = conf.apply_export(self.cluster_id, json.dumps({
+            'path': '/',
+            'pseudo': '/pool',
+            'cluster_id': self.cluster_id,
+            'access_type': 'RO',
+            'squash': 'none',
+            'fsal': {'name': 'CEPH', 'fs_name': 'myfs'},
+        }))
+        assert len(r.changes) == 1
+        assert self.io_mock.notify.call_count == 1
+
+        def mock_check_mon_command(cmd):
+            return 0, '', ''
+
+        self.io_mock.notify.reset_mock()
+        with mock.patch.object(nfs_mod, 'check_mon_command',
+                               side_effect=mock_check_mon_command):
+            conf.delete_export(cluster_id=self.cluster_id, pseudo_path='/pool')
+        # Export object removed and the pool torn down: still a single notify.
+        assert conf._rados(self.cluster_id).read_obj(
+            ceph_users_obj_name(self.cluster_id)) is None
+        assert self.io_mock.notify.call_count == 1
+
+
+    def test_cephfs_client_pool_rotate_key(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_rotate_key, clients_per_pool=2)
+
+    def _do_test_cephfs_client_pool_rotate_key(self):
+        from nfs.export import get_pool_user_id, get_user_id
+        from nfs.utils import ceph_users_obj_name
+        from nfs.ganesha_conf import CephUsers
+
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+        cluster = nfs_mod.nfs
+
+        pool0 = get_pool_user_id(self.cluster_id, 'myfs', 0)
+        pool1 = get_pool_user_id(self.cluster_id, 'myfs', 1)
+        entity0 = f'client.{pool0}'
+        entity1 = f'client.{pool1}'
+        hashed_user = f'nfs.{get_user_id(self.cluster_id, "myfs", "/volumes")}'
+        hashed_entity = f'client.{hashed_user}'
+
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/poolrot',
+            read_only=False,
+            squash='none',
+        )
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/volumes',
+            pseudo_path='/sub',
+            read_only=False,
+            squash='none',
+            cmount_path='/volumes',
+        )
+
+        def mock_create_user_key(self, cluster_id, entity_name, path, fs_name):
+            return f'rotated-{entity_name}'
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=[entity0],
+                key_type='aes256k',
+            )
+
+        check_mon.assert_called_once_with({
+            'prefix': 'auth rotate',
+            'entity': entity0,
+            'key_type': 'aes256k',
+        })
+        redeploy.assert_not_called()
+        assert result['rotated'] == [entity0]
+        assert result['export_keys'] == [entity0]
+        assert result['daemon_keys'] == []
+        assert result['service_redeployed'] is False
+        # Slot 0 is refreshed both in CEPH_USERS and in the FSAL that carries it.
+        assert result['updated_exports'] == [pool0, '/poolrot']
+
+        export = conf._fetch_export(self.cluster_id, '/poolrot')
+        assert export.fsal.user_id == pool0
+        assert export.fsal.cephx_key == f'rotated-{pool0}'
+        hashed = conf._fetch_export(self.cluster_id, '/sub')
+        assert hashed.fsal.user_id == hashed_user
+        assert hashed.fsal.cephx_key == 'thekeyforclientabc'
+
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        keys = {u.user_id: u.secret_access_key for u in ceph_users.users}
+        assert keys[pool0] == f'rotated-{pool0}'
+        assert keys[pool1] == 'thekeyforclientabc'
+
+        with mock.patch.object(nfs_mod, 'check_mon_command') as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=[hashed_entity],
+            )
+
+        check_mon.assert_called_once_with({
+            'prefix': 'auth rotate',
+            'entity': hashed_entity,
+        })
+        redeploy.assert_not_called()
+        assert result['export_keys'] == [hashed_entity]
+        assert result['updated_exports'] == ['/sub']
+        hashed = conf._fetch_export(self.cluster_id, '/sub')
+        assert hashed.fsal.cephx_key == f'rotated-{hashed_user}'
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        keys = {u.user_id: u.secret_access_key for u in ceph_users.users}
+        assert keys[pool0] == f'rotated-{pool0}'
+        assert keys[pool1] == 'thekeyforclientabc'
+
+        daemon_entity = 'client.nfs.foo.0.0.host.hash-rgw'
+        cluster_entity = 'client.nfs.foo'
+        auth_ls = {
+            'auth_dump': [
+                {'entity': cluster_entity},
+                {'entity': daemon_entity},
+                {'entity': entity0},
+                {'entity': entity1},
+                {'entity': hashed_entity},
+                {'entity': 'client.nfs.other.fs.deadbeef'},
+            ]
+        }
+
+        def mock_check_mon(cmd):
+            if cmd.get('prefix') == 'auth ls':
+                return mock.Mock(stdout=json.dumps(auth_ls), retval=0, stderr='')
+            return mock.Mock(stdout='', retval=0, stderr='')
+
+        with mock.patch.object(nfs_mod, 'check_mon_command', side_effect=mock_check_mon) as check_mon, \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                all_daemon_and_export_keys=True,
+                key_type='aes256k',
+            )
+
+        rotate_calls = [
+            c.args[0] for c in check_mon.call_args_list
+            if c.args[0].get('prefix') == 'auth rotate'
+        ]
+        rotated = [c['entity'] for c in rotate_calls]
+        assert sorted(rotated) == sorted(
+            [cluster_entity, daemon_entity, entity0, entity1, hashed_entity])
+        redeploy.assert_called_once_with(nfs_mod, self.cluster_id)
+        assert result['service_redeployed'] is True
+        assert sorted(result['daemon_keys']) == sorted([cluster_entity, daemon_entity])
+        assert sorted(result['export_keys']) == sorted([entity0, entity1, hashed_entity])
+        export = conf._fetch_export(self.cluster_id, '/poolrot')
+        assert export.fsal.user_id == pool0
+        assert export.fsal.cephx_key == f'rotated-{pool0}'
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        keys = {u.user_id: u.secret_access_key for u in ceph_users.users}
+        assert keys[pool0] == f'rotated-{pool0}'
+        assert keys[pool1] == f'rotated-{pool1}'
+
+    def test_cephfs_client_pool_rotate_key_notifies_without_export(self):
+        self._do_mock_test(self._do_test_cephfs_client_pool_rotate_key_notifies_without_export,
+                           clients_per_pool=2)
+
+    def _do_test_cephfs_client_pool_rotate_key_notifies_without_export(self):
+        """A pool slot other than 0 lives in CEPH_USERS alone.
+
+        No export FSAL carries it, so no export write follows to notify
+        ganesha: the CEPH_USERS rewrite has to do it itself, or the pool keeps
+        serving a key that auth rotate has already invalidated.
+        """
+        from nfs.export import get_pool_user_id
+        from nfs.utils import ceph_users_obj_name
+        from nfs.ganesha_conf import CephUsers
+
+        nfs_mod = Module('nfs', '', '')
+        conf = nfs_mod.export_mgr
+        cluster = nfs_mod.nfs
+
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/poolrot',
+            read_only=False,
+            squash='none',
+        )
+        pool0 = get_pool_user_id(self.cluster_id, 'myfs', 0)
+        pool1 = get_pool_user_id(self.cluster_id, 'myfs', 1)
+
+        def mock_create_user_key(self, cluster_id, entity_name, path, fs_name):
+            return f'rotated-{entity_name}'
+
+        self.io_mock.notify.reset_mock()
+        with mock.patch.object(nfs_mod, 'check_mon_command'), \
+                mock.patch.object(ExportMgr, '_create_user_key', mock_create_user_key), \
+                mock.patch('nfs.cluster.redeploy_nfs_service') as redeploy:
+            result = cluster.rotate_keys(
+                cluster_id=self.cluster_id,
+                auth_entities=[f'client.{pool1}'],
+            )
+
+        # Neither an export write nor a redeploy would have notified here.
+        redeploy.assert_not_called()
+        assert result['updated_exports'] == [pool1]
+        assert self.io_mock.notify.call_count == 1
+
+        ceph_users = CephUsers.from_raw(
+            conf._rados(self.cluster_id).read_obj(ceph_users_obj_name(self.cluster_id)))
+        keys = {u.user_id: u.secret_access_key for u in ceph_users.users}
+        assert keys[pool1] == f'rotated-{pool1}'
+        # Slot 0 was not rotated, so it keeps the key its export still carries.
+        assert keys[pool0] == 'thekeyforclientabc'
+        assert conf._fetch_export(self.cluster_id, '/poolrot').fsal.cephx_key == \
+            'thekeyforclientabc'
+
 
 class TestNFSClusterIngressPlacement:
     cluster_id = 'mynfs'
@@ -1943,6 +2619,28 @@ def test_ganesha_validate_access_type():
         _validate_access_type(ok)
     with pytest.raises(NFSInvalidOperation):
         _validate_access_type("any")
+
+
+def test_ceph_users_block_roundtrip():
+    from nfs.ganesha_conf import CephUsers, CephUser, GaneshaConfParser, format_block
+
+    users = CephUsers([
+        CephUser('nfs.myc.fs_a.pool.0', 'key0', 'fs_a'),
+        CephUser('nfs.myc.fs_a.pool.1', 'key1', 'fs_a'),
+        CephUser('nfs.myc.fs_b.pool.0', 'key2', 'fs_b'),
+    ])
+    raw = format_block(users.to_block())
+    parsed = CephUsers.from_raw(raw)
+    assert len(parsed.users_for_fs('fs_a')) == 2
+    assert len(parsed.users_for_fs('fs_b')) == 1
+    assert parsed.users_for_fs('fs_a')[0].user_id == 'nfs.myc.fs_a.pool.0'
+    assert parsed.users_for_fs('fs_a')[0].secret_access_key == 'key0'
+    parsed.remove_fs('fs_a')
+    assert not parsed.users_for_fs('fs_a')
+    assert len(parsed.users_for_fs('fs_b')) == 1
+    blocks = GaneshaConfParser(raw).parse()
+    assert blocks[0].block_name == 'CEPH_USERS'
+    assert blocks[0].blocks[0].block_name == 'USER'
 
 
 class TestCephfsClientForMgr:

@@ -351,6 +351,7 @@ class NFSService(CephService):
                     with_units_to_int(str(nfs_spec.client_object_cache_max_dirty))
                     if nfs_spec.client_object_cache_max_dirty is not None else None
                 ),
+                "clients_per_pool": getattr(spec, 'clients_per_pool', None),
             }
             if nfs_spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
