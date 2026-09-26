@@ -228,9 +228,12 @@ int init_and_open_image(const std::string &pool_name,
                         const std::string &image_id,
                         const std::string &snap_name, bool read_only,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
-                        librbd::Image *image);
+                        librbd::Image *image,
+                        bool all_snaps = false);
 
-int snap_set(librbd::Image &image, const std::string &snap_name);
+int snap_set(librbd::Image &image,
+             const std::string &snap_name,
+             bool all_snaps = false);
 
 void calc_sparse_extent(const bufferptr &bp,
                         size_t sparse_size,
