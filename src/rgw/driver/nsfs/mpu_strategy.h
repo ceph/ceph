@@ -64,6 +64,23 @@ public:
   /* a part's file name, and the inverse.  part_number() returns nullopt
    * for a name which is not a part, so a caller does not have to know the
    * spelling to ask. */
+  /* Is this directory entry a staging directory?
+   *
+   * Asked rather than compared against staging_dir_name(), for the same
+   * reason is_part_name() is separate from part_name():  recognition and
+   * construction are not the same question for every format, and only
+   * this side has to work on a tree somebody else wrote.
+   *
+   * This replaced a stored attribute.  nsfs used to write an
+   * `object_type` xattr on every object -- inherited from the posix
+   * driver, which still has it as POSIX-Object-Type -- and read it back
+   * when enumerating a directory, to tell a staging directory from an
+   * ordinary one.  That is a cached answer to a question the name
+   * already settles, it cost an openat and an attribute read per
+   * directory entry, and it could not work on a NooBaa-format tree,
+   * whose staging directories carry no attribute of ours. */
+  virtual bool names_staging_dir(std::string_view name) const = 0;
+
   virtual std::string part_name(uint32_t part_num) const = 0;
   virtual bool is_part_name(std::string_view name) const = 0;
   virtual std::optional<uint32_t> part_number(std::string_view name) const = 0;
@@ -101,6 +118,7 @@ class RGWMPUStrategy : public MPUStrategy {
 public:
   std::string staging_dir_name(const std::string& upload_id) const override;
 
+  bool names_staging_dir(std::string_view name) const override;
   std::string part_name(uint32_t part_num) const override;
   bool is_part_name(std::string_view name) const override;
   std::optional<uint32_t> part_number(std::string_view name) const override;

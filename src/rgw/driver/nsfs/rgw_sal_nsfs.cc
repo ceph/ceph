@@ -1570,12 +1570,6 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
   need_fsync = true;
 
-  /* Set the type */
-  bufferlist type_bl;
-  ObjectType type{get_type()};
-  type.encode(type_bl);
-  attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = type_bl;
-
   /* An empty value means "leave this attr alone", matching
    * RGWRados::set_attrs().  MERGE only:  under REPLACE_ALL a name absent
    * from the write set is pruned, so skipping it here would delete the
@@ -2452,18 +2446,16 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
   if (S_ISREG(nstx.stx_mode)) {
     nent = std::make_unique<File>(name, this, nstx, ctx);
   } else if (S_ISDIR(nstx.stx_mode)) {
-    ObjectType type{ObjectType::DIRECTORY};
-    int tmpfd;
-    Attrs attrs;
+    /* A staging directory is told from an ordinary one by its name,
+     * which MPUStrategy owns.  This used to open the directory and read
+     * an `object_type` attribute -- an openat and a full attribute read
+     * per directory entry, to cache an answer the name already gives.
+     * The attribute was inherited from the posix driver, could not work
+     * on a NooBaa-format tree, and already fell back to DIRECTORY when
+     * absent, which is what a natively created directory has. */
+    ObjectType type{mpu_strategy->names_staging_dir(name)
+		      ? ObjectType::MULTIPART : ObjectType::DIRECTORY};
 
-    tmpfd = openat(get_fd(), name.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-    if (tmpfd >= 0) {
-      ret = get_x_attrs(y, dpp, tmpfd, attrs, name, xattr_strategy);
-      if (ret >= 0) {
-        (void) decode_attr(attrs, RGW_NSFS_ATTR_OBJECT_TYPE, type);
-      }
-      ::close(tmpfd);
-    }
     switch (type.type) {
     case ObjectType::MULTIPART:
       nent = std::make_unique<MPDirectory>(name, this, nstx, ctx);
@@ -5668,10 +5660,6 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_NSFS_ATTR_MPUPLOAD, mpu)) {
     attrs[RGW_NSFS_ATTR_MPUPLOAD] = mpu;
   }
-  bufferlist pot;
-  if (rgw::sal::get_attr(src_attrs, RGW_NSFS_ATTR_OBJECT_TYPE, pot)) {
-    attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = pot;
-  }
   ret = dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
   if (ret < 0) {
     return ret;
@@ -6786,20 +6774,12 @@ int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   std::vector<std::string> rmattrs;
   if (delattrs) {
     for (auto& it : *delattrs) {
-      if (it.first == RGW_NSFS_ATTR_OBJECT_TYPE) {
-	// Don't delete type
-	continue;
-      }
       state.attrset.erase(it.first);
       rmattrs.push_back(it.first);
     }
   }
   if (setattrs) {
     for (auto& it : *setattrs) {
-      if (it.first == RGW_NSFS_ATTR_OBJECT_TYPE) {
-	// Don't overwrite type
-	continue;
-      }
       state.attrset[it.first] = it.second;
     }
   }
@@ -8931,13 +8911,6 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   }
 
   /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
-
-  // encode object type as FILE
-  ObjectType file_type;
-  file_type.type = ObjectType::FILE;
-  bufferlist type_bl;
-  file_type.encode(type_bl);
-  attrs[RGW_NSFS_ATTR_OBJECT_TYPE] = std::move(type_bl);
 
   for (auto& [k, v] : attrs) {
     std::string xattr_name = driver->get_xattr_strategy()->disk_name(k);

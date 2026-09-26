@@ -21,6 +21,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <charconv>
+
 #include <fmt/format.h>
 
 #include "common/dout.h"
@@ -45,6 +47,11 @@ std::string RGWMPUStrategy::staging_dir_name(const std::string& upload_id) const
   return RGW_MP_STAGING_PREFIX + upload_id;
 }
 
+bool RGWMPUStrategy::names_staging_dir(std::string_view name) const
+{
+  return name.starts_with(RGW_MP_STAGING_PREFIX);
+}
+
 std::string RGWMPUStrategy::part_name(uint32_t part_num) const
 {
   return RGW_MP_PART_PREFIX + fmt::format("{:0>5}", part_num);
@@ -60,15 +67,23 @@ std::optional<uint32_t> RGWMPUStrategy::part_number(std::string_view name) const
   if (! is_part_name(name)) {
     return std::nullopt;
   }
-  const std::string digits{name.substr(RGW_MP_PART_PREFIX.length())};
+  const std::string_view digits{name.substr(RGW_MP_PART_PREFIX.length())};
   if (digits.empty()) {
     return std::nullopt;
   }
-  try {
-    return (uint32_t) std::stoul(digits);
-  } catch (const std::exception&) {
+
+  /* from_chars rather than stoul:  it parses into the target type, so a
+   * value above 2^32-1 is reported as out of range instead of being
+   * truncated by a narrowing cast;  it needs no try/catch;  and
+   * requiring ptr == end rejects "00001x", which stoul would accept.
+   * This reads a name found on disk, so anything may be there. */
+  uint32_t part_num = 0;
+  const char* const end = digits.data() + digits.size();
+  const auto [ptr, ec] = std::from_chars(digits.data(), end, part_num);
+  if (ec != std::errc{} || ptr != end) {
     return std::nullopt;
   }
+  return part_num;
 }
 
 std::string RGWMPUStrategy::head_name() const
