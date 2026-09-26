@@ -688,6 +688,12 @@ class CephadmServe:
             try:
                 if self._apply_service(spec):
                     r = True
+                # Only record last-working spec if no failure was recorded for
+                # this service (covers internal failures that return False
+                # instead of raising, e.g. bad placement or port conflict).
+                if not any(x[0] == spec.service_name()
+                           for x in self.mgr.apply_spec_fails):
+                    self.mgr.spec_store.mark_last_working_spec(spec.service_name())
             except Exception as e:
                 msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
                 self.log.exception(msg)
