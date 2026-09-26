@@ -382,7 +382,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
     // Configure sub-interpreter
     derr << "Loading module " << module_name << " in sub-interpreter" << dendl;
     SafeThreadState sts(pMainThreadState);
-    Gil gil(sts);
+    Gil gil(sts, false, module_name);
 
     auto thread_state = Py_NewInterpreter();
     if (thread_state == nullptr) {
@@ -395,7 +395,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
   // Environment is all good, import the external module
   {
-    Gil gil(pMyThreadState);
+    Gil gil(pMyThreadState, false, module_name);
 
     int r;
 
@@ -809,7 +809,7 @@ int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
 PyModule::~PyModule()
 {
   if (pMyThreadState.ts != nullptr) {
-    Gil gil(pMyThreadState, true);
+    Gil gil(pMyThreadState, true, module_name);
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
     Py_XDECREF(pPickleModule);
