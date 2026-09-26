@@ -11,6 +11,7 @@ tasks:
     log-ignorelist:
     - \(POOL_APP_NOT_ENABLED\)
 - workunit:
+    watchdog: true
     clients:
       all:
         - osdc/stress_objectcacher.sh
