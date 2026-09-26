@@ -1,0 +1,262 @@
+tasks:
+
+# stop kernel nfs server, if running
+- exec:
+    all-hosts:
+      - systemctl stop nfs-server
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create foofs
+
+# deploy NFS service
+- cephadm.apply:
+    specs:
+      - service_type: nfs
+        service_id: qostest
+        placement:
+          count: 1
+        spec:
+          port: 12049
+
+- cephadm.wait_for_service:
+    service: nfs.qostest
+
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        # ---- Verify NFS service is running ----
+        NFS_COUNT=$(ceph orch ps --service-name nfs.qostest --format json | jq '[.[] | select(.status_desc == "running")] | length')
+        if [ "$NFS_COUNT" -lt 1 ]; then
+          echo "NFS daemon not running"
+          ceph orch ps --service-name nfs.qostest
+          exit 1
+        fi
+
+        # ---- Create a CephFS export for QoS testing ----
+        ceph nfs export create cephfs --fsname foofs --cluster-id qostest --pseudo-path /qostest
+
+        EXPORTS=$(ceph nfs export ls qostest)
+        if ! echo "$EXPORTS" | grep -q "/qostest"; then
+          echo "NFS export /qostest not found"
+          exit 1
+        fi
+
+        # ---- Save NFS daemon host IP for later mount ----
+        NFS_HOST=$(ceph orch ps --service-name nfs.qostest --format json | jq -r '.[0].hostname')
+        NFS_IP=$(ceph orch host ls --format json | jq -r --arg h "$NFS_HOST" '.[] | select(.hostname == $h) | .addr')
+        echo "NFS daemon on $NFS_HOST at $NFS_IP:12049"
+
+        # ============================================================
+        # Cluster-level bandwidth control (PerShare)
+        # ============================================================
+
+        # ---- Enable cluster BW control with PerShare type ----
+        ceph nfs cluster qos enable bandwidth_control qostest PerShare \
+          --max_export_write_bw 1M \
+          --max_export_read_bw 2M
+
+        # ---- Verify cluster QoS config ----
+        CLUSTER_QOS=$(ceph nfs cluster qos get qostest)
+        echo "$CLUSTER_QOS"
+
+        if ! echo "$CLUSTER_QOS" | jq -e '.enable_qos == true' > /dev/null; then
+          echo "Expected enable_qos to be true"
+          exit 1
+        fi
+        if ! echo "$CLUSTER_QOS" | jq -e '.enable_bw_control == true' > /dev/null; then
+          echo "Expected enable_bw_control to be true"
+          exit 1
+        fi
+
+        # ============================================================
+        # Export-level bandwidth control
+        # ============================================================
+
+        # ---- Enable export BW control ----
+        ceph nfs export qos enable bandwidth_control qostest /qostest \
+          --max_export_write_bw 512K \
+          --max_export_read_bw 512K
+
+        # ---- Verify export QoS config ----
+        EXPORT_QOS=$(ceph nfs export qos get qostest /qostest)
+        echo "$EXPORT_QOS"
+
+        if ! echo "$EXPORT_QOS" | jq -e '.enable_bw_control == true' > /dev/null; then
+          echo "Expected export enable_bw_control to be true"
+          exit 1
+        fi
+
+        # ---- Disable export BW control ----
+        ceph nfs export qos disable bandwidth_control qostest /qostest
+
+        EXPORT_QOS=$(ceph nfs export qos get qostest /qostest)
+        if echo "$EXPORT_QOS" | jq -e '.enable_bw_control == true' > /dev/null 2>&1; then
+          echo "Expected export enable_bw_control to be false after disable"
+          exit 1
+        fi
+
+        # ---- Disable cluster BW control ----
+        ceph nfs cluster qos disable bandwidth_control qostest
+
+        CLUSTER_QOS=$(ceph nfs cluster qos get qostest)
+        if echo "$CLUSTER_QOS" | jq -e '.enable_bw_control == true' > /dev/null 2>&1; then
+          echo "Expected cluster enable_bw_control to be false after disable"
+          exit 1
+        fi
+
+        # ============================================================
+        # Cluster-level IOPS control (PerShare)
+        # ============================================================
+
+        # ---- Enable cluster IOPS control ----
+        ceph nfs cluster qos enable ops_control qostest PerShare \
+          --max_export_iops 1000
+
+        CLUSTER_QOS=$(ceph nfs cluster qos get qostest)
+        if ! echo "$CLUSTER_QOS" | jq -e '.enable_iops_control == true' > /dev/null; then
+          echo "Expected enable_iops_control to be true"
+          exit 1
+        fi
+
+        # ---- Enable export IOPS control ----
+        ceph nfs export qos enable ops_control qostest /qostest \
+          --max_export_iops 500
+
+        EXPORT_QOS=$(ceph nfs export qos get qostest /qostest)
+        if ! echo "$EXPORT_QOS" | jq -e '.enable_iops_control == true' > /dev/null; then
+          echo "Expected export enable_iops_control to be true"
+          exit 1
+        fi
+
+        # ---- Disable export IOPS control ----
+        ceph nfs export qos disable ops_control qostest /qostest
+
+        # ---- Disable cluster IOPS control ----
+        ceph nfs cluster qos disable ops_control qostest
+
+        CLUSTER_QOS=$(ceph nfs cluster qos get qostest)
+        if echo "$CLUSTER_QOS" | jq -e '.enable_iops_control == true' > /dev/null 2>&1; then
+          echo "Expected cluster enable_iops_control to be false after disable"
+          exit 1
+        fi
+
+        # ============================================================
+        # Combined BW + IOPS control (PerShare_PerClient)
+        # ============================================================
+
+        # ---- Enable both BW and IOPS with PerShare_PerClient ----
+        ceph nfs cluster qos enable bandwidth_control qostest PerShare_PerClient \
+          --max_export_write_bw 1M \
+          --max_export_read_bw 1M \
+          --max_client_write_bw 512K \
+          --max_client_read_bw 512K
+
+        ceph nfs cluster qos enable ops_control qostest PerShare_PerClient \
+          --max_export_iops 1000 \
+          --max_client_iops 500
+
+        CLUSTER_QOS=$(ceph nfs cluster qos get qostest)
+        if ! echo "$CLUSTER_QOS" | jq -e '.enable_bw_control == true and .enable_iops_control == true' > /dev/null; then
+          echo "Expected both BW and IOPS control enabled"
+          exit 1
+        fi
+
+        # ---- Set QoS message interval ----
+        ceph nfs cluster qos set qostest --msg_interval 200
+
+        # ---- Cleanup: disable both controls ----
+        ceph nfs cluster qos disable ops_control qostest
+        ceph nfs cluster qos disable bandwidth_control qostest
+
+        # ---- Final verification: QoS fully disabled ----
+        # After disabling all controls, enable_qos should be false or the
+        # config may be an empty object
+        CLUSTER_QOS=$(ceph nfs cluster qos get qostest)
+        if echo "$CLUSTER_QOS" | jq -e '.enable_qos == true' > /dev/null 2>&1; then
+          echo "Expected QoS to be fully disabled, got:"
+          echo "$CLUSTER_QOS"
+          exit 1
+        fi
+
+# ============================================================
+# I/O-based bandwidth verification
+# Mount the NFS export and measure actual write throughput
+# with and without QoS to confirm throttling is effective
+# ============================================================
+
+- exec:
+    host.a:
+      - |
+        set -ex
+        mkdir -p /mnt/qostest
+
+        # Get the NFS daemon's host IP
+        NFS_IP=$(sudo cephadm shell -- ceph orch ps --service-name nfs.qostest --format json 2>/dev/null \
+          | jq -r '.[0].ip')
+
+        # If .ip is not available, fall back to host addr
+        if [ -z "$NFS_IP" ] || [ "$NFS_IP" = "null" ]; then
+          NFS_HOST=$(sudo cephadm shell -- ceph orch ps --service-name nfs.qostest --format json 2>/dev/null \
+            | jq -r '.[0].hostname')
+          NFS_IP=$(sudo cephadm shell -- ceph orch host ls --format json 2>/dev/null \
+            | jq -r --arg h "$NFS_HOST" '.[] | select(.hostname == $h) | .addr')
+        fi
+
+        echo "Mounting NFS from $NFS_IP:12049"
+        mount -t nfs -o port=12049,vers=4.1 ${NFS_IP}:/qostest /mnt/qostest
+        echo "Mount successful"
+
+        # ---- Baseline: unthrottled write ----
+        # Write 2MiB without QoS to establish a baseline timing
+        SECONDS=0
+        dd if=/dev/zero of=/mnt/qostest/baseline.dat bs=256K count=8 oflag=direct 2>&1
+        sync
+        BASELINE_TIME=$SECONDS
+        echo "Baseline write (2MiB, no QoS): ${BASELINE_TIME}s"
+        rm -f /mnt/qostest/baseline.dat
+
+        # ---- Enable a tight bandwidth limit: 256KiB/s ----
+        sudo cephadm shell -- ceph nfs cluster qos enable bandwidth_control \
+          qostest PerShare --max_export_write_bw 256K --max_export_read_bw 256K
+
+        # Allow time for QoS config to propagate to ganesha
+        sleep 10
+
+        # ---- Throttled write ----
+        # Write 1MiB -- at 256KiB/s this should take ~4 seconds
+        SECONDS=0
+        dd if=/dev/zero of=/mnt/qostest/throttled.dat bs=256K count=4 oflag=direct 2>&1
+        sync
+        THROTTLED_TIME=$SECONDS
+        echo "Throttled write (1MiB, 256KiB/s limit): ${THROTTLED_TIME}s"
+        rm -f /mnt/qostest/throttled.dat
+
+        # ---- Verify throttling had an effect ----
+        # The throttled write of 1MiB at 256KiB/s should take at least 2 seconds
+        # (generous margin -- theoretically ~4s, we just check it's > 2s)
+        if [ "$THROTTLED_TIME" -lt 2 ]; then
+          echo "FAIL: Throttled write completed too fast (${THROTTLED_TIME}s)."
+          echo "Expected at least 2s for 1MiB at 256KiB/s limit."
+          echo "QoS bandwidth throttling may not be effective."
+          sudo cephadm shell -- ceph nfs cluster qos get qostest
+          exit 1
+        fi
+        echo "PASS: QoS throttling is effective (baseline=${BASELINE_TIME}s, throttled=${THROTTLED_TIME}s)"
+
+        # ---- Disable QoS and verify write speed recovers ----
+        sudo cephadm shell -- ceph nfs cluster qos disable bandwidth_control qostest
+        sleep 5
+
+        SECONDS=0
+        dd if=/dev/zero of=/mnt/qostest/recovered.dat bs=256K count=8 oflag=direct 2>&1
+        sync
+        RECOVERED_TIME=$SECONDS
+        echo "Post-disable write (2MiB, QoS off): ${RECOVERED_TIME}s"
+        rm -f /mnt/qostest/recovered.dat
+
+        # Cleanup
+        umount /mnt/qostest
+        rmdir /mnt/qostest
