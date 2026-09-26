@@ -211,6 +211,34 @@ def test_daemon_placement_renumber(dp, n, result):
             DaemonDescription('mgr', 'b', 'host1'),
             False
         ),
+        # Upgrade scenario: spec gained extra default ports (e.g. NFS gained monitoring
+        # and qos ports after upgrade).  The existing daemon only has [2049]; the new
+        # spec wants [2049, 9587, 31311].  The old ports are a leading subset of the
+        # new spec ports so the daemon should still be considered matching - no spurious
+        # redeploy should be triggered.
+        (
+            DaemonPlacement(daemon_type='nfs', hostname='host1', ports=[2049, 9587, 31311]),
+            DaemonDescription('nfs', 'foo.0', 'host1', ports=[2049]),
+            True
+        ),
+        # All ports match exactly - still matches.
+        (
+            DaemonPlacement(daemon_type='nfs', hostname='host1', ports=[2049, 9587, 31311]),
+            DaemonDescription('nfs', 'foo.0', 'host1', ports=[2049, 9587, 31311]),
+            True
+        ),
+        # The NFS port itself changed (2049 -> 2222) - must NOT match so a redeploy fires.
+        (
+            DaemonPlacement(daemon_type='nfs', hostname='host1', ports=[2222, 9587, 31311]),
+            DaemonDescription('nfs', 'foo.0', 'host1', ports=[2049]),
+            False
+        ),
+        # Ports reduced (feature removed) - must NOT match.
+        (
+            DaemonPlacement(daemon_type='nfs', hostname='host1', ports=[2049]),
+            DaemonDescription('nfs', 'foo.0', 'host1', ports=[2049, 9587, 31311]),
+            False
+        ),
     ])
 def test_daemon_placement_match(dp, dd, result):
     assert dp.matches_daemon(dd) == result
