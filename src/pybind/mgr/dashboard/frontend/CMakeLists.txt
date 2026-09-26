@@ -81,8 +81,10 @@ else(WITH_SYSTEM_NPM)
     # ensure that the files that nodeenv unpacks from tarballs are owned by
     # the current user. This can be an issue due to the node tarball using
     # uid 1000 and running the unpack in a id-mapped namespace (container)
-    # that lets tar set the uid to a "bad" uid outside the namespace
-    COMMAND bash -c 'chown -R `id -u`:`id -g` ${mgr-dashboard-nodeenv-dir}/src'
+    # that lets tar set the uid to a "bad" uid outside the namespace.
+    # nodeenv >= 1.11.0 no longer leaves the src directory behind after a
+    # prebuilt node install, so tolerate it being absent
+    COMMAND bash -c 'test ! -e ${mgr-dashboard-nodeenv-dir}/src || chown -R `id -u`:`id -g` ${mgr-dashboard-nodeenv-dir}/src'
     COMMAND ${CMAKE_COMMAND} -E make_directory ${npm-cache-dir}
     DEPENDS ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
