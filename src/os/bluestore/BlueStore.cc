@@ -8176,6 +8176,7 @@ int BlueStore::close_db_environment()
     db = nullptr;
   }
   _close_around_db();
+  _kv_only = false; // was set by open_db_environment()
   return 0;
 }
 
@@ -9650,6 +9651,99 @@ int BlueStore::_umount_readonly()
   return 0;
 }
 
+int BlueStore::_maybe_reshard_db()
+{
+  if (!cct->_conf.get_val<bool>("bluestore_reshard_db_on_mount")) {
+    return 0;
+  }
+  if (!cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
+    dout(5) << __func__ << " bluestore_rocksdb_cf is false, skipping" << dendl;
+    return 0;
+  }
+  string new_sharding =
+    cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");
+  if (new_sharding.empty()) {
+    dout(5) << __func__ << " bluestore_rocksdb_cfs is empty, skipping" << dendl;
+    return 0;
+  }
+  // Open the db environment the same way 'ceph-bluestore-tool reshard' does:
+  // BlueFS is opened and the RocksDBStore is created and initialized, but the
+  // database itself is not opened (to_repair=true), which is the state
+  // RocksDBStore::reshard() expects.
+  KeyValueDB* kvdb = nullptr;
+  int r = open_db_environment(&kvdb, false, true);
+  if (r < 0) {
+    derr << __func__ << " error preparing db environment: " << cpp_strerror(r)
+	 << dendl;
+    return r;
+  }
+  auto close_env = make_scope_guard([&] {
+    close_db_environment();
+  });
+  RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(kvdb);
+  if (!rdb) {
+    dout(5) << __func__ << " kv backend is not rocksdb, skipping" << dendl;
+    return 0;
+  }
+  // The decision is based solely on the sharding definition stored in the
+  // OSD's own BlueFS, read here under the fsid lock, never on external or
+  // cached state. A read error is not mistaken for "not sharded": it fails
+  // the mount, just like the subsequent regular open of the db would.
+  // Note that a db with an interrupted resharding does not get this far:
+  // open_db_environment() refuses to open it, see RocksDBStore::do_open().
+  string cur_sharding;
+  r = rdb->read_sharding_def(cur_sharding);
+  if (r < 0) {
+    derr << __func__ << " cannot read the stored sharding definition,"
+	 << " not resharding" << dendl;
+    return r;
+  }
+  if (r > 0) {
+    dout(10) << __func__ << " db is already sharded: " << cur_sharding
+	     << dendl;
+    return 0;
+  }
+  if (bluefs) {
+    // free space pre-flight check: while resharding, the old and the new
+    // copy of the data coexist until the old column families are dropped,
+    // so BlueFS may temporarily need up to twice the current db footprint
+    // (plus some slack for WAL and compaction). Do not start a resharding
+    // that could run out of space midway.
+    uint64_t db_used = bluefs->get_used(BlueFS::BDEV_DB) +
+      bluefs->get_used(BlueFS::BDEV_SLOW);
+    uint64_t db_avail = 0;
+    // get_free() must only be queried for devices that are present
+    if (bluefs->get_block_device_size(BlueFS::BDEV_DB) > 0) {
+      db_avail += bluefs->get_free(BlueFS::BDEV_DB);
+    }
+    if (bluefs->get_block_device_size(BlueFS::BDEV_SLOW) > 0) {
+      db_avail += bluefs->get_free(BlueFS::BDEV_SLOW);
+    }
+    uint64_t db_needed = db_used + db_used / 5;
+    if (db_avail < db_needed) {
+      derr << __func__ << " not enough free space to reshard: db uses "
+	   << byte_u_t(db_used) << ", " << byte_u_t(db_needed)
+	   << " required, " << byte_u_t(db_avail) << " available,"
+	   << " skipping resharding, will be re-evaluated on next startup"
+	   << dendl;
+      return 0;
+    }
+  }
+  dout(1) << __func__ << " resharding legacy (non-sharded) db to '"
+	  << new_sharding << "', this may take a while and must not be"
+	  << " interrupted" << dendl;
+  utime_t start = ceph_clock_now();
+  r = rdb->reshard(new_sharding);
+  if (r < 0) {
+    derr << __func__ << " resharding failed: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  utime_t duration = ceph_clock_now() - start;
+  dout(1) << __func__ << " resharding successful, took "
+	  << duration << " seconds" << dendl;
+  return 0;
+}
+
 int BlueStore::_mount()
 {
   dout(5) << __func__ << " path " << path << dendl;
@@ -9673,6 +9767,12 @@ int BlueStore::_mount()
     }
   }
   debug_extent_map_encode_check = cct->_conf.get_val<bool>("bluestore_debug_extent_map_encode_check");
+  {
+    int r = _maybe_reshard_db();
+    if (r < 0) {
+      return r;
+    }
+  }
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);
