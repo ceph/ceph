@@ -953,10 +953,14 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     op.hoid,
     op.delta_stats);
 
+  // Construct each shard's transaction with the peer feature set so that
+  // Transaction::write() can route page-aligned data into the aligned
+  // bufferlist and ECSubWrite ships it first in the data segment; a
+  // default-constructed transaction never takes the aligned format.
   shard_id_map<ObjectStore::Transaction> trans(sinfo.get_k_plus_m());
   for (auto &&shard: get_parent()->
        get_acting_recovery_backfill_shard_id_set()) {
-    trans[shard];
+    trans.emplace(shard, get_parent()->min_peer_features());
   }
 
   op.trace.event("start ec write");
