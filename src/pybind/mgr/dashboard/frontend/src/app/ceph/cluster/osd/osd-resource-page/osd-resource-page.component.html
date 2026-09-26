@@ -1,0 +1,116 @@
+@if (osdId !== null) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        title="OSD details"
+        [columns]="4"
+        [fields]="osdOverviewFields"
+        i18n-title
+      >
+      </cd-resource-overview-card>
+
+      <cd-osd-capacity-card [overviewModel]="capacityOverviewModel"></cd-osd-capacity-card>
+
+      <cd-osd-io-card [overviewModel]="ioOverviewModel"></cd-osd-io-card>
+    }
+
+    @case ('storage-devices') {
+      <section class="osd-resource-section cds-mb-5">
+        <h2
+          class="osd-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Ceph Devices
+        </h2>
+        <p
+          class="osd-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          View the devices currently associated with this OSD.
+        </p>
+        <cd-device-list
+          [osdId]="osdId"
+          [hostname]="osd?.host?.name"
+          [osdList]="true"
+        ></cd-device-list>
+      </section>
+
+      <section class="osd-resource-section cds-mb-5">
+        <h2
+          class="osd-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Device Health
+        </h2>
+        <p
+          class="osd-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          Review SMART and health diagnostics for the storage devices in this OSD.
+        </p>
+        <cd-smart-list [osdId]="osdId"></cd-smart-list>
+      </section>
+    }
+
+    @case ('attributes') {
+      <section class="osd-resource-section cds-mb-6">
+        <h2
+          class="osd-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Attributes (OSD map)
+        </h2>
+        <p
+          class="osd-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          Display current OSD map attributes for this OSD.
+        </p>
+        <cd-table-key-value [data]="osdMap"> </cd-table-key-value>
+      </section>
+    }
+
+    @case ('performance-counters') {
+      <section class="osd-resource-section cds-mb-5">
+        <h2
+          class="osd-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Performance Counters
+        </h2>
+        <p
+          class="osd-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          Monitor low-level OSD counters and performance metrics.
+        </p>
+        <cd-table-performance-counter
+          serviceType="osd"
+          [serviceId]="osdId"
+        >
+        </cd-table-performance-counter>
+      </section>
+    }
+
+    @case ('performance') {
+      @if (grafanaPermission.read) {
+        <cd-grafana
+          i18n-title
+          title="OSD details"
+          [grafanaPath]="'ceph-osd-device-overview?var-osd=osd.' + osdId"
+          [type]="'metrics'"
+          uid="CrAHE0iZz"
+          scrollable="no"
+          grafanaStyle="three"
+        >
+        </cd-grafana>
+      }
+    }
+  }
+} @else {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No OSD ID found.</cd-alert-panel
+  >
+}

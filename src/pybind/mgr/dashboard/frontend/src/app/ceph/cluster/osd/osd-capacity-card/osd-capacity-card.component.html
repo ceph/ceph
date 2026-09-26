@@ -1,0 +1,67 @@
+<cds-tile class="resource-page-card osd-capacity-card cds-mt-5">
+  <div class="resource-page-panels">
+    <section class="resource-page-panel">
+      <h4
+        class="cds--type-heading-02"
+        i18n
+      >
+        Capacity
+      </h4>
+      <p
+        class="cds--type-body-compact-01 resource-page-panel__subtitle"
+        i18n
+      >
+        Storage utilization
+      </p>
+
+      <div class="resource-page-panel__usage-head">
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Usage</span
+        >
+        <span class="cds--type-heading-04">{{ overviewModel.usagePercent | empty }}</span>
+      </div>
+
+      @if (overviewModel.usageTotal > 0 && overviewModel.usageUsed !== null) {
+        <cd-usage-bar
+          [total]="overviewModel.usageTotal"
+          [used]="overviewModel.usageUsed"
+          [title]="overviewModel.name"
+          [width]="'100%'"
+          decimals="2"
+        >
+        </cd-usage-bar>
+      } @else {
+        <span class="cds--type-body-compact-01">-</span>
+      }
+
+      <div class="resource-page-stats cds-mt-5">
+        <div class="resource-page-stat-box">
+          <span
+            class="cds--type-label-01"
+            i18n
+            >Used</span
+          >
+          <span class="cds--type-heading-03">{{ overviewModel.usedCapacity | empty }}</span>
+        </div>
+        <div class="resource-page-stat-box">
+          <span
+            class="cds--type-label-01"
+            i18n
+            >Available</span
+          >
+          <span class="cds--type-heading-03">{{ overviewModel.availableCapacity | empty }}</span>
+        </div>
+        <div class="resource-page-stat-box">
+          <span
+            class="cds--type-label-01"
+            i18n
+            >Total</span
+          >
+          <span class="cds--type-heading-03">{{ overviewModel.totalCapacity | empty }}</span>
+        </div>
+      </div>
+    </section>
+  </div>
+</cds-tile>

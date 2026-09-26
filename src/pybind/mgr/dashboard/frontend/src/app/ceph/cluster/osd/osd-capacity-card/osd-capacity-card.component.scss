@@ -1,0 +1,34 @@
+@use '@carbon/layout';
+@use '../../../shared/resource-page-card' as resource-page-card;
+
+@include resource-page-card.base();
+
+.osd-capacity-card .resource-page-panels {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.osd-capacity-card .resource-page-panel__usage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: layout.$spacing-03;
+  margin-bottom: layout.$spacing-03;
+}
+
+.osd-capacity-card .resource-page-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: layout.$spacing-04;
+}
+
+.osd-capacity-card .resource-page-stat-box {
+  padding: layout.$spacing-04;
+  display: flex;
+  flex-direction: column;
+  gap: layout.$spacing-02;
+  min-height: 5.5rem;
+}
+
+.osd-capacity-card .resource-page-panel cd-usage-bar {
+  display: block;
+}

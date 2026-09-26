@@ -1,6 +1,6 @@
-<cds-tile class="pool-overview-card cds-mt-6">
-  <div class="pool-overview-panels">
-    <section class="pool-detail-panel">
+<cds-tile class="resource-page-card cds-mt-6">
+  <div class="resource-page-panels">
+    <section class="resource-page-panel">
       <h4
         class="cds--type-heading-02"
         i18n
@@ -8,13 +8,13 @@
         Capacity
       </h4>
       <p
-        class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+        class="cds--type-body-compact-01 resource-page-panel__subtitle"
         i18n
       >
         Storage utilization
       </p>
 
-      <div class="pool-detail-panel__usage-head">
+      <div class="resource-page-panel__usage-head">
         <span
           class="cds--type-label-01"
           i18n
@@ -36,8 +36,8 @@
         <span class="cds--type-body-compact-01">-</span>
       }
 
-      <div class="pool-detail-stats cds-mt-5">
-        <div class="pool-detail-stat-box">
+      <div class="resource-page-stats cds-mt-5">
+        <div class="resource-page-stat-box">
           <span
             class="cds--type-label-01"
             i18n
@@ -45,7 +45,7 @@
           >
           <span class="cds--type-heading-03">{{ overviewModel.usedCapacity | empty }}</span>
         </div>
-        <div class="pool-detail-stat-box">
+        <div class="resource-page-stat-box">
           <span
             class="cds--type-label-01"
             i18n
@@ -53,7 +53,7 @@
           >
           <span class="cds--type-heading-03">{{ overviewModel.availableCapacity | empty }}</span>
         </div>
-        <div class="pool-detail-stat-box">
+        <div class="resource-page-stat-box">
           <span
             class="cds--type-label-01"
             i18n
@@ -63,7 +63,7 @@
         </div>
       </div>
 
-      <div class="pool-detail-row cds-mt-5">
+      <div class="resource-page-row cds-mt-5">
         <span
           class="cds--type-label-01"
           i18n
@@ -73,7 +73,7 @@
       </div>
     </section>
 
-    <section class="pool-detail-panel">
+    <section class="resource-page-panel">
       <h4
         class="cds--type-heading-02"
         i18n
@@ -81,13 +81,13 @@
         Data Protection
       </h4>
       <p
-        class="cds--type-body-compact-01 pool-detail-panel__subtitle"
+        class="cds--type-body-compact-01 resource-page-panel__subtitle"
         i18n
       >
         Replication and durability
       </p>
 
-      <div class="pool-detail-row">
+      <div class="resource-page-row">
         <span
           class="cds--type-label-01"
           i18n
@@ -97,16 +97,16 @@
       </div>
 
       @if (overviewModel.isErasure) {
-        <div class="pool-detail-stats pool-detail-stats--triple cds-mt-5">
-          <div class="pool-detail-stat-box">
+        <div class="resource-page-stats resource-page-stats--triple cds-mt-5">
+          <div class="resource-page-stat-box">
             <span class="cds--type-label-01">K (Split)</span>
             <span class="cds--type-heading-03">{{ overviewModel.erasureK | empty }}</span>
           </div>
-          <div class="pool-detail-stat-box">
+          <div class="resource-page-stat-box">
             <span class="cds--type-label-01">M (Chunks)</span>
             <span class="cds--type-heading-03">{{ overviewModel.erasureM | empty }}</span>
           </div>
-          <div class="pool-detail-stat-box">
+          <div class="resource-page-stat-box">
             <span
               class="cds--type-label-01"
               i18n
@@ -116,7 +116,7 @@
           </div>
         </div>
 
-        <div class="pool-detail-row cds-mt-5">
+        <div class="resource-page-row cds-mt-5">
           <span
             class="cds--type-label-01"
             i18n
@@ -125,8 +125,8 @@
           <span class="cds--type-body-compact-01">{{ overviewModel.erasurePlugin | empty }}</span>
         </div>
       } @else {
-        <div class="pool-detail-stats cds-mt-5">
-          <div class="pool-detail-stat-box">
+        <div class="resource-page-stats cds-mt-5">
+          <div class="resource-page-stat-box">
             <span
               class="cds--type-label-01"
               i18n
@@ -134,7 +134,7 @@
             >
             <span class="cds--type-heading-03">{{ overviewModel.replicationSize | empty }}</span>
           </div>
-          <div class="pool-detail-stat-box">
+          <div class="resource-page-stat-box">
             <span
               class="cds--type-label-01"
               i18n
@@ -145,9 +145,9 @@
         </div>
       }
 
-      <hr class="pool-detail-divider cds-mt-5 cds-mb-5" />
+      <hr class="resource-page-divider cds-mt-5 cds-mb-5" />
 
-      <div class="pool-detail-row">
+      <div class="resource-page-row">
         <span
           class="cds--type-label-01"
           i18n
@@ -155,7 +155,7 @@
         >
         <span class="cds--type-body-compact-01">{{ overviewModel.crushRuleset | empty }}</span>
       </div>
-      <div class="pool-detail-row cds-mt-3">
+      <div class="resource-page-row cds-mt-3">
         <span
           class="cds--type-label-01"
           i18n
