@@ -209,8 +209,20 @@ class HostPlacementSpec(NamedTuple):
                 else:
                     ip_address(unwrap_ipv6(network))
             except ValueError as e:
-                # logging?
+                try:
+                    port_val = int(host_spec.network)
+                except ValueError:
+                    port_val = None
+                if port_val is not None and not (0 <= port_val <= 65535):
+                    raise SpecValidationError(
+                        f'Invalid placement "{host}": "{host_spec.network}" is not a '
+                        f'valid port number. Port must be an integer between 0 and 65535.'
+                    ) from e
                 raise e
+
+        if not require_network:
+            return host_spec
+
         host_spec.validate()
         return host_spec
 
@@ -1849,6 +1861,13 @@ class RGWSpec(ServiceSpec):
                     'Cannot add RGW: Realm specified but no zone specified')
         if self.rgw_zone and not self.rgw_realm:
             raise SpecValidationError('Cannot add RGW: Zone specified but no realm specified')
+
+        if self.rgw_frontend_port is not None:
+            if not isinstance(self.rgw_frontend_port, int) or not (0 <= self.rgw_frontend_port <= 65535):
+                raise SpecValidationError(
+                    f'Invalid rgw_frontend_port value {self.rgw_frontend_port}. '
+                    'Port must be an integer between 0 and 65535.'
+                )
 
         if self.rgw_frontend_type is not None:
             if self.rgw_frontend_type not in ['beast', 'civetweb']:
