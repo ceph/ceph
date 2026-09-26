@@ -1,66 +1,143 @@
 {
-"version": 1.0,
-"merge": {
-    "shapes": {
-        "MetadataConfiguration":{
-            "required":[],
-            "members":{
-                "filterableMetadataKeys":{
-                    "shape":"FilterableMetadataKeys",
-                    "documentation":"<p>Filterable metadata keys allow you to create typed columns that can be used as query filters during vector search.</p>"
+    "version": 1.0,
+    "merge": {
+        "shapes": {
+            "MetadataConfiguration": {
+                "required": [],
+                "members": {
+                    "filterableMetadataKeys": {
+                        "shape": "FilterableMetadataKeys",
+                        "documentation": "<p>Filterable metadata keys allow you to create typed columns that can be used as query filters during vector search.</p>"
+                    }
                 }
-            }
-        },
-        "FilterableMetadataKeys":{
-            "type":"list",
-            "member":{"shape":"FilterableMetadataKeyEntry"},
-            "max":10,
-            "min":0
-        },
-        "FilterableMetadataKeyEntry":{
-            "type":"structure",
-            "required":["name"],
-            "members":{
-                "name":{
-                    "shape":"MetadataKey",
-                    "documentation":"<p>The name of the filterable metadata key.</p>"
+            },
+            "FilterableMetadataKeys": {
+                "type": "list",
+                "member": {
+                    "shape": "FilterableMetadataKeyEntry"
                 },
-                "type":{
-                    "shape":"FilterableMetadataType",
-                    "documentation":"<p>The type of the filterable metadata key. Defaults to String if not specified.</p>"
+                "max": 10,
+                "min": 0
+            },
+            "FilterableMetadataKeyEntry": {
+                "type": "structure",
+                "required": [
+                    "name"
+                ],
+                "members": {
+                    "name": {
+                        "shape": "MetadataKey",
+                        "documentation": "<p>The name of the filterable metadata key.</p>"
+                    },
+                    "type": {
+                        "shape": "FilterableMetadataType",
+                        "documentation": "<p>The type of the filterable metadata key. Defaults to String if not specified.</p>"
+                    },
+                    "mustExist": {
+                        "shape": "MustExist",
+                        "documentation": "<p>Whether the filterable metadata key must exist in every vector. Defaults to false.</p>"
+                    }
+                }
+            },
+            "MustExist": {
+                "type": "boolean"
+            },
+            "FilterableMetadataType": {
+                "type": "string",
+                "enum": [
+                    "String",
+                    "Number",
+                    "Boolean",
+                    "StringList",
+                    "NumberList",
+                    "BooleanList"
+                ]
+            },
+            "QueryVectorsInput": {
+                "required": [],
+                "members": {
+                    "postFiltering": {
+                        "shape": "PostFiltering",
+                        "documentation": "<p>If true, all filtering is done via JSON post-filtering, ignoring filterable columns. This allows $or filters to mix filterable and non-filterable metadata fields. Defaults to false.</p>"
+                    },
+                    "explainPlan": {
+                        "shape": "ExplainFlag",
+                        "documentation": "<p>If true, returns the query execution plan alongside normal query results.</p>"
+                    },
+                    "explainOnly": {
+                        "shape": "ExplainFlag",
+                        "documentation": "<p>If true, returns only the query execution plan without executing the query (no vectors returned).</p>"
+                    }
+                }
+            },
+            "PostFiltering": {
+                "type": "boolean"
+            },
+            "GetIndexStatsOutput": {
+                "type": "structure",
+                "required": [],
+                "members": {
+                    "indexStats": {
+                        "shape": "IndexStatsData",
+                        "documentation": "<p>Statistics about the vector index.</p>"
+                    }
+                }
+            },
+            "IndexStatsData": {
+                "type": "structure",
+                "required": [],
+                "members": {
+                    "numIndexedRows": {
+                        "shape": "Long",
+                        "documentation": "<p>Number of rows that have been indexed.</p>"
+                    },
+                    "numUnindexedRows": {
+                        "shape": "Long",
+                        "documentation": "<p>Number of rows that have not yet been indexed.</p>"
+                    },
+                    "numIndexSegments": {
+                        "shape": "Integer",
+                        "documentation": "<p>Number of index segments (parts) that make up the vector index.</p>"
+                    }
+                }
+            },
+            "Long": {
+                "type": "long"
+            },
+            "Integer": {
+                "type": "integer"
+            },
+            "ExplainFlag": {
+                "type": "boolean"
+            },
+            "QueryVectorsOutput": {
+                "required": [],
+                "members": {
+                    "queryPlan": {
+                        "shape": "QueryPlan",
+                        "documentation": "<p>The query execution plan, returned when explainPlan or explainOnly is set.</p>"
+                    }
+                }
+            },
+            "QueryPlan": {
+                "type": "string"
+            }
+        },
+        "operations": {
+            "GetIndexStats": {
+                "name": "GetIndexStats",
+                "http": {
+                    "method": "POST",
+                    "requestUri": "/GetIndexStats"
                 },
-                "mustExist":{
-                    "shape":"MustExist",
-                    "documentation":"<p>Whether the filterable metadata key must exist in every vector. Defaults to false.</p>"
-                }
+                "input": {
+                    "shape": "GetIndexInput"
+                },
+                "output": {
+                    "shape": "GetIndexStatsOutput"
+                },
+                "documentation": "<p>Returns statistics about a vector index, including the number of indexed rows, unindexed rows, and indices.</p>"
             }
-        },
-        "MustExist":{
-            "type":"boolean"
-        },
-        "FilterableMetadataType":{
-            "type":"string",
-            "enum":[
-                "String",
-                "Number",
-                "Boolean",
-                "StringList",
-                "NumberList",
-                "BooleanList"
-            ]
-        },
-        "QueryVectorsInput":{
-            "required":[],
-            "members":{
-                "postFiltering":{
-                    "shape":"PostFiltering",
-                    "documentation":"<p>If true, all filtering is done via JSON post-filtering, ignoring filterable columns. This allows $or filters to mix filterable and non-filterable metadata fields. Defaults to false.</p>"
-                }
-            }
-        },
-        "PostFiltering":{
-            "type":"boolean"
         }
     }
-}
 }
