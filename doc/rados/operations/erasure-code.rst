@@ -187,12 +187,8 @@ data in an erasure-coded pool:
 
     ceph osd pool set ec_pool allow_ec_overwrites true
 
-This can be enabled only on a pool residing on BlueStore OSDs, since
-BlueStore's checksumming is used during deep scrubs to detect bitrot
-and other corruption. Using Filestore with EC overwrites is not only
-unsafe, but it also results in lower performance compared to BlueStore.
-Moreover, Filestore is deprecated and any Filestore OSDs in your cluster
-should be migrated to BlueStore.
+Erasure-coded overwrites rely on BlueStore's checksumming, which deep scrubs
+use to detect bitrot and other corruption.
 
 There is no downside to enabling EC overwrites, so it is best practice to
 routinely do so.
