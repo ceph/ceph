@@ -296,6 +296,12 @@ class KvRgwServiceImpl final {
     version_id_t version_id{};
     bool created_dm{false};
     version_id_t dm_version_id{};
+
+    DeleteMultiKeyOutcome() = default;
+    DeleteMultiKeyOutcome(Status s, std::string k, std::string ec,
+                          bool dm = false, version_id_t dm_vid = {})
+        : key(std::move(k)), status(s), error_code(std::move(ec)),
+          created_dm(dm), dm_version_id(dm_vid) {}
   };
 
   KvrgwErrorCode delete_multi(tenant_id_t tenant_id,
@@ -547,6 +553,7 @@ class KvRgwServiceImpl final {
   };
 
   NewVersionIds compute_new_version(VersioningState versioning_state, const ObjectValue* old_o);
+  NewVersionIds compute_new_version(VersioningState versioning_state, const ObjectValueHeader* old_hdr);
 
   void displace_old_object(
       KvTransaction& tr,
@@ -554,25 +561,45 @@ class KvRgwServiceImpl final {
       std::string_view object_key,
       const ObjectValue& old_o);
 
-  struct DeleteContext {
-    FdbFuture f_obj;
+  // Zero-copy overload: operates directly on the wire-format raw value.
+  void displace_old_object(
+      KvTransaction& tr,
+      VersioningState versioning_state,
+      std::string_view object_key,
+      std::string_view raw_value);
+
+  bool move_object_to_g(KvTransaction& tr, std::string_view object_key,
+                        std::string_view raw_value);
+
+  // Batch-level state shared across all keys in a single-bucket delete operation.
+  // bucket_name is a reference — caller must ensure the string outlives the batch.
+  struct DeleteBatchCtx {
     FdbFuture f_bkt;
-    std::string object_key;
     bucket_id_t bucket_id{};
     tenant_id_t tenant_id{};
-    std::string bucket_name;
+    const std::string* bucket_name{nullptr};
   };
 
-  std::expected<DeleteContext, KvrgwErrorCode> delete_prepare(
+  // Per-key state for a single object within a delete batch.
+  struct DeleteContext {
+    FdbFuture f_obj;
+    KeyBuf object_key;
+  };
+
+  std::expected<DeleteBatchCtx, KvrgwErrorCode> delete_prepare_batch(
       KvTransaction& tr,
       tenant_id_t tenant_id,
       const std::string& bucket_name,
+      bucket_id_t bucket_id);
+
+  void delete_prepare_key(
+      KvTransaction& tr,
+      bucket_id_t bucket_id,
       const std::string& object_name,
-      bool need_bucket,
-      bucket_id_t bucket_id = kNullBucket);
+      DeleteContext& ctx);
 
   std::expected<BucketState, KvrgwErrorCode>
-  delete_verify_bucket(DeleteContext& ctx);
+  delete_verify_bucket(DeleteBatchCtx& batch);
 
   std::expected<DeleteResult, KvrgwErrorCode>
   delete_apply(
@@ -593,13 +620,14 @@ class KvRgwServiceImpl final {
       tenant_id_t tenant_id,
       const std::string& bucket_name,
       bucket_id_t bucket_id,
-      const std::vector<std::string>& keys,
-      std::vector<DeleteMultiKeyOutcome>& outcomes);
+      std::span<const std::string> keys,
+      std::span<DeleteContext> ctxs,
+      std::vector<DeleteMultiKeyOutcome>* out);
   void delete_multi_one_key(
       tenant_id_t tenant_id,
       const std::string& bucket_name,
       bucket_id_t bucket_id,
-      const std::string& key,
+      std::string_view key,
       std::vector<DeleteMultiKeyOutcome>& outcomes);
 
   KvrgwErrorCode put_object_phase3(

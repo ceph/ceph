@@ -37,6 +37,14 @@ struct ObjectKeyParts {
   std::string object_name;
 };
 
+// Zero-copy variant — object_name is a view into the original key buffer.
+struct ObjectKeyPartsView {
+  uint16_t shard_count{};
+  uint16_t shard_id{};
+  bucket_id_t bucket_id{};
+  std::string_view object_name;
+};
+
 struct PoKeyParts {
   uint16_t shard_count{};
   uint16_t shard_id{};
@@ -79,10 +87,12 @@ std::optional<BucketKeyParts> parse_bucket_key(std::string_view key);
 std::optional<std::string_view> parse_bucket_key_view(std::string_view key);
 
 KeyBuf make_object_key(bucket_id_t bucket_id, std::string_view object_name);
+void   make_object_key(bucket_id_t bucket_id, std::string_view object_name, KeyBuf& out);
 KeyBuf make_object_prefix(bucket_id_t bucket_id);
 KeyBuf make_version_prefix(bucket_id_t bucket_id);
 std::optional<ObjectKeyParts> parse_object_key(std::string_view key);
 std::optional<std::string_view> parse_object_key_view(std::string_view key);
+std::optional<ObjectKeyPartsView> parse_object_key_parts_view(std::string_view key);
 
 KeyBuf make_po_key(
     bucket_id_t bucket_id,
@@ -96,9 +106,18 @@ KeyBuf make_p_bucket_prefix(bucket_id_t bucket_id);
 std::optional<PoKeyParts> parse_po_key(std::string_view key);
 
 KeyBuf make_go_key(
-    const ObjectKeyParts& object_key,
+    uint16_t shard_count,
+    uint16_t shard_id,
+    bucket_id_t bucket_id,
     std::string_view ref_tag_bytes,
     uint64_t object_size);
+void make_go_key(
+    uint16_t shard_count,
+    uint16_t shard_id,
+    bucket_id_t bucket_id,
+    std::string_view ref_tag_bytes,
+    uint64_t object_size,
+    KeyBuf& out);
 KeyBuf make_g_prefix();
 std::optional<GoKeyParts> parse_go_key(std::string_view key);
 
@@ -111,6 +130,12 @@ KeyBuf make_d_key(
     uint8_t size_tier,
     std::string_view ref_tag,
     uint32_t mtime);
+void make_d_key(
+    bucket_id_t bucket_id,
+    uint8_t size_tier,
+    std::string_view ref_tag,
+    uint32_t mtime,
+    KeyBuf& out);
 KeyBuf make_d_bucket_prefix(bucket_id_t bucket_id);
 KeyBuf make_d_bucket_tier_prefix(bucket_id_t bucket_id, uint8_t size_tier);
 std::optional<DKeyParts> parse_d_key(std::string_view key);
@@ -126,6 +151,7 @@ struct VersionKeyParts {
 };
 
 KeyBuf make_v_key(bucket_id_t bucket_id, std::string_view object_name, version_id_t version_id);
+void   make_v_key(bucket_id_t bucket_id, std::string_view object_name, version_id_t version_id, KeyBuf& out);
 KeyBuf make_v_prefix(bucket_id_t bucket_id, std::string_view object_name);
 std::optional<VersionKeyParts> parse_v_key(std::string_view key);
 std::optional<std::string_view> parse_v_key_view(std::string_view key);
@@ -133,7 +159,9 @@ std::optional<std::string_view> parse_v_key_view(std::string_view key);
 KeyBuf make_r_key(std::string_view ref_tag);
 
 KeyBuf make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag);
+void   make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out);
 KeyBuf make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag);
+void   make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out);
 
 struct GroupPoKeyParts {
   uint16_t shard_count{};

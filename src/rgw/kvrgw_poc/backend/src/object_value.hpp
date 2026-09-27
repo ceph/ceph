@@ -30,6 +30,7 @@
 namespace kvrgw {
 
 enum ChunkType : uint8_t {
+  CHUNK_EMPTY        = 'E',     // used by delete_markers
   CHUNK_INLINE       = 'I',
   CHUNK_CHILD_D      = 'D',
   CHUNK_CHILD_D_REF  = 'd',
@@ -235,6 +236,46 @@ inline version_id_t ovh_version_id(const ObjectValueHeader* h)
 {
   return h->version_id.from_be();
 }
+inline version_id_t ovh_next_vid(const ObjectValueHeader* h)
+{
+  return h->next_vid.from_be();
+}
+inline std::string_view ovh_ref_tag(const ObjectValueHeader* h)
+{
+  return {reinterpret_cast<const char*>(h->ref_tag), kRefTagSize};
+}
+
+// For CHUNK_CHILD_D_REF / CHUNK_STORAGE_REF: extract the extra ref fields
+// that follow the header + content_type in the wire format.
+// Returns false if the buffer is too short.
+struct OvhChunkRef {
+  bucket_id_t bucket_id{};           // only valid for CHUNK_CHILD_D_REF
+  std::string_view ref_tag{};        // points into the raw buffer
+};
+inline bool ovh_chunk_ref(std::string_view raw, const ObjectValueHeader* h,
+                           OvhChunkRef& out)
+{
+  const size_t base = sizeof(ObjectValueHeader) + h->content_type_len;
+  if (h->chunk.type == CHUNK_CHILD_D_REF) {
+    const size_t need = base + sizeof(bucket_id_t) + kRefTagSize;
+    if (raw.size() < need) {
+      return false;
+    }
+    out.bucket_id = bucket_id_t::deserialize(raw.data() + base);
+    out.ref_tag = raw.substr(base + sizeof(bucket_id_t), kRefTagSize);
+    return true;
+  }
+  if (h->chunk.type == CHUNK_STORAGE_REF) {
+    const size_t need = base + kRefTagSize;
+    if (raw.size() < need) {
+      return false;
+    }
+    out.ref_tag = raw.substr(base, kRefTagSize);
+    return true;
+  }
+  return false;
+}
+
 std::string ovh_etag_display(const ObjectValueHeader* h);
 std::span<const uint8_t> object_inline_metadata_bytes(std::string_view data);
 

@@ -227,13 +227,9 @@ std::expected<void, fdb_error_t> move_po_to_go(KvTransaction &tr,
     }
   }
 
-  ObjectKeyParts object_parts;
-  object_parts.shard_count = parts.shard_count;
-  object_parts.shard_id = parts.shard_id;
-  object_parts.bucket_id = parts.bucket_id;
-  object_parts.object_name = parts.object_name;
-  const auto go_key =
-      make_go_key(object_parts, rt_view, po_value.hdr.estimated_size);
+  const auto go_key = make_go_key(parts.shard_count, parts.shard_id,
+                                  parts.bucket_id, rt_view,
+                                  po_value.hdr.estimated_size);
   GcValueHeader gc_hdr{};
   gc_hdr.chunk.type = CHUNK_STORAGE;
   gc_hdr.object_size = po_value.hdr.estimated_size;

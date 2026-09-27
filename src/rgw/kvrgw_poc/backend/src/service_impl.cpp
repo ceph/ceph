@@ -1466,83 +1466,26 @@ KvRgwServiceImpl::load_object_with_data(bucket_id_t bucket_id,
   return result;
 }
 
-bool KvRgwServiceImpl::move_object_to_g(KvTransaction &tr,
-                                        std::string_view object_key,
-                                        const ObjectValue &value)
-{
-  const auto parts = parse_object_key(object_key);
-  if (!parts) {
-    std::cerr << "move_object_to_g: corrupt object key (len="
-              << object_key.size() << "), fencing entry\n";
-    return false;
-  }
-
-  const std::string_view ref_tag_sv(
-      reinterpret_cast<const char *>(value.hdr.ref_tag), 12);
-  const auto tc = tier_config_state_.active_copy();
-
-  const bool must_defer_to_gc = value.hdr.chunk.type == CHUNK_STORAGE ||
-                                value.hdr.chunk.type == CHUNK_STORAGE_REF ||
-                                value.has_external_annotations() ||
-                                tc.kv_store_coalescing;
-
-  if (must_defer_to_gc) {
-    const auto go_key = make_go_key(*parts, ref_tag_sv, value.hdr.size);
-    GcValueHeader gc_hdr{};
-    gc_hdr.chunk = value.hdr.chunk;
-    gc_hdr.flags = value.hdr.flags;
-    gc_hdr.object_size = value.hdr.size;
-    gc_hdr.mtime = value.hdr.last_modified_sec;
-    tr.kv_put(go_key.view(), make_gc_value(gc_hdr));
-    tr.kv_del(object_key);
-  }
-  else {
-    const uint8_t st = d_size_tier_from_size(value.hdr.size);
-    const uint32_t mtime = static_cast<uint32_t>(value.hdr.last_modified_sec);
-
-    if (value.hdr.chunk.type == CHUNK_CHILD_D) {
-      const auto d_key = make_d_key(parts->bucket_id, st, ref_tag_sv, mtime);
-      decrement_or_del_child_d(tr, d_key.view(), value.hdr.size,
-                               value.has_shared_data());
-    }
-    else if (value.hdr.chunk.type == CHUNK_CHILD_D_REF) {
-      const std::string_view chunk_ref(
-          reinterpret_cast<const char *>(value.chunk_data_ref_tag),
-          kRefTagSize);
-      const auto d_key =
-          make_d_key(value.chunk_data_bucket_id, st, chunk_ref, mtime);
-      decrement_or_del_child_d(tr, d_key.view(), value.hdr.size,
-                               value.has_shared_data());
-    }
-
-    if (value.has_external_tags()) {
-      const auto ct_key = make_ct_key(parts->bucket_id, ref_tag_sv);
-      tr.kv_del(ct_key.view());
-    }
-    if (value.has_extended_attrs()) {
-      const auto ce_key = make_c_prefix(parts->bucket_id, ref_tag_sv);
-      const auto ce_end = std::string(ce_key.view()) + "\xFF";
-      tr.kv_range_clear(ce_key.view(), ce_end);
-    }
-
-    tr.kv_del(object_key);
-  }
-  return true;
-}
-
 KvRgwServiceImpl::NewVersionIds
 KvRgwServiceImpl::compute_new_version(VersioningState versioning_state,
                                       const ObjectValue *old_o)
 {
+  return compute_new_version(versioning_state, old_o ? &old_o->hdr : nullptr);
+}
+
+KvRgwServiceImpl::NewVersionIds
+KvRgwServiceImpl::compute_new_version(VersioningState versioning_state,
+                                      const ObjectValueHeader *old_hdr)
+{
   switch (versioning_state) {
   case VERSIONING_ENABLED:
     {
-      version_id_t vid = old_o ? old_o->hdr.next_vid : kFirstVersionId;
+      version_id_t vid = old_hdr ? ovh_next_vid(old_hdr): kFirstVersionId;
       return {vid, vid.next_vid()};
     }
   case VERSIONING_SUSPENDED:
-    if (old_o) {
-      return {kNullVersion, old_o->hdr.next_vid};
+    if (old_hdr) {
+      return {kNullVersion, ovh_next_vid(old_hdr)};
     }
     return {kNullVersion, kFirstVersionId};
   case VERSIONING_DISABLED:
@@ -1551,115 +1494,143 @@ KvRgwServiceImpl::compute_new_version(VersioningState versioning_state,
   }
 }
 
-void KvRgwServiceImpl::displace_old_object(KvTransaction &tr,
-                                           VersioningState versioning_state,
-                                           std::string_view object_key,
-                                           const ObjectValue &old_o)
+//--------------------------------------------------------------------------------
+// Zero-copy move_object_to_g: reads directly from wire-format raw_value.
+bool KvRgwServiceImpl::move_object_to_g(KvTransaction &tr,
+                                         std::string_view object_key,
+                                         std::string_view raw_value)
 {
-  if (versioning_state == VERSIONING_ENABLED) {
-    const auto parts = parse_object_key(object_key);
-    if (!parts) {
-      move_object_to_g(tr, object_key, old_o);
-      return;
-    }
-    const auto v_key =
-        make_v_key(parts->bucket_id, parts->object_name, old_o.hdr.version_id);
-    OValueBuf vbuf;
-    if (write_object_value(vbuf, old_o)) {
-      tr.kv_put(v_key.view(), vbuf.view());
-    }
+  const auto parts = parse_object_key_parts_view(object_key);
+  if (!parts) {
+    std::cerr << "move_object_to_g: corrupt object key (len="
+              << object_key.size() << "), fencing entry\n";
+    return false;
   }
-  else if (versioning_state == VERSIONING_SUSPENDED) {
-    const auto parts = parse_object_key(object_key);
-    if (!parts) {
-      move_object_to_g(tr, object_key, old_o);
-      return;
-    }
-    if (old_o.hdr.version_id != kNullVersion) {
-      const auto v_key = make_v_key(parts->bucket_id, parts->object_name,
-                                    old_o.hdr.version_id);
-      OValueBuf vbuf;
-      if (write_object_value(vbuf, old_o)) {
-        tr.kv_put(v_key.view(), vbuf.view());
-      }
-    }
-    else {
-      move_object_to_g(tr, object_key, old_o);
-    }
-    const auto null_v_key =
-        make_v_key(parts->bucket_id, parts->object_name, kNullVersion);
-    auto null_v_raw = tr.kv_get(null_v_key.view());
-    if (null_v_raw && *null_v_raw) {
-      auto null_obj = parse_object_value(**null_v_raw);
-      if (null_obj) {
-        const std::string_view ref_sv(
-            reinterpret_cast<const char *>(null_obj->hdr.ref_tag), 12);
-        const auto tc = tier_config_state_.active_copy();
 
-        const bool must_defer = null_obj->hdr.chunk.type == CHUNK_STORAGE ||
-                                null_obj->hdr.chunk.type == CHUNK_STORAGE_REF ||
-                                null_obj->has_external_annotations() ||
+  const ObjectValueHeader *h = ovh_ptr(raw_value);
+  if (!h) {
+    tr.kv_del(object_key);
+    return false;
+  }
+
+  const std::string_view ref_tag_sv = ovh_ref_tag(h);
+  const auto tc = tier_config_state_.active_copy();
+
+  const bool must_defer_to_gc = h->chunk.type == CHUNK_STORAGE ||
+                                h->chunk.type == CHUNK_STORAGE_REF ||
+                                (h->flags & ObjectValue::kFlagExternalAnnotations &&
+                                 be16toh(h->annotations_count) > 0) ||
                                 tc.kv_store_coalescing;
 
-        if (must_defer) {
-          const auto go_key = make_go_key(*parts, ref_sv, null_obj->hdr.size);
-          GcValueHeader gc_hdr{};
-          gc_hdr.chunk = null_obj->hdr.chunk;
-          gc_hdr.flags = null_obj->hdr.flags;
-          gc_hdr.object_size = null_obj->hdr.size;
-          gc_hdr.mtime = null_obj->hdr.last_modified_sec;
-          tr.kv_put(go_key.view(), make_gc_value(gc_hdr));
-        }
-        else {
-          const uint8_t st = d_size_tier_from_size(null_obj->hdr.size);
-          const uint32_t mtime =
-              static_cast<uint32_t>(null_obj->hdr.last_modified_sec);
+  const uint64_t obj_size = be64toh(h->size);
+  const uint32_t mtime = be32toh(h->last_modified_sec);
 
-          if (null_obj->hdr.chunk.type == CHUNK_CHILD_D) {
-            const auto d_key = make_d_key(parts->bucket_id, st, ref_sv, mtime);
-            decrement_or_del_child_d(tr, d_key.view(), null_obj->hdr.size,
-                                     null_obj->has_shared_data());
-          }
-          else if (null_obj->hdr.chunk.type == CHUNK_CHILD_D_REF) {
-            const std::string_view chunk_ref(
-                reinterpret_cast<const char *>(null_obj->chunk_data_ref_tag),
-                kRefTagSize);
-            const auto d_key = make_d_key(null_obj->chunk_data_bucket_id, st,
-                                          chunk_ref, mtime);
-            decrement_or_del_child_d(tr, d_key.view(), null_obj->hdr.size,
-                                     null_obj->has_shared_data());
-          }
+  KeyBuf key_buf;
+  if (must_defer_to_gc) {
+    GcValueHeader gc_hdr{};
+    gc_hdr.chunk = h->chunk;
+    gc_hdr.flags = h->flags;
+    gc_hdr.object_size = obj_size;
+    gc_hdr.mtime = mtime;
+    make_go_key(parts->shard_count, parts->shard_id,
+                parts->bucket_id, ref_tag_sv, obj_size, key_buf);
+    tr.kv_put(key_buf.view(), make_gc_value(gc_hdr));
+    tr.kv_del(object_key);
+  }
+  else {
+    const uint8_t st = d_size_tier_from_size(obj_size);
 
-          if (null_obj->has_external_tags()) {
-            const auto ct_key = make_ct_key(parts->bucket_id, ref_sv);
-            tr.kv_del(ct_key.view());
-          }
-          if (null_obj->has_extended_attrs()) {
-            const auto ce_key = make_c_prefix(parts->bucket_id, ref_sv);
-            const auto ce_end = std::string(ce_key.view()) + "\xFF";
-            tr.kv_range_clear(ce_key.view(), ce_end);
-          }
-        }
+    if (h->chunk.type == CHUNK_CHILD_D) {
+      make_d_key(parts->bucket_id, st, ref_tag_sv, mtime, key_buf);
+      const bool shared = (h->flags & ObjectValue::kFlagSharedData) != 0;
+      decrement_or_del_child_d(tr, key_buf.view(), obj_size, shared);
+    }
+    else if (h->chunk.type == CHUNK_CHILD_D_REF) {
+      OvhChunkRef cref;
+      if (ovh_chunk_ref(raw_value, h, cref)) {
+        make_d_key(cref.bucket_id, st, cref.ref_tag, mtime, key_buf);
+        const bool shared = (h->flags & ObjectValue::kFlagSharedData) != 0;
+        decrement_or_del_child_d(tr, key_buf.view(), obj_size, shared);
       }
-      tr.kv_del(null_v_key.view());
+    }
+
+    if (h->flags & ObjectValue::kFlagExternalTags) {
+      make_ct_key(parts->bucket_id, ref_tag_sv, key_buf);
+      tr.kv_del(key_buf.view());
+    }
+    if (h->flags & ObjectValue::kFlagExtendedAttrs) {
+      make_c_prefix(parts->bucket_id, ref_tag_sv, key_buf);
+      // TBD: dynamic allocation! should be removed
+      const auto ce_end = std::string(key_buf.view()) + "\xFF";
+      tr.kv_range_clear(key_buf.view(), ce_end);
+    }
+
+    tr.kv_del(object_key);
+  }
+  return true;
+}
+
+//--------------------------------------------------------------------------------
+// Zero-copy displace_old_object: writes raw_value directly to :V: (versioned),
+// or delegates to the raw move_object_to_g (unversioned/GC path).
+void KvRgwServiceImpl::displace_old_object(KvTransaction &tr,
+                                            VersioningState versioning_state,
+                                            std::string_view object_key,
+                                            std::string_view raw_value)
+{
+  const ObjectValueHeader *h = ovh_ptr(raw_value);
+  if (!h) {
+    // Corrupt value — treat as unversioned GC to clean up what we can.
+    move_object_to_g(tr, object_key, raw_value);
+    return;
+  }
+
+  KeyBuf v_key;
+  if (versioning_state == VERSIONING_ENABLED) {
+    const auto parts = parse_object_key_parts_view(object_key);
+    if (!parts) {
+      move_object_to_g(tr, object_key, raw_value);
+      return;
+    }
+    make_v_key(parts->bucket_id, parts->object_name, ovh_version_id(h), v_key);
+    tr.kv_put(v_key.view(), raw_value);
+  }
+  else if (versioning_state == VERSIONING_SUSPENDED) {
+    const auto parts = parse_object_key_parts_view(object_key);
+    if (!parts) {
+      move_object_to_g(tr, object_key, raw_value);
+      return;
+    }
+    const version_id_t vid = ovh_version_id(h);
+    if (vid != kNullVersion) {
+      make_v_key(parts->bucket_id, parts->object_name, vid, v_key);
+      tr.kv_put(v_key.view(), raw_value);
+    }
+    else {
+      move_object_to_g(tr, object_key, raw_value);
+    }
+    // Also clean up any existing null-version slot.
+    make_v_key(parts->bucket_id, parts->object_name, kNullVersion, v_key);
+    auto null_v_raw = tr.kv_get(v_key.view());
+    if (null_v_raw && *null_v_raw) {
+      // move_object_to_g calls kv_del(v_key) internally.
+      move_object_to_g(tr, v_key.view(), **null_v_raw);
     }
   }
   else {
-    move_object_to_g(tr, object_key, old_o);
+    move_object_to_g(tr, object_key, raw_value);
   }
 }
 
 //--------------------------------------------------------------------------------
-std::expected<KvRgwServiceImpl::DeleteContext, KvrgwErrorCode>
-KvRgwServiceImpl::delete_prepare(KvTransaction &tr, tenant_id_t tenant_id,
-                                 const std::string &bucket_name,
-                                 const std::string &object_name,
-                                 bool need_bucket,
-                                 bucket_id_t bucket_id)
+std::expected<KvRgwServiceImpl::DeleteBatchCtx, KvrgwErrorCode>
+KvRgwServiceImpl::delete_prepare_batch(KvTransaction &tr, tenant_id_t tenant_id,
+                                       const std::string &bucket_name,
+                                       bucket_id_t bucket_id)
 {
-  DeleteContext ctx;
-  ctx.tenant_id = tenant_id;
-  ctx.bucket_name = bucket_name;
+  DeleteBatchCtx batch;
+  batch.tenant_id = tenant_id;
+  batch.bucket_name = &bucket_name;  // pointer — no copy
   if (bucket_id == kNullBucket) {
     auto cached = get_bucket_id_cached(tenant_id, bucket_name);
     if (!cached) {
@@ -1670,28 +1641,33 @@ KvRgwServiceImpl::delete_prepare(KvTransaction &tr, tenant_id_t tenant_id,
     }
     bucket_id = (**cached).bucket_id;
   }
-  ctx.bucket_id = bucket_id;
-  if (need_bucket) {
-    const auto bkt_key = make_bucket_key(tenant_id, bucket_name);
-    ctx.f_bkt = tr.kv_async_get(bkt_key.view());
-  }
-  const auto obj_key = make_object_key(ctx.bucket_id, object_name);
-  ctx.object_key.assign(obj_key.view());
-  ctx.f_obj = tr.kv_async_get(ctx.object_key);
-  return ctx;
+  batch.bucket_id = bucket_id;
+  // TBD - should be done once for the full multi-delete not per-batch!
+  const auto bkt_key = make_bucket_key(tenant_id, bucket_name);
+  batch.f_bkt = tr.kv_async_get(bkt_key.view());
+  return batch;
+}
+
+//--------------------------------------------------------------------------------
+void KvRgwServiceImpl::delete_prepare_key(KvTransaction &tr, bucket_id_t bucket_id,
+                                          const std::string &object_name,
+                                          DeleteContext &ctx)
+{
+  make_object_key(bucket_id, object_name, ctx.object_key);
+  ctx.f_obj = tr.kv_async_get(ctx.object_key.view());
 }
 
 //--------------------------------------------------------------------------------
 std::expected<KvRgwServiceImpl::BucketState, KvrgwErrorCode>
-KvRgwServiceImpl::delete_verify_bucket(DeleteContext &ctx)
+KvRgwServiceImpl::delete_verify_bucket(DeleteBatchCtx &batch)
 {
-  FdbGetHolder holder(std::move(ctx.f_bkt));
-  auto vb = resolve_bucket_verify(ctx.tenant_id, ctx.bucket_name, holder,
-                                  ctx.bucket_id, kDenyWrite);
+  FdbGetHolder holder(std::move(batch.f_bkt));
+  auto vb = resolve_bucket_verify(batch.tenant_id, *batch.bucket_name, holder,
+                                  batch.bucket_id, kDenyWrite);
   if (!vb) {
     return std::unexpected(vb.error());
   }
-  ctx.bucket_id = vb->bucket_id;
+  batch.bucket_id = vb->bucket_id;
   return *vb;
 }
 
@@ -1701,39 +1677,41 @@ KvRgwServiceImpl::delete_apply(KvTransaction &tr, DeleteContext &ctx,
                                const BucketState &bucket_state,
                                const DeleteCondition *cond)
 {
-  auto obj_raw = tr.kv_wait_get(ctx.f_obj);
-  if (!obj_raw) {
-    return std::unexpected(fdb_to_error(obj_raw.error()));
+  // Construct FdbGetHolder on-the-fly from the stored future for zero-copy access.
+  FdbGetHolder obj_holder(std::move(ctx.f_obj));
+  const fdb_error_t obj_err = obj_holder.wait();
+  if (obj_err) {
+    return std::unexpected(fdb_to_error(obj_err));
   }
 
-  std::optional<ObjectValue> old_parsed;
-  if (*obj_raw) {
-    old_parsed = parse_object_value(**obj_raw);
-    if (!old_parsed) {
-      return std::unexpected(KVRGW_ERR_CORRUPT_VALUE);
-    }
+  const bool obj_present = obj_holder.present();
+  const std::string_view raw_val = obj_present ? obj_holder.value() : std::string_view{};
+  const ObjectValueHeader *old_hdr = obj_present ? ovh_ptr(raw_val) : nullptr;
+
+  if (obj_present && !old_hdr) {
+    return std::unexpected(KVRGW_ERR_CORRUPT_VALUE);
   }
 
+  // Conditional delete — all checks use zero-copy ovh_* accessors; no parse needed.
   if (cond) {
-    if (!old_parsed) {
+    if (!old_hdr) {
       return std::unexpected(KVRGW_ERR_NO_SUCH_KEY);
     }
-    if (old_parsed->is_delete_marker()) {
+    if (ovh_is_delete_marker(old_hdr)) {
       return std::unexpected(KVRGW_ERR_PRECONDITION_FAILED);
     }
     if (!cond->if_match.empty() && cond->if_match != "*") {
-      if (old_parsed->etag_display() != cond->if_match) {
+      if (ovh_etag_display(old_hdr) != cond->if_match) {
         return std::unexpected(KVRGW_ERR_PRECONDITION_FAILED);
       }
     }
     if (cond->if_match_last_modified_time != 0) {
-      if (static_cast<int64_t>(old_parsed->hdr.last_modified_sec) !=
-          cond->if_match_last_modified_time) {
+      if (ovh_last_modified_sec(old_hdr) != cond->if_match_last_modified_time) {
         return std::unexpected(KVRGW_ERR_PRECONDITION_FAILED);
       }
     }
     if (cond->has_if_match_size) {
-      if (static_cast<int64_t>(old_parsed->hdr.size) != cond->if_match_size) {
+      if (static_cast<int64_t>(ovh_size(old_hdr)) != cond->if_match_size) {
         return std::unexpected(KVRGW_ERR_PRECONDITION_FAILED);
       }
     }
@@ -1742,30 +1720,31 @@ KvRgwServiceImpl::delete_apply(KvTransaction &tr, DeleteContext &ctx,
   DeleteResult result;
   switch (bucket_state.versioning_state) {
   case VERSIONING_DISABLED:
-    if (!old_parsed) {
+    if (!old_hdr) {
       return result;
     }
-    displace_old_object(tr, VERSIONING_DISABLED, ctx.object_key, *old_parsed);
+    displace_old_object(tr, VERSIONING_DISABLED, ctx.object_key.view(), raw_val);
     return result;
 
   case VERSIONING_ENABLED:
   case VERSIONING_SUSPENDED: {
-    if (old_parsed) {
-      displace_old_object(tr, bucket_state.versioning_state, ctx.object_key,
-                          *old_parsed);
+    if (old_hdr) {
+      displace_old_object(tr, bucket_state.versioning_state, ctx.object_key.view(),
+                          raw_val);
     }
-    auto ids = compute_new_version(bucket_state.versioning_state,
-                                   old_parsed ? &*old_parsed : nullptr);
+    auto ids = compute_new_version(bucket_state.versioning_state, old_hdr);
+    // create a delete marker
     ObjectValue dm;
     dm.hdr.flags = ObjectValue::kFlagFenced;
     dm.hdr.version_id = ids.version_id;
     dm.hdr.next_vid = ids.next_vid;
     dm.hdr.chunk.type = CHUNK_INLINE;
+    //dm.hdr.chunk.type = CHUNK_EMPTY;
     OValueBuf dm_buf;
     if (!write_object_value(dm_buf, dm)) {
       return std::unexpected(KVRGW_ERR_VALUE_TOO_LARGE);
     }
-    tr.kv_put(ctx.object_key, dm_buf.view());
+    tr.kv_put(ctx.object_key.view(), dm_buf.view());
     result.created_dm = true;
     result.dm_version_id = ids.version_id;
     return result;
@@ -1781,64 +1760,109 @@ KvRgwServiceImpl::delete_single(KvTransaction &tr, tenant_id_t tenant_id,
                                 const std::string &object_name,
                                 const DeleteCondition *cond)
 {
-  auto ctx = delete_prepare(tr, tenant_id, bucket_name, object_name, true, kNullBucket);
-  if (!ctx) {
-    return std::unexpected(ctx.error());
+  auto batch = delete_prepare_batch(tr, tenant_id, bucket_name, kNullBucket);
+  if (!batch) {
+    return std::unexpected(batch.error());
   }
-  auto bs = delete_verify_bucket(*ctx);
+  auto bs = delete_verify_bucket(*batch);
   if (!bs) {
     return std::unexpected(bs.error());
   }
-  return delete_apply(tr, *ctx, *bs, cond);
+  DeleteContext ctx;
+  delete_prepare_key(tr, batch->bucket_id, object_name, ctx);
+  return delete_apply(tr, ctx, *bs, cond);
 }
 
+//--------------------------------------------------------------------------------
 bool KvRgwServiceImpl::delete_multi_try_commit(
     tenant_id_t tenant_id, const std::string &bucket_name,
-    bucket_id_t bucket_id, const std::vector<std::string> &keys,
-    std::vector<DeleteMultiKeyOutcome> &outcomes)
+    bucket_id_t bucket_id, std::span<const std::string> keys,
+    std::span<DeleteContext> ctxs,
+    std::vector<DeleteMultiKeyOutcome> *out)
 {
-  outcomes.clear();
   if (keys.empty()) {
     return true;
   }
   auto tr_result = store_.begin_transaction();
   if (!tr_result) {
-    outcomes.clear();
     return false;
   }
   auto &tr = *tr_result;
 
-  // Phase 1: issue all async reads (B: for first key, S:O for all)
-  std::vector<DeleteContext> ctxs;
-  ctxs.reserve(keys.size());
-
-  auto ctx0 = delete_prepare(*tr, tenant_id, bucket_name, keys[0], true, kNullBucket);
-  if (!ctx0) {
+  // Phase 1: issue bucket get + all per-key object gets concurrently
+  auto batch = delete_prepare_batch(*tr, tenant_id, bucket_name, bucket_id);
+  if (!batch) {
     return false;
   }
-  const bucket_id_t bucket_id_0 = ctx0->bucket_id;
-  ctxs.push_back(std::move(*ctx0));
-  for (size_t i = 1; i < keys.size(); ++i) {
-    auto ctx = delete_prepare(*tr, tenant_id, bucket_name, keys[i], false,
-                              bucket_id_0);
-    if (!ctx) {
-      return false;
-    }
-    ctxs.push_back(std::move(*ctx));
+
+  for (size_t i = 0; i < keys.size(); ++i) {
+    delete_prepare_key(*tr, batch->bucket_id, keys[i], ctxs[i]);
   }
 
-  // Phase 2: verify bucket once using ctxs[0]'s future
-  auto bs = delete_verify_bucket(ctxs[0]);
+  // Phase 2: verify bucket once
+  auto bs = delete_verify_bucket(*batch);
   if (!bs) {
     return false;
   }
 
-  // Phase 3: apply all (each resolves its S:O future)
+  // Phase 3: append directly into out; roll back on commit failure
+  const size_t base = out->size();
   for (size_t i = 0; i < keys.size(); ++i) {
-    DeleteMultiKeyOutcome outcome;
-    outcome.key = keys[i];
     auto result = delete_apply(*tr, ctxs[i], *bs, nullptr);
     if (result) {
+      out->emplace_back(DeleteMultiKeyOutcome::Status::Deleted, keys[i], "",
+                       result->created_dm, result->dm_version_id);
+    }
+    else {
+      out->emplace_back(DeleteMultiKeyOutcome::Status::Error, keys[i],
+                       "InternalError");
+    }
+  }
+
+  if (tr->commit()) {
+    return true;
+  }
+  out->resize(base);
+  return false;
+}
+
+void KvRgwServiceImpl::delete_multi_one_key(
+    tenant_id_t tenant_id, const std::string &bucket_name,
+    bucket_id_t bucket_id, std::string_view key,
+    std::vector<DeleteMultiKeyOutcome> &out)
+{
+  auto tr_result = store_.begin_transaction();
+  if (!tr_result) {
+    DeleteMultiKeyOutcome err;
+    err.key = std::string(key);
+    err.status = DeleteMultiKeyOutcome::Status::Error;
+    err.error_code = "InternalError";
+    err.error_message = "transaction begin failed";
+    out.push_back(std::move(err));
+    return;
+  }
+  auto &tr = *tr_result;
+
+  auto batch = delete_prepare_batch(*tr, tenant_id, bucket_name, bucket_id);
+  if (!batch) {
+    DeleteMultiKeyOutcome err;
+    err.key = std::string(key);
+    err.status = DeleteMultiKeyOutcome::Status::Error;
+    err.error_code = "InternalError";
+    err.error_message = "prepare batch failed";
+    out.push_back(std::move(err));
+    return;
+  }
+
+  DeleteContext ctx;
+  delete_prepare_key(*tr, batch->bucket_id, std::string(key), ctx);
+
+  auto bs = delete_verify_bucket(*batch);
+  DeleteMultiKeyOutcome outcome;
+  outcome.key = std::string(key);
+  if (bs) {
+    auto result = delete_apply(*tr, ctx, *bs, nullptr);
+    if (result && tr->commit()) {
       outcome.status = DeleteMultiKeyOutcome::Status::Deleted;
       outcome.created_dm = result->created_dm;
       outcome.dm_version_id = result->dm_version_id;
@@ -1846,35 +1870,15 @@ bool KvRgwServiceImpl::delete_multi_try_commit(
     else {
       outcome.status = DeleteMultiKeyOutcome::Status::Error;
       outcome.error_code = "InternalError";
+      outcome.error_message = "transaction commit failed";
     }
-    outcomes.push_back(std::move(outcome));
   }
-
-  auto commit_rc = tr->commit();
-  if (commit_rc) {
-    return true;
+  else {
+    outcome.status = DeleteMultiKeyOutcome::Status::Error;
+    outcome.error_code = "InternalError";
+    outcome.error_message = "bucket verify failed";
   }
-  outcomes.clear();
-  return false;
-}
-
-void KvRgwServiceImpl::delete_multi_one_key(
-    tenant_id_t tenant_id, const std::string &bucket_name,
-    bucket_id_t bucket_id, const std::string &key,
-    std::vector<DeleteMultiKeyOutcome> &out)
-{
-  std::vector<DeleteMultiKeyOutcome> outcomes;
-  if (delete_multi_try_commit(tenant_id, bucket_name, bucket_id, {key},
-                              outcomes)) {
-    out.insert(out.end(), outcomes.begin(), outcomes.end());
-    return;
-  }
-  DeleteMultiKeyOutcome err;
-  err.key = key;
-  err.status = DeleteMultiKeyOutcome::Status::Error;
-  err.error_code = "InternalError";
-  err.error_message = "transaction commit failed";
-  out.push_back(std::move(err));
+  out.push_back(std::move(outcome));
 }
 
 void apply_tags_to_value(ObjectValue &obj, std::span<const uint8_t> encoded,
@@ -2176,12 +2180,9 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
 
       if (!*po_val) {
         if (*existing) {
-          const auto ev = parse_object_value(**existing);
-          if (ev &&
-              RefTagGenerator::equal(
-                  std::string_view(
-                      reinterpret_cast<const char *>(ev->hdr.ref_tag), 12),
-                  ref_tag_view(params.ref_tag))) {
+          const auto *h = ovh_ptr(**existing);
+          if (h && RefTagGenerator::equal(ovh_ref_tag(h),
+                                          ref_tag_view(params.ref_tag))) {
             return KVRGW_ERR_OK;
           }
         }
@@ -2189,44 +2190,36 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
       }
 
       if (*existing) {
-        const auto ev = parse_object_value(**existing);
-        if (ev && RefTagGenerator::equal(
-                      std::string_view(
-                          reinterpret_cast<const char *>(ev->hdr.ref_tag), 12),
-                      ref_tag_view(params.ref_tag))) {
+        const auto *h = ovh_ptr(**existing);
+        if (h && RefTagGenerator::equal(ovh_ref_tag(h),
+                                        ref_tag_view(params.ref_tag))) {
           tr.kv_del(po_key.view());
           return KVRGW_ERR_OK;
         }
-        if (ev) {
-          displace_old_object(tr, vs, ctx.object_key.view(), *ev);
+        if (h) {
+          displace_old_object(tr, vs, ctx.object_key.view(), **existing);
         }
       }
     }
     else {
       if (*existing) {
-        const auto ev = parse_object_value(**existing);
-        if (ev && RefTagGenerator::equal(
-                      std::string_view(
-                          reinterpret_cast<const char *>(ev->hdr.ref_tag), 12),
-                      ref_tag_view(params.ref_tag))) {
+        const auto *h = ovh_ptr(**existing);
+        if (h && RefTagGenerator::equal(ovh_ref_tag(h),
+                                        ref_tag_view(params.ref_tag))) {
           return KVRGW_ERR_OK;
         }
-        if (ev) {
-          displace_old_object(tr, vs, ctx.object_key.view(), *ev);
+        if (h) {
+          displace_old_object(tr, vs, ctx.object_key.view(), **existing);
         }
       }
     }
 
-    const ObjectValue *old_ptr = nullptr;
-    std::optional<ObjectValue> old_parsed;
+    const ObjectValueHeader *old_hdr = nullptr;
     if (*existing) {
-      old_parsed = parse_object_value(**existing);
-      if (old_parsed) {
-        old_ptr = &*old_parsed;
-      }
+      old_hdr = ovh_ptr(**existing);
     }
 
-    auto ids = compute_new_version(vs, old_ptr);
+    auto ids = compute_new_version(vs, old_hdr);
     params.value.hdr.version_id = ids.version_id;
     params.value.hdr.next_vid = ids.next_vid;
 
@@ -2262,42 +2255,44 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
     return fdb_to_error(existing.error());
   }
 
-  std::optional<ObjectValue> old_parsed;
+  const ObjectValueHeader *old_hdr = nullptr;
+  std::string_view old_raw;
   if (*existing) {
-    old_parsed = parse_object_value(**existing);
-    if (!old_parsed) {
+    old_raw = **existing;
+    old_hdr = ovh_ptr(old_raw);
+    if (!old_hdr) {
       return KVRGW_ERR_CORRUPT_VALUE;
     }
   }
 
   if (params.cond) {
     if (!params.cond->if_match.empty()) {
-      if (!old_parsed || old_parsed->is_delete_marker()) {
+      if (!old_hdr || ovh_is_delete_marker(old_hdr)) {
         return KVRGW_ERR_NO_SUCH_KEY;
       }
       if (params.cond->if_match != "*" &&
-          old_parsed->etag_display() != params.cond->if_match) {
+          ovh_etag_display(old_hdr) != params.cond->if_match) {
         return KVRGW_ERR_PRECONDITION_FAILED;
       }
     }
     if (!params.cond->if_none_match.empty()) {
-      if (params.cond->if_none_match == "*" && old_parsed &&
-          !old_parsed->is_delete_marker()) {
+      if (params.cond->if_none_match == "*" && old_hdr &&
+          !ovh_is_delete_marker(old_hdr)) {
         return KVRGW_ERR_PRECONDITION_FAILED;
       }
-      if (params.cond->if_none_match != "*" && old_parsed &&
-          !old_parsed->is_delete_marker() &&
-          old_parsed->etag_display() == params.cond->if_none_match) {
+      if (params.cond->if_none_match != "*" && old_hdr &&
+          !ovh_is_delete_marker(old_hdr) &&
+          ovh_etag_display(old_hdr) == params.cond->if_none_match) {
         return KVRGW_ERR_PRECONDITION_FAILED;
       }
     }
   }
 
-  if (old_parsed) {
-    displace_old_object(tr, vs, ctx.object_key.view(), *old_parsed);
+  if (old_hdr) {
+    displace_old_object(tr, vs, ctx.object_key.view(), old_raw);
   }
 
-  auto ids = compute_new_version(vs, old_parsed ? &*old_parsed : nullptr);
+  auto ids = compute_new_version(vs, old_hdr);
   params.value.hdr.version_id = ids.version_id;
   params.value.hdr.next_vid = ids.next_vid;
   if (out_versioning_state) {
@@ -3012,7 +3007,9 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
             tr->kv_del(d_key.view());
           }
           else if (current->hdr.chunk.type == CHUNK_STORAGE) {
-            const auto go_key = make_go_key(*parts, ref_sv, current->hdr.size);
+            const auto go_key = make_go_key(parts->shard_count, parts->shard_id,
+                                            parts->bucket_id, ref_sv,
+                                            current->hdr.size);
             GcValueHeader gc_hdr{};
             gc_hdr.chunk = current->hdr.chunk;
             gc_hdr.object_size = current->hdr.size;
@@ -3062,7 +3059,9 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
         if (parts) {
           const std::string_view ref_sv(
               reinterpret_cast<const char *>(v_entry->hdr.ref_tag), 12);
-          const auto go_key = make_go_key(*parts, ref_sv, v_entry->hdr.size);
+          const auto go_key = make_go_key(parts->shard_count, parts->shard_id,
+                                          parts->bucket_id, ref_sv,
+                                          v_entry->hdr.size);
           GcValueHeader gc_hdr{};
           gc_hdr.chunk = v_entry->hdr.chunk;
           gc_hdr.object_size = v_entry->hdr.size;
@@ -3117,24 +3116,24 @@ KvRgwServiceImpl::delete_multi(tenant_id_t tenant_id,
   int txn_failures = 0;
   bool single_delete_mode = false;
 
+  // TBD: version-deletion must be refactored to work in bulk
   if (!objects.empty()) {
+    out->reserve(out->size() + objects.size());
     for (const auto &obj : objects) {
       const std::string key(obj.key);
       if (obj.version_id) {
-        DeleteMultiKeyOutcome outcome;
-        outcome.key = key;
-        outcome.version_id = *obj.version_id;
-        const auto ec = delete_object_version(tenant_id, bname, key, *obj.version_id,
-                                              nullptr);
+        const auto ec = delete_object_version(tenant_id, bname, key,
+                                              *obj.version_id, nullptr);
         if (ec == KVRGW_ERR_OK) {
-          outcome.status = DeleteMultiKeyOutcome::Status::Deleted;
+          out->emplace_back(DeleteMultiKeyOutcome::Status::Deleted, key, "");
+          out->back().version_id = *obj.version_id;
         }
         else {
-          outcome.status = DeleteMultiKeyOutcome::Status::Error;
-          outcome.error_code = "InternalError";
-          outcome.error_message = kvrgw_strerror(ec);
+          out->emplace_back(DeleteMultiKeyOutcome::Status::Error, key,
+                            "InternalError");
+          out->back().error_message = kvrgw_strerror(ec);
+          out->back().version_id = *obj.version_id;
         }
-        out->push_back(std::move(outcome));
       }
       else {
         delete_multi_one_key(tenant_id, bname, bucket_id, key, *out);
@@ -3144,6 +3143,9 @@ KvRgwServiceImpl::delete_multi(tenant_id_t tenant_id,
   }
 
   const int key_count = static_cast<int>(keys.size());
+  out->reserve(out->size() + static_cast<size_t>(key_count));
+  // Allocate the per-key ctx array once — reused across all chunk iterations.
+  std::unique_ptr<DeleteContext[]> ctx_buf(new DeleteContext[kChunkSize]);
   for (int i = 0; i < key_count;) {
     if (single_delete_mode) {
       delete_multi_one_key(tenant_id, bname, bucket_id,
@@ -3153,17 +3155,11 @@ KvRgwServiceImpl::delete_multi(tenant_id_t tenant_id,
     }
 
     const int chunk_end = std::min(i + kChunkSize, key_count);
-    std::vector<std::string> chunk;
-    chunk.reserve(static_cast<size_t>(chunk_end - i));
-    for (int j = i; j < chunk_end; ++j) {
-      chunk.push_back(keys[static_cast<size_t>(j)]);
-    }
+    const auto chunk = keys.subspan(static_cast<size_t>(i),
+                                    static_cast<size_t>(chunk_end - i));
+    const std::span<DeleteContext> ctxs(ctx_buf.get(), chunk.size());
 
-    std::vector<DeleteMultiKeyOutcome> outcomes;
-    if (delete_multi_try_commit(tenant_id, bname, bucket_id, chunk, outcomes)) {
-      out->insert(out->end(), outcomes.begin(), outcomes.end());
-    }
-    else {
+    if (!delete_multi_try_commit(tenant_id, bname, bucket_id, chunk, ctxs, out)) {
       ++txn_failures;
       for (const auto &key : chunk) {
         delete_multi_one_key(tenant_id, bname, bucket_id, key, *out);
@@ -3626,24 +3622,26 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
       }
       return ec;
     }
-    std::optional<ObjectValue> dst_parsed;
+    const ObjectValueHeader *dst_hdr = nullptr;
+    std::string_view dst_raw;
     if (*dst_o_raw) {
-      dst_parsed = parse_object_value(**dst_o_raw);
+      dst_raw = **dst_o_raw;
+      dst_hdr = ovh_ptr(dst_raw);
     }
 
     // --- Destination preconditions ---
     if (!req.dst_if_match.empty()) {
-      if (!dst_parsed || dst_parsed->is_delete_marker()) {
+      if (!dst_hdr || ovh_is_delete_marker(dst_hdr)) {
         return KVRGW_ERR_NO_SUCH_KEY;
       }
       if (req.dst_if_match != "*" &&
-          dst_parsed->etag_display() != req.dst_if_match) {
+          ovh_etag_display(dst_hdr) != req.dst_if_match) {
         return KVRGW_ERR_PRECONDITION_FAILED;
       }
     }
     if (!req.dst_if_none_match.empty()) {
-      if (req.dst_if_none_match == "*" && dst_parsed &&
-          !dst_parsed->is_delete_marker()) {
+      if (req.dst_if_none_match == "*" && dst_hdr &&
+          !ovh_is_delete_marker(dst_hdr)) {
         return KVRGW_ERR_PRECONDITION_FAILED;
       }
     }
@@ -3904,12 +3902,10 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     }
 
     // --- Displace destination + versioning ---
-    if (dst_parsed) {
-      displace_old_object(*tr, vb->versioning_state, dst_o_key.view(),
-                          *dst_parsed);
+    if (dst_hdr) {
+      displace_old_object(*tr, vb->versioning_state, dst_o_key.view(), dst_raw);
     }
-    auto ids = compute_new_version(vb->versioning_state,
-                                   dst_parsed ? &*dst_parsed : nullptr);
+    auto ids = compute_new_version(vb->versioning_state, dst_hdr);
     new_value.hdr.version_id = ids.version_id;
     new_value.hdr.next_vid = ids.next_vid;
 
