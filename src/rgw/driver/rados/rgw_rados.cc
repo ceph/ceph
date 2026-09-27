@@ -6107,6 +6107,13 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     return ret;
   }
 
+  // compressed bytes written back as-is: index the plaintext size
+  bool compressed = false;
+  RGWCompressionInfo info;
+  if (rgw_compression_info_from_attrset(attrs, compressed, info) == 0 && compressed) {
+    accounted_size = info.orig_size;
+  }
+
   {
     if (!olh_epoch) {
       const auto aiter = attrs.find("x-amz-meta-rgwx-versioned-epoch");
