@@ -92,6 +92,19 @@ class MgrThrasher(ThrasherGreenlet):
                          active mgr's own admin socket (perf dump), to
                          catch a hung or unresponsive mgr process on
                          whichever one just took over. (default: True)
+    check_tell_routing    After every iteration, send 'tell' to a mgr
+                         name that doesn't exist and confirm it fails
+                         or times out rather than getting answered --
+                         a real answer means the command was misrouted
+                         to whichever mgr session happens to be open.
+                         (default: False)
+    failover_timeout      Seconds to wait for a new mgr to take over
+                         after killing the active one, before giving up
+                         (default: mon_mgr_beacon_grace * 2). Raise this
+                         when running alongside another thrasher (e.g.
+                         mon_thrash) that can itself delay the mon's
+                         response for a while -- the default assumes an
+                         otherwise-undisturbed mon cluster.
 
     For example::
 
@@ -150,6 +163,8 @@ class MgrThrasher(ThrasherGreenlet):
             self.selftest_modules[0] if self.selftest_modules else 'devicehealth')
         self.check_balancer = self.config.get('check_balancer', False)
         self.check_admin_socket = self.config.get('check_admin_socket', True)
+        self.check_tell_routing = self.config.get('check_tell_routing', False)
+        self.failover_timeout = self.config.get('failover_timeout', None)
 
         assert self.max_killable() > 0, \
             'Unable to kill at least one manager with the current config.'
@@ -353,17 +368,74 @@ class MgrThrasher(ThrasherGreenlet):
         proc = self.manager.admin_socket('mgr', active, ['perf', 'dump'])
         json.loads(proc.stdout.getvalue())
 
+    def _check_tell_routing(self):
+        """
+        Send 'tell' to a mgr name that doesn't exist. Since it can
+        never be delivered, the only correct outcome is a failure or
+        timeout. MgrClient::start_tell_command() moves its 'name'
+        argument into the queued command, then reads the (now
+        moved-from) local 'name' again to decide whether to send
+        straight to the current session -- so a moved-from name that
+        happens to read back empty makes it send to whatever mgr
+        session is currently open, regardless of the real target. A
+        real answer here means exactly that happened.
+        """
+        bogus = 'thrashtest{r}'.format(r=self.rng.randrange(1000000))
+        try:
+            out = self.manager.raw_cluster_cmd(
+                'tell', 'mgr.{b}'.format(b=bogus), 'version',
+                timeoutcmd=15)
+        except Exception:
+            return
+        raise RuntimeError(
+            "tell mgr.{b} (a mgr that doesn't exist) got a response "
+            "instead of failing/timing out -- looks like "
+            "MgrClient::start_tell_command()'s use-after-move bug "
+            "misrouted it to whichever mgr session happens to be open: "
+            "{out!r}".format(b=bogus, out=out))
+
+    def _validate_check(self, name, fn, *args):
+        """
+        Run one _validate_modules() check, tolerating a transient
+        command failure instead of letting it kill the whole thrasher
+        -- same as OSDThrasher's do_optrack_toggle()/do_noscrub_toggle()
+        (catch, log one line, keep going). Only for checks whose sole
+        failure mode is "the ceph command didn't go through" (e.g.
+        mon_thrash dropping quorum mid-check when running mgr_thrash
+        alongside it) with no assertion or deliberately-raised
+        exception of their own -- a check that's actually broken keeps
+        failing every iteration and shows up repeatedly in the log, so
+        a real regression there isn't lost, just not immediately fatal.
+
+        Do NOT route a check through here if its own failure *is* the
+        signal it exists to produce (an assertion, or an exception it
+        raises on purpose after determining something is wrong) --
+        tolerating that swallows the exact thing the check was written
+        to catch. check_admin_socket and check_tell_routing are called
+        directly below for that reason.
+        """
+        try:
+            fn(*args)
+        except Exception as e:
+            self.log('{n} failed, ignoring: {e}'.format(n=name, e=e))
+
     def _validate_modules(self):
         if self.check_enabled_modules:
-            self._check_enabled_modules()
+            self._validate_check(
+                'check_enabled_modules', self._check_enabled_modules)
         if self.selftest_modules:
-            self._run_module_selftests()
+            self._validate_check(
+                'module selftests', self._run_module_selftests)
         if self.test_remote_dispatch:
-            self._run_remote_dispatch_selftest()
+            self._validate_check(
+                'remote dispatch selftest', self._run_remote_dispatch_selftest)
         if self.check_balancer:
-            self._check_balancer_active()
+            self._validate_check(
+                'check_balancer', self._check_balancer_active)
         if self.check_admin_socket:
             self._check_admin_socket()
+        if self.check_tell_routing:
+            self._check_tell_routing()
 
     def _run(self):
         """
@@ -437,7 +509,7 @@ class MgrThrasher(ThrasherGreenlet):
 
             survivors = set(mgrs) - set(mgrs_to_kill)
             if active in mgrs_to_kill and survivors:
-                self._wait_for_failover(active)
+                self._wait_for_failover(active, timeout=self.failover_timeout)
 
             if self.maintain_availability:
                 self.manager.wait_for_mgr_available(timeout=60)
