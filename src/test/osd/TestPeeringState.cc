@@ -2814,6 +2814,203 @@ TEST_F(PeeringStateTest, RebuildStatsMultiHopHandoverRecordsEachSegment) {
   EXPECT_GT(sum_ns, 0u);
 }
 
+// GetInfo must not take a notify that proc_replica_notify() discards as a
+// peer's reply. osd.1 alone takes a write while osd.0 is down, then fails and
+// is marked out; osd.0 comes back as primary and waits in Down for osd.1.
+// osd.1 returns and notifies osd.0, which is behind, and flaps. osd.0 queries
+// osd.1 and osd.2; osd.1's old notify (sent before its current up_from)
+// arrives first and is discarded, then osd.2 replies. GetInfo must still
+// wait for osd.1, whose info has the write.
+TEST_F(PeeringStateTest, StaleNotifyCompletesGetInfo) {
+  dout(0) << "== StaleNotifyCompletesGetInfo ==" << dendl;
+
+  auto set_mapping = [this](std::vector<int> osds) {
+    up = osds;
+    acting = osds;
+    up_primary = acting_primary = osds.empty() ? -1 : osds[0];
+  };
+  auto next_inc = [this]() {
+    OSDMap::Incremental inc(osdmap->get_epoch() + 1);
+    inc.fsid = osdmap->get_fsid();
+    return inc;
+  };
+  auto mark_down = [&](int osd) {
+    auto inc = next_inc();
+    inc.pending_osd_state_set(osd, CEPH_OSD_UP);
+    apply_incremental(inc);
+  };
+  // up as a new instance: a new up_from and new addresses
+  unsigned nonce = 100;
+  auto mark_up = [&](int osd) {
+    auto inc = next_inc();
+    entity_addrvec_t addrs;
+    addrs.v.push_back(entity_addr_t());
+    addrs.v[0].nonce = ++nonce;
+    inc.new_up_client[osd] = addrs;
+    inc.new_up_cluster[osd] = addrs;
+    inc.new_hb_back_up[osd] = addrs;
+    inc.new_hb_front_up[osd] = addrs;
+    apply_incremental(inc);
+  };
+  auto mark_out = [&](int osd) {
+    auto inc = next_inc();
+    inc.new_weight[osd] = CEPH_OSD_OUT;
+    apply_incremental(inc);
+  };
+  // an OSD that is down in its own map sends nothing (OSD::dispatch_context)
+  auto drop_sent = [this](int osd) {
+    get_ctx(osd)->message_map.clear();
+    get_listener(osd)->messages.clear();
+  };
+  // every OSD takes every map, whether or not it is in up/acting (the
+  // test_event_* helpers only visit up_acting)
+  auto advance = [this](int osd) {
+    get_ps(osd)->advance_map(osdmap, osdmap, up, up_primary, acting,
+                             acting_primary, *get_ctx(osd));
+  };
+  auto activate = [this](int osd) {
+    get_ps(osd)->activate_map(*get_ctx(osd));
+  };
+  // a replicated PG is recoverable with any one copy (the harness default
+  // accepts anything, so a prior set would never be down)
+  auto replicated_predicates = [this](int osd) {
+    get_ps(osd)->set_backend_predicates(
+      get_is_readable_predicate(), new MockECRecPred(1, 0));
+  };
+
+  // [0,1] active+clean
+  create_rep_pool(2);
+  test_create_peering_state();
+  replicated_predicates(0);
+  replicated_predicates(1);
+  test_init();
+  test_event_initialize();
+  test_peering();
+  verify_primary_active_clean(0);
+
+  // osd.0 is marked down: osd.1 goes active alone and takes a write
+  mark_down(0);
+  set_mapping({1});
+  up_acting = {1};
+  advance(0);
+  drop_sent(0);
+  advance(1);
+  activate(1);
+  dispatch_all();
+  while (new_epoch(false)) {  // up_thru
+    advance(0);
+    drop_sent(0);
+    advance(1);
+    activate(1);
+    dispatch_all();
+  }
+  ASSERT_TRUE(get_ps(1)->is_active());
+  eversion_t w = test_append_log_entry(shard_id_set(), ss({1}));
+  ASSERT_EQ(get_ps(1)->get_info().last_update, w);
+  ASSERT_LT(get_ps(0)->get_info().last_update, w);
+
+  // osd.1 is marked down and out; osd.0 comes back as primary of [0,2]
+  // and waits in Down for osd.1
+  mark_down(1);
+  set_mapping({});
+  up_acting = {};
+  advance(0);
+  advance(1);
+  mark_out(1);
+  advance(0);
+  advance(1);
+  drop_sent(0);
+  drop_sent(1);
+  mark_up(0);
+  set_mapping({0, 2});
+  up_acting = {0, 2};
+  // osd.2 has no copy: its info is empty, like handle_pg_query_nopg()'s
+  // (test_init() would give it a history that is clean now, and merging
+  // that would clear osd.0's past intervals). Having no past intervals, it
+  // would fail check_past_interval_bounds(), which an OSD without the PG
+  // never runs.
+  struct SkipBoundsCheck {
+    SkipBoundsCheck() {
+      g_ceph_context->_conf.set_val_or_die("osd_skip_check_past_interval_bounds", "true");
+    }
+    ~SkipBoundsCheck() {
+      g_ceph_context->_conf.set_val_or_die("osd_skip_check_past_interval_bounds", "false");
+    }
+  } skip_bounds_check;
+  create_peering_state(2, 0);
+  replicated_predicates(2);
+  {
+    pg_history_t history;
+    history.same_interval_since = osdmap->get_epoch();
+    PastIntervals past_intervals;
+    ObjectStore::Transaction t;
+    get_ps(2)->init(1, up, up_primary, acting, acting_primary,
+                    history, past_intervals, t);
+  }
+  test_event_initialize(2);
+  advance(0);
+  activate(0);
+  advance(1);
+  drop_sent(1);
+  advance(2);
+  activate(2);
+  dispatch_all();
+  ASSERT_STREQ(get_ps(0)->get_current_state(), "Started/Primary/Peering/Down");
+
+  // osd.0 falls behind. osd.1 comes up (out, a stray) and notifies it
+  mark_up(1);
+  epoch_t stale = osdmap->get_epoch();
+  advance(1);
+  activate(1);  // queues osd.1's notify to osd.0, sent in epoch `stale`
+  advance(0);   // osd.0 advances through the batch without activating it
+  advance(2);
+  // osd.1 is marked down and comes up again
+  mark_down(1);
+  advance(1);
+  advance(0);
+  advance(2);
+  mark_up(1);
+  advance(0);
+  advance(2);
+  // osd.0 activates the batch: GetInfo queries osd.1 and osd.2
+  activate(0);
+  activate(2);
+  ASSERT_STREQ(get_ps(0)->get_current_state(), "Started/Primary/Peering/GetInfo");
+  // the notify from `stale` gets past PG::old_peering_msg ...
+  ASSERT_LE(get_ps(0)->get_last_peering_reset(), stale);
+  // ... and proc_replica_notify discards it
+  ASSERT_GT(osdmap->get_up_from(1), stale);
+
+  // osd.1's notify from `stale` reaches osd.0 first ...
+  dispatch_peering_messages(1, 0, 1);
+  EXPECT_FALSE(get_ps(0)->get_peer_info().contains(
+    pg_shard_t(1, shard_id_t::NO_SHARD)));
+  // ... then osd.2's reply to the query
+  dispatch_peering_messages(0, 2);
+  dispatch_peering_messages(2, 0);
+
+  // osd.0 must still be waiting for osd.1's info
+  EXPECT_STREQ(get_ps(0)->get_current_state(), "Started/Primary/Peering/GetInfo");
+
+  // the rest of peering: osd.1 answers, osd.0 goes active
+  advance(1);
+  activate(1);
+  up_acting = {0, 1, 2};
+  dispatch_all();
+  while (new_epoch(false)) {
+    advance(0);
+    activate(0);
+    advance(1);
+    activate(1);
+    advance(2);
+    activate(2);
+    dispatch_all();
+  }
+  EXPECT_TRUE(get_ps(0)->is_active());
+  // the write osd.1 took alone survives
+  EXPECT_EQ(get_ps(0)->get_info().last_update, w);
+}
+
 // ============================================================================
 // Main
 // ============================================================================

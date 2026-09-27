@@ -7780,15 +7780,18 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
 
   DECLARE_LOCALS;
 
-  auto p = peer_info_requested.find(infoevt.from);
-  if (p != peer_info_requested.end()) {
-    peer_info_requested.erase(p);
-    ps->blocked_by.erase(infoevt.from.osd);
-  }
-
   epoch_t old_start = ps->info.history.last_epoch_started;
   if (ps->proc_replica_notify(infoevt.from, infoevt.notify)) {
     // we got something new ...
+    // Only now is this the peer's reply. A notify proc_replica_notify()
+    // discards, such as one the peer sent before its current up_from,
+    // must not stand in for it, or GetInfo can finish without the info
+    // of the only surviving OSD of an interval that went rw.
+    auto p = peer_info_requested.find(infoevt.from);
+    if (p != peer_info_requested.end()) {
+      peer_info_requested.erase(p);
+      ps->blocked_by.erase(infoevt.from.osd);
+    }
     PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
     if (old_start < ps->info.history.last_epoch_started) {
       psdout(10) << " last_epoch_started moved forward, rebuilding prior" << dendl;
