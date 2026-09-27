@@ -3894,7 +3894,11 @@ int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
   int r = op_ret;
-  if (r == -ENOENT)
+  // deleting an object that does not exist succeeds, unless the delete
+  // carries If-Match: S3 answers a conditional delete that finds no object
+  // 404. The directory-bucket conditions (x-amz-if-match-size and
+  // x-amz-if-match-last-modified-time) answer 204, as S3 documents
+  if (r == -ENOENT && !if_match)
     r = 0;
   if (!r)
     r = STATUS_NO_CONTENT;

@@ -7258,6 +7258,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     // leaving that pending entry in the index so that bucket listing can recover with check_disk_state() and cls_rgw_suggest_changes()
     ldpp_dout(dpp, 0) << "ERROR: rgw_rados_operate returned r=" << r << dendl;
   } else if (r >= 0 || r == -ENOENT) {
+    // -ENOENT: the head was gone, removed by a racing delete
+    const bool removed_nothing = (r == -ENOENT);
     tombstone_cache_t *obj_tombstone_cache = store->get_tombstone_cache();
     if (obj_tombstone_cache) {
       tombstone_entry entry{*state};
@@ -7270,6 +7272,12 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       ldpp_dout(dpp, 0) << "ERROR: complete_atomic_modification returned ret=" << ret << dendl;
     }
     /* other than that, no need to propagate error */
+
+    // a conditional delete that removed nothing found no object to delete,
+    // like one that found no head to begin with
+    if (r >= 0 && removed_nothing && params.if_match) {
+      r = -ENOENT;
+    }
   } else {
     int ret = index_op.cancel(dpp, params.remove_objs, y, log_op);
     if (ret < 0) {

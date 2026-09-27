@@ -8355,7 +8355,9 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   if (script_return_code != -EPERM) {
     r = del_op->delete_obj(dpp, y,
                           rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
-    if (r == -ENOENT) {
+    // as for DeleteObject, a key that does not exist is deleted, unless
+    // its delete carries an ETag condition
+    if (r == -ENOENT && !object.get_if_match()) {
       r = 0;
     }
   }
