@@ -48,11 +48,16 @@ inline constexpr std::string_view CLONE_PARENT_PREFIX = ".clone_parent.";
 inline constexpr size_t MIN_COPY_IO_SIZE = 1u << 20;
 inline constexpr size_t MAX_COPY_IO_SIZE = 4u << 20;
 
-/* Try a real copy_file_range in dir and see whether it consumed no space:
- * the one question a strategy cannot answer about itself.  Returns false on
+/* Can this filesystem make a copy free?  The one question a strategy
+ * cannot answer about itself.  Returns false on
  * any error, so an unwritable or odd directory reads as "does not share",
  * which is the conservative answer -- it only costs a fallback that would
- * have worked. */
+ * have worked.
+ *
+ * Asks FICLONE rather than measuring a copy.  copy_file_range returns a
+ * positive count whether it shared or copied, and a reflinked file's
+ * st_blocks still covers its own extents, so neither says anything;
+ * only free space or FICLONE do.  See the comment on the definition. */
 bool probe_shares_extents(const DoutPrefixProvider* dpp,
                           const std::string& dir);
 

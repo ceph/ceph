@@ -21,7 +21,9 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <linux/fs.h>
 #include <linux/stat.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/vfs.h>
 #include <sys/xattr.h>
@@ -31,6 +33,7 @@
 #include "gpfs/gpfs_fcntl.h"
 
 #include "common/dout.h"
+#include "include/scope_guard.h"
 #include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -146,9 +149,30 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
 bool probe_shares_extents(const DoutPrefixProvider* dpp,
                           const std::string& dir)
 {
+  /* ASK FICLONE, and measure nothing.
+   *
+   * Three signals were tried here and two of them lie (measured
+   * 2026-09-26, probes/cfrprobe.c, XFS reflink=1 against tmpfs):
+   *
+   *   copy_file_range's return value -- positive on both, because it
+   *   copies where it cannot share.  This reported "shares extents" for
+   *   every filesystem but GPFS.
+   *
+   *   the destination's st_blocks -- 2048 on both, because a reflinked
+   *   file's extents still count toward its own block total.  This
+   *   reported "does not share" for XFS with reflink on.
+   *
+   *   statfs free space -- 0 on XFS, a full megabyte on tmpfs, so it
+   *   does discriminate.  Not used:  the data root may have other
+   *   gateways writing to it, and a concurrent write moves free space
+   *   under the probe.
+   *
+   * FICLONE is the same kernel path (remap_file_range) that lets
+   * copy_file_range share, it answers locally and deterministically,
+   * and GPFS returns EOPNOTSUPP to it exactly as it does to
+   * copy_file_range at every granularity. */
   const std::string src = dir + "/.cfr-probe.src";
   const std::string dst = dir + "/.cfr-probe.dst";
-  bool shares = false;
 
   int sfd = ::open(src.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
   if (sfd < 0) {
@@ -156,27 +180,37 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
       << ": " << cpp_strerror(errno) << dendl;
     return false;
   }
+  auto close_src = make_scope_guard([sfd, &src] {
+    ::close(sfd);
+    ::unlink(src.c_str());
+  });
+
   char buf[4096];
   memset(buf, 0, sizeof(buf));
-  if (::write(sfd, buf, sizeof(buf)) == (ssize_t) sizeof(buf)) {
-    int dfd = ::open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    if (dfd >= 0) {
-      loff_t soff = 0, doff = 0;
-      shares = (::copy_file_range(sfd, &soff, dfd, &doff,
-                                  sizeof(buf), 0) > 0);
-      ::close(dfd);
-    }
+  if (::write(sfd, buf, sizeof(buf)) != (ssize_t) sizeof(buf)) {
+    return false;
   }
-  ::close(sfd);
-  ::unlink(src.c_str());
-  ::unlink(dst.c_str());
+
+  int dfd = ::open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+  if (dfd < 0) {
+    return false;
+  }
+  auto close_dst = make_scope_guard([dfd, &dst] {
+    ::close(dfd);
+    ::unlink(dst.c_str());
+  });
+
+  const bool shares = (::ioctl(dfd, FICLONE, sfd) == 0);
+  const int err = errno;
 
   ldpp_dout(dpp, 1) << "nsfs: filesystem at " << dir
-    << (shares ? " shares extents via copy_file_range"
+    << (shares ? " shares extents (FICLONE)"
                : " does not share extents;  copies fall back to a buffer")
+    << (shares ? "" : std::string(" (") + cpp_strerror(err) + ")")
     << dendl;
   return shares;
 }
+
 
 
 int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
