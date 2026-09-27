@@ -23,6 +23,10 @@ const auto HOST_ID = "host_id";
 
 extern tracing::Tracer tracer;
 
+// starts the tracer, and follows changes to where it exports to
+void init(CephContext* cct);
+void shutdown(CephContext* cct);
+
 // whether requests that are not traced live should carry a context_span(), so
 // that slow requests can be traced after the fact and the OSDs can place their
 // slow ops under them

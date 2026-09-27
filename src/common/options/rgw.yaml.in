@@ -1898,7 +1898,13 @@ options:
   type: uint
   level: advanced
   desc: Maximum number of slow-request traces exported per second
-  default: 10
+  long_desc: A request's trace is one span here, while its slow ops add spans
+    on each OSD they reach, each OSD with its own osd_op_trace_max_per_sec.
+    When this limit is lower than what the OSDs together export, their spans
+    reach the tracing backend without the request span they belong under.
+    Requests not traced because of the limit are counted in the rgw
+    slow_request_traces_dropped perf counter.
+  default: 100
   services:
   - rgw
   see_also:

@@ -6,7 +6,9 @@
 #include <algorithm>
 #include <mutex>
 
+#include "common/config_obs.h"
 #include "rgw_op.h"
+#include "rgw_perf_counters.h"
 #include "rgw_sal.h"
 
 namespace tracing {
@@ -39,7 +41,39 @@ bool take_token(CephContext* cct)
   return true;
 }
 
+// re-creates the exporter when its destination changes, as the OSDs do
+class ExporterObserver : public md_config_obs_t {
+ public:
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {"trace_exporter", "trace_otlp_endpoint",
+            "jaeger_agent_host", "jaeger_agent_port"};
+  }
+  void handle_conf_change(const ConfigProxy&,
+                          const std::set<std::string>&) override {
+    tracer.reconfigure();
+  }
+};
+ExporterObserver exporter_observer;
+bool observing = false;
+
 } // anonymous namespace
+
+void init(CephContext* cct)
+{
+  tracer.init(cct, "rgw");
+  if (!observing) {
+    cct->_conf.add_observer(&exporter_observer);
+    observing = true;
+  }
+}
+
+void shutdown(CephContext* cct)
+{
+  if (observing) {
+    cct->_conf.remove_observer(&exporter_observer);
+    observing = false;
+  }
+}
 
 void trace_slow_request(const req_state* s, const RGWOp* op, ::rgw::sal::Driver* driver)
 {
@@ -51,7 +85,13 @@ void trace_slow_request(const req_state* s, const RGWOp* op, ::rgw::sal::Driver*
   OpTimeline t;
   t.start.set_from_double(req_state::Clock::to_double(s->time));
   t.end = ceph_clock_now();
-  if (t.end - t.start < threshold || !take_token(cct)) {
+  if (t.end - t.start < threshold) {
+    return;
+  }
+  if (!take_token(cct)) {
+    if (perfcounter) {
+      perfcounter->inc(l_rgw_slow_request_traces_dropped);
+    }
     return;
   }
   trace_id_t trace_id;
@@ -81,6 +121,9 @@ void trace_slow_request(const req_state* s, const RGWOp* op, ::rgw::sal::Driver*
     t.attributes.emplace_back(OBJECT_NAME, s->object->get_name());
   }
   tracer.record_op(t);
+  if (perfcounter) {
+    perfcounter->inc(l_rgw_slow_request_traces);
+  }
 }
 
 } // namespace rgw

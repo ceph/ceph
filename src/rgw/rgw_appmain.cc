@@ -670,7 +670,7 @@ void rgw::AppMain::init_tracepoints()
 {
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(dpp->get_cct());
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(dpp->get_cct());
-  tracing::rgw::tracer.init(dpp->get_cct(), "rgw");
+  tracing::rgw::init(dpp->get_cct());
 } /* init_tracepoints() */
 
 void rgw::AppMain::init_lua()
@@ -824,6 +824,8 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   }
 
   finalize_async_signals(); // callback
+
+  tracing::rgw::shutdown(dpp->get_cct());
 
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
