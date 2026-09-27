@@ -145,6 +145,17 @@ def main():
     assert num_leftover_olh_entries == 0, \
       'Found leftover olh entries after concurrent deletes'
 
+    # TESTCASE 'verify that bucket radoslist names the olh object of a key starting with an underscore'
+    log.debug('TEST: verify that bucket radoslist names the olh object of a key starting with an underscore\n')
+    key = '_' + str(uuid.uuid4())
+    bucket.put_object(Key=key, Body=b"data")
+    out = exec_cmd(f'radosgw-admin bucket radoslist --bucket {BUCKET_NAME}')
+    listed = sorted(oid for oid in out.decode().splitlines() if key in oid)
+    out = exec_cmd(f'rados -p {DATA_POOL} ls')
+    # rados ls prints the locator after the oid
+    stored = sorted(line.split('\t')[0] for line in out.decode().splitlines() if key in line)
+    assert listed == stored, f'radoslist {listed} does not match rados objects {stored}'
+
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.object_versions.all().delete()
