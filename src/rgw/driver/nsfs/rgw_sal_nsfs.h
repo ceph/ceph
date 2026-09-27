@@ -483,6 +483,30 @@ protected:
   bool use_lc_thread{false};
   /* driver hint state (test only)--see driver_hint() */
   bool inject_fork_race{false};
+  /* Added to the accounted size before the multipart writer compares it
+   * against the bytes it actually stored.
+   *
+   * The strided staging layout refuses to establish a stride when those
+   * two disagree, because a disagreement means a filter between the op
+   * layer and the writer changed the byte count and the client's length
+   * cannot place anything.  Compression and AEAD are the real causes,
+   * and NEITHER IS REACHABLE ON NSFS:  NSFSZone hardcodes its one
+   * storage class with no compression type, so the suppressing branch
+   * has no way to be taken in a test.  A control whose negative case
+   * cannot occur proves nothing, so this makes it occur. */
+  /* Scoped to one upload, not global.
+   *
+   * A multipart upload is concurrent by nature and so is the test
+   * suite:  a delta armed for the whole driver perturbs every upload
+   * running at the time, which is how one test's negative case
+   * silently suppressed another test's stride.  The unit the control
+   * acts on is the upload -- the condition it forces is evaluated once
+   * per upload, at part 1's completion -- so that is the unit it is
+   * keyed by.  A bucket would isolate test from test but still not let
+   * one test arm one upload and not another. */
+  std::map<std::string, int64_t> inject_delta_by_upload;
+  ceph::mutex inject_delta_lock =
+      ceph::make_mutex("NSFSDriver::inject_delta_lock");
   bool inject_skip_reclone{false};
   /* -1 disables;  otherwise fail a rename after this many version entries
    * have moved, so the rollback path is exercised rather than assumed */
@@ -839,6 +863,19 @@ public:
 		  std::map<std::string, std::string>* out = nullptr) override;
 
   bool fork_race_injected() const { return inject_fork_race; }
+  int64_t stored_size_delta_injected(const std::string& upload) {
+    std::lock_guard l{inject_delta_lock};
+    auto it = inject_delta_by_upload.find(upload);
+    return it == inject_delta_by_upload.end() ? 0 : it->second;
+  }
+  void set_stored_size_delta(const std::string& upload, int64_t bytes) {
+    std::lock_guard l{inject_delta_lock};
+    if (bytes == 0) {
+      inject_delta_by_upload.erase(upload);
+    } else {
+      inject_delta_by_upload[upload] = bytes;
+    }
+  }
   bool skip_reclone_injected() const { return inject_skip_reclone; }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
@@ -1446,17 +1483,46 @@ struct NSFSUploadPartInfo {
   ceph::real_time mtime;
   std::optional<rgw::cksum::Cksum> cksum;
 
+  /* Where this part's bytes are, and how many.
+   *
+   * shared:  they are in the upload's shared data file rather than in
+   * this part's own file, at `offset` within it.  A layout giving every
+   * part its own file leaves this false and offset zero.
+   *
+   * stored:  bytes actually written.  NOT `size`, which is the
+   * accounted, pre-filter length the client sent -- what ListParts must
+   * report and what quota bills.  The two differ whenever compression
+   * or AEAD is active, and only this one describes the file.
+   *
+   * Recording the location rather than inferring it from sizes is what
+   * lets assembly cope with a part which was not placed:  one which
+   * arrived before the stride was established, one which exceeded its
+   * extent and diverted, and part 1 re-uploaded at a different size,
+   * which invalidates every offset already assigned.  Inferring from
+   * sizes would produce a corrupt object in that last case rather than
+   * a slow one.
+   *
+   * It is also the only truthful source for part 1 under the strided
+   * layout:  its file is linked to the shared file, so they are one
+   * inode and a stat reports the whole upload. */
+  bool shared{false};
+  uint64_t offset{0};
+  uint64_t stored{0};
+
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(num, bl);
     encode(etag, bl);
     encode(mtime, bl);
     encode(cksum, bl);
     encode(size, bl);
+    encode(shared, bl);
+    encode(offset, bl);
+    encode(stored, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 1, 1, bl);
     decode(num, bl);
     decode(etag, bl);
     decode(mtime, bl);
@@ -1465,6 +1531,17 @@ struct NSFSUploadPartInfo {
     }
     if (struct_v > 2) {
       decode(size, bl);
+    }
+    if (struct_v > 3) {
+      decode(shared, bl);
+      decode(offset, bl);
+      decode(stored, bl);
+    } else {
+      /* a record written before placement was recorded describes a part
+       * in its own file;  no other layout existed then */
+      shared = false;
+      offset = 0;
+      stored = size;
     }
     DECODE_FINISH(bl);
   }
@@ -1558,6 +1635,16 @@ public:
 			  const std::string& part_num_str) override;
 
   NSFSBucket* get_shadow() { return shadow.get(); }
+
+  /* the stride this upload runs at, or nothing;  see the definition.
+   * Public because the driver-hint read-back asks it:  whether an
+   * upload established a stride is the one fact a test cannot see
+   * through S3, and it is what makes the establishment conditions
+   * assertable in both polarities. */
+  std::optional<uint64_t> established_stride(const DoutPrefixProvider* dpp,
+					     optional_yield y);
+  int load_for_hint(const DoutPrefixProvider* dpp) { return load(dpp); }
+
 private:
   std::string get_fname();
   int load(const DoutPrefixProvider *dpp, bool create=false);
@@ -1614,8 +1701,41 @@ private:
   const ACLOwner& owner;
   const rgw_placement_rule *ptail_placement_rule;
   uint64_t part_num;
+  /* where this part's bytes begin in the file it is written to.  Zero
+   * for a layout giving each part its own file;  MPUStrategy decides
+   * (see part_target()). */
+  uint64_t base_offset;
+  /* bytes stored for this part, counted as they are written.
+   *
+   * NOT accounted_size, which complete() is handed:  that is the
+   * pre-filter length the client sent, which is what ListParts must
+   * report and what quota bills.  Compression and AEAD sit between the
+   * op layer and this writer, so the two differ whenever one of them is
+   * active, and only the stored count can place a part. */
+  uint64_t high_water{0};
+  /* does base_offset point into a file other parts also write?  From
+   * MPUStrategy::part_target;  recorded so assembly knows where to read
+   * this part from. */
+  bool shared_target{false};
+  /* the upload this part belongs to, as the client knows it.  The
+   * injection map is keyed by this rather than by the internal meta,
+   * so a test can arm exactly the upload it created. */
+  std::string upload_id;
   std::unique_ptr<nsfs::Directory> upload_dir;
+  /* the part's RECORD -- part-NNNNN -- which carries its attributes.
+   * Always this file, whatever the layout, because complete() writes
+   * the record and only process() writes bytes. */
   std::unique_ptr<nsfs::File> part_file;
+  /* the file the BYTES go to, when that is not the record.  Null in the
+   * one-file-per-part layout, where the two coincide;  the shared data
+   * file otherwise, in which case the record file stays empty and its
+   * size means nothing. */
+  std::unique_ptr<nsfs::File> shared_file;
+
+  /* where this part's bytes are written */
+  nsfs::File* data_file() {
+    return shared_file ? shared_file.get() : part_file.get();
+  }
   file::listing::MultipartCacheKey mp_cache_key;
   QD2PendingWrite pending_write;
   optional_yield yield;
@@ -1630,19 +1750,33 @@ public:
                     const ACLOwner& _owner,
                     const rgw_placement_rule *_ptail_placement_rule,
                     uint64_t _part_num,
-		    file::listing::MultipartCacheKey&& _mp_cache_key) :
+		    file::listing::MultipartCacheKey&& _mp_cache_key,
+		    uint64_t _base_offset = 0,
+		    bool _shared_target = false,
+		    const std::string& _shared_name = std::string(),
+		    const std::string& _upload_id = std::string()) :
     StoreWriter(dpp, y),
     driver(_driver),
     owner(_owner),
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),
+    base_offset(_base_offset),
+    shared_target(_shared_target),
+    upload_id(_upload_id),
     upload_dir(_shadow_bucket->get_dir()->clone()),
     part_file(std::make_unique<nsfs::File>(
 		_driver->get_path_strategy()->object_name(_key, false),
 		upload_dir.get(), _driver->ctx())),
     mp_cache_key(std::move(_mp_cache_key)),
     yield(y)
-  { upload_dir->open(dpp); }
+  {
+    upload_dir->open(dpp);
+    if (!_shared_name.empty()) {
+      shared_file = std::make_unique<nsfs::File>(_shared_name,
+						 upload_dir.get(),
+						 _driver->ctx());
+    }
+  }
   virtual ~NSFSMultipartWriter() = default;
 
   virtual int prepare(optional_yield y) override;

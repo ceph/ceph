@@ -30,7 +30,7 @@ static const std::string NSFS_XATTR_PREFIX = "user.nsfs.";
 static const std::string NSFS_RGW_XATTR_PREFIX = "user.nsfs.rgw.";
 static const std::string RGW_ATTR_PFX = "user.rgw.";
 
-std::string RGWXattrStrategy::disk_name(const std::string& key) const
+std::string PrefixedXattrStrategy::disk_name(const std::string& key) const
 {
   if (key.compare(0, RGW_ATTR_PFX.size(), RGW_ATTR_PFX) == 0) {
     return NSFS_RGW_XATTR_PREFIX + key.substr(RGW_ATTR_PFX.size());
@@ -38,7 +38,7 @@ std::string RGWXattrStrategy::disk_name(const std::string& key) const
   return NSFS_XATTR_PREFIX + key;
 }
 
-bool RGWXattrStrategy::parse_disk_name(const std::string& disk,
+bool PrefixedXattrStrategy::parse_disk_name(const std::string& disk,
 				       std::string& key) const
 {
   if (disk.compare(0, NSFS_RGW_XATTR_PREFIX.size(),
@@ -53,7 +53,7 @@ bool RGWXattrStrategy::parse_disk_name(const std::string& disk,
   return false;
 }
 
-int RGWXattrStrategy::object_owner(const Attrs& attrs,
+int PrefixedXattrStrategy::object_owner(const Attrs& attrs,
 				   const struct statx* stx,
 				   ACLOwner& owner) const
 {
@@ -79,7 +79,7 @@ int RGWXattrStrategy::object_owner(const Attrs& attrs,
  * catalogued in docs/RGW_COUNTED_STRING_ATTRS.md.  Everything else --
  * the encoded ACL, object_type, bucket_info, the multipart blobs -- is
  * ceph-encoded and must not be touched. */
-bool RGWXattrStrategy::counted_string_value(const std::string& key) const
+bool PrefixedXattrStrategy::counted_string_value(const std::string& key) const
 {
   /* x-amz-meta-*, from rgw_get_request_metadata() and the librgw
    * setxattr path */
@@ -105,7 +105,7 @@ bool RGWXattrStrategy::counted_string_value(const std::string& key) const
    * the quotes. */
 }
 
-const char* RGWXattrStrategy::bucket_info_key() const
+const char* PrefixedXattrStrategy::bucket_info_key() const
 {
   return "bucket_info";
 }

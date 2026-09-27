@@ -94,6 +94,13 @@ public:
 
 /* What nsfs writes today.
  *
+ * Named for the sentinel, which is the thin part of the contrast:  both
+ * formats store an object under its own name and both write `.folder`,
+ * and the only divergence identified is that NooBaa may record an empty
+ * directory object as a directory attribute instead of an entry.  The
+ * question which handles that is S5's (see names_directory_object), so
+ * this name may want revisiting once the contrast is real.
+ *
  * An object is stored under its own name.  `rgw_obj_key::get_index_key_name()`
  * and `get_oid()` double a leading underscore -- in rados the index shares
  * a keyspace with entries spelled `_<ns>_<name>`, so a key beginning `_`
@@ -106,7 +113,7 @@ public:
  * Both halves had to move together, which is why they live on one
  * object;  key_from_name() no longer calls parse_raw_oid(), whose
  * namespace branch would mis-split a bare `_foo_bar`. */
-class RGWPathStrategy : public PathStrategy {
+class SentinelPathStrategy : public PathStrategy {
 public:
   std::string object_name(const rgw_obj_key& key,
 			  bool use_version) const override;

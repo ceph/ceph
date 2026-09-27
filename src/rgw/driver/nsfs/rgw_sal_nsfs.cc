@@ -2943,15 +2943,32 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     << " fs strategy" << dendl;
   fs_strategy->set_shares_extents(nsfs::probe_shares_extents(dpp, base_path));
 
-  /* one implementation today;  the selection which will pick between this
-   * and a write-into-final-offset layout asks FSStrategy, because that is
-   * what decides whether assembling from per-part files is free */
-  mpu_strategy = std::make_unique<nsfs::RGWMPUStrategy>();
+  /* Which staging layout.
+   *
+   * Assembling from per-part files is nearly free where the filesystem
+   * shares extents and costs a copy of the whole object where it does
+   * not -- GPFS answers EOPNOTSUPP at every granularity, and ext4 and
+   * tmpfs have no reflink at all.  So writing each part straight to its
+   * final offset is worth its complexity exactly where the copy is
+   * real, and FSStrategy has just measured that.
+   *
+   * A capability question, not a vendor one:  link() is plain POSIX and
+   * nothing here names a filesystem.  This is also the one on-disk
+   * structure which may legitimately be probed rather than recorded,
+   * because staging never outlives its upload and so cannot be
+   * inherited by a gateway which would read it differently. */
+  if (fs_strategy->shares_extents()) {
+    mpu_strategy = std::make_unique<nsfs::PerPartMPUStrategy>();
+  } else {
+    mpu_strategy = std::make_unique<nsfs::StridedMPUStrategy>();
+  }
+  ldpp_dout(dpp, 1) << "nsfs: using " << mpu_strategy->name()
+    << " multipart staging layout" << dendl;
 
   /* one implementation today;  the second is selected by the bucket's
    * recorded format, which S4 adds */
-  xattr_strategy = std::make_unique<nsfs::RGWXattrStrategy>();
-  path_strategy = std::make_unique<nsfs::RGWPathStrategy>();
+  xattr_strategy = std::make_unique<nsfs::PrefixedXattrStrategy>();
+  path_strategy = std::make_unique<nsfs::SentinelPathStrategy>();
 
   /* The two profiles a bucket's extensions marker resolves to.  They
    * point at the same strategies until S5 supplies the noobaa ones;  what
@@ -8702,6 +8719,9 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 	      pi.mtime = upi.mtime;
 	      pi.cksum = std::move(upi.cksum);
 	      if (upi.size) pi.size = upi.size;
+	      pi.shared = upi.shared;
+	      pi.offset = upi.offset;
+	      pi.stored = upi.stored;
 	    }
 	  }
 	  pm[pnum] = std::move(pi);
@@ -8721,6 +8741,9 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
     ppart->info.etag = std::move(pi.etag);
     ppart->info.mtime = pi.mtime;
     ppart->info.cksum = std::move(pi.cksum);
+    ppart->info.shared = pi.shared;
+    ppart->info.offset = pi.offset;
+    ppart->info.stored = pi.stored;
     parts[pi.num] = std::move(part);
   }
 
@@ -8780,6 +8803,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
   std::vector<uint64_t> part_sizes;
+  std::vector<nsfs::MPUStrategy::PartPlacement> placements;
 
   ofs = accounted_size = 0;
 
@@ -8862,6 +8886,12 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       }
 #endif
 
+      /* friend access:  the placement lives on the part record, and
+       * this is the one caller which needs it.  Read here rather than
+       * in assemble(), which has no attribute format to read it with. */
+      placements.push_back({part->info.num, part->info.shared,
+			    part->info.offset, part->info.stored});
+
       part_sizes.push_back(part->get_size());
       ofs += part->get_size();
       accounted_size += part->get_size();
@@ -8898,8 +8928,9 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // assemble parts into a single file
   std::string assembled_name = driver->get_mpu_strategy()->assembled_name();
   ret = driver->get_mpu_strategy()->assemble(dpp, driver->get_fs_strategy(),
-					    staging_fd, total_parts,
-					    assembled_name);
+					    staging_fd, placements,
+					    assembled_name,
+					    established_stride(dpp, y));
   if (ret < 0) {
     return ret;
   }
@@ -9201,6 +9232,52 @@ std::string NSFSMultipartUpload::get_fname()
   return driver->get_mpu_strategy()->staging_dir_name(mp_obj.upload_id);
 }
 
+/* The stride this upload runs at, or nothing if it has none.
+ *
+ * The shared file's name is the authority.  It is created by one
+ * linkat whose success publishes both that a stride exists and what it
+ * is, so there is no window in which the answer is half-written --
+ * which matters because parts arrive concurrently.
+ *
+ * Part 1's record is consulted only as an index, to learn which name
+ * to look for;  the faccessat then confirms or denies it.  A stale or
+ * wrong record therefore costs a failed lookup and the per-part
+ * layout, not a wrong offset.  That is the difference from reading a
+ * recorded flag and trusting it.
+ */
+std::optional<uint64_t>
+NSFSMultipartUpload::established_stride(const DoutPrefixProvider* dpp,
+					optional_yield y)
+{
+  auto* dir = shadow ? shadow->get_dir() : nullptr;
+  if (!dir) {
+    return std::nullopt;
+  }
+
+  nsfs::File pf(driver->get_mpu_strategy()->part_name(1), dir,
+		driver->ctx());
+  if (pf.stat(dpp, y) < 0) {
+    return std::nullopt;
+  }
+  Attrs attrs;
+  if (pf.read_attrs(dpp, y, attrs) != 0) {
+    return std::nullopt;
+  }
+  NSFSUploadPartInfo upi;
+  if (!decode_attr(attrs, RGW_NSFS_ATTR_MPUPLOAD, upi) || !upi.stored) {
+    return std::nullopt;
+  }
+
+  auto sname = driver->get_mpu_strategy()->shared_name(upi.stored);
+  if (!sname) {
+    return std::nullopt;
+  }
+  if (faccessat(dir->get_fd(), sname->c_str(), F_OK, 0) != 0) {
+    return std::nullopt;
+  }
+  return upi.stored;
+}
+
 std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
@@ -9210,40 +9287,83 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 				  uint64_t part_num,
 				  const std::string& part_num_str)
 {
-  std::string fname = driver->get_mpu_strategy()->part_name(part_num);
-  rgw_obj_key part_key(fname);
-
   load(dpp);
 
   file::listing::MultipartCacheKey cache_key{
     bucket->get_name(), mp_obj.meta};
 
+  /* Ask the layout where the bytes go.  The stride is the upload's
+   * established uniform part size, which part 1 sets at its completion
+   * and which is unset until then;  a layout which cannot place the
+   * part without one answers nullopt, and we stage the part in its own
+   * file, which is what part_name() names. */
+  const std::optional<uint64_t> stride = established_stride(dpp, y);
+  auto target = driver->get_mpu_strategy()->part_target(part_num, stride);
+  const uint64_t base_offset = target ? target->offset : 0;
+  const bool shared_target = target ? target->shared : false;
+
+  /* the record is always the part's own file;  the target names where
+   * the BYTES go, which is a different file only when it is shared */
+  rgw_obj_key part_key(driver->get_mpu_strategy()->part_name(part_num));
+  const std::string shared_name = shared_target ? target->name : std::string();
+
   return std::make_unique<NSFSMultipartWriter>(dpp, y, shadow.get(), part_key,
                                                 driver, owner,
                                                 ptail_placement_rule, part_num,
-						std::move(cache_key));
+						std::move(cache_key),
+						base_offset, shared_target,
+						shared_name,
+						mp_obj.upload_id);
 }
 
 int NSFSMultipartWriter::prepare(optional_yield y)
 {
+  /* the record, always;  it stays empty when the bytes go elsewhere */
   int ret = part_file->create(dpp, /*existed=*/nullptr, /*tempfile=*/false);
   if (ret < 0) {
     return ret;
   }
+  ret = part_file->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
 
-  return part_file->open(dpp);
+  if (!shared_file) {
+    return 0;
+  }
+
+  /* File::create opens O_CREAT|O_RDWR and does NOT truncate, which is
+   * what a shared file needs:  other parts have already written into
+   * it, and this one only fills its own extent. */
+  ret = shared_file->create(dpp, /*existed=*/nullptr, /*tempfile=*/false);
+  if (ret < 0) {
+    return ret;
+  }
+  return shared_file->open(dpp);
 }
 
 int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
-  if (posix_try_use_uring(dpp, yield, /*nsfs=*/true) && part_file &&
-      part_file->get_fd() >= 0) {
+  /* counted before rebasing, so this is the part's own length:  each
+   * length-changing filter rebases the offset it passes down (see
+   * RGWPutObj_Compress::process), so what arrives here is a true output
+   * offset within the part.  The chain's final flush arrives as an
+   * ordinary zero-length call, which costs nothing here. */
+  high_water = std::max(high_water, offset + data.length());
+
+  /* offset is within the part;  base_offset places the part within the
+   * file it shares, and is zero where it does not share one */
+  offset += base_offset;
+
+  nsfs::File* df = data_file();
+  if (posix_try_use_uring(dpp, yield, /*nsfs=*/true) && df &&
+      df->get_fd() >= 0) {
     if (!uring_write) {
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io");
       uring_write = std::make_unique<UringWriteWindow>(
-          dpp, yield, part_file->get_fd(), qd, dio);
-      part_file->set_sync_on_close(true);
+          dpp, yield, df->get_fd(), qd, dio);
+      df->set_sync_on_close(true);
     }
     return uring_write->process(std::move(data), offset);
   }
@@ -9252,8 +9372,8 @@ int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
       "rgw_nsfs_put_iodepth");
   bool pipeline = iodepth >= 2;
   return pending_write.process(std::move(data), offset, pipeline,
-      [this](uint64_t ofs, bufferlist& bl) {
-        return part_file->write(ofs, bl, dpp, null_yield);
+      [this, df](uint64_t ofs, bufferlist& bl) {
+        return df->write(ofs, bl, dpp, null_yield);
       });
 }
 
@@ -9279,6 +9399,19 @@ int NSFSMultipartWriter::complete(
   if (ret < 0) {
     return ret;
   }
+  /* The comparison the shared-file layout will gate on:  they agree
+   * when nothing between the op layer and here changed the byte count,
+   * and diverge under compression or AEAD.  Logged before anything
+   * depends on it, so a real run can confirm both polarities. */
+  const uint64_t accounted_checked =
+      accounted_size + driver->stored_size_delta_injected(upload_id);
+  if (high_water != accounted_checked) {
+    ldpp_dout(dpp, 10) << "NSFSMultipartWriter::complete: part " << part_num
+		       << " stored " << high_water << " for accounted "
+		       << accounted_checked
+		       << " -- a filter changed the byte count" << dendl;
+  }
+
   NSFSUploadPartInfo info;
 
   if (if_match) {
@@ -9318,15 +9451,75 @@ int NSFSMultipartWriter::complete(
     }
   }
 
+  /* Establishment.  Part 1, and only part 1, may set the upload's
+   * stride -- which is why no lock is needed and none exists
+   * (MPNSFSSerializer::try_lock only checks existence).  Exactly one
+   * writer can ever reach this.
+   *
+   * Part 1's offset is zero, so the file it just wrote already IS a
+   * valid prefix of the shared file:  promotion is a link, at no cost
+   * whatever the part's size.  Afterwards the two names are one inode,
+   * which is why part sizes are read from records and never from a
+   * stat -- see NSFSUploadPartInfo. */
+  bool promoted = false;
+  if (part_num == 1 && !shared_target && high_water > 0 &&
+      high_water == accounted_checked) {
+    /* does this layout share at all, and under what name?  Asked of the
+     * strategy rather than assumed, so the one-file-per-part layout
+     * answers no and nothing here fires. */
+    auto tgt = driver->get_mpu_strategy()->part_target(1, high_water);
+    bool aligned = true;
+    if (dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io")) {
+      /* an unaligned stride puts part K's end mid-block, sharing that
+       * block with part K+1's start;  two parts doing a
+       * read-modify-write on it would lose one of the two updates */
+      aligned = (high_water % 4096) == 0;
+    }
+    if (tgt && tgt->shared && tgt->offset == 0 && aligned) {
+      /* One atomic act:  the name carries the stride, so this link
+       * both creates the shared file and publishes its value.  EEXIST
+       * means a concurrent completion of this same part got there
+       * first with the same stride -- same name, same bytes -- so the
+       * upload is established either way. */
+      const int dfd = upload_dir->get_fd();
+      const int lret = linkat(dfd, part_file->get_name().c_str(), dfd,
+			      tgt->name.c_str(), 0);
+      if (lret == 0 || errno == EEXIST) {
+	promoted = true;
+	ldpp_dout(dpp, 15) << "NSFSMultipartWriter::complete: established"
+			   << " stride " << high_water << " for "
+			   << mp_cache_key.upload_meta << dendl;
+      } else {
+	/* nothing is broken by failing to establish:  every part takes
+	 * its own file and assembly copies, which is the layout we had */
+	ldpp_dout(dpp, 5) << "NSFSMultipartWriter::complete: could not"
+			  << " promote part 1: " << cpp_strerror(errno)
+			  << dendl;
+      }
+    }
+  }
+
   info.num = part_num;
   info.size = accounted_size;
+  /* `shared` is what later parts read as "a stride exists";  it is true
+   * for a part written into the shared file, and for part 1 once its
+   * own file has become that shared file */
+  info.shared = shared_target || promoted;
+  info.offset = base_offset;
+  info.stored = high_water;
   info.etag = part_etag;
   info.cksum = cksum;
   info.mtime = set_mtime;
 
   auto* mc = driver->get_multipart_cache();
+  /* seeded from `info`, not from shared_target:  part 1 is promoted
+   * after its bytes are written, so the flag the writer started with
+   * says unshared where the record it just wrote says shared.  Seeding
+   * from the raw flag put a stale answer in front of a correct one,
+   * and the cache is consulted first. */
   bool added = mc ? mc->add_part(mp_cache_key,
-    {static_cast<uint32_t>(part_num), accounted_size, part_etag, set_mtime, cksum}) : false;
+    {static_cast<uint32_t>(part_num), accounted_size, part_etag, set_mtime,
+     cksum, info.shared, info.offset, info.stored}) : false;
 
   if (!added || mc->policy == file::listing::MultipartCachePolicy::writethrough) {
     bufferlist bl;
@@ -9340,6 +9533,10 @@ int NSFSMultipartWriter::complete(
     }
   }
 
+  if (shared_file) {
+    shared_file->set_sync_on_close(false);
+    shared_file->close();
+  }
   part_file->set_sync_on_close(false);
   ret = part_file->close();
   if (ret < 0) {
@@ -9722,6 +9919,76 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_fork_race = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_fork_race ? "true" : "false";
+    }
+    return 0;
+  }
+
+  if (hint == "mpu-state") {
+    /* Read-back, the half that lets a test check a result.
+     *
+     * `layout` is always reported, because the staging layout is probed
+     * from the filesystem and a test cannot know which one is live --
+     * a reflink-capable root selects per-part, where no stride is ever
+     * established and asserting one would fail everywhere but a root
+     * without reflink.
+     *
+     * `stride` needs bucket, key and upload, and is the fact that
+     * cannot be seen through S3:  whether part 1 met the establishment
+     * conditions.  Empty when it did not. */
+    if (out) {
+      (*out)["layout"] = mpu_strategy ? mpu_strategy->name() : "";
+    }
+
+    auto b_it = params.find("bucket");
+    auto k_it = params.find("key");
+    auto u_it = params.find("upload");
+    if (b_it == params.end() || k_it == params.end() ||
+	u_it == params.end()) {
+      return 0;
+    }
+
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    rgw_bucket rb;
+    rb.name = b_it->second;
+    int ret = load_bucket(dpp, rb, &bucket, null_yield);
+    if (ret < 0) {
+      return ret;
+    }
+    auto upload = bucket->get_multipart_upload(k_it->second, u_it->second);
+    auto* nu = static_cast<NSFSMultipartUpload*>(upload.get());
+    ret = nu->load_for_hint(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+    if (auto stride = nu->established_stride(dpp, null_yield); stride) {
+      if (out) {
+	(*out)["stride"] = std::to_string(*stride);
+      }
+    } else if (out) {
+      (*out)["stride"] = "";
+    }
+    return 0;
+  }
+
+  if (hint == "inject-stored-size-delta") {
+    /* make the multipart writer see a stored byte count which differs
+     * from the accounted one, as it would if a length-changing filter
+     * were in the chain.  Nothing else changes -- the part record still
+     * describes the file truthfully -- so what this exercises is the
+     * branch, not a corrupted tree.
+     *
+     * Keyed by upload:  parts upload concurrently and so do tests, and
+     * a driver-wide delta suppresses stride establishment for every
+     * upload in flight, not just the one under test. */
+    auto it = params.find("bytes");
+    auto up = params.find("upload");
+    if (it == params.end() || up == params.end()) {
+      return -EINVAL;
+    }
+    set_stored_size_delta(up->second, std::stoll(it->second));
+    if (out) {
+      (*out)["bytes"] = it->second;
+      (*out)["upload"] = up->second;
     }
     return 0;
   }

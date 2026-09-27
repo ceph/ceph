@@ -119,8 +119,13 @@ public:
 
 /* nsfs's own layout:  logical keys under user.nsfs., with RGW's own
  * user.rgw. attributes re-prefixed to user.nsfs.rgw. so that the two
- * namespaces cannot collide, and ownership decoded from RGW_ATTR_ACL. */
-class RGWXattrStrategy : public XattrStrategy {
+ * namespaces cannot collide, and ownership decoded from RGW_ATTR_ACL.
+ *
+ * Named for the prefixing, which is what distinguishes it:  the NooBaa
+ * format keeps plain names and declines to claim foreign ones.  Not
+ * "RGW", which is the prefix on half the classes in this tree and so
+ * cannot carry a distinction from NooBaa at all. */
+class PrefixedXattrStrategy : public XattrStrategy {
 public:
   std::string disk_name(const std::string& key) const override;
   bool parse_disk_name(const std::string& disk,

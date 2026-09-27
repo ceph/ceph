@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <mutex>
 #include <string>
 #include <tuple>
@@ -65,6 +66,15 @@ struct MultipartPartInfo {
   std::string etag;
   ceph::real_time mtime;
   std::optional<rgw::cksum::Cksum> cksum;
+  /* where the part's bytes are and how many, for a staging layout
+   * which writes several parts into one file.  `stored` is bytes on
+   * disk, which is not `size` -- that is the accounted length the
+   * client sent, and the two differ whenever a filter between the op
+   * layer and the writer changed the byte count.  A layout giving
+   * every part its own file leaves all three at their defaults. */
+  bool shared{false};
+  uint64_t offset{0};
+  uint64_t stored{0};
 };
 
 struct MultipartCacheKey {

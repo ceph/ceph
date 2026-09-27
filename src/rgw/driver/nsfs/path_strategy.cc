@@ -22,7 +22,7 @@ static const std::string RGW_SHADOW_DIR{SHADOW_DIR};
 static const std::string RGW_VERSIONS_DIR{VERSIONS_DIR};
 static const std::string RGW_VERSIONS_LOCK{VERSIONS_LOCK};
 
-std::string RGWPathStrategy::object_name(const rgw_obj_key& key,
+std::string SentinelPathStrategy::object_name(const rgw_obj_key& key,
 					 bool use_version) const
 {
   std::string fname = use_version ? key.get_oid() : key.get_index_key_name();
@@ -51,7 +51,7 @@ std::string RGWPathStrategy::object_name(const rgw_obj_key& key,
   return fname;
 }
 
-rgw_obj_key RGWPathStrategy::key_from_name(const std::string& fname) const
+rgw_obj_key SentinelPathStrategy::key_from_name(const std::string& fname) const
 {
   /* The file name is the key, verbatim -- the inverse of object_name()
    * above, which no longer doubles a leading underscore.
@@ -67,7 +67,7 @@ rgw_obj_key RGWPathStrategy::key_from_name(const std::string& fname) const
   return key;
 }
 
-std::string RGWPathStrategy::bucket_dir_name(
+std::string SentinelPathStrategy::bucket_dir_name(
     const std::string& name, const std::optional<std::string>& ns) const
 {
   if (ns) {
@@ -76,17 +76,17 @@ std::string RGWPathStrategy::bucket_dir_name(
   return name;
 }
 
-std::string RGWPathStrategy::folder_object_name() const
+std::string SentinelPathStrategy::folder_object_name() const
 {
   return RGW_FOLDER_OBJECT_NAME;
 }
 
-bool RGWPathStrategy::names_directory_object(std::string_view entry) const
+bool SentinelPathStrategy::names_directory_object(std::string_view entry) const
 {
   return entry == RGW_FOLDER_OBJECT_NAME;
 }
 
-const ReservedNames& RGWPathStrategy::reserved_names() const
+const ReservedNames& SentinelPathStrategy::reserved_names() const
 {
   static const ReservedNames names{
     .exact = { RGW_SHADOW_DIR, RGW_VERSIONS_DIR, RGW_FOLDER_OBJECT_NAME,
