@@ -784,6 +784,10 @@ public:
   RGWHandler_REST_Bucket_S3(const rgw::auth::StrategyRegistry& auth_registry, bool _enable_pubsub) :
       RGWHandler_REST_S3(auth_registry), enable_pubsub(_enable_pubsub) {}
   ~RGWHandler_REST_Bucket_S3() override = default;
+
+  int init(rgw::sal::Driver* driver,
+           req_state *s,
+           rgw::io::BasicClient *cio) override;
 };
 
 class RGWHandler_REST_Obj_S3 : public RGWHandler_REST_S3 {
@@ -822,6 +826,10 @@ protected:
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_Obj_S3() override = default;
+
+  int init(rgw::sal::Driver* driver,
+           req_state *s,
+           rgw::io::BasicClient *cio) override;
 };
 
 class RGWRESTMgr_S3Control;

@@ -5596,6 +5596,70 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
   return new RGWPostObj_ObjStore_S3;
 }
 
+// S3 APIs that rgw does not implement, by the sub-resource that names each.
+// The op_*() methods test the sub-resources they serve, and run any other
+// request as the plain bucket or object operation for its method, so a
+// request for one of these would run as DeleteBucket, PutObject or
+// DeleteObject, and be answered success. Refuse them with 501 instead.
+static constexpr const char* unimplemented_bucket_apis[] = {
+  "abac",                    // Get/PutBucketAbac
+  "accelerate",              // Get/PutBucketAccelerateConfiguration
+  "analytics",               // Get/Put/Delete/ListBucketAnalyticsConfiguration(s)
+  "intelligent-tiering",     // Get/Put/Delete/ListBucketIntelligentTieringConfiguration(s)
+  "inventory",               // Get/Put/Delete/ListBucketInventoryConfiguration(s)
+  "metadataAnnotationTable", // UpdateBucketMetadataAnnotationTableConfiguration
+  "metadataConfiguration",   // Create/Get/DeleteBucketMetadataConfiguration
+  "metadataInventoryTable",  // UpdateBucketMetadataInventoryTableConfiguration
+  "metadataJournalTable",    // UpdateBucketMetadataJournalTableConfiguration
+  "metadataTable",           // Create/Get/DeleteBucketMetadataTableConfiguration
+  "metrics",                 // Get/Put/Delete/ListBucketMetricsConfiguration(s)
+  "session",                 // CreateSession
+};
+static constexpr const char* unimplemented_object_apis[] = {
+  "annotation",              // Put/Get/Delete/ListObjectAnnotation(s)
+  "encryption",              // UpdateObjectEncryption
+  "renameObject",            // RenameObject
+};
+
+// the S3 API that a request names and rgw does not implement, if any. A
+// HEAD or OPTIONS request names none: HEAD serves no such API, and a CORS
+// preflight is answered as for any other request
+template <size_t N>
+static const char* unimplemented_api(const req_state* s, const char* const (&apis)[N])
+{
+  if (s->op == OP_HEAD || s->op == OP_OPTIONS) {
+    return nullptr;
+  }
+  for (const char* api : apis) {
+    if (s->info.args.exists(api)) {
+      return api;
+    }
+  }
+  return nullptr;
+}
+
+int RGWHandler_REST_Bucket_S3::init(rgw::sal::Driver* driver, req_state* s,
+                                    rgw::io::BasicClient* cio)
+{
+  if (const char* api = unimplemented_api(s, unimplemented_bucket_apis); api) {
+    ldpp_dout(s, 5) << "the bucket sub-resource " << api << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return -ERR_NOT_IMPLEMENTED;
+  }
+  return RGWHandler_REST_S3::init(driver, s, cio);
+}
+
+int RGWHandler_REST_Obj_S3::init(rgw::sal::Driver* driver, req_state* s,
+                                 rgw::io::BasicClient* cio)
+{
+  if (const char* api = unimplemented_api(s, unimplemented_object_apis); api) {
+    ldpp_dout(s, 5) << "the object sub-resource " << api << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return -ERR_NOT_IMPLEMENTED;
+  }
+  return RGWHandler_REST_S3::init(driver, s, cio);
+}
+
 RGWOp *RGWHandler_REST_Bucket_S3::op_options()
 {
   return new RGWOptionsCORS_ObjStore_S3;
