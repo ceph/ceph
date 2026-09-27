@@ -772,6 +772,7 @@ protected:
   bool is_bucket_ownership_op() const {
     return s->info.args.exists("ownershipControls");
   }
+  bool is_unimplemented_op() const;
 
   RGWOp *get_obj_op(bool get_data) const;
   RGWOp *op_get() override;
@@ -807,6 +808,7 @@ protected:
   bool is_select_op() const {
     return s->info.args.exists("select-type");
   }
+  bool is_unimplemented_op() const;
 
   bool is_obj_update_op() const override {
     return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op() || is_select_op();

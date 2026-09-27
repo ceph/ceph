@@ -5393,6 +5393,65 @@ RGWOp *RGWHandler_REST_Service_S3::op_head()
   return new RGWListBuckets_ObjStore_S3;
 }
 
+// S3 APIs that rgw does not implement, by the sub-resource that names each.
+// The op_*() methods test the sub-resources they serve, and run any other
+// request as the plain bucket or object operation for its method, so a
+// request for one of these would run as DeleteBucket, PutObject or
+// DeleteObject, and be answered success. They return no op for one instead,
+// which is answered 405 MethodNotAllowed, as S3 answers for a sub-resource
+// that a region does not serve.
+static constexpr const char* unimplemented_bucket_apis[] = {
+  "abac",                    // Get/PutBucketAbac
+  "accelerate",              // Get/PutBucketAccelerateConfiguration
+  "analytics",               // Get/Put/Delete/ListBucketAnalyticsConfiguration(s)
+  "intelligent-tiering",     // Get/Put/Delete/ListBucketIntelligentTieringConfiguration(s)
+  "inventory",               // Get/Put/Delete/ListBucketInventoryConfiguration(s)
+  "metadataAnnotationTable", // UpdateBucketMetadataAnnotationTableConfiguration
+  "metadataConfiguration",   // Create/Get/DeleteBucketMetadataConfiguration
+  "metadataInventoryTable",  // UpdateBucketMetadataInventoryTableConfiguration
+  "metadataJournalTable",    // UpdateBucketMetadataJournalTableConfiguration
+  "metadataTable",           // Create/Get/DeleteBucketMetadataTableConfiguration
+  "metrics",                 // Get/Put/Delete/ListBucketMetricsConfiguration(s)
+  "session",                 // CreateSession
+};
+static constexpr const char* unimplemented_object_apis[] = {
+  "annotation",              // Put/Get/Delete/ListObjectAnnotation(s)
+  "encryption",              // UpdateObjectEncryption
+  "renameObject",            // RenameObject
+};
+
+// the S3 API that a request names and rgw does not implement, if any
+template <size_t N>
+static const char* unimplemented_api(const req_state* s, const char* const (&apis)[N])
+{
+  for (const char* api : apis) {
+    if (s->info.args.exists(api)) {
+      return api;
+    }
+  }
+  return nullptr;
+}
+
+bool RGWHandler_REST_Bucket_S3::is_unimplemented_op() const
+{
+  const char* api = unimplemented_api(s, unimplemented_bucket_apis);
+  if (api) {
+    ldpp_dout(s, 5) << "the bucket sub-resource " << api << " names an S3 API "
+        "that rgw does not implement" << dendl;
+  }
+  return api != nullptr;
+}
+
+bool RGWHandler_REST_Obj_S3::is_unimplemented_op() const
+{
+  const char* api = unimplemented_api(s, unimplemented_object_apis);
+  if (api) {
+    ldpp_dout(s, 5) << "the object sub-resource " << api << " names an S3 API "
+        "that rgw does not implement" << dendl;
+  }
+  return api != nullptr;
+}
+
 RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data) const
 {
   // Non-website mode
@@ -5470,6 +5529,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetBucketEncryption_ObjStore_S3;
   } else if (is_bucket_ownership_op()) {
     return new RGWGetBucketOwnershipControls_ObjStore_S3;
+  } else if (is_unimplemented_op()) {
+    return nullptr;
   }
   return get_obj_op(true);
 }
@@ -5530,6 +5591,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutBucketEncryption_ObjStore_S3;
   } else if (is_bucket_ownership_op()) {
     return new RGWPutBucketOwnershipControls_ObjStore_S3;
+  } else if (is_unimplemented_op()) {
+    return nullptr;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -5573,6 +5636,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDelBucketMetaSearch_ObjStore_S3;
   }
 
+  if (is_unimplemented_op()) {
+    return nullptr;
+  }
+
   return new RGWDeleteBucket_ObjStore_S3;
 }
 
@@ -5591,6 +5658,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
       return NULL;
     }
     return new RGWConfigBucketMetaSearch_ObjStore_S3;
+  }
+
+  if (is_unimplemented_op()) {
+    return nullptr;
   }
 
   return new RGWPostObj_ObjStore_S3;
@@ -5624,6 +5695,8 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
     return new RGWGetObjRetention_ObjStore_S3;
   } else if (is_obj_legal_hold_op()) {
     return new RGWGetObjLegalHold_ObjStore_S3;
+  } else if (is_unimplemented_op()) {
+    return nullptr;
   }
   return get_obj_op(true);
 }
@@ -5648,6 +5721,8 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
     return new RGWPutObjRetention_ObjStore_S3;
   } else if (is_obj_legal_hold_op()) {
     return new RGWPutObjLegalHold_ObjStore_S3;
+  } else if (is_unimplemented_op()) {
+    return nullptr;
   }
 
   if (s->init_state.src_bucket.empty())
@@ -5660,6 +5735,8 @@ RGWOp *RGWHandler_REST_Obj_S3::op_delete()
 {
   if (is_tagging_op()) {
     return new RGWDeleteObjTags_ObjStore_S3;
+  } else if (is_unimplemented_op()) {
+    return nullptr;
   }
   string upload_id = s->info.args.get("uploadId");
 
@@ -5682,6 +5759,9 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
   
   if (is_select_op())
     return rgw::s3select::create_s3select_op();
+
+  if (is_unimplemented_op())
+    return nullptr;
 
   return new RGWPostObj_ObjStore_S3;
 }
