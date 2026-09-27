@@ -1429,17 +1429,30 @@ struct NSFSMPObj {
   multipart_upload_info upload_info;
   std::string meta;
 
+  /* An upload without an id is a new one, so generate it.
+   *
+   * This used to try from_meta() first, treating the key as possibly
+   * already being a meta string.  from_meta() splits at the last dot
+   * and cannot tell a meta from a key that merely contains one, so
+   * every key ending `.bin` or `.jpg` yielded the upload id `bin` or
+   * `jpg` and no id was generated at all.  Two uploads in a bucket
+   * whose keys shared a suffix then shared an upload id, and with the
+   * staging directory named for that id they shared a directory:  each
+   * completed object was assembled from both sets of parts, silently.
+   *
+   * A caller holding a real meta splits it itself and passes both
+   * halves, because only that caller knows which it has. */
   NSFSMPObj(NSFSDriver* driver, const std::string& _oid,
 	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
     if (_upload_id && !_upload_id->empty()) {
       init(_oid, *_upload_id, _owner);
     } else if (!_oid.empty()) {
-      if (!from_meta(_oid, _owner)) {
-	init_gen(driver, _oid, _owner);
-      }
+      init_gen(driver, _oid, _owner);
     }
   }
-  /* parse <objname>.<uploadid> — the format produced by get_meta() */
+  /* parse <objname>.<uploadid> — the format produced by get_meta().
+   * Only for a caller which knows it holds a meta;  an upload id
+   * contains no dot, so the last one is the separator. */
   bool from_meta(const std::string& meta_name, ACLOwner& _owner) {
     auto pos = meta_name.rfind('.');
     if (pos == std::string::npos || pos == 0) return false;
