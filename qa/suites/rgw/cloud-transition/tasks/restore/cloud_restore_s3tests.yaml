@@ -1,6 +1,9 @@
 tasks:
 - install:
 - ceph:
+    conf:
+      client:
+        rgw crypt sse algorithm: aes-256-gcm
 - rgw:
     client.0:
       port: 8000
