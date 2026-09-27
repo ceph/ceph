@@ -87,7 +87,14 @@ public:
 Locker::Locker(MDSRank *m, MDCache *c) :
   revoking_caps(member_offset(Capability, item_revoking_caps)),
   need_snapflush_inodes(member_offset(CInode, item_to_flush)),
-  mds(m), mdcache(c) {}
+  mds(m), mdcache(c),
+  defer_client_range_shrink(g_conf().get_val<bool>("mds_defer_client_range_shrink")) {}
+
+void Locker::handle_conf_change(const std::set<std::string>& changed)
+{
+  if (changed.count("mds_defer_client_range_shrink"))
+    defer_client_range_shrink = g_conf().get_val<bool>("mds_defer_client_range_shrink");
+}
 
 
 void Locker::dispatch(const cref_t<Message> &m)
@@ -4167,6 +4174,32 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
   if (!dirty && !change_max)
     return false;
+
+  /*
+   * The client gave up its write caps and all that is left to do is drop
+   * its writeable range.  Journaling that costs a whole inode update, a
+   * second journal event for every file created and closed without data.
+   * If asked to, drop the range in memory only: the journal keeps the old,
+   * larger range, which is only ever used to decide which files need their
+   * size probed after a failure, and a range larger than needed just probes
+   * a file that did not need it.  The inode must not be projected, or a
+   * pending update would bring the old range back when it is applied.
+   */
+  if (defer_client_range_shrink && !dirty && change_max && !new_max &&
+      in->last == CEPH_NOSNAP && !in->is_projected()) {
+    dout(7) << "  max_size " << old_max << " -> 0 for " << *in
+	    << ", not journaled" << dendl;
+    // copy, as others may still hold a reference to the current inode
+    auto _inode = CInode::allocate_inode(*in->get_inode());
+    _inode->client_ranges.erase(client);
+    const bool no_ranges = _inode->client_ranges.empty();
+    in->reset_inode(std::move(_inode));
+    if (no_ranges)
+      in->clear_clientwriteable();
+    if (cap)
+      cap->clear_clientwriteable();
+    return false;
+  }
 
   // do the update.
   EUpdate *le = new EUpdate(mds->mdlog, "cap update");

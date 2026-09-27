@@ -1578,6 +1578,24 @@ options:
   default: 0
   services:
   - mds
+- name: mds_defer_client_range_shrink
+  type: bool
+  level: advanced
+  desc: shrink a client's writeable range without journaling it
+  long_desc: When a client gives up its write caps on a file and nothing else
+    about the inode changes, the MDS normally journals an inode update only to
+    drop that client's writeable range, which costs a second journal event
+    for every file created and closed without data. With this option the MDS
+    drops the range in memory and leaves the journal alone; the dropped range
+    reaches the disk with the next commit of the inode's dirfrag. Until
+    then, an MDS failure makes recovery probe the size of such a file on the
+    OSDs if its client no longer holds caps on it, the same as for a file
+    whose writer died.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_dump_cache_threshold_formatter
   type: size
   level: dev

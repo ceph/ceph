@@ -4155,6 +4155,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_cap_acquisition_throttle_retry_request_time",
     "mds_cap_revoke_eviction_timeout",
     "mds_debug_subtrees",
+    "mds_defer_client_range_shrink",
     "mds_dir_max_entries",
     "mds_dir_prefetch",
     "mds_dir_prefetch_backend",
@@ -4292,6 +4293,7 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
 
     sessionmap.handle_conf_change(changed);
     server->handle_conf_change(changed);
+    locker->handle_conf_change(changed);
     mdcache->handle_conf_change(changed, *mdsmap);
     mdlog->handle_conf_change(changed, *mdsmap);
     purge_queue.handle_conf_change(changed, *mdsmap);
