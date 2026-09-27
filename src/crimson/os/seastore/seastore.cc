@@ -1799,7 +1799,8 @@ static bool txn_is_batchable(ceph::os::Transaction& t)
 
 seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   CollectionRef _ch,
-  ceph::os::Transaction&& _t)
+  ceph::os::Transaction&& _t,
+  transaction_exec_info_t* exec_info)
 {
   LOG_PREFIX(SeaStoreS::do_transaction_no_callbacks);
   assert(store_active);
@@ -1809,6 +1810,7 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   auto& entry = coll.pending_txns.emplace_back();
   entry.txn = std::move(_t);
   entry.batchable = txn_is_batchable(entry.txn);
+  entry.exec_info = exec_info;
   auto fut = entry.pr.get_future();
   DEBUG("enqueue cid={} queue_depth={} in_flight={}",
         coll.get_cid(), coll.pending_txns.size(), coll.collection_in_flight);
@@ -1822,7 +1824,8 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
 
 ceph::os::Transaction SeaStore::Shard::build_next_batch(
   SeastoreCollection& coll,
-  std::vector<seastar::promise<>>& pending_txns_promises)
+  std::vector<seastar::promise<>>& pending_txns_promises,
+  std::vector<transaction_exec_info_t*>& pending_txns_exec_infos)
 {
   ceph::os::Transaction merged;
   bool first = true;
@@ -1844,6 +1847,7 @@ ceph::os::Transaction SeaStore::Shard::build_next_batch(
       merged.append(e.txn);
     }
     pending_txns_promises.push_back(std::move(e.pr));
+    pending_txns_exec_infos.push_back(e.exec_info);
     if (no_batch) {
       // no_batch runs solo (never is appended)
       break;
@@ -1858,10 +1862,20 @@ seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
   auto& coll = static_cast<SeastoreCollection&>(*ch);
   while (!coll.pending_txns.empty()) {
     std::vector<seastar::promise<>> pending_txns_promises;
-    auto merged = build_next_batch(coll, pending_txns_promises);
+    std::vector<transaction_exec_info_t*> pending_txns_exec_infos;
+    auto merged = build_next_batch(
+      coll, pending_txns_promises, pending_txns_exec_infos);
     DEBUG("draining {} txns from cid={}, committing batch ({} ops)",
           pending_txns_promises.size(), coll.get_cid(), merged.get_num_ops());
-    co_await run_one_batch(ch, std::move(merged));
+    bool lba_conflicted = co_await run_one_batch(ch, std::move(merged));
+    // every original txn merged into this batch shares the merged
+    // transaction's conflict outcome -- once merged there's no way to
+    // attribute a conflict to just one of them.
+    for (auto* exec_info : pending_txns_exec_infos) {
+      if (exec_info) {
+        exec_info->lba_conflicted = lba_conflicted;
+      }
+    }
     DEBUG("committed batch of {} txns for cid={}",
           pending_txns_promises.size(), coll.get_cid());
     for (auto& p : pending_txns_promises) {
@@ -1872,7 +1886,7 @@ seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
   coll.collection_in_flight = false;
 }
 
-seastar::future<> SeaStore::Shard::run_one_batch(
+seastar::future<bool> SeaStore::Shard::run_one_batch(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
@@ -1960,6 +1974,7 @@ seastar::future<> SeaStore::Shard::run_one_batch(
   );
 
   DEBUGT("done", *ctx.transaction);
+  bool lba_conflicted = ctx.transaction->ever_lba_conflicted;
   add_conflict_replay_sample(ctx.transaction->get_num_replays());
   {
     auto& pd = ctx.transaction->get_phase_durations();
@@ -2002,6 +2017,7 @@ seastar::future<> SeaStore::Shard::run_one_batch(
   --(shard_stats.pending_io_num);
   // XXX: it's wrong to assume no failure
   --(shard_stats.processing_postlock_io_num);
+  co_return lba_conflicted;
 }
 
 
