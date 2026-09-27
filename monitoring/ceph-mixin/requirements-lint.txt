@@ -11,8 +11,11 @@ dataclasses==0.6
 types-dataclasses==0.6.1
 six==1.16.0
 toml==0.10.2
-pylint==2.6.0
-isort==5.10.0
-mypy==0.910
+pylint==2.6.0; python_version < "3.13"
+pylint>=3.3; python_version >= "3.13"
+isort==5.10.0; python_version < "3.13"
+isort>=5.13; python_version >= "3.13"
+mypy==0.910; python_version < "3.13"
+mypy>=1.11; python_version >= "3.13"
 mypy-extensions==0.4.3
 prettytable==2.4.0

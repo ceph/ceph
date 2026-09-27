@@ -21,8 +21,10 @@ from .services.auth import JwtManager
 from .settings import Settings
 
 try:
-    from typing import Any, AnyStr, Callable, DefaultDict, Deque, Dict, List, \
-        Optional, Set, Tuple, Union
+    from typing import (  # noqa: F401  (used in type comments)
+        Any, AnyStr, Callable, DefaultDict, Deque, Dict, List, Optional, Set,
+        Tuple, Union
+    )
 except ImportError:
     pass  # For typing only
 

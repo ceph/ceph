@@ -41,7 +41,7 @@ TODO: Once this becomes available in the above distros, this file should be
 REMOVED, and the fully featured python-pluggy should be used instead.
 """
 try:
-    from typing import DefaultDict
+    from typing import DefaultDict  # noqa: F401  (used in type comments)
 except ImportError:
     pass  # For typing only
 

@@ -1,4 +1,5 @@
-CherryPy~=13.1
+CherryPy~=13.1; python_version < "3.13"
+CherryPy~=18.10; python_version >= "3.13"
 more-itertools~=8.14
 bcrypt~=3.1
 python3-saml~=1.4

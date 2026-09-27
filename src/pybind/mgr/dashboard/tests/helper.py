@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 try:
-    from typing import Any, Dict
+    from typing import Any, Dict  # noqa: F401  (used in type comments)
 except ImportError:
     pass
 

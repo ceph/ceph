@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set  # noqa: F401  (used in type comments)
 
 import cherrypy
 from mgr_module import Option
