@@ -5580,6 +5580,75 @@ TEST(OPEN2, EXT_FSIO_REFUSED_ON_UNMARKED_BUCKET)
   (void) rgw_unlink(fs, fs->root_fh, bname.c_str(), RGW_UNLINK_FLAG_NONE);
 }
 
+/* A truncated listing of multipart uploads must advance its marker, so
+ * that repeating the call reaches every upload and stops.
+ *
+ * This is the shape RGWLC::handle_multipart_expiration uses:  it loops
+ * while ListResults::is_truncated and never sets a marker itself,
+ * because the contract is that the driver advances ListParams::marker
+ * in place -- RadosBucket::list ends by doing exactly that.  A driver
+ * which leaves the marker alone returns the same uploads forever,
+ * and
+ * the sweep spends its whole interval budget on one bucket, aborting
+ * nothing and never reaching the next.
+ *
+ * The S3 listing path cannot cover this:  ListMultipartUploads calls
+ * list_multiparts() directly and carries its marker in the response,
+ * so it never touches this branch. */
+TEST(OPEN2, MULTIPART_LIST_TRUNCATED_ADVANCES_MARKER)
+{
+  const DoutPrefix dp(g_ceph_context, dout_subsys, "write2 test: ");
+  auto* driver = rgw::g_rgwlib->get_driver();
+
+  std::unique_ptr<rgw::sal::Bucket> sal_bucket;
+  ASSERT_EQ(driver->load_bucket(&dp, rgw_bucket(std::string(), bucket_name),
+				&sal_bucket, null_yield), 0);
+
+  constexpr int n_uploads = 5;
+  constexpr int max_uploads = 2;
+  ACLOwner owner;
+  owner.id = sal_bucket->get_info().owner;
+  rgw::sal::Attrs init_attrs;
+
+  std::set<std::string> created;
+  for (int i = 0; i < n_uploads; ++i) {
+    const std::string key = fmt::format("mp-list-{:02d}", i);
+    auto upload = sal_bucket->get_multipart_upload(key, std::nullopt, owner);
+    ASSERT_NE(upload, nullptr);
+    rgw_placement_rule placement = sal_bucket->get_info().placement_rule;
+    ASSERT_EQ(upload->init(&dp, null_yield, owner, placement, init_attrs), 0);
+    created.insert(upload->get_meta());
+  }
+
+  rgw::sal::Bucket::ListParams params;
+  params.ns = RGW_OBJ_NS_MULTIPART;
+  std::set<std::string> seen;
+  int rounds = 0;
+
+  do {
+    rgw::sal::Bucket::ListResults results;
+    ASSERT_EQ(sal_bucket->list(&dp, params, max_uploads, results, null_yield), 0);
+    for (const auto& o : results.objs) {
+      seen.insert(o.key.name);
+    }
+    ASSERT_LE(++rounds, n_uploads + 2)
+	<< "the listing did not terminate;  the driver is not advancing "
+	   "ListParams::marker, so every call returns the same uploads";
+    if (!results.is_truncated) {
+      break;
+    }
+  } while (true);
+
+  EXPECT_EQ(seen.size(), created.size())
+      << "uploads were lost between successive calls";
+
+  for (const auto& meta : created) {
+    auto upload = sal_bucket->get_multipart_upload(
+	std::string(), meta, owner);
+    (void) upload->abort(&dp, g_ceph_context, null_yield);
+  }
+}
+
 TEST(OPEN2, DELETE_BUCKET) {
   if (do_delete) {
     int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),

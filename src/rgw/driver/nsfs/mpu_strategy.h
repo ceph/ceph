@@ -95,6 +95,10 @@ public:
    * whose staging directories carry no attribute of ours. */
   virtual bool names_staging_dir(std::string_view name) const = 0;
 
+  /* what a staging directory's name begins with, so a caller which
+   * has recognised one can strip it and decode the rest */
+  virtual std::string_view staging_prefix() const = 0;
+
   virtual std::string part_name(uint32_t part_num) const = 0;
   virtual bool is_part_name(std::string_view name) const = 0;
   virtual std::optional<uint32_t> part_number(std::string_view name) const = 0;
@@ -206,6 +210,7 @@ public:
   std::string staging_dir_name(const std::string& meta) const override;
 
   bool names_staging_dir(std::string_view name) const override;
+  std::string_view staging_prefix() const override;
   std::string part_name(uint32_t part_num) const override;
   bool is_part_name(std::string_view name) const override;
   std::optional<uint32_t> part_number(std::string_view name) const override;

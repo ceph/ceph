@@ -76,6 +76,11 @@ bool PerPartMPUStrategy::names_staging_dir(std::string_view name) const
   return name.starts_with(RGW_MP_STAGING_PREFIX);
 }
 
+std::string_view PerPartMPUStrategy::staging_prefix() const
+{
+  return RGW_MP_STAGING_PREFIX;
+}
+
 std::string PerPartMPUStrategy::part_name(uint32_t part_num) const
 {
   return RGW_MP_PART_PREFIX + fmt::format("{:0>5}", part_num);

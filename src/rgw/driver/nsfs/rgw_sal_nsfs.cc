@@ -4404,18 +4404,21 @@ int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
    * LMDB/directory listing below. */
   if (params.ns == mp_ns && ns != mp_ns) {
     std::vector<std::unique_ptr<MultipartUpload>> uploads;
-    std::string marker;
-    int ret = list_multiparts(dpp, "", marker, "",
+    /* The marker is the meta of the last upload returned, and this
+     * function advances it in place.  That is the contract
+     * RadosBucket::list follows, and RGWLC::handle_multipart_expiration
+     * depends on it:  its loop repeats while is_truncated and never
+     * sets a marker itself, so a driver which leaves the marker alone
+     * makes the sweep re-read the same uploads until the interval
+     * budget runs out, aborting nothing and reaching no later
+     * bucket. */
+    std::string marker = params.marker.name;
+    int ret = list_multiparts(dpp, params.prefix, marker, params.delim,
 			      max, uploads, nullptr,
 			      &results.is_truncated, y);
     if (ret < 0)
       return ret;
     for (auto& upload : uploads) {
-      const auto& obj_name = upload->get_key();
-      if (!params.prefix.empty() &&
-	  !obj_name.starts_with(params.prefix)) {
-	continue;
-      }
       rgw_bucket_dir_entry bde{};
       bde.key.name = fmt::format("_{}_{}",
 				 mp_ns,
@@ -4424,6 +4427,10 @@ int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
       bde.meta.category = RGWObjCategory::MultiMeta;
       bde.exists = true;
       results.objs.push_back(std::move(bde));
+    }
+    if (!uploads.empty()) {
+      results.next_marker = rgw_obj_key(uploads.back()->get_meta());
+      params.marker = results.next_marker;
     }
     return 0;
   }
@@ -4988,6 +4995,72 @@ std::unique_ptr<MultipartUpload> NSFSBucket::get_multipart_upload(
   return std::make_unique<NSFSMultipartUpload>(driver, this, oid, upload_id, owner, mtime);
 }
 
+namespace {
+
+/* An upload as the directory shows it:  the key and upload id its
+ * staging directory is named for, and that name, so the entry can be
+ * revisited without decoding twice.  Ordered as S3 orders a listing,
+ * by key and then upload id. */
+struct UploadEnt {
+  std::string key;
+  std::string upload_id;
+  std::string dname;
+
+  bool operator<(const UploadEnt& o) const {
+    return key != o.key ? key < o.key : upload_id < o.upload_id;
+  }
+};
+
+/* Split a staging directory's meta into key and upload id.  An upload
+ * id carries no dot, so the last one separates them. */
+bool split_meta(const std::string& meta, std::string& key,
+		std::string& upload_id)
+{
+  const auto dot = meta.rfind('.');
+  if (dot == std::string::npos || dot == 0 || dot + 1 == meta.size()) {
+    return false;
+  }
+  key = meta.substr(0, dot);
+  upload_id = meta.substr(dot + 1);
+  return true;
+}
+
+/* Holds at most max_uploads entries, keeping the smallest, from
+ * entries arriving in no order.
+ *
+ * Every entry has to be examined before any one of them is known to
+ * belong in the result.  A heap bounded at max_uploads holds only what
+ * can still be returned, discarding the largest as each new entry
+ * arrives, so memory follows max_uploads and not the directory. */
+class UploadEntries {
+  std::vector<UploadEnt> ents;
+  size_t limit;
+  bool dropped{false};
+
+public:
+  explicit UploadEntries(size_t _limit) : limit(_limit) {}
+
+  void add(UploadEnt&& e) {
+    ents.push_back(std::move(e));
+    std::push_heap(ents.begin(), ents.end());
+    if (ents.size() > limit) {
+      std::pop_heap(ents.begin(), ents.end());
+      ents.pop_back();
+      dropped = true;
+    }
+  }
+
+  /* an entry was discarded, so more uploads follow the ones returned */
+  bool dropped_any() const { return dropped; }
+
+  std::vector<UploadEnt> sorted() {
+    std::sort_heap(ents.begin(), ents.end());
+    return std::move(ents);
+  }
+};
+
+} /* anonymous namespace */
+
 int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const std::string& prefix,
 				  std::string& marker,
@@ -4997,62 +5070,90 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  std::map<std::string, bool> *common_prefixes,
 				  bool *is_truncated, optional_yield y)
 {
-  int count = 0;
-  int ret;
+  /* S3 returns uploads ordered by key and then upload id, and a
+   * directory offers no order.  Every entry is examined and the first
+   * max_uploads after the marker are kept.  Examining one costs a
+   * decode and a compare, because the staging directory's name
+   * carries the key.
+   *
+   * The metadata read is paid only for the uploads returned, and only
+   * because the response reports an owner. */
+  std::string marker_key, marker_upload_id;
+  const bool have_marker = !marker.empty();
+  if (have_marker && !split_meta(marker, marker_key, marker_upload_id)) {
+    marker_key = marker;
+  }
 
-  ret = dir->for_each(dpp, [this, dpp, y, &count, &max_uploads, &is_truncated, &uploads] (const char* name) {
+  UploadEntries ents(max_uploads);
+  std::map<std::string, bool> prefixes;
+
+  int ret = dir->for_each(dpp, [&] (const char* name) {
+    if (!driver->get_mpu_strategy()->names_staging_dir(name)) {
+      return 0;
+    }
     std::string_view d_name = name;
-    static std::string mp_pre{"." + mp_ns + "_"};
-    if (!d_name.starts_with(mp_pre)) {
-      /* Skip non-uploads */
+    d_name.remove_prefix(
+	driver->get_mpu_strategy()->staging_prefix().size());
+
+    UploadEnt ent;
+    if (!split_meta(url_decode(std::string(d_name)), ent.key,
+		    ent.upload_id)) {
+      return 0;
+    }
+    ent.dname = name;
+
+    if (!prefix.empty() && !ent.key.starts_with(prefix)) {
+      return 0;
+    }
+    if (have_marker &&
+	!(marker_key < ent.key ||
+	  (marker_key == ent.key && marker_upload_id < ent.upload_id))) {
       return 0;
     }
 
-    if (count >= max_uploads) {
-      if (is_truncated) {
-	*is_truncated = true;
+    /* a key whose remainder after the prefix contains the delimiter is
+     * reported as a common prefix and not as an upload */
+    if (!delim.empty()) {
+      auto pos = ent.key.find(delim, prefix.size());
+      if (pos != std::string::npos) {
+	prefixes[ent.key.substr(0, pos + delim.size())] = true;
+	return 0;
       }
-
-      return -EAGAIN;
     }
 
-    d_name.remove_prefix(mp_pre.size());
-
-    /* the directory name is the URL-encoded meta -- object key and
-     * upload id -- so both come from the entry.  Split it here:  this
-     * is the caller which knows it holds a meta, and an upload id
-     * contains no dot, so the last one separates them. */
-    const std::string meta = url_decode(std::string(d_name));
-    const auto dot = meta.rfind('.');
-    if (dot == std::string::npos || dot == 0 || dot + 1 == meta.size()) {
-      return 0;
-    }
-    const std::string mp_key = meta.substr(0, dot);
-    const std::string mp_id = meta.substr(dot + 1);
-
-    /* use the staging directory's mtime as the upload creation time */
-    struct statx stx;
-    if (statx(dir->get_fd(), name, AT_SYMLINK_NOFOLLOW, STATX_MTIME, &stx) < 0) {
-      return 0;
-    }
-    auto mtime = from_statx_timestamp(stx.stx_mtime);
-
-    ACLOwner owner;
-    std::unique_ptr<MultipartUpload> upload =
-        std::make_unique<NSFSMultipartUpload>(
-            driver, this, mp_key, mp_id, owner,
-            mtime);
-    rgw_placement_rule* rule{nullptr};
-    int ret = upload->get_info(dpp, y, &rule, nullptr);
-    if (ret < 0)
-      return 0;
-    uploads.emplace(uploads.end(), std::move(upload));
-    count++;
-
+    ents.add(std::move(ent));
     return 0;
   });
+  if (ret < 0) {
+    return ret;
+  }
 
-  return ret;
+  if (is_truncated) {
+    *is_truncated = ents.dropped_any();
+  }
+  if (common_prefixes) {
+    *common_prefixes = std::move(prefixes);
+  }
+
+  for (auto& ent : ents.sorted()) {
+    struct statx stx;
+    if (statx(dir->get_fd(), ent.dname.c_str(), AT_SYMLINK_NOFOLLOW,
+	      STATX_MTIME, &stx) < 0) {
+      continue;
+    }
+    ACLOwner owner;
+    auto upload = std::make_unique<NSFSMultipartUpload>(
+	driver, this, ent.key, ent.upload_id, owner,
+	from_statx_timestamp(stx.stx_mtime));
+    /* the owner the response reports lives in the upload's metadata */
+    rgw_placement_rule* rule{nullptr};
+    if (upload->get_info(dpp, y, &rule, nullptr) < 0) {
+      continue;
+    }
+    uploads.emplace_back(std::move(upload));
+  }
+
+  return 0;
 }
 
 int NSFSBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y)
