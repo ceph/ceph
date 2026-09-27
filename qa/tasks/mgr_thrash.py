@@ -100,6 +100,13 @@ class MgrThrasher(ThrasherGreenlet):
                          OSD has sent stats to the current active mgr,
                          to catch OSDs that never reconnect to a new
                          active mgr. (default: True)
+    failover_timeout      Seconds to wait for a new mgr to take over
+                         after killing the active one, before giving up
+                         (default: mon_mgr_beacon_grace * 2). Raise this
+                         when running alongside another thrasher (e.g.
+                         mon_thrash) that can itself delay the mon's
+                         response for a while -- the default assumes an
+                         otherwise-undisturbed mon cluster.
 
     For example::
 
@@ -156,7 +163,9 @@ class MgrThrasher(ThrasherGreenlet):
         self.check_module_option = self.config.get('check_module_option', True)
         self.check_module_errors = self.config.get('check_module_errors', True)
         self.check_osd_reports = self.config.get('check_osd_reports', True)
-        self.failover_timeout = self._get_beacon_grace() * 2
+        self.failover_timeout = self.config.get('failover_timeout')
+        if self.failover_timeout is None:
+            self.failover_timeout = self._get_beacon_grace() * 2
 
         assert self.max_killable() > 0, \
             'Unable to kill at least one manager with the current config.'

@@ -25,6 +25,7 @@ overrides:
         osd class default list: "*"
 tasks:
 - workunit:
+    watchdog: true
     clients:
       client.0:
         - rados/test.sh
