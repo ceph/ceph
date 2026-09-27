@@ -3461,7 +3461,8 @@ options:
   desc: Export a trace for every op that takes at least this many seconds (0 disables)
   long_desc: The trace is built after the op completes, from the events the op
     tracker already recorded, so ops faster than the threshold cost nothing extra.
-    Traces go to the configured Jaeger agent, independently of jaeger_tracing_enable.
+    Traces go to the trace_exporter destination, independently of
+    jaeger_tracing_enable.
   default: 0
   services:
   - osd
@@ -7246,12 +7247,14 @@ options:
   long_desc: otlp sends spans over OTLP/HTTP to trace_otlp_endpoint, which
     Jaeger v2, Grafana Tempo, the OpenTelemetry Collector and most tracing
     backends accept. jaeger sends them over UDP to jaeger_agent_host and
-    jaeger_agent_port, the older Jaeger-only protocol. OSDs pick up a change
-    without restarting.
+    jaeger_agent_port, the older Jaeger-only protocol. OSDs and RGWs pick up a
+    change without restarting.
   default: jaeger
   enum_values:
   - jaeger
   - otlp
+  flags:
+  - runtime
   services:
   - rgw
   - osd
@@ -7263,6 +7266,8 @@ options:
   level: advanced
   desc: URL that spans are posted to when trace_exporter is otlp
   default: http://localhost:4318/v1/traces
+  flags:
+  - runtime
   services:
   - rgw
   - osd
@@ -7273,9 +7278,11 @@ options:
   level: advanced
   desc: Host that spans are sent to
   long_desc: A Jaeger agent on each host, or one Jaeger collector for the whole
-    cluster; Jaeger v2 accepts spans directly on UDP port 6831. OSDs pick up a
-    change without restarting.
+    cluster; Jaeger v2 accepts spans directly on UDP port 6831. OSDs and RGWs pick
+    up a change without restarting.
   default: localhost
+  flags:
+  - runtime
   services:
   - rgw
   - osd
@@ -7288,6 +7295,8 @@ options:
   long_desc: 6799 matches the Jaeger agent that cephadm deploys; Jaeger v2
     listens on 6831. OSDs pick up a change without restarting.
   default: 6799
+  flags:
+  - runtime
   services:
   - rgw
   - osd

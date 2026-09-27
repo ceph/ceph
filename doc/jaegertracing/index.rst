@@ -161,8 +161,10 @@ span, but no span. RGW exports the request's span only if the request took
 at least ``rgw_trace_slow_threshold``, after it completes, and the OSDs export
 their slow operations under it. The primary OSD forwards the context to the
 replicas with each sub-operation, so their sub-operations join the same
-trace. Set ``osd_op_trace_slow_threshold`` to the same value or lower, so
-that the OSD side of a slow request is traced too.
+trace. Set ``osd_op_trace_slow_threshold`` to the same value, so that the OSD
+side of a slow request is traced too. With a lower value, the OSDs also trace
+slow operations of requests that were not slow enough for RGW, and those
+reach the tracing backend without a request span above them.
 
 The cost for requests that are not slow is 24 random bytes per request in
 RGW, and about 25 bytes more per message from RGW to the primary and from
@@ -191,7 +193,7 @@ To trace slow S3 requests end to end:
 .. prompt:: bash $
 
    ceph config set global rgw_trace_slow_threshold 1
-   ceph config set osd osd_op_trace_slow_threshold 0.5
+   ceph config set osd osd_op_trace_slow_threshold 1
    ceph config set osd osd_op_trace_slow_require_context true
 
 On a small test cluster, S3 PUT latency with these settings did not differ
@@ -208,7 +210,18 @@ recent operations are listed first by:
 
    ceph tell osd.0 dump_historic_ops_by_duration
 
-Search for that ID in the Jaeger UI to open the trace. The history keeps
+Search for that ID in the Jaeger UI to open the trace.
+
+An operation that never completes is never traced that way. So when the OSD
+reports an operation as a slow request (older than ``osd_op_complaint_time``,
+30 seconds by default) and slow-op tracing is on, it also exports what the
+operation did so far, once, as a span with ``in_flight`` set that ends with
+the phase the operation is still in, such as ``waiting for rw locks -> (in
+flight)``. ``ceph tell osd.N dump_ops_in_flight`` then shows the operation's
+``trace_id``, and so do the per-operation slow request lines in the cluster
+log, which the OSD writes when ``osd_aggregated_slow_ops_logging`` is off. If
+the operation completes later, its full span joins the same trace. At most
+``osd_op_trace_max_per_sec`` such operations are traced per health check. The history keeps
 ``osd_op_history_size`` operations from the last ``osd_op_history_duration``
 seconds; ``dump_historic_slow_ops`` keeps only operations slower than
 ``osd_op_history_slow_op_threshold`` (10 seconds by default).
@@ -228,6 +241,17 @@ against the limit. The ``trackedop`` perf counters count both:
 
 * ``slow_op_traces``: operations exported as traces
 * ``slow_op_traces_dropped``: slow operations skipped because of the rate limit
+
+RGW limits its request traces with ``rgw_trace_max_per_sec`` (default 100)
+and counts them in ``slow_request_traces`` and ``slow_request_traces_dropped``
+of its ``rgw`` perf counters. A request's trace is one span in RGW, while its
+operations are traced by every OSD they reach, each within its own limit. If
+RGW drops requests while the OSDs still trace their operations, those
+operations appear without the request above them; raise
+``rgw_trace_max_per_sec`` until ``slow_request_traces_dropped`` stays at 0.
+To keep or drop whole traces, send the spans through an OpenTelemetry
+Collector with the ``tail_sampling`` processor, which decides per trace ID
+once all of a trace's spans have arrived.
 
 Cost
 ----

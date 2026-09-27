@@ -13,13 +13,17 @@
   primary's and the replicas' operations for one request share a trace, and
   carry searchable attributes such as pool, PG, object, op type and role.
   Disabled by default. See the tracing documentation.
+  Operations still stuck when they are reported as slow requests are traced
+  too, with the phase they are in; ``dump_ops_in_flight`` and the
+  per-operation slow request log lines show their ``trace_id``.
 * OSD, RGW: Spans can now be exported over OTLP/HTTP, the OpenTelemetry
   protocol accepted by Jaeger v2, Grafana Tempo, the OpenTelemetry Collector
   and most tracing backends: set ``trace_exporter`` to ``otlp`` and
   ``trace_otlp_endpoint`` to the backend's URL. The default remains the Jaeger
   UDP exporter, whose destination host is now configurable with
   ``jaeger_agent_host``, so all daemons can send to one Jaeger instead of an
-  agent on every host. OSDs apply changes to these options without restarting.
+  agent on every host. OSDs and RGWs apply changes to these options without
+  restarting.
   Builds with tracing now require protobuf (``WITH_OTLP``, on by default).
 * RGW, OSD: Slow S3 and Swift requests can now be traced end to end, from the
   request in RGW to the primary OSD's operation and the replicas'
@@ -31,6 +35,9 @@
   by older OSDs. OSDs no longer create live spans for a context they receive
   unless ``jaeger_tracing_enable`` is set on the OSD and the context is
   sampled.
+  RGW exports at most ``rgw_trace_max_per_sec`` request traces a second, now
+  100 by default, and counts them in its ``slow_request_traces`` and
+  ``slow_request_traces_dropped`` perf counters.
 * OSD: Slow-op traces are smaller. Phases that took less than 5% of the
   operation no longer get a span, nor does a phase that covers 90% of it; the
   primary no longer exports replicas' acknowledgements (``osd_repop_reply``)
