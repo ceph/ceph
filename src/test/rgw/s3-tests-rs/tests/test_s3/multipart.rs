@@ -2664,3 +2664,89 @@ async fn test_multipart_etag_agrees_with_head_warm_cache() {
         "listing reported the synthetic change token: {listed_etag}"
     );
 }
+
+/// The strided staging layout establishes a stride from part 1, and
+/// refuses to when the bytes stored differ from the bytes accounted.
+///
+/// BOTH POLARITIES, which is the point.  The refusal is guarded by a
+/// comparison that cannot fire in production on nsfs today -- NSFSZone
+/// hardcodes one storage class with no compression, so no filter
+/// between the op layer and the writer ever changes the byte count.  A
+/// control whose negative case cannot occur proves nothing, so
+/// `inject-stored-size-delta` makes it occur.
+///
+/// The injection is armed for ONE UPLOAD.  Parts upload concurrently
+/// and so do tests;  a driver-wide delta suppressed establishment for
+/// every upload in flight, which is how an earlier version of this
+/// test silently disarmed a different one running beside it.
+///
+/// Skips where the layout is not live:  staging is chosen by probing
+/// the filesystem, and a root that can share extents takes the
+/// per-part layout, where no stride is ever established.
+#[tokio::test]
+async fn test_multipart_strided_stride_establishment() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+
+    let layout = match s3_tests_rs::admin::driver_hint_results("mpu-state", &[]).await {
+        Some(m) => m.get("layout").cloned().unwrap_or_default(),
+        None => {
+            eprintln!("skipping: driver does not implement mpu-state");
+            return;
+        }
+    };
+    if layout != "rgw-strided" {
+        eprintln!("skipping: staging layout is {layout:?}, not rgw-strided");
+        return;
+    }
+
+    let part = vec![b'x'; 5 * 1024 * 1024];
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    let stride_of = |bucket: String, key: String, upload: String| async move {
+        s3_tests_rs::admin::driver_hint_results(
+            "mpu-state",
+            &[("bucket", &bucket), ("key", &key), ("upload", &upload)],
+        ).await.expect("mpu-state should answer")
+            .get("stride").cloned().unwrap_or_default()
+    };
+
+    // positive: a plain upload establishes a stride of part 1's length
+    let key = "strided-established";
+    let up = client.create_multipart_upload()
+        .bucket(&bucket).key(key).send().await.unwrap();
+    let id = up.upload_id().unwrap().to_string();
+    client.upload_part()
+        .bucket(&bucket).key(key).upload_id(&id).part_number(1)
+        .body(ByteStream::from(part.clone()))
+        .send().await.unwrap();
+    assert_eq!(stride_of(bucket.clone(), key.into(), id.clone()).await,
+        "5242880", "part 1 should have established a stride of its own length");
+
+    // negative: the same, with this upload's byte counts made to disagree
+    let key2 = "strided-refused";
+    let up2 = client.create_multipart_upload()
+        .bucket(&bucket).key(key2).send().await.unwrap();
+    let id2 = up2.upload_id().unwrap().to_string();
+
+    let armed = s3_tests_rs::admin::driver_hint(
+        "inject-stored-size-delta", &[("bytes", "7"), ("upload", &id2)]).await;
+    assert_eq!(armed.status, 200,
+        "arming the delta failed: {} {}", armed.status, armed.body);
+
+    client.upload_part()
+        .bucket(&bucket).key(key2).upload_id(&id2).part_number(1)
+        .body(ByteStream::from(part.clone()))
+        .send().await.unwrap();
+    let refused = stride_of(bucket.clone(), key2.into(), id2.clone()).await;
+
+    let _ = s3_tests_rs::admin::driver_hint(
+        "inject-stored-size-delta", &[("bytes", "0"), ("upload", &id2)]).await;
+
+    assert_eq!(refused, "",
+        "a byte-count disagreement must refuse to establish a stride");
+
+    // the first upload is untouched by the second's injection
+    assert_eq!(stride_of(bucket.clone(), key.into(), id.clone()).await,
+        "5242880", "arming one upload must not disturb another");
+}
