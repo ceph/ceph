@@ -110,7 +110,11 @@ TEST(MutexAdaptiveDebug, Lock) { test_lock<ceph::mutex_adaptive_debug>(); }
 
 TEST(MutexAdaptiveDebugDeathTest, NotRecursive)
 {
+#ifdef CEPH_LOCKSTAT
+  ceph::mutex_adaptive_debug m(LOCKSTAT("foo"));
+#else
   ceph::mutex_adaptive_debug m("foo");
+#endif
   std::unique_lock locker{m};
   ASSERT_TRUE(m.is_locked());
   ASSERT_DEATH(m.lock(), "FAILED ceph_assert(recursive || !is_locked_by_me())");
@@ -118,7 +122,11 @@ TEST(MutexAdaptiveDebugDeathTest, NotRecursive)
 
 TEST(ConditionVariableAdaptiveDebug, WaitNotify)
 {
+#ifdef CEPH_LOCKSTAT
+  ceph::mutex_adaptive_debug m(LOCKSTAT("cv_mutex"));
+#else
   ceph::mutex_adaptive_debug m("cv_mutex");
+#endif
   ceph::condition_variable_adaptive_debug cv;
   bool ready = false;
 

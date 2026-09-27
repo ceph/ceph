@@ -188,19 +188,20 @@ typedef ceph::condition_variable_debug condition_variable;
 #elif defined(CEPH_LOCKSTAT)
 #include <condition_variable>
 
-#include "common/adaptive_mutex.h"
 #include "common/ceph_mutex_lockstat.h"
 
 namespace ceph {
 typedef mutex_lockstat mutex;
 typedef mutex_recursive_lockstat recursive_mutex;
+typedef mutex_adaptive_lockstat adaptive_mutex;
 typedef condition_variable_lockstat condition_variable;
+typedef condition_variable_adaptive_lockstat adaptive_condition_variable;
 typedef shared_mutex_lockstat shared_mutex;
 } // namespace ceph
 
 #define make_mutex(name, ...) mutex_lockstat(LOCKSTAT(name))
 #define make_recursive_mutex(name, ...) mutex_recursive_lockstat(LOCKSTAT(name))
-#define make_adaptive_mutex(name, ...) adaptive_mutex()
+#define make_adaptive_mutex(name, ...) mutex_adaptive_lockstat(LOCKSTAT(name))
 #define make_shared_mutex(name, ...) shared_mutex_lockstat(LOCKSTAT(name))
 
 // debug methods.  Note that these can blindly return true
@@ -236,10 +237,12 @@ typedef shared_mutex_lockstat shared_mutex;
 namespace ceph {
 
   typedef std::recursive_mutex recursive_mutex;
+  typedef adaptive_mutex_impl adaptive_mutex;
+  typedef adaptive_condition_variable_impl adaptive_condition_variable;
 
 #if defined(WITH_CEPH_ADAPTIVE_MUTEX) && defined(HAVE_PTHREAD_MUTEX_ADAPTIVE_NP)
-  typedef ceph::adaptive_mutex mutex;
-  typedef ceph::adaptive_condition_variable condition_variable;
+  typedef adaptive_mutex mutex;
+  typedef adaptive_condition_variable condition_variable;
 #else
   typedef std::mutex mutex;
   typedef std::condition_variable condition_variable;
