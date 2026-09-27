@@ -1504,6 +1504,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
   // use empty strings for params.{prefix,delim}
 
   do {
+    uploads.clear();
     ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated, null_yield);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
