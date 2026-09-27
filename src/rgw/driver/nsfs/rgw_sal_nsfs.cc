@@ -9301,6 +9301,8 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
   auto target = driver->get_mpu_strategy()->part_target(part_num, stride);
   const uint64_t base_offset = target ? target->offset : 0;
   const bool shared_target = target ? target->shared : false;
+  const std::optional<uint64_t> extent = target ? target->extent
+						: std::nullopt;
 
   /* the record is always the part's own file;  the target names where
    * the BYTES go, which is a different file only when it is shared */
@@ -9313,7 +9315,7 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 						std::move(cache_key),
 						base_offset, shared_target,
 						shared_name,
-						mp_obj.upload_id);
+						mp_obj.upload_id, extent);
 }
 
 int NSFSMultipartWriter::prepare(optional_yield y)
@@ -9342,6 +9344,48 @@ int NSFSMultipartWriter::prepare(optional_yield y)
   return shared_file->open(dpp);
 }
 
+/* Copy what this part has already written into its own file, and
+ * continue there.  `written` is the part's length so far, which is
+ * what has to move;  the shared file keeps its bytes, and nothing
+ * reads them again because the part's record will say it lives
+ * elsewhere. */
+int NSFSMultipartWriter::divert(uint64_t written)
+{
+  /* everything queued must reach the shared file before it is copied
+   * out of it, and the window is bound to that fd in any case */
+  int ret = uring_write ? uring_write->drain() : pending_write.drain();
+  if (ret < 0) {
+    return ret;
+  }
+  uring_write.reset();
+
+  if (written > 0) {
+    ret = driver->get_fs_strategy()->copy_range(
+	dpp, shared_file->get_fd(), base_offset,
+	part_file->get_fd(), 0, written);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not move part " << part_num
+			<< " out of the shared file: " << cpp_strerror(-ret)
+			<< dendl;
+      return ret;
+    }
+  }
+
+  ldpp_dout(dpp, 10) << "NSFSMultipartWriter::divert: part " << part_num
+		     << " exceeded its extent of " << (extent ? *extent : 0)
+		     << " after " << written << " bytes;  moved to its own"
+		     << " file" << dendl;
+
+  shared_file->close();
+  shared_file.reset();
+  base_offset = 0;
+  shared_target = false;
+  extent.reset();
+  diverted = true;
+  driver->record_mpu_divert();
+  return 0;
+}
+
 int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
   /* counted before rebasing, so this is the part's own length:  each
@@ -9349,7 +9393,19 @@ int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
    * RGWPutObj_Compress::process), so what arrives here is a true output
    * offset within the part.  The chain's final flush arrives as an
    * ordinary zero-length call, which costs nothing here. */
+  const uint64_t written = high_water;
   high_water = std::max(high_water, offset + data.length());
+
+  /* Refuse to cross the extent, before submitting rather than after.
+   * With io_uring a check at drain would come too late:  the writes
+   * that overran would already have landed in the next part's
+   * region. */
+  if (shared_file && extent && offset + data.length() > *extent) {
+    int ret = divert(written);
+    if (ret < 0) {
+      return ret;
+    }
+  }
 
   /* offset is within the part;  base_offset places the part within the
    * file it shares, and is zero where it does not share one */
@@ -9937,6 +9993,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
      * conditions.  Empty when it did not. */
     if (out) {
       (*out)["layout"] = mpu_strategy ? mpu_strategy->name() : "";
+      (*out)["diverts"] = std::to_string(mpu_diverts_seen());
     }
 
     auto b_it = params.find("bucket");

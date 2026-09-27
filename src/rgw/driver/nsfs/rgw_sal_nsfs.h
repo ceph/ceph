@@ -504,6 +504,7 @@ protected:
    * per upload, at part 1's completion -- so that is the unit it is
    * keyed by.  A bucket would isolate test from test but still not let
    * one test arm one upload and not another. */
+  std::atomic<uint64_t> mpu_diverts{0};
   std::map<std::string, int64_t> inject_delta_by_upload;
   ceph::mutex inject_delta_lock =
       ceph::make_mutex("NSFSDriver::inject_delta_lock");
@@ -868,6 +869,12 @@ public:
     auto it = inject_delta_by_upload.find(upload);
     return it == inject_delta_by_upload.end() ? 0 : it->second;
   }
+  /* how many parts have been moved out of a shared staging file
+   * because they would have crossed their extent.  Reported by the
+   * mpu-state hint:  a divert is correct behaviour and leaves no trace
+   * a test can see otherwise, since the object it produces is right. */
+  void record_mpu_divert() { ++mpu_diverts; }
+  uint64_t mpu_diverts_seen() const { return mpu_diverts.load(); }
   void set_stored_size_delta(const std::string& upload, int64_t bytes) {
     std::lock_guard l{inject_delta_lock};
     if (bytes == 0) {
@@ -1717,6 +1724,23 @@ private:
    * MPUStrategy::part_target;  recorded so assembly knows where to read
    * this part from. */
   bool shared_target{false};
+  /* how much this part may write at base_offset before it would run
+   * into the next part's region.  Unset where the part has a file to
+   * itself and nothing bounds it. */
+  std::optional<uint64_t> extent;
+  /* set once this part has been moved out of the shared file */
+  bool diverted{false};
+
+  /* Move this part out of the shared file and into its own.
+   *
+   * Called when a write would cross the extent.  S3 does not require
+   * parts to be equal -- only that every part but the last reaches a
+   * minimum -- so a part longer than the stride is legal, and the
+   * stride is an inference from part 1 with nothing behind it.
+   * Writing past the extent would land in part K+1's region, and the
+   * damage is invisible afterwards:  each record still describes where
+   * its part was meant to go. */
+  int divert(uint64_t written);
   /* the upload this part belongs to, as the client knows it.  The
    * injection map is keyed by this rather than by the internal meta,
    * so a test can arm exactly the upload it created. */
@@ -1754,7 +1778,8 @@ public:
 		    uint64_t _base_offset = 0,
 		    bool _shared_target = false,
 		    const std::string& _shared_name = std::string(),
-		    const std::string& _upload_id = std::string()) :
+		    const std::string& _upload_id = std::string(),
+		    std::optional<uint64_t> _extent = std::nullopt) :
     StoreWriter(dpp, y),
     driver(_driver),
     owner(_owner),
@@ -1762,6 +1787,7 @@ public:
     part_num(_part_num),
     base_offset(_base_offset),
     shared_target(_shared_target),
+    extent(_extent),
     upload_id(_upload_id),
     upload_dir(_shadow_bucket->get_dir()->clone()),
     part_file(std::make_unique<nsfs::File>(
