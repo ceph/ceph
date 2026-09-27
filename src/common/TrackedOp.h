@@ -18,6 +18,7 @@
 #include "common/ceph_mutex.h"
 #include "common/Thread.h"
 #include "common/Clock.h"
+#include "common/trace_sampler.h"
 #include "common/zipkin_trace.h"
 #include "include/spinlock.h"
 
@@ -70,9 +71,13 @@ enum {
   l_trackedop_slow_op_last,
 };
 
+/// asked by the tracer, once it knows the trace an op belongs to, whether to
+/// export it; the key is tracing::TraceSampler::key() of the trace id
+using trace_admit_t = std::function<bool(uint64_t key)>;
 /// exports a trace for an op, completed or, with in_flight, still in flight;
 /// returns its trace id, or "" if none
-using slow_op_tracer_t = std::function<std::string(TrackedOp&, bool in_flight)>;
+using slow_op_tracer_t =
+  std::function<std::string(TrackedOp&, bool in_flight, const trace_admit_t&)>;
 
 class OpHistory {
   CephContext* cct = nullptr;
@@ -90,12 +95,11 @@ class OpHistory {
   friend class OpHistoryServiceThread;
   std::unique_ptr<PerfCounters> logger;
 
-  // slow-op tracing; the token bucket is only touched by the service thread
+  // slow-op tracing; the sampler is only touched by the service thread
   std::atomic<float> trace_slow_threshold{0};
   std::atomic_uint32_t trace_max_per_sec{0};
   slow_op_tracer_t slow_op_tracer;  ///< protected by ops_history_lock
-  double trace_tokens = 0;
-  utime_t trace_tokens_stamp;
+  tracing::TraceSampler trace_sampler;
   void maybe_trace(const utime_t& now, TrackedOp& op, double opduration);
 
 public:

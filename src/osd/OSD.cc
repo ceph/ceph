@@ -3680,9 +3680,11 @@ int OSD::init()
   tracing::osd::tracer.init(cct, "osd");
   // runs on the op history thread, which op_tracker.on_shutdown() joins
   // before the OSD goes away
-  op_tracker.set_slow_op_tracer([this](TrackedOp& op, bool in_flight) {
+  op_tracker.set_slow_op_tracer([this](TrackedOp& op, bool in_flight,
+                                       const trace_admit_t& admit) {
     auto osdmap = service.get_osdmap();
-    return tracing::osd::trace_slow_op(op, whoami, osdmap.get(), in_flight);
+    return tracing::osd::trace_slow_op(op, whoami, osdmap.get(), in_flight,
+                                       admit);
   });
   tick_timer.init();
   tick_timer_without_osd_lock.init();

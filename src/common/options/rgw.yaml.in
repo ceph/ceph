@@ -1897,13 +1897,12 @@ options:
 - name: rgw_trace_max_per_sec
   type: uint
   level: advanced
-  desc: Maximum number of slow-request traces exported per second
-  long_desc: A request's trace is one span here, while its slow ops add spans
-    on each OSD they reach, each OSD with its own osd_op_trace_max_per_sec.
-    When this limit is lower than what the OSDs together export, their spans
-    reach the tracing backend without the request span they belong under.
-    Requests not traced because of the limit are counted in the rgw
-    slow_request_traces_dropped perf counter.
+  desc: Number of slow-request traces exported per second
+  long_desc: When there are more slow requests, RGW keeps about this many a
+    second, chosen by their trace id as the OSDs choose their slow ops, so
+    that a request that the OSDs trace is traced here too. For a second after
+    the rate goes up, RGW may export up to twice as many. Requests not traced
+    are counted in the rgw slow_request_traces_dropped perf counter.
   default: 100
   services:
   - rgw

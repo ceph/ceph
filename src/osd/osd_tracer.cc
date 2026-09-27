@@ -163,7 +163,7 @@ void place_op(const Message* m, const std::optional<RequestTrace>& request, OpTi
 } // anonymous namespace
 
 std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap,
-                          bool in_flight)
+                          bool in_flight, const trace_admit_t& admit)
 {
   // the OSD's op tracker only tracks OpRequests
   auto& op = static_cast<OpRequest&>(tracked);
@@ -243,6 +243,12 @@ std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap,
     }
   }
   place_op(m, request, t);
+  // an op without a trace to join (no client context, no reqid) is sampled
+  // by a hash of what it is
+  if (!admit(t.trace_id ? TraceSampler::key(*t.trace_id) :
+             std::hash<std::string>{}(op.get_desc()))) {
+    return {};
+  }
   if (in_flight) {
     // the op's own id stays for the span of the completed op, which the
     // replicas' spans hang off; the snapshot sits next to it

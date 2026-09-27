@@ -3473,9 +3473,12 @@ options:
 - name: osd_op_trace_max_per_sec
   type: uint
   level: advanced
-  desc: Maximum number of slow-op traces exported per second
-  long_desc: Slow ops beyond this rate are not traced, and are counted in the
-    trackedop slow_op_traces_dropped perf counter.
+  desc: Number of slow-op traces exported per second
+  long_desc: When there are more slow ops, the OSD keeps about this many a
+    second, chosen by their trace id so that the OSDs and RGW keep the same
+    requests and their traces arrive whole. For a second after the rate goes
+    up, the OSD may export up to twice as many. Ops not traced are counted in
+    the trackedop slow_op_traces_dropped perf counter.
   default: 10
   services:
   - osd

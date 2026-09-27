@@ -5,14 +5,18 @@
 #include <atomic>
 #include <chrono>
 #include <map>
+#include <random>
+#include <set>
 #include <sstream>
 #include <thread>
+#include <vector>
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "common/JSONFormatter.h"
 #include "common/TrackedOp.h"
+#include "common/trace_sampler.h"
 #include "common/tracer.h"
 #include "global/global_context.h"
 
@@ -309,7 +313,11 @@ protected:
   }
 
   void set_hook() {
-    tracker.set_slow_op_tracer([this](TrackedOp&, bool in_flight) {
+    tracker.set_slow_op_tracer([this](TrackedOp&, bool in_flight,
+                                      const trace_admit_t& admit) {
+      if (!admit(0)) {
+        return std::string();
+      }
       if (in_flight) {
         ++traced_in_flight;
       }
@@ -379,9 +387,9 @@ TEST_F(SlowOpTracing, RateLimited) {
     run_op(2.0);
   }
   wait_for_history(5);
-  // one token to start with, and far less than a second passed since
-  EXPECT_EQ(traced, 1);
-  EXPECT_EQ(count(dump(), "\"trace_id\""), 1u);
+  // in the first second, up to twice the rate
+  EXPECT_EQ(traced, 2);
+  EXPECT_EQ(count(dump(), "\"trace_id\""), 2u);
 }
 
 TEST_F(SlowOpTracing, NoTracerNoTraceId) {
@@ -438,6 +446,25 @@ TEST_F(SlowOpTracing, InFlightTracedOnce) {
   EXPECT_EQ(count(ss.str(), "\"trace-1\""), 1u);
 }
 
+TEST_F(SlowOpTracing, CompletedOpKeptAfterInFlightTrace) {
+  set_hook();
+  tracker.set_trace_threshold_and_rate(1.0, 1);
+  // use up the budget of the first second
+  run_op(2.0);
+  run_op(2.0);
+  wait_for_history(2);
+  ASSERT_EQ(traced, 2);
+  {
+    TrackedOpRef op(new TestOp(&tracker, ago(2.0)));
+    op->tracking_start();
+    op->mark_event("started");
+    EXPECT_TRUE(tracker.trace_in_flight(*op));
+  }
+  wait_for_history(3);
+  // the snapshot, and the completed op despite the budget
+  EXPECT_EQ(traced, 4);
+}
+
 TEST_F(SlowOpTracing, InFlightOffWithoutThreshold) {
   set_hook();
   TrackedOpRef op(new TestOp(&tracker, ago(2.0)));
@@ -448,4 +475,83 @@ TEST_F(SlowOpTracing, InFlightOffWithoutThreshold) {
   tracker.set_trace_threshold_and_rate(1.0, 100);
   EXPECT_TRUE(tracker.trace_in_flight(*op));
   EXPECT_EQ(traced, 1);
+}
+
+namespace {
+
+using tracing::TraceSampler;
+
+// feeds `per_sec` random keys a second, for `secs` seconds, to each sampler;
+// returns, per second and sampler, the keys it kept
+std::vector<std::vector<std::set<uint64_t>>> feed(
+  std::vector<std::pair<TraceSampler*, uint32_t>> samplers,
+  int per_sec, int secs)
+{
+  std::mt19937_64 rng(42);
+  std::vector<std::vector<std::set<uint64_t>>> kept(
+    secs, std::vector<std::set<uint64_t>>(samplers.size()));
+  utime_t now(1000, 0);
+  for (int sec = 0; sec < secs; ++sec) {
+    for (int i = 0; i < per_sec; ++i) {
+      const uint64_t key = rng();
+      for (size_t j = 0; j < samplers.size(); ++j) {
+        if (samplers[j].first->admit(key, now, samplers[j].second)) {
+          kept[sec][j].insert(key);
+        }
+      }
+      now += 1.0 / per_sec;
+    }
+  }
+  return kept;
+}
+
+} // anonymous namespace
+
+TEST(TraceSampler, KeyIsTheLastEightBytes) {
+  std::array<uint8_t, 16> id{};
+  id[0] = 0xff;
+  id[8] = 0x01;
+  id[15] = 0x02;
+  EXPECT_EQ(TraceSampler::key(id), 0x0100000000000002ull);
+}
+
+TEST(TraceSampler, KeepsAllBelowTheRate) {
+  TraceSampler s;
+  const auto kept = feed({{&s, 10}}, 5, 4);
+  for (const auto& sec : kept) {
+    EXPECT_EQ(sec[0].size(), 5u);
+  }
+}
+
+TEST(TraceSampler, NothingWithoutARate) {
+  TraceSampler s;
+  EXPECT_FALSE(s.admit(0, utime_t(1, 0), 0));
+}
+
+TEST(TraceSampler, FirstSecondOfABurstUpToTwiceTheRate) {
+  TraceSampler s;
+  const auto kept = feed({{&s, 10}}, 1000, 1);
+  EXPECT_EQ(kept[0][0].size(), 20u);
+}
+
+TEST(TraceSampler, AboutTheRateAfterwards) {
+  TraceSampler s;
+  const auto kept = feed({{&s, 10}}, 1000, 6);
+  for (int sec = 1; sec < 6; ++sec) {
+    EXPECT_GE(kept[sec][0].size(), 3u) << sec;
+    EXPECT_LE(kept[sec][0].size(), 20u) << sec;
+  }
+}
+
+TEST(TraceSampler, BusierDaemonKeepsASubset) {
+  // an OSD that sees every slow request keeps fewer of them than RGW, but
+  // only ones RGW keeps too
+  TraceSampler osd, rgw;
+  const auto kept = feed({{&osd, 10}, {&rgw, 100}}, 1000, 6);
+  for (int sec = 1; sec < 6; ++sec) {
+    EXPECT_FALSE(kept[sec][0].empty()) << sec;
+    for (uint64_t key : kept[sec][0]) {
+      EXPECT_TRUE(kept[sec][1].count(key)) << sec;
+    }
+  }
 }

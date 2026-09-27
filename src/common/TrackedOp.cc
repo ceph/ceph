@@ -132,14 +132,6 @@ void OpHistory::maybe_trace(const utime_t& now, TrackedOp& op, double opduration
   if (threshold <= 0 || opduration < threshold) {
     return;
   }
-  // token bucket: refill at max_per_sec, hold at most one second's worth
-  const double rate = trace_max_per_sec.load();
-  trace_tokens = std::min(rate, trace_tokens + (now - trace_tokens_stamp) * rate);
-  trace_tokens_stamp = now;
-  if (trace_tokens < 1) {
-    logger->inc(l_trackedop_slow_op_trace_dropped);
-    return;
-  }
   slow_op_tracer_t tracer;
   {
     std::lock_guard history_lock(ops_history_lock);
@@ -148,10 +140,18 @@ void OpHistory::maybe_trace(const utime_t& now, TrackedOp& op, double opduration
   if (!tracer) {
     return;
   }
-  // ops the tracer skips do not use up the budget
-  if (std::string id = tracer(op, false); !id.empty()) {
+  // an op that was traced while stuck keeps its trace, so that the snapshot
+  // finds the completed op next to it
+  const bool keep = op.traced_in_flight.load();
+  auto admit = [&](uint64_t key) {
+    if (keep || trace_sampler.admit(key, now, trace_max_per_sec.load())) {
+      return true;
+    }
+    logger->inc(l_trackedop_slow_op_trace_dropped);
+    return false;
+  };
+  if (std::string id = tracer(op, false, admit); !id.empty()) {
     op.set_trace_id(std::move(id));
-    trace_tokens -= 1;
     logger->inc(l_trackedop_slow_op_traced);
   }
 }
@@ -171,7 +171,7 @@ bool OpHistory::trace_in_flight(TrackedOp& op)
   }
   // the caller limits how many it asks for; the token bucket belongs to the
   // service thread
-  std::string id = tracer(op, true);
+  std::string id = tracer(op, true, [](uint64_t) { return true; });
   if (id.empty()) {
     return false;
   }

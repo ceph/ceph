@@ -230,10 +230,13 @@ Rate limit
 ----------
 
 When a cluster has trouble, many operations become slow at once. Each OSD
-exports at most ``osd_op_trace_max_per_sec`` slow-op traces per second
-(default 10) and skips the rest. Operations that are not traced for another
-reason, such as ``osd_op_trace_slow_require_context``, do not count
-against the limit. The ``trackedop`` perf counters count both:
+then exports about ``osd_op_trace_max_per_sec`` slow-op traces per second
+(default 10) and skips the rest. It chooses them by trace ID, as RGW and the
+other OSDs do, so that they all keep the same requests and a kept request's
+trace arrives whole. For a second after the rate goes up, an OSD may export
+up to twice as many. Operations that are not traced for another reason, such
+as ``osd_op_trace_slow_require_context``, do not count against the limit.
+The ``trackedop`` perf counters count both:
 
 .. prompt:: bash $
 
@@ -245,13 +248,11 @@ against the limit. The ``trackedop`` perf counters count both:
 RGW limits its request traces with ``rgw_trace_max_per_sec`` (default 100)
 and counts them in ``slow_request_traces`` and ``slow_request_traces_dropped``
 of its ``rgw`` perf counters. A request's trace is one span in RGW, while its
-operations are traced by every OSD they reach, each within its own limit. If
-RGW drops requests while the OSDs still trace their operations, those
-operations appear without the request above them; raise
-``rgw_trace_max_per_sec`` until ``slow_request_traces_dropped`` stays at 0.
-To keep or drop whole traces, send the spans through an OpenTelemetry
-Collector with the ``tail_sampling`` processor, which decides per trace ID
-once all of a trace's spans have arrived.
+operations are traced by every OSD they reach. The busier a daemon, the fewer
+requests it keeps, but only ones that the less busy daemons keep too: a trace
+can hold the request with fewer operations than were slow, but seldom
+operations without their request. A few traces still have gaps, for example
+when a daemon's rate changes between two operations of the same request.
 
 Cost
 ----

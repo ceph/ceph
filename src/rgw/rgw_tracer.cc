@@ -7,6 +7,7 @@
 #include <mutex>
 
 #include "common/config_obs.h"
+#include "common/trace_sampler.h"
 #include "rgw_op.h"
 #include "rgw_perf_counters.h"
 #include "rgw_sal.h"
@@ -23,22 +24,16 @@ bool trace_slow_requests(CephContext* cct)
 
 namespace {
 
-// at most rgw_trace_max_per_sec traces a second, holding one second's worth
-bool take_token(CephContext* cct)
+// about rgw_trace_max_per_sec traces a second, the same requests that the
+// OSDs keep
+bool admit(CephContext* cct, const trace_id_t& trace_id)
 {
   static std::mutex lock;
-  static double tokens = 0;
-  static utime_t stamp;
-  const double rate = cct->_conf.get_val<uint64_t>("rgw_trace_max_per_sec");
-  const utime_t now = ceph_clock_now();
+  static TraceSampler sampler;
+  const auto max_per_sec = cct->_conf.get_val<uint64_t>("rgw_trace_max_per_sec");
   std::lock_guard l(lock);
-  tokens = std::min(rate, tokens + (now - stamp) * rate);
-  stamp = now;
-  if (tokens < 1) {
-    return false;
-  }
-  tokens -= 1;
-  return true;
+  return sampler.admit(TraceSampler::key(trace_id), ceph_clock_now(),
+                       std::min<uint64_t>(max_per_sec, UINT32_MAX));
 }
 
 // re-creates the exporter when its destination changes, as the OSDs do
@@ -88,15 +83,15 @@ void trace_slow_request(const req_state* s, const RGWOp* op, ::rgw::sal::Driver*
   if (t.end - t.start < threshold) {
     return;
   }
-  if (!take_token(cct)) {
-    if (perfcounter) {
-      perfcounter->inc(l_rgw_slow_request_traces_dropped);
-    }
-    return;
-  }
   trace_id_t trace_id;
   span_id_t span_id;
   if (!context_ids(s->trace->GetContext(), &trace_id, &span_id)) {
+    return;
+  }
+  if (!admit(cct, trace_id)) {
+    if (perfcounter) {
+      perfcounter->inc(l_rgw_slow_request_traces_dropped);
+    }
     return;
   }
   // the ids the OSDs already placed their slow ops under
