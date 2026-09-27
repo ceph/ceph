@@ -217,6 +217,26 @@ quick_tests() {
 # S3 TESTS
 
 ####################################
+# radoslist names a bucket in a tenant with its tenant
+
+tenant_akey='TENANTACCESSKEY00001'
+tenant_skey='tenantsecretkey0000000000000000000000001'
+radosgw-admin user create --tenant tnt --uid tenant-tester \
+	      --access-key $tenant_akey --secret $tenant_skey \
+	      --display-name 'T. Tester'
+
+mys3cmd --access_key=$tenant_akey --secret_key=$tenant_skey \
+	mb s3://tenant-bkt
+mys3cmd --access_key=$tenant_akey --secret_key=$tenant_skey \
+	put -q $big_obj s3://tenant-bkt/tenant-obj
+
+if ! radosgw-admin bucket radoslist --bucket=tnt/tenant-bkt --rgw-obj-fs=, |
+	grep -q ',tnt/tenant-bkt,tenant-obj$' ;then
+    echo "ERROR: radoslist did not print the bucket's tenant"
+    exit 1
+fi
+
+####################################
 # regular multipart test
 
 mys3cmd mb s3://multipart-bkt
