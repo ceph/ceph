@@ -3680,9 +3680,9 @@ int OSD::init()
   tracing::osd::tracer.init(cct, "osd");
   // runs on the op history thread, which op_tracker.on_shutdown() joins
   // before the OSD goes away
-  op_tracker.set_slow_op_tracer([this](TrackedOp& op) {
+  op_tracker.set_slow_op_tracer([this](TrackedOp& op, bool in_flight) {
     auto osdmap = service.get_osdmap();
-    return tracing::osd::trace_slow_op(op, whoami, osdmap.get());
+    return tracing::osd::trace_slow_op(op, whoami, osdmap.get(), in_flight);
   });
   tick_timer.init();
   tick_timer_without_osd_lock.init();
@@ -8006,14 +8006,25 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
     map<uint64_t, int> slow_op_pools;
     bool log_aggregated_slow_op =
 	    cct->_conf.get_val<bool>("osd_aggregated_slow_ops_logging");
+    // ops that stay stuck never complete, so they are traced here, once each
+    // and at most osd_op_trace_max_per_sec new ones per check
+    uint64_t in_flight_traces = 0;
+    const uint64_t max_in_flight_traces = cct->_conf->osd_op_trace_max_per_sec;
     auto count_slow_ops = [&](TrackedOp& op) {
       if (op.get_initiated() < too_old) {
+        if (in_flight_traces < max_in_flight_traces &&
+            op_tracker.trace_in_flight(op)) {
+          ++in_flight_traces;
+        }
         stringstream ss;
         ss << "slow request " << op.get_desc()
            << " initiated "
            << op.get_initiated()
            << " currently "
            << op.state_string();
+        if (auto trace_id = op.get_trace_id(); !trace_id.empty()) {
+          ss << " trace_id " << trace_id;
+        }
         lgeneric_subdout(cct,osd,20) << ss.str() << dendl;
         if (log_aggregated_slow_op) {
           if (const OpRequest *req = dynamic_cast<const OpRequest *>(&op)) {

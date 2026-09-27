@@ -299,6 +299,7 @@ class SlowOpTracing : public ::testing::Test {
 protected:
   OpTracker tracker{g_ceph_context, true, 1};
   std::atomic<int> traced{0};
+  std::atomic<int> traced_in_flight{0};
 
   void SetUp() override {
     tracker.set_history_size_and_duration(100, 600);
@@ -308,7 +309,10 @@ protected:
   }
 
   void set_hook() {
-    tracker.set_slow_op_tracer([this](TrackedOp&) {
+    tracker.set_slow_op_tracer([this](TrackedOp&, bool in_flight) {
+      if (in_flight) {
+        ++traced_in_flight;
+      }
       return "trace-" + std::to_string(++traced);
     });
   }
@@ -415,3 +419,33 @@ TEST(TrackedOp, GetEventsInOrder) {
 }
 
 } // anonymous namespace
+
+TEST_F(SlowOpTracing, InFlightTracedOnce) {
+  set_hook();
+  tracker.set_trace_threshold_and_rate(1.0, 100);
+  TrackedOpRef op(new TestOp(&tracker, ago(2.0)));
+  op->tracking_start();
+  op->mark_event("started");
+  EXPECT_TRUE(tracker.trace_in_flight(*op));
+  EXPECT_FALSE(tracker.trace_in_flight(*op));
+  EXPECT_EQ(traced_in_flight, 1);
+  EXPECT_EQ(op->get_trace_id(), "trace-1");
+
+  ceph::JSONFormatter f;
+  tracker.dump_ops_in_flight(&f);
+  std::ostringstream ss;
+  f.flush(ss);
+  EXPECT_EQ(count(ss.str(), "\"trace-1\""), 1u);
+}
+
+TEST_F(SlowOpTracing, InFlightOffWithoutThreshold) {
+  set_hook();
+  TrackedOpRef op(new TestOp(&tracker, ago(2.0)));
+  op->tracking_start();
+  op->mark_event("started");
+  EXPECT_FALSE(tracker.trace_in_flight(*op));
+  // once tracing is on, the op is still traced
+  tracker.set_trace_threshold_and_rate(1.0, 100);
+  EXPECT_TRUE(tracker.trace_in_flight(*op));
+  EXPECT_EQ(traced, 1);
+}

@@ -149,11 +149,35 @@ void OpHistory::maybe_trace(const utime_t& now, TrackedOp& op, double opduration
     return;
   }
   // ops the tracer skips do not use up the budget
-  op.trace_id = tracer(op);
-  if (!op.trace_id.empty()) {
+  if (std::string id = tracer(op, false); !id.empty()) {
+    op.set_trace_id(std::move(id));
     trace_tokens -= 1;
     logger->inc(l_trackedop_slow_op_traced);
   }
+}
+
+bool OpHistory::trace_in_flight(TrackedOp& op)
+{
+  if (trace_slow_threshold.load() <= 0) {
+    return false;
+  }
+  slow_op_tracer_t tracer;
+  {
+    std::lock_guard history_lock(ops_history_lock);
+    tracer = slow_op_tracer;
+  }
+  if (!tracer || op.traced_in_flight.exchange(true)) {
+    return false;
+  }
+  // the caller limits how many it asks for; the token bucket belongs to the
+  // service thread
+  std::string id = tracer(op, true);
+  if (id.empty()) {
+    return false;
+  }
+  op.set_trace_id(std::move(id));
+  logger->inc(l_trackedop_slow_op_traced);
+  return true;
 }
 
 void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
@@ -676,8 +700,8 @@ void TrackedOp::dump(utime_t now, Formatter *f, OpTracker::dumper lambda) const
   f->dump_float("age", now - get_initiated());
   f->dump_float("duration", get_duration());
   f->dump_bool("continuous", is_continuous());
-  if (!trace_id.empty()) {
-    f->dump_string("trace_id", trace_id);
+  if (auto id = get_trace_id(); !id.empty()) {
+    f->dump_string("trace_id", id);
   }
   {
     f->open_object_section("type_data");

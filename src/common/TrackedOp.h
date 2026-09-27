@@ -70,8 +70,9 @@ enum {
   l_trackedop_slow_op_last,
 };
 
-/// exports a trace for a completed op; returns its trace id, or "" if none
-using slow_op_tracer_t = std::function<std::string(TrackedOp&)>;
+/// exports a trace for an op, completed or, with in_flight, still in flight;
+/// returns its trace id, or "" if none
+using slow_op_tracer_t = std::function<std::string(TrackedOp&, bool in_flight)>;
 
 class OpHistory {
   CephContext* cct = nullptr;
@@ -128,6 +129,7 @@ public:
     trace_slow_threshold = threshold;
     trace_max_per_sec = max_per_sec;
   }
+  bool trace_in_flight(TrackedOp& op);
 };
 
 struct ShardedTrackingData;
@@ -157,6 +159,11 @@ public:
   }
   void set_history_slow_op_size_and_threshold(uint32_t new_size, float new_threshold) {
     history.set_slow_op_size_and_threshold(new_size, new_threshold);
+  }
+  // exports what a slow op that is still in flight did so far, the first time
+  // it is called for the op while slow-op tracing is on; true if it did
+  bool trace_in_flight(TrackedOp& op) {
+    return history.trace_in_flight(op);
   }
   void set_slow_op_tracer(slow_op_tracer_t tracer) {
     history.set_slow_op_tracer(std::move(tracer));
@@ -314,8 +321,10 @@ protected:
   };
   std::atomic<int> state = {STATE_UNTRACKED};
   uint64_t flags = 0;
-  /// set once by OpHistory before the op enters the history, if it was traced
+  /// set by OpHistory if the op was traced, in flight or when it completed;
+  /// protected by lock
   std::string trace_id;
+  std::atomic_bool traced_in_flight{false};
 
   void mark_continuous() {
     flags |= FLAG_CONTINUOUS;
@@ -386,6 +395,15 @@ public:
   void mark_event(std::string_view event, utime_t stamp=ceph_clock_now());
 
   /// a copy of the recorded events, in order
+  std::string get_trace_id() const {
+    std::lock_guard l(lock);
+    return trace_id;
+  }
+  void set_trace_id(std::string id) {
+    std::lock_guard l(lock);
+    trace_id = std::move(id);
+  }
+
   std::vector<std::pair<utime_t, std::string>> get_events() const {
     std::lock_guard l(lock);
     std::vector<std::pair<utime_t, std::string>> ret;

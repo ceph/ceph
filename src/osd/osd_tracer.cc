@@ -66,6 +66,9 @@ const char* op_role(const Message* m, int whoami, const OSDMap* osdmap)
 // that far
 const char* op_type(const OpRequest& op)
 {
+  if (op.op_info_needs_init()) {
+    return "";
+  }
   if (op.may_write()) {
     return op.may_read() ? "read-write" : "write";
   }
@@ -159,7 +162,8 @@ void place_op(const Message* m, const std::optional<RequestTrace>& request, OpTi
 
 } // anonymous namespace
 
-std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap)
+std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap,
+                          bool in_flight)
 {
   // the OSD's op tracker only tracks OpRequests
   auto& op = static_cast<OpRequest&>(tracked);
@@ -183,7 +187,12 @@ std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap)
   if (t.events.empty()) {
     return {};
   }
-  t.end = t.events.back().first;
+  if (in_flight) {
+    t.complete = false;
+    t.end = ceph_clock_now();
+  } else {
+    t.end = t.events.back().first;
+  }
   t.attributes = {
     {"description", op.get_desc()},
     {"osd", stringify(whoami)},
@@ -207,7 +216,11 @@ std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap)
     t.int_attributes.emplace_back("osdmap_epoch", pg_op->get_map_epoch());
   }
   if (m->get_type() == CEPH_MSG_OSD_OP) {
-    add_client_op_attributes(op, static_cast<const MOSDOp*>(m), t);
+    // until do_op finished decoding it, an op in flight is still being
+    // written to by the thread that runs it
+    if (!in_flight) {
+      add_client_op_attributes(op, static_cast<const MOSDOp*>(m), t);
+    }
   } else if (m->get_type() == MSG_OSD_REPOP) {
     t.attributes.emplace_back(
       "object", static_cast<const MOSDRepOp*>(m)->poid.oid.name);
@@ -230,6 +243,11 @@ std::string trace_slow_op(TrackedOp& tracked, int whoami, const OSDMap* osdmap)
     }
   }
   place_op(m, request, t);
+  if (in_flight) {
+    // the op's own id stays for the span of the completed op, which the
+    // replicas' spans hang off; the snapshot sits next to it
+    t.span_id.reset();
+  }
   return tracer.record_op(t);
 }
 
