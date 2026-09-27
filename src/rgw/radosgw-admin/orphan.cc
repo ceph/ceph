@@ -1465,10 +1465,6 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
     }
   } // while (! bucket_process_map.empty())
 
-  if (include_rgw_obj_name) {
-    return 0;
-  }
-
   // now handle incomplete multipart uploads by going back to the
   // initial bucket
 
@@ -1551,7 +1547,14 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 		 ++obj_it) {
 	      const rgw_raw_obj& loc =
 		obj_it.get_location().get_raw_obj(store->getRados());
-	      std::cout << loc.oid << std::endl;
+	      if (include_rgw_obj_name) {
+		std::cout << loc.oid <<
+		  field_separator << bucket->get_key().get_namespaced_name() <<
+		  field_separator << manifest.get_prefix() << "." <<
+		  part->get_num() << std::endl;
+	      } else {
+		std::cout << loc.oid << std::endl;
+	      }
 	    } // for (auto obj_it
 	  } // for (auto& p
 	} while (is_parts_truncated);
