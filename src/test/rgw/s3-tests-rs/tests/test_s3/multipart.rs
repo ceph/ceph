@@ -2833,3 +2833,61 @@ async fn test_multipart_oversized_part_diverts() {
         "no part was diverted ({before} -> {after});  the object is correct \
          but the guard never fired, so this test proves nothing");
 }
+
+/// Two uploads whose keys share a dotted suffix must not share staging.
+///
+/// nsfs derives an upload's staging directory from the upload id, and
+/// `NSFSMPObj` treated a key given without an upload id as possibly
+/// being a meta string, splitting it at the last dot.  Every key ending
+/// `.bin`, `.jpg` or `.tar` therefore produced the upload id `bin`,
+/// `jpg` or `tar`, so two uploads in one bucket landed in one staging
+/// directory and each completed object was assembled from both sets of
+/// parts.  No error was reported on either upload.
+///
+/// S3 identifies an upload by bucket, key and id together, so ids
+/// coinciding across keys is not itself a violation.  The bytes are.
+#[tokio::test]
+async fn test_multipart_distinct_keys_shared_suffix() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    let cases: [(&str, u8); 2] = [("alpha.bin", b'a'), ("beta.bin", b'b')];
+    let part_len = 5 * 1024 * 1024;
+
+    // both uploads open before either completes
+    let mut uploads = Vec::new();
+    for (key, _) in &cases {
+        let up = client.create_multipart_upload()
+            .bucket(&bucket).key(*key).send().await.unwrap();
+        uploads.push(up.upload_id().unwrap().to_string());
+    }
+
+    let mut parts = Vec::new();
+    for ((key, fill), id) in cases.iter().zip(uploads.iter()) {
+        let body = vec![*fill; part_len];
+        let r = client.upload_part()
+            .bucket(&bucket).key(*key).upload_id(id).part_number(1)
+            .body(ByteStream::from(body))
+            .send().await.unwrap();
+        parts.push(CompletedPart::builder()
+            .part_number(1).e_tag(r.e_tag().unwrap_or_default()).build());
+    }
+
+    for ((key, _), (id, part)) in cases.iter().zip(uploads.iter().zip(parts)) {
+        client.complete_multipart_upload()
+            .bucket(&bucket).key(*key).upload_id(id)
+            .multipart_upload(CompletedMultipartUpload::builder()
+                .set_parts(Some(vec![part])).build())
+            .send().await.unwrap();
+    }
+
+    for (key, fill) in &cases {
+        let got = get_body(client.get_object()
+            .bucket(&bucket).key(*key).send().await.unwrap()).await;
+        assert_eq!(got.len(), part_len, "{key}: wrong length");
+        let wrong = got.iter().position(|b| b != fill);
+        assert_eq!(wrong, None,
+            "{key}: byte {wrong:?} belongs to the other upload");
+    }
+}
