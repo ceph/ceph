@@ -1309,6 +1309,10 @@ int RGWRadosList::process_bucket(
 	}
       }
 
+      if (entry.is_delete_marker()) {
+	continue;
+      }
+
       ret = do_stat_key(entry.key);
       if (ret < 0) {
 	return ret;
