@@ -9289,7 +9289,10 @@ void OSD::consume_map()
     std::lock_guard l(pending_creates_lock);
     for (auto pg = pending_creates_from_osd.begin();
 	 pg != pending_creates_from_osd.end();) {
-      if (osdmap->get_pg_acting_role(pg->first, whoami) < 0) {
+      // up, not only acting: a backfill or async recovery target is in up
+      // alone, and if its create is dropped nothing re-peers the PG once
+      // there is room for it (resume_creating_pg)
+      if (!osdmap->is_up_acting_osd_shard(pg->first, whoami)) {
 	dout(10) << __func__ << " pg " << pg->first << " doesn't map here, "
 		 << "discarding pending_create_from_osd" << dendl;
 	pg = pending_creates_from_osd.erase(pg);
