@@ -5,12 +5,10 @@
 
 #include "rgw_tools.h"
 #include "common/Clock.h" // for ceph_clock_now()
-#include "include/scope_guard.h"
 #include "include/rados/librados.hpp"
-#include "cls/rgw/cls_rgw_client.h"
+#include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw_gc/cls_rgw_gc_client.h"
 #include "cls/refcount/cls_refcount_client.h"
-#include "cls/version/cls_version_client.h"
 #include "rgw_perf_counters.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/random.h"
@@ -43,11 +41,6 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store, optional_yield y) {
     snprintf(buf, 32, ".%d", i);
     obj_names[i].append(buf);
 
-    auto it = transitioned_objects_cache.begin() + i;
-    transitioned_objects_cache.insert(it, false);
-
-    //version = 0 -> not ready for transition
-    //version = 1 -> marked ready for transition
     librados::ObjectWriteOperation op;
     op.create(false);
     const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size;
@@ -163,27 +156,7 @@ int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag, optiona
 
   ldpp_dout(this, 20) << "RGWGC::send_chain - on object name: " << obj_names[i] << "tag is: " << tag << dendl;
 
-  auto ret = store->gc_operate(this, obj_names[i], std::move(op), y);
-  if (ret != -ECANCELED && ret != -EPERM) {
-    return ret;
-  }
-  ObjectWriteOperation set_entry_op;
-  cls_rgw_gc_set_entry(set_entry_op, cct->_conf->rgw_gc_obj_min_wait, info);
-  return store->gc_operate(this, obj_names[i], std::move(set_entry_op), y);
-}
-
-int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc, optional_yield y)
-{
-  ObjectWriteOperation op;
-  cls_rgw_gc_remove(op, tags);
-
-  aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
-  int ret = store->gc_aio_operate(obj_names[index], c.get(), &op);
-  if (ret >= 0) {
-    *pc = c.get();
-    c.release();
-  }
-  return ret;
+  return store->gc_operate(this, obj_names[i], std::move(op), y);
 }
 
 int RGWGC::remove(int index, int num_entries, optional_yield y)
@@ -194,80 +167,29 @@ int RGWGC::remove(int index, int num_entries, optional_yield y)
   return store->gc_operate(this, obj_names[index], std::move(op), y);
 }
 
-static int gc_list(const DoutPrefixProvider* dpp, optional_yield y, librados::IoCtx& io_ctx,
-                   std::string& oid, std::string& marker, uint32_t max, bool expired_only,
-                   std::list<cls_rgw_gc_obj_info>& entries, bool& truncated, std::string& next_marker)
-{
-  librados::ObjectReadOperation op;
-  bufferlist bl;
-  cls_rgw_gc_list(op, marker, max, expired_only, bl);
-  int ret = rgw_rados_operate(dpp, io_ctx, oid, std::move(op), nullptr, y);
-  if (ret < 0) {
-    return ret;
-  }
-  return cls_rgw_gc_list_decode(bl, entries, truncated, next_marker);
-}
-
 int RGWGC::list(int& index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool& truncated, bool& processing_queue, std::optional<int> shard_id)
 {
   result.clear();
   string next_marker;
-  bool check_queue = false;
 
   int max_index = shard_id.has_value() ? (shard_id.value() + 1) : max_objs;
   if (shard_id.has_value()) {
     index = shard_id.value();
   }
 
-  for (; index < max_index && result.size() < max; index++, marker.clear(), check_queue = false) {
-    std::list<cls_rgw_gc_obj_info> entries, queue_entries;
-    int ret = 0;
+  for (; index < max_index && result.size() < max; index++, marker.clear()) {
+    std::list<cls_rgw_gc_obj_info> queue_entries;
 
-    //processing_queue is set to true from previous iteration if the queue was under process and probably has more elements in it.
-    if (! transitioned_objects_cache[index] && ! check_queue && ! processing_queue) {
-      ret = gc_list(this, null_yield, store->gc_pool_ctx, obj_names[index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
-      if (ret != -ENOENT && ret < 0) {
-        return ret;
-      }
-      obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[index], &objv);
-      if (ret == -ENOENT || entries.size() == 0) {
-        if (objv.ver == 0) {
-          continue;
-        } else {
-          if (! expired_only) {
-            transitioned_objects_cache[index] = true;
-            marker.clear();
-          } else {
-            std::list<cls_rgw_gc_obj_info> non_expired_entries;
-            ret = gc_list(this, null_yield, store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, truncated, next_marker);
-            if (non_expired_entries.size() == 0) {
-              transitioned_objects_cache[index] = true;
-              marker.clear();
-            }
-          }
-        }
-      }
-      if ((objv.ver == 1) && (entries.size() < max - result.size())) {
-        check_queue = true;
-        marker.clear();
-      }
+    processing_queue = false;
+    int ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, max - result.size(), expired_only, queue_entries, truncated, next_marker);
+    if (ret < 0) {
+      return ret;
     }
-    if (transitioned_objects_cache[index] || check_queue || processing_queue) {
-      processing_queue = false;
-      ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, (max - result.size()) - entries.size(), expired_only, queue_entries, truncated, next_marker);
-      if (ret < 0) {
-        return ret;
-      }
-    }
-    if (entries.size() == 0 && queue_entries.size() == 0)
+
+    if (queue_entries.size() == 0)
       continue;
 
     std::list<cls_rgw_gc_obj_info>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      result.push_back(*iter);
-    }
-
     for (iter = queue_entries.begin(); iter != queue_entries.end(); ++iter) {
       result.push_back(*iter);
     }
@@ -275,20 +197,15 @@ int RGWGC::list(int& index, string& marker, uint32_t max, bool expired_only, std
     marker = next_marker;
 
     if (index == max_index - 1) {
-      if (queue_entries.size() > 0 && truncated) {
-        processing_queue = true;
-      } else {
-        processing_queue = false;
-      }
+      processing_queue = truncated;
       /* we cut short here, truncated will hold the correct value */
       return 0;
     }
 
     if (result.size() == max) {
-      if (queue_entries.size() > 0 && truncated) {
+      if (truncated) {
         processing_queue = true;
       } else {
-        processing_queue = false;
         index += 1; //move to next gc object
       }
 
@@ -315,7 +232,6 @@ class RGWGCIOManager {
     enum Type {
       UnknownIO = 0,
       TailIO = 1,
-      IndexIO = 2,
     } type{UnknownIO};
     librados::AioCompletion *c{nullptr};
     string oid;
@@ -324,11 +240,6 @@ class RGWGCIOManager {
   };
 
   deque<IO> ios;
-  vector<std::vector<string> > remove_tags;
-  /* tracks the number of remaining shadow objects for a given tag in order to
-   * only remove the tag once all shadow objects have themselves been removed
-   */
-  vector<map<string, size_t> > tag_io_size;
 
 #define MAX_AIO_DEFAULT 10
   size_t max_aio{MAX_AIO_DEFAULT};
@@ -338,9 +249,6 @@ public:
                                                                                   cct(_cct),
                                                                                   gc(_gc) {
     max_aio = cct->_conf->rgw_gc_max_concurrent_io;
-    // must match obj_names[] / transitioned_objects_cache sized in initialize()
-    remove_tags.resize(gc->get_max_objs());
-    tag_io_size.resize(gc->get_max_objs());
   }
 
   ~RGWGCIOManager() {
@@ -356,8 +264,7 @@ public:
         return 0;
       }
       auto ret = handle_next_completion();
-      //Return error if we are using queue, else ignore it
-      if (gc->transitioned_objects_cache[index] && ret < 0) {
+      if (ret < 0) {
         return ret;
       }
     }
@@ -384,59 +291,13 @@ public:
       ret = 0;
     }
 
-    if (io.type == IO::IndexIO && ! gc->transitioned_objects_cache[io.index]) {
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "WARNING: gc cleanup of tags on gc shard index=" <<
-	  io.index << " returned error, ret=" << ret << dendl;
-      }
-      goto done;
-    }
-
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "WARNING: gc could not remove oid=" << io.oid <<
 	", ret=" << ret << dendl;
-      goto done;
     }
 
-    if (! gc->transitioned_objects_cache[io.index]) {
-      schedule_tag_removal(io.index, io.tag);
-    }
-
-  done:
     ios.pop_front();
     return ret;
-  }
-
-  /* This is a request to schedule a tag removal. It will be called once when
-   * there are no shadow objects. But it will also be called for every shadow
-   * object when there are any. Since we do not want the tag to be removed
-   * until all shadow objects have been successfully removed, the scheduling
-   * will not happen until the shadow object count goes down to zero
-   */
-  void schedule_tag_removal(int index, string tag) {
-    auto& ts = tag_io_size[index];
-    auto ts_it = ts.find(tag);
-    if (ts_it != ts.end()) {
-      auto& size = ts_it->second;
-      --size;
-      // wait all shadow obj delete return
-      if (size != 0)
-        return;
-
-      ts.erase(ts_it);
-    }
-
-    auto& rt = remove_tags[index];
-
-    rt.push_back(tag);
-    if (rt.size() >= (size_t)cct->_conf->rgw_gc_max_trim_chunk) {
-      flush_remove_tags(index, rt);
-    }
-  }
-
-  void add_tag_io_size(int index, string tag, size_t size) {
-    auto& ts = tag_io_size[index];
-    ts.emplace(tag, size);
   }
 
   int drain_ios() {
@@ -455,51 +316,6 @@ public:
 
   void drain() {
     drain_ios();
-    flush_remove_tags();
-    /* the tags draining might have generated more ios, drain those too */
-    drain_ios();
-  }
-
-  void flush_remove_tags(int index, vector<string>& rt) {
-    IO index_io;
-    index_io.type = IO::IndexIO;
-    index_io.index = index;
-
-    ldpp_dout(dpp, 20) << __func__ <<
-      " removing entries from gc log shard index=" << index << ", size=" <<
-      rt.size() << ", entries=" << rt << dendl;
-
-    auto rt_guard = make_scope_guard(
-      [&]
-	{
-	  rt.clear();
-	}
-      );
-
-    int ret = gc->remove(index, rt, &index_io.c, null_yield);
-    if (ret < 0) {
-      /* we already cleared list of tags, this prevents us from
-       * ballooning in case of a persistent problem
-       */
-      ldpp_dout(dpp, 0) << "WARNING: failed to remove tags on gc shard index=" <<
-	index << " ret=" << ret << dendl;
-      return;
-    }
-    if (perfcounter) {
-      /* log the count of tags retired for rate estimation */
-      perfcounter->inc(l_rgw_gc_retire, rt.size());
-    }
-    ios.push_back(index_io);
-  }
-
-  void flush_remove_tags() {
-    int index = 0;
-    for (auto& rt : remove_tags) {
-      if (! gc->transitioned_objects_cache[index]) {
-        flush_remove_tags(index, rt);
-      }
-      ++index;
-    }
   }
 
   int remove_queue_entries(int index, int num_entries, optional_yield y) {
@@ -555,44 +371,14 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
     int max = 100;
     std::list<cls_rgw_gc_obj_info> entries;
 
-    int ret = 0;
-
-    if (! transitioned_objects_cache[index]) {
-      ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, truncated, next_marker);
-      ldpp_dout(this, 20) <<
-      "RGWGC::process cls_rgw_gc_list returned with returned:" << ret <<
-      ", entries.size=" << entries.size() << ", truncated=" << truncated <<
-      ", next_marker='" << next_marker << "'" << dendl;
-      obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[index], &objv);
-      if ((objv.ver == 1) && entries.size() == 0) {
-        std::list<cls_rgw_gc_obj_info> non_expired_entries;
-        ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, truncated, next_marker);
-        if (non_expired_entries.size() == 0) {
-          transitioned_objects_cache[index] = true;
-          marker.clear();
-          ldpp_dout(this, 20) << "RGWGC::process cls_rgw_gc_list returned NO non expired entries, so setting cache entry to TRUE" << dendl;
-        } else {
-          ret = 0;
-          goto done;
-        }
-      }
-      if ((objv.ver == 0) && (ret == -ENOENT || entries.size() == 0)) {
-        ret = 0;
-        goto done;
-      }
-    }
-
-    if (transitioned_objects_cache[index]) {
-      ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, truncated, next_marker);
-      ldpp_dout(this, 20) <<
-      "RGWGC::process cls_rgw_gc_queue_list_entries returned with return value:" << ret <<
-      ", entries.size=" << entries.size() << ", truncated=" << truncated <<
-      ", next_marker='" << next_marker << "'" << dendl;
-      if (entries.size() == 0) {
-        ret = 0;
-        goto done;
-      }
+    int ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, truncated, next_marker);
+    ldpp_dout(this, 20) <<
+    "RGWGC::process cls_rgw_gc_queue_list_entries returned with return value:" << ret <<
+    ", entries.size=" << entries.size() << ", truncated=" << truncated <<
+    ", next_marker='" << next_marker << "'" << dendl;
+    if (entries.size() == 0) {
+      ret = 0;
+      goto done;
     }
 
     if (ret < 0)
@@ -615,13 +401,6 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
       if (now >= end) {
         goto done;
       }
-      if (! transitioned_objects_cache[index]) {
-        if (chain.objs.empty()) {
-          io_manager.schedule_tag_removal(index, info.tag);
-        } else {
-          io_manager.add_tag_io_size(index, info.tag, chain.objs.size());
-        }
-      }
       if (! chain.objs.empty()) {
 	for (const auto& obj : chain.objs) {
 	  if (obj.pool != last_pool) {
@@ -629,7 +408,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	    ctx = new IoCtx;
 	    ret = rgw_init_ioctx(this, store->get_rados_handle(), obj.pool, *ctx);
 	    if (ret < 0) {
-	      if (ret != -ENOENT && transitioned_objects_cache[index]) {
+	      if (ret != -ENOENT) {
 		goto done;
 	      }
 	      last_pool = "";
@@ -654,10 +433,8 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	  if (ret < 0) {
 	    ldpp_dout(this, 0) <<
 	      "WARNING: failed to schedule deletion for oid=" << oid << dendl;
-      if (transitioned_objects_cache[index]) {
-        //If deleting oid failed for any of them, we will not delete queue entries
-        goto done;
-      }
+      //If deleting oid failed for any of them, we will not delete queue entries
+      goto done;
 	  }
 	  if (going_down()) {
 	    // leave early, even if tag isn't removed, it's ok since it
@@ -667,7 +444,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	} // chains loop
       } // else -- chains not empty
     } // entries loop
-    if (transitioned_objects_cache[index] && entries.size() > 0) {
+    if (entries.size() > 0) {
       ret = io_manager.drain_ios();
       if (ret < 0) {
         goto done;
