@@ -3573,6 +3573,11 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
       return ret;
     }
 
+    // the cloud copy of an unencrypted object is uncompressed
+    if (!get_attrs().count(RGW_ATTR_CRYPT_MODE)) {
+      get_attrs().erase(RGW_ATTR_COMPRESSION);
+    }
+
     ret = write_cloud_tier(dpp, y, tier_ctx.o.versioned_epoch,
 			   tier, tier_ctx.is_multipart_upload,
 			   target_placement, tier_ctx.obj);

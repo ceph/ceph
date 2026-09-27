@@ -18,6 +18,7 @@
 #include "rgw_string.h"
 #include "rgw_zone.h"
 #include "rgw_common.h"
+#include "rgw_compression.h"
 #include "rgw_rest.h"
 #include "svc_zone.h"
 #include "rgw_rados.h"
@@ -524,6 +525,29 @@ bool is_restore_in_progress(const DoutPrefixProvider *dpp,
   return false;;
 }
 
+// compressed objects go to the cloud decompressed; encrypted ones as stored
+static bool send_decompressed(const rgw::sal::Attrs& attrs) {
+  return attrs.count(RGW_ATTR_COMPRESSION) &&
+         !attrs.count(RGW_ATTR_CRYPT_MODE);
+}
+
+static uint64_t transfer_size(rgw::sal::Object* obj) {
+  return send_decompressed(obj->get_attrs()) ? obj->get_accounted_size()
+                                             : obj->get_size();
+}
+
+class RGWLCStreamSink : public RGWGetObj_Filter {
+  RGWGetDataCB* cb;
+ public:
+  explicit RGWLCStreamSink(RGWGetDataCB* cb) : cb(cb) {}
+  int handle_data(bufferlist& bl, off_t ofs, off_t len) override {
+    // the filter splices bl after this returns; the http client claims its input
+    bufferlist copy;
+    bl.begin(ofs).copy(len, copy);
+    return cb->handle_data(copy, 0, len);
+  }
+};
+
 /* Read object locally & also initialize dest rest obj based on read attrs */
 class RGWLCStreamRead
 {
@@ -651,7 +675,7 @@ int RGWLCStreamRead::init() {
   }
 
   attrs = obj->get_attrs();
-  obj_size = obj->get_size();
+  obj_size = transfer_size(obj);
 
   ret = init_rest_obj();
   if (ret < 0) {
@@ -710,8 +734,19 @@ int RGWLCStreamRead::init_rest_obj() {
 }
 
 int RGWLCStreamRead::read(off_t ofs, off_t end, RGWGetDataCB *out_cb) {
-  int ret = read_op->iterate(dpp, ofs, end, out_cb, y);
-  return ret;
+  if (!send_decompressed(attrs)) {
+    return read_op->iterate(dpp, ofs, end, out_cb, y);
+  }
+  bool compressed;
+  RGWCompressionInfo cs_info;
+  int ret = rgw_compression_info_from_attrset(attrs, compressed, cs_info);
+  if (ret < 0) {
+    return ret;
+  }
+  RGWLCStreamSink sink(out_cb);
+  RGWGetObj_Decompress filter(cct, &cs_info, multipart, &sink);
+  filter.fixup_range(ofs, end);
+  return read_op->iterate(dpp, ofs, end, &filter, y);
 }
 
 int RGWLCCloudStreamPut::init() {
@@ -1383,7 +1418,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   uint64_t cur_ofs{0};
   std::map<int, rgw_lc_multipart_part_info> parts;
 
-  obj_size = tier_ctx.o.meta.size;
+  obj_size = transfer_size(tier_ctx.obj);
 
   target_bucket.name = tier_ctx.target_bucket_name;
 
@@ -1660,12 +1695,12 @@ static int do_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<s
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to check object on the cloud endpoint ret=" << ret << dendl;
   }
 
-  if (already_tiered) {
+  if (already_tiered && !send_decompressed(tier_ctx.obj->get_attrs())) {
     ldpp_dout(tier_ctx.dpp, 20) << "Object (" << tier_ctx.o.key << ") is already tiered" << dendl;
     return 0;
   }
 
-  uint64_t size = tier_ctx.o.meta.size;
+  uint64_t size = transfer_size(tier_ctx.obj);
   uint64_t multipart_sync_threshold = tier_ctx.multipart_sync_threshold;
 
   if (multipart_sync_threshold < MULTIPART_MIN_POSSIBLE_PART_SIZE) {
