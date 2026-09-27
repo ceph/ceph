@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <cstring>
+
 #include "test/crimson/gtest_seastar.h"
 
 #include "crimson/common/log.h"
@@ -277,4 +279,64 @@ TEST_F(cache_test_t, test_dirty_extent)
       ASSERT_EQ(csum2, extent->calc_crc32c());
     }
   });
+}
+
+TEST_F(cache_test_t, test_alloc_remapped_extent_shares_aligned_bptr)
+{
+  run_async([this] {
+    constexpr extent_len_t parent_len = 16 << 10;
+    constexpr extent_len_t off = 4 << 10;
+    constexpr extent_len_t len = 4 << 10;
+
+    auto parent = ceph::bufferptr(buffer::create_page_aligned(parent_len));
+    parent.zero();
+    std::memset(parent.c_str() + off, 'A', len);
+
+    auto t = get_transaction();
+    auto ext = cache->alloc_remapped_extent<TestBlock>(
+      *t,
+      laddr_t::from_byte_offset(off),
+      paddr_t::make_seg_paddr(
+	segment_id_t(segment_manager->get_device_id(), 0), off),
+      off,
+      len,
+      parent);
+
+    // Leftover pointer must be page-aligned for DMA.
+    ASSERT_TRUE(ext->get_bptr().is_page_aligned());
+    // Leftover length must be a multiple of the page size.
+    ASSERT_TRUE(ext->get_bptr().is_n_page_sized());
+    // Remap created a 4K EXIST_CLEAN extent
+    ASSERT_EQ(len, ext->get_length());
+    // Skip path: leftover is a slice of the parent raw, not a memcpy.
+    ASSERT_EQ(parent.c_str() + off, ext->get_bptr().c_str());
+  });
+}
+
+TEST_F(cache_test_t, test_alloc_remapped_extent_unaligned_aborts)
+{
+  // Default death tests clone() this process, which is unsafe once
+  // Seastar's reactor is running (main() starts it before RUN_ALL_TESTS).
+  // "threadsafe" makes ASSERT_DEATH re-exec the binary in a child instead.
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  // Spawn happens here: parent waits, child runs the statement and must abort.
+  ASSERT_DEATH({
+    run_async([this] {
+      constexpr extent_len_t parent_len = 16 << 10;
+      // Not a multiple of CEPH_PAGE_SIZE; alloc_remapped_extent must abort.
+      constexpr extent_len_t off = 512;
+      constexpr extent_len_t len = 4 << 10;
+
+      auto parent = ceph::bufferptr(buffer::create_page_aligned(parent_len));
+      auto t = get_transaction();
+      cache->alloc_remapped_extent<TestBlock>(
+	*t,
+	laddr_t::from_raw_uint(off),
+	paddr_t::make_seg_paddr(
+	  segment_id_t(segment_manager->get_device_id(), 0), 0),
+	off,
+	len,
+	parent);
+    });
+  }, "ceph_assert\\(remap_offset");
 }
