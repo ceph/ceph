@@ -8,8 +8,11 @@
 # osd_max_pg_per_osd_hard_ratio) withholds creating a PG, and once it has
 # room again it forces a pg_temp change so the PG peers again
 # (OSD::resume_creating_pg). For a backfill target, which is in the PG's up
-# set but not in its acting set, the OSD must remember the withheld PG across
-# new OSDMaps. Otherwise the primary waits in activating+remapped for good.
+# set but not in its acting set:
+# - the OSD must remember the withheld PG across new OSDMaps;
+# - the pg_temp change must change the acting set, also when that is the
+#   primary alone.
+# Otherwise the primary waits in activating+remapped for good.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU Library Public License as published by
@@ -140,6 +143,26 @@ function TEST_withheld_backfill_target_survives_new_map() {
     wait_for_clean || return 1
     test "$(up_set $pgid)" = "$primary $target" || return 1
     ceph osd unset noout || return 1
+}
+
+function TEST_withheld_backfill_target_single_acting() {
+    local dir=$1
+
+    setup_target_at_limit $dir || return 1
+
+    # the replica dies and is marked out, and the target replaces it: the
+    # primary alone is acting while it backfills the target, which
+    # withholds creating the PG
+    kill_daemons $dir TERM osd.$replica || return 1
+    ceph osd down $replica || return 1
+    ceph osd out $replica || return 1
+    ceph osd pg-upmap $pgid $primary $target || return 1
+    wait_for_withhold $dir || return 1
+
+    # room again: the pg_temp change must change the acting set [primary]
+    ceph tell osd.$target config set mon_max_pg_per_osd 1000 || return 1
+    wait_for_clean || return 1
+    test "$(up_set $pgid)" = "$primary $target" || return 1
 }
 
 main osd-max-pg-backfill-target "$@"

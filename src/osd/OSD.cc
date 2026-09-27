@@ -5526,10 +5526,26 @@ bool OSD::maybe_wait_for_max_pg(const OSDMapRef& osdmap,
 // to re-trigger a peering, we have to twiddle the pg mapping a little bit,
 // see PG::should_restart_peering(). OSDMap::pg_to_up_acting_osds() will turn
 // to up set if pg_temp is empty. so an empty pg_temp won't work.
-static vector<int32_t> twiddle(const vector<int>& acting, const OSDMapRef& osdmap, pg_t pgid) {
+static vector<int32_t> twiddle(const vector<int>& acting, const OSDMapRef& osdmap, pg_t pgid,
+				int whoami) {
   vector<int32_t> twiddled;
+  const pg_pool_t *pool = osdmap->get_pg_pool(pgid.pool());
   if (acting.size() > 1) {
     twiddled = {acting[0]};
+  } else if (pool && pool->can_shift_osds()) {
+    // _get_temp_osds() drops a CRUSH_ITEM_NONE here, which would leave the
+    // acting set as it is: add a second up OSD, as "pg repeer" does
+    twiddled = vector<int32_t>(acting.begin(), acting.end());
+    if (twiddled.empty() || twiddled[0] != whoami) {
+      twiddled.push_back(whoami);
+    } else {
+      for (int i = 0; i < osdmap->get_max_osd(); ++i) {
+	if (i != whoami && osdmap->is_up(i)) {
+	  twiddled.push_back(i);
+	  break;
+	}
+      }
+    }
   } else {
     twiddled = vector<int32_t>(acting.begin(), acting.end());
     twiddled.push_back(-1);
@@ -5537,7 +5553,6 @@ static vector<int32_t> twiddle(const vector<int>& acting, const OSDMapRef& osdma
   
   // Optimized EC does not cope with pg temp with a mismatched size.
   // Only resize for EC pools with optimizations enabled.
-  const pg_pool_t *pool = osdmap->get_pg_pool(pgid.pool());
   if (pool && pool->is_erasure() && pool->allows_ecoptimizations()) {
     unsigned pool_size = pool->get_size();
     if (twiddled.size() < pool_size) {
@@ -5578,7 +5593,8 @@ void OSD::resume_creating_pg()
       dout(20) << __func__ << " pg " << pg->first << dendl;
       vector<int> acting;
       get_osdmap()->pg_to_up_acting_osds(pg->first.pgid, nullptr, nullptr, &acting, nullptr);
-      service.queue_want_pg_temp(pg->first.pgid, twiddle(acting, get_osdmap(), pg->first.pgid), true);
+      service.queue_want_pg_temp(pg->first.pgid,
+				 twiddle(acting, get_osdmap(), pg->first.pgid, whoami), true);
       pg = pending_creates_from_osd.erase(pg);
       do_sub_pg_creates = true;
       spare_pgs--;
