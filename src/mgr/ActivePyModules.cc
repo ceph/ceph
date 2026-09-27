@@ -671,6 +671,40 @@ bool ActivePyModules::get_store(const std::string &module_name,
   }
 }
 
+int ActivePyModules::get_store_ex(const std::string &reader,
+    const std::string &owner, const std::string &key, std::string *val) const
+{
+  without_gil_t no_gil;
+
+  // A disabled/failed module has no policy, so nothing is shared by default.
+  if (reader != owner) {
+    PyModuleRef module = py_module_registry.get_module(owner);
+    if (!module) {
+      dout(4) << __func__ << " no module '" << owner << "'" << dendl;
+      return -ENODEV;
+    }
+    if (!module->can_read_shared(reader, key)) {
+      dout(1) << __func__ << " module '" << reader << "' may not read '"
+              << key << "' of module '" << owner << "'" << dendl;
+      return -EACCES;
+    }
+  }
+
+  const std::string global_key = PyModule::mgr_store_prefix
+    + owner + "/" + key;
+
+  dout(4) << __func__ << " key: " << global_key << " reader: " << reader
+          << dendl;
+
+  std::lock_guard l(lock);
+  auto i = store_cache.find(global_key);
+  if (i == store_cache.end()) {
+    return -ENOENT;
+  }
+  *val = i->second;
+  return 0;
+}
+
 std::optional<std::vector<std::byte>> ActivePyModules::dispatch_remote(
     const std::string &other_module,
     const std::string &method,
