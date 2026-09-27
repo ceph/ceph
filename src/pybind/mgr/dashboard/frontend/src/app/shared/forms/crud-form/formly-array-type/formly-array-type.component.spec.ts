@@ -1,8 +1,9 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormGroup } from '@angular/forms';
+import { FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { FormlyFieldConfig, FormlyModule } from '@ngx-formly/core';
 
+import { ComponentsModule } from '~/app/shared/components/components.module';
 import { FormlyArrayTypeComponent } from './formly-array-type.component';
 import { configureTestBed } from '~/testing/unit-test-helper';
 
@@ -32,6 +33,8 @@ describe('FormlyArrayTypeComponent', () => {
   configureTestBed({
     declarations: [FormlyArrayTypeComponent],
     imports: [
+      ReactiveFormsModule,
+      ComponentsModule,
       FormlyModule.forRoot({
         types: [{ name: 'array', component: FormlyArrayTypeComponent }]
       })
