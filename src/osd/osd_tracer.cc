@@ -102,8 +102,9 @@ void add_client_op_attributes(const OpRequest& op, const MOSDOp* m, OpTimeline& 
       names += ',';
     }
     names += ceph_osd_op_name(code);
-    // the reply took the read data with it, so count what was asked for
-    if (ceph_osd_op_type_data(code) && ceph_osd_op_mode_read(code)) {
+    // by now the reply took the read data with it, and the transaction the
+    // written data, so count the extent of data ops
+    if (ceph_osd_op_type_data(code)) {
       bytes += osd_op.op.extent.length;
     } else {
       bytes += osd_op.indata.length();
