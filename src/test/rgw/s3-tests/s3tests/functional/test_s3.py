@@ -10298,6 +10298,8 @@ def _restore_permanent(client, bucket, key, expected):
         assert time.monotonic() < deadline, 'permanent restore did not complete'
         time.sleep(1)
     assert client.get_object(Bucket=bucket, Key=key)['Body'].read() == expected
+    objects = client.list_objects_v2(Bucket=bucket, Prefix=key)['Contents']
+    assert next(obj['Size'] for obj in objects if obj['Key'] == key) == len(expected)
 
 # The test harness for lifecycle is configured to treat days as 10 second intervals.
 @pytest.mark.lifecycle
@@ -10324,8 +10326,12 @@ def test_lifecycle_cloud_transition_sse_kms():
         init_headers=headers, part_headers={}, metadata=None, resend_parts=[])
     client.complete_multipart_upload(Bucket=bucket, Key='multipart',
                                      UploadId=upload_id, MultipartUpload={'Parts': parts})
+    sc1 = get_cloud_regular_storage_class()
+    client.put_object(Bucket=bucket, Key='compressed-encrypted', Body=data,
+                      StorageClass=sc1, ServerSideEncryption='aws:kms', SSEKMSKeyId=kms_key)
     keys = [('single', data, 'STANDARD'),
-            ('multipart', multipart_data.encode(), 'STANDARD')]
+            ('multipart', multipart_data.encode(), 'STANDARD'),
+            ('compressed-encrypted', data, sc1)]
     client.put_object(Bucket=bucket, Key='plain', Body=data,
                       Metadata={'rgwx-source-encrypted': 'true'})
     rules = [{'ID': 'cloud', 'Prefix': '', 'Status': 'Enabled',
@@ -10353,6 +10359,44 @@ def test_lifecycle_cloud_transition_sse_kms():
         assert response['Metadata']['rgwx-source-encrypted'] == 'true'
         assert response['Body'].read() != expected
         _restore_permanent(client, bucket, key, expected)
+
+# The test harness for lifecycle is configured to treat days as 10 second intervals.
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_transition
+@pytest.mark.cloud_transition
+@pytest.mark.cloud_restore
+@pytest.mark.target_by_bucket
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_lifecycle_cloud_transition_compressed():
+    cloud_sc = get_cloud_storage_class()
+    if cloud_sc is None:
+        pytest.skip('[s3 cloud] section missing cloud_storage_class')
+
+    client = get_client()
+    bucket = get_new_bucket()
+    sc1 = get_cloud_regular_storage_class()
+    key = 'compressed'
+    upload_id, data, parts = _multipart_upload_enc(
+        client, bucket, key, 40*1024*1024, part_size=5*1024*1024,
+        init_headers={'x-amz-storage-class': sc1}, part_headers={},
+        metadata=None, resend_parts=[])
+    client.complete_multipart_upload(Bucket=bucket, Key=key,
+                                     UploadId=upload_id, MultipartUpload={'Parts': parts})
+    rules = [{'ID': 'cloud', 'Prefix': '', 'Status': 'Enabled',
+              'Transitions': [{'Days': 1, 'StorageClass': cloud_sc}]}]
+    client.put_bucket_lifecycle_configuration(Bucket=bucket, LifecycleConfiguration={'Rules': rules})
+    time.sleep(24*get_lc_debug_interval())
+
+    if not get_cloud_target_by_bucket():
+        cloud_client = get_cloud_client()
+        target_path = get_cloud_target_path() or 'rgwx-default-' + cloud_sc.lower() + '-cloud-bucket'
+        verify_object(cloud_client, target_path, bucket + '/' + key, data,
+                      get_cloud_target_storage_class())
+
+    if get_cloud_retain_head_object() == 'true':
+        client.delete_bucket_lifecycle(Bucket=bucket)
+        _restore_permanent(client, bucket, key, data.encode())
 
 # The test harness for lifecycle is configured to treat days as 10 second intervals.
 @pytest.mark.lifecycle

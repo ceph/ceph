@@ -15,8 +15,9 @@ overrides:
         rgw_restore_debug_interval: 20
         rgw_restore_processor_period: 10
   rgw:
+    enable features: [compress-encrypted]
     storage classes:
-      LUKEWARM:
+      LUKEWARM: [--compression, zstd]
       FROZEN:
     frontend: beast
   s3tests:
