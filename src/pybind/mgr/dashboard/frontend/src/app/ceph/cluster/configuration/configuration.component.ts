@@ -13,8 +13,6 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ConfigurationOption } from '~/app/shared/services/configuration-resource-state.service';
 
-const RGW = 'rgw';
-
 @Component({
   selector: 'cd-configuration',
   templateUrl: './configuration.component.html',
@@ -151,8 +149,8 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
       },
       { prop: 'default', name: $localize`Default`, cellClass: 'wrap' },
       {
-        prop: 'can_update_at_runtime',
-        name: $localize`Editable`,
+        prop: 'restart_required',
+        name: $localize`Restart Required`,
         cellTransformation: CellTemplate.checkIcon,
         flexGrow: 0.4,
         cellClass: 'text-center'
@@ -169,6 +167,7 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
       (data: any) => {
         this.data = (Array.isArray(data) ? data : []).map((configOption: ConfigurationOption) => ({
           ...configOption,
+          restart_required: !configOption.can_update_at_runtime,
           cdLink: `/configuration/${encodeURIComponent(configOption.name)}`
         }));
       },
@@ -179,12 +178,6 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
   }
 
   isEditable(selection: CdTableSelection): boolean {
-    if (selection.selected.length !== 1) {
-      return false;
-    }
-    if ((this.selection.selected[0].name as string).includes(RGW)) {
-      return true;
-    }
-    return this.selection.selected[0].can_update_at_runtime;
+    return selection.selected.length === 1;
   }
 }
