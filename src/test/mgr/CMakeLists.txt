@@ -34,6 +34,15 @@ target_link_libraries(unittest_mgr_daemonstate
   Python3::Python
 )
 
+# unittest_mgr_sharedstore
+add_executable(unittest_mgr_sharedstore
+  test_sharedstore.cc
+)
+add_ceph_unittest(unittest_mgr_sharedstore)
+target_link_libraries(unittest_mgr_sharedstore
+  ceph-common
+)
+
 # unittest_mgr_mgrcap
 add_executable(unittest_mgr_mgrcap
   test_mgrcap.cc
