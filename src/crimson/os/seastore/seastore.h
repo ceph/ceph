@@ -504,6 +504,8 @@ public:
       uint64_t onode_updates = 0;
       uint64_t onode_erases = 0;
       int64_t  onode_extents_delta = 0;
+      uint64_t oi_inline = 0;          // OI stored in the onode's inline slot
+      uint64_t oi_overflow = 0;        // OI too large, stored in the xattr omap tree
 
       // same metrics collected two more times for high tail txns.
       std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_slow;
