@@ -180,14 +180,12 @@ std::vector<GcEntry> scan_gc_entries(kvrgw::KvStore &store,
         }
       }
       else if (gc_val->hdr.chunk.type == kvrgw::CHUNK_CHILD_D) {
-        const uint8_t st =
-            kvrgw::d_size_tier_from_size(gc_val->hdr.object_size);
-        const auto d_key =
-            kvrgw::make_d_key(parts->bucket_id, st, rt_view, gc_val->hdr.mtime);
+        const uint8_t st = kvrgw::d_size_tier_from_size(gc_val->hdr.object_size);
+        kvrgw::KeyBuf d_key;
+        kvrgw::make_d_key(parts->bucket_id, st, rt_view, gc_val->hdr.mtime, d_key);
         auto d_val_result = store.get(d_key.view());
         if (d_val_result && *d_val_result &&
-            (*d_val_result)->size() !=
-                sizeof(kvrgw::ChildValueHeader) + gc_val->hdr.object_size) {
+            (*d_val_result)->size() != sizeof(kvrgw::ChildValueHeader) + gc_val->hdr.object_size) {
           entry.size_mismatch = true;
         }
       }

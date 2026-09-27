@@ -131,7 +131,9 @@ int main()
     const int64_t created = now_unix();
 
     for (const auto &name : names) {
-      txn_put(store, kvrgw::make_bucket_key(tenant_id, name).view(),
+      kvrgw::KeyBuf bucket_key;
+      kvrgw::make_bucket_key(tenant_id, name, bucket_key);
+      txn_put(store, bucket_key.view(),
               kvrgw::make_bucket_value(bucket_id, created));
     }
 
@@ -161,9 +163,11 @@ int main()
     assert(matched == 4);
 
     constexpr int kMany = 150;
+    kvrgw::KeyBuf bucket_key;
     for (int i = 0; i < kMany; ++i) {
       const std::string name = "scan-many-" + run_tag + "-" + std::to_string(i);
-      txn_put(store, kvrgw::make_bucket_key(tenant_id, name).view(),
+      kvrgw::make_bucket_key(tenant_id, name, bucket_key);
+      txn_put(store, bucket_key.view(),
               kvrgw::make_bucket_value(bucket_id, created));
     }
     auto many_rows = store.range_scan(prefix.view(), end, 0);
@@ -176,11 +180,13 @@ int main()
     assert(static_cast<int>(seen_keys.size()) == 4 + kMany);
     for (int i = 0; i < kMany; ++i) {
       const std::string name = "scan-many-" + run_tag + "-" + std::to_string(i);
-      txn_del(store, kvrgw::make_bucket_key(tenant_id, name).view());
+      kvrgw::make_bucket_key(tenant_id, name, bucket_key);
+      txn_del(store, bucket_key.view());
     }
 
     for (const auto &name : names) {
-      txn_del(store, kvrgw::make_bucket_key(tenant_id, name).view());
+      kvrgw::make_bucket_key(tenant_id, name, bucket_key);
+      txn_del(store, bucket_key.view());
     }
     cleanup_tenant_buckets(store, tenant_id);
 

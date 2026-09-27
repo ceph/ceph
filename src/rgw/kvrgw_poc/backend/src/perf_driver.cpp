@@ -1050,8 +1050,14 @@ static bool get_issue_task(GetTask &task, const GetRequest &req,
   }
   task.req = req;
   task.txn = std::move(*tr_res);
-  KeyBuf key = req.has_version ? make_v_key(bucket_id, req.name, req.version)
-                               : make_object_key(bucket_id, req.name);
+  KeyBuf key;
+  if (req.has_version) {
+    make_v_key(bucket_id, req.name, req.version, key);
+  }
+  else {
+    make_object_key(bucket_id, req.name, key);
+  }
+
   task.future = task.txn->kv_async_get(key.view());
   task.occupied = true;
   return true;

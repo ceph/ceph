@@ -202,7 +202,8 @@ std::expected<void, fdb_error_t> move_po_to_go(KvTransaction &tr,
                                                const PoValue &po_value)
 {
   const auto rt_view = ref_tag_view(parts.ref_tag);
-  const auto po_key = make_po_key(parts.bucket_id, parts.object_name, rt_view);
+  KeyBuf po_key;
+  make_po_key(parts.bucket_id, parts.object_name, rt_view, po_key);
   auto po_exists = tr.kv_get(po_key.view());
   if (!po_exists) {
     return std::unexpected(po_exists.error());
@@ -210,7 +211,8 @@ std::expected<void, fdb_error_t> move_po_to_go(KvTransaction &tr,
   if (!*po_exists) {
     return {};
   }
-  const auto object_key = make_object_key(parts.bucket_id, parts.object_name);
+  KeyBuf object_key;
+  make_object_key(parts.bucket_id, parts.object_name, object_key);
   auto existing = tr.kv_get(object_key.view());
   if (!existing) {
     return std::unexpected(existing.error());
@@ -227,9 +229,9 @@ std::expected<void, fdb_error_t> move_po_to_go(KvTransaction &tr,
     }
   }
 
-  const auto go_key = make_go_key(parts.shard_count, parts.shard_id,
-                                  parts.bucket_id, rt_view,
-                                  po_value.hdr.estimated_size);
+  KeyBuf go_key;
+  make_go_key(parts.shard_count, parts.shard_id,
+              parts.bucket_id, rt_view, po_value.hdr.estimated_size, go_key);
   GcValueHeader gc_hdr{};
   gc_hdr.chunk.type = CHUNK_STORAGE;
   gc_hdr.object_size = po_value.hdr.estimated_size;

@@ -117,13 +117,11 @@ std::optional<LKeyParts> parse_l_key(std::string_view key)
   return parts;
 }
 
-KeyBuf make_bucket_key(tenant_id_t tenant_id, std::string_view bucket_name)
+void make_bucket_key(tenant_id_t tenant_id, std::string_view bucket_name, KeyBuf& out)
 {
-  KeyBuf key;
   KeyHeaderB hdr(tenant_id);
-  key.set_header(hdr);
-  key.append(bucket_name.data(), bucket_name.size());
-  return key;
+  out.set_header(hdr);
+  out.append(bucket_name.data(), bucket_name.size());
 }
 
 KeyBuf make_bucket_prefix(tenant_id_t tenant_id)
@@ -265,28 +263,25 @@ std::optional<ObjectKeyPartsView> parse_object_key_parts_view(std::string_view k
   return parts;
 }
 
-KeyBuf make_po_key(bucket_id_t bucket_id, std::string_view object_name,
-                   std::string_view ref_tag_bytes)
+void make_po_key(bucket_id_t bucket_id, std::string_view object_name,
+                 std::string_view ref_tag_bytes, KeyBuf& out)
 {
   uint8_t bid_be[sizeof(bucket_id_t)];
   bucket_id.serialize(bid_be);
-  KeyBuf key;
   KeyHeaderS hdr('P', kShardCount, kShardId, bid_be, kOpTypeObject);
-  key.set_header(hdr);
-  key.append(object_name.data(), object_name.size());
-  key.append(ref_tag_bytes.data(), ref_tag_bytes.size());
-  return key;
+  out.set_header(hdr);
+  out.append(object_name.data(), object_name.size());
+  out.append(ref_tag_bytes.data(), ref_tag_bytes.size());
 }
 
-KeyBuf make_group_po_key(bucket_id_t bucket_id, std::string_view group_ref_tag)
+void make_group_po_key(bucket_id_t bucket_id, std::string_view group_ref_tag,
+                       KeyBuf& out)
 {
   uint8_t bid_be[sizeof(bucket_id_t)];
   bucket_id.serialize(bid_be);
-  KeyBuf key;
   KeyHeaderS hdr('P', kShardCount, kShardId, bid_be, kOpTypeGroup);
-  key.set_header(hdr);
-  key.append(group_ref_tag.data(), group_ref_tag.size());
-  return key;
+  out.set_header(hdr);
+  out.append(group_ref_tag.data(), group_ref_tag.size());
 }
 
 KeyBuf make_p_prefix(uint16_t shard_count, uint16_t shard_id)
@@ -346,14 +341,6 @@ void make_go_key(uint16_t shard_count, uint16_t shard_id, bucket_id_t bucket_id,
   out.append(ref_tag_bytes.data(), ref_tag_bytes.size());
 }
 
-KeyBuf make_go_key(uint16_t shard_count, uint16_t shard_id, bucket_id_t bucket_id,
-                   std::string_view ref_tag_bytes, uint64_t object_size)
-{
-  KeyBuf key;
-  make_go_key(shard_count, shard_id, bucket_id, ref_tag_bytes, object_size, key);
-  return key;
-}
-
 KeyBuf make_g_prefix()
 {
   KeyBuf key;
@@ -389,14 +376,6 @@ void make_d_key(bucket_id_t bucket_id, uint8_t size_tier,
   KeyHeaderD hdr(kShardCount, kShardId, bid_be, size_tier,
                  d_hash_prefix(ref_tag), mtime, ref_tag.data());
   out.set_header(hdr);
-}
-
-KeyBuf make_d_key(bucket_id_t bucket_id, uint8_t size_tier,
-                  std::string_view ref_tag, uint32_t mtime)
-{
-  KeyBuf key;
-  make_d_key(bucket_id, size_tier, ref_tag, mtime, key);
-  return key;
 }
 
 KeyBuf make_d_bucket_prefix(bucket_id_t bucket_id)
@@ -455,14 +434,6 @@ void make_v_key(bucket_id_t bucket_id, std::string_view object_name,
   char buff[sizeof(version_id_t)];
   version_id.serialize(buff);
   out.append(buff, sizeof(buff));
-}
-
-KeyBuf make_v_key(bucket_id_t bucket_id, std::string_view object_name,
-                  version_id_t version_id)
-{
-  KeyBuf key;
-  make_v_key(bucket_id, object_name, version_id, key);
-  return key;
 }
 
 KeyBuf make_v_prefix(bucket_id_t bucket_id, std::string_view object_name)
@@ -543,13 +514,6 @@ void make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
   out.append(&child_type, 1);
 }
 
-KeyBuf make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag)
-{
-  KeyBuf key;
-  make_ct_key(bucket_id, ref_tag, key);
-  return key;
-}
-
 void make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
 {
   uint8_t bid_be[sizeof(bucket_id_t)];
@@ -557,13 +521,6 @@ void make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
   KeyHeaderS hdr('S', kShardCount, kShardId, bid_be, kCategoryChild);
   out.set_header(hdr);
   out.append(ref_tag.data(), ref_tag.size());
-}
-
-KeyBuf make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag)
-{
-  KeyBuf key;
-  make_c_prefix(bucket_id, ref_tag, key);
-  return key;
 }
 
 std::optional<GroupPoKeyParts> parse_group_po_key(std::string_view key)

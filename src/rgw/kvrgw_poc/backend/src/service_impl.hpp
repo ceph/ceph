@@ -488,6 +488,7 @@ class KvRgwServiceImpl final {
     bool has_bucket_future{false};
     bool is_storage_tier{false};
     KeyBuf object_key;
+    KeyBuf po_key;
   };
 
   struct VerifiedBucket {

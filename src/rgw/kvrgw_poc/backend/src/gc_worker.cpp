@@ -160,7 +160,8 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
       if (!has_external_children) {
         return;
       }
-      auto c_prefix = make_c_prefix(parts->bucket_id, rt_view);
+      KeyBuf c_prefix;
+      make_c_prefix(parts->bucket_id, rt_view, c_prefix);
       auto c_end = c_prefix;
       c_end.append_byte(0xFF);
       txn.kv_range_clear(c_prefix.view(), c_end.view());
@@ -215,8 +216,8 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
         return;
       }
       const uint8_t st = d_size_tier_from_size(gc_val->hdr.object_size);
-      const auto d_key =
-          make_d_key(parts->bucket_id, st, rt_view, gc_val->hdr.mtime);
+      KeyBuf d_key;
+      make_d_key(parts->bucket_id, st, rt_view, gc_val->hdr.mtime, d_key);
       auto tr = store_.begin_transaction();
       if (!tr) {
         continue;

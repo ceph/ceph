@@ -49,10 +49,10 @@ int main()
   {
     bucket_id_t bucket_id(0x0101010101010101ULL);
     std::string object_name = "photos/cat.jpg";
-
-    auto vk1 = make_v_key(bucket_id, object_name, version_id_t{0xFFFFFFFF});
-    auto vk2 = make_v_key(bucket_id, object_name, version_id_t{0xFFFFFFFE});
-    auto vk3 = make_v_key(bucket_id, object_name, version_id_t{0x00000002});
+    KeyBuf vk1, vk2, vk3;
+    make_v_key(bucket_id, object_name, version_id_t{0xFFFFFFFF}, vk1);
+    make_v_key(bucket_id, object_name, version_id_t{0xFFFFFFFE}, vk2);
+    make_v_key(bucket_id, object_name, version_id_t{0x00000002}, vk3);
 
     // Lower vid value → smaller BE bytes → sorts first in forward scan
     // This means most recently displaced version (lowest vid) sorts first
@@ -80,7 +80,8 @@ int main()
     assert(vk2.view().substr(0, prefix.len) == prefix.view());
 
     // Different object sorts differently
-    auto vk_other = make_v_key(bucket_id, "zzz", version_id_t{0xFFFFFFFF});
+    KeyBuf vk_other;
+    make_v_key(bucket_id, "zzz", version_id_t{0xFFFFFFFF}, vk_other);
     assert(vk_other.view() > vk1.view());
   }
 

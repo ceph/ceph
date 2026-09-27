@@ -577,7 +577,8 @@ void BatchCommitQueue::start_batch(InFlightBatch &ib)
       return;
     }
     auto group_ref_view = ref_tag_view(ib.storage_entries[0].ref_tag);
-    auto gpo_key = make_group_po_key(ib.group_bucket_id, group_ref_view);
+    KeyBuf gpo_key;
+    make_group_po_key(ib.group_bucket_id, group_ref_view, gpo_key);
     auto gpo_val =
         make_group_po_value(ib.storage_entries, ib.storage_entry_count,
                             static_cast<uint32_t>(now_unix()));
@@ -677,7 +678,8 @@ bool BatchCommitQueue::do_phase3_work(InFlightBatch &ib)
   FdbFuture f_group_po;
   if (ib.storage_entry_count > 0 && !any_failed) {
     auto group_ref_view = ref_tag_view(ib.storage_entries[0].ref_tag);
-    auto gpo_key = make_group_po_key(ib.group_bucket_id, group_ref_view);
+    KeyBuf gpo_key;
+    make_group_po_key(ib.group_bucket_id, group_ref_view, gpo_key);
     f_group_po = tr->kv_async_get(gpo_key.view());
   }
 
@@ -727,7 +729,8 @@ bool BatchCommitQueue::do_phase3_work(InFlightBatch &ib)
     }
     else {
       auto group_ref_view = ref_tag_view(ib.storage_entries[0].ref_tag);
-      auto gpo_key = make_group_po_key(ib.group_bucket_id, group_ref_view);
+      KeyBuf gpo_key;
+      make_group_po_key(ib.group_bucket_id, group_ref_view, gpo_key);
       tr->kv_del(gpo_key.view());
     }
   }
@@ -824,7 +827,8 @@ void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)
   }
 
   if (has_storage_tier) {
-    auto gpo_key = make_group_po_key(group_bucket_id, group_ref_tag);
+    KeyBuf gpo_key;
+    make_group_po_key(group_bucket_id, group_ref_tag, gpo_key);
     auto gpo_val = make_group_po_value(storage_entries, storage_entry_count,
                                        static_cast<uint32_t>(now_unix()));
     auto set_rc = service_.store_.set(gpo_key.view(), gpo_val);
@@ -945,7 +949,8 @@ void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)
 
     FdbFuture f_group_po;
     if (has_storage_tier && !any_failed) {
-      auto gpo_key = make_group_po_key(group_bucket_id, group_ref_tag);
+      KeyBuf gpo_key;
+      make_group_po_key(group_bucket_id, group_ref_tag, gpo_key);
       f_group_po = tr->kv_async_get(gpo_key.view());
     }
 
@@ -996,7 +1001,8 @@ void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)
         fail_ec = KVRGW_ERR_INTERNAL;
       }
       else {
-        auto gpo_key = make_group_po_key(group_bucket_id, group_ref_tag);
+        KeyBuf gpo_key;
+        make_group_po_key(group_bucket_id, group_ref_tag, gpo_key);
         tr->kv_del(gpo_key.view());
       }
     }
@@ -1107,7 +1113,8 @@ FdbGetHolder KvRgwServiceImpl::issue_bucket_get(KvTransaction &tr,
                                                 tenant_id_t tenant_id,
                                                 const std::string &bucket_name)
 {
-  const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
+  KeyBuf bucket_key;
+  make_bucket_key(tenant_id, bucket_name, bucket_key);
   return tr.kv_async_get_holder(bucket_key.view());
 }
 
@@ -1186,7 +1193,8 @@ KvRgwServiceImpl::read_bucket_state(tenant_id_t tenant_id,
   if (!is_valid_bucket_name(bucket_name)) {
     return std::optional<BucketState>(std::nullopt);
   }
-  const auto key = make_bucket_key(tenant_id, bucket_name);
+  KeyBuf key;
+  make_bucket_key(tenant_id, bucket_name, key);
   auto value = store_.get(key.view());
   if (!value) {
     return std::unexpected(value.error());
@@ -1393,7 +1401,8 @@ std::expected<std::optional<ObjectValue>, fdb_error_t>
 KvRgwServiceImpl::load_object(bucket_id_t bucket_id,
                               const std::string &object_name)
 {
-  const auto key = make_object_key(bucket_id, object_name);
+  KeyBuf key;
+  make_object_key(bucket_id, object_name, key);
   auto value = store_.get(key.view());
   if (!value) {
     return std::unexpected(value.error());
@@ -1413,7 +1422,8 @@ KvRgwServiceImpl::load_object_with_data(bucket_id_t bucket_id,
     return std::unexpected(tr_result.error());
   }
   auto &tr = *tr_result;
-  const auto key = make_object_key(bucket_id, object_name);
+  KeyBuf key;
+  make_object_key(bucket_id, object_name, key);
   auto raw = tr->kv_get(key.view());
   if (!raw) {
     return std::unexpected(raw.error());
@@ -1448,7 +1458,8 @@ KvRgwServiceImpl::load_object_with_data(bucket_id_t bucket_id,
                                12)
             : std::string_view(
                   reinterpret_cast<const char *>(result.value.hdr.ref_tag), 12);
-    const auto d_key = make_d_key(d_bucket, st, ref_sv, mtime);
+    KeyBuf d_key;
+    make_d_key(d_bucket, st, ref_sv, mtime, d_key);
     auto d_val = tr->kv_get(d_key.view());
     if (!d_val) {
       return std::unexpected(d_val.error());
@@ -1643,7 +1654,8 @@ KvRgwServiceImpl::delete_prepare_batch(KvTransaction &tr, tenant_id_t tenant_id,
   }
   batch.bucket_id = bucket_id;
   // TBD - should be done once for the full multi-delete not per-batch!
-  const auto bkt_key = make_bucket_key(tenant_id, bucket_name);
+  KeyBuf bkt_key;
+  make_bucket_key(tenant_id, bucket_name, bkt_key);
   batch.f_bkt = tr.kv_async_get(bkt_key.view());
   return batch;
 }
@@ -1888,7 +1900,8 @@ void apply_tags_to_value(ObjectValue &obj, std::span<const uint8_t> encoded,
   const tag_count_t count = read_be_field<tag_count_t>(encoded.data());
   obj.hdr.tags_count = static_cast<uint8_t>(count);
   obj.hdr.flags |= ObjectValue::kFlagExternalTags;
-  const auto ct_key = make_ct_key(bucket_id, ref_tag);
+  KeyBuf ct_key;
+  make_ct_key(bucket_id, ref_tag, ct_key);
   ChildValueHeader ch{};
   tr.kv_put(
       ct_key.view(),
@@ -1901,7 +1914,8 @@ void clear_object_tags(ObjectValue &obj, KvTransaction &tr,
                        bucket_id_t bucket_id, std::string_view ref_tag)
 {
   if (obj.has_external_tags()) {
-    const auto ct_key = make_ct_key(bucket_id, ref_tag);
+    KeyBuf ct_key;
+    make_ct_key(bucket_id, ref_tag, ct_key);
     tr.kv_del(ct_key.view());
   }
   obj.hdr.tags_count = 0;
@@ -1967,7 +1981,8 @@ KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,
     return KVRGW_ERR_INVALID_BUCKET_NAME;
   }
   // generate key to the bucket entry
-  const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
+  KeyBuf bucket_key;
+  make_bucket_key(tenant_id, bucket_name, bucket_key);
 
   // start txn
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
@@ -2095,19 +2110,20 @@ KvRgwServiceImpl::put_prepare(KvTransaction &tr, PutInTxnParams &params,
                               bool need_bucket)
 {
   PutContext ctx;
-  ctx.object_key = make_object_key(params.bucket_id, params.object_name);
+  make_object_key(params.bucket_id, params.object_name, ctx.object_key);
   ctx.is_storage_tier = params.is_storage_tier;
 
   if (need_bucket) {
-    const auto bucket_key = make_bucket_key(params.tenant_id, params.bucket_name);
+    KeyBuf bucket_key;
+    make_bucket_key(params.tenant_id, params.bucket_name, bucket_key);
     ctx.f_bkt = tr.kv_async_get(bucket_key.view());
     ctx.has_bucket_future = true;
   }
 
   if (params.is_storage_tier) {
-    const auto po_key = make_po_key(params.bucket_id, params.object_name,
-                                    ref_tag_view(params.ref_tag));
-    ctx.f_po = tr.kv_async_get(po_key.view());
+    make_po_key(params.bucket_id, params.object_name,
+                ref_tag_view(params.ref_tag), ctx.po_key);
+    ctx.f_po = tr.kv_async_get(ctx.po_key.view());
   }
 
   ctx.f_obj = tr.kv_async_get(ctx.object_key.view());
@@ -2171,8 +2187,6 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
     }
 
     if (ctx.f_po) {
-      const auto po_key = make_po_key(params.bucket_id, params.object_name,
-                                      ref_tag_view(params.ref_tag));
       auto po_val = tr.kv_wait_get(ctx.f_po);
       if (!po_val) {
         return fdb_to_error(po_val.error());
@@ -2193,7 +2207,7 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
         const auto *h = ovh_ptr(**existing);
         if (h && RefTagGenerator::equal(ovh_ref_tag(h),
                                         ref_tag_view(params.ref_tag))) {
-          tr.kv_del(po_key.view());
+          tr.kv_del(ctx.po_key.view());
           return KVRGW_ERR_OK;
         }
         if (h) {
@@ -2241,9 +2255,7 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
     tr.kv_put(ctx.object_key.view(), vbuf.view());
 
     if (ctx.f_po) {
-      const auto po_key = make_po_key(params.bucket_id, params.object_name,
-                                      ref_tag_view(params.ref_tag));
-      tr.kv_del(po_key.view());
+      tr.kv_del(ctx.po_key.view());
     }
 
     return KVRGW_ERR_OK;
@@ -2319,8 +2331,8 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
     const uint8_t st = d_size_tier_from_size(params.data->size());
     const uint32_t mtime =
         static_cast<uint32_t>(params.value.hdr.last_modified_sec);
-    const auto d_key =
-        make_d_key(params.bucket_id, st, ref_tag_view(params.ref_tag), mtime);
+    KeyBuf d_key;
+    make_d_key(params.bucket_id, st, ref_tag_view(params.ref_tag), mtime, d_key);
     ChildValueHeader ch{};
     tr.kv_put(d_key.view(), make_child_value(ch, *params.data));
   }
@@ -2436,7 +2448,8 @@ KvrgwErrorCode KvRgwServiceImpl::select_storage_tier(
   }
 
   const bucket_id_t bid = (**cached_bid).bucket_id;
-  const auto po_key = make_po_key(bid, object_name, ref_tag_view(ref_tag));
+  KeyBuf po_key;
+  make_po_key(bid, object_name, ref_tag_view(ref_tag), po_key);
   auto po_rc = store_.set(
       po_key.view(),
       make_po_value(estimated_size, static_cast<uint32_t>(now_unix())));
@@ -2568,13 +2581,14 @@ KvRgwServiceImpl::list_buckets(tenant_id_t tenant_id,
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     *out = {};
 
-    std::string scan_begin;
+    KeyBuf bucket_key;
     if (!continuation_token.empty()) {
-      scan_begin = make_bucket_key(tenant_id, continuation_token).view();
+      make_bucket_key(tenant_id, continuation_token, bucket_key);
     }
     else {
-      scan_begin = make_bucket_key(tenant_id, prefix).view();
+      make_bucket_key(tenant_id, prefix, bucket_key);
     }
+    std::string scan_begin(bucket_key.view());
     bool exclusive_scan = !continuation_token.empty();
 
     KvrgwErrorCode iter_ec = KVRGW_ERR_OK;
@@ -2910,6 +2924,11 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
   const auto bucket_id = (**bucket_id_res).bucket_id;
   const version_id_t target_vid = version_id;
 
+  KeyBuf object_key;
+  make_object_key(bucket_id, key, object_key);
+  KeyBuf v_key;
+  make_v_key(bucket_id, key, target_vid, v_key);
+
   constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     auto tr_result = store_.begin_transaction();
@@ -2922,9 +2941,6 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
       return ec;
     }
     auto &tr = *tr_result;
-
-    const auto object_key = make_object_key(bucket_id, key);
-    const auto v_key = make_v_key(bucket_id, key, target_vid);
 
     auto f_current = tr->kv_async_get(object_key.view());
     auto f_v = tr->kv_async_get(v_key.view());
@@ -3003,13 +3019,14 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
             const uint8_t st = d_size_tier_from_size(current->hdr.size);
             const uint32_t mtime =
                 static_cast<uint32_t>(current->hdr.last_modified_sec);
-            const auto d_key = make_d_key(parts->bucket_id, st, ref_sv, mtime);
+            KeyBuf d_key;
+            make_d_key(parts->bucket_id, st, ref_sv, mtime, d_key);
             tr->kv_del(d_key.view());
           }
           else if (current->hdr.chunk.type == CHUNK_STORAGE) {
-            const auto go_key = make_go_key(parts->shard_count, parts->shard_id,
-                                            parts->bucket_id, ref_sv,
-                                            current->hdr.size);
+            KeyBuf go_key;
+            make_go_key(parts->shard_count, parts->shard_id,
+                        parts->bucket_id, ref_sv, current->hdr.size, go_key);
             GcValueHeader gc_hdr{};
             gc_hdr.chunk = current->hdr.chunk;
             gc_hdr.object_size = current->hdr.size;
@@ -3059,9 +3076,9 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
         if (parts) {
           const std::string_view ref_sv(
               reinterpret_cast<const char *>(v_entry->hdr.ref_tag), 12);
-          const auto go_key = make_go_key(parts->shard_count, parts->shard_id,
-                                          parts->bucket_id, ref_sv,
-                                          v_entry->hdr.size);
+          KeyBuf go_key;
+          make_go_key(parts->shard_count, parts->shard_id,
+                      parts->bucket_id, ref_sv, v_entry->hdr.size, go_key);
           GcValueHeader gc_hdr{};
           gc_hdr.chunk = v_entry->hdr.chunk;
           gc_hdr.object_size = v_entry->hdr.size;
@@ -3181,7 +3198,8 @@ KvrgwErrorCode KvRgwServiceImpl::delete_bucket(tenant_id_t tenant_id,
   ops_stats_.inc(OpType::kDeleteBucket);
   constexpr int kMaxRetries = 3;
   // generate key to the bucket entry
-  const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
+  KeyBuf bucket_key;
+  make_bucket_key(tenant_id, bucket_name, bucket_key);
   const std::string name(bucket_name);
 
   auto cached = get_bucket_id_cached(tenant_id, name);
@@ -3302,7 +3320,8 @@ KvrgwErrorCode KvRgwServiceImpl::put_bucket_policy(tenant_id_t tenant_id,
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kPutBucketPolicy);
   ops_stats_.inc(OpType::kPutBucketPolicy);
-  const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
+  KeyBuf bucket_key;
+  make_bucket_key(tenant_id, bucket_name, bucket_key);
   const std::string name(bucket_name);
 
   auto existing = store_.get(bucket_key.view());
@@ -3341,7 +3360,8 @@ KvrgwErrorCode KvRgwServiceImpl::get_bucket_policy(tenant_id_t tenant_id,
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kGetBucketPolicy);
   ops_stats_.inc(OpType::kGetBucketPolicy);
-  const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
+  KeyBuf bucket_key;
+  make_bucket_key(tenant_id, bucket_name, bucket_key);
   auto val = store_.get(bucket_key.view());
   if (!val) {
     return fdb_to_error(val.error());
@@ -3364,7 +3384,8 @@ KvRgwServiceImpl::delete_bucket_policy(tenant_id_t tenant_id,
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kDeleteBucketPolicy);
   ops_stats_.inc(OpType::kDeleteBucketPolicy);
-  const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
+  KeyBuf bucket_key;
+  make_bucket_key(tenant_id, bucket_name, bucket_key);
   const std::string name(bucket_name);
 
   auto existing = store_.get(bucket_key.view());
@@ -3402,7 +3423,8 @@ KvrgwErrorCode KvRgwServiceImpl::put_bucket_versioning(
   ScopedRequestLatency _lat(latency_stats_, OpType::kPutBucketVersioning);
   ops_stats_.inc(OpType::kPutBucketVersioning);
   constexpr int kMaxRetries = 3;
-  const auto bucket_key = make_bucket_key(tenant_id, bucket_name);
+  KeyBuf bucket_key;
+  make_bucket_key(tenant_id, bucket_name, bucket_key);
   const std::string name(bucket_name);
 
   // start txn
@@ -3513,6 +3535,11 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     dst_bucket_id = (**dst_cached).bucket_id;
   }
 
+  KeyBuf src_o_key;
+  make_object_key(src_bucket_id, src_key, src_o_key);
+  KeyBuf dst_o_key;
+  make_object_key(dst_bucket_id, dst_key, dst_o_key);
+
   constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
     auto tr_result = store_.begin_transaction();
@@ -3527,9 +3554,6 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     auto &tr = *tr_result;
 
     // --- Group 1: pipeline dst B: + src S:O + dst S:O ---
-    const auto src_o_key = make_object_key(src_bucket_id, src_key);
-    const auto dst_o_key = make_object_key(dst_bucket_id, dst_key);
-
     auto f_dst_bkt = issue_bucket_get(*tr, tenant_id, dst_bucket);
     auto f_src_o = tr->kv_async_get(src_o_key.view());
     auto f_dst_o = tr->kv_async_get(dst_o_key.view());
@@ -3560,7 +3584,8 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
         }
       }
       if (!found_in_o) {
-        const auto v_key = make_v_key(src_bucket_id, src_key, src_vid);
+        KeyBuf v_key;
+        make_v_key(src_bucket_id, src_key, src_vid, v_key);
         auto v_raw = tr->kv_get(v_key.view());
         if (!v_raw) {
           auto ec = fdb_to_error(v_raw.error());
@@ -3772,8 +3797,8 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
                     reinterpret_cast<const char *>(src.hdr.ref_tag),
                     kRefTagSize);
       const uint8_t st = d_size_tier_from_size(src.hdr.size);
-      const auto d_key =
-          make_d_key(d_bucket, st, d_ref_sv, src.hdr.last_modified_sec);
+      KeyBuf d_key;
+      make_d_key(d_bucket, st, d_ref_sv, src.hdr.last_modified_sec, d_key);
 
       auto d_raw = tr->kv_get(d_key.view());
       if (!d_raw) {
@@ -3881,14 +3906,16 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     else if (src.hdr.tags_count > 0) {
       const std::string_view src_ref_sv(
           reinterpret_cast<const char *>(src.hdr.ref_tag), kRefTagSize);
-      const auto src_ct = make_ct_key(src_bucket_id, src_ref_sv);
+      KeyBuf src_ct;
+      make_ct_key(src_bucket_id, src_ref_sv, src_ct);
       auto ct_val = tr->kv_get(src_ct.view());
       if (!ct_val || !*ct_val) {
         return KVRGW_ERR_CORRUPT_VALUE;
       }
       const std::string_view new_ref_sv(
           reinterpret_cast<const char *>(new_value.hdr.ref_tag), kRefTagSize);
-      const auto dst_ct = make_ct_key(dst_bucket_id, new_ref_sv);
+      KeyBuf dst_ct;
+      make_ct_key(dst_bucket_id, new_ref_sv, dst_ct);
       tr->kv_put(dst_ct.view(), **ct_val);
       new_value.hdr.tags_count = src.hdr.tags_count;
       new_value.hdr.flags |= ObjectValue::kFlagExternalTags;
@@ -4031,7 +4058,8 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(tenant_id_t tenant_id,
       return fdb_to_error(tr_result.error());
     }
     auto &tr = *tr_result;
-    const auto v_key = make_v_key(bucket_id, object_name, target_vid);
+    KeyBuf v_key;
+    make_v_key(bucket_id, object_name, target_vid, v_key);
     auto v_raw = tr->kv_get(v_key.view());
     if (!v_raw) {
       return fdb_to_error(v_raw.error());
@@ -4064,7 +4092,8 @@ KvrgwErrorCode KvRgwServiceImpl::load_object_for_read(tenant_id_t tenant_id,
             12)
           : std::string_view(
             reinterpret_cast<const char *>(v_obj->hdr.ref_tag), 12);
-        const auto d_key = make_d_key(d_bucket, st, ref_sv, mtime);
+        KeyBuf d_key;
+        make_d_key(d_bucket, st, ref_sv, mtime, d_key);
         auto d_val = tr->kv_get(d_key.view());
         if (!d_val) {
           return fdb_to_error(d_val.error());
@@ -4395,8 +4424,11 @@ KvrgwErrorCode KvRgwServiceImpl::list_object_versions(
     std::string last_o;
     std::string last_v;
     if (!key_marker.empty() && !decode_lov_cursors(key_marker, &last_o, &last_v)) {
-      last_o = std::string(make_object_key(bucket_id, key_marker).view());
-      last_v = std::string(make_v_key(bucket_id, key_marker, version_id_marker).view());
+      KeyBuf o_key, v_key;
+      make_object_key(bucket_id, key_marker, o_key);
+      last_o = std::string(o_key.view());
+      make_v_key(bucket_id, key_marker, version_id_marker, v_key);
+      last_v = std::string(v_key.view());
     }
 
     std::string o_begin;
@@ -4565,7 +4597,8 @@ KvrgwErrorCode KvRgwServiceImpl::put_object_tagging(
     return ac;
   }
   const auto bucket_id = (**cached).bucket_id;
-  const auto object_key = make_object_key(bucket_id, key);
+  KeyBuf object_key;
+  make_object_key(bucket_id, key, object_key);
 
   constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
@@ -4665,7 +4698,8 @@ KvrgwErrorCode KvRgwServiceImpl::get_object_tagging(
     return ac;
   }
   const auto bucket_id = (**cached).bucket_id;
-  const auto object_key = make_object_key(bucket_id, key);
+  KeyBuf object_key;
+  make_object_key(bucket_id, key, object_key);
 
   auto tr_result = store_.begin_transaction();
   if (!tr_result) {
@@ -4694,7 +4728,8 @@ KvrgwErrorCode KvRgwServiceImpl::get_object_tagging(
 
   const std::string_view ref_tag_sv(
       reinterpret_cast<const char *>(value->hdr.ref_tag), kRefTagSize);
-  const auto ct_key = make_ct_key(bucket_id, ref_tag_sv);
+  KeyBuf ct_key;
+  make_ct_key(bucket_id, ref_tag_sv, ct_key);
   auto ct_val = tr->kv_get(ct_key.view());
   if (!ct_val) {
     return fdb_to_error(ct_val.error());
@@ -4739,7 +4774,8 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_tagging(
     return ac;
   }
   const auto bucket_id = (**cached).bucket_id;
-  const auto object_key = make_object_key(bucket_id, key);
+  KeyBuf object_key;
+  make_object_key(bucket_id, key, object_key);
 
   constexpr int kMaxRetries = 3;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {

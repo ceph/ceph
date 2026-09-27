@@ -80,12 +80,15 @@ KeyBuf make_l_key(char type, std::string_view name);
 std::optional<LKeyParts> parse_l_key(std::string_view key);
 bool is_valid_l_type(char type);
 
-KeyBuf make_bucket_key(tenant_id_t tenant_id, std::string_view bucket_name);
+void   make_bucket_key(tenant_id_t tenant_id, std::string_view bucket_name, KeyBuf& out);
 KeyBuf make_bucket_prefix(tenant_id_t tenant_id);
 KeyBuf make_tenant_key(std::string_view tenant_name);
 std::optional<BucketKeyParts> parse_bucket_key(std::string_view key);
 std::optional<std::string_view> parse_bucket_key_view(std::string_view key);
 
+// Prefer the out-param overload below to avoid a KeyBuf copy.
+// Value-returning form retained only for listing scan-boundary call sites
+// that must convert to std::string (e.g. prefix_range_end inputs).
 KeyBuf make_object_key(bucket_id_t bucket_id, std::string_view object_name);
 void   make_object_key(bucket_id_t bucket_id, std::string_view object_name, KeyBuf& out);
 KeyBuf make_object_prefix(bucket_id_t bucket_id);
@@ -94,23 +97,19 @@ std::optional<ObjectKeyParts> parse_object_key(std::string_view key);
 std::optional<std::string_view> parse_object_key_view(std::string_view key);
 std::optional<ObjectKeyPartsView> parse_object_key_parts_view(std::string_view key);
 
-KeyBuf make_po_key(
+void   make_po_key(
     bucket_id_t bucket_id,
     std::string_view object_name,
-    std::string_view ref_tag_bytes);
-KeyBuf make_group_po_key(
+    std::string_view ref_tag_bytes,
+    KeyBuf& out);
+void   make_group_po_key(
     bucket_id_t bucket_id,
-    std::string_view group_ref_tag);
+    std::string_view group_ref_tag,
+    KeyBuf& out);
 KeyBuf make_p_prefix(uint16_t shard_count, uint16_t shard_id);
 KeyBuf make_p_bucket_prefix(bucket_id_t bucket_id);
 std::optional<PoKeyParts> parse_po_key(std::string_view key);
 
-KeyBuf make_go_key(
-    uint16_t shard_count,
-    uint16_t shard_id,
-    bucket_id_t bucket_id,
-    std::string_view ref_tag_bytes,
-    uint64_t object_size);
 void make_go_key(
     uint16_t shard_count,
     uint16_t shard_id,
@@ -125,11 +124,6 @@ uint8_t size_tier_from_size(uint64_t object_size_bytes);
 uint64_t size_tier_min_bytes(uint8_t tier);
 uint64_t size_tier_max_bytes(uint8_t tier);
 
-KeyBuf make_d_key(
-    bucket_id_t bucket_id,
-    uint8_t size_tier,
-    std::string_view ref_tag,
-    uint32_t mtime);
 void make_d_key(
     bucket_id_t bucket_id,
     uint8_t size_tier,
@@ -150,7 +144,6 @@ struct VersionKeyParts {
   version_id_t version_id{};
 };
 
-KeyBuf make_v_key(bucket_id_t bucket_id, std::string_view object_name, version_id_t version_id);
 void   make_v_key(bucket_id_t bucket_id, std::string_view object_name, version_id_t version_id, KeyBuf& out);
 KeyBuf make_v_prefix(bucket_id_t bucket_id, std::string_view object_name);
 std::optional<VersionKeyParts> parse_v_key(std::string_view key);
@@ -158,9 +151,7 @@ std::optional<std::string_view> parse_v_key_view(std::string_view key);
 
 KeyBuf make_r_key(std::string_view ref_tag);
 
-KeyBuf make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag);
 void   make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out);
-KeyBuf make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag);
 void   make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out);
 
 struct GroupPoKeyParts {
