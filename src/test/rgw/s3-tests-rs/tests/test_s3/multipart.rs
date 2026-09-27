@@ -2750,3 +2750,86 @@ async fn test_multipart_strided_stride_establishment() {
     assert_eq!(stride_of(bucket.clone(), key.into(), id.clone()).await,
         "5242880", "arming one upload must not disturb another");
 }
+
+
+/// A part larger than part 1 must not corrupt its neighbour.
+///
+/// S3 requires only that every part but the last reach a minimum size;
+/// it does not require them to be equal, and RGW enforces nothing more
+/// (rgw_sal_nsfs.cc rejects a short non-final part and says nothing
+/// about equality).  The strided staging layout places part K at
+/// (K-1) * stride, where the stride is inferred from part 1, so a
+/// larger part K would run into part K+1's region -- and the damage is
+/// invisible afterwards, because every record still describes where
+/// its part was meant to go.
+///
+/// The driver moves such a part into its own file instead.  That is
+/// correct behaviour producing a correct object, so the object bytes
+/// alone cannot distinguish it from the guard never firing;  the
+/// divert counter is what makes the assertion real.
+#[tokio::test]
+async fn test_multipart_oversized_part_diverts() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+
+    let before = match s3_tests_rs::admin::driver_hint_results("mpu-state", &[]).await {
+        Some(m) => {
+            if m.get("layout").map(String::as_str) != Some("rgw-strided") {
+                eprintln!("skipping: staging layout is not rgw-strided");
+                return;
+            }
+            m.get("diverts").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0)
+        }
+        None => {
+            eprintln!("skipping: driver does not implement mpu-state");
+            return;
+        }
+    };
+
+    /* deliberately unequal, with the SECOND part the longest:  part 1
+     * sets the stride, so part 2 is the one that would overrun */
+    let parts: Vec<Vec<u8>> = vec![
+        vec![b'a'; 5 * 1024 * 1024 + 3],
+        vec![b'b'; 5 * 1024 * 1024 + 7],
+        vec![b'c'; 4096 + 5],
+    ];
+    let whole: Vec<u8> = parts.iter().flatten().copied().collect();
+
+    let bucket = get_new_bucket(Some(&client)).await;
+    let key = "mpu-oversized-part";
+    let up = client.create_multipart_upload()
+        .bucket(&bucket).key(key).send().await.unwrap();
+    let upload_id = up.upload_id().unwrap().to_string();
+
+    let mut completed = Vec::new();
+    for (i, body) in parts.iter().enumerate() {
+        let n = i as i32 + 1;
+        let r = client.upload_part()
+            .bucket(&bucket).key(key).upload_id(&upload_id).part_number(n)
+            .body(ByteStream::from(body.clone()))
+            .send().await.unwrap();
+        completed.push(CompletedPart::builder()
+            .part_number(n).e_tag(r.e_tag().unwrap_or_default()).build());
+    }
+
+    client.complete_multipart_upload()
+        .bucket(&bucket).key(key).upload_id(&upload_id)
+        .multipart_upload(CompletedMultipartUpload::builder()
+            .set_parts(Some(completed)).build())
+        .send().await.unwrap();
+
+    let got = get_body(client.get_object()
+        .bucket(&bucket).key(key).send().await.unwrap()).await;
+
+    assert_eq!(got.len(), whole.len(), "assembled object is the wrong length");
+    let diff = got.iter().zip(whole.iter()).position(|(a, b)| a != b);
+    assert_eq!(diff, None,
+        "assembled object differs from the parts at offset {diff:?}");
+
+    let after = s3_tests_rs::admin::driver_hint_results("mpu-state", &[]).await
+        .and_then(|m| m.get("diverts").and_then(|s| s.parse::<u64>().ok()))
+        .expect("mpu-state should report diverts");
+    assert!(after > before,
+        "no part was diverted ({before} -> {after});  the object is correct \
+         but the guard never fired, so this test proves nothing");
+}
