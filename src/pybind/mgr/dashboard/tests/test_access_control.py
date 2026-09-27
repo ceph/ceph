@@ -899,3 +899,85 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         Settings.PWD_POLICY_CHECK_OLDPWD_ENABLED = True
         pw_policy = PasswordPolicy('foo', old_password='foo')
         self.assertTrue(pw_policy.check_is_old_password())
+
+    # --- Last admin protection tests ---
+
+    def _create_admin_user(self, username='admin'):
+        self.exec_cmd('ac-user-create', username=username, inbuf='admin',
+                      rolename='administrator',
+                      name=f'{username} User', email=f'{username}@user.com',
+                      force_password=True)
+
+    def test_delete_last_admin_user(self):
+        self._create_admin_user()
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-delete', username='admin')
+        self.assertEqual(ctx.exception.retcode, -errno.EPERM)
+        self.assertIn('last user with administrator role', str(ctx.exception))
+        self.validate_persistent_user('admin', ['administrator'])
+
+    def test_delete_admin_when_others_exist(self):
+        self._create_admin_user('admin1')
+        self._create_admin_user('admin2')
+        out = self.exec_cmd('ac-user-delete', username='admin1')
+        self.assertEqual(out, "User 'admin1' deleted")
+        self.validate_persistent_no_user('admin1')
+
+    def test_delete_admin_when_other_is_disabled(self):
+        self._create_admin_user('admin1')
+        self._create_admin_user('admin2')
+        self.exec_cmd('ac-user-disable', username='admin2')
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-delete', username='admin1')
+        self.assertEqual(ctx.exception.retcode, -errno.EPERM)
+        self.assertIn('last user with administrator role', str(ctx.exception))
+
+    def test_delete_non_admin_user_freely(self):
+        self._create_admin_user('admin1')
+        self.exec_cmd('ac-user-create', username='regular', inbuf='pass',
+                      name='Regular', email='r@r.com', force_password=True)
+        out = self.exec_cmd('ac-user-delete', username='regular')
+        self.assertEqual(out, "User 'regular' deleted")
+
+    def test_disable_last_admin(self):
+        self._create_admin_user()
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-disable', username='admin')
+        self.assertEqual(ctx.exception.retcode, -errno.EPERM)
+        self.assertIn('last user with administrator role', str(ctx.exception))
+
+    def test_disable_admin_when_others_exist(self):
+        self._create_admin_user('admin1')
+        self._create_admin_user('admin2')
+        user = self.exec_cmd('ac-user-disable', username='admin1')
+        self.assertFalse(user['enabled'])
+
+    def test_set_roles_remove_admin_from_last_admin(self):
+        self._create_admin_user()
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-set-roles', username='admin',
+                          roles=['read-only'])
+        self.assertEqual(ctx.exception.retcode, -errno.EPERM)
+        self.assertIn('last user with administrator role', str(ctx.exception))
+
+    def test_set_roles_remove_admin_when_others_exist(self):
+        self._create_admin_user('admin1')
+        self._create_admin_user('admin2')
+        user = self.exec_cmd('ac-user-set-roles', username='admin1',
+                             roles=['read-only'])
+        self.assertListEqual(user['roles'], ['read-only'])
+
+    def test_del_roles_remove_admin_from_last_admin(self):
+        self._create_admin_user()
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-del-roles', username='admin',
+                          roles=['administrator'])
+        self.assertEqual(ctx.exception.retcode, -errno.EPERM)
+        self.assertIn('last user with administrator role', str(ctx.exception))
+
+    def test_del_roles_remove_admin_when_others_exist(self):
+        self._create_admin_user('admin1')
+        self._create_admin_user('admin2')
+        user = self.exec_cmd('ac-user-del-roles', username='admin1',
+                             roles=['administrator'])
+        self.assertNotIn('administrator', user['roles'])

@@ -117,6 +117,49 @@ describe('UserListComponent', () => {
       }
     });
   });
+  describe('isLastAdmin', () => {
+    const adminUser = { username: 'admin', roles: ['administrator'], enabled: true };
+    const admin2User = { username: 'admin2', roles: ['administrator'], enabled: true };
+    const regularUser = { username: 'regular', roles: ['read-only'], enabled: true };
+    const disabledAdmin = { username: 'disabled', roles: ['administrator'], enabled: false };
+
+    it('should return true when selected user is the only enabled admin', () => {
+      component.users = [adminUser, regularUser];
+      component.selection.selected = [adminUser];
+      expect(component.isLastAdmin()).toBe(true);
+    });
+
+    it('should return false when multiple enabled admins exist', () => {
+      component.users = [adminUser, admin2User];
+      component.selection.selected = [adminUser];
+      expect(component.isLastAdmin()).toBe(false);
+    });
+
+    it('should return false when selected user is not an admin', () => {
+      component.users = [adminUser, regularUser];
+      component.selection.selected = [regularUser];
+      expect(component.isLastAdmin()).toBe(false);
+    });
+
+    it('should return true when other admin exists but is disabled', () => {
+      component.users = [adminUser, disabledAdmin];
+      component.selection.selected = [adminUser];
+      expect(component.isLastAdmin()).toBe(true);
+    });
+
+    it('should return false when no selection', () => {
+      component.users = [adminUser];
+      component.selection.selected = [];
+      expect(component.isLastAdmin()).toBe(false);
+    });
+
+    it('should return false when users not loaded', () => {
+      component.users = undefined;
+      component.selection.selected = [adminUser];
+      expect(component.isLastAdmin()).toBe(false);
+    });
+  });
+
   it('should calculate remaining days', () => {
     const day = 60 * 60 * 24 * 1000;
     let today = Date.now();
