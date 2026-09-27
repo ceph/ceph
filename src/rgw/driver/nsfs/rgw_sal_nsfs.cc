@@ -2965,8 +2965,8 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   ldpp_dout(dpp, 1) << "nsfs: using " << mpu_strategy->name()
     << " multipart staging layout" << dendl;
 
-  /* one implementation today;  the second is selected by the bucket's
-   * recorded format, which S4 adds */
+  /* one implementation each;  the second of each is selected by the
+   * bucket's recorded format and is not written yet */
   xattr_strategy = std::make_unique<nsfs::PrefixedXattrStrategy>();
   path_strategy = std::make_unique<nsfs::SentinelPathStrategy>();
 
@@ -5018,6 +5018,18 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 
     d_name.remove_prefix(mp_pre.size());
 
+    /* the directory name is the URL-encoded meta -- object key and
+     * upload id -- so both come from the entry.  Split it here:  this
+     * is the caller which knows it holds a meta, and an upload id
+     * contains no dot, so the last one separates them. */
+    const std::string meta = url_decode(std::string(d_name));
+    const auto dot = meta.rfind('.');
+    if (dot == std::string::npos || dot == 0 || dot + 1 == meta.size()) {
+      return 0;
+    }
+    const std::string mp_key = meta.substr(0, dot);
+    const std::string mp_id = meta.substr(dot + 1);
+
     /* use the staging directory's mtime as the upload creation time */
     struct statx stx;
     if (statx(dir->get_fd(), name, AT_SYMLINK_NOFOLLOW, STATX_MTIME, &stx) < 0) {
@@ -5026,10 +5038,9 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
     auto mtime = from_statx_timestamp(stx.stx_mtime);
 
     ACLOwner owner;
-    std::string upload_id{d_name};
     std::unique_ptr<MultipartUpload> upload =
         std::make_unique<NSFSMultipartUpload>(
-            driver, this, std::string(), upload_id, owner,
+            driver, this, mp_key, mp_id, owner,
             mtime);
     rgw_placement_rule* rule{nullptr};
     int ret = upload->get_info(dpp, y, &rule, nullptr);
@@ -5075,6 +5086,13 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
 
 std::string NSFSBucket::get_fname()
 {
+  /* A staging bucket wraps a directory MPUStrategy named, so ask the
+   * directory rather than rendering the name a second way.  The two
+   * renderings agreed while both were the upload id;  they do not
+   * now, and a second renderer is a second thing to keep in step. */
+  if (ns && *ns == mp_ns && dir) {
+    return dir->get_name();
+  }
   return driver->get_path_strategy()->bucket_dir_name(get_name(), ns);
 }
 
@@ -9229,7 +9247,7 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
 
 std::string NSFSMultipartUpload::get_fname()
 {
-  return driver->get_mpu_strategy()->staging_dir_name(mp_obj.upload_id);
+  return driver->get_mpu_strategy()->staging_dir_name(mp_obj.meta);
 }
 
 /* The stride this upload runs at, or nothing if it has none.

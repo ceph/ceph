@@ -30,6 +30,7 @@
 #include "include/scope_guard.h"
 
 #include "fs_strategy.h"
+#include "rgw_common.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -65,9 +66,9 @@ static const std::string RGW_MP_ASSEMBLED_NAME = ".assembled";
  * a second size file. */
 static const std::string RGW_MP_SHARED_PREFIX = "parts-size-";
 
-std::string PerPartMPUStrategy::staging_dir_name(const std::string& upload_id) const
+std::string PerPartMPUStrategy::staging_dir_name(const std::string& meta) const
 {
-  return RGW_MP_STAGING_PREFIX + upload_id;
+  return RGW_MP_STAGING_PREFIX + url_encode(meta, true);
 }
 
 bool PerPartMPUStrategy::names_staging_dir(std::string_view name) const

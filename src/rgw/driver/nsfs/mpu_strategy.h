@@ -48,18 +48,32 @@ namespace rgw { namespace sal { namespace nsfs {
  * is nearly free and per-part files cost nothing, and where they are not
  * -- GPFS answers EOPNOTSUPP at every granularity, measured on Storage
  * Scale 6.0.0.2 -- completing an upload rewrites every byte, and writing
- * parts into their final offsets so that complete is a rename is the
+ * parts into their final offsets so that complete is a link is the
  * better layout.  Both answers are known and they differ, so the chooser
  * asks FSStrategy.
  *
- * One implementation today, deliberately:  it is the layout nsfs already
- * writes, moved behind an interface without changing a byte of it. */
+ * Two implementations:  PerPartMPUStrategy, one file per part, and
+ * StridedMPUStrategy, which derives from it and adds the shared data
+ * file.  A NooBaa one is not written yet. */
 class MPUStrategy {
 public:
   virtual ~MPUStrategy() = default;
 
-  /* the per-upload staging directory, under the bucket */
-  virtual std::string staging_dir_name(const std::string& upload_id) const = 0;
+  /* The per-upload staging directory, under the bucket.
+   *
+   * Named for the upload's meta -- the object key and the upload id --
+   * so that enumerating the bucket recovers both from the directory
+   * entry.  A name carrying the upload id alone costs an open and a
+   * metadata read per upload to answer "which object is this", which
+   * is what ListMultipartUploads has to know before it can order or
+   * page.
+   *
+   * The meta is encoded, because a key contains '/' and the staging
+   * directory is one path component.  Object names are stored
+   * verbatim (see PathStrategy) and this does not reopen that:  a
+   * staging directory is scaffolding, and the key inside it is not a
+   * path. */
+  virtual std::string staging_dir_name(const std::string& meta) const = 0;
 
   /* a part's file name, and the inverse.  part_number() returns nullopt
    * for a name which is not a part, so a caller does not have to know the
@@ -189,7 +203,7 @@ public:
  * these decisions behind an interface changed nothing. */
 class PerPartMPUStrategy : public MPUStrategy {
 public:
-  std::string staging_dir_name(const std::string& upload_id) const override;
+  std::string staging_dir_name(const std::string& meta) const override;
 
   bool names_staging_dir(std::string_view name) const override;
   std::string part_name(uint32_t part_num) const override;
