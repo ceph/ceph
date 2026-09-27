@@ -718,12 +718,13 @@ bool BatchCommitQueue::do_phase3_work(InFlightBatch &ib)
   }
 
   if (ib.storage_entry_count > 0 && !any_failed) {
-    auto gpo_val = tr->kv_wait_get(f_group_po);
-    if (!gpo_val) {
+    FdbGetHolder gpo_holder(std::move(f_group_po));
+    const fdb_error_t gpo_err = gpo_holder.wait();
+    if (gpo_err) {
       any_failed = true;
-      fail_ec = fdb_to_error(gpo_val.error());
+      fail_ec = fdb_to_error(gpo_err);
     }
-    else if (!*gpo_val) {
+    else if (!gpo_holder.present()) {
       any_failed = true;
       fail_ec = KVRGW_ERR_INTERNAL;
     }
@@ -991,12 +992,13 @@ void BatchCommitQueue::commit_batch(std::vector<BatchCommitEntry> &batch)
     }
 
     if (has_storage_tier && !any_failed) {
-      auto gpo_val = tr->kv_wait_get(f_group_po);
-      if (!gpo_val) {
+      FdbGetHolder gpo_holder(std::move(f_group_po));
+      const fdb_error_t gpo_err = gpo_holder.wait();
+      if (gpo_err) {
         any_failed = true;
-        fail_ec = fdb_to_error(gpo_val.error());
+        fail_ec = fdb_to_error(gpo_err);
       }
-      else if (!*gpo_val) {
+      else if (!gpo_holder.present()) {
         any_failed = true;
         fail_ec = KVRGW_ERR_INTERNAL;
       }
@@ -2181,56 +2183,57 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
   }
 
   if (ctx.is_storage_tier) {
-    auto existing = tr.kv_wait_get(ctx.f_obj);
-    if (!existing) {
-      return fdb_to_error(existing.error());
+    FdbGetHolder existing(std::move(ctx.f_obj));
+    {
+      const fdb_error_t err = existing.wait();
+      if (err) {
+        return fdb_to_error(err);
+      }
     }
 
     if (ctx.f_po) {
-      auto po_val = tr.kv_wait_get(ctx.f_po);
-      if (!po_val) {
-        return fdb_to_error(po_val.error());
+      FdbGetHolder po_holder(std::move(ctx.f_po));
+      const fdb_error_t po_err = po_holder.wait();
+      if (po_err) {
+        return fdb_to_error(po_err);
       }
 
-      if (!*po_val) {
-        if (*existing) {
-          const auto *h = ovh_ptr(**existing);
-          if (h && RefTagGenerator::equal(ovh_ref_tag(h),
-                                          ref_tag_view(params.ref_tag))) {
+      if (!po_holder.present()) {
+        if (existing.present()) {
+          const auto *h = ovh_ptr(existing.value());
+          if (h && RefTagGenerator::equal(ovh_ref_tag(h), ref_tag_view(params.ref_tag))) {
             return KVRGW_ERR_OK;
           }
         }
         return KVRGW_ERR_INTERNAL;
       }
 
-      if (*existing) {
-        const auto *h = ovh_ptr(**existing);
-        if (h && RefTagGenerator::equal(ovh_ref_tag(h),
-                                        ref_tag_view(params.ref_tag))) {
+      if (existing.present()) {
+        const auto *h = ovh_ptr(existing.value());
+        if (h && RefTagGenerator::equal(ovh_ref_tag(h), ref_tag_view(params.ref_tag))) {
           tr.kv_del(ctx.po_key.view());
           return KVRGW_ERR_OK;
         }
         if (h) {
-          displace_old_object(tr, vs, ctx.object_key.view(), **existing);
+          displace_old_object(tr, vs, ctx.object_key.view(), existing.value());
         }
       }
     }
     else {
-      if (*existing) {
-        const auto *h = ovh_ptr(**existing);
-        if (h && RefTagGenerator::equal(ovh_ref_tag(h),
-                                        ref_tag_view(params.ref_tag))) {
+      if (existing.present()) {
+        const auto *h = ovh_ptr(existing.value());
+        if (h && RefTagGenerator::equal(ovh_ref_tag(h), ref_tag_view(params.ref_tag))) {
           return KVRGW_ERR_OK;
         }
         if (h) {
-          displace_old_object(tr, vs, ctx.object_key.view(), **existing);
+          displace_old_object(tr, vs, ctx.object_key.view(), existing.value());
         }
       }
     }
 
     const ObjectValueHeader *old_hdr = nullptr;
-    if (*existing) {
-      old_hdr = ovh_ptr(**existing);
+    if (existing.present()) {
+      old_hdr = ovh_ptr(existing.value());
     }
 
     auto ids = compute_new_version(vs, old_hdr);
@@ -2254,7 +2257,7 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
 
     tr.kv_put(ctx.object_key.view(), vbuf.view());
 
-    if (ctx.f_po) {
+    if (ctx.po_key.size() > 0) {
       tr.kv_del(ctx.po_key.view());
     }
 
@@ -2262,15 +2265,16 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
   }
 
   // Inline / child-D path
-  auto existing = tr.kv_wait_get(ctx.f_obj);
-  if (!existing) {
-    return fdb_to_error(existing.error());
+  FdbGetHolder existing(std::move(ctx.f_obj));
+  {
+    const fdb_error_t err = existing.wait();
+    if (err) return fdb_to_error(err);
   }
 
   const ObjectValueHeader *old_hdr = nullptr;
   std::string_view old_raw;
-  if (*existing) {
-    old_raw = **existing;
+  if (existing.present()) {
+    old_raw = existing.value();
     old_hdr = ovh_ptr(old_raw);
     if (!old_hdr) {
       return KVRGW_ERR_CORRUPT_VALUE;
@@ -3555,17 +3559,19 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
 
     // --- Group 1: pipeline dst B: + src S:O + dst S:O ---
     auto f_dst_bkt = issue_bucket_get(*tr, tenant_id, dst_bucket);
-    auto f_src_o = tr->kv_async_get(src_o_key.view());
-    auto f_dst_o = tr->kv_async_get(dst_o_key.view());
+    FdbGetHolder src_o_h(tr->kv_async_get(src_o_key.view()));
+    FdbGetHolder dst_o_h(tr->kv_async_get(dst_o_key.view()));
 
-    auto src_o_raw = tr->kv_wait_get(f_src_o);
-    if (!src_o_raw) {
-      auto ec = fdb_to_error(src_o_raw.error());
-      if (is_retriable(ec)) {
-        sleep_for_msec(10 * (attempt + 1));
-        continue;
+    {
+      auto src_o_err = src_o_h.wait();
+      if (src_o_err) {
+        auto ec = fdb_to_error(src_o_err);
+        if (is_retriable(ec)) {
+          sleep_for_msec(10 * (attempt + 1));
+          continue;
+        }
+        return ec;
       }
-      return ec;
     }
 
     // --- Read source ---
@@ -3575,8 +3581,8 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     if (req.src_version_id) {
       const version_id_t src_vid = *req.src_version_id;
       bool found_in_o = false;
-      if (*src_o_raw) {
-        auto parsed = parse_object_value(**src_o_raw);
+      if (src_o_h.present()) {
+        auto parsed = parse_object_value(src_o_h.value());
         if (parsed && parsed->hdr.version_id == src_vid) {
           src = std::move(*parsed);
           src_entry_key.assign(src_o_key.view());
@@ -3607,10 +3613,10 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
       }
     }
     else {
-      if (!*src_o_raw) {
+      if (!src_o_h.present()) {
         return KVRGW_ERR_NO_SUCH_KEY;
       }
-      auto parsed = parse_object_value(**src_o_raw);
+      auto parsed = parse_object_value(src_o_h.value());
       if (!parsed) {
         return KVRGW_ERR_INTERNAL;
       }
@@ -3638,19 +3644,21 @@ KvrgwErrorCode KvRgwServiceImpl::copy_object(const CopyObjectRequest &req,
     }
 
     // --- Resolve destination O: (already issued in Group 1) ---
-    auto dst_o_raw = tr->kv_wait_get(f_dst_o);
-    if (!dst_o_raw) {
-      auto ec = fdb_to_error(dst_o_raw.error());
-      if (is_retriable(ec)) {
-        sleep_for_msec(10 * (attempt + 1));
-        continue;
+    {
+      auto dst_o_err = dst_o_h.wait();
+      if (dst_o_err) {
+        auto ec = fdb_to_error(dst_o_err);
+        if (is_retriable(ec)) {
+          sleep_for_msec(10 * (attempt + 1));
+          continue;
+        }
+        return ec;
       }
-      return ec;
     }
     const ObjectValueHeader *dst_hdr = nullptr;
     std::string_view dst_raw;
-    if (*dst_o_raw) {
-      dst_raw = **dst_o_raw;
+    if (dst_o_h.present()) {
+      dst_raw = dst_o_h.value();
       dst_hdr = ovh_ptr(dst_raw);
     }
 
