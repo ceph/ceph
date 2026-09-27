@@ -49,6 +49,7 @@ import { ApiDocsComponent } from './core/navigation/api-docs/api-docs.component'
 import {
   ActionLabels,
   CEPHFS_MIRRORING_PAGE_HEADER,
+  NFS_PAGE_HEADER,
   URLVerbs
 } from './shared/constants/app.constants';
 import { CrudFormComponent } from './shared/forms/crud-form/crud-form.component';
@@ -631,7 +632,11 @@ const routes: Routes = [
               breadcrumbs: 'File/NFS'
             },
             children: [
-              { path: '', component: NfsClusterComponent },
+              {
+                path: '',
+                component: NfsClusterComponent,
+                data: { pageHeader: NFS_PAGE_HEADER }
+              },
               {
                 path: `${URLVerbs.CREATE}/:fs_name/:subvolume_group`,
                 component: NfsFormComponent,
