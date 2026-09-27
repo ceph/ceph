@@ -1,9 +1,9 @@
 @use '@carbon/layout';
-@use '../pool-resource-overview-card' as pool-resource-overview-card;
+@use '../../shared/resource-page-card' as resource-page-card;
 
-@include pool-resource-overview-card.base();
+@include resource-page-card.base();
 
-.pool-detail-panel__usage-head {
+.resource-page-panel__usage-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -11,21 +11,21 @@
   margin-bottom: layout.$spacing-03;
 }
 
-.pool-detail-stats {
+.resource-page-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: layout.$spacing-04;
 }
 
-.pool-detail-panel:last-child .pool-detail-stats {
+.resource-page-panel:last-child .resource-page-stats {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.pool-detail-panel:last-child .pool-detail-stats.pool-detail-stats--triple {
+.resource-page-panel:last-child .resource-page-stats.resource-page-stats--triple {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.pool-detail-stat-box {
+.resource-page-stat-box {
   padding: layout.$spacing-04;
   display: flex;
   flex-direction: column;
@@ -33,11 +33,11 @@
   min-height: 5.5rem;
 }
 
-.pool-detail-divider {
+.resource-page-divider {
   border: 0;
   border-top: 1px solid var(--cds-border-subtle-01);
 }
 
-.pool-detail-panel cd-usage-bar {
+.resource-page-panel cd-usage-bar {
   display: block;
 }

@@ -14,7 +14,7 @@ import { DeviceService } from '../services/device.service';
 import { CdFormGroup } from '../forms/cd-form-group';
 import { PaginateObservable } from './paginate.model';
 import { PaginateParams } from '../classes/paginate-params.class';
-import { Osd } from '../models/osd.model';
+import { Osd, OsdDetails } from '../models/osd.model';
 
 @Injectable({
   providedIn: 'root'
@@ -98,13 +98,8 @@ export class OsdService {
     });
   }
 
-  getDetails(id: number) {
-    interface OsdData {
-      osd_map: { [key: string]: any };
-      osd_metadata: { [key: string]: any };
-      smart: { [device_identifier: string]: any };
-    }
-    return this.http.get<OsdData>(`${this.path}/${id}`);
+  getDetails(id: number): Observable<OsdDetails> {
+    return this.http.get<OsdDetails>(`${this.path}/${id}`);
   }
 
   /**
@@ -122,8 +117,8 @@ export class OsdService {
     return this.http.get<DeploymentOptions>(`${this.uiPath}/deployment_options`);
   }
 
-  getFlags() {
-    return this.http.get(`${this.path}/flags`);
+  getFlags(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.path}/flags`);
   }
 
   updateFlags(flags: string[]) {

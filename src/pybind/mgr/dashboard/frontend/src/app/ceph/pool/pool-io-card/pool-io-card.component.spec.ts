@@ -72,7 +72,7 @@ describe('PoolIoCardComponent', () => {
 
     it('should hide the read chart and show a dash when chart data is empty', () => {
       fixture.detectChanges();
-      const chartContainers = fixture.nativeElement.querySelectorAll('.pool-detail-chart');
+      const chartContainers = fixture.nativeElement.querySelectorAll('.resource-page-chart');
       expect(chartContainers[0].textContent?.trim()).toBe('-');
     });
 
@@ -103,7 +103,7 @@ describe('PoolIoCardComponent', () => {
     it('should hide the write chart and show a dash when chart data is empty', () => {
       fixture.detectChanges();
 
-      const chartContainers = fixture.nativeElement.querySelectorAll('.pool-detail-chart');
+      const chartContainers = fixture.nativeElement.querySelectorAll('.resource-page-chart');
       expect(chartContainers[1].textContent?.trim()).toBe('-');
     });
 
