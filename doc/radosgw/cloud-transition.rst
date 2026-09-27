@@ -201,6 +201,7 @@ when accessing cloud services::
 * ``multipart_sync_threshold`` (integer)
 
   Objects this size or larger will be transitioned to the cloud using multipart upload.
+  For compressed objects sent decompressed, this compares the uncompressed size.
 
 * ``multipart_min_part_size`` (integer)
 
@@ -397,9 +398,10 @@ lifecycle rules, the cloud storage class should be specified
 last among all the storage classes the object transitions to.
 Subsequent rules (if any) do not apply post-transition to the cloud.
 
-Encrypted objects are uploaded as stored, with their encryption attributes
-kept only on the retained source stub, so they are not transitioned when
-``retain_head_object`` is false.
+Compressed objects are decompressed before uploading to the cloud. Encrypted
+objects, including compressed encrypted objects, are uploaded as stored, with
+their encryption attributes kept only on the retained source stub, so they are
+not transitioned when ``retain_head_object`` is false.
 
 Due to API limitations, there is no way to preserve the original object
 modification time and ETag, which are stored as metadata attributes
