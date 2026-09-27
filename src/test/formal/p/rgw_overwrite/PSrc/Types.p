@@ -51,6 +51,10 @@ type tCfg = (
                                // answered an error, not success
   refusedKeepsParts: bool,     // a write refused after it lost the head race cancels its index
                                // op without remove_objs, so a live upload's parts stay listed
+  condDelNoKey: bool,          // a conditional DeleteObject that finds no object is answered
+                               // 404 NoSuchKey, as S3 answers it, not 204
+  historyAfterHead: bool,      // a completion sends its parts' past prefixes to GC only once
+                               // its head is written, not while it checks the parts
   // environment
   completeMayCrash: bool,      // RGW may die after a completion's head write, before it
                                // deletes the meta object; the lock then expires
@@ -63,7 +67,54 @@ type tCfg = (
                                // expires (rgw_pending_bucket_index_op_expiration, 120 s)
 );
 
-enum tRc { OK, EEXIST, ECANCELED, ENOENT, EBUSY, EIO, EINVAL }
+// a RADOS op's return code, or an RGW op's (op_ret), which may also be
+// one of RGW's own errors
+enum tRc { OK, EEXIST, ECANCELED, ENOENT, EBUSY, EIO, EINVAL,
+           ERR_PRECONDITION_FAILED, ERR_NO_SUCH_UPLOAD, ERR_INVALID_PART, ERR_INTERNAL_ERROR,
+           ERR_CONDITIONAL_REQUEST_CONFLICT }
+
+// An S3 answer: the HTTP status, and the error code in the body (S3_NONE
+// on success). S3_UNKNOWN_ERROR is RGW's answer to an errno it has no S3
+// error for; S3 defines no such code.
+enum tS3Code { S3_NONE, S3_PRECONDITION_FAILED, S3_NO_SUCH_KEY, S3_NO_SUCH_UPLOAD, S3_INVALID_PART,
+               S3_CONDITIONAL_REQUEST_CONFLICT, S3_BUCKET_ALREADY_EXISTS, S3_INVALID_ARGUMENT,
+               S3_INTERNAL_ERROR, S3_SERVICE_UNAVAILABLE, S3_UNKNOWN_ERROR }
+type tAnswer = (status: int, code: tS3Code);
+
+// rgw_http_s3_errors (rgw_common.cc): an error's HTTP status and S3 code.
+// An errno it lacks, such as -ECANCELED or -EIO, is 500 UnknownError
+// (set_req_state_err, rgw_common.cc:364-368). -EEXIST is the bucket's
+// error. ERR_CONDITIONAL_REQUEST_CONFLICT is proposed; main lacks it.
+fun S3Error(rc: tRc): tAnswer {
+  if (rc == EEXIST) {
+    return (status = 409, code = S3_BUCKET_ALREADY_EXISTS);
+  }
+  if (rc == ENOENT) {
+    return (status = 404, code = S3_NO_SUCH_KEY);
+  }
+  if (rc == EBUSY) {
+    return (status = 503, code = S3_SERVICE_UNAVAILABLE);
+  }
+  if (rc == EINVAL) {
+    return (status = 400, code = S3_INVALID_ARGUMENT);
+  }
+  if (rc == ERR_PRECONDITION_FAILED) {
+    return (status = 412, code = S3_PRECONDITION_FAILED);
+  }
+  if (rc == ERR_NO_SUCH_UPLOAD) {
+    return (status = 404, code = S3_NO_SUCH_UPLOAD);
+  }
+  if (rc == ERR_INVALID_PART) {
+    return (status = 400, code = S3_INVALID_PART);
+  }
+  if (rc == ERR_INTERNAL_ERROR) {
+    return (status = 500, code = S3_INTERNAL_ERROR);
+  }
+  if (rc == ERR_CONDITIONAL_REQUEST_CONFLICT) {
+    return (status = 409, code = S3_CONDITIONAL_REQUEST_CONFLICT);
+  }
+  return (status = 500, code = S3_UNKNOWN_ERROR);
+}
 
 // What a key's head object holds. writer is the request that wrote it;
 // tailTag is the tag its tail is referenced by (RGW_ATTR_TAIL_TAG).
@@ -89,6 +140,18 @@ type tCond = (kind: tCondKind, etag: int);
 // what a request is answered: success, 412 PreconditionFailed, 404
 // NoSuchKey, or another error
 enum tAns { A_OK, A_PRECOND, A_NOTFOUND, A_ERR }
+fun AnsOf(a: tAnswer): tAns {
+  if (a.status < 300) {
+    return A_OK;
+  }
+  if (a.code == S3_PRECONDITION_FAILED) {
+    return A_PRECOND;
+  }
+  if (a.code == S3_NO_SUCH_KEY) {
+    return A_NOTFOUND;
+  }
+  return A_ERR;
+}
 // key: the key written or deleted, or a copy's destination; src: a copy's source
 type tSpec = (kind: tKind, key: int, src: int, upload: int, num: int, etag: int, list: map[int, int],
               cond: tCond);
@@ -221,5 +284,9 @@ event mRequest: (rid: int, key: int, cond: tCond, del: bool, etag: int);
 // a key's head written (present) or removed by request by (0: set up)
 event mHeadState: (key: int, by: int, present: bool, etag: int);
 event mReply: (rid: int, ans: tAns);
+// the S3 answer to a request: its kind and condition; whether its own op
+// wrote or removed the head of its key; and whether it met an injected
+// fault (an index completion that failed)
+event mResponse: (rid: int, kind: tKind, cond: tCond, changed: bool, fault: bool, ans: tAnswer);
 // n index entries removed through a request's remove_objs
 event mIxRemoved: (by: int, n: int);

@@ -457,3 +457,149 @@ test tcCondFixedIxCondDelVsMatch [main=TestCondFixedIxCondDelVsMatch]:
   assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIxCondDelVsMatch });
 test tcCondFixedIxCondCompleteVsPut [main=TestCondFixedIxCondCompleteVsPut]:
   assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics in (union System, { TestCondFixedIxCondCompleteVsPut });
+
+// S3 answers, against the Smithy model and the S3 User Guide
+test tcAnsPuts [main=TestAnsPuts]:
+  assert S3Answers in (union System, { TestAnsPuts });
+test tcAnsPutVsComplete [main=TestAnsPutVsComplete]:
+  assert S3Answers in (union System, { TestAnsPutVsComplete });
+test tcAnsCompletes [main=TestAnsCompletes]:
+  assert S3Answers in (union System, { TestAnsCompletes });
+test tcAnsSameCompletes [main=TestAnsSameCompletes]:
+  assert S3Answers in (union System, { TestAnsSameCompletes });
+test tcAnsReupload [main=TestAnsReupload]:
+  assert S3Answers in (union System, { TestAnsReupload });
+test tcAnsAbort [main=TestAnsAbort]:
+  assert S3Answers in (union System, { TestAnsAbort });
+test tcAnsLcAbort [main=TestAnsLcAbort]:
+  assert S3Answers in (union System, { TestAnsLcAbort });
+test tcAnsRetry [main=TestAnsRetry]:
+  assert S3Answers in (union System, { TestAnsRetry });
+test tcAnsThenAbort [main=TestAnsThenAbort]:
+  assert S3Answers in (union System, { TestAnsThenAbort });
+test tcAnsPutThenRetry [main=TestAnsPutThenRetry]:
+  assert S3Answers in (union System, { TestAnsPutThenRetry });
+test tcAnsDelVsPut [main=TestAnsDelVsPut]:
+  assert S3Answers in (union System, { TestAnsDelVsPut });
+test tcAnsDelsAndPut [main=TestAnsDelsAndPut]:
+  assert S3Answers in (union System, { TestAnsDelsAndPut });
+test tcAnsDelVsComplete [main=TestAnsDelVsComplete]:
+  assert S3Answers in (union System, { TestAnsDelVsComplete });
+test tcAnsCopyVsPutSrc [main=TestAnsCopyVsPutSrc]:
+  assert S3Answers in (union System, { TestAnsCopyVsPutSrc });
+test tcAnsCopyVsDelSrc [main=TestAnsCopyVsDelSrc]:
+  assert S3Answers in (union System, { TestAnsCopyVsDelSrc });
+test tcAnsCopySelfVsPut [main=TestAnsCopySelfVsPut]:
+  assert S3Answers in (union System, { TestAnsCopySelfVsPut });
+test tcAnsCopyMpu [main=TestAnsCopyMpu]:
+  assert S3Answers in (union System, { TestAnsCopyMpu });
+test tcAnsListVsPut [main=TestAnsListVsPut]:
+  assert S3Answers in (union System, { TestAnsListVsPut });
+test tcAnsCreates [main=TestAnsCreates]:
+  assert S3Answers in (union System, { TestAnsCreates });
+test tcAnsCreateVsComplete [main=TestAnsCreateVsComplete]:
+  assert S3Answers in (union System, { TestAnsCreateVsComplete });
+test tcAnsIfMatchVsPut [main=TestAnsIfMatchVsPut]:
+  assert S3Answers in (union System, { TestAnsIfMatchVsPut });
+test tcAnsMatchAnyVsMatch [main=TestAnsMatchAnyVsMatch]:
+  assert S3Answers in (union System, { TestAnsMatchAnyVsMatch });
+test tcAnsCondDelVsPut [main=TestAnsCondDelVsPut]:
+  assert S3Answers in (union System, { TestAnsCondDelVsPut });
+test tcAnsCondDelVsMatch [main=TestAnsCondDelVsMatch]:
+  assert S3Answers in (union System, { TestAnsCondDelVsMatch });
+test tcAnsCondCompleteVsPut [main=TestAnsCondCompleteVsPut]:
+  assert S3Answers in (union System, { TestAnsCondCompleteVsPut });
+test tcAnsCondDels [main=TestAnsCondDels]:
+  assert S3Answers in (union System, { TestAnsCondDels });
+test tcAnsInvalidThenReupload [main=TestAnsInvalidThenReupload]:
+  assert S3Answers in (union System, { TestAnsInvalidThenReupload });
+test tcAnsIxFailPut [main=TestAnsIxFailPut]:
+  assert S3Answers in (union System, { TestAnsIxFailPut });
+test tcAnsIxFailRetry [main=TestAnsIxFailRetry]:
+  assert S3Answers in (union System, { TestAnsIxFailRetry });
+test tcAnsGuardCondDelVsMatch [main=TestAnsGuardCondDelVsMatch]:
+  assert S3Answers in (union System, { TestAnsGuardCondDelVsMatch });
+test tcAnsTakesLockLcAbort [main=TestAnsTakesLockLcAbort]:
+  assert S3Answers in (union System, { TestAnsTakesLockLcAbort });
+test tcAnsLossFailsIfMatchVsPut [main=TestAnsLossFailsIfMatchVsPut]:
+  assert S3Answers in (union System, { TestAnsLossFailsIfMatchVsPut });
+test tcAnsLossFailsCondCompleteVsPut [main=TestAnsLossFailsCondCompleteVsPut]:
+  assert S3Answers in (union System, { TestAnsLossFailsCondCompleteVsPut });
+test tcAnsNoKeyCondDels [main=TestAnsNoKeyCondDels]:
+  assert S3Answers, CondSemantics in (union System, { TestAnsNoKeyCondDels });
+test tcAnsHistoryInvalidThenReupload [main=TestAnsHistoryInvalidThenReupload]:
+  assert S3Answers, HeadIntact, NoOrphans, IndexMatchesHead, AllAnswered, BucketStats in (union System, { TestAnsHistoryInvalidThenReupload });
+test tcAnsFixedPuts [main=TestAnsFixedPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedPuts });
+test tcAnsFixedPutVsComplete [main=TestAnsFixedPutVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedPutVsComplete });
+test tcAnsFixedCompletes [main=TestAnsFixedCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedCompletes });
+test tcAnsFixedSameCompletes [main=TestAnsFixedSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedSameCompletes });
+test tcAnsFixedReupload [main=TestAnsFixedReupload]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedReupload });
+test tcAnsFixedAbort [main=TestAnsFixedAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedAbort });
+test tcAnsFixedLcAbort [main=TestAnsFixedLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedLcAbort });
+test tcAnsFixedRetry [main=TestAnsFixedRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedRetry });
+test tcAnsFixedThenAbort [main=TestAnsFixedThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedThenAbort });
+test tcAnsFixedPutThenRetry [main=TestAnsFixedPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedPutThenRetry });
+test tcAnsFixedDelVsPut [main=TestAnsFixedDelVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedDelVsPut });
+test tcAnsFixedDelsAndPut [main=TestAnsFixedDelsAndPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedDelsAndPut });
+test tcAnsFixedDelVsComplete [main=TestAnsFixedDelVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedDelVsComplete });
+test tcAnsFixedCopyVsDelSrc [main=TestAnsFixedCopyVsDelSrc]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedCopyVsDelSrc });
+test tcAnsFixedCopyMpu [main=TestAnsFixedCopyMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedCopyMpu });
+test tcAnsFixedReshardVsMpu [main=TestAnsFixedReshardVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedReshardVsMpu });
+test tcAnsFixedCreates [main=TestAnsFixedCreates]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedCreates });
+test tcAnsFixedCreateVsComplete [main=TestAnsFixedCreateVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedCreateVsComplete });
+test tcAnsFixedIfMatchVsPut [main=TestAnsFixedIfMatchVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIfMatchVsPut });
+test tcAnsFixedMatchAnyVsMatch [main=TestAnsFixedMatchAnyVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedMatchAnyVsMatch });
+test tcAnsFixedCondDelVsPut [main=TestAnsFixedCondDelVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedCondDelVsPut });
+test tcAnsFixedCondDelVsMatch [main=TestAnsFixedCondDelVsMatch]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedCondDelVsMatch });
+test tcAnsFixedCondCompleteVsPut [main=TestAnsFixedCondCompleteVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedCondCompleteVsPut });
+test tcAnsFixedCondDels [main=TestAnsFixedCondDels]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedCondDels });
+test tcAnsFixedInvalidThenReupload [main=TestAnsFixedInvalidThenReupload]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedInvalidThenReupload });
+test tcAnsFixedIxPutVsComplete [main=TestAnsFixedIxPutVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIxPutVsComplete });
+test tcAnsFixedIxCompletes [main=TestAnsFixedIxCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIxCompletes });
+test tcAnsFixedIxSameCompletes [main=TestAnsFixedIxSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIxSameCompletes });
+test tcAnsFixedIxReupload [main=TestAnsFixedIxReupload]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIxReupload });
+test tcAnsFixedIxRetry [main=TestAnsFixedIxRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIxRetry });
+test tcAnsFixedIxCreateVsComplete [main=TestAnsFixedIxCreateVsComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIxCreateVsComplete });
+test tcAnsFixedIxCondCompleteVsPut [main=TestAnsFixedIxCondCompleteVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIxCondCompleteVsPut });
+test tcAnsFixedIxCondDels [main=TestAnsFixedIxCondDels]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIxCondDels });
+test tcAnsFixedIxInvalidThenReupload [main=TestAnsFixedIxInvalidThenReupload]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedIxInvalidThenReupload });
+test tcAnsFixedMarkCrashRetry [main=TestAnsFixedMarkCrashRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedMarkCrashRetry });
+test tcAnsFixedMarkCrashThenAbort [main=TestAnsFixedMarkCrashThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedMarkCrashThenAbort });
+test tcAnsFixedMarkCrashInvalidThenReupload [main=TestAnsFixedMarkCrashInvalidThenReupload]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedMarkCrashInvalidThenReupload });

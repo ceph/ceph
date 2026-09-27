@@ -6,7 +6,7 @@ fun Main(): tCfg {
           cancelKeepsVer = false, lcTakesLock = false, loserGcsParts = false, gcSparesHead = false,
           deleteGuard = false, copyLoserDropsRefs = false, copySelfGuardsSource = false,
           ixFailKeepsWrite = false, lateCompleteRelinks = false, completionMark = false,
-          condLossFails = false, refusedKeepsParts = false,
+          condLossFails = false, refusedKeepsParts = false, condDelNoKey = false, historyAfterHead = false,
           completeMayCrash = false, metaDeleteMayFail = false, ixCompleteMayFail = false,
           lockHeld = true, writersPrompt = true);
 }
@@ -30,6 +30,14 @@ fun Complete(u: int): tSpec {
   l[2] = PARTETAG(u, 2);
   return (kind = R_COMPLETE, key = MPKEY(), src = 0, upload = u, num = 0, etag = 0, list = l,
           cond = default(tCond));
+}
+// complete upload u with part 1's ETag e1 and part 2's e2
+fun CompleteList(u: int, e1: int, e2: int): tSpec {
+  var r: tSpec;
+  r = Complete(u);
+  r.list[1] = e1;
+  r.list[2] = e2;
+  return r;
 }
 fun Reupload(u: int, num: int, etag: int): tSpec {
   return (kind = R_UPLOAD_PART, key = MPKEY(), src = 0, upload = u, num = num, etag = etag,
@@ -105,7 +113,11 @@ enum tScenario {
   SC_MATCH_ANY_VS_MATCH, // a PutObject with If-Match: *, and one with If-Match
   SC_COND_DEL_VS_PUT,   // a DeleteObject with If-Match, and a PutObject
   SC_COND_DEL_VS_MATCH, // a DeleteObject and a PutObject, both with If-Match
-  SC_COND_COMPLETE_VS_PUT // a completion with If-Match, and a PutObject
+  SC_COND_COMPLETE_VS_PUT, // a completion with If-Match, and a PutObject
+  SC_COND_DELS,         // two DeleteObjects with If-Match on the same ETag
+  // an SDK retry of part 1; a completion refused for part 2's ETag, after
+  // part 1's history; then part 1 uploaded again
+  SC_INVALID_THEN_REUPLOAD
 }
 
 // Key 1 starts with an object, except in the If-None-Match scenarios, and
@@ -237,6 +249,13 @@ machine Scenario {
       } else if (p.sc == SC_COND_COMPLETE_VS_PUT) {
         uploads += (1);
         script += (0, Two(With(Complete(1), IfMatch(OLDWRITER(1))), Put(1)));
+      } else if (p.sc == SC_COND_DELS) {
+        script += (0, Two(With(Del(1), IfMatch(OLDWRITER(1))), With(Del(1), IfMatch(OLDWRITER(1)))));
+      } else if (p.sc == SC_INVALID_THEN_REUPLOAD) {
+        uploads += (1);
+        script += (0, One(Reupload(1, 1, PARTETAG(1, 1))));
+        script += (1, One(CompleteList(1, PARTETAG(1, 1), 29)));
+        script += (2, One(Reupload(1, 1, PARTETAG(1, 1))));
       } else {
         objects += (2);
         twins = true;
@@ -840,4 +859,231 @@ machine TestCondFixedCondCompleteVsPut {
 }
 machine TestCondFixedIxCondCompleteVsPut {
   start state Init { entry { var c: tCfg; c = FixedCond(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COND_COMPLETE_VS_PUT)); } }
+}
+
+// S3 answers (S3Answers): on main, with fixes alone, and with every
+// fix: the nine of FixedCond(), the completion record, and the two
+// proposed for S3's answers
+fun AnsFixed(): tCfg {
+  var c: tCfg;
+  c = FixedCond();
+  c.condDelNoKey = true;
+  c.historyAfterHead = true;
+  return c;
+}
+machine TestAnsPuts {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_PUTS)); } }
+}
+machine TestAnsPutVsComplete {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_PUT_VS_COMPLETE)); } }
+}
+machine TestAnsCompletes {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_COMPLETES)); } }
+}
+machine TestAnsSameCompletes {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_SAME_COMPLETES)); } }
+}
+machine TestAnsReupload {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_REUPLOAD)); } }
+}
+machine TestAnsAbort {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_ABORT)); } }
+}
+machine TestAnsLcAbort {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_LC_ABORT)); } }
+}
+machine TestAnsRetry {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_RETRY)); } }
+}
+machine TestAnsThenAbort {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_THEN_ABORT)); } }
+}
+machine TestAnsPutThenRetry {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_PUT_THEN_RETRY)); } }
+}
+machine TestAnsDelVsPut {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_DEL_VS_PUT)); } }
+}
+machine TestAnsDelsAndPut {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_DELS_AND_PUT)); } }
+}
+machine TestAnsDelVsComplete {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_DEL_VS_COMPLETE)); } }
+}
+machine TestAnsCopyVsPutSrc {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_COPY_VS_PUT_SRC)); } }
+}
+machine TestAnsCopyVsDelSrc {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_COPY_VS_DEL_SRC)); } }
+}
+machine TestAnsCopySelfVsPut {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_COPY_SELF_VS_PUT)); } }
+}
+machine TestAnsCopyMpu {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_COPY_MPU)); } }
+}
+machine TestAnsListVsPut {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_LIST_VS_PUT)); } }
+}
+machine TestAnsCreates {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_CREATES)); } }
+}
+machine TestAnsCreateVsComplete {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_CREATE_VS_COMPLETE)); } }
+}
+machine TestAnsIfMatchVsPut {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_IF_MATCH_VS_PUT)); } }
+}
+machine TestAnsMatchAnyVsMatch {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_MATCH_ANY_VS_MATCH)); } }
+}
+machine TestAnsCondDelVsPut {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_COND_DEL_VS_PUT)); } }
+}
+machine TestAnsCondDelVsMatch {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_COND_DEL_VS_MATCH)); } }
+}
+machine TestAnsCondCompleteVsPut {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_COND_COMPLETE_VS_PUT)); } }
+}
+machine TestAnsCondDels {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_COND_DELS)); } }
+}
+machine TestAnsInvalidThenReupload {
+  start state Init { entry { var c: tCfg; c = Main(); new Scenario((cfg = c, sc = SC_INVALID_THEN_REUPLOAD)); } }
+}
+machine TestAnsIxFailPut {
+  start state Init { entry { var c: tCfg; c = Main(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_PUT_ONE)); } }
+}
+machine TestAnsIxFailRetry {
+  start state Init { entry { var c: tCfg; c = Main(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_RETRY)); } }
+}
+machine TestAnsGuardCondDelVsMatch {
+  start state Init { entry { var c: tCfg; c = Main(); c.deleteGuard = true; new Scenario((cfg = c, sc = SC_COND_DEL_VS_MATCH)); } }
+}
+machine TestAnsTakesLockLcAbort {
+  start state Init { entry { var c: tCfg; c = Main(); c.lcTakesLock = true; new Scenario((cfg = c, sc = SC_LC_ABORT)); } }
+}
+machine TestAnsLossFailsIfMatchVsPut {
+  start state Init { entry { var c: tCfg; c = Main(); c.condLossFails = true; new Scenario((cfg = c, sc = SC_IF_MATCH_VS_PUT)); } }
+}
+machine TestAnsLossFailsCondCompleteVsPut {
+  start state Init { entry { var c: tCfg; c = Main(); c.condLossFails = true; new Scenario((cfg = c, sc = SC_COND_COMPLETE_VS_PUT)); } }
+}
+machine TestAnsNoKeyCondDels {
+  start state Init { entry { var c: tCfg; c = Main(); c.condDelNoKey = true; new Scenario((cfg = c, sc = SC_COND_DELS)); } }
+}
+machine TestAnsHistoryInvalidThenReupload {
+  start state Init { entry { var c: tCfg; c = Main(); c.historyAfterHead = true; new Scenario((cfg = c, sc = SC_INVALID_THEN_REUPLOAD)); } }
+}
+machine TestAnsFixedPuts {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_PUTS)); } }
+}
+machine TestAnsFixedPutVsComplete {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_PUT_VS_COMPLETE)); } }
+}
+machine TestAnsFixedCompletes {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_COMPLETES)); } }
+}
+machine TestAnsFixedSameCompletes {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_SAME_COMPLETES)); } }
+}
+machine TestAnsFixedReupload {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_REUPLOAD)); } }
+}
+machine TestAnsFixedAbort {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_ABORT)); } }
+}
+machine TestAnsFixedLcAbort {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_LC_ABORT)); } }
+}
+machine TestAnsFixedRetry {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_RETRY)); } }
+}
+machine TestAnsFixedThenAbort {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_THEN_ABORT)); } }
+}
+machine TestAnsFixedPutThenRetry {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_PUT_THEN_RETRY)); } }
+}
+machine TestAnsFixedDelVsPut {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_DEL_VS_PUT)); } }
+}
+machine TestAnsFixedDelsAndPut {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_DELS_AND_PUT)); } }
+}
+machine TestAnsFixedDelVsComplete {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_DEL_VS_COMPLETE)); } }
+}
+machine TestAnsFixedCopyVsDelSrc {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_COPY_VS_DEL_SRC)); } }
+}
+machine TestAnsFixedCopyMpu {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_COPY_MPU)); } }
+}
+machine TestAnsFixedReshardVsMpu {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_RESHARD_VS_MPU)); } }
+}
+machine TestAnsFixedCreates {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_CREATES)); } }
+}
+machine TestAnsFixedCreateVsComplete {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_CREATE_VS_COMPLETE)); } }
+}
+machine TestAnsFixedIfMatchVsPut {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_IF_MATCH_VS_PUT)); } }
+}
+machine TestAnsFixedMatchAnyVsMatch {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_MATCH_ANY_VS_MATCH)); } }
+}
+machine TestAnsFixedCondDelVsPut {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_COND_DEL_VS_PUT)); } }
+}
+machine TestAnsFixedCondDelVsMatch {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_COND_DEL_VS_MATCH)); } }
+}
+machine TestAnsFixedCondCompleteVsPut {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_COND_COMPLETE_VS_PUT)); } }
+}
+machine TestAnsFixedCondDels {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_COND_DELS)); } }
+}
+machine TestAnsFixedInvalidThenReupload {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); new Scenario((cfg = c, sc = SC_INVALID_THEN_REUPLOAD)); } }
+}
+machine TestAnsFixedIxPutVsComplete {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_PUT_VS_COMPLETE)); } }
+}
+machine TestAnsFixedIxCompletes {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COMPLETES)); } }
+}
+machine TestAnsFixedIxSameCompletes {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_SAME_COMPLETES)); } }
+}
+machine TestAnsFixedIxReupload {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_REUPLOAD)); } }
+}
+machine TestAnsFixedIxRetry {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_RETRY)); } }
+}
+machine TestAnsFixedIxCreateVsComplete {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_CREATE_VS_COMPLETE)); } }
+}
+machine TestAnsFixedIxCondCompleteVsPut {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COND_COMPLETE_VS_PUT)); } }
+}
+machine TestAnsFixedIxCondDels {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_COND_DELS)); } }
+}
+machine TestAnsFixedIxInvalidThenReupload {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.ixCompleteMayFail = true; new Scenario((cfg = c, sc = SC_INVALID_THEN_REUPLOAD)); } }
+}
+machine TestAnsFixedMarkCrashRetry {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.completionMark = true; c.completeMayCrash = true; new Scenario((cfg = c, sc = SC_RETRY)); } }
+}
+machine TestAnsFixedMarkCrashThenAbort {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.completionMark = true; c.completeMayCrash = true; new Scenario((cfg = c, sc = SC_THEN_ABORT)); } }
+}
+machine TestAnsFixedMarkCrashInvalidThenReupload {
+  start state Init { entry { var c: tCfg; c = AnsFixed(); c.completionMark = true; c.completeMayCrash = true; new Scenario((cfg = c, sc = SC_INVALID_THEN_REUPLOAD)); } }
 }

@@ -26,6 +26,9 @@
  * NOENT or REFUSED (not written, answered 412, 404 or another error).
  * PutObject, CompleteMultipartUpload and DeleteObject may carry a
  * condition (If-Match, If-None-Match: *).
+ * Each request ends with its op_ret, which Respond answers as the op's
+ * send_response and rgw_http_s3_errors do: an HTTP status and an S3
+ * error code.
  */
 machine Rgw {
   var cfg: tCfg;
@@ -33,6 +36,14 @@ machine Rgw {
   var driver: machine;
   var rid: int;
   var gen: int;
+  var kind: tKind;
+  var cond: tCond;
+  // whether this request's own op wrote or removed a head, and whether it
+  // met an injected fault
+  var changed: bool;
+  var fault: bool;
+  // what write_meta returned
+  var wmRc: tRc;
 
   start state Serve {
     entry (p: (cfg: tCfg, store: machine, driver: machine, rid: int, req: tSpec)) {
@@ -40,6 +51,8 @@ machine Rgw {
       store = p.store;
       driver = p.driver;
       rid = p.rid;
+      kind = p.req.kind;
+      cond = p.req.cond;
       announce mStarted, rid;
       if (p.req.cond.kind != C_NONE) {
         announce mRequest, (rid = rid, key = p.req.key, cond = p.req.cond, del = p.req.kind == R_DELETE,
@@ -94,7 +107,7 @@ machine Rgw {
       // wrote
       DeleteInline(tail);
     }
-    Reply(Ans(w));
+    Respond(wmRc);
   }
 
   // RGWRados::Object::Delete::delete_obj on a non-versioned bucket
@@ -105,11 +118,11 @@ machine Rgw {
     // delete_obj checks the condition against that state
     st = ReadHead(key);
     if (!st.present) {
-      Reply(A_OK);  // -ENOENT, answered 204, before any condition
+      Respond(ENOENT);  // before any condition; send_response answers it 204
       return;
     }
     if (Precondition(cond, st) != A_OK) {
-      Reply(A_PRECOND);  // check_preconditions
+      Respond(ERR_PRECONDITION_FAILED);  // check_preconditions
       return;
     }
     IndexPrepare(key);
@@ -121,7 +134,8 @@ machine Rgw {
         // complete_del fails before the op reaches the OSD: the pending
         // op stays, and the error is answered after the tail goes to GC
         SendGc(st.tailTag, st.manifest);
-        Answer(false);
+        fault = true;
+        Respond(EIO);
         return;
       }
       if (IndexComplete(key, IX_DEL, 1, r.epoch, 0, default(set[int])) == EINVAL && cfg.lateCompleteRelinks) {
@@ -129,15 +143,21 @@ machine Rgw {
       }
       // complete_atomic_modification: the head it read goes to GC
       SendGc(st.tailTag, st.manifest);
-      Answer(true);
+      // complete_del's return replaces the removal's -ENOENT (no head left
+      // to remove), so that too is answered 204 on main
+      if (r.rc == ENOENT && cond.kind != C_NONE && cfg.condDelNoKey) {
+        Respond(ENOENT);
+      } else {
+        Respond(OK);
+      }
       return;
     }
     IndexComplete(key, IX_CANCEL, -1, 0, 0, default(set[int]));
     // -ECANCELED: RGWDeleteObj::execute answers it as success (204)
     if (cond.kind != C_NONE && cfg.condLossFails) {
-      Reply(A_ERR);
+      Respond(ERR_CONDITIONAL_REQUEST_CONFLICT);
     } else {
-      Reply(A_OK);
+      Respond(OK);
     }
   }
 
@@ -150,11 +170,12 @@ machine Rgw {
     var o: int;
     var g: int;
     var rc: tRc;
+    var err: tRc;
     var canceled: bool;
     var w: int;
     s = ReadHead(src);
     if (!s.present) {
-      Answer(false);  // NoSuchKey
+      Respond(ENOENT);
       return;
     }
     if (src == dst) {
@@ -163,23 +184,23 @@ machine Rgw {
       // RGWObjectCtx), so it guards on whatever head is there by then.
       if (cfg.copySelfGuardsSource) {
         canceled = WriteHeadOver(dst, s, s.manifest, s.etag, s.upload, s.tailTag, s.size);
-        Answer(true);
+        Respond(OK);
       } else {
         w = WriteMeta(dst, s.manifest, s.etag, s.upload, default(set[int]), s.tailTag, true, s.size,
                       default(tCond));
-        Answer(w != FAILED());
+        Respond(wmRc);
       }
       return;
     }
     if (cfg.copyTakesRefs) {
       foreach (o in s.manifest) {
-        rc = RefGet(o, rid);
-        if (rc != OK) {
-          // done_ret: drop the references taken
+        err = RefGet(o, rid);
+        if (err != OK) {
+          // done_ret: drop the references taken, and answer the error
           foreach (g in got) {
             rc = RefPut(g, rid);
           }
-          Answer(false);
+          Respond(err);
           return;
         }
         got += (o);
@@ -192,7 +213,7 @@ machine Rgw {
         rc = RefPut(g, rid);
       }
     }
-    Answer(w != FAILED());
+    Respond(wmRc);
   }
 
   // RGWRados::Object::Write::write_meta and _do_write_meta
@@ -225,9 +246,11 @@ machine Rgw {
         // index op
         a = Precondition(cond, st);
         if (a == A_PRECOND) {
+          wmRc = ERR_PRECONDITION_FAILED;
           return PRECOND();
         }
         if (a == A_NOTFOUND) {
+          wmRc = ENOENT;
           return NOENT();
         }
       }
@@ -246,9 +269,10 @@ machine Rgw {
     }
     if (r.rc != OK) {
       // done_cancel: -ECANCELED, -ENOENT or -EEXIST. Without a condition
-      // each is answered as success; with one, as LostAs says. On main the
+      // each is answered as success; with one, as LostRc says. On main the
       // cancel removes remove_objs either way.
-      w = LostAs(cond, r.rc);
+      wmRc = LostRc(cond, r.rc);
+      w = LostAs(wmRc);
       if (w != LOST() && cfg.refusedKeepsParts) {
         IndexComplete(key, IX_CANCEL, -1, 0, 0, default(set[int]));
       } else {
@@ -276,19 +300,25 @@ machine Rgw {
         if (sizeof(removeKeys) > 0) {
           IndexRemoveObjs(key, removeKeys);
         }
+        fault = true;
+        wmRc = OK;
         return WRITTEN();
       }
       // done_cancel: the cancel may fail the same way; the caller then
-      // undoes its write
+      // undoes its write. The error is the bilog flush's: any errno, here
+      // -EIO
       if ($) {
         IndexComplete(key, IX_CANCEL, -1, 0, 0, removeKeys);
       }
+      fault = true;
+      wmRc = EIO;
       return FAILED();
     }
     ixrc = IndexComplete(key, IX_ADD, 1, r.epoch, size, removeKeys);
     if (ixrc == EINVAL && cfg.lateCompleteRelinks) {
       Relink(key, r.epoch, false, removeKeys);
     }
+    wmRc = OK;
     return WRITTEN();
   }
 
@@ -326,7 +356,7 @@ machine Rgw {
     s = ReadHead(src);
     t = ReadHead(tgt);
     if (!s.present || !t.present || s.etag != t.etag) {
-      Answer(false);
+      Respond(ECANCELED);
       return;
     }
     // inc_ref_count_by_manifest: the source's tail, under the target's tag
@@ -336,7 +366,7 @@ machine Rgw {
         foreach (g in got) {
           rc = RefPut(g, t.tailTag);
         }
-        Answer(false);
+        Respond(ECANCELED);
         return;
       }
       got += (o);
@@ -351,7 +381,7 @@ machine Rgw {
       foreach (g in got) {
         rc = RefPut(g, t.tailTag);
       }
-      Answer(false);
+      Respond(ECANCELED);
       return;
     }
     // free_tail_objs_by_manifest: the target's old tail, at once, not
@@ -359,7 +389,7 @@ machine Rgw {
     foreach (o in t.manifest) {
       rc = RefPut(o, t.tailTag);
     }
-    Answer(true);
+    Respond(OK);
   }
 
   fun HeadRewrite(key: int, etag: int, tailTag: int, setManifest: bool, manifest: set[int]): tRc {
@@ -391,7 +421,7 @@ machine Rgw {
     ReshardOp(1);  // in progress: client index ops block
     ReshardOp(2);  // the incremental pass over the logged entries
     ReshardOp(3);  // commit
-    Answer(true);
+    Respond(OK);
   }
 
   fun ReshardOp(step: int) {
@@ -449,20 +479,6 @@ machine Rgw {
   fun NOENT(): int { return 4; }
   fun REFUSED(): int { return 5; }
 
-  // how a write_meta outcome is answered
-  fun Ans(w: int): tAns {
-    if (w == WRITTEN() || w == LOST()) {
-      return A_OK;
-    }
-    if (w == PRECOND()) {
-      return A_PRECOND;
-    }
-    if (w == NOENT()) {
-      return A_NOTFOUND;
-    }
-    return A_ERR;
-  }
-
   // RGWRados::Object::check_preconditions: If-Match (an ETag, or *) needs
   // a head, and its absence is -ENOENT, answered 404; another ETag, or a
   // head under If-None-Match: *, is answered 412
@@ -480,32 +496,57 @@ machine Rgw {
     return A_OK;
   }
 
-  // done_cancel's answer to a conditional write that lost the head race:
-  // If-Match: * turns -ENOENT into 412 and -ECANCELED into success;
-  // If-None-Match: * turns -EEXIST into 412 and -ENOENT into success;
-  // under If-Match with an ETag the error stands (-ENOENT is 404,
-  // -ECANCELED has no S3 code and is answered 500)
-  fun LostAs(cond: tCond, rc: tRc): int {
+  // done_cancel: what a write that lost the head race returns. Without a
+  // condition every lost race is success. If-Match: * turns -ENOENT into
+  // 412 and -ECANCELED into success; If-None-Match: * turns -EEXIST into
+  // 412 and -ENOENT into success; under If-Match with an ETag the error
+  // stands: -ENOENT is 404 NoSuchKey, and -ECANCELED, which has no S3
+  // error, 500 UnknownError (rgw_rados.cc:3736-3768). With condLossFails,
+  // each lost race that its condition does not refuse is 409
+  // ConditionalRequestConflict.
+  fun LostRc(cond: tCond, rc: tRc): tRc {
     if (cond.kind == C_NONE) {
-      return LOST();
+      return OK;
     }
     if (cond.kind == C_IF_MATCH_ANY) {
       if (rc == ENOENT) {
-        return PRECOND();
+        return ERR_PRECONDITION_FAILED;
       }
-      if (rc == ECANCELED && !cfg.condLossFails) {
-        return LOST();
+      if (rc == ECANCELED) {
+        return Conflict();
       }
-      return REFUSED();
+      return rc;
     }
     if (cond.kind == C_IF_NONE_MATCH_ANY) {
       if (rc == EEXIST) {
-        return PRECOND();
+        return ERR_PRECONDITION_FAILED;
       }
-      if (rc == ENOENT && !cfg.condLossFails) {
-        return LOST();
+      if (rc == ENOENT) {
+        return Conflict();
       }
-      return REFUSED();
+      return rc;
+    }
+    if (rc == ECANCELED && cfg.condLossFails) {
+      return ERR_CONDITIONAL_REQUEST_CONFLICT;
+    }
+    return rc;
+  }
+
+  // a lost race that done_cancel answers as success on main
+  fun Conflict(): tRc {
+    if (cfg.condLossFails) {
+      return ERR_CONDITIONAL_REQUEST_CONFLICT;
+    }
+    return OK;
+  }
+
+  // write_meta's outcome for what done_cancel returns
+  fun LostAs(rc: tRc): int {
+    if (rc == OK) {
+      return LOST();
+    }
+    if (rc == ERR_PRECONDITION_FAILED) {
+      return PRECOND();
     }
     if (rc == ENOENT) {
       return NOENT();
@@ -538,7 +579,7 @@ machine Rgw {
       }
       k = k + 1;
     }
-    Answer(true);
+    Respond(OK);
   }
 
   // proposed: a keep_tail rewrite guarded on the head it read before, so
@@ -580,14 +621,17 @@ machine Rgw {
     MpIndexAdd(obj);
     rc = PartUpdate(u, num, (prefix = prefix, etag = etag, past = default(set[int])));
     if (rc != OK) {
-      // -ERR_NO_SUCH_UPLOAD: ~RadosWriter removes the part head, through
-      // the index
+      // ~RadosWriter removes the part head, through the index.
+      // MultipartObjectProcessor::complete answers -ENOENT, the upload
+      // gone, as NoSuchUpload; any other error stands, such as -EEXIST
+      // when the prefix is one of the part's past prefixes
+      // (rgw_putobj_processor.cc:648, cls_rgw.cc:5119)
       DeleteInline(written);
       MpIndexDel(obj);
-      Answer(false);
+      Respond(NoUpload(rc));
       return;
     }
-    Answer(true);
+    Respond(OK);
   }
 
   // RGWCompleteMultipart::execute
@@ -609,6 +653,7 @@ machine Rgw {
     var rc: tRc;
     var k: int;
     var mk: (rc: tRc, mark: int);
+    var hchain: set[int];
 
     // the lock keeps racing completions and aborts off the parts
     m = TryLock(u);
@@ -621,30 +666,32 @@ machine Rgw {
         } else {
           announce mCompleted, (rid = rid, etag = 0, want = MPETAG(list));
         }
-        Answer(true);
+        Respond(OK);
         return;
       }
-      Answer(false);
+      Respond(ERR_NO_SUCH_UPLOAD);
       return;
     }
     if (m.rc != OK) {
-      Answer(false);  // "This multipart completion is already in progress"
+      Respond(ERR_INTERNAL_ERROR);  // "This multipart completion is already in progress"
       return;
     }
     m = GetAttrs(u);
     if (m.rc != OK) {
-      Finish(u, false);
+      // get_obj_attrs's error stands: the meta object gone since the lock
+      // was taken is -ENOENT, answered 404 NoSuchKey (rgw_op.cc:7738)
+      Finish(u, m.rc);
       return;
     }
     ver = m.ver;
     if (!IsLocked(u)) {
-      Finish(u, false);  // lock renewal failed
+      Finish(u, ERR_INTERNAL_ERROR);  // lock renewal failed
       return;
     }
     if (cfg.completionMark) {
       mk = GetMark(u);
       if (mk.rc != OK) {
-        Finish(u, false);
+        Finish(u, NoUpload(mk.rc));
         return;
       }
       if (mk.mark != 0) {
@@ -654,7 +701,7 @@ machine Rgw {
         // either way the parts cannot be trusted
         h = ReadHead(MPKEY());
         if (!(h.present && h.tag == mk.mark)) {
-          Finish(u, false);
+          Finish(u, ERR_NO_SUCH_UPLOAD);
           return;
         }
         lp = ListParts(u);
@@ -666,47 +713,60 @@ machine Rgw {
         MetaDelete(u, VerCheck(ver), removeKeys);
         if (h.etag == MPETAG(list)) {
           announce mCompleted, (rid = rid, etag = h.etag, want = MPETAG(list));
-          Finish(u, true);
+          Finish(u, OK);
           return;
         }
-        Finish(u, false);
+        Finish(u, ERR_NO_SUCH_UPLOAD);
         return;
       }
     }
 
-    // RadosMultipartUpload::complete: the parts must be the list's
+    // RadosMultipartUpload::complete: the parts must be the list's. It
+    // checks each part, then sends its past prefixes to GC
+    // (cleanup_part_history), in part order: a part refused after the
+    // first leaves the history of those before it collected, while the
+    // meta object still lists it
     lp = ListParts(u);
     if (lp.rc != OK) {
-      Finish(u, false);
+      Finish(u, NoUpload(lp.rc));
       return;
     }
     if (sizeof(lp.parts) != sizeof(list)) {
-      Finish(u, false);
+      Finish(u, ERR_INVALID_PART);
       return;
     }
-    foreach (num in keys(list)) {
-      if (!(num in lp.parts) || lp.parts[num].etag != list[num]) {
-        Finish(u, false);  // -ERR_INVALID_PART
-        return;
+    num = 1;
+    while (num <= 3) {
+      if (num in list) {
+        if (!(num in lp.parts) || lp.parts[num].etag != list[num]) {
+          Finish(u, ERR_INVALID_PART);
+          return;
+        }
+        pt = lp.parts[num];
+        manifest += (OBJ(pt.prefix, num));
+        removeKeys += (OBJ(pt.prefix, num));
+        done = default(set[int]);
+        done += (pt.prefix);
+        hist = History(num, pt, done);
+        if (cfg.historyAfterHead) {
+          foreach (k in hist.chain) {
+            hchain += (k);
+          }
+        } else {
+          SendGc(UPLOADTAG(u), hist.chain);
+        }
+        foreach (k in hist.ixKeys) {
+          removeKeys += (k);
+        }
+        processed[num] = hist.done;
       }
-    }
-    foreach (num in keys(lp.parts)) {
-      pt = lp.parts[num];
-      manifest += (OBJ(pt.prefix, num));
-      removeKeys += (OBJ(pt.prefix, num));
-      done = default(set[int]);
-      done += (pt.prefix);
-      hist = History(num, pt, done);
-      SendGc(UPLOADTAG(u), hist.chain);
-      foreach (k in hist.ixKeys) {
-        removeKeys += (k);
-      }
-      processed[num] = hist.done;
+      num = num + 1;
     }
     if (cfg.completionMark) {
       // record this completion's tag, the ID tag its head will carry
-      if (MetaMark(u, rid) != OK) {
-        Finish(u, false);
+      rc = MetaMark(u, rid);
+      if (rc != OK) {
+        Finish(u, NoUpload(rc));
         return;
       }
       if (cfg.completeMayCrash && $) {
@@ -724,8 +784,12 @@ machine Rgw {
         MetaMark(u, 0);
       }
       Unlock(u);
-      Reply(Ans(w));
+      Respond(wmRc);
       return;
+    }
+    if (cfg.historyAfterHead) {
+      // proposed: the history goes to GC once the head is written
+      SendGc(UPLOADTAG(u), hchain);
     }
     if (w == LOST() && cfg.loserGcsParts) {
       SendGc(UPLOADTAG(u), manifest);
@@ -781,7 +845,7 @@ machine Rgw {
     }
     // the ETag set on the object's attrs by upload->complete()
     announce mCompleted, (rid = rid, etag = MPETAG(list), want = MPETAG(list));
-    Finish(u, true);
+    Finish(u, OK);
   }
 
   // cleanup_part_history: a part's past prefixes go to GC and their
@@ -820,19 +884,22 @@ machine Rgw {
     if (takeLock) {
       m = TryLock(u);
       if (m.rc != OK) {
-        Answer(false);
+        // -ENOENT is NoSuchUpload; -EBUSY, a completion holding the lock,
+        // 503 ServiceUnavailable
+        Respond(NoUpload(m.rc));
         return;
       }
     }
-    rc = ENOENT;
     i = 0;
     while (i < 3) {
       m = GetAttrs(u);
       if (m.rc != OK) {
+        rc = m.rc;
         break;
       }
       lp = ListParts(u);
       if (lp.rc != OK) {
+        rc = lp.rc;
         break;
       }
       if (cfg.completionMark) {
@@ -884,7 +951,7 @@ machine Rgw {
     if (takeLock) {
       Unlock(u);
     }
-    Answer(rc == OK);
+    Respond(NoUpload(rc));
   }
 
   fun VerCheck(ver: int): int {
@@ -895,23 +962,43 @@ machine Rgw {
   }
 
   // RGWCompleteMultipart::complete: unlock if still held, and answer
-  fun Finish(u: int, ok: bool) {
+  fun Finish(u: int, rc: tRc) {
     Unlock(u);
-    Answer(ok);
+    Respond(rc);
   }
 
-  fun Answer(ok: bool) {
-    if (ok) {
-      Reply(A_OK);
-    } else {
-      Reply(A_ERR);
+  // -ENOENT from the meta object is the upload gone
+  fun NoUpload(rc: tRc): tRc {
+    if (rc == ENOENT) {
+      return ERR_NO_SUCH_UPLOAD;
     }
+    return rc;
   }
 
-  fun Reply(a: tAns) {
+  // RGW<Op>_ObjStore_S3::send_response: op_ret, answered through
+  // rgw_http_s3_errors. DeleteObject answers -ENOENT as success, and
+  // success as 204 (rgw_rest_s3.cc:3897-3900), as does
+  // AbortMultipartUpload; with condDelNoKey a conditional DeleteObject
+  // answers -ENOENT as 404 NoSuchKey
+  fun Respond(opRet: tRc) {
+    var rc: tRc;
+    var a: tAnswer;
+    rc = opRet;
+    if (kind == R_DELETE && rc == ENOENT && !(cfg.condDelNoKey && cond.kind != C_NONE)) {
+      rc = OK;
+    }
+    if (rc == OK) {
+      a = (status = 200, code = S3_NONE);
+      if (kind == R_DELETE || kind == R_ABORT || kind == R_LC_ABORT) {
+        a.status = 204;
+      }
+    } else {
+      a = S3Error(rc);
+    }
     send store, eFinished, rid;
-    announce mAnswered, (rid = rid, ok = a == A_OK);
-    announce mReply, (rid = rid, ans = a);
+    announce mAnswered, (rid = rid, ok = rc == OK);
+    announce mReply, (rid = rid, ans = AnsOf(a));
+    announce mResponse, (rid = rid, kind = kind, cond = cond, changed = changed, fault = fault, ans = a);
     send driver, eDone, (rid = rid, crashed = false);
   }
 
@@ -939,6 +1026,9 @@ machine Rgw {
     receive {
       case eHeadWritten: (x: (rc: tRc, epoch: int)) { r = x; }
     }
+    if (r.rc == OK) {
+      changed = true;
+    }
     return r;
   }
 
@@ -947,6 +1037,9 @@ machine Rgw {
     send store, eHeadRemove, (from = this, key = key, guard = guard, expectTag = expectTag, rid = rid);
     receive {
       case eHeadWritten: (x: (rc: tRc, epoch: int)) { r = x; }
+    }
+    if (r.rc == OK) {
+      changed = true;
     }
     return r;
   }

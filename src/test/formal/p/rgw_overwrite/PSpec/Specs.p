@@ -297,3 +297,184 @@ spec AllAnswered observes mStarted, mAnswered, mCrashed {
     }
   }
 }
+
+// Each request is answered as the S3 API allows for its operation. The
+// contract is AWS's Smithy model of S3 (aws/api-models-aws,
+// models/s3/service/2006-03-01/s3-2006-03-01.json at f9dcea01): each
+// operation's success status (its http trait's code), and the errors its
+// model and documentation name, with their statuses. For conditional
+// requests it is also the S3 User Guide's pages on conditional writes and
+// deletes.
+// - Success carries the operation's status: 204 for DeleteObject and
+//   AbortMultipartUpload, 200 for the others.
+// - Each error is one the operation's contract names, with S3's status
+//   for it. Those are:
+//   - PutObject: 412 PreconditionFailed and 409 ConditionalRequestConflict
+//     under If-Match or If-None-Match, and 404 NoSuchKey under If-Match.
+//   - DeleteObject: the same three under If-Match.
+//   - CopyObject: 404 NoSuchKey for a missing source (S3's error list;
+//     the Smithy model names none).
+//   - UploadPart: 404 NoSuchUpload.
+//   - CompleteMultipartUpload: 400 InvalidPart and 404 NoSuchUpload, and
+//     PutObject's under a condition. Also 500 InternalError, which its
+//     documentation tells clients to retry.
+//   - AbortMultipartUpload: 404 NoSuchUpload.
+//   - Any of them: 503 ServiceUnavailable, which clients retry.
+//   A request that met an injected fault may be answered any 5xx.
+//   UnknownError is not an S3 error code.
+// - A conditional DeleteObject answered 204 removed an object. S3
+//   answers one that finds no object 404, and one that loses a race 409
+//   or 404 (the User Guide's "How to perform conditional deletes").
+// Lifecycle's abort, dedup and resharding are not S3 requests.
+spec S3Answers observes mResponse {
+  start state Watch {
+    on mResponse do (r: (rid: int, kind: tKind, cond: tCond, changed: bool, fault: bool, ans: tAnswer)) {
+      if (r.kind == R_LC_ABORT || r.kind == R_DEDUP || r.kind == R_RESHARD) {
+        return;
+      }
+      if (r.ans.status < 300) {
+        assert r.ans.status == SuccessStatus(r.kind),
+          format("request {0} ({1}) succeeded with status {2}, where S3 answers {3}",
+                 r.rid, OpName(r.kind), r.ans.status, SuccessStatus(r.kind));
+        if (r.kind == R_DELETE && r.cond.kind != C_NONE && !r.fault) {
+          assert r.changed,
+            format("request {0} (a conditional DeleteObject) was answered 204 but removed no object; S3 answers 404, or 409 on a conflict",
+                   r.rid);
+        }
+        return;
+      }
+      if (r.fault && r.ans.status >= 500) {
+        return;
+      }
+      assert r.ans.code != S3_UNKNOWN_ERROR,
+        format("request {0} ({1}) was answered {2} UnknownError, an error S3 does not define",
+               r.rid, OpName(r.kind), r.ans.status);
+      assert r.ans.status == S3Status(r.ans.code),
+        format("request {0} ({1}) was answered {2} {3}, where S3's status for {3} is {4}",
+               r.rid, OpName(r.kind), r.ans.status, CodeName(r.ans.code), S3Status(r.ans.code));
+      assert Allowed(r.kind, r.cond, r.ans.code),
+        format("request {0} ({1}) was answered {2} {3}, an error S3 does not give {1}{4}",
+               r.rid, OpName(r.kind), r.ans.status, CodeName(r.ans.code), CondName(r.cond));
+    }
+  }
+}
+
+fun SuccessStatus(kind: tKind): int {
+  if (kind == R_DELETE || kind == R_ABORT) {
+    return 204;
+  }
+  return 200;
+}
+
+// S3's status for each error code: the httpError trait of the Smithy
+// model's error shapes (NoSuchKey, NoSuchUpload, BucketAlreadyExists),
+// and the documentation for the others
+fun S3Status(code: tS3Code): int {
+  if (code == S3_PRECONDITION_FAILED) {
+    return 412;
+  }
+  if (code == S3_NO_SUCH_KEY || code == S3_NO_SUCH_UPLOAD) {
+    return 404;
+  }
+  if (code == S3_CONDITIONAL_REQUEST_CONFLICT || code == S3_BUCKET_ALREADY_EXISTS) {
+    return 409;
+  }
+  if (code == S3_INVALID_PART || code == S3_INVALID_ARGUMENT) {
+    return 400;
+  }
+  if (code == S3_SERVICE_UNAVAILABLE) {
+    return 503;
+  }
+  return 500;
+}
+
+// the errors S3 gives each operation, under its condition
+fun Allowed(kind: tKind, cond: tCond, code: tS3Code): bool {
+  if (code == S3_SERVICE_UNAVAILABLE) {
+    return true;
+  }
+  if (cond.kind != C_NONE && (kind == R_PUT || kind == R_DELETE || kind == R_COMPLETE)) {
+    if (code == S3_PRECONDITION_FAILED || code == S3_CONDITIONAL_REQUEST_CONFLICT) {
+      return true;
+    }
+    if (code == S3_NO_SUCH_KEY && (kind == R_DELETE || cond.kind == C_IF_MATCH || cond.kind == C_IF_MATCH_ANY)) {
+      return true;
+    }
+  }
+  if (kind == R_COPY) {
+    return code == S3_NO_SUCH_KEY;
+  }
+  if (kind == R_UPLOAD_PART || kind == R_ABORT) {
+    return code == S3_NO_SUCH_UPLOAD;
+  }
+  if (kind == R_COMPLETE) {
+    return code == S3_INVALID_PART || code == S3_NO_SUCH_UPLOAD || code == S3_INTERNAL_ERROR;
+  }
+  return false;
+}
+
+fun OpName(kind: tKind): string {
+  if (kind == R_PUT) {
+    return "PutObject";
+  }
+  if (kind == R_DELETE) {
+    return "DeleteObject";
+  }
+  if (kind == R_COPY) {
+    return "CopyObject";
+  }
+  if (kind == R_UPLOAD_PART) {
+    return "UploadPart";
+  }
+  if (kind == R_COMPLETE) {
+    return "CompleteMultipartUpload";
+  }
+  if (kind == R_ABORT) {
+    return "AbortMultipartUpload";
+  }
+  return "ListObjects";
+}
+
+fun CodeName(code: tS3Code): string {
+  if (code == S3_PRECONDITION_FAILED) {
+    return "PreconditionFailed";
+  }
+  if (code == S3_NO_SUCH_KEY) {
+    return "NoSuchKey";
+  }
+  if (code == S3_NO_SUCH_UPLOAD) {
+    return "NoSuchUpload";
+  }
+  if (code == S3_INVALID_PART) {
+    return "InvalidPart";
+  }
+  if (code == S3_CONDITIONAL_REQUEST_CONFLICT) {
+    return "ConditionalRequestConflict";
+  }
+  if (code == S3_BUCKET_ALREADY_EXISTS) {
+    return "BucketAlreadyExists";
+  }
+  if (code == S3_INVALID_ARGUMENT) {
+    return "InvalidArgument";
+  }
+  if (code == S3_INTERNAL_ERROR) {
+    return "InternalError";
+  }
+  if (code == S3_SERVICE_UNAVAILABLE) {
+    return "ServiceUnavailable";
+  }
+  return "UnknownError";
+}
+
+fun CondName(c: tCond): string {
+  if (c.kind == C_IF_MATCH) {
+    return " under If-Match";
+  }
+  if (c.kind == C_IF_MATCH_ANY) {
+    return " under If-Match: *";
+  }
+  if (c.kind == C_IF_NONE_MATCH_ANY) {
+    return " under If-None-Match: *";
+  }
+  return "";
+}

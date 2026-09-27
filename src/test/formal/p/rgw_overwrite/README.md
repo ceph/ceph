@@ -1,7 +1,7 @@
 # RGW overwrites, deletes, copies and multipart uploads: a P model
 
 A model of writes to the keys of a non-versioned bucket that already hold
-objects. A key is overwritten by PutObject, CopyObject or a multipart
+objects, and of how S3 requests to them are answered. A key is overwritten by PutObject, CopyObject or a multipart
 completion, or removed by DeleteObject. Those operations race each other,
 part re-uploads, aborts, lifecycle, dedup, bucket listings, a reshard and
 GC. A copy within one pool, and dedup, share a tail through
@@ -47,7 +47,8 @@ requests on its key would answer it:
   at some point while it ran, and can be ordered just before the write
   that replaced that head, whose own condition still holds after it. A
   conditional delete also meets its condition where there is no head, as
-  RGW answers it 204 with nothing to delete;
+  RGW answers it 204 with nothing to delete. S3 answers it 404, which
+  S3Answers checks;
 - a request answered PreconditionFailed found, while it ran, a head that
   failed its condition, and one answered NoSuchKey found no head. Neither
   changed anything: no head, and no bucket index entry.
@@ -56,6 +57,41 @@ Another error, such as a 500, promises nothing, so the spec only checks
 that such a request did not write over a head that failed its condition.
 Unconditional requests are checked only as the writes that replace a
 head.
+
+**S3Answers.** Each request is answered as the S3 API answers its
+operation. The contract has two sources. The first is AWS's Smithy
+model of S3 ([`aws/api-models-aws`](https://github.com/aws/api-models-aws),
+`models/s3/service/2006-03-01/s3-2006-03-01.json` at `f9dcea01`,
+2026-09-11). It gives each operation's success status (the `http`
+trait's `code`), the errors the operation's model and documentation
+name, and their statuses (the `httpError` trait). The second is the S3
+User Guide's pages on conditional writes and deletes, which say how S3
+answers a conditional request that loses a race.
+- A success carries its operation's status: 204 for DeleteObject and
+  AbortMultipartUpload, 200 for the others.
+- An error is one its operation's contract names, with S3's status for
+  it:
+  - PutObject: 412 `PreconditionFailed` and 409
+    `ConditionalRequestConflict` under `If-Match` or `If-None-Match`,
+    and 404 `NoSuchKey` under `If-Match`.
+  - DeleteObject: the same three, under `If-Match`.
+  - CopyObject: 404 `NoSuchKey` for a missing source. S3's list of
+    error codes gives it; the Smithy model names none.
+  - UploadPart: 404 `NoSuchUpload`.
+  - CompleteMultipartUpload: 400 `InvalidPart` and 404 `NoSuchUpload`,
+    and PutObject's under a condition. Also 500 `InternalError`, which
+    its documentation tells clients to retry.
+  - AbortMultipartUpload: 404 `NoSuchUpload`.
+
+  Any operation may answer 503 `ServiceUnavailable`, which clients
+  retry, and a request that met an injected fault may answer any 5xx.
+  RGW answers an errno it has no S3 error for with 500 `UnknownError`,
+  which S3 does not define.
+- A conditional DeleteObject answered 204 removed an object. S3 answers
+  one that finds no object 404, and one that loses a race 409 or 404.
+
+Lifecycle's abort, dedup and resharding are not S3 requests, and are not
+checked.
 
 ## What is modelled
 
@@ -128,15 +164,18 @@ head.
   - `UploadPart` (`MultipartObjectProcessor`):
     - creates the part head exclusively, under a random prefix if the part
       was uploaded before;
-    - records the part in the meta object, or removes what it wrote if the
-      upload is gone.
+    - records the part in the meta object
+      (`cls_rgw_mp_upload_part_info_update`), which refuses a prefix
+      that is one of the part's past prefixes with `-EEXIST`
+      (`cls_rgw.cc:5119`), or removes what it wrote if that fails.
   - `CompleteMultipartUpload` (`RGWCompleteMultipart::execute`,
     `RadosMultipartUpload::complete`):
     - takes the lock, with `check_previously_completed` when the meta
       object is gone;
-    - checks the parts against the client's list;
-    - sends each part's past prefixes to GC under the upload id
-      (`cleanup_part_history`);
+    - checks each part against the client's list, then sends its past
+      prefixes to GC under the upload id (`cleanup_part_history`), part
+      by part. A part refused later leaves the history of those before
+      it collected (`rgw_sal_rados.cc:4546-4645`);
     - writes the head;
     - deletes the meta object under its `cls_version`, cleaning up parts
       that raced (`cleanup_orphaned_parts`) and retrying.
@@ -186,6 +225,29 @@ head.
       (`rgw_rados.cc:7203-7206`), then checks the condition against the
       head read (`rgw_rados.cc:7214`). The removal does not check it again
       on main.
+  - The answer. Each request ends with its `op_ret`, which the op's
+    `send_response` answers through `rgw_http_s3_errors`
+    (`rgw_common.cc`).
+    - DeleteObject answers `-ENOENT` and success as 204
+      (`rgw_rest_s3.cc:3897-3900`), and so does `delete_obj` when the
+      removal finds no head, because `complete_del`'s return replaces
+      the `-ENOENT` (`rgw_rados.cc:7266`).
+    - AbortMultipartUpload answers success as 204.
+    - An errno the table lacks, such as `-ECANCELED` or `-EIO`, is 500
+      `UnknownError` (`rgw_common.cc:364-368`), and `-EEXIST` is 409
+      `BucketAlreadyExists` (`rgw_common.cc:110`).
+    - CompleteMultipartUpload answers:
+      - an upload that is gone, `NoSuchUpload`;
+      - a completion already in progress, 500 `InternalError`
+        (`rgw_op.cc:7728-7735`);
+      - a meta object gone after the lock was taken, 404 `NoSuchKey`,
+        because `get_obj_attrs`'s `-ENOENT` stands (`rgw_op.cc:7738`);
+      - a list that does not match the parts, `InvalidPart`.
+    - UploadPart answers `-ENOENT` from the meta object as `NoSuchUpload`,
+      and passes any other error on (`rgw_putobj_processor.cc:648`).
+    - AbortMultipartUpload answers a lock held by a completion with 503
+      `ServiceUnavailable` (`-EBUSY`), and an upload that is gone with
+      `NoSuchUpload`.
 - **`Driver`**: runs a script of phases. The requests of a phase run
   concurrently.
 
@@ -220,6 +282,8 @@ head.
 | `SC_COND_DEL_VS_PUT` | a DeleteObject with `If-Match`, and a PutObject |
 | `SC_COND_DEL_VS_MATCH` | a DeleteObject and a PutObject, both with `If-Match` |
 | `SC_COND_COMPLETE_VS_PUT` | a completion with `If-Match`, and a PutObject |
+| `SC_COND_DELS` | two DeleteObjects with `If-Match` on the same ETag |
+| `SC_INVALID_THEN_REUPLOAD` | part 1 uploaded again, as an SDK retry does; then a completion whose list has the wrong ETag for part 2; then part 1 uploaded again |
 
 ## Environment and assumptions
 
@@ -358,6 +422,26 @@ found. The cases of conditional requests were run with the default
 | `tcMarkMetaDel<Scenario>` | the same | the same, and the meta delete may fail instead | holds |
 | `tcMarkLapse<Scenario>` | `SC_ABORT`, `SC_LC_ABORT`, `SC_SAME_COMPLETES` | the same, and the completion lock may lapse under a live holder | violated: a record cannot fence a holder whose lock lapsed before its head write |
 
+The S3Answers cases check only S3Answers on main and with one fix. With
+every fix, they check every property.
+
+| Test case | Scenario | Changes | Result |
+|---|---|---|---|
+| `tcAns<Scenario>` | the write, delete, copy, multipart, listing and conditional scenarios | none | holds, except the six below |
+| `tcAnsIfMatchVsPut`, `tcAnsMatchAnyVsMatch` | `SC_IF_MATCH_VS_PUT`, `SC_MATCH_ANY_VS_MATCH` | none | **violated**: a PutObject under `If-Match` answered 500 `UnknownError` (finding 13) |
+| `tcAnsCondCompleteVsPut` | `SC_COND_COMPLETE_VS_PUT` | none | **violated**: a completion under `If-Match` answered 500 `UnknownError` (finding 13) |
+| `tcAnsLcAbort` | `SC_LC_ABORT` | none | **violated**: a completion answered 404 `NoSuchKey` (finding 2) |
+| `tcAnsCondDels` | `SC_COND_DELS` | none | **violated**: a conditional DeleteObject that removed nothing answered 204 (finding 15) |
+| `tcAnsInvalidThenReupload` | `SC_INVALID_THEN_REUPLOAD` | none | **violated**: UploadPart answered 409 `BucketAlreadyExists` (finding 16) |
+| `tcAnsIxFailPut`, `tcAnsIxFailRetry` | `SC_PUT_ONE`, `SC_RETRY` | the index completion may fail | holds: a fault may be answered 5xx |
+| `tcAnsGuardCondDelVsMatch` | `SC_COND_DEL_VS_MATCH` | the guarded removal (M5) | **violated**: a conditional DeleteObject that lost the race answered 204 (finding 13) |
+| `tcAnsLossFailsIfMatchVsPut`, `tcAnsLossFailsCondCompleteVsPut` | `SC_IF_MATCH_VS_PUT`, `SC_COND_COMPLETE_VS_PUT` | a lost race is answered 409 (proposed) | holds |
+| `tcAnsTakesLockLcAbort` | `SC_LC_ABORT` | lifecycle takes the lock (proposed) | holds |
+| `tcAnsNoKeyCondDels` | `SC_COND_DELS` | a conditional DeleteObject that finds no object is answered 404 (proposed) | holds, CondSemantics too |
+| `tcAnsHistoryInvalidThenReupload` | `SC_INVALID_THEN_REUPLOAD` | a completion sends its parts' history to GC only once its head is written (proposed) | holds, with HeadIntact, NoOrphans, IndexMatchesHead, AllAnswered and BucketStats |
+| `tcAnsFixed<Scenario>`, `tcAnsFixedIx<Scenario>` | the S3Answers scenarios, and resharding with multipart | `FixedCond()` and the two above (`AnsFixed()`); then with index completions that may fail | holds, every property |
+| `tcAnsFixedMarkCrash<Scenario>` | `SC_RETRY`, `SC_THEN_ABORT`, `SC_INVALID_THEN_REUPLOAD` | the same, the completion record, and RGW may die | holds, every property |
+
 ## What the model finds on main
 
 These are counterexamples the checker produced, traced by hand to the code
@@ -369,7 +453,9 @@ findings 4, 5, 6, 9 and 10 in `qa/workunits/rgw/test_rgw_overwrite_races.py`
 ([#72096](https://github.com/ceph/ceph/pull/72096)); findings 2, 3, 7 and 11 in s3-tests (`rgw_inject`
 marker, [wip-rgw-overwrite-races](https://github.com/mmgaggle/s3-tests/tree/wip-rgw-overwrite-races)).
 Finding 8 needs a FIFO bilog flush to fail. Findings 12, 13 and 14
-reproduce with the workunit's conditional-request cases.
+reproduce with the workunit's conditional-request cases. Findings 15 and
+16 come from S3Answers, and are traced to the code but not yet reproduced
+on a cluster.
 
 | Finding | Tracker | Fix |
 |---|---|---|
@@ -386,6 +472,7 @@ reproduce with the workunit's conditional-request cases.
 | 12 | [80898](https://tracker.ceph.com/issues/80898) | [#72100](https://github.com/ceph/ceph/pull/72100) |
 | 13 | [80906](https://tracker.ceph.com/issues/80906) | [#72109](https://github.com/ceph/ceph/pull/72109), and [#72100](https://github.com/ceph/ceph/pull/72100) for deletes |
 | 14 | [80907](https://tracker.ceph.com/issues/80907) | [#72109](https://github.com/ceph/ceph/pull/72109) |
+| 15, 16 | not filed | — |
 
 
 1. **The bucket index can keep a stale entry for good.**
@@ -541,6 +628,62 @@ reproduce with the workunit's conditional-request cases.
     counting its parts until then (`tcCreateVsCompleteCond`). No data is
     lost. Cancelling without `remove_objs` when the lost race is refused
     holds (`tcCreateVsCompleteKeepsParts`).
+15. **A conditional DeleteObject that removes nothing is answered 204.**
+    Two paths get there:
+    - `delete_obj` answers a key with no object `-ENOENT` before it
+      checks any condition (`rgw_rados.cc:7203-7206`);
+    - a removal that finds the head already gone ends in `complete_del`,
+      whose return replaces the `-ENOENT` (`rgw_rados.cc:7266`).
+
+    `RGWDeleteObj_ObjStore_S3::send_response` answers both 204
+    (`rgw_rest_s3.cc:3897-3900`). S3 answers a conditional delete that
+    finds no object 404, including one that a concurrent delete beat (S3
+    User Guide, "How to perform conditional deletes"). Take two clients
+    that release the same lease with `DELETE If-Match` on its ETag: both
+    are told they released it (`tcAnsCondDels`). No order of the two
+    explains that under S3's rules, since the second would find nothing
+    and be answered 404. Answering a conditional delete's `-ENOENT` as 404
+    `NoSuchKey` holds (`tcAnsNoKeyCondDels`).
+16. **A completion refused after it checks a part leaves that part
+    impossible to upload again.** `RadosMultipartUpload::complete` works
+    through the parts in order. For each one it sends the part's past
+    prefixes to GC (`cleanup_part_history`, `rgw_sal_rados.cc:4645`)
+    before it checks the next part and before the head write. The
+    completion may still be refused after that: InvalidPart or
+    EntityTooSmall on a later part (`rgw_sal_rados.cc:4546-4613`), or a
+    precondition or lost race in `write_meta`. The upload then stays, and
+    its meta object still lists those prefixes as the part's history.
+    - Once GC has deleted them, the part's base prefix is free.
+      `process_first_chunk` falls back to a random prefix only when the
+      exclusive create fails, so the next upload of that part number
+      writes its head at the base prefix.
+    - `cls_rgw_mp_upload_part_info_update` then refuses it with `-EEXIST`,
+      because that prefix is in the part's history (`cls_rgw.cc:5119`).
+      `rgw_http_s3_errors` answers that 409 `BucketAlreadyExists`, an
+      error S3 does not give UploadPart.
+    - Every retry takes the same prefix, so the part number cannot be
+      uploaded again for the life of the upload
+      (`tcAnsInvalidThenReupload`).
+
+    It takes a part uploaded twice, as an SDK retry does, then a refused
+    completion, then GC (`rgw_gc_obj_min_wait`, 2 h). Sending the history
+    to GC only once the head is written holds
+    (`tcAnsHistoryInvalidThenReupload`), with every fix too
+    (`tcAnsFixedInvalidThenReupload`).
+
+S3Answers also shows how findings 2 and 13 look to a client:
+- **Finding 13.** Under `If-Match` with an ETag, a PutObject or a
+  completion that loses the race is answered 500 `UnknownError`, because
+  `-ECANCELED` has no entry in `rgw_http_s3_errors`. S3 answers 409
+  `ConditionalRequestConflict`, which RGW lacks (`tcAnsIfMatchVsPut`,
+  `tcAnsMatchAnyVsMatch`, `tcAnsCondCompleteVsPut`). With the guarded
+  removal (M5), a conditional delete that loses the race is answered 204
+  (`tcAnsGuardCondDelVsMatch`). Answering each of these 409 holds.
+- **Finding 2.** When lifecycle's abort deletes the meta object under a
+  completion that holds the lock, the completion is answered 404
+  `NoSuchKey`. `get_obj_attrs`'s `-ENOENT` is passed through, not mapped
+  to `NoSuchUpload` (`rgw_op.cc:7738`, `tcAnsLcAbort`). Lifecycle taking
+  the lock closes it.
 
 The seven proposed fixes hold together (`tcFixed*`), with index
 completions that may fail too (`tcFixedIx*`), apart from dedup and
@@ -602,6 +745,12 @@ commit, a write would land in an index nobody reads.
   apply to the source as `copy_obj` reads it; a retried conditional
   completion, which `check_previously_completed` answers without its
   condition.
+- S3Answers checks the error codes S3 gives each operation, not every
+  code RGW could give it: a request here fails only in the ways the model
+  makes it fail. Other operations, request parsing and response bodies
+  are left to the audit of RGW's S3 front end against the Smithy model.
+- CompleteMultipartUpload's early 200 with an error in the body, which S3
+  may send and RGW never does.
 - CondSemantics does not check unconditional requests, and it checks
   answers other than success, 412 and 404 only for what they wrote.
 - Multi-object delete, which runs the same `delete_obj` for each key,

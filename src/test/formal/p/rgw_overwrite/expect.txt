@@ -219,3 +219,77 @@ tcCondFixedIxMatchAnyVsMatch       holds
 tcCondFixedIxCondDelVsPut          holds
 tcCondFixedIxCondDelVsMatch        holds
 tcCondFixedIxCondCompleteVsPut     holds
+
+# S3 answers, against the Smithy model and the S3 User Guide
+tcAnsPuts                              holds
+tcAnsPutVsComplete                     holds
+tcAnsCompletes                         holds
+tcAnsSameCompletes                     holds
+tcAnsReupload                          holds
+tcAnsAbort                             holds
+tcAnsLcAbort                           violated 404 NoSuchKey
+tcAnsRetry                             holds
+tcAnsThenAbort                         holds
+tcAnsPutThenRetry                      holds
+tcAnsDelVsPut                          holds
+tcAnsDelsAndPut                        holds
+tcAnsDelVsComplete                     holds
+tcAnsCopyVsPutSrc                      holds
+tcAnsCopyVsDelSrc                      holds
+tcAnsCopySelfVsPut                     holds
+tcAnsCopyMpu                           holds
+tcAnsListVsPut                         holds
+tcAnsCreates                           holds
+tcAnsCreateVsComplete                  holds
+tcAnsIfMatchVsPut                      violated UnknownError
+tcAnsMatchAnyVsMatch                   violated UnknownError
+tcAnsCondDelVsPut                      holds
+tcAnsCondDelVsMatch                    holds
+tcAnsCondCompleteVsPut                 violated UnknownError
+tcAnsCondDels                          violated removed no object
+tcAnsInvalidThenReupload               violated BucketAlreadyExists
+tcAnsIxFailPut                         holds
+tcAnsIxFailRetry                       holds
+tcAnsGuardCondDelVsMatch               violated removed no object
+tcAnsTakesLockLcAbort                  holds
+tcAnsLossFailsIfMatchVsPut             holds
+tcAnsLossFailsCondCompleteVsPut        holds
+tcAnsNoKeyCondDels                     holds
+tcAnsHistoryInvalidThenReupload        holds
+tcAnsFixedPuts                         holds
+tcAnsFixedPutVsComplete                holds
+tcAnsFixedCompletes                    holds
+tcAnsFixedSameCompletes                holds
+tcAnsFixedReupload                     holds
+tcAnsFixedAbort                        holds
+tcAnsFixedLcAbort                      holds
+tcAnsFixedRetry                        holds
+tcAnsFixedThenAbort                    holds
+tcAnsFixedPutThenRetry                 holds
+tcAnsFixedDelVsPut                     holds
+tcAnsFixedDelsAndPut                   holds
+tcAnsFixedDelVsComplete                holds
+tcAnsFixedCopyVsDelSrc                 holds
+tcAnsFixedCopyMpu                      holds
+tcAnsFixedReshardVsMpu                 holds
+tcAnsFixedCreates                      holds
+tcAnsFixedCreateVsComplete             holds
+tcAnsFixedIfMatchVsPut                 holds
+tcAnsFixedMatchAnyVsMatch              holds
+tcAnsFixedCondDelVsPut                 holds
+tcAnsFixedCondDelVsMatch               holds
+tcAnsFixedCondCompleteVsPut            holds
+tcAnsFixedCondDels                     holds
+tcAnsFixedInvalidThenReupload          holds
+tcAnsFixedIxPutVsComplete              holds
+tcAnsFixedIxCompletes                  holds
+tcAnsFixedIxSameCompletes              holds
+tcAnsFixedIxReupload                   holds
+tcAnsFixedIxRetry                      holds
+tcAnsFixedIxCreateVsComplete           holds
+tcAnsFixedIxCondCompleteVsPut          holds
+tcAnsFixedIxCondDels                   holds
+tcAnsFixedIxInvalidThenReupload        holds
+tcAnsFixedMarkCrashRetry               holds
+tcAnsFixedMarkCrashThenAbort           holds
+tcAnsFixedMarkCrashInvalidThenReupload holds
