@@ -21,7 +21,9 @@
 
 namespace ceph {
 
-class adaptive_mutex {
+// pthread adaptive mutex primitive. Public ceph::adaptive_mutex is aliased in
+// ceph_mutex.h (plain, lockstat-wrapped, or debug) depending on build mode.
+class adaptive_mutex_impl {
   pthread_mutex_t m;
 
   void
@@ -38,25 +40,25 @@ class adaptive_mutex {
   }
 
 public:
-  adaptive_mutex() { _init(); }
+  adaptive_mutex_impl() { _init(); }
 
   // Accept and discard naming / lockdep args used by make_mutex factories.
   template <typename... Args>
-  explicit adaptive_mutex(Args&&...)
+  explicit adaptive_mutex_impl(Args&&...)
   {
     _init();
   }
 
-  ~adaptive_mutex()
+  ~adaptive_mutex_impl()
   {
     int r = pthread_mutex_destroy(&m);
     ceph_assert(r == 0);
   }
 
-  adaptive_mutex(const adaptive_mutex&) = delete;
-  adaptive_mutex& operator=(const adaptive_mutex&) = delete;
-  adaptive_mutex(adaptive_mutex&&) = delete;
-  adaptive_mutex& operator=(adaptive_mutex&&) = delete;
+  adaptive_mutex_impl(const adaptive_mutex_impl&) = delete;
+  adaptive_mutex_impl& operator=(const adaptive_mutex_impl&) = delete;
+  adaptive_mutex_impl(adaptive_mutex_impl&&) = delete;
+  adaptive_mutex_impl& operator=(adaptive_mutex_impl&&) = delete;
 
   void
   lock()
@@ -96,15 +98,16 @@ public:
   }
 };
 
-class adaptive_condition_variable {
+class adaptive_condition_variable_impl {
   pthread_cond_t cond;
 
-  adaptive_condition_variable& operator=(
-      const adaptive_condition_variable&) = delete;
-  adaptive_condition_variable(const adaptive_condition_variable&) = delete;
+  adaptive_condition_variable_impl& operator=(
+      const adaptive_condition_variable_impl&) = delete;
+  adaptive_condition_variable_impl(
+      const adaptive_condition_variable_impl&) = delete;
 
   std::cv_status
-  _wait_until(adaptive_mutex* mutex, timespec* ts)
+  _wait_until(adaptive_mutex_impl* mutex, timespec* ts)
   {
     int r = pthread_cond_timedwait(&cond, mutex->native_handle(), ts);
     switch (r) {
@@ -118,7 +121,7 @@ class adaptive_condition_variable {
   }
 
 public:
-  adaptive_condition_variable()
+  adaptive_condition_variable_impl()
   {
     int r = pthread_cond_init(&cond, nullptr);
     if (r) {
@@ -126,10 +129,10 @@ public:
     }
   }
 
-  ~adaptive_condition_variable() { pthread_cond_destroy(&cond); }
+  ~adaptive_condition_variable_impl() { pthread_cond_destroy(&cond); }
 
   void
-  wait(std::unique_lock<adaptive_mutex>& lock)
+  wait(std::unique_lock<adaptive_mutex_impl>& lock)
   {
     if (int r = pthread_cond_wait(&cond, lock.mutex()->native_handle());
         r != 0) {
@@ -139,7 +142,7 @@ public:
 
   template <class Predicate>
   void
-  wait(std::unique_lock<adaptive_mutex>& lock, Predicate pred)
+  wait(std::unique_lock<adaptive_mutex_impl>& lock, Predicate pred)
   {
     while (!pred()) {
       wait(lock);
@@ -149,7 +152,7 @@ public:
   template <class Clock, class Duration>
   std::cv_status
   wait_until(
-      std::unique_lock<adaptive_mutex>& lock,
+      std::unique_lock<adaptive_mutex_impl>& lock,
       const std::chrono::time_point<Clock, Duration>& when)
   {
     if constexpr (Clock::is_steady) {
@@ -167,7 +170,7 @@ public:
   template <class Rep, class Period>
   std::cv_status
   wait_for(
-      std::unique_lock<adaptive_mutex>& lock,
+      std::unique_lock<adaptive_mutex_impl>& lock,
       const std::chrono::duration<Rep, Period>& awhile)
   {
     ceph::real_time when{ceph::real_clock::now()};
@@ -179,7 +182,7 @@ public:
   template <class Rep, class Period, class Pred>
   bool
   wait_for(
-      std::unique_lock<adaptive_mutex>& lock,
+      std::unique_lock<adaptive_mutex_impl>& lock,
       const std::chrono::duration<Rep, Period>& awhile,
       Pred pred)
   {
@@ -212,8 +215,8 @@ public:
 #else // !HAVE_PTHREAD_MUTEX_ADAPTIVE_NP
 
 namespace ceph {
-using adaptive_mutex = std::mutex;
-using adaptive_condition_variable = std::condition_variable;
+using adaptive_mutex_impl = std::mutex;
+using adaptive_condition_variable_impl = std::condition_variable;
 } // namespace ceph
 
 #endif // HAVE_PTHREAD_MUTEX_ADAPTIVE_NP

@@ -34,6 +34,7 @@
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 
+#include "adaptive_mutex.h"
 #include "ceph_time.h"
 #include "likely.h"
 #include "lockstat.h"
@@ -604,12 +605,24 @@ private:
 
 } // namespace lockstat_detail
 
+using mutex_adaptive_lockstat =
+    lockstat_detail::mutex_lockstat_impl<adaptive_mutex_impl>;
+using condition_variable_adaptive_lockstat =
+    lockstat_detail::condition_variable_lockstat_impl<adaptive_mutex_impl>;
+
+#if defined(WITH_CEPH_ADAPTIVE_MUTEX) && defined(HAVE_PTHREAD_MUTEX_ADAPTIVE_NP)
+using mutex_lockstat = mutex_adaptive_lockstat;
+using condition_variable_lockstat = condition_variable_adaptive_lockstat;
+#else
 using mutex_lockstat = lockstat_detail::mutex_lockstat_impl<std::timed_mutex>;
+using condition_variable_lockstat =
+    lockstat_detail::condition_variable_lockstat_impl<std::timed_mutex>;
+#endif
+
 using mutex_recursive_lockstat =
     lockstat_detail::mutex_lockstat_impl<std::recursive_timed_mutex>;
 using shared_mutex_lockstat =
     lockstat_detail::shared_mutex_lockstat_impl<std::shared_timed_mutex>;
-using condition_variable_lockstat = lockstat_detail::condition_variable_lockstat_impl<std::timed_mutex>;
 } // namespace ceph
 
 #endif // CEPH_COMMON_MUTEX_LOCKSTAT_H
