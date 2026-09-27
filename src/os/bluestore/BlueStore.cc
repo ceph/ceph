@@ -9432,18 +9432,20 @@ int BlueStore::expand_devices(ostream& out)
 	<<" : Expanding to 0x" << std::hex << size
 	<< std::dec << "(" << byte_u_t(size) << ")"
 	<< std::endl;
+    // label copies added by this expansion; they live in the new space
+    std::vector<uint64_t> new_label_locations;
+    uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
     r = _write_out_fm_meta(size);
     if (r != 0) {
       derr << "unable to write out fm meta for " << my_path << ": "
            << cpp_strerror(r) << dendl;
     } else if (bdev->supported_bdev_label()) {
       bdev_label.size = size;
-      uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-      for (uint64_t loc : bdev_label_positions) {
-        if ((loc >= size0) && (loc + lsize <= size)) {
-          bdev_label_valid_locations.push_back(loc);
-          if (!bdev_label_multi) {
-            break;
+      if (bdev_label_multi) {
+        for (uint64_t loc : bdev_label_positions) {
+          if ((loc >= size0) && (loc + lsize <= size)) {
+            bdev_label_valid_locations.push_back(loc);
+            new_label_locations.push_back(loc);
           }
         }
       }
@@ -9476,7 +9478,19 @@ int BlueStore::expand_devices(ostream& out)
         fm->expand(aligned_size, db);
         alloc->expand(aligned_size);
         uint64_t aligned_size0 = p2roundup(size0, min_alloc_size);
-        alloc->init_add_free(aligned_size0, aligned_size - aligned_size0);
+        // The new label copies were written into the new space. The offline
+        // path reserves them on re-open in _main_bdev_label_try_reserve();
+        // here the OSD keeps running, so never hand them to the allocator,
+        // or object data gets allocated over them and later label writes
+        // clobber that data.
+        interval_set<uint64_t> new_free;
+        new_free.insert(aligned_size0, aligned_size - aligned_size0);
+        for (uint64_t loc : new_label_locations) {
+          new_free.erase(loc, lsize);
+        }
+        for (auto p = new_free.begin(); p != new_free.end(); ++p) {
+          alloc->init_add_free(p.get_start(), p.get_len());
+        }
       }
 
       dout(1) << __func__
