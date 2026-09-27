@@ -9,8 +9,8 @@
 * RGW: Cloud-s3 lifecycle transitions now upload unencrypted compressed objects
   decompressed. Keep lifecycle off (``rgw_enable_lc_threads=false``) on every
   cluster in the zonegroup until all radosgw daemons run this release, then
-  re-enable it and restart them; an older radosgw repeating a transition
-  started by a newer one can leave the object unreadable after restore.
+  re-enable it and restart them; an older radosgw transitioning an object that
+  a newer one transitioned or restored can leave it unreadable after restore.
 
 * RGW: Encrypted objects are skipped during cloud-s3 lifecycle transitions
   when ``retain_head_object`` is false, preserving their encryption attributes.

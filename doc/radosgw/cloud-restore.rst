@@ -270,6 +270,10 @@ API the storage class of restored objects should remain unchanged. Therefore, fo
 temporary copies, the ``x-amz-storage-class`` will continue to reflect the
 original cloud-tier storage class.
 
+Permanent restores of unencrypted, uncompressed cloud data use the restore
+storage class's compression setting; temporary restores keep the data as
+stored in the cloud.
+
 
 mtime
 ~~~~~
