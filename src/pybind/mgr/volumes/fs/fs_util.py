@@ -76,6 +76,8 @@ def listdir(fs, dirpath, filter_entries=None, filter_files=True):
     """
     Get the directory entries for a given path. List only dirs if 'filter_files' is True.
     Don't list the entries passed in 'filter_entries'
+
+    :rtype: list of bytes
     """
     entries = []
     if filter_entries is None:
@@ -95,6 +97,24 @@ def listdir(fs, dirpath, filter_entries=None, filter_files=True):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
     return entries
+
+
+def list_files(fs, path):
+    return listdir(fs, path, filter_files=False)
+
+
+def is_dir_empty(fs, path):
+    try:
+        with fs.opendir(path) as dir_handle:
+            d = fs.readdir(dir_handle)
+            while d:
+                if not d.d_name in (b'.', b'..'):
+                    return False
+                d = fs.readdir(dir_handle)
+    except cephfs.Error as e:
+        raise VolumeException(exception=e)
+
+    return True
 
 
 def has_subdir(fs, dirpath, filter_entries=None):
@@ -211,6 +231,42 @@ def get_ancestor_xattr(fs, path, attr):
         else:
             return get_ancestor_xattr(fs, os.path.split(path)[0], attr)
 
+
+def get_all_xattrs(fs, path):
+    '''
+    Get/return all xattrs present on the given path.
+
+    :returns: dict of xattr key and values
+    '''
+    num_of_keys, keys = fs.listxattr(path)
+    if not keys:
+        return
+    keys = keys.split('\x00')
+    assert len(keys) == num_of_keys
+
+    sv_xattrs = {}
+    for xattr in keys:
+        if not xattr:
+            continue
+        val = fs.getxattr(path, xattr)
+        if val:
+            sv_xattrs[xattr] = val
+
+    return sv_xattrs
+
+
+def set_all_xattrs(fs, path, path_xattrs):
+    '''
+    Set all passed xattrs on the given path
+
+    :param xattrs: dict of xattr key and values
+    '''
+    for xattr, val in path_xattrs.items():
+        if not val:
+            continue
+        fs.setxattr(path, xattr, val)
+
+
 def create_base_dir(fs, path, mode):
     """
     Create volspec base/group directory if it doesn't exist
@@ -224,7 +280,7 @@ def create_base_dir(fs, path, mode):
             raise VolumeException(-e.args[0], e.args[1])
 
 
-def statx(fs, path, fields=None):
+def statx(fs, path, fields=None, follow_symlink=True):
     '''
     Convenient wrapper around libcephfs's statx().
 
@@ -232,17 +288,42 @@ def statx(fs, path, fields=None):
     :param fields: stat buffer fields to be fetched
     :returns: bool or list. list if fields were passed, otherwise bool
     '''
+    mask = 0
+    if fields:
+        if 'uid' in fields:
+            mask = cephfs.CEPH_STATX_UID
+        if 'gid' in fields:
+            mask = mask | cephfs.CEPH_STATX_GID
+        if 'mode' in fields:
+            mask = mask | cephfs.CEPH_STATX_MODE
+
     flags = 0
     flags = flags | cephfs.AT_STATX_SYNC_AS_STAT
+    if follow_symlink:
+        flags = flags | cephfs.AT_SYMLINK_NOFOLLOW
 
     # sxb = statx buffer
-    sxb = fs.statx(path, 0, flags)
+    sxb = fs.statx(path, mask, flags)
+
+    if mask == 0:
+        # no fields were fetched, only presence was checked
+        return True
+
+    sxb_fields = []
+    if 'uid' in fields:
+        sxb_fields.append(int(sxb['uid']))
+    if 'gid' in fields:
+        sxb_fields.append(int(sxb['gid']))
+    if 'mode' in fields:
+        sxb_fields.append(int(sxb['mode']))
+
+    return sxb_fields
 
 
-def path_exists(fs, path):
+def path_exists(fs, path, follow_symlink=True):
     try:
         # prefer statx over stat has it passes much lesser data on n/w
-        statx(fs, path, None)
+        statx(fs, path, None, follow_symlink)
     except cephfs.PermissionError:
         raise
     except:
