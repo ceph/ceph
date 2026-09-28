@@ -32,6 +32,7 @@
 
 #include "fs_strategy.h"
 #include "rgw_common.h"
+#include "common/ceph_json.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -82,14 +83,31 @@ std::string PerPartMPUStrategy::staging_dir_name(const std::string& meta) const
   return RGW_MP_STAGING_PREFIX + url_encode(meta, true);
 }
 
-bool PerPartMPUStrategy::names_staging_dir(std::string_view name) const
+bool PerPartMPUStrategy::is_staging_dir(std::string_view name) const
 {
   return name.starts_with(RGW_MP_STAGING_PREFIX);
 }
 
-std::string_view PerPartMPUStrategy::staging_prefix() const
+/* The name carries the meta, so this costs a decode and a split and
+ * opens nothing. */
+bool PerPartMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
+				       int root_fd, std::string_view dname,
+				       StagedUpload& out) const
 {
-  return RGW_MP_STAGING_PREFIX;
+  if (!is_staging_dir(dname)) {
+    return false;
+  }
+  std::string_view rest = dname;
+  rest.remove_prefix(RGW_MP_STAGING_PREFIX.size());
+
+  const std::string meta = url_decode(std::string(rest));
+  const auto dot = meta.rfind('.');
+  if (dot == std::string::npos || dot == 0 || dot + 1 == meta.size()) {
+    return false;
+  }
+  out.key = meta.substr(0, dot);
+  out.upload_id = meta.substr(dot + 1);
+  return true;
 }
 
 std::string PerPartMPUStrategy::part_name(uint32_t part_num) const
@@ -97,14 +115,9 @@ std::string PerPartMPUStrategy::part_name(uint32_t part_num) const
   return RGW_MP_PART_PREFIX + fmt::format("{:0>5}", part_num);
 }
 
-bool PerPartMPUStrategy::is_part_name(std::string_view name) const
-{
-  return name.starts_with(RGW_MP_PART_PREFIX);
-}
-
 std::optional<uint32_t> PerPartMPUStrategy::part_number(std::string_view name) const
 {
-  if (! is_part_name(name)) {
+  if (! name.starts_with(RGW_MP_PART_PREFIX)) {
     return std::nullopt;
   }
   const std::string_view digits{name.substr(RGW_MP_PART_PREFIX.length())};
@@ -135,11 +148,6 @@ PerPartMPUStrategy::part_target(uint32_t part_num,
    * The stride is not consulted:  this layout places a part without
    * one, which is why it never answers nullopt. */
   return PartTarget{part_name(part_num), 0, std::nullopt, false};
-}
-
-std::string PerPartMPUStrategy::head_name() const
-{
-  return part_name(0);
 }
 
 std::string PerPartMPUStrategy::meta_name() const
@@ -427,18 +435,63 @@ std::string NooBaaMPUStrategy::staging_dir_name(const std::string& meta) const
   return meta.substr(dot + 1);
 }
 
-bool NooBaaMPUStrategy::names_staging_dir(std::string_view name) const
+bool NooBaaMPUStrategy::is_staging_dir(std::string_view name) const
 {
-  /* Their upload directories are UUIDs, which no test can recognise
-   * without also matching an object key.  What identifies one is that
-   * it sits under multipart-uploads, so every entry of that directory
-   * is an upload and the caller has already narrowed to it. */
-  return !name.empty() && (name != ".") && (name != "..");
+  /* Their staging never sits among objects -- it is under the bucket's
+   * temp directory, which is reserved whole -- so an entry of the
+   * bucket directory is never one of theirs.  This is the question
+   * asked while enumerating objects, and for this format the answer is
+   * always no;  recognising an upload is staged_upload()'s job, and it
+   * reads the directory rather than guessing from a uuid. */
+  return false;
 }
 
-std::string_view NooBaaMPUStrategy::staging_prefix() const
+/* Their directory is named for the upload id and the key is inside, in
+ * create_object_upload (`namespace_fs.js` create_object_upload, and
+ * their own list_uploads reads it back the same way).  So this opens
+ * and parses one file per upload, which is what their layout costs. */
+bool NooBaaMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
+				      int root_fd, std::string_view dname,
+				      StagedUpload& out) const
 {
-  return std::string_view{};
+  if (dname.empty() || (dname == ".") || (dname == "..")) {
+    return false;
+  }
+
+  const std::string path = std::string(dname) + "/" + NB_CREATE_NAME;
+  int fd = ::openat(root_fd, path.c_str(), O_RDONLY);
+  if (fd < 0) {
+    /* not an upload, or one being torn down;  skipped, not failed */
+    return false;
+  }
+  auto close_fd = make_scope_guard([fd] { ::close(fd); });
+
+  /* their create params are a JSON dump of the request, so bounded by
+   * what a CreateMultipartUpload carries;  a file larger than this is
+   * not one of theirs */
+  static constexpr size_t MAX_CREATE_PARAMS = 64 * 1024;
+  std::string buf(MAX_CREATE_PARAMS, '\0');
+  ssize_t len = ::pread(fd, buf.data(), buf.size(), 0);
+  if (len <= 0) {
+    return false;
+  }
+  buf.resize(len);
+
+  JSONParser parser;
+  if (!parser.parse(buf.data(), buf.size())) {
+    ldpp_dout(dpp, 4) << "could not parse " << path << " as JSON;  not "
+		      << "treating it as an upload" << dendl;
+    return false;
+  }
+  JSONObj* kobj = parser.find_obj("key");
+  if (!kobj) {
+    ldpp_dout(dpp, 4) << path << " carries no key" << dendl;
+    return false;
+  }
+
+  out.key = kobj->get_data();
+  out.upload_id = std::string(dname);
+  return !out.key.empty();
 }
 
 std::optional<std::string>
@@ -479,7 +532,18 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
   if (found.empty()) {
     return std::nullopt;
   }
-  return found + "/" + NB_MPU_ROOT;
+
+  /* The temp directory is not enough.  NooBaa creates it for ordinary
+   * object writes too (`namespace_fs.js:1303`, `:1569`) and only
+   * creates multipart-uploads/ beneath it at the first
+   * create_object_upload, so a bucket which has been written to and
+   * never uploaded to has the one and not the other.  Answering with
+   * a path that does not exist would send an enumeration at it. */
+  const std::string root = found + "/" + NB_MPU_ROOT;
+  if (::faccessat(bucket_fd, root.c_str(), F_OK, 0) != 0) {
+    return std::nullopt;
+  }
+  return root;
 }
 
 std::string NooBaaMPUStrategy::part_name(uint32_t part_num) const
@@ -488,15 +552,10 @@ std::string NooBaaMPUStrategy::part_name(uint32_t part_num) const
   return NB_PART_PREFIX + std::to_string(part_num);
 }
 
-bool NooBaaMPUStrategy::is_part_name(std::string_view name) const
-{
-  return name.starts_with(NB_PART_PREFIX);
-}
-
 std::optional<uint32_t>
 NooBaaMPUStrategy::part_number(std::string_view name) const
 {
-  if (!is_part_name(name)) {
+  if (!name.starts_with(NB_PART_PREFIX)) {
     return std::nullopt;
   }
   const std::string_view digits{name.substr(NB_PART_PREFIX.length())};
@@ -537,11 +596,6 @@ std::optional<std::string>
 NooBaaMPUStrategy::shared_name(uint64_t stride) const
 {
   return RGW_MP_SHARED_PREFIX + std::to_string(stride);
-}
-
-std::string NooBaaMPUStrategy::head_name() const
-{
-  return part_name(0);
 }
 
 std::string NooBaaMPUStrategy::meta_name() const

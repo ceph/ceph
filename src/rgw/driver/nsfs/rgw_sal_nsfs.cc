@@ -2453,7 +2453,7 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
      * The attribute was inherited from the posix driver, could not work
      * on a NooBaa-format tree, and already fell back to DIRECTORY when
      * absent, which is what a natively created directory has. */
-    ObjectType type{mpu_strategy->names_staging_dir(name)
+    ObjectType type{mpu_strategy->is_staging_dir(name)
 		      ? ObjectType::MULTIPART : ObjectType::DIRECTORY};
 
     switch (type.type) {
@@ -2776,7 +2776,7 @@ int MPDirectory::stat(const DoutPrefixProvider* dpp, bool force)
     struct statx stx;
     std::string sname = name;
 
-    if (! mpu_strategy->is_part_name(sname)) {
+    if (! mpu_strategy->part_number(sname)) {
       /* Skip non-parts */
       return 0;
     }
@@ -2982,19 +2982,25 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   xattr_strategy = std::make_unique<nsfs::PrefixedXattrStrategy>();
   path_strategy = std::make_unique<nsfs::SentinelPathStrategy>();
 
-  /* The three profiles a bucket's extensions attribute resolves to.  They
-   * point at the same strategies until S5 supplies the noobaa ones;  what
-   * exists now is the selection, so that adding an implementation does
-   * not also mean finding every call site again. */
+  /* The format shared and strong use.  Its MPU member is left null:
+   * per-part against strided is chosen from what the filesystem can
+   * do, not from what the tree is. */
+  rgw_meta_format.xattr_strategy = xattr_strategy.get();
+  rgw_meta_format.path_strategy = path_strategy.get();
+  rgw_meta_format.mpu_strategy = nullptr;
+  rgw_meta_format.fname = "rgw-meta";
+
+  /* Three profiles, two formats.  Shared and strong differ in which
+   * extensions the mask permits, not in how the tree is written, so
+   * they name one format between them.  Base names NooBaa's when S5
+   * supplies it;  until then it borrows this one, which is why an
+   * unmarked bucket is still served. */
   base_profile.extensions = nsfs::EXTENSIONS_NONE;
-  base_profile.xattr_strategy = xattr_strategy.get();
-  base_profile.path_strategy = path_strategy.get();
+  base_profile.format = &rgw_meta_format;
   shared_profile.extensions = nsfs::EXTENSIONS_SHARED;
-  shared_profile.xattr_strategy = xattr_strategy.get();
-  shared_profile.path_strategy = path_strategy.get();
+  shared_profile.format = &rgw_meta_format;
   extended_profile.extensions = nsfs::EXTENSIONS_STRONG;
-  extended_profile.xattr_strategy = xattr_strategy.get();
-  extended_profile.path_strategy = path_strategy.get();
+  extended_profile.format = &rgw_meta_format;
   ldpp_dout(dpp, 1) << "nsfs: new buckets are "
     << (extensions_enabled() ? "marked with extension set "
 	  + std::to_string(nsfs::EXTENSIONS_DEFAULT)
@@ -4787,6 +4793,27 @@ int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp)
  * refused in reversible mode, where the deployment means to hand the
  * tree back, and it is never inferred from access.
  */
+nsfs::XattrStrategy* NSFSBucket::xattr_strategy() const
+{
+  auto* f = get_format();
+  return (f && f->xattr_strategy) ? f->xattr_strategy
+				  : driver->get_xattr_strategy();
+}
+
+nsfs::PathStrategy* NSFSBucket::path_strategy() const
+{
+  auto* f = get_format();
+  return (f && f->path_strategy) ? f->path_strategy
+				 : driver->get_path_strategy();
+}
+
+nsfs::MPUStrategy* NSFSBucket::mpu_strategy() const
+{
+  auto* f = get_format();
+  return (f && f->mpu_strategy) ? f->mpu_strategy
+				: driver->get_mpu_strategy();
+}
+
 int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 			    uint32_t target)
 {
@@ -5244,19 +5271,44 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
   UploadEntries ents(max_uploads);
   std::map<std::string, bool> prefixes;
 
-  int ret = dir->for_each(dpp, [&] (const char* name) {
-    if (!driver->get_mpu_strategy()->names_staging_dir(name)) {
+  /* Where this format keeps staging directories.  None means no upload
+   * has ever been started here, which is an empty listing and not an
+   * error:  NooBaa creates multipart-uploads/ at the first
+   * CreateMultipartUpload, and ours is the bucket directory, which
+   * always exists. */
+  auto* mpu = mpu_strategy();
+  auto root = mpu->staging_root(dpp, dir->get_fd());
+  if (!root) {
+    if (is_truncated) {
+      *is_truncated = false;
+    }
+    return 0;
+  }
+
+  nsfs::Directory* scan = dir.get();
+  std::unique_ptr<nsfs::Directory> root_dir;
+  if (*root != ".") {
+    root_dir = std::make_unique<nsfs::Directory>(*root, dir.get(),
+						 driver->ctx());
+    int rret = root_dir->open(dpp);
+    if (rret < 0) {
+      return rret;
+    }
+    scan = root_dir.get();
+  }
+
+  int ret = scan->for_each(dpp, [&] (const char* name) {
+    /* What upload is here, if any.  Ours answers from the name;
+     * NooBaa's opens the directory's metadata, because that is where
+     * they keep the key. */
+    nsfs::MPUStrategy::StagedUpload su;
+    if (!mpu->staged_upload(dpp, scan->get_fd(), name, su)) {
       return 0;
     }
-    std::string_view d_name = name;
-    d_name.remove_prefix(
-	driver->get_mpu_strategy()->staging_prefix().size());
 
     UploadEnt ent;
-    if (!split_meta(url_decode(std::string(d_name)), ent.key,
-		    ent.upload_id)) {
-      return 0;
-    }
+    ent.key = std::move(su.key);
+    ent.upload_id = std::move(su.upload_id);
     ent.dname = name;
 
     if (!prefix.empty() && !ent.key.starts_with(prefix)) {
@@ -5294,7 +5346,7 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 
   for (auto& ent : ents.sorted()) {
     struct statx stx;
-    if (statx(dir->get_fd(), ent.dname.c_str(), AT_SYMLINK_NOFOLLOW,
+    if (statx(scan->get_fd(), ent.dname.c_str(), AT_SYMLINK_NOFOLLOW,
 	      STATX_MTIME, &stx) < 0) {
       continue;
     }
@@ -8854,8 +8906,38 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
     NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
     std::optional<std::string> ns{mp_ns};
 
+    /* Where this format keeps its staging directories.  Ours answers
+     * ".", the bucket directory.  NooBaa's is two levels down, under a
+     * temp directory whose name carries a bucket id from their config
+     * store -- so it is found and never invented.  Nothing gives us
+     * that id, so a format which wants a root and has none is refused
+     * rather than served somewhere else. */
+    auto root = mpu_strategy()->staging_root(dpp, pb->get_dir()->get_fd());
+    if (!root) {
+      ldpp_dout(dpp, 4) << "no staging root for bucket " << pb->get_name()
+			<< " in format " << pb->profile_name()
+			<< ";  refusing to place an upload" << dendl;
+      return -ENOTSUP;
+    }
+
+    /* Held by the upload, not by this scope:  the staging directory
+     * keeps a raw parent pointer, so the root has to outlive it. */
+    Directory* staging_parent = pb->get_dir();
+    if (*root != ".") {
+      staging_root_dir = std::make_unique<Directory>(*root, pb->get_dir(),
+						     driver->ctx());
+      ret = staging_root_dir->open(dpp);
+      if (ret < 0) {
+	ldpp_dout(dpp, 4) << "could not open staging root " << *root
+			  << " under " << pb->get_name() << ": "
+			  << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+      staging_parent = staging_root_dir.get();
+    }
+
     std::string staging_name = get_fname();
-    std::unique_ptr<Directory> mpdir = std::make_unique<MPDirectory>(staging_name, pb->get_dir(), driver->ctx());
+    std::unique_ptr<Directory> mpdir = std::make_unique<MPDirectory>(staging_name, staging_parent, driver->ctx());
 
     shadow = std::make_unique<NSFSBucket>(driver, std::move(mpdir), rgw_bucket(std::string(), mp_obj.upload_id), mp_ns);
 
@@ -8874,7 +8956,7 @@ std::unique_ptr<rgw::sal::Object> NSFSMultipartUpload::get_meta_obj()
 
   load(nullptr);
 
-  const std::string meta_name = driver->get_mpu_strategy()->meta_name();
+  const std::string meta_name = mpu_strategy()->meta_name();
   if (!shadow) {
     meta_obj = bucket->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
   } else {
@@ -8974,7 +9056,7 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
       dir->for_each(dpp,
 	[&](const char* name) -> int {
 	  std::string sname(name);
-	  auto parsed = driver->get_mpu_strategy()->part_number(sname);
+	  auto parsed = mpu_strategy()->part_number(sname);
 	  if (!parsed) {
 	    return 0;
 	  }
@@ -9205,8 +9287,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
   int staging_fd = shadow->get_dir()->get_fd();
 
   // assemble parts into a single file
-  std::string assembled_name = driver->get_mpu_strategy()->assembled_name();
-  ret = driver->get_mpu_strategy()->assemble(dpp, driver->get_fs_strategy(),
+  std::string assembled_name = mpu_strategy()->assembled_name();
+  ret = mpu_strategy()->assemble(dpp, driver->get_fs_strategy(),
 					    staging_fd, placements,
 					    assembled_name,
 					    established_stride(dpp, y));
@@ -9506,9 +9588,15 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
   return 0;
 }
 
+nsfs::MPUStrategy* NSFSMultipartUpload::mpu_strategy() const
+{
+  auto* b = static_cast<NSFSBucket*>(bucket);
+  return b ? b->mpu_strategy() : driver->get_mpu_strategy();
+}
+
 std::string NSFSMultipartUpload::get_fname()
 {
-  return driver->get_mpu_strategy()->staging_dir_name(mp_obj.meta);
+  return mpu_strategy()->staging_dir_name(mp_obj.meta);
 }
 
 /* The stride this upload runs at, or nothing if it has none.
@@ -9551,7 +9639,7 @@ NSFSMultipartUpload::established_stride(const DoutPrefixProvider* dpp,
   }
 
   if (!stored) {
-    nsfs::File pf(driver->get_mpu_strategy()->part_name(1), dir,
+    nsfs::File pf(mpu_strategy()->part_name(1), dir,
 		  driver->ctx());
     if (pf.stat(dpp, y) < 0) {
       return std::nullopt;
@@ -9570,7 +9658,7 @@ NSFSMultipartUpload::established_stride(const DoutPrefixProvider* dpp,
     return std::nullopt;
   }
 
-  auto sname = driver->get_mpu_strategy()->shared_name(stored);
+  auto sname = mpu_strategy()->shared_name(stored);
   if (!sname) {
     return std::nullopt;
   }
@@ -9600,7 +9688,7 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
    * part without one answers nullopt, and we stage the part in its own
    * file, which is what part_name() names. */
   const std::optional<uint64_t> stride = established_stride(dpp, y);
-  auto target = driver->get_mpu_strategy()->part_target(part_num, stride);
+  auto target = mpu_strategy()->part_target(part_num, stride);
   const uint64_t base_offset = target ? target->offset : 0;
   const bool shared_target = target ? target->shared : false;
   const std::optional<uint64_t> extent = target ? target->extent
@@ -9608,12 +9696,13 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 
   /* the record is always the part's own file;  the target names where
    * the BYTES go, which is a different file only when it is shared */
-  rgw_obj_key part_key(driver->get_mpu_strategy()->part_name(part_num));
+  rgw_obj_key part_key(mpu_strategy()->part_name(part_num));
   const std::string shared_name = shared_target ? target->name : std::string();
 
   return std::make_unique<NSFSMultipartWriter>(dpp, y, shadow.get(), part_key,
                                                 driver, owner,
                                                 ptail_placement_rule, part_num,
+						mpu_strategy(),
 						std::move(cache_key),
 						base_offset, shared_target,
 						shared_name,
@@ -9825,7 +9914,7 @@ int NSFSMultipartWriter::complete(
     /* does this layout share at all, and under what name?  Asked of the
      * strategy rather than assumed, so the one-file-per-part layout
      * answers no and nothing here fires. */
-    auto tgt = driver->get_mpu_strategy()->part_target(1, high_water);
+    auto tgt = mpu_strat->part_target(1, high_water);
     bool aligned = true;
     if (dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io")) {
       /* an unaligned stride puts part K's end mid-block, sharing that

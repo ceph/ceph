@@ -81,7 +81,7 @@ public:
   /* Is this directory entry a staging directory?
    *
    * Asked rather than compared against staging_dir_name(), for the same
-   * reason is_part_name() is separate from part_name():  recognition and
+   * reason part_number() is separate from part_name():  recognition and
    * construction are not the same question for every format, and only
    * this side has to work on a tree somebody else wrote.
    *
@@ -93,11 +93,32 @@ public:
    * already settles, it cost an openat and an attribute read per
    * directory entry, and it could not work on a NooBaa-format tree,
    * whose staging directories carry no attribute of ours. */
-  virtual bool names_staging_dir(std::string_view name) const = 0;
+  virtual bool is_staging_dir(std::string_view name) const = 0;
 
-  /* what a staging directory's name begins with, so a caller which
-   * has recognised one can strip it and decode the rest */
-  virtual std::string_view staging_prefix() const = 0;
+  /* What upload is staged in this directory.
+   *
+   * The question enumeration asks, and the one S3 cannot be served
+   * without:  ListMultipartUploads orders by key and then upload id
+   * and pages on both, so every upload's key has to be known before
+   * a page can be decided.
+   *
+   * Where the key lives is the format's business and the cost
+   * differs.  A layout which names the directory for the upload's
+   * meta answers from `dname` alone.  NooBaa names it for a bare uuid
+   * and keeps the key in a file inside, so theirs opens and reads
+   * one, which is what their own listing does.
+   *
+   * `dname` is an entry of staging_root().  False means there is no
+   * upload here -- an entry which is not one, or one whose metadata
+   * cannot be read -- which a caller skips rather than fails on. */
+  struct StagedUpload {
+    std::string key;
+    std::string upload_id;
+  };
+
+  virtual bool staged_upload(const DoutPrefixProvider* dpp, int root_fd,
+			     std::string_view dname,
+			     StagedUpload& out) const = 0;
 
   /* The directory holding staging directories, relative to the bucket.
    *
@@ -116,7 +137,6 @@ public:
   }
 
   virtual std::string part_name(uint32_t part_num) const = 0;
-  virtual bool is_part_name(std::string_view name) const = 0;
   virtual std::optional<uint32_t> part_number(std::string_view name) const = 0;
 
   /* Where a part's bytes go.
@@ -170,7 +190,6 @@ public:
   };
 
   /* fixed names inside the staging directory */
-  virtual std::string head_name() const = 0;
   virtual std::string meta_name() const = 0;
   virtual std::string assembled_name() const = 0;
 
@@ -224,17 +243,17 @@ public:
 class PerPartMPUStrategy : public MPUStrategy {
 public:
   std::string staging_dir_name(const std::string& meta) const override;
+  bool is_staging_dir(std::string_view name) const override;
+  bool staged_upload(const DoutPrefixProvider* dpp, int root_fd,
+		     std::string_view dname,
+		     StagedUpload& out) const override;
 
-  bool names_staging_dir(std::string_view name) const override;
-  std::string_view staging_prefix() const override;
   std::string part_name(uint32_t part_num) const override;
-  bool is_part_name(std::string_view name) const override;
   std::optional<uint32_t> part_number(std::string_view name) const override;
 
   std::optional<PartTarget> part_target(
       uint32_t part_num, std::optional<uint64_t> stride) const override;
 
-  std::string head_name() const override;
   std::string meta_name() const override;
   std::string assembled_name() const override;
 
@@ -314,19 +333,19 @@ public:
 class NooBaaMPUStrategy : public MPUStrategy {
 public:
   std::string staging_dir_name(const std::string& meta) const override;
-  bool names_staging_dir(std::string_view name) const override;
-  std::string_view staging_prefix() const override;
+  bool is_staging_dir(std::string_view name) const override;
+  bool staged_upload(const DoutPrefixProvider* dpp, int root_fd,
+		     std::string_view dname,
+		     StagedUpload& out) const override;
   std::optional<std::string> staging_root(const DoutPrefixProvider* dpp,
 					  int bucket_fd) const override;
 
   std::string part_name(uint32_t part_num) const override;
-  bool is_part_name(std::string_view name) const override;
   std::optional<uint32_t> part_number(std::string_view name) const override;
 
   std::optional<PartTarget> part_target(
       uint32_t part_num, std::optional<uint64_t> stride) const override;
 
-  std::string head_name() const override;
   std::string meta_name() const override;
   std::string assembled_name() const override;
   const ReservedNames& reserved_names() const override;

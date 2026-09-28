@@ -471,6 +471,10 @@ protected:
   std::unique_ptr<nsfs::PathStrategy> path_strategy;
   /* what a bucket's extensions marker resolves to;  both resolve to the
    * same strategy instances until S5 supplies the noobaa ones */
+  /* The format shared and strong both use:  NooBaa's layout with our
+   * metadata representation, which is what EXT_RGW_META declares.
+   * NooBaa's own joins it at S5, and base points there. */
+  nsfs::Format rgw_meta_format;
   nsfs::BucketProfile base_profile;
   nsfs::BucketProfile shared_profile;
   nsfs::BucketProfile extended_profile;
@@ -1148,6 +1152,32 @@ public:
     return profile ? profile->name() : "unresolved";
   }
 
+  const nsfs::Format* get_format() const {
+    return profile ? profile->format : nullptr;
+  }
+
+  /* Test support:  point a bucket at a profile the driver does not
+   * hold, so the selection can be shown choosing between two formats
+   * while only one real one exists.  The caller owns the profile. */
+  void set_profile_for_test(const nsfs::BucketProfile* p) { profile = p; }
+
+  /* The strategies this bucket's format selects.
+   *
+   * They fall back to the driver's, for two reasons:  a bucket whose
+   * profile has not been resolved yet has no format, and only one
+   * format exists, so the answers coincide.  Call sites move onto
+   * these as each NooBaa strategy arrives and gives the selection
+   * something to be wrong about;  migrating them while every path
+   * resolves to the same objects would be a large diff nothing can
+   * check.
+   *
+   * The MPU one differs:  a format which does not name a staging
+   * layout takes the driver's, because per-part against strided is
+   * chosen from what the filesystem can do. */
+  nsfs::XattrStrategy* xattr_strategy() const;
+  nsfs::PathStrategy* path_strategy() const;
+  nsfs::MPUStrategy* mpu_strategy() const;
+
   /* Move the bucket to a profile.  The one way a bucket's profile
    * changes:  adding extensions is a write, dropping them requires the
    * bucket to hold no content and removes the scaffolding the dropped
@@ -1729,6 +1759,16 @@ public:
 
 private:
   std::string get_fname();
+
+  /* The staging layout this upload's bucket is in.  Resolved through
+   * the bucket rather than the driver, because which layout a tree
+   * stages in is a property of its format. */
+  nsfs::MPUStrategy* mpu_strategy() const;
+
+  /* The directory holding staging directories, where the format keeps
+   * them somewhere other than the bucket.  Held because the staging
+   * directory keeps a raw parent pointer into it. */
+  std::unique_ptr<nsfs::Directory> staging_root_dir;
   int load(const DoutPrefixProvider *dpp, bool create=false);
 };
 
@@ -1780,6 +1820,9 @@ public:
 class NSFSMultipartWriter : public StoreWriter {
 private:
   NSFSDriver* driver;
+  /* the upload's staging layout, resolved once by get_writer();  this
+   * writer has no bucket of its own to ask */
+  nsfs::MPUStrategy* mpu_strat;
   const ACLOwner& owner;
   const rgw_placement_rule *ptail_placement_rule;
   uint64_t part_num;
@@ -1849,6 +1892,7 @@ public:
                     const ACLOwner& _owner,
                     const rgw_placement_rule *_ptail_placement_rule,
                     uint64_t _part_num,
+		    nsfs::MPUStrategy* _mpu_strat,
 		    file::listing::MultipartCacheKey&& _mp_cache_key,
 		    uint64_t _base_offset = 0,
 		    bool _shared_target = false,
@@ -1857,6 +1901,7 @@ public:
 		    std::optional<uint64_t> _extent = std::nullopt) :
     StoreWriter(dpp, y),
     driver(_driver),
+    mpu_strat(_mpu_strat),
     owner(_owner),
     ptail_placement_rule(_ptail_placement_rule),
     part_num(_part_num),

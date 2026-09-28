@@ -24,6 +24,31 @@ namespace rgw { namespace sal { namespace nsfs {
 
 class XattrStrategy;
 class PathStrategy;
+class MPUStrategy;
+
+/* The on-disk format of a tree:  one member per format-dependent
+ * concern, so the formats sit beside each other with the same shape.
+ *
+ * The MPU member is nullable, and null means the driver's own choice
+ * between per-part and strided, which turns on whether the filesystem
+ * shares extents.  That is a property of the mount and not of the
+ * tree, so `rgw_meta_format` leaves it unset.  A format whose staging
+ * layout is its own -- NooBaa's size-keyed one -- names it here.
+ *
+ * A Format is complete or it does not exist.  A driver must not hold
+ * one carrying another format's staging layout with our attribute
+ * names:  that is a combination no profile represents and no tree is
+ * ever in.  A test may compose one, which is how the selection is
+ * given something to be wrong about while only one real format
+ * exists. */
+struct Format {
+  XattrStrategy* xattr_strategy{nullptr};
+  PathStrategy* path_strategy{nullptr};
+  MPUStrategy* mpu_strategy{nullptr};
+  const char* fname{"unset"};
+
+  const char* name() const { return fname; }
+};
 
 /* Whether a bucket carries our extensions, and what that resolves to.
  *
@@ -167,8 +192,7 @@ inline constexpr uint32_t EXTENSIONS_DEFAULT = EXTENSIONS_STRONG;
  * strategy at a time without touching the call sites again. */
 struct BucketProfile {
   uint32_t extensions{EXTENSIONS_NONE};
-  XattrStrategy* xattr_strategy{nullptr};
-  PathStrategy* path_strategy{nullptr};
+  const Format* format{nullptr};
 
   bool has(uint32_t ext) const { return (extensions & ext) != 0; }
 
