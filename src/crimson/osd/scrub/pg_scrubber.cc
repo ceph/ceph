@@ -2037,9 +2037,20 @@ void PGScrubber::emit_scrub_result(
           in_stats.num_bytes, s.num_bytes,
           in_stats.num_objects_manifest, s.num_objects_manifest,
           in_stats.num_bytes_hit_set_archive, s.num_bytes_hit_set_archive);
-        ERRORDPP("{}", pg, mismatch_msg);
-        pg.get_clog_error() << mismatch_msg;
-        ++pg_stats.stats.sum.num_shallow_scrub_errors;
+        if (m_total_error_count > 0) {
+          // Object-level errors were already found: this stat mismatch may
+          // reflect real data damage, so report it as a scrub error, matching
+          // classic OSD's PrimaryLogScrub::_scrub_finish().
+          ERRORDPP("{}", pg, mismatch_msg);
+          pg.get_clog_error() << mismatch_msg;
+          ++pg_stats.stats.sum.num_shallow_scrub_errors;
+        } else {
+          // No object-level inconsistencies: this is just a bookkeeping
+          // mismatch (e.g. after a PG split, whose stats are only an
+          // estimate).  Fix it silently, matching classic OSD.
+          DEBUGDPP("fixing stat mismatch (no object errors): {}", pg,
+                   mismatch_msg);
+        }
       }
 
       // Update objects_scrubbed with the total count from all chunks
