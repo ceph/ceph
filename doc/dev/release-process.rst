@@ -349,7 +349,7 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    .. prompt:: bash $
 
-      sync-push ceph squid-19.2.2 2
+      sync-push ceph squid-19.2.2
 
 This leaves the packages, and the tarball, in a password-protected `prerelease
 area <https://download.ceph.com/prerelease/ceph>`_. To gain access, you need to
