@@ -16,6 +16,7 @@
 #include "mpu_strategy.h"
 
 #include <cerrno>
+#include <dirent.h>
 #include <fcntl.h>
 #include <linux/stat.h>
 #include <sys/stat.h>
@@ -65,6 +66,16 @@ static const std::string RGW_MP_ASSEMBLED_NAME = ".assembled";
  * part which does not fit takes its own file where theirs would open
  * a second size file. */
 static const std::string RGW_MP_SHARED_PREFIX = "parts-size-";
+
+/* NooBaa's names, from noobaa-core 68ca22d33.  The temp directory is
+ * config.NSFS_TEMP_DIR_NAME + '_' + bucket_id, and the bucket id comes
+ * from their config store, so only the prefix is knowable here. */
+static const std::string NB_TMPDIR_PREFIX = ".noobaa-nsfs_";
+static const std::string NB_MPU_ROOT = "multipart-uploads";
+static const std::string NB_PART_PREFIX = "part-";
+static const std::string NB_CREATE_NAME = "create_object_upload";
+static const std::string NB_FINAL_NAME = "final";
+
 
 std::string PerPartMPUStrategy::staging_dir_name(const std::string& meta) const
 {
@@ -401,5 +412,263 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 		     << " bytes -- placement was not contiguous" << dendl;
   return 0;
 }
+
+
+std::string NooBaaMPUStrategy::staging_dir_name(const std::string& meta) const
+{
+  /* Their directory is the upload id alone -- a randomUUID -- so the
+   * key half of the meta is dropped.  The key is inside, in
+   * create_object_upload, which is what costs them an open per upload
+   * when they enumerate. */
+  const auto dot = meta.rfind('.');
+  if (dot == std::string::npos) {
+    return meta;
+  }
+  return meta.substr(dot + 1);
+}
+
+bool NooBaaMPUStrategy::names_staging_dir(std::string_view name) const
+{
+  /* Their upload directories are UUIDs, which no test can recognise
+   * without also matching an object key.  What identifies one is that
+   * it sits under multipart-uploads, so every entry of that directory
+   * is an upload and the caller has already narrowed to it. */
+  return !name.empty() && (name != ".") && (name != "..");
+}
+
+std::string_view NooBaaMPUStrategy::staging_prefix() const
+{
+  return std::string_view{};
+}
+
+std::optional<std::string>
+NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
+				int bucket_fd) const
+{
+  int fd = ::openat(bucket_fd, ".", O_RDONLY | O_DIRECTORY);
+  if (fd < 0) {
+    return std::nullopt;
+  }
+  DIR* d = ::fdopendir(fd);
+  if (!d) {
+    ::close(fd);
+    return std::nullopt;
+  }
+  auto close_d = make_scope_guard([d] { ::closedir(d); });
+
+  std::string found;
+  struct dirent* de;
+  while ((de = ::readdir(d)) != nullptr) {
+    std::string_view n = de->d_name;
+    if (!n.starts_with(NB_TMPDIR_PREFIX)) {
+      continue;
+    }
+    if (!found.empty()) {
+      /* Two temp directories means two bucket ids have written here.
+       * Which one holds the uploads is not decidable from the tree, so
+       * refuse rather than pick. */
+      ldpp_dout(dpp, 0) << "ERROR: bucket holds more than one "
+			<< NB_TMPDIR_PREFIX << "* directory (" << found
+			<< ", " << n << ");  refusing to guess which holds "
+			<< "multipart uploads" << dendl;
+      return std::nullopt;
+    }
+    found = n;
+  }
+
+  if (found.empty()) {
+    return std::nullopt;
+  }
+  return found + "/" + NB_MPU_ROOT;
+}
+
+std::string NooBaaMPUStrategy::part_name(uint32_t part_num) const
+{
+  /* not zero padded:  theirs is Number(name.slice('part-'.length)) */
+  return NB_PART_PREFIX + std::to_string(part_num);
+}
+
+bool NooBaaMPUStrategy::is_part_name(std::string_view name) const
+{
+  return name.starts_with(NB_PART_PREFIX);
+}
+
+std::optional<uint32_t>
+NooBaaMPUStrategy::part_number(std::string_view name) const
+{
+  if (!is_part_name(name)) {
+    return std::nullopt;
+  }
+  const std::string_view digits{name.substr(NB_PART_PREFIX.length())};
+  if (digits.empty()) {
+    return std::nullopt;
+  }
+  uint32_t num{0};
+  auto [p, ec] = std::from_chars(digits.data(), digits.data() + digits.size(),
+				 num);
+  if ((ec != std::errc{}) || (p != digits.data() + digits.size())) {
+    return std::nullopt;
+  }
+  return num;
+}
+
+std::optional<MPUStrategy::PartTarget>
+NooBaaMPUStrategy::part_target(uint32_t part_num,
+			       std::optional<uint64_t> stride) const
+{
+  /* Their offset is the part's own size times (n - 1)
+   * (`namespace_fs.js` upload_multipart).  A uniform upload makes that
+   * the same arithmetic as a stride, which is the case this can serve.
+   *
+   * Without one, the part goes to its own file and is copied into a
+   * size file afterwards -- which is what they do when the size is not
+   * known before the body is read.  Their own file is the record,
+   * part-<n>, because they write the data there and copy it out. */
+  if (!stride || (*stride == 0)) {
+    return PartTarget{part_name(part_num), 0, std::nullopt, false};
+  }
+  return PartTarget{RGW_MP_SHARED_PREFIX + std::to_string(*stride),
+		    (static_cast<uint64_t>(part_num) - 1) * *stride,
+		    *stride,
+		    true};
+}
+
+std::optional<std::string>
+NooBaaMPUStrategy::shared_name(uint64_t stride) const
+{
+  return RGW_MP_SHARED_PREFIX + std::to_string(stride);
+}
+
+std::string NooBaaMPUStrategy::head_name() const
+{
+  return part_name(0);
+}
+
+std::string NooBaaMPUStrategy::meta_name() const
+{
+  return NB_CREATE_NAME;
+}
+
+std::string NooBaaMPUStrategy::assembled_name() const
+{
+  return NB_FINAL_NAME;
+}
+
+const ReservedNames& NooBaaMPUStrategy::reserved_names() const
+{
+  static const ReservedNames names{
+    .exact = { NB_CREATE_NAME, NB_FINAL_NAME },
+    .prefixes = { RGW_MP_SHARED_PREFIX, NB_PART_PREFIX },
+    /* the temp directory holds uploads in flight, which S3 reports and
+     * which therefore make a bucket non-empty */
+    .staging_prefixes = { NB_TMPDIR_PREFIX },
+  };
+  return names;
+}
+
+int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
+				int dir_fd,
+				const std::vector<PartPlacement>& parts,
+				const std::string& output_name,
+				std::optional<uint64_t> stride) const
+{
+  if (!fs || parts.empty()) {
+    return -EINVAL;
+  }
+
+  /* Their three cases, `complete_object_upload`.  The placements carry
+   * what their code reads from the part records, so the distinct-size
+   * count is taken from the run rather than accumulated with open file
+   * descriptors.
+   *
+   * Sparse numbering disables both fast paths, as it does for them:
+   * with a part missing, the file for a size no longer holds a
+   * contiguous prefix of the object. */
+  const bool continuous =
+      (parts.back().num == static_cast<uint32_t>(parts.size()));
+
+  size_t distinct = 0;
+  uint64_t body_size = 0;
+  bool tail_is_last = true;
+  for (size_t i = 0; i < parts.size(); ++i) {
+    if ((i == 0) || (parts[i].stored != parts[i - 1].stored)) {
+      ++distinct;
+      if (i == 0) {
+	body_size = parts[i].stored;
+      } else if (i + 1 != parts.size()) {
+	tail_is_last = false;
+      }
+    }
+  }
+
+  auto link_size_file = [&](uint64_t size) -> int {
+    const std::string sname = RGW_MP_SHARED_PREFIX + std::to_string(size);
+    if (::linkat(dir_fd, sname.c_str(), dir_fd, output_name.c_str(), 0) < 0) {
+      int ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not link " << sname << " to "
+			<< output_name << ": " << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+    return 0;
+  };
+
+  /* every part the same size, in order:  the size file is the object */
+  if (continuous && (distinct == 1)) {
+    return link_size_file(body_size);
+  }
+
+  int out_fd = -1;
+  uint64_t total = 0;
+  size_t first_to_copy = 0;
+
+  /* a uniform body and a short final part:  link the body's file and
+   * append the tail, which is the copy their scheme cannot avoid */
+  if (continuous && (distinct == 2) && tail_is_last) {
+    int ret = link_size_file(body_size);
+    if (ret < 0) {
+      return ret;
+    }
+    first_to_copy = parts.size() - 1;
+    total = body_size * first_to_copy;
+    out_fd = ::openat(dir_fd, output_name.c_str(), O_WRONLY);
+  } else {
+    out_fd = ::openat(dir_fd, output_name.c_str(),
+		      O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+  }
+  if (out_fd < 0) {
+    int ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not open " << output_name << ": "
+		      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+  auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+
+  for (size_t i = first_to_copy; i < parts.size(); ++i) {
+    const auto& part = parts[i];
+    const std::string sname =
+	RGW_MP_SHARED_PREFIX + std::to_string(part.stored);
+    int part_fd = ::openat(dir_fd, sname.c_str(), O_RDONLY);
+    if (part_fd < 0) {
+      int ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not open " << sname << ": "
+			<< cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+    auto close_part = make_scope_guard([part_fd] { ::close(part_fd); });
+
+    int ret = fs->copy_range(dpp, part_fd, part.offset, out_fd, total,
+			     part.stored);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not copy part " << part.num
+			<< " from " << sname << ": " << cpp_strerror(-ret)
+			<< dendl;
+      return ret;
+    }
+    total += part.stored;
+  }
+
+  return 0;
+}
+
 
 }}} // namespace rgw::sal::nsfs

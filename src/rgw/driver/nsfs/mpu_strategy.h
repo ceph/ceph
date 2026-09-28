@@ -99,6 +99,22 @@ public:
    * has recognised one can strip it and decode the rest */
   virtual std::string_view staging_prefix() const = 0;
 
+  /* The directory holding staging directories, relative to the bucket.
+   *
+   * "." where uploads stage directly under the bucket.  NooBaa puts
+   * theirs two levels down, so a caller enumerating uploads has to ask
+   * rather than assume the bucket directory.
+   *
+   * Resolved against a fd because the answer can depend on what is
+   * there:  NooBaa's path contains a bucket id from their config store,
+   * which this interface never reads.  Returns nullopt when the layout
+   * has a root it cannot find, which is not an error -- a bucket with
+   * no uploads has no staging root. */
+  virtual std::optional<std::string> staging_root(
+      const DoutPrefixProvider* dpp, int bucket_fd) const {
+    return std::string{"."};
+  }
+
   virtual std::string part_name(uint32_t part_num) const = 0;
   virtual bool is_part_name(std::string_view name) const = 0;
   virtual std::optional<uint32_t> part_number(std::string_view name) const = 0;
@@ -270,6 +286,59 @@ public:
   std::optional<std::string> shared_name(uint64_t stride) const override;
 
   const char* name() const override { return "rgw-strided"; }
+};
+
+/* NooBaa's layout, which is what the base profile is.
+ *
+ *   <bucket>/.noobaa-nsfs_<bucket id>/multipart-uploads/<upload id>/
+ *       create_object_upload    JSON, the create parameters;  key among them
+ *       part-<n>                the part's record, size and offset in xattrs
+ *       parts-size-<size>       the shared data file for parts of that size
+ *       final                   the assembled object
+ *
+ * Read from noobaa-core at 68ca22d33 (2026-05-27):  `namespace_fs.js`
+ * `_mpu_root_path`, `_mpu_path`, `_get_part_data_path`,
+ * `_get_part_md_path`, `upload_multipart`, `complete_object_upload`.
+ *
+ * A part's offset is its OWN size times (n - 1), not an upload-wide
+ * stride.  A part of a different length therefore addresses a
+ * different file rather than a different offset in the same one, which
+ * is why completing an upload whose last part is short copies that
+ * part:  the body is linked and the tail is appended.
+ *
+ * `parts-size-<size>` is spelled exactly as ours.  The two readings
+ * agree for every part but a short final one and disagree there, so
+ * nothing may identify a layout by that name;  the staging directory's
+ * location and its create_object_upload file are what distinguish
+ * them. */
+class NooBaaMPUStrategy : public MPUStrategy {
+public:
+  std::string staging_dir_name(const std::string& meta) const override;
+  bool names_staging_dir(std::string_view name) const override;
+  std::string_view staging_prefix() const override;
+  std::optional<std::string> staging_root(const DoutPrefixProvider* dpp,
+					  int bucket_fd) const override;
+
+  std::string part_name(uint32_t part_num) const override;
+  bool is_part_name(std::string_view name) const override;
+  std::optional<uint32_t> part_number(std::string_view name) const override;
+
+  std::optional<PartTarget> part_target(
+      uint32_t part_num, std::optional<uint64_t> stride) const override;
+
+  std::string head_name() const override;
+  std::string meta_name() const override;
+  std::string assembled_name() const override;
+  const ReservedNames& reserved_names() const override;
+
+  int assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
+	       int dir_fd, const std::vector<PartPlacement>& parts,
+	       const std::string& output_name,
+	       std::optional<uint64_t> stride) const override;
+
+  std::optional<std::string> shared_name(uint64_t stride) const override;
+
+  const char* name() const override { return "noobaa"; }
 };
 
 }}} // namespace rgw::sal::nsfs

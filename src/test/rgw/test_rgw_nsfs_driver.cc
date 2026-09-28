@@ -1978,6 +1978,233 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
   EXPECT_TRUE(ret == 0 || ret == -EPERM);
 }
 
+/* NooBaa's multipart staging layout.
+ *
+ * These assert on-disk names, offsets and sizes directly, because the
+ * layout is somebody else's and this is where we state what we believe
+ * it to be.  Read from noobaa-core 68ca22d33, `namespace_fs.js`.
+ *
+ * A fixture written by our own emulator only proves we read what we
+ * wrote, so a tree captured from an installation has to sit under this
+ * eventually.  What these can settle without one is that the names and
+ * the arithmetic match the source.
+ */
+
+namespace {
+
+/* lay down a staging directory as NooBaa would, and hand back its fd */
+class NBStaging {
+public:
+  sf::path root;     /* <base>/<test>/.noobaa-nsfs_<id>/multipart-uploads */
+  sf::path upload;   /* root/<upload id> */
+  int fd{-1};
+
+  NBStaging(const std::string& test, const std::string& bucket_id,
+	    const std::string& upload_id) {
+    sf::path bucket{base_path / test};
+    sf::create_directories(bucket);
+    root = bucket / (".noobaa-nsfs_" + bucket_id) / "multipart-uploads";
+    upload = root / upload_id;
+    sf::create_directories(upload);
+    fd = ::open(upload.c_str(), O_RDONLY | O_DIRECTORY);
+  }
+  ~NBStaging() { if (fd >= 0) { ::close(fd); } }
+
+  /* write `count` parts of `size` bytes into parts-size-<size>, part K
+   * at size * (K - 1), each filled with a distinct byte */
+  void write_uniform(uint64_t size, uint32_t first, uint32_t count) {
+    const sf::path f{upload / ("parts-size-" + std::to_string(size))};
+    int pfd = ::open(f.c_str(), O_WRONLY | O_CREAT, 0600);
+    ASSERT_GE(pfd, 0);
+    for (uint32_t k = first; k < first + count; ++k) {
+      std::string buf(size, static_cast<char>('a' + (k % 26)));
+      ASSERT_EQ(::pwrite(pfd, buf.data(), buf.size(), (k - 1) * size),
+		static_cast<ssize_t>(buf.size()));
+    }
+    ::close(pfd);
+  }
+};
+
+std::string read_all(const sf::path& p)
+{
+  std::ifstream f(p, std::ios::binary);
+  return std::string((std::istreambuf_iterator<char>(f)),
+		     std::istreambuf_iterator<char>());
+}
+
+} /* anonymous namespace */
+
+TEST(NooBaaMPU, Names)
+{
+  nsfs::NooBaaMPUStrategy nb;
+
+  /* their directory is the upload id alone;  the key lives inside */
+  EXPECT_EQ(nb.staging_dir_name("some/key.2~abcdef"), "2~abcdef");
+  EXPECT_EQ(nb.staging_dir_name("key.with.dots.UUID"), "UUID");
+
+  EXPECT_EQ(nb.part_name(1), "part-1");
+  EXPECT_EQ(nb.part_name(1000), "part-1000");
+  EXPECT_TRUE(nb.is_part_name("part-7"));
+  EXPECT_FALSE(nb.is_part_name("parts-size-64"));
+  EXPECT_EQ(nb.part_number("part-7"), std::optional<uint32_t>{7});
+  EXPECT_EQ(nb.part_number("part-"), std::nullopt);
+  EXPECT_EQ(nb.part_number("final"), std::nullopt);
+
+  EXPECT_EQ(nb.meta_name(), "create_object_upload");
+  EXPECT_EQ(nb.assembled_name(), "final");
+  EXPECT_EQ(nb.shared_name(64), std::optional<std::string>{"parts-size-64"});
+}
+
+/* The shared file is spelled the same in both layouts, so the name
+ * cannot tell them apart.  Asserted rather than commented, because the
+ * two readings agree for every part but a short last one:  a layout
+ * identified by this name would be wrong only at the tail, and
+ * silently. */
+TEST(NooBaaMPU, SharedFileNameIsNotADiscriminator)
+{
+  nsfs::NooBaaMPUStrategy nb;
+  nsfs::StridedMPUStrategy ours;
+
+  EXPECT_EQ(nb.shared_name(1048576), ours.shared_name(1048576));
+
+  /* what does distinguish them */
+  EXPECT_NE(nb.meta_name(), ours.meta_name());
+  EXPECT_NE(nb.assembled_name(), ours.assembled_name());
+  EXPECT_NE(nb.part_name(1), ours.part_name(1));
+}
+
+/* Their offset is the part's own size times (n - 1), not an upload-wide
+ * stride (`namespace_fs.js` upload_multipart). */
+TEST(NooBaaMPU, PartTargetIsKeyedByTheSize)
+{
+  nsfs::NooBaaMPUStrategy nb;
+
+  auto t1 = nb.part_target(1, 64);
+  ASSERT_TRUE(t1.has_value());
+  EXPECT_EQ(t1->name, "parts-size-64");
+  EXPECT_EQ(t1->offset, 0u);
+  EXPECT_EQ(t1->extent, std::optional<uint64_t>{64});
+  EXPECT_TRUE(t1->shared);
+
+  auto t3 = nb.part_target(3, 64);
+  ASSERT_TRUE(t3.has_value());
+  EXPECT_EQ(t3->offset, 128u);
+
+  /* no size known yet:  the data goes to the part's own file, which for
+   * them is the record, and is copied into a size file afterwards */
+  auto t0 = nb.part_target(2, std::nullopt);
+  ASSERT_TRUE(t0.has_value());
+  EXPECT_EQ(t0->name, "part-2");
+  EXPECT_EQ(t0->offset, 0u);
+  EXPECT_FALSE(t0->shared);
+  EXPECT_EQ(t0->extent, std::nullopt);
+}
+
+TEST(NooBaaMPU, StagingRootIsFoundByPrefix)
+{
+  nsfs::NooBaaMPUStrategy nb;
+  const std::string test = get_test_name();
+  NBStaging st(test, "abc123", "u1");
+  ASSERT_GE(st.fd, 0);
+
+  int bfd = ::open((base_path / test).c_str(), O_RDONLY | O_DIRECTORY);
+  ASSERT_GE(bfd, 0);
+  auto r = nb.staging_root(env->dpp, bfd);
+  ASSERT_TRUE(r.has_value());
+  EXPECT_EQ(*r, ".noobaa-nsfs_abc123/multipart-uploads");
+
+  /* a second bucket id means two trees have written here, and which
+   * holds the uploads is not decidable, so it refuses */
+  sf::create_directories(base_path / test / ".noobaa-nsfs_def456");
+  EXPECT_EQ(nb.staging_root(env->dpp, bfd), std::nullopt);
+  ::close(bfd);
+}
+
+TEST(NooBaaMPU, StagingRootAbsentIsNotAnError)
+{
+  nsfs::NooBaaMPUStrategy nb;
+  const std::string test = get_test_name();
+  sf::create_directories(base_path / test);
+  int bfd = ::open((base_path / test).c_str(), O_RDONLY | O_DIRECTORY);
+  ASSERT_GE(bfd, 0);
+  EXPECT_EQ(nb.staging_root(env->dpp, bfd), std::nullopt);
+  ::close(bfd);
+}
+
+/* Uniform parts:  the size file already is the object, so completing
+ * links it and copies nothing. */
+TEST(NooBaaMPU, AssembleUniformLinks)
+{
+  nsfs::NooBaaMPUStrategy nb;
+  nsfs::POSIXStrategy fs;
+  const std::string test = get_test_name();
+  NBStaging st(test, "b", "u");
+  ASSERT_GE(st.fd, 0);
+
+  const uint64_t size = 16;
+  st.write_uniform(size, 1, 3);
+
+  std::vector<nsfs::MPUStrategy::PartPlacement> parts{
+    {1, true, 0, size}, {2, true, size, size}, {3, true, 2 * size, size}};
+
+  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size), 0);
+
+  const std::string out = read_all(st.upload / "final");
+  EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'c') +
+		 std::string(size, 'd'));
+  /* linked, not copied */
+  EXPECT_EQ(sf::hard_link_count(st.upload / "final"), 2u);
+}
+
+/* A short final part is the case their scheme cannot place:  it lives
+ * in a file of its own size, so completing links the body and copies
+ * the tail. */
+TEST(NooBaaMPU, AssembleShortTailCopiesTheTail)
+{
+  nsfs::NooBaaMPUStrategy nb;
+  nsfs::POSIXStrategy fs;
+  const std::string test = get_test_name();
+  NBStaging st(test, "b", "u");
+  ASSERT_GE(st.fd, 0);
+
+  const uint64_t size = 16, tail = 5;
+  st.write_uniform(size, 1, 2);
+  st.write_uniform(tail, 3, 1);
+
+  std::vector<nsfs::MPUStrategy::PartPlacement> parts{
+    {1, true, 0, size}, {2, true, size, size}, {3, true, 2 * tail, tail}};
+
+  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size), 0);
+
+  const std::string out = read_all(st.upload / "final");
+  EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'c') +
+		 std::string(tail, 'd'));
+}
+
+/* A gap in the part numbers disables both fast paths, as it does for
+ * them:  the file for a size no longer holds a contiguous prefix. */
+TEST(NooBaaMPU, AssembleSparseNumberingCopies)
+{
+  nsfs::NooBaaMPUStrategy nb;
+  nsfs::POSIXStrategy fs;
+  const std::string test = get_test_name();
+  NBStaging st(test, "b", "u");
+  ASSERT_GE(st.fd, 0);
+
+  const uint64_t size = 16;
+  st.write_uniform(size, 1, 1);
+  st.write_uniform(size, 5, 1);
+
+  std::vector<nsfs::MPUStrategy::PartPlacement> parts{
+    {1, true, 0, size}, {5, true, 4 * size, size}};
+
+  ASSERT_EQ(nb.assemble(env->dpp, &fs, st.fd, parts, "final", size), 0);
+
+  const std::string out = read_all(st.upload / "final");
+  EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'f'));
+  EXPECT_EQ(sf::hard_link_count(st.upload / "final"), 1u);
+}
+
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
