@@ -4098,6 +4098,49 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
   }
 }
 
+/* Cloning the whole of a smaller object to the start of a larger one must
+ * leave the rest of the larger one alone. */
+TEST_P(StoreTest, CloneRangeOfSmallerObject) {
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t src(hobject_t(sobject_t("src", CEPH_NOSNAP)));
+  src.hobj.pool = -1;
+  ghobject_t dst(hobject_t(sobject_t("dst", CEPH_NOSNAP)));
+  dst.hobj.pool = -1;
+  bufferlist a, b;
+  a.append(std::string(3 * 4096, 'a'));
+  b.append(std::string(4096, 'b'));
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, dst, 0, a.length(), a);
+    t.write(cid, src, 0, b.length(), b);
+    t.clone_range(cid, src, dst, 0, b.length(), 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist expected, got;
+  expected.append(b);
+  expected.append(std::string(2 * 4096, 'a'));
+  r = store->read(ch, dst, 0, a.length(), got);
+  ASSERT_EQ(r, (int)a.length());
+  ASSERT_TRUE(bl_eq(expected, got));
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, src);
+    t.remove(cid, dst);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 #if defined(WITH_BLUESTORE)
 TEST_P(StoreTestSpecificAUSize, BlueStoreReconstructAllocationsTest)
 {
