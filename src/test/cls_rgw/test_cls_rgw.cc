@@ -185,6 +185,40 @@ TEST_P(TestClsRgw, index_stale_complete_keeps_newest)
   test_stats(ioctx, bucket_oid, RGWObjCategory::None, 1, 1024 * 3);
 }
 
+// The null version of a key with an olh, as in a bucket whose versioning
+// is suspended, lives in the null instance entry behind the key's version
+// marker. A stale completion there must not lower its version either.
+TEST_P(TestClsRgw, index_stale_complete_keeps_newest_null_version)
+{
+  string bucket_oid = str_int("bucket", 110);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  string loc = str_int("loc", 0);
+  // linking a version turns the key's plain entry into a version marker
+  cls_rgw_obj_key version("obj", "v1");
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-v1", version, loc);
+  rgw_bucket_dir_entry_meta vmeta;
+  vmeta.category = RGWObjCategory::None;
+  vmeta.size = 512;
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, "tag-v1", 1, version, vmeta);
+
+  cls_rgw_obj_key null_version("obj");
+  const int epochs[] = {3, 1, 2};
+  for (int e : epochs) {
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, str_int("tag", e), null_version, loc);
+  }
+  for (int e : epochs) {
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = RGWObjCategory::None;
+    meta.size = 1024 * e;
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, str_int("tag", e), e, null_version, meta);
+  }
+  test_stats(ioctx, bucket_oid, RGWObjCategory::None, 2, 512 + 1024 * 3);
+}
+
 // A canceled op must not reset the entry's version either: after epoch 2's
 // write, a cancel, and a stale completion at epoch 1, epoch 2's write
 // stays listed.
