@@ -715,7 +715,7 @@ class ExportMgr:
             if isinstance(export.fsal, CephFSFSAL) and export.fsal.user_id
             and f'client.{export.fsal.user_id}' in entity_set
         ]
-        updated, stale = self._refresh_pool_user_keys(
+        _, stale = self._refresh_pool_user_keys(
             cluster_id, entity_set, should_notify=not matching)
 
         updated_pseudos: List[str] = []
@@ -743,7 +743,7 @@ class ExportMgr:
                 "Updated export %s with rotated key for user %s",
                 export.pseudo, fsal.user_id
             )
-        return updated + updated_pseudos, stale + stale_pseudos
+        return updated_pseudos, stale + stale_pseudos
 
     # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
     # Do not change interface without updating the Dashboard code

@@ -310,6 +310,19 @@ class RGWFSAL(FSAL):
         return r
 
 
+def _as_str_list(value: Any) -> List[str]:
+    """Normalise a stanza value into a list of strings.
+
+    A stanza holding a single element parses back as a scalar, so a pool of
+    one user has to read the same way as a pool of many.
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    return [str(value)]
+
+
 class CephUser:
     """One CephX identity in a CEPH_USERS client-pool mapping."""
     def __init__(self, user_id: str, secret_access_key: str, filesystem: str) -> None:
@@ -317,30 +330,50 @@ class CephUser:
         self.secret_access_key = secret_access_key
         self.filesystem = filesystem
 
-    def to_user_block(self) -> RawBlock:
-        return RawBlock('USER', values={
-            'user_id': self.user_id,
-            'secret_access_key': self.secret_access_key,
-            'filesystem': self.filesystem,
-        })
-
-    @classmethod
-    def from_user_block(cls, block: RawBlock) -> 'CephUser':
-        return cls(
-            block.values.get('user_id', ''),
-            block.values.get('secret_access_key', ''),
-            block.values.get('filesystem', ''),
-        )
-
 
 class CephUsers:
-    """Ganesha CEPH_USERS block storing pool-mode CephX credentials."""
+    """Ganesha CEPH_USERS block storing pool-mode CephX credentials.
+
+    Every filesystem that has a client pool contributes one USERS block, which
+    carries the pool as parallel Userids and Keys lists, the key of a user
+    being at the index of its id::
+
+        CEPH_USERS {
+            USERS {
+                Userids = "nfs.mync.cephfs.80bb977a", "nfs.mync.cephfs.pool.1";
+                Keys = "AQCTb...", "AQCVc...";
+                filesystem = "cephfs";
+            }
+        }
+
+    In memory the pools are kept flattened as one CephUser per identity; the
+    grouping by filesystem only happens on the way in and out of the block.
+    """
     def __init__(self, users: Optional[List[CephUser]] = None) -> None:
         self.users = users or []
 
     @classmethod
+    def from_users_block(cls, block: RawBlock) -> List[CephUser]:
+        """Expand one USERS block into the identities it holds."""
+        fs_name = str(block.values.get('filesystem', ''))
+        user_ids = _as_str_list(block.values.get('userids'))
+        keys = _as_str_list(block.values.get('keys'))
+        if len(keys) != len(user_ids):
+            raise Exception(
+                f"CEPH_USERS block for filesystem {fs_name} has {len(user_ids)} userids "
+                f"but {len(keys)} keys"
+            )
+            # An identity is still worth keeping without its key: it can be
+            # rotated back into shape, and it has to be removed with the pool.
+            keys = (keys + [''] * len(user_ids))[:len(user_ids)]
+        return [CephUser(user_id, key, fs_name) for user_id, key in zip(user_ids, keys)]
+
+    @classmethod
     def from_block(cls, block: RawBlock) -> 'CephUsers':
-        users = [CephUser.from_user_block(b) for b in block.blocks if b.block_name == 'USER']
+        users: List[CephUser] = []
+        for b in block.blocks:
+            if b.block_name == 'USERS':
+                users.extend(cls.from_users_block(b))
         return cls(users)
 
     @classmethod
@@ -353,8 +386,23 @@ class CephUsers:
                 return cls.from_block(block)
         return cls()
 
+    def _users_by_fs(self) -> Dict[str, List[CephUser]]:
+        """Group the identities per filesystem, keeping the pool order."""
+        grouped: Dict[str, List[CephUser]] = {}
+        for user in self.users:
+            grouped.setdefault(user.filesystem, []).append(user)
+        return grouped
+
     def to_block(self) -> RawBlock:
-        return RawBlock('CEPH_USERS', blocks=[u.to_user_block() for u in self.users])
+        blocks = [
+            RawBlock('USERS', values={
+                'Userids': [u.user_id for u in users],
+                'Keys': [u.secret_access_key for u in users],
+                'filesystem': fs_name,
+            })
+            for fs_name, users in self._users_by_fs().items()
+        ]
+        return RawBlock('CEPH_USERS', blocks=blocks)
 
     def users_for_fs(self, fs_name: str) -> List[CephUser]:
         return [u for u in self.users if u.filesystem == fs_name]

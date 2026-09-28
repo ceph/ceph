@@ -780,9 +780,9 @@ class TestNFS:
             )
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
-                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
-                                            service_name=nfs_spec.service_name(),
-                                            rank=0))
+                    DaemonDeployContext(CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                                                service_name=nfs_spec.service_name(),
+                                                                rank=0)))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert ganesha_conf.count('CEPH {') == 1
                 assert "clients_per_pool = 3;" in ganesha_conf

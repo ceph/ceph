@@ -532,7 +532,8 @@ class NFSCluster:
                     )
                     if stale:
                         problems.append(
-                            f"exports left with a pre-rotation keyring: {', '.join(stale)}")
+                            "exports or client-pool users left with a "
+                            f"pre-rotation keyring: {', '.join(stale)}")
                 except Exception as e:
                     log.exception("Failed to refresh exports of cluster %s", cluster_id)
                     problems.append(f"failed to refresh export keyrings: {e}")

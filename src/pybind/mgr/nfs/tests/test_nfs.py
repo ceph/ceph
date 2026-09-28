@@ -2416,8 +2416,10 @@ EXPORT {
         assert result['export_keys'] == [entity0]
         assert result['daemon_keys'] == []
         assert result['service_redeployed'] is False
-        # Slot 0 is refreshed both in CEPH_USERS and in the FSAL that carries it.
-        assert result['updated_exports'] == [pool0, '/poolrot']
+        # Slot 0 is refreshed both in CEPH_USERS and in the FSAL that carries
+        # it, but only the export is reported: updated_exports holds pseudo
+        # paths, never CephX ids.
+        assert result['updated_exports'] == ['/poolrot']
 
         export = conf._fetch_export(self.cluster_id, '/poolrot')
         assert export.fsal.user_id == pool0
@@ -2547,7 +2549,10 @@ EXPORT {
 
         # Neither an export write nor a redeploy would have notified here.
         redeploy.assert_not_called()
-        assert result['updated_exports'] == [pool1]
+        # No export carries this slot, so no export was updated. The rotation
+        # is still reported through the rotated and export_keys entities.
+        assert result['updated_exports'] == []
+        assert result['export_keys'] == [f'client.{pool1}']
         assert self.io_mock.notify.call_count == 1
 
         ceph_users = CephUsers.from_raw(
@@ -2625,22 +2630,78 @@ def test_ceph_users_block_roundtrip():
     from nfs.ganesha_conf import CephUsers, CephUser, GaneshaConfParser, format_block
 
     users = CephUsers([
-        CephUser('nfs.myc.fs_a.pool.0', 'key0', 'fs_a'),
+        CephUser('nfs.myc.fs_a.80bb977a', 'key0', 'fs_a'),
         CephUser('nfs.myc.fs_a.pool.1', 'key1', 'fs_a'),
-        CephUser('nfs.myc.fs_b.pool.0', 'key2', 'fs_b'),
+        CephUser('nfs.myc.fs_b.deadbeef', 'key2', 'fs_b'),
     ])
     raw = format_block(users.to_block())
     parsed = CephUsers.from_raw(raw)
     assert len(parsed.users_for_fs('fs_a')) == 2
     assert len(parsed.users_for_fs('fs_b')) == 1
-    assert parsed.users_for_fs('fs_a')[0].user_id == 'nfs.myc.fs_a.pool.0'
+    # The pool keeps its order, so slot 0 stays the identity of the exports.
+    assert [u.user_id for u in parsed.users_for_fs('fs_a')] == [
+        'nfs.myc.fs_a.80bb977a', 'nfs.myc.fs_a.pool.1']
     assert parsed.users_for_fs('fs_a')[0].secret_access_key == 'key0'
     parsed.remove_fs('fs_a')
     assert not parsed.users_for_fs('fs_a')
     assert len(parsed.users_for_fs('fs_b')) == 1
+
+    # One USERS block per filesystem, holding the pool as parallel lists.
     blocks = GaneshaConfParser(raw).parse()
+    assert len(blocks) == 1
     assert blocks[0].block_name == 'CEPH_USERS'
-    assert blocks[0].blocks[0].block_name == 'USER'
+    assert [b.block_name for b in blocks[0].blocks] == ['USERS', 'USERS']
+    fs_a_block = blocks[0].blocks[0]
+    assert fs_a_block.values['filesystem'] == 'fs_a'
+    assert fs_a_block.values['userids'] == ['nfs.myc.fs_a.80bb977a', 'nfs.myc.fs_a.pool.1']
+    assert fs_a_block.values['keys'] == ['key0', 'key1']
+    # A single-user pool writes a scalar stanza, and has to read back as a pool.
+    fs_b_block = blocks[0].blocks[1]
+    assert fs_b_block.values['userids'] == 'nfs.myc.fs_b.deadbeef'
+    assert [u.user_id for u in CephUsers.from_raw(raw).users_for_fs('fs_b')] == [
+        'nfs.myc.fs_b.deadbeef']
+
+
+def test_ceph_users_block_parses_hand_written_block():
+    from nfs.ganesha_conf import CephUsers
+
+    raw = '''
+CEPH_USERS {
+    USERS {
+        Userids = "nfs.nfs-cnt-repro.cephfs.80bb977a", "nfs.nfs-cnt-repro.cephfs.pool.1", "nfs.nfs-cnt-repro.cephfs.pool.2";
+        Keys = "AQCkey1==", "AQCkey2==", "AQCkey3==";
+        filesystem = "cephfs";
+    }
+}
+'''
+    users = CephUsers.from_raw(raw).users_for_fs('cephfs')
+    assert [u.user_id for u in users] == [
+        'nfs.nfs-cnt-repro.cephfs.80bb977a',
+        'nfs.nfs-cnt-repro.cephfs.pool.1',
+        'nfs.nfs-cnt-repro.cephfs.pool.2',
+    ]
+    assert [u.secret_access_key for u in users] == ['AQCkey1==', 'AQCkey2==', 'AQCkey3==']
+
+
+def test_ceph_users_block_keeps_userids_without_keys():
+    """A truncated Keys list must not drop the identities it does not cover.
+
+    Those users still exist in CephX, so they have to survive a read to be
+    rotated or removed with the rest of the pool.
+    """
+    from nfs.ganesha_conf import CephUsers
+
+    raw = '''
+CEPH_USERS {
+    USERS {
+        Userids = "nfs.myc.cephfs.80bb977a", "nfs.myc.cephfs.pool.1";
+        Keys = "AQCkey1==";
+        filesystem = "cephfs";
+    }
+}
+'''
+    with pytest.raises(Exception) as e:
+        CephUsers.from_raw(raw).users_for_fs('cephfs')
 
 
 class TestCephfsClientForMgr:
