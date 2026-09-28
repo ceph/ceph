@@ -261,6 +261,17 @@ class Lvm(BaseObjectStore):
         if not (disk.is_partition(device_name) or disk.is_device(device_name)):
             return None
 
+        if disk.is_partition(device_name):
+            # activate looks the partition up by PARTUUID
+            tags.update(
+                {
+                    f"ceph.{device_type}_uuid": self.get_ptuuid(device_name),
+                    f"ceph.{device_type}_device": device_name,
+                }
+            )
+            self.tags.update(tags)
+            return device_name
+
         lv_type = f"osd-{device_type}"
         name_uuid = system.generate_uuid()
 
@@ -275,20 +286,16 @@ class Lvm(BaseObjectStore):
             "tags": tags,
         }
 
-        lv = None if disk.is_partition(device_name) else api.create_lv(**kwargs)
-
-        if lv is not None:
-            tags.update(
-                {
-                    f"ceph.{device_type}_uuid": lv.lv_uuid,
-                    f"ceph.{device_type}_device": lv.lv_path,
-                }
-            )
-            self.tags.update(tags)
-            lv.set_tags(tags)
-            return lv.lv_path
-
-        return device_name
+        lv = api.create_lv(**kwargs)
+        tags.update(
+            {
+                f"ceph.{device_type}_uuid": lv.lv_uuid,
+                f"ceph.{device_type}_device": lv.lv_path,
+            }
+        )
+        self.tags.update(tags)
+        lv.set_tags(tags)
+        return lv.lv_path
 
     def get_osd_device_path(self,
                             osd_lvs: List[api.Volume],
