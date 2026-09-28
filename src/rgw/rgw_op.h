@@ -1619,6 +1619,8 @@ protected:
   std::string_view copy_source;
   // Not actually required
   std::optional<std::string_view> md_directive;
+  std::optional<RGWObjTags> obj_tags;
+  bool copy_source_tags = false;
   std::map<std::string, std::string> crypt_http_responses;
 
   off_t ofs;
@@ -2409,7 +2411,8 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
       "x-amz-storage-class",
       "x-amz-content-sha256",
       "x-amz-checksum-algorithm",
-      "x-amz-date"
+      "x-amz-date",
+      "x-amz-tagging"
   };
 
   size_t valid_meta_count = 0;

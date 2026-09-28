@@ -909,6 +909,10 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
       bl_val.append(*version_id);
       baseAttrs[RGW_CACHE_ATTR_VERSION_ID] = std::move(bl_val); //populate destination version id
     }
+    auto titer = attrs.find(RGW_ATTR_TAGS);
+    if (titer != attrs.end()) {
+      baseAttrs[RGW_ATTR_TAGS] = titer->second;
+    }
   }
 
   //ATTRSMOD_MERGE - any conflicting meta keys on the source object's attributes are overwritten by values contained in attrs parameter.
