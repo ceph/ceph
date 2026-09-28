@@ -213,10 +213,33 @@ options:
   type: int
   level: advanced
   desc: Number of directory entries to read in one RADOS operation
+  long_desc: The OSD also limits each OMAP read to
+    osd_max_omap_entries_per_request, so the effective batch size is the
+    smaller of the two limits.
   default: 16384
+  min: 1
   services:
   - mds
   with_legacy: true
+- name: mds_dir_fetch_pipelined
+  type: bool
+  level: advanced
+  desc: Issue the next batch of a directory fetch before decoding the current one
+  long_desc: Fetching a large dirfrag takes several omap reads. With this
+    enabled the MDS issues the read for the next batch as soon as a batch
+    arrives and decodes that batch while the read is in flight, instead of
+    buffering every batch and decoding them all at the end. This overlaps
+    decode with I/O and avoids buffering the entire encoded directory.
+    Disable to restore the previous behaviour, which buffers the whole
+    fragment and restarts the fetch from scratch if the fragment is
+    committed while it is being read.
+  default: true
+  services:
+  - mds
+  see_also:
+  - mds_dir_keys_per_op
+  flags:
+  - runtime
 - name: mds_decay_halflife
   type: float
   level: advanced
@@ -1143,6 +1166,18 @@ options:
   services:
   - mds
   fmt_desc: probabilistically inject corrupt CDentry::first at journal load
+- name: mds_inject_dir_fetch_delay
+  type: millisecs
+  level: dev
+  default: 0
+  services:
+  - mds
+  fmt_desc: >
+    inject a delay (ms) before each dirfrag fetch reply acquires mds_lock,
+    including continuation batches, so tests can inspect partial fetches
+    and exercise concurrent cache trimming and commits.
+  flags:
+  - runtime
 - name: mds_kill_shutdown_at
   type: uint
   level: dev

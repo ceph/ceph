@@ -6123,6 +6123,11 @@ bool MDCache::open_undef_inodes_dirfrags()
 
 void MDCache::opened_undef_inode(CInode *in) {
   dout(10) << "opened_undef_inode " << *in << dendl;
+  if (!in->state_test(CInode::STATE_REJOINUNDEF)) {
+    dout(10) << "opened_undef_inode already opened " << *in << dendl;
+    return;
+  }
+  in->state_clear(CInode::STATE_REJOINUNDEF);
   rejoin_undef_inodes.erase(in);
   if (in->is_dir()) {
     // FIXME: re-hash dentries if necessary
@@ -7126,6 +7131,13 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
 
   CDir *dir = dn->get_dir();
   ceph_assert(dir);
+
+  // Keep decoded dentries until the scan completes; the fetch auth pin
+  // protects only the dirfrag.
+  if (dir->is_fetching_pipelined()) {
+    dout(12) << "trim_dentry keeping dentry in fetching dirfrag " << *dn << dendl;
+    return true;
+  }
   
   CDir *con = get_subtree_root(dir);
   if (con)
