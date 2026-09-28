@@ -608,6 +608,10 @@ def test_get_vector_bucket():
     result = conn.get_vector_bucket(vectorBucketName=bucket_name)
     log.info("get_vector_buckets result: %s", result)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert result['vectorBucket']['vectorBucketName'] == bucket_name
+    assert result['vectorBucket']['vectorBucketArn'] == bucket_arn
+    # creationTime must be a timestamp (seconds since the epoch on the wire), not a string
+    assert result['vectorBucket']['creationTime'] > datetime.now(timezone.utc) - timedelta(days=1), "creationTime should be within the last day"
     result = conn.get_vector_bucket(vectorBucketArn=bucket_arn)
     log.info("get_vector_buckets result: %s", result)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
@@ -686,6 +690,9 @@ def test_list_vector_buckets():
     bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
     assert bucket_name1 in bucket_names
     assert bucket_name2 in bucket_names
+    for b in result['vectorBuckets']:
+        # creationTime must be a timestamp (seconds since the epoch on the wire), not a string
+        assert b['creationTime'] > datetime.now(timezone.utc) - timedelta(days=1), "creationTime should be within the last day"
     # list vector buckets with a prefix.
     # bucket_name3 sorts after the prefix range, and bucket_name4 is named exactly
     # like the prefix, which is the edge of the range the listing starts from

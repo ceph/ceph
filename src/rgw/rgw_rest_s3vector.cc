@@ -749,7 +749,8 @@ private:
     f.open_array_section("vectorBuckets");
     for (const auto& bucket : listing.buckets) {
       f.open_object_section("");
-      ::encode_json("creationTime",  ceph::to_iso_8601(bucket.creation_time), &f);
+      // the AWS API encodes timestamps as seconds since the epoch
+      ::encode_json("creationTime", static_cast<uint64_t>(ceph::real_clock::to_time_t(bucket.creation_time)), &f);
       rgw::ARN arn(rgw::Partition::aws,
           rgw::Service::s3vectors,
           zonegroup_name,
@@ -840,7 +841,8 @@ private:
     JSONFormatter f;
     f.open_object_section("");
     f.open_object_section("vectorBucket");
-    ::encode_json("creationTime",  ceph::to_iso_8601(bucket->get_creation_time()), &f);
+    // the AWS API encodes timestamps as seconds since the epoch
+    ::encode_json("creationTime", static_cast<uint64_t>(ceph::real_clock::to_time_t(bucket->get_creation_time())), &f);
     ::encode_json("vectorBucketArn", configuration.vector_bucket_arn->to_string(), &f);
     ::encode_json("vectorBucketName", bucket->get_name(), &f);
     f.close_section(); // vectorBucket
