@@ -21,16 +21,16 @@
 // MockPGLogEntryHandler
 //
 // This is a fully functional implementation of the PGLog::LogEntryHandler
-// interface. It calls code in PGBackend to perform the requested operations
-// although some of the stubs in MockPGBackend return questionable information
+// interface. It calls code in PGBackend to perform the requested operations.
+// Given a MockPGBackend, some of its stubs return questionable information
 // about the object size so the generated ObjectStore::Transaction is probably
-// not correct. The main purpose is to use partial_write to update the PWLC
-// information when appending entries to the log
+// not correct; given the PG's real backend, the transaction is the one the OSD
+// would generate.
 class MockPGLogEntryHandler : public PGLog::LogEntryHandler {
  public:
-  MockPGBackend *backend;
+  PGBackend *backend;
   ObjectStore::Transaction *t;
-  MockPGLogEntryHandler(MockPGBackend *backend, ObjectStore::Transaction *t) : backend(backend), t(t) {}
+  MockPGLogEntryHandler(PGBackend *backend, ObjectStore::Transaction *t) : backend(backend), t(t) {}
 
   // LogEntryHandler
   void remove(const hobject_t &hoid) override {
