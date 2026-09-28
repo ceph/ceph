@@ -33,8 +33,7 @@ bool OnodeReformatEngine::validate(OnodeReformatContext& ctx)
 	<< p2nphase(ctx.offset, min_alloc_size) << " "
 	<< p2nphase(ctx.offset + ctx.length, min_alloc_size)
 	<< dendl;
-    }
-    else {
+    } else {
       ldout(ctx.store.cct, 15) << "reformat '" << args << "'"
 	<< " enabled "
 	<< dendl;
@@ -59,7 +58,13 @@ bool OnodeReformatRecompressEngine::execute(OnodeReformatContext& ctx,
   const auto& span_stat = ctx.get_span_stats();
   auto& wctx = ctx.get_write_context();
   auto min_alloc_size = ctx.store.get_min_alloc_size();
-  bool will_do = wctx.compress && span_stat.allocated > 0;
+  // do reformat if
+  // - compression enabled
+  // - object isn't cached (meaning it's not being written at the moment),
+  // - and there are no shared blobs within the span as this might increase
+  //   used space.
+  bool will_do = wctx.compress && span_stat.allocated > 0 &&
+                 span_stat.cached == 0 && span_stat.allocated_shared ==0;
   if (will_do) {
     uint64_t need = 0;
     auto bl_it = ctx.bl.begin();
@@ -117,6 +122,13 @@ bool OnodeReformatRecompressEngine::execute(OnodeReformatContext& ctx,
     logger.inc(l_bluestore_reformat_compress_attempted);
     if (!will_do)
       logger.inc(l_bluestore_reformat_compress_omitted);
+  } else {
+    ldout(ctx.store.cct, 10) << " reformat:'" << args << "'"
+      << " omitted, compress " << wctx.compress
+      << " alloc " << span_stat.allocated
+      << " shared alloc " << span_stat.allocated_shared
+      << " cached " << span_stat.cached
+      << dendl;
   }
   return will_do;
 }
@@ -141,7 +153,8 @@ bool OnodeReformatDefragmentEngine::execute(OnodeReformatContext& ctx,
   auto need = p2roundup(ctx.length, min_alloc_size);
   size_t frags = 0;
   int64_t allocated = 0;
-  if (span_stat.frags > 1) {
+  if (span_stat.frags > 1 &&
+      span_stat.cached == 0 && span_stat.allocated_shared ==0) {
     logger.inc(l_bluestore_reformat_defragment_attempted);
     will_do = ctx.maybe_allocate(need, min_alloc_size,
       [&](int64_t num_bytes, size_t num_frags) {
@@ -157,6 +170,8 @@ bool OnodeReformatDefragmentEngine::execute(OnodeReformatContext& ctx,
     << " preallocated: 0x" << std::hex << allocated << std::dec
     << " old frags:" << span_stat.frags
     << " new frags:" << frags
+    << " shared alloc " << span_stat.allocated_shared
+    << " cached " << span_stat.cached
     << " apply: " << will_do
     << dendl;
   return will_do;

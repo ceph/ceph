@@ -13121,20 +13121,15 @@ void BlueStore::_maybe_do_reformat_onode(OnodeReformatContext& reformat_ctx,
   const bufferlist& bl,
   uint32_t op_flags)
 {
-  // do reformat if
-  // - reformat preapproved
-  // - object isn't cached (meaning it's not being written at the moment),
-  // - and there are no shared blobs within the span as this might increase
-  //   used space.
-  const auto& span_stat = reformat_ctx.get_span_stats(); // just make an alias
-  if (reformat_ctx.is_enabled() && span_stat.cached == 0 && span_stat.allocated_shared == 0) {
+  if (reformat_ctx.is_enabled()) {
     auto start2 = mono_clock::now();
     // will probably need write context, make an alias for the one from
     // reformat ctx
     auto& wctx = reformat_ctx.get_write_context();
     _choose_write_options(c, o, op_flags, &wctx);
 
-    dout(25) << __func__ << " span stat {" << span_stat << "}" << dendl;
+    dout(25) << __func__ << " span stat {" << reformat_ctx.get_span_stats() << "}"
+             << dendl;
     _dump_onode<25>(cct, *o);
 
     ceph_assert(logger);
@@ -13149,8 +13144,6 @@ void BlueStore::_maybe_do_reformat_onode(OnodeReformatContext& reformat_ctx,
   } else {
     dout(15) << __func__ << " skipping reformat:"
      << reformat_ctx.is_enabled() << " "
-     << span_stat.cached << " "
-     << span_stat.allocated_shared << " "
      << dendl;
   }
 }
