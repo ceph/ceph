@@ -257,6 +257,8 @@ public:
   bool merge(MDSAuthCaps newcaps);
 
   bool allow_all() const;
+  // whether any grant is limited to a path, i.e. is_capable() looks at it
+  bool path_restricted() const;
   bool is_capable(std::string_view fs_name,
                   std::string_view inode_path,
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
