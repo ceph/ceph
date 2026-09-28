@@ -5173,3 +5173,18 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: rgw_s3vector_max_request_size
+  type: size
+  level: advanced
+  desc: The maximum size (in bytes) of the payload of an S3 Vector request
+  long_desc: The payload of S3 Vector requests, such as PutVectors, holds the
+    vectors themselves, and is therefore not limited by rgw_max_put_param_size.
+    Requests with a larger payload are rejected with EntityTooLarge. Note that
+    the payload is read into memory before the request is authenticated.
+  default: 20_M
+  services:
+  - rgw
+  flags:
+  - runtime
+  see_also:
+  - rgw_max_put_param_size

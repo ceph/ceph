@@ -1178,7 +1178,34 @@ int RGWHandler_REST_s3Vector::init(rgw::sal::Driver* driver, req_state *s, rgw::
   if (const auto ret = RGWHandler_REST::init(driver, s, cio); ret < 0) {
     return ret;
   }
-  return RGWHandler_REST::allocate_formatter(s, RGWFormat::JSON, false);
+  if (const auto ret = RGWHandler_REST::allocate_formatter(s, RGWFormat::JSON, false); ret < 0) {
+    return ret;
+  }
+  // an s3vector request is signed as a non-s3 one, without the
+  // "x-amz-content-sha256" header. so, the payload must be read, and its hash
+  // calculated, before the request is authenticated.
+  // the payload of PutVectors holds the vectors themselves, so its size is
+  // limited separately from the parameters of the other REST requests
+  const auto max_size = s->cct->_conf.get_val<Option::size_t>("rgw_s3vector_max_request_size");
+  int ret;
+  std::tie(ret, bl_post_body) = rgw_rest_read_all_input(s, max_size, false);
+  if (ret == -ERANGE) {
+    ldpp_dout(s, 1) << "ERROR: s3vector payload of " << s->init_state.url_bucket <<
+      " is larger than the maximum of " << max_size << " bytes" << dendl;
+    return -ERR_TOO_LARGE;
+  }
+  if (ret < 0) {
+    ldpp_dout(s, 1) << "ERROR: failed to read s3vector payload of " <<
+      s->init_state.url_bucket << ". error: " << ret << dendl;
+    return ret;
+  }
+  // PayloadHash is present if the request was forwarded from another zone
+  if (!s->info.args.exists("PayloadHash")) {
+    auto sha256_hash = calc_hash_sha256_open_stream();
+    calc_hash_sha256_update_stream(sha256_hash, bl_post_body.c_str(), bl_post_body.length());
+    s->info.args.append("PayloadHash", calc_hash_sha256_close_stream(&sha256_hash));
+  }
+  return 0;
 }
 
 int RGWHandler_REST_s3Vector::postauth_init(optional_yield y) {
