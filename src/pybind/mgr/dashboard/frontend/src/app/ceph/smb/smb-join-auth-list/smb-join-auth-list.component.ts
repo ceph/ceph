@@ -4,13 +4,14 @@ import { switchMap, catchError } from 'rxjs/operators';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { SMB_BASE_CEPHFS } from '~/app/shared/constants/smb.constant';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SMBJoinAuth } from '../smb.model';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -18,7 +19,6 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { getJoinAuthPath } from '../utils';
 
 @Component({
   selector: 'cd-smb-join-auth-list',
@@ -27,8 +27,11 @@ import { getJoinAuthPath } from '../utils';
   providers: [
     {
       provide: URLBuilderService,
-      useFactory: (router: Router) => new URLBuilderService(getJoinAuthPath(router.url)),
-      deps: [Router]
+      useFactory: (route: ActivatedRoute) =>
+        new URLBuilderService(
+          `${route.snapshot.data['smbBasePath'] ?? SMB_BASE_CEPHFS}/active-directory`
+        ),
+      deps: [ActivatedRoute]
     }
   ],
   standalone: false
@@ -42,6 +45,7 @@ export class SmbJoinAuthListComponent implements OnInit {
   joinAuth$: Observable<SMBJoinAuth[]>;
   subject$ = new BehaviorSubject<SMBJoinAuth[]>([]);
   selection: CdTableSelection = new CdTableSelection();
+  private smbBasePath: string;
 
   constructor(
     private router: Router,
@@ -50,12 +54,14 @@ export class SmbJoinAuthListComponent implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private smbService: SmbService,
     private modalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private route: ActivatedRoute
   ) {
     this.permission = this.authStorageService.getPermissions().smb;
   }
 
   ngOnInit() {
+    this.smbBasePath = this.route.snapshot.data['smbBasePath'] ?? SMB_BASE_CEPHFS;
     this.columns = [
       {
         name: $localize`Name`,
@@ -73,7 +79,7 @@ export class SmbJoinAuthListComponent implements OnInit {
         flexGrow: 2,
         cellTransformation: CellTemplate.redirect,
         customTemplateConfig: {
-          redirectLink: ['/cephfs/smb/cluster', '::prop', 'overview']
+          redirectLink: [`/${this.smbBasePath}/cluster`, '::prop', 'overview']
         }
       }
     ];
@@ -125,7 +131,7 @@ export class SmbJoinAuthListComponent implements OnInit {
       itemNames: [authId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${getJoinAuthPath(this.router.url)}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${this.smbBasePath}/active-directory/${URLVerbs.DELETE}`, {
             authId: authId
           }),
           call: this.smbService.deleteJoinAuth(authId)
