@@ -41,6 +41,7 @@ static const char * const EMPTY_STRING = "";
 #define CEPH_V2_MOUNT_SUPPORT_PATH CEPH_SYS_FS_PARAM_PATH"/mount_syntax_v2"
 
 #define CEPH_DEFAULT_V2_MS_MODE "prefer-crc"
+#define CEPH_ENOTSUPP 524	/* kernel-internal, not in errno.h */
 
 #include "mtab.c"
 
@@ -958,6 +959,8 @@ static int append_key_or_secret_option(struct ceph_mount_info *cmi)
 				return 0;
 			}
 			fprintf(stderr, "adding ceph secret key to kernel failed: %s\n",
+				ret == -CEPH_ENOTSUPP ?
+				"key type not supported (aes256k needs Linux 7.0)" :
 				strerror(-ret));
 			return ret;
 		}
