@@ -108,11 +108,7 @@ class SubvolumeLoader(object):
                 disc_uuid = base_subvol.discover_subvol_uuid(disc_version)
                 subvol_obj = SubvolumeV1(mgr, fs, vol_spec, group, subvolname,
                                           legacy=False)
-            elif disc_version == 2:
-                disc_uuid = base_subvol.discover_subvol_uuid(disc_version)
-                subvol_obj = SubvolumeV2(mgr, fs, vol_spec, group, subvolname,
-                                          legacy=False)
-            elif disc_version == 3:
+            elif disc_version in (3, 2):
                 disc_uuid = base_subvol.discover_subvol_uuid(disc_version)
                 subvol_obj = SubvolumeV3(mgr, fs, vol_spec, group, subvolname,
                                          disc_uuid, disc_version)
