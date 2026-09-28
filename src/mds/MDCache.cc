@@ -190,6 +190,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
 
   symlink_recovery = g_conf().get_val<bool>("mds_symlink_recovery");
+  verify_frag_bytes = g_conf().get_val<bool>("mds_verify_frag_bytes");
   kill_dirfrag_at = static_cast<enum dirfrag_killpoint>(g_conf().get_val<int64_t>("mds_kill_dirfrag_at"));
 
   kill_shutdown_at = g_conf().get_val<uint64_t>("mds_kill_shutdown_at");
@@ -271,6 +272,9 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
   }
   if (changed.count("mds_kill_shutdown_at")) {
     kill_shutdown_at = g_conf().get_val<uint64_t>("mds_kill_shutdown_at");
+  }
+  if (changed.count("mds_verify_frag_bytes")) {
+    verify_frag_bytes = g_conf().get_val<bool>("mds_verify_frag_bytes");
   }
   if (changed.count("mds_use_global_snaprealm_seq_for_subvol")) {
     use_global_snaprealm_seq = g_conf().get_val<bool>("mds_use_global_snaprealm_seq_for_subvol");
@@ -621,6 +625,7 @@ void MDCache::_create_system_file(CDir *dir, std::string_view name, CInode *in, 
     le->metablob.add_remote_dentry(dn, true, in->ino(), in->d_type());
     le->metablob.add_root(true, in);
   }
+  account_dentry_bytes(mut.get(), dn);
   if (mdir)
     le->metablob.add_new_dir(mdir); // dirty AND complete AND new
 
@@ -1711,6 +1716,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	  olddn->set_projected_version(dir->get_projected_version());
 	  metablob->add_remote_dentry(olddn, true);
 	  mut->add_cow_dentry(olddn);
+	  account_dentry_bytes(mut, olddn);
 	  // FIXME: adjust link count here?  hmm.
 
 	  if (dir_follows+1 > in->first)
@@ -1789,6 +1795,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       olddn->set_projected_version(dir->get_projected_version());
       metablob->add_primary_dentry(olddn, 0, true, false, false, need_snapflush);
       mut->add_cow_dentry(olddn);
+      account_dentry_bytes(mut, olddn);
     } else {
       ceph_assert(dnl->is_remote());
       CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
@@ -1797,6 +1804,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       olddn->set_projected_version(dir->get_projected_version());
       metablob->add_remote_dentry(olddn, true);
       mut->add_cow_dentry(olddn);
+      account_dentry_bytes(mut, olddn);
     }
   }
 }
@@ -1818,7 +1826,43 @@ void MDCache::journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode
     } else {
       metablob->add_primary_dentry(dn, in, true);
     }
+    account_dentry_bytes(mut, dn);
   }
+}
+
+void MDCache::account_dentry_bytes(MutationImpl *mut, CDentry *dn)
+{
+  CDir *dir = dn->get_dir();
+  if (!dir->is_auth() || dir->get_inode()->is_stray()) {
+    return;
+  }
+  if (!mut->is_projected(dir)) {
+    dout(1) << __func__ << " fnode not projected, total not trusted: " << *dn << dendl;
+    dir->mark_frag_bytes_untrusted();
+    // the current fnode is what the next commit or export writes. later
+    // fnodes get -1 from project_fnode() and pop_and_dirty_projected_fnode()
+    if (dir->get_fnode()->frag_bytes >= 0) {
+      auto _fnode = CDir::allocate_fnode(*dir->get_fnode());
+      _fnode->frag_bytes = -1;
+      dir->reset_fnode(std::move(_fnode));
+    }
+    // keep counting the dentry so that a later repair or a split sums the right sizes
+    dn->counted_size = static_cast<uint32_t>(dir->dentry_value_length(dn, true));
+    return;
+  }
+
+  uint64_t new_len = dir->dentry_value_length(dn, true);
+  auto pf = dir->project_fnode(MutationRef(mut));
+  if (pf->frag_bytes >= 0) {
+    pf->frag_bytes += (int64_t)new_len - (int64_t)dn->counted_size;
+    if (pf->frag_bytes < 0) {
+      dout(1) << __func__ << " total went negative, now unknown: " << *dir << dendl;
+      pf->frag_bytes = -1;
+    }
+  }
+  dout(20) << __func__ << " " << dn->counted_size << " -> " << new_len
+           << ", frag_bytes " << pf->frag_bytes << " " << *dn << dendl;
+  dn->counted_size = static_cast<uint32_t>(new_len);
 }
 
 
@@ -12771,6 +12815,7 @@ void MDCache::rollback_uncommitted_fragments()
       pi.inode->version = diri->pre_dirty();
       predirty_journal_parents(mut, &le->metablob, diri, 0, PREDIRTY_PRIMARY);
       le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), diri, true);
+      account_dentry_bytes(mut.get(), diri->get_projected_parent_dn());
     } else {
       mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
       mut->ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
@@ -13622,6 +13667,54 @@ void MDCache::repair_dirfrag_stats_work(const MDRequestRef& mdr)
   le->metablob.add_dir(dir, true);
 
   mds->mdlog->submit_entry(le, new C_MDC_RespondInternalRequest(this, mdr));
+}
+
+class C_MDC_RepairFragBytes : public MDCacheLogContext {
+  MutationRef mut;
+  MDSContext *fin;
+public:
+  C_MDC_RepairFragBytes(MDCache *c, const MutationRef& m, MDSContext *f) :
+    MDCacheLogContext(c), mut(m), fin(f) {}
+  void finish(int r) override {
+    mut->apply();
+    mut->cleanup();
+    fin->complete(r);
+  }
+};
+
+// Unlike repair_dirfrag_stats() this takes no locks. only the auth dirfrag
+// changes frag_bytes, so, the sum and the projection happen together under
+// mds_lock. Scrub calls it with the complete dirfrag auth pinned.
+void MDCache::repair_dirfrag_bytes(CDir *dir)
+{
+  ceph_assert(dir->is_auth() && dir->is_complete());
+  // nothing can be journaled; the total stays as it is, which is safe
+  if (is_readonly() || mds->mdlog->is_capped()) {
+    return;
+  }
+  const int64_t counted_bytes = dir->get_dentries_counted_bytes();
+  dout(10) << __func__ << " frag_bytes " << dir->get_frag_bytes() << " -> "
+           << counted_bytes << " on " << *dir << dendl;
+
+  MutationRef mut(new MutationImpl());
+  mut->ls = mds->mdlog->get_current_segment();
+  mut->auth_pin(dir);
+  auto pf = dir->project_fnode(mut);
+  pf->version = dir->pre_dirty();
+  pf->frag_bytes = counted_bytes;
+  dir->clear_frag_bytes_untrusted();
+
+  EUpdate *le = new EUpdate(mds->mdlog, "repair_dirfrag_bytes");
+  le->metablob.add_dir_context(dir);
+  le->metablob.add_dir(dir, true);
+
+  MDSContext *fin;
+  if (dir->scrub_is_in_progress()) {
+    fin = new C_MDC_ScrubRepaired(this, dir->get_scrub_header());
+  } else {
+    fin = new C_MDSInternalNoop;
+  }
+  mds->mdlog->submit_entry(le, new C_MDC_RepairFragBytes(this, mut, fin));
 }
 
 void MDCache::repair_inode_stats(CInode *diri)

@@ -3716,6 +3716,9 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       }
     }
     
+    // the exported fnode counts the dentry at its imported length
+    dn->set_counted_size(dir->dentry_value_length(dn, false));
+
     // add dentry to journal entry
     if (le)
       le->metablob.add_import_dentry(dn);

@@ -4972,6 +4972,7 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, newi, true, true, true);
+  mdcache->account_dentry_bytes(mdr.get(), dn);
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());
@@ -7571,6 +7572,7 @@ void Server::handle_client_mknod(const MDRequestRef& mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(),
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, newi, true, true, true);
+  mdcache->account_dentry_bytes(mdr.get(), dn);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
   mds->balancer->maybe_fragment(dn->get_dir(), false);
@@ -7655,6 +7657,7 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, newi, true, true);
+  mdcache->account_dentry_bytes(mdr.get(), dn);
   le->metablob.add_new_dir(newdir); // dirty AND complete AND new
   
   // issue a cap on the directory
@@ -7740,6 +7743,7 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, newi, true, true);
+  mdcache->account_dentry_bytes(mdr.get(), dn);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
   mds->balancer->maybe_fragment(dir, false);
@@ -7943,6 +7947,7 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
 
   // do this after predirty_*, to avoid funky extra dnl arg
   dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+  mdcache->account_dentry_bytes(mdr.get(), dn);
 
   journal_and_reply(mdr, targeti, dn, le,
 		    new C_MDS_link_local_finish(this, mdr, dn, targeti, dnpv, tipv, adjust_realm));
@@ -8058,12 +8063,14 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);
     le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type()); // new remote
     dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+    mdcache->account_dentry_bytes(mdr.get(), dn);
   } else {
     dn->pre_dirty();
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
     mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
     le->metablob.add_null_dentry(dn, true);
     dn->push_projected_linkage();
+    mdcache->account_dentry_bytes(mdr.get(), dn);
   }
 
   journal_and_reply(mdr, (inc ? targeti : nullptr), dn, le,
@@ -8404,6 +8411,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t leader, const MDReques
   le->commit.add_dir_context(parent);
   le->commit.add_dir(parent, true);
   le->commit.add_primary_dentry(in->get_projected_parent_dn(), 0, true);
+  mdcache->account_dentry_bytes(mut.get(), in->get_projected_parent_dn());
   
   submit_mdlog_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr, std::move(splits)),
                      mdr, __func__);
@@ -8705,6 +8713,7 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   }
 
   dn->push_projected_linkage();
+  mdcache->account_dentry_bytes(mdr.get(), dn);
 
   if (straydn) {
     ceph_assert(in->first <= straydn->first);
@@ -10178,6 +10187,15 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
   if (srci->is_dir())
     mdcache->project_subtree_rename(srci, srcdn->get_dir(), destdn->get_dir());
 
+  // Count every dentry the rename can change
+  mdcache->account_dentry_bytes(mdr.get(), destdn);
+  mdcache->account_dentry_bytes(mdr.get(), srcdn);
+  // a renamed hard link: the file's own dentry changes too
+  mdcache->account_dentry_bytes(mdr.get(), srci->get_projected_parent_dn());
+  // an overwritten hard link: the other file's own dentry changes too
+  if (oldin) {
+    mdcache->account_dentry_bytes(mdr.get(), oldin->get_projected_parent_dn());
+  }
 }
 
 
@@ -11143,12 +11161,14 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
       le->commit.add_primary_dentry(srcdn, 0, true);
     else
       le->commit.add_remote_dentry(srcdn, true);
+    mdcache->account_dentry_bytes(mut.get(), srcdn);
   }
 
   if (!rollback.orig_src.ino && // remote linkage
       in && in->authority().first == whoami) {
     le->commit.add_dir_context(in->get_projected_parent_dir());
     le->commit.add_primary_dentry(in->get_projected_parent_dn(), in, true);
+    mdcache->account_dentry_bytes(mut.get(), in->get_projected_parent_dn());
   }
 
   if (force_journal_dest) {
@@ -11163,6 +11183,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
     ceph_assert(rollback.orig_dest.remote_ino);
     le->commit.add_dir_context(target->get_projected_parent_dir());
     le->commit.add_primary_dentry(target->get_projected_parent_dn(), target, true);
+    mdcache->account_dentry_bytes(mut.get(), target->get_projected_parent_dn());
   }
 
   if (in && in->is_dir() && (srcdn->authority().first == whoami || force_journal_src)) {
