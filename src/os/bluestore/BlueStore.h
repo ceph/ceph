@@ -3731,6 +3731,7 @@ private:
   std::string disk_size_mismatch_alert;
   std::string spurious_read_errors_alert;
   std::string no_db_sharding_alert;
+  std::string legacy_min_alloc_size_alert;
   std::queue <std::pair<ceph::mono_clock::time_point, bool>> slow_op_event_queue;
   size_t slow_op_event_count = 0;
   size_t slow_scrub_op_event_count = 0;
@@ -3757,6 +3758,8 @@ private:
   void _check_legacy_statfs_alert();
   void _check_no_per_pg_or_pool_omap_alert();
   void _check_no_db_sharding_alert();
+  uint64_t _get_default_min_alloc_size();
+  void _check_legacy_min_alloc_size_alert();
   void _set_disk_size_mismatch_alert(const std::string& s) {
     std::lock_guard l(qlock);
     disk_size_mismatch_alert = s;
