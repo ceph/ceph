@@ -3481,6 +3481,14 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   }
   bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
   bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == nullptr || meta.if_nomatch != "*"sv);
+  if (link_cond.type != cls_rgw_link_olh_cond::NONE && is_olh &&
+      target->obj.key.instance.empty() && guard) {
+    // a null version, in a bucket whose versioning is suspended, is written
+    // into the olh's head before its link checks the condition again. guard
+    // that head for If-None-Match: * too, so a write that would be refused
+    // at the link cannot first replace the head of one that was linked
+    set_attr_id_tag = true;
+  }
   r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, set_attr_id_tag, rctx.y);
   if (r < 0)
     return r;
@@ -3780,6 +3788,10 @@ done_cancel:
       if (strcmp(meta.if_nomatch, "*") == 0) {
         if (r == -EEXIST) {
           r = -ERR_PRECONDITION_FAILED;
+        } else if (r == -ECANCELED && link_cond.type != cls_rgw_link_olh_cond::NONE) {
+          // another write replaced the null version's head since the check,
+          // which passed: a conflicting operation, as at the link
+          r = -ERR_CONDITIONAL_REQUEST_CONFLICT;
         } else if (r == -ENOENT) {
           r = 0;
         }
