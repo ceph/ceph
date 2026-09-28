@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from '@jest/globals';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { RouterTestingModule } from '@angular/router/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 import { OverviewComponent } from './resource-overview-card.component';
@@ -13,7 +14,7 @@ describe('OverviewComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [OverviewComponent],
-      imports: [PipesModule],
+      imports: [PipesModule, RouterTestingModule],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
@@ -45,6 +46,24 @@ describe('OverviewComponent', () => {
 
       expect(labelEl.nativeElement.textContent.trim()).toBe('CPU');
       expect(valueEl.nativeElement.textContent.trim()).toBe('Intel');
+    });
+
+    it('should render link values as links', () => {
+      component.fields = [
+        {
+          label: 'Resource',
+          value: 'Resource 42',
+          type: 'link',
+          routerLink: ['/resources', 42]
+        }
+      ];
+      fixture.detectChanges();
+
+      const linkEl = fixture.debugElement.query(By.css('a.cd-overview-value'));
+
+      expect(linkEl).toBeTruthy();
+      expect(linkEl.nativeElement.textContent.trim()).toBe('Resource 42');
+      expect(linkEl.nativeElement.getAttribute('href')).toBe('/resources/42');
     });
 
     it('should render tags correctly', () => {

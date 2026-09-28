@@ -11,12 +11,21 @@ export interface OverviewField {
   value?: OverviewValue;
   /* Multiple values rendered when the field uses tag display. */
   values?: OverviewValue[];
-  /* Selects how the field value should be presented in the UI. */
-  type?: 'text' | 'status' | 'tags' | 'password';
+  /**
+   * Selects how the field value should be presented:
+   * - `text`: plain text value.
+   * - `status`: value with status styling and icon.
+   * - `tags`: multiple values rendered as tags.
+   * - `password`: read-only masked password field.
+   * - `link`: value rendered as a router link.
+   */
+  type?: 'text' | 'status' | 'tags' | 'password' | 'link';
   /* Visual tone used by status rendering (icon/text styling). */
   status?: 'success' | 'warning' | 'danger' | 'info-circle';
   /* Fallback text shown when the value is empty. */
   emptyText?: string;
+  /* Router link target used when type is 'link'. */
+  routerLink?: string | unknown[];
 }
 
 @Component({
