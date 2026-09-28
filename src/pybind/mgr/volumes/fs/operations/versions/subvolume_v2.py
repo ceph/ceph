@@ -342,8 +342,8 @@ class SubvolumeV2(SubvolumeV1):
                           'file and ignoring missing subvolume path '
                           f'{subvol_data_path} for subvolume {self.subvolname}')
                 return
-            log.debug(f"missing subvolume path '{subvol_data_path}' for '
-                      f'subvolume '{self.name}'")
+            log.debug(f"missing subvolume path '{subvol_data_path}' for "
+                      f"subvolume '{self.name}'")
             raise VolumeException(-errno.ENOENT, "mount path missing for subvolume '{0}'".format(self.subvolname))
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
