@@ -45,6 +45,10 @@ tasks:
 # Wait for the smb service to start
 - cephadm.wait_for_service:
     service: smb.modusr1
+
+- cephadm.shell:
+    host.a:
+      - cmd: 'ceph config-key ls | grep -q "ceph.smb.resources.*modusr1"'
 # Check if shares exist
 - template.exec:
     host.b:
@@ -76,3 +80,7 @@ tasks:
 # Wait for the smb service to be removed
 - cephadm.wait_for_service_not_present:
     service: smb.modusr1
+# Removing the cluster should clean that mirror entry too
+- cephadm.shell:
+    host.a:
+      - cmd: '! ceph config-key ls | grep -q "ceph.smb.resources.*modusr1"'
