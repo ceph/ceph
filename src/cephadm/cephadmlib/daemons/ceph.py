@@ -779,6 +779,77 @@ class CephExporter(ContainerDaemonForm):
         populate_files(ssl_dir, cert_files, uid, gid)
 
 
+def update_osd_bluestore_affinity(
+    ctx: CephadmContext, daemon_name: str, service_name: str
+) -> None:
+    """Update osdspec_affinity via ceph-bluestore-tool set-label-key.
+
+    ceph-bluestore-tool only exists inside the Ceph container image, so we
+    spin up an ephemeral privileged container to run it. The block device is
+    held exclusively by the running OSD (EBUSY), so the container is stopped
+    first and restarted afterwards. The host root is mounted at /rootfs inside
+    the container, so the block symlink is prefixed accordingly.
+    """
+    osd_data_dir = os.path.join(ctx.data_dir, ctx.fsid, daemon_name)
+    block_path = os.path.join(osd_data_dir, 'block')
+
+    if not os.path.exists(block_path):
+        raise Error(
+            f'Block device not found at {block_path} for {daemon_name}'
+        )
+
+    # daemon_name is "osd.3" (type="osd", id="3")
+    daemon_type, daemon_id = daemon_name.split('.', 1)
+    ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
+
+    logger.info(
+        f'Stopping {ident.container_name} to update osdspec_affinity bdev label'
+    )
+    call(
+        ctx,
+        [ctx.container_engine.path, 'stop', ident.container_name],
+        verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+    )
+    try:
+        block_path_in_container = '/rootfs' + block_path
+        c = CephContainer(
+            ctx,
+            image=ctx.image,
+            privileged=True,
+            entrypoint='ceph-bluestore-tool',
+            args=[
+                '--dev',
+                block_path_in_container,
+                'set-label-key',
+                '-k',
+                'osdspec_affinity',
+                '-v',
+                service_name,
+            ],
+            volume_mounts=get_ceph_mounts_for_type(ctx, ctx.fsid, 'osd'),
+        )
+        _, err, ret = call(
+            ctx,
+            c.run_cmd(),
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        if ret:
+            raise Error(
+                f'ceph-bluestore-tool set-label-key failed for {daemon_name} '
+                f'(osdspec_affinity={service_name}): {err}'
+            )
+        logger.debug(
+            f'Updated osdspec_affinity={service_name} for {daemon_name}'
+        )
+    finally:
+        logger.info(f'Restarting {ident.unit_name}')
+        call(
+            ctx,
+            ['systemctl', 'start', ident.unit_name],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+
+
 def get_ceph_mounts_for_type(
     ctx: CephadmContext, fsid: str, daemon_type: str
 ) -> Dict[str, str]:
