@@ -13,31 +13,10 @@
     i18n-emptyStateTitle
     emptyStateMessage="Once a subsystem is associated, it will appear in this list."
     i18n-emptyStateMessage
-<<<<<<< HEAD
-    [emptyStateImage]="emptyStateImage.search"
-=======
-    [emptyStateIcon]="iconType.emptySearch"
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
   >
   </cd-table>
 </div>
 
-<<<<<<< HEAD
-<ng-template
-  #authTpl
-  let-row="data.row"
->
-  <div
-    cdsStack="horizontal"
-    gap="4"
-  >
-    @if (row.auth === authType.NO_AUTH) {
-      <cd-icon type="warning"></cd-icon>
-    } @else {
-      <cd-icon type="success"></cd-icon>
-    }
-    <span class="cds-ml-3">{{ row.auth }}</span>
-=======
 <ng-template #authTpl
              let-row="data.row">
   <div cdsStack="horizontal"
@@ -48,6 +27,5 @@
     <cd-icon type="success"></cd-icon>
   }
   <span class="cds-ml-3">{{ row.auth }}</span>
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
   </div>
 </ng-template>

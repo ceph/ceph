@@ -9,15 +9,6 @@ describe('NvmeGatewayViewComponent', () => {
   let component: NvmeGatewayViewComponent;
   let fixture: ComponentFixture<NvmeGatewayViewComponent>;
 
-<<<<<<< HEAD
-  beforeEach(waitForAsync(() => {
-    TestBed.configureTestingModule({
-      declarations: [NvmeGatewayViewComponent],
-      imports: [RouterTestingModule, SideNavModule, ThemeModule],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
-    }).compileComponents();
-  }));
-=======
   beforeEach(
     waitForAsync(() => {
       TestBed.configureTestingModule({
@@ -27,7 +18,6 @@ describe('NvmeGatewayViewComponent', () => {
       }).compileComponents();
     })
   );
->>>>>>> e7c163eefa4 (mgr/dashboard: NVme-gateway-resource)
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeGatewayViewComponent);

@@ -31,14 +31,6 @@ export class NvmeSubsystemViewComponent implements OnInit {
     const extras = { queryParams: { group: this.groupName } };
     this.sidebarItems = [
       {
-<<<<<<< HEAD
-        label: $localize`Overview`,
-        route: [this.basePath, this.subsystemNQN, 'overview'],
-        routeExtras: extras
-      },
-      {
-=======
->>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
         label: $localize`Initiators`,
         route: [this.basePath, this.subsystemNQN, 'hosts'],
         routeExtras: extras
@@ -52,14 +44,6 @@ export class NvmeSubsystemViewComponent implements OnInit {
         label: $localize`Listeners`,
         route: [this.basePath, this.subsystemNQN, 'listeners'],
         routeExtras: extras
-<<<<<<< HEAD
-      },
-      {
-        label: $localize`Performance`,
-        route: [this.basePath, this.subsystemNQN, 'performance'],
-        routeExtras: extras
-=======
->>>>>>> 50177830211 (mgr/dashboard: NVMe – Fix host,listeners namespace list display on Subsystem resource page)
       }
     ];
   }
