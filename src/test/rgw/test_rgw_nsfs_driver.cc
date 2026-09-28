@@ -2583,6 +2583,118 @@ TEST(NooBaaMPU, StrategyReadsTheGeneratedTree)
   ::close(ofd);
 }
 
+/* NooBaa's path conventions.
+ *
+ * Most of them are ours -- keys verbatim, `.folder`, `.versions` --
+ * and asserting the sameness is the point:  it records that the
+ * agreement is deliberate rather than a coincidence nobody may rely
+ * on.  What differs is asserted against a tree written by hand.
+ */
+TEST(NooBaaPath, KeyConventionsMatchOurs)
+{
+  nsfs::NooBaaPathStrategy nb;
+  nsfs::SentinelPathStrategy ours;
+
+  for (const char* k : {"plain", "some/deep/key.bin", "_leading_underscore",
+			"__doubled", "trailing/"}) {
+    rgw_obj_key key{k};
+    EXPECT_EQ(nb.object_name(key, false), ours.object_name(key, false)) << k;
+  }
+
+  EXPECT_EQ(nb.folder_object_name(), ".folder");
+  EXPECT_EQ(nb.object_name(rgw_obj_key{"photos/"}, false), "photos/.folder");
+  EXPECT_TRUE(nb.names_directory_object(".folder"));
+  EXPECT_EQ(nb.key_from_name("some/key").name, "some/key");
+}
+
+/* Their staging is under the bucket temp directory, so nothing beside
+ * the bucket is named for an upload and a namespace has nothing to
+ * render.  Ours spells one, which is the difference. */
+TEST(NooBaaPath, NoStagingSpelling)
+{
+  nsfs::NooBaaPathStrategy nb;
+  nsfs::SentinelPathStrategy ours;
+  std::optional<std::string> mp{"multipart"};
+
+  EXPECT_EQ(nb.bucket_dir_name("b", mp), "b");
+  EXPECT_EQ(ours.bucket_dir_name("b", mp), ".multipart_b");
+  EXPECT_EQ(nb.bucket_dir_name("b", std::nullopt), "b");
+}
+
+/* No .shadow -- they have none, and claiming the name would hide a
+ * directory a user may create -- and the temp directory reserved by
+ * prefix, since its name carries a bucket id. */
+TEST(NooBaaPath, ReservesTheirNamesAndNotOurs)
+{
+  nsfs::NooBaaPathStrategy nb;
+  const auto& rn = nb.reserved_names();
+
+  auto has_exact = [&](const char* n) {
+    return std::find(rn.exact.begin(), rn.exact.end(), n) != rn.exact.end();
+  };
+  auto has_prefix = [&](const char* n) {
+    return std::find(rn.prefixes.begin(), rn.prefixes.end(), n) !=
+	   rn.prefixes.end();
+  };
+
+  EXPECT_TRUE(has_exact(".versions"));
+  EXPECT_TRUE(has_exact(".folder"));
+  EXPECT_FALSE(has_exact(".shadow"));
+  EXPECT_TRUE(has_prefix(".noobaa-nsfs_"));
+
+  /* and ours does claim .shadow, so this is a difference rather than
+   * an empty set */
+  nsfs::SentinelPathStrategy ours;
+  const auto& orn = ours.reserved_names();
+  EXPECT_NE(std::find(orn.exact.begin(), orn.exact.end(), ".shadow"),
+	    orn.exact.end());
+}
+
+/* A directory object of theirs, which is the interop case:  their
+ * empty one has no sentinel at all, so nothing in the directory
+ * listing reveals it and the question has to be asked of the
+ * directory. */
+TEST(NooBaaPath, DirectoryObjectFromTheAttribute)
+{
+  nsfs::NooBaaPathStrategy nb;
+  nsfs::SentinelPathStrategy ours;
+  const sf::path b{base_path / "nbdirobj"};
+  sf::remove_all(b);
+  sf::create_directories(b / "empty");
+  sf::create_directories(b / "withcontent");
+  sf::create_directories(b / "plain");
+
+  /* "0":  the directory alone is the object */
+  set_u64_xattr(b / "empty", "user.noobaa.dir_content", 0);
+  /* non-zero:  the bytes are in the sentinel */
+  set_u64_xattr(b / "withcontent", "user.noobaa.dir_content", 17);
+  write_file(b / "withcontent" / ".folder", std::string(17, 'x'));
+
+  int bfd = ::open(b.c_str(), O_RDONLY | O_DIRECTORY);
+  ASSERT_GE(bfd, 0);
+
+  nsfs::PathStrategy::DirectoryObject d{};
+  ASSERT_TRUE(nb.directory_object(env->dpp, bfd, "empty", d));
+  EXPECT_EQ(d.size, 0u);
+  EXPECT_FALSE(d.content_in_sentinel);
+
+  d = {};
+  ASSERT_TRUE(nb.directory_object(env->dpp, bfd, "withcontent", d));
+  EXPECT_EQ(d.size, 17u);
+  EXPECT_TRUE(d.content_in_sentinel);
+
+  /* a directory without the attribute is not an object;  their own
+   * read path throws NoSuchKey for one */
+  d = {};
+  EXPECT_FALSE(nb.directory_object(env->dpp, bfd, "plain", d));
+
+  /* ours never marks a directory, and says so without looking */
+  d = {};
+  EXPECT_FALSE(ours.directory_object(env->dpp, bfd, "empty", d));
+
+  ::close(bfd);
+}
+
 /* A bucket's format, and the strategies it selects.
  *
  * One format exists, so every profile names it and the bucket's

@@ -84,6 +84,37 @@ public:
    * half, and the other half is S5's. */
   virtual bool names_directory_object(std::string_view entry) const = 0;
 
+  /* Is this directory itself an object?
+   *
+   * The other half the comment above anticipated.  A format which
+   * marks the directory rather than putting a sentinel inside it has
+   * no entry to recognise, so the question has to be asked one level
+   * up, with the parent's fd and the directory's name.
+   *
+   * Ours answers false without a syscall:  we never mark a directory,
+   * the sentinel is the marker, and the walk sees it for free while
+   * enumerating.  A bucket we wrote holds no foreign directory
+   * objects, so paying per directory on the listing path would be
+   * paying for a case that cannot occur there.
+   *
+   * NooBaa reads user.noobaa.dir_content off the directory, whose
+   * value is the content length as a string.  "0" means the directory
+   * alone is the object and there is no sentinel file;  non-zero means
+   * the bytes are in the sentinel and the directory's own attributes
+   * are the object's (`namespace_fs.js:1008`).  A directory without
+   * the attribute is not an object at all, which is why its absence
+   * cannot be inferred from a missing sentinel. */
+  struct DirectoryObject {
+    uint64_t size{0};
+    /* the bytes are in folder_object_name();  false means the object
+     * is empty and the directory is the whole of it */
+    bool content_in_sentinel{false};
+  };
+
+  virtual bool directory_object(const DoutPrefixProvider* dpp,
+				int parent_fd, std::string_view dname,
+				DirectoryObject& out) const = 0;
+
   /* names this layout creates which are not objects.  Contributed to the
    * driver's aggregate;  the listing paths match against that, so no
    * strategy is consulted per directory entry. */
@@ -123,9 +154,55 @@ public:
       const std::optional<std::string>& ns) const override;
   std::string folder_object_name() const override;
   bool names_directory_object(std::string_view entry) const override;
+  bool directory_object(const DoutPrefixProvider* dpp, int parent_fd,
+			std::string_view dname,
+			DirectoryObject& out) const override;
   const ReservedNames& reserved_names() const override;
 
   const char* name() const override { return "rgw"; }
+};
+
+/* NooBaa's layout, which is what the base profile is.
+ *
+ * Most of it is already ours.  Object keys are stored verbatim on both
+ * sides -- the rados underscore doubling went in `7f0c721ab56`, in
+ * every profile -- and `.folder` and `.versions` are theirs, adopted.
+ * So object_name(), key_from_name() and folder_object_name() are the
+ * same answers, and this exists for three differences.
+ *
+ * reserved_names() has no `.shadow`, because they have no shadow
+ * subtree, and gains `.noobaa-nsfs` so the bucket temp directory is
+ * never enumerated as a key.
+ *
+ * bucket_dir_name() does not render our staging spelling.  Their
+ * staging is under the temp directory, which MPUStrategy::
+ * staging_root() finds;  nothing beside the bucket is named for an
+ * upload.
+ *
+ * directory_object() reads user.noobaa.dir_content.  This is the one
+ * that matters for interop:  a zero-length directory object of theirs
+ * has no sentinel at all, so without it a trailing-slash key they
+ * created is invisible to us, and one we create is invisible to them.
+ * That is the folder case, which is how most tools make folders.
+ *
+ * Read from noobaa-core at 68ca22d33:  `config.NSFS_FOLDER_OBJECT_NAME`
+ * is '.folder', and `namespace_fs.js:1008` is the read path. */
+class NooBaaPathStrategy : public PathStrategy {
+public:
+  std::string object_name(const rgw_obj_key& key,
+			  bool use_version) const override;
+  rgw_obj_key key_from_name(const std::string& fname) const override;
+  std::string bucket_dir_name(
+      const std::string& name,
+      const std::optional<std::string>& ns) const override;
+  std::string folder_object_name() const override;
+  bool names_directory_object(std::string_view entry) const override;
+  bool directory_object(const DoutPrefixProvider* dpp, int parent_fd,
+			std::string_view dname,
+			DirectoryObject& out) const override;
+  const ReservedNames& reserved_names() const override;
+
+  const char* name() const override { return "noobaa"; }
 };
 
 }}} // namespace rgw::sal::nsfs
