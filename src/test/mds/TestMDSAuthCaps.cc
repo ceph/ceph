@@ -198,6 +198,25 @@ TEST(MDSAuthCaps, AllowAll) {
   ASSERT_TRUE(cap.is_capable(fsname, "foo/bar", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo/bar", false));
 }
 
+TEST(MDSAuthCaps, PathRestricted) {
+  MDSAuthCaps cap;
+  ASSERT_FALSE(cap.path_restricted());
+
+  for (const char *str : {"allow *", "allow r", "allow rw", "allow rw uid=10",
+                          "allow rw fsname=a", "allow rw path=/"}) {
+    cap = MDSAuthCaps();
+    ASSERT_TRUE(cap.parse(str, NULL)) << str;
+    ASSERT_FALSE(cap.path_restricted()) << str;
+  }
+
+  for (const char *str : {"allow rw path=/foo", "allow r, allow rw path=/foo",
+                          "allow rw path=/foo, allow *"}) {
+    cap = MDSAuthCaps();
+    ASSERT_TRUE(cap.parse(str, NULL)) << str;
+    ASSERT_TRUE(cap.path_restricted()) << str;
+  }
+}
+
 TEST(MDSAuthCaps, AllowUid) {
   MDSAuthCaps cap;
   ASSERT_TRUE(cap.parse("allow * uid=10", NULL));
