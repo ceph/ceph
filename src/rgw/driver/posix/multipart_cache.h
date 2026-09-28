@@ -446,6 +446,38 @@ struct MultipartCache
     return result;
   }
 
+  /* One part, from the cache only.
+   *
+   * Deliberately does not fill:  the fill enumerates the staging
+   * directory, and this is called on the write path for every part
+   * after the first.  A miss is not an error -- the caller falls back
+   * to the part's record on disk, which is where the answer is under
+   * the writethrough policy.
+   *
+   * Under writeback the record reaches disk only when the entry is
+   * evicted, so the cache is the only place it exists, and a reader
+   * which consulted disk alone would conclude the fact was never
+   * established. */
+  bool peek_part(const MultipartCacheKey& key, uint32_t num,
+		 MultipartPartInfo& out) {
+    auto [b, rflags] = get_entry(key, FLAG_LOCK);
+    if (!b) {
+      return false;
+    }
+    auto sg = make_scope_guard(
+      [this, b]() {
+	b->mtx.unlock();
+	lru.unref(b, cohort::lru::FLAG_NONE);
+      });
+
+    auto it = b->parts.find(num);
+    if (it == b->parts.end()) {
+      return false;
+    }
+    out = it->second;
+    return true;
+  }
+
   void remove(const MultipartCacheKey& key) {
     auto [b, rflags] = get_entry(key, FLAG_LOCK);
     if (!b) {

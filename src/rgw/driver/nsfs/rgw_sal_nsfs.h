@@ -554,8 +554,13 @@ public:
 
   /* Construct the strategies, the profiles and the reserved-name union.
    * Called by initialize(), and directly by a test driver which does not
-   * want the rest of initialization.  base_path must be set first. */
-  void init_strategies(const DoutPrefixProvider* dpp);
+   * want the rest of initialization.  base_path must be set first.
+   *
+   * shares_extents replaces the filesystem probe when supplied, which
+   * is how the strided staging layout is reached on a filesystem that
+   * does share extents. */
+  void init_strategies(const DoutPrefixProvider* dpp,
+		       std::optional<bool> shares_extents = std::nullopt);
 
   /* Construct the multipart part cache.  Sizing is the caller's, because
    * it decides whether eviction -- and so the stabilize callback -- is

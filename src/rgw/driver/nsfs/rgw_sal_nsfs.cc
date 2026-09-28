@@ -2933,7 +2933,8 @@ int NSFSLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yiel
  *
  * base_path must already be set;  the extents probe reads it.
  */
-void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp)
+void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
+				 std::optional<bool> shares_extents)
 {
   auto gpfs_lib = g_conf().get_val<std::string>("rgw_nsfs_gpfs_lib_path");
   bool gpfs_clone = g_conf().get_val<bool>("rgw_nsfs_gpfs_clone_files");
@@ -2947,7 +2948,13 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp)
   }
   ldpp_dout(dpp, 1) << "nsfs: using " << fs_strategy->name()
     << " fs strategy" << dendl;
-  fs_strategy->set_shares_extents(nsfs::probe_shares_extents(dpp, base_path));
+  /* Probed unless the caller says otherwise.  The strided layout, the
+   * extent guard and the divert path are reached only where a copy is
+   * real, which on a developer machine is nowhere -- so a caller which
+   * means to exercise them has to be able to say so. */
+  fs_strategy->set_shares_extents(
+      shares_extents ? *shares_extents
+		     : nsfs::probe_shares_extents(dpp, base_path));
 
   /* Which staging layout.
    *
@@ -9526,28 +9533,51 @@ NSFSMultipartUpload::established_stride(const DoutPrefixProvider* dpp,
     return std::nullopt;
   }
 
-  nsfs::File pf(driver->get_mpu_strategy()->part_name(1), dir,
-		driver->ctx());
-  if (pf.stat(dpp, y) < 0) {
-    return std::nullopt;
+  /* Part 1's stored length, from the cache if it is there and from the
+   * part's record otherwise.
+   *
+   * The cache first, because under the writeback policy the record has
+   * not reached disk yet -- it is written when the entry is evicted.
+   * Reading disk alone would find no stored length, conclude no stride
+   * was established, and stage every part after the first in its own
+   * file:  correct objects, and the layout silently never used on the
+   * one filesystem it exists for. */
+  uint64_t stored = 0;
+  if (auto* mc = driver->get_multipart_cache(); mc) {
+    file::listing::MultipartPartInfo pi;
+    if (mc->peek_part({bucket->get_name(), mp_obj.meta}, 1, pi)) {
+      stored = pi.stored;
+    }
   }
-  Attrs attrs;
-  if (pf.read_attrs(dpp, y, attrs) != 0) {
-    return std::nullopt;
+
+  if (!stored) {
+    nsfs::File pf(driver->get_mpu_strategy()->part_name(1), dir,
+		  driver->ctx());
+    if (pf.stat(dpp, y) < 0) {
+      return std::nullopt;
+    }
+    Attrs attrs;
+    if (pf.read_attrs(dpp, y, attrs) != 0) {
+      return std::nullopt;
+    }
+    NSFSUploadPartInfo upi;
+    if (!decode_attr(attrs, RGW_NSFS_ATTR_MPUPLOAD, upi)) {
+      return std::nullopt;
+    }
+    stored = upi.stored;
   }
-  NSFSUploadPartInfo upi;
-  if (!decode_attr(attrs, RGW_NSFS_ATTR_MPUPLOAD, upi) || !upi.stored) {
+  if (!stored) {
     return std::nullopt;
   }
 
-  auto sname = driver->get_mpu_strategy()->shared_name(upi.stored);
+  auto sname = driver->get_mpu_strategy()->shared_name(stored);
   if (!sname) {
     return std::nullopt;
   }
   if (faccessat(dir->get_fd(), sname->c_str(), F_OK, 0) != 0) {
     return std::nullopt;
   }
-  return upi.stored;
+  return stored;
 }
 
 std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(

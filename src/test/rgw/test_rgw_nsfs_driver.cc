@@ -556,7 +556,10 @@ public:
   { }
   virtual ~TestDriver() = default;
 
-  int init(const DoutPrefixProvider* dpp)
+  int init(const DoutPrefixProvider* dpp,
+	   std::optional<bool> shares_extents = std::nullopt,
+	   file::listing::MultipartCachePolicy mp_policy =
+	     file::listing::MultipartCachePolicy::writethrough)
   {
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
@@ -574,7 +577,7 @@ public:
       return -ec.value();
     }
 
-    init_strategies(dpp);
+    init_strategies(dpp, shares_extents);
 
     root_dir = std::make_unique<nsfs::Directory>(base_path, nullptr,
 						 env->cct.get(),
@@ -600,8 +603,7 @@ public:
      * large enough that nothing is ever evicted, and eviction is what
      * runs the stabilize callback.  writeback is the policy that has
      * one, so it is the policy worth testing against. */
-    init_multipart_cache(dpp, 16, 2, 2, 64,
-			 file::listing::MultipartCachePolicy::writeback);
+    init_multipart_cache(dpp, 16, 2, 2, 64, mp_policy);
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;
@@ -682,13 +684,25 @@ class NSFSDriverTest : public ::testing::Test {
   public:
     NSFSDriverTest() {}
 
+    /* Probe the filesystem, which on a developer machine always answers
+     * that extents are shared.  A fixture which means to exercise the
+     * strided layout overrides this. */
+    virtual std::optional<bool> shares_extents() const {
+      return std::nullopt;
+    }
+
+    /* writethrough, as a deployment gets by default */
+    virtual file::listing::MultipartCachePolicy mp_cache_policy() const {
+      return file::listing::MultipartCachePolicy::writethrough;
+    }
+
     void SetUp() {
       testname = get_test_name();
       bp = sf::path{sf::absolute(sf::path{base_path / testname})};
       sf::create_directories(bp / "cache");
       sf::create_directories(bp / "root");
       driver = std::make_unique<TestDriver>(bp);
-      int ret = driver->init(env->dpp);
+      int ret = driver->init(env->dpp, shares_extents(), mp_cache_policy());
       EXPECT_EQ(ret, 0);
 
       rgw_user uid{"tenant", testname};
@@ -2216,6 +2230,230 @@ TEST(NooBaaMPU, AssembleSparseNumberingCopies)
   const std::string out = read_all(st.upload / "final");
   EXPECT_EQ(out, std::string(size, 'b') + std::string(size, 'f'));
   EXPECT_EQ(sf::hard_link_count(st.upload / "final"), 1u);
+}
+
+/* The strided staging layout, on a filesystem that shares extents.
+ *
+ * The driver chooses strided only where assembling from per-part files
+ * would copy the whole object, which is GPFS and nothing a developer
+ * machine mounts.  So the layout, the extent guard and the divert path
+ * have had no test outside a Storage Scale run.  These force the
+ * answer instead of measuring it.
+ *
+ * What they do not test is the premise:  XFS still shares extents
+ * underneath, so this exercises placement, the guard and assembly, not
+ * the cost that motivates them.
+ */
+class NSFSStridedBucketTest : public NSFSBucketTest {
+public:
+  std::optional<bool> shares_extents() const override { return false; }
+};
+
+/* Both polarities.  Forced false must select strided and forced true
+ * must not -- an override stuck at one answer would otherwise pass. */
+TEST_F(NSFSStridedBucketTest, StridedLayoutIsSelected)
+{
+  EXPECT_STREQ(driver->get_mpu_strategy()->name(), "rgw-strided");
+
+  TestDriver other{bp};
+  ASSERT_EQ(other.init(env->dpp, true), 0);
+  EXPECT_STREQ(other.get_mpu_strategy()->name(), "rgw");
+}
+
+namespace {
+
+/* one part through the SAL;  returns the etag the upload will be
+ * completed with */
+std::string write_mp_part(rgw::sal::MultipartUpload* upload,
+			  const ACLOwner& acl_owner,
+			  rgw_placement_rule* placement,
+			  int num, const std::string& payload)
+{
+  std::unique_ptr<rgw::sal::Writer> writer =
+    upload->get_writer(env->dpp, null_yield, nullptr, acl_owner,
+		       placement, num, std::to_string(num));
+  EXPECT_NE(writer.get(), nullptr);
+  EXPECT_EQ(writer->prepare(null_yield), 0);
+
+  bufferlist bl;
+  bl.append(payload);
+  const int len = bl.length();
+  EXPECT_EQ(writer->process(std::move(bl), 0), 0);
+  EXPECT_EQ(writer->process({}, len), 0);
+
+  ceph::real_time mtime;
+  Attrs part_attrs;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  std::string etag = std::to_string(num);
+  EXPECT_EQ(writer->complete(len, etag, &mtime, real_time(), part_attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), 0);
+  return etag;
+}
+
+int complete_mp(rgw::sal::Bucket* bucket, rgw::sal::MultipartUpload* upload,
+		const rgw_owner& owner, const std::string& objname,
+		std::map<int, std::string>& part_etags)
+{
+  std::list<rgw_obj_index_key> remove_objs;
+  bool compressed = false;
+  RGWCompressionInfo cs_info;
+  off_t ofs{0};
+  uint64_t accounted_size{0};
+  std::string tag;
+  rgw::sal::MultipartUpload::prefix_map_t processed_prefixes;
+  ACLOwner mp_owner;
+  mp_owner.id = owner;
+  std::unique_ptr<rgw::sal::Object> mp_obj =
+    bucket->get_object(rgw_obj_key(objname));
+  return upload->complete(env->dpp, null_yield, get_pointer(env->cct),
+			  part_etags, remove_objs, accounted_size, compressed,
+			  cs_info, ofs, tag, mp_owner, 0, mp_obj.get(),
+			  processed_prefixes);
+}
+
+} /* anonymous namespace */
+
+/* Uniform parts land in one file at (K-1) * stride, and completing the
+ * upload links that file rather than copying it. */
+TEST_F(NSFSStridedBucketTest, StridedMultipartCompletes)
+{
+  const std::string objname = testname + "-mp";
+  const std::string upload_id = "c0ffee";
+  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    std::string payload(stride, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  /* the shared file is named for the stride, and holds the parts in
+   * order, before anything is completed */
+  sf::path staging{bp / "root" / testname /
+		   (".multipart_" + objname + "." + upload_id)};
+  sf::path shared{staging / ("parts-size-" + std::to_string(stride))};
+  ASSERT_TRUE(sf::exists(shared)) << "no shared file at " << shared;
+  EXPECT_EQ(sf::file_size(shared), stride * 3);
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+
+  sf::path obj_path{bp / "root" / testname / objname};
+  ASSERT_TRUE(sf::is_regular_file(obj_path));
+  EXPECT_EQ(sf::file_size(obj_path), expected.size());
+
+  EXPECT_EQ(read_all(obj_path), expected);
+}
+
+/* A part longer than the stride must not write into the next part's
+ * region.  Before the guard, the object came back the right length
+ * with another part's bytes inside it -- found on GPFS, and until now
+ * reachable nowhere else. */
+TEST_F(NSFSStridedBucketTest, StridedOversizedPartDiverts)
+{
+  const std::string objname = testname + "-mp";
+  const std::string upload_id = "c0ffee";
+  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+
+  /* part 1 establishes the stride */
+  std::string p1(stride, 'a');
+  part_etags[1] = write_mp_part(upload.get(), acl_owner, &placement, 1, p1);
+  expected += p1;
+
+  /* part 2 exceeds it, so it cannot stay where the stride would put it */
+  std::string p2(stride + 17, 'b');
+  part_etags[2] = write_mp_part(upload.get(), acl_owner, &placement, 2, p2);
+  expected += p2;
+
+  /* part 3 would have been overwritten by part 2's overrun */
+  std::string p3(stride, 'c');
+  part_etags[3] = write_mp_part(upload.get(), acl_owner, &placement, 3, p3);
+  expected += p3;
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+
+  sf::path obj_path{bp / "root" / testname / objname};
+  ASSERT_TRUE(sf::is_regular_file(obj_path));
+
+  const std::string got = read_all(obj_path);
+  EXPECT_EQ(got.size(), expected.size());
+  /* the length was right even when the bytes were not, so compare the
+   * bytes and say which part was corrupted if they differ */
+  EXPECT_EQ(got, expected)
+      << "part 2's overrun reached part 3's region";
+}
+
+/* The strided layout under the writeback cache policy.
+ *
+ * A part's record reaches its xattr only when the cache entry is
+ * evicted, so part 1's stored length -- which is what establishes the
+ * stride -- does not exist on disk while the upload is in flight.  A
+ * reader consulting disk alone finds no stride and stages every part
+ * after the first in its own file:  the objects are correct and the
+ * layout is silently never used, on the one filesystem it exists for.
+ *
+ * established_stride() asks the cache first for that reason, and this
+ * is what holds it to it. */
+class NSFSStridedWritebackBucketTest : public NSFSStridedBucketTest {
+public:
+  file::listing::MultipartCachePolicy mp_cache_policy() const override {
+    return file::listing::MultipartCachePolicy::writeback;
+  }
+};
+
+TEST_F(NSFSStridedWritebackBucketTest, StrideSurvivesWriteback)
+{
+  const std::string objname = testname + "-mp";
+  const std::string upload_id = "c0ffee";
+  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    std::string payload(stride, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  sf::path staging{bp / "root" / testname /
+		   (".multipart_" + objname + "." + upload_id)};
+  sf::path shared{staging / ("parts-size-" + std::to_string(stride))};
+  ASSERT_TRUE(sf::exists(shared)) << "no shared file at " << shared;
+  EXPECT_EQ(sf::file_size(shared), stride * 3)
+      << "parts after the first did not reach the shared file, so the "
+	 "stride was not found under writeback";
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+
+  EXPECT_EQ(read_all(bp / "root" / testname / objname), expected);
 }
 
 int main(int argc, char *argv[]) {
