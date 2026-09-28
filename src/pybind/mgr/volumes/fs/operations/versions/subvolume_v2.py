@@ -11,7 +11,7 @@ from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeFeatures
 from .op_sm import SubvolumeOpSm
 from .subvolume_v1 import SubvolumeV1
 from ...exception import OpSmException, VolumeException, MetadataMgrException
-from ...utils import gen_uuid, safe_join, to_utf8, to_str
+from ...utils import gen_uuid, safe_join, to_str
 from ...fs_util import listdir, create_base_dir
 from ..template import SubvolumeOpType
 
@@ -356,8 +356,8 @@ class SubvolumeV2(SubvolumeV1):
                           'file and ignoring missing subvolume path '
                           f'{subvol_data_path} for subvolume {self.subvolname}')
                 return
-            log.debug(f"missing subvolume path '{subvol_data_path}' for '
-                      f'subvolume '{self.name}'")
+            log.debug(f"missing subvolume path '{subvol_data_path}' for "
+                      f"subvolume '{self.name}'")
             raise VolumeException(-errno.ENOENT, "mount path missing for subvolume '{0}'".format(self.subvolname))
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
