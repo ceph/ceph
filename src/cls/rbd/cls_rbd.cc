@@ -8726,6 +8726,17 @@ int group_snap_set(cls_method_context_t hctx,
               cpp_strerror(r).c_str());
       return r;
     }
+  } else {
+    bufferlist snap_bl;
+    r = cls_cxx_map_get_val(hctx, key, &snap_bl);
+    if (r == -ENOENT) {
+      // group_snap_unlink() can remove the snapshot but preserve its order.
+      r = cls_cxx_map_get_val(hctx, group::snap_order_key(group_snap.id),
+                              &snap_bl);
+    }
+    if (r < 0) {
+      return r;
+    }
   }
 
   bufferlist obl;
