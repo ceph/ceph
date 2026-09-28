@@ -17,15 +17,6 @@ The ``ubuntu`` user on the machine has some `build scripts <https://github.com/c
 
 The GPG signing key permanently lives on a `Nitrokey Pro <https://shop.nitrokey.com/shop/product/nkpr2-nitrokey-pro-2-3>`_ and is passed through to the VM via RHV. This helps to ensure that the key cannot be exported or leave the datacenter in any way.
 
-New Major Releases
-------------------
-
-For each new major (alphabetical) release, you must create one ``ceph-release`` RPM for each RPM repo (e.g., one for el8 and one for el9). `chacra <https://github.com/ceph/chacra>`_ is a python service we use to store DEB and RPM repos. The chacra repos are configured to include this ceph-release RPM, but it must be built separately. You must make sure that chacra is properly configured to include this RPM for each particular release.
-
-#. Update chacra so it is aware of the new Ceph release.  See `this PR <https://github.com/ceph/chacra/pull/219>`_ for an example.
-#. Redeploy chacra (e.g., ``ansible-playbook chacra.ceph.com.yml``)
-#. Run https://jenkins.ceph.com/view/all/job/ceph-release-rpm/
-
 Summarized release process
 ==========================
 
