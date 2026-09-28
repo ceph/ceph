@@ -1394,6 +1394,11 @@ static int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd,
   std::string attrname;
 
   attrname = xs->disk_name(key);
+  if (attrname.empty()) {
+    /* nowhere to keep it in this format;  accepted and not stored, as
+     * their own gateway does with an ACL */
+    return 0;
+  }
 
   const std::string v = attr_on_disk(xs, key, value);
   ret = fsetxattr(fd, attrname.c_str(), v.data(), v.size(), 0);
@@ -1413,6 +1418,11 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
 {
   int ret;
   std::string attrname{xs->disk_name(key)};
+  if (attrname.empty()) {
+    /* this format keeps the attribute nowhere, so there is nothing to
+     * remove and nothing went wrong */
+    return 0;
+  }
 
   ret = fremovexattr(fd, attrname.c_str());
   if (ret < 0) {
@@ -1577,21 +1587,32 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
   if (fs_strategy) {
     nsfs::xattr_map_t to_write;
+    /* An empty disk name means this format keeps the attribute
+     * nowhere -- an S3 ACL on a NooBaa tree, where their own gateway
+     * also accepts the request and stores nothing.  Skipped rather
+     * than written under a name neither format owns. */
+    auto place = [&](const std::string& key, const bufferlist& bl) {
+      std::string dname = xattr_strategy->disk_name(key);
+      if (dname.empty()) {
+	return;
+      }
+      to_write.try_emplace(std::move(dname),
+			   attr_on_disk(xattr_strategy, key, bl));
+    };
+
     if (extra_attrs) {
       for (auto& [key, bl] : *extra_attrs) {
         if (skip_empty && !bl.length()) {
           continue;
         }
-        to_write.try_emplace(xattr_strategy->disk_name(key),
-			     attr_on_disk(xattr_strategy, key, bl));
+        place(key, bl);
       }
     }
     for (auto& [key, bl] : attrs) {
       if (skip_empty && !bl.length()) {
         continue;
       }
-      to_write.try_emplace(xattr_strategy->disk_name(key),
-			   attr_on_disk(xattr_strategy, key, bl));
+      place(key, bl);
     }
 
     std::vector<std::string> to_remove;

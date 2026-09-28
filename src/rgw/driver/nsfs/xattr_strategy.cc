@@ -110,4 +110,128 @@ const char* PrefixedXattrStrategy::bucket_info_key() const
   return "bucket_info";
 }
 
+/* --- NooBaaXattrStrategy ---------------------------------------------- */
+
+static const std::string NB_USER_PREFIX = "user.";
+static const std::string NB_INTERNAL_PREFIX = "user.noobaa.";
+static const std::string NB_CONTENT_MD5 = "user.content_md5";
+
+/* RGW's logical key on the left, theirs on the right.  One to one;  the
+ * rows which are not are named in the header and deferred. */
+struct NBKeyMap {
+  const char* logical;
+  const char* disk;
+};
+
+static const NBKeyMap NB_KEYS[] = {
+  { RGW_ATTR_ETAG,            "user.content_md5" },
+  { RGW_ATTR_CONTENT_TYPE,    "user.noobaa.content_type" },
+  { RGW_ATTR_CONTENT_ENC,     "user.noobaa.content_encoding" },
+  { "version_id",             "user.noobaa.version_id" },
+  { "delete_marker",          "user.noobaa.delete_marker" },
+  { "non_current_timestamp",  "user.noobaa.non_current_timestamp" },
+};
+
+/* Three answers, not two.
+ *
+ * A key they keep goes to their name.  A key of ours with no
+ * counterpart -- bucket_info, rename intent -- goes under user.nsfs.,
+ * where it is inert to them;  the convergence report already records
+ * that we write bucket_info on a base bucket for exactly that reason.
+ * Only an S3 attribute they deliberately do not keep is dropped, and
+ * that is the ACL:  the empty name says "nowhere", and a write path
+ * which sees one skips the attribute rather than inventing a place for
+ * it.
+ *
+ * Returning the key unchanged would be the wrong third answer -- it
+ * would write under a name neither format owns, which is how two
+ * gateways come to disagree about what an object carries. */
+std::string NooBaaXattrStrategy::disk_name(const std::string& key) const
+{
+  for (const auto& m : NB_KEYS) {
+    if (key == m.logical) {
+      return m.disk;
+    }
+  }
+
+  /* user metadata is theirs key for key:  to_fs_xattr() prefixes with
+   * "user." and nothing else */
+  if (key.compare(0, std::strlen(RGW_ATTR_META_PREFIX),
+		  RGW_ATTR_META_PREFIX) == 0) {
+    return NB_USER_PREFIX + key.substr(std::strlen(RGW_ATTR_META_PREFIX));
+  }
+
+  /* nowhere:  they store no ACL, and their own gateway accepts the
+   * request and keeps nothing (`s3_put_object_acl.js`) */
+  if (key == RGW_ATTR_ACL) {
+    return std::string();
+  }
+
+  /* ours, and inert to them */
+  return NSFS_XATTR_PREFIX + key;
+}
+
+bool NooBaaXattrStrategy::parse_disk_name(const std::string& disk,
+					  std::string& key) const
+{
+  for (const auto& m : NB_KEYS) {
+    if (disk == m.disk) {
+      key = m.logical;
+      return true;
+    }
+  }
+
+  /* ours, written on their tree because it has nowhere else to go */
+  if (disk.compare(0, NSFS_XATTR_PREFIX.size(), NSFS_XATTR_PREFIX) == 0) {
+    key = disk.substr(NSFS_XATTR_PREFIX.size());
+    return true;
+  }
+
+  /* Everything else under user.noobaa. is theirs and structured --
+   * tags, the object-lock family, the part record -- and this format
+   * does not yet map any of it.  Claimed as unmapped rather than
+   * surfaced:  handing a caller one of their plain strings under an RGW
+   * key would feed a NooBaa value to a ceph decoder. */
+  if (disk.compare(0, NB_INTERNAL_PREFIX.size(), NB_INTERNAL_PREFIX) == 0) {
+    return false;
+  }
+
+  /* what is left under user. is user metadata */
+  if (disk.compare(0, NB_USER_PREFIX.size(), NB_USER_PREFIX) == 0) {
+    key = std::string(RGW_ATTR_META_PREFIX) +
+	  disk.substr(NB_USER_PREFIX.size());
+    return true;
+  }
+
+  return false;
+}
+
+/* From the inode.  They record no owner anywhere:  the write happened
+ * under the account's identity, so the file's uid is the answer, and it
+ * is the only answer a natively created file has. */
+int NooBaaXattrStrategy::object_owner(const Attrs& attrs,
+				      const struct statx* stx,
+				      ACLOwner& owner) const
+{
+  if (!stx || !(stx->stx_mask & STATX_UID)) {
+    return -EINVAL;
+  }
+  owner.id = rgw_user(std::to_string(stx->stx_uid));
+  return 0;
+}
+
+/* Never.  The terminator is an RGW-side accident that our own writers
+ * append;  nothing in their tree carries one, and restoring a byte they
+ * never wrote would corrupt the value.  See
+ * docs/RGW_COUNTED_STRING_ATTRS.md. */
+bool NooBaaXattrStrategy::counted_string_value(const std::string& key) const
+{
+  return false;
+}
+
+const char* NooBaaXattrStrategy::bucket_info_key() const
+{
+  return "bucket_info";
+}
+
 }}} // namespace rgw::sal::nsfs

@@ -141,4 +141,57 @@ public:
   const char* name() const override { return "rgw"; }
 };
 
+/* NooBaa's layout, which is what the base profile is.
+ *
+ *   user.<k>                          user metadata, key for key
+ *   user.content_md5                  the etag
+ *   user.noobaa.content_type          content type
+ *   user.noobaa.content_encoding      content encoding
+ *   user.noobaa.version_id            version id
+ *   user.noobaa.delete_marker         delete marker
+ *   user.noobaa.non_current_timestamp when it stopped being current
+ *
+ * Read from noobaa-core at 68ca22d33, `namespace_fs.js`:  the constant
+ * block at the head of the file, and `to_fs_xattr()` for the user
+ * metadata mapping.
+ *
+ * Ownership comes from the inode.  They record no owner anywhere, and
+ * the file's uid is the answer because the write happened under the
+ * account's identity -- which is also what stops a natively created
+ * file listing as unknown/unknown.
+ *
+ * NOT MAPPED, DELIBERATELY:
+ *
+ * S3 ACLs.  They store none, so there is nowhere for RGW_ATTR_ACL to
+ * go.  The write is accepted and not stored, which is what their own
+ * gateway does -- `s3_put_object_acl.js` says so:  "we only handle
+ * canned acl, the rest is deprecated in favor of bucket policy.
+ * however we do not fail the request because there are still clients
+ * that call it."  Refusing would make base stricter than the format it
+ * emulates and break the clients that comment protects.  Losing an ACL
+ * in *translation* is a different matter and is the export manifest's
+ * job;  a base bucket never held one.
+ *
+ * Object tags and the object-lock family.  Not renames:  ours is one
+ * encoded blob for every tag and two encoded attributes for the lock,
+ * theirs is user.noobaa.tag.<k> per tag and three plain attributes.
+ * Changing the shape of a value is what disk_name() and
+ * parse_disk_name() cannot express, and it is the value-format work S5
+ * names separately.  Deferred, not overlooked. */
+class NooBaaXattrStrategy : public XattrStrategy {
+public:
+  std::string disk_name(const std::string& key) const override;
+  bool parse_disk_name(const std::string& disk,
+		       std::string& key) const override;
+
+  int object_owner(const Attrs& attrs, const struct statx* stx,
+		   ACLOwner& owner) const override;
+
+  bool counted_string_value(const std::string& key) const override;
+
+  const char* bucket_info_key() const override;
+
+  const char* name() const override { return "noobaa"; }
+};
+
 }}} // namespace rgw::sal::nsfs
