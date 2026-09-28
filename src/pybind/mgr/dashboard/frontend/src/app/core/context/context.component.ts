@@ -1,6 +1,9 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { AsyncPipe } from '@angular/common';
+import { Component, Input, OnDestroy, OnInit } from '@angular/core';
 import { Event, NavigationEnd, Router } from '@angular/router';
 
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
+import { TagModule } from 'carbon-components-angular';
 import { NEVER, Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 
@@ -18,7 +21,8 @@ import { TimerService } from '~/app/shared/services/timer.service';
   selector: 'cd-context',
   templateUrl: './context.component.html',
   styleUrls: ['./context.component.scss'],
-  standalone: false
+  standalone: true,
+  imports: [AsyncPipe, NgbDropdownModule, TagModule]
 })
 export class ContextComponent implements OnInit, OnDestroy {
   readonly REFRESH_INTERVAL = 5000;
@@ -29,6 +33,7 @@ export class ContextComponent implements OnInit, OnDestroy {
   private rgwAccountsUrlPrefix = '/rgw/accounts';
   private rgwAccountsResourcePagePattern = /^\/rgw\/accounts\/[^/]+\/(overview|roles)(?:$|[?#])/;
   private rgwMultisiteSyncPolicyPrefix = '/rgw/multisite/sync-policy';
+  // private rgwOverviewUrlPrefix = '/rgw/overview';
   permissions: Permissions;
   featureToggleMap$: FeatureTogglesMap$;
   isRgwResourcePage = this.isRgwAccountsResourcePage(this.getRoutePath(document.location.href));
@@ -37,6 +42,12 @@ export class ContextComponent implements OnInit, OnDestroy {
     document.location.href.includes(this.rgwBuckerUrlPrefix) ||
     document.location.href.includes(this.rgwAccountsUrlPrefix) ||
     document.location.href.includes(this.rgwMultisiteSyncPolicyPrefix);
+
+  /**
+   * When true, show the context bar even if the current route is not an RGW
+   * route (e.g. embed on /rgw/overview without enabling the workbench instance).
+   */
+  @Input() forceShow = false;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -64,10 +75,13 @@ export class ContextComponent implements OnInit, OnDestroy {
           this.isRgwResourcePage = this.isRgwAccountsResourcePage(currentRoute);
         })
     );
-    // Set daemon list polling only when in RGW route:
+    // Set daemon list polling only when in RGW route or forced:
     this.subs.add(
       this.timerService
-        .get(() => (this.isRgwRoute ? this.rgwDaemonService.list() : NEVER), this.REFRESH_INTERVAL)
+        .get(
+          () => (this.isRgwRoute || this.forceShow ? this.rgwDaemonService.list() : NEVER),
+          this.REFRESH_INTERVAL
+        )
         .subscribe()
     );
   }
@@ -78,7 +92,10 @@ export class ContextComponent implements OnInit, OnDestroy {
 
   onDaemonSelection(daemon: RgwDaemon) {
     this.rgwDaemonService.selectDaemon(daemon);
-    this.reloadData();
+    // Embedded overview context refreshes via selectedDaemon$ without remounting.
+    if (!this.forceShow) {
+      this.reloadData();
+    }
   }
 
   private reloadData() {
