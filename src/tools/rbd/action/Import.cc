@@ -142,6 +142,22 @@ private:
 static int do_image_snap_from(ImportDiffContext *idiffctx)
 {
   int r;
+
+  // read the snap namespace type
+  rbd_snap_namespace_type_t snap_ns_type =
+    rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER;
+  char buf[sizeof(snap_ns_type)];
+  r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
+  if (r < 0) {
+    std::cerr << "rbd: failed to decode snap namespace type" << std::endl;
+    return r;
+  }
+
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  auto p = bl.cbegin();
+  decode(snap_ns_type, p);
+
   string from;
   r = utils::read_string(idiffctx->fd, 4096, &from);   // 4k limit to make sure we don't get a garbage string
   if (r < 0) {
@@ -149,8 +165,42 @@ static int do_image_snap_from(ImportDiffContext *idiffctx)
     return r;
   }
 
+  librbd::snap_trash_namespace_t maybe_snap_trash_namespace;
+  if (snap_ns_type ==
+        rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_TRASH) {
+    r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
+    if (r < 0) {
+      std::cerr << "rbd: failed to decode snap namespace type" << std::endl;
+      return r;
+    }
+
+    bl.clear();
+    bl.append(buf, sizeof(buf));
+    auto p = bl.cbegin();
+    decode(maybe_snap_trash_namespace.original_namespace_type, p);
+    ceph_assert(maybe_snap_trash_namespace.original_namespace_type ==
+      rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER);
+    r = utils::read_string(
+      idiffctx->fd, 4096,
+      &maybe_snap_trash_namespace.original_name);
+    if (r < 0) {
+      std::cerr << "rbd: failed to decode the original name"
+                << "for the trashed end snapshot" << std::endl;
+      return r;
+    }
+  }
+
   bool exists;
-  r = idiffctx->image->snap_exists2(from.c_str(), &exists);
+
+  if (snap_ns_type ==
+        rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER) {
+    r = idiffctx->image->snap_exists2(from.c_str(), &exists);
+  } else {
+    ceph_assert(snap_ns_type ==
+      rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_TRASH);
+    r = idiffctx->image->snap_exists2(
+      maybe_snap_trash_namespace.original_name.c_str(), &exists);
+  }
   if (r < 0) {
     std::cerr << "rbd: failed to query start snap state" << std::endl;
     return r;
@@ -166,9 +216,30 @@ static int do_image_snap_from(ImportDiffContext *idiffctx)
   return 0;
 }
 
-static int do_image_snap_to(ImportDiffContext *idiffctx, std::string *tosnap)
+static int do_image_snap_to(
+  ImportDiffContext *idiffctx,
+  std::string *tosnap,
+  std::optional<librbd::snap_trash_namespace_t> &maybe_snap_trash_namespace)
 {
+  ceph_assert(!maybe_snap_trash_namespace);
   int r;
+
+  // read the snap namespace type
+  rbd_snap_namespace_type_t snap_ns_type =
+    rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER;
+  char buf[sizeof(snap_ns_type)];
+  r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
+  if (r < 0) {
+    std::cerr << "rbd: failed to decode snap namespace type" << std::endl;
+    return r;
+  }
+
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  auto p = bl.cbegin();
+  decode(snap_ns_type, p);
+
+  // read the end snapshot name
   string to;
   r = utils::read_string(idiffctx->fd, 4096, &to);   // 4k limit to make sure we don't get a garbage string
   if (r < 0) {
@@ -176,8 +247,43 @@ static int do_image_snap_to(ImportDiffContext *idiffctx, std::string *tosnap)
     return r;
   }
 
+  if (snap_ns_type ==
+        rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_TRASH) {
+    maybe_snap_trash_namespace =
+      librbd::snap_trash_namespace_t{};
+    r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
+    if (r < 0) {
+      std::cerr << "rbd: failed to decode snap namespace type" << std::endl;
+      return r;
+    }
+
+    bl.clear();
+    bl.append(buf, sizeof(buf));
+    auto p = bl.cbegin();
+    decode(maybe_snap_trash_namespace->original_namespace_type, p);
+    ceph_assert(maybe_snap_trash_namespace->original_namespace_type ==
+      rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER);
+    r = utils::read_string(
+      idiffctx->fd, 4096,
+      &maybe_snap_trash_namespace->original_name);
+    if (r < 0) {
+      std::cerr << "rbd: failed to decode the original name"
+                << "for the trashed end snapshot" << std::endl;
+      return r;
+    }
+  }
+
   bool exists;
-  r = idiffctx->image->snap_exists2(to.c_str(), &exists);
+  if (snap_ns_type ==
+        rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER) {
+    r = idiffctx->image->snap_exists2(to.c_str(), &exists);
+  } else {
+    ceph_assert(snap_ns_type ==
+      rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_TRASH);
+    ceph_assert(maybe_snap_trash_namespace);
+    r = idiffctx->image->snap_exists2(
+      maybe_snap_trash_namespace->original_name.c_str(), &exists);
+  }
   if (r < 0) {
     std::cerr << "rbd: failed to query end snap state" << std::endl;
     return r;
@@ -404,6 +510,7 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
   std::string tosnap;
   bool is_protected = false;
   ImportDiffContext idiffctx(&image, fd, size, no_progress);
+  std::optional<librbd::snap_trash_namespace_t> maybe_snap_trash_namespace;
   while (r == 0) {
     __u8 tag;
     uint64_t length = 0;
@@ -416,7 +523,7 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
     if (tag == RBD_DIFF_FROM_SNAP) {
       r = do_image_snap_from(&idiffctx);
     } else if (tag == RBD_DIFF_TO_SNAP) {
-      r = do_image_snap_to(&idiffctx, &tosnap);
+      r = do_image_snap_to(&idiffctx, &tosnap, maybe_snap_trash_namespace);
     } else if (tag == RBD_SNAP_PROTECTION_STATUS) {
       r = get_snap_protection_status(&idiffctx, &is_protected);
     } else if (tag == RBD_DIFF_IMAGE_SIZE) {
@@ -432,10 +539,14 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
 
   int temp_r = idiffctx.throttle.wait_for_ret();
   r = (r < 0) ? r : temp_r; // preserve original error
-  if (r == 0 && tosnap.length()) {
-    r = idiffctx.image->snap_create(tosnap.c_str());
+  std::string &endsnapname =
+    (maybe_snap_trash_namespace
+     ? maybe_snap_trash_namespace->original_name
+     : tosnap);
+  if (r == 0 && endsnapname.length()) {
+    r = idiffctx.image->snap_create(endsnapname.c_str());
     if (r == 0 && is_protected) {
-      r = idiffctx.image->snap_protect(tosnap.c_str());
+      r = idiffctx.image->snap_protect(endsnapname.c_str());
     }
   }
 
