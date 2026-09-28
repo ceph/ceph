@@ -1237,7 +1237,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   // controls whether this operation is logged (depends on op.op and ondisk)
   bool log_op = default_log_op;
 
-  entry.ver = op.ver;
+  if (op.op != CLS_RGW_OP_CANCEL) {
+    entry.ver = op.ver;
+  }
   if (op.op == CLS_RGW_OP_CANCEL) {
     log_op = false; // don't log cancelation
     if (op.op_tag.size()) {

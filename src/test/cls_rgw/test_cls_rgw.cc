@@ -157,6 +157,16 @@ TEST_P(TestClsRgw, index_multiple_obj_writers)
     test_stats(ioctx, bucket_oid, RGWObjCategory::None, 1,
 	       obj_size * NUM_OBJS);
   }
+
+  // a later cancel or older epoch must not undo the newest completion
+  string tag = str_int("tag", NUM_OBJS);
+  rgw_bucket_dir_entry_meta meta;
+  meta.size = obj_size;
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_CANCEL, tag, 0, obj, meta);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, NUM_OBJS - 1, obj, meta);
+  test_stats(ioctx, bucket_oid, RGWObjCategory::None, 1, obj_size * NUM_OBJS);
 }
 
 TEST_P(TestClsRgw, index_remove_object)
