@@ -21,8 +21,12 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        DIFF=$(gh pr diff ${{ github.event.pull_request.number }} -R ${{ github.repository }})
-        if echo "$DIFF" | grep -qi "GNU General Public License"; then
-          echo "Error: Incompatible license 'GNU General Public License' found in PR diff."
-          exit 1
-        fi
+        pr_number=${{ github.event.pull_request.number }}
+        repo=${{ github.repository }}
+
+        gh api "repos/$repo/pulls/$pr_number/files" --paginate --jq \
+          '.[] | select(.filename != ".github/workflows/check-license.yml") | .patch' |
+          grep -qi "GNU General Public License" && {
+            echo "Error: Incompatible license 'GNU General Public License' found in PR changes."
+            exit 1
+          } || true
