@@ -1582,9 +1582,13 @@ public:
   /**
    * Per-PG latch state for rebuild time tracking. Cleared after each
    * completed rebuild event is recorded in the perf counters.
-   * The state is also cleared in clear_primary_state() so that an interval
-   * change or role transition (primary -> replica) does not carry a stale
-   * start time or baseline recovered count into a future interval.
+   * The state is also cleared in start_peering_interval() when the
+   * primary role actually changes across the transition, so that a
+   * role change (primary -> replica, or vice versa) does not carry a
+   * stale start time or baseline recovered count into a future primary
+   * stint. Peering-interval restarts that leave this OSD as primary
+   * throughout preserve the latch so an in-progress rebuild keeps
+   * accruing across them.
    */
   utime_t rebuild_start_time;
   int64_t rebuild_base_recovered = 0;

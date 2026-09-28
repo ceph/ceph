@@ -2196,17 +2196,12 @@ TEST_F(PeeringStateTest, Issue74218) {
 // Rebuild Stats Perf Counter Tests
 //
 // These tests exercise the latch logic in prepare_stats_for_publish() that
-// feeds rs_pg_rebuild_duration, rs_pg_rebuild_max_secs, and
-// rs_pg_rebuild_min_secs.
+// feeds rs_pg_rebuild_duration.
 // Design notes:
 //   - call_prepare_stats(osd) passes nullopt so the publish branch always
 //     runs, which is needed to drive the latch even when stats are unchanged.
 //   - A 10 ms sleep between the latch call and the clean call ensures
 //     rebuild_dur.to_msec() > 0 so the record is committed.
-//   - rebuild_secs = (uint64_t)rebuild_dur.sec(), so sub-second rebuilds
-//     leave pg_rebuild_max_secs and pg_rebuild_min_secs at 0.  Those gauges
-//     are verified only for their mutual ordering (min <= max); absolute
-//     values are verified via pg_rebuild_duration.sum which is in nanoseconds.
 // ============================================================================
 
 // One complete failure+recovery cycle does the following:
@@ -2220,7 +2215,7 @@ TEST_F(PeeringStateTest, Issue74218) {
 // The old_osd PeeringState is left in osd_peeringstate (may go stale).
 
 // ============================================================================
-// Test 1: Primary OSD records all four counters after a recovery event.
+// Test 1: Primary OSD records the rebuild duration after a recovery event.
 // ============================================================================
 TEST_F(PeeringStateTest, RebuildStatsLatchAndCount) {
   dout(0) << "== RebuildStatsLatchAndCount ==" << dendl;
@@ -2268,10 +2263,6 @@ TEST_F(PeeringStateTest, RebuildStatsLatchAndCount) {
   auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_rebuild_duration);
   EXPECT_GE(count, 1u);
   EXPECT_GT(sum_ns, 0u);
-
-  // max/min gauges track whole seconds; sub-second rebuilds leave both at 0.
-  // The key invariant is that min never exceeds max.
-  EXPECT_LE(perf->get(rs_pg_rebuild_min_secs), perf->get(rs_pg_rebuild_max_secs));
 }
 
 // ============================================================================
@@ -2311,9 +2302,7 @@ TEST_F(PeeringStateTest, RebuildStatsReplicaSkips) {
 
   call_prepare_stats(acting_primary);   // record fires on primary
 
-  // All rebuild counters on the replica must remain at their initial values.
-  EXPECT_EQ(replica_perf->get(rs_pg_rebuild_max_secs), 0u);
-  EXPECT_EQ(replica_perf->get(rs_pg_rebuild_min_secs), 0u);
+  // The rebuild counter on the replica must remain at its initial values.
   auto [sum_ns, count] =
     replica_perf->get_tavg_ns(rs_pg_rebuild_duration);
   EXPECT_EQ(count, 0u);
@@ -2453,9 +2442,6 @@ TEST_F(PeeringStateTest, RebuildStatsCountAccumulates) {
   auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_rebuild_duration);
   EXPECT_EQ(count, 2u);
   EXPECT_GT(sum_ns, 0u);
-
-  // min <= max invariant must hold across both events.
-  EXPECT_LE(perf->get(rs_pg_rebuild_min_secs), perf->get(rs_pg_rebuild_max_secs));
 }
 
 // ============================================================================
@@ -2506,8 +2492,8 @@ TEST_F(PeeringStateTest, RebuildStatsLatchClearedOnRoleChange) {
   test_event_initialize(7);
 
   // advance_map on OSD 0: the new acting set excludes OSD 0, so
-  // should_restart_peering()->start_peering_interval()->clear_primary_state()
-  // resets the three latch variables.
+  // should_restart_peering()->start_peering_interval() resets the
+  // three latch variables since the role of OSD 0 is now changed.
   test_event_advance_map();
 
   // --- Phase 3: verify latch is cleared on the old primary. ---
@@ -2521,6 +2507,67 @@ TEST_F(PeeringStateTest, RebuildStatsLatchClearedOnRoleChange) {
   auto [sum_ns, count] = perf_osd0->get_tavg_ns(rs_pg_rebuild_duration);
   EXPECT_EQ(count, 0u);
   EXPECT_EQ(sum_ns,  0u);
+}
+
+// ============================================================================
+// Test 6: Latch survives a peering-interval restart that leaves the primary
+// role unchanged.
+//
+// Acting-set churn among non-primary slots (e.g. a backfill peer being
+// added mid-rebuild) forces start_peering_interval() to run again, but the
+// primary OSD does not change across the transition. Regression test: this
+// must not discard an in-progress rebuild's latch, or the eventual recovery
+// never gets recorded even though the same primary owned it the whole time.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildStatsLatchSurvivesSamePrimaryIntervalRestart) {
+  dout(0) << "== RebuildStatsLatchSurvivesSamePrimaryIntervalRestart ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  // Stamp last_clean so the new_failure guard inside the latch is satisfied.
+  call_prepare_stats(acting_primary);        // acting_primary = OSD 0
+
+  // --- Phase 1: degrade the PG while OSD 0 stays primary. ---
+  // Replace acting[1] (OSD 1) with OSD 9; OSD 9 needs recovery.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+  // PG is now active+recovering+degraded; OSD 0 remains primary.
+
+  // Latch: first prepare_stats call while vulnerable sets rebuild_start_time.
+  call_prepare_stats(acting_primary);
+  utime_t latched_at = get_ps(0)->get_rebuild_start_time();
+  ASSERT_NE(latched_at, utime_t())
+      << "latch must be set before the second interval restart";
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // --- Phase 2: a second acting-set change (e.g. a backfill target joining)
+  // forces another interval restart via start_peering_interval(), but OSD 0
+  // stays primary throughout. This tests the scenario involving
+  // clear_primary_state(), which should not wipe the latch here, since no
+  // primary role change occurred.
+  modify_up_acting(2, 8);
+  test_create_peering_state(8, 2);
+  test_init(8);
+  test_event_initialize(8);
+  test_peering();
+
+  // --- Phase 3: verify the latch survived unchanged on OSD 0. ---
+  EXPECT_EQ(get_ps(0)->get_rebuild_start_time(), latched_at)
+      << "same-primary interval restart must not clear an in-progress latch";
+  EXPECT_EQ(get_ps(0)->get_rebuild_base_recovered(), 0);
+
+  // No record should have fired yet: the rebuild is still ongoing.
+  PerfCounters *perf_osd0 = get_listener(0)->recoverystate_perf;
+  auto [sum_ns, count] = perf_osd0->get_tavg_ns(rs_pg_rebuild_duration);
+  EXPECT_EQ(count, 0u);
 }
 
 // ============================================================================
