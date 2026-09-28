@@ -79,7 +79,6 @@ const int64_t DIRECT_IO_ALIGN = 4096;
 /* the bucket_info attribute's name is XattrStrategy::bucket_info_key();
  * both formats answer it the same way, and the method exists so that the
  * decision is stated once */
-#define RGW_NSFS_ATTR_MPUPLOAD "mp_upload"
 #define RGW_NSFS_ATTR_OBJECT_TYPE "object_type"
 #define RGW_NSFS_ATTR_MULTIPART_PART_COUNT "multipart_part_count"
 #define RGW_NSFS_ATTR_MULTIPART_PART_SIZES "multipart_part_sizes"
@@ -9070,20 +9069,28 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 	  }
 	  file::listing::MultipartPartInfo pi;
 	  pi.num = pnum;
+	  /* the file's length, until the record says otherwise:  under a
+	   * shared layout the file is the whole upload, so a record is
+	   * what makes this part's own length knowable */
 	  pi.size = pf->get_size();
 
+	  /* Ask the format what its record says.  Ours arrives decoded in
+	   * `attrs`, through the bucket's XattrStrategy;  NooBaa keeps
+	   * theirs in attributes that reader drops as foreign, so they
+	   * read the file themselves. */
 	  Attrs attrs;
-	  if (pf->read_attrs(dpp, y, attrs) == 0) {
-	    NSFSUploadPartInfo upi;
-	    if (decode_attr(attrs, RGW_NSFS_ATTR_MPUPLOAD, upi)) {
-	      pi.etag = std::move(upi.etag);
-	      pi.mtime = upi.mtime;
-	      pi.cksum = std::move(upi.cksum);
-	      if (upi.size) pi.size = upi.size;
-	      pi.shared = upi.shared;
-	      pi.offset = upi.offset;
-	      pi.stored = upi.stored;
-	    }
+	  (void) pf->read_attrs(dpp, y, attrs);
+
+	  nsfs::MPUStrategy::PartRecord rec;
+	  if (mpu_strategy()->part_record(dpp, dir->get_fd(), sname, attrs,
+					  rec)) {
+	    pi.etag = std::move(rec.etag);
+	    pi.mtime = rec.mtime;
+	    pi.cksum = std::move(rec.cksum);
+	    if (rec.size) pi.size = rec.size;
+	    pi.shared = rec.shared;
+	    pi.offset = rec.offset;
+	    pi.stored = rec.stored;
 	  }
 	  pm[pnum] = std::move(pi);
 	  return 0;

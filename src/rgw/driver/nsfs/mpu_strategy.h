@@ -23,6 +23,9 @@
 
 #include <sys/types.h>
 
+#include "rgw_sal_fwd.h"
+
+#include "part_info.h"
 #include "fs_strategy.h"
 
 class DoutPrefixProvider;
@@ -175,6 +178,40 @@ public:
   virtual std::optional<PartTarget> part_target(
       uint32_t part_num, std::optional<uint64_t> stride) const = 0;
 
+  /* What a part's record says about it.
+   *
+   * Read per format, because the record is the staging layout's and
+   * not the object metadata's.  Ours is one ceph-encoded blob under a
+   * single attribute;  NooBaa keeps size, offset and etag as three
+   * plain attributes of their own.
+   *
+   * Both inputs are offered because the formats need different ones.
+   * `attrs` are the logical attributes the caller has already read
+   * through the bucket's XattrStrategy, which is where ours lives and
+   * which carries the value decoding that strategy owns.  `dir_fd`
+   * and `pname` are for a format whose record that reader does not
+   * surface at all -- our reader drops `user.noobaa.*` as foreign, so
+   * theirs opens the part itself.  A directory fd and a name rather
+   * than an open file, because the caller stats parts without opening
+   * them and a format which needs no open should not pay for one.
+   *
+   * False means this part has no readable record.  `size` may still
+   * be unknown afterwards, in which case the caller falls back to the
+   * file's length, as their own listing does. */
+  struct PartRecord {
+    uint64_t size{0};      /* accounted:  what the client sent */
+    uint64_t stored{0};    /* bytes on disk */
+    uint64_t offset{0};    /* where in the file they begin */
+    bool shared{false};    /* other parts write into that file */
+    std::string etag;
+    ceph::real_time mtime;
+    std::optional<rgw::cksum::Cksum> cksum;
+  };
+
+  virtual bool part_record(const DoutPrefixProvider* dpp, int dir_fd,
+			   std::string_view pname, const Attrs& attrs,
+			   PartRecord& out) const = 0;
+
   /* A part as assembly sees it:  which part, where its bytes are, and
    * how many.  Read from the part records by the caller, which owns the
    * attribute format;  this interface does not.
@@ -247,6 +284,9 @@ public:
   bool staged_upload(const DoutPrefixProvider* dpp, int root_fd,
 		     std::string_view dname,
 		     StagedUpload& out) const override;
+  bool part_record(const DoutPrefixProvider* dpp, int dir_fd,
+		   std::string_view pname, const Attrs& attrs,
+		   PartRecord& out) const override;
 
   std::string part_name(uint32_t part_num) const override;
   std::optional<uint32_t> part_number(std::string_view name) const override;
@@ -337,6 +377,9 @@ public:
   bool staged_upload(const DoutPrefixProvider* dpp, int root_fd,
 		     std::string_view dname,
 		     StagedUpload& out) const override;
+  bool part_record(const DoutPrefixProvider* dpp, int dir_fd,
+		   std::string_view pname, const Attrs& attrs,
+		   PartRecord& out) const override;
   std::optional<std::string> staging_root(const DoutPrefixProvider* dpp,
 					  int bucket_fd) const override;
 

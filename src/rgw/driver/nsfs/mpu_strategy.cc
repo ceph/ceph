@@ -23,6 +23,8 @@
 #include <unistd.h>
 
 #include <charconv>
+#include <algorithm>
+#include <sys/xattr.h>
 
 #include <fmt/format.h>
 
@@ -76,6 +78,9 @@ static const std::string NB_MPU_ROOT = "multipart-uploads";
 static const std::string NB_PART_PREFIX = "part-";
 static const std::string NB_CREATE_NAME = "create_object_upload";
 static const std::string NB_FINAL_NAME = "final";
+static const char* NB_XATTR_PART_SIZE = "user.noobaa.part_size";
+static const char* NB_XATTR_PART_OFFSET = "user.noobaa.part_offset";
+static const char* NB_XATTR_CONTENT_MD5 = "user.content_md5";
 
 
 std::string PerPartMPUStrategy::staging_dir_name(const std::string& meta) const
@@ -148,6 +153,36 @@ PerPartMPUStrategy::part_target(uint32_t part_num,
    * The stride is not consulted:  this layout places a part without
    * one, which is why it never answers nullopt. */
   return PartTarget{part_name(part_num), 0, std::nullopt, false};
+}
+
+/* Our record is one ceph-encoded blob, written and read through the
+ * bucket's XattrStrategy, so it arrives already decoded in `attrs` and
+ * the fd is not needed. */
+bool PerPartMPUStrategy::part_record(const DoutPrefixProvider* dpp,
+				     int dir_fd, std::string_view pname,
+				     const Attrs& attrs,
+				     PartRecord& out) const
+{
+  auto i = attrs.find(RGW_NSFS_ATTR_MPUPLOAD);
+  if (i == attrs.end()) {
+    return false;
+  }
+  NSFSUploadPartInfo upi;
+  try {
+    auto bufit = i->second.cbegin();
+    decode(upi, bufit);
+  } catch (buffer::error&) {
+    return false;
+  }
+
+  out.size = upi.size;
+  out.stored = upi.stored;
+  out.offset = upi.offset;
+  out.shared = upi.shared;
+  out.etag = std::move(upi.etag);
+  out.mtime = upi.mtime;
+  out.cksum = std::move(upi.cksum);
+  return true;
 }
 
 std::string PerPartMPUStrategy::meta_name() const
@@ -606,6 +641,104 @@ std::string NooBaaMPUStrategy::meta_name() const
 std::string NooBaaMPUStrategy::assembled_name() const
 {
   return NB_FINAL_NAME;
+}
+
+namespace {
+
+/* one unsigned decimal xattr, or nothing */
+std::optional<uint64_t> u64_xattr(int fd, const char* name)
+{
+  char buf[32];
+  ssize_t len = ::fgetxattr(fd, name, buf, sizeof(buf) - 1);
+  if (len <= 0) {
+    return std::nullopt;
+  }
+  buf[len] = '\0';
+  char* end = nullptr;
+  errno = 0;
+  unsigned long long v = ::strtoull(buf, &end, 10);
+  if (errno || (end == buf) || (*end != '\0')) {
+    return std::nullopt;
+  }
+  return static_cast<uint64_t>(v);
+}
+
+std::string base36(uint64_t v)
+{
+  static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  if (v == 0) {
+    return "0";
+  }
+  std::string out;
+  while (v) {
+    out.push_back(digits[v % 36]);
+    v /= 36;
+  }
+  std::reverse(out.begin(), out.end());
+  return out;
+}
+
+} /* anonymous namespace */
+
+/* Their record is three plain attributes of their own, which our
+ * XattrStrategy drops as foreign, so this reads them off the file.
+ *
+ * The etag is the one place their writer and their reader disagree.
+ * _finish_upload() writes both user.content_md5 and
+ * user.noobaa.part_etag (`namespace_fs.js:1421`, `:1424`), and
+ * _get_etag() -- which their list_multiparts and their completion
+ * check both use -- reads content_md5 and falls back to a string
+ * derived from the stat.  So content_md5 is the answer, part_etag is
+ * a cross-check, and the derived form is what a part carries when no
+ * digest was computed.  It is not an MD5 and a strict client will say
+ * so;  that is their behaviour, and base is their format.
+ *
+ * `stored` has no counterpart:  nothing sits between their op layer
+ * and their writer to change a byte count, so the accounted size is
+ * the stored size. */
+bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
+				    int dir_fd, std::string_view pname,
+				    const Attrs& attrs,
+				    PartRecord& out) const
+{
+  int part_fd = ::openat(dir_fd, std::string(pname).c_str(), O_RDONLY);
+  if (part_fd < 0) {
+    return false;
+  }
+  auto close_part = make_scope_guard([part_fd] { ::close(part_fd); });
+
+  auto size = u64_xattr(part_fd, NB_XATTR_PART_SIZE);
+  if (!size) {
+    return false;
+  }
+  out.size = *size;
+  out.stored = *size;
+  out.offset = u64_xattr(part_fd, NB_XATTR_PART_OFFSET).value_or(0);
+  /* every part of a size shares that size's file */
+  out.shared = true;
+
+  char ebuf[256];
+  ssize_t elen = ::fgetxattr(part_fd, NB_XATTR_CONTENT_MD5, ebuf,
+			     sizeof(ebuf));
+  if (elen > 0) {
+    out.etag.assign(ebuf, elen);
+  }
+
+  struct statx stx;
+  if (statx(part_fd, "", AT_EMPTY_PATH, STATX_MTIME | STATX_INO, &stx) == 0) {
+    out.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec) +
+		std::chrono::nanoseconds(stx.stx_mtime.tv_nsec);
+    if (out.etag.empty()) {
+      /* _get_version_id_by_stat:  mtime in nanoseconds and the inode,
+       * both base 36 */
+      const uint64_t ns =
+	  static_cast<uint64_t>(stx.stx_mtime.tv_sec) * 1000000000ull +
+	  stx.stx_mtime.tv_nsec;
+      out.etag = "mtime-" + base36(ns) + "-ino-" + base36(stx.stx_ino);
+    }
+  }
+
+  return true;
 }
 
 const ReservedNames& NooBaaMPUStrategy::reserved_names() const
