@@ -561,7 +561,8 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    If the client's software (e.g. ``ceph-fuse`` or the Linux kernel driver) is
    up-to-date on all machines using the key, you may rotate the key and
-   distribute it.
+   distribute it. Kernel clients need Linux 7.0 for ``aes256k`` keys; see
+   :ref:`cephx-older-kernel-clients`.
 
    .. code:: bash
 
@@ -651,6 +652,25 @@ This can be imported into a new keyring using ``ceph-authtool``:
 
 .. note:: The key must be distributed to all locations where the key is in use.
 
+
+.. _cephx-older-kernel-clients:
+
+Older Kernel Clients
+--------------------
+
+The Linux kernel client (CephFS and RBD) supports ``aes256k`` keys since
+Linux 7.0. For older kernels, allow ``aes`` and give those clients an
+``aes`` key:
+
+.. code:: bash
+
+    ceph mon set auth_allowed_ciphers aes,aes256k
+    ceph auth get-or-create client.foo --key-type aes ...
+
+For a few seconds after the ``mon set``, creating the key may fail with
+``creating key with insecure key type ("aes") not allowed``; retry.
+
+``ceph-fuse`` and ``rbd-nbd`` do not use the kernel client.
 
 .. _auth_emergency_allowed_ciphers:
 
