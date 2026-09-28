@@ -19,6 +19,7 @@ RADOS_TESTS=(
     api_c_write_operations
     api_c_read_operations
     api_omap_pp
+    api_split_op_pp
     list_parallel
     open_pools_parallel
     delete_pools_parallel
@@ -36,17 +37,19 @@ VALGRIND_TESTS=(
 # Note on argument ordering: This script processes arguments sequentially,
 # so the order matters. Arguments must be provided in this specific sequence:
 # 1. --serial OR --crimson (optional)
-# 2. --timeout VALUE (optional) (for each test)
-# 3. --vstart (optional)
+# 2. --external-error-inject (optional)
+# 3. --timeout VALUE (optional) (for each test)
+# 4. --vstart (optional)
 #
 # For example:
-# ./test.sh                               # Default: parallel mode, 90-min timeout for each test
-# ./test.sh --serial                      # Serial mode, 90-min timeout for each test
-# ./test.sh --crimson                     # Crimson mode, 90-min timeout for each test
-# ./test.sh --timeout 3600                # Parallel mode, 60-min timeout for each test
-# ./test.sh --serial --timeout 60         # Serial mode, 1-min timeout for each test
-# ./test.sh --crimson --timeout 0         # Crimson mode, no timeout for each test
-# ../qa/workunits/rados/test.sh --vstart  # Run tests locally from `ceph/build` dir
+# ./test.sh                                        # Default: parallel mode, 90-min timeout for each test
+# ./test.sh --serial                               # Serial mode, 90-min timeout for each test
+# ./test.sh --crimson                              # Crimson mode, 90-min timeout for each test
+# ./test.sh --external-error-inject                # Skip all *DoesErrorInject* tests
+# ./test.sh --timeout 3600                         # Parallel mode, 60-min timeout for each test
+# ./test.sh --serial --timeout 60                  # Serial mode, 1-min timeout for each test
+# ./test.sh --crimson --timeout 0                  # Crimson mode, no timeout for each test
+# ../qa/workunits/rados/test.sh --vstart           # Run tests locally from `ceph/build` dir
 
 # First argument must be either --serial or --crimson or nothing
 parallel=1
@@ -57,6 +60,16 @@ if [ "$1" = "--serial" ]; then
 elif [ "$1" = "--crimson" ]; then
     parallel=0
     crimson=1
+    shift
+fi
+
+# After processing the mode flag, check for --external-error-inject
+external_error_inject=0
+gtest_inject_filter=""
+if [ "$1" = "--external-error-inject" ]; then
+    external_error_inject=1
+    gtest_inject_filter="--gtest_filter=-*DoesErrorInject*"
+    export CEPH_TEST_EXTERNAL_ERROR_INJECT=1
     shift
 fi
 
@@ -127,14 +140,14 @@ do
     if [ $parallel -eq 1 ]; then
         r=`printf '%25s' $f`
         ff=`echo $f | awk '{print $1}'`
-        bash -o pipefail -exc "$executable --gtest_output=xml:$GTEST_OUTPUT_DIR/$f.xml $color 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
+        bash -o pipefail -exc "$executable --gtest_output=xml:$GTEST_OUTPUT_DIR/$f.xml $color $gtest_inject_filter 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
         pid=$!
         echo "test $f on pid $pid"
 	    pids[$f]=$pid
         test_type["$f"]="rados" # Store test type for later use in parallel mode
     else
         # If running in serial mode, run the test directly
-        if ! timeout $timeout $executable; then
+        if ! timeout $timeout $executable $gtest_inject_filter; then
             echo "ERROR: Test $f timed out after $timeout seconds"
             echo "Check the logs for failures in $f"
             ret=1
@@ -152,7 +165,7 @@ do
     if [ $parallel -eq 1 ]; then
         r=`printf '%25s' $f`
         ff=`echo $f | awk '{print $1}'`
-        bash -o pipefail -exc "$executable --gtest_output=xml:$GTEST_OUTPUT_DIR/neorados_$f.xml $color 2>&1 | tee ceph_test_neorados_$ff.log | sed \"s/^/$r: /\"" &
+        bash -o pipefail -exc "$executable --gtest_output=xml:$GTEST_OUTPUT_DIR/neorados_$f.xml $color $gtest_inject_filter 2>&1 | tee ceph_test_neorados_$ff.log | sed \"s/^/$r: /\"" &
         pid=$!
         echo "test $f on pid $pid"
         pids[$f]=$pid
@@ -165,7 +178,7 @@ do
             fi
         fi
         # If running in serial mode, run the test directly
-        if ! timeout $timeout $executable; then
+        if ! timeout $timeout $executable $gtest_inject_filter; then
             echo "ERROR: Test $f timed out after $timeout seconds"
             echo "Check the logs for failures in $f"
             ret=1
@@ -183,14 +196,14 @@ do
     if [ $parallel -eq 1 ]; then
         r=$(printf '%25s' "$f")
         ff=$(echo "$f" | awk '{print $1}')
-        bash -o pipefail -exc "valgrind $executable --error-exitcode=1 --track-origins=yes --leak-check=yes --log-file=valgrind_$ff.log" &
+        bash -o pipefail -exc "valgrind $executable --error-exitcode=1 --track-origins=yes --leak-check=yes --log-file=valgrind_$ff.log $gtest_inject_filter" &
         pid=$!
         echo "valgrind test $f on pid $pid"
         pids[$f]=$pid
         test_type["$f"]="valgrind" # Store test type for later use in parallel mode
     else
         # If running in serial mode, run the test directly
-        if ! timeout "$timeout" valgrind "$executable" --track-origins=yes --error-exitcode=1 --leak-check=yes; then
+        if ! timeout "$timeout" valgrind "$executable" --track-origins=yes --error-exitcode=1 --leak-check=yes $gtest_inject_filter; then
             echo "ERROR: Test $f timed out after $timeout seconds"
             echo "Check the logs for failures in $f"
             ret=1
