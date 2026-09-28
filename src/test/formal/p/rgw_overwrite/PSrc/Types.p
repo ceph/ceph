@@ -38,6 +38,9 @@ type tCfg = (
                                // (as before 55f5b762c67)
   copyLoserDropsRefs: bool,    // a copy that loses the head race drops the references it took
   copySelfGuardsSource: bool,  // a copy onto itself writes only over the head it copied
+  copySelfRetries: bool,       // a copy onto itself that loses that guard reads the head again
+                               // and retries, and is answered an error if it keeps losing,
+                               // rather than success
   ixFailKeepsWrite: bool,      // an index completion that fails after the head write neither
                                // cancels the index op nor undoes the write; it removes the
                                // entries it replaces with a cancel without a tag
@@ -55,7 +58,27 @@ type tCfg = (
                                // 404 NoSuchKey, as S3 answers it, not 204
   historyAfterHead: bool,      // a completion sends its parts' past prefixes to GC only once
                                // its head is written, not while it checks the parts
+  markVersioned: int,          // the record in a versioned bucket: MV_SKIP() none, as PR
+                               // 72103 first did (!bucket->versioned(), true when
+                               // suspended too); MV_CURRENT() recorded, and checked against
+                               // the current version (the OLH's); MV_INSTANCE() recorded
+                               // with the version instance the completion writes, and
+                               // checked against that instance
+  // the bucket index layout: before a reshard (generation 0) and after it
+  // (generation 1). A hashed layout (BucketHashType::Mod) places an entry
+  // by the rjenkins hash of its name modulo the shards; an ordered one
+  // (PR 70053) by the lexical range of its name. Either way an index op
+  // places an entry by its object's name (the hash source): a key's
+  // versions, and its multipart meta and parts, share its shard.
+  srcShards: int,
+  srcOrdered: bool,
+  dstShards: int,
+  dstOrdered: bool,
+  reshardByIndexName: bool,    // a reshard places each entry by its full index key name
+                               // (PR 70053), not by its object's name (calc_target_shard):
+                               // a multipart entry's name is "_multipart_<obj>..."
   // environment
+  versioning: int,             // the bucket: VER_OFF(), VER_ENABLED() or VER_SUSPENDED()
   completeMayCrash: bool,      // RGW may die after a completion's head write, before it
                                // deletes the meta object; the lock then expires
   metaDeleteMayFail: bool,     // deleting the meta object may fail other than with -ECANCELED
@@ -120,8 +143,10 @@ fun S3Error(rc: tRc): tAnswer {
 // tailTag is the tag its tail is referenced by (RGW_ATTR_TAIL_TAG).
 // size is the object's size in the model's units; ver is the head
 // object's RADOS version, set by the Store.
+// meta is the request whose user metadata the head carries, tags the
+// request whose tag set it carries (0: the object's first).
 type tHead = (present: bool, tag: int, tailTag: int, manifest: set[int], writer: int, etag: int, upload: int,
-              size: int, ver: int);
+              size: int, ver: int, meta: int, tags: int);
 
 // a key's bucket index entry: listed = entry.exists; ver = (pool, epoch);
 // iver = entry.index_ver, bumped whenever an op completes on the entry
@@ -131,7 +156,8 @@ type tIx = (present: bool, listed: bool, writer: int, size: int, pool: int, epoc
 // an uploaded part as the meta object records it (RGWUploadPartInfo)
 type tPart = (prefix: int, etag: int, past: set[int]);
 
-enum tKind { R_PUT, R_DELETE, R_COPY, R_UPLOAD_PART, R_COMPLETE, R_ABORT, R_LC_ABORT, R_LIST, R_DEDUP, R_RESHARD }
+enum tKind { R_PUT, R_DELETE, R_COPY, R_UPLOAD_PART, R_COMPLETE, R_ABORT, R_LC_ABORT, R_LIST, R_DEDUP, R_RESHARD,
+             R_SET_TAGS }
 // A request's condition on the head of its key: If-Match with an ETag,
 // If-Match: *, or If-None-Match: * on a PutObject or completion; If-Match
 // with an ETag on a DeleteObject.
@@ -161,6 +187,28 @@ type tSpec = (kind: tKind, key: int, src: int, upload: int, num: int, etag: int,
 // object, its head, which also names its index entry. Multipart uploads
 // complete to key 1.
 fun MPKEY(): int { return 1; }
+// Versioning. A version instance of a key is a head slot of its own,
+// with its own bucket index entry: key k itself is its null instance,
+// and VKEY(k, rid) the instance a request writes in a version-enabled
+// bucket. The current version (the OLH's target) is the present
+// instance written last.
+fun VER_OFF(): int { return 0; }
+fun VER_ENABLED(): int { return 1; }
+fun VER_SUSPENDED(): int { return 2; }
+fun VKEY(key: int, rid: int): int { return 10000 + 100 * key + rid; }
+fun KEYOF(slot: int): int {
+  if (slot >= 10000) {
+    return (slot - 10000) / 100;
+  }
+  return slot;
+}
+// names, for placing index entries: an object key's name, and each
+// multipart entry's own index key name, which sorts before every object
+// name ("_multipart_..." < "obj1" < "obj2")
+fun MPNAME(id: int): int { return 100000 + id; }
+fun MV_SKIP(): int { return 0; }
+fun MV_CURRENT(): int { return 1; }
+fun MV_INSTANCE(): int { return 2; }
 fun OBJ(prefix: int, num: int): int { return prefix * 10 + num; }
 fun TAIL(rid: int): int { return 5000 + rid; }
 fun METAKEY(upload: int): int { return 7000 + upload; }
@@ -200,11 +248,15 @@ event eDone: (rid: int, crashed: bool);
 
 // head objects
 event eReadHead: (from: machine, key: int);
+event eReadCurrent: (from: machine, key: int);   // the key's current version, through the OLH
 event eHeadRead: tHead;
 event eHeadWrite: (from: machine, key: int, guard: bool, expectTag: int, excl: bool, head: tHead);
 event eHeadRemove: (from: machine, key: int, guard: bool, expectTag: int, rid: int);
 // dedup's head update: cmpxattr on the ETag and ref (tail) tag, then
 // setxattr of SHARE_MANIFEST and, on the target, of the manifest
+// set_attrs: cmpxattr on the ID tag read (append_atomic_test), the tag
+// set, and a new ID tag
+event eHeadSetAttrs: (from: machine, key: int, expectTag: int, tags: int, newTag: int);
 event eHeadRewrite: (from: machine, key: int, etag: int, tailTag: int, setManifest: bool, manifest: set[int]);
 event eHeadWritten: (rc: tRc, epoch: int);
 // data objects
@@ -254,9 +306,10 @@ event eListParts: (from: machine, upload: int);
 event ePartUpdate: (from: machine, upload: int, num: int, part: tPart);
 event eMetaDelete: (from: machine, gen: int, upload: int, checkVer: int, removeKeys: set[int]);
 event eMetaRc: (rc: tRc, ver: int);
-event eMetaMark: (from: machine, upload: int, mark: int);  // the completion's tag, in the meta object
+// the completion's tag, and the head slot (version instance) it writes, in the meta object
+event eMetaMark: (from: machine, upload: int, mark: int, slot: int);
 event eGetMark: (from: machine, upload: int);
-event eMark: (rc: tRc, mark: int);
+event eMark: (rc: tRc, mark: int, slot: int);
 event eParts: (rc: tRc, parts: map[int, tPart]);
 event eCrashed: int;                            // a request's RGW died
 event eFinished: int;                           // a request was answered
@@ -276,6 +329,9 @@ event mCreated: int;          // a data object created again after it was delete
 event mFinal: tFinal;
 event mStarted: int;
 event mAnswered: (rid: int, ok: bool);
+// a request's kind for AttrsKept: 1 a copy onto itself (with new metadata),
+// 2 a tagging update, 3 any other write of its key
+event mReqKind: (rid: int, key: int, kind: int);
 event mCompleted: (rid: int, etag: int, want: int);  // a completion answered success
 event mCrashed: int;
 // a conditional request starts: the key, its condition, and what its own

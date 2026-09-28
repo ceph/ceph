@@ -329,7 +329,7 @@ spec AllAnswered observes mStarted, mAnswered, mCrashed {
 spec S3Answers observes mResponse {
   start state Watch {
     on mResponse do (r: (rid: int, kind: tKind, cond: tCond, changed: bool, fault: bool, ans: tAnswer)) {
-      if (r.kind == R_LC_ABORT || r.kind == R_DEDUP || r.kind == R_RESHARD) {
+      if (r.kind == R_LC_ABORT || r.kind == R_DEDUP || r.kind == R_RESHARD || r.kind == R_SET_TAGS) {
         return;
       }
       if (r.ans.status < 300) {
@@ -477,4 +477,67 @@ fun CondName(c: tCond): string {
     return " under If-None-Match: *";
   }
   return "";
+}
+
+// A copy of an object onto itself with new metadata, and a tagging update
+// (PutObjectTagging; PutObjectAcl takes the same path), each answered
+// success, are both in the object at the end: whichever came first, the
+// other keeps it (a copy copies the tag set). Checked for a key that no
+// other request wrote, where one copy and one tagging update ran.
+spec AttrsKept observes mReqKind, mAnswered, mFinal {
+  var reqKey: map[int, int];
+  var reqKind: map[int, int];
+  var ok: set[int];
+  start state Watch {
+    on mReqKind do (r: (rid: int, key: int, kind: int)) {
+      reqKey[r.rid] = r.key;
+      reqKind[r.rid] = r.kind;
+    }
+    on mAnswered do (a: (rid: int, ok: bool)) {
+      if (a.ok) {
+        ok += (a.rid);
+      }
+    }
+    on mFinal do (f: tFinal) {
+      var k: int;
+      var r: int;
+      var copies: int;
+      var tags: int;
+      var other: bool;
+      var h: tHead;
+      foreach (k in keys(f.heads)) {
+        copies = 0;
+        tags = 0;
+        other = false;
+        foreach (r in keys(reqKey)) {
+          if (reqKey[r] == k) {
+            if (reqKind[r] == 1) {
+              copies = copies + 1;
+            } else if (reqKind[r] == 2) {
+              tags = tags + 1;
+            } else if (r in ok) {
+              other = true;
+            }
+          }
+        }
+        if (other || copies > 1 || tags > 1) {
+          continue;
+        }
+        h = f.heads[k];
+        foreach (r in keys(reqKey)) {
+          if (reqKey[r] == k && r in ok) {
+            if (reqKind[r] == 1) {
+              assert h.present && h.meta == r,
+                format("request {0}, a copy of key {1} onto itself, was answered success, but the object carries request {2}'s metadata",
+                       r, k, h.meta);
+            } else if (reqKind[r] == 2) {
+              assert h.present && h.tags == r,
+                format("request {0}, a tagging update of key {1}, was answered success, but the object carries request {2}'s tag set",
+                       r, k, h.tags);
+            }
+          }
+        }
+      }
+    }
+  }
 }

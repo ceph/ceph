@@ -19,6 +19,10 @@
  * A request reads the bucket's index layout when it starts. An index op
  * answered -ERR_BUSY_RESHARDING waits for the reshard to commit and is
  * retried on the new layout (UpdateIndex::guard_reshard).
+ * In a versioned bucket, PutObject and a completion write the key's
+ * version instance (Slot): a new one if versioning is enabled, the null
+ * instance if it is suspended. A DeleteObject in a versioned scenario
+ * names the instance it deletes (DeleteObject with a version id).
  * A request's tag, and the writer recorded in what it writes, is its rid.
  * write_meta's outcome is WRITTEN, LOST (a lost race, answered as
  * success), FAILED (the head was written but the index completion
@@ -44,6 +48,9 @@ machine Rgw {
   var fault: bool;
   // what write_meta returned
   var wmRc: tRc;
+  // the user metadata and tag set the head this request writes carries
+  var wMeta: int;
+  var wTags: int;
 
   start state Serve {
     entry (p: (cfg: tCfg, store: machine, driver: machine, rid: int, req: tSpec)) {
@@ -54,6 +61,16 @@ machine Rgw {
       kind = p.req.kind;
       cond = p.req.cond;
       announce mStarted, rid;
+      wMeta = rid;
+      wTags = 0;
+      if (p.req.kind == R_COPY && p.req.src == p.req.key) {
+        announce mReqKind, (rid = rid, key = p.req.key, kind = 1);
+      } else if (p.req.kind == R_SET_TAGS) {
+        announce mReqKind, (rid = rid, key = p.req.key, kind = 2);
+      } else if (p.req.kind == R_PUT || p.req.kind == R_DELETE || p.req.kind == R_COMPLETE ||
+                 p.req.kind == R_COPY || p.req.kind == R_DEDUP) {
+        announce mReqKind, (rid = rid, key = p.req.key, kind = 3);
+      }
       if (p.req.cond.kind != C_NONE) {
         announce mRequest, (rid = rid, key = p.req.key, cond = p.req.cond, del = p.req.kind == R_DELETE,
                             etag = OwnEtag(p.req));
@@ -77,6 +94,8 @@ machine Rgw {
         Dedup(p.req.src, p.req.key);
       } else if (p.req.kind == R_RESHARD) {
         Reshard();
+      } else if (p.req.kind == R_SET_TAGS) {
+        SetTags(p.req.key);
       } else {
         Abort(p.req.upload, cfg.lcTakesLock);
       }
@@ -101,7 +120,7 @@ machine Rgw {
     var w: int;
     tail += (TAIL(rid));
     WriteData(tail);
-    w = WriteMeta(key, tail, rid, 0, default(set[int]), rid, false, 1, cond);
+    w = WriteMeta(Slot(key), tail, rid, 0, default(set[int]), rid, false, 1, cond);
     if (w != WRITTEN()) {
       // lost a race, refused or failed: ~RadosWriter removes the tail it
       // wrote
@@ -178,12 +197,35 @@ machine Rgw {
       Respond(ENOENT);
       return;
     }
+    // the copy's attributes: the source's metadata and tag set
+    // (x-amz-metadata-directive and x-amz-tagging-directive COPY); a copy
+    // onto itself must replace the metadata, and takes new metadata
+    wMeta = s.meta;
+    wTags = s.tags;
     if (src == dst) {
+      wMeta = rid;
       // copy_itself: the manifest read above, keep_tail, the tail tag
       // kept. The write reads the head afresh (the destination has its own
       // RGWObjectCtx), so it guards on whatever head is there by then.
       if (cfg.copySelfGuardsSource) {
         canceled = WriteHeadOver(dst, s, s.manifest, s.etag, s.upload, s.tailTag, s.size);
+        g = 1;
+        while (canceled && cfg.copySelfRetries && g < 3) {
+          // proposed: the head changed since it was read, by a write or an
+          // attribute update (tagging, ACL): copy the head as it is now
+          s = ReadHead(src);
+          if (!s.present) {
+            Respond(ENOENT);
+            return;
+          }
+          wTags = s.tags;
+          canceled = WriteHeadOver(dst, s, s.manifest, s.etag, s.upload, s.tailTag, s.size);
+          g = g + 1;
+        }
+        if (canceled && cfg.copySelfRetries) {
+          Respond(ERR_INTERNAL_ERROR);
+          return;
+        }
         Respond(OK);
       } else {
         w = WriteMeta(dst, s.manifest, s.etag, s.upload, default(set[int]), s.tailTag, true, s.size,
@@ -231,7 +273,7 @@ machine Rgw {
     var a: tAns;
     var w: int;
     nh = (present = true, tag = rid, tailTag = tailTag, manifest = manifest, writer = rid, etag = etag,
-          upload = upload, size = size, ver = 0);
+          upload = upload, size = size, ver = 0, meta = wMeta, tags = wTags);
     // first without reading the head, as an exclusive create; on
     // -EEXIST, read it and replace it. A conditional write reads the head
     // at once, and writes once.
@@ -389,6 +431,31 @@ machine Rgw {
     foreach (o in t.manifest) {
       rc = RefPut(o, t.tailTag);
     }
+    Respond(OK);
+  }
+
+  // PutObjectTagging (RGWPutObjTags, set_attrs): the head read, the index
+  // op prepared, the tag set written under cmpxattr on the ID tag read with
+  // a new ID tag, and the index op completed from the head read
+  fun SetTags(key: int) {
+    var st: tHead;
+    var r: (rc: tRc, epoch: int);
+    st = ReadHead(key);
+    if (!st.present) {
+      Respond(ENOENT);
+      return;
+    }
+    IndexPrepare(key);
+    send store, eHeadSetAttrs, (from = this, key = key, expectTag = st.tag, tags = rid, newTag = rid);
+    receive {
+      case eHeadWritten: (x: (rc: tRc, epoch: int)) { r = x; }
+    }
+    if (r.rc != OK) {
+      IndexComplete(key, IX_CANCEL, -1, 0, 0, default(set[int]));
+      Respond(r.rc);
+      return;
+    }
+    IndexCompleteAs(key, IX_ADD, 1, r.epoch, st.writer, st.size, default(set[int]), rid);
     Respond(OK);
   }
 
@@ -589,7 +656,7 @@ machine Rgw {
     var nh: tHead;
     var r: (rc: tRc, epoch: int);
     nh = (present = true, tag = rid, tailTag = tailTag, manifest = manifest, writer = rid, etag = etag,
-          upload = upload, size = size, ver = 0);
+          upload = upload, size = size, ver = 0, meta = wMeta, tags = wTags);
     IndexPrepare(key);
     r = HeadWrite(key, true, st.tag, false, nh);
     if (r.rc != OK) {
@@ -652,14 +719,17 @@ machine Rgw {
     var i: int;
     var rc: tRc;
     var k: int;
-    var mk: (rc: tRc, mark: int);
+    var mk: (rc: tRc, mark: int, slot: int);
     var hchain: set[int];
+    var slot: int;
 
+    // the version instance this completion writes (gen_rand_obj_instance_name)
+    slot = Slot(MPKEY());
     // the lock keeps racing completions and aborts off the parts
     m = TryLock(u);
     if (m.rc == ENOENT) {
       // check_previously_completed: the head's ETag against the list's
-      h = ReadHead(MPKEY());
+      h = ReadCurrent(MPKEY());
       if (h.present && h.etag == MPETAG(list)) {
         if (cfg.replayAnswersEtag) {
           announce mCompleted, (rid = rid, etag = h.etag, want = MPETAG(list));
@@ -688,7 +758,7 @@ machine Rgw {
       Finish(u, ERR_INTERNAL_ERROR);  // lock renewal failed
       return;
     }
-    if (cfg.completionMark) {
+    if (Records()) {
       mk = GetMark(u);
       if (mk.rc != OK) {
         Finish(u, NoUpload(mk.rc));
@@ -699,7 +769,7 @@ machine Rgw {
         // it, that completion took effect: only its meta object is left.
         // Otherwise its head was never written, or was replaced, and
         // either way the parts cannot be trusted
-        h = ReadHead(MPKEY());
+        h = MarkedHead(mk.slot);
         if (!(h.present && h.tag == mk.mark)) {
           Finish(u, ERR_NO_SUCH_UPLOAD);
           return;
@@ -762,9 +832,10 @@ machine Rgw {
       }
       num = num + 1;
     }
-    if (cfg.completionMark) {
-      // record this completion's tag, the ID tag its head will carry
-      rc = MetaMark(u, rid);
+    if (Records()) {
+      // record this completion's tag, the ID tag its head will carry, and
+      // the instance it writes
+      rc = MetaMark(u, rid, slot);
       if (rc != OK) {
         Finish(u, NoUpload(rc));
         return;
@@ -774,14 +845,14 @@ machine Rgw {
         return;
       }
     }
-    w = WriteMeta(MPKEY(), manifest, MPETAG(list), u, removeKeys, rid, false, sizeof(manifest), cond);
+    w = WriteMeta(slot, manifest, MPETAG(list), u, removeKeys, rid, false, sizeof(manifest), cond);
     if (w != WRITTEN() && w != LOST()) {
       // RadosMultipartUpload::complete returns the error: the meta
       // object stays, and complete() releases the lock. A write refused
       // before it reached the head clears its record, so that a retry can
       // still complete the upload
-      if (cfg.completionMark && w != FAILED()) {
-        MetaMark(u, 0);
+      if (Records() && w != FAILED()) {
+        MetaMark(u, 0, 0);
       }
       Unlock(u);
       Respond(wmRc);
@@ -880,7 +951,7 @@ machine Rgw {
     var i: int;
     var rc: tRc;
     var k: int;
-    var mk: (rc: tRc, mark: int);
+    var mk: (rc: tRc, mark: int, slot: int);
     if (takeLock) {
       m = TryLock(u);
       if (m.rc != OK) {
@@ -902,10 +973,10 @@ machine Rgw {
         rc = lp.rc;
         break;
       }
-      if (cfg.completionMark) {
+      if (Records()) {
         mk = GetMark(u);
         if (mk.rc == OK && mk.mark != 0) {
-          h = ReadHead(MPKEY());
+          h = MarkedHead(mk.slot);
           if (h.present && h.tag == mk.mark) {
             // the upload was completed: its parts are the head's
             foreach (num in keys(lp.parts)) {
@@ -952,6 +1023,29 @@ machine Rgw {
       Unlock(u);
     }
     Respond(NoUpload(rc));
+  }
+
+  // the head slot a write of key goes to: a new version instance if
+  // versioning is enabled, else the key's null instance
+  fun Slot(key: int): int {
+    if (cfg.versioning == VER_ENABLED()) {
+      return VKEY(key, rid);
+    }
+    return key;
+  }
+
+  // a completion records its tag: MV_SKIP() does so only in a bucket
+  // that was never versioned
+  fun Records(): bool {
+    return cfg.completionMark && (cfg.versioning == VER_OFF() || cfg.markVersioned != MV_SKIP());
+  }
+
+  // the head a record is checked against
+  fun MarkedHead(slot: int): tHead {
+    if (cfg.markVersioned == MV_INSTANCE()) {
+      return ReadHead(slot);
+    }
+    return ReadCurrent(MPKEY());
   }
 
   fun VerCheck(ver: int): int {
@@ -1014,6 +1108,15 @@ machine Rgw {
   fun ReadHead(key: int): tHead {
     var h: tHead;
     send store, eReadHead, (from = this, key = key);
+    receive {
+      case eHeadRead: (x: tHead) { h = x; }
+    }
+    return h;
+  }
+
+  fun ReadCurrent(key: int): tHead {
+    var h: tHead;
+    send store, eReadCurrent, (from = this, key = key);
     receive {
       case eHeadRead: (x: tHead) { h = x; }
     }
@@ -1257,20 +1360,20 @@ machine Rgw {
     return r;
   }
 
-  fun MetaMark(u: int, mark: int): tRc {
+  fun MetaMark(u: int, mark: int, slot: int): tRc {
     var r: tRc;
-    send store, eMetaMark, (from = this, upload = u, mark = mark);
+    send store, eMetaMark, (from = this, upload = u, mark = mark, slot = slot);
     receive {
       case eMetaRc: (x: (rc: tRc, ver: int)) { r = x.rc; }
     }
     return r;
   }
 
-  fun GetMark(u: int): (rc: tRc, mark: int) {
-    var r: (rc: tRc, mark: int);
+  fun GetMark(u: int): (rc: tRc, mark: int, slot: int) {
+    var r: (rc: tRc, mark: int, slot: int);
     send store, eGetMark, (from = this, upload = u);
     receive {
-      case eMark: (x: (rc: tRc, mark: int)) { r = x; }
+      case eMark: (x: (rc: tRc, mark: int, slot: int)) { r = x; }
     }
     return r;
   }

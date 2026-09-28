@@ -603,3 +603,435 @@ test tcAnsFixedMarkCrashThenAbort [main=TestAnsFixedMarkCrashThenAbort]:
   assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedMarkCrashThenAbort });
 test tcAnsFixedMarkCrashInvalidThenReupload [main=TestAnsFixedMarkCrashInvalidThenReupload]:
   assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats, CondSemantics, S3Answers in (union System, { TestAnsFixedMarkCrashInvalidThenReupload });
+
+// versioned buckets
+test tcVEPuts [main=TestVEPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPuts });
+test tcVEDelVsPut [main=TestVEDelVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEDelVsPut });
+test tcVERetry [main=TestVERetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVERetry });
+test tcVEDelAfterRetry [main=TestVEDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEDelAfterRetry });
+test tcVEPutThenAbort [main=TestVEPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPutThenAbort });
+test tcVSPuts [main=TestVSPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPuts });
+test tcVSDelVsPut [main=TestVSDelVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSDelVsPut });
+test tcVSRetry [main=TestVSRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSRetry });
+test tcVSDelAfterRetry [main=TestVSDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSDelAfterRetry });
+test tcVSPutThenAbort [main=TestVSPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPutThenAbort });
+test tcMarkCrashDelAfterRetry [main=TestMarkCrashDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestMarkCrashDelAfterRetry });
+test tcMarkCrashPutThenAbort [main=TestMarkCrashPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestMarkCrashPutThenAbort });
+test tcMarkMetaDelDelAfterRetry [main=TestMarkMetaDelDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestMarkMetaDelDelAfterRetry });
+test tcMarkMetaDelPutThenAbort [main=TestMarkMetaDelPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestMarkMetaDelPutThenAbort });
+test tcVEPrCrashRetry [main=TestVEPrCrashRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrCrashRetry });
+test tcVEPrCrashThenAbort [main=TestVEPrCrashThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrCrashThenAbort });
+test tcVEPrCrashPutThenRetry [main=TestVEPrCrashPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrCrashPutThenRetry });
+test tcVEPrCrashSameCompletes [main=TestVEPrCrashSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrCrashSameCompletes });
+test tcVEPrCrashAbort [main=TestVEPrCrashAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrCrashAbort });
+test tcVEPrCrashLcAbort [main=TestVEPrCrashLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrCrashLcAbort });
+test tcVEPrCrashDelAfterRetry [main=TestVEPrCrashDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrCrashDelAfterRetry });
+test tcVEPrCrashPutThenAbort [main=TestVEPrCrashPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrCrashPutThenAbort });
+test tcVEPrMetaDelRetry [main=TestVEPrMetaDelRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrMetaDelRetry });
+test tcVEPrMetaDelThenAbort [main=TestVEPrMetaDelThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrMetaDelThenAbort });
+test tcVEPrMetaDelPutThenRetry [main=TestVEPrMetaDelPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrMetaDelPutThenRetry });
+test tcVEPrMetaDelSameCompletes [main=TestVEPrMetaDelSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrMetaDelSameCompletes });
+test tcVEPrMetaDelAbort [main=TestVEPrMetaDelAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrMetaDelAbort });
+test tcVEPrMetaDelLcAbort [main=TestVEPrMetaDelLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrMetaDelLcAbort });
+test tcVEPrMetaDelDelAfterRetry [main=TestVEPrMetaDelDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrMetaDelDelAfterRetry });
+test tcVEPrMetaDelPutThenAbort [main=TestVEPrMetaDelPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEPrMetaDelPutThenAbort });
+test tcVECurCrashRetry [main=TestVECurCrashRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurCrashRetry });
+test tcVECurCrashThenAbort [main=TestVECurCrashThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurCrashThenAbort });
+test tcVECurCrashPutThenRetry [main=TestVECurCrashPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurCrashPutThenRetry });
+test tcVECurCrashSameCompletes [main=TestVECurCrashSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurCrashSameCompletes });
+test tcVECurCrashAbort [main=TestVECurCrashAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurCrashAbort });
+test tcVECurCrashLcAbort [main=TestVECurCrashLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurCrashLcAbort });
+test tcVECurCrashDelAfterRetry [main=TestVECurCrashDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurCrashDelAfterRetry });
+test tcVECurCrashPutThenAbort [main=TestVECurCrashPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurCrashPutThenAbort });
+test tcVECurMetaDelRetry [main=TestVECurMetaDelRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurMetaDelRetry });
+test tcVECurMetaDelThenAbort [main=TestVECurMetaDelThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurMetaDelThenAbort });
+test tcVECurMetaDelPutThenRetry [main=TestVECurMetaDelPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurMetaDelPutThenRetry });
+test tcVECurMetaDelSameCompletes [main=TestVECurMetaDelSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurMetaDelSameCompletes });
+test tcVECurMetaDelAbort [main=TestVECurMetaDelAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurMetaDelAbort });
+test tcVECurMetaDelLcAbort [main=TestVECurMetaDelLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurMetaDelLcAbort });
+test tcVECurMetaDelDelAfterRetry [main=TestVECurMetaDelDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurMetaDelDelAfterRetry });
+test tcVECurMetaDelPutThenAbort [main=TestVECurMetaDelPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVECurMetaDelPutThenAbort });
+test tcVEInstCrashRetry [main=TestVEInstCrashRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstCrashRetry });
+test tcVEInstCrashThenAbort [main=TestVEInstCrashThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstCrashThenAbort });
+test tcVEInstCrashPutThenRetry [main=TestVEInstCrashPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstCrashPutThenRetry });
+test tcVEInstCrashSameCompletes [main=TestVEInstCrashSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstCrashSameCompletes });
+test tcVEInstCrashAbort [main=TestVEInstCrashAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstCrashAbort });
+test tcVEInstCrashLcAbort [main=TestVEInstCrashLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstCrashLcAbort });
+test tcVEInstCrashDelAfterRetry [main=TestVEInstCrashDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstCrashDelAfterRetry });
+test tcVEInstCrashPutThenAbort [main=TestVEInstCrashPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstCrashPutThenAbort });
+test tcVEInstMetaDelRetry [main=TestVEInstMetaDelRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstMetaDelRetry });
+test tcVEInstMetaDelThenAbort [main=TestVEInstMetaDelThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstMetaDelThenAbort });
+test tcVEInstMetaDelPutThenRetry [main=TestVEInstMetaDelPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstMetaDelPutThenRetry });
+test tcVEInstMetaDelSameCompletes [main=TestVEInstMetaDelSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstMetaDelSameCompletes });
+test tcVEInstMetaDelAbort [main=TestVEInstMetaDelAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstMetaDelAbort });
+test tcVEInstMetaDelLcAbort [main=TestVEInstMetaDelLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstMetaDelLcAbort });
+test tcVEInstMetaDelDelAfterRetry [main=TestVEInstMetaDelDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstMetaDelDelAfterRetry });
+test tcVEInstMetaDelPutThenAbort [main=TestVEInstMetaDelPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVEInstMetaDelPutThenAbort });
+test tcVSPrCrashRetry [main=TestVSPrCrashRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrCrashRetry });
+test tcVSPrCrashThenAbort [main=TestVSPrCrashThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrCrashThenAbort });
+test tcVSPrCrashPutThenRetry [main=TestVSPrCrashPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrCrashPutThenRetry });
+test tcVSPrCrashSameCompletes [main=TestVSPrCrashSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrCrashSameCompletes });
+test tcVSPrCrashAbort [main=TestVSPrCrashAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrCrashAbort });
+test tcVSPrCrashLcAbort [main=TestVSPrCrashLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrCrashLcAbort });
+test tcVSPrCrashDelAfterRetry [main=TestVSPrCrashDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrCrashDelAfterRetry });
+test tcVSPrCrashPutThenAbort [main=TestVSPrCrashPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrCrashPutThenAbort });
+test tcVSPrMetaDelRetry [main=TestVSPrMetaDelRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrMetaDelRetry });
+test tcVSPrMetaDelThenAbort [main=TestVSPrMetaDelThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrMetaDelThenAbort });
+test tcVSPrMetaDelPutThenRetry [main=TestVSPrMetaDelPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrMetaDelPutThenRetry });
+test tcVSPrMetaDelSameCompletes [main=TestVSPrMetaDelSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrMetaDelSameCompletes });
+test tcVSPrMetaDelAbort [main=TestVSPrMetaDelAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrMetaDelAbort });
+test tcVSPrMetaDelLcAbort [main=TestVSPrMetaDelLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrMetaDelLcAbort });
+test tcVSPrMetaDelDelAfterRetry [main=TestVSPrMetaDelDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrMetaDelDelAfterRetry });
+test tcVSPrMetaDelPutThenAbort [main=TestVSPrMetaDelPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSPrMetaDelPutThenAbort });
+test tcVSCurCrashRetry [main=TestVSCurCrashRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurCrashRetry });
+test tcVSCurCrashThenAbort [main=TestVSCurCrashThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurCrashThenAbort });
+test tcVSCurCrashPutThenRetry [main=TestVSCurCrashPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurCrashPutThenRetry });
+test tcVSCurCrashSameCompletes [main=TestVSCurCrashSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurCrashSameCompletes });
+test tcVSCurCrashAbort [main=TestVSCurCrashAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurCrashAbort });
+test tcVSCurCrashLcAbort [main=TestVSCurCrashLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurCrashLcAbort });
+test tcVSCurCrashDelAfterRetry [main=TestVSCurCrashDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurCrashDelAfterRetry });
+test tcVSCurCrashPutThenAbort [main=TestVSCurCrashPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurCrashPutThenAbort });
+test tcVSCurMetaDelRetry [main=TestVSCurMetaDelRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurMetaDelRetry });
+test tcVSCurMetaDelThenAbort [main=TestVSCurMetaDelThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurMetaDelThenAbort });
+test tcVSCurMetaDelPutThenRetry [main=TestVSCurMetaDelPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurMetaDelPutThenRetry });
+test tcVSCurMetaDelSameCompletes [main=TestVSCurMetaDelSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurMetaDelSameCompletes });
+test tcVSCurMetaDelAbort [main=TestVSCurMetaDelAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurMetaDelAbort });
+test tcVSCurMetaDelLcAbort [main=TestVSCurMetaDelLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurMetaDelLcAbort });
+test tcVSCurMetaDelDelAfterRetry [main=TestVSCurMetaDelDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurMetaDelDelAfterRetry });
+test tcVSCurMetaDelPutThenAbort [main=TestVSCurMetaDelPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSCurMetaDelPutThenAbort });
+test tcVSInstCrashRetry [main=TestVSInstCrashRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstCrashRetry });
+test tcVSInstCrashThenAbort [main=TestVSInstCrashThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstCrashThenAbort });
+test tcVSInstCrashPutThenRetry [main=TestVSInstCrashPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstCrashPutThenRetry });
+test tcVSInstCrashSameCompletes [main=TestVSInstCrashSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstCrashSameCompletes });
+test tcVSInstCrashAbort [main=TestVSInstCrashAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstCrashAbort });
+test tcVSInstCrashLcAbort [main=TestVSInstCrashLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstCrashLcAbort });
+test tcVSInstCrashDelAfterRetry [main=TestVSInstCrashDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstCrashDelAfterRetry });
+test tcVSInstCrashPutThenAbort [main=TestVSInstCrashPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstCrashPutThenAbort });
+test tcVSInstMetaDelRetry [main=TestVSInstMetaDelRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstMetaDelRetry });
+test tcVSInstMetaDelThenAbort [main=TestVSInstMetaDelThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstMetaDelThenAbort });
+test tcVSInstMetaDelPutThenRetry [main=TestVSInstMetaDelPutThenRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstMetaDelPutThenRetry });
+test tcVSInstMetaDelSameCompletes [main=TestVSInstMetaDelSameCompletes]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstMetaDelSameCompletes });
+test tcVSInstMetaDelAbort [main=TestVSInstMetaDelAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstMetaDelAbort });
+test tcVSInstMetaDelLcAbort [main=TestVSInstMetaDelLcAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstMetaDelLcAbort });
+test tcVSInstMetaDelDelAfterRetry [main=TestVSInstMetaDelDelAfterRetry]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstMetaDelDelAfterRetry });
+test tcVSInstMetaDelPutThenAbort [main=TestVSInstMetaDelPutThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestVSInstMetaDelPutThenAbort });
+
+// sharding
+test tcShH1H2ObjVsPuts [main=TestShH1H2ObjVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjVsPuts });
+test tcShH1H2ObjVsDel [main=TestShH1H2ObjVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjVsDel });
+test tcShH1H2ObjVsMpu [main=TestShH1H2ObjVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjVsMpu });
+test tcShH1H2ObjThenComplete [main=TestShH1H2ObjThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjThenComplete });
+test tcShH1H2ObjThenAbort [main=TestShH1H2ObjThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjThenAbort });
+test tcShH1H2ObjVEVsPuts [main=TestShH1H2ObjVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjVEVsPuts });
+test tcShH1H2ObjVEThenComplete [main=TestShH1H2ObjVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjVEThenComplete });
+test tcShH1H2ObjVSVsPuts [main=TestShH1H2ObjVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjVSVsPuts });
+test tcShH1H2ObjVSThenComplete [main=TestShH1H2ObjVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjVSThenComplete });
+test tcShH1H2IdxVsPuts [main=TestShH1H2IdxVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2IdxVsPuts });
+test tcShH1H2IdxVsDel [main=TestShH1H2IdxVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2IdxVsDel });
+test tcShH1H2IdxVsMpu [main=TestShH1H2IdxVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2IdxVsMpu });
+test tcShH1H2IdxThenComplete [main=TestShH1H2IdxThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2IdxThenComplete });
+test tcShH1H2IdxThenAbort [main=TestShH1H2IdxThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2IdxThenAbort });
+test tcShH1H2IdxVEVsPuts [main=TestShH1H2IdxVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2IdxVEVsPuts });
+test tcShH1H2IdxVEThenComplete [main=TestShH1H2IdxVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2IdxVEThenComplete });
+test tcShH1H2IdxVSVsPuts [main=TestShH1H2IdxVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2IdxVSVsPuts });
+test tcShH1H2IdxVSThenComplete [main=TestShH1H2IdxVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2IdxVSThenComplete });
+test tcShH2H2ObjVsPuts [main=TestShH2H2ObjVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2ObjVsPuts });
+test tcShH2H2ObjVsDel [main=TestShH2H2ObjVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2ObjVsDel });
+test tcShH2H2ObjVsMpu [main=TestShH2H2ObjVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2ObjVsMpu });
+test tcShH2H2ObjThenComplete [main=TestShH2H2ObjThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2ObjThenComplete });
+test tcShH2H2ObjThenAbort [main=TestShH2H2ObjThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2ObjThenAbort });
+test tcShH2H2ObjVEVsPuts [main=TestShH2H2ObjVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2ObjVEVsPuts });
+test tcShH2H2ObjVEThenComplete [main=TestShH2H2ObjVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2ObjVEThenComplete });
+test tcShH2H2ObjVSVsPuts [main=TestShH2H2ObjVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2ObjVSVsPuts });
+test tcShH2H2ObjVSThenComplete [main=TestShH2H2ObjVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2ObjVSThenComplete });
+test tcShH2H2IdxVsPuts [main=TestShH2H2IdxVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2IdxVsPuts });
+test tcShH2H2IdxVsDel [main=TestShH2H2IdxVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2IdxVsDel });
+test tcShH2H2IdxVsMpu [main=TestShH2H2IdxVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2IdxVsMpu });
+test tcShH2H2IdxThenComplete [main=TestShH2H2IdxThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2IdxThenComplete });
+test tcShH2H2IdxThenAbort [main=TestShH2H2IdxThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2IdxThenAbort });
+test tcShH2H2IdxVEVsPuts [main=TestShH2H2IdxVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2IdxVEVsPuts });
+test tcShH2H2IdxVEThenComplete [main=TestShH2H2IdxVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2IdxVEThenComplete });
+test tcShH2H2IdxVSVsPuts [main=TestShH2H2IdxVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2IdxVSVsPuts });
+test tcShH2H2IdxVSThenComplete [main=TestShH2H2IdxVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2H2IdxVSThenComplete });
+test tcShH2O2ObjVsPuts [main=TestShH2O2ObjVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2ObjVsPuts });
+test tcShH2O2ObjVsDel [main=TestShH2O2ObjVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2ObjVsDel });
+test tcShH2O2ObjVsMpu [main=TestShH2O2ObjVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2ObjVsMpu });
+test tcShH2O2ObjThenComplete [main=TestShH2O2ObjThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2ObjThenComplete });
+test tcShH2O2ObjThenAbort [main=TestShH2O2ObjThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2ObjThenAbort });
+test tcShH2O2ObjVEVsPuts [main=TestShH2O2ObjVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2ObjVEVsPuts });
+test tcShH2O2ObjVEThenComplete [main=TestShH2O2ObjVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2ObjVEThenComplete });
+test tcShH2O2ObjVSVsPuts [main=TestShH2O2ObjVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2ObjVSVsPuts });
+test tcShH2O2ObjVSThenComplete [main=TestShH2O2ObjVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2ObjVSThenComplete });
+test tcShH2O2IdxVsPuts [main=TestShH2O2IdxVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2IdxVsPuts });
+test tcShH2O2IdxVsDel [main=TestShH2O2IdxVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2IdxVsDel });
+test tcShH2O2IdxVsMpu [main=TestShH2O2IdxVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2IdxVsMpu });
+test tcShH2O2IdxThenComplete [main=TestShH2O2IdxThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2IdxThenComplete });
+test tcShH2O2IdxThenAbort [main=TestShH2O2IdxThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2IdxThenAbort });
+test tcShH2O2IdxVEVsPuts [main=TestShH2O2IdxVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2IdxVEVsPuts });
+test tcShH2O2IdxVEThenComplete [main=TestShH2O2IdxVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2IdxVEThenComplete });
+test tcShH2O2IdxVSVsPuts [main=TestShH2O2IdxVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2IdxVSVsPuts });
+test tcShH2O2IdxVSThenComplete [main=TestShH2O2IdxVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH2O2IdxVSThenComplete });
+test tcShO2H2ObjVsPuts [main=TestShO2H2ObjVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2ObjVsPuts });
+test tcShO2H2ObjVsDel [main=TestShO2H2ObjVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2ObjVsDel });
+test tcShO2H2ObjVsMpu [main=TestShO2H2ObjVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2ObjVsMpu });
+test tcShO2H2ObjThenComplete [main=TestShO2H2ObjThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2ObjThenComplete });
+test tcShO2H2ObjThenAbort [main=TestShO2H2ObjThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2ObjThenAbort });
+test tcShO2H2ObjVEVsPuts [main=TestShO2H2ObjVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2ObjVEVsPuts });
+test tcShO2H2ObjVEThenComplete [main=TestShO2H2ObjVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2ObjVEThenComplete });
+test tcShO2H2ObjVSVsPuts [main=TestShO2H2ObjVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2ObjVSVsPuts });
+test tcShO2H2ObjVSThenComplete [main=TestShO2H2ObjVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2ObjVSThenComplete });
+test tcShO2H2IdxVsPuts [main=TestShO2H2IdxVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2IdxVsPuts });
+test tcShO2H2IdxVsDel [main=TestShO2H2IdxVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2IdxVsDel });
+test tcShO2H2IdxVsMpu [main=TestShO2H2IdxVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2IdxVsMpu });
+test tcShO2H2IdxThenComplete [main=TestShO2H2IdxThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2IdxThenComplete });
+test tcShO2H2IdxThenAbort [main=TestShO2H2IdxThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2IdxThenAbort });
+test tcShO2H2IdxVEVsPuts [main=TestShO2H2IdxVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2IdxVEVsPuts });
+test tcShO2H2IdxVEThenComplete [main=TestShO2H2IdxVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2IdxVEThenComplete });
+test tcShO2H2IdxVSVsPuts [main=TestShO2H2IdxVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2IdxVSVsPuts });
+test tcShO2H2IdxVSThenComplete [main=TestShO2H2IdxVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShO2H2IdxVSThenComplete });
+test tcShH1O2ObjVsPuts [main=TestShH1O2ObjVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2ObjVsPuts });
+test tcShH1O2ObjVsDel [main=TestShH1O2ObjVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2ObjVsDel });
+test tcShH1O2ObjVsMpu [main=TestShH1O2ObjVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2ObjVsMpu });
+test tcShH1O2ObjThenComplete [main=TestShH1O2ObjThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2ObjThenComplete });
+test tcShH1O2ObjThenAbort [main=TestShH1O2ObjThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2ObjThenAbort });
+test tcShH1O2ObjVEVsPuts [main=TestShH1O2ObjVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2ObjVEVsPuts });
+test tcShH1O2ObjVEThenComplete [main=TestShH1O2ObjVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2ObjVEThenComplete });
+test tcShH1O2ObjVSVsPuts [main=TestShH1O2ObjVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2ObjVSVsPuts });
+test tcShH1O2ObjVSThenComplete [main=TestShH1O2ObjVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2ObjVSThenComplete });
+test tcShH1O2IdxVsPuts [main=TestShH1O2IdxVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2IdxVsPuts });
+test tcShH1O2IdxVsDel [main=TestShH1O2IdxVsDel]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2IdxVsDel });
+test tcShH1O2IdxVsMpu [main=TestShH1O2IdxVsMpu]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2IdxVsMpu });
+test tcShH1O2IdxThenComplete [main=TestShH1O2IdxThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2IdxThenComplete });
+test tcShH1O2IdxThenAbort [main=TestShH1O2IdxThenAbort]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2IdxThenAbort });
+test tcShH1O2IdxVEVsPuts [main=TestShH1O2IdxVEVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2IdxVEVsPuts });
+test tcShH1O2IdxVEThenComplete [main=TestShH1O2IdxVEThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2IdxVEThenComplete });
+test tcShH1O2IdxVSVsPuts [main=TestShH1O2IdxVSVsPuts]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2IdxVSVsPuts });
+test tcShH1O2IdxVSThenComplete [main=TestShH1O2IdxVSThenComplete]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1O2IdxVSThenComplete });
+test tcShGuardH1H2ObjVsDel [main=TestShH1H2ObjVsDelGuard]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, CompletionEtag, AllAnswered, BucketStats in (union System, { TestShH1H2ObjVsDelGuard });
+
+// attribute updates
+test tcAttrMainVsTag [main=TestAttrMainVsTag]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrMainVsTag });
+test tcAttrMainTagVsPut [main=TestAttrMainTagVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrMainTagVsPut });
+test tcAttrMainTagThenCopy [main=TestAttrMainTagThenCopy]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrMainTagThenCopy });
+test tcAttrMainVsPut [main=TestAttrMainVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrMainVsPut });
+test tcAttrGuardVsTag [main=TestAttrGuardVsTag]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrGuardVsTag });
+test tcAttrGuardTagVsPut [main=TestAttrGuardTagVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrGuardTagVsPut });
+test tcAttrGuardTagThenCopy [main=TestAttrGuardTagThenCopy]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrGuardTagThenCopy });
+test tcAttrGuardVsPut [main=TestAttrGuardVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrGuardVsPut });
+test tcAttrRetryVsTag [main=TestAttrRetryVsTag]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrRetryVsTag });
+test tcAttrRetryTagVsPut [main=TestAttrRetryTagVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrRetryTagVsPut });
+test tcAttrRetryTagThenCopy [main=TestAttrRetryTagThenCopy]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrRetryTagThenCopy });
+test tcAttrRetryVsPut [main=TestAttrRetryVsPut]:
+  assert HeadIntact, NoOrphans, IndexMatchesHead, AttrsKept, AllAnswered, BucketStats in (union System, { TestAttrRetryVsPut });

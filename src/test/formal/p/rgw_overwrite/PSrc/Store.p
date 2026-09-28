@@ -41,6 +41,9 @@ machine Store {
   var epoch: int;
   var ixs: map[int, tIx];
   var mpIndex: set[int];
+  var mpShard: map[int, int];   // the shard each multipart-namespace entry is on
+  var hashBit: map[int, int];   // a name's hash, modulo two shards
+  var split: map[int, int];     // an ordered generation's split: the first name rank of shard 1
   var live: set[int];
   var gone: set[int];
   var refs: map[int, set[int]];
@@ -50,6 +53,7 @@ machine Store {
   var metas: set[int];
   var metaVer: map[int, int];
   var metaMark: map[int, int];
+  var metaMarkSlot: map[int, int];
   var parts: map[int, map[int, tPart]];
   var lockOwner: map[int, int];
   var dead: set[int];
@@ -65,6 +69,7 @@ machine Store {
   var rlog: set[int];
   var tix: map[int, tIx];
   var tmp: set[int];
+  var tmpShard: map[int, int];
   var tCount: int;
   var tSize: int;
   var waiters: seq[machine];
@@ -87,7 +92,8 @@ machine Store {
       foreach (k in p.objects) {
         epoch = epoch + 1;
         h = (present = true, tag = OLDWRITER(k), tailTag = OLDWRITER(k), manifest = default(set[int]),
-             writer = OLDWRITER(k), etag = OLDWRITER(k), upload = 0, size = 1, ver = epoch);
+             writer = OLDWRITER(k), etag = OLDWRITER(k), upload = 0, size = 1, ver = epoch,
+             meta = 0, tags = 0);
         if (p.twins) {
           h.etag = OLDWRITER(1);  // the keys hold the same bytes
         }
@@ -107,7 +113,7 @@ machine Store {
         while (num <= 2) {
           ps[num] = (prefix = u, etag = PARTETAG(u, num), past = default(set[int]));
           live += (OBJ(u, num));
-          mpIndex += (OBJ(u, num));
+          MpPlace(OBJ(u, num));
           Account(MPSIZE(OBJ(u, num)));
           num = num + 1;
         }
@@ -115,19 +121,40 @@ machine Store {
         metas += (u);
         metaVer[u] = 1;
         lockOwner[u] = 0;
-        mpIndex += (METAKEY(u));
+        MpPlace(METAKEY(u));
         Account(MPSIZE(METAKEY(u)));
       }
     }
 
     on eReadHead do (p: (from: machine, key: int)) {
       MaybeGc();
+      EnsureSlot(p.key);
       send p.from, eHeadRead, heads[p.key];
+    }
+
+    // a read without a version id: the OLH's target, the present
+    // instance of the key written last
+    on eReadCurrent do (p: (from: machine, key: int)) {
+      var k: int;
+      var best: tHead;
+      MaybeGc();
+      EnsureSlot(p.key);
+      if (cfg.versioning == VER_OFF()) {
+        send p.from, eHeadRead, heads[p.key];
+        return;
+      }
+      foreach (k in keys(heads)) {
+        if (KEYOF(k) == p.key && heads[k].present && (!best.present || heads[k].ver > best.ver)) {
+          best = heads[k];
+        }
+      }
+      send p.from, eHeadRead, best;
     }
 
     on eHeadWrite do (w: (from: machine, key: int, guard: bool, expectTag: int, excl: bool, head: tHead)) {
       var h: tHead;
       MaybeGc();
+      EnsureSlot(w.key);
       h = heads[w.key];
       if (w.guard && !h.present) {
         send w.from, eHeadWritten, (rc = ENOENT, epoch = 0);
@@ -153,6 +180,7 @@ machine Store {
     on eHeadRemove do (w: (from: machine, key: int, guard: bool, expectTag: int, rid: int)) {
       var h: tHead;
       MaybeGc();
+      EnsureSlot(w.key);
       h = heads[w.key];
       if (!h.present) {
         send w.from, eHeadWritten, (rc = ENOENT, epoch = epoch);
@@ -167,6 +195,29 @@ machine Store {
       announce mHead, (key = w.key, writer = 0, manifest = default(set[int]));
       announce mHeadState, (key = w.key, by = w.rid, present = false, etag = 0);
       send w.from, eHeadWritten, (rc = OK, epoch = epoch);
+    }
+
+    // set_attrs (PutObjectTagging, PutObjectAcl): guarded on the ID tag
+    // read, and a new ID tag; the object is unchanged
+    on eHeadSetAttrs do (p: (from: machine, key: int, expectTag: int, tags: int, newTag: int)) {
+      var h: tHead;
+      MaybeGc();
+      EnsureSlot(p.key);
+      h = heads[p.key];
+      if (!h.present) {
+        send p.from, eHeadWritten, (rc = ENOENT, epoch = 0);
+        return;
+      }
+      if (h.tag != p.expectTag) {
+        send p.from, eHeadWritten, (rc = ECANCELED, epoch = 0);
+        return;
+      }
+      epoch = epoch + 1;
+      h.tags = p.tags;
+      h.tag = p.newTag;
+      h.ver = epoch;
+      heads[p.key] = h;
+      send p.from, eHeadWritten, (rc = OK, epoch = epoch);
     }
 
     // dedup's guarded setxattr: the ID tag is left as it is
@@ -264,6 +315,7 @@ machine Store {
         return;
       }
       Touch(p.key);
+      EnsureSlot(p.key);
       e = ixs[p.key];
       if (!e.present) {
         e = (present = true, listed = false, writer = 0, size = 0, pool = -1, epoch = 0, pending = default(set[int]),
@@ -292,6 +344,7 @@ machine Store {
         return;
       }
       Touch(c.key);
+      EnsureSlot(c.key);
       e = ixs[c.key];
       if (!e.present || !(c.tag in e.pending)) {
         send c.from, eIndexDone, EINVAL;
@@ -347,8 +400,11 @@ machine Store {
       }
       if (!(p.key in mpIndex)) {
         Touch(p.key);
-        mpIndex += (p.key);
+        MpPlace(p.key);
         Account(MPSIZE(p.key));
+      } else {
+        // a second entry of the same name on another shard is not modelled
+        assert mpShard[p.key] == RtShard(p.key), "a multipart entry was added again on another shard";
       }
       send p.from, eIndexDone, OK;
     }
@@ -376,12 +432,18 @@ machine Store {
       send from, eLayout, gen;
     }
 
+    // an ordered target cannot record a reshard log: its reshard blocks
+    // index ops from the start (RESHARD_IN_PROGRESS)
     on eReshardStart do (from: machine) {
       MaybeGc();
       rstate = 1;
+      if (cfg.dstOrdered) {
+        rstate = 2;
+      }
       rlog = default(set[int]);
       tix = default(map[int, tIx]);
       tmp = default(set[int]);
+      tmpShard = default(map[int, int]);
       tCount = 0;
       tSize = 0;
       send from, eIndexDone, OK;
@@ -404,6 +466,7 @@ machine Store {
         }
       } else if (!(p.id in tmp)) {
         tmp += (p.id);
+        tmpShard[p.id] = ReshardShard(p.id);
         tCount = tCount + 1;
         tSize = tSize + MPSIZE(p.id);
       }
@@ -422,7 +485,7 @@ machine Store {
       var t: tIx;
       MaybeGc();
       foreach (id in rlog) {
-        if (id <= 2) {
+        if (IsMainKey(id)) {
           if (id in tix) {
             t = tix[id];
             if (cfg.reshardCheckExisting && t.present && t.listed) {
@@ -445,6 +508,7 @@ machine Store {
           }
           if (id in mpIndex) {
             tmp += (id);
+            tmpShard[id] = ReshardShard(id);
             tCount = tCount + 1;
             tSize = tSize + MPSIZE(id);
           }
@@ -466,6 +530,7 @@ machine Store {
       }
       ixs = tix;
       mpIndex = tmp;
+      mpShard = tmpShard;
       statCount = tCount;
       statSize = tSize;
       gen = gen + 1;
@@ -548,27 +613,28 @@ machine Store {
       send p.from, eLocked, (p.upload in metas && lockOwner[p.upload] == p.rid);
     }
 
-    on eMetaMark do (p: (from: machine, upload: int, mark: int)) {
+    on eMetaMark do (p: (from: machine, upload: int, mark: int, slot: int)) {
       MaybeGc();
       if (!(p.upload in metas)) {
         send p.from, eMetaRc, (rc = ENOENT, ver = 0);
         return;
       }
       metaMark[p.upload] = p.mark;
+      metaMarkSlot[p.upload] = p.slot;
       send p.from, eMetaRc, (rc = OK, ver = metaVer[p.upload]);
     }
 
     on eGetMark do (p: (from: machine, upload: int)) {
       MaybeGc();
       if (!(p.upload in metas)) {
-        send p.from, eMark, (rc = ENOENT, mark = 0);
+        send p.from, eMark, (rc = ENOENT, mark = 0, slot = 0);
         return;
       }
       if (p.upload in metaMark) {
-        send p.from, eMark, (rc = OK, mark = metaMark[p.upload]);
+        send p.from, eMark, (rc = OK, mark = metaMark[p.upload], slot = metaMarkSlot[p.upload]);
         return;
       }
-      send p.from, eMark, (rc = OK, mark = 0);
+      send p.from, eMark, (rc = OK, mark = 0, slot = 0);
     }
 
     on eGetAttrs do (p: (from: machine, upload: int)) {
@@ -645,6 +711,7 @@ machine Store {
       metas -= (p.upload);
       if (p.upload in metaMark) {
         metaMark -= (p.upload);
+        metaMarkSlot -= (p.upload);
       }
       lockOwner[p.upload] = 0;
       MpRemove(METAKEY(p.upload));
@@ -706,9 +773,26 @@ machine Store {
           }
         }
       }
+      // an entry on a shard that its object's index ops do not reach is
+      // never removed: orphaned, even while its upload lives
+      foreach (o in mpIndex) {
+        if (o in validKeys && mpShard[o] != RtShard(o)) {
+          validKeys -= (o);
+        }
+      }
       announce mFinal, (heads = heads, ixs = ixs, live = live, referenced = referenced,
                         mpIndex = mpIndex, validKeys = validKeys, statCount = statCount, statSize = statSize);
       send from, eQuiesced;
+    }
+  }
+
+  // a version instance's head and index entry, before anything is there
+  fun EnsureSlot(k: int) {
+    if (!(k in heads)) {
+      heads[k] = default(tHead);
+    }
+    if (!(k in ixs)) {
+      ixs[k] = default(tIx);
     }
   }
 
@@ -754,7 +838,7 @@ machine Store {
     var k: int;
     var n: int;
     foreach (k in removeKeys) {
-      if (k in mpIndex) {
+      if (MpReachable(k)) {
         n = n + 1;
       }
       MpRemove(k);
@@ -764,13 +848,94 @@ machine Store {
     }
   }
 
-  // a multipart-namespace entry removed (complete_remove_obj, or a DEL)
+  // a multipart-namespace entry removed (complete_remove_obj, or a DEL).
+  // The op runs on the shard of the entry's object: an entry that a
+  // reshard placed elsewhere is not there, and stays
   fun MpRemove(k: int) {
-    if (k in mpIndex) {
+    if (MpReachable(k)) {
       Touch(k);
       mpIndex -= (k);
+      mpShard -= (k);
       Unaccount(MPSIZE(k));
     }
+  }
+
+  fun MpReachable(k: int): bool {
+    return k in mpIndex && mpShard[k] == RtShard(k);
+  }
+
+  // a multipart-namespace entry written by an index op: on its object's shard
+  fun MpPlace(k: int) {
+    mpIndex += (k);
+    mpShard[k] = RtShard(k);
+  }
+
+  // an index key: an object key, or a version instance of one
+  fun IsMainKey(id: int): bool {
+    return id <= 2 || id >= 10000;
+  }
+
+  // the object an index entry belongs to: multipart uploads are of key 1
+  fun Owner(id: int): int {
+    if (id <= 2) {
+      return id;
+    }
+    if (id >= 10000) {
+      return KEYOF(id);
+    }
+    return MPKEY();
+  }
+
+  // the shard an index op on the entry goes to: its object's, under the
+  // current layout
+  fun RtShard(id: int): int {
+    return Route(gen, Owner(id));
+  }
+
+  // the target shard a reshard copies an entry to
+  fun ReshardShard(id: int): int {
+    if (cfg.reshardByIndexName && !IsMainKey(id)) {
+      return Route(gen + 1, MPNAME(id));
+    }
+    return Route(gen + 1, Owner(id));
+  }
+
+  // the shard a name is on in a generation's layout. The hash, and an
+  // ordered layout's split, are chosen by the checker when first needed
+  fun Route(g: int, name: int): int {
+    var n: int;
+    var ordered: bool;
+    var rank: int;
+    n = cfg.srcShards;
+    ordered = cfg.srcOrdered;
+    if (g > 0) {
+      n = cfg.dstShards;
+      ordered = cfg.dstOrdered;
+    }
+    if (n <= 1) {
+      return 0;
+    }
+    assert n == 2, "the model has at most two shards";
+    if (!ordered) {
+      if (!(name in hashBit)) {
+        hashBit[name] = choose(2);
+      }
+      return hashBit[name];
+    }
+    // multipart names, then key 1's, then key 2's
+    rank = 0;
+    if (name == 1) {
+      rank = 1;
+    } else if (name == 2) {
+      rank = 2;
+    }
+    if (!(g in split)) {
+      split[g] = 1 + choose(2);
+    }
+    if (rank >= split[g]) {
+      return 1;
+    }
+    return 0;
   }
 
   // a pending op's tag timeout has run out, as a listing that read the

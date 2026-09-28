@@ -734,9 +734,191 @@ index keeps the pre-reshard object; without `check_existing`, the stats
 count re-copied entries twice; if the old shards accepted ops after the
 commit, a write would land in an index nobody reads.
 
+## Versioned buckets and the completion record
+
+The first version of PR 72103, for finding 3, recorded the completion only when
+`bucket->versioned()` was false. That call is true when versioning is
+enabled and also when it is suspended. The model checks the record in
+versioned buckets, with `versioning` set to `VER_ENABLED()` or
+`VER_SUSPENDED()`.
+
+The model represents versions as follows:
+
+- A version instance of a key is a head slot of its own, with its own
+  bucket index entry. Key 1 itself is the null instance, which holds the
+  object written before versioning was turned on.
+- In a version-enabled bucket, PutObject and a completion write a new
+  instance, `VKEY(key, rid)`. This write is an exclusive create, and it
+  replaces nothing.
+- In a suspended bucket, they write the null instance. This write
+  replaces the null version and sends its manifest to GC, as in a
+  non-versioned bucket.
+- A read without a version id finds the current version: the present
+  instance written last. This stands in for the OLH (object logical
+  head).
+- In the versioned scenarios, DeleteObject names the instance that it
+  deletes, as a DeleteObject with a version id does. It removes that
+  instance and sends the instance's manifest to GC.
+
+`markVersioned` selects how a versioned bucket treats the record:
+
+- `MV_SKIP()` does not record the completion, as in the PR. The code on
+  main behaves the same in a versioned bucket.
+- `MV_CURRENT()` records the tag and checks it against the current
+  version.
+- `MV_INSTANCE()` records the tag and the instance that the completion
+  writes, and checks the tag against that instance.
+
+Two scenarios are new. In `SC_DEL_AFTER_RETRY`, a completion runs, a
+retry of it runs, and then request 2's version is deleted. In
+`SC_PUT_THEN_ABORT`, a completion runs, then a PutObject, then an abort.
+Both hold in a non-versioned bucket with the record
+(`tcMark*DelAfterRetry`, `tcMark*PutThenAbort`). Versioning without a
+crash or a failed meta delete also holds (`tcVE*`, `tcVS*` without a
+record mode in the name).
+
+The test cases are `tcV<E|S><Pr|Cur|Inst><Crash|MetaDel><Scenario>`.
+The Crash cases let RGW die before the meta delete. The MetaDel cases let
+the meta delete fail. Both environments give the same results:
+
+| Bucket | Record | Violated scenarios (HeadIntact) |
+|---|---|---|
+| enabled | `Pr` (the PR, and main) | ThenAbort, Abort, LcAbort, PutThenAbort, DelAfterRetry |
+| enabled | `Cur` | PutThenAbort |
+| enabled | `Inst` | none |
+| suspended | `Pr` (the PR, and main) | Retry, ThenAbort, Abort, LcAbort, SameCompletes, PutThenRetry, DelAfterRetry |
+| suspended | `Cur` | none |
+| suspended | `Inst` | none |
+
+The results show three things:
+
+- In a suspended bucket, the PR leaves finding 3 open as it is on main.
+  A retry replaces the null version and sends its parts to GC. The
+  record works there without a change, so a gate on
+  `versioning_enabled()` in place of `versioned()` is sufficient.
+- In a version-enabled bucket, a retry does not replace the first
+  version. It writes a second version that shares the same parts. The
+  data is lost when either version is deleted (DelAfterRetry). An abort,
+  or lifecycle's abort, sends the parts to GC while the completed
+  version references them.
+- In a version-enabled bucket, a check against the current version is
+  not sufficient. After a later PutObject, the completed version is no
+  longer current. The abort then finds no match and sends the parts of
+  that older version to GC (PutThenAbort). The record must name the
+  version instance that the completion writes, and the check must read
+  that instance.
+
+The instance is known before the head write, because
+`RGWCompleteMultipart` generates it before it calls `complete()`. The
+`Inst` cases hold at 20,000 schedules and at 100,000 schedules, and so do
+the suspended `Cur` cases.
+
+The versioned model does not include delete markers, a DeleteObject
+without a version id, the OLH log and its epochs, a bucket whose
+versioning changes during a scenario, or copy, dedup, listing and
+reshard in a versioned bucket.
+
+## Sharded bucket indexes
+
+An index may have several shards. A hashed layout (`BucketHashType::Mod`,
+on main) places an entry by the rjenkins hash of a name modulo the shard
+count. An ordered layout (PR 70053, experimental) splits the name space
+into lexical ranges, one per shard. Every index op places an entry by its
+object's name: the key's name, or the hash source that multipart entries
+carry (`set_hash_source`). So a key's entry, its versions, and its
+uploads' meta object and parts share one shard in both layouts, and an
+op's `remove_objs` reach every entry they name.
+
+The model has two keys and at most two shards. The layout before a
+reshard (`srcShards`, `srcOrdered`) and after it (`dstShards`,
+`dstOrdered`) are configured. The checker picks each name's hash, and
+an ordered layout's split point: between the multipart names
+(`_multipart_obj1...`) and `obj1`, or between `obj1` and `obj2`. Each
+multipart entry records the shard it is on. An op removes it only on its
+object's shard under the current layout. An entry left on another shard
+counts as orphaned at the end, even while its upload lives. A reshard to
+an ordered layout cannot keep a reshard log: it blocks index ops from
+the start. Ordered to ordered is not allowed, and is not modelled.
+
+A reshard copies each entry to a target shard. Main's
+`calc_target_shard` places an entry by its object's name (`Obj`). PR
+70053 places it by its full index key name, `get_index_key_name()`
+(`rgw_reshard.cc:1398` there; `Idx`). For a multipart entry that name is
+`_multipart_<obj>.<upload>...`, which hashes, or sorts, apart from the
+object's name.
+
+The test cases are `tcSh<layouts><Obj|Idx>[VE|VS]<Scenario>`, from one
+hashed shard to two (H1H2), two hashed to two hashed (H2H2), two hashed
+to two ordered (H2O2), two ordered to two hashed (O2H2), and one hashed
+to two ordered (H1O2). `SC_RESHARD_THEN_COMPLETE` and
+`SC_RESHARD_THEN_ABORT` reshard, then complete or abort upload 1.
+
+| Routing | Scenarios | Result |
+|---|---|---|
+| `Obj` | every layout change, each scenario, versioned or not | holds, apart from VsDel |
+| `Idx` | ThenComplete, ThenAbort, VsMpu, in every layout change, versioned or not | **violated**: NoOrphans |
+| `Idx` | VsPuts, versioned or not | holds |
+| either | VsDel, on main | violated: NoOrphans, finding 5 |
+
+- **PR 70053's reshard orphans multipart entries.** It copies an
+  upload's meta and part entries to the shard of their own index names.
+  The completion and the abort then remove them from the shard of the
+  object's name, where they are not: the entries stay listed, and a
+  ListMultipartUploads shows an upload that is gone. This happens for
+  hashed to hashed as well as to and from ordered layouts. Entries of an
+  object whose name starts with `_` would move the same way; the model's
+  object names do not.
+- VsDel is finding 5. The reshard holds the DeleteObject's index prepare
+  until its commit, which widens the window between its head read and
+  its unguarded head removal. With the removal guarded on the ID tag
+  (`deleteGuard`, PR 72100) it holds (`tcShGuardH1H2ObjVsDel`).
+
+Not modelled here: PR 70053 writes a hashed-to-ordered reshard's split
+points after the bucket instance, in a second op, and ignores an error
+from the split-point lookup. An index op between the two could go to an
+unset shard object. That is not checked.
+
+## Attribute updates and a copy onto itself
+
+PutObjectTagging, PutObjectAcl and the other `set_attrs` callers change a
+head's attributes and keep its object. `set_attrs` guards the update on
+the ID tag it read (`append_atomic_test`), and gives the head a new ID
+tag. The model has one such request, a tagging update (`R_SET_TAGS`); an
+ACL update takes the same path. A head records the request whose user
+metadata it carries, and the request whose tag set it carries. A copy
+onto itself replaces the metadata and copies the tag set
+(`x-amz-tagging-directive` COPY).
+
+**AttrsKept.** A copy onto itself and a tagging update of one key, each
+answered success, are both in the object at the end, whichever came
+first. It is checked for a key that no other request wrote.
+
+| Test case | Scenario | Copy onto itself | Result |
+|---|---|---|---|
+| `tcAttrMainVsTag` | `SC_COPY_SELF_VS_TAG` | on main | **violated**: AttrsKept, the tagging update's tag set lost |
+| `tcAttrGuardVsTag` | `SC_COPY_SELF_VS_TAG` | guarded on the head it read (PR 72101) | **violated**: AttrsKept, the copy's metadata lost |
+| `tcAttrRetryVsTag` | `SC_COPY_SELF_VS_TAG` | guarded, retried (proposed) | holds |
+| `tcAttr*TagVsPut`, `tcAttr*TagThenCopy` | a tagging update and a PutObject; a tagging update, then a copy | each | holds |
+| `tcAttr<Guard\|Retry>VsPut` | `SC_COPY_SELF_VS_PUT` | guarded, or guarded and retried | holds (finding 7 closed) |
+
+- **On main**, a copy onto itself writes the tag set it read. A tagging
+  update between the copy's read and its write is overwritten, though it
+  was answered success. The copy can also lose the write's own guard to
+  the update, and be answered success without writing.
+- **PR 72101** guards the copy on the ID tag it read. A tagging or ACL
+  update changes that tag, so the copy fails its guard, and is answered
+  success without writing: its metadata is lost. mheler reported this on
+  the PR. A vstart run reproduces it for tagging and for ACLs
+  (`test_copy_to_itself_racing_tagging`, `_acl` in the workunit).
+- **Proposed:** a copy onto itself that loses its guard reads the head
+  again and copies it as it is then, up to twice more, and is answered an
+  error if it still loses (`copySelfRetries`). This holds, at 100,000
+  schedules too, and passes the vstart cases.
+
 ## Not modelled
 
-- Versioned buckets and OLH.
+- Versioned buckets beyond the multipart scenarios above: delete
+  markers, the OLH log, and conditional writes of a version.
 - Some conditions: `If-None-Match` with an ETag; on DeleteObject,
   `x-amz-if-match-size`, which is checked against the head read as the
   ETag is, and `x-amz-if-match-last-modified-time` and
@@ -764,6 +946,5 @@ commit, a write would land in an index nobody reads.
 - `-ETIMEDOUT` handling.
 - Dedup's split-head mode, and its table and scan beyond the two
   records it acts on.
-- More than one shard per generation. A reshard moves every entry from
-  one shard to another.
+- More than two shards, and a split point inside the multipart names.
 - More than 3 retries of the meta object's delete (15 on main).
