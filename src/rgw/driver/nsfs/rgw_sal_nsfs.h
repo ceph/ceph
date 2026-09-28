@@ -470,12 +470,19 @@ protected:
   std::unique_ptr<nsfs::MPUStrategy> mpu_strategy;
   std::unique_ptr<nsfs::XattrStrategy> xattr_strategy;
   std::unique_ptr<nsfs::PathStrategy> path_strategy;
+  /* NooBaa's three.  Held whether or not a bucket is in their format,
+   * because which format a bucket is in is not known until it is
+   * loaded, and constructing a strategy costs nothing. */
+  std::unique_ptr<nsfs::XattrStrategy> nb_xattr_strategy;
+  std::unique_ptr<nsfs::PathStrategy> nb_path_strategy;
+  std::unique_ptr<nsfs::MPUStrategy> nb_mpu_strategy;
   /* what a bucket's extensions marker resolves to;  both resolve to the
    * same strategy instances until S5 supplies the noobaa ones */
   /* The format shared and strong both use:  NooBaa's layout with our
-   * metadata representation, which is what EXT_RGW_META declares.
-   * NooBaa's own joins it at S5, and base points there. */
+   * metadata representation, which is what EXT_RGW_META declares. */
   nsfs::Format rgw_meta_format;
+  /* What base is:  NooBaa's, entire. */
+  nsfs::Format noobaa_format;
   nsfs::BucketProfile base_profile;
   nsfs::BucketProfile shared_profile;
   nsfs::BucketProfile extended_profile;

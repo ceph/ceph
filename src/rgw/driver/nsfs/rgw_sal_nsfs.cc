@@ -3002,6 +3002,10 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   xattr_strategy = std::make_unique<nsfs::PrefixedXattrStrategy>();
   path_strategy = std::make_unique<nsfs::SentinelPathStrategy>();
 
+  nb_xattr_strategy = std::make_unique<nsfs::NooBaaXattrStrategy>();
+  nb_path_strategy = std::make_unique<nsfs::NooBaaPathStrategy>();
+  nb_mpu_strategy = std::make_unique<nsfs::NooBaaMPUStrategy>();
+
   /* The format shared and strong use.  Its MPU member is left null:
    * per-part against strided is chosen from what the filesystem can
    * do, not from what the tree is. */
@@ -3010,13 +3014,21 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   rgw_meta_format.mpu_strategy = nullptr;
   rgw_meta_format.fname = "rgw-meta";
 
+  /* What base is:  NooBaa's format entire -- their attribute names,
+   * their path conventions, their staging layout.  Its MPU member is
+   * named rather than left null, because their staging layout is
+   * theirs and not a capability question;  a base bucket stages as
+   * they do whatever the filesystem can do. */
+  noobaa_format.xattr_strategy = nb_xattr_strategy.get();
+  noobaa_format.path_strategy = nb_path_strategy.get();
+  noobaa_format.mpu_strategy = nb_mpu_strategy.get();
+  noobaa_format.fname = "noobaa";
+
   /* Three profiles, two formats.  Shared and strong differ in which
    * extensions the mask permits, not in how the tree is written, so
-   * they name one format between them.  Base names NooBaa's when S5
-   * supplies it;  until then it borrows this one, which is why an
-   * unmarked bucket is still served. */
+   * they name one format between them. */
   base_profile.extensions = nsfs::EXTENSIONS_NONE;
-  base_profile.format = &rgw_meta_format;
+  base_profile.format = &noobaa_format;
   shared_profile.extensions = nsfs::EXTENSIONS_SHARED;
   shared_profile.format = &rgw_meta_format;
   extended_profile.extensions = nsfs::EXTENSIONS_STRONG;
