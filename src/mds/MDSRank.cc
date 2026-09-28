@@ -3769,6 +3769,10 @@ void MDSRank::create_logger()
 			    "dir_fetch_keys", "Fetch keys from dirfrag");
     mds_plb.add_u64_counter(l_mds_dir_fetch_background,
 			    "dir_fetch_background", "Background full dirfrag prefetch");
+    mds_plb.add_u64_counter(l_mds_dir_fetch_restart, "dir_fetch_restart",
+			    "Buffered dirfrag fetch restarted after a commit");
+    mds_plb.add_u64_counter(l_mds_dir_fetch_continue, "dir_fetch_continue",
+			    "Pipelined dirfrag fetch continued across a commit");
     mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
     mds_plb.add_u64_counter(l_mds_dir_split, "dir_split", "Directory split");
     mds_plb.add_u64_counter(l_mds_dir_merge, "dir_merge", "Directory merge");

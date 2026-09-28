@@ -1887,6 +1887,7 @@ void CDir::_omap_fetch_batch(map<string, bufferlist>& batch,
 
   ceph_assert(fetch_state);
   fetch_state_t& st = *fetch_state;
+  ++st.replies;
 
   if (r < 0)
     more = false;		// let the finish path report it
@@ -1910,6 +1911,8 @@ void CDir::_omap_fetch_batch(map<string, bufferlist>& batch,
     if (check_version && st.omap_version < get_committed_version()) {
       dout(10) << __func__ << " dir was committed to v" << get_committed_version()
 	       << " while fetching at v" << st.omap_version << ", restarting" << dendl;
+      if (mdcache->mds->logger)
+        mdcache->mds->logger->inc(l_mds_dir_fetch_restart);
       fetch_state.reset();
       _omap_fetch(nullptr, nullptr, false);
       return;
@@ -1939,6 +1942,8 @@ void CDir::_omap_fetch_batch(map<string, bufferlist>& batch,
     st.version_changed = true;
     dout(10) << __func__ << " dir was committed to v" << get_committed_version()
 	     << " while fetching at v" << st.omap_version << ", continuing" << dendl;
+    if (mdcache->mds->logger)
+      mdcache->mds->logger->inc(l_mds_dir_fetch_continue);
   }
 
   // The raw cursor lets the next read overlap decoding this batch.
@@ -2258,6 +2263,7 @@ void CDir::_omap_decode_batch(fetch_state_t& st, map<string, bufferlist>& batch,
 			      std::vector<string_snap_t>& null_keys)
 {
   dout(10) << "_fetched " << batch.size() << " keys for " << *this << dendl;
+  st.decoded_keys += batch.size();
 
   if (st.snap_purge_target)
     st.snaps = inode->find_snaprealm()->get_snaps();
@@ -3934,6 +3940,17 @@ void CDir::dump(Formatter *f, int flags) const
     if (state_test(CDir::STATE_IMPORTBOUND)) f->dump_string("state", "importbound");
     if (state_test(CDir::STATE_BADFRAG)) f->dump_string("state", "badfrag");
     f->close_section();
+    if (fetch_state) {
+      // Progress of the full fetch; absent until its first reply arrives.
+      f->open_object_section("fetch");
+      f->dump_bool("pipelined", fetch_state->pipelined);
+      f->dump_unsigned("omap_version", fetch_state->omap_version);
+      f->dump_bool("version_changed", fetch_state->version_changed);
+      f->dump_unsigned("replies", fetch_state->replies);
+      f->dump_unsigned("decoded_keys", fetch_state->decoded_keys);
+      f->dump_unsigned("buffered_keys", fetch_state->pending.size());
+      f->close_section();
+    }
   }
   if (flags & DUMP_MDS_CACHE_OBJECT) {
     MDSCacheObject::dump(f);

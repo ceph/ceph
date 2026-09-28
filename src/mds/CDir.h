@@ -701,7 +701,7 @@ protected:
     // Latch the mode so a runtime toggle cannot strand buffered batches.
     bool pipelined = true;
     bool first_batch = true;           ///< tracks the first buffered reply
-    bool version_changed = false;      ///< only used to log the transition once
+    bool version_changed = false;      ///< report the transition once
     bool force_dirty = false;
     bool decode_error = false;         ///< never certify a damaged full scan
     // Refresh snapshots per batch, but retain the initial purge watermark.
@@ -717,6 +717,9 @@ protected:
     // Own the name across batch callback lifetimes.
     std::string last_name;
     unsigned pos = 0;                  ///< index of this batch's first entry
+    // Progress reported by dump(); keyed reads never publish theirs.
+    unsigned replies = 0;              ///< OMAP replies received by a full fetch
+    uint64_t decoded_keys = 0;         ///< keys decoded so far
     int count = 0;                     ///< heartbeat_reset() throttle, across batches
     // Buffered mode accumulates all batches before decoding.
     std::map<std::string, ceph::buffer::list> pending;
