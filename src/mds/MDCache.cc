@@ -8179,6 +8179,12 @@ bool MDCache::shutdown_pass()
 
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {
+    // Every stray removal must reach the journal before the cap: a purge
+    // that completes after it could not journal its removal.
+    if (!stray_manager.flush_purged_strays()) {
+      dout(5) << "still have strays to journal" << dendl;
+      return false;
+    }
     dout(5) << "capping the mdlog" << dendl;
     mds->mdlog->submit_entry(new ELid());
     mds->mdlog->flush();

@@ -21,9 +21,12 @@
 
 #include <boost/intrusive_ptr.hpp>
 
+#include <map>
 #include <set>
 #include <string>
+#include <vector>
 
+class Context;
 class MDSRank;
 class CInode;
 class PurgeQueue;
@@ -54,6 +57,14 @@ public:
   void activate();
 
   bool eval_stray(CDentry *dn);
+
+  /**
+   * Journal the removal of the purged strays queued so far, without
+   * waiting for the batching delay.  Returns true if none were queued and
+   * no stray is on its way to the PurgeQueue either, i.e. no stray removal
+   * is left to submit to the journal.
+   */
+  bool flush_purged_strays();
 
   void set_num_strays(uint64_t num);
   uint64_t get_num_strays() const { return num_strays; }
@@ -126,7 +137,7 @@ protected:
 
   friend class C_StraysFetched;
   friend class C_RetryEnqueue;
-  friend class C_PurgeStrayLogged;
+  friend class C_PurgeStraysLogged;
   friend class C_TruncateStrayLogged;
   friend class C_IO_PurgeStrayPurged;
 
@@ -145,7 +156,20 @@ protected:
    */
   void _purge_stray_purged(CDentry *dn, bool only_head);
 
-  void _purge_stray_logged(CDentry *dn, version_t pdv, MutationRef& mut);
+  // A purged stray whose removal is being journaled.
+  struct PurgedStray {
+    CDentry *dn;
+    CInode *in;
+    version_t pdv;
+  };
+  /**
+   * Journal the removal of the purged strays queued for each stray
+   * dirfrag, one event per dirfrag.
+   */
+  void _journal_purged_strays();
+  void _journal_purged_strays(CDir *dir, const std::vector<CDentry*>& dns);
+  void _purge_strays_logged(CDir *dir, std::vector<PurgedStray>& strays,
+			    MutationRef& mut);
 
   /**
    * Callback: we have logged the update to an inode's metadata
@@ -213,6 +237,15 @@ protected:
    * recorded by PurgeQueue yet
    */
   uint64_t num_strays_enqueuing = 0;
+
+  /**
+   * Purged strays whose removal is yet to be journaled, per stray dirfrag.
+   * Each purge used to journal its own event; collecting them for a moment
+   * lets one event remove many.  The dentries stay pinned for purging and
+   * their dirfrags auth pinned until the event is logged.
+   */
+  std::map<CDir*, std::vector<CDentry*>> purged_strays;
+  Context *purged_strays_timer = nullptr;
 
   PurgeQueue &purge_queue;
 };
