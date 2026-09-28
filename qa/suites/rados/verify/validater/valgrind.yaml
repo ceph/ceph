@@ -11,6 +11,11 @@ overrides:
         osd op thread timeout: 150
       mon:
         mon osd crush smoke test: false
+      client:
+        # relax the hang guard from qa/config/rados.yaml: everything here
+        # runs under memcheck, and the other timeouts in this file are
+        # already scaled ~10x for that
+        rados osd op timeout: 3600
       osd:
         osd fast shutdown: false
         debug bluestore: 1
