@@ -2934,7 +2934,8 @@ function test_osd_messenger_dump()
 }
 function test_mon_messenger_dump()
 {
-  do_messenger_dump_basics_test mon.a
+  local target="mon.a"
+  do_messenger_dump_basics_test "$target"
   # Testing the tcp_info feature requires at lease one messenger TCP
   # conneciton. Test only the mon as it is very unlikely that it
   # doesn't have an active connection. Also only test for one
