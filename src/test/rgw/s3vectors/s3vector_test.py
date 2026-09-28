@@ -2220,6 +2220,231 @@ def test_list_vectors_exact_pagination():
     _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
+def put_vectors_in_fragments(conn, bucket_name, index_name, num_fragments, vectors_per_fragment,
+                             dimension, with_metadata=False):
+    """
+    Put vectors in several requests, each with its own keys.
+    Every request is a separate commit that adds a fragment to the index, and a
+    query that reads from more than one fragment returns more than one record batch.
+    """
+    vectors = []
+    for fragment in range(num_fragments):
+        fragment_vectors = []
+        for i in range(vectors_per_fragment):
+            index = fragment*vectors_per_fragment + i
+            v = {
+                'key': f'frag-{fragment}-vec-{i}',
+                'data': generate_data(dimension, index)
+            }
+            if with_metadata:
+                v['metadata'] = json.dumps({'color': 'red', 'fragment': fragment})
+            fragment_vectors.append(v)
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=fragment_vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vectors.extend(fragment_vectors)
+    return vectors
+
+
+@pytest.mark.vector_test
+def test_get_vectors_multiple_fragments():
+    """
+    Vectors that were written by different requests must all be returned.
+    """
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = put_vectors_in_fragments(conn, bucket_name, index_name, 5, 10, dimension)
+
+    # all keys in one request
+    vector_ids = [v['key'] for v in vectors]
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids)
+
+    # one key from each fragment
+    vector_ids = [f'frag-{fragment}-vec-0' for fragment in range(5)]
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_list_vectors_multiple_fragments():
+    """
+    A page of the listing must be full even when its vectors were written by
+    different requests.
+    """
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = put_vectors_in_fragments(conn, bucket_name, index_name, 5, 10, dimension)
+
+    # a single page that holds all fragments
+    _, page_count = verify_list_vectors_pagination(
+        conn, bucket_name, index_name, vectors, 100, expected_dimension=dimension)
+    assert page_count == 1, f"expected 1 pages but got {page_count}"
+
+    # 50 vectors with page size 15 = 4 pages (15, 15, 15, 5)
+    # none of the pages fit in a single fragment
+    _, page_count = verify_list_vectors_pagination(
+        conn, bucket_name, index_name, vectors, 15, expected_dimension=dimension)
+    assert page_count == 4, f"expected 4 pages but got {page_count}"
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_query_vectors_multiple_fragments():
+    """
+    A query must consider the vectors of all fragments, with and without a filter.
+    """
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = put_vectors_in_fragments(conn, bucket_name, index_name, 5, 10, dimension,
+                                       with_metadata=True)
+    expected_keys = sorted(v['key'] for v in vectors)
+    query_vector = generate_data(dimension, 0)
+    query_args = dict(vectorBucketName=bucket_name, indexName=index_name,
+                      queryVector=query_vector, topK=len(vectors))
+
+    result = conn.query_vectors(**query_args)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert sorted(v['key'] for v in result['vectors']) == expected_keys
+
+    # "color" is not a filterable key, so the filter is applied on the results
+    result = conn.query_vectors(filter={'color': 'red'}, **query_args)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert sorted(v['key'] for v in result['vectors']) == expected_keys
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_put_vectors_max_vectors():
+    """
+    A request with more vectors than "rgw_s3vector_max_put_vectors" is rejected.
+    """
+    max_vectors = 10
+    set_rgw_config_option('rgw_s3vector_max_put_vectors', max_vectors)
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 2
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(max_vectors + 1, dimension)
+    assert_put_vectors_validation_error(conn,
+        'vectors',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    # verify no vectors were inserted
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result.get('vectors', [])) == 0
+
+    vectors = generate_vectors(max_vectors, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    verify_get_vectors(conn, bucket_name, index_name, [v['key'] for v in vectors],
+                       expected_dimension=dimension)
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+    set_rgw_config_option('rgw_s3vector_max_put_vectors', 500)
+
+@pytest.mark.vector_test
+def test_vectors_large_fragment():
+    """
+    Vectors that were written by a single large request must all be returned.
+    The vectors are in one fragment, that is larger than a record batch.
+    """
+    num_vectors = 10000
+    set_rgw_config_option('rgw_s3vector_max_put_vectors', num_vectors)
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 2
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # the vectors are small, so that the request is not larger than "rgw_max_put_param_size"
+    vectors = [{'key': f'vec-{i}',
+                'data': {'float32': [float(i), float(i % 10)]},
+                'metadata': json.dumps({'color': 'red'})}
+               for i in range(num_vectors)]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # keys from all parts of the fragment
+    vector_ids = [f'vec-{i}' for i in range(0, num_vectors, 100)]
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids)
+
+    # 10000 vectors with page size 1000 = 10 pages
+    _, page_count = verify_list_vectors_pagination(
+        conn, bucket_name, index_name, vectors, 1000, expected_dimension=dimension)
+    assert page_count == 10, f"expected 10 pages but got {page_count}"
+
+    expected_keys = sorted(v['key'] for v in vectors)
+    query_args = dict(vectorBucketName=bucket_name, indexName=index_name,
+                      queryVector={'float32': [0.0, 0.0]}, topK=num_vectors)
+
+    result = conn.query_vectors(**query_args)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert sorted(v['key'] for v in result['vectors']) == expected_keys
+
+    # "color" is not a filterable key, so the filter is applied on the results
+    result = conn.query_vectors(filter={'color': 'red'}, **query_args)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert sorted(v['key'] for v in result['vectors']) == expected_keys
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+    set_rgw_config_option('rgw_s3vector_max_put_vectors', 500)
+
 @pytest.mark.vector_test
 def test_delete_vectors():
     conn = connection()

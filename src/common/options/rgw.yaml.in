@@ -5080,6 +5080,24 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: rgw_s3vector_max_put_vectors
+  type: uint
+  level: advanced
+  desc: Maximum number of vectors in a single PutVectors request
+  long_desc: A PutVectors request that holds more vectors than this value is
+    rejected. All the vectors of a request are written together, so higher values
+    allow for fewer and larger writes, at the cost of larger requests. Note that
+    the size of the request is also limited by rgw_max_put_param_size.
+  default: 500
+  services:
+  - rgw
+  min: 1
+  max: 10000
+  flags:
+  - runtime
+  see_also:
+  - rgw_max_put_param_size
+  with_legacy: true
 - name: rgw_usage_log_key_transition
   type: bool
   level: advanced
