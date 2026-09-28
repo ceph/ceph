@@ -3302,6 +3302,7 @@ void DaemonServer::adjust_pgs()
   std::map<string,unsigned> pg_num_to_set;
   std::map<string,unsigned> pgp_num_to_set;
   std::set<pg_t> upmaps_to_clear;
+  std::map<uint64_t,string> current_pools; // pid -> pool_name
   cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
       unsigned creating_or_unknown = 0;
       for (auto& i : pg_map.num_pg_by_state) {
@@ -3336,7 +3337,8 @@ void DaemonServer::adjust_pgs()
 
       for (auto& i : osdmap.get_pools()) {
 	const pg_pool_t& p = i.second;
-
+        const auto& pool_name = osdmap.get_pool_name(i.first);
+        current_pools[i.first] = pool_name;
 	// adjust pg_num?
 	if (p.get_pg_num_target() != p.get_pg_num()) {
 	  dout(20) << "pool " << i.first
@@ -3593,7 +3595,9 @@ void DaemonServer::adjust_pgs()
       "}";
     monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
   }
+  std::set<uint64_t> affected_pools;
   for (auto pg : upmaps_to_clear) {
+    affected_pools.emplace(pg.pool());
     const string cmd =
       "{"
       "\"prefix\": \"osd rm-pg-upmap\", "
@@ -3606,6 +3610,20 @@ void DaemonServer::adjust_pgs()
       "\"pgid\": \"" + stringify(pg) + "\"" +
       "}";
     monc->start_mon_command({cmd2}, {}, nullptr, nullptr, nullptr);
+   }
+  // remove all pg_upmap_primary mappings from any pool where pg_num was changed.
+  for (auto pool_id : affected_pools) {
+   std::string pool_name;
+   auto it = current_pools.find(pool_id);
+   if (it != current_pools.end()) {
+     pool_name = it->second;
+     const string cmd =
+       "{"
+       "\"prefix\": \"osd rm-pg-upmap-primary-all\", "
+       "\"pool\": \"" + pool_name + "\"" +
+       "}";
+     monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
+   }
   }
 }
 
