@@ -628,6 +628,18 @@ public:
     std::function<void()> on_error,
     std::function<void(int)> on_success);
 
+  // Also for subclasses, which cannot call ObjectTracker's record methods.
+  void record_truncate_and_write(
+    const std::string& obj_name,
+    std::optional<uint64_t> truncate_size,
+    const std::vector<std::pair<uint64_t, std::string>>& writes,
+    const eversion_t& version) {
+    if (object_tracker) {
+      object_tracker->record_truncate_and_write(
+        obj_name, truncate_size, writes, version);
+    }
+  }
+
   /**
    * Look up (creating if necessary) the OBCs for `hoid` and its snap=1
    * clone `snap_hoid`, marking either as existing with size `size` if it
