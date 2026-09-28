@@ -1192,12 +1192,12 @@ TEST_P(LibRadosIoECPP, ZeroAndTruncateSameRequest) {
   SKIP_IF_CRIMSON();
   set_allow_ec_overwrites();
 
-  constexpr size_t chunk_size = 4096;
-  constexpr size_t obj_size = 4096;
-  constexpr size_t smaller = 2048;
-  constexpr size_t larger = 8192;
+  const size_t chunk_size = get_ec_stripe_unit();
+  const size_t obj_size = chunk_size;
+  const size_t smaller = chunk_size / 2;
+  const size_t larger = chunk_size * 2;
 
-  auto write_4k_object = [&](const char* oid) {
+  auto write_chunksize_object = [&](const char* oid) {
       char buf[obj_size];
       memset(buf, 0, sizeof(buf));
       bufferlist bl;
@@ -1226,57 +1226,57 @@ TEST_P(LibRadosIoECPP, ZeroAndTruncateSameRequest) {
   };
 
   {
-    write_4k_object("zero_trunc_2k");
+    write_chunksize_object("zero_trunc_small");
     ObjectWriteOperation op;
     op.zero(0, obj_size);
     op.truncate(smaller);
-    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_2k", &op));
-    expect_object("zero_trunc_2k", smaller);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_small", &op));
+    expect_object("zero_trunc_small", smaller);
   }
 
   {
-    write_4k_object("zero_trunc_4k");
+    write_chunksize_object("zero_trunc_chunksize");
     ObjectWriteOperation op;
     op.zero(0, obj_size);
     op.truncate(obj_size);
-    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_4k", &op));
-    expect_object("zero_trunc_4k", obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_chunksize", &op));
+    expect_object("zero_trunc_chunksize", obj_size);
   }
 
   {
-    write_4k_object("zero_trunc_8k");
+    write_chunksize_object("zero_trunc_large");
     ObjectWriteOperation op;
     op.zero(0, obj_size);
     op.truncate(larger);
-    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_8k", &op));
-    expect_object("zero_trunc_8k", larger);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "zero_trunc_large", &op));
+    expect_object("zero_trunc_large", larger);
   }
 
   {
-    write_4k_object("trunc0_trunc2k");
+    write_chunksize_object("trunc0_trunc_small");
     ObjectWriteOperation op;
     op.truncate(0);
     op.truncate(smaller);
-    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc2k", &op));
-    expect_object("trunc0_trunc2k", smaller);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc_small", &op));
+    expect_object("trunc0_trunc_small", smaller);
   }
 
   {
-    write_4k_object("trunc0_trunc4k");
+    write_chunksize_object("trunc0_trunc_chunksize");
     ObjectWriteOperation op;
     op.truncate(0);
     op.truncate(obj_size);
-    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc4k", &op));
-    expect_object("trunc0_trunc4k", obj_size);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc_chunksize", &op));
+    expect_object("trunc0_trunc_chunksize", obj_size);
   }
 
   {
-    write_4k_object("trunc0_trunc8k");
+    write_chunksize_object("trunc0_trunc_large");
     ObjectWriteOperation op;
     op.truncate(0);
     op.truncate(larger);
-    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc8k", &op));
-    expect_object("trunc0_trunc8k", larger);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "trunc0_trunc_large", &op));
+    expect_object("trunc0_trunc_large", larger);
   }
 
   {
@@ -1285,17 +1285,17 @@ TEST_P(LibRadosIoECPP, ZeroAndTruncateSameRequest) {
     // commit 86cab4aecc40
     ObjectWriteOperation op;
     op.truncate(0);
-    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc0", &op));
-    stat_object("missing_trunc0", -ENOENT);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc_zero", &op));
+    stat_object("missing_trunc_zero", -ENOENT);
   }
 
   {
-    // Slightly surprisingly truncate to 4K on a non-existent object is successful
+    // Slightly surprisingly truncate to chunk size on a non-existent object is successful
     // but doesn't create the object.
     ObjectWriteOperation op;
     op.truncate(obj_size);
-    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc4k", &op));
-    stat_object("missing_trunc4k", -ENOENT);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc_chunksize", &op));
+    stat_object("missing_trunc_chunksize", -ENOENT);
   }
 
   {
@@ -1303,8 +1303,8 @@ TEST_P(LibRadosIoECPP, ZeroAndTruncateSameRequest) {
     ObjectWriteOperation op;
     op.truncate(0);
     op.truncate(obj_size);
-    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc0_trunc4k", &op));
-    stat_object("missing_trunc0_trunc4k", -ENOENT);
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "missing_trunc0_trunc_chunksize", &op));
+    stat_object("missing_trunc0_trunc_chunksize", -ENOENT);
   }
 }
 
