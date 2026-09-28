@@ -3138,6 +3138,17 @@ options:
   with_legacy: true
   services:
   - rgw
+- name: rgw_debug_inject_link_olh_log_err_key
+  type: str
+  level: dev
+  desc: Object name whose olh link fails after the bucket index links the version
+  long_desc: When set, a write or delete of this object name in a versioned bucket fails
+    with EIO after the bucket index has linked the version to the olh, as a bilog
+    flush that fails there would. This exists for development and testing purposes.
+  services:
+  - rgw
+  flags:
+  - runtime
 - name: rgw_debug_inject_mp_meta_delete_err
   type: uint
   level: dev

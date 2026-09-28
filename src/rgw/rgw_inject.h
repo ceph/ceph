@@ -15,15 +15,31 @@
 #include "common/dout.h"
 
 // for testing: wait at a named point when rgw_inject_delay_pattern names
-// it and rgw_inject_delay_sec is positive. A request coroutine waits on a
-// timer, so the frontend keeps serving other requests meanwhile.
+// it, alone or in a comma-separated list, and rgw_inject_delay_sec is
+// positive. A request coroutine waits on a timer, so the frontend keeps
+// serving other requests meanwhile.
+inline bool rgw_inject_delay_named(std::string_view pattern, std::string_view point)
+{
+  while (!pattern.empty()) {
+    const auto comma = pattern.find(',');
+    if (pattern.substr(0, comma) == point) {
+      return true;
+    }
+    if (comma == std::string_view::npos) {
+      break;
+    }
+    pattern.remove_prefix(comma + 1);
+  }
+  return false;
+}
+
 inline void rgw_inject_delay(const DoutPrefixProvider* dpp, optional_yield y,
                              std::string_view point)
 {
   CephContext* cct = dpp->get_cct();
   const double delay_sec = cct->_conf->rgw_inject_delay_sec;
   if (delay_sec <= 0 ||
-      std::string_view(cct->_conf->rgw_inject_delay_pattern) != point) {
+      !rgw_inject_delay_named(cct->_conf->rgw_inject_delay_pattern, point)) {
     return;
   }
   ldpp_dout(dpp, 0) << "injecting delay of " << delay_sec << "s at " << point

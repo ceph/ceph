@@ -3690,6 +3690,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   if (versioned_op && meta.olh_epoch) {
     bool add_log = log_op && store->svc.zone->need_to_log_data();
+    // for testing: the version's head and index entry are written, the olh
+    // not yet linked to it
+    rgw_inject_delay(rctx.dpp, rctx.y, "write_meta_before_olh_link");
     r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, add_log);
     if (r < 0) {
       return r;
@@ -7060,6 +7063,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         return r;
       }
 
+      // for testing: the current version is checked, the delete marker not
+      // yet linked
+      rgw_inject_delay(dpp, y, "delete_obj_before_olh_link");
       r = store->set_olh(dpp, target->get_ctx(), target->get_bucket_info(), marker, true,
                              &meta, params.olh_epoch, params.unmod_since, params.high_precision_time,
                              y, params.zones_trace, add_log, skip_olh_obj_update);
@@ -7106,6 +7112,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       }
 
       result.delete_marker = dirent.is_delete_marker();
+      // for testing: the version's index entry is read and checked, the
+      // version not yet unlinked
+      rgw_inject_delay(dpp, y, "delete_obj_before_unlink_instance");
       r = store->unlink_obj_instance(
 	dpp, target->get_ctx(), target->get_bucket_info(), obj,
 	params.olh_epoch, y, params.bilog_flags,
@@ -9610,6 +9619,12 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
     bilog.add_maybe_flush(committed_epoch, key, op_tag, delete_marker,
                           meta ? meta->mtime : ceph::real_clock::now(), zones_trace);
     int r = bilog.flush(y);
+    if (const auto k = cct->_conf.get_val<std::string>("rgw_debug_inject_link_olh_log_err_key");
+        r == 0 && !k.empty() && obj_instance.key.name == k) {
+      // for testing: the index links the version, and the bilog step
+      // after it fails
+      r = -EIO;
+    }
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__
                         << ": failed to flush bilog entry for " << key
@@ -10399,6 +10414,9 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  // for testing: the index unlinks the version and logs its removal, the
+  // olh log not yet applied
+  rgw_inject_delay(dpp, y, "unlink_instance_before_olh_update");
   ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, y,
 		   zones_trace, null_verid, log_op, force);
   if (ret == -ECANCELED) { /* already did what we needed, no need to retry, raced with another user */
