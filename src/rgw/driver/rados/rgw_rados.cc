@@ -5224,8 +5224,11 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
-               jspan_context& trace)
+               jspan_context& trace,
+               int copy_self_attempt)
 {
+  // a copy onto itself that loses its guard runs again with these
+  const rgw::sal::Attrs request_attrs = attrs;
   int ret;
   uint64_t obj_size;
   rgw_obj shadow_obj = dest_obj;
@@ -5563,6 +5566,26 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
   if (ret < 0) {
     goto done_ret;
+  }
+  if (copy_itself && write_op.meta.canceled) {
+    // the head changed since the copy read it: a write replaced it, or an
+    // attribute update (tagging, ACL) gave it a new ID tag. nothing of
+    // this copy was written. answered as success, it would drop the
+    // copy's metadata, or with the tag set it read, the update's: copy the
+    // object again as it is now
+    if (copy_self_attempt < 2) {
+      ldpp_dout(dpp, 5) << "copy of " << src_obj << " onto itself lost its guard, retrying" << dendl;
+      src_obj_ctx.invalidate(src_obj);
+      dest_obj_ctx.invalidate(dest_obj);
+      attrs = request_attrs;
+      return copy_obj(src_obj_ctx, dest_obj_ctx, owner, remote_user, info, source_zone,
+                      dest_obj, src_obj, dest_bucket_info, src_bucket_info, dest_placement,
+                      src_mtime, mtime, mod_ptr, unmod_ptr, high_precision_time,
+                      if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
+                      olh_epoch, delete_at, version_id, ptag, petag, progress_cb,
+                      progress_data, dp_factory, dpp, y, trace, copy_self_attempt + 1);
+    }
+    return -ERR_INTERNAL_ERROR;
   }
 
   return 0;

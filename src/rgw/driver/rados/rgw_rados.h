@@ -1304,7 +1304,8 @@ public:
                rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
-               jspan_context& trace);
+               jspan_context& trace,
+               int copy_self_attempt = 0);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                const ACLOwner& owner,
