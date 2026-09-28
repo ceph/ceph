@@ -59,6 +59,10 @@ class InvalidUuidError(VolumeException):
     pass
 
 
+class SubvolUpgradeError(VolumeException):
+    pass
+
+
 class EvictionError(VolumeException):
     pass
 

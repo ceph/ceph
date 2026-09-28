@@ -751,8 +751,7 @@ class SubvolumeBase(object):
             raise VolumeException(-me.args[0], me.args[1])
 
     def get_snap_section_name(self, snapname):
-        section = "SNAP_METADATA" + "_" + snapname;
-        return section;
+        return "SNAP_METADATA" + "_" + to_str(snapname)
 
     def set_snapshot_metadata(self, snapname, keyname, value):
         try:

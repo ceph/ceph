@@ -114,14 +114,14 @@ class SubvolumeLoader(object):
             # disc = discovered
             disc_version, disc_uuid = base_subvol.discover()
 
-            if disc_version <= 2:
+            if disc_version < 2:
                 self.upgrade_to_v2_subvolume(base_subvol)
                 subvol_class = self._get_subvolume_class(disc_version)
                 subvol_obj = subvol_class(mgr, fs, vol_spec, group, subvolname,
                                           legacy=base_subvol.legacy_mode)
-            elif disc_version == 3:
+            elif disc_version in (2, 3):
                 subvol_obj = SubvolumeV3(mgr, fs, vol_spec, group, subvolname,
-                                         disc_uuid)
+                                         disc_uuid, disc_version)
             else:
                 assert False, \
                         f'invalid version. disc_version = {disc_version}'
