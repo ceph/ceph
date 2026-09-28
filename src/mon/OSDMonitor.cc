@@ -8936,6 +8936,26 @@ int OSDMonitor::prepare_new_pool(string& name,
 
     dout(0) << "starting migration of pool " << source_pool_id.value() << dendl;
 
+    // A pool that both migrates and splits/merges in one epoch trips the assert
+    // in PeeringState::split_into(), so refuse to start while pg_num is changing.
+    {
+      // Null if the source pool was created in this same proposal: a brand-new
+      // pool has no in-flight split, so skip the committed-baseline comparison.
+      const pg_pool_t *committed_sp = osdmap.get_pg_pool(source_pool_id.value());
+      if ((committed_sp && spi->get_pg_num() != committed_sp->get_pg_num()) ||
+          spi->get_pg_num() != spi->get_pg_num_target() ||
+          spi->get_pg_num_pending() != spi->get_pg_num()) {
+        *ss << "cannot start migration of pool '"
+            << osdmap.get_pool_name(source_pool_id.value())
+            << "': its pg_num is changing (pg_num " << spi->get_pg_num()
+            << ", target " << spi->get_pg_num_target() << ")."
+            << " Wait for the pg_num change to complete (or set pg_num_target equal to"
+            << " the current pg_num) and retry.";
+        abort_pool();
+        return -EBUSY;
+      }
+    }
+
     spi->migration_src.reset();
     spi->migration_target = pool;
     pi->migration_src = source_pool_id.value();

@@ -821,8 +821,8 @@ public:
     return (outbl.to_str().contains("Pool migration"));
   }
 
-  void start_pool_migration(const std::string &source_name, const int pg_num,
-                            bool enable_ec_optimizations) {
+  int start_pool_migration(const std::string &source_name, const int pg_num,
+                           bool enable_ec_optimizations) {
     auto const formatter = std::make_shared<JSONFormatter>(false);
     std::ostringstream oss;
     messaging::osd::OSDPoolMigrateRequest pool_mig_request{source_name, pg_num,
@@ -831,10 +831,17 @@ public:
     formatter.get()->flush(oss);
 
     std::string outstr;
-    if (rados.mon_command(oss.str(), {}, nullptr, &outstr) != 0) {
+    int r = rados.mon_command(oss.str(), {}, nullptr, &outstr);
+    if (r == -EBUSY) {
+      cout_prefix() << __func__ << " migration not started yet (pg_num unstable), "
+                    << "will retry: " << outstr << std::endl;
+      return r;
+    }
+    if (r != 0) {
       std::cerr << "Error: could not start pool migration: " << outstr << std::endl;
       ceph_abort();
     }
+    return 0;
   }
 
   void manage_pool_migrations() {
@@ -858,8 +865,11 @@ public:
           migration_pg_num.value() : initial_pg_num;
         cout_prefix() << __func__ << " starting new pool migration on "
                       << pool_name << std::endl;
-        start_pool_migration(pool_name, pg_num, migration_ec_opts);
-        needs_wait = true;
+        if (start_pool_migration(pool_name, pg_num, migration_ec_opts) == -EBUSY) {
+          // not started yet; leave needs_wait unset to retry next iteration
+        } else {
+          needs_wait = true;
+        }
       } else {
         sleep_duration = migration_interval;
         migration_counter++;
