@@ -29,6 +29,9 @@ NFS_CORE_PARAM {
 {% if cqos_port %}
         Cqos_Port = {{ cqos_port }};
 {% endif %}
+{% if mem_stats_disable %}
+        Mem_Stats_Disable = true;
+{% endif %}
 }
 
 NFSv4 {
