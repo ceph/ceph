@@ -53,4 +53,31 @@ describe('OSDs page', () => {
       });
     });
   });
+
+  describe('Create OSDs tearsheet', () => {
+    it('should open create modal and close it on cancel, updating the URL', function () {
+      // Only exercise the Create click flow when the button is enabled.
+      // When Create is disabled (no Orchestrator / eligible devices), opening the
+      // form via URL is not the user path and orch APIs can return 500s.
+      cy.get('#osd-actions [data-testid="primary-action"][aria-label="Create"]').then(
+        function ($btn) {
+          if ($btn.is(':disabled')) {
+            cy.log('Skipping: Create OSD is disabled in this environment');
+            this.skip();
+          }
+
+          cy.wrap($btn).click();
+          cy.get('cd-osd-form').should('exist');
+          cy.get('[data-testid="osd-create-tearsheet-header"]').should(
+            'contain.text',
+            'Create OSDs'
+          );
+          cy.location('hash').should('eq', '#/osd/(modal:create)');
+
+          // Cancel closes the modal and redirects back to /osd
+          osds.closeCreateTearsheet();
+        }
+      );
+    });
+  });
 });
