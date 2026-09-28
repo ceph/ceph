@@ -52,6 +52,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   std::unique_ptr<MockPGBackendListener> backend_listener;
   coll_t coll;
   ObjectStore::CollectionHandle ch;
+  // Stub used by the pg log entry handler when there is no pg_backend.
   std::unique_ptr<MockPGBackend> backend;
   // Non-owning; set by ECPeeringTestFixture when a real IO backend exists.
   PGBackend *pg_backend = nullptr;
@@ -428,7 +429,8 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   PGLog::LogEntryHandlerRef get_log_handler(
     ObjectStore::Transaction &t) override {
-    return std::make_unique<MockPGLogEntryHandler>(backend.get(), &t);
+    return std::make_unique<MockPGLogEntryHandler>(
+      pg_backend ? pg_backend : backend.get(), &t);
   }
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) override {
