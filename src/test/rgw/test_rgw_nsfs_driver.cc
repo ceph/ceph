@@ -15,6 +15,7 @@
 #include "rgw_sal_nsfs.h"
 #include <gtest/gtest.h>
 #include <iostream>
+#include <fstream>
 #include <filesystem>
 #include <sys/xattr.h>
 #include "common/ceph_argparse.h"
@@ -42,9 +43,56 @@ sf::path base_path{"nsfstest"};
 std::unique_ptr<nsfs::Directory> root;
 std::vector<const char*> args;
 
+/* The strategies a driverless FSEnt runs with.
+ *
+ * An FSEnt reads and writes attributes and names scaffolding, so it
+ * carries a strategy for each and dereferences them;  the tests below
+ * build Directory and File objects with no driver, and until this
+ * existed every one of them died on a null pointer.
+ *
+ * Fixed rather than probed, deliberately.  A unit test wants a known
+ * layout, not whatever the filesystem under the build directory
+ * happens to support, and a driver's own selection is factored into
+ * NSFSDriver::init_strategies() for the cases that want it. */
+class DriverlessStrategies {
+public:
+  nsfs::POSIXStrategy fs;
+  nsfs::PerPartMPUStrategy mpu;
+  nsfs::PrefixedXattrStrategy xattr;
+  nsfs::SentinelPathStrategy path;
+  nsfs::ReservedNames reserved;
+
+  DriverlessStrategies() {
+    auto add = [this](const nsfs::ReservedNames& r) {
+      reserved.exact.insert(reserved.exact.end(),
+			    r.exact.begin(), r.exact.end());
+      reserved.prefixes.insert(reserved.prefixes.end(),
+			       r.prefixes.begin(), r.prefixes.end());
+      reserved.staging_prefixes.insert(reserved.staging_prefixes.end(),
+				       r.staging_prefixes.begin(),
+				       r.staging_prefixes.end());
+      reserved.content_exact.insert(reserved.content_exact.end(),
+				    r.content_exact.begin(),
+				    r.content_exact.end());
+    };
+    add(path.reserved_names());
+    add(mpu.reserved_names());
+  }
+
+  void seed(nsfs::FSEnt* ent) {
+    ent->set_mpu_strategy(&mpu);
+    ent->set_xattr_strategy(&xattr);
+    ent->set_path_strategy(&path);
+    ent->set_reserved_names(&reserved);
+  }
+};
+
+std::unique_ptr<DriverlessStrategies> strategies;
+
 class Environment : public ::testing::Environment {
 public:
   boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<DoutPrefix> dp;
   DoutPrefixProvider* dpp{nullptr};
 
   Environment() {}
@@ -65,11 +113,19 @@ public:
                       CODE_ENVIRONMENT_UTILITY,
                       CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
-    dpp = nullptr;
+    /* A real prefix provider, not nullptr.  The driver reads
+     * configuration through dpp->get_cct() on the write path, so a null
+     * one crashes every test that puts an object. */
+    dp = std::make_unique<DoutPrefix>(cct.get(), ceph_subsys_rgw,
+				      "nsfs unittest: ");
+    dpp = dp.get();
 
     rgw_mime_init(dpp, cct.get());
 
-    root = std::make_unique<nsfs::Directory>(base_path, nullptr, cct.get());
+    strategies = std::make_unique<DriverlessStrategies>();
+    root = std::make_unique<nsfs::Directory>(base_path, nullptr, cct.get(),
+					     &strategies->fs);
+    strategies->seed(root.get());
     ASSERT_EQ(root->open(dpp), 0);
 
     if (verbose) {
@@ -508,23 +564,37 @@ public:
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
 
-    root_dir = std::make_unique<nsfs::Directory>(base_path, nullptr, env->cct.get());
+    /* The base path first, because the extents probe reads it, then the
+     * strategies, then the root directory -- which takes the FSStrategy
+     * as a constructor argument and passes it to every child.  The real
+     * driver orders these the same way;  building the root first leaves
+     * every File below it with a null fs_strategy. */
+    std::error_code ec;
+    sf::create_directories(base_path, ec);
+    if (ec) {
+      ldpp_dout(env->dpp, 0) << " ERROR: could not create base path ("
+			     << base_path << "): " << ec.message() << dendl;
+      return -ec.value();
+    }
+
+    init_strategies(dpp);
+
+    root_dir = std::make_unique<nsfs::Directory>(base_path, nullptr,
+						 env->cct.get(),
+						 fs_strategy.get());
+    root_dir->set_mpu_strategy(mpu_strategy.get());
+    root_dir->set_xattr_strategy(xattr_strategy.get());
+    root_dir->set_path_strategy(path_strategy.get());
+    root_dir->set_reserved_names(&reserved_names);
+
     int ret = root_dir->open(env->dpp);
     if (ret < 0) {
-      if (ret == -ENOTDIR) {
-        ldpp_dout(env->dpp, 0) << " ERROR: base path (" << base_path
-                          << "): was not a directory." << dendl;
-        return ret;
-      } else if (ret == -ENOENT) {
-        ret = root_dir->create(env->dpp);
-        if (ret < 0) {
-          ldpp_dout(env->dpp, 0)
-              << " ERROR: could not create base path (" << base_path
-              << "): " << cpp_strerror(-ret) << dendl;
-          return ret;
-        }
-      }
+      ldpp_dout(env->dpp, 0) << " ERROR: could not open base path ("
+			     << base_path << "): " << cpp_strerror(-ret)
+			     << dendl;
+      return ret;
     }
+
     quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
     bucket_cache.reset(new nsfs::BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));

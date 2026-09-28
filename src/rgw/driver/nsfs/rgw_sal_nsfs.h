@@ -552,6 +552,11 @@ public:
 
   bool have_fsio() const override { return true; }
 
+  /* Construct the strategies, the profiles and the reserved-name union.
+   * Called by initialize(), and directly by a test driver which does not
+   * want the rest of initialization.  base_path must be set first. */
+  void init_strategies(const DoutPrefixProvider* dpp);
+
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
   virtual const std::string get_name() const override { return "nsfs"; }
   virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) override { return "PLACEHOLDER"; };

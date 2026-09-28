@@ -2922,13 +2922,19 @@ int NSFSLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yiel
   return -ENOENT;
 }
 
-int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+/* Build every strategy implementation, the profiles which select among
+ * them, and the union of names they reserve.
+ *
+ * Separate from initialize() so that a test can construct a driver
+ * without the rest of it -- the configuration, the caches, the
+ * frontends -- and still have a driver whose strategies are not null.
+ * Factored rather than reproduced:  the selection is what S5 changes,
+ * and a second copy of it drifts from the first.
+ *
+ * base_path must already be set;  the extents probe reads it.
+ */
+void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp)
 {
-  int ret = -1;
-  base_path = g_conf().get_val<std::string>("rgw_nsfs_base_path");
-
-  ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
-
   auto gpfs_lib = g_conf().get_val<std::string>("rgw_nsfs_gpfs_lib_path");
   bool gpfs_clone = g_conf().get_val<bool>("rgw_nsfs_gpfs_clone_files");
   bool gpfs_lwe = g_conf().get_val<bool>("rgw_nsfs_gpfs_lwe_locking");
@@ -2953,10 +2959,9 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
    * real, and FSStrategy has just measured that.
    *
    * A capability question, not a vendor one:  link() is plain POSIX and
-   * nothing here names a filesystem.  This is also the one on-disk
-   * structure which may legitimately be probed rather than recorded,
-   * because staging never outlives its upload and so cannot be
-   * inherited by a gateway which would read it differently. */
+   * nothing here names a filesystem.  It chooses between OUR two
+   * layouts and nothing else:  a base bucket stages as NooBaa does,
+   * because base is NooBaa's format. */
   if (fs_strategy->shares_extents()) {
     mpu_strategy = std::make_unique<nsfs::PerPartMPUStrategy>();
   } else {
@@ -3010,6 +3015,17 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     reserved_names.prefixes.emplace_back(nsfs::UNLINK_TMP_PREFIX);
     reserved_names.prefixes.emplace_back(nsfs::CLONE_PARENT_PREFIX);
   }
+
+}
+
+int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+{
+  int ret = -1;
+  base_path = g_conf().get_val<std::string>("rgw_nsfs_base_path");
+
+  ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
+
+  init_strategies(dpp);
 
   /* ordered listing cache */
   bucket_cache.reset(
