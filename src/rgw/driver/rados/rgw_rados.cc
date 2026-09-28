@@ -9656,10 +9656,12 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
                           meta ? meta->mtime : ceph::real_clock::now(), zones_trace);
     int r = bilog.flush(y);
     if (r < 0) {
+      // the index links the version, so the link stands. failing here would
+      // have the caller free what the now current version names, as a
+      // failed index completion after a head write would
       ldpp_dout(dpp, 0) << "ERROR: " << __func__
                         << ": failed to flush bilog entry for " << key
                         << ": " << cpp_strerror(r) << dendl;
-      return r;
     }
     return 0;
   };
@@ -9682,6 +9684,12 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
   if (log_data_change) {
     r = add_datalog_entry(dpp, svc.datalog_rados, bucket_info,
                           obj_instance.get_hash_object(), bs.shard_id, y);
+    if (r < 0) {
+      // the index links the version: the link stands
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__
+                        << ": failed to add datalog entry, ret=" << r << dendl;
+      r = 0;
+    }
   }
 
   return r;
@@ -10346,8 +10354,10 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
     ret = 0;
   }
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
-    return ret;
+    // the index links the version, so the link stands. the olh's pending
+    // log entry stays, and a read that follows the olh applies it
+    ldpp_dout(dpp, 0) << "ERROR: update_olh() target_obj=" << target_obj << " returned " << ret
+                      << ", leaving the olh log for a read to apply" << dendl;
   }
 
   return 0;
