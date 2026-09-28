@@ -114,9 +114,32 @@ pub async fn driver_hint(hint: &str, params: &[(&str, &str)]) -> RawResponse {
 /// against a tree that came from NooBaa, so it has its own resource and
 /// its own capability instead of riding the dev-gated hint endpoint.
 /// `None` when the deployment does not offer it.
-pub async fn nsfs_adopt(bucket: &str) -> Option<HashMap<String, String>> {
+pub async fn nsfs_set_profile(bucket: &str, profile: &str)
+    -> Option<HashMap<String, String>> {
     let resp = admin_request(
-        reqwest::Method::PUT, "/admin/nsfs/adopt",
+        reqwest::Method::PUT, "/admin/nsfs/profile",
+        &format!("bucket={bucket}&profile={profile}"), None).await;
+    if resp.status != 200 {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(&resp.body).ok()?;
+    let map = v.as_object()?;
+    let mut out = HashMap::new();
+    for (k, val) in map {
+        let s = match val {
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::String(s) => s.clone(),
+            other => other.to_string(),
+        };
+        out.insert(k.clone(), s);
+    }
+    Some(out)
+}
+
+/// Which profile a bucket is in, without changing it.
+pub async fn nsfs_get_profile(bucket: &str) -> Option<HashMap<String, String>> {
+    let resp = admin_request(
+        reqwest::Method::GET, "/admin/nsfs/profile",
         &format!("bucket={bucket}"), None).await;
     if resp.status != 200 {
         return None;

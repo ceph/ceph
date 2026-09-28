@@ -11,7 +11,7 @@
 //! bucket.  Never inferred on access, which would convert a tree an
 //! operator was deliberately keeping reversible.
 
-use s3_tests_rs::admin::{driver_hint_results, nsfs_adopt};
+use s3_tests_rs::admin::{nsfs_get_profile, nsfs_set_profile};
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::features::features;
 use s3_tests_rs::fixtures::{get_new_bucket, TestGuard};
@@ -43,13 +43,17 @@ async fn test_extensions_are_reported() {
         "whether new buckets are marked is not reported");
 }
 
-/// Both polarities.  A bucket the gateway created is already marked, so
-/// adopting it is a no-op;  the hint takes the marker away, and only then
-/// does adoption have anything to do.  Without the unmarked leg this test
-/// would pass against an adopt that did nothing at all.
+/// Both polarities.  A bucket the gateway created is already `strong`,
+/// so setting it there is a no-op;  moving it to `base` is the only way
+/// a suite reaches that profile, and only then does setting `strong`
+/// have anything to do.  Without the base leg this would pass against a
+/// setter that did nothing at all.
+///
+/// Reducing a profile requires the bucket to hold no content, so the
+/// bucket is left empty here.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_adopt_marks_an_unmarked_bucket() {
+async fn test_profile_moves_between_base_and_strong() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
@@ -57,50 +61,87 @@ async fn test_adopt_marks_an_unmarked_bucket() {
     }
     let f = features().await.unwrap();
     if f.get_bool("extensions_default") != Some(true) {
-        eprintln!("reversible mode;  adoption is refused by design");
+        eprintln!("reversible mode;  extending a bucket is refused by design");
         return;
     }
-    let version = f.get_str("extensions").unwrap().to_string();
 
     let client = get_client();
     let bucket = get_new_bucket(Some(&client)).await;
 
-    /* created here, so already marked:  adoption is a no-op and says so */
-    let Some(first) = nsfs_adopt(&bucket).await else {
-        eprintln!("adopt endpoint unavailable;  nothing to check");
+    /* created here, so already strong */
+    let Some(first) = nsfs_get_profile(&bucket).await else {
+        eprintln!("profile endpoint unavailable;  nothing to check");
         return;
     };
-    assert_eq!(first.get("had").map(String::as_str), Some(version.as_str()),
-        "a bucket this gateway created should already be marked");
+    assert_eq!(first.get("profile").map(String::as_str), Some("strong"),
+        "a bucket this gateway created should be in the strong profile");
 
-    /* take the marker away, which is the only way to reach the base
-     * profile from a suite -- everything a gateway creates is marked */
-    let unmarked = driver_hint_results(
-        "unmark-bucket", &[("bucket", &bucket)]).await
-        .expect("unmark-bucket hint unavailable");
-    assert_eq!(unmarked.get("unmarked").map(String::as_str), Some("true"),
-        "the hint did not report the marker removed");
+    let down = nsfs_set_profile(&bucket, "base").await
+        .expect("the profile endpoint answered once and should answer again");
+    assert_eq!(down.get("had_profile").map(String::as_str), Some("strong"));
 
-    let second = nsfs_adopt(&bucket).await
-        .expect("adopt answered once and should answer again");
-    assert_eq!(second.get("had").map(String::as_str), Some("0"),
-        "the bucket was unmarked and adoption should have seen that");
-    assert_eq!(second.get("extensions").map(String::as_str),
-        Some(version.as_str()),
-        "adoption did not mark the bucket at this gateway's version");
+    let now = nsfs_get_profile(&bucket).await.expect("profile should answer");
+    assert_eq!(now.get("profile").map(String::as_str), Some("base"),
+        "the bucket was not reduced to base");
+    assert_eq!(now.get("extensions").map(String::as_str), Some("0"),
+        "base carries no extensions");
 
-    /* and it is marked again, so the next adoption is a no-op */
-    let third = nsfs_adopt(&bucket).await.expect("adopt should answer");
-    assert_eq!(third.get("had").map(String::as_str), Some(version.as_str()),
-        "adoption did not persist");
+    let up = nsfs_set_profile(&bucket, "strong").await
+        .expect("profile should answer");
+    assert_eq!(up.get("had_profile").map(String::as_str), Some("base"),
+        "the setter did not see the bucket at base");
+
+    let back = nsfs_get_profile(&bucket).await.expect("profile should answer");
+    assert_eq!(back.get("profile").map(String::as_str), Some("strong"),
+        "the move to strong did not persist");
 }
 
-/// An unmarked bucket still serves S3.  The extensions are what it lacks,
-/// not the object interface -- if this broke, the base profile would be
-/// useless and the whole polarity would be wrong.
+/// Shared sits between the two and is a profile in its own right, not an
+/// absent marker.  A suite cannot otherwise reach it:  the gateway
+/// creates every bucket strong.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_unmarked_bucket_still_serves_s3() {
+async fn test_profile_shared_is_distinct_from_base() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let f = features().await.unwrap();
+    if f.get_bool("extensions_default") != Some(true) {
+        eprintln!("reversible mode;  extending a bucket is refused by design");
+        return;
+    }
+
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    if nsfs_set_profile(&bucket, "shared").await.is_none() {
+        eprintln!("profile endpoint unavailable;  nothing to check");
+        return;
+    }
+
+    let got = nsfs_get_profile(&bucket).await.expect("profile should answer");
+    assert_eq!(got.get("profile").map(String::as_str), Some("shared"),
+        "shared did not read back as shared");
+
+    /* the distinction the on-disk value has to carry:  shared is not the
+     * absence of a marker, so its extension set is not zero */
+    assert_ne!(got.get("extensions").map(String::as_str), Some("0"),
+        "shared reported the same extension set as base");
+
+    /* and base still reads as base, so the two are not aliases */
+    nsfs_set_profile(&bucket, "base").await.expect("profile should answer");
+    let base = nsfs_get_profile(&bucket).await.expect("profile should answer");
+    assert_eq!(base.get("profile").map(String::as_str), Some("base"));
+    assert_eq!(base.get("extensions").map(String::as_str), Some("0"));
+}
+
+/// Reducing a profile is refused once the bucket holds content, because
+/// the structures the dropped extensions allowed stay in the tree.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_profile_cannot_be_reduced_with_content() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
@@ -110,24 +151,60 @@ async fn test_unmarked_bucket_still_serves_s3() {
     let client = get_client();
     let bucket = get_new_bucket(Some(&client)).await;
 
-    if driver_hint_results("unmark-bucket", &[("bucket", &bucket)]).await
-        .is_none() {
-        eprintln!("unmark-bucket hint unavailable;  nothing to check");
+    /* empty, so the reduction is allowed:  the control for the refusal
+     * below, which would otherwise pass against a setter that refused
+     * everything */
+    if nsfs_set_profile(&bucket, "base").await.is_none() {
+        eprintln!("profile endpoint unavailable;  nothing to check");
+        return;
+    }
+    nsfs_set_profile(&bucket, "strong").await.expect("profile should answer");
+
+    client.put_object()
+        .bucket(&bucket).key("obj")
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"payload"))
+        .send().await.expect("put on a strong bucket");
+
+    assert!(nsfs_set_profile(&bucket, "base").await.is_none(),
+        "a bucket holding content was reduced to base");
+
+    let still = nsfs_get_profile(&bucket).await.expect("profile should answer");
+    assert_eq!(still.get("profile").map(String::as_str), Some("strong"),
+        "the refused reduction changed the profile anyway");
+}
+
+/// A base bucket still serves S3.  The extensions are what it lacks, not
+/// the object interface -- if this broke, the base profile would be
+/// useless and the whole polarity would be wrong.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_base_bucket_still_serves_s3() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    if nsfs_set_profile(&bucket, "base").await.is_none() {
+        eprintln!("profile endpoint unavailable;  nothing to check");
         return;
     }
 
     client.put_object()
         .bucket(&bucket).key("obj")
         .body(aws_sdk_s3::primitives::ByteStream::from_static(b"payload"))
-        .send().await.expect("put on an unmarked bucket");
+        .send().await.expect("put on a base bucket");
 
     let got = client.get_object()
         .bucket(&bucket).key("obj")
-        .send().await.expect("get on an unmarked bucket");
+        .send().await.expect("get on a base bucket");
     let body = got.body.collect().await.unwrap().into_bytes();
     assert_eq!(&body[..], b"payload");
 
     let listed = client.list_objects_v2()
-        .bucket(&bucket).send().await.expect("list on an unmarked bucket");
+        .bucket(&bucket).send().await.expect("list on a base bucket");
     assert_eq!(listed.contents().len(), 1);
 }
