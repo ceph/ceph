@@ -281,6 +281,12 @@ int mgr_command(librados::Rados& rados, const std::string& cmd,
                 const std::map<std::string, std::string> &args,
                 std::ostream *out_os, std::ostream *err_os);
 
+int read_snaps(
+  int fd,
+  std::string &snapname,
+  librbd::snap_namespace_type_t &snap_ns_type,
+  std::optional<librbd::snap_trash_namespace_t> &maybe_snap_trash_namespace);
+
 } // namespace utils
 } // namespace rbd
 
