@@ -18,7 +18,7 @@
 
 #include <iterator>
 #include <cstdlib>
-#include <ostream>
+#include <iosfwd>
 
 #include "include/ceph_assert.h"
 
@@ -220,19 +220,6 @@ public:
 
   const_iterator begin() const { return const_iterator(_front); }
   const_iterator end() const { return const_iterator(NULL); }
-
-  friend std::ostream &operator<<(std::ostream &oss, const xlist<T> &list) {
-    bool first = true;
-    for (const auto &item : list) {
-      if (!first) {
-        oss << ", ";
-      }
-      oss << *item; /* item should be a pointer */
-      first = false;
-    }
-    return oss;
-  }
 };
-
 
 #endif

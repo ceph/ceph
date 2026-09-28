@@ -16,6 +16,8 @@
 #ifndef CEPH_MMONJOIN_H
 #define CEPH_MMONJOIN_H
 
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "messages/PaxosServiceMessage.h"
 
 class MMonJoin final : public PaxosServiceMessage {

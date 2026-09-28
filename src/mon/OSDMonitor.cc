@@ -82,18 +82,24 @@
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
 
+#include "include/byte_u_t.h"
 #include "include/compat.h"
 #include "include/ceph_assert.h"
+#include "include/si_u_t.h"
 #include "include/stringify.h"
 #include "include/util.h"
 #include "common/cmdparse.h"
 #include "include/str_list.h"
 #include "include/str_map.h"
 #include "include/scope_guard.h"
+#include "include/variant_print.h"
 #include "perfglue/heap_profiler.h"
 
 #include "auth/cephx/CephxKeyServer.h"
 #include "osd/OSDCap.h"
+#include "osd/BloomHitSet.h"
+#include "osd/ExplicitHashHitSet.h"
+#include "osd/ExplicitObjectHitSet.h"
 
 #include "json_spirit/json_spirit_reader.h"
 

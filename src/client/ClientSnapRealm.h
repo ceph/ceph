@@ -4,10 +4,11 @@
 #ifndef CEPH_CLIENT_SNAPREALM_H
 #define CEPH_CLIENT_SNAPREALM_H
 
-#include <iostream>
+#include <iosfwd>
 #include <set>
 #include <vector>
 
+#include "include/container_ios.h"
 #include "include/types.h"
 #include "common/snap_types.h"
 #include "include/xlist.h"
@@ -56,15 +57,6 @@ public:
   void dump(Formatter *f) const;
 };
 
-inline std::ostream& operator<<(std::ostream& out, const SnapRealm& r) {
-  return out << "snaprealm(" << r.ino << " nref=" << r.nref << " c=" << r.created << " seq=" << r.seq
-	     << " parent=" << r.parent
-	     << " my_snaps=" << r.my_snaps
-	     << " cached_snapc=" << r.cached_snap_context
-	     << " last_modified=" << r.last_modified
-	     << " change_attr=" << r.change_attr
-             << " is_snapdir_visible=" << r.is_snapdir_visible
-	     << ")";
-}
+std::ostream& operator<<(std::ostream& out, const SnapRealm& r);
 
 #endif

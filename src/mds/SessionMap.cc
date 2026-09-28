@@ -29,6 +29,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/DecayCounter.h"
+#include "common/OnFinisher.h"
 #include "common/perf_counters.h"
 #include "common/strescape.h" // for get_trimmed_path()
 #include "include/ceph_assert.h"

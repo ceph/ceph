@@ -6,6 +6,7 @@
 #include "osd_perf_counters.h"
 #include "common/ceph_releases.h"
 #include "common/debug.h"
+#include "common/hobject_fmt.h"
 #include "common/JSONFormatter.h"
 #include "common/ostream_temp.h"
 #include "crush/crush.h" // for CRUSH_ITEM_NONE

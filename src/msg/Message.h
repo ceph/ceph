@@ -18,18 +18,11 @@
 
 #include <concepts>
 #include <cstdlib>
-#include <ostream>
-#include <sstream>
+#include <iosfwd>
 #include <string_view>
 
 #include <boost/intrusive/list.hpp>
 
-#include <fmt/core.h> // for FMT_VERSION
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
-
-#include "include/Context.h"
 #include "common/RefCountedObj.h"
 #include "common/ThrottleInterface.h"
 #include "common/config.h"
@@ -305,14 +298,7 @@ public:
   void encode_otel_trace(ceph::buffer::list &bl, uint64_t features) const;
   void decode_otel_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 
-  class CompletionHook : public Context {
-  protected:
-    Message *m;
-    friend class Message;
-  public:
-    explicit CompletionHook(Message *_m) : m(_m) {}
-    virtual void set_message(Message *_m) { m = _m; }
-  };
+  class CompletionHook;
 
   typedef boost::intrusive::list<Message,
 				 boost::intrusive::member_hook<
@@ -353,15 +339,7 @@ public:
   }
 
 protected:
-  ~Message() override {
-    if (byte_throttler)
-      byte_throttler->put(payload.length() + middle.length() + data.length());
-    release_message_throttle();
-    trace.event("message destructed");
-    /* call completion hooks (if any) */
-    if (completion_hook)
-      completion_hook->complete(0);
-  }
+  ~Message() override;
 public:
   const ConnectionRef& get_connection() const {
 #ifdef WITH_CRIMSON
@@ -547,10 +525,7 @@ public:
   virtual void decode_payload() = 0;
   virtual void encode_payload(uint64_t features) = 0;
   virtual std::string_view get_type_name() const = 0;
-  virtual void print(std::ostream& out) const {
-    out << get_type_name() << " magic: " << magic;
-  }
-
+  virtual void print(std::ostream& out) const;
   virtual void dump(ceph::Formatter *f) const;
 
   void encode(uint64_t features, int crcflags, bool skip_header_crc = false);
@@ -574,12 +549,7 @@ extern Message *decode_message(CephContext *cct,
                                ceph::buffer::list& middle,
                                ceph::buffer::list& data,
                                Message::ConnectionRef conn);
-inline std::ostream& operator<<(std::ostream& out, const Message& m) {
-  m.print(out);
-  if (m.get_header().version)
-    out << " v" << m.get_header().version;
-  return out;
-}
+std::ostream& operator<<(std::ostream& out, const Message& m);
 
 extern void encode_message(Message *m, uint64_t features, ceph::buffer::list& bl);
 extern Message *decode_message(CephContext *cct, int crcflags,
@@ -618,26 +588,5 @@ MURef<T> make_message(Args&&... args) {
   return {new T(std::forward<Args>(args)...), TOPNSPC::common::UniquePtrDeleter{}};
 }
 }
-
-namespace fmt {
-// placed in the fmt namespace due to an ADL bug in g++ < 12
-// (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92944).
-// Specifically - gcc pre-12 can't handle two templated specializations of
-// the formatter if in two different namespaces.
-template <std::derived_from<Message> M>
-struct formatter<M> {
-  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-  template <typename FormatContext>
-  auto format(const M& m, FormatContext& ctx) const {
-    std::ostringstream oss;
-    m.print(oss);
-    if (auto ver = m.get_header().version; ver) {
-      return fmt::format_to(ctx.out(), "{} v{}", oss.str(), (uint32_t)ver);
-    } else {
-      return fmt::format_to(ctx.out(), "{}", oss.str());
-    }
-  }
-};
-}  // namespace fmt
 
 #endif

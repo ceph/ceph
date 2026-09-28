@@ -19,12 +19,20 @@
 
 #include <atomic>
 #include <cstdint>
+#include <ostream>
 #include <vector>
 
 #include "MOSDFastDispatchOp.h"
+#include "include/buffer.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
+#include "include/object.h" // for snapid_t
+#include "include/rados_encoder.h"
+#include "include/utime.h"
 #include "common/hobject.h"
+#include "osd/osd_types.h" // for osd_reqid_t, spg_t
 
 /*
  * OSD op
@@ -258,6 +266,7 @@ public:
   // marshalling
   void encode_payload(uint64_t features) override {
     using ceph::encode;
+    using ceph::encode_nohead;
     if( false == bdata_encode ) {
       OSDOp::merge_osd_op_vector_in_data(ops, data);
       bdata_encode = true;
@@ -312,8 +321,8 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < ops.size(); i++)
 	encode(ops[i].op, payload);
 
-      ceph::encode_nohead(hobj.oid.name, payload);
-      ceph::encode_nohead(snaps, payload);
+      encode_nohead(hobj.oid.name, payload);
+      encode_nohead(snaps, payload);
     } else if ((features & CEPH_FEATURE_NEW_OSDOP_ENCODING) == 0) {
       header.version = 6;
       encode(client_inc, payload);
@@ -433,6 +442,8 @@ struct ceph_osd_request_head {
 
   void decode_payload() override {
     using ceph::decode;
+    using ceph::decode_nohead;
+    using ceph::decode_raw;
     ceph_assert(partial_decode_needed && final_decode_needed);
     p = std::cbegin(payload);
 
@@ -469,7 +480,7 @@ struct ceph_osd_request_head {
       decode(client_inc, p);
 
       old_pg_t opgid;
-      ceph::decode_raw(opgid, p);
+      decode_raw(opgid, p);
       pgid.pgid = opgid;
 
       __u32 su;
@@ -495,8 +506,8 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < num_ops; i++)
 	decode(ops[i].op, p);
 
-      ceph::decode_nohead(oid_len, hobj.oid.name, p);
-      ceph::decode_nohead(num_snaps, snaps, p);
+      decode_nohead(oid_len, hobj.oid.name, p);
+      decode_nohead(num_snaps, snaps, p);
 
       // recalculate pgid hash value
       pgid.pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
@@ -528,7 +539,7 @@ struct ceph_osd_request_head {
 
       if (header.version < 3) {
 	old_pg_t opgid;
-	ceph::decode_raw(opgid, p);
+	decode_raw(opgid, p);
 	pgid.pgid = opgid;
       } else {
 	decode(pgid.pgid, p);

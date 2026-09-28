@@ -20,9 +20,9 @@
 
 #define CONST_DELIMS ",;\t\n "
 
+#include <iosfwd>
 #include <map>
 #include <string>
-#include <sstream>
 
 template <typename Func>
 void for_each_pair(std::string_view s, const char* delims, Func&& f)

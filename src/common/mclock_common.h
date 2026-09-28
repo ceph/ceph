@@ -16,10 +16,12 @@
 
 #pragma once
 #include "config.h"
-#include "ceph_context.h"
+#include "common/ceph_context.h" // for CephContext
+#include "common/config_proxy.h" // for md_config_obs_t
+#include "include/utime.h"
 #include "dmclock/src/dmclock_server.h"
 #ifndef WITH_CRIMSON
- #include "mon/MonClient.h"
+  class MonClient;
 #else
  #include "crimson/mon/MonClient.h"
 #endif

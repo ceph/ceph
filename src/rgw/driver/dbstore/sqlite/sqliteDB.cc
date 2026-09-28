@@ -3,6 +3,8 @@
 
 #include "sqliteDB.h"
 #include "rgw_account.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 
 using namespace std;
 

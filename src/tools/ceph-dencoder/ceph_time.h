@@ -4,6 +4,7 @@
 #include <list>
 
 #include "include/encoding.h"
+#include "include/encoding_chrono.h"
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
 

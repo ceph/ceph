@@ -77,6 +77,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/str_list.cc
   ${PROJECT_SOURCE_DIR}/src/common/str_map.cc
   ${PROJECT_SOURCE_DIR}/src/common/strtol.cc
+  ${PROJECT_SOURCE_DIR}/src/common/tracer.cc
   ${PROJECT_SOURCE_DIR}/src/common/reverse.c
   ${PROJECT_SOURCE_DIR}/src/common/types.cc
   ${PROJECT_SOURCE_DIR}/src/common/utf8.c
@@ -110,12 +111,19 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/include/filepath.cc
   ${PROJECT_SOURCE_DIR}/src/include/object.cc
+  ${PROJECT_SOURCE_DIR}/src/include/snapid.cc
+  ${PROJECT_SOURCE_DIR}/src/include/sobject.cc
+  ${PROJECT_SOURCE_DIR}/src/include/client_t.cc
   ${PROJECT_SOURCE_DIR}/src/include/types.cc
+  ${PROJECT_SOURCE_DIR}/src/include/errorcode32.cc
+  ${PROJECT_SOURCE_DIR}/src/include/shard_id.cc
   ${PROJECT_SOURCE_DIR}/src/include/utime.cc
   ${PROJECT_SOURCE_DIR}/src/include/uuid.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/io/IoOperations.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
+  ${PROJECT_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc
   ${PROJECT_SOURCE_DIR}/src/mds/inode_backtrace.cc
   ${PROJECT_SOURCE_DIR}/src/mds/mdstypes.cc
   ${PROJECT_SOURCE_DIR}/src/mds/cephfs_features.cc
@@ -125,10 +133,23 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/mds/MDSAuthCaps.cc
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MClientReply.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MClientRequest.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MClientSession.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MClientSnap.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MMonCommand.cc
+  ${PROJECT_SOURCE_DIR}/src/messages/MMonCommandAck.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/DataStats.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/FeatureMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MgrMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonCap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/MonitorDBStoreStats.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/mon_feature_t.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/PoolAvailability.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/ProgressEvent.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/ScrubResult.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_types.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECMsgTypes.cc
   ${PROJECT_SOURCE_DIR}/src/osd/HitSet.cc

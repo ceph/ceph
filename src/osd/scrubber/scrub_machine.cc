@@ -12,6 +12,7 @@
 #include "osd/OpRequest.h"
 
 #include "ScrubStore.h"
+#include "common/ceph_time_fmt.h"
 #include "common/debug.h"
 
 #define dout_context g_ceph_context

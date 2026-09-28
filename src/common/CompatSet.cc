@@ -18,7 +18,9 @@
 #include <iostream>
 
 #include "common/Formatter.h"
-#include "include/types.h"
+#include "include/container_ios.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 
 void CompatSet::FeatureSet::encode(ceph::buffer::list& bl) const {
   using ceph::encode;
@@ -68,6 +70,18 @@ std::ostream& CompatSet::printlite(std::ostream& o) const {
   o << ",i=[" << std::hex << incompat.mask << "]}";
   o << std::dec;
   return o;
+}
+
+void CompatSet::encode(ceph::buffer::list& bl) const {
+  compat.encode(bl);
+  ro_compat.encode(bl);
+  incompat.encode(bl);
+}
+
+void CompatSet::decode(ceph::buffer::list::const_iterator& bl) {
+  compat.decode(bl);
+  ro_compat.decode(bl);
+  incompat.decode(bl);
 }
 
 void CompatSet::dump(ceph::Formatter *f) const {

@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "include/ceph_assert.h"
+#include "include/container_ios.h"
 #include "include/rados/librados.hpp"
 
 #include "cls/lock/cls_lock_client.h"

@@ -19,6 +19,7 @@
 
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "common/OnFinisher.h"
 #include "mds/mdstypes.h"
 #include "mds/CInode.h"
 #include "osdc/Objecter.h"

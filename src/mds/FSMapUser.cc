@@ -1,5 +1,7 @@
 #include "FSMapUser.h"
 #include "common/Formatter.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 
 void FSMapUser::encode(ceph::buffer::list& bl, uint64_t features) const
 {

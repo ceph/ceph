@@ -25,7 +25,7 @@
 
 #include "common/snap_types.h"
 #include "include/buffer.h"
-#include "include/object.h" // for snapid_t
+#include "include/snapid.h" // for snapid_t
 #include "include/utime.h"
 
 namespace ceph { class Formatter; }

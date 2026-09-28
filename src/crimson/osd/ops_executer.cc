@@ -15,6 +15,7 @@
 
 #include <seastar/core/thread.hh>
 
+#include "common/snap_fmt.h"
 #include "crimson/common/log.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg.h"

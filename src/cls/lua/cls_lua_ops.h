@@ -4,6 +4,7 @@
 #include <string>
 
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "include/rados/cls_traits.hpp"
 
 struct cls_lua_eval_op {

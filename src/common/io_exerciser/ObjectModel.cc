@@ -1,5 +1,6 @@
 #include "ObjectModel.h"
 #include "IoOp.h"
+#include "include/encoding_vector.h"
 
 #include <algorithm>
 #include <execution>
