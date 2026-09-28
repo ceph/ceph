@@ -73,6 +73,7 @@ inline constexpr std::string_view kLocalCounterRgwId = "rgw_id";
 
 inline constexpr int kMaxBatchSize = 16;
 
+inline constexpr size_t AWS_MaxMetadataBytes = 2048;
 inline constexpr size_t AWS_MaxObjectNameLen = 1024;
 inline constexpr uint32_t AWS_MinBucketNameLen = 3;
 inline constexpr uint32_t AWS_MaxBucketNameLen = 63;

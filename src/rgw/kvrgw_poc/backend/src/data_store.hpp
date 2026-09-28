@@ -30,13 +30,13 @@ class DataStore {
  public:
   virtual ~DataStore() = default;
 
-  virtual std::error_code write(std::string_view ref_tag, std::string_view data) = 0;
-  virtual std::error_code read(std::string_view ref_tag, uint64_t offset, uint64_t length, std::string* out) = 0;
-  virtual std::error_code remove(std::string_view ref_tag) = 0;
-  virtual std::filesystem::path path_for(std::string_view ref_tag) const = 0;
+  virtual std::error_code write(std::string_view filename, std::string_view data) = 0;
+  virtual std::error_code read(std::string_view filename, uint64_t offset, uint64_t length, std::string* out) = 0;
+  virtual std::error_code remove(std::string_view filename) = 0;
+  virtual std::filesystem::path path_for(std::string_view filename) const = 0;
 
-  std::error_code read_all(std::string_view ref_tag, std::string* out) {
-    return read(ref_tag, 0, UINT64_MAX, out);
+  std::error_code read_all(std::string_view filename, std::string* out) {
+    return read(filename, 0, UINT64_MAX, out);
   }
 };
 
@@ -44,22 +44,21 @@ class FileDataStore : public DataStore {
  public:
   explicit FileDataStore(std::filesystem::path root);
 
-  std::error_code write(std::string_view ref_tag, std::string_view data) override;
-  std::error_code read(std::string_view ref_tag, uint64_t offset, uint64_t length, std::string* out) override;
-  std::error_code remove(std::string_view ref_tag) override;
-  std::filesystem::path path_for(std::string_view ref_tag) const override;
+  std::error_code write(std::string_view filename, std::string_view data) override;
+  std::error_code read(std::string_view filename, uint64_t offset, uint64_t length, std::string* out) override;
+  std::error_code remove(std::string_view filename) override;
+  std::filesystem::path path_for(std::string_view filename) const override;
 
  private:
-  std::string ref_tag_to_filename(std::string_view ref_tag) const;
   std::filesystem::path root_;
 };
 
 class PerfDataStore : public DataStore {
  public:
-  std::error_code write(std::string_view ref_tag, std::string_view data) override;
-  std::error_code read(std::string_view ref_tag, uint64_t offset, uint64_t length, std::string* out) override;
-  std::error_code remove(std::string_view ref_tag) override;
-  std::filesystem::path path_for(std::string_view ref_tag) const override;
+  std::error_code write(std::string_view filename, std::string_view data) override;
+  std::error_code read(std::string_view filename, uint64_t offset, uint64_t length, std::string* out) override;
+  std::error_code remove(std::string_view filename) override;
+  std::filesystem::path path_for(std::string_view filename) const override;
 
   void set_sim_write_us(int64_t us) { sim_write_us_.store(us, std::memory_order_relaxed); }
   void set_sim_read_us(int64_t us) { sim_read_us_.store(us, std::memory_order_relaxed); }

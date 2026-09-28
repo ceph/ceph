@@ -77,12 +77,11 @@ struct BatchCommitEntry {
   tenant_id_t tenant_id;
   std::string bucket_name;
   std::string object_name;
-  RefTag ref_tag{};
   ObjectValue value;
   std::string data;
   ChunkType chunk_type{CHUNK_INLINE};
-  std::string if_match;
-  std::string if_none_match;
+  PutCondition cond{};
+  bool has_cond{false};
   std::vector<uint8_t> tag_encoded;
   std::array<uint8_t, MAX_META_FRAME_BYTES> metadata_encoded{};
   size_t metadata_encoded_size{0};
@@ -146,8 +145,8 @@ class BatchCommitQueue {
         entries[i].bucket_name.clear();
         entries[i].object_name.clear();
         entries[i].data.clear();
-        entries[i].if_match.clear();
-        entries[i].if_none_match.clear();
+        entries[i].cond = PutCondition{};
+        entries[i].has_cond = false;
         entries[i].tag_encoded.clear();
         entries[i].metadata_encoded_size = 0;
       }
@@ -270,7 +269,7 @@ class KvRgwServiceImpl final {
                               std::string_view marker,
                               ListObjectsResult* out);
 
-  struct DeleteCondition {
+  struct AWSDeleteCondition {
     std::string if_match;
     int64_t if_match_last_modified_time = 0;
     int64_t if_match_size = 0;
@@ -281,7 +280,7 @@ class KvRgwServiceImpl final {
                                        std::string_view bucket_name,
                                        std::string_view key,
                                        version_id_t version_id,
-                                       const DeleteCondition* cond);
+                                       const AWSDeleteCondition* cond);
 
   struct DeleteMultiObjectRef {
     std::string_view key;
@@ -382,7 +381,7 @@ class KvRgwServiceImpl final {
   };
 
   KvrgwErrorCode delete_object(tenant_id_t tenant_id, std::string_view bucket_name,
-                               std::string_view key, const DeleteCondition* cond,
+                               std::string_view key, const AWSDeleteCondition* cond,
                                DeleteResult* out);
 
   KvrgwErrorCode put_object_tagging(tenant_id_t tenant_id, std::string_view bucket_name,
@@ -395,7 +394,7 @@ class KvRgwServiceImpl final {
   KvrgwErrorCode delete_object_tagging(tenant_id_t tenant_id, std::string_view bucket_name,
                                        std::string_view key);
 
-  struct PutCondition {
+  struct AWSPutCondition {
     std::string if_match;
     std::string if_none_match;
   };
@@ -404,10 +403,9 @@ class KvRgwServiceImpl final {
     tenant_id_t tenant_id;
     std::string bucket_name;
     std::string object_name;
-    RefTag ref_tag{};
     ObjectValue value;
     uint64_t estimated_size;
-    PutCondition* cond;
+    const PutCondition* cond;
     std::span<const uint8_t> tags;
     std::span<const uint8_t> metadata;
   };
@@ -420,12 +418,22 @@ class KvRgwServiceImpl final {
 
   PutObjectResult put_object_route(PutObjectRequest& req, const uint8_t* data, size_t data_len);
 
+  PutObjectResult put_object(
+      tenant_id_t tenant_id,
+      std::string_view bucket_name,
+      std::string_view object_name,
+      const uint8_t* data, size_t data_len,
+      std::string_view content_type,
+      uint64_t estimated_size,
+      const AWSPutCondition* cond,
+      std::span<const TagPair> tags,
+      std::span<const MetaPair> metadata);
+
   struct PutInTxnParams {
     tenant_id_t tenant_id;
     const std::string& bucket_name;
     bucket_id_t bucket_id;
     const std::string& object_name;
-    const RefTag& ref_tag;
     ObjectValue& value;
     const std::string* data;
     const PutCondition* cond;
@@ -607,7 +615,7 @@ class KvRgwServiceImpl final {
       KvTransaction& tr,
       DeleteContext& ctx,
       const BucketState& bucket_state,
-      const DeleteCondition* cond);
+      const GetCondition* cond);
 
   std::expected<DeleteResult, KvrgwErrorCode>
   delete_single(
@@ -615,7 +623,7 @@ class KvRgwServiceImpl final {
       tenant_id_t tenant_id,
       const std::string& bucket_name,
       const std::string& object_name,
-      const DeleteCondition* cond);
+      const GetCondition* cond);
 
   bool delete_multi_try_commit(
       tenant_id_t tenant_id,
@@ -636,7 +644,6 @@ class KvRgwServiceImpl final {
       const std::string& bucket_name,
       bucket_id_t bucket_id,
       const std::string& object_name,
-      const RefTag& ref_tag,
       ObjectValue& new_value,
       VersioningState* out_versioning_state = nullptr,
       std::span<const uint8_t> tags = {},
@@ -646,7 +653,6 @@ class KvRgwServiceImpl final {
       tenant_id_t tenant_id,
       const std::string& bucket_name,
       const std::string& object_name,
-      const RefTag& ref_tag,
       ObjectValue& new_value,
       const std::string& data,
       VersioningState* out_versioning_state = nullptr,
@@ -658,7 +664,6 @@ class KvRgwServiceImpl final {
       tenant_id_t tenant_id,
       const std::string& bucket_name,
       const std::string& object_name,
-      const RefTag& ref_tag,
       ObjectValue& object_value,
       const std::string& data,
       uint64_t estimated_size,

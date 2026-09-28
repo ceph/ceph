@@ -168,16 +168,14 @@ std::optional<ObjectValue> parse_object_value(std::string_view data)
     auto p_bid = data.data() + tail_offset;
     value.chunk_data_bucket_id = bucket_id_t::deserialize(p_bid);
     tail_offset += sizeof(bucket_id_t);
-    std::memcpy(value.chunk_data_ref_tag, data.data() + tail_offset,
-                kRefTagSize);
+    value.chunk_data_ref_tag.load(data.data() + tail_offset);
     tail_offset += kRefTagSize;
   }
   else if (value.hdr.chunk.type == CHUNK_STORAGE_REF) {
     if (data.size() < tail_offset + kRefTagSize) {
       return std::nullopt;
     }
-    std::memcpy(value.chunk_data_ref_tag, data.data() + tail_offset,
-                kRefTagSize);
+    value.chunk_data_ref_tag.load(data.data() + tail_offset);
     tail_offset += kRefTagSize;
   }
 

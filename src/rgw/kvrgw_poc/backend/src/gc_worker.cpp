@@ -29,9 +29,9 @@ namespace kvrgw {
 
 namespace {
 
-uint64_t blob_bytes_for(const DataStore &data_store, std::string_view ref_tag)
+uint64_t blob_bytes_for(const DataStore &data_store, std::string_view filename)
 {
-  const auto path = data_store.path_for(ref_tag);
+  const auto path = data_store.path_for(filename);
   std::error_code ec;
   if (!std::filesystem::exists(path, ec) || ec) {
     return 0;
@@ -136,7 +136,7 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
         if (!rate_allow(rate, entry_policy, ge.object_size)) {
           return;
         }
-        (void)data_store_.remove(ref_tag_view(ge.ref_tag));
+        (void)data_store_.remove(ge.ref_tag.filename());
       }
       auto tr = store_.begin_transaction();
       if (!tr) {
@@ -155,7 +155,8 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
 
     const bool has_external_children =
         gc_val && (gc_val->hdr.flags & kFlagExternalTags);
-    const auto rt_view = ref_tag_view(parts->ref_tag);
+    const auto rt_view = parts->ref_tag.view();
+    const auto rt_filename = parts->ref_tag.filename();
     auto clean_children = [&](KvTransaction &txn) {
       if (!has_external_children) {
         return;
@@ -189,17 +190,17 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
           }
           (*tr)->kv_del(r_key.view());
         }
-        (void)data_store_.remove(rt_view);
+        (void)data_store_.remove(rt_filename);
         (*tr)->kv_del(row.key);
         clean_children(**tr);
         (*tr)->commit();
       }
       else {
-        const uint64_t blob_bytes = blob_bytes_for(data_store_, rt_view);
+        const uint64_t blob_bytes = blob_bytes_for(data_store_, rt_filename);
         if (!rate_allow(rate, entry_policy, blob_bytes)) {
           return;
         }
-        if (data_store_.remove(rt_view)) {
+        if (data_store_.remove(rt_filename)) {
           continue;
         }
         auto tr = store_.begin_transaction();

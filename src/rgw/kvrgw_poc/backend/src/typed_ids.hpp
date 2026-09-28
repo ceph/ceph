@@ -82,6 +82,7 @@ class __attribute__((packed)) cond_flags_t {
   static constexpr uint8_t kHasMtime          = 0x10;
   static constexpr uint8_t kHasSize           = 0x20;
   static constexpr uint8_t kEtagIsStar        = 0x40;
+  static constexpr uint8_t kIfNoneMatchStar   = 0x80;
 
   bool has_any() const { return bits_ != 0; }
   bool if_match() const { return bits_ & kIfMatch; }
@@ -91,6 +92,7 @@ class __attribute__((packed)) cond_flags_t {
   bool has_mtime() const { return bits_ & kHasMtime; }
   bool has_size() const { return bits_ & kHasSize; }
   bool etag_is_star() const { return bits_ & kEtagIsStar; }
+  bool if_none_match_star() const { return bits_ & kIfNoneMatchStar; }
 
   void set_if_match() { bits_ |= kIfMatch; }
   void set_if_none_match() { bits_ |= kIfNoneMatch; }
@@ -98,18 +100,31 @@ class __attribute__((packed)) cond_flags_t {
   void set_if_unmodified_since() { bits_ |= kIfUnmodifiedSince | kHasMtime; }
   void set_has_size() { bits_ |= kHasSize; }
   void set_etag_star() { bits_ |= kIfMatch | kEtagIsStar; }
+  void set_if_none_match_star() { bits_ |= kIfNoneMatch | kIfNoneMatchStar; }
   void clear() { bits_ = 0; }
 };
 static_assert(sizeof(cond_flags_t) == 1);
 
-struct __attribute__((packed)) Condition {
+struct __attribute__((packed)) PutCondition {
   cond_flags_t flags{};
   uint8_t _pad{0};
   etag_t etag{};
+
+  // Encodes AWS string-form if_match / if_none_match into binary fields.
+  // Always returns true; invalid/short hex strings decode to zeros (guaranteed miss).
+  bool encode(std::string_view if_match, std::string_view if_none_match);
+};
+static_assert(sizeof(PutCondition) == 20);
+
+struct __attribute__((packed)) GetCondition : PutCondition {
   uint32_t mtime{0};
   uint64_t size{0};
+
+  // Encodes AWS string-form if_match plus numeric mtime/size into binary fields.
+  // Always returns true; invalid/short hex strings decode to zeros (guaranteed miss).
+  bool encode(std::string_view if_match, uint32_t mtime, uint64_t size, bool has_size);
 };
-static_assert(sizeof(Condition) == 32);
+static_assert(sizeof(GetCondition) == 32);
 
 class __attribute__((packed)) version_id_t {
   uint32_t val_{0};

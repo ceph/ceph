@@ -17,34 +17,62 @@
 #include "constants.hpp"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
-#include <mutex>
 #include <string>
 #include <string_view>
 
 namespace kvrgw {
 
-using RefTag = std::array<uint8_t, kRefTagSize>;
+// Opaque 12-byte reference tag stored in network byte order.
+// Created only by RefTagGenerator::next().
+// Never byte-swapped after generation.
+class RefTag {
+ public:
+  RefTag() = default;
 
-inline std::string_view ref_tag_view(const RefTag& rt) {
-  return {reinterpret_cast<const char*>(rt.data()), rt.size()};
-}
+  // Populate from a raw wire-format byte buffer (e.g. during deserialization).
+  // src must point to at least kRefTagSize bytes.
+  void load(const uint8_t* src);
+  void load(const char* src) { load(reinterpret_cast<const uint8_t*>(src)); }
 
+  // Returns a string_view over the raw bytes for use in key-building and
+  // DataStore calls. Valid for the lifetime of this RefTag.
+  std::string_view view() const;
+
+  // Filename-safe identifier (= to_hex()).
+  std::string filename() const {
+    return to_hex();
+  }
+
+  bool operator==(const RefTag& o) const;
+  bool operator!=(const RefTag& o) const;
+
+ private:
+  // Hex representation of the 12 bytes (24 hex chars).
+  std::string to_hex() const;
+
+  uint8_t bytes_[kRefTagSize]{};
+
+  friend class RefTagGenerator;
+};
+static_assert(sizeof(RefTag) == kRefTagSize);
+
+// Generates unique RefTags for this RGW instance.
+// Exactly one instance per process — asserted in the constructor.
 class RefTagGenerator {
  public:
   explicit RefTagGenerator(uint32_t rgw_id);
 
+  // Returns the next unique RefTag. Thread-safe, lock-free.
   RefTag next();
 
-  static std::string to_hex(std::string_view ref_tag);
-  static std::string from_hex(std::string_view ref_tag_hex);
-  static std::string filename_for(std::string_view ref_tag);
-  static bool equal(std::string_view a, std::string_view b);
+  RefTagGenerator(const RefTagGenerator&) = delete;
+  RefTagGenerator& operator=(const RefTagGenerator&) = delete;
 
  private:
-  uint32_t rgw_id_;
-  uint64_t seq_id_{0};
-  std::mutex mu_;
+  uint32_t              rgw_id_;
+  std::atomic<uint64_t> seq_id_{0};
 };
 
 }  // namespace kvrgw

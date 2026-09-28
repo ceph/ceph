@@ -322,8 +322,7 @@ std::optional<PoKeyParts> parse_po_key(std::string_view key)
   parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
   parts.object_name.assign(
       key.substr(14, key.size() - 14 - kPoFixedSuffixSize));
-  std::memcpy(parts.ref_tag.data(),
-              key.data() + key.size() - kPoFixedSuffixSize, kRefTagSize);
+  parts.ref_tag.load(key.data() + key.size() - kPoFixedSuffixSize);
   if (parts.object_name.empty()) {
     return std::nullopt;
   }
@@ -364,7 +363,7 @@ std::optional<GoKeyParts> parse_go_key(std::string_view key)
   parts.shard_count = be16toh(sc_net);
   parts.shard_id = be16toh(si_net);
   parts.bucket_id = bucket_id_t::deserialize(key.data() + 6);
-  std::memcpy(parts.ref_tag.data(), key.data() + 15, kRefTagSize);
+  parts.ref_tag.load(key.data() + 15);
   return parts;
 }
 
@@ -418,7 +417,7 @@ std::optional<DKeyParts> parse_d_key(std::string_view key)
   uint32_t mt_net{};
   std::memcpy(&mt_net, key.data() + 15, 4);
   parts.mtime = be32toh(mt_net);
-  std::memcpy(parts.ref_tag.data(), key.data() + 19, kRefTagSize);
+  parts.ref_tag.load(key.data() + 19);
   return parts;
 }
 
@@ -538,7 +537,7 @@ std::optional<GroupPoKeyParts> parse_group_po_key(std::string_view key)
   parts.shard_count = be16toh(sc_net);
   parts.shard_id = be16toh(si_net);
   parts.bucket_id = bucket_id_t::deserialize(key.data() + 5);
-  std::memcpy(parts.group_ref_tag.data(), key.data() + 14, kRefTagSize);
+  parts.group_ref_tag.load(key.data() + 14);
   return parts;
 }
 
@@ -569,7 +568,7 @@ std::optional<GroupGoKeyParts> parse_group_go_key(std::string_view key)
   parts.shard_count = be16toh(sc_net);
   parts.shard_id = be16toh(si_net);
   parts.bucket_id = bucket_id_t::deserialize(key.data() + 6);
-  std::memcpy(parts.group_ref_tag.data(), key.data() + 15, kRefTagSize);
+  parts.group_ref_tag.load(key.data() + 15);
   return parts;
 }
 

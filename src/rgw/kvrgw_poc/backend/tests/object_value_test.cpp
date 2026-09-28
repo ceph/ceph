@@ -48,7 +48,7 @@ void test_bucket_value_endianness()
 void test_ref_tag_zero_base64_roundtrip()
 {
   kvrgw::ObjectValue value;
-  std::memset(value.hdr.ref_tag, 0, 12);
+  value.hdr.ref_tag = {};
   std::memset(value.hdr.etag, 0xDE, 16);
   value.hdr.size = 12;
   value.hdr.last_modified_sec = 1785926327;
@@ -61,10 +61,10 @@ void test_ref_tag_zero_base64_roundtrip()
   wire.content_type_len = static_cast<uint8_t>(value.content_type.size());
   kvrgw::hdr_to_be(wire);
   assert(buf.set_header(wire));
-  assert(buf.append(value.content_type.data(), value.content_type.size()));
+  assert(buf.append(value.content_type));
   const auto parsed = kvrgw::parse_object_value(buf.view());
   assert(parsed);
-  assert(std::memcmp(parsed->hdr.ref_tag, value.hdr.ref_tag, 12) == 0);
+  assert(parsed->hdr.ref_tag == value.hdr.ref_tag);
   assert(std::memcmp(parsed->hdr.etag, value.hdr.etag, 16) == 0);
   assert(parsed->hdr.size == value.hdr.size);
   assert(parsed->hdr.last_modified_sec == value.hdr.last_modified_sec);
@@ -107,7 +107,11 @@ void test_bucket_value_versioning_state()
 void test_object_value_header_version_fields()
 {
   kvrgw::ObjectValue value;
-  std::memset(value.hdr.ref_tag, 0xAA, 12);
+  {
+    uint8_t fill[sizeof(kvrgw::RefTag)];
+    std::memset(fill, 0xAA, sizeof(fill));
+    value.hdr.ref_tag.load(fill);
+  }
   std::memset(value.hdr.etag, 0xBB, 16);
   value.hdr.size = 100;
   value.hdr.last_modified_sec = 1700000000;
@@ -132,7 +136,7 @@ void test_object_value_header_version_fields()
     wire.content_type_len = static_cast<uint8_t>(value.content_type.size());
     kvrgw::hdr_to_be(wire);
     assert(buf.set_header(wire));
-    assert(buf.append(value.content_type.data(), value.content_type.size()));
+    assert(buf.append(value.content_type));
 
     const auto parsed = kvrgw::parse_object_value(buf.view());
     assert(parsed);
@@ -209,12 +213,13 @@ void test_inline_metadata_frame_roundtrip()
 {
   std::array<uint8_t, kvrgw::MAX_META_FRAME_BYTES> encoded{};
   size_t frame_size = 0;
-  const kvrgw::MetaPair p{"color", "blue"};
+  std::string_view color_key("color");
+  const kvrgw::MetaPair p{color_key, "blue"};
   assert(kvrgw::encode_metadata(std::span<const kvrgw::MetaPair>(&p, 1),
                                 encoded, frame_size));
 
   kvrgw::ObjectValue value;
-  std::memset(value.hdr.ref_tag, 0, 12);
+  value.hdr.ref_tag = {};
   value.hdr.metadata_count = 1;
   value.content_type = "text/plain";
   value.hdr.chunk.type = kvrgw::CHUNK_STORAGE;
@@ -225,8 +230,9 @@ void test_inline_metadata_frame_roundtrip()
   wire.content_type_len = static_cast<uint8_t>(value.content_type.size());
   kvrgw::hdr_to_be(wire);
   assert(buf.set_header(wire));
-  assert(buf.append(value.content_type.data(), value.content_type.size()));
-  assert(buf.append(value.metadata_frame.data(), value.metadata_frame.size()));
+  assert(buf.append(value.content_type));
+  assert(buf.append({reinterpret_cast<const char*>(value.metadata_frame.data()),
+                     value.metadata_frame.size()}));
 
   const auto parsed = kvrgw::parse_object_value(buf.view());
   assert(parsed);
@@ -242,7 +248,7 @@ void test_inline_metadata_frame_roundtrip()
 
   std::array<kvrgw::MetaPair, kvrgw::MAX_META_COUNT> meta{};
   assert(kvrgw::decode_metadata(parsed->metadata_frame, meta));
-  assert(meta[0].first == "color");
+  assert(meta[0].first == color_key);
   assert(meta[0].second == "blue");
 }
 

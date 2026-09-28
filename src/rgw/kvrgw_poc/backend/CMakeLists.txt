@@ -112,13 +112,13 @@ set_target_properties(kv-rgw-backend PROPERTIES
   INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
 )
 
-add_executable(object_value_test tests/object_value_test.cpp src/object_value.cpp src/tenant_value.cpp src/id_tag.cpp src/id_meta.cpp src/typed_ids.cpp)
+add_executable(object_value_test tests/object_value_test.cpp src/object_value.cpp src/ref_tag.cpp src/tenant_value.cpp src/id_tag.cpp src/id_meta.cpp src/typed_ids.cpp)
 target_include_directories(object_value_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
 )
 target_link_libraries(object_value_test PRIVATE OpenSSL::Crypto)
 
-add_executable(l_key_test tests/l_key_test.cpp src/keys.cpp src/typed_ids.cpp)
+add_executable(l_key_test tests/l_key_test.cpp src/keys.cpp src/ref_tag.cpp src/typed_ids.cpp)
 target_include_directories(l_key_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 
 add_executable(data_store_test tests/data_store_test.cpp src/data_store.cpp src/ref_tag.cpp)
@@ -130,6 +130,7 @@ add_executable(kv_range_test
   src/kv_store.cpp
   src/keys.cpp
   src/object_value.cpp
+  src/ref_tag.cpp
   src/id_tag.cpp
   src/id_meta.cpp
   src/typed_ids.cpp
@@ -182,6 +183,7 @@ add_executable(fdb_error_test
   tests/fdb_error_test.cpp
   src/kv_store.cpp
   src/keys.cpp
+  src/ref_tag.cpp
   src/typed_ids.cpp
 )
 target_include_directories(fdb_error_test PRIVATE

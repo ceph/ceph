@@ -127,7 +127,7 @@ void Sweeper::sweep_once()
       }
 
       const auto go_key = make_group_go_key(
-          group_parts->bucket_id, ref_tag_view(group_parts->group_ref_tag));
+          group_parts->bucket_id, group_parts->group_ref_tag.view());
       (*tr)->kv_put(go_key.view(),
                     make_group_gc_value(gc_entries, group_val->count));
       (*tr)->kv_del(row.key);

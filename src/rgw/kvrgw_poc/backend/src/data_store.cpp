@@ -14,8 +14,6 @@
 
 #include "data_store.hpp"
 
-#include "ref_tag.hpp"
-
 #include <algorithm>
 #include <cerrno>
 #include <fstream>
@@ -32,20 +30,15 @@ FileDataStore::FileDataStore(std::filesystem::path root)
   std::filesystem::create_directories(root_);
 }
 
-std::string FileDataStore::ref_tag_to_filename(std::string_view ref_tag) const
+std::filesystem::path FileDataStore::path_for(std::string_view filename) const
 {
-  return RefTagGenerator::filename_for(ref_tag);
+  return root_ / filename;
 }
 
-std::filesystem::path FileDataStore::path_for(std::string_view ref_tag) const
-{
-  return root_ / ref_tag_to_filename(ref_tag);
-}
-
-std::error_code FileDataStore::write(std::string_view ref_tag,
+std::error_code FileDataStore::write(std::string_view filename,
                                      std::string_view data)
 {
-  const auto path = path_for(ref_tag);
+  const auto path = path_for(filename);
   std::ofstream out(path, std::ios::binary | std::ios::trunc);
   if (!out) {
     return {errno, std::system_category()};
@@ -57,7 +50,7 @@ std::error_code FileDataStore::write(std::string_view ref_tag,
   return {};
 }
 
-std::error_code FileDataStore::read(std::string_view ref_tag, uint64_t offset,
+std::error_code FileDataStore::read(std::string_view filename, uint64_t offset,
                                     uint64_t length, std::string *out)
 {
   if (length == 0) {
@@ -65,7 +58,7 @@ std::error_code FileDataStore::read(std::string_view ref_tag, uint64_t offset,
     return {};
   }
 
-  const auto path = path_for(ref_tag);
+  const auto path = path_for(filename);
   std::ifstream in(path, std::ios::binary);
   if (!in) {
     return {errno, std::system_category()};
@@ -106,9 +99,9 @@ std::error_code FileDataStore::read(std::string_view ref_tag, uint64_t offset,
   return {};
 }
 
-std::error_code FileDataStore::remove(std::string_view ref_tag)
+std::error_code FileDataStore::remove(std::string_view filename)
 {
-  const auto path = path_for(ref_tag);
+  const auto path = path_for(filename);
   std::error_code ec;
   std::filesystem::remove(path, ec);
   if (ec && ec != std::errc::no_such_file_or_directory) {
@@ -121,7 +114,7 @@ std::error_code FileDataStore::remove(std::string_view ref_tag)
 
 // --- PerfDataStore ---
 
-std::error_code PerfDataStore::write(std::string_view, std::string_view data)
+std::error_code PerfDataStore::write(std::string_view filename, std::string_view data)
 {
   auto us = sim_write_us_.load(std::memory_order_relaxed);
   if (us > 0) {
@@ -130,7 +123,7 @@ std::error_code PerfDataStore::write(std::string_view, std::string_view data)
   return {};
 }
 
-std::error_code PerfDataStore::read(std::string_view, uint64_t, uint64_t length,
+std::error_code PerfDataStore::read(std::string_view filename, uint64_t, uint64_t length,
                                     std::string *out)
 {
   auto us = sim_read_us_.load(std::memory_order_relaxed);
@@ -146,9 +139,9 @@ std::error_code PerfDataStore::read(std::string_view, uint64_t, uint64_t length,
   return {};
 }
 
-std::error_code PerfDataStore::remove(std::string_view) { return {}; }
+std::error_code PerfDataStore::remove(std::string_view filename) { return {}; }
 
-std::filesystem::path PerfDataStore::path_for(std::string_view) const
+std::filesystem::path PerfDataStore::path_for(std::string_view filename) const
 {
   return "/dev/null";
 }

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "constants.hpp"
+#include "ref_tag.hpp"
 #include "typed_ids.hpp"
 
 #include <arpa/inet.h>
@@ -97,14 +98,14 @@ struct KeyHeaderD {
   uint8_t size_tier;
   uint8_t hash_prefix;
   uint32_t mtime;
-  uint8_t ref_tag[kRefTagSize];
+  RefTag ref_tag;
 
   KeyHeaderD(uint16_t sc, uint16_t si, const void* bid,
-             uint8_t st, uint8_t hp, uint32_t mt, const void* rt)
+             uint8_t st, uint8_t hp, uint32_t mt, const char* rt)
       : ns('D'), shard_count(htons(sc)), shard_id(htons(si)),
         size_tier(st), hash_prefix(hp), mtime(htonl(mt)) {
     std::memcpy(bucket_id, bid, sizeof(bucket_id));
-    std::memcpy(ref_tag, rt, sizeof(ref_tag));
+    ref_tag.load(rt);
   }
 };
 

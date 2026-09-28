@@ -25,10 +25,8 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstring>
 #include <new>
-#include <openssl/evp.h>
 #include <optional>
 #include <span>
 #include <string>
@@ -489,47 +487,42 @@ kvrgw_err_t kvrgw_put_object(
     if (tags_count > kMaxTags) {
       return KVRGW_ERR_INVALID_TAG;
     }
-
-    auto ct = sv(content_type, content_type_len);
-    if (ct.empty()) {
-      ct = "application/octet-stream";
-    }
-    if (ct.size() > kMaxContentTypeLen) {
+    if (sv(content_type, content_type_len).size() > kMaxContentTypeLen) {
       return KVRGW_ERR_INVALID_ARGUMENT;
     }
 
-    const auto ref_tag = s->ref_tags().next();
-
-    unsigned char digest[16];
-    unsigned int digest_len = 0;
-    EVP_MD_CTX *md5_ctx = EVP_MD_CTX_new();
-    if (md5_ctx == nullptr) {
-      return KVRGW_ERR_INTERNAL;
+    // Translate tags: kvrgw_kv* → TagPair[]
+    if (tags_count > 0 && tags == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
     }
-    EVP_DigestInit_ex(md5_ctx, EVP_md5(), nullptr);
-    if (data_len > 0) {
-      EVP_DigestUpdate(md5_ctx, data, data_len);
+    if (tags_count == 0 && tags != nullptr) {
+      return KVRGW_ERR_INVALID_TAG;
     }
-    EVP_DigestFinal_ex(md5_ctx, digest, &digest_len);
-    EVP_MD_CTX_free(md5_ctx);
+    kvrgw::TagPair tag_pairs[kvrgw::MAX_TAG_COUNT];
+    for (size_t i = 0; i < tags_count; ++i) {
+      tag_pairs[i] = {sv(tags[i].key, tags[i].key_len),
+                      sv(tags[i].value, tags[i].value_len)};
+    }
 
-    ObjectValue object_value;
-    std::memcpy(object_value.hdr.ref_tag, ref_tag.data(),
-                sizeof(object_value.hdr.ref_tag));
-    object_value.set_etag_raw(digest);
-    object_value.hdr.size = data_len;
-    const auto now_tp = std::chrono::system_clock::now();
-    const auto now_s = std::chrono::duration_cast<std::chrono::seconds>(
-        now_tp.time_since_epoch());
-    const auto now_ns =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            now_tp.time_since_epoch()) -
-        std::chrono::duration_cast<std::chrono::nanoseconds>(now_s);
-    object_value.hdr.last_modified_sec = static_cast<uint32_t>(now_s.count());
-    object_value.hdr.last_modified_nsec = static_cast<uint32_t>(now_ns.count());
-    object_value.content_type = std::string(ct);
+    // Translate metadata: kvrgw_kv* → MetaPair[]
+    if (metadata_count > 0 && metadata == nullptr) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    if (metadata_count > kvrgw::MAX_META_COUNT) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
+    kvrgw::MetaPair meta_pairs[kvrgw::MAX_META_COUNT];
+    size_t metadata_size = 0;
+    for (size_t i = 0; i < metadata_count; ++i) {
+      metadata_size += (metadata[i].key_len + metadata[i].value_len);
+      meta_pairs[i] = {sv(metadata[i].key, metadata[i].key_len),
+                       sv(metadata[i].value, metadata[i].value_len)};
+    }
+    if (metadata_size > kvrgw::AWS_MaxMetadataBytes) {
+      return KVRGW_ERR_INVALID_ARGUMENT;
+    }
 
-    std::optional<kvrgw::KvRgwServiceImpl::PutCondition> put_cond;
+    std::optional<kvrgw::KvRgwServiceImpl::AWSPutCondition> put_cond;
     if (if_match_len > 0 || if_none_match_len > 0) {
       put_cond.emplace();
       put_cond->if_match = std::string(sv(if_match, if_match_len));
@@ -537,54 +530,17 @@ kvrgw_err_t kvrgw_put_object(
           std::string(sv(if_none_match, if_none_match_len));
     }
 
-    std::vector<uint8_t> tag_buf;
-    if (tags_count == 0) {
-      if (tags != nullptr) {
-        return KVRGW_ERR_INVALID_TAG;
-      }
-    }
-    else {
-      if (tags == nullptr) {
-        return KVRGW_ERR_INVALID_ARGUMENT;
-      }
-      if (auto ec = encode_kv_tags(tags, tags_count, tag_buf);
-          ec != KVRGW_ERR_OK) {
-        return ec;
-      }
-    }
+    auto result = s->put_object(
+        tenant_id,
+        sv(bucket, bucket_len),
+        sv(key, key_len),
+        data, data_len,
+        sv(content_type, content_type_len),
+        estimated_size,
+        put_cond ? &*put_cond : nullptr,
+        std::span<const kvrgw::TagPair>(tag_pairs, tags_count),
+        std::span<const kvrgw::MetaPair>(meta_pairs, metadata_count));
 
-    std::array<uint8_t, MAX_META_FRAME_BYTES> meta_buf{};
-    size_t meta_len = 0;
-    if (metadata_count > 0) {
-      if (metadata == nullptr) {
-        return KVRGW_ERR_INVALID_ARGUMENT;
-      }
-      if (auto ec =
-              encode_kv_metadata(metadata, metadata_count, meta_buf, meta_len);
-          ec != KVRGW_ERR_OK) {
-        return ec;
-      }
-      object_value.hdr.metadata_count = static_cast<uint16_t>(metadata_count);
-      object_value.metadata_frame.assign(meta_buf.data(),
-                                         meta_buf.data() + meta_len);
-    }
-
-    kvrgw::KvRgwServiceImpl::PutObjectRequest req;
-    req.tenant_id = tenant_id;
-    req.bucket_name = std::string(sv(bucket, bucket_len));
-    req.object_name = std::string(sv(key, key_len));
-    req.ref_tag = ref_tag;
-    req.value = std::move(object_value);
-    req.estimated_size = estimated_size > 0 ? estimated_size : data_len;
-    req.cond = put_cond ? &*put_cond : nullptr;
-    if (!tag_buf.empty()) {
-      req.tags = std::span<const uint8_t>(tag_buf.data(), tag_buf.size());
-    }
-    if (meta_len > 0) {
-      req.metadata = std::span<const uint8_t>(meta_buf.data(), meta_len);
-    }
-
-    auto result = s->put_object_route(req, data, data_len);
     if (!ok(result.error_code)) {
       return result.error_code;
     }
@@ -692,8 +648,8 @@ kvrgw_err_t kvrgw_delete_object(KvRgwHandle *h, uint32_t tenant_id,
     if (s == nullptr) {
       return KVRGW_ERR_INVALID_ARGUMENT;
     }
-    kvrgw::KvRgwServiceImpl::DeleteCondition cond;
-    const kvrgw::KvRgwServiceImpl::DeleteCondition *cp = nullptr;
+    kvrgw::KvRgwServiceImpl::AWSDeleteCondition cond;
+    const kvrgw::KvRgwServiceImpl::AWSDeleteCondition *cp = nullptr;
     if (if_match_len > 0 || if_match_mtime != 0 || has_if_match_size) {
       cond.if_match = std::string(sv(if_match, if_match_len));
       cond.if_match_last_modified_time = if_match_mtime;
@@ -725,8 +681,8 @@ kvrgw_err_t kvrgw_delete_object_version(
     if (s == nullptr || version_id_len == 0) {
       return KVRGW_ERR_INVALID_ARGUMENT;
     }
-    kvrgw::KvRgwServiceImpl::DeleteCondition cond;
-    const kvrgw::KvRgwServiceImpl::DeleteCondition *cp = nullptr;
+    kvrgw::KvRgwServiceImpl::AWSDeleteCondition cond;
+    const kvrgw::KvRgwServiceImpl::AWSDeleteCondition *cp = nullptr;
     if (if_match_len > 0 || if_match_mtime != 0 || has_if_match_size) {
       cond.if_match = std::string(sv(if_match, if_match_len));
       cond.if_match_last_modified_time = if_match_mtime;
@@ -1028,34 +984,30 @@ kvrgw_err_t kvrgw_copy_object(KvRgwHandle *h, uint32_t tenant_id,
     req.src_key = sv(args->src_key.data, args->src_key.len);
     req.dst_bucket_name = sv(args->dst_bucket.data, args->dst_bucket.len);
     req.dst_key = sv(args->dst_key.data, args->dst_key.len);
-    req.src_version_id =
-        parse_version(args->src_version_id.data, args->src_version_id.len);
+    req.src_version_id = parse_version(args->src_version_id.data, args->src_version_id.len);
     req.if_match = sv(args->if_match.data, args->if_match.len);
     req.if_none_match = sv(args->if_none_match.data, args->if_none_match.len);
     req.dst_if_match = sv(args->dst_if_match.data, args->dst_if_match.len);
-    req.dst_if_none_match =
-        sv(args->dst_if_none_match.data, args->dst_if_none_match.len);
+    req.dst_if_none_match = sv(args->dst_if_none_match.data, args->dst_if_none_match.len);
     req.content_type = sv(args->content_type.data, args->content_type.len);
     req.replace_metadata = args->replace_metadata != 0;
     if (req.replace_metadata && meta_n > 0) {
       size_t copy_meta_len = 0;
-      if (auto ec = encode_kv_metadata(args->metadata, meta_n, copy_meta_buf,
-                                       copy_meta_len);
-          ec != KVRGW_ERR_OK) {
+      auto ec = encode_kv_metadata(args->metadata, meta_n, copy_meta_buf,
+                                   copy_meta_len);
+      if (ec != KVRGW_ERR_OK) {
         return ec;
       }
-      req.metadata =
-          std::span<const uint8_t>(copy_meta_buf.data(), copy_meta_len);
+      req.metadata = std::span<const uint8_t>(copy_meta_buf.data(), copy_meta_len);
     }
     req.replace_tags = args->replace_tags != 0;
     std::vector<uint8_t> copy_tag_buf;
     if (req.replace_tags) {
-      if (auto ec = encode_kv_tags(args->tags, args->tags_count, copy_tag_buf);
-          ec != KVRGW_ERR_OK) {
+      auto ec = encode_kv_tags(args->tags, args->tags_count, copy_tag_buf);
+      if (ec != KVRGW_ERR_OK) {
         return ec;
       }
-      req.tags =
-          std::span<const uint8_t>(copy_tag_buf.data(), copy_tag_buf.size());
+      req.tags = std::span<const uint8_t>(copy_tag_buf.data(), copy_tag_buf.size());
     }
 
     kvrgw::KvRgwServiceImpl::CopyObjectResult out;
@@ -1073,8 +1025,7 @@ kvrgw_err_t kvrgw_copy_object(KvRgwHandle *h, uint32_t tenant_id,
     else if (version_id_out != nullptr && version_id_cap > 0) {
       version_id_out[0] = '\0';
     }
-    copy_cstr(src_version_id_out, src_version_id_cap,
-              out.copy_source_version_id.to_hex());
+    copy_cstr(src_version_id_out, src_version_id_cap, out.copy_source_version_id.to_hex());
     return KVRGW_ERR_OK;
   });
 }

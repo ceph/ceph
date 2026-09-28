@@ -107,8 +107,7 @@ std::string make_group_po_value(const GroupPoEntry *entries, size_t count,
   uint16_t count_be = htons(static_cast<uint16_t>(count));
   out.append(reinterpret_cast<const char *>(&count_be), 2);
   for (size_t i = 0; i < count; ++i) {
-    out.append(reinterpret_cast<const char *>(entries[i].ref_tag.data()),
-               kRefTagSize);
+    out.append(entries[i].ref_tag.view().data(), kRefTagSize);
     uint64_t size_be = htobe64(entries[i].object_size);
     out.append(reinterpret_cast<const char *>(&size_be), 8);
   }
@@ -137,8 +136,7 @@ std::optional<GroupPoValue> parse_group_po_value(std::string_view data)
   val.count = static_cast<uint8_t>(count);
   for (size_t i = 0; i < count; ++i) {
     const size_t offset = 2 + i * 20;
-    std::memcpy(val.entries[i].ref_tag.data(), data.data() + offset,
-                kRefTagSize);
+    val.entries[i].ref_tag.load(data.data() + offset);
     uint64_t size_be{};
     std::memcpy(&size_be, data.data() + offset + kRefTagSize, 8);
     val.entries[i].object_size = be64toh(size_be);
@@ -156,8 +154,7 @@ std::string make_group_gc_value(const GroupGcEntry *entries, size_t count)
   uint16_t count_be = htons(static_cast<uint16_t>(count));
   out.append(reinterpret_cast<const char *>(&count_be), 2);
   for (size_t i = 0; i < count; ++i) {
-    out.append(reinterpret_cast<const char *>(entries[i].ref_tag.data()),
-               kRefTagSize);
+    out.append(entries[i].ref_tag.view().data(), kRefTagSize);
     out.push_back(static_cast<char>(entries[i].chunk));
     out.push_back(static_cast<char>(entries[i].flags));
     uint64_t size_be = htobe64(entries[i].object_size);
@@ -186,8 +183,7 @@ std::optional<GroupGcValue> parse_group_gc_value(std::string_view data)
   val.count = static_cast<uint8_t>(count);
   for (size_t i = 0; i < count; ++i) {
     const size_t offset = 2 + i * 22;
-    std::memcpy(val.entries[i].ref_tag.data(), data.data() + offset,
-                kRefTagSize);
+    val.entries[i].ref_tag.load(data.data() + offset);
     val.entries[i].chunk = static_cast<ChunkType>(data[offset + kRefTagSize]);
     val.entries[i].flags = static_cast<uint8_t>(data[offset + kRefTagSize + 1]);
     uint64_t size_be{};
@@ -201,7 +197,7 @@ std::expected<void, fdb_error_t> move_po_to_go(KvTransaction &tr,
                                                const PoKeyParts &parts,
                                                const PoValue &po_value)
 {
-  const auto rt_view = ref_tag_view(parts.ref_tag);
+  const auto rt_view = parts.ref_tag.view();
   KeyBuf po_key;
   make_po_key(parts.bucket_id, parts.object_name, rt_view, po_key);
   auto po_exists = tr.kv_get(po_key.view());
@@ -219,13 +215,9 @@ std::expected<void, fdb_error_t> move_po_to_go(KvTransaction &tr,
   }
   if (*existing) {
     const auto object_value = parse_object_value(**existing);
-    if (object_value) {
-      std::string_view existing_ref(
-          reinterpret_cast<const char *>(object_value->hdr.ref_tag), 12);
-      if (RefTagGenerator::equal(existing_ref, rt_view)) {
-        tr.kv_del(po_key.view());
-        return {};
-      }
+    if (object_value && object_value->hdr.ref_tag == parts.ref_tag) {
+      tr.kv_del(po_key.view());
+      return {};
     }
   }
 

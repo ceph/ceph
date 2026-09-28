@@ -115,7 +115,7 @@ uint64_t parse_size_arg(const char *text)
 }
 
 struct GcEntry {
-  std::string ref_tag_hex;
+  kvrgw::RefTag ref_tag;
   uint8_t size_tier{};
   std::optional<uint64_t> blob_bytes;
   std::string bucket_id_hex;
@@ -162,10 +162,11 @@ std::vector<GcEntry> scan_gc_entries(kvrgw::KvStore &store,
     if (!parts) {
       continue;
     }
-    const auto rt_view = kvrgw::ref_tag_view(parts->ref_tag);
+    const auto rt_view     = parts->ref_tag.view();
+    const auto rt_filename = parts->ref_tag.filename();
     GcEntry entry;
     entry.size_tier = parts->size_tier;
-    entry.ref_tag_hex = kvrgw::RefTagGenerator::to_hex(rt_view);
+    entry.ref_tag = parts->ref_tag;
     entry.bucket_id_hex = parts->bucket_id.to_hex();
     entry.shard_count = parts->shard_count;
     entry.shard_id = parts->shard_id;
@@ -174,7 +175,7 @@ std::vector<GcEntry> scan_gc_entries(kvrgw::KvStore &store,
     if (gc_val) {
       entry.blob_bytes = gc_val->hdr.object_size;
       if (gc_val->hdr.chunk.type == kvrgw::CHUNK_STORAGE) {
-        const auto actual = blob_file_size(data_store, rt_view);
+        const auto actual = blob_file_size(data_store, rt_filename);
         if (actual.has_value() && *actual != gc_val->hdr.object_size) {
           entry.size_mismatch = true;
         }
@@ -191,7 +192,7 @@ std::vector<GcEntry> scan_gc_entries(kvrgw::KvStore &store,
       }
     }
     else {
-      entry.blob_bytes = blob_file_size(data_store, rt_view);
+      entry.blob_bytes = blob_file_size(data_store, rt_filename);
     }
     entries.push_back(std::move(entry));
   }
@@ -545,7 +546,7 @@ int cmd_list(kvrgw::KvStore &store, kvrgw::DataStore &data_store, int limit)
   std::cout
       << "ref_tag\tsize_tier\tblob_bytes\tbucket_id\tshard_count\tshard_id\n";
   for (const auto &entry : entries) {
-    std::cout << entry.ref_tag_hex << '\t'
+    std::cout << entry.ref_tag.filename() << '\t'
               << static_cast<unsigned>(entry.size_tier) << '\t';
     if (entry.blob_bytes.has_value()) {
       std::cout << *entry.blob_bytes;
@@ -575,7 +576,7 @@ int cmd_list_by_size(kvrgw::KvStore &store, kvrgw::DataStore &data_store,
     if (!entry_in_size_range(entry, min_bytes, max_bytes)) {
       continue;
     }
-    std::cout << entry.ref_tag_hex << '\t'
+    std::cout << entry.ref_tag.filename() << '\t'
               << static_cast<unsigned>(entry.size_tier) << '\t';
     if (entry.blob_bytes.has_value()) {
       std::cout << *entry.blob_bytes;

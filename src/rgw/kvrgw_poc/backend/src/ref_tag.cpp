@@ -23,82 +23,64 @@
 
 namespace kvrgw {
 
-RefTagGenerator::RefTagGenerator(uint32_t rgw_id) : rgw_id_(rgw_id) {}
+// --- RefTag ---
+//--------------------------------------------------------------------------------
+void RefTag::load(const uint8_t* src)
+{
+  std::memcpy(bytes_, src, kRefTagSize);
+}
 
+//--------------------------------------------------------------------------------
+std::string_view RefTag::view() const
+{
+  return {reinterpret_cast<const char*>(bytes_), kRefTagSize};
+}
+
+//--------------------------------------------------------------------------------
+std::string RefTag::to_hex() const
+{
+  static constexpr char kHex[] = "0123456789abcdef";
+  char buf[kRefTagSize * 2];
+  for (size_t i = 0; i < kRefTagSize; ++i) {
+    buf[i * 2]     = kHex[bytes_[i] >> 4];
+    buf[i * 2 + 1] = kHex[bytes_[i] & 0xf];
+  }
+  return std::string(buf, sizeof(buf));
+}
+
+//--------------------------------------------------------------------------------
+bool RefTag::operator==(const RefTag& o) const
+{
+  return std::memcmp(bytes_, o.bytes_, kRefTagSize) == 0;
+}
+
+//--------------------------------------------------------------------------------
+bool RefTag::operator!=(const RefTag& o) const
+{
+  return !(*this == o);
+}
+
+// --- RefTagGenerator ---
+
+static bool s_instance_created = false;
+
+//--------------------------------------------------------------------------------
+RefTagGenerator::RefTagGenerator(uint32_t rgw_id) : rgw_id_(rgw_id)
+{
+  assert(!s_instance_created && "RefTagGenerator must be a singleton");
+  s_instance_created = true;
+}
+
+//--------------------------------------------------------------------------------
 RefTag RefTagGenerator::next()
 {
-  std::lock_guard lock(mu_);
-  RefTag ref_tag{};
-
+  RefTag ref_tag;
   const uint32_t rgw_net = htonl(rgw_id_);
-  std::memcpy(ref_tag.data(), &rgw_net, sizeof(rgw_net));
-
-  const uint64_t seq = seq_id_++;
+  std::memcpy(ref_tag.bytes_, &rgw_net, sizeof(rgw_net));
+  const uint64_t seq     = seq_id_.fetch_add(1, std::memory_order_relaxed);
   const uint64_t seq_net = htobe64(seq);
-  std::memcpy(ref_tag.data() + 4, &seq_net, sizeof(seq_net));
+  std::memcpy(ref_tag.bytes_ + sizeof(rgw_net), &seq_net, sizeof(seq_net));
   return ref_tag;
-}
-
-std::string RefTagGenerator::to_hex(std::string_view ref_tag)
-{
-  assert(ref_tag.size() == 12);
-  std::ostringstream out;
-  out << std::hex << std::setfill('0');
-  for (unsigned char byte : ref_tag) {
-    out << std::setw(2) << static_cast<int>(byte);
-  }
-  return out.str();
-}
-
-std::string RefTagGenerator::from_hex(std::string_view ref_tag_hex)
-{
-  assert(ref_tag_hex.size() == 24);
-  std::string out;
-  out.reserve(12);
-  for (size_t i = 0; i < 24; i += 2) {
-    const char hi = ref_tag_hex[i];
-    const char lo = ref_tag_hex[i + 1];
-    auto nibble = [](char c) -> int {
-      if (c >= '0' && c <= '9') {
-        return c - '0';
-      }
-      if (c >= 'a' && c <= 'f') {
-        return c - 'a' + 10;
-      }
-      if (c >= 'A' && c <= 'F') {
-        return c - 'A' + 10;
-      }
-      return -1;
-    };
-    const int h = nibble(hi);
-    const int l = nibble(lo);
-    assert(h >= 0 && l >= 0);
-    out.push_back(static_cast<char>((h << 4) | l));
-  }
-  return out;
-}
-
-std::string RefTagGenerator::filename_for(std::string_view ref_tag)
-{
-  assert(ref_tag.size() == 12 || ref_tag.size() == 24);
-  if (ref_tag.size() == 12) {
-    return to_hex(ref_tag);
-  }
-  return std::string(ref_tag);
-}
-
-bool RefTagGenerator::equal(std::string_view a, std::string_view b)
-{
-  if (a.size() == b.size()) {
-    return a == b;
-  }
-  if (a.size() == 24 && b.size() == 12) {
-    return from_hex(a) == b;
-  }
-  if (a.size() == 12 && b.size() == 24) {
-    return a == from_hex(b);
-  }
-  return false;
 }
 
 } // namespace kvrgw

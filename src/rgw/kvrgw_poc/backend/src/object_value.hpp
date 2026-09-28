@@ -15,6 +15,7 @@
 #pragma once
 
 #include "constants.hpp"
+#include "ref_tag.hpp"
 #include "typed_ids.hpp"
 
 #include <arpa/inet.h>
@@ -65,7 +66,7 @@ struct ChunkDescriptor {
 
 struct ObjectValue;
 struct ObjectValueHeader {
-  uint8_t ref_tag[kRefTagSize]{};
+  RefTag ref_tag{};
   uint16_t etag_part_count{};
   uint16_t annotations_count{};
 
@@ -144,6 +145,10 @@ struct OValueBuf {
     return true;
   }
 
+  bool append(std::string_view v) {
+    return append(v.data(), v.size());
+  }
+
   std::string_view view() const {
     return {reinterpret_cast<const char*>(data), len};
   }
@@ -170,6 +175,16 @@ struct ObjectValue {
   bool has_external_tags() const { return (hdr.flags & kFlagExternalTags) != 0; }
   bool has_data() const { return hdr.size > 0 || hdr.chunk.type != CHUNK_INLINE; }
 
+  // Returns the ref_tag view for data access:
+  // chunk_data_ref_tag for REF chunk types, hdr.ref_tag otherwise.
+  std::string_view data_ref_view() const {
+    if (hdr.chunk.type == CHUNK_CHILD_D_REF ||
+        hdr.chunk.type == CHUNK_STORAGE_REF) {
+      return chunk_data_ref_tag.view();
+    }
+    return hdr.ref_tag.view();
+  }
+
   etag_t get_etag() const {
     etag_t e;
     e.deserialize(hdr.etag);
@@ -188,7 +203,7 @@ struct ObjectValue {
   std::string etag_display() const;
 
   bucket_id_t chunk_data_bucket_id{};
-  uint8_t chunk_data_ref_tag[kRefTagSize]{};
+  RefTag chunk_data_ref_tag{};
 };
 
 struct BucketValue {
@@ -240,11 +255,6 @@ inline version_id_t ovh_next_vid(const ObjectValueHeader* h)
 {
   return h->next_vid.from_be();
 }
-inline std::string_view ovh_ref_tag(const ObjectValueHeader* h)
-{
-  return {reinterpret_cast<const char*>(h->ref_tag), kRefTagSize};
-}
-
 // For CHUNK_CHILD_D_REF / CHUNK_STORAGE_REF: extract the extra ref fields
 // that follow the header + content_type in the wire format.
 // Returns false if the buffer is too short.

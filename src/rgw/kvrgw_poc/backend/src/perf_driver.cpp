@@ -40,7 +40,6 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <openssl/evp.h>
 #include <optional>
 #include <random>
 #include <semaphore>
@@ -66,8 +65,10 @@ int g_instance_id = 0;
 char g_key_prefix[kKeyPrefixMaxLen + 1] = "perf";
 char g_key_suffix[kKeyPrefixMaxLen + 1] = "";
 const char *g_metadata_file = nullptr;
-std::vector<uint8_t> g_put_tag_buf;
-std::span<const uint8_t> g_put_tags{};
+static std::array<std::array<char, kMaxTagKeyLen + 16>, kMaxTags> g_put_tag_keybufs{};
+static std::array<std::array<char, kMaxTagValueLen>, kMaxTags> g_put_tag_valbufs{};
+static std::array<TagPair, kMaxTags> g_put_tag_pairs{};
+static size_t g_put_tag_count{0};
 
 std::string make_object_name(int thread_id, uint64_t seq)
 {
@@ -81,36 +82,6 @@ std::string make_object_name(int thread_id, uint64_t seq)
                   thread_id, g_instance_id, seq, g_key_suffix);
   }
   return buf;
-}
-
-ObjectValue build_object_value(const RefTag &ref_tag, const uint8_t *data,
-                               uint64_t size)
-{
-  ObjectValue ov{};
-  std::memcpy(ov.hdr.ref_tag, ref_tag.data(), kRefTagSize);
-
-  unsigned char digest[16];
-  unsigned int digest_len = 0;
-  auto *ctx = EVP_MD_CTX_new();
-  EVP_DigestInit_ex(ctx, EVP_md5(), nullptr);
-  EVP_DigestUpdate(ctx, data, size);
-  EVP_DigestFinal_ex(ctx, digest, &digest_len);
-  EVP_MD_CTX_free(ctx);
-
-  ov.set_etag_raw(digest);
-  ov.hdr.size = size;
-
-  const auto now = std::chrono::system_clock::now();
-  const auto sec =
-      std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
-  const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                      now.time_since_epoch()) -
-                  std::chrono::duration_cast<std::chrono::nanoseconds>(sec);
-  ov.hdr.last_modified_sec = static_cast<uint32_t>(sec.count());
-  ov.hdr.last_modified_nsec = static_cast<uint32_t>(ns.count());
-  ov.content_type = "application/octet-stream";
-
-  return ov;
 }
 
 } // namespace
@@ -299,8 +270,7 @@ static bool init_put_tags()
     count = std::atoi(count_env);
   }
   if (count == 0) {
-    g_put_tags = {};
-    g_put_tag_buf.clear();
+    g_put_tag_count = 0;
     return true;
   }
   if (count < 1 || count > static_cast<int>(kMaxTags)) {
@@ -324,29 +294,22 @@ static bool init_put_tags()
     return false;
   }
 
-  std::array<std::array<char, kMaxTagKeyLen + 16>, kMaxTags> keybufs{};
-  std::array<std::array<char, kMaxTagValueLen>, kMaxTags> valbufs{};
-  // std::array<char, kMaxTagValueLen> val{};
-  std::array<TagPair, kMaxTags> pairs;
   for (int i = 0; i < count; ++i) {
-    const int n =
-        std::snprintf(keybufs[i].data(), keybufs[i].size(), "%s%d", base, i);
+    const int n = std::snprintf(g_put_tag_keybufs[i].data(),
+                                g_put_tag_keybufs[i].size(), "%s%d", base, i);
     if (n < 1 || static_cast<size_t>(n) > kMaxTagKeyLen) {
       std::cerr << "ERROR: tag key too long\n";
       return false;
     }
-    fill_idtag_buffer_random(valbufs[i], static_cast<size_t>(data_size));
-    pairs[static_cast<size_t>(i)] = {
-        std::string_view(keybufs[i].data(), static_cast<size_t>(n)),
-        std::string_view(valbufs[i].data(), static_cast<size_t>(data_size))};
+    fill_idtag_buffer_random(g_put_tag_valbufs[i],
+                             static_cast<size_t>(data_size));
+    g_put_tag_pairs[static_cast<size_t>(i)] = {
+        std::string_view(g_put_tag_keybufs[i].data(),
+                         static_cast<size_t>(n)),
+        std::string_view(g_put_tag_valbufs[i].data(),
+                         static_cast<size_t>(data_size))};
   }
-  if (!encode(
-          std::span<const TagPair>(pairs.data(), static_cast<size_t>(count)),
-          g_put_tag_buf)) {
-    std::cerr << "ERROR: tag encode failed\n";
-    return false;
-  }
-  g_put_tags = std::span<const uint8_t>(g_put_tag_buf);
+  g_put_tag_count = static_cast<size_t>(count);
   return true;
 }
 
@@ -435,22 +398,14 @@ void put_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     const auto &bucket_name = bucket_names[bucket_idx];
     uint64_t seq = wr.bucket_seq[bucket_idx]++;
     const auto name = make_object_name(thread_id, seq);
-    const auto ref_tag = service.ref_tags().next();
-    auto ov = build_object_value(ref_tag, g_put_buffer, obj_size);
 
     ScopedRequestLatency _lat(service.latency_stats(), OpType::kPutObject);
 
-    KvRgwServiceImpl::PutObjectRequest req;
-    req.tenant_id = tenant_id;
-    req.bucket_name = bucket_name;
-    req.object_name = name;
-    req.ref_tag = ref_tag;
-    req.value = std::move(ov);
-    req.estimated_size = obj_size;
-    req.cond = nullptr;
-    req.tags = g_put_tags;
-
-    auto res = service.put_object_route(req, g_put_buffer, obj_size);
+    auto res = service.put_object(
+        tenant_id, bucket_name, name,
+        g_put_buffer, obj_size, {}, obj_size, nullptr,
+        std::span<const TagPair>(g_put_tag_pairs.data(), g_put_tag_count),
+        {});
     if (res.error_code == KVRGW_ERR_OK) {
       ++wr.ops;
     }
@@ -489,20 +444,11 @@ void put_pad_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
       uint64_t seq = wr.bucket_seq[b]++;
       const auto &bucket_name = bucket_names[b];
       const auto name = make_object_name(thread_id, seq);
-      const auto ref_tag = service.ref_tags().next();
-      auto ov = build_object_value(ref_tag, g_put_buffer, obj_size);
-
-      KvRgwServiceImpl::PutObjectRequest req;
-      req.tenant_id = tenant_id;
-      req.bucket_name = bucket_name;
-      req.object_name = name;
-      req.ref_tag = ref_tag;
-      req.value = std::move(ov);
-      req.estimated_size = obj_size;
-      req.cond = nullptr;
-      req.tags = g_put_tags;
-
-      service.put_object_route(req, g_put_buffer, obj_size);
+      service.put_object(
+          tenant_id, bucket_name, name,
+          g_put_buffer, obj_size, {}, obj_size, nullptr,
+          std::span<const TagPair>(g_put_tag_pairs.data(), g_put_tag_count),
+          {});
     }
   }
 }
@@ -1776,22 +1722,14 @@ void put_overwrite_standalone_worker(KvRgwServiceImpl &service,
       const int bidx = file_id % num_buckets;
       std::snprintf(bname, sizeof(bname), "perf-bucket-%d", bidx);
       const auto name = make_object_name(thread_id, static_cast<uint64_t>(j));
-      const auto ref_tag = service.ref_tags().next();
-      auto ov = build_object_value(ref_tag, g_put_buffer, obj_size);
 
       ScopedRequestLatency _lat(service.latency_stats(), OpType::kPutObject);
 
-      KvRgwServiceImpl::PutObjectRequest req;
-      req.tenant_id = tenant_id;
-      req.bucket_name = bname;
-      req.object_name = name;
-      req.ref_tag = ref_tag;
-      req.value = std::move(ov);
-      req.estimated_size = obj_size;
-      req.cond = nullptr;
-      req.tags = g_put_tags;
-
-      auto res = service.put_object_route(req, g_put_buffer, obj_size);
+      auto res = service.put_object(
+          tenant_id, std::string_view(bname), name,
+          g_put_buffer, obj_size, {}, obj_size, nullptr,
+          std::span<const TagPair>(g_put_tag_pairs.data(), g_put_tag_count),
+          {});
       if (res.error_code == KVRGW_ERR_OK) {
         result.ops.fetch_add(1, std::memory_order_relaxed);
       }

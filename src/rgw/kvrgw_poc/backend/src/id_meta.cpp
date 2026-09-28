@@ -42,8 +42,7 @@ bool encoded_metadata_frame_size(std::span<const uint8_t> input,
     const tag_size_t val_len =
         read_be_field<tag_size_t>(size_ptr + sizeof(tag_size_t));
     size_ptr += SIZES_PER_TAG_BYTES;
-    if (!key_len || key_len > MAX_META_KEY_SIZE ||
-        val_len > MAX_META_VALUE_SIZE) {
+    if (!key_len || key_len > MAX_META_KEY_SIZE || val_len > MAX_META_VALUE_SIZE) {
       return false;
     }
     calculated_data_bytes += (key_len + val_len);

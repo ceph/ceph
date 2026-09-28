@@ -81,6 +81,49 @@ etag_t etag_t::from_hex(std::string_view hex)
   return result;
 }
 
+bool PutCondition::encode(std::string_view if_match, std::string_view if_none_match)
+{
+  if (!if_match.empty()) {
+    if (if_match == "*") {
+      flags.set_etag_star();
+    } else {
+      flags.set_if_match();
+      etag = etag_t::from_hex(if_match);
+    }
+  }
+
+  if (!if_none_match.empty()) {
+    if (if_none_match == "*") {
+      flags.set_if_none_match_star();
+    } else {
+      flags.set_if_none_match();
+      etag = etag_t::from_hex(if_none_match);
+    }
+  }
+
+  return true;
+}
+
+bool GetCondition::encode(std::string_view if_match, uint32_t mtime_val,
+                          uint64_t size_val, bool has_size)
+{
+  if (!PutCondition::encode(if_match, {})) {
+    return false;
+  }
+
+  if (mtime_val != 0) {
+    mtime = mtime_val;
+    flags.set_if_modified_since();
+  }
+
+  if (has_size) {
+    size = size_val;
+    flags.set_has_size();
+  }
+
+  return true;
+}
+
 std::string bucket_id_t::to_hex() const
 {
   std::ostringstream out;
