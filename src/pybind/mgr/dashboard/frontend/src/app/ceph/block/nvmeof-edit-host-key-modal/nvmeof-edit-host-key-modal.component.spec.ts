@@ -3,11 +3,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { By } from '@angular/platform-browser';
-<<<<<<< HEAD
-
-=======
 import { ToastrModule } from 'ngx-toastr';
->>>>>>> 392f7008b26 (mgr/dashboard: Fix nvmeof edit host key in subsystem resources page)
 import { of, throwError } from 'rxjs';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -33,22 +29,6 @@ describe('NvmeofEditHostKeyModalComponent', () => {
     wrapTaskAroundCall: jasmine.createSpy('wrapTaskAroundCall').and.callFake(({ call }) => call)
   };
 
-<<<<<<< HEAD
-  beforeEach(waitForAsync(() => {
-    TestBed.configureTestingModule({
-      declarations: [NvmeofEditHostKeyModalComponent],
-      imports: [ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule, SharedModule],
-      providers: [
-        { provide: NvmeofService, useValue: nvmeofServiceSpy },
-        { provide: TaskWrapperService, useValue: taskWrapperServiceSpy },
-        { provide: 'subsystemNQN', useValue: mockSubsystemNQN },
-        { provide: 'hostNQN', useValue: mockHostNQN },
-        { provide: 'group', useValue: mockGroup },
-        { provide: 'dhchapKey', useValue: '' }
-      ]
-    }).compileComponents();
-  }));
-=======
   beforeEach(
     waitForAsync(() => {
       TestBed.configureTestingModule({
@@ -71,7 +51,6 @@ describe('NvmeofEditHostKeyModalComponent', () => {
       }).compileComponents();
     })
   );
->>>>>>> 392f7008b26 (mgr/dashboard: Fix nvmeof edit host key in subsystem resources page)
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofEditHostKeyModalComponent);

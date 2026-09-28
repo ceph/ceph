@@ -122,7 +122,8 @@ export enum Icons {
   plug = 'plug',
   vmdkDisk = 'vmdk-disk',
   checkMarkOutline = 'checkmark--outline',
-  warningAlt = 'warning--alt'
+  warningAlt = 'warning--alt',
+  destroyCircle = 'error--filled'
 }
 
 export enum IconSize {
@@ -160,5 +161,12 @@ export const ICON_TYPE = {
   plug: 'plug',
   vmdkDisk: 'vmdk-disk',
   warningAlt: 'warning--alt',
-  checkMarkOutline: 'checkmark--outline'
+  checkMarkOutline: 'checkmark--outline',
+  destroyCircle: 'error--filled'
+} as const;
+
+export const EMPTY_STATE_IMAGE = {
+  default: 'assets/empty-state.png',
+  search: 'assets/empty-state-search.png',
+  locked: 'assets/locked.png'
 } as const;

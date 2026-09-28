@@ -88,11 +88,11 @@ import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-adv
 import { ProgressComponent } from './progress/progress.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
 import { ChartsModule } from '@carbon/charts-angular';
-import { InlineMessageComponent } from './inline-message/inline-message.component';
 import { IconComponent } from './icon/icon.component';
 import { DetailsCardComponent } from './details-card/details-card.component';
 import { ToastComponent } from './notification-toast/notification-toast.component';
 import { TearsheetComponent } from './tearsheet/tearsheet.component';
+import { UpgradableComponent } from './upgradable/upgradable.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
@@ -134,9 +134,7 @@ import WebServicesCluster32 from '@carbon/icons/es/web-services--cluster/32';
 import CloudMonitoring16 from '@carbon/icons/es/cloud--monitoring/16';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
-import { PageHeaderComponent } from './page-header/page-header.component';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
-import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
 import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
 @NgModule({
@@ -228,14 +226,12 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     ProgressComponent,
     SidePanelComponent,
     IconComponent,
-    InlineMessageComponent,
     DetailsCardComponent,
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    PageHeaderComponent,
     SidebarLayoutComponent,
-    NumberWithUnitComponent
+    UpgradableComponent,
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -274,14 +270,12 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     ProgressComponent,
     SidePanelComponent,
     IconComponent,
-    InlineMessageComponent,
     DetailsCardComponent,
     ToastComponent,
     TearsheetComponent,
     TearsheetStepComponent,
-    PageHeaderComponent,
     SidebarLayoutComponent,
-    NumberWithUnitComponent,
+    UpgradableComponent,
     ProductiveCardComponent
   ]
 })
