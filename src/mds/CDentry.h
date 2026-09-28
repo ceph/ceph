@@ -260,6 +260,10 @@ public:
   void set_version(version_t v) { projected_version = version = v; }
   version_t get_projected_version() const { return projected_version; }
   void set_projected_version(version_t v) { projected_version = v; }
+
+  // omap value length counted in the dirfrag's fnode_t::frag_bytes
+  uint32_t get_counted_size() const { return counted_size; }
+  void set_counted_size(uint32_t n) { counted_size = n; }
   
   mds_authority_t authority() const override;
 
@@ -407,6 +411,8 @@ protected:
 
   version_t version = 0;  // dir version when last touched.
   version_t projected_version = 0;  // what it will be when i unlock/commit.
+
+  uint32_t counted_size = 0;
 
 private:
   mempool::mds_co::string name;

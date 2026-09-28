@@ -101,6 +101,7 @@ MDBalancer::MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) :
   bal_split_rd = g_conf().get_val<double>("mds_bal_split_rd");
   bal_split_bits = g_conf().get_val<int64_t>("mds_bal_split_bits");
   bal_split_size = g_conf().get_val<int64_t>("mds_bal_split_size");
+  bal_split_bytes = g_conf().get_val<Option::size_t>("mds_bal_split_bytes");
   bal_split_wr = g_conf().get_val<double>("mds_bal_split_wr");
   bal_unreplicate_threshold = g_conf().get_val<double>("mds_bal_unreplicate_threshold");
   num_bal_times = g_conf().get_val<int64_t>("mds_bal_max");
@@ -136,6 +137,8 @@ void MDBalancer::handle_conf_change(const std::set<std::string>& changed, const 
     bal_split_bits = g_conf().get_val<int64_t>("mds_bal_split_bits");
   if (changed.count("mds_bal_split_size"))
     bal_split_size = g_conf().get_val<int64_t>("mds_bal_split_size");
+  if (changed.count("mds_bal_split_bytes"))
+    bal_split_bytes = g_conf().get_val<Option::size_t>("mds_bal_split_bytes");
   if (changed.count("mds_bal_split_wr"))
     bal_split_wr = g_conf().get_val<double>("mds_bal_split_wr");
   if (changed.count("mds_bal_unreplicate_threshold"))
@@ -713,6 +716,15 @@ void MDBalancer::queue_merge(CDir *dir)
     if (diri->is_ephemeral_dist())
       min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
 
+    // The merged fragment must also stay at or below get_bal_merge_bytes(),
+    // or it undoes a split by bytes. should_merge() already requires each
+    // fragment's total to be known when the limit is set.
+    int64_t merged_bytes = dir->get_frag_bytes();
+    if (bal_split_bytes > 0 && merged_bytes < 0) {
+      dout(10) << "drop merge on " << *dir << " because its byte total is unknown" << dendl;
+      return;
+    }
+
     frag_t fg = dir->get_frag();
     while (fg.bits() > min_frag_bits) {
       frag_t sibfg = fg.get_sibling();
@@ -722,6 +734,7 @@ void MDBalancer::queue_merge(CDir *dir)
         break;
       }
       bool all = true;
+      int64_t sibs_bytes = 0;
       for (auto& sib : sibs) {
 	auto is_auth = sib->is_auth();
 	auto should_merge = sib->should_merge();
@@ -732,11 +745,19 @@ void MDBalancer::queue_merge(CDir *dir)
           all = false;
           break;
         }
+        sibs_bytes += sib->get_frag_bytes();
       }
       if (!all) {
         dout(10) << "  not all sibs under " << sibfg << " " << sibs << " should_merge" << dendl;
         break;
       }
+      if (bal_split_bytes > 0 &&
+          static_cast<uint64_t>(merged_bytes + sibs_bytes) > get_bal_merge_bytes()) {
+        dout(10) << "  merging sibs under " << sibfg << " would reach "
+                 << merged_bytes + sibs_bytes << " bytes, over the merge limit" << dendl;
+        break;
+      }
+      merged_bytes += sibs_bytes;
       dout(10) << "  all sibs under " << sibfg << " " << sibs << " should merge" << dendl;
       fg = fg.parent();
     }
