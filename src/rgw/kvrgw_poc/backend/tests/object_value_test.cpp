@@ -12,6 +12,7 @@
  *
  */
 
+#include "error_codes.hpp"
 #include "id_meta.hpp"
 #include "id_tag.hpp"
 #include "object_value.hpp"
@@ -49,7 +50,11 @@ void test_ref_tag_zero_base64_roundtrip()
 {
   kvrgw::ObjectValue value;
   value.hdr.ref_tag = {};
-  std::memset(value.hdr.etag, 0xDE, 16);
+  {
+    uint8_t fill[kvrgw::ETag::kSize]{};
+    std::memset(fill, 0xDE, kvrgw::kMd5Bytes);
+    value.hdr.etag.load(fill);
+  }
   value.hdr.size = 12;
   value.hdr.last_modified_sec = 1785926327;
   value.hdr.last_modified_nsec = 123456789;
@@ -65,7 +70,7 @@ void test_ref_tag_zero_base64_roundtrip()
   const auto parsed = kvrgw::parse_object_value(buf.view());
   assert(parsed);
   assert(parsed->hdr.ref_tag == value.hdr.ref_tag);
-  assert(std::memcmp(parsed->hdr.etag, value.hdr.etag, 16) == 0);
+  assert(parsed->hdr.etag == value.hdr.etag);
   assert(parsed->hdr.size == value.hdr.size);
   assert(parsed->hdr.last_modified_sec == value.hdr.last_modified_sec);
   assert(parsed->hdr.last_modified_nsec == value.hdr.last_modified_nsec);
@@ -112,7 +117,11 @@ void test_object_value_header_version_fields()
     std::memset(fill, 0xAA, sizeof(fill));
     value.hdr.ref_tag.load(fill);
   }
-  std::memset(value.hdr.etag, 0xBB, 16);
+  {
+    uint8_t fill[kvrgw::ETag::kSize]{};
+    std::memset(fill, 0xBB, kvrgw::kMd5Bytes);
+    value.hdr.etag.load(fill);
+  }
   value.hdr.size = 100;
   value.hdr.last_modified_sec = 1700000000;
   value.hdr.last_modified_nsec = 500000000;
@@ -281,21 +290,102 @@ void test_parse_r_value()
   assert(parsed->chunk_descriptor == "desc");
 }
 
+void test_put_condition_encode()
+{
+  const std::string etag_a = "d41d8cd98f00b204e9800998ecf8427e";
+  const std::string etag_b = "098f6bcd4621d373cade4e832627b4f6";
+
+  // Single If-Match ETag → succeeds, flag set, etag stored
+  {
+    kvrgw::PutCondition cond{};
+    assert(cond.encode(etag_a, "") == kvrgw::KVRGW_ERR_OK);
+    assert(cond.flags.if_match());
+    assert(!cond.flags.if_none_match());
+    kvrgw::ETag expected{};
+    kvrgw::ETag::from_hex(etag_a, &expected);
+    assert(cond.etag == expected);
+  }
+
+  // Single If-None-Match ETag → succeeds, flag set, etag stored
+  {
+    kvrgw::PutCondition cond{};
+    assert(cond.encode("", etag_b) == kvrgw::KVRGW_ERR_OK);
+    assert(!cond.flags.if_match());
+    assert(cond.flags.if_none_match());
+    kvrgw::ETag expected{};
+    kvrgw::ETag::from_hex(etag_b, &expected);
+    assert(cond.etag == expected);
+  }
+
+  // If-Match "*" → succeeds, etag_star flag set
+  {
+    kvrgw::PutCondition cond{};
+    assert(cond.encode("*", "") == kvrgw::KVRGW_ERR_OK);
+    assert(cond.flags.etag_is_star());
+  }
+
+  // If-None-Match "*" → succeeds, if_none_match_star flag set
+  {
+    kvrgw::PutCondition cond{};
+    assert(cond.encode("", "*") == kvrgw::KVRGW_ERR_OK);
+    assert(cond.flags.if_none_match_star());
+  }
+
+  // Dual non-wildcard ETags → KVRGW_ERR_INVALID_ARGUMENT
+  {
+    kvrgw::PutCondition cond{};
+    assert(cond.encode(etag_a, etag_b) == kvrgw::KVRGW_ERR_INVALID_ARGUMENT);
+  }
+
+  // One wildcard + one ETag → allowed (not dual non-wildcard)
+  {
+    kvrgw::PutCondition cond{};
+    assert(cond.encode("*", etag_b) == kvrgw::KVRGW_ERR_OK);
+  }
+  {
+    kvrgw::PutCondition cond{};
+    assert(cond.encode(etag_a, "*") == kvrgw::KVRGW_ERR_OK);
+  }
+
+  // Unparseable ETag → sentinel stored, KVRGW_ERR_OK returned (→ 412 via comparison)
+  {
+    kvrgw::PutCondition cond{};
+    assert(cond.encode("notavalidetag", "") == kvrgw::KVRGW_ERR_OK);
+    assert(cond.flags.if_match());
+    // sentinel is all 0xFF — must not equal a zero-init ETag
+    kvrgw::ETag zero{};
+    assert(cond.etag != zero);
+  }
+}
+
 } // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-  test_bucket_value_endianness();
-  test_ref_tag_zero_base64_roundtrip();
-  test_tenant_value_roundtrip();
-  test_bucket_value_versioning_state();
-  test_object_value_header_version_fields();
-  test_is_delete_marker_flag();
-  test_child_value_header_layout();
-  test_tag_encode_exact_size();
-  test_inline_metadata_frame_roundtrip();
-  test_child_d_header_then_data();
-  test_parse_r_value();
+  bool verbose = false;
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "--verbose") {
+      verbose = true;
+    }
+  }
+
+#define RUN(fn) do { if (verbose) std::cout << "  " #fn "\n"; fn(); } while(0)
+
+  RUN(test_bucket_value_endianness);
+  RUN(test_ref_tag_zero_base64_roundtrip);
+  RUN(test_tenant_value_roundtrip);
+  RUN(test_bucket_value_versioning_state);
+  RUN(test_object_value_header_version_fields);
+  RUN(test_is_delete_marker_flag);
+  RUN(test_child_value_header_layout);
+  RUN(test_tag_encode_exact_size);
+  RUN(test_inline_metadata_frame_roundtrip);
+  RUN(test_child_d_header_then_data);
+  RUN(test_parse_r_value);
+  RUN(test_put_condition_encode);
+
+#undef RUN
+
   std::cout << "object_value_test passed\n";
   return 0;
 }

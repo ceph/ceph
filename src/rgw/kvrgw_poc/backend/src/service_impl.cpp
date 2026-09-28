@@ -1692,7 +1692,7 @@ KvRgwServiceImpl::delete_apply(KvTransaction &tr, DeleteContext &ctx,
       return std::unexpected(KVRGW_ERR_PRECONDITION_FAILED);
     }
     if (cond->flags.if_match() && !cond->flags.etag_is_star()) {
-      if (std::memcmp(old_hdr->etag, cond->etag.data(), 16) != 0) {
+      if (old_hdr->etag != cond->etag) {
         return std::unexpected(KVRGW_ERR_PRECONDITION_FAILED);
       }
     }
@@ -2262,7 +2262,7 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
         return KVRGW_ERR_NO_SUCH_KEY;
       }
       if (!cond->flags.etag_is_star() &&
-          std::memcmp(old_hdr->etag, cond->etag.data(), 16) != 0) {
+          old_hdr->etag != cond->etag) {
         return KVRGW_ERR_PRECONDITION_FAILED;
       }
     }
@@ -2273,7 +2273,7 @@ KvRgwServiceImpl::put_finalize(KvTransaction &tr, PutContext &ctx,
       }
       if (!cond->flags.if_none_match_star() && old_hdr &&
           !ovh_is_delete_marker(old_hdr) &&
-          std::memcmp(old_hdr->etag, cond->etag.data(), 16) == 0) {
+          old_hdr->etag == cond->etag) {
         return KVRGW_ERR_PRECONDITION_FAILED;
       }
     }
@@ -2514,7 +2514,10 @@ KvRgwServiceImpl::put_object(tenant_id_t tenant_id,
   PutCondition bin_cond{};
   const PutCondition *cond_ptr = nullptr;
   if (aws_cond) {
-    bin_cond.encode(aws_cond->if_match, aws_cond->if_none_match);
+    auto ec = bin_cond.encode(aws_cond->if_match, aws_cond->if_none_match);
+    if (ec != KVRGW_ERR_OK) {
+      return PutObjectResult{ec};
+    }
     cond_ptr = &bin_cond;
   }
 
@@ -2975,10 +2978,13 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
 
   GetCondition bin_cond{};
   if (aws_cond) {
-    bin_cond.encode(aws_cond->if_match,
-                    static_cast<uint32_t>(aws_cond->if_match_last_modified_time),
-                    static_cast<uint64_t>(aws_cond->if_match_size),
-                    aws_cond->has_if_match_size);
+    auto ec = bin_cond.encode(aws_cond->if_match,
+                              static_cast<uint32_t>(aws_cond->if_match_last_modified_time),
+                              static_cast<uint64_t>(aws_cond->if_match_size),
+                              aws_cond->has_if_match_size);
+    if (ec != KVRGW_ERR_OK) {
+      return ec;
+    }
   }
   auto bucket_id_res = get_bucket_id_cached(tenant_id, bname);
   if (!bucket_id_res) {
@@ -3034,7 +3040,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
           return KVRGW_ERR_PRECONDITION_FAILED;
         }
         if (bin_cond.flags.if_match() && !bin_cond.flags.etag_is_star() &&
-            std::memcmp(current->hdr.etag, bin_cond.etag.data(), 16) != 0) {
+            current->hdr.etag != bin_cond.etag) {
           return KVRGW_ERR_PRECONDITION_FAILED;
         }
         if (bin_cond.flags.has_mtime() &&
@@ -3121,7 +3127,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object_version(
           return KVRGW_ERR_PRECONDITION_FAILED;
         }
         if (bin_cond.flags.if_match() && !bin_cond.flags.etag_is_star() &&
-            std::memcmp(v_entry->hdr.etag, bin_cond.etag.data(), 16) != 0) {
+            v_entry->hdr.etag != bin_cond.etag) {
           return KVRGW_ERR_PRECONDITION_FAILED;
         }
         if (bin_cond.flags.has_mtime() &&
@@ -4581,10 +4587,13 @@ KvrgwErrorCode KvRgwServiceImpl::delete_object(tenant_id_t tenant_id,
   GetCondition bin_cond{};
   const GetCondition *cond_ptr = nullptr;
   if (aws_cond) {
-    bin_cond.encode(aws_cond->if_match,
-                    static_cast<uint32_t>(aws_cond->if_match_last_modified_time),
-                    static_cast<uint64_t>(aws_cond->if_match_size),
-                    aws_cond->has_if_match_size);
+    auto ec = bin_cond.encode(aws_cond->if_match,
+                              static_cast<uint32_t>(aws_cond->if_match_last_modified_time),
+                              static_cast<uint64_t>(aws_cond->if_match_size),
+                              aws_cond->has_if_match_size);
+    if (ec != KVRGW_ERR_OK) {
+      return ec;
+    }
     cond_ptr = &bin_cond;
   }
 

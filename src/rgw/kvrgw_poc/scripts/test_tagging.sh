@@ -38,7 +38,7 @@ export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-e
 
 BUCKET="kv-tag-test-$$"
 TMPDIR="$(mktemp -d)"
-trap 'aws --endpoint-url "${ENDPOINT}" s3 rb "s3://${BUCKET}" --force 2>/dev/null; rm -rf "${TMPDIR}"' EXIT
+trap 'aws --endpoint-url "${ENDPOINT}" s3 rb "s3://${BUCKET}" --force >/dev/null 2>&1; rm -rf "${TMPDIR}"' EXIT
 
 echo "=== Object Tagging Tests ==="
 

@@ -29,6 +29,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${ROOT}/scripts/kvrgw-common.sh"
 
 TIER=""
+SKIP_RELOAD=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --fast|--quick|--medium|--slow|--chaos)
@@ -39,9 +40,13 @@ while [[ $# -gt 0 ]]; do
       TIER="${1#--}"
       shift
       ;;
+    --skip-reload)
+      SKIP_RELOAD=1
+      shift
+      ;;
     -h|--help)
       cat <<EOF
-Usage: $(basename "$0") [TIER]
+Usage: $(basename "$0") [TIER] [--skip-reload]
 
 Tiers (each includes all prior tiers):
   --fast     build, unit, reload (+ fast integration tests)     ~1 min
@@ -50,6 +55,9 @@ Tiers (each includes all prior tiers):
   --slow     --medium + 64K/1K stress + gc delete queue        ~45 min
   --chaos    --slow + kill-instance + power-cycle (N=3)         ~1 hour
   (default)  same as --slow
+
+Options:
+  --skip-reload  Skip the reload (clean) step (phase 2)
 
 EOF
       exit 0
@@ -85,19 +93,22 @@ declare -a PHASE_DETAIL=()
 PLAN_ORDER=()
 PLAN_ORDER+=("0 build" "1 unit tests")
 if tier_at_least fast; then
-  PLAN_ORDER+=("2 reload (clean)")
+  if [[ "${SKIP_RELOAD}" -eq 0 ]]; then
+    PLAN_ORDER+=("2 reload (clean)")
+  fi
+  PLAN_ORDER+=("3 version_get")
 fi
 if tier_at_least quick; then
-  PLAN_ORDER+=("3 smoke")
+  PLAN_ORDER+=("4 smoke")
 fi
 if tier_at_least medium; then
-  PLAN_ORDER+=("4 byte range GET (4MiB)" "5 list boundary (1024)" "5b batch tiers (s5cmd)")
+  PLAN_ORDER+=("5 byte range GET (4MiB)" "6 version tests" "7 list boundary (1024)" "8 batch tiers (s5cmd)" "9 tagging")
 fi
 if tier_at_least slow; then
-  PLAN_ORDER+=("6 pagination (64K)" "7 list stress (64K upload)" "8 list buckets stress (1K buckets)" "9 gc delete queue")
+  PLAN_ORDER+=("10 pagination (64K)" "11 list stress (64K upload)" "12 list buckets stress (1K buckets)" "13 gc delete queue")
 fi
 if [[ "${TIER}" == "chaos" ]]; then
-  PLAN_ORDER+=("10 kill instance" "10b reload restore (3)" "11 power-cycle easy" "12 power-cycle hard")
+  PLAN_ORDER+=("14 kill instance" "14b reload restore (3)" "15 power-cycle easy" "16 power-cycle hard")
 fi
 PHASE_TOTAL="${#PLAN_ORDER[@]}"
 
@@ -194,6 +205,15 @@ phase_byte_range() {
   "${ROOT}/scripts/test_byte_range_get.sh"
 }
 
+phase_version_get() {
+  "${ROOT}/scripts/test_version_get_put.sh"
+}
+
+phase_version() {
+    "${ROOT}/scripts/test_list_object_versions.sh"
+    "${ROOT}/scripts/test_delete_bucket_versioning.sh"
+}
+
 phase_boundary() {
   require_cmd() { command -v "$1" >/dev/null || { echo "missing: $1"; return 1; }; }
   require_cmd aws
@@ -245,6 +265,10 @@ phase_list_buckets_stress() {
   "${ROOT}/scripts/test_list_buckets_stress.sh" --skip-reload
 }
 
+phase_tagging() {
+  "${ROOT}/scripts/test_tagging.sh" --skip-reload
+}
+
 phase_batch_tiers() {
   "${ROOT}/scripts/test_batch_tiers.sh"
 }
@@ -275,36 +299,41 @@ run_phase "0 build" phase_build
 run_phase "1 unit tests" phase_unit
 
 if tier_at_least fast; then
-  run_phase "2 reload (clean)" phase_reload
+  if [[ "${SKIP_RELOAD}" -eq 0 ]]; then
+    run_phase "2 reload (clean)" phase_reload
+  fi
+  run_phase "3 version_get" phase_version_get
 fi
 
 if tier_at_least quick; then
-  run_phase "3 smoke" phase_smoke
+  run_phase "4 smoke" phase_smoke
 fi
 
 if tier_at_least medium; then
-  run_phase "4 byte range GET (4MiB)" phase_byte_range
-  run_phase "5 list boundary (1024)" phase_boundary
-  run_phase "5b batch tiers (s5cmd)" phase_batch_tiers
+  run_phase "5 byte range GET (4MiB)" phase_byte_range
+  run_phase "6 version tests" phase_version
+  run_phase "7 list boundary (1024)" phase_boundary
+  run_phase "8 batch tiers (s5cmd)" phase_batch_tiers
+  run_phase "9 tagging" phase_tagging
 fi
 
 if tier_at_least slow; then
-  run_phase "6 pagination (64K)" phase_pagination
-  run_phase "7 list stress (64K upload)" phase_stress
-  run_phase "8 list buckets stress (1K buckets)" phase_list_buckets_stress
-  run_phase "9 gc delete queue" phase_gc_delete_queue
+  run_phase "10 pagination (64K)" phase_pagination
+  run_phase "11 list stress (64K upload)" phase_stress
+  run_phase "12 list buckets stress (1K buckets)" phase_list_buckets_stress
+  run_phase "13 gc delete queue" phase_gc_delete_queue
 fi
 
 if [[ "${TIER}" == "chaos" ]]; then
   if [[ "${KVRGW_INSTANCES}" -lt 3 ]]; then
-    record_fail "10 kill instance" "KVRGW_INSTANCES=${KVRGW_INSTANCES}; need 3 for chaos tier"
-    record_fail "11 power-cycle easy" "skipped (need N=3)"
-    record_fail "12 power-cycle hard" "skipped (need N=3)"
+    record_fail "14 kill instance" "KVRGW_INSTANCES=${KVRGW_INSTANCES}; need 3 for chaos tier"
+    record_fail "15 power-cycle easy" "skipped (need N=3)"
+    record_fail "16 power-cycle hard" "skipped (need N=3)"
   else
-    run_phase "10 kill instance" phase_kill_instance
-    run_phase "10b reload restore (3)" phase_reload
-    run_phase "11 power-cycle easy" phase_power_cycle_easy
-    run_phase "12 power-cycle hard" phase_power_cycle_hard
+    run_phase "14 kill instance" phase_kill_instance
+    run_phase "14b reload restore (3)" phase_reload
+    run_phase "15 power-cycle easy" phase_power_cycle_easy
+    run_phase "16 power-cycle hard" phase_power_cycle_hard
   fi
 fi
 

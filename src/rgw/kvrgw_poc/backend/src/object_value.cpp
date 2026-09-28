@@ -28,7 +28,6 @@ namespace kvrgw {
 
 void hdr_to_be(ObjectValueHeader &hdr)
 {
-  hdr.etag_part_count = htons(hdr.etag_part_count);
   hdr.annotations_count = htons(hdr.annotations_count);
   hdr.size = htobe64(hdr.size);
   hdr.last_modified_sec = htonl(hdr.last_modified_sec);
@@ -40,7 +39,6 @@ void hdr_to_be(ObjectValueHeader &hdr)
 
 void hdr_from_be(ObjectValueHeader &hdr)
 {
-  hdr.etag_part_count = be16toh(hdr.etag_part_count);
   hdr.annotations_count = be16toh(hdr.annotations_count);
   hdr.size = be64toh(hdr.size);
   hdr.last_modified_sec = be32toh(hdr.last_modified_sec);
@@ -50,27 +48,11 @@ void hdr_from_be(ObjectValueHeader &hdr)
   hdr.metadata_count = be16toh(hdr.metadata_count);
 }
 
-namespace {
-
-std::string etag_to_hex(const uint8_t *etag, size_t len)
-{
-  static const char kHex[] = "0123456789abcdef";
-  std::string out;
-  out.reserve(len * 2);
-  for (size_t i = 0; i < len; ++i) {
-    out.push_back(kHex[etag[i] >> 4]);
-    out.push_back(kHex[etag[i] & 0x0F]);
-  }
-  return out;
-}
-
-} // namespace
-
 std::string ObjectValue::etag_display() const { return get_etag().to_hex(); }
 
 std::string ovh_etag_display(const ObjectValueHeader* h)
 {
-  return etag_t::to_hex(h->etag, be16toh(h->etag_part_count));
+  return h->etag.to_hex();
 }
 
 namespace {

@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include "error_codes.hpp"
+#include "etag.hpp"
+
 #include <cstdint>
 #include <cstring>
 #include <iosfwd>
@@ -42,34 +45,6 @@ class __attribute__((packed)) bucket_id_t {
 };
 static_assert(sizeof(bucket_id_t) == 8);
 inline const bucket_id_t kNullBucket{0x0};
-
-class __attribute__((packed)) etag_t {
-  uint8_t bytes_[16]{};
-  uint16_t part_count_{0};
-
- public:
-  etag_t() = default;
-
-  void serialize(uint8_t* out) const { std::memcpy(out, bytes_, 16); }
-  void deserialize(const uint8_t* src) { std::memcpy(bytes_, src, 16); }
-
-  std::string to_hex() const;
-  // Operate directly on any 16-byte buffer — no etag_t construction needed.
-  static std::string to_hex(const uint8_t* bytes, uint16_t part_count);
-  static etag_t from_hex(std::string_view hex);
-
-  const uint8_t* data() const { return bytes_; }
-  uint8_t* data() { return bytes_; }
-  uint16_t part_count() const { return part_count_; }
-  void set_part_count(uint16_t pc) { part_count_ = pc; }
-  bool is_multipart() const { return part_count_ > 0; }
-
-  bool operator==(const etag_t& o) const {
-    return std::memcmp(bytes_, o.bytes_, 16) == 0 && part_count_ == o.part_count_;
-  }
-  bool operator!=(const etag_t& o) const { return !(*this == o); }
-};
-static_assert(sizeof(etag_t) == 18);
 
 class __attribute__((packed)) cond_flags_t {
   uint8_t bits_{0};
@@ -108,11 +83,13 @@ static_assert(sizeof(cond_flags_t) == 1);
 struct __attribute__((packed)) PutCondition {
   cond_flags_t flags{};
   uint8_t _pad{0};
-  etag_t etag{};
+  ETag etag{};
 
   // Encodes AWS string-form if_match / if_none_match into binary fields.
-  // Always returns true; invalid/short hex strings decode to zeros (guaranteed miss).
-  bool encode(std::string_view if_match, std::string_view if_none_match);
+  // Returns KVRGW_ERR_INVALID_ARGUMENT if both are non-empty non-wildcard ETags.
+  // Unparseable single ETag stores sentinel (all 0xFF) → guaranteed 412 miss.
+  // Returns KVRGW_ERR_OK on all other cases.
+  KvrgwErrorCode encode(std::string_view if_match, std::string_view if_none_match);
 };
 static_assert(sizeof(PutCondition) == 20);
 
@@ -121,8 +98,9 @@ struct __attribute__((packed)) GetCondition : PutCondition {
   uint64_t size{0};
 
   // Encodes AWS string-form if_match plus numeric mtime/size into binary fields.
-  // Always returns true; invalid/short hex strings decode to zeros (guaranteed miss).
-  bool encode(std::string_view if_match, uint32_t mtime, uint64_t size, bool has_size);
+  // Unparseable if_match stores sentinel (all 0xFF) → guaranteed 412 miss.
+  // Returns KVRGW_ERR_OK on all cases.
+  KvrgwErrorCode encode(std::string_view if_match, uint32_t mtime, uint64_t size, bool has_size);
 };
 static_assert(sizeof(GetCondition) == 32);
 

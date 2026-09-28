@@ -64,6 +64,7 @@ set(KVRGW_LIB_SRCS
   src/error_codes.cpp
   src/err_insertion.cpp
   src/typed_ids.cpp
+  src/etag.cpp
   src/admin_server.cpp
 )
 
@@ -112,14 +113,23 @@ set_target_properties(kv-rgw-backend PROPERTIES
   INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
 )
 
-add_executable(object_value_test tests/object_value_test.cpp src/object_value.cpp src/ref_tag.cpp src/tenant_value.cpp src/id_tag.cpp src/id_meta.cpp src/typed_ids.cpp)
+add_executable(object_value_test tests/object_value_test.cpp src/object_value.cpp src/ref_tag.cpp src/tenant_value.cpp src/id_tag.cpp src/id_meta.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
 target_include_directories(object_value_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
+  "${GENERATED_DIR}"
+  "${FDB_INCLUDE_DIR}"
 )
-target_link_libraries(object_value_test PRIVATE OpenSSL::Crypto)
+target_link_libraries(object_value_test PRIVATE OpenSSL::Crypto kvrgw_pb "${FDB_LIB_DIR}/libfdb_c.so")
+target_compile_definitions(object_value_test PRIVATE FDB_API_VERSION=730)
 
-add_executable(l_key_test tests/l_key_test.cpp src/keys.cpp src/ref_tag.cpp src/typed_ids.cpp)
-target_include_directories(l_key_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+add_executable(l_key_test tests/l_key_test.cpp src/keys.cpp src/ref_tag.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
+target_include_directories(l_key_test PRIVATE
+  "${CMAKE_SOURCE_DIR}/src"
+  "${GENERATED_DIR}"
+  "${FDB_INCLUDE_DIR}"
+)
+target_link_libraries(l_key_test PRIVATE kvrgw_pb "${FDB_LIB_DIR}/libfdb_c.so")
+target_compile_definitions(l_key_test PRIVATE FDB_API_VERSION=730)
 
 add_executable(data_store_test tests/data_store_test.cpp src/data_store.cpp src/ref_tag.cpp)
 target_include_directories(data_store_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
@@ -134,6 +144,7 @@ add_executable(kv_range_test
   src/id_tag.cpp
   src/id_meta.cpp
   src/typed_ids.cpp
+  src/etag.cpp
 )
 target_include_directories(kv_range_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
@@ -160,6 +171,7 @@ add_executable(gc_ctl
   src/id_tag.cpp
   src/id_meta.cpp
   src/typed_ids.cpp
+  src/etag.cpp
 )
 target_include_directories(gc_ctl PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
@@ -185,6 +197,7 @@ add_executable(fdb_error_test
   src/keys.cpp
   src/ref_tag.cpp
   src/typed_ids.cpp
+  src/etag.cpp
 )
 target_include_directories(fdb_error_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"

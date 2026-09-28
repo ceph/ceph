@@ -15,6 +15,7 @@
 #pragma once
 
 #include "constants.hpp"
+#include "etag.hpp"
 #include "ref_tag.hpp"
 #include "typed_ids.hpp"
 
@@ -67,10 +68,8 @@ struct ChunkDescriptor {
 struct ObjectValue;
 struct ObjectValueHeader {
   RefTag ref_tag{};
-  uint16_t etag_part_count{};
+  ETag etag{};
   uint16_t annotations_count{};
-
-  uint8_t etag[kEtagSize]{};
 
   uint64_t size{};
   uint32_t last_modified_sec{};
@@ -185,19 +184,10 @@ struct ObjectValue {
     return hdr.ref_tag.view();
   }
 
-  etag_t get_etag() const {
-    etag_t e;
-    e.deserialize(hdr.etag);
-    e.set_part_count(hdr.etag_part_count);
-    return e;
-  }
-  void set_etag(const etag_t& e) {
-    e.serialize(hdr.etag);
-    hdr.etag_part_count = e.part_count();
-  }
+  const ETag& get_etag() const { return hdr.etag; }
+  void set_etag(const ETag& e) { hdr.etag = e; }
   void set_etag_raw(const uint8_t* digest, uint16_t part_count = 0) {
-    std::memcpy(hdr.etag, digest, kEtagSize);
-    hdr.etag_part_count = part_count;
+    hdr.etag.load_raw(digest, part_count);
   }
 
   std::string etag_display() const;
