@@ -8,7 +8,8 @@ from .subvolume_v2 import SubvolumeV2
 from .subvolume_v3 import SubvolumeV3
 from .metadata_manager import MetadataManager
 from ..template import SubvolumeOpType
-from ...exception import MetadataMgrException, VolumeException
+from ...exception import (MetadataMgrException, VolumeException,
+                          PrevpathNotRecognizedError)
 
 log = logging.getLogger(__name__)
 
@@ -108,14 +109,16 @@ class SubvolumeLoader(object):
                 disc_uuid = base_subvol.discover_subvol_uuid(disc_version)
                 subvol_obj = SubvolumeV1(mgr, fs, vol_spec, group, subvolname,
                                           legacy=False)
-            elif disc_version == 2:
+            elif disc_version in (3, 2):
                 disc_uuid = base_subvol.discover_subvol_uuid(disc_version)
-                subvol_obj = SubvolumeV2(mgr, fs, vol_spec, group, subvolname,
-                                          legacy=False)
-            elif disc_version == 3:
-                disc_uuid = base_subvol.discover_subvol_uuid(disc_version)
-                subvol_obj = SubvolumeV3(mgr, fs, vol_spec, group, subvolname,
-                                         disc_uuid, disc_version)
+                try:
+                    subvol_obj = SubvolumeV3(mgr, fs, vol_spec, group, subvolname,
+                                             disc_uuid, disc_version)
+                except PrevpathNotRecognizedError:
+                    assert disc_version != 3
+
+                    subvol_obj = SubvolumeV2(mgr, fs, vol_spec, group, subvolname,
+                                             disc_uuid, disc_version)
             else:
                 assert False, \
                     f'invalid version. disc_version = {disc_version}'

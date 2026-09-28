@@ -1,4 +1,4 @@
-from errno import errorcode, EACCES
+from errno import errorcode, EACCES, ENOTSUP
 from logging import getLogger
 from traceback import format_stack
 
@@ -69,6 +69,26 @@ class OpSmException(VolumesError):
 
 class InvalidUuidError(VolumesError):
     pass
+
+
+class PrevpathNotRecognizedError(VolumesError):
+    '''
+    Raised when xattr prevpath is not recognized by MDS.
+    '''
+
+    def __init__(self, errmsg=None):
+        errmsg = errmsg if errmsg else 'MDS did not recognize "prevpath" xattr'
+        super().__init__(errno=ENOTSUP, errmsg=errmsg)
+
+
+class V2UpgradeError(VolumesError):
+    '''
+    Subvol auto-upgrade from v2 to v3.
+    '''
+
+    def __init__(self, exception=None):
+        super().__init__(exception=exception)
+        self.errmsg = f'Error upgrading subvol from v2 to v3: {self.errmsg}'
 
 
 class EvictionError(VolumesError):

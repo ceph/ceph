@@ -65,6 +65,11 @@ class MetadataManager(object):
     CLONE_FAILURE_META_KEY_ERRNO = "errno"
     CLONE_FAILURE_META_KEY_ERROR_MSG = "error_msg"
 
+    PRE_V3_INCAR_SEC = 'PRE_V3_INCAR'
+    PRE_V3_VERSION_KEY = 'pre_v3_version'
+    PRE_V3_UUID_KEY = 'pre_v3_uuid'
+    PRE_V3_PATH_KEY = 'pre_v3_path'
+
     def __init__(self, fs, config_path, mode):
         self.fs = fs
         self.mode = mode
@@ -173,7 +178,11 @@ class MetadataManager(object):
 
     def get_option(self, sec, key, def_val=''):
         if not self.config.has_section(sec):
-            raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(sec))
+            if def_val == '':
+                raise MetadataMgrException(-errno.ENOENT,
+                                           f"section '{sec}' does not exist")
+            else:
+                return def_val
 
         if self.config.has_option(sec, key):
             return self.config.get(sec, key)
@@ -221,3 +230,19 @@ class MetadataManager(object):
         sections = self.config.sections()
         r = re.compile('SNAP_METADATA_.*')
         return [section[len("SNAP_METADATA_"):] for section in sections if r.match(section)]
+
+    def add_pre_v3_incar_sec(self, version, uuid, path):
+        version, uuid, path = to_str(version, uuid, path)
+
+        self.add_section(self.PRE_V3_INCAR_SEC)
+
+        self.update_section(self.PRE_V3_INCAR_SEC, self.PRE_V3_VERSION_KEY, version)
+        self.update_section(self.PRE_V3_INCAR_SEC, self.PRE_V3_UUID_KEY, uuid)
+        self.update_section(self.PRE_V3_INCAR_SEC, self.PRE_V3_PATH_KEY, path)
+
+    def rm_pre_v3_incar_sec(self):
+        self.remove_section(self.PRE_V3_INCAR_SEC)
+
+    def get_pre_v3_uuid(self, def_val=''):
+        return self.get_option(self.PRE_V3_INCAR_SEC, self.PRE_V3_UUID_KEY,
+                               def_val)
