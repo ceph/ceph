@@ -135,12 +135,13 @@ class SubvolumeLoader(object):
                 subvol_class = self._get_subvolume_class(disc_version)
                 subvol_obj = subvol_class(mgr, fs, vol_spec, group, subvolname,
                                           legacy=True)
-            if disc_version <= 2:
+            if disc_version == 1:
                 self.upgrade_v1_to_v2(base_subvol)
                 subvol_class = self._get_subvolume_class(disc_version)
                 subvol_obj = subvol_class(mgr, fs, vol_spec, group, subvolname,
                                           legacy=base_subvol.legacy_mode)
-            elif disc_version == 3:
+            # opening v3 or upgrade + opening for v2
+            elif disc_version in (3, 2):
                 subvol_obj = SubvolumeV3(mgr, fs, vol_spec, group, subvolname,
                                          disc_uuid, disc_version)
             else:
