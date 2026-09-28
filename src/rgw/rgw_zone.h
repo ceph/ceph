@@ -801,6 +801,13 @@ int set_default_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
 /// Return an endpoint from the zonegroup or its master zone.
 std::string get_zonegroup_endpoint(const RGWZoneGroup& info);
 
+/// Return the zonegroup with the given id, which may be the local zonegroup or
+/// any other zonegroup of the given period. Returns null if the id matches
+/// neither.
+const RGWZoneGroup* find_zonegroup_by_id(const RGWZoneGroup& local_zonegroup,
+                                         const std::optional<RGWPeriod>& period,
+                                         const std::string& zonegroup_id);
+
 /// Add a zone to the zonegroup, or update an existing zone entry.
 int add_zone_to_group(const DoutPrefixProvider* dpp,
                       RGWZoneGroup& zonegroup,

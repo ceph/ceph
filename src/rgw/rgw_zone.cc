@@ -941,6 +941,24 @@ std::string get_zonegroup_endpoint(const RGWZoneGroup& info)
   return "";
 }
 
+const RGWZoneGroup* find_zonegroup_by_id(const RGWZoneGroup& local_zonegroup,
+                                         const std::optional<RGWPeriod>& period,
+                                         const std::string& zonegroup_id)
+{
+  if (local_zonegroup.equals(zonegroup_id)) {
+    return &local_zonegroup;
+  }
+  if (!period) {
+    return nullptr;
+  }
+  const auto& zonegroups = period->period_map.zonegroups;
+  auto z = zonegroups.find(zonegroup_id);
+  if (z == zonegroups.end()) {
+    return nullptr;
+  }
+  return &z->second;
+}
+
 int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
                       const RGWZoneParams& zone_params,
                       const bool *pis_master, const bool *pread_only,
