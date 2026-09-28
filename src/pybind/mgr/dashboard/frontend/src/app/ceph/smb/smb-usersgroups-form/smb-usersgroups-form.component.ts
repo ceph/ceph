@@ -8,7 +8,7 @@ import {
   OnDestroy
 } from '@angular/core';
 import { FormArray, FormControl, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { Observable } from 'rxjs';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -20,8 +20,6 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { Group, SMBCluster, SMBUsersGroups, User, USERSGROUPS_RESOURCE } from '../smb.model';
 import { Location } from '@angular/common';
-import { getUsersGroupsPath } from '../utils';
-
 @Component({
   selector: 'cd-smb-usersgroups-form',
   templateUrl: './smb-usersgroups-form.component.html',
@@ -36,6 +34,7 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDes
   editing: boolean;
   icons = Icons;
   hideUploader: boolean = false;
+  private smbBasePath: string;
 
   smbClusters$: Observable<SMBCluster[]>;
   uploadedData: Signal<SMBUsersGroups> = computed(() => {
@@ -47,15 +46,13 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDes
     private taskWrapperService: TaskWrapperService,
     private formBuilder: CdFormBuilder,
     public smbService: SmbService,
-    private router: Router,
     private cd: ChangeDetectorRef,
     private route: ActivatedRoute,
     private location: Location
   ) {
     super();
-    this.editing = this.router.url.startsWith(
-      `/${getUsersGroupsPath(this.router.url)}/${URLVerbs.EDIT}`
-    );
+    this.editing = !!this.route.snapshot.data['editing'];
+    this.smbBasePath = this.route.snapshot.data['smbBasePath'] ?? 'cephfs/smb';
     this.resource = $localize`users and groups access resource`;
     effect(() => {
       const formData = this.uploadedData();
@@ -146,7 +143,7 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDes
 
     const self = this;
 
-    let taskUrl = `${getUsersGroupsPath(this.router.url)}/${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
+    let taskUrl = `${this.smbBasePath}/standalone/${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {

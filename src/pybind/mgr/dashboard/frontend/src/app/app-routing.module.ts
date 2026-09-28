@@ -66,7 +66,7 @@ import { UpgradeProgressComponent } from './ceph/cluster/upgrade/upgrade-progres
 import { MultiClusterComponent } from './ceph/cluster/multi-cluster/multi-cluster.component';
 import { MultiClusterListComponent } from './ceph/cluster/multi-cluster/multi-cluster-list/multi-cluster-list.component';
 import { NfsClusterComponent } from './ceph/nfs/nfs-cluster/nfs-cluster.component';
-import { smbChildRoutes } from './ceph/smb/smb.routes';
+import { smbParentRoute } from './ceph/smb/smb.routes';
 import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { CephfsAddMirroringPathComponent } from './ceph/cephfs/cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
@@ -636,21 +636,7 @@ const routes: Routes = [
               }
             ]
           },
-          {
-            path: 'smb',
-            canActivate: [ModuleStatusGuardService],
-            data: {
-              moduleStatusGuardConfig: {
-                uiApiPath: 'smb',
-                redirectTo: 'error',
-                header: 'SMB module is not enabled',
-                module_name: 'smb',
-                navigate_to: 'cephfs/smb'
-              },
-              breadcrumbs: 'File/SMB'
-            },
-            children: smbChildRoutes
-          }
+          smbParentRoute(false, 'File/SMB')
         ]
       },
       // Object Gateway

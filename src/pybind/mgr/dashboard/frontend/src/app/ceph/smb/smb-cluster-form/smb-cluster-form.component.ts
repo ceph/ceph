@@ -35,7 +35,6 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
 import { UpperFirstPipe } from '~/app/shared/pipes/upper-first.pipe';
-import { getClusterPath, getUsersGroupsPath } from '../utils';
 import { Host } from '~/app/shared/models/host.interface';
 
 @Component({
@@ -63,6 +62,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   clusterResponse: SMBCluster;
   modalData$!: Observable<DomainSettings>;
   usersGroups$: Observable<SMBUsersGroups[]>;
+  private smbBasePath: string;
 
   constructor(
     private hostService: HostService,
@@ -80,14 +80,13 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
     this.resource = $localize`Cluster`;
     this.modalData$ = this.smbService.modalData$;
+    this.smbBasePath = this.route.snapshot.data['smbBasePath'] ?? 'cephfs/smb';
   }
 
   ngOnInit() {
     this.action = this.actionLabels.CREATE;
     this.usersGroups$ = this.smbService.listUsersGroups();
-    if (this.router.url.startsWith(`/${getClusterPath(this.router.url)}/${URLVerbs.EDIT}`)) {
-      this.isEdit = true;
-    }
+    this.isEdit = !!this.route.snapshot.data['editing'];
     this.smbService.modalData$.subscribe((data: DomainSettings) => {
       this.domainSettingsObject = data;
       this.smbForm.get('domain_settings').setValue(data?.realm);
@@ -305,12 +304,12 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`${getClusterPath(this.router.url)}/${urlVerb}`, { cluster_id }),
+        task: new FinishedTask(`${this.smbBasePath}/cluster/${urlVerb}`, { cluster_id }),
         call: this.smbService.createCluster(requestModel)
       })
       .subscribe({
         complete: () => {
-          this.router.navigate([getClusterPath(this.router.url)]);
+          this.router.navigate([`${this.smbBasePath}/cluster`]);
         },
         error: () => {
           component.smbForm.setErrors({ cdSubmitButton: true });
@@ -414,7 +413,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
   editDomainSettingsModal() {
     this.modalService.show(SmbDomainSettingModalComponent, {
-      domainSettingsObject: this.domainSettingsObject
+      domainSettingsObject: this.domainSettingsObject,
+      smbBasePath: this.smbBasePath
     });
   }
 
@@ -441,7 +441,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   navigateCreateUsersGroups() {
-    this.router.navigate([`${getUsersGroupsPath(this.router.url)}/${URLVerbs.CREATE}`]);
+    this.router.navigate([`${this.smbBasePath}/standalone/${URLVerbs.CREATE}`]);
   }
 
   addCustomDns() {

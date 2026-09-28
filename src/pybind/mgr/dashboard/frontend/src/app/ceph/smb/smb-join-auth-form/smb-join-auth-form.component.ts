@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -12,8 +12,6 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { JOIN_AUTH_RESOURCE, SMBCluster, SMBJoinAuth } from '../smb.model';
 import { Observable } from 'rxjs';
 import { Location } from '@angular/common';
-import { getJoinAuthPath } from '../utils';
-
 @Component({
   selector: 'cd-smb-join-auth-form',
   templateUrl: './smb-join-auth-form.component.html',
@@ -27,6 +25,7 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
   submitText: string;
   editing: boolean;
   icons = Icons;
+  private smbBasePath: string;
 
   smbClusters$: Observable<SMBCluster[]>;
 
@@ -35,14 +34,12 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
     private taskWrapperService: TaskWrapperService,
     private formBuilder: CdFormBuilder,
     private smbService: SmbService,
-    private router: Router,
     private route: ActivatedRoute,
     private location: Location
   ) {
     super();
-    this.editing = this.router.url.startsWith(
-      `/${getJoinAuthPath(this.router.url)}/${URLVerbs.EDIT}`
-    );
+    this.editing = !!this.route.snapshot.data['editing'];
+    this.smbBasePath = this.route.snapshot.data['smbBasePath'] ?? 'cephfs/smb';
     this.resource = $localize`Active directory (AD) access resource`;
   }
 
@@ -99,7 +96,7 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
     };
 
     const self = this;
-    let taskUrl = `${getJoinAuthPath(this.router.url)}/${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
+    let taskUrl = `${this.smbBasePath}/active-directory/${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {

@@ -1,11 +1,10 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute, ParamMap, Router } from '@angular/router';
+import { ActivatedRoute, ParamMap } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
 import { SmbClusterResourceStateService } from '~/app/shared/services/smb-cluster-resource-state.service';
 import { SMBCluster } from '../smb.model';
-import { getClusterPath } from '../utils';
 
 @Component({
   selector: 'cd-smb-cluster-resource-sidebar',
@@ -21,12 +20,14 @@ export class SmbClusterResourceSidebarComponent implements OnInit, OnDestroy {
   clusterName = '';
   selection: SMBCluster | undefined;
   sidebarItems: SidebarItem[] = [];
+  private smbBasePath: string;
 
   constructor(
     private route: ActivatedRoute,
-    private router: Router,
     private smbClusterResourceStateService: SmbClusterResourceStateService
-  ) {}
+  ) {
+    this.smbBasePath = this.route.snapshot.data['smbBasePath'] ?? 'cephfs/smb';
+  }
 
   ngOnInit(): void {
     this.sub.add(
@@ -54,7 +55,7 @@ export class SmbClusterResourceSidebarComponent implements OnInit, OnDestroy {
     this.sidebarItems = [
       {
         label: $localize`Overview`,
-        route: [`/${getClusterPath(this.router.url)}`, this.clusterId, 'overview'],
+        route: [`/${this.smbBasePath}/cluster`, this.clusterId, 'overview'],
         routerLinkActiveOptions: { exact: true }
       }
     ];

@@ -1,8 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute, ParamMap, Router } from '@angular/router';
+import { ActivatedRoute, ParamMap } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
-import { getUsersGroupsPath } from '../utils';
 
 @Component({
   selector: 'cd-smb-usersgroups-resource-sidebar',
@@ -15,11 +14,11 @@ export class SmbUsersgroupsResourceSidebarComponent implements OnInit, OnDestroy
   usersGroupsIdRoute = '';
   standaloneName = '';
   sidebarItems: SidebarItem[] = [];
+  private smbBasePath: string;
 
-  constructor(
-    private route: ActivatedRoute,
-    private router: Router
-  ) {}
+  constructor(private route: ActivatedRoute) {
+    this.smbBasePath = this.route.snapshot.data['smbBasePath'] ?? 'cephfs/smb';
+  }
 
   ngOnInit() {
     this.sub.add(
@@ -39,7 +38,7 @@ export class SmbUsersgroupsResourceSidebarComponent implements OnInit, OnDestroy
     this.sidebarItems = [
       {
         label: $localize`Overview`,
-        route: [`/${getUsersGroupsPath(this.router.url)}`, this.usersGroupsIdRoute, 'overview'],
+        route: [`/${this.smbBasePath}/standalone`, this.usersGroupsIdRoute, 'overview'],
         routerLinkActiveOptions: { exact: true }
       }
     ];

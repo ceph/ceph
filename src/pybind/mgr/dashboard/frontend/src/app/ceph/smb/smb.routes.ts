@@ -1,6 +1,7 @@
-import { Routes } from '@angular/router';
+import { Route, Routes } from '@angular/router';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
+import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 import { SmbClusterFormComponent } from './smb-cluster-form/smb-cluster-form.component';
 import { SmbClusterListComponent } from './smb-cluster-list/smb-cluster-list.component';
 import { SmbClusterResourceBreadcrumbResolver } from './smb-cluster-resource-page/smb-cluster-resource-breadcrumb.resolver';
@@ -15,6 +16,9 @@ import { SmbUsersgroupsListComponent } from './smb-usersgroups-list/smb-usersgro
 import { SmbUsergroupsResourceBreadcrumbResolver } from './smb-usersgroups-resource-page/smb-usersgroups-resource-breadcrumb.resolver';
 import { SmbUsersgroupsResourcePageComponent } from './smb-usersgroups-resource-page/smb-usersgroups-resource-page.component';
 import { SmbUsersgroupsResourceSidebarComponent } from './smb-usersgroups-resource-sidebar/smb-usersgroups-resource-sidebar.component';
+
+export const SMB_BASE_CEPHFS = 'cephfs/smb';
+export const SMB_BASE_RGW = 'rgw/smb';
 
 export const smbChildRoutes: Routes = [
   { path: '', component: SmbClusterListComponent },
@@ -31,7 +35,7 @@ export const smbChildRoutes: Routes = [
       {
         path: `${URLVerbs.EDIT}/:cluster_id`,
         component: SmbClusterFormComponent,
-        data: { breadcrumbs: ActionLabels.EDIT }
+        data: { breadcrumbs: ActionLabels.EDIT, editing: true }
       },
       {
         path: ':cluster_id',
@@ -64,7 +68,7 @@ export const smbChildRoutes: Routes = [
       {
         path: `${URLVerbs.EDIT}/:authId`,
         component: SmbJoinAuthFormComponent,
-        data: { breadcrumbs: ActionLabels.EDIT }
+        data: { breadcrumbs: ActionLabels.EDIT, editing: true }
       }
     ]
   },
@@ -80,7 +84,8 @@ export const smbChildRoutes: Routes = [
       },
       {
         path: `${URLVerbs.EDIT}/:usersGroupsId`,
-        component: SmbUsersgroupsFormComponent
+        component: SmbUsersgroupsFormComponent,
+        data: { editing: true }
       },
       {
         path: ':users_groups_id',
@@ -113,6 +118,31 @@ export const smbChildRoutes: Routes = [
   {
     path: `share/${URLVerbs.EDIT}/:clusterId/:shareId`,
     component: SmbShareFormComponent,
-    data: { breadcrumbs: ActionLabels.EDIT }
+    data: { breadcrumbs: ActionLabels.EDIT, editing: true }
   }
 ];
+
+/**
+ * Parent SMB route for cephfs (/cephfs/smb) or rgw (/rgw/smb).
+ * Child components read isRgw / smbBasePath from ActivatedRoute.snapshot.data.
+ */
+export function smbParentRoute(isRgw: boolean, breadcrumbs: string): Route {
+  const smbBasePath = isRgw ? SMB_BASE_RGW : SMB_BASE_CEPHFS;
+  return {
+    path: 'smb',
+    canActivate: [ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'smb',
+        redirectTo: 'error',
+        header: 'SMB module is not enabled',
+        module_name: 'smb',
+        navigate_to: smbBasePath
+      },
+      breadcrumbs,
+      isRgw,
+      smbBasePath
+    },
+    children: smbChildRoutes
+  };
+}

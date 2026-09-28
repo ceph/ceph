@@ -1,12 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SmbUsersgroupsResourceSidebarComponent } from './smb-usersgroups-resource-sidebar.component';
-import {
-  ActivatedRoute,
-  convertToParamMap,
-  provideRouter,
-  ParamMap,
-  Router
-} from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter, ParamMap } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
 import { Component, Input } from '@angular/core';
 
@@ -29,16 +23,13 @@ describe('SmbUsersgroupsResourceSidebarComponent', () => {
     );
 
     const activatedRouteMock = {
-      paramMap: paramMapSubject.asObservable()
+      paramMap: paramMapSubject.asObservable(),
+      snapshot: { data: { smbBasePath: 'cephfs/smb', isRgw: false } }
     };
 
     await TestBed.configureTestingModule({
       declarations: [SmbUsersgroupsResourceSidebarComponent, MockSidebarLayoutComponent],
-      providers: [
-        provideRouter([]),
-        { provide: ActivatedRoute, useValue: activatedRouteMock },
-        { provide: Router, useValue: { url: '/cephfs/smb/standalone/standalone-url-id/overview' } }
-      ]
+      providers: [provideRouter([]), { provide: ActivatedRoute, useValue: activatedRouteMock }]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbUsersgroupsResourceSidebarComponent);
