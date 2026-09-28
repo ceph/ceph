@@ -105,6 +105,64 @@ int read_string(int fd, unsigned max, std::string *out) {
   return len;
 }
 
+int read_snaps(
+  int fd,
+  std::string &snapname,
+  librbd::snap_namespace_type_t &snap_ns_type,
+  std::optional<librbd::snap_trash_namespace_t> &maybe_snap_trash_namespace) {
+
+  ceph_assert(!maybe_snap_trash_namespace);
+  int r;
+
+  // read the snap namespace type
+  char buf[sizeof(snap_ns_type)];
+  r = safe_read_exact(fd, buf, sizeof(buf));
+  if (r < 0) {
+    std::cerr << "rbd: failed to decode snap namespace type" << std::endl;
+    return r;
+  }
+
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  auto p = bl.cbegin();
+  decode(snap_ns_type, p);
+
+  // read the end snapshot name
+  // 4k limit to make sure we don't get a garbage string
+  r = utils::read_string(fd, 4096, &snapname);
+  if (r < 0) {
+    std::cerr << "rbd: failed to decode end snap name" << std::endl;
+    return r;
+  }
+
+  if (snap_ns_type ==
+        rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_TRASH) {
+    maybe_snap_trash_namespace =
+      librbd::snap_trash_namespace_t{};
+    r = safe_read_exact(fd, buf, sizeof(buf));
+    if (r < 0) {
+      std::cerr << "rbd: failed to decode snap namespace type" << std::endl;
+      return r;
+    }
+
+    bl.clear();
+    bl.append(buf, sizeof(buf));
+    auto p = bl.cbegin();
+    decode(maybe_snap_trash_namespace->original_namespace_type, p);
+    ceph_assert(maybe_snap_trash_namespace->original_namespace_type ==
+      rbd_snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER);
+    r = utils::read_string(
+      fd, 4096,
+      &maybe_snap_trash_namespace->original_name);
+    if (r < 0) {
+      std::cerr << "rbd: failed to decode the original name"
+                << "for the trashed end snapshot" << std::endl;
+      return r;
+    }
+  }
+  return 0;
+}
+
 int extract_spec(const std::string &spec, std::string *pool_name,
                  std::string *namespace_name, std::string *name,
                  std::string *snap_name, SpecValidation spec_validation) {
