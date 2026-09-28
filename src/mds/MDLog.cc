@@ -61,6 +61,8 @@ MDLog::MDLog(MDSRank* m)
   skip_unbounded_events = g_conf().get_val<bool>("mds_log_skip_unbounded_events");
   log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
   minor_segments_per_major_segment = g_conf().get_val<uint64_t>("mds_log_minor_segments_per_major_segment");
+  safe_batch_max = g_conf().get_val<uint64_t>("mds_log_safe_batch_max");
+  safe_batch_max_us = g_conf().get_val<uint64_t>("mds_log_safe_batch_max_us");
   upkeep_thread = std::thread(&MDLog::log_trim_upkeep, this);
 }
 
@@ -488,6 +490,90 @@ public:
   }
 };
 
+/*
+ * Registered with the journaler for each submitted event.  Its event's
+ * completion sits in safe_waiters; by the time this runs the journal has
+ * made that event safe, and usually a whole flush worth of events after it
+ * as well, so they all complete here under one mds_lock acquisition rather
+ * than one each.  The kicks for events already completed find nothing to do.
+ */
+class C_MDL_SafeKick : public Context {
+  MDLog *mdlog;
+  void finish(int r) override {
+    if (r < 0) {  // journaler shutting down
+      mdlog->_drop_safe_events(r);
+      return;
+    }
+    mdlog->_complete_safe_events();
+  }
+public:
+  explicit C_MDL_SafeKick(MDLog *m) : mdlog(m) {}
+};
+
+void MDLog::_complete_safe_events()
+{
+  /*
+   * Bound how long one batch keeps dispatch off mds_lock, by count and
+   * by time: completions differ a lot in cost (an unlink's does much more
+   * than a create's), and a request that arrives meanwhile waits for the
+   * whole batch.
+   */
+  const size_t max_batch = std::max<uint64_t>(1, safe_batch_max);
+  const auto max_time = std::chrono::microseconds(safe_batch_max_us);
+
+  const uint64_t safe = journaler->get_write_safe_pos();
+  while (true) {
+    {
+      std::lock_guard l(safe_waiters_lock);
+      if (safe_ready.empty() &&
+          (safe_waiters.empty() ||
+           safe_waiters.front()->get_write_pos() > safe))
+        return;
+      while (safe_ready.size() < max_batch && !safe_waiters.empty() &&
+             safe_waiters.front()->get_write_pos() <= safe) {
+        safe_ready.push_back(safe_waiters.front());
+        safe_waiters.pop_front();
+      }
+    }
+    // pre_finish() needs no mds_lock; run it before taking the lock, as
+    // MDSLogContextBase::complete() does, so that its op event marks when
+    // the journal made the event safe rather than when the lock came free.
+    for (; safe_prepared < safe_ready.size(); safe_prepared++)
+      safe_ready[safe_prepared]->pre_finish(0);
+
+    size_t done = 0;
+    {
+      std::lock_guard l(mds->mds_lock);
+      const auto start = ceph::mono_clock::now();
+      do {
+        auto fin = safe_ready[done++];
+        const uint64_t pos = fin->get_write_pos();
+        fin->complete_safe_locked();  // frees fin
+        // As MDSLogContextBase::complete() does, advance safe_pos after
+        // each completion rather than once per batch: a later completion
+        // in the batch, such as a wait_for_safe() waiter that goes on to
+        // trim the log, must see the events before it as safe.
+        set_safe_pos(pos);
+      } while (done < safe_ready.size() &&
+               (max_time.count() == 0 ||
+                ceph::mono_clock::now() - start < max_time));
+    }
+    safe_ready.erase(safe_ready.begin(), safe_ready.begin() + done);
+    safe_prepared -= done;
+  }
+}
+
+void MDLog::_drop_safe_events(int r)
+{
+  std::deque<MDSLogContextBase*> ls;
+  {
+    std::lock_guard l(safe_waiters_lock);
+    ls.swap(safe_waiters);
+  }
+  for (auto fin : ls)
+    fin->complete(r);  // frees fin
+}
+
 void MDLog::_submit_thread()
 {
   dout(10) << "_submit_thread start" << dendl;
@@ -552,7 +638,12 @@ void MDLog::_submit_thread()
 	fin = new C_MDL_Flushed(this, new_write_pos);
       }
 
-      journaler->wait_for_flush(fin);
+      // queue fin before the kick, which may run as soon as it is registered
+      {
+        std::lock_guard l(safe_waiters_lock);
+        safe_waiters.push_back(fin);
+      }
+      journaler->wait_for_flush(new C_MDL_SafeKick(this));
 
       if (data.flush)
 	journaler->flush();
@@ -567,7 +658,11 @@ void MDLog::_submit_thread()
 	ceph_assert(fin);
 	C_MDL_Flushed *fin2 = new C_MDL_Flushed(this, fin);
 	fin2->set_write_pos(journaler->get_write_pos());
-	journaler->wait_for_flush(fin2);
+	{
+	  std::lock_guard l(safe_waiters_lock);
+	  safe_waiters.push_back(fin2);
+	}
+	journaler->wait_for_flush(new C_MDL_SafeKick(this));
       }
       if (data.flush)
 	journaler->flush();
@@ -1674,6 +1769,12 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   }
   if (changed.count("mds_log_events_per_segment")) {
     events_per_segment = g_conf().get_val<uint64_t>("mds_log_events_per_segment");
+  }
+  if (changed.count("mds_log_safe_batch_max")) {
+    safe_batch_max = g_conf().get_val<uint64_t>("mds_log_safe_batch_max");
+  }
+  if (changed.count("mds_log_safe_batch_max_us")) {
+    safe_batch_max_us = g_conf().get_val<uint64_t>("mds_log_safe_batch_max_us");
   }
   if (changed.count("mds_log_max_events")) {
     max_events = g_conf().get_val<int64_t>("mds_log_max_events");
