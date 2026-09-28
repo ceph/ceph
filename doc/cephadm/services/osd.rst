@@ -319,7 +319,10 @@ Expected output:
 
   Scheduled OSD(s) for removal
 
-OSDs that are not safe to destroy will be rejected.  Adding the ``--zap`` flag
+OSDs that are not safe to destroy will be rejected. Use ``--force`` to
+remove an OSD without waiting for PGs to drain or for ``osd safe-to-destroy``
+to succeed. This is required when the OSD daemon is already in an error
+state (for example when its backing devices are gone). Adding the ``--zap`` flag
 directs the orchestrator to remove all LVM and partition information from the
 OSD's drives, leaving it a blank slate for redeployment or other reuse.
 

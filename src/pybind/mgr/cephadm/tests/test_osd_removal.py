@@ -5,6 +5,7 @@ import pytest
 from tests import mock
 from .fixtures import with_cephadm_module
 from datetime import datetime
+from orchestrator import DaemonDescription, DaemonDescriptionStatus, OrchestratorError
 
 
 class MockOSD:
@@ -49,11 +50,6 @@ class TestOSDRemoval:
     def test_find_stop_threshold(self, rm_util, osds, ok_to_stop, expected):
         with mock.patch("cephadm.services.osd.RemoveUtil.ok_to_stop", side_effect=ok_to_stop):
             assert rm_util.find_osd_stop_threshold(osds) == expected
-
-    def test_process_removal_queue(self, rm_util):
-        # TODO: !
-        # rm_util.process_removal_queue()
-        pass
 
     @pytest.mark.parametrize(
         "max_osd_draining_count, draining_osds, idling_osds, ok_to_stop, expected",
@@ -227,6 +223,27 @@ class TestOSD:
         osd_obj.safe_to_destroy()
         osd_obj.rm_util.safe_to_destroy.assert_called_once()
 
+    def test_daemon_is_error(self, osd_obj):
+        dd = DaemonDescription(daemon_type='osd', daemon_id='0', hostname='h',
+                               status=DaemonDescriptionStatus.error)
+        osd_obj.hostname = 'h'
+        osd_obj.rm_util.mgr.cache.get_daemon.return_value = dd
+        assert osd_obj.daemon_is_error() is True
+
+        dd.status = DaemonDescriptionStatus.running
+        assert osd_obj.daemon_is_error() is False
+
+        osd_obj.rm_util.mgr.cache.get_daemon.side_effect = OrchestratorError('missing')
+        assert osd_obj.daemon_is_error() is False
+
+    def test_update_from(self, osd_obj):
+        osd_obj.force = True
+        osd_obj.zap = True
+        other = OSD(osd_id=0, remove_util=mock.MagicMock(), force=False, zap=False)
+        osd_obj.update_from(other)
+        assert osd_obj.force is False
+        assert osd_obj.zap is False
+
     @mock.patch("cephadm.services.osd.RemoveUtil.set_osd_flag")
     def test_down(self, _, osd_obj):
         osd_obj.down()
@@ -280,6 +297,82 @@ class TestOSDRemovalQueue:
         q = OSDRemovalQueue(mock.Mock())
         q.enqueue(osd_obj)
         osd_obj.start.assert_called_once()
+
+    @mock.patch("cephadm.services.osd.OSD.start")
+    @mock.patch("cephadm.services.osd.OSD.exists")
+    def test_enqueue_updates_existing(self, exist, start, osd_obj):
+        q = OSDRemovalQueue(mock.Mock())
+        osd_obj.force = True
+        osd_obj.zap = True
+        q.enqueue(osd_obj)
+        newer = OSD(osd_id=osd_obj.osd_id, remove_util=mock.MagicMock(),
+                    force=False, zap=False)
+        q.enqueue(newer)
+        queued = next(iter(q.osds))
+        assert queued is osd_obj
+        assert queued.force is False
+        assert queued.zap is False
+        start.assert_called_once()
+
+    def _removal_queue_with_osd(self, force=False):
+        mgr = mock.Mock()
+        mgr.max_osd_draining_count = 1
+        mgr.cache.has_daemon.return_value = False
+        osd = OSD(osd_id=1, remove_util=mock.MagicMock(), force=force, hostname='host1')
+        q = OSDRemovalQueue(mgr)
+        q.osds.add(osd)
+        return q, osd
+
+    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
+    @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
+    @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=False)
+    @mock.patch("cephadm.services.osd.OSD.purge")
+    def test_process_removal_queue_waits_when_not_safe(self, _purge, _std, _pgs, _err):
+        q, osd = self._removal_queue_with_osd(force=False)
+        q.process_removal_queue()
+        assert osd in q.osds
+        _purge.assert_not_called()
+
+    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
+    @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
+    @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=False)
+    @mock.patch("cephadm.services.osd.OSD.down", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.purge", return_value=True)
+    def test_process_removal_queue_force_skips_safe_to_destroy(
+            self, _purge, _down, _std, _pgs, _err):
+        q, osd = self._removal_queue_with_osd(force=True)
+        q.process_removal_queue()
+        _purge.assert_called_once()
+        _std.assert_not_called()
+        assert osd not in q.osds
+
+    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
+    @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=False)
+    @mock.patch("cephadm.services.osd.OSD.down", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.purge", return_value=True)
+    def test_process_removal_queue_error_empty_skips_safe_to_destroy(
+            self, _purge, _down, _std, _pgs, _err):
+        q, osd = self._removal_queue_with_osd(force=False)
+        q.process_removal_queue()
+        _purge.assert_called_once()
+        _std.assert_not_called()
+        assert osd not in q.osds
+
+    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.OSD.daemon_is_error", return_value=False)
+    @mock.patch("cephadm.services.osd.OSD.get_pg_count", return_value=0)
+    @mock.patch("cephadm.services.osd.OSD.safe_to_destroy", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.down", return_value=True)
+    @mock.patch("cephadm.services.osd.OSD.purge", side_effect=Exception('purge failed'))
+    def test_process_removal_queue_keeps_osd_on_purge_failure(
+            self, _purge, _down, _std, _pgs, _err):
+        q, osd = self._removal_queue_with_osd(force=False)
+        q.process_removal_queue()
+        assert osd in q.osds
 
     @mock.patch("cephadm.services.osd.OSD.stop")
     @mock.patch("cephadm.services.osd.OSD.exists")
