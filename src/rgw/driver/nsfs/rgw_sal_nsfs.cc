@@ -17,7 +17,7 @@
 #include "rgw_rest_user.h"
 #include "driver/posix/sync_policy.h"
 #include "rgw_rest_driver_hint.h"
-#include "rgw_rest_nsfs_adopt.h"
+#include "rgw_rest_nsfs_profile.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
@@ -2970,13 +2970,16 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   xattr_strategy = std::make_unique<nsfs::PrefixedXattrStrategy>();
   path_strategy = std::make_unique<nsfs::SentinelPathStrategy>();
 
-  /* The two profiles a bucket's extensions marker resolves to.  They
+  /* The three profiles a bucket's extensions attribute resolves to.  They
    * point at the same strategies until S5 supplies the noobaa ones;  what
    * exists now is the selection, so that adding an implementation does
    * not also mean finding every call site again. */
   base_profile.extensions = nsfs::EXTENSIONS_NONE;
   base_profile.xattr_strategy = xattr_strategy.get();
   base_profile.path_strategy = path_strategy.get();
+  shared_profile.extensions = nsfs::EXTENSIONS_SHARED;
+  shared_profile.xattr_strategy = xattr_strategy.get();
+  shared_profile.path_strategy = path_strategy.get();
   extended_profile.extensions = nsfs::EXTENSIONS_STRONG;
   extended_profile.xattr_strategy = xattr_strategy.get();
   extended_profile.path_strategy = path_strategy.get();
@@ -4628,15 +4631,36 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
   ssize_t len = ::fgetxattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR,
 			    buf, sizeof(buf) - 1);
   if (len < 0) {
-    if ((errno != ENODATA) && (errno != ENOTSUP)) {
+    if (errno == ENOTSUP) {
+      /* The mount cannot answer the question, so every bucket on it
+       * would resolve to base -- including a strong one, whose shadow
+       * subtree we would then expose as a key and whose attributes we
+       * would write under NooBaa's names.  A filesystem without xattrs
+       * cannot hold our format at all, so refusing costs nothing we
+       * could have served. */
+      ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " is on a "
+	<< "filesystem which does not support " << nsfs::EXTENSIONS_XATTR
+	<< ";  refusing to serve it, because every profile would read as "
+	<< "base" << dendl;
+      return -ERR_NOT_IMPLEMENTED;
+    }
+    if (errno != ENODATA) {
       ret = -errno;
       ldpp_dout(dpp, 0) << "ERROR: reading " << nsfs::EXTENSIONS_XATTR
 	<< " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
       return ret;
     }
-    /* absent.  A NooBaa tree, or one of ours written before the marker
-     * existed;  nothing distinguishes them by inspection, which is why
-     * adoption is a declared act. */
+
+    /* No attribute is the base profile:  a NooBaa tree, or one of ours
+     * we serve in NooBaa's format.  Nothing in the directory refines
+     * that.  A name identifies our scaffolding only where we are the
+     * only writer, and base is the profile for trees somebody else
+     * wrote, so a directory called `.shadow` in one of them was put
+     * there by whoever wrote the tree. */
+    profile = driver->get_base_profile();
+    ldpp_dout(dpp, 20) << "bucket " << get_name() << " profile "
+      << profile->name() << dendl;
+    return 0;
   } else {
     buf[len] = '\0';
     char* end = nullptr;
@@ -4681,9 +4705,9 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
   return 0;
 }
 
-/* Test support:  see the unmark-bucket hint.  Removing the marker is not
- * an operator action -- there is no un-adopt, because the structure the
- * extensions added is still in the tree afterwards. */
+/* Remove the extensions attribute, which is how a bucket reaches base.
+ * Reached through set_profile(), which is where the conditions on
+ * getting there are enforced. */
 int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp)
 {
   int ret = dir->open(dpp);
@@ -4703,6 +4727,89 @@ int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp)
   return 0;
 }
 
+/* Set a bucket's profile.
+ *
+ * Adding extensions is a write and nothing else.  Shared and strong both
+ * hold everything base does, so the attribute is the whole change and
+ * the tree is already in the shape the new profile describes.
+ *
+ * Dropping them is a conversion.  The structures the dropped extensions
+ * allowed are still in the tree afterwards, and nothing walks every
+ * object to take an S3 ACL back off it, so the bucket has to hold no
+ * content:  check_empty() decides that with the content-versus-
+ * scaffolding rules the delete path already uses.  The scaffolding those
+ * extensions own is then removed, because check_empty() counts an empty
+ * .shadow as scaffolding and a bucket must never end up claiming a
+ * profile while holding structure the profile does not describe.
+ *
+ * Leaving base takes a tree we did not write into our management.  It is
+ * refused in reversible mode, where the deployment means to hand the
+ * tree back, and it is never inferred from access.
+ */
+int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
+			    uint32_t target)
+{
+  if (! nsfs::is_named_profile(target)) {
+    ldpp_dout(dpp, 0) << "ERROR: refusing to set bucket " << get_name()
+      << " to extension set " << target << ":  no profile names it"
+      << dendl;
+    return -EINVAL;
+  }
+
+  int ret = resolve_profile(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  const uint32_t current = profile->extensions;
+  if (target == current) {
+    return 0;
+  }
+
+  if (target & ~current) {
+    if (! driver->extensions_enabled()) {
+      ldpp_dout(dpp, 0) << "ERROR: refusing to extend bucket " << get_name()
+	<< ":  rgw_nsfs_extensions is false, and extending a bucket is what "
+	<< "ends its ability to go back" << dendl;
+      return -EPERM;
+    }
+    if (current == nsfs::EXTENSIONS_BASE) {
+      /* A tree we did not write.  Its bucket state lives in NooBaa's
+       * config store and not in the directory, so what we have here is
+       * whatever load_bucket() could reconstruct;  owner, creation time,
+       * versioning and placement arrive with the configuration import.
+       * Recorded rather than refused, because nothing else takes a
+       * NooBaa tree today. */
+      ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name()
+	<< " leaves the base profile for extension set " << target << dendl;
+    }
+  }
+
+  if (current & ~target) {
+    ret = check_empty(dpp, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: refusing to reduce bucket " << get_name()
+	<< " from " << profile->name() << " to extension set " << target
+	<< ":  it holds content, and the structures the dropped extensions "
+	<< "allowed stay in the tree" << dendl;
+      return ret;
+    }
+    if ((current & nsfs::EXT_SHADOW) && !(target & nsfs::EXT_SHADOW)) {
+      if ((::unlinkat(dir->get_fd(), HIDDEN_SHADOW_PATH.c_str(),
+		      AT_REMOVEDIR) < 0) && (errno != ENOENT)) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: removing " << HIDDEN_SHADOW_PATH
+	  << " from bucket " << get_name() << ": " << cpp_strerror(-ret)
+	  << dendl;
+	return ret;
+      }
+    }
+  }
+
+  return (target == nsfs::EXTENSIONS_BASE) ? unmark_extensions(dpp)
+					   : mark_extensions(dpp, target);
+}
+
 int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
 				uint32_t version)
 {
@@ -4715,12 +4822,21 @@ int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
   if (::fsetxattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR,
 		  v.data(), v.size(), 0) < 0) {
     ret = -errno;
-    ldpp_dout(dpp, 0) << "ERROR: stamping " << nsfs::EXTENSIONS_XATTR
+    ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::EXTENSIONS_XATTR
       << " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
   profile = driver->resolve_profile(version);
+  if (! profile) {
+    /* The attribute is written and names nothing we serve.  Only a
+     * caller passing a set we do not implement reaches this, and the
+     * bucket is now unservable, which the next load reports. */
+    ldpp_dout(dpp, 0) << "ERROR: stamped bucket " << get_name()
+      << " with extension set " << version << ", which resolves to no "
+      << "profile" << dendl;
+    return -EINVAL;
+  }
   return 0;
 }
 
@@ -5977,10 +6093,13 @@ int NSFSObject::check_fsio_allowed(const DoutPrefixProvider* dpp)
   if (ret < 0) {
     return ret;
   }
-  if (! b->extended()) {
+  /* FSIO needs somewhere to put a shadow, so the question is EXT_SHADOW
+   * and not whether the bucket carries anything of ours.  Shared carries
+   * EXT_RGW_META and no shadow subtree. */
+  if (! b->has_extension(nsfs::EXT_SHADOW)) {
     ldpp_dout(dpp, 4) << "FSIO refused on bucket " << b->get_name()
-      << ":  unmarked, so it is read as NooBaa wrote it and must not "
-      << "acquire a shadow tree" << dendl;
+      << " (profile " << b->profile_name() << "):  it does not carry "
+      << "EXT_SHADOW, so it must not acquire a shadow tree" << dendl;
     return -ENOTSUP;
   }
   return 0;
@@ -10025,24 +10144,18 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
   features["extensions_default"] = extensions_enabled() ? "true" : "false";
 }
 
-/* Mark a bucket that already exists.
+/* Set the profile of a bucket that already exists.
  *
- * The other way a bucket becomes extended, and the reason marking at
- * creation is not enough:  a tree that came from NooBaa, or one of ours
- * written before the marker existed, has buckets nobody stamped.  It is a
- * declared act on a named bucket rather than something inferred on first
- * access, because inference would mark a tree an operator was keeping
- * reversible without anyone deciding to. */
-int NSFSDriver::adopt_bucket(const DoutPrefixProvider* dpp, optional_yield y,
-			     const std::string& name, uint32_t* had)
+ * The reason setting one at creation is not enough:  a tree that came
+ * from NooBaa has buckets nobody wrote an attribute onto.  It is a
+ * declared act on a named bucket rather than something inferred on
+ * first access, because inference would extend a tree an operator was
+ * keeping reversible without anyone deciding to. */
+int NSFSDriver::set_bucket_profile(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   const std::string& name, uint32_t target,
+				   uint32_t* had, std::string* had_profile)
 {
-  if (! extensions_enabled()) {
-    ldpp_dout(dpp, 0) << "ERROR: refusing to adopt " << name
-      << ":  rgw_nsfs_extensions is false, and marking a bucket is what "
-      << "ends its ability to go back" << dendl;
-    return -EPERM;
-  }
-
   rgw_bucket b;
   b.name = name;
   NSFSBucket bucket(this, root_dir.get(), b);
@@ -10056,13 +10169,37 @@ int NSFSDriver::adopt_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   if (had) {
     *had = was ? was->extensions : nsfs::EXTENSIONS_NONE;
   }
-  if (bucket.extended()) {
-    return 0;   /* already ours, at a version we implement */
+  if (had_profile) {
+    /* The set alone does not say which profile it was:  base carries no
+     * attribute and reports zero. */
+    *had_profile = bucket.profile_name();
   }
 
-  ldpp_dout(dpp, 1) << "nsfs: adopting bucket " << name
-    << " into extension set " << nsfs::EXTENSIONS_DEFAULT << dendl;
-  return bucket.mark_extensions(dpp, nsfs::EXTENSIONS_DEFAULT);
+  return bucket.set_profile(dpp, y, target);
+}
+
+int NSFSDriver::get_bucket_profile(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   const std::string& name,
+				   uint32_t* extensions, std::string* pname)
+{
+  rgw_bucket b;
+  b.name = name;
+  NSFSBucket bucket(this, root_dir.get(), b);
+
+  int ret = bucket.load_bucket(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  const nsfs::BucketProfile* p = bucket.get_profile();
+  if (extensions) {
+    *extensions = p ? p->extensions : nsfs::EXTENSIONS_NONE;
+  }
+  if (pname) {
+    *pname = bucket.profile_name();
+  }
+  return 0;
 }
 
 void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
@@ -10072,7 +10209,7 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
   driver_mgr->register_resource("hint", new RGWRESTMgr_Driver_Hint);
   mgr->register_resource("driver", driver_mgr);
   auto* nsfs_mgr = new RGWRESTMgr;
-  nsfs_mgr->register_resource("adopt", new RGWRESTMgr_NSFS_Adopt);
+  nsfs_mgr->register_resource("profile", new RGWRESTMgr_NSFS_Profile);
   mgr->register_resource("nsfs", nsfs_mgr);
 }
 
@@ -10274,14 +10411,23 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  if (hint == "unmark-bucket") {
-    /* remove a bucket's extensions marker, so that the base profile and
-     * the interlocks which refuse on it can be reached from a suite.
-     * Every bucket a gateway creates is marked, so without this the
-     * refusing branch is unreachable and a test asserting it would prove
-     * nothing. */
+  if (hint == "bucket-profile") {
+    /* Move a bucket to a named profile, so a suite can reach one this
+     * gateway does not create on its own.  Every bucket it makes is
+     * `strong`, so without this the `base` and `shared` branches of any
+     * interlock are unreachable and a test asserting them would prove
+     * nothing.
+     *
+     * It goes through set_profile() and gets the same refusals as the
+     * REST path, so a suite cannot arrive at a state an operator
+     * cannot. */
     auto it = params.find("bucket");
-    if (it == params.end()) {
+    auto pv = params.find("profile");
+    if ((it == params.end()) || (pv == params.end())) {
+      return -EINVAL;
+    }
+    auto target = nsfs::extensions_for_profile(pv->second);
+    if (! target) {
       return -EINVAL;
     }
 
@@ -10292,9 +10438,12 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (ret < 0) {
       return ret;
     }
-    ret = bucket.unmark_extensions(dpp);
     if (out) {
-      (*out)["unmarked"] = (ret == 0) ? "true" : "false";
+      (*out)["had_profile"] = bucket.profile_name();
+    }
+    ret = bucket.set_profile(dpp, null_yield, *target);
+    if (out) {
+      (*out)["profile"] = bucket.profile_name();
     }
     return ret;
   }

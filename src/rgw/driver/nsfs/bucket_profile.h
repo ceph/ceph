@@ -16,7 +16,9 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace rgw { namespace sal { namespace nsfs {
 
@@ -89,21 +91,33 @@ inline constexpr uint32_t EXT_SHADOW      = 0x1;  /* .shadow, FSIO */
 inline constexpr uint32_t EXT_ACLS        = 0x2;  /* S3 access control lists */
 inline constexpr uint32_t EXT_POSITIONAL  = 0x4;  /* positional IO layout --
                                                    * NOT IMPLEMENTED */
+/* Object metadata in RGW's representation:  our attribute names and our
+ * packing, on NooBaa's layout.
+ *
+ * It adds no file and no directory, so without a bit of its own the
+ * shared profile would be an empty set -- and an empty set is not
+ * separable from a bucket carrying no attribute at all.  Anything that
+ * strips xattrs turns one into the other, and we would then write
+ * NooBaa's attribute names onto objects holding ours.  A profile has to
+ * be a value somebody can read back. */
+inline constexpr uint32_t EXT_RGW_META    = 0x8;
 
 /* The bits this build can serve.  The refusal test, and the reason a
  * declared-but-unbuilt extension must stay out of it:  accepting a bit
  * we cannot honour is exactly the corruption the rule exists to
  * prevent. */
-inline constexpr uint32_t EXTENSIONS_KNOWN = EXT_SHADOW | EXT_ACLS;
+inline constexpr uint32_t EXTENSIONS_KNOWN =
+    EXT_SHADOW | EXT_ACLS | EXT_RGW_META;
 
 /* The named profiles.
  *
- * base    -- no bits.  Read as NooBaa wrote it, add nothing.
- * shared  -- features where the RGW representation is stronger and worth
- *            taking early for something NooBaa also has.  Empty today:
- *            the candidates are object tagging and object lock, and
- *            neither has landed.  It exists so that S5 has somewhere to
- *            put them that is not `strong`.
+ * base    -- no attribute at all.  Read and written as NooBaa does, and
+ *            nothing of ours is added.  It is an absence and not a
+ *            value, so it is the one profile with no mask.
+ * shared  -- RGW's metadata representation on NooBaa's layout, and
+ *            whatever features move in later;  the candidates are object
+ *            tagging and object lock, and neither has landed.  It exists
+ *            so that S5 has somewhere to put them that is not `strong`.
  * strong  -- everything this build can serve.  Not everything named:
  *            POSITIONAL is declared and unbuilt, so it is not here, and
  *            a bucket must never be marked with an extension the writer
@@ -111,8 +125,32 @@ inline constexpr uint32_t EXTENSIONS_KNOWN = EXT_SHADOW | EXT_ACLS;
  *
  * A tree is handable back to NooBaa only at `base`. */
 inline constexpr uint32_t EXTENSIONS_BASE   = EXTENSIONS_NONE;
-inline constexpr uint32_t EXTENSIONS_SHARED = 0;
+inline constexpr uint32_t EXTENSIONS_SHARED = EXT_RGW_META;
 inline constexpr uint32_t EXTENSIONS_STRONG = EXTENSIONS_KNOWN;
+
+/* The extension set a profile name asks for, or nothing for a name we do
+ * not write.
+ *
+ * Callers from outside the driver name a profile and not a bitmask:  the
+ * mask is how the answer is stored, and "shared" is what an operator or
+ * a test means.  `base` is the absence of the attribute, so setting it
+ * removes rather than writes. */
+inline std::optional<uint32_t> extensions_for_profile(std::string_view name)
+{
+  if (name == "base") return EXTENSIONS_BASE;
+  if (name == "shared") return EXTENSIONS_SHARED;
+  if (name == "strong") return EXTENSIONS_STRONG;
+  return std::nullopt;
+}
+
+/* Whether a set is one of the three we name.  A bucket must never be
+ * left carrying a combination nobody defined, so this gates what can be
+ * written as well as what can be read back. */
+inline bool is_named_profile(uint32_t ext)
+{
+  return (ext == EXTENSIONS_BASE) || (ext == EXTENSIONS_SHARED) ||
+	 (ext == EXTENSIONS_STRONG);
+}
 
 /* What a newly created bucket is marked with, when the deployment marks
  * at all.  See rgw_nsfs_extensions.
@@ -140,6 +178,7 @@ struct BucketProfile {
 
   const char* name() const {
     if (extensions == EXTENSIONS_BASE) return "base";
+    if (extensions == EXTENSIONS_SHARED) return "shared";
     if (extensions == EXTENSIONS_STRONG) return "strong";
     return "mixed";
   }

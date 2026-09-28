@@ -472,6 +472,7 @@ protected:
   /* what a bucket's extensions marker resolves to;  both resolve to the
    * same strategy instances until S5 supplies the noobaa ones */
   nsfs::BucketProfile base_profile;
+  nsfs::BucketProfile shared_profile;
   nsfs::BucketProfile extended_profile;
   nsfs::ReservedNames reserved_names;
   std::string base_path;
@@ -904,11 +905,13 @@ public:
   nsfs::PathStrategy* get_path_strategy() { return path_strategy.get(); }
   const nsfs::ReservedNames& get_reserved_names() const { return reserved_names; }
 
-  /* The profile a mark selects, or nullptr for a bucket carrying a bit
-   * this build does not implement -- refused rather than guessed.
+  /* The profile an extension set selects, or nullptr for a bucket this
+   * build cannot serve -- refused rather than guessed.  Base is not
+   * reachable from here:  it is the absence of the attribute, and
+   * load_bucket resolves it without asking.
    *
-   * The two profile objects differ only in which strategies they point
-   * at, and today both point at the same ones.  When S5 makes them
+   * The profile objects differ only in which strategies they point
+   * at, and today all of them point at the same ones.  When S5 makes them
    * differ, a bucket carrying a *subset* of the known bits will need to
    * carry its own mask rather than borrow the profile's;  the profile
    * selects implementations, the mask says what the bucket has. */
@@ -916,8 +919,19 @@ public:
     if (extensions & ~nsfs::EXTENSIONS_KNOWN) {
       return nullptr;
     }
-    return (extensions == nsfs::EXTENSIONS_NONE) ? &base_profile
-						 : &extended_profile;
+    /* An attribute holding zero names no profile.  Base is the absence
+     * of the attribute, and nothing we write produces an empty mask, so
+     * a zero here is a tree somebody edited or a truncated write. */
+    if (extensions == nsfs::EXTENSIONS_NONE) {
+      return nullptr;
+    }
+    /* Anything adding structure is strong.  A mask holding only
+     * EXT_RGW_META changes attribute names and packing and adds no file,
+     * which is what shared is. */
+    if (extensions & ~nsfs::EXT_RGW_META) {
+      return &extended_profile;
+    }
+    return &shared_profile;
   }
   const nsfs::BucketProfile* get_base_profile() const { return &base_profile; }
 
@@ -933,8 +947,18 @@ public:
 
   /* Write the marker onto an existing bucket directory.  Idempotent for a
    * bucket already at this version. */
-  int adopt_bucket(const DoutPrefixProvider* dpp, optional_yield y,
-		   const std::string& name, uint32_t* had /* OUT */);
+  /* Set a named bucket's profile, and report what it was so a caller
+   * can tell a change from a no-op. */
+  int set_bucket_profile(const DoutPrefixProvider* dpp, optional_yield y,
+			 const std::string& name, uint32_t target,
+			 uint32_t* had /* OUT */,
+			 std::string* had_profile /* OUT */);
+
+  /* Read it without changing it. */
+  int get_bucket_profile(const DoutPrefixProvider* dpp, optional_yield y,
+			 const std::string& name,
+			 uint32_t* extensions /* OUT */,
+			 std::string* pname /* OUT */);
 
   /* called by nsfs::BucketCache layer when a new object is discovered
    * by inotify or similar */
@@ -1089,12 +1113,31 @@ public:
   int resolve_profile(const DoutPrefixProvider* dpp);
   const nsfs::BucketProfile* get_profile() const { return profile; }
 
-  /* Whether this bucket carries our extensions.  Unresolved reads as
-   * base, which is the safe direction:  the interlocks refuse. */
+  /* Whether this bucket carries our extensions at all -- shared or
+   * strong, not base.  Unresolved reads as base, which is the safe
+   * direction:  the interlocks refuse. */
   bool extended() const { return profile && profile->extended(); }
 
-  /* Write the marker.  Called at creation when the deployment marks new
-   * buckets, and by adoption. */
+  /* Whether it carries one particular extension.  What an interlock
+   * guarding a single structure should ask:  extended() is true for
+   * shared, which has our attribute names and none of the structures. */
+  bool has_extension(uint32_t ext) const {
+    return profile && profile->has(ext);
+  }
+
+  const char* profile_name() const {
+    return profile ? profile->name() : "unresolved";
+  }
+
+  /* Move the bucket to a profile.  The one way a bucket's profile
+   * changes:  adding extensions is a write, dropping them requires the
+   * bucket to hold no content and removes the scaffolding the dropped
+   * extensions own. */
+  int set_profile(const DoutPrefixProvider* dpp, optional_yield y,
+		  uint32_t target);
+
+  /* Write the extensions attribute.  Reached through set_profile(),
+   * and directly at creation. */
   int mark_extensions(const DoutPrefixProvider* dpp, uint32_t version);
 
   /* test support only -- reachable through the unmark-bucket hint */
