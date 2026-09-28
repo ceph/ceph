@@ -3954,3 +3954,72 @@ class TestMirroring(CephFSTestCase):
         self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_name}'])
         self.assert_snapshot_not_synced(dir_name, snap_name)
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_hardlink_relinked_external_primary(self):
+        """Copy a re-created link whose primary name is outside the mirror.
+
+        Only linkA can discover the content update: fileA is not mirrored.
+        Keep the file below the blockdiff threshold to test path discovery
+        and full copying, including the destination snapshot's contents.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.config_set('client.mirror',
+                        'cephfs_mirror_blockdiff_min_file_size', 134217728)
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0/mirror'
+        primary = 'd0/fileA'
+        link = f'{dir_name}/linkA'
+
+        def snapshot_file_state(mount, snap_name):
+            path = f'{dir_name}/.snap/{snap_name}/linkA'
+            size = mount.run_shell(
+                ['stat', '-c', '%s', path]).stdout.getvalue().strip()
+            digest = mount.run_shell(
+                ['sha256sum', path]).stdout.getvalue().split()[0]
+            return int(size), digest
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', '-p', dir_name])
+        self.mount_a.run_shell(['dd', 'if=/dev/zero', f'of={primary}',
+                                'bs=1M', 'count=64', 'conv=fsync'])
+        self.mount_a.run_shell(['ln', primary, link])
+        self.mount_a.run_shell(['touch', '-m', '-d', '2020-01-01 00:00:00 UTC',
+                                primary])
+        self.mount_a.run_shell(['sync', primary])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id,
+                           f'/{dir_name}')
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap1'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap1', 1)
+        initial_state = snapshot_file_state(self.mount_a, 'snap1')
+        self.assertEqual(initial_state,
+                         snapshot_file_state(self.mount_b, 'snap1'))
+
+        self.mount_a.run_shell(['rm', link])
+        self.mount_a.run_shell(['ln', primary, link])
+        inodes = self.mount_a.run_shell(
+            ['stat', '-c', '%i', primary, link]).stdout.getvalue().split()
+        self.assertEqual(2, len(inodes))
+        self.assertEqual(inodes[0], inodes[1])
+        self.mount_a.run_shell(['dd', 'if=/dev/urandom', f'of={primary}',
+                                'bs=1M', 'count=1', 'seek=32',
+                                'conv=notrunc,fsync'])
+        self.mount_a.run_shell(['touch', '-m', '-d', '2020-01-01 00:00:02 UTC',
+                                primary])
+        self.mount_a.run_shell(['sync', primary])
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap2'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap2', 2)
+        source_state = snapshot_file_state(self.mount_a, 'snap2')
+        destination_state = snapshot_file_state(self.mount_b, 'snap2')
+        log.info('external primary relink: snap1=%s source=%s destination=%s',
+                 initial_state, source_state, destination_state)
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                              f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.assertEqual(64 * 1024 * 1024, source_state[0])
+        self.assertNotEqual(initial_state[1], source_state[1])
+        self.assertEqual(source_state, destination_state)
