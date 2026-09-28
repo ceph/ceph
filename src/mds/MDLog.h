@@ -54,6 +54,7 @@ enum {
 #include "LogSegmentRef.h"
 
 #include <atomic>
+#include <deque>
 #include <list>
 #include <map>
 #include <set>
@@ -254,6 +255,9 @@ protected:
   }
 
   void _submit_thread();
+  void _wait_for_flush(MDSLogContextBase *fin);
+  void _complete_safe_events();
+  void _drop_safe_events(int r);
 
   LogSegmentRef const& get_oldest_segment() {
     return segments.begin()->second;
@@ -293,9 +297,31 @@ protected:
   ceph::fair_mutex submit_mutex{"MDLog::submit_mutex"};
   std::condition_variable_any submit_cond;
 
+  // Completions of submitted events, in journal order, waiting for the
+  // journal to make them safe.  The submit thread appends; the finisher
+  // runs every safe one under a single mds_lock acquisition.
+  ceph::mutex safe_waiters_lock = ceph::make_mutex("MDLog::safe_waiters_lock");
+  std::deque<MDSLogContextBase*> safe_waiters;
+  // Safe completions taken off safe_waiters and not yet run, the first
+  // safe_prepared of them past pre_finish().  Finisher thread only: every
+  // C_MDL_SafeKick runs on the Journaler's finisher.  The one exception is
+  // Journaler::wait_for_flush() completing a kick inline, with -EAGAIN,
+  // when the Journaler is already STATE_STOPPING; that only happens after
+  // shutdown() has joined the submit thread, and such a kick only goes to
+  // _drop_safe_events(), which does not touch these.
+  std::vector<MDSLogContextBase*> safe_ready;
+  size_t safe_prepared = 0;
+  // mds_log_safe_batch, read once at startup and never changed, so that
+  // every completion of the process takes the same path
+  bool safe_batch = true;
+  // mds_log_safe_batch_max{,_us}, read by the finisher thread
+  std::atomic_uint64_t safe_batch_max;
+  std::atomic_uint64_t safe_batch_max_us;
+
 private:
   friend class C_MaybeExpiredSegment;
   friend class C_MDL_Flushed;
+  friend class C_MDL_SafeKick;
   friend class C_OFT_Committed;
 
   void try_to_commit_open_file_table(uint64_t last_seq);
