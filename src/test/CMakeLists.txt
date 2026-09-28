@@ -617,17 +617,15 @@ endif(HAVE_BLKID OR FREEBSD)
 
 # ceph_test_admin_socket_output
 
-if(StdFilesystem_FOUND)
-  add_executable(ceph_test_admin_socket_output
-    test_admin_socket_output.cc
-    admin_socket_output.cc
-    admin_socket_output_tests.cc)
-  target_link_libraries(ceph_test_admin_socket_output
-    ceph-common StdFilesystem::filesystem)
-  install(TARGETS
-    ceph_test_admin_socket_output
-    DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif()
+add_executable(ceph_test_admin_socket_output
+  test_admin_socket_output.cc
+  admin_socket_output.cc
+  admin_socket_output_tests.cc)
+target_link_libraries(ceph_test_admin_socket_output
+  ceph-common)
+install(TARGETS
+  ceph_test_admin_socket_output
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 #make check starts here
 

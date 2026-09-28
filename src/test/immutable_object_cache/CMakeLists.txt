@@ -16,7 +16,6 @@ target_link_libraries(unittest_ceph_immutable_obj_cache
   librados
   global
   radostest-cxx
-  StdFilesystem::filesystem
   GTest::GTest
   )
 

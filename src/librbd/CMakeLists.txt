@@ -313,8 +313,7 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     ceph-common
     cls_rbd_client
     libneorados
-    librados
-    StdFilesystem::filesystem)
+    librados)
 
   if(WITH_RBD_RWL)
     target_link_libraries(librbd_plugin_pwl_cache

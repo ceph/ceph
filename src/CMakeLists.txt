@@ -616,7 +616,6 @@ set(ceph_common_deps
   Boost::program_options
   Boost::date_time
   Boost::iostreams
-  StdFilesystem::filesystem
   ${FMT_LIB}
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
