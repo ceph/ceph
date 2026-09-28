@@ -122,7 +122,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   createOsdsLabel = $localize`Create OSDs`;
   isSubmitLoading = false;
 
-  deploymentOptions!: DeploymentOptions;
+  deploymentOptions?: DeploymentOptions;
   optionNames = Object.values(OsdDeploymentOptions);
 
   steps: Array<Step> = this.getStepsForMode('automatic');
@@ -143,7 +143,6 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
     private hostService: HostService,
     private router: Router,
     private formatterService: FormatterService,
-    // private modalService: ModalService,
     private osdService: OsdService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -282,21 +281,26 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
       }
     });
 
-    this.osdService.getDeploymentOptions().subscribe((options) => {
-      this.deploymentOptions = options;
-      if (!this.osdService.selectedFormValues) {
-        this.form.get('deploymentMode').setValue('automatic', { emitEvent: false });
-        this.form.get('deploymentOption').setValue(this.deploymentOptions?.recommended_option);
-      }
+    this.osdService.getDeploymentOptions().subscribe({
+      next: (options) => {
+        this.deploymentOptions = options;
+        if (!this.osdService.selectedFormValues) {
+          this.form.get('deploymentMode').setValue('automatic', { emitEvent: false });
+          this.form.get('deploymentOption').setValue(this.deploymentOptions?.recommended_option);
+        }
 
-      if (this.deploymentOptions?.recommended_option) {
-        this.enableFeatures();
+        if (this.deploymentOptions?.recommended_option) {
+          this.enableFeatures();
+        }
+      },
+      error: () => {
+        // Orchestrator may be unavailable; keep the form usable without profiles.
+        this.deploymentOptions = undefined;
       }
     });
 
     // restoring form value on back/next
     if (this.osdService.selectedFormValues) {
-      this.form = _.cloneDeep(this.osdService.selectedFormValues);
       if (!this.form.get('deploymentMode')) {
         this.form.addControl('deploymentMode', new UntypedFormControl('automatic'));
       }
@@ -521,7 +525,7 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
       const option = this.form.get('deploymentOption').value;
       const encrypted = this.getEncryptedFeatureValue();
       const deploymentSpec = { option: option, encrypted: encrypted };
-      const title = this.deploymentOptions.options[deploymentSpec.option].title;
+      const title = this.deploymentOptions!.options[deploymentSpec.option].title;
       const trackingId = `${title} deployment`;
       this.taskWrapper
         .wrapTaskAroundCall({
@@ -577,7 +581,8 @@ export class OsdFormComponent extends CdForm implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.osdService.selectedFormValues = _.cloneDeep(this.form);
+    const rawForm = this.form.getRawValue();
+    this.osdService.selectedFormValues = _.cloneDeep(rawForm);
     this.osdService.isDeployementModeSimple = this.simpleDeployment;
   }
 }
