@@ -47,6 +47,8 @@ export class SmbShareListComponent implements OnInit {
   smbShares$: Observable<SMBShare[]>;
   subject$ = new BehaviorSubject<SMBShare[]>([]);
   modalRef: NgbModalRef;
+  isRgw = false;
+  shareListDescription = '';
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -60,62 +62,84 @@ export class SmbShareListComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.columns = [
-      {
-        name: $localize`ID`,
-        prop: 'share_id',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Name`,
-        prop: 'name',
-        flexGrow: 2
-      },
-      {
-        name: $localize`File System`,
-        prop: 'cephfs.volume',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Path`,
-        prop: 'cephfs.path',
-        cellTransformation: CellTemplate.path,
-        flexGrow: 2
-      },
-      {
-        name: $localize`Subvolume group`,
-        prop: 'cephfs.subvolumegroup',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Subvolume`,
-        prop: 'cephfs.subvolume',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Provider`,
-        prop: 'cephfs.provider',
-        flexGrow: 2
-      },
-      {
-        name: $localize`IOPS Limit`,
-        prop: 'cephfs.qos',
-        cellTemplate: this.iopsLimitTpl,
-        flexGrow: 2
-      },
-      {
-        name: $localize`Bandwidth Limit`,
-        prop: 'cephfs.qos',
-        cellTemplate: this.bwLimitTpl,
-        flexGrow: 2
-      },
-      {
-        name: $localize`Delay Max`,
-        prop: 'cephfs.qos',
-        cellTemplate: this.delayMaxTpl,
-        flexGrow: 2
-      }
-    ];
+    this.isRgw = isRgwSmbRoute(this.router.url);
+    this.shareListDescription = this.isRgw
+      ? $localize`Logical unit hosted by the cluster that maps to an RGW bucket`
+      : $localize`Logical unit hosted by the cluster that maps to the given CephFS volume and path`;
+    this.columns = this.isRgw
+      ? [
+          {
+            name: $localize`ID`,
+            prop: 'share_id',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Name`,
+            prop: 'name',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Bucket`,
+            prop: 'rgw.bucket',
+            flexGrow: 2
+          }
+        ]
+      : [
+          {
+            name: $localize`ID`,
+            prop: 'share_id',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Name`,
+            prop: 'name',
+            flexGrow: 2
+          },
+          {
+            name: $localize`File System`,
+            prop: 'cephfs.volume',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Path`,
+            prop: 'cephfs.path',
+            cellTransformation: CellTemplate.path,
+            flexGrow: 2
+          },
+          {
+            name: $localize`Subvolume group`,
+            prop: 'cephfs.subvolumegroup',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Subvolume`,
+            prop: 'cephfs.subvolume',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Provider`,
+            prop: 'cephfs.provider',
+            flexGrow: 2
+          },
+          {
+            name: $localize`IOPS Limit`,
+            prop: 'cephfs.qos',
+            cellTemplate: this.iopsLimitTpl,
+            flexGrow: 2
+          },
+          {
+            name: $localize`Bandwidth Limit`,
+            prop: 'cephfs.qos',
+            cellTemplate: this.bwLimitTpl,
+            flexGrow: 2
+          },
+          {
+            name: $localize`Delay Max`,
+            prop: 'cephfs.qos',
+            cellTemplate: this.delayMaxTpl,
+            flexGrow: 2
+          }
+        ];
     const createAction: CdTableAction = {
       name: `${this.actionLabels.CREATE}`,
       permission: 'create',
@@ -140,9 +164,7 @@ export class SmbShareListComponent implements OnInit {
       name: this.actionLabels.DELETE
     };
 
-    this.tableActions = isRgwSmbRoute(this.router.url)
-      ? [editAction, deleteAction]
-      : [createAction, editAction, deleteAction];
+    this.tableActions = [createAction, editAction, deleteAction];
 
     this.smbShares$ = this.subject$.pipe(
       switchMap(() =>

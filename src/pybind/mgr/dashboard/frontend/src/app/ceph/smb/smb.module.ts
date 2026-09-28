@@ -29,6 +29,7 @@ import { CommonModule } from '@angular/common';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterModule } from '@angular/router';
 import { NgModule } from '@angular/core';
+import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { SmbShareFormComponent } from './smb-share-form/smb-share-form.component';
 
 import { SmbUsersgroupsListComponent } from './smb-usersgroups-list/smb-usersgroups-list.component';
@@ -63,7 +64,8 @@ import { SmbUsersgroupsResourcePageComponent } from './smb-usersgroups-resource-
     NumberModule,
     LayoutModule,
     ComboBoxModule,
-    IconModule
+    IconModule,
+    NgbTypeaheadModule
   ],
   exports: [SmbClusterListComponent, SmbClusterFormComponent],
   declarations: [
