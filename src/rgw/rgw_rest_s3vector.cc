@@ -242,15 +242,19 @@ private:
   void execute(optional_yield y) override {
     const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
     const int ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
-    if (ret < 0 && ret != -ENOENT) {
+    if (ret == 0) {
+      ldpp_dout(this, 5) << "WARNING: s3vector bucket " << bucket_id << " already exists" << dendl;
+      op_ret = -EEXIST;
+      return;
+    }
+    if (ret != -ENOENT) {
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << ret << dendl;
       op_ret = ret;
       return;
     }
 
     // the backend is verified before the metadata of the bucket is created, so that a
-    // failed request does not leave a bucket behind. it is verified also when the bucket
-    // already exists, so that the request fails if the backend became unusable
+    // failed request does not leave a bucket behind
     op_ret = rgw::s3vector::create_vector_bucket(configuration, driver, &s->bucket_tenant, this, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to initialize the backend of s3vector bucket " << bucket_id <<
@@ -258,35 +262,28 @@ private:
       return;
     }
 
-    // TODO: verify creation parameters are the same as the existing ones. reject if not
-    if (ret == -ENOENT) {
-      const auto& zonegroup = s->penv.site->get_zonegroup();
+    const auto& zonegroup = s->penv.site->get_zonegroup();
 
-      rgw::sal::VectorBucket::CreateParams createparams;
-      // as with ordinary buckets, a vector bucket belongs to the account of the user
-      // creating it, when it has one, and to the user itself otherwise
-      createparams.owner = s->owner.id;
-      createparams.zonegroup_id = zonegroup.id;
-      // vector buckets are indexless
-      createparams.index_type = rgw::BucketIndexType::Indexless;
-      createparams.placement_rule.storage_class = s->info.storage_class;
+    rgw::sal::VectorBucket::CreateParams createparams;
+    // as with ordinary buckets, a vector bucket belongs to the account of the user
+    // creating it, when it has one, and to the user itself otherwise
+    createparams.owner = s->owner.id;
+    createparams.zonegroup_id = zonegroup.id;
+    // vector buckets are indexless
+    createparams.index_type = rgw::BucketIndexType::Indexless;
+    createparams.placement_rule.storage_class = s->info.storage_class;
 
-      op_ret = bucket->create(this, createparams, y);
-      if (op_ret < 0) {
-        ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
-        return;
-      }
+    // a request that raced with another creation of the same bucket fails here
+    op_ret = bucket->create(this, createparams, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
+      return;
     }
   }
 
   void send_response() override {
-    if (op_ret == -ERR_BUCKET_EXISTS) {
-      const auto eexist_override = s->cct->_conf.get_val<bool>("rgw_bucket_eexist_override");
-      if (! eexist_override) [[likely]] {
-        op_ret = 0;
-      } else {
-        s->err.message = "The requested bucket name is not available. The bucket namespace is shared by all users of the system. Specify a different name and try again.";
-      }
+    if (op_ret == -EEXIST || op_ret == -ERR_BUCKET_EXISTS) {
+      s->err.message = "A vector bucket with this name already exists. Choose a different name and try again.";
     }
 
     if (op_ret) {
