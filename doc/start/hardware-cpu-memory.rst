@@ -28,9 +28,9 @@ CPU
    * - Monitor, Manager
      - Modest; 2 cores minimum.
    * - MDS
-     - CPU-intensive and single-threaded. Performs best with a high clock
-       rate (GHz). Does not need many cores unless the host also runs other
-       services, such as SSD OSDs for the CephFS metadata pool.
+     - CPU-intensive but cannot exploit many cores. Performs best with a high
+       clock rate (GHz). Does not need many cores unless the host also runs
+       other services, such as SSD OSDs for the CephFS metadata pool.
    * - RGW
      - May co-reside with Monitor and Manager services if the nodes have
        sufficient resources.
@@ -114,9 +114,8 @@ attempts to consume.
      - The default. Chosen for typical use cases to balance RAM cost and OSD
        performance.
    * - Above 4 GiB
-     - Can improve performance with many small objects, or with large data
-       sets of 256 GiB per OSD or more. This is especially true with fast
-       NVMe OSDs.
+     - Can improve performance with many small objects or with large OSDs.
+       This is especially true with fast NVMe OSDs.
    * - HDD OSDs: 6 GiB
      - An effective target of at least 6 GiB helps mitigate slow requests
        on HDD OSDs.

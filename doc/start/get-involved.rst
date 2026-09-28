@@ -22,6 +22,9 @@ your question.
    * - **Blog**
      - Announcements and progress reports.
      - https://ceph.io/en/news/blog/
+   * - **Slack**
+     - Live chat for user questions.
+     - `Ceph Slack Invite`_
    * - **IRC**
      - Live chat with developers, mostly US Pacific daytime. ``#ceph`` for
        users and operators; ``#ceph-devel``, ``#ceph-dashboard``, ``#cephfs``
@@ -29,9 +32,6 @@ your question.
      - - **Domain:** ``irc.oftc.net``
        - **Channels:** ``#ceph``, ``#ceph-devel``, ``#ceph-dashboard``,
          ``#cephfs``
-   * - **Slack**
-     - Live chat for user questions.
-     - `Ceph Slack Invite`_
    * - **User List**
      - Questions and answers for users and operators (ceph-users@ceph.io).
      - - `User Subscribe`_
@@ -41,7 +41,7 @@ your question.
      - - `Devel Subscribe`_
        - `Devel Archives`_
    * - **Kernel Client**
-     - Kernel client patches and discussion.
+     - Linux kernel client patches and discussion.
      - - `Kernel Client Subscribe`_
        - `Kernel Client Unsubscribe`_
        - `Kernel Client Archives`_

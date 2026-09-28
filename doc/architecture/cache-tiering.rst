@@ -14,10 +14,9 @@ configured to act as a cache tier, and a backing pool of either erasure-coded
 or relatively slower/cheaper devices configured to act as an economical storage
 tier.
 
-The Ceph objecter handles where to place the objects and the tiering agent
-determines when to flush objects from the cache to the backing storage tier.
-So the cache tier and the backing storage tier are completely transparent to
-Ceph clients.
+The Ceph objecter handles object placement and the tiering agent determines
+when to flush objects from the cache to the backing storage tier. So the cache
+tier and the backing storage tier are completely transparent to Ceph clients.
 
 .. note:: Cache tiering is deprecated since Reef and is not recommended for
    new clusters.

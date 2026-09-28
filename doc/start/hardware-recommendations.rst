@@ -23,7 +23,7 @@ A failure domain is any component whose loss prevents access to one or more
 host, a failed storage drive, an OS crash, a malfunctioning NIC, a failed
 power supply, a network outage, and a power outage.
 
-Fewer failure domains cost less; isolating every one costs more.
+Sharing failure domains costs less; isolating every one costs more.
 
 These principles keep failure domains small:
 
@@ -42,12 +42,16 @@ Balance Cost, Performance, and Risk
 These principles apply to every component:
 
 - CPUs are chosen for IOPS (I/O operations per second) per core, not for
-  cores per OSD; Metadata Servers (:term:`MDS`) are single-threaded and want
-  a high clock rate.
+  cores per OSD. Each Metadata Server (:term:`MDS`) cannot exploit many
+  cores, so its latency is lowest with a high clock rate rather than a large
+  number of cores.
 - More RAM is better; size for peak use, not for a calm period. See
   :ref:`CPU and Memory Sizing <hardware-cpu-memory>`.
-- The operating system, each OSD, and any WAL+DB (write-ahead log and
-  metadata database) have their own drives.
+- The operating system has its own drive, and each OSD has its own drive.
+  HDD OSDs, other than deep archives, gain from moving WAL+DB (write-ahead
+  log and metadata database) to a shared SSD; SSD OSDs keep WAL+DB on the
+  device. Ratios and sizing: :ref:`Storage Devices
+  <hardware-storage-devices>`.
 - Monitor databases, CephFS metadata, and RGW index and log pools belong on
   enterprise-class SSDs even when bulk data lives on HDDs; see
   :ref:`Storage Devices <hardware-storage-devices>`.

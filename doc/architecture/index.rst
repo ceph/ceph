@@ -12,9 +12,9 @@ These pages explain how Ceph stores data, keeps it available when hardware
 fails, and serves it to clients.
 
 .. image:: ../images/stack.png
-   :alt: The Ceph stack: RADOS at the base; librados above it; RADOSGW, RBD,
-         and CephFS on top, each reached by applications, hosts or virtual
-         machines, and clients.
+   :alt: The Ceph stack: RADOS at the base; librados above it; RADOS Gateway
+         (RGW), RBD, and CephFS on top, each reached by applications, hosts or
+         virtual machines, and clients.
 
 .. toctree::
    :maxdepth: 2
