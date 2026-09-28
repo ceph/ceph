@@ -1118,8 +1118,14 @@ int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
            << " caller_gid_list=" << *caller_gid_list
            << dendl;
 
+  /*
+   * The path only matters to a grant limited to one.  Building it walks
+   * every ancestor dentry, which is a real cost when done for each request,
+   * so skip it for the common unrestricted caps ("allow *", "allow rw").
+   */
+  const bool need_path = auth_caps.path_restricted();
   string path;
-  if (!in->is_base()) {
+  if (need_path && !in->is_base()) {
     auto* dn = in->get_projected_parent_dn();
     auto* pdiri = dn->get_dir()->get_inode();
     if (pdiri) {
@@ -1141,7 +1147,9 @@ int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
   }
 
   string trimmed_path = "";
-  if (!path.empty()) {
+  if (!need_path) {
+    dout(20) << __func__ << " caps not path restricted" << dendl;
+  } else if (!path.empty()) {
     dout(20) << __func__ << " stray_prior_path " << path << dendl;
   } else {
     in->make_path_string(path, true);
