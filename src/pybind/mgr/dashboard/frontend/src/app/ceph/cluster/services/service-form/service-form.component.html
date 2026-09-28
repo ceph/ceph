@@ -1828,13 +1828,14 @@
               helperText="QAT compression is optional. Choose Hardware or Software to enable compression, or select None to disable it."
               i18n-helperText
             >
-              <option
-                *ngFor="let option of qatCompressionOptions"
-                [value]="option.value"
-                i18n
-              >
-                {{ option.label }}
-              </option>
+              @for (option of qatCompressionOptions; track option) {
+                <option
+                  [value]="option.value"
+                  i18n
+                >
+                  {{ option.label }}
+                </option>
+              }
             </cds-select>
           </div>
         }

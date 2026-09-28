@@ -73,7 +73,7 @@ export class NvmeofInitiatorsFormComponent implements OnInit {
   }
 
   private getDisableAllowAllState(): boolean {
-    return this.router.getCurrentNavigation()?.extras?.state?.['disableAllowAll'] === true;
+    return this.router.currentNavigation()?.extras?.state?.['disableAllowAll'] === true;
   }
 
   rebuildSteps() {

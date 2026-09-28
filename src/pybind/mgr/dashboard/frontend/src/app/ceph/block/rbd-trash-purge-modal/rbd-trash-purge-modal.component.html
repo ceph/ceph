@@ -27,26 +27,26 @@
       </p>
 
       <div class="form-item">
-        <cds-select
-          label="Pool"
-          for="poolName"
-          id="poolName"
-          formControlName="poolName"
-          *ngIf="poolPermission.read"
-        >
-          <option
-            value=""
-            i18n
+        @if (poolPermission.read) {
+          <cds-select
+            label="Pool"
+            for="poolName"
+            id="poolName"
+            formControlName="poolName"
           >
-            All
-          </option>
-          <option
-            *ngFor="let pool of pools"
-            [value]="pool"
-          >
-            {{ pool }}
-          </option>
-        </cds-select>
+            <option
+              value=""
+              i18n
+            >
+              All
+            </option>
+            @for (pool of pools; track pool) {
+              <option [value]="pool">
+                {{ pool }}
+              </option>
+            }
+          </cds-select>
+        }
       </div>
     </form>
   </section>

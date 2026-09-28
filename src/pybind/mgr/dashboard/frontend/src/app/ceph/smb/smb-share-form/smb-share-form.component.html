@@ -45,12 +45,13 @@
             />
           </cds-text-label>
           <ng-template #shareError>
-            <span
-              class="invalid-feedback"
-              *ngIf="smbShareForm.showError('share_id', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (smbShareForm.showError('share_id', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </ng-template>
         </div>
 
@@ -84,117 +85,126 @@
           [invalidText]="volumeError"
           i18n-label
         >
-          <option
-            *ngIf="allFsNames?.length === 0"
-            value=""
-            i18n
-          >
-            -- No filesystem available --
-          </option>
-          <option
-            *ngIf="allFsNames !== null && allFsNames?.length > 0"
-            value=""
-            i18n
-          >
-            -- Select the filesystem --
-          </option>
-          <option
-            *ngFor="let filesystem of allFsNames"
-            [value]="filesystem.name"
-            i18n
-          >
-            {{ filesystem.name }}
-          </option>
+          @if (allFsNames?.length === 0) {
+            <option
+              value=""
+              i18n
+            >
+              -- No filesystem available --
+            </option>
+          }
+          @if (allFsNames !== null && allFsNames?.length > 0) {
+            <option
+              value=""
+              i18n
+            >
+              -- Select the filesystem --
+            </option>
+          }
+          @for (filesystem of allFsNames; track filesystem) {
+            <option
+              [value]="filesystem.name"
+              i18n
+            >
+              {{ filesystem.name }}
+            </option>
+          }
         </cds-select>
         <ng-template #volumeError>
-          <span
-            class="invalid-feedback"
-            *ngIf="smbShareForm.showError('volume', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (smbShareForm.showError('volume', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
 
-      <div
-        class="form-item"
-        *ngIf="smbShareForm.getValue('volume')"
-      >
-        <cds-select
-          formControlName="subvolume_group"
-          label="Subvolume Group"
-          id="subvolume_group"
-          (change)="getSubVol()"
-          [skeleton]="allsubvolgrps === null"
-          i18n-label
-        >
-          <option
-            *ngIf="allsubvolgrps === null"
-            value=""
-            i18n
+      @if (smbShareForm.getValue('volume')) {
+        <div class="form-item">
+          <cds-select
+            formControlName="subvolume_group"
+            label="Subvolume Group"
+            id="subvolume_group"
+            (change)="getSubVol()"
+            [skeleton]="allsubvolgrps === null"
+            i18n-label
           >
-            Loading...
-          </option>
-          <option
-            *ngIf="allsubvolgrps !== null && allsubvolgrps.length >= 0"
-            value=""
-            i18n
-          >
-            -- Select the CephFS subvolume group --
-          </option>
-          <option
-            *ngFor="let subvol_grp of allsubvolgrps"
-            [value]="subvol_grp.name"
-            [selected]="subvol_grp.name === smbShareForm.get('subvolume_group').value"
-            i18n
-          >
-            {{ subvol_grp.name }}
-          </option>
-        </cds-select>
-      </div>
+            @if (allsubvolgrps === null) {
+              <option
+                value=""
+                i18n
+              >
+                Loading...
+              </option>
+            }
+            @if (allsubvolgrps !== null && allsubvolgrps.length >= 0) {
+              <option
+                value=""
+                i18n
+              >
+                -- Select the CephFS subvolume group --
+              </option>
+            }
+            @for (subvol_grp of allsubvolgrps; track subvol_grp) {
+              <option
+                [value]="subvol_grp.name"
+                [selected]="subvol_grp.name === smbShareForm.get('subvolume_group').value"
+                i18n
+              >
+                {{ subvol_grp.name }}
+              </option>
+            }
+          </cds-select>
+        </div>
+      }
 
-      <div
-        class="form-group row"
-        *ngIf="smbShareForm.getValue('volume')"
-      >
-        <cds-select
-          formControlName="subvolume"
-          label="Subvolume"
-          id="subvolume"
-          (change)="setSubVolPath()"
-          [skeleton]="allsubvols === null"
-        >
-          <option
-            *ngIf="allsubvols === null"
-            value=""
-            i18n
+      @if (smbShareForm.getValue('volume')) {
+        <div class="form-group row">
+          <cds-select
+            formControlName="subvolume"
+            label="Subvolume"
+            id="subvolume"
+            (change)="setSubVolPath()"
+            [skeleton]="allsubvols === null"
           >
-            Loading...
-          </option>
-          <option
-            *ngIf="allsubvols !== null && allsubvols.length === 0"
-            value=""
-            i18n
-          >
-            -- No SMB subvolume available --
-          </option>
-          <option
-            *ngIf="allsubvols !== null && allsubvols.length > 0"
-            value=""
-            i18n
-          >
-            -- Select the SMB subvolume --
-          </option>
-          <option
-            *ngFor="let subvolume of allsubvols"
-            [value]="subvolume.name"
-            [selected]="subvolume.name === smbShareForm.get('subvolume').value"
-            i18n
-          >
-            {{ subvolume.name }}
-          </option>
-        </cds-select>
-      </div>
+            @if (allsubvols === null) {
+              <option
+                value=""
+                i18n
+              >
+                Loading...
+              </option>
+            }
+            @if (allsubvols !== null && allsubvols.length === 0) {
+              <option
+                value=""
+                i18n
+              >
+                -- No SMB subvolume available --
+              </option>
+            }
+            @if (allsubvols !== null && allsubvols.length > 0) {
+              <option
+                value=""
+                i18n
+              >
+                -- Select the SMB subvolume --
+              </option>
+            }
+            @for (subvolume of allsubvols; track subvolume) {
+              <option
+                [value]="subvolume.name"
+                [selected]="subvolume.name === smbShareForm.get('subvolume').value"
+                i18n
+              >
+                {{ subvolume.name }}
+              </option>
+            }
+          </cds-select>
+        </div>
+      }
 
       <!-- Path -->
       <div
@@ -237,12 +247,13 @@
             />
           </cds-text-label>
           <ng-template #pathError>
-            <span
-              class="invalid-feedback"
-              *ngIf="smbShareForm.showError('inputPath', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (smbShareForm.showError('inputPath', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </ng-template>
         </div>
       </div>

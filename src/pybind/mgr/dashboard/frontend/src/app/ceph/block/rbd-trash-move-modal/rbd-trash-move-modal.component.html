@@ -20,16 +20,17 @@
       [formGroup]="moveForm"
       novalidate
     >
-      <cd-alert-panel
-        type="warning"
-        *ngIf="hasSnapshots"
-        spacingClass="mb-2"
-      >
-        <span i18n
-          >This image contains snapshot(s), which will prevent it from being removed after moved to
-          trash.</span
+      @if (hasSnapshots) {
+        <cd-alert-panel
+          type="warning"
+          spacingClass="mb-2"
         >
-      </cd-alert-panel>
+          <span i18n
+            >This image contains snapshot(s), which will prevent it from being removed after moved
+            to trash.</span
+          >
+        </cd-alert-panel>
+      }
 
       <p i18n>
         To move <kbd>{{ imageSpecStr }}</kbd> to trash, click <kbd>Move</kbd>. Optionally, you can
@@ -46,29 +47,29 @@
           >Set expiration date</cds-checkbox
         >
       </div>
-      <div
-        class="form-item"
-        *ngIf="setExpirationDate"
-      >
-        <cd-date-time-picker
-          [control]="moveForm.get('expiresAt')"
-          name="Protection expires at"
-          i18n-name
-        ></cd-date-time-picker>
-
-        <span
-          class="invalid-feedback"
-          *ngIf="moveForm.showError('expiresAt', formDir, 'format')"
-          i18n
-          >Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</span
-        >
-        <span
-          class="invalid-feedback"
-          *ngIf="moveForm.showError('expiresAt', formDir, 'expired')"
-          i18n
-          >Protection has already expired. Please pick a future date or leave it empty.</span
-        >
-      </div>
+      @if (setExpirationDate) {
+        <div class="form-item">
+          <cd-date-time-picker
+            [control]="moveForm.get('expiresAt')"
+            name="Protection expires at"
+            i18n-name
+          ></cd-date-time-picker>
+          @if (moveForm.showError('expiresAt', formDir, 'format')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</span
+            >
+          }
+          @if (moveForm.showError('expiresAt', formDir, 'expired')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Protection has already expired. Please pick a future date or leave it empty.</span
+            >
+          }
+        </div>
+      }
     </form>
   </section>
 

@@ -12,120 +12,122 @@
       novalidate
     >
       <div class="modal-body">
-        <cd-alert-panel
-          type="warning"
-          spacingClass="mb-3"
-          *ngIf="showImageField"
-          i18n
-          >Make sure to put the correct image. Passing an incorrect image can lead the cluster into
-          an undesired state.</cd-alert-panel
-        >
-        <div
-          *ngIf="versions"
-          class="form-group row"
-        >
-          <label
-            class="cd-col-form-label"
-            [ngClass]="{ required: !showImageField }"
-            for="availableVersions"
+        @if (showImageField) {
+          <cd-alert-panel
+            type="warning"
+            spacingClass="mb-3"
             i18n
-            >New Version</label
+            >Make sure to put the correct image. Passing an incorrect image can lead the cluster
+            into an undesired state.</cd-alert-panel
           >
-          <div class="cd-col-form-input">
-            <select
-              id="availableVersions"
-              name="availableVersions"
-              class="form-select"
-              formControlName="availableVersions"
-            >
-              <option
-                *ngIf="versions === null"
-                ngValue="null"
-                i18n
-              >
-                Loading...
-              </option>
-              <option
-                *ngIf="versions !== null && versions.length === 0"
-                [ngValue]="null"
-                i18n
-              >
-                -- No version available --
-              </option>
-              <option
-                *ngIf="versions !== null && versions.length > 0"
-                [ngValue]="null"
-                i18n
-              >
-                -- Select a version --
-              </option>
-              <option
-                *ngFor="let version of versions"
-                [value]="version"
-              >
-                {{ version }}
-              </option>
-            </select>
-            <span
-              class="invalid-feedback"
-              *ngIf="upgradeForm.showError('availableVersions', formDir, 'required')"
+        }
+        @if (versions) {
+          <div class="form-group row">
+            <label
+              class="cd-col-form-label"
+              [ngClass]="{ required: !showImageField }"
+              for="availableVersions"
               i18n
-              >This field is required!</span
+              >New Version</label
             >
-          </div>
-        </div>
-
-        <div
-          *ngIf="versions"
-          class="form-group row"
-        >
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input
-                type="checkbox"
-                class="custom-control-input"
-                id="useImage"
-                name="useImage"
-                formControlName="useImage"
-                (click)="useImage()"
-              />
-              <label
-                class="custom-control-label"
-                for="useImage"
-                i18n
-                >Use image</label
+            <div class="cd-col-form-input">
+              <select
+                id="availableVersions"
+                name="availableVersions"
+                class="form-select"
+                formControlName="availableVersions"
               >
+                @if (versions === null) {
+                  <option
+                    ngValue="null"
+                    i18n
+                  >
+                    Loading...
+                  </option>
+                }
+                @if (versions !== null && versions.length === 0) {
+                  <option
+                    [ngValue]="null"
+                    i18n
+                  >
+                    -- No version available --
+                  </option>
+                }
+                @if (versions !== null && versions.length > 0) {
+                  <option
+                    [ngValue]="null"
+                    i18n
+                  >
+                    -- Select a version --
+                  </option>
+                }
+                @for (version of versions; track version) {
+                  <option [value]="version">
+                    {{ version }}
+                  </option>
+                }
+              </select>
+              @if (upgradeForm.showError('availableVersions', formDir, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required!</span
+                >
+              }
             </div>
           </div>
-        </div>
+        }
+
+        @if (versions) {
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input
+                  type="checkbox"
+                  class="custom-control-input"
+                  id="useImage"
+                  name="useImage"
+                  formControlName="useImage"
+                  (click)="useImage()"
+                />
+                <label
+                  class="custom-control-label"
+                  for="useImage"
+                  i18n
+                  >Use image</label
+                >
+              </div>
+            </div>
+          </div>
+        }
 
         <!-- Custom image name input-->
-        <div
-          class="form-group row"
-          *ngIf="showImageField || !versions"
-        >
-          <label
-            class="cd-col-form-label required"
-            for="customImageName"
-            i18n
-            >Image</label
-          >
-          <div class="cd-col-form-input">
-            <input
-              type="text"
-              class="form-control"
-              id="customImageName"
-              name="customImageName"
-              formControlName="customImageName"
-            />
-            <span
-              class="invalid-feedback"
-              *ngIf="upgradeForm.showError('customImageName', formDir, 'required')"
+        @if (showImageField || !versions) {
+          <div class="form-group row">
+            <label
+              class="cd-col-form-label required"
+              for="customImageName"
               i18n
-              >This field is required!</span
+              >Image</label
             >
+            <div class="cd-col-form-input">
+              <input
+                type="text"
+                class="form-control"
+                id="customImageName"
+                name="customImageName"
+                formControlName="customImageName"
+              />
+              @if (upgradeForm.showError('customImageName', formDir, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required!</span
+                >
+              }
+            </div>
           </div>
-        </div>
+        }
       </div>
 
       <div class="modal-footer">

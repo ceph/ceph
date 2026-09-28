@@ -21,7 +21,7 @@ import { DropdownModule, GridModule, LayoutModule, ListItem } from 'carbon-compo
 import { Subject, Subscription } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ProductiveCardComponent } from '../productive-card/productive-card.component';
-import { CommonModule } from '@angular/common';
+
 import { TimePickerComponent } from '../time-picker/time-picker.component';
 import { AreaChartComponent } from '../area-chart/area-chart.component';
 import { EmptyStateComponent } from '../empty-state/empty-state.component';
@@ -33,7 +33,6 @@ import { EmptyStateComponent } from '../empty-state/empty-state.component';
   standalone: true,
   imports: [
     ProductiveCardComponent,
-    CommonModule,
     DropdownModule,
     AreaChartComponent,
     TimePickerComponent,

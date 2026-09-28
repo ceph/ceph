@@ -95,11 +95,9 @@
   let-value="data.value"
 >
   @if (value && value.length > 0) {
-    <cds-tag
-      *ngFor="let label of value"
-      class="tag tag-dark"
-      >{{ label }}</cds-tag
-    >
+    @for (label of value; track label) {
+      <cds-tag class="tag tag-dark">{{ label }}</cds-tag>
+    }
   } @else {
     <span>-</span>
   }

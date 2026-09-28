@@ -272,7 +272,7 @@
       }
 
       <!-- RGW -->
-      <ng-container *ngIf="!importTokenForm.controls.unmanaged.value">
+      @if (!importTokenForm.controls.unmanaged.value) {
         <!-- rgw_frontend_port -->
         <div
           class="form-item"
@@ -300,7 +300,7 @@
             </ng-template>
           </div>
         </div>
-      </ng-container>
+      }
     </form>
   </div>
   <cd-form-button-panel

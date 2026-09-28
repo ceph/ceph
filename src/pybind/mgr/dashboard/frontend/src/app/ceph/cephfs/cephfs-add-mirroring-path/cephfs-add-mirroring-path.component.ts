@@ -70,7 +70,7 @@ export class CephfsAddMirroringPathComponent implements OnInit {
     } catch {
       this.fsName = fsName;
     }
-    const navState = this.router.lastSuccessfulNavigation?.extras?.state as
+    const navState = this.router.lastSuccessfulNavigation()?.extras?.state as
       { returnUrl?: string } | undefined;
     this.returnUrl = navState?.returnUrl ?? (history.state?.['returnUrl'] as string) ?? null;
   }

@@ -53,18 +53,18 @@
               <span i18n>Enter a unique notification name</span>
             </ng-template>
             <ng-template #nameError>
-              <span
-                *ngIf="notificationForm.showError('id', formDir, 'required')"
-                class="invalid-feedback"
-              >
-                <ng-container i18n>This field is required.</ng-container>
-              </span>
-              <span
-                class="invalid-feedback"
-                *ngIf="notificationForm.showError('id', formDir, 'duplicate')"
-                i18n
-                >The name is already in use. Please choose a different one</span
-              >
+              @if (notificationForm.showError('id', formDir, 'required')) {
+                <span class="invalid-feedback">
+                  <ng-container i18n>This field is required.</ng-container>
+                </span>
+              }
+              @if (notificationForm.showError('id', formDir, 'duplicate')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >The name is already in use. Please choose a different one</span
+                >
+              }
             </ng-template>
           </div>
           <!-- Topic -->
@@ -84,33 +84,30 @@
               helperText="This topic will define and control the notification settings"
               i18n-helperText
             >
-              <option
-                *ngIf="topicArn === null"
-                value=""
-              >
-                Loading...
-              </option>
+              @if (topicArn === null) {
+                <option value="">Loading...</option>
+              }
               <option
                 [ngValue]="null"
                 i18n
               >
                 -- Select a topic --
               </option>
-              <option
-                *ngFor="let data of topicArn"
-                i18n
-                [ngValue]="data"
-              >
-                {{ data }}
-              </option>
+              @for (data of topicArn; track data) {
+                <option
+                  i18n
+                  [ngValue]="data"
+                >
+                  {{ data }}
+                </option>
+              }
             </cds-select>
             <ng-template #topicError>
-              <span
-                *ngIf="notificationForm.showError('topic', formDir, 'required')"
-                class="invalid-feedback"
-              >
-                <ng-container i18n>This field is required.</ng-container>
-              </span>
+              @if (notificationForm.showError('topic', formDir, 'required')) {
+                <span class="invalid-feedback">
+                  <ng-container i18n>This field is required.</ng-container>
+                </span>
+              }
             </ng-template>
           </div>
         </div>
@@ -140,7 +137,7 @@
           </div>
         </div>
         <cd-form-advanced-fieldset class="cd-header">
-          <ng-container *ngFor="let key of filterTypes">
+          @for (key of filterTypes; track key) {
             <ng-container
               *ngTemplateOutlet="
                 filterTemplate;
@@ -157,7 +154,7 @@
               "
             >
             </ng-container>
-          </ng-container>
+          }
         </cd-form-advanced-fieldset>
       </form>
     </section>
@@ -188,106 +185,100 @@
 
   <div [formGroup]="notificationForm.get('filter')">
     <div [formArrayName]="type">
-      <div
-        *ngFor="let group of controls.controls; let i = index"
-        [formGroupName]="i"
-      >
-        <div
-          cdsRow
-          class="form-item form-item-append"
-        >
-          <div cdsCol>
-            <ng-container *ngIf="isDropdown; else textInputName">
-              <cds-select
-                [id]="type + '-name-' + i"
-                formControlName="Name"
-                label="Name"
-                i18n-label
-                [helperText]="nameHelper"
-                i18n-helperText
-              >
-                <option
-                  *ngFor="let filter of s3KeyFilterValue"
-                  [value]="filter"
+      @for (group of controls.controls; track group; let i = $index) {
+        <div [formGroupName]="i">
+          <div
+            cdsRow
+            class="form-item form-item-append"
+          >
+            <div cdsCol>
+              @if (isDropdown) {
+                <cds-select
+                  [id]="type + '-name-' + i"
+                  formControlName="Name"
+                  label="Name"
+                  i18n-label
+                  [helperText]="nameHelper"
+                  i18n-helperText
                 >
-                  {{ filter }}
-                </option>
-              </cds-select>
-            </ng-container>
-
-            <ng-template #textInputName>
+                  @for (filter of s3KeyFilterValue; track filter) {
+                    <option [value]="filter">
+                      {{ filter }}
+                    </option>
+                  }
+                </cds-select>
+              } @else {
+                <cds-text-label
+                  [labelInputID]="type + '-name-' + i"
+                  i18n-label
+                  [helperText]="nameHelper"
+                  i18n-helperText
+                >
+                  Name
+                  <input
+                    cdsText
+                    type="text"
+                    [placeholder]="namePlaceholder"
+                    formControlName="Name"
+                    i18n
+                  />
+                </cds-text-label>
+              }
+            </div>
+            <div cdsCol>
               <cds-text-label
-                [labelInputID]="type + '-name-' + i"
+                [labelInputID]="type + '-value-' + i"
                 i18n-label
-                [helperText]="nameHelper"
+                [helperText]="valueHelper"
                 i18n-helperText
               >
-                Name
+                Value
                 <input
                   cdsText
                   type="text"
-                  [placeholder]="namePlaceholder"
-                  formControlName="Name"
+                  [placeholder]="valuePlaceholder"
+                  formControlName="Value"
                   i18n
                 />
               </cds-text-label>
-            </ng-template>
-          </div>
-
-          <div cdsCol>
-            <cds-text-label
-              [labelInputID]="type + '-value-' + i"
-              i18n-label
-              [helperText]="valueHelper"
-              i18n-helperText
+            </div>
+            <div
+              cdsCol
+              [columnNumbers]="{ lg: 1, md: 1 }"
+              class="item-action-btn spacing"
             >
-              Value
-              <input
-                cdsText
-                type="text"
-                [placeholder]="valuePlaceholder"
-                formControlName="Value"
-                i18n
-              />
-            </cds-text-label>
-          </div>
-          <div
-            cdsCol
-            [columnNumbers]="{ lg: 1, md: 1 }"
-            class="item-action-btn spacing"
-          >
-            <cds-icon-button
-              kind="primary"
-              size="sm"
-              (click)="addRow(type, i)"
+              <cds-icon-button
+                kind="primary"
+                size="sm"
+                (click)="addRow(type, i)"
+              >
+                <svg
+                  cdsIcon="add"
+                  size="32"
+                  class="cds--btn__icon"
+                ></svg>
+              </cds-icon-button>
+            </div>
+            <div
+              cdsCol
+              [columnNumbers]="{ lg: 1, md: 1 }"
+              class="item-action-btn spacing"
             >
-              <svg
-                cdsIcon="add"
-                size="32"
-                class="cds--btn__icon"
-              ></svg>
-            </cds-icon-button>
-          </div>
-
-          <div
-            cdsCol
-            [columnNumbers]="{ lg: 1, md: 1 }"
-            class="item-action-btn spacing"
-          >
-            <cds-icon-button
-              kind="danger"
-              size="sm"
-              (click)="removeRow(type, i)"
-            >
-              <svg
-                cdsIcon="trash-can"
-                size="32"
-                class="cds--btn__icon"
-              ></svg>
-            </cds-icon-button>
+              <cds-icon-button
+                kind="danger"
+                size="sm"
+                (click)="removeRow(type, i)"
+              >
+                <svg
+                  cdsIcon="trash-can"
+                  size="32"
+                  class="cds--btn__icon"
+                ></svg>
+              </cds-icon-button>
+            </div>
           </div>
         </div>
-      </div>
+      }
     </div>
   </div>
 </ng-template>

@@ -1,4 +1,4 @@
-<ng-container *ngIf="selection">
+@if (selection) {
   <nav
     ngbNav
     #nav="ngbNav"
@@ -35,6 +35,5 @@
       </ng-template>
     </ng-container>
   </nav>
-
   <div [ngbNavOutlet]="nav"></div>
-</ng-container>
+}
