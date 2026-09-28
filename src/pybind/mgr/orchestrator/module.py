@@ -634,7 +634,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
         fields = mapping.get(category, ())
         for host in data.keys():
-            for sys_id, details in data[host].items():
+            host_data = data[host] or {}
+            if not any(host_data.values()):
+                # HOST + 'NO DATA' already fill the first two columns...
+                table.add_row([host, 'NO DATA'] + [''] * (len(table.field_names) - 2))
+                continue
+            for sys_id, details in host_data.items():
                 for k, v in details.items():
                     row = []
                     for field in fields:
