@@ -8830,6 +8830,19 @@ int group_snap_unlink(cls_method_context_t hctx,
     CLS_LOG(20, "group_snap_unlink: removing snapshot with key %s",
             group_snap_key.c_str());
     r = cls_cxx_map_remove_key(hctx, group_snap_key);
+    if (r < 0) {
+      CLS_ERR("error removing snapshot with key %s : %s",
+              group_snap_key.c_str(), cpp_strerror(r).c_str());
+      return r;
+    }
+
+    std::string group_snap_order_key = group::snap_order_key(group_snap_id);
+    r = cls_cxx_map_remove_key(hctx, group_snap_order_key);
+    if (r < 0 && r != -ENOENT) {
+      CLS_ERR("error removing snapshot order key %s : %s",
+              group_snap_order_key.c_str(), cpp_strerror(r).c_str());
+      return r;
+    }
   } else {
     CLS_LOG(20, "group_snap_unlink: updating snapshot with key %s",
             group_snap_key.c_str());
