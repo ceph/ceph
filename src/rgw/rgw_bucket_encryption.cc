@@ -21,10 +21,26 @@ void ApplyServerSideEncryptionByDefault::dump_xml(Formatter *f) const {
 void ServerSideEncryptionConfiguration::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("ApplyServerSideEncryptionByDefault", applyServerSideEncryptionByDefault, obj, false);
   RGWXMLDecoder::decode_xml("BucketKeyEnabled", bucketKeyEnabled, obj, false);
+
+  if (XMLObj *blocked = obj->find_first("BlockedEncryptionTypes"); blocked) {
+    RGWXMLDecoder::decode_xml("EncryptionType", blockedEncryptionTypes, blocked);
+    for (const auto& type : blockedEncryptionTypes) {
+      if (type != "SSE-C" && type != "NONE") {
+        throw RGWXMLDecoder::err("invalid EncryptionType: '" + type + "'");
+      }
+    }
+  }
 }
 
 void ServerSideEncryptionConfiguration::dump_xml(Formatter *f) const {
-  encode_xml("ApplyServerSideEncryptionByDefault", applyServerSideEncryptionByDefault, f);
+  if (!sse_algorithm().empty()) {
+    encode_xml("ApplyServerSideEncryptionByDefault", applyServerSideEncryptionByDefault, f);
+  }
+  if (!blockedEncryptionTypes.empty()) {
+    f->open_object_section("BlockedEncryptionTypes");
+    encode_xml("EncryptionType", blockedEncryptionTypes, f);
+    f->close_section();
+  }
   if (bucketKeyEnabled) {
     encode_xml("BucketKeyEnabled", true, f);
   }
@@ -46,5 +62,6 @@ void RGWBucketEncryptionConfig::dump(Formatter *f) const {
     encode_json("sse_algorithm", sse_algorithm(), f);
     encode_json("kms_master_key_id", kms_master_key_id(), f);
     encode_json("bucket_key_enabled", bucket_key_enabled(), f);
+    encode_json("blocked_encryption_types", rule.blocked_encryption_types(), f);
   }
 }
